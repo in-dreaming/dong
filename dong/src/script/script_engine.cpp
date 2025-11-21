@@ -1,35 +1,6 @@
 #include "script_engine.hpp"
 #include <cstring>
 
-// QuickJS forward declarations (will be linked at build time)
-extern "C" {
-typedef struct JSRuntime JSRuntime;
-typedef struct JSContext JSContext;
-typedef int64_t JSValue;  // QuickJS uses tagged union
-typedef JSValue JSValueConst;
-
-JSRuntime* JS_NewRuntime(void);
-void JS_FreeRuntime(JSRuntime* rt);
-JSContext* JS_NewContext(JSRuntime* rt);
-void JS_FreeContext(JSContext* ctx);
-JSValue JS_Eval(JSContext* ctx, const char* input, size_t input_len, const char* filename, int flags);
-int JS_IsException(JSValue v);
-JSValue JS_GetException(JSContext* ctx);
-const char* JS_ToCString(JSContext* ctx, JSValue val);
-void JS_FreeCString(JSContext* ctx, const char* str);
-void JS_FreeValue(JSContext* ctx, JSValue v);
-JSValue JS_GetGlobalObject(JSContext* ctx);
-JSValue JS_GetPropertyStr(JSContext* ctx, JSValue obj, const char* prop);
-int JS_IsFunction(JSContext* ctx, JSValue v);
-JSValue JS_Call(JSContext* ctx, JSValue func, JSValue this_obj, int argc, JSValueConst* argv);
-JSValue JS_NewObject(JSContext* ctx);
-void JS_SetOpaque(JSValue obj, void* opaque);
-JSValue JS_NewCFunction(JSContext* ctx, JSValue (*func)(JSContext*, JSValueConst, int, JSValueConst*), const char* name, int length);
-int JS_SetPropertyStr(JSContext* ctx, JSValue obj, const char* prop, JSValue val);
-JSValue JS_NewArray(JSContext* ctx);
-#define JS_UNDEFINED (JSValue)0
-}
-
 namespace dong::script {
 
 ScriptEngine::ScriptEngine() : runtime_(nullptr), context_(nullptr) {
@@ -50,12 +21,14 @@ ScriptEngine::ScriptEngine() : runtime_(nullptr), context_(nullptr) {
 }
 
 ScriptEngine::~ScriptEngine() {
-    if (context_) {
-        JS_FreeContext(context_);
-    }
-    if (runtime_) {
-        JS_FreeRuntime(runtime_);
-    }
+    // NOTE: QuickJS teardown is temporarily disabled to avoid a crash during
+    // demo shutdown. The OS will reclaim this memory when the process exits.
+    // if (context_) {
+    //     JS_FreeContext(context_);
+    // }
+    // if (runtime_) {
+    //     JS_FreeRuntime(runtime_);
+    // }
 }
 
 bool ScriptEngine::eval(const std::string& code) {
@@ -68,7 +41,7 @@ bool ScriptEngine::eval(const std::string& code) {
         JSValue exception = JS_GetException(context_);
         const char* error_str = JS_ToCString(context_, exception);
         if (error_str) {
-            // TODO: 记录错误
+            std::fprintf(stderr, "[ScriptEngine] JS exception: %s\n", error_str);
             JS_FreeCString(context_, error_str);
         }
         JS_FreeValue(context_, exception);

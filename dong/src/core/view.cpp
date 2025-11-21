@@ -1,4 +1,5 @@
 #include "view.hpp"
+#include <cstdio>
 #include "../dom/dom_manager.hpp"
 #include "../render/render_surface.hpp"
 #include "../render/painter.hpp"
@@ -13,11 +14,11 @@ View::View(uint32_t width, uint32_t height)
       dom_manager(std::make_unique<dom::Manager>()),
       layout_engine(std::make_unique<layout::Engine>()),
       render_surface(std::make_unique<render::CPUBufferSurface>(width, height)),
-      painter(std::make_unique<render::Painter>(render_surface.get())),
+      painter(nullptr),
       script_engine(std::make_unique<script::ScriptEngine>()),
       js_bindings(std::make_unique<script::JSBindings>(
-          script_engine.get(), 
-          dom_manager.get(), 
+          script_engine.get(),
+          dom_manager.get(),
           nullptr // TODO: 连接事件分发器
       )) {
     js_bindings->initialize();
@@ -53,31 +54,43 @@ void View::resize(uint32_t width, uint32_t height) {
 }
 
 void View::update() {
-    // 更新流程：
-    // 1. 处理脚本任务
-    // 2. 计算布局
-    // 3. 渲染 DOM
-
+    std::fprintf(stderr, "[dong::View] scripts\n");
     if (script_engine) {
         script_engine->processPendingTasks();
     }
 
-    // 计算布局
+    std::fprintf(stderr, "[dong::View] layout\n");
     if (layout_engine && dom_manager) {
         auto root = dom_manager->getRoot();
         if (root) {
             layout_engine->calculateLayout(root, static_cast<float>(width_), static_cast<float>(height_));
-            render_surface->markDirty();
+            if (render_surface) {
+                render_surface->markDirty();
+            } else {
+                std::fprintf(stderr, "[dong::View] layout warning: no render surface\n");
+            }
+        } else {
+            std::fprintf(stderr, "[dong::View] layout skipped: no DOM root\n");
         }
+    } else {
+        std::fprintf(stderr, "[dong::View] layout skipped: missing engine or DOM\n");
     }
 
-    // 渲染 DOM
+    std::fprintf(stderr, "[dong::View] render\n");
     if (render_surface && render_surface->isDirty() && painter && dom_manager) {
         auto root = dom_manager->getRoot();
         if (root) {
+            std::fprintf(stderr, "[dong::View] render invoking painter\n");
             painter->renderDOM(root, layout_engine.get());
+            std::fprintf(stderr, "[dong::View] render finished\n");
+        } else {
+            std::fprintf(stderr, "[dong::View] render skipped: no DOM root\n");
         }
+    } else {
+        std::fprintf(stderr, "[dong::View] render skipped: prerequisites not met\n");
     }
+
+    std::fprintf(stderr, "[dong::View] done\n");
 }
 
 void* View::get_pixel_buffer() {

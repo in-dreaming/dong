@@ -3,47 +3,9 @@
 #include <cstring>
 #include <iostream>
 
-// QuickJS C API declarations
 extern "C" {
-    JSValue JS_GetGlobalObject(JSContext *ctx);
-    JSValue JS_NewObject(JSContext *ctx);
-    JSValue JS_NewArray(JSContext *ctx);
-    JSValue JS_NewCFunction(JSContext *ctx, void *func, const char *name, int length);
-    
-    int JS_SetPropertyStr(JSContext *ctx, JSValue obj, const char *prop, JSValue val);
-    int JS_SetPropertyUint32(JSContext *ctx, JSValue obj, uint32_t idx, JSValue val);
-    
-    JSValue JS_GetPropertyStr(JSContext *ctx, JSValue obj, const char *prop);
-    JSValue JS_GetPropertyUint32(JSContext *ctx, JSValue obj, uint32_t idx);
-    
-    const char *JS_ToCString(JSContext *ctx, JSValue val);
-    double JS_ToFloat64(JSContext *ctx, JSValue val);
-    int32_t JS_ToInt32(JSContext *ctx, JSValue val);
-    
-    void JS_FreeCString(JSContext *ctx, const char *ptr);
-    JSValue JS_FreeValue(JSContext *ctx, JSValue v);
-    JSValue JS_DupValue(JSContext *ctx, JSValue v);
-    
-    int JS_IsUndefined(JSValue v);
-    int JS_IsNull(JSValue v);
-    void JS_SetOpaque(JSValue obj, void *opaque);
-    
-    JSValue JS_NULL;
-    JSValue JS_TRUE;
-    JSValue JS_FALSE;
-    JSValue JS_UNDEFINED;
-    
-    JSValue JS_NewInt32(JSContext *ctx, int32_t val);
-    JSValue JS_NewFloat64(JSContext *ctx, double val);
-    JSValue JS_NewString(JSContext *ctx, const char *str);
-    
-    int JS_GetArrayLength(JSContext *ctx, JSValue val);
-    int JS_IsException(JSValue v);
-    JSValue JS_GetException(JSContext *ctx);
-    
+#include "quickjs.h"
 }
-
-using JSValueConst = int64_t;
 
 namespace dong::script {
 
@@ -425,9 +387,9 @@ static JSValue event_constructor(JSContext* ctx, JSValueConst this_val, int argc
     
     // Event methods
     JS_SetPropertyStr(ctx, event, "preventDefault",
-        JS_NewCFunction(ctx, (void*)&event_preventDefault, "preventDefault", 0));
+        JS_NewCFunction(ctx, event_preventDefault, "preventDefault", 0));
     JS_SetPropertyStr(ctx, event, "stopPropagation",
-        JS_NewCFunction(ctx, (void*)&event_stopPropagation, "stopPropagation", 0));
+        JS_NewCFunction(ctx, event_stopPropagation, "stopPropagation", 0));
     
     return event;
 }
@@ -497,11 +459,11 @@ void JSBindings::initializeConsoleAPI() {
     JSValue console = JS_NewObject(ctx);
 
     JS_SetPropertyStr(ctx, console, "log",
-        JS_NewCFunction(ctx, (void*)&console_log, "log", -1));
+        JS_NewCFunction(ctx, console_log, "log", -1));
     JS_SetPropertyStr(ctx, console, "warn",
-        JS_NewCFunction(ctx, (void*)&console_warn, "warn", -1));
+        JS_NewCFunction(ctx, console_warn, "warn", -1));
     JS_SetPropertyStr(ctx, console, "error",
-        JS_NewCFunction(ctx, (void*)&console_error, "error", -1));
+        JS_NewCFunction(ctx, console_error, "error", -1));
 
     JS_SetPropertyStr(ctx, global, "console", console);
     JS_FreeValue(ctx, console);
@@ -519,15 +481,15 @@ void JSBindings::initializeDocumentAPI() {
 
     // Document methods
     JS_SetPropertyStr(ctx, document, "getElementById",
-        JS_NewCFunction(ctx, (void*)&doc_getElementById, "getElementById", 1));
+        JS_NewCFunction(ctx, doc_getElementById, "getElementById", 1));
     JS_SetPropertyStr(ctx, document, "getElementsByTagName",
-        JS_NewCFunction(ctx, (void*)&doc_getElementsByTagName, "getElementsByTagName", 1));
+        JS_NewCFunction(ctx, doc_getElementsByTagName, "getElementsByTagName", 1));
     JS_SetPropertyStr(ctx, document, "getElementsByClassName",
-        JS_NewCFunction(ctx, (void*)&doc_getElementsByClassName, "getElementsByClassName", 1));
+        JS_NewCFunction(ctx, doc_getElementsByClassName, "getElementsByClassName", 1));
     JS_SetPropertyStr(ctx, document, "querySelector",
-        JS_NewCFunction(ctx, (void*)&doc_querySelector, "querySelector", 1));
+        JS_NewCFunction(ctx, doc_querySelector, "querySelector", 1));
     JS_SetPropertyStr(ctx, document, "querySelectorAll",
-        JS_NewCFunction(ctx, (void*)&doc_querySelectorAll, "querySelectorAll", 1));
+        JS_NewCFunction(ctx, doc_querySelectorAll, "querySelectorAll", 1));
 
     // Document object references
     JSValue body = JS_NewObject(ctx);
@@ -567,19 +529,19 @@ void JSBindings::initializeElementAPI() {
 
     // Element methods
     JS_SetPropertyStr(ctx, element_proto, "getAttribute",
-        JS_NewCFunction(ctx, (void*)&elem_getAttribute, "getAttribute", 1));
+        JS_NewCFunction(ctx, elem_getAttribute, "getAttribute", 1));
     JS_SetPropertyStr(ctx, element_proto, "setAttribute",
-        JS_NewCFunction(ctx, (void*)&elem_setAttribute, "setAttribute", 2));
+        JS_NewCFunction(ctx, elem_setAttribute, "setAttribute", 2));
     JS_SetPropertyStr(ctx, element_proto, "appendChild",
-        JS_NewCFunction(ctx, (void*)&elem_appendChild, "appendChild", 1));
+        JS_NewCFunction(ctx, elem_appendChild, "appendChild", 1));
     JS_SetPropertyStr(ctx, element_proto, "removeChild",
-        JS_NewCFunction(ctx, (void*)&elem_removeChild, "removeChild", 1));
+        JS_NewCFunction(ctx, elem_removeChild, "removeChild", 1));
     JS_SetPropertyStr(ctx, element_proto, "addEventListener",
-        JS_NewCFunction(ctx, (void*)&elem_addEventListener, "addEventListener", 2));
+        JS_NewCFunction(ctx, elem_addEventListener, "addEventListener", 2));
     JS_SetPropertyStr(ctx, element_proto, "removeEventListener",
-        JS_NewCFunction(ctx, (void*)&elem_removeEventListener, "removeEventListener", 2));
+        JS_NewCFunction(ctx, elem_removeEventListener, "removeEventListener", 2));
     JS_SetPropertyStr(ctx, element_proto, "getComputedStyle",
-        JS_NewCFunction(ctx, (void*)&elem_getComputedStyle, "getComputedStyle", 0));
+        JS_NewCFunction(ctx, elem_getComputedStyle, "getComputedStyle", 0));
 
     JS_SetPropertyStr(ctx, global, "Element", element_proto);
     JS_FreeValue(ctx, element_proto);
@@ -595,15 +557,15 @@ void JSBindings::initializeEventAPI() {
     JSValue global = JS_GetGlobalObject(ctx);
 
     // Event constructors
-    JSValue event_ctor = JS_NewCFunction(ctx, (void*)&event_constructor, "Event", 1);
+    JSValue event_ctor = JS_NewCFunction(ctx, event_constructor, "Event", 1);
     JS_SetPropertyStr(ctx, global, "Event", event_ctor);
     JS_FreeValue(ctx, event_ctor);
 
-    JSValue mouse_event_ctor = JS_NewCFunction(ctx, (void*)&mouse_event_constructor, "MouseEvent", 1);
+    JSValue mouse_event_ctor = JS_NewCFunction(ctx, mouse_event_constructor, "MouseEvent", 1);
     JS_SetPropertyStr(ctx, global, "MouseEvent", mouse_event_ctor);
     JS_FreeValue(ctx, mouse_event_ctor);
 
-    JSValue keyboard_event_ctor = JS_NewCFunction(ctx, (void*)&keyboard_event_constructor, "KeyboardEvent", 1);
+    JSValue keyboard_event_ctor = JS_NewCFunction(ctx, keyboard_event_constructor, "KeyboardEvent", 1);
     JS_SetPropertyStr(ctx, global, "KeyboardEvent", keyboard_event_ctor);
     JS_FreeValue(ctx, keyboard_event_ctor);
 
@@ -629,54 +591,56 @@ JSValue JSBindings::createJSElement(JSContext* ctx, const dom::DOMNodePtr& node)
     
     // Methods
     JS_SetPropertyStr(ctx, elem, "getAttribute",
-        JS_NewCFunction(ctx, (void*)&elem_getAttribute, "getAttribute", 1));
+        JS_NewCFunction(ctx, elem_getAttribute, "getAttribute", 1));
     JS_SetPropertyStr(ctx, elem, "setAttribute",
-        JS_NewCFunction(ctx, (void*)&elem_setAttribute, "setAttribute", 2));
+        JS_NewCFunction(ctx, elem_setAttribute, "setAttribute", 2));
     JS_SetPropertyStr(ctx, elem, "appendChild",
-        JS_NewCFunction(ctx, (void*)&elem_appendChild, "appendChild", 1));
+        JS_NewCFunction(ctx, elem_appendChild, "appendChild", 1));
     JS_SetPropertyStr(ctx, elem, "removeChild",
-        JS_NewCFunction(ctx, (void*)&elem_removeChild, "removeChild", 1));
+        JS_NewCFunction(ctx, elem_removeChild, "removeChild", 1));
     JS_SetPropertyStr(ctx, elem, "addEventListener",
-        JS_NewCFunction(ctx, (void*)&elem_addEventListener, "addEventListener", 2));
+        JS_NewCFunction(ctx, elem_addEventListener, "addEventListener", 2));
     JS_SetPropertyStr(ctx, elem, "removeEventListener",
-        JS_NewCFunction(ctx, (void*)&elem_removeEventListener, "removeEventListener", 2));
+        JS_NewCFunction(ctx, elem_removeEventListener, "removeEventListener", 2));
     JS_SetPropertyStr(ctx, elem, "getComputedStyle",
-        JS_NewCFunction(ctx, (void*)&elem_getComputedStyle, "getComputedStyle", 0));
+        JS_NewCFunction(ctx, elem_getComputedStyle, "getComputedStyle", 0));
     JS_SetPropertyStr(ctx, elem, "getChildren",
-        JS_NewCFunction(ctx, (void*)&elem_getChildren, "getChildren", 0));
+        JS_NewCFunction(ctx, elem_getChildren, "getChildren", 0));
 
     return elem;
 }
 
 // Static helper methods
 dom::DOMNodePtr JSBindings::getNodeOpaque(JSContext* ctx, JSValue val) {
-    // This is a simplified implementation - in production, use proper QuickJS class system
-    // For now, we'll store the pointer directly in the object
-    JSValue node_ptr_val = JS_GetPropertyStr(ctx, val, "__node_ptr__");
-    
-    if (!JS_IsUndefined(node_ptr_val)) {
-        double ptr = JS_ToFloat64(ctx, node_ptr_val);
-        dom::DOMNodePtr* ptr_ref = reinterpret_cast<dom::DOMNodePtr*>((uintptr_t)ptr);
-        if (ptr_ref) {
-            dom::DOMNodePtr result = *ptr_ref;
-            JS_FreeValue(ctx, node_ptr_val);
-            return result;
-        }
+    if (!g_bindings) return nullptr;
+
+    JSValue id_val = JS_GetPropertyStr(ctx, val, "__node_id__");
+    if (JS_IsUndefined(id_val)) {
+        JS_FreeValue(ctx, id_val);
+        return nullptr;
     }
-    JS_FreeValue(ctx, node_ptr_val);
+
+    int64_t id = 0;
+    if (JS_ToInt64(ctx, &id, id_val) != 0) {
+        JS_FreeValue(ctx, id_val);
+        return nullptr;
+    }
+    JS_FreeValue(ctx, id_val);
+
+    auto it = g_bindings->id_to_node_.find(static_cast<uint64_t>(id));
+    if (it != g_bindings->id_to_node_.end()) {
+        return it->second;
+    }
     return nullptr;
 }
 
 void JSBindings::setNodeOpaque(JSContext* ctx, JSValue val, dom::DOMNodePtr node) {
-    if (!node) return;
-    
-    // Allocate storage for the shared_ptr
-    dom::DOMNodePtr* ptr_store = new dom::DOMNodePtr(node);
-    double ptr_as_double = static_cast<double>(reinterpret_cast<uintptr_t>(ptr_store));
-    
-    JS_SetPropertyStr(ctx, val, "__node_ptr__", JS_NewFloat64(ctx, ptr_as_double));
-    // Simple ID based on pointer value
-    JS_SetPropertyStr(ctx, val, "__node_id__", JS_NewInt32(ctx, static_cast<int32_t>(reinterpret_cast<uintptr_t>(node.get()) & 0xFFFFFFFF)));
+    if (!g_bindings || !node) return;
+
+    uint64_t id = g_bindings->next_js_id_++;
+    g_bindings->id_to_node_[id] = node;
+
+    JS_SetPropertyStr(ctx, val, "__node_id__", JS_NewInt64(ctx, static_cast<int64_t>(id)));
 }
 
 } // namespace dong::script

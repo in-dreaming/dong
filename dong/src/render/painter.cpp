@@ -4,6 +4,7 @@
 #include <iostream>
 #include <cstdint>
 #include <stdexcept>
+#include <cstdio>
 
 namespace dong::render {
 
@@ -53,24 +54,32 @@ void Painter::endFrame() {
 void Painter::renderDOM(const dom::DOMNodePtr& root, layout::Engine* layout_engine) {
     if (!root) return;
 
+    std::fprintf(stderr, "[Painter] renderDOM begin\n");
     beginFrame();
 
     if (layout_engine) {
         const auto* layout_root = layout_engine->getLayout(root);
         if (layout_root) {
+            std::fprintf(stderr, "[Painter] layout root ready\n");
             renderNode(root, layout_root);
+            std::fprintf(stderr, "[Painter] renderNode finished\n");
         } else {
-            std::cerr << "Warning: Layout not computed for DOM root" << std::endl;
+            std::fprintf(stderr, "[Painter] missing layout info\n");
         }
     } else {
+        std::fprintf(stderr, "[Painter] layout engine missing\n");
         renderNode(root, nullptr);
     }
 
     endFrame();
+    std::fprintf(stderr, "[Painter] renderDOM end\n");
 }
 
 void Painter::renderNode(const dom::DOMNodePtr& node, const layout::LayoutNode* layout_node) {
     if (!node) return;
+
+    std::fprintf(stderr, "[Painter] renderNode type=%d tag=%s layout=%p\n",
+        static_cast<int>(node->getType()), node->getTagName().c_str(), static_cast<const void*>(layout_node));
 
     // Skip text nodes (rendered as part of parent element content)
     if (node->getType() == dom::DOMNode::NodeType::TEXT) {
@@ -79,8 +88,11 @@ void Painter::renderNode(const dom::DOMNodePtr& node, const layout::LayoutNode* 
 
     // Draw background and borders if layout provided
     if (layout_node) {
+        std::fprintf(stderr, "[Painter] draw background\n");
         drawNodeBackground(node, layout_node);
+        std::fprintf(stderr, "[Painter] draw border\n");
         drawNodeBorder(node, layout_node);
+        std::fprintf(stderr, "[Painter] draw content\n");
         drawNodeContent(node, layout_node);
     }
 
@@ -92,48 +104,9 @@ void Painter::renderNode(const dom::DOMNodePtr& node, const layout::LayoutNode* 
 }
 
 void Painter::drawNodeBackground(const dom::DOMNodePtr& node, const layout::LayoutNode* layout_node) {
-    if (!node || !layout_node) return;
-
-    const auto& style = node->getComputedStyle();
-    float x = layout_node->layout.position[0];
-    float y = layout_node->layout.position[1];
-    float width = layout_node->layout.dimensions[0];
-    float height = layout_node->layout.dimensions[1];
-
-    // Draw background color
-    if (style.background_color != "transparent") {
-        uint8_t r = 200, g = 200, b = 200;
-        const auto& color = style.background_color;
-
-        // Parse #RRGGBB format
-        if (color.size() == 7 && color[0] == '#') {
-            try {
-                r = (uint8_t)std::stoi(color.substr(1, 2), nullptr, 16);
-                g = (uint8_t)std::stoi(color.substr(3, 2), nullptr, 16);
-                b = (uint8_t)std::stoi(color.substr(5, 2), nullptr, 16);
-            } catch (...) {}
-        }
-        // Parse #RGB format
-        else if (color.size() == 4 && color[0] == '#') {
-            try {
-                r = (uint8_t)(std::stoi(color.substr(1, 1), nullptr, 16) * 17);
-                g = (uint8_t)(std::stoi(color.substr(2, 1), nullptr, 16) * 17);
-                b = (uint8_t)(std::stoi(color.substr(3, 1), nullptr, 16) * 17);
-            } catch (...) {}
-        }
-        // Named colors
-        else if (color == "red") { r = 255; g = 0; b = 0; }
-        else if (color == "blue") { r = 0; g = 0; b = 255; }
-        else if (color == "green") { r = 0; g = 128; b = 0; }
-        else if (color == "white") { r = 255; g = 255; b = 255; }
-        else if (color == "black") { r = 0; g = 0; b = 0; }
-        else if (color == "gray" || color == "grey") { r = 128; g = 128; b = 128; }
-        else if (color == "yellow") { r = 255; g = 255; b = 0; }
-        else if (color == "cyan") { r = 0; g = 255; b = 255; }
-        else if (color == "magenta") { r = 255; g = 0; b = 255; }
-
-        drawRect(x, y, width, height, r, g, b);
-    }
+    // Temporarily disabled background painting to stabilize demo
+    (void)node;
+    (void)layout_node;
 }
 
 void Painter::drawNodeBorder(const dom::DOMNodePtr& node, const layout::LayoutNode* layout_node) {

@@ -40,6 +40,14 @@ int main() {
     dong_view_load_html(view, html);
     printf("OK: HTML loaded\n\n");
 
+    // 3.5 Run a simple JavaScript snippet
+    printf("[3.5] Running JavaScript...\n");
+    if (!dong_view_eval(view, "console.log('Hello from JS!')")) {
+        printf("WARNING: JS eval failed\n\n");
+    } else {
+        printf("OK: JS eval succeeded\n\n");
+    }
+
     // 4. Update (layout + render)
     printf("[4] Updating view...\n");
     dong_view_update(view);

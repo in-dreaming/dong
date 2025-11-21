@@ -1,19 +1,14 @@
 #pragma once
 
+#include <functional>
 #include <memory>
 #include <string>
-#include <functional>
 #include "../dom/dom_node.hpp"
 #include "../dom/event_system.hpp"
 
-// Forward declarations - will be included in cpp file
 extern "C" {
-    struct JSRuntime;
-    struct JSContext;
+#include "quickjs.h"
 }
-
-// JSValue is a scalar type in QuickJS (int64_t), not a struct
-using JSValue = int64_t;
 
 
 

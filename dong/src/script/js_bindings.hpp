@@ -6,14 +6,9 @@
 #include "../dom/dom_manager.hpp"
 #include "../dom/event_system.hpp"
 
-// Forward declarations
 extern "C" {
-    struct JSContext;
-    struct JSRuntime;
+#include "quickjs.h"
 }
-
-// JSValue is a scalar type in QuickJS (int64_t), not a struct
-using JSValue = int64_t;
 
 namespace dong::script {
 
@@ -39,8 +34,8 @@ public:
 
 private:
     
-    // 映射：DOMNode 指针 -> JS 对象 ID
-    std::unordered_map<uintptr_t, uint64_t> node_to_js_id_;
+    // 映射：JS 对象 ID -> DOM 节点，保证生命周期
+    std::unordered_map<uint64_t, dom::DOMNodePtr> id_to_node_;
     uint64_t next_js_id_ = 1;
 
     // 初始化各个 API 模块
