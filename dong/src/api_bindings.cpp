@@ -50,40 +50,40 @@ uint32_t dong_view_get_texture_id(dong_view_t* view) {
 }
 
 void dong_view_send_mouse_move(dong_view_t* view, int32_t x, int32_t y) {
-    (void)view;
-    (void)x;
-    (void)y;
+    if (!view) return;
+    // TODO: Implement mouse move event forwarding to DOM
+    // dispatch event to elements at (x, y)
 }
 
 void dong_view_send_mouse_down(dong_view_t* view, int32_t button) {
-    (void)view;
-    (void)button;
+    if (!view) return;
+    // TODO: Implement mouse down event forwarding to DOM
 }
 
 void dong_view_send_mouse_up(dong_view_t* view, int32_t button) {
-    (void)view;
-    (void)button;
+    if (!view) return;
+    // TODO: Implement mouse up event forwarding to DOM
 }
 
 void dong_view_send_key_down(dong_view_t* view, uint32_t key_code) {
-    (void)view;
-    (void)key_code;
+    if (!view) return;
+    // TODO: Implement key down event forwarding to DOM
 }
 
 void dong_view_send_key_up(dong_view_t* view, uint32_t key_code) {
-    (void)view;
-    (void)key_code;
+    if (!view) return;
+    // TODO: Implement key up event forwarding to DOM
 }
 
 bool dong_view_eval(dong_view_t* view, const char* script) {
-    (void)view;
-    (void)script;
-    return true;
+    if (!view || !script) return false;
+    return reinterpret_cast<DongView*>(view)->eval_script(script);
 }
 
 const char* dong_view_eval_return(dong_view_t* view, const char* script) {
-    (void)view;
-    (void)script;
+    if (!view || !script) return "";
+    // TODO: Implement return value capture from JavaScript
+    reinterpret_cast<DongView*>(view)->eval_script(script);
     return "";
 }
 

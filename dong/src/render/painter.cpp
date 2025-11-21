@@ -2,13 +2,15 @@
 #include "skia_backend.hpp"
 #include <cstring>
 #include <iostream>
+#include <cstdint>
+#include <stdexcept>
 
 namespace dong::render {
 
 Painter::Painter(RenderSurface* surface)
     : surface_(surface), in_frame_(false), current_opacity_(1.0f),
       sk_canvas_(nullptr), sk_surface_(nullptr) {
-    // 初始化 Skia 后端
+    // Initialize Skia backend
     auto backend = std::make_unique<SkiaBackend>(surface);
     if (backend && backend->initialize()) {
         sk_canvas_ = reinterpret_cast<void*>(backend->getCanvas());
@@ -18,7 +20,7 @@ Painter::Painter(RenderSurface* surface)
 }
 
 Painter::~Painter() {
-    // Skia 资源由 SkiaBackend 析构函数处理
+    // Skia resources cleaned up by SkiaBackend destructor
     skia_backend_.reset();
 }
 
@@ -28,9 +30,9 @@ void Painter::beginFrame() {
     in_frame_ = true;
     current_opacity_ = 1.0f;
 
-    // 清空表面
+    // Clear surface
     surface_->lock();
-    surface_->clear(255, 255, 255, 255); // 白色背景
+    surface_->clear(255, 255, 255, 255); // White background
     surface_->unlock();
 }
 
@@ -39,12 +41,12 @@ void Painter::endFrame() {
 
     in_frame_ = false;
 
-    // 提交 Skia 绘制
+    // Commit Skia drawing
     if (skia_backend_) {
         skia_backend_->flush();
     }
 
-    // 标记表面已更新
+    // Mark surface as updated
     surface_->unlock();
 }
 
@@ -53,19 +55,14 @@ void Painter::renderDOM(const dom::DOMNodePtr& root, layout::Engine* layout_engi
 
     beginFrame();
 
-    // If no layout engine provided, we still render with nullptr layout info
-    // This allows testing DOM rendering without layout
     if (layout_engine) {
         const auto* layout_root = layout_engine->getLayout(root);
         if (layout_root) {
             renderNode(root, layout_root);
         } else {
-            // Layout not computed yet, skip rendering
-            std::cerr << "Warning: Layout not computed for DOM root\n";
+            std::cerr << "Warning: Layout not computed for DOM root" << std::endl;
         }
     } else {
-        // Render with dummy layout (all zeros)
-        // This is fallback behavior if layout_engine is not provided
         renderNode(root, nullptr);
     }
 
@@ -75,33 +72,22 @@ void Painter::renderDOM(const dom::DOMNodePtr& root, layout::Engine* layout_engi
 void Painter::renderNode(const dom::DOMNodePtr& node, const layout::LayoutNode* layout_node) {
     if (!node) return;
 
-    // If layout_node is provided, use it for positioning and sizing
+    // Skip text nodes (rendered as part of parent element content)
+    if (node->getType() == dom::DOMNode::NodeType::TEXT) {
+        return;
+    }
+
+    // Draw background and borders if layout provided
     if (layout_node) {
-        // 绘制背景
         drawNodeBackground(node, layout_node);
-
-        // 绘制边框
         drawNodeBorder(node, layout_node);
-
-        // 绘制内容（文本、图片等）
         drawNodeContent(node, layout_node);
     }
 
-    // 递归绘制子节点
+    // Recursively render children
     const auto& children = node->getChildren();
-    if (layout_node && layout_node->first_child) {
-        const auto* child_layout = layout_node->first_child;
-        for (size_t i = 0; i < children.size(); ++i) {
-            if (child_layout) {
-                renderNode(children[i], child_layout);
-                child_layout = child_layout->next_sibling;
-            }
-        }
-    } else {
-        // No layout info, render children without layout
-        for (const auto& child : children) {
-            renderNode(child, nullptr);
-        }
+    for (const auto& child : children) {
+        renderNode(child, nullptr);
     }
 }
 
@@ -114,17 +100,37 @@ void Painter::drawNodeBackground(const dom::DOMNodePtr& node, const layout::Layo
     float width = layout_node->layout.dimensions[0];
     float height = layout_node->layout.dimensions[1];
 
-    // 绘制背景色
+    // Draw background color
     if (style.background_color != "transparent") {
-        // 简单的颜色解析（仅支持 #RRGGBB 格式）
-        uint8_t r = 200, g = 200, b = 200; // 默认灰色
-        if (style.background_color == "red") {
-            r = 255; g = 0; b = 0;
-        } else if (style.background_color == "blue") {
-            r = 0; g = 0; b = 255;
-        } else if (style.background_color == "green") {
-            r = 0; g = 255; b = 0;
+        uint8_t r = 200, g = 200, b = 200;
+        const auto& color = style.background_color;
+
+        // Parse #RRGGBB format
+        if (color.size() == 7 && color[0] == '#') {
+            try {
+                r = (uint8_t)std::stoi(color.substr(1, 2), nullptr, 16);
+                g = (uint8_t)std::stoi(color.substr(3, 2), nullptr, 16);
+                b = (uint8_t)std::stoi(color.substr(5, 2), nullptr, 16);
+            } catch (...) {}
         }
+        // Parse #RGB format
+        else if (color.size() == 4 && color[0] == '#') {
+            try {
+                r = (uint8_t)(std::stoi(color.substr(1, 1), nullptr, 16) * 17);
+                g = (uint8_t)(std::stoi(color.substr(2, 1), nullptr, 16) * 17);
+                b = (uint8_t)(std::stoi(color.substr(3, 1), nullptr, 16) * 17);
+            } catch (...) {}
+        }
+        // Named colors
+        else if (color == "red") { r = 255; g = 0; b = 0; }
+        else if (color == "blue") { r = 0; g = 0; b = 255; }
+        else if (color == "green") { r = 0; g = 128; b = 0; }
+        else if (color == "white") { r = 255; g = 255; b = 255; }
+        else if (color == "black") { r = 0; g = 0; b = 0; }
+        else if (color == "gray" || color == "grey") { r = 128; g = 128; b = 128; }
+        else if (color == "yellow") { r = 255; g = 255; b = 0; }
+        else if (color == "cyan") { r = 0; g = 255; b = 255; }
+        else if (color == "magenta") { r = 255; g = 0; b = 255; }
 
         drawRect(x, y, width, height, r, g, b);
     }
@@ -139,24 +145,18 @@ void Painter::drawNodeBorder(const dom::DOMNodePtr& node, const layout::LayoutNo
     float width = layout_node->layout.dimensions[0];
     float height = layout_node->layout.dimensions[1];
 
-    // 简单的边框支持（仅支持实线边框）
+    // Draw border
     if (style.border_width > 0 && style.border_color != "transparent") {
-        uint8_t r = 0, g = 0, b = 0; // 默认黑色
-        if (style.border_color == "red") {
-            r = 255; g = 0; b = 0;
-        } else if (style.border_color == "blue") {
-            r = 0; g = 0; b = 255;
-        } else if (style.border_color == "green") {
-            r = 0; g = 255; b = 0;
-        }
+        uint8_t r = 0, g = 0, b = 0;
+        if (style.border_color == "red") { r = 255; }
+        else if (style.border_color == "blue") { b = 255; }
+        else if (style.border_color == "green") { g = 255; }
 
         skia_backend_->drawStroke(x, y, width, height, style.border_width, r, g, b);
     }
 
-    // 圆角支持
+    // Draw rounded corners
     if (style.border_radius > 0) {
-        // 使用 Skia 的圆角矩形（绘制在背景之后作为装饰）
-        // 这里我们绘制一个透明的圆角边框
         skia_backend_->drawRoundRect(x, y, width, height, style.border_radius,
                                       50, 50, 50, 0, 0.5f);
     }
@@ -167,7 +167,7 @@ void Painter::drawNodeContent(const dom::DOMNodePtr& node, const layout::LayoutN
 
     std::string tag = node->getTagName();
 
-    // 如果是文本节点或包含文本内容
+    // Handle text nodes
     if (node->getType() == dom::DOMNode::NodeType::TEXT) {
         std::string text = node->getTextContent();
         if (!text.empty()) {
@@ -176,10 +176,10 @@ void Painter::drawNodeContent(const dom::DOMNodePtr& node, const layout::LayoutN
             float y = layout_node->layout.position[1];
             float font_size = style.font_size;
 
-            drawText(text, x, y, font_size, 0, 0, 0); // 黑色文本
+            drawText(text, x, y, font_size, 0, 0, 0);
         }
     }
-    // 如果是图片标签
+    // Handle image elements
     else if (tag == "img") {
         if (node->hasAttribute("src")) {
             std::string src = node->getAttribute("src");

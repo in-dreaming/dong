@@ -24,6 +24,7 @@ View::View(uint32_t width, uint32_t height)
 }
 
 View::~View() {
+    // All resources are cleaned up via unique_ptr destructors
 }
 
 void View::load_html(const char* html) {
