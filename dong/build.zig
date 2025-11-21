@@ -166,8 +166,7 @@ fn buildLexbor(b: *std.Build, lib: *std.Build.Step.Compile, target: std.Build.Re
     b.installArtifact(lexbor_lib);
     lib.linkLibrary(lexbor_lib);
     lib.addIncludePath(b.path("third_party/lexbor/source"));
-    std.debug.print("Lexbor compiled
-", .{});
+    std.debug.print("Lexbor compiled", .{});
 }
 
 fn buildYoga(b: *std.Build, lib: *std.Build.Step.Compile, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {
@@ -205,14 +204,13 @@ fn buildYoga(b: *std.Build, lib: *std.Build.Step.Compile, target: std.Build.Reso
             "third_party/yoga/yoga/node/LayoutResults.cpp",
             "third_party/yoga/yoga/node/Node.cpp",
         },
-        .flags = &.{ "-std=c++20", "-fno-exceptions", "-fno-rtti" },
+        .flags = &.{ "-std=c++20" },
     });
 
     b.installArtifact(yoga_lib);
     lib.linkLibrary(yoga_lib);
     lib.addIncludePath(b.path("third_party/yoga"));
-    std.debug.print("Yoga compiled
-", .{});
+    std.debug.print("Yoga compiled", .{});
 }
 
 fn addYogaIncludePaths(b: *std.Build, lib: *std.Build.Step.Compile) void {
@@ -233,24 +231,21 @@ fn buildSkia(b: *std.Build, lib: *std.Build.Step.Compile, target: std.Build.Reso
     const skia_lib_dir = "third_party/skia/lib";
 
     if (!dirExists(b.build_root.handle, skia_include)) {
-        std.debug.print("Info: Skia headers not found
-", .{});
+        std.debug.print("Info: Skia headers not found", .{});
         return;
     }
 
     addSkiaIncludePaths(b, lib, skia_include);
 
     if (!dirExists(b.build_root.handle, skia_lib_dir)) {
-        std.debug.print("Warning: Skia lib not found
-", .{});
+        std.debug.print("Warning: Skia lib not found", .{});
         return;
     }
 
     lib.addLibraryPath(b.path(skia_lib_dir));
     lib.linkSystemLibrary("skia");
     linkSkiaSystemLibs(lib, target);
-    std.debug.print("Skia integrated
-", .{});
+    std.debug.print("Skia integrated", .{});
 }
 
 fn addSkiaIncludePaths(b: *std.Build, lib: *std.Build.Step.Compile, skia_path: []const u8) void {
@@ -336,48 +331,79 @@ fn dirExists(handle: std.fs.Dir, path: []const u8) bool {
 }
 
 fn buildDemos(b: *std.Build, lib: *std.Build.Step.Compile, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {
-    const demos = &[_]struct { name: []const u8, file: []const u8 }{
+    const c_demos = &[_]struct { name: []const u8, file: []const u8 }{
         .{ .name = "simple_demo", .file = "examples/simple_demo.c" },
         .{ .name = "basic_demo", .file = "examples/basic_demo.c" },
     };
 
-    inline for (demos) |demo| {
-        const exe = b.addExecutable(.{
-            .name = demo.name,
-            .target = target,
-            .optimize = optimize,
-            .root_source_file = null,
-        });
+    const cpp_demos = &[_]struct { name: []const u8, file: []const u8 }{
+        .{ .name = "complete_demo", .file = "examples/complete_demo.cpp" },
+        .{ .name = "render_and_script_demo", .file = "examples/render_and_script_demo.cpp" },
+    };
 
-        exe.linkLibC();
-        exe.linkLibCpp();
-        exe.addIncludePath(b.path("include"));
-        exe.addIncludePath(b.path("src"));
-
-        exe.addCSourceFile(.{
-            .file = b.path(demo.file),
-            .flags = &.{"-D_CRT_SECURE_NO_WARNINGS"},
-        });
-
-        exe.linkLibrary(lib);
-
-        if (target.result.os.tag == .windows) {
-            exe.subsystem = .Console;
-        }
-
-        b.installArtifact(exe);
-
-        const run_cmd = b.addRunArtifact(exe);
-        run_cmd.step.dependOn(b.getInstallStep());
-
-        if (b.args) |args| {
-            run_cmd.addArgs(args);
-        }
-
-        const run_step = b.step(
-            b.fmt("run-{s}", .{demo.name}),
-            b.fmt("Run the {s} demo", .{demo.name}),
-        );
-        run_step.dependOn(&run_cmd.step);
+    inline for (c_demos) |demo| {
+        buildSingleDemo(b, lib, target, optimize, demo.name, demo.file, false);
     }
+
+    inline for (cpp_demos) |demo| {
+        buildSingleDemo(b, lib, target, optimize, demo.name, demo.file, true);
+    }
+}
+
+fn buildSingleDemo(
+    b: *std.Build,
+    lib: *std.Build.Step.Compile,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    demo_name: []const u8,
+    demo_file: []const u8,
+    is_cpp: bool,
+) void {
+    const exe = b.addExecutable(.{
+        .name = demo_name,
+        .target = target,
+        .optimize = optimize,
+        .root_source_file = null,
+    });
+
+    exe.linkLibC();
+    exe.linkLibCpp();
+    exe.addIncludePath(b.path("include"));
+    exe.addIncludePath(b.path("src"));
+    exe.addLibraryPath(b.path("third_party/skia/lib"));
+
+    if (is_cpp) {
+        addYogaIncludePaths(b, exe);
+    }
+
+    const flags = if (is_cpp)
+        &[_][]const u8{ "-std=c++17", "-D_CRT_SECURE_NO_WARNINGS" }
+    else
+        &[_][]const u8{ "-D_CRT_SECURE_NO_WARNINGS" };
+
+    exe.addCSourceFile(.{
+        .file = b.path(demo_file),
+        .flags = flags,
+    });
+
+    exe.linkLibrary(lib);
+
+    if (target.result.os.tag == .windows) {
+        exe.subsystem = .Console;
+    }
+
+    b.installArtifact(exe);
+
+    const run_cmd = b.addRunArtifact(exe);
+    run_cmd.step.dependOn(b.getInstallStep());
+
+    if (b.args) |args| {
+        run_cmd.addArgs(args);
+    }
+
+    const run_step = b.step(
+        b.fmt("run-{s}", .{demo_name}),
+        b.fmt("Run the {s} demo", .{demo_name}),
+    );
+    run_step.dependOn(&run_cmd.step);
 }
