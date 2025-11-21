@@ -1,0 +1,32 @@
+{
+  "version": "m102-f2d8e0f",
+  "description": "Skia precompiled binaries from Aseprite fork (optimized for graphics)",
+  "sources": {
+    "darwin": {
+      "name": "macOS ARM64",
+      "url": "https://github.com/aseprite/skia/releases/download/m102-f2d8e0f/Skia-macOS-Release-arm64.zip",
+      "architecture": "arm64",
+      "size_mb": 150
+    },
+    "win32": {
+      "name": "Windows x64",
+      "url": "https://github.com/aseprite/skia/releases/download/m102-f2d8e0f/Skia-Windows-Release-x64.zip",
+      "architecture": "x86_64",
+      "crt": "/MD",
+      "size_mb": 180
+    },
+    "linux": {
+      "name": "Linux x64",
+      "url": "https://github.com/aseprite/skia/releases/download/m102-f2d8e0f/Skia-Linux-Release-x64.zip",
+      "architecture": "x86_64",
+      "libc": "glibc",
+      "size_mb": 160
+    }
+  },
+  "notes": {
+    "general": "Use Aseprite's fork for game engine optimizations",
+    "macos": "Requires Apple Silicon (M1/M2/M3) or Intel x64 compatible version",
+    "windows": "Requires MSVC runtime MD version. If using /MT, you may need to recompile",
+    "linux": "Compatible with GCC 9+ and Clang 10+"
+  }
+}

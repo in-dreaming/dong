@@ -1,17 +1,17 @@
 #include "skia_backend.hpp"
 #include "render_surface.hpp"
 
-#include <include/core/SkCanvas.h>
-#include <include/core/SkSurface.h>
-#include <include/core/SkPaint.h>
-#include <include/core/SkFont.h>
-#include <include/core/SkTypeface.h>
-#include <include/core/SkTextBlob.h>
-#include <include/core/SkPath.h>
-#include <include/core/SkRRect.h>
-#include <include/core/SkColor.h>
-#include <include/core/SkImageInfo.h>
-#include <include/core/SkImage.h>
+#include <core/SkCanvas.h>
+#include <core/SkSurface.h>
+#include <core/SkPaint.h>
+#include <core/SkFont.h>
+#include <core/SkTypeface.h>
+#include <core/SkTextBlob.h>
+#include <core/SkPath.h>
+#include <core/SkRRect.h>
+#include <core/SkColor.h>
+#include <core/SkImageInfo.h>
+#include <core/SkImage.h>
 
 #include <cstdio>
 #include <cstring>

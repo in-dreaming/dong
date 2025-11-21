@@ -9,3 +9,10 @@ build/
 *.dylib
 .vscode/
 .idea/
+
+# Skia precompiled libraries (platform-specific)
+third_party/skia/*/lib/
+third_party/skia/windows/
+third_party/skia/linux/
+# Keep Mac headers for development
+!third_party/skia/mac/include/
