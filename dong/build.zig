@@ -132,7 +132,13 @@ pub fn build(b: *std.Build) void {
     lib.addIncludePath(b.path("third_party/quickjs"));
     lib.addIncludePath(b.path("third_party/lexbor/source"));
     lib.addIncludePath(b.path("third_party/yoga"));
-    lib.addIncludePath(b.path("third_party/skia/include"));
+    // Skia include paths (correct paths for macOS arm64)
+    lib.addIncludePath(b.path("third_party/skia/mac"));  // For internal includes like #include "include/core/..."
+    lib.addIncludePath(b.path("third_party/skia/mac/include"));
+    lib.addIncludePath(b.path("third_party/skia/mac/include/core"));
+    lib.addIncludePath(b.path("third_party/skia/mac/include/gpu"));
+    lib.addIncludePath(b.path("third_party/skia/mac/modules/skshaper/include"));
+    lib.addIncludePath(b.path("third_party/skia/mac/modules/skparagraph/include"));
     
     // ============================================================
     // QuickJS (C sources)
@@ -166,7 +172,7 @@ pub fn build(b: *std.Build) void {
             "src/script/js_bindings.cpp",
             "src/render/painter.cpp",
             "src/render/render_surface.cpp",
-            // "src/render/skia_backend.cpp",  // Temporarily disabled - Skia include issues
+            "src/render/skia_backend.cpp",
         },
         .flags = &.{"-std=c++17"},
     });
