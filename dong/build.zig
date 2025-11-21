@@ -63,6 +63,55 @@ fn addYogaFiles(lib: *std.Build.Step.Compile, _: *std.Build) void {
     });
 }
 
+fn linkSkiaLibraries(exe: *std.Build.Step.Compile, b: *std.Build) void {
+    const skia_lib_path = "third_party/skia/mac/out/Debug-arm64";
+    exe.addLibraryPath(b.path(skia_lib_path));
+    
+    // Link all Skia libraries directly as object files
+    exe.addObjectFile(b.path(skia_lib_path ++ "/libskia.a"));
+    exe.addObjectFile(b.path(skia_lib_path ++ "/libskottie.a"));
+    exe.addObjectFile(b.path(skia_lib_path ++ "/libskparagraph.a"));
+    exe.addObjectFile(b.path(skia_lib_path ++ "/libskshaper.a"));
+    exe.addObjectFile(b.path(skia_lib_path ++ "/libskunicode.a"));
+    exe.addObjectFile(b.path(skia_lib_path ++ "/libsksg.a"));
+    exe.addObjectFile(b.path(skia_lib_path ++ "/libskresources.a"));
+    exe.addObjectFile(b.path(skia_lib_path ++ "/libharfbuzz.a"));
+    exe.addObjectFile(b.path(skia_lib_path ++ "/libfreetype2.a"));
+    exe.addObjectFile(b.path(skia_lib_path ++ "/libicu.a"));
+    exe.addObjectFile(b.path(skia_lib_path ++ "/libskcms.a"));
+    exe.addObjectFile(b.path(skia_lib_path ++ "/libwuffs.a"));
+    exe.addObjectFile(b.path(skia_lib_path ++ "/libsvg.a"));
+    exe.addObjectFile(b.path(skia_lib_path ++ "/libwebp.a"));
+    exe.addObjectFile(b.path(skia_lib_path ++ "/libwebp_sse41.a"));
+    exe.addObjectFile(b.path(skia_lib_path ++ "/libpng.a"));
+    exe.addObjectFile(b.path(skia_lib_path ++ "/libjpeg.a"));
+    exe.addObjectFile(b.path(skia_lib_path ++ "/libzlib.a"));
+    exe.addObjectFile(b.path(skia_lib_path ++ "/libexpat.a"));
+    exe.addObjectFile(b.path(skia_lib_path ++ "/libpiex.a"));
+    exe.addObjectFile(b.path(skia_lib_path ++ "/libbentleyottmann.a"));
+    exe.addObjectFile(b.path(skia_lib_path ++ "/libspvtools.a"));
+    exe.addObjectFile(b.path(skia_lib_path ++ "/libspvtools_val.a"));
+}
+
+fn configureExample(exe: *std.Build.Step.Compile, lib: *std.Build.Step.Compile, b: *std.Build, is_cpp: bool) void {
+    exe.addIncludePath(b.path("include"));
+    if (is_cpp) {
+        exe.addIncludePath(b.path("src"));
+    }
+    
+    linkSkiaLibraries(exe, b);
+    
+    exe.linkLibC();
+    exe.linkLibCpp();
+    exe.linkFramework("CoreFoundation");
+    exe.linkFramework("CoreGraphics");
+    exe.linkFramework("CoreText");
+    exe.linkFramework("Metal");
+    exe.linkFramework("ApplicationServices");
+    exe.linkSystemLibrary("z");
+    exe.linkLibrary(lib);
+}
+
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -105,6 +154,19 @@ pub fn build(b: *std.Build) void {
     lib.addCSourceFiles(.{
         .files = &.{
             "src/api_bindings.cpp",
+            "src/core/context.cpp",
+            "src/core/view.cpp",
+            "src/dom/dom_manager.cpp",
+            "src/dom/dom_node.cpp",
+            "src/dom/event_system.cpp",
+            "src/dom/parser.cpp",
+            "src/dom/style_engine.cpp",
+            "src/layout/layout_engine.cpp",
+            "src/script/script_engine.cpp",
+            "src/script/js_bindings.cpp",
+            "src/render/painter.cpp",
+            "src/render/render_surface.cpp",
+            // "src/render/skia_backend.cpp",  // Temporarily disabled - Skia include issues
         },
         .flags = &.{"-std=c++17"},
     });
@@ -127,6 +189,11 @@ pub fn build(b: *std.Build) void {
     
     // Skia header includes
     lib.addIncludePath(b.path("third_party/skia/mac/include"));
+    lib.addIncludePath(b.path("third_party/skia/mac/include/core"));
+    lib.addIncludePath(b.path("third_party/skia/mac/include/gpu"));
+    lib.addIncludePath(b.path("third_party/skia/mac/include/effects"));
+    lib.addIncludePath(b.path("third_party/skia/mac/include/pathops"));
+    lib.addIncludePath(b.path("third_party/skia/mac/include/svg"));
     lib.addIncludePath(b.path("third_party/skia/mac/modules/skshaper/include"));
     lib.addIncludePath(b.path("third_party/skia/mac/modules/skparagraph/include"));
     lib.addIncludePath(b.path("third_party/skia/mac/modules/skottie/include"));
@@ -168,4 +235,150 @@ pub fn build(b: *std.Build) void {
     lib.linkFramework("ApplicationServices");
     
     b.installArtifact(lib);
+    
+    // ============================================================
+    // Examples Build
+    // ============================================================
+    const examples_step = b.step("examples", "Build all examples");
+    
+    // Simple demo (C)
+    {
+        const exe = b.addExecutable(.{
+            .name = "simple_demo",
+            .target = target,
+            .optimize = optimize,
+            .root_source_file = null,
+        });
+        exe.addCSourceFile(.{ .file = b.path("examples/simple_demo.c"), .flags = &.{} });
+        configureExample(exe, lib, b, false);
+        const install = b.addInstallArtifact(exe, .{});
+        examples_step.dependOn(&install.step);
+    }
+    
+    // Basic demo (C)
+    {
+        const exe = b.addExecutable(.{
+            .name = "basic_demo",
+            .target = target,
+            .optimize = optimize,
+            .root_source_file = null,
+        });
+        exe.addCSourceFile(.{ .file = b.path("examples/basic_demo.c"), .flags = &.{} });
+        configureExample(exe, lib, b, false);
+        const install = b.addInstallArtifact(exe, .{});
+        examples_step.dependOn(&install.step);
+    }
+    
+    // Complete demo (C++)
+    {
+        const exe = b.addExecutable(.{
+            .name = "complete_demo",
+            .target = target,
+            .optimize = optimize,
+            .root_source_file = null,
+        });
+        exe.addCSourceFile(.{ .file = b.path("examples/complete_demo.cpp"), .flags = &.{"-std=c++17"} });
+        configureExample(exe, lib, b, true);
+        const install = b.addInstallArtifact(exe, .{});
+        examples_step.dependOn(&install.step);
+    }
+    
+    // DOM test (C++)
+    {
+        const exe = b.addExecutable(.{
+            .name = "dom_test",
+            .target = target,
+            .optimize = optimize,
+            .root_source_file = null,
+        });
+        exe.addCSourceFile(.{ .file = b.path("examples/dom_test.cpp"), .flags = &.{"-std=c++17"} });
+        configureExample(exe, lib, b, true);
+        const install = b.addInstallArtifact(exe, .{});
+        examples_step.dependOn(&install.step);
+    }
+    
+    // Integration demo (C++)
+    {
+        const exe = b.addExecutable(.{
+            .name = "integration_demo",
+            .target = target,
+            .optimize = optimize,
+            .root_source_file = null,
+        });
+        exe.addCSourceFile(.{ .file = b.path("examples/integration_demo.cpp"), .flags = &.{"-std=c++17"} });
+        configureExample(exe, lib, b, true);
+        const install = b.addInstallArtifact(exe, .{});
+        examples_step.dependOn(&install.step);
+    }
+    
+    // JS API test (C++)
+    {
+        const exe = b.addExecutable(.{
+            .name = "js_api_test",
+            .target = target,
+            .optimize = optimize,
+            .root_source_file = null,
+        });
+        exe.addCSourceFile(.{ .file = b.path("examples/js_api_test.cpp"), .flags = &.{"-std=c++17"} });
+        configureExample(exe, lib, b, true);
+        const install = b.addInstallArtifact(exe, .{});
+        examples_step.dependOn(&install.step);
+    }
+    
+    // Render and script demo (C++)
+    {
+        const exe = b.addExecutable(.{
+            .name = "render_and_script_demo",
+            .target = target,
+            .optimize = optimize,
+            .root_source_file = null,
+        });
+        exe.addCSourceFile(.{ .file = b.path("examples/render_and_script_demo.cpp"), .flags = &.{"-std=c++17"} });
+        configureExample(exe, lib, b, true);
+        const install = b.addInstallArtifact(exe, .{});
+        examples_step.dependOn(&install.step);
+    }
+    
+    // Style cascade test (C++)
+    {
+        const exe = b.addExecutable(.{
+            .name = "style_cascade_test",
+            .target = target,
+            .optimize = optimize,
+            .root_source_file = null,
+        });
+        exe.addCSourceFile(.{ .file = b.path("examples/style_cascade_test.cpp"), .flags = &.{"-std=c++17"} });
+        configureExample(exe, lib, b, true);
+        const install = b.addInstallArtifact(exe, .{});
+        examples_step.dependOn(&install.step);
+    }
+    
+    // Quick run commands for common demos
+    {
+        const exe = b.addExecutable(.{
+            .name = "run_simple_tmp",
+            .target = target,
+            .optimize = optimize,
+            .root_source_file = null,
+        });
+        exe.addCSourceFile(.{ .file = b.path("examples/simple_demo.c"), .flags = &.{} });
+        configureExample(exe, lib, b, false);
+        const run = b.addRunArtifact(exe);
+        const run_step = b.step("run-simple", "Run simple demo");
+        run_step.dependOn(&run.step);
+    }
+    
+    {
+        const exe = b.addExecutable(.{
+            .name = "run_complete_tmp",
+            .target = target,
+            .optimize = optimize,
+            .root_source_file = null,
+        });
+        exe.addCSourceFile(.{ .file = b.path("examples/complete_demo.cpp"), .flags = &.{"-std=c++17"} });
+        configureExample(exe, lib, b, true);
+        const run = b.addRunArtifact(exe);
+        const run_step = b.step("run-complete", "Run complete demo");
+        run_step.dependOn(&run.step);
+    }
 }

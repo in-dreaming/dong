@@ -24,6 +24,10 @@ void dong_view_destroy(dong_view_t* view) {
     delete reinterpret_cast<DongView*>(view);
 }
 
+void dong_view_free(dong_view_t* view) {
+    delete reinterpret_cast<DongView*>(view);
+}
+
 void dong_view_load_html(dong_view_t* view, const char* html) {
     reinterpret_cast<DongView*>(view)->load_html(html);
 }
