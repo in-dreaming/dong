@@ -1,0 +1,11 @@
+zig-cache/
+zig-build-output/
+build/
+.DS_Store
+*.o
+*.a
+*.so
+*.dll
+*.dylib
+.vscode/
+.idea/

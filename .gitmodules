@@ -1,0 +1,15 @@
+[submodule "dong/third_party/quickjs"]
+	path = dong/third_party/quickjs
+	url = https://github.com/bellard/quickjs
+[submodule "dong/third_party/lexbor"]
+	path = dong/third_party/lexbor
+	url = https://github.com/lexbor/lexbor
+[submodule "dong/third_party/yoga"]
+	path = dong/third_party/yoga
+	url = https://github.com/facebook/yoga
+[submodule "dong/third_party/sdl"]
+	path = dong/third_party/sdl
+	url = https://github.com/in-dreaming/SDL.git
+[submodule "dong/third_party/SDL_shadercross"]
+	path = dong/third_party/SDL_shadercross
+	url = https://github.com/in-dreaming/SDL_shadercross.git
