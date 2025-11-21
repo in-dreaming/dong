@@ -47,6 +47,10 @@
 #include "libunicode.h"
 #include "dtoa.h"
 
+#ifndef CONFIG_VERSION
+#define CONFIG_VERSION "2024-01"
+#endif
+
 #define OPTIMIZE         1
 #define SHORT_OPCODES    1
 #if defined(EMSCRIPTEN)
