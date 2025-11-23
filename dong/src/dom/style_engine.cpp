@@ -3,6 +3,7 @@
 #include <sstream>
 #include <cctype>
 #include <iostream>
+#include <unordered_set>
 
 namespace dong::dom {
 
@@ -181,6 +182,13 @@ void StyleEngine::computeStyles(DOMNodePtr node) {
             computed.flex_shrink = rule.style.flex_shrink;
         if (rule.style.flex_basis.unit != CSSValue::Unit::AUTO) 
             computed.flex_basis = rule.style.flex_basis;
+    }
+
+    static const std::unordered_set<std::string> kAlwaysHiddenTags = {
+        "head", "style", "script", "meta", "title"
+    };
+    if (kAlwaysHiddenTags.count(node->getTagName()) > 0) {
+        computed.display = "none";
     }
 
     // Inherit selected text-related properties from parent when not explicitly set

@@ -4,8 +4,8 @@
 #include <iostream>
 #include <cstdint>
 #include <stdexcept>
-#include <cstdio>
 #include <algorithm>
+#include <vector>
 #include <sstream>
 #include <cctype>
 
@@ -59,42 +59,27 @@ void Painter::renderDOM(const dom::DOMNodePtr& root, layout::Engine* layout_engi
 
     layout_engine_ = layout_engine;
 
-    std::fprintf(stderr, "[Painter] renderDOM begin\n");
     beginFrame();
 
     if (layout_engine_) {
         const auto* layout_root = layout_engine_->getLayout(root);
         if (layout_root) {
-            std::fprintf(stderr, "[Painter] layout root ready\n");
             renderNode(root, layout_root);
-            std::fprintf(stderr, "[Painter] renderNode finished\n");
-        } else {
-            std::fprintf(stderr, "[Painter] missing layout info\n");
         }
     } else {
-        std::fprintf(stderr, "[Painter] layout engine missing\n");
         renderNode(root, nullptr);
     }
 
     endFrame();
     layout_engine_ = nullptr;
-    std::fprintf(stderr, "[Painter] renderDOM end\n");
 }
 
 void Painter::renderNode(const dom::DOMNodePtr& node, const layout::LayoutNode* layout_node) {
     if (!node) return;
 
     const auto& style = node->getComputedStyle();
-    const std::string id_attr = node->hasAttribute("id") ? node->getAttribute("id") : "";
-    const std::string class_attr = node->hasAttribute("class") ? node->getAttribute("class") : "";
-    std::fprintf(stderr, "[Painter] renderNode type=%d tag=%s id=%s class=%s layout=%p bg=%s\n",
-        static_cast<int>(node->getType()), node->getTagName().c_str(), id_attr.c_str(), class_attr.c_str(),
-        static_cast<const void*>(layout_node), style.background_color.c_str());
-
-    if (layout_node) {
-        std::fprintf(stderr, "[Painter] layout box=(%.1f,%.1f,%.1f,%.1f)\n",
-            layout_node->layout.position[0], layout_node->layout.position[1],
-            layout_node->layout.dimensions[0], layout_node->layout.dimensions[1]);
+    if (style.display == "none") {
+        return;
     }
 
     // Skip text nodes (rendered as part of parent element content)
@@ -122,11 +107,8 @@ void Painter::renderNode(const dom::DOMNodePtr& node, const layout::LayoutNode* 
             }
         }
 
-        std::fprintf(stderr, "[Painter] draw background\n");
         drawNodeBackground(node, layout_node);
-        std::fprintf(stderr, "[Painter] draw border\n");
         drawNodeBorder(node, layout_node);
-        std::fprintf(stderr, "[Painter] draw content\n");
         drawNodeContent(node, layout_node);
     }
 
@@ -207,6 +189,34 @@ static void parseCssColor(const std::string& css, uint8_t& r, uint8_t& g, uint8_
     r = g = b = 240;
 }
 
+static std::string collapseWhitespace(const std::string& input) {
+    if (input.empty()) {
+        return "";
+    }
+
+    std::string output;
+    output.reserve(input.size());
+    bool in_space = false;
+    for (char c : input) {
+        if (std::isspace(static_cast<unsigned char>(c))) {
+            if (!in_space) {
+                output.push_back(' ');
+                in_space = true;
+            }
+        } else {
+            output.push_back(c);
+            in_space = false;
+        }
+    }
+
+    size_t first = output.find_first_not_of(' ');
+    if (first == std::string::npos) {
+        return "";
+    }
+    size_t last = output.find_last_not_of(' ');
+    return output.substr(first, last - first + 1);
+}
+
 } // anonymous namespace
 
 void Painter::drawNodeBackground(const dom::DOMNodePtr& node, const layout::LayoutNode* layout_node) {
@@ -234,11 +244,6 @@ void Painter::drawNodeBackground(const dom::DOMNodePtr& node, const layout::Layo
     uint8_t r = 240, g = 240, b = 240, a = 255;
     parseCssColor(style.background_color, r, g, b, a);
     a = static_cast<uint8_t>(a * current_opacity_);
-
-    std::fprintf(stderr,
-        "[Painter] background tag=%s color=%s rgba=(%u,%u,%u,%u) rect=(%.1f,%.1f,%.1f,%.1f)\n",
-        node->getTagName().c_str(), style.background_color.c_str(), r, g, b, a,
-        x, y, width, height);
 
     if (style.border_radius > 0.0f) {
         skia_backend_->drawRoundRect(x, y, width, height, style.border_radius,
@@ -278,100 +283,129 @@ void Painter::drawNodeBorder(const dom::DOMNodePtr& node, const layout::LayoutNo
 void Painter::drawNodeContent(const dom::DOMNodePtr& node, const layout::LayoutNode* layout_node) {
     if (!node || !layout_node || !skia_backend_) return;
 
-    std::string tag = node->getTagName();
+    const std::string tag = node->getTagName();
+    if (tag == "script" || tag == "style" || tag == "head") {
+        return;
+    }
 
-    // For now, render text content for block elements like h1 / p using their own box
-    if (node->getType() == dom::DOMNode::NodeType::ELEMENT && (tag == "h1" || tag == "p")) {
-        // Collect direct text children
-        std::string text;
-        for (const auto& child : node->getChildren()) {
-            if (child && child->getType() == dom::DOMNode::NodeType::TEXT) {
-                text += child->getTextContent();
-            }
-        }
-
-        if (!text.empty()) {
-            const auto& style = node->getComputedStyle();
-            float x = layout_node->layout.position[0];
-            float y = layout_node->layout.position[1];
-            float width = layout_node->layout.dimensions[0];
-            float height = layout_node->layout.dimensions[1];
-
-            // Apply simple padding based on computed style
-            float pad_left = style.padding_left.isPixel() ? style.padding_left.value : 0.0f;
-            float pad_right = style.padding_right.isPixel() ? style.padding_right.value : 0.0f;
-            float pad_top = style.padding_top.isPixel() ? style.padding_top.value : 0.0f;
-
-            float font_size = style.font_size;
-            if (font_size <= 0.0f) {
-                font_size = 16.0f; // fallback font size
-            }
-
-            // Text color from style.color
-            uint8_t r = 0, g = 0, b = 0, a = 255;
-            parseCssColor(style.color, r, g, b, a);
-            a = static_cast<uint8_t>(a * current_opacity_);
-
-            float text_x = x + pad_left;
-            float text_y;
-
-            // Respect text-align for horizontal alignment (single line)
-            if (skia_backend_) {
-                float text_width = skia_backend_->measureTextWidth(text, font_size, style.font_family, style.font_weight);
-                float inner_width = width - pad_left - pad_right;
-                if (inner_width < 0.0f) inner_width = 0.0f;
-
-                if (style.text_align == "center") {
-                    text_x = x + pad_left + (inner_width - text_width) * 0.5f;
-                } else if (style.text_align == "right") {
-                    text_x = x + pad_left + (inner_width - text_width);
-                } else {
-                    // left or default
-                    text_x = x + pad_left;
-                }
-            }
-            // Try to keep baseline inside the element box: if the box太矮，就大致垂直居中
-            if (height > font_size + pad_top) {
-                text_y = y + pad_top + font_size;
-            } else {
-                text_y = y + height * 0.5f + font_size * 0.35f;
-            }
-
-            std::fprintf(stderr,
-                "[Painter] draw text tag=%s text='%s' box=(%.1f,%.1f,%.1f,%.1f) pad=(%.1f,%.1f) font=%.1f rgba=(%u,%u,%u,%u)\n",
-                node->getTagName().c_str(), text.c_str(), x, y, width, height,
-                pad_left, pad_top, font_size, r, g, b, a);
-
-            // Debug helper: small red dot at the baseline start so we can see位置
-            skia_backend_->drawRect(text_x, text_y, 2.0f, 2.0f, 255, 0, 0, 255);
-
-            // 使用 CSS 的 font-family / font-weight 信息进行美化渲染
-            const std::string& font_family = style.font_family;
-            const std::string& font_weight = style.font_weight;
-
-            // 简单的文字阴影，让对比度更好
-            uint8_t shadow_a = static_cast<uint8_t>(a * 0.6f);
-            skia_backend_->drawTextStyled(text, text_x + 1.5f, text_y + 1.5f,
-                                          font_size, font_family, font_weight,
-                                          0, 0, 0, shadow_a);
-
-            // 主文字
-            skia_backend_->drawTextStyled(text, text_x, text_y,
-                                          font_size, font_family, font_weight,
-                                          r, g, b, a);
+    bool has_text_child = false;
+    bool has_element_child = false;
+    std::string raw_text;
+    for (const auto& child : node->getChildren()) {
+        if (!child) continue;
+        if (child->getType() == dom::DOMNode::NodeType::TEXT) {
+            raw_text += child->getTextContent();
+            has_text_child = true;
+        } else if (child->getType() == dom::DOMNode::NodeType::ELEMENT) {
+            has_element_child = true;
         }
     }
-    // Handle image elements
-    else if (tag == "img") {
-        if (node->hasAttribute("src")) {
-            std::string src = node->getAttribute("src");
-            float x = layout_node->layout.position[0];
-            float y = layout_node->layout.position[1];
-            float width = layout_node->layout.dimensions[0];
-            float height = layout_node->layout.dimensions[1];
 
-            drawImage(src, x, y, width, height);
+    const bool tag_prefers_text =
+        tag == "h1" || tag == "h2" || tag == "h3" || tag == "h4" ||
+        tag == "h5" || tag == "h6" || tag == "p" || tag == "span" ||
+        tag == "button" || tag == "code" || tag == "div" || tag == "footer";
+
+    if (!has_text_child) {
+        return;
+    }
+    if (!tag_prefers_text && has_element_child) {
+        return;
+    }
+
+    std::string text = collapseWhitespace(raw_text);
+    if (text.empty()) {
+        return;
+    }
+
+    const auto& style = node->getComputedStyle();
+    float x = layout_node->layout.position[0];
+    float y = layout_node->layout.position[1];
+    float width = layout_node->layout.dimensions[0];
+    float height = layout_node->layout.dimensions[1];
+
+    float pad_left = style.padding_left.isPixel() ? style.padding_left.value : 0.0f;
+    float pad_right = style.padding_right.isPixel() ? style.padding_right.value : 0.0f;
+    float pad_top = style.padding_top.isPixel() ? style.padding_top.value : 0.0f;
+    float pad_bottom = style.padding_bottom.isPixel() ? style.padding_bottom.value : 0.0f;
+
+    float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
+    float line_height = font_size * (tag == "h1" ? 1.25f : (tag == "h2" ? 1.2f : 1.35f));
+    if (tag == "button" || tag == "span") {
+        line_height = font_size * 1.2f;
+    }
+
+    uint8_t r = 0, g = 0, b = 0, a = 255;
+    parseCssColor(style.color, r, g, b, a);
+    a = static_cast<uint8_t>(a * current_opacity_);
+    uint8_t shadow_a = static_cast<uint8_t>(a * 0.6f);
+
+    auto measure = [&](const std::string& line) -> float {
+        if (!skia_backend_) {
+            return static_cast<float>(line.size()) * font_size * 0.5f;
         }
+        return skia_backend_->measureTextWidth(line, font_size, style.font_family, style.font_weight);
+    };
+
+    float inner_width = width - pad_left - pad_right;
+    if (inner_width <= 0.0f) {
+        inner_width = width > 0.0f ? width : 0.0f;
+    }
+
+    std::vector<std::string> lines;
+    if (inner_width <= 0.0f) {
+        lines.push_back(text);
+    } else {
+        std::istringstream stream(text);
+        std::string word;
+        std::string current_line;
+        while (stream >> word) {
+            std::string candidate = current_line.empty() ? word : current_line + " " + word;
+            float candidate_width = measure(candidate);
+            if (candidate_width <= inner_width || current_line.empty()) {
+                current_line = candidate;
+            } else {
+                lines.push_back(current_line);
+                current_line = word;
+            }
+        }
+        if (!current_line.empty()) {
+            lines.push_back(current_line);
+        }
+    }
+
+    if (lines.empty()) {
+        lines.push_back(text);
+    }
+
+    float first_baseline;
+    if (height > font_size + pad_top + pad_bottom) {
+        first_baseline = y + pad_top + font_size;
+    } else {
+        first_baseline = y + height * 0.5f + font_size * 0.35f;
+    }
+
+    for (size_t i = 0; i < lines.size(); ++i) {
+        const std::string& line = lines[i];
+        float line_width = measure(line);
+        float text_x = x + pad_left;
+        if (style.text_align == "center") {
+            text_x = x + pad_left + std::max(0.0f, (inner_width - line_width) * 0.5f);
+        } else if (style.text_align == "right") {
+            text_x = x + pad_left + std::max(0.0f, inner_width - line_width);
+        }
+
+        float text_y = first_baseline + static_cast<float>(i) * line_height;
+
+        if (shadow_a > 0) {
+            skia_backend_->drawTextStyled(line, text_x + 1.0f, text_y + 1.0f,
+                                          font_size, style.font_family, style.font_weight,
+                                          0, 0, 0, shadow_a);
+        }
+
+        skia_backend_->drawTextStyled(line, text_x, text_y,
+                                      font_size, style.font_family, style.font_weight,
+                                      r, g, b, a);
     }
 }
 

@@ -3,7 +3,6 @@
 #include <yoga/YGConfig.h>
 #include <yoga/Yoga.h>
 #include <iostream>
-#include <cstdio>
 
 namespace dong::layout {
 
@@ -210,18 +209,47 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
 
     const auto& style = dom_node->getComputedStyle();
 
-    // Debug current computed style -> Yoga mapping for key elements
     const std::string& tag = dom_node->getTagName();
-    const std::string id_attr = dom_node->hasAttribute("id") ? dom_node->getAttribute("id") : "";
-    const std::string class_attr = dom_node->hasAttribute("class") ? dom_node->getAttribute("class") : "";
-    std::fprintf(stderr,
-        "[Layout] applyDOMStyles tag=%s id=%s class=%s display=%s width(unit=%d,val=%.1f) height(unit=%d,val=%.1f) flex=%.2f flex_dir=%s\n",
-        tag.c_str(), id_attr.c_str(), class_attr.c_str(), style.display.c_str(),
-        static_cast<int>(style.width.unit), style.width.value,
-        static_cast<int>(style.height.unit), style.height.value,
-        style.flex, style.flex_direction.c_str());
 
     mapComputedStylesToYoga(style, yoga_node);
+
+    bool width_converted_to_max = false;
+    float converted_width_value = 0.0f;
+    if (style.width.isPercent() && style.width.value >= 100.0f &&
+        style.max_width.isPixel() && style.max_width.value > 0.0f) {
+        width_converted_to_max = true;
+        converted_width_value = style.max_width.value;
+        YGNodeStyleSetWidth(yoga_node, converted_width_value);
+    }
+
+    // If parent is a row-direction flex container and this node has an explicit width
+    // but no custom flex-basis, propagate that width as the flex-basis so Yoga treats it
+    // as the main-axis base size. Otherwise, percent widths on flex items shrink to content.
+    bool parent_row_flex = false;
+    if (auto parent = dom_node->getParent()) {
+        if (parent->getType() == dom::DOMNode::NodeType::ELEMENT) {
+            const auto& parent_style = parent->getComputedStyle();
+            if (parent_style.display == "flex") {
+                std::string dir = parent_style.flex_direction;
+                if (dir.empty()) dir = "row";
+                if (dir == "row" || dir == "row-reverse") {
+                    parent_row_flex = true;
+                }
+            }
+        }
+    }
+
+    bool has_explicit_width = style.width.isPixel() || style.width.isPercent() || width_converted_to_max;
+    bool has_custom_flex_basis = style.flex_basis.unit != dom::CSSValue::Unit::AUTO;
+    if (parent_row_flex && has_explicit_width && !has_custom_flex_basis) {
+        if (width_converted_to_max) {
+            YGNodeStyleSetFlexBasis(yoga_node, converted_width_value);
+        } else if (style.width.isPixel()) {
+            YGNodeStyleSetFlexBasis(yoga_node, style.width.value);
+        } else if (style.width.isPercent()) {
+            YGNodeStyleSetFlexBasisPercent(yoga_node, style.width.value);
+        }
+    }
 
     // Heuristic intrinsic sizing for text-like elements.
     // Since Yoga does not know about our text measurement, many text containers would
