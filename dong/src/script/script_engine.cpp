@@ -1,7 +1,23 @@
 #include "script_engine.hpp"
 #include <cstring>
+#include <cstdio>
 
 namespace dong::script {
+
+// 简单的 console.log 实现，直接打印到 stderr
+static JSValue js_console_log(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val;
+    for (int i = 0; i < argc; i++) {
+        if (i > 0) std::fprintf(stderr, " ");
+        const char* str = JS_ToCString(ctx, argv[i]);
+        if (str) {
+            std::fprintf(stderr, "%s", str);
+            JS_FreeCString(ctx, str);
+        }
+    }
+    std::fprintf(stderr, "\n");
+    return JS_UNDEFINED;
+}
 
 ScriptEngine::ScriptEngine() : runtime_(nullptr), context_(nullptr) {
     // 创建 QuickJS 运行时
@@ -45,6 +61,35 @@ bool ScriptEngine::eval(const std::string& code) {
             JS_FreeCString(context_, error_str);
         }
         JS_FreeValue(context_, exception);
+
+        // 调试 console 绑定状态
+        JSValue global = JS_GetGlobalObject(context_);
+        JSValue console_val = JS_GetPropertyStr(context_, global, "console");
+        const char* console_type = JS_IsUndefined(console_val) ? "undefined" :
+                                   JS_IsNull(console_val) ? "null" :
+                                   JS_IsObject(console_val) ? "object" : "other";
+
+        JSValue log_val = JS_UNDEFINED;
+        const char* log_type = "missing";
+        if (!JS_IsUndefined(console_val) && !JS_IsNull(console_val)) {
+            log_val = JS_GetPropertyStr(context_, console_val, "log");
+            if (JS_IsUndefined(log_val)) {
+                log_type = "undefined";
+            } else if (JS_IsFunction(context_, log_val)) {
+                log_type = "function";
+            } else {
+                log_type = "non-function";
+            }
+        }
+
+        std::fprintf(stderr, "[ScriptEngine] debug: console=%s, log=%s\n", console_type, log_type);
+
+        if (!JS_IsUndefined(log_val)) {
+            JS_FreeValue(context_, log_val);
+        }
+        JS_FreeValue(context_, console_val);
+        JS_FreeValue(context_, global);
+
         return false;
     }
 

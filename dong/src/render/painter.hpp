@@ -44,6 +44,7 @@ public:
 
 private:
     RenderSurface* surface_;
+    layout::Engine* layout_engine_;
     bool in_frame_;
     float current_opacity_;
 

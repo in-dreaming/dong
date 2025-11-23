@@ -49,10 +49,12 @@ DOMNodePtr Parser::parse(const std::string& html) {
     if (dom_root) {
         applyDefaultStyles(dom_root);
         
-        // Extract and apply styles from <style> tags
+        // Extract styles from <style> tags and compute CSS-based styles
         auto style_engine = std::make_unique<StyleEngine>();
         extractAndApplyStyles(dom_root, style_engine.get());
+        style_engine->computeStyles(dom_root);
         
+        // Apply inline styles (override stylesheet rules)
         parseInlineStyles(dom_root);
     }
 

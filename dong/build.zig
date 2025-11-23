@@ -33,7 +33,7 @@ fn addCSourcesRecursive(
 }
 
 fn linkSkiaLibraries(step: *std.Build.Step.Compile, b: *std.Build) void {
-    const skia_lib_path = "third_party/skia/mac/out/Debug-arm64";
+    const skia_lib_path = "third_party/skia/mac/out/Release-arm64";
     step.addLibraryPath(b.path(skia_lib_path));
 
     const archives = .{
@@ -58,8 +58,6 @@ fn linkSkiaLibraries(step: *std.Build.Step.Compile, b: *std.Build) void {
         "libexpat.a",
         "libpiex.a",
         "libbentleyottmann.a",
-        "libspvtools.a",
-        "libspvtools_val.a",
     };
 
     inline for (archives) |name| {
@@ -83,6 +81,8 @@ fn configureExample(
     yoga: *std.Build.Step.Compile,
 ) void {
     exe.addIncludePath(b.path("include"));
+    exe.addIncludePath(b.path("src"));
+    exe.addIncludePath(b.path("third_party/quickjs"));
 
     linkSkiaLibraries(exe, b);
 
@@ -221,6 +221,8 @@ pub fn build(b: *std.Build) void {
         .{ .name = "js_api_test", .source = "examples/js_api_test.cpp", .flags = &.{"-std=c++17"} },
         .{ .name = "render_and_script_demo", .source = "examples/render_and_script_demo.cpp", .flags = &.{"-std=c++17"} },
         .{ .name = "style_cascade_test", .source = "examples/style_cascade_test.cpp", .flags = &.{"-std=c++17"} },
+        .{ .name = "skia_cpu_demo", .source = "examples/skia_cpu_demo.cpp", .flags = &.{"-std=c++17"} },
+        .{ .name = "js_event_demo", .source = "examples/js_event_demo.cpp", .flags = &.{"-std=c++17"} },
     };
 
     inline for (example_defs) |info| {

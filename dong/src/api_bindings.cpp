@@ -53,28 +53,27 @@ uint32_t dong_view_get_texture_id(dong_view_t* view) {
 
 void dong_view_send_mouse_move(dong_view_t* view, int32_t x, int32_t y) {
     if (!view) return;
-    // TODO: Implement mouse move event forwarding to DOM
-    // dispatch event to elements at (x, y)
+    reinterpret_cast<DongView*>(view)->handle_mouse_move(x, y);
 }
 
 void dong_view_send_mouse_down(dong_view_t* view, int32_t button) {
     if (!view) return;
-    // TODO: Implement mouse down event forwarding to DOM
+    reinterpret_cast<DongView*>(view)->handle_mouse_down(button);
 }
 
 void dong_view_send_mouse_up(dong_view_t* view, int32_t button) {
     if (!view) return;
-    // TODO: Implement mouse up event forwarding to DOM
+    reinterpret_cast<DongView*>(view)->handle_mouse_up(button);
 }
 
 void dong_view_send_key_down(dong_view_t* view, uint32_t key_code) {
     if (!view) return;
-    // TODO: Implement key down event forwarding to DOM
+    reinterpret_cast<DongView*>(view)->handle_key_down(key_code);
 }
 
 void dong_view_send_key_up(dong_view_t* view, uint32_t key_code) {
     if (!view) return;
-    // TODO: Implement key up event forwarding to DOM
+    reinterpret_cast<DongView*>(view)->handle_key_up(key_code);
 }
 
 bool dong_view_eval(dong_view_t* view, const char* script) {

@@ -286,24 +286,78 @@ static JSValue elem_setTextContent(JSContext* ctx, JSValueConst this_val, int ar
 
 static JSValue elem_addEventListener(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     if (argc < 2) return JS_UNDEFINED;
-    
-    const char* event_type = JS_ToCString(ctx, argv[0]);
-    if (!event_type) return JS_UNDEFINED;
-    
-    // TODO: Store event listener callback and attach to event system
-    // For now, just consume the arguments
-    
-    JS_FreeCString(ctx, event_type);
+
+    // Expect (type, handler)
+    if (!JS_IsString(argv[0]) || !JS_IsFunction(ctx, argv[1])) {
+        return JS_UNDEFINED;
+    }
+
+    // Read the internal node id stored on the element wrapper
+    JSValue id_val = JS_GetPropertyStr(ctx, this_val, "__node_id__");
+    if (JS_IsUndefined(id_val)) {
+        JS_FreeValue(ctx, id_val);
+        return JS_UNDEFINED;
+    }
+
+    int64_t node_id = 0;
+    if (JS_ToInt64(ctx, &node_id, id_val) != 0) {
+        JS_FreeValue(ctx, id_val);
+        return JS_UNDEFINED;
+    }
+    JS_FreeValue(ctx, id_val);
+
+    const char* type_cstr = JS_ToCString(ctx, argv[0]);
+    if (!type_cstr) {
+        return JS_UNDEFINED;
+    }
+
+    if (g_bindings) {
+        std::string type_str(type_cstr);
+        g_bindings->registerEventListener(static_cast<uint64_t>(node_id), type_str, argv[1]);
+
+        // Bridge this JS listener into the C++ DOM event system so that
+        // native EventDispatcher can handle bubbling along the DOM tree.
+        dom::DOMNodePtr node = JSBindings::getNodeOpaque(ctx, this_val);
+        if (node) {
+            g_bindings->ensureEventBridgeForNode(node, type_str, static_cast<uint64_t>(node_id));
+        }
+    }
+
+    JS_FreeCString(ctx, type_cstr);
     return JS_UNDEFINED;
 }
 
 static JSValue elem_removeEventListener(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     if (argc < 2) return JS_UNDEFINED;
-    
-    const char* event_type = JS_ToCString(ctx, argv[0]);
-    if (!event_type) return JS_UNDEFINED;
-    
-    JS_FreeCString(ctx, event_type);
+
+    // Expect (type, handler)
+    if (!JS_IsString(argv[0]) || !JS_IsFunction(ctx, argv[1])) {
+        return JS_UNDEFINED;
+    }
+
+    JSValue id_val = JS_GetPropertyStr(ctx, this_val, "__node_id__");
+    if (JS_IsUndefined(id_val)) {
+        JS_FreeValue(ctx, id_val);
+        return JS_UNDEFINED;
+    }
+
+    int64_t node_id = 0;
+    if (JS_ToInt64(ctx, &node_id, id_val) != 0) {
+        JS_FreeValue(ctx, id_val);
+        return JS_UNDEFINED;
+    }
+    JS_FreeValue(ctx, id_val);
+
+    const char* type_cstr = JS_ToCString(ctx, argv[0]);
+    if (!type_cstr) {
+        return JS_UNDEFINED;
+    }
+
+    if (g_bindings) {
+        g_bindings->removeEventListener(static_cast<uint64_t>(node_id), std::string(type_cstr), argv[1]);
+    }
+
+    JS_FreeCString(ctx, type_cstr);
     return JS_UNDEFINED;
 }
 
@@ -435,6 +489,7 @@ JSBindings::JSBindings(ScriptEngine* engine, dom::Manager* dom_manager,
 }
 
 JSBindings::~JSBindings() {
+    resetForNewDOM();
     g_bindings = nullptr;
 }
 
@@ -445,8 +500,6 @@ void JSBindings::initialize() {
     initializeDocumentAPI();
     initializeElementAPI();
     initializeEventAPI();
-    
-    std::cout << "✓ JavaScript API bindings initialized" << std::endl;
 }
 
 void JSBindings::initializeConsoleAPI() {
@@ -465,8 +518,8 @@ void JSBindings::initializeConsoleAPI() {
     JS_SetPropertyStr(ctx, console, "error",
         JS_NewCFunction(ctx, console_error, "error", -1));
 
+    // JS_SetPropertyStr takes ownership of 'console', so we must NOT free it afterwards.
     JS_SetPropertyStr(ctx, global, "console", console);
-    JS_FreeValue(ctx, console);
     JS_FreeValue(ctx, global);
 }
 
@@ -513,39 +566,14 @@ void JSBindings::initializeDocumentAPI() {
     }
     JS_SetPropertyStr(ctx, document, "documentElement", html);
 
+    // JS_SetPropertyStr takes ownership of 'document'
     JS_SetPropertyStr(ctx, global, "document", document);
-    JS_FreeValue(ctx, document);
     JS_FreeValue(ctx, global);
 }
 
 void JSBindings::initializeElementAPI() {
-    if (!engine_) return;
-
-    JSContext* ctx = engine_->getContext();
-    if (!ctx) return;
-    
-    JSValue global = JS_GetGlobalObject(ctx);
-    JSValue element_proto = JS_NewObject(ctx);
-
-    // Element methods
-    JS_SetPropertyStr(ctx, element_proto, "getAttribute",
-        JS_NewCFunction(ctx, elem_getAttribute, "getAttribute", 1));
-    JS_SetPropertyStr(ctx, element_proto, "setAttribute",
-        JS_NewCFunction(ctx, elem_setAttribute, "setAttribute", 2));
-    JS_SetPropertyStr(ctx, element_proto, "appendChild",
-        JS_NewCFunction(ctx, elem_appendChild, "appendChild", 1));
-    JS_SetPropertyStr(ctx, element_proto, "removeChild",
-        JS_NewCFunction(ctx, elem_removeChild, "removeChild", 1));
-    JS_SetPropertyStr(ctx, element_proto, "addEventListener",
-        JS_NewCFunction(ctx, elem_addEventListener, "addEventListener", 2));
-    JS_SetPropertyStr(ctx, element_proto, "removeEventListener",
-        JS_NewCFunction(ctx, elem_removeEventListener, "removeEventListener", 2));
-    JS_SetPropertyStr(ctx, element_proto, "getComputedStyle",
-        JS_NewCFunction(ctx, elem_getComputedStyle, "getComputedStyle", 0));
-
-    JS_SetPropertyStr(ctx, global, "Element", element_proto);
-    JS_FreeValue(ctx, element_proto);
-    JS_FreeValue(ctx, global);
+    // Temporarily disabled to debug crash; element methods are installed per-instance in createJSElement.
+    return;
 }
 
 void JSBindings::initializeEventAPI() {
@@ -559,15 +587,12 @@ void JSBindings::initializeEventAPI() {
     // Event constructors
     JSValue event_ctor = JS_NewCFunction(ctx, event_constructor, "Event", 1);
     JS_SetPropertyStr(ctx, global, "Event", event_ctor);
-    JS_FreeValue(ctx, event_ctor);
 
     JSValue mouse_event_ctor = JS_NewCFunction(ctx, mouse_event_constructor, "MouseEvent", 1);
     JS_SetPropertyStr(ctx, global, "MouseEvent", mouse_event_ctor);
-    JS_FreeValue(ctx, mouse_event_ctor);
 
     JSValue keyboard_event_ctor = JS_NewCFunction(ctx, keyboard_event_constructor, "KeyboardEvent", 1);
     JS_SetPropertyStr(ctx, global, "KeyboardEvent", keyboard_event_ctor);
-    JS_FreeValue(ctx, keyboard_event_ctor);
 
     JS_FreeValue(ctx, global);
 }
@@ -610,6 +635,228 @@ JSValue JSBindings::createJSElement(JSContext* ctx, const dom::DOMNodePtr& node)
     return elem;
 }
 
+uint64_t JSBindings::getNodeIdFor(const dom::DOMNodePtr& node) const {
+    if (!node) return 0;
+    auto it = node_to_id_.find(node.get());
+    if (it != node_to_id_.end()) {
+        return it->second;
+    }
+    return 0;
+}
+
+void JSBindings::registerEventListener(uint64_t node_id, const std::string& type, JSValueConst handler) {
+    if (!engine_) return;
+    JSContext* ctx = engine_->getContext();
+    if (!ctx) return;
+
+    JSValue fn = JS_DupValue(ctx, handler);
+    listeners_[node_id][type].push_back(fn);
+}
+
+void JSBindings::removeEventListener(uint64_t node_id, const std::string& type, JSValueConst handler) {
+    if (!engine_) return;
+    JSContext* ctx = engine_->getContext();
+    if (!ctx) return;
+
+    auto node_it = listeners_.find(node_id);
+    if (node_it == listeners_.end()) return;
+
+    auto& type_map = node_it->second;
+    auto type_it = type_map.find(type);
+    if (type_it == type_map.end()) return;
+
+    auto& entries = type_it->second;
+    for (auto it = entries.begin(); it != entries.end(); ++it) {
+        int eq = JS_StrictEqual(ctx, *it, handler);
+        if (eq == 1) {
+            JS_FreeValue(ctx, *it);
+            entries.erase(it);
+            break;
+        }
+    }
+
+    if (entries.empty()) {
+        type_map.erase(type_it);
+    }
+    if (type_map.empty()) {
+        listeners_.erase(node_it);
+    }
+}
+
+void JSBindings::ensureEventBridgeForNode(const dom::DOMNodePtr& node, const std::string& type, uint64_t node_id) {
+    if (!event_dispatcher_ || !node || node_id == 0) {
+        return;
+    }
+
+    void* key = node.get();
+    auto& per_node = event_bridge_ids_[key];
+    if (per_node.find(type) != per_node.end()) {
+        // Bridge listener already registered for this (node, type)
+        return;
+    }
+
+    dom::EventListener callback;
+
+    if (type == "click" || type == "mousedown" || type == "mouseup" || type == "mousemove") {
+        callback = [this, node_id, type](const dom::Event& ev) {
+            this->dispatchMouseEvent(node_id, type.c_str(), ev.mouse_x, ev.mouse_y, ev.mouse_button);
+        };
+    } else if (type == "keydown" || type == "keyup" || type == "keypress") {
+        callback = [this, node_id, type](const dom::Event& ev) {
+            this->dispatchKeyEvent(node_id, type.c_str(), ev.key_code);
+        };
+    } else {
+        // Unsupported event type for bridging; ignore.
+        return;
+    }
+
+    uint64_t listener_id = event_dispatcher_->addEventListener(node, type, callback);
+    if (listener_id != 0) {
+        per_node[type] = listener_id;
+    }
+}
+
+void JSBindings::dispatchMouseEvent(uint64_t node_id, const char* type, int32_t x, int32_t y, int32_t button) {
+    if (!engine_) return;
+    JSContext* ctx = engine_->getContext();
+    if (!ctx) return;
+
+    auto node_it = listeners_.find(node_id);
+    if (node_it == listeners_.end()) return;
+    auto& type_map = node_it->second;
+    auto type_it = type_map.find(type);
+    if (type_it == type_map.end()) return;
+
+    auto& funcs = type_it->second;
+
+    for (auto& fn : funcs) {
+        if (!JS_IsFunction(ctx, fn)) continue;
+
+        JSValue ev = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, ev, "type", JS_NewString(ctx, type));
+        JS_SetPropertyStr(ctx, ev, "clientX", JS_NewInt32(ctx, x));
+        JS_SetPropertyStr(ctx, ev, "clientY", JS_NewInt32(ctx, y));
+        JS_SetPropertyStr(ctx, ev, "button", JS_NewInt32(ctx, button));
+        JS_SetPropertyStr(ctx, ev, "bubbles", JS_TRUE);
+        JS_SetPropertyStr(ctx, ev, "cancelable", JS_TRUE);
+
+        auto dom_it = id_to_node_.find(node_id);
+        if (dom_it != id_to_node_.end()) {
+            JSValue target = createJSElement(ctx, dom_it->second);
+            JS_SetPropertyStr(ctx, ev, "target", target);
+            JS_SetPropertyStr(ctx, ev, "currentTarget", JS_DupValue(ctx, target));
+        }
+
+        JSValue ret = JS_Call(ctx, fn, JS_UNDEFINED, 1, &ev);
+        if (JS_IsException(ret)) {
+            JSValue exc = JS_GetException(ctx);
+            const char* err = JS_ToCString(ctx, exc);
+            if (err) {
+                std::fprintf(stderr, "[JSBindings] mouse event error: %s\n", err);
+                JS_FreeCString(ctx, err);
+            }
+            JS_FreeValue(ctx, exc);
+        }
+        JS_FreeValue(ctx, ret);
+        JS_FreeValue(ctx, ev);
+    }
+}
+
+void JSBindings::dispatchKeyEvent(uint64_t node_id, const char* type, uint32_t key_code) {
+    if (!engine_) return;
+    JSContext* ctx = engine_->getContext();
+    if (!ctx) return;
+
+    auto node_it = listeners_.find(node_id);
+    if (node_it == listeners_.end()) return;
+    auto& type_map = node_it->second;
+    auto type_it = type_map.find(type);
+    if (type_it == type_map.end()) return;
+
+    auto& funcs = type_it->second;
+
+    for (auto& fn : funcs) {
+        if (!JS_IsFunction(ctx, fn)) continue;
+
+        JSValue ev = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, ev, "type", JS_NewString(ctx, type));
+        JS_SetPropertyStr(ctx, ev, "keyCode", JS_NewInt32(ctx, (int32_t)key_code));
+        JS_SetPropertyStr(ctx, ev, "charCode", JS_NewInt32(ctx, (int32_t)key_code));
+        JS_SetPropertyStr(ctx, ev, "bubbles", JS_TRUE);
+        JS_SetPropertyStr(ctx, ev, "cancelable", JS_TRUE);
+
+        auto dom_it = id_to_node_.find(node_id);
+        if (dom_it != id_to_node_.end()) {
+            JSValue target = createJSElement(ctx, dom_it->second);
+            JS_SetPropertyStr(ctx, ev, "target", target);
+            JS_SetPropertyStr(ctx, ev, "currentTarget", JS_DupValue(ctx, target));
+        }
+
+        JSValue ret = JS_Call(ctx, fn, JS_UNDEFINED, 1, &ev);
+        if (JS_IsException(ret)) {
+            JSValue exc = JS_GetException(ctx);
+            const char* err = JS_ToCString(ctx, exc);
+            if (err) {
+                std::fprintf(stderr, "[JSBindings] key event error: %s\n", err);
+                JS_FreeCString(ctx, err);
+            }
+            JS_FreeValue(ctx, exc);
+        }
+        JS_FreeValue(ctx, ret);
+        JS_FreeValue(ctx, ev);
+    }
+}
+
+bool JSBindings::hasEventListeners(uint64_t node_id, const char* type) const {
+    auto node_it = listeners_.find(node_id);
+    if (node_it == listeners_.end()) return false;
+    const auto& type_map = node_it->second;
+    auto type_it = type_map.find(type);
+    if (type_it == type_map.end()) return false;
+    return !type_it->second.empty();
+}
+
+void JSBindings::resetForNewDOM() {
+    if (engine_) {
+        JSContext* ctx = engine_->getContext();
+        if (ctx) {
+            for (auto& node_pair : listeners_) {
+                for (auto& type_pair : node_pair.second) {
+                    for (auto& fn : type_pair.second) {
+                        JS_FreeValue(ctx, fn);
+                    }
+                }
+            }
+        }
+    }
+
+    listeners_.clear();
+
+    // Unregister bridge listeners from the C++ EventDispatcher
+    if (event_dispatcher_) {
+        for (auto& node_entry : event_bridge_ids_) {
+            void* raw = node_entry.first;
+            auto id_it = node_to_id_.find(raw);
+            if (id_it == node_to_id_.end()) continue;
+
+            uint64_t node_id = id_it->second;
+            auto dom_it = id_to_node_.find(node_id);
+            if (dom_it == id_to_node_.end()) continue;
+
+            dom::DOMNodePtr node = dom_it->second;
+            for (auto& type_pair : node_entry.second) {
+                const std::string& type = type_pair.first;
+                uint64_t listener_id = type_pair.second;
+                event_dispatcher_->removeEventListener(node, type, listener_id);
+            }
+        }
+    }
+
+    event_bridge_ids_.clear();
+    id_to_node_.clear();
+    node_to_id_.clear();
+}
+
 // Static helper methods
 dom::DOMNodePtr JSBindings::getNodeOpaque(JSContext* ctx, JSValue val) {
     if (!g_bindings) return nullptr;
@@ -637,8 +884,15 @@ dom::DOMNodePtr JSBindings::getNodeOpaque(JSContext* ctx, JSValue val) {
 void JSBindings::setNodeOpaque(JSContext* ctx, JSValue val, dom::DOMNodePtr node) {
     if (!g_bindings || !node) return;
 
-    uint64_t id = g_bindings->next_js_id_++;
-    g_bindings->id_to_node_[id] = node;
+    uint64_t id = 0;
+    auto it = g_bindings->node_to_id_.find(node.get());
+    if (it != g_bindings->node_to_id_.end()) {
+        id = it->second;
+    } else {
+        id = g_bindings->next_js_id_++;
+        g_bindings->id_to_node_[id] = node;
+        g_bindings->node_to_id_[node.get()] = id;
+    }
 
     JS_SetPropertyStr(ctx, val, "__node_id__", JS_NewInt64(ctx, static_cast<int64_t>(id)));
 }

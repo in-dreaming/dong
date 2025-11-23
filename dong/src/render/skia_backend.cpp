@@ -12,6 +12,9 @@
 #include <core/SkColor.h>
 #include <core/SkImageInfo.h>
 #include <core/SkImage.h>
+#include <core/SkFontStyle.h>
+#include <core/SkFontTypes.h>
+#include <core/SkFontMgr.h>
 
 #include <cstdio>
 #include <cstring>
@@ -178,25 +181,74 @@ void SkiaBackend::drawShadow(float x, float y, float width, float height, float 
 
 void SkiaBackend::drawText(const std::string& text, float x, float y,
                            float font_size, uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
-    if (!sk_canvas_ || !default_font_) return;
+    // 保持兼容旧接口：使用默认字体族和权重
+    drawTextStyled(text, x, y, font_size, "", "", r, g, b, a);
+}
+
+void SkiaBackend::drawTextStyled(const std::string& text, float x, float y,
+                                 float font_size, const std::string& font_family,
+                                 const std::string& font_weight,
+                                 uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+    if (!sk_canvas_) return;
 
     SkCanvas* canvas = reinterpret_cast<SkCanvas*>(sk_canvas_);
-    SkFont* font = reinterpret_cast<SkFont*>(default_font_);
-    
+
+    // 准备字体对象
+    float size = font_size > 0.0f ? font_size : default_font_size_;
+
+    // 使用 SkFontMgr 从系统加载字体，尽量按 font-family / font-weight 匹配
+    SkFont font;
+    static sk_sp<SkFontMgr> font_mgr = SkFontMgr::RefEmpty();
+    if (font_mgr) {
+        int sk_weight = SkFontStyle::kNormal_Weight;
+        if (font_weight == "bold" || font_weight == "700") {
+            sk_weight = SkFontStyle::kBold_Weight;
+        }
+        SkFontStyle style(sk_weight, SkFontStyle::kNormal_Width, SkFontStyle::kUpright_Slant);
+
+        const char* family_cstr = font_family.empty() ? nullptr : font_family.c_str();
+        sk_sp<SkTypeface> typeface = font_mgr->matchFamilyStyle(family_cstr, style);
+        if (!typeface) {
+            // 回退到系统默认字体
+            typeface = font_mgr->matchFamilyStyle(nullptr, SkFontStyle::Normal());
+        }
+
+        if (typeface) {
+            font = SkFont(typeface, size);
+        } else {
+            font.setSize(size);
+        }
+    } else if (default_font_) {
+        // 回退到构造时创建的默认字体
+        SkFont* default_font = reinterpret_cast<SkFont*>(default_font_);
+        font = *default_font;
+        font.setSize(size);
+    } else {
+        font.setSize(size);
+    }
+
+    // 开启子像素抗锯齿，让文字尽可能清晰
+    font.setEdging(SkFont::Edging::kSubpixelAntiAlias);
+
     SkPaint paint;
     paint.setColor(SkColorSetARGB(a, r, g, b));
+    paint.setAntiAlias(true);
 
-    // Create text blob
-    sk_sp<SkTextBlob> blob = SkTextBlob::MakeFromText(
+    std::fprintf(stderr,
+                 "[SkiaBackend] drawTextStyled '%s' at (%.1f,%.1f) size=%.1f family='%s' weight='%s' rgba=(%u,%u,%u,%u)\n",
+                 text.c_str(), x, y, size, font_family.c_str(), font_weight.c_str(), r, g, b, a);
+
+    // 使用 SkCanvas::drawSimpleText 直接根据 UTF-8 文本绘制
+    canvas->drawSimpleText(
         text.c_str(),
         text.length(),
-        *font
+        SkTextEncoding::kUTF8,
+        x,
+        y,
+        font,
+        paint
     );
 
-    if (blob) {
-        canvas->drawTextBlob(blob, x, y, paint);
-    }
-    
     render_surface_->markDirty();
 }
 

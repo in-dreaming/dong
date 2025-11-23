@@ -30,6 +30,12 @@ public:
     void drawText(const std::string& text, float x, float y,
                   float font_size, uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255);
 
+    // 带字体信息的文本渲染（支持 font-family / font-weight 等）
+    void drawTextStyled(const std::string& text, float x, float y,
+                        float font_size, const std::string& font_family,
+                        const std::string& font_weight,
+                        uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255);
+
     // 使用 SkParagraph 进行高级文本布局（换行、对齐等）
     void drawParagraph(const std::string& text, float x, float y, float max_width,
                        float font_size, uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255);

@@ -55,6 +55,12 @@ void Engine::calculateLayout(dom::DOMNodePtr root, float width, float height) {
             node_layout->width = YGNodeLayoutGetWidth(yoga_node);
             node_layout->height = YGNodeLayoutGetHeight(yoga_node);
 
+            // Keep legacy fields and new layout struct in sync
+            node_layout->layout.position[0] = node_layout->x;
+            node_layout->layout.position[1] = node_layout->y;
+            node_layout->layout.dimensions[0] = node_layout->width;
+            node_layout->layout.dimensions[1] = node_layout->height;
+
             // Recursively extract child layouts
             uint32_t child_count = YGNodeGetChildCount(yoga_node);
             for (uint32_t i = 0; i < child_count; ++i) {
@@ -139,14 +145,20 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
     }
 
     // Set flex direction
-    if (style.flex_direction == "column") {
-        YGNodeStyleSetFlexDirection(yoga_node, YGFlexDirectionColumn);
-    } else if (style.flex_direction == "column-reverse") {
-        YGNodeStyleSetFlexDirection(yoga_node, YGFlexDirectionColumnReverse);
-    } else if (style.flex_direction == "row-reverse") {
-        YGNodeStyleSetFlexDirection(yoga_node, YGFlexDirectionRowReverse);
+    // For display:flex, respect flex_direction; for normal block layout, prefer column
+    if (style.display == "flex") {
+        if (style.flex_direction == "column") {
+            YGNodeStyleSetFlexDirection(yoga_node, YGFlexDirectionColumn);
+        } else if (style.flex_direction == "column-reverse") {
+            YGNodeStyleSetFlexDirection(yoga_node, YGFlexDirectionColumnReverse);
+        } else if (style.flex_direction == "row-reverse") {
+            YGNodeStyleSetFlexDirection(yoga_node, YGFlexDirectionRowReverse);
+        } else {
+            YGNodeStyleSetFlexDirection(yoga_node, YGFlexDirectionRow);
+        }
     } else {
-        YGNodeStyleSetFlexDirection(yoga_node, YGFlexDirectionRow);
+        // Approximate block layout as a vertical stack
+        YGNodeStyleSetFlexDirection(yoga_node, YGFlexDirectionColumn);
     }
 
     // Set justify content

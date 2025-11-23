@@ -29,7 +29,9 @@ void dong_view_update(dong_view_t* view);
 void* dong_view_get_pixel_buffer(dong_view_t* view);
 uint32_t dong_view_get_texture_id(dong_view_t* view);
 
-// 5. Input Events
+// 5. Input Events (host -> engine -> DOM -> JS)
+// Mouse coordinates are in view space pixels.
+// Supported JS event types: "mousemove", "mousedown", "mouseup", "click", "keydown", "keyup".
 void dong_view_send_mouse_move(dong_view_t* view, int32_t x, int32_t y);
 void dong_view_send_mouse_down(dong_view_t* view, int32_t button);
 void dong_view_send_mouse_up(dong_view_t* view, int32_t button);
@@ -37,7 +39,11 @@ void dong_view_send_key_down(dong_view_t* view, uint32_t key_code);
 void dong_view_send_key_up(dong_view_t* view, uint32_t key_code);
 
 // 6. JS Interaction
+// Evaluate JavaScript code in the view's scripting context.
+// Returns true on success, false if evaluation fails.
 bool dong_view_eval(dong_view_t* view, const char* script);
+// Execute script and return a stringified result. Currently returns an empty
+// string but still evaluates the script for side effects.
 const char* dong_view_eval_return(dong_view_t* view, const char* script);
 
 #ifdef __cplusplus

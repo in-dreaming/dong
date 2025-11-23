@@ -2,6 +2,8 @@
 
 #include <memory>
 #include <unordered_map>
+#include <vector>
+#include <string>
 #include "script_engine.hpp"
 #include "../dom/dom_manager.hpp"
 #include "../dom/event_system.hpp"
@@ -36,7 +38,12 @@ private:
     
     // 映射：JS 对象 ID -> DOM 节点，保证生命周期
     std::unordered_map<uint64_t, dom::DOMNodePtr> id_to_node_;
+    // 反向映射：DOM 节点指针 -> JS 对象 ID，便于从原生事件反查
+    std::unordered_map<void*, uint64_t> node_to_id_;
     uint64_t next_js_id_ = 1;
+
+    // JS 事件监听器注册表：node_id -> (event_type -> JS 函数列表)
+    std::unordered_map<uint64_t, std::unordered_map<std::string, std::vector<JSValue>>> listeners_;
 
     // 初始化各个 API 模块
     void initializeDocumentAPI();
@@ -47,8 +54,25 @@ private:
 public:
     // Helper methods (public for use by callback functions)
     static dom::DOMNodePtr getNodeOpaque(JSContext* ctx, JSValue val);
+    uint64_t getNodeIdFor(const dom::DOMNodePtr& node) const;
+
+    // Event bridge helpers
+    void registerEventListener(uint64_t node_id, const std::string& type, JSValueConst handler);
+    void removeEventListener(uint64_t node_id, const std::string& type, JSValueConst handler);
+    void dispatchMouseEvent(uint64_t node_id, const char* type, int32_t x, int32_t y, int32_t button);
+    void dispatchKeyEvent(uint64_t node_id, const char* type, uint32_t key_code);
+    bool hasEventListeners(uint64_t node_id, const char* type) const;
+
+    // Bridge between JS listeners and C++ DOM EventDispatcher
+    void ensureEventBridgeForNode(const dom::DOMNodePtr& node, const std::string& type, uint64_t node_id);
+
+    // DOM lifecycle
+    void resetForNewDOM();
     
 private:
+    // Track C++ bridge listener IDs to avoid duplicate registration
+    std::unordered_map<void*, std::unordered_map<std::string, uint64_t>> event_bridge_ids_;
+
     // Static helper for storing node pointers
     static void setNodeOpaque(JSContext* ctx, JSValue val, dom::DOMNodePtr node);
 };
