@@ -47,6 +47,8 @@ private:
     layout::Engine* layout_engine_;
     bool in_frame_;
     float current_opacity_;
+    layout::DirtyRect current_dirty_rect_;
+    bool use_dirty_rect_ = true;
 
     // Skia 对象
     void* sk_canvas_;  // SkCanvas*
@@ -60,6 +62,9 @@ private:
     void drawNodeBackground(const dom::DOMNodePtr& node, const layout::LayoutNode* layout_node);
     void drawNodeBorder(const dom::DOMNodePtr& node, const layout::LayoutNode* layout_node);
     void drawNodeContent(const dom::DOMNodePtr& node, const layout::LayoutNode* layout_node);
+
+    // 脏矩形优化
+    bool isNodeInDirtyRect(const layout::LayoutNode* layout_node) const;
 };
 
 using PainterPtr = std::unique_ptr<Painter>;

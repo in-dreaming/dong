@@ -62,11 +62,13 @@ void Painter::renderDOM(const dom::DOMNodePtr& root, layout::Engine* layout_engi
     beginFrame();
 
     if (layout_engine_) {
+        current_dirty_rect_ = layout_engine_->getDirtyRect();
         const auto* layout_root = layout_engine_->getLayout(root);
         if (layout_root) {
             renderNode(root, layout_root);
         }
     } else {
+        current_dirty_rect_ = layout::DirtyRect();
         renderNode(root, nullptr);
     }
 
@@ -85,6 +87,13 @@ void Painter::renderNode(const dom::DOMNodePtr& node, const layout::LayoutNode* 
     // Skip text nodes (rendered as part of parent element content)
     if (node->getType() == dom::DOMNode::NodeType::TEXT) {
         return;
+    }
+
+    // Dirty rect optimization: skip nodes outside dirty region
+    if (use_dirty_rect_ && !current_dirty_rect_.isEmpty() && layout_node) {
+        if (!isNodeInDirtyRect(layout_node)) {
+            return;
+        }
     }
 
     // Opacity stack: 累乘当前节点的 opacity
@@ -445,6 +454,19 @@ void Painter::clearClipRect() {
 
 void Painter::setOpacity(float opacity) {
     current_opacity_ = opacity;
+}
+
+bool Painter::isNodeInDirtyRect(const layout::LayoutNode* layout_node) const {
+    if (!layout_node || current_dirty_rect_.isEmpty()) {
+        return true;
+    }
+    
+    float x = layout_node->layout.position[0];
+    float y = layout_node->layout.position[1];
+    float w = layout_node->layout.dimensions[0];
+    float h = layout_node->layout.dimensions[1];
+    
+    return current_dirty_rect_.intersects(x, y, w, h);
 }
 
 } // namespace dong::render

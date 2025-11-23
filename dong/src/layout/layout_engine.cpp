@@ -3,8 +3,37 @@
 #include <yoga/YGConfig.h>
 #include <yoga/Yoga.h>
 #include <iostream>
+#include <algorithm>
 
 namespace dong::layout {
+
+// DirtyRect implementation
+void DirtyRect::expand(float px, float py, float pw, float ph) {
+    if (pw <= 0 || ph <= 0) return;
+    
+    if (is_empty) {
+        x = px;
+        y = py;
+        width = pw;
+        height = ph;
+        is_empty = false;
+    } else {
+        float new_x = std::min(x, px);
+        float new_y = std::min(y, py);
+        float new_right = std::max(x + width, px + pw);
+        float new_bottom = std::max(y + height, py + ph);
+        x = new_x;
+        y = new_y;
+        width = new_right - new_x;
+        height = new_bottom - new_y;
+    }
+}
+
+bool DirtyRect::intersects(float px, float py, float pw, float ph) const {
+    if (is_empty || pw <= 0 || ph <= 0) return false;
+    return !(px + pw <= x || px >= x + width ||
+             py + ph <= y || py >= y + height);
+}
 
 namespace {
 
@@ -45,6 +74,25 @@ Engine::~Engine() {
 void Engine::calculateLayout(dom::DOMNodePtr root, float width, float height) {
     if (!root || !yoga_config) return;
 
+    // Reset dirty rect for this layout pass
+    dirty_rect_ = DirtyRect();
+
+    // Check if any node is dirty; if not, skip layout entirely
+    std::function<bool(const dom::DOMNodePtr&)> hasAnyDirtyNode =
+        [&hasAnyDirtyNode](const dom::DOMNodePtr& node) -> bool {
+            if (!node) return false;
+            if (node->isLayoutDirty()) return true;
+            for (const auto& child : node->getChildren()) {
+                if (hasAnyDirtyNode(child)) return true;
+            }
+            return false;
+        };
+
+    if (!hasAnyDirtyNode(root)) {
+        // Everything is clean, no need to relayout
+        return;
+    }
+
     // Rebuild layout tree from scratch each time for now to avoid stale Yoga nodes
     layout_cache.clear();
 
@@ -78,8 +126,10 @@ void Engine::calculateLayout(dom::DOMNodePtr root, float width, float height) {
             if (!dom_node || !yoga_node) return;
 
             auto& node_layout = layout_cache[dom_node.get()];
+            bool is_new_layout = false;
             if (!node_layout) {
                 node_layout = std::make_unique<LayoutNode>();
+                is_new_layout = true;
             }
             node_layout->yoga_node = yoga_node;
 
@@ -88,16 +138,34 @@ void Engine::calculateLayout(dom::DOMNodePtr root, float width, float height) {
             const float width = YGNodeLayoutGetWidth(yoga_node);
             const float height = YGNodeLayoutGetHeight(yoga_node);
 
-            node_layout->x = parent_x + left;
-            node_layout->y = parent_y + top;
-            node_layout->width = width;
-            node_layout->height = height;
+            float new_x = parent_x + left;
+            float new_y = parent_y + top;
+            float new_width = width;
+            float new_height = height;
+
+            // Check if layout changed: position or size differs
+            bool layout_changed = is_new_layout || 
+                                  node_layout->x != new_x ||
+                                  node_layout->y != new_y ||
+                                  node_layout->width != new_width ||
+                                  node_layout->height != new_height;
+
+            node_layout->x = new_x;
+            node_layout->y = new_y;
+            node_layout->width = new_width;
+            node_layout->height = new_height;
+            node_layout->layout_recalculated = true;
 
             // Keep legacy fields and new layout struct in sync (absolute coords)
             node_layout->layout.position[0] = node_layout->x;
             node_layout->layout.position[1] = node_layout->y;
             node_layout->layout.dimensions[0] = node_layout->width;
             node_layout->layout.dimensions[1] = node_layout->height;
+
+            // If this node's layout changed, add its area to dirty rect
+            if (layout_changed) {
+                dirty_rect_.expand(new_x, new_y, new_width, new_height);
+            }
 
             // Recursively extract child layouts. Only ELEMENT nodes get Yoga children.
             uint32_t child_count = YGNodeGetChildCount(yoga_node);

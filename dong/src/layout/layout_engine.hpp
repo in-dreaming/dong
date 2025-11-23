@@ -12,6 +12,19 @@ extern "C" {
 
 namespace dong::layout {
 
+// Dirty rectangle for incremental rendering
+struct DirtyRect {
+    float x = 0;
+    float y = 0;
+    float width = 0;
+    float height = 0;
+    bool is_empty = true;
+
+    bool isEmpty() const { return is_empty; }
+    void expand(float px, float py, float pw, float ph);
+    bool intersects(float px, float py, float pw, float ph) const;
+};
+
 // Layout node properties
 struct LayoutNode {
     float x = 0;
@@ -22,6 +35,7 @@ struct LayoutNode {
     LayoutNode* parent = nullptr;
     LayoutNode* first_child = nullptr;
     LayoutNode* next_sibling = nullptr;
+    bool layout_recalculated = false;  // Whether this node's layout was recalculated in current pass
 
     // Layout result structure
     struct Layout {
@@ -48,9 +62,14 @@ public:
     // Update layout when DOM changes
     void markDirty(dom::DOMNodePtr node);
 
+    // Get the dirty region (union of all changed areas)
+    const DirtyRect& getDirtyRect() const { return dirty_rect_; }
+    bool hasDirtyRegion() const { return !dirty_rect_.isEmpty(); }
+
 private:
     YGConfig* yoga_config = nullptr;
     std::unordered_map<void*, std::unique_ptr<LayoutNode>> layout_cache;
+    DirtyRect dirty_rect_;  // Accumulates all regions that changed this frame
 
     // Yoga node creation and style mapping
     YGNode* createYogaNode(dom::DOMNodePtr dom_node);
@@ -63,6 +82,10 @@ private:
 
     // Cleanup
     void destroyYogaNode(YGNode* node);
+
+    // Incremental layout helpers
+    bool calculateLayoutIncremental(dom::DOMNodePtr dom_node, YGNode* yoga_node,
+                                    float parent_x, float parent_y);
 };
 
 } // namespace dong::layout

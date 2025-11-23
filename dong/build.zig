@@ -226,6 +226,8 @@ pub fn build(b: *std.Build) void {
         .{ .name = "style_modification_demo", .source = "examples/style_modification_demo.cpp", .flags = &.{"-std=c++17"} },
         .{ .name = "js_return_value_demo", .source = "examples/js_return_value_demo.cpp", .flags = &.{"-std=c++17"} },
         .{ .name = "performance_demo", .source = "examples/performance_demo.cpp", .flags = &.{"-std=c++17"} },
+        // 【新增】脏矩形优化演示
+        .{ .name = "dirty_rect_optimization_demo", .source = "examples/dirty_rect_optimization_demo.cpp", .flags = &.{"-std=c++17"} },
         .{ .name = "skia_cpu_demo", .source = "examples/skia_cpu_demo.cpp", .flags = &.{"-std=c++17"} },
         .{ .name = "js_event_demo", .source = "examples/js_event_demo.cpp", .flags = &.{"-std=c++17"} },
     };
