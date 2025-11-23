@@ -97,6 +97,73 @@ bool ScriptEngine::eval(const std::string& code) {
     return true;
 }
 
+// 【缺口3】执行代码并返回字符串化的结果
+std::string ScriptEngine::evalWithReturn(const std::string& code) {
+    if (!context_) return "";
+
+    JSValue result = JS_Eval(context_, code.c_str(), code.length(), "<eval>", 0);
+
+    if (JS_IsException(result)) {
+        // 获取异常信息
+        JSValue exception = JS_GetException(context_);
+        const char* error_str = JS_ToCString(context_, exception);
+        std::string error_msg = error_str ? error_str : "Unknown error";
+        if (error_str) JS_FreeCString(context_, error_str);
+        JS_FreeValue(context_, exception);
+        
+        std::fprintf(stderr, "[ScriptEngine] JS exception: %s\n", error_msg.c_str());
+        return "";
+    }
+
+    // 将结果转换为字符串
+    std::string return_value;
+    
+    if (JS_IsString(result)) {
+        const char* str = JS_ToCString(context_, result);
+        if (str) {
+            return_value = str;
+            JS_FreeCString(context_, str);
+        }
+    } else if (JS_IsNumber(result)) {
+        double num = 0;
+        JS_ToFloat64(context_, &num, result);
+        // 转换为字符串
+        char buf[64];
+        snprintf(buf, sizeof(buf), "%.17g", num);
+        return_value = buf;
+    } else if (JS_IsBool(result)) {
+        return_value = JS_ToBool(context_, result) ? "true" : "false";
+    } else if (JS_IsNull(result)) {
+        return_value = "null";
+    } else if (JS_IsUndefined(result)) {
+        return_value = "undefined";
+    } else if (JS_IsObject(result)) {
+        // 对象转字符串 - 调用 JSON.stringify
+        JSValue global = JS_GetGlobalObject(context_);
+        JSValue json = JS_GetPropertyStr(context_, global, "JSON");
+        if (!JS_IsUndefined(json) && !JS_IsNull(json)) {
+            JSValue stringify = JS_GetPropertyStr(context_, json, "stringify");
+            if (JS_IsFunction(context_, stringify)) {
+                JSValue str_result = JS_Call(context_, stringify, json, 1, &result);
+                if (!JS_IsException(str_result)) {
+                    const char* str = JS_ToCString(context_, str_result);
+                    if (str) {
+                        return_value = str;
+                        JS_FreeCString(context_, str);
+                    }
+                }
+                JS_FreeValue(context_, str_result);
+            }
+            JS_FreeValue(context_, stringify);
+        }
+        JS_FreeValue(context_, json);
+        JS_FreeValue(context_, global);
+    }
+
+    JS_FreeValue(context_, result);
+    return return_value;
+}
+
 JSValue* ScriptEngine::callFunction(const std::string& function_name, int argc, JSValue* argv) {
     if (!context_) return nullptr;
 

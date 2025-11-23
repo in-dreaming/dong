@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <string>
 
 namespace dong::dom {
 class Manager;
@@ -46,6 +47,8 @@ public:
 
     // Script API
     bool eval_script(const char* code);
+    // 【缺口3】返回 JS 代码的执行结果
+    std::string eval_script_with_return(const char* code);
 
     // Rendering modes
     void setRenderMode(bool use_gpu);
@@ -64,6 +67,8 @@ private:
     bool js_bindings_initialized_ = false;
     int32_t last_mouse_x_ = 0;
     int32_t last_mouse_y_ = 0;
+    // 【缺口3】缓存最后的 eval 返回值
+    std::string last_eval_return_value_;
 
     void ensureJSBindingsInitialized();
     void dispatchMouseEventToJS(const char* type, int32_t x, int32_t y, int32_t button);

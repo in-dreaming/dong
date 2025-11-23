@@ -23,6 +23,9 @@ public:
     // 执行 JavaScript 代码
     bool eval(const std::string& code);
 
+    // 【缺口3】执行 JavaScript 代码并返回结果
+    std::string evalWithReturn(const std::string& code);
+
     // 调用 JavaScript 函数
     JSValue* callFunction(const std::string& function_name, int argc = 0, JSValue* argv = nullptr);
 

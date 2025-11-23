@@ -150,6 +150,14 @@ bool View::eval_script(const char* code) {
     return script_engine->eval(std::string(code));
 }
 
+// 【缺口3】执行脚本并返回结果
+std::string View::eval_script_with_return(const char* code) {
+    if (!code || !script_engine) return "";
+    ensureJSBindingsInitialized();
+    last_eval_return_value_ = script_engine->evalWithReturn(std::string(code));
+    return last_eval_return_value_;
+}
+
 void View::ensureJSBindingsInitialized() {
     if (js_bindings_initialized_ || !js_bindings || !script_engine) return;
     JSContext* ctx = script_engine->getContext();

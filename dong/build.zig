@@ -221,6 +221,11 @@ pub fn build(b: *std.Build) void {
         .{ .name = "js_api_test", .source = "examples/js_api_test.cpp", .flags = &.{"-std=c++17"} },
         .{ .name = "render_and_script_demo", .source = "examples/render_and_script_demo.cpp", .flags = &.{"-std=c++17"} },
         .{ .name = "style_cascade_test", .source = "examples/style_cascade_test.cpp", .flags = &.{"-std=c++17"} },
+        // 【新增】四个功能演示
+        .{ .name = "dom_api_demo", .source = "examples/dom_api_demo.cpp", .flags = &.{"-std=c++17"} },
+        .{ .name = "style_modification_demo", .source = "examples/style_modification_demo.cpp", .flags = &.{"-std=c++17"} },
+        .{ .name = "js_return_value_demo", .source = "examples/js_return_value_demo.cpp", .flags = &.{"-std=c++17"} },
+        .{ .name = "performance_demo", .source = "examples/performance_demo.cpp", .flags = &.{"-std=c++17"} },
         .{ .name = "skia_cpu_demo", .source = "examples/skia_cpu_demo.cpp", .flags = &.{"-std=c++17"} },
         .{ .name = "js_event_demo", .source = "examples/js_event_demo.cpp", .flags = &.{"-std=c++17"} },
     };

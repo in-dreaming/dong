@@ -83,9 +83,12 @@ bool dong_view_eval(dong_view_t* view, const char* script) {
 
 const char* dong_view_eval_return(dong_view_t* view, const char* script) {
     if (!view || !script) return "";
-    // TODO: Implement return value capture from JavaScript
-    reinterpret_cast<DongView*>(view)->eval_script(script);
-    return "";
+    // 【缺口3】真正的返回值捕获
+    std::string result = reinterpret_cast<DongView*>(view)->eval_script_with_return(script);
+    // 返回静态存储的指针（调用者应立即使用）
+    static thread_local std::string cached_result;
+    cached_result = result;
+    return cached_result.c_str();
 }
 
 } // extern "C"
