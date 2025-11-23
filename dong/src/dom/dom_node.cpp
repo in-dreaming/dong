@@ -13,6 +13,8 @@ void DOMNode::appendChild(DOMNodePtr child) {
     child->parent = std::weak_ptr<DOMNode>(
         std::static_pointer_cast<DOMNode>(shared_from_this())
     );
+    // Any structural change can affect layout
+    markLayoutDirty();
 }
 
 void DOMNode::removeChild(DOMNodePtr child) {
@@ -20,11 +22,15 @@ void DOMNode::removeChild(DOMNodePtr child) {
     if (it != children.end()) {
         children.erase(it);
         child->parent.reset();
+        // Removing children also affects layout
+        markLayoutDirty();
     }
 }
 
 void DOMNode::setAttribute(const std::string& key, const std::string& value) {
     attributes[key] = value;
+    // Attribute changes may affect layout or style
+    markLayoutDirty();
 }
 
 std::string DOMNode::getAttribute(const std::string& key) const {
@@ -80,6 +86,26 @@ std::vector<DOMNodePtr> DOMNode::getElementsByClassName(const std::string& cls) 
     }
 
     return result;
+}
+
+void DOMNode::markLayoutDirty() {
+    if (layout_dirty_) {
+        return;
+    }
+    layout_dirty_ = true;
+
+    if (auto p = parent.lock()) {
+        p->markLayoutDirty();
+    }
+}
+
+void DOMNode::clearLayoutDirtyRecursive() {
+    layout_dirty_ = false;
+    for (auto& child : children) {
+        if (child) {
+            child->clearLayoutDirtyRecursive();
+        }
+    }
 }
 
 void DOMNode::print(int depth) const {

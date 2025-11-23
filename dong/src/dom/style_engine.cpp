@@ -131,12 +131,24 @@ void StyleEngine::computeStyles(DOMNodePtr node) {
             computed.border_width = rule.style.border_width;
         if (!rule.style.border_color.empty()) 
             computed.border_color = rule.style.border_color;
+        if (!rule.style.overflow.empty() && rule.style.overflow != "visible")
+            computed.overflow = rule.style.overflow;
+        if (rule.style.opacity != 1.0f)
+            computed.opacity = rule.style.opacity;
         
         // Box model properties
         if (rule.style.width.unit != CSSValue::Unit::AUTO) 
             computed.width = rule.style.width;
         if (rule.style.height.unit != CSSValue::Unit::AUTO) 
             computed.height = rule.style.height;
+        if (rule.style.min_width.unit != CSSValue::Unit::AUTO) 
+            computed.min_width = rule.style.min_width;
+        if (rule.style.max_width.unit != CSSValue::Unit::AUTO) 
+            computed.max_width = rule.style.max_width;
+        if (rule.style.min_height.unit != CSSValue::Unit::AUTO) 
+            computed.min_height = rule.style.min_height;
+        if (rule.style.max_height.unit != CSSValue::Unit::AUTO) 
+            computed.max_height = rule.style.max_height;
         if (rule.style.margin_top.unit != CSSValue::Unit::AUTO) 
             computed.margin_top = rule.style.margin_top;
         if (rule.style.margin_right.unit != CSSValue::Unit::AUTO) 
@@ -169,6 +181,28 @@ void StyleEngine::computeStyles(DOMNodePtr node) {
             computed.flex_shrink = rule.style.flex_shrink;
         if (rule.style.flex_basis.unit != CSSValue::Unit::AUTO) 
             computed.flex_basis = rule.style.flex_basis;
+    }
+
+    // Inherit selected text-related properties from parent when not explicitly set
+    auto parent = node->getParent();
+    if (parent) {
+        const auto& parent_style = parent->getComputedStyle();
+
+        if (computed.color == "#000000") {
+            computed.color = parent_style.color;
+        }
+        if (computed.font_family == "Arial") {
+            computed.font_family = parent_style.font_family;
+        }
+        if (computed.font_size == 16.0f) {
+            computed.font_size = parent_style.font_size;
+        }
+        if (computed.font_weight == "normal") {
+            computed.font_weight = parent_style.font_weight;
+        }
+        if (computed.text_align == "left") {
+            computed.text_align = parent_style.text_align;
+        }
     }
 
     // Recursively compute styles for children
@@ -607,6 +641,41 @@ void StyleEngine::applyStyleProperty(const std::string& property, const std::str
         val.pop_back();
         val = trimWhitespace(val);
     }
+
+    auto parseFloat = [](const std::string& s) -> float {
+        std::string v = s;
+        // trim spaces
+        v.erase(0, v.find_first_not_of(" \t\n\r"));
+        size_t last = v.find_last_not_of(" \t\n\r");
+        if (last != std::string::npos && last + 1 < v.size()) {
+            v.erase(last + 1);
+        }
+        // take leading numeric part
+        size_t i = 0;
+        while (i < v.size() && (std::isdigit(static_cast<unsigned char>(v[i])) || v[i] == '-' || v[i] == '+' || v[i] == '.')) {
+            ++i;
+        }
+        if (i == 0) return 0.0f;
+        try {
+            return std::stof(v.substr(0, i));
+        } catch (...) {
+            return 0.0f;
+        }
+    };
+
+    auto parseLength = [&](const std::string& s) -> CSSValue {
+        std::string v = trimWhitespace(s);
+        if (v == "auto") {
+            return CSSValue(0.0f, CSSValue::Unit::AUTO);
+        }
+        bool is_percent = v.find('%') != std::string::npos;
+        float num = parseFloat(v);
+        if (num == 0.0f && v.find('0') == std::string::npos) {
+            // failed to parse, treat as AUTO
+            return CSSValue(0.0f, CSSValue::Unit::AUTO);
+        }
+        return CSSValue(num, is_percent ? CSSValue::Unit::PERCENT : CSSValue::Unit::PIXEL);
+    };
     
     if (prop == "color") {
         style.color = val;
@@ -615,9 +684,7 @@ void StyleEngine::applyStyleProperty(const std::string& property, const std::str
         style.background_color = val;
     }
     else if (prop == "font-size") {
-        try {
-            style.font_size = std::stof(val);
-        } catch (...) {}
+        style.font_size = parseFloat(val);
     }
     else if (prop == "font-weight") {
         style.font_weight = val;
@@ -634,13 +701,26 @@ void StyleEngine::applyStyleProperty(const std::string& property, const std::str
     else if (prop == "position") {
         style.position = val;
     }
+    else if (prop == "overflow") {
+        style.overflow = val;
+    }
     else if (prop == "width") {
-        style.width = CSSValue(std::stof(val), 
-            val.find('%') != std::string::npos ? CSSValue::Unit::PERCENT : CSSValue::Unit::PIXEL);
+        style.width = parseLength(val);
     }
     else if (prop == "height") {
-        style.height = CSSValue(std::stof(val),
-            val.find('%') != std::string::npos ? CSSValue::Unit::PERCENT : CSSValue::Unit::PIXEL);
+        style.height = parseLength(val);
+    }
+    else if (prop == "min-width") {
+        style.min_width = parseLength(val);
+    }
+    else if (prop == "max-width") {
+        style.max_width = parseLength(val);
+    }
+    else if (prop == "min-height") {
+        style.min_height = parseLength(val);
+    }
+    else if (prop == "max-height") {
+        style.max_height = parseLength(val);
     }
     else if (prop == "margin") {
         // margin: 10px or 10px 20px or 10px 20px 30px or 10px 20px 30px 40px
@@ -652,31 +732,31 @@ void StyleEngine::applyStyleProperty(const std::string& property, const std::str
         }
         
         if (parts.size() == 1) {
-            auto v = CSSValue(std::stof(parts[0]), CSSValue::Unit::PIXEL);
+            auto v = parseLength(parts[0]);
             style.margin_top = style.margin_right = style.margin_bottom = style.margin_left = v;
         } else if (parts.size() == 2) {
-            auto v1 = CSSValue(std::stof(parts[0]), CSSValue::Unit::PIXEL);
-            auto v2 = CSSValue(std::stof(parts[1]), CSSValue::Unit::PIXEL);
+            auto v1 = parseLength(parts[0]);
+            auto v2 = parseLength(parts[1]);
             style.margin_top = style.margin_bottom = v1;
             style.margin_left = style.margin_right = v2;
         } else if (parts.size() >= 4) {
-            style.margin_top = CSSValue(std::stof(parts[0]), CSSValue::Unit::PIXEL);
-            style.margin_right = CSSValue(std::stof(parts[1]), CSSValue::Unit::PIXEL);
-            style.margin_bottom = CSSValue(std::stof(parts[2]), CSSValue::Unit::PIXEL);
-            style.margin_left = CSSValue(std::stof(parts[3]), CSSValue::Unit::PIXEL);
+            style.margin_top = parseLength(parts[0]);
+            style.margin_right = parseLength(parts[1]);
+            style.margin_bottom = parseLength(parts[2]);
+            style.margin_left = parseLength(parts[3]);
         }
     }
     else if (prop == "margin-top") {
-        style.margin_top = CSSValue(std::stof(val), CSSValue::Unit::PIXEL);
+        style.margin_top = parseLength(val);
     }
     else if (prop == "margin-right") {
-        style.margin_right = CSSValue(std::stof(val), CSSValue::Unit::PIXEL);
+        style.margin_right = parseLength(val);
     }
     else if (prop == "margin-bottom") {
-        style.margin_bottom = CSSValue(std::stof(val), CSSValue::Unit::PIXEL);
+        style.margin_bottom = parseLength(val);
     }
     else if (prop == "margin-left") {
-        style.margin_left = CSSValue(std::stof(val), CSSValue::Unit::PIXEL);
+        style.margin_left = parseLength(val);
     }
     else if (prop == "padding") {
         std::istringstream iss(val);
@@ -687,31 +767,31 @@ void StyleEngine::applyStyleProperty(const std::string& property, const std::str
         }
         
         if (parts.size() == 1) {
-            auto v = CSSValue(std::stof(parts[0]), CSSValue::Unit::PIXEL);
+            auto v = parseLength(parts[0]);
             style.padding_top = style.padding_right = style.padding_bottom = style.padding_left = v;
         } else if (parts.size() == 2) {
-            auto v1 = CSSValue(std::stof(parts[0]), CSSValue::Unit::PIXEL);
-            auto v2 = CSSValue(std::stof(parts[1]), CSSValue::Unit::PIXEL);
+            auto v1 = parseLength(parts[0]);
+            auto v2 = parseLength(parts[1]);
             style.padding_top = style.padding_bottom = v1;
             style.padding_left = style.padding_right = v2;
         } else if (parts.size() >= 4) {
-            style.padding_top = CSSValue(std::stof(parts[0]), CSSValue::Unit::PIXEL);
-            style.padding_right = CSSValue(std::stof(parts[1]), CSSValue::Unit::PIXEL);
-            style.padding_bottom = CSSValue(std::stof(parts[2]), CSSValue::Unit::PIXEL);
-            style.padding_left = CSSValue(std::stof(parts[3]), CSSValue::Unit::PIXEL);
+            style.padding_top = parseLength(parts[0]);
+            style.padding_right = parseLength(parts[1]);
+            style.padding_bottom = parseLength(parts[2]);
+            style.padding_left = parseLength(parts[3]);
         }
     }
     else if (prop == "padding-top") {
-        style.padding_top = CSSValue(std::stof(val), CSSValue::Unit::PIXEL);
+        style.padding_top = parseLength(val);
     }
     else if (prop == "padding-right") {
-        style.padding_right = CSSValue(std::stof(val), CSSValue::Unit::PIXEL);
+        style.padding_right = parseLength(val);
     }
     else if (prop == "padding-bottom") {
-        style.padding_bottom = CSSValue(std::stof(val), CSSValue::Unit::PIXEL);
+        style.padding_bottom = parseLength(val);
     }
     else if (prop == "padding-left") {
-        style.padding_left = CSSValue(std::stof(val), CSSValue::Unit::PIXEL);
+        style.padding_left = parseLength(val);
     }
     else if (prop == "flex-direction") {
         style.flex_direction = val;
@@ -723,30 +803,31 @@ void StyleEngine::applyStyleProperty(const std::string& property, const std::str
         style.align_items = val;
     }
     else if (prop == "flex") {
-        style.flex = std::stof(val);
+        style.flex = parseFloat(val);
     }
     else if (prop == "flex-grow") {
-        style.flex_grow = std::stof(val);
+        style.flex_grow = parseFloat(val);
     }
     else if (prop == "flex-shrink") {
-        style.flex_shrink = std::stof(val);
+        style.flex_shrink = parseFloat(val);
     }
     else if (prop == "flex-basis") {
-        style.flex_basis = CSSValue(std::stof(val),
-            val.find('%') != std::string::npos ? CSSValue::Unit::PERCENT : CSSValue::Unit::PIXEL);
+        style.flex_basis = parseLength(val);
     }
     else if (prop == "border-radius") {
-        try {
-            style.border_radius = std::stof(val);
-        } catch (...) {}
+        style.border_radius = parseFloat(val);
     }
     else if (prop == "border-width") {
-        try {
-            style.border_width = std::stof(val);
-        } catch (...) {}
+        style.border_width = parseFloat(val);
     }
     else if (prop == "border-color") {
         style.border_color = val;
+    }
+    else if (prop == "opacity") {
+        float v = parseFloat(val);
+        if (v < 0.0f) v = 0.0f;
+        if (v > 1.0f) v = 1.0f;
+        style.opacity = v;
     }
 }
 

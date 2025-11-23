@@ -85,17 +85,43 @@ void Painter::renderNode(const dom::DOMNodePtr& node, const layout::LayoutNode* 
     if (!node) return;
 
     const auto& style = node->getComputedStyle();
-    std::fprintf(stderr, "[Painter] renderNode type=%d tag=%s layout=%p bg=%s\n",
-        static_cast<int>(node->getType()), node->getTagName().c_str(), static_cast<const void*>(layout_node),
-        style.background_color.c_str());
+    const std::string id_attr = node->hasAttribute("id") ? node->getAttribute("id") : "";
+    const std::string class_attr = node->hasAttribute("class") ? node->getAttribute("class") : "";
+    std::fprintf(stderr, "[Painter] renderNode type=%d tag=%s id=%s class=%s layout=%p bg=%s\n",
+        static_cast<int>(node->getType()), node->getTagName().c_str(), id_attr.c_str(), class_attr.c_str(),
+        static_cast<const void*>(layout_node), style.background_color.c_str());
+
+    if (layout_node) {
+        std::fprintf(stderr, "[Painter] layout box=(%.1f,%.1f,%.1f,%.1f)\n",
+            layout_node->layout.position[0], layout_node->layout.position[1],
+            layout_node->layout.dimensions[0], layout_node->layout.dimensions[1]);
+    }
 
     // Skip text nodes (rendered as part of parent element content)
     if (node->getType() == dom::DOMNode::NodeType::TEXT) {
         return;
     }
 
+    // Opacity stack: 累乘当前节点的 opacity
+    float prev_opacity = current_opacity_;
+    current_opacity_ *= style.opacity;
+
+    bool pushed_clip = false;
+    
     // Draw background and borders if layout provided
     if (layout_node) {
+        // Apply overflow clipping for this node if requested
+        if (style.overflow == "hidden") {
+            float x = layout_node->layout.position[0];
+            float y = layout_node->layout.position[1];
+            float w = layout_node->layout.dimensions[0];
+            float h = layout_node->layout.dimensions[1];
+            if (w > 0.0f && h > 0.0f) {
+                setClipRect(x, y, w, h);
+                pushed_clip = true;
+            }
+        }
+
         std::fprintf(stderr, "[Painter] draw background\n");
         drawNodeBackground(node, layout_node);
         std::fprintf(stderr, "[Painter] draw border\n");
@@ -113,6 +139,12 @@ void Painter::renderNode(const dom::DOMNodePtr& node, const layout::LayoutNode* 
         }
         renderNode(child, child_layout);
     }
+
+    if (pushed_clip) {
+        clearClipRect();
+    }
+
+    current_opacity_ = prev_opacity;
 }
 
 namespace {
@@ -201,6 +233,7 @@ void Painter::drawNodeBackground(const dom::DOMNodePtr& node, const layout::Layo
 
     uint8_t r = 240, g = 240, b = 240, a = 255;
     parseCssColor(style.background_color, r, g, b, a);
+    a = static_cast<uint8_t>(a * current_opacity_);
 
     std::fprintf(stderr,
         "[Painter] background tag=%s color=%s rgba=(%u,%u,%u,%u) rect=(%.1f,%.1f,%.1f,%.1f)\n",
@@ -226,12 +259,13 @@ void Painter::drawNodeBorder(const dom::DOMNodePtr& node, const layout::LayoutNo
 
     // Draw border
     if (style.border_width > 0 && style.border_color != "transparent") {
-        uint8_t r = 0, g = 0, b = 0;
+        uint8_t r = 0, g = 0, b = 0, a = 255;
         if (style.border_color == "red") { r = 255; }
         else if (style.border_color == "blue") { b = 255; }
         else if (style.border_color == "green") { g = 255; }
+        a = static_cast<uint8_t>(a * current_opacity_);
 
-        skia_backend_->drawStroke(x, y, width, height, style.border_width, r, g, b);
+        skia_backend_->drawStroke(x, y, width, height, style.border_width, r, g, b, a);
     }
 
     // Draw rounded corners
@@ -265,6 +299,7 @@ void Painter::drawNodeContent(const dom::DOMNodePtr& node, const layout::LayoutN
 
             // Apply simple padding based on computed style
             float pad_left = style.padding_left.isPixel() ? style.padding_left.value : 0.0f;
+            float pad_right = style.padding_right.isPixel() ? style.padding_right.value : 0.0f;
             float pad_top = style.padding_top.isPixel() ? style.padding_top.value : 0.0f;
 
             float font_size = style.font_size;
@@ -275,9 +310,26 @@ void Painter::drawNodeContent(const dom::DOMNodePtr& node, const layout::LayoutN
             // Text color from style.color
             uint8_t r = 0, g = 0, b = 0, a = 255;
             parseCssColor(style.color, r, g, b, a);
+            a = static_cast<uint8_t>(a * current_opacity_);
 
             float text_x = x + pad_left;
             float text_y;
+
+            // Respect text-align for horizontal alignment (single line)
+            if (skia_backend_) {
+                float text_width = skia_backend_->measureTextWidth(text, font_size, style.font_family, style.font_weight);
+                float inner_width = width - pad_left - pad_right;
+                if (inner_width < 0.0f) inner_width = 0.0f;
+
+                if (style.text_align == "center") {
+                    text_x = x + pad_left + (inner_width - text_width) * 0.5f;
+                } else if (style.text_align == "right") {
+                    text_x = x + pad_left + (inner_width - text_width);
+                } else {
+                    // left or default
+                    text_x = x + pad_left;
+                }
+            }
             // Try to keep baseline inside the element box: if the box太矮，就大致垂直居中
             if (height > font_size + pad_top) {
                 text_y = y + pad_top + font_size;

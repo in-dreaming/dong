@@ -667,8 +667,11 @@ void JSBindings::removeEventListener(uint64_t node_id, const std::string& type, 
 
     auto& entries = type_it->second;
     for (auto it = entries.begin(); it != entries.end(); ++it) {
-        int eq = JS_StrictEqual(ctx, *it, handler);
-        if (eq == 1) {
+        // QuickJS API 在不同版本中未提供统一的 JS_IsStrictEqual/JS_StrictEqual，
+        // 这里我们只需要判断两个函数是否是同一个 JS 对象，所以用 tag+指针比较即可。
+        JSValue a = *it;
+        JSValue b = handler;
+        if (JS_VALUE_GET_TAG(a) == JS_VALUE_GET_TAG(b) && JS_VALUE_GET_PTR(a) == JS_VALUE_GET_PTR(b)) {
             JS_FreeValue(ctx, *it);
             entries.erase(it);
             break;

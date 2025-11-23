@@ -83,6 +83,11 @@ void View::load_html(const char* html) {
         if (render_surface) {
             render_surface->markDirty();
         }
+        // 新的 DOM 树需要重新布局
+        auto root = dom_manager->getRoot();
+        if (root) {
+            root->markLayoutDirty();
+        }
     }
 }
 
@@ -98,6 +103,14 @@ void View::resize(uint32_t width, uint32_t height) {
     }
 
     render_surface->markDirty();
+
+    // 尺寸变化会影响整个布局
+    if (dom_manager) {
+        auto root = dom_manager->getRoot();
+        if (root) {
+            root->markLayoutDirty();
+        }
+    }
 }
 
 void View::update() {
@@ -107,8 +120,9 @@ void View::update() {
 
     if (layout_engine && dom_manager) {
         auto root = dom_manager->getRoot();
-        if (root) {
+        if (root && root->isLayoutDirty()) {
             layout_engine->calculateLayout(root, static_cast<float>(width_), static_cast<float>(height_));
+            root->clearLayoutDirtyRecursive();
             if (render_surface) {
                 render_surface->markDirty();
             }

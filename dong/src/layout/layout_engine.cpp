@@ -3,8 +3,25 @@
 #include <yoga/YGConfig.h>
 #include <yoga/Yoga.h>
 #include <iostream>
+#include <cstdio>
 
 namespace dong::layout {
+
+namespace {
+
+dom::DOMNodePtr firstElementChild(const dom::DOMNodePtr& node) {
+    if (!node) {
+        return nullptr;
+    }
+    for (const auto& child : node->getChildren()) {
+        if (child && child->getType() == dom::DOMNode::NodeType::ELEMENT) {
+            return child;
+        }
+    }
+    return nullptr;
+}
+
+} // anonymous namespace
 
 LayoutNode::~LayoutNode() {
     if (yoga_node) {
@@ -29,20 +46,36 @@ Engine::~Engine() {
 void Engine::calculateLayout(dom::DOMNodePtr root, float width, float height) {
     if (!root || !yoga_config) return;
 
-    // Create Yoga tree from DOM tree
-    YGNode* yoga_root = createYogaNode(root);
+    // Rebuild layout tree from scratch each time for now to avoid stale Yoga nodes
+    layout_cache.clear();
+
+    // Prefer the first real element (e.g., <html>) as the Yoga root instead of the #document node
+    dom::DOMNodePtr layout_root_dom = root;
+    if (root->getType() != dom::DOMNode::NodeType::ELEMENT) {
+        auto element_child = firstElementChild(root);
+        if (element_child) {
+            layout_root_dom = element_child;
+        }
+    }
+
+    if (!layout_root_dom) return;
+
+    // Create Yoga tree from the chosen DOM root
+    YGNode* yoga_root = createYogaNode(layout_root_dom);
     if (!yoga_root) return;
 
-    // Set root size
+    // Set viewport size on Yoga root (now the <html> element in most cases)
     YGNodeStyleSetWidth(yoga_root, width);
     YGNodeStyleSetHeight(yoga_root, height);
 
     // Calculate layout
     YGNodeCalculateLayout(yoga_root, width, height, YGDirectionLTR);
 
-    // Extract layout info back to cache (recursively)
-    std::function<void(dom::DOMNodePtr, YGNode*)> extractLayoutRecursive =
-        [this, &extractLayoutRecursive](dom::DOMNodePtr dom_node, YGNode* yoga_node) {
+    // Extract layout info back to cache (recursively). Convert Yoga's relative
+    // positions into absolute coordinates so the painter can use them directly.
+    std::function<void(dom::DOMNodePtr, YGNode*, float, float)> extractLayoutRecursive =
+        [this, &extractLayoutRecursive](dom::DOMNodePtr dom_node, YGNode* yoga_node,
+                                        float parent_x, float parent_y) {
             if (!dom_node || !yoga_node) return;
 
             auto& node_layout = layout_cache[dom_node.get()];
@@ -50,31 +83,60 @@ void Engine::calculateLayout(dom::DOMNodePtr root, float width, float height) {
                 node_layout = std::make_unique<LayoutNode>();
             }
             node_layout->yoga_node = yoga_node;
-            node_layout->x = YGNodeLayoutGetLeft(yoga_node);
-            node_layout->y = YGNodeLayoutGetTop(yoga_node);
-            node_layout->width = YGNodeLayoutGetWidth(yoga_node);
-            node_layout->height = YGNodeLayoutGetHeight(yoga_node);
 
-            // Keep legacy fields and new layout struct in sync
+            const float left = YGNodeLayoutGetLeft(yoga_node);
+            const float top = YGNodeLayoutGetTop(yoga_node);
+            const float width = YGNodeLayoutGetWidth(yoga_node);
+            const float height = YGNodeLayoutGetHeight(yoga_node);
+
+            node_layout->x = parent_x + left;
+            node_layout->y = parent_y + top;
+            node_layout->width = width;
+            node_layout->height = height;
+
+            // Keep legacy fields and new layout struct in sync (absolute coords)
             node_layout->layout.position[0] = node_layout->x;
             node_layout->layout.position[1] = node_layout->y;
             node_layout->layout.dimensions[0] = node_layout->width;
             node_layout->layout.dimensions[1] = node_layout->height;
 
-            // Recursively extract child layouts
+            // Recursively extract child layouts. Only ELEMENT nodes get Yoga children.
             uint32_t child_count = YGNodeGetChildCount(yoga_node);
-            for (uint32_t i = 0; i < child_count; ++i) {
-                YGNode* child_yoga = YGNodeGetChild(yoga_node, i);
-                if (child_yoga && i < dom_node->getChildren().size()) {
-                    const auto& child_dom = dom_node->getChildren()[i];
-                    if (child_dom && child_dom->getType() == dom::DOMNode::NodeType::ELEMENT) {
-                        extractLayoutRecursive(child_dom, child_yoga);
-                    }
+            uint32_t yoga_child_index = 0;
+            for (const auto& child_dom : dom_node->getChildren()) {
+                if (!child_dom || child_dom->getType() != dom::DOMNode::NodeType::ELEMENT) {
+                    continue;
                 }
+                if (yoga_child_index >= child_count) {
+                    break;
+                }
+                YGNode* child_yoga = YGNodeGetChild(yoga_node, yoga_child_index);
+                if (child_yoga) {
+                    extractLayoutRecursive(child_dom, child_yoga,
+                                            node_layout->x, node_layout->y);
+                }
+                ++yoga_child_index;
             }
         };
 
-    extractLayoutRecursive(root, yoga_root);
+    extractLayoutRecursive(layout_root_dom, yoga_root, 0.0f, 0.0f);
+
+    // Ensure the #document node itself still has a layout entry so rendering can start from it
+    if (layout_root_dom.get() != root.get()) {
+        auto& doc_layout = layout_cache[root.get()];
+        if (!doc_layout) {
+            doc_layout = std::make_unique<LayoutNode>();
+        }
+        doc_layout->x = 0.0f;
+        doc_layout->y = 0.0f;
+        doc_layout->width = width;
+        doc_layout->height = height;
+        doc_layout->layout.position[0] = 0.0f;
+        doc_layout->layout.position[1] = 0.0f;
+        doc_layout->layout.dimensions[0] = width;
+        doc_layout->layout.dimensions[1] = height;
+        doc_layout->yoga_node = nullptr; // #document is synthetic; it doesn't have a corresponding Yoga node
+    }
 }
 
 const LayoutNode* Engine::getLayout(dom::DOMNodePtr node) const {
@@ -100,13 +162,31 @@ void Engine::markDirty(dom::DOMNodePtr node) {
 YGNode* Engine::createYogaNode(dom::DOMNodePtr dom_node) {
     if (!dom_node || !yoga_config) return nullptr;
 
-    YGNode* yoga_node = YGNodeNewWithConfig(yoga_config);
-    if (!yoga_node) return nullptr;
+    // Reuse existing Yoga node for this DOM node if it already exists in the cache,
+    // otherwise create a new one. This avoids reallocating the Yoga tree on every
+    // layout pass and lets us rely on Yoga's own dirty-marking for subtrees.
+    auto& node_layout = layout_cache[dom_node.get()];
+    if (!node_layout) {
+        node_layout = std::make_unique<LayoutNode>();
+    }
+
+    YGNode* yoga_node = node_layout->yoga_node;
+    if (!yoga_node) {
+        yoga_node = YGNodeNewWithConfig(yoga_config);
+        if (!yoga_node) return nullptr;
+        node_layout->yoga_node = yoga_node;
+    } else {
+        // Clear existing children so we can rebuild the hierarchy to match DOM
+        const uint32_t child_count = YGNodeGetChildCount(yoga_node);
+        for (uint32_t i = 0; i < child_count; ++i) {
+            YGNodeRemoveChild(yoga_node, YGNodeGetChild(yoga_node, 0));
+        }
+    }
 
     // Apply DOM styles to Yoga node
     applyDOMStylesToYoga(dom_node, yoga_node);
 
-    // Recursively create Yoga nodes for children
+    // Recursively create or reuse Yoga nodes for children
     for (const auto& child : dom_node->getChildren()) {
         if (child && child->getType() == dom::DOMNode::NodeType::ELEMENT) {
             YGNode* child_yoga = createYogaNode(child);
@@ -129,7 +209,31 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
     if (!dom_node || !yoga_node) return;
 
     const auto& style = dom_node->getComputedStyle();
+
+    // Debug current computed style -> Yoga mapping for key elements
+    const std::string& tag = dom_node->getTagName();
+    const std::string id_attr = dom_node->hasAttribute("id") ? dom_node->getAttribute("id") : "";
+    const std::string class_attr = dom_node->hasAttribute("class") ? dom_node->getAttribute("class") : "";
+    std::fprintf(stderr,
+        "[Layout] applyDOMStyles tag=%s id=%s class=%s display=%s width(unit=%d,val=%.1f) height(unit=%d,val=%.1f) flex=%.2f flex_dir=%s\n",
+        tag.c_str(), id_attr.c_str(), class_attr.c_str(), style.display.c_str(),
+        static_cast<int>(style.width.unit), style.width.value,
+        static_cast<int>(style.height.unit), style.height.value,
+        style.flex, style.flex_direction.c_str());
+
     mapComputedStylesToYoga(style, yoga_node);
+
+    // Heuristic intrinsic sizing for text-like elements.
+    // Since Yoga does not know about our text measurement, many text containers would
+    // otherwise collapse to zero height. For common tags, ensure a reasonable
+    // minimum height based on font-size.
+    if ((tag == "h1" || tag == "h2" || tag == "h3" || tag == "h4" ||
+         tag == "h5" || tag == "h6" || tag == "p" || tag == "button") &&
+        style.height.isAuto()) {
+        float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
+        float line_height = font_size * 1.4f;
+        YGNodeStyleSetMinHeight(yoga_node, line_height);
+    }
 }
 
 void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yoga_node) {
@@ -186,16 +290,30 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
     }
 
     // Set dimensions
+    bool has_explicit_width = false;
+    bool has_explicit_height = false;
+
     if (style.width.isPixel()) {
         YGNodeStyleSetWidth(yoga_node, style.width.value);
+        has_explicit_width = true;
     } else if (style.width.isPercent()) {
         YGNodeStyleSetWidthPercent(yoga_node, style.width.value);
+        has_explicit_width = true;
     }
 
     if (style.height.isPixel()) {
         YGNodeStyleSetHeight(yoga_node, style.height.value);
+        has_explicit_height = true;
     } else if (style.height.isPercent()) {
         YGNodeStyleSetHeightPercent(yoga_node, style.height.value);
+        has_explicit_height = true;
+    }
+
+    // Fallback: for block-like elements without an explicit width,
+    // stretch to full available width. This approximates HTML block layout
+    // when we don't have intrinsic content measurement.
+    if (!has_explicit_width && style.display != "inline") {
+        YGNodeStyleSetWidthPercent(yoga_node, 100.0f);
     }
 
     // Set margins
@@ -246,16 +364,62 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
     }
 
     // Set flex grow/shrink
-    YGNodeStyleSetFlexGrow(yoga_node, style.flex_grow);
-    YGNodeStyleSetFlexShrink(yoga_node, style.flex_shrink);
-    if (style.flex_basis.isPixel()) {
-        YGNodeStyleSetFlexBasis(yoga_node, style.flex_basis.value);
-    } else if (style.flex_basis.isPercent()) {
-        YGNodeStyleSetFlexBasisPercent(yoga_node, style.flex_basis.value);
+    float flex_grow = style.flex_grow;
+    float flex_shrink = style.flex_shrink;
+    dom::CSSValue flex_basis = style.flex_basis;
+
+    // Support `flex: <number>` shorthand as flex-grow with a 0 basis
+    if (style.flex != 0.0f) {
+        if (flex_grow == 0.0f) {
+            flex_grow = style.flex;
+        }
+        // Keep existing shrink unless explicitly overridden
+        if (flex_shrink == 1.0f) {
+            flex_shrink = 1.0f;
+        }
+        // When flex shorthand is used and flex-basis is auto, default to 0
+        if (flex_basis.unit == dom::CSSValue::Unit::AUTO) {
+            flex_basis = dom::CSSValue(0.0f, dom::CSSValue::Unit::PIXEL);
+        }
     }
 
-    // Set min/max width and height (if CSS supports them)
-    // TODO: Add min-width, max-width, min-height, max-height support to ComputedStyle
+    YGNodeStyleSetFlexGrow(yoga_node, flex_grow);
+    YGNodeStyleSetFlexShrink(yoga_node, flex_shrink);
+    if (flex_basis.isPixel()) {
+        YGNodeStyleSetFlexBasis(yoga_node, flex_basis.value);
+    } else if (flex_basis.isPercent()) {
+        YGNodeStyleSetFlexBasisPercent(yoga_node, flex_basis.value);
+    }
+
+    // Map border width into Yoga so that border participates in box model sizing
+    if (style.border_width > 0.0f) {
+        YGNodeStyleSetBorder(yoga_node, YGEdgeLeft, style.border_width);
+        YGNodeStyleSetBorder(yoga_node, YGEdgeTop, style.border_width);
+        YGNodeStyleSetBorder(yoga_node, YGEdgeRight, style.border_width);
+        YGNodeStyleSetBorder(yoga_node, YGEdgeBottom, style.border_width);
+    }
+
+    // Set min/max width and height
+    if (style.min_width.isPixel()) {
+        YGNodeStyleSetMinWidth(yoga_node, style.min_width.value);
+    } else if (style.min_width.isPercent()) {
+        YGNodeStyleSetMinWidthPercent(yoga_node, style.min_width.value);
+    }
+    if (style.max_width.isPixel()) {
+        YGNodeStyleSetMaxWidth(yoga_node, style.max_width.value);
+    } else if (style.max_width.isPercent()) {
+        YGNodeStyleSetMaxWidthPercent(yoga_node, style.max_width.value);
+    }
+    if (style.min_height.isPixel()) {
+        YGNodeStyleSetMinHeight(yoga_node, style.min_height.value);
+    } else if (style.min_height.isPercent()) {
+        YGNodeStyleSetMinHeightPercent(yoga_node, style.min_height.value);
+    }
+    if (style.max_height.isPixel()) {
+        YGNodeStyleSetMaxHeight(yoga_node, style.max_height.value);
+    } else if (style.max_height.isPercent()) {
+        YGNodeStyleSetMaxHeightPercent(yoga_node, style.max_height.value);
+    }
 }
 
 float Engine::parsePixelValue(const dom::CSSValue& value, float parent_size) {

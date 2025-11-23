@@ -15,12 +15,27 @@
 #include <core/SkFontStyle.h>
 #include <core/SkFontTypes.h>
 #include <core/SkFontMgr.h>
+#if defined(__APPLE__)
+#include <ports/SkFontMgr_mac_ct.h>
+#endif
 
 #include <cstdio>
 #include <cstring>
 #include <memory>
 
 namespace dong::render {
+
+namespace {
+sk_sp<SkFontMgr> CreateSystemFontMgr() {
+#if defined(__APPLE__)
+    auto mgr = SkFontMgr_New_CoreText(nullptr);
+    if (mgr) {
+        return mgr;
+    }
+#endif
+    return SkFontMgr::RefEmpty();
+}
+}
 
 SkiaBackend::SkiaBackend(RenderSurface* surface)
     : render_surface_(surface), sk_canvas_(nullptr), sk_surface_(nullptr),
@@ -198,7 +213,7 @@ void SkiaBackend::drawTextStyled(const std::string& text, float x, float y,
 
     // 使用 SkFontMgr 从系统加载字体，尽量按 font-family / font-weight 匹配
     SkFont font;
-    static sk_sp<SkFontMgr> font_mgr = SkFontMgr::RefEmpty();
+    static sk_sp<SkFontMgr> font_mgr = CreateSystemFontMgr();
     if (font_mgr) {
         int sk_weight = SkFontStyle::kNormal_Weight;
         if (font_weight == "bold" || font_weight == "700") {
@@ -250,6 +265,45 @@ void SkiaBackend::drawTextStyled(const std::string& text, float x, float y,
     );
 
     render_surface_->markDirty();
+}
+
+float SkiaBackend::measureTextWidth(const std::string& text, float font_size,
+                                   const std::string& font_family,
+                                   const std::string& font_weight) {
+    // 复用 drawTextStyled 中的字体构造逻辑，但不真正绘制，只做度量
+    float size = font_size > 0.0f ? font_size : default_font_size_;
+
+    SkFont font;
+    static sk_sp<SkFontMgr> font_mgr = CreateSystemFontMgr();
+    if (font_mgr) {
+        int sk_weight = SkFontStyle::kNormal_Weight;
+        if (font_weight == "bold" || font_weight == "700") {
+            sk_weight = SkFontStyle::kBold_Weight;
+        }
+        SkFontStyle style(sk_weight, SkFontStyle::kNormal_Width, SkFontStyle::kUpright_Slant);
+
+        const char* family_cstr = font_family.empty() ? nullptr : font_family.c_str();
+        sk_sp<SkTypeface> typeface = font_mgr->matchFamilyStyle(family_cstr, style);
+        if (!typeface) {
+            typeface = font_mgr->matchFamilyStyle(nullptr, SkFontStyle::Normal());
+        }
+
+        if (typeface) {
+            font = SkFont(typeface, size);
+        } else {
+            font.setSize(size);
+        }
+    } else if (default_font_) {
+        SkFont* default_font = reinterpret_cast<SkFont*>(default_font_);
+        font = *default_font;
+        font.setSize(size);
+    } else {
+        font.setSize(size);
+    }
+
+    SkRect bounds;
+    font.measureText(text.c_str(), text.length(), SkTextEncoding::kUTF8, &bounds);
+    return bounds.width();
 }
 
 void SkiaBackend::drawParagraph(const std::string& text, float x, float y, float max_width,

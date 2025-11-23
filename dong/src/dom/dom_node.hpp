@@ -36,6 +36,10 @@ struct ComputedStyle {
     // Box Model
     CSSValue width;
     CSSValue height;
+    CSSValue min_width;
+    CSSValue max_width;
+    CSSValue min_height;
+    CSSValue max_height;
     CSSValue margin_top;
     CSSValue margin_right;
     CSSValue margin_bottom;
@@ -55,6 +59,8 @@ struct ComputedStyle {
     float border_radius = 0.0f;
     std::string border_color = "#000000";
     float border_width = 0.0f;
+    std::string overflow = "visible"; // visible, hidden, scroll
+    float opacity = 1.0f;              // 0.0 ~ 1.0
 
     // Text
     std::string font_family = "Arial";
@@ -95,7 +101,10 @@ public:
     NodeType getType() const { return type; }
     const std::string& getTagName() const { return tag_name; }
     const std::string& getTextContent() const { return text_content; }
-    void setTextContent(const std::string& text) { text_content = text; }
+    void setTextContent(const std::string& text) {
+        text_content = text;
+        markLayoutDirty();
+    }
 
     // Attributes
     void setAttribute(const std::string& key, const std::string& value);
@@ -108,6 +117,11 @@ public:
     // Style
     ComputedStyle& getComputedStyle() { return computed_style; }
     const ComputedStyle& getComputedStyle() const { return computed_style; }
+
+    // Layout dirtiness for incremental layout
+    void markLayoutDirty();
+    void clearLayoutDirtyRecursive();
+    bool isLayoutDirty() const { return layout_dirty_; }
 
     // Traversal helpers
     DOMNodePtr getElementById(const std::string& id);
@@ -123,6 +137,7 @@ private:
     std::string text_content;
     std::unordered_map<std::string, std::string> attributes;
     ComputedStyle computed_style;
+    bool layout_dirty_ = true;
 
     std::weak_ptr<DOMNode> parent;
     std::vector<DOMNodePtr> children;

@@ -40,6 +40,11 @@ public:
     void drawParagraph(const std::string& text, float x, float y, float max_width,
                        float font_size, uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255);
 
+    // 文本度量：返回单行文本宽度
+    float measureTextWidth(const std::string& text, float font_size,
+                           const std::string& font_family,
+                           const std::string& font_weight);
+
     // 矩形绘制
     void drawRect(float x, float y, float width, float height,
                   uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255, float stroke_width = 0);
