@@ -1,5 +1,6 @@
 #include "skia_backend.hpp"
 #include "render_surface.hpp"
+#include "resource_manager.hpp"
 
 #include <core/SkCanvas.h>
 #include <core/SkSurface.h>
@@ -39,12 +40,12 @@ sk_sp<SkFontMgr> CreateSystemFontMgr() {
 
 SkiaBackend::SkiaBackend(RenderSurface* surface)
     : render_surface_(surface), sk_canvas_(nullptr), sk_surface_(nullptr),
-      default_font_(nullptr), default_font_size_(16.0f) {
+      default_font_(nullptr), default_font_size_(16.0f),
+      resource_manager_(std::make_unique<ResourceManager>()) {
 }
 
 SkiaBackend::~SkiaBackend() {
-    font_cache_.clear();
-    image_cache_.clear();
+    resource_manager_.reset();
     
     if (sk_canvas_) {
         // sk_canvas_ is owned by sk_surface_, don't delete directly
@@ -122,8 +123,6 @@ void SkiaBackend::setDefaultFont(const std::string& font_name, float font_size) 
         SkFont* font = reinterpret_cast<SkFont*>(default_font_);
         font->setSize(font_size);
     }
-    
-    font_cache_[font_name] = nullptr;
 }
 
 void SkiaBackend::drawRect(float x, float y, float width, float height,
@@ -314,40 +313,54 @@ void SkiaBackend::drawParagraph(const std::string& text, float x, float y, float
 }
 
 void* SkiaBackend::loadTypeface(const std::string& font_name) {
-    auto it = font_cache_.find(font_name);
-    if (it != font_cache_.end()) {
-        return it->second;
-    }
+    if (!resource_manager_) return nullptr;
     
-    // For now, just return nullptr and use default typeface
-    // A proper implementation would use SkFontMgr to load typefaces
+    FontResource* res = resource_manager_->getSystemFont(font_name, default_font_size_);
+    if (res) {
+        return res->sk_typeface;
+    }
     return nullptr;
 }
 
 void* SkiaBackend::loadImage(const std::string& image_path) {
-    auto it = image_cache_.find(image_path);
-    if (it != image_cache_.end()) {
-        return it->second;
-    }
+    if (!resource_manager_) return nullptr;
     
-    // TODO: Implement image loading from file
-    // This would require SkImage::MakeFromEncoded or similar
+    ImageResource* res = resource_manager_->loadImage(image_path);
+    if (res) {
+        return res->sk_image;
+    }
     return nullptr;
 }
 
 void SkiaBackend::drawImage(const std::string& image_path, float x, float y,
                            float width, float height, uint8_t alpha) {
-    if (!sk_canvas_) return;
+    if (!sk_canvas_ || !resource_manager_) return;
 
-    // TODO: Load image and draw it
-    // void* img_ptr = loadImage(image_path);
-    // if (img_ptr) {
-    //     SkImage* image = reinterpret_cast<SkImage*>(img_ptr);
-    //     SkCanvas* canvas = reinterpret_cast<SkCanvas*>(sk_canvas_);
-    //     SkPaint paint;
-    //     paint.setAlpha(alpha);
-    //     canvas->drawImageRect(image, SkRect::MakeXYWH(x, y, width, height), paint);
-    // }
+    // If width or height is 0, try to load image and use its intrinsic size
+    float actual_width = width;
+    float actual_height = height;
+
+    ImageResource* img_res = resource_manager_->getImage(image_path);
+    if (!img_res) {
+        img_res = resource_manager_->loadImage(image_path);
+    }
+    
+    if (img_res && img_res->sk_image) {
+        // If no explicit size, use image's intrinsic size
+        if (actual_width <= 0.0f || actual_height <= 0.0f) {
+            actual_width = (float)img_res->width;
+            actual_height = (float)img_res->height;
+        }
+        
+        SkImage* image = reinterpret_cast<SkImage*>(img_res->sk_image);
+        SkCanvas* canvas = reinterpret_cast<SkCanvas*>(sk_canvas_);
+        
+        SkPaint paint;
+        paint.setAlpha(alpha);
+        
+        SkRect dest = SkRect::MakeXYWH(x, y, actual_width, actual_height);
+        canvas->drawImageRect(image, dest, SkSamplingOptions(), &paint);
+    }
     
     render_surface_->markDirty();
 }

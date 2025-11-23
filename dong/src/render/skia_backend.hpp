@@ -4,11 +4,13 @@
 #include <string>
 #include <unordered_map>
 #include "render_surface.hpp"
+#include "resource_manager.hpp"
 
 namespace dong::render {
 
 // Forward declarations
 class CPUBufferSurface;
+class ResourceManager;
 
 // Skia 后端管理器，处理文本、图片、绘制等
 class SkiaBackend {
@@ -73,6 +75,9 @@ public:
     // 提交绘制到表面
     void flush();
 
+    // 获取资源管理器
+    ResourceManager* getResourceManager() const { return resource_manager_.get(); }
+
 private:
     RenderSurface* render_surface_;
     void* sk_canvas_;    // SkCanvas* (opaque)
@@ -80,9 +85,8 @@ private:
     void* default_font_; // SkFont* (opaque)
     float default_font_size_;
 
-    // 缓存存储（使用 opaque pointers）
-    std::unordered_map<std::string, void*> font_cache_;   // SkTypeface* cache
-    std::unordered_map<std::string, void*> image_cache_;  // SkImage* cache
+    // 资源管理器
+    ResourceManagerPtr resource_manager_;
 
     // 辅助函数
     void* loadTypeface(const std::string& font_name);

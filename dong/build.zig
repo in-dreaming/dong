@@ -113,7 +113,7 @@ pub fn build(b: *std.Build) void {
             "third_party/quickjs/cutils.c",
             "third_party/quickjs/dtoa.c",
         },
-        .flags = &.{ "-D_GNU_SOURCE", "-DCONFIG_VERSION=\"2024-01\"" },
+        .flags = &.{ "-D_GNU_SOURCE" },
     });
     quickjs.linkLibC();
 
@@ -194,6 +194,7 @@ pub fn build(b: *std.Build) void {
             "src/render/painter.cpp",
             "src/render/render_surface.cpp",
             "src/render/skia_backend.cpp",
+            "src/render/resource_manager.cpp",
         },
         .flags = &.{"-std=c++17"},
     });
@@ -230,6 +231,10 @@ pub fn build(b: *std.Build) void {
         .{ .name = "dirty_rect_optimization_demo", .source = "examples/dirty_rect_optimization_demo.cpp", .flags = &.{"-std=c++17"} },
         .{ .name = "skia_cpu_demo", .source = "examples/skia_cpu_demo.cpp", .flags = &.{"-std=c++17"} },
         .{ .name = "js_event_demo", .source = "examples/js_event_demo.cpp", .flags = &.{"-std=c++17"} },
+        // 【新增】功能完整性演示
+        .{ .name = "comprehensive_features_demo", .source = "examples/comprehensive_features_demo.cpp", .flags = &.{"-std=c++17"} },
+        // 【新增】图片渲染演示
+        .{ .name = "image_rendering_demo", .source = "examples/image_rendering_demo.cpp", .flags = &.{"-std=c++17"} },
     };
 
     inline for (example_defs) |info| {

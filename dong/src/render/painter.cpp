@@ -88,9 +88,11 @@ void Painter::renderNode(const dom::DOMNodePtr& node, const layout::LayoutNode* 
     if (node->getType() == dom::DOMNode::NodeType::TEXT) {
         return;
     }
+    
 
-    // Dirty rect optimization: skip nodes outside dirty region
-    if (use_dirty_rect_ && !current_dirty_rect_.isEmpty() && layout_node) {
+
+    // Dirty rect optimization: skip nodes outside dirty region (but skip for img tags)
+    if (use_dirty_rect_ && !current_dirty_rect_.isEmpty() && layout_node && node->getTagName() != "img") {
         if (!isNodeInDirtyRect(layout_node)) {
             return;
         }
@@ -294,6 +296,22 @@ void Painter::drawNodeContent(const dom::DOMNodePtr& node, const layout::LayoutN
 
     const std::string tag = node->getTagName();
     if (tag == "script" || tag == "style" || tag == "head") {
+        return;
+    }
+
+    // Handle img tag specially - draw the image
+    if (tag == "img") {
+        std::string src = node->getAttribute("src");
+        if (!src.empty()) {
+            const auto& style = node->getComputedStyle();
+            float x = layout_node->layout.position[0];
+            float y = layout_node->layout.position[1];
+            float width = layout_node->layout.dimensions[0];
+            float height = layout_node->layout.dimensions[1];
+            
+            uint8_t alpha = static_cast<uint8_t>(255 * current_opacity_);
+            skia_backend_->drawImage(src, x, y, width, height, alpha);
+        }
         return;
     }
 
