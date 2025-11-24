@@ -5,10 +5,12 @@
 namespace dong::render {
 
 GPUDevice::~GPUDevice() {
-    if (device_) {
+    // Only destroy devices that we created ourselves. External devices are
+    // owned by the host (e.g., SDL3Window) and must not be destroyed here.
+    if (device_ && owns_device_) {
         SDL_DestroyGPUDevice(device_);
-        device_ = nullptr;
     }
+    device_ = nullptr;
 }
 
 bool GPUDevice::initialize(const CreateInfo& info) {
@@ -28,6 +30,7 @@ bool GPUDevice::initialize(const CreateInfo& info) {
     }
 
     shader_format_ = info.shader_format;
+    owns_device_ = true;
     SDL_Log("GPU device initialized successfully with format: %d", shader_format_);
 
     return true;
@@ -39,9 +42,16 @@ void GPUDevice::adoptExternal(SDL_GPUDevice* external_device, SDL_GPUShaderForma
         return;
     }
 
-    // Adopt external device without destroying it
+    // If we currently own an internally created device, destroy it first.
+    if (device_ && owns_device_) {
+        SDL_DestroyGPUDevice(device_);
+        device_ = nullptr;
+    }
+
+    // Adopt external device without taking ownership (lifetime managed by host)
     device_ = external_device;
     shader_format_ = format;
+    owns_device_ = false;
     SDL_Log("GPU device adopted from external source with format: %d", shader_format_);
 }
 

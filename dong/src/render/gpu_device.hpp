@@ -45,6 +45,7 @@ public:
 private:
     SDL_GPUDevice* device_ = nullptr;
     SDL_GPUShaderFormat shader_format_ = SDL_GPU_SHADERFORMAT_INVALID;
+    bool owns_device_ = false; // true: we created the device and must destroy it
 };
 
 } // namespace dong::render

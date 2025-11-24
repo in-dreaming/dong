@@ -148,6 +148,10 @@ void GPUPainter::renderInternal() {
 
         // 绘制全屏三角形
         SDL_DrawGPUPrimitives(pass, 3, 1, 0, 0);
+        SDL_Log("Rendered 3 vertices with content texture");
+    } else {
+        SDL_Log("RenderInternal: missing pipeline=%p texture=%p sampler=%p", 
+            (void*)fullscreen_pipeline_, (void*)content_texture_, (void*)content_sampler_);
     }
 
     SDL_EndGPURenderPass(pass);
@@ -166,6 +170,7 @@ void GPUPainter::beginFrame() {
     }
 
     is_rendering_ = true;
+    SDL_Log("beginFrame: acquired command buffer");
 }
 
 void GPUPainter::endFrame() {
@@ -339,7 +344,10 @@ void GPUPainter::setupContentTexture() {
 }
 
 void GPUPainter::uploadCPUPixelsToGPU(const void* cpu_buffer, uint32_t width, uint32_t height) {
+    SDL_Log("uploadCPUPixelsToGPU called: buffer=%p w=%u h=%u", cpu_buffer, width, height);
+    
     if (!cpu_buffer || !gpu_device_ || !gpu_device_->isInitialized() || !content_texture_) {
+        SDL_Log("uploadCPUPixelsToGPU: invalid params");
         return;
     }
 
@@ -349,6 +357,8 @@ void GPUPainter::uploadCPUPixelsToGPU(const void* cpu_buffer, uint32_t width, ui
         SDL_Log("uploadCPUPixelsToGPU: no active command buffer");
         return;
     }
+    
+    SDL_Log("uploadCPUPixelsToGPU: proceeding with upload");
 
     // 计算缓冲大小
     uint32_t stride = width * 4;  // RGBA
