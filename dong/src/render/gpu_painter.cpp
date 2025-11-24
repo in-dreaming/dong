@@ -5,6 +5,7 @@
 #include "../dom/dom_manager.hpp"
 #include "../layout/layout_engine.hpp"
 #include <SDL3/SDL_log.h>
+#include <cstring>
 
 namespace dong::render {
 
@@ -45,9 +46,15 @@ bool GPUPainter::initialize() {
         return false;
     }
 
+    setupContentTexture();
     setupPipelines();
     if (!fullscreen_pipeline_) {
         SDL_Log("Failed to initialize GPU pipelines");
+        return false;
+    }
+
+    if (!content_texture_) {
+        SDL_Log("Failed to initialize content texture");
         return false;
     }
 
@@ -70,12 +77,42 @@ void GPUPainter::render(dom::Manager* dom_manager, layout::Engine* layout_engine
         return;
     }
 
-    // 使用 GPU render pass 对当前 render target 进行绘制
+    renderInternal();
+
+    endFrame();
+}
+
+void GPUPainter::renderInternal() {
+    if (!is_rendering_ || !current_cmd_buf_) {
+        return;
+    }
+
+    // 获取 swapchain 纹理以渲染到屏幕
+    SDL_GPUTexture* swapchain_texture = nullptr;
+    Uint32 w = 0;
+    Uint32 h = 0;
+
+    SDL_Window* window = gpu_surface_->getWindow();
+    if (!window) {
+        SDL_Log("GPUPainter::renderInternal: GPU surface has no window bound");
+        return;
+    }
+
+    if (!SDL_WaitAndAcquireGPUSwapchainTexture(
+            current_cmd_buf_,
+            window,
+            &swapchain_texture,
+            &w,
+            &h)) {
+        SDL_Log("Failed to acquire swapchain texture: %s", SDL_GetError());
+        return;
+    }
+
     SDL_GPUColorTargetInfo color_target{};
-    color_target.texture = gpu_surface_->getTexture();
+    color_target.texture = swapchain_texture;
     color_target.mip_level = 0;
     color_target.layer_or_depth_plane = 0;
-    color_target.clear_color = SDL_FColor{0.1f, 0.2f, 0.4f, 1.0f};
+    color_target.clear_color = SDL_FColor{0.0f, 0.0f, 0.0f, 1.0f};
     color_target.load_op = SDL_GPU_LOADOP_CLEAR;
     color_target.store_op = SDL_GPU_STOREOP_STORE;
     color_target.resolve_texture = nullptr;
@@ -93,19 +130,24 @@ void GPUPainter::render(dom::Manager* dom_manager, layout::Engine* layout_engine
 
     if (!pass) {
         SDL_Log("Failed to begin GPU render pass: %s", SDL_GetError());
-        endFrame();
         return;
     }
 
-    if (fullscreen_pipeline_) {
+    if (fullscreen_pipeline_ && content_texture_ && content_sampler_) {
         SDL_BindGPUGraphicsPipeline(pass, fullscreen_pipeline_);
-        // 利用 SV_VertexID 的全屏三角形，无需绑定顶点缓冲
+
+        // 绑定采样的纹理和采样器
+        SDL_GPUTextureSamplerBinding bindings{};
+        bindings.texture = content_texture_;
+        bindings.sampler = content_sampler_;
+
+        SDL_BindGPUFragmentSamplers(pass, 0, &bindings, 1);
+
+        // 绘制全屏三角形
         SDL_DrawGPUPrimitives(pass, 3, 1, 0, 0);
     }
 
     SDL_EndGPURenderPass(pass);
-
-    endFrame();
 }
 
 void GPUPainter::beginFrame() {
@@ -245,6 +287,122 @@ void GPUPainter::drawImage(const std::string& src, float x, float y,
     (void)width;
     (void)height;
     (void)alpha;
+}
+
+void GPUPainter::setupContentTexture() {
+    if (!gpu_device_ || !gpu_device_->isInitialized()) {
+        return;
+    }
+
+    SDL_GPUDevice* dev = gpu_device_->getHandle();
+
+    // 创建内容纹理
+    SDL_GPUTextureCreateInfo texture_info{};
+    texture_info.type = SDL_GPU_TEXTURETYPE_2D;
+    texture_info.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    texture_info.width = 960;
+    texture_info.height = 600;
+    texture_info.layer_count_or_depth = 1;
+    texture_info.num_levels = 1;
+    texture_info.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+
+    content_texture_ = SDL_CreateGPUTexture(dev, &texture_info);
+    if (!content_texture_) {
+        SDL_Log("Failed to create content texture: %s", SDL_GetError());
+        return;
+    }
+
+    // 创建采样器
+    SDL_GPUSamplerCreateInfo sampler_info{};
+    sampler_info.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    sampler_info.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    sampler_info.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    sampler_info.mag_filter = SDL_GPU_FILTER_LINEAR;
+    sampler_info.min_filter = SDL_GPU_FILTER_LINEAR;
+    sampler_info.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_LINEAR;
+
+    content_sampler_ = SDL_CreateGPUSampler(dev, &sampler_info);
+    if (!content_sampler_) {
+        SDL_Log("Failed to create content sampler: %s", SDL_GetError());
+        SDL_ReleaseGPUTexture(dev, content_texture_);
+        content_texture_ = nullptr;
+        return;
+    }
+
+    SDL_Log("Content texture and sampler created");
+}
+
+void GPUPainter::uploadCPUPixelsToGPU(const void* cpu_buffer, uint32_t width, uint32_t height) {
+    if (!cpu_buffer || !gpu_device_ || !gpu_device_->isInitialized() || !content_texture_) {
+        return;
+    }
+
+    SDL_GPUDevice* dev = gpu_device_->getHandle();
+    if (!current_cmd_buf_) {
+        SDL_Log("uploadCPUPixelsToGPU: no active command buffer");
+        return;
+    }
+
+    // 计算缓冲大小
+    uint32_t stride = width * 4;  // RGBA
+    uint32_t buffer_size = stride * height;
+
+    // 创建临时上传缓冲
+    SDL_GPUTransferBufferCreateInfo transfer_info = {
+        .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
+        .size = buffer_size,
+    };
+
+    SDL_GPUTransferBuffer* transfer_buf = SDL_CreateGPUTransferBuffer(dev, &transfer_info);
+    if (!transfer_buf) {
+        SDL_Log("Failed to create transfer buffer: %s", SDL_GetError());
+        return;
+    }
+
+    // 映射并复制数据
+    void* mapped = SDL_MapGPUTransferBuffer(dev, transfer_buf, false);
+    if (!mapped) {
+        SDL_Log("Failed to map transfer buffer: %s", SDL_GetError());
+        SDL_ReleaseGPUTransferBuffer(dev, transfer_buf);
+        return;
+    }
+
+    std::memcpy(mapped, cpu_buffer, buffer_size);
+    SDL_UnmapGPUTransferBuffer(dev, transfer_buf);
+
+    // 开始复制传递
+    SDL_GPUCopyPass* copy_pass = SDL_BeginGPUCopyPass(current_cmd_buf_);
+    if (!copy_pass) {
+        SDL_Log("Failed to begin GPU copy pass: %s", SDL_GetError());
+        SDL_ReleaseGPUTransferBuffer(dev, transfer_buf);
+        return;
+    }
+
+    // 上传到纹理
+    SDL_GPUTextureTransferInfo texture_transfer = {
+        .transfer_buffer = transfer_buf,
+        .offset = 0,
+    };
+
+    SDL_GPUTextureRegion texture_region = {
+        .texture = content_texture_,
+        .mip_level = 0,
+        .layer = 0,
+        .x = 0,
+        .y = 0,
+        .z = 0,
+        .w = width,
+        .h = height,
+        .d = 1,
+    };
+
+    SDL_UploadToGPUTexture(copy_pass, &texture_transfer, &texture_region, false);
+    SDL_EndGPUCopyPass(copy_pass);
+
+    // 清理临时缓冲
+    SDL_ReleaseGPUTransferBuffer(dev, transfer_buf);
+
+    SDL_Log("Uploaded %u x %u pixels to GPU texture", width, height);
 }
 
 } // namespace dong::render

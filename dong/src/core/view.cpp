@@ -142,14 +142,31 @@ void View::update() {
         return;
     }
 
-    if (use_gpu_) {
-        if (gpu_painter_) {
-            gpu_painter_->render(dom_manager.get(), layout_engine.get());
+    // 无论 GPU 还是 CPU 模式，都先用 CPU Painter 渲染 DOM
+    if (painter) {
+        painter->renderDOM(root, layout_engine.get());
+    }
+
+    // GPU 模式下通过 GPU Painter 进行最终显示（包括像素上传和渲染）
+    if (use_gpu_ && gpu_painter_) {
+        // 获取 CPU 缓冲的像素数据
+        const void* cpu_buffer = nullptr;
+        if (render_surface && render_surface->getType() == render::RenderSurface::Type::CPU_BUFFER) {
+            cpu_buffer = render_surface->getCPUBuffer();
         }
-    } else {
-        if (painter) {
-            painter->renderDOM(root, layout_engine.get());
+
+        // GPU Painter 内部管理命令缓冲的生命周期
+        gpu_painter_->beginFrame();
+
+        // 上传 CPU 像素到纹理
+        if (cpu_buffer) {
+            gpu_painter_->uploadCPUPixelsToGPU(cpu_buffer, width_, height_);
         }
+
+        // 渲染内容纹理到屏幕
+        gpu_painter_->render(dom_manager.get(), layout_engine.get());
+
+        gpu_painter_->endFrame();
     }
 }
 

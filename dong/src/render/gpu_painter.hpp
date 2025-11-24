@@ -34,6 +34,7 @@ public:
     // GPU 特定接口
     void beginFrame();
     void endFrame();
+    void uploadCPUPixelsToGPU(const void* cpu_buffer, uint32_t width, uint32_t height);
 
 private:
     GPUTextureSurfaceImpl* gpu_surface_;
@@ -46,7 +47,14 @@ private:
     SDL_GPUShader* fullscreen_fs_ = nullptr;
     SDL_GPUGraphicsPipeline* fullscreen_pipeline_ = nullptr;
 
+    // 像素上传管道
+    SDL_GPUTexture* content_texture_ = nullptr;
+    SDL_GPUSampler* content_sampler_ = nullptr;
+    SDL_GPUBuffer* quad_vertex_buffer_ = nullptr;
+
     void setupPipelines();
+    void setupContentTexture();
+    void renderInternal();
     void drawRect(float x, float y, float width, float height, 
                   uint32_t color, float radius = 0.0f);
     void drawText(const std::string& text, float x, float y, 
