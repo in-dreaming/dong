@@ -148,7 +148,7 @@ void View::update() {
     }
 
     // GPU 模式下通过 GPU Painter 进行最终显示（包括像素上传和渲染）
-    if (use_gpu_ && gpu_painter_) {
+    if (use_gpu_ && gpu_painter_ && gpu_device_ && gpu_surface_) {
         // 获取 CPU 缓冲的像素数据
         const void* cpu_buffer = nullptr;
         if (render_surface && render_surface->getType() == render::RenderSurface::Type::CPU_BUFFER) {
@@ -164,7 +164,9 @@ void View::update() {
         }
 
         // 渲染内容纹理到屏幕
-        gpu_painter_->render(dom_manager.get(), layout_engine.get());
+        if (dom_manager && layout_engine) {
+            gpu_painter_->render(dom_manager.get(), layout_engine.get());
+        }
 
         gpu_painter_->endFrame();
     }
