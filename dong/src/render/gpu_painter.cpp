@@ -136,6 +136,35 @@ void GPUPainter::renderInternal() {
         return;
     }
 
+    // 设置 viewport：
+    // - 内容逻辑尺寸固定为 960x600
+    // - 窗口比内容大时，不放大，1:1 居中显示（保证清晰、不拉伸）
+    // - 窗口比内容小时，等比缩小整帧
+    {
+        const float content_width = 960.0f;
+        const float content_height = 600.0f;
+
+        const float win_w = static_cast<float>(w);
+        const float win_h = static_cast<float>(h);
+
+        float scale = 1.0f;
+        if (win_w < content_width || win_h < content_height) {
+            const float sx = win_w / content_width;
+            const float sy = win_h / content_height;
+            scale = sx < sy ? sx : sy;
+        }
+
+        SDL_GPUViewport viewport{};
+        viewport.w = content_width * scale;
+        viewport.h = content_height * scale;
+        viewport.x = (win_w - viewport.w) * 0.5f;
+        viewport.y = (win_h - viewport.h) * 0.5f;
+        viewport.min_depth = 0.0f;
+        viewport.max_depth = 1.0f;
+
+        SDL_SetGPUViewport(pass, &viewport);
+    }
+
     if (fullscreen_pipeline_ && content_texture_ && content_sampler_) {
         SDL_BindGPUGraphicsPipeline(pass, fullscreen_pipeline_);
 
