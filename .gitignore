@@ -20,3 +20,4 @@ zig-out/
 src/core/examples/libs/
 dong/third_party/skia/
 /dong/third_party/skia
+/dong/third_party/DXC-1.8.2505.1

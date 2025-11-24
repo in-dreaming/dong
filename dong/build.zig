@@ -189,6 +189,14 @@ fn configureExample(
     exe.linkLibrary(quickjs);
     exe.linkLibrary(lexbor);
     exe.linkLibrary(yoga);
+
+    // HLSL -> SPIR-V -> (MSL/Vulkan) 运行时代码所需依赖
+    exe.addLibraryPath(.{ .cwd_relative = "/Users/lcle/VulkanSDK/1.4.328.1/macOS/lib" });
+    exe.linkSystemLibrary("spirv-cross-c-shared");
+    exe.addLibraryPath(.{ .cwd_relative = "third_party/DXC-1.8.2505.1/lib/macosx" });
+    exe.linkSystemLibrary("dxcompiler");
+    exe.addRPath(.{ .cwd_relative = "/Users/lcle/VulkanSDK/1.4.328.1/macOS/lib" });
+    exe.addRPath(.{ .cwd_relative = "third_party/DXC-1.8.2505.1/lib/macosx" });
 }
 
 pub fn build(b: *std.Build) void {
@@ -297,6 +305,7 @@ pub fn build(b: *std.Build) void {
     dong.addIncludePath(b.path("third_party/yoga"));
     dong.addIncludePath(b.path("third_party/sdl/include"));
     dong.addIncludePath(b.path("third_party/SDL_shadercross/include"));
+    dong.addIncludePath(.{ .cwd_relative = "/Users/lcle/VulkanSDK/1.4.328.1/macOS/include/spirv_cross" });
 
     configureSkia(dong, b, target, optimize);
 
@@ -324,6 +333,13 @@ pub fn build(b: *std.Build) void {
             "src/platform/sdl3_window.cpp",
         },
         .flags = &.{"-std=c++17"},
+    });
+
+    dong.addCSourceFiles(.{
+        .files = &.{
+            "third_party/SDL_shadercross/src/SDL_shadercross.c",
+        },
+        .flags = &.{"-DSDL_SHADERCROSS_DXC"},
     });
     dong.linkLibC();
     dong.linkLibCpp();
@@ -402,6 +418,8 @@ pub fn build(b: *std.Build) void {
         .{ .name = "comprehensive_features_demo", .source = "examples/comprehensive_features_demo.cpp", .flags = &.{"-std=c++17"} },
         // 【新增】图片渲染演示
         .{ .name = "image_rendering_demo", .source = "examples/image_rendering_demo.cpp", .flags = &.{"-std=c++17"} },
+        // GPU 后端完整视图 demo
+        .{ .name = "gpu_view_demo", .source = "examples/gpu_view_demo.cpp", .flags = &.{"-std=c++17"} },
     };
 
     inline for (example_defs) |info| {

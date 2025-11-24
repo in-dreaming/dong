@@ -42,6 +42,10 @@ private:
     SDL_GPUCommandBuffer* current_cmd_buf_;
     bool is_rendering_;
 
+    SDL_GPUShader* fullscreen_vs_ = nullptr;
+    SDL_GPUShader* fullscreen_fs_ = nullptr;
+    SDL_GPUGraphicsPipeline* fullscreen_pipeline_ = nullptr;
+
     void setupPipelines();
     void drawRect(float x, float y, float width, float height, 
                   uint32_t color, float radius = 0.0f);

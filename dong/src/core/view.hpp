@@ -37,6 +37,7 @@ public:
     void resize(uint32_t width, uint32_t height);
     void update();
     void* get_pixel_buffer();
+    render::RenderSurface* getRenderSurface() const { return render_surface.get(); }
 
     // Input events (forwarded from C API)
     void handle_mouse_move(int32_t x, int32_t y);

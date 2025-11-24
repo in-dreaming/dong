@@ -76,6 +76,11 @@ void dong_view_send_key_up(dong_view_t* view, uint32_t key_code) {
     reinterpret_cast<DongView*>(view)->handle_key_up(key_code);
 }
 
+void dong_view_set_render_mode(dong_view_t* view, bool use_gpu) {
+    if (!view) return;
+    reinterpret_cast<DongView*>(view)->setRenderMode(use_gpu);
+}
+
 bool dong_view_eval(dong_view_t* view, const char* script) {
     if (!view || !script) return false;
     return reinterpret_cast<DongView*>(view)->eval_script(script);

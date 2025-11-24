@@ -38,7 +38,12 @@ void dong_view_send_mouse_up(dong_view_t* view, int32_t button);
 void dong_view_send_key_down(dong_view_t* view, uint32_t key_code);
 void dong_view_send_key_up(dong_view_t* view, uint32_t key_code);
 
-// 6. JS Interaction
+// 6. Rendering mode control
+// When use_gpu is true, the view will use the SDL_gpu-based GPU backend
+// instead of the CPU Skia backend for rendering.
+void dong_view_set_render_mode(dong_view_t* view, bool use_gpu);
+
+// 7. JS Interaction
 // Evaluate JavaScript code in the view's scripting context.
 // Returns true on success, false if evaluation fails.
 bool dong_view_eval(dong_view_t* view, const char* script);
