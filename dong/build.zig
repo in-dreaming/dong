@@ -16,7 +16,13 @@ fn addCSourcesRecursive(
 
     while (walker.next() catch unreachable) |entry| {
         if (entry.kind == .file and std.mem.endsWith(u8, entry.path, ".c")) {
-            if (std.mem.indexOf(u8, entry.path, "ports/windows") != null) {
+            // Skip platform-specific ports directories
+            const should_skip_posix = std.mem.indexOf(u8, entry.path, "ports/posix") != null or 
+                                      std.mem.indexOf(u8, entry.path, "ports\\posix") != null;
+            const should_skip_windows = std.mem.indexOf(u8, entry.path, "ports/windows") != null or 
+                                        std.mem.indexOf(u8, entry.path, "ports\\windows") != null;
+            
+            if (should_skip_posix or should_skip_windows) {
                 continue;
             }
             const full = std.fs.path.join(b.allocator, &.{ base_dir, entry.path }) catch unreachable;
