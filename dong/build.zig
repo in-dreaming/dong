@@ -18,14 +18,16 @@ fn addCSourcesRecursive(
 
     while (walker.next() catch unreachable) |entry| {
         if (entry.kind == .file and std.mem.endsWith(u8, entry.path, ".c")) {
-            const should_skip_posix = std.mem.indexOf(u8, entry.path, "ports/posix") != null or
-                std.mem.indexOf(u8, entry.path, "ports\\posix") != null;
+            // 仅排除 Windows 端口代码，保留 POSIX 端口，以便提供 lexbor_calloc/lexbor_malloc 等实现
             const should_skip_windows = std.mem.indexOf(u8, entry.path, "ports/windows") != null or
-                std.mem.indexOf(u8, entry.path, "ports\\windows") != null;
+                std.mem.indexOf(u8, entry.path, "ports\\windows") != null or
+                std.mem.indexOf(u8, entry.path, "ports/windows_nt") != null or
+                std.mem.indexOf(u8, entry.path, "ports\\windows_nt") != null;
 
-            if (should_skip_posix or should_skip_windows) {
+            if (should_skip_windows) {
                 continue;
             }
+
             const full = std.fs.path.join(b.allocator, &.{ base_dir, entry.path }) catch unreachable;
             files.append(full) catch unreachable;
         }
