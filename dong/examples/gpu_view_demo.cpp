@@ -52,7 +52,7 @@ int main() {
 
     // 切换到 GPU 渲染模式（让 View 使用 SDL_gpu 后端）
     std::printf("[gpu_view_demo] Enabling GPU render mode on dong view...\n");
-    dong_view_set_render_mode(view, true);
+    dong_view_set_external_gpu_device(view, static_cast<void*>(device), static_cast<void*>(window.getHandle()));
 
     const char* html = R"(
         <!DOCTYPE html>

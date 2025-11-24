@@ -43,6 +43,13 @@ void dong_view_send_key_up(dong_view_t* view, uint32_t key_code);
 // instead of the CPU Skia backend for rendering.
 void dong_view_set_render_mode(dong_view_t* view, bool use_gpu);
 
+// Set an external GPU device and window for rendering.
+// This allows the host application to create and manage the GPU device
+// and window, then pass them to Dong for rendering.
+// device: SDL_GPUDevice* pointer (cast from void*)
+// window: SDL_Window* pointer (cast from void*)
+void dong_view_set_external_gpu_device(dong_view_t* view, void* device, void* window);
+
 // 7. JS Interaction
 // Evaluate JavaScript code in the view's scripting context.
 // Returns true on success, false if evaluation fails.

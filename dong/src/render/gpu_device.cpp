@@ -17,8 +17,8 @@ bool GPUDevice::initialize(const CreateInfo& info) {
         return false;
     }
 
-    // 创建 GPU 设备
-    // SDL3 会根据平台选择最优的 GPU 后端
+    // Create GPU device
+    // SDL3 will choose the best GPU backend for the platform
     SDL_GPUShaderFormat format_flags = info.shader_format;
 
     device_ = SDL_CreateGPUDevice(format_flags, info.debug_mode, nullptr);
@@ -31,6 +31,18 @@ bool GPUDevice::initialize(const CreateInfo& info) {
     SDL_Log("GPU device initialized successfully with format: %d", shader_format_);
 
     return true;
+}
+
+void GPUDevice::adoptExternal(SDL_GPUDevice* external_device, SDL_GPUShaderFormat format) {
+    if (!external_device) {
+        SDL_Log("Cannot adopt null GPU device");
+        return;
+    }
+
+    // Adopt external device without destroying it
+    device_ = external_device;
+    shader_format_ = format;
+    SDL_Log("GPU device adopted from external source with format: %d", shader_format_);
 }
 
 SDL_GPUCommandBuffer* GPUDevice::acquireCommandBuffer() const {

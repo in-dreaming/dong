@@ -21,6 +21,9 @@ public:
     // 初始化 GPU 设备
     bool initialize(const CreateInfo& info);
 
+    // 采用外部创建的 GPU 设备（用于宿主应用已创建设备的情况）
+    void adoptExternal(SDL_GPUDevice* external_device, SDL_GPUShaderFormat format);
+
     // 获取 SDL GPU 设备句柄
     SDL_GPUDevice* getHandle() const { return device_; }
 

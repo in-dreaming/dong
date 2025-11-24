@@ -4,6 +4,10 @@
 #include <memory>
 #include <string>
 
+// Forward declare SDL types
+struct SDL_GPUDevice;
+struct SDL_Window;
+
 namespace dong::dom {
 class Manager;
 class EventDispatcher;
@@ -13,6 +17,7 @@ namespace dong::render {
 class Painter;
 class RenderSurface;
 class GPUDevice;
+class GPUTextureSurfaceImpl;
 class GPUPainter;
 class ShaderManager;
 }
@@ -56,6 +61,7 @@ public:
 
     // Rendering modes
     void setRenderMode(bool use_gpu);
+    void setExternalGPUDevice(SDL_GPUDevice* device, SDL_Window* window);
 
 private:
     uint32_t width_;
@@ -70,6 +76,7 @@ private:
 
     // GPU 渲染相关（可选）
     std::unique_ptr<render::GPUDevice> gpu_device_;
+    std::unique_ptr<render::GPUTextureSurfaceImpl> gpu_surface_;
     std::unique_ptr<render::ShaderManager> shader_manager_;
     std::unique_ptr<render::GPUPainter> gpu_painter_;
 

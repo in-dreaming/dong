@@ -346,4 +346,56 @@ void View::setRenderMode(bool use_gpu) {
     }
 }
 
+void View::setExternalGPUDevice(SDL_GPUDevice* device, SDL_Window* window) {
+    if (!device || !window) {
+        return;
+    }
+
+#ifdef __APPLE__
+    SDL_GPUShaderFormat format = SDL_GPU_SHADERFORMAT_MSL;
+#else
+    SDL_GPUShaderFormat format = SDL_GPU_SHADERFORMAT_SPIRV;
+#endif
+
+    if (!gpu_device_) {
+        gpu_device_ = std::make_unique<render::GPUDevice>();
+    }
+    gpu_device_->adoptExternal(device, format);
+
+    // 创建 GPU 表面用于窗口绑定
+    gpu_surface_ = std::make_unique<render::GPUTextureSurfaceImpl>(
+        device,
+        window,
+        width_,
+        height_
+    );
+
+    // 始终创建 CPU 缓冲作为主渲染表面（由 CPU Painter 绘制）
+    auto cpu_surface = std::make_unique<render::CPUBufferSurface>(width_, height_);
+    render_surface = std::move(cpu_surface);
+
+    // 创建 CPU Painter 用于绘制 DOM
+    painter = std::make_unique<render::Painter>(render_surface.get());
+
+    shader_manager_ = std::make_unique<render::ShaderManager>(gpu_device_.get());
+    gpu_painter_ = std::make_unique<render::GPUPainter>(
+        gpu_surface_.get(),
+        gpu_device_.get(),
+        shader_manager_.get()
+    );
+
+    if (!gpu_painter_->initialize()) {
+        gpu_painter_.reset();
+        shader_manager_.reset();
+        gpu_surface_.reset();
+        use_gpu_ = false;
+        return;
+    }
+
+    use_gpu_ = true;
+    if (render_surface) {
+        render_surface->markDirty();
+    }
+}
+
 } // namespace dong
