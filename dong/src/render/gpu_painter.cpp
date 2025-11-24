@@ -77,6 +77,9 @@ void GPUPainter::render(dom::Manager* dom_manager, layout::Engine* layout_engine
         return;
     }
 
+    // 注意：CPU 像素应该在 uploadCPUPixelsToGPU 中上传
+    // 这里只需要从纹理渲染到 swapchain
+
     renderInternal();
 
     endFrame();
@@ -181,34 +184,37 @@ void GPUPainter::setupPipelines() {
         return;
     }
 
-    // 简单全屏三角形 HLSL：使用 SV_VertexID 生成裁剪空间顶点
-    static const char* kFullscreenVS = R"(
-struct VSOutput {
-    float4 position : SV_Position;
-};
+    // 简单全屏三角形 HLSL：使用 SV_VertexID 生成裁剪空间顶点 + UV
+    const char* kFullscreenVS = 
+        "struct VSOutput {"
+        "    float4 position : SV_Position;"
+        "    float2 uv : TEXCOORD0;"
+        "};"
+        "VSOutput main(uint vertexID : SV_VertexID) {"
+        "    float2 pos;"
+        "    float2 uv;"
+        "    if (vertexID == 0) {"
+        "        pos = float2(-1.0, -1.0);"
+        "        uv = float2(0.0, 1.0);"
+        "    } else if (vertexID == 1) {"
+        "        pos = float2(3.0, -1.0);"
+        "        uv = float2(1.0, 1.0);"
+        "    } else {"
+        "        pos = float2(-1.0, 3.0);"
+        "        uv = float2(0.0, 0.0);"
+        "    }"
+        "    VSOutput o;"
+        "    o.position = float4(pos, 0.0, 1.0);"
+        "    o.uv = uv;"
+        "    return o;"
+        "}";
 
-VSOutput main(uint vertexID : SV_VertexID) {
-    float2 pos;
-    if (vertexID == 0) {
-        pos = float2(-1.0, -1.0);
-    } else if (vertexID == 1) {
-        pos = float2(3.0, -1.0);
-    } else {
-        pos = float2(-1.0, 3.0);
-    }
-
-    VSOutput o;
-    o.position = float4(pos, 0.0, 1.0);
-    return o;
-}
-)";
-
-    static const char* kFullscreenPS = R"(
-float4 main() : SV_Target0 {
-    // 颜色最终由 ClearColor 控制，这里返回白色以保证合法输出
-    return float4(1.0, 1.0, 1.0, 1.0);
-}
-)";
+    const char* kFullscreenPS =
+        "Texture2D contentTexture : register(t0);"
+        "SamplerState contentSampler : register(s0);"
+        "float4 main(float2 uv : TEXCOORD0) : SV_Target0 {"
+        "    return contentTexture.Sample(contentSampler, uv);"
+        "}";
 
     fullscreen_vs_ = shader_manager_->loadShaderFromHLSL(
         "dong_fullscreen_vs",
@@ -338,6 +344,7 @@ void GPUPainter::uploadCPUPixelsToGPU(const void* cpu_buffer, uint32_t width, ui
     }
 
     SDL_GPUDevice* dev = gpu_device_->getHandle();
+    
     if (!current_cmd_buf_) {
         SDL_Log("uploadCPUPixelsToGPU: no active command buffer");
         return;

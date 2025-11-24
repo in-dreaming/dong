@@ -266,61 +266,9 @@ int main() {
         }
 
         // 4. 驱动 Dong 的 JS / 布局 / 渲染流水线
+        // Dong 已通过 setExternalGPUDevice 拥有 GPU device 的控制权
+        // 包括命令缓冲的生命周期和 swapchain 纹理的获取/呈现
         dong_view_update(view);
-
-        // 5. 使用 SDL_gpu 正常渲染一帧（这里先只做清屏，保持典型 GPU 流程）
-        SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(device);
-        if (!cmd) {
-            std::printf("ERROR: SDL_AcquireGPUCommandBuffer failed: %s\n", SDL_GetError());
-            break;
-        }
-
-        SDL_GPUTexture* swapchain_texture = nullptr;
-        Uint32 w = 0;
-        Uint32 h = 0;
-
-        if (!SDL_WaitAndAcquireGPUSwapchainTexture(
-                cmd,
-                window.getHandle(),
-                &swapchain_texture,
-                &w,
-                &h)) {
-            std::printf("ERROR: SDL_WaitAndAcquireGPUSwapchainTexture failed: %s\n", SDL_GetError());
-            SDL_SubmitGPUCommandBuffer(cmd);
-            break;
-        }
-
-        SDL_GPUColorTargetInfo color_target{};
-        color_target.texture = swapchain_texture;
-        color_target.mip_level = 0;
-        color_target.layer_or_depth_plane = 0;
-        color_target.clear_color = SDL_FColor{0.1f, 0.2f, 0.4f, 1.0f};
-        color_target.load_op = SDL_GPU_LOADOP_CLEAR;
-        color_target.store_op = SDL_GPU_STOREOP_STORE;
-        color_target.resolve_texture = nullptr;
-        color_target.resolve_mip_level = 0;
-        color_target.resolve_layer = 0;
-        color_target.cycle = false;
-        color_target.cycle_resolve_texture = false;
-
-        SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(
-            cmd,
-            &color_target,
-            1,
-            nullptr
-        );
-
-        if (!pass) {
-            std::printf("ERROR: SDL_BeginGPURenderPass failed: %s\n", SDL_GetError());
-            SDL_SubmitGPUCommandBuffer(cmd);
-            break;
-        }
-
-        // TODO：后续可以在这里采样 Dong 渲染的 GPU/CPU 结果贴到窗口上
-        // 目前先保持一个干净的 GPU 清屏流程
-
-        SDL_EndGPURenderPass(pass);
-        SDL_SubmitGPUCommandBuffer(cmd);
 
         // 简单限帧，避免 CPU 跑满
         SDL_Delay(16);

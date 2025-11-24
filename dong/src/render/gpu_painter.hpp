@@ -35,6 +35,7 @@ public:
     void beginFrame();
     void endFrame();
     void uploadCPUPixelsToGPU(const void* cpu_buffer, uint32_t width, uint32_t height);
+    void renderInternal();
 
 private:
     GPUTextureSurfaceImpl* gpu_surface_;
@@ -54,7 +55,6 @@ private:
 
     void setupPipelines();
     void setupContentTexture();
-    void renderInternal();
     void drawRect(float x, float y, float width, float height, 
                   uint32_t color, float radius = 0.0f);
     void drawText(const std::string& text, float x, float y, 

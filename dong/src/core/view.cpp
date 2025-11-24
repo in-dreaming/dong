@@ -155,19 +155,18 @@ void View::update() {
             cpu_buffer = render_surface->getCPUBuffer();
         }
 
-        // GPU Painter 内部管理命令缓冲的生命周期
+        // 手动管理整个 GPU frame：1) 上传数据  2) 渲染
+        // 使用完整的 render 过程包括 begin/end frame
         gpu_painter_->beginFrame();
-
-        // 上传 CPU 像素到纹理
+        
         if (cpu_buffer) {
             gpu_painter_->uploadCPUPixelsToGPU(cpu_buffer, width_, height_);
         }
 
-        // 渲染内容纹理到屏幕
         if (dom_manager && layout_engine) {
-            gpu_painter_->render(dom_manager.get(), layout_engine.get());
+            gpu_painter_->renderInternal();
         }
-
+        
         gpu_painter_->endFrame();
     }
 }
