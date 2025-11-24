@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const skia_root_dir = "third_party/skia/Skia-m124";
+
 fn addCSourcesRecursive(
     b: *std.Build,
     comp: *std.Build.Step.Compile,
@@ -16,12 +18,11 @@ fn addCSourcesRecursive(
 
     while (walker.next() catch unreachable) |entry| {
         if (entry.kind == .file and std.mem.endsWith(u8, entry.path, ".c")) {
-            // Skip platform-specific ports directories
-            const should_skip_posix = std.mem.indexOf(u8, entry.path, "ports/posix") != null or 
-                                      std.mem.indexOf(u8, entry.path, "ports\\posix") != null;
-            const should_skip_windows = std.mem.indexOf(u8, entry.path, "ports/windows") != null or 
-                                        std.mem.indexOf(u8, entry.path, "ports\\windows") != null;
-            
+            const should_skip_posix = std.mem.indexOf(u8, entry.path, "ports/posix") != null or
+                std.mem.indexOf(u8, entry.path, "ports\\posix") != null;
+            const should_skip_windows = std.mem.indexOf(u8, entry.path, "ports/windows") != null or
+                std.mem.indexOf(u8, entry.path, "ports\\windows") != null;
+
             if (should_skip_posix or should_skip_windows) {
                 continue;
             }
@@ -38,44 +39,126 @@ fn addCSourcesRecursive(
     comp.addCSourceFiles(.{ .files = owned, .flags = flags });
 }
 
-fn linkSkiaLibraries(step: *std.Build.Step.Compile, b: *std.Build) void {
-    const skia_lib_path = "third_party/skia/mac/out/Release-arm64";
-    step.addLibraryPath(b.path(skia_lib_path));
+fn addSkiaIncludePaths(step: *std.Build.Step.Compile, b: *std.Build) void {
+    const root = skia_root_dir;
+    step.addIncludePath(b.path(root));
+    step.addIncludePath(b.path(b.fmt("{s}/include", .{root})));
+    step.addIncludePath(b.path(b.fmt("{s}/include/core", .{root})));
+    step.addIncludePath(b.path(b.fmt("{s}/include/gpu", .{root})));
+    step.addIncludePath(b.path(b.fmt("{s}/modules/skshaper/include", .{root})));
+    step.addIncludePath(b.path(b.fmt("{s}/modules/skparagraph/include", .{root})));
+}
 
-    const archives = .{
-        "libskia.a",
-        "libskottie.a",
-        "libskparagraph.a",
-        "libskshaper.a",
-        "libskunicode.a",
-        "libsksg.a",
-        "libskresources.a",
-        "libharfbuzz.a",
-        "libfreetype2.a",
-        "libicu.a",
-        "libskcms.a",
-        "libwuffs.a",
-        "libsvg.a",
-        "libwebp.a",
-        "libwebp_sse41.a",
-        "libpng.a",
-        "libjpeg.a",
-        "libzlib.a",
-        "libexpat.a",
-        "libpiex.a",
-        "libbentleyottmann.a",
+fn resolveSkiaOutDir(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+) []const u8 {
+    const flavor = if (optimize == .Debug) "Debug" else "Release";
+    const platform = switch (target.result.os.tag) {
+        .windows => "win",
+        .macos => "mac",
+        else => std.debug.panic("Skia-m124 currently supports only macOS/Windows (got {s})", .{@tagName(target.result.os.tag)}),
+    };
+    const arch = switch (target.result.cpu.arch) {
+        .x86_64 => "x64",
+        .aarch64 => "arm64",
+        else => std.debug.panic("Skia-m124 has no prebuilt artifacts for {s}", .{@tagName(target.result.cpu.arch)}),
     };
 
-    inline for (archives) |name| {
-        step.addObjectFile(b.path(std.fmt.comptimePrint("{s}/{s}", .{ skia_lib_path, name })));
-    }
+    return b.fmt("{s}/out/{s}-{s}-{s}", .{ skia_root_dir, flavor, platform, arch });
+}
 
-    step.linkFramework("CoreFoundation");
-    step.linkFramework("CoreGraphics");
-    step.linkFramework("CoreText");
-    step.linkFramework("Metal");
-    step.linkFramework("ApplicationServices");
-    step.linkSystemLibrary("z");
+fn configureSkia(
+    step: *std.Build.Step.Compile,
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+) void {
+    addSkiaIncludePaths(step, b);
+
+    switch (target.result.os.tag) {
+        .windows => {
+            const skia_lib_dir = resolveSkiaOutDir(b, target, optimize);
+            const libs = &.{
+                "skia.lib",
+                "skottie.lib",
+                "skparagraph.lib",
+                "skresources.lib",
+                "sksg.lib",
+                "skshaper.lib",
+                "skunicode.lib",
+                "svg.lib",
+                "bentleyottmann.lib",
+                "harfbuzz.lib",
+                "icu.lib",
+                "freetype2.lib",
+                "libpng.lib",
+                "libjpeg.lib",
+                "libwebp.lib",
+                "libwebp_sse41.lib",
+                "expat.lib",
+                "zlib.lib",
+                "skcms.lib",
+                "wuffs.lib",
+                "spvtools.lib",
+                "spvtools_val.lib",
+            };
+
+            inline for (libs) |lib_name| {
+                const lib_path = b.fmt("{s}/{s}", .{ skia_lib_dir, lib_name });
+                step.addObjectFile(b.path(lib_path));
+            }
+
+            step.linkSystemLibrary("opengl32");
+            step.linkSystemLibrary("user32");
+            step.linkSystemLibrary("gdi32");
+            step.linkSystemLibrary("ole32");
+            step.linkSystemLibrary("oleaut32");
+            step.linkSystemLibrary("kernel32");
+        },
+        .macos => {
+            const skia_lib_dir = resolveSkiaOutDir(b, target, optimize);
+            const archives = .{
+                "libskia.a",
+                "libskottie.a",
+                "libskparagraph.a",
+                "libskshaper.a",
+                "libskunicode.a",
+                "libsksg.a",
+                "libskresources.a",
+                "libharfbuzz.a",
+                "libfreetype2.a",
+                "libicu.a",
+                "libskcms.a",
+                "libwuffs.a",
+                "libsvg.a",
+                "libwebp.a",
+                "libwebp_sse41.a",
+                "libpng.a",
+                "libjpeg.a",
+                "libzlib.a",
+                "libexpat.a",
+                "libpiex.a",
+                "libbentleyottmann.a",
+            };
+
+            inline for (archives) |name| {
+                const archive_path = b.fmt("{s}/{s}", .{ skia_lib_dir, name });
+                step.addObjectFile(b.path(archive_path));
+            }
+
+            step.linkFramework("CoreFoundation");
+            step.linkFramework("CoreGraphics");
+            step.linkFramework("CoreText");
+            step.linkFramework("Metal");
+            step.linkFramework("ApplicationServices");
+            step.linkSystemLibrary("z");
+        },
+        else => {
+            std.debug.panic("Skia-m124 currently supports only macOS/Windows targets", .{});
+        },
+    }
 }
 
 fn configureExample(
@@ -85,12 +168,14 @@ fn configureExample(
     quickjs: *std.Build.Step.Compile,
     lexbor: *std.Build.Step.Compile,
     yoga: *std.Build.Step.Compile,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
 ) void {
     exe.addIncludePath(b.path("include"));
     exe.addIncludePath(b.path("src"));
     exe.addIncludePath(b.path("third_party/quickjs"));
 
-    linkSkiaLibraries(exe, b);
+    configureSkia(exe, b, target, optimize);
 
     exe.linkLibC();
     exe.linkLibCpp();
@@ -119,7 +204,7 @@ pub fn build(b: *std.Build) void {
             "third_party/quickjs/cutils.c",
             "third_party/quickjs/dtoa.c",
         },
-        .flags = &.{ "-D_GNU_SOURCE" },
+        .flags = &.{"-D_GNU_SOURCE"},
     });
     quickjs.linkLibC();
 
@@ -177,12 +262,8 @@ pub fn build(b: *std.Build) void {
     dong.addIncludePath(b.path("third_party/quickjs"));
     dong.addIncludePath(b.path("third_party/lexbor/source"));
     dong.addIncludePath(b.path("third_party/yoga"));
-    dong.addIncludePath(b.path("third_party/skia/mac"));
-    dong.addIncludePath(b.path("third_party/skia/mac/include"));
-    dong.addIncludePath(b.path("third_party/skia/mac/include/core"));
-    dong.addIncludePath(b.path("third_party/skia/mac/include/gpu"));
-    dong.addIncludePath(b.path("third_party/skia/mac/modules/skshaper/include"));
-    dong.addIncludePath(b.path("third_party/skia/mac/modules/skparagraph/include"));
+
+    configureSkia(dong, b, target, optimize);
 
     dong.addCSourceFiles(.{
         .files = &.{
@@ -251,7 +332,7 @@ pub fn build(b: *std.Build) void {
             .root_source_file = null,
         });
         exe.addCSourceFile(.{ .file = b.path(info.source), .flags = info.flags });
-        configureExample(exe, b, dong, quickjs, lexbor, yoga);
+        configureExample(exe, b, dong, quickjs, lexbor, yoga, target, optimize);
         const install = b.addInstallArtifact(exe, .{});
         examples_step.dependOn(&install.step);
     }
@@ -264,7 +345,7 @@ pub fn build(b: *std.Build) void {
         .root_source_file = null,
     });
     run_simple.addCSourceFile(.{ .file = b.path("examples/simple_demo.c"), .flags = &.{} });
-    configureExample(run_simple, b, dong, quickjs, lexbor, yoga);
+    configureExample(run_simple, b, dong, quickjs, lexbor, yoga, target, optimize);
     const run_simple_cmd = b.addRunArtifact(run_simple);
     const run_simple_step = b.step("run-simple", "Run simple demo");
     run_simple_step.dependOn(&run_simple_cmd.step);
@@ -276,7 +357,7 @@ pub fn build(b: *std.Build) void {
         .root_source_file = null,
     });
     run_complete.addCSourceFile(.{ .file = b.path("examples/complete_demo.cpp"), .flags = &.{"-std=c++17"} });
-    configureExample(run_complete, b, dong, quickjs, lexbor, yoga);
+    configureExample(run_complete, b, dong, quickjs, lexbor, yoga, target, optimize);
     const run_complete_cmd = b.addRunArtifact(run_complete);
     const run_complete_step = b.step("run-complete", "Run complete demo");
     run_complete_step.dependOn(&run_complete_cmd.step);
