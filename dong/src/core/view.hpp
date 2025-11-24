@@ -12,6 +12,9 @@ class EventDispatcher;
 namespace dong::render {
 class Painter;
 class RenderSurface;
+class GPUDevice;
+class GPUPainter;
+class ShaderManager;
 }
 
 namespace dong::script {
@@ -63,6 +66,12 @@ private:
     std::unique_ptr<render::Painter> painter;
     std::unique_ptr<script::ScriptEngine> script_engine;
     std::unique_ptr<script::JSBindings> js_bindings;
+
+    // GPU 渲染相关（可选）
+    std::unique_ptr<render::GPUDevice> gpu_device_;
+    std::unique_ptr<render::ShaderManager> shader_manager_;
+    std::unique_ptr<render::GPUPainter> gpu_painter_;
+
     bool use_gpu_;
     bool js_bindings_initialized_ = false;
     int32_t last_mouse_x_ = 0;
