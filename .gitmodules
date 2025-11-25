@@ -19,3 +19,6 @@
 [submodule "dong/third_party/harfbuzz"]
 	path = dong/third_party/harfbuzz
 	url = https://github.com/in-dreaming/harfbuzz.git
+[submodule "dong/third_party/freetype"]
+	path = dong/third_party/freetype
+	url = https://github.com/in-dreaming/freetype.git
