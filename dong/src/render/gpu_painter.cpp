@@ -21,17 +21,30 @@ GPUPainter::GPUPainter(
 }
 
 GPUPainter::~GPUPainter() {
-    if (fullscreen_pipeline_ && gpu_device_ && gpu_device_->isInitialized()) {
-        SDL_ReleaseGPUGraphicsPipeline(gpu_device_->getHandle(), fullscreen_pipeline_);
-        fullscreen_pipeline_ = nullptr;
-    }
-    if (fullscreen_vs_ && gpu_device_ && gpu_device_->isInitialized()) {
-        SDL_ReleaseGPUShader(gpu_device_->getHandle(), fullscreen_vs_);
-        fullscreen_vs_ = nullptr;
-    }
-    if (fullscreen_fs_ && gpu_device_ && gpu_device_->isInitialized()) {
-        SDL_ReleaseGPUShader(gpu_device_->getHandle(), fullscreen_fs_);
-        fullscreen_fs_ = nullptr;
+    if (gpu_device_ && gpu_device_->isInitialized()) {
+        SDL_GPUDevice* dev = gpu_device_->getHandle();
+
+        if (content_texture_) {
+            SDL_ReleaseGPUTexture(dev, content_texture_);
+            content_texture_ = nullptr;
+        }
+        if (content_sampler_) {
+            SDL_ReleaseGPUSampler(dev, content_sampler_);
+            content_sampler_ = nullptr;
+        }
+
+        if (fullscreen_pipeline_) {
+            SDL_ReleaseGPUGraphicsPipeline(dev, fullscreen_pipeline_);
+            fullscreen_pipeline_ = nullptr;
+        }
+        if (fullscreen_vs_) {
+            SDL_ReleaseGPUShader(dev, fullscreen_vs_);
+            fullscreen_vs_ = nullptr;
+        }
+        if (fullscreen_fs_) {
+            SDL_ReleaseGPUShader(dev, fullscreen_fs_);
+            fullscreen_fs_ = nullptr;
+        }
     }
 }
 
@@ -46,7 +59,15 @@ bool GPUPainter::initialize() {
         return false;
     }
 
-    setupContentTexture();
+    // 使用 GPU 表面尺寸作为内容纹理初始大小
+    uint32_t content_w = gpu_surface_->getWidth();
+    uint32_t content_h = gpu_surface_->getHeight();
+    if (content_w == 0 || content_h == 0) {
+        content_w = 960;
+        content_h = 600;
+    }
+
+    setupContentTexture(content_w, content_h);
     setupPipelines();
     if (!fullscreen_pipeline_) {
         SDL_Log("Failed to initialize GPU pipelines");
@@ -137,12 +158,12 @@ void GPUPainter::renderInternal() {
     }
 
     // 设置 viewport：
-    // - 内容逻辑尺寸固定为 960x600
+    // - 内容逻辑尺寸为当前内容纹理尺寸
     // - 窗口比内容大时，不放大，1:1 居中显示（保证清晰、不拉伸）
     // - 窗口比内容小时，等比缩小整帧
     {
-        const float content_width = 960.0f;
-        const float content_height = 600.0f;
+        const float content_width = static_cast<float>(content_width_);
+        const float content_height = static_cast<float>(content_height_);
 
         const float win_w = static_cast<float>(w);
         const float win_h = static_cast<float>(h);
@@ -210,6 +231,10 @@ void GPUPainter::endFrame() {
     gpu_device_->submitCommandBuffer(current_cmd_buf_);
     current_cmd_buf_ = nullptr;
     is_rendering_ = false;
+}
+
+void GPUPainter::resizeContentTexture(uint32_t width, uint32_t height) {
+    setupContentTexture(width, height);
 }
 
 void GPUPainter::setupPipelines() {
@@ -329,19 +354,32 @@ void GPUPainter::drawImage(const std::string& src, float x, float y,
     (void)alpha;
 }
 
-void GPUPainter::setupContentTexture() {
+void GPUPainter::setupContentTexture(uint32_t width, uint32_t height) {
     if (!gpu_device_ || !gpu_device_->isInitialized()) {
         return;
     }
 
     SDL_GPUDevice* dev = gpu_device_->getHandle();
 
+    // 如已有旧纹理/采样器，先释放
+    if (content_texture_) {
+        SDL_ReleaseGPUTexture(dev, content_texture_);
+        content_texture_ = nullptr;
+    }
+    if (content_sampler_) {
+        SDL_ReleaseGPUSampler(dev, content_sampler_);
+        content_sampler_ = nullptr;
+    }
+
+    content_width_ = width;
+    content_height_ = height;
+
     // 创建内容纹理
     SDL_GPUTextureCreateInfo texture_info{};
     texture_info.type = SDL_GPU_TEXTURETYPE_2D;
     texture_info.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
-    texture_info.width = 960;
-    texture_info.height = 600;
+    texture_info.width = width;
+    texture_info.height = height;
     texture_info.layer_count_or_depth = 1;
     texture_info.num_levels = 1;
     texture_info.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;

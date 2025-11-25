@@ -36,6 +36,8 @@ public:
     void endFrame();
     void uploadCPUPixelsToGPU(const void* cpu_buffer, uint32_t width, uint32_t height);
     void renderInternal();
+    // 调整内容纹理尺寸以匹配 View/窗口大小
+    void resizeContentTexture(uint32_t width, uint32_t height);
 
 private:
     GPUTextureSurfaceImpl* gpu_surface_;
@@ -52,9 +54,11 @@ private:
     SDL_GPUTexture* content_texture_ = nullptr;
     SDL_GPUSampler* content_sampler_ = nullptr;
     SDL_GPUBuffer* quad_vertex_buffer_ = nullptr;
+    uint32_t content_width_ = 0;
+    uint32_t content_height_ = 0;
 
     void setupPipelines();
-    void setupContentTexture();
+    void setupContentTexture(uint32_t width, uint32_t height);
     void drawRect(float x, float y, float width, float height, 
                   uint32_t color, float radius = 0.0f);
     void drawText(const std::string& text, float x, float y, 

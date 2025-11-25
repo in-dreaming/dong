@@ -101,12 +101,31 @@ void View::resize(uint32_t width, uint32_t height) {
     width_ = width;
     height_ = height;
 
-    // 重新分配渲染表面
+    // 重新分配渲染表面（CPU 路径）
     if (render_surface && render_surface->getType() == render::RenderSurface::Type::CPU_BUFFER) {
         static_cast<render::CPUBufferSurface*>(render_surface.get())->resize(width, height);
     }
 
-    render_surface->markDirty();
+    // GPU 路径下还需要同步调整 GPU 表面和内容纹理尺寸
+    if (use_gpu_) {
+        // 外部 GPU 设备路径：单独维护一个 gpu_surface_
+        if (gpu_surface_) {
+            gpu_surface_->resize(width, height);
+        }
+        // 离屏 GPU 路径：render_surface 本身就是 GPU 纹理表面
+        if (render_surface && render_surface->getType() == render::RenderSurface::Type::GPU_TEXTURE) {
+            auto* gpu_tex_surface = static_cast<render::GPUTextureSurfaceImpl*>(render_surface.get());
+            gpu_tex_surface->resize(width, height);
+        }
+        // 内容纹理跟随 View 尺寸变化
+        if (gpu_painter_) {
+            gpu_painter_->resizeContentTexture(width, height);
+        }
+    }
+
+    if (render_surface) {
+        render_surface->markDirty();
+    }
 
     // 尺寸变化会影响整个布局
     if (dom_manager) {
