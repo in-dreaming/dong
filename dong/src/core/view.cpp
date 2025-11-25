@@ -1,6 +1,7 @@
 #include "view.hpp"
 #include <cstdio>
 #include <string>
+#include <SDL3/SDL_log.h>
 #include "../dom/dom_manager.hpp"
 #include "../dom/event_system.hpp"
 #include "../render/render_surface.hpp"
@@ -163,46 +164,32 @@ void View::update() {
         return;
     }
 
-    // 无论 GPU 还是 CPU 模式，都先用 CPU Painter 渲染 DOM
-    if (painter) {
-        painter->renderDOM(root, layout_engine.get());
-    }
-
-    // GPU 模式（外部设备路径）下：如果有 GPUDriver，则用 DisplayList → GPUCommandList 驱动 SDL_gpu
+    // GPU 路径：DisplayList → GPU 渲染
     if (use_gpu_ && gpu_driver_ && painter) {
-        const render::DisplayList& dl = painter->getDisplayList();
+        SDL_Log("[View::update] Building DisplayList...");
+        const render::DisplayList& dl = painter->buildDisplayList(root, layout_engine.get());
+        SDL_Log("[View::update] DisplayList built with %zu items", dl.items.size());
+        
         render::GPUCompiler compiler;
         render::GPUCommandList cmd_list;
+        SDL_Log("[View::update] Compiling DisplayList to GPUCommandList...");
         compiler.compile(dl, cmd_list);
+        SDL_Log("[View::update] GPUCommandList compiled with %zu commands", cmd_list.commands.size());
 
+        SDL_Log("[View::update] Beginning GPU frame...");
         gpu_driver_->beginFrame();
+        SDL_Log("[View::update] Executing GPUCommandList...");
         gpu_driver_->execute(cmd_list);
+        SDL_Log("[View::update] Ending GPU frame...");
         gpu_driver_->endFrame();
+        SDL_Log("[View::update] GPU frame completed");
         return;
     }
 
-    // GPU 模式下通过 GPU Painter 进行最终显示（包括像素上传和渲染）
-    if (use_gpu_ && gpu_painter_ && gpu_device_ && gpu_surface_) {
-        // 获取 CPU 缓冲的像素数据
-        const void* cpu_buffer = nullptr;
-        if (render_surface && render_surface->getType() == render::RenderSurface::Type::CPU_BUFFER) {
-            cpu_buffer = render_surface->getCPUBuffer();
-        }
-
-        // 手动管理整个 GPU frame：1) 上传数据  2) 渲染
-        // 使用完整的 render 过程包括 begin/end frame
-        gpu_painter_->beginFrame();
-        
-        if (cpu_buffer) {
-            gpu_painter_->uploadCPUPixelsToGPU(cpu_buffer, width_, height_);
-        }
-
-        if (dom_manager && layout_engine) {
-            gpu_painter_->renderInternal();
-        }
-        
-        gpu_painter_->endFrame();
-    }
+    // CPU 路径（保留，暂时注释）
+    // if (painter) {
+    //     painter->renderDOM(root, layout_engine.get());
+    // }
 }
 
 void* View::get_pixel_buffer() {
@@ -426,10 +413,11 @@ void View::setExternalGPUDevice(SDL_GPUDevice* device, SDL_Window* window) {
         shader_manager_.get()
     );
 
-    if (painter && gpu_driver_) {
-        auto* rm = painter->getResourceManager();
-        static_cast<render::GPUDriverSDL*>(gpu_driver_.get())->setImageResourceManager(rm);
-    }
+    // TODO: 重新接入 ResourceManager（用于图片缓存）
+    // if (painter && gpu_driver_) {
+    //     auto* rm = painter->getResourceManager();
+    //     static_cast<render::GPUDriverSDL*>(gpu_driver_.get())->setImageResourceManager(rm);
+    // }
 
     if (!static_cast<render::GPUDriverSDL*>(gpu_driver_.get())->initialize()) {
         gpu_driver_.reset();

@@ -86,7 +86,7 @@ struct VSOutput {
     float4 color : COLOR0;
 };
 
-[[vk::binding(0, 1)]] cbuffer RectUniforms : register(b0, space1) {
+cbuffer RectUniforms : register(b0) {
     float4 uRect;
     float4 uColor;
     float4 uViewport;
@@ -171,7 +171,7 @@ struct VSOutput {
     float4 color : COLOR0;
 };
 
-[[vk::binding(0, 1)]] cbuffer RoundRectUniforms : register(b0, space1) {
+cbuffer RoundRectUniforms : register(b0) {
     float4 uRect;
     float4 uRadius;
     float4 uViewport;
@@ -279,7 +279,7 @@ struct VSOutput {
     float4 tint : COLOR0;
 };
 
-[[vk::binding(0, 1)]] cbuffer ImageUniforms : register(b0, space1) {
+cbuffer ImageUniforms : register(b0) {
     float4 uRect;
     float4 uUVRect;
     float4 uViewport;
