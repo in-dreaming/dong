@@ -20,6 +20,7 @@ class GPUDevice;
 class GPUTextureSurfaceImpl;
 class GPUPainter;
 class ShaderManager;
+class GPUDriver;
 }
 
 namespace dong::script {
@@ -79,6 +80,7 @@ private:
     std::unique_ptr<render::GPUTextureSurfaceImpl> gpu_surface_;
     std::unique_ptr<render::ShaderManager> shader_manager_;
     std::unique_ptr<render::GPUPainter> gpu_painter_;
+    std::unique_ptr<render::GPUDriver> gpu_driver_;
 
     bool use_gpu_;
     bool js_bindings_initialized_ = false;

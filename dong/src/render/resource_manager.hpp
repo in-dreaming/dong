@@ -64,6 +64,13 @@ public:
     size_t getImageCacheSize() const { return image_cache_.size(); }
     size_t getFontCacheSize() const { return font_cache_.size(); }
 
+    // 获取指定图片的 RGBA 像素数据（用于 GPU atlas 构建）
+    // 返回 true 表示成功填充 out_pixels / out_width / out_height
+    bool getImagePixelsRGBA(const std::string& file_path,
+                            std::vector<uint8_t>& out_pixels,
+                            uint32_t& out_width,
+                            uint32_t& out_height);
+
 private:
     // Image cache: path -> ImageResource
     std::unordered_map<std::string, std::unique_ptr<ImageResource>> image_cache_;

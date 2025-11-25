@@ -9,6 +9,8 @@
 #include "../render/gpu_surface.hpp"
 #include "../render/gpu_painter.hpp"
 #include "../render/shader_manager.hpp"
+#include "../render/gpu_ir.hpp"
+#include "../render/gpu_driver_sdl.hpp"
 #include "../script/script_engine.hpp"
 #include "../script/js_bindings.hpp"
 #include "../layout/layout_engine.hpp"
@@ -164,6 +166,19 @@ void View::update() {
     // 无论 GPU 还是 CPU 模式，都先用 CPU Painter 渲染 DOM
     if (painter) {
         painter->renderDOM(root, layout_engine.get());
+    }
+
+    // GPU 模式（外部设备路径）下：如果有 GPUDriver，则用 DisplayList → GPUCommandList 驱动 SDL_gpu
+    if (use_gpu_ && gpu_driver_ && painter) {
+        const render::DisplayList& dl = painter->getDisplayList();
+        render::GPUCompiler compiler;
+        render::GPUCommandList cmd_list;
+        compiler.compile(dl, cmd_list);
+
+        gpu_driver_->beginFrame();
+        gpu_driver_->execute(cmd_list);
+        gpu_driver_->endFrame();
+        return;
     }
 
     // GPU 模式下通过 GPU Painter 进行最终显示（包括像素上传和渲染）
@@ -394,18 +409,25 @@ void View::setExternalGPUDevice(SDL_GPUDevice* device, SDL_Window* window) {
     auto cpu_surface = std::make_unique<render::CPUBufferSurface>(width_, height_);
     render_surface = std::move(cpu_surface);
 
-    // 创建 CPU Painter 用于绘制 DOM
+    // 创建 CPU Painter 用于绘制 DOM（DisplayList 生成仍在 CPU 侧完成）
     painter = std::make_unique<render::Painter>(render_surface.get());
 
     shader_manager_ = std::make_unique<render::ShaderManager>(gpu_device_.get());
-    gpu_painter_ = std::make_unique<render::GPUPainter>(
-        gpu_surface_.get(),
+    gpu_painter_.reset();
+
+    gpu_driver_ = std::make_unique<render::GPUDriverSDL>(
         gpu_device_.get(),
+        window,
         shader_manager_.get()
     );
 
-    if (!gpu_painter_->initialize()) {
-        gpu_painter_.reset();
+    if (painter && gpu_driver_) {
+        auto* rm = painter->getResourceManager();
+        static_cast<render::GPUDriverSDL*>(gpu_driver_.get())->setImageResourceManager(rm);
+    }
+
+    if (!static_cast<render::GPUDriverSDL*>(gpu_driver_.get())->initialize()) {
+        gpu_driver_.reset();
         shader_manager_.reset();
         gpu_surface_.reset();
         use_gpu_ = false;

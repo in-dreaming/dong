@@ -41,6 +41,38 @@ ResourceManager::~ResourceManager() {
     clear();
 }
 
+bool ResourceManager::getImagePixelsRGBA(const std::string& file_path,
+                                         std::vector<uint8_t>& out_pixels,
+                                         uint32_t& out_width,
+                                         uint32_t& out_height) {
+    ImageResource* res = loadImage(file_path);
+    if (!res || !res->sk_image || res->width == 0 || res->height == 0) {
+        return false;
+    }
+
+    SkImage* image = reinterpret_cast<SkImage*>(res->sk_image);
+    out_width = res->width;
+    out_height = res->height;
+
+    SkImageInfo info = SkImageInfo::Make(
+        static_cast<int>(out_width),
+        static_cast<int>(out_height),
+        kRGBA_8888_SkColorType,
+        kPremul_SkAlphaType
+    );
+
+    out_pixels.resize(static_cast<size_t>(out_width) * static_cast<size_t>(out_height) * 4);
+    SkPixmap pixmap(info, out_pixels.data(), static_cast<size_t>(out_width) * 4);
+
+    if (!image->readPixels(pixmap, 0, 0)) {
+        out_pixels.clear();
+        out_width = out_height = 0;
+        return false;
+    }
+
+    return true;
+}
+
 ImageResource* ResourceManager::loadImage(const std::string& file_path) {
     // Check cache first
     auto it = image_cache_.find(file_path);
