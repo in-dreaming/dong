@@ -397,6 +397,11 @@ void View::setExternalGPUDevice(SDL_GPUDevice* device, SDL_Window* window) {
     }
     gpu_device_->adoptExternal(device, format);
 
+    // 释放旧的 CPU/GPU 表面和 Painter，避免悬空引用
+    painter.reset();
+    gpu_surface_.reset();
+    render_surface.reset();
+
     // 创建 GPU 表面用于窗口绑定
     gpu_surface_ = std::make_unique<render::GPUTextureSurfaceImpl>(
         device,

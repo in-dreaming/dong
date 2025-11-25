@@ -6,6 +6,8 @@
 #include "render_surface.hpp"
 #include "resource_manager.hpp"
 
+class SkCanvas;
+
 namespace dong::render {
 
 // Forward declarations
@@ -23,7 +25,7 @@ public:
 
     // 获取画布指针
     void* getCanvas() const { return sk_canvas_; }
-    void* getSurface() const { return sk_surface_; }
+    void* getSurface() const { return nullptr; }
 
     // 设置默认字体
     void setDefaultFont(const std::string& font_name, float font_size);
@@ -81,7 +83,7 @@ public:
 private:
     RenderSurface* render_surface_;
     void* sk_canvas_;    // SkCanvas* (opaque)
-    void* sk_surface_;   // SkSurface* (opaque)
+    std::unique_ptr<SkCanvas> sk_canvas_holder_;
     void* default_font_; // SkFont* (opaque)
     float default_font_size_;
 

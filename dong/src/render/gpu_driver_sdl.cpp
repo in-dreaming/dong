@@ -80,40 +80,45 @@ bool GPUDriverSDL::initialize() {
     SDL_GPUDevice* dev = gpu_device_->getHandle();
 
     // 简单的纯色矩形着色器：用 SV_VertexID 生成一个屏幕空间矩形
-    const char* kRectVS =
-        "struct VSOutput {"
-        "    float4 position : SV_Position;"
-        "    float4 color : COLOR0;"
-        "};"
-        "cbuffer RectUniforms : register(b0, space1) {"
-        "    float4 uRect;"      // x, y, width, height (像素)
-        "    float4 uColor;"     // rgba
-        "    float4 uViewport;"  // viewport width, height, unused, unused
-        "};"
-        "VSOutput main(uint vertexID : SV_VertexID) {"
-        "    float2 local;"
-        "    if (vertexID == 0) { local = float2(0.0, 0.0); }"
-        "    else if (vertexID == 1) { local = float2(1.0, 0.0); }"
-        "    else if (vertexID == 2) { local = float2(0.0, 1.0); }"
-        "    else { local = float2(1.0, 1.0); }"
-        "    float2 pos = uRect.xy + local * uRect.zw;"
-        "    float2 ndc;"
-        "    ndc.x = (pos.x / uViewport.x) * 2.0 - 1.0;"
-        "    ndc.y = 1.0 - (pos.y / uViewport.y) * 2.0;"
-        "    VSOutput o;"
-        "    o.position = float4(ndc, 0.0, 1.0);"
-        "    o.color = uColor;"
-        "    return o;"
-        "}";
+    const char* kRectVS = R"(
+struct VSOutput {
+    float4 position : SV_Position;
+    float4 color : COLOR0;
+};
 
-    const char* kRectFS =
-        "struct PSInput {"
-        "    float4 position : SV_Position;"
-        "    float4 color : COLOR0;"
-        "};"
-        "float4 main(PSInput input) : SV_Target0 {"
-        "    return input.color;"
-        "}";
+[[vk::binding(0, 1)]] cbuffer RectUniforms : register(b0, space1) {
+    float4 uRect;
+    float4 uColor;
+    float4 uViewport;
+};
+
+VSOutput main(uint vertexID : SV_VertexID) {
+    float2 local;
+    if (vertexID == 0) { local = float2(0.0, 0.0); }
+    else if (vertexID == 1) { local = float2(1.0, 0.0); }
+    else if (vertexID == 2) { local = float2(0.0, 1.0); }
+    else { local = float2(1.0, 1.0); }
+    float2 pos = uRect.xy + local * uRect.zw;
+    float2 ndc;
+    ndc.x = (pos.x / uViewport.x) * 2.0 - 1.0;
+    ndc.y = 1.0 - (pos.y / uViewport.y) * 2.0;
+    VSOutput o;
+    o.position = float4(ndc, 0.0, 1.0);
+    o.color = uColor;
+    return o;
+}
+)";
+
+    const char* kRectFS = R"(
+struct PSInput {
+    float4 position : SV_Position;
+    float4 color : COLOR0;
+};
+
+float4 main(PSInput input) : SV_Target0 {
+    return input.color;
+}
+)";
 
     rect_vs_ = shader_manager_->loadShaderFromHLSL(
         "dong_rect_vs",
@@ -157,65 +162,73 @@ bool GPUDriverSDL::initialize() {
     }
 
     // 圆角矩形绘制：analytic SDF，在 fragment 阶段做抗锯齿边缘
-    const char* kRoundRectVS =
-        "struct VSOutput {"
-        "    float4 position : SV_Position;"
-        "    float2 local : TEXCOORD0;"
-        "    float4 color : COLOR0;"
-        "};"
-        "cbuffer RoundRectUniforms : register(b0, space1) {"
-        "    float4 uRect;"      // x, y, width, height (像素)
-        "    float4 uRadius;"    // radius.x = 圆角半径
-        "    float4 uViewport;"  // viewport width, height, unused, unused
-        "    float4 uColor;"     // rgba
-        "};"
-        "VSOutput main(uint vertexID : SV_VertexID) {"
-        "    float2 local;"
-        "    if (vertexID == 0) { local = float2(0.0, 0.0); }"
-        "    else if (vertexID == 1) { local = float2(1.0, 0.0); }"
-        "    else if (vertexID == 2) { local = float2(0.0, 1.0); }"
-        "    else { local = float2(1.0, 1.0); }"
-        "    float2 pos = uRect.xy + local * uRect.zw;"
-        "    float2 ndc;"
-        "    ndc.x = (pos.x / uViewport.x) * 2.0 - 1.0;"
-        "    ndc.y = 1.0 - (pos.y / uViewport.y) * 2.0;"
-        "    VSOutput o;"
-        "    o.position = float4(ndc, 0.0, 1.0);"
-        "    o.local = local;"
-        "    o.color = uColor;"
-        "    return o;"
-        "}";
+    const char* kRoundRectVS = R"(
+struct VSOutput {
+    float4 position : SV_Position;
+    float2 local : TEXCOORD0;
+    nointerpolation float2 size : TEXCOORD1;
+    nointerpolation float radius : TEXCOORD2;
+    float4 color : COLOR0;
+};
 
-    const char* kRoundRectFS =
-        "cbuffer RoundRectUniforms : register(b0, space1) {"
-        "    float4 uRect;"
-        "    float4 uRadius;"
-        "    float4 uViewport;"
-        "    float4 uColor;"
-        "};"
-        "struct PSInput {"
-        "    float4 position : SV_Position;"
-        "    float2 local : TEXCOORD0;"
-        "    float4 color : COLOR0;"
-        "};"
-        "float sdRoundRect(float2 p, float2 halfSize, float radius) {"
-        "    float2 q = abs(p) - (halfSize - radius);"
-        "    float2 qmax = float2(max(q.x, 0.0), max(q.y, 0.0));"
-        "    return length(qmax) + min(max(q.x, q.y), 0.0) - radius;"
-        "}"
-        "float4 main(PSInput input) : SV_Target0 {"
-        "    float2 size = float2(uRect.z, uRect.w);"
-        "    float2 p = (input.local - 0.5) * size;"           // 以矩形中心为原点的局部坐标
-        "    float r = uRadius.x;"
-        "    r = min(r, min(size.x, size.y) * 0.5 - 0.5);"    // 半径不能超过半边长
-        "    float2 halfSize = size * 0.5;"
-        "    float dist = sdRoundRect(p, halfSize, r);"
-        "    const float aa = 1.0;"                            // 约 1 像素软边
-        "    float alpha = saturate(0.5 - dist / aa);"
-        "    float4 base = input.color;"
-        "    base.a *= alpha;"
-        "    return base;"
-        "}";
+[[vk::binding(0, 1)]] cbuffer RoundRectUniforms : register(b0, space1) {
+    float4 uRect;
+    float4 uRadius;
+    float4 uViewport;
+    float4 uColor;
+};
+
+VSOutput main(uint vertexID : SV_VertexID) {
+    float2 local;
+    if (vertexID == 0) { local = float2(0.0, 0.0); }
+    else if (vertexID == 1) { local = float2(1.0, 0.0); }
+    else if (vertexID == 2) { local = float2(0.0, 1.0); }
+    else { local = float2(1.0, 1.0); }
+    float2 pos = uRect.xy + local * uRect.zw;
+    float2 ndc;
+    ndc.x = (pos.x / uViewport.x) * 2.0 - 1.0;
+    ndc.y = 1.0 - (pos.y / uViewport.y) * 2.0;
+    float radius = uRadius.x;
+    radius = min(radius, min(uRect.z, uRect.w) * 0.5 - 0.5);
+    radius = max(radius, 0.0);
+    VSOutput o;
+    o.position = float4(ndc, 0.0, 1.0);
+    o.local = local;
+    o.size = uRect.zw;
+    o.radius = radius;
+    o.color = uColor;
+    return o;
+}
+)";
+
+    const char* kRoundRectFS = R"(
+struct PSInput {
+    float4 position : SV_Position;
+    float2 local : TEXCOORD0;
+    nointerpolation float2 size : TEXCOORD1;
+    nointerpolation float radius : TEXCOORD2;
+    float4 color : COLOR0;
+};
+
+float sdRoundRect(float2 p, float2 halfSize, float radius) {
+    float2 q = abs(p) - (halfSize - radius);
+    float2 qmax = float2(max(q.x, 0.0), max(q.y, 0.0));
+    return length(qmax) + min(max(q.x, q.y), 0.0) - radius;
+}
+
+float4 main(PSInput input) : SV_Target0 {
+    float2 size = input.size;
+    float2 p = (input.local - 0.5) * size;
+    float r = input.radius;
+    float2 halfSize = size * 0.5;
+    float dist = sdRoundRect(p, halfSize, r);
+    const float aa = 1.0;
+    float alpha = saturate(0.5 - dist / aa);
+    float4 base = input.color;
+    base.a *= alpha;
+    return base;
+}
+)";
 
     round_rect_vs_ = shader_manager_->loadShaderFromHLSL(
         "dong_round_rect_vs",
@@ -259,51 +272,54 @@ bool GPUDriverSDL::initialize() {
     }
 
     // 图片绘制着色器：使用 SV_VertexID 生成矩形，并根据 atlas UV 采样
-    const char* kImageVS =
-        "struct VSOutput {"
-        "    float4 position : SV_Position;"
-        "    float2 uv : TEXCOORD0;"
-        "};"
-        "cbuffer ImageUniforms : register(b0, space1) {"
-        "    float4 uRect;"      // 目标矩形（像素）
-        "    float4 uUVRect;"    // u0, v0, u1, v1
-        "    float4 uViewport;"  // viewport width, height, unused, unused
-        "    float4 uTint;"      // rgba 调制（目前主要用 alpha）
-        "};"
-        "VSOutput main(uint vertexID : SV_VertexID) {"
-        "    float2 local;"
-        "    if (vertexID == 0) { local = float2(0.0, 0.0); }"
-        "    else if (vertexID == 1) { local = float2(1.0, 0.0); }"
-        "    else if (vertexID == 2) { local = float2(0.0, 1.0); }"
-        "    else { local = float2(1.0, 1.0); }"
-        "    float2 pos = uRect.xy + local * uRect.zw;"
-        "    float2 ndc;"
-        "    ndc.x = (pos.x / uViewport.x) * 2.0 - 1.0;"
-        "    ndc.y = 1.0 - (pos.y / uViewport.y) * 2.0;"
-        "    float2 uv = float2(lerp(uUVRect.x, uUVRect.z, local.x), lerp(uUVRect.y, uUVRect.w, local.y));"
-        "    VSOutput o;"
-        "    o.position = float4(ndc, 0.0, 1.0);"
-        "    o.uv = uv;"
-        "    return o;"
-        "}";
+    const char* kImageVS = R"(
+struct VSOutput {
+    float4 position : SV_Position;
+    float2 uv : TEXCOORD0;
+    float4 tint : COLOR0;
+};
 
-    const char* kImageFS =
-        "Texture2D imageTexture : register(t0);"
-        "SamplerState imageSampler : register(s0);"
-        "cbuffer ImageUniforms : register(b0, space1) {"
-        "    float4 uRect;"
-        "    float4 uUVRect;"
-        "    float4 uViewport;"
-        "    float4 uTint;"
-        "};"
-        "struct PSInput {"
-        "    float4 position : SV_Position;"
-        "    float2 uv : TEXCOORD0;"
-        "};"
-        "float4 main(PSInput input) : SV_Target0 {"
-        "    float4 c = imageTexture.Sample(imageSampler, input.uv);"
-        "    return c * uTint;"
-        "}";
+[[vk::binding(0, 1)]] cbuffer ImageUniforms : register(b0, space1) {
+    float4 uRect;
+    float4 uUVRect;
+    float4 uViewport;
+    float4 uTint;
+};
+
+VSOutput main(uint vertexID : SV_VertexID) {
+    float2 local;
+    if (vertexID == 0) { local = float2(0.0, 0.0); }
+    else if (vertexID == 1) { local = float2(1.0, 0.0); }
+    else if (vertexID == 2) { local = float2(0.0, 1.0); }
+    else { local = float2(1.0, 1.0); }
+    float2 pos = uRect.xy + local * uRect.zw;
+    float2 ndc;
+    ndc.x = (pos.x / uViewport.x) * 2.0 - 1.0;
+    ndc.y = 1.0 - (pos.y / uViewport.y) * 2.0;
+    float2 uv = float2(lerp(uUVRect.x, uUVRect.z, local.x), lerp(uUVRect.y, uUVRect.w, local.y));
+    VSOutput o;
+    o.position = float4(ndc, 0.0, 1.0);
+    o.uv = uv;
+    o.tint = uTint;
+    return o;
+}
+)";
+
+    const char* kImageFS = R"(
+Texture2D imageTexture : register(t0);
+SamplerState imageSampler : register(s0);
+
+struct PSInput {
+    float4 position : SV_Position;
+    float2 uv : TEXCOORD0;
+    float4 tint : COLOR0;
+};
+
+float4 main(PSInput input) : SV_Target0 {
+    float4 c = imageTexture.Sample(imageSampler, input.uv);
+    return c * input.tint;
+}
+)";
 
     image_vs_ = shader_manager_->loadShaderFromHLSL(
         "dong_image_vs",

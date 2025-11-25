@@ -3,9 +3,9 @@
 #include "resource_manager.hpp"
 
 #include <core/SkCanvas.h>
-#include <core/SkSurface.h>
 #include <core/SkPaint.h>
 #include <core/SkFont.h>
+#include <core/SkGraphics.h>
 #include <core/SkTypeface.h>
 #include <core/SkTextBlob.h>
 #include <core/SkPath.h>
@@ -15,48 +15,34 @@
 #include <core/SkImage.h>
 #include <core/SkFontStyle.h>
 #include <core/SkFontTypes.h>
-#include <core/SkFontMgr.h>
-#if defined(__APPLE__)
-#include <ports/SkFontMgr_mac_ct.h>
-#endif
 
 #include <cstdio>
 #include <cstring>
 #include <memory>
+#include <mutex>
 
 namespace dong::render {
 
 namespace {
-sk_sp<SkFontMgr> CreateSystemFontMgr() {
-#if defined(__APPLE__)
-    auto mgr = SkFontMgr_New_CoreText(nullptr);
-    if (mgr) {
-        return mgr;
-    }
-#endif
-    return SkFontMgr::RefEmpty();
-}
+std::once_flag g_skia_init_flag;
 }
 
 SkiaBackend::SkiaBackend(RenderSurface* surface)
-    : render_surface_(surface), sk_canvas_(nullptr), sk_surface_(nullptr),
+    : render_surface_(surface), sk_canvas_(nullptr),
       default_font_(nullptr), default_font_size_(16.0f),
       resource_manager_(std::make_unique<ResourceManager>()) {
+    std::call_once(g_skia_init_flag, []() {
+        SkGraphics::Init();
+    });
 }
 
 SkiaBackend::~SkiaBackend() {
     resource_manager_.reset();
     
     if (sk_canvas_) {
-        // sk_canvas_ is owned by sk_surface_, don't delete directly
         sk_canvas_ = nullptr;
     }
-    
-    if (sk_surface_) {
-        SkSurface* surface = reinterpret_cast<SkSurface*>(sk_surface_);
-        SkSafeUnref(surface);
-        sk_surface_ = nullptr;
-    }
+    sk_canvas_holder_.reset();
     
     if (default_font_) {
         SkFont* font = reinterpret_cast<SkFont*>(default_font_);
@@ -86,27 +72,15 @@ bool SkiaBackend::initialize() {
     void* pixels = render_surface_->getCPUBuffer();
     if (!pixels) return false;
 
-    // Create Skia surface wrapping the CPU buffer
+    // Create a raster canvas that wraps the CPU buffer
     size_t row_bytes = width * 4; // RGBA = 4 bytes per pixel
-    sk_sp<SkSurface> surface = SkSurfaces::WrapPixels(
-        info,
-        pixels,
-        row_bytes
-    );
-
-    if (!surface) {
-        return false;
-    }
-
-    // Store canvas from surface
-    SkCanvas* canvas = surface->getCanvas();
+    auto canvas = SkCanvas::MakeRasterDirect(info, pixels, row_bytes);
     if (!canvas) {
         return false;
     }
 
-    // Store as opaque pointers
-    sk_surface_ = surface.release();
-    sk_canvas_ = canvas;
+    sk_canvas_holder_ = std::move(canvas);
+    sk_canvas_ = sk_canvas_holder_.get();
 
     // Create default font with default typeface
     SkFont* font = new SkFont();
@@ -212,34 +186,10 @@ void SkiaBackend::drawTextStyled(const std::string& text, float x, float y,
 
     // 使用 SkFontMgr 从系统加载字体，尽量按 font-family / font-weight 匹配
     SkFont font;
-    static sk_sp<SkFontMgr> font_mgr = CreateSystemFontMgr();
-    if (font_mgr) {
-        int sk_weight = SkFontStyle::kNormal_Weight;
-        if (font_weight == "bold" || font_weight == "700") {
-            sk_weight = SkFontStyle::kBold_Weight;
-        }
-        SkFontStyle style(sk_weight, SkFontStyle::kNormal_Width, SkFontStyle::kUpright_Slant);
-
-        const char* family_cstr = font_family.empty() ? nullptr : font_family.c_str();
-        sk_sp<SkTypeface> typeface = font_mgr->matchFamilyStyle(family_cstr, style);
-        if (!typeface) {
-            // 回退到系统默认字体
-            typeface = font_mgr->matchFamilyStyle(nullptr, SkFontStyle::Normal());
-        }
-
-        if (typeface) {
-            font = SkFont(typeface, size);
-        } else {
-            font.setSize(size);
-        }
-    } else if (default_font_) {
-        // 回退到构造时创建的默认字体
-        SkFont* default_font = reinterpret_cast<SkFont*>(default_font_);
-        font = *default_font;
-        font.setSize(size);
-    } else {
-        font.setSize(size);
+    if (default_font_) {
+        font = *reinterpret_cast<SkFont*>(default_font_);
     }
+    font.setSize(size);
 
     // 开启子像素抗锯齿，让文字尽可能清晰
     font.setEdging(SkFont::Edging::kSubpixelAntiAlias);
@@ -273,32 +223,10 @@ float SkiaBackend::measureTextWidth(const std::string& text, float font_size,
     float size = font_size > 0.0f ? font_size : default_font_size_;
 
     SkFont font;
-    static sk_sp<SkFontMgr> font_mgr = CreateSystemFontMgr();
-    if (font_mgr) {
-        int sk_weight = SkFontStyle::kNormal_Weight;
-        if (font_weight == "bold" || font_weight == "700") {
-            sk_weight = SkFontStyle::kBold_Weight;
-        }
-        SkFontStyle style(sk_weight, SkFontStyle::kNormal_Width, SkFontStyle::kUpright_Slant);
-
-        const char* family_cstr = font_family.empty() ? nullptr : font_family.c_str();
-        sk_sp<SkTypeface> typeface = font_mgr->matchFamilyStyle(family_cstr, style);
-        if (!typeface) {
-            typeface = font_mgr->matchFamilyStyle(nullptr, SkFontStyle::Normal());
-        }
-
-        if (typeface) {
-            font = SkFont(typeface, size);
-        } else {
-            font.setSize(size);
-        }
-    } else if (default_font_) {
-        SkFont* default_font = reinterpret_cast<SkFont*>(default_font_);
-        font = *default_font;
-        font.setSize(size);
-    } else {
-        font.setSize(size);
+    if (default_font_) {
+        font = *reinterpret_cast<SkFont*>(default_font_);
     }
+    font.setSize(size);
 
     SkRect bounds;
     font.measureText(text.c_str(), text.length(), SkTextEncoding::kUTF8, &bounds);
