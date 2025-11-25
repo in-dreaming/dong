@@ -2,6 +2,7 @@
 #include "gpu_device.hpp"
 #include "shader_manager.hpp"
 #include "resource_manager.hpp"
+#include "glyph_atlas.hpp"
 #include <SDL3/SDL_log.h>
 #include <vector>
 #include <algorithm>
@@ -68,7 +69,28 @@ GPUDriverSDL::~GPUDriverSDL() {
             SDL_ReleaseGPUTexture(dev, image_atlas_texture_);
             image_atlas_texture_ = nullptr;
         }
+
+        // 释放 MSDF 文字渲染资源
+        if (text_pipeline_) {
+            SDL_ReleaseGPUGraphicsPipeline(dev, text_pipeline_);
+            text_pipeline_ = nullptr;
+        }
+        if (text_vs_) {
+            SDL_ReleaseGPUShader(dev, text_vs_);
+            text_vs_ = nullptr;
+        }
+        if (text_fs_) {
+            SDL_ReleaseGPUShader(dev, text_fs_);
+            text_fs_ = nullptr;
+        }
+        if (text_sampler_) {
+            SDL_ReleaseGPUSampler(dev, text_sampler_);
+            text_sampler_ = nullptr;
+        }
     }
+
+    // GlyphAtlas 会在其析构函数中释放资源
+    glyph_atlas_.reset();
 }
 
 bool GPUDriverSDL::initialize() {
@@ -86,7 +108,7 @@ struct VSOutput {
     float4 color : COLOR0;
 };
 
-cbuffer RectUniforms : register(b0) {
+cbuffer RectUniforms : register(b0, space1) {
     float4 uRect;
     float4 uColor;
     float4 uViewport;
@@ -171,7 +193,7 @@ struct VSOutput {
     float4 color : COLOR0;
 };
 
-cbuffer RoundRectUniforms : register(b0) {
+cbuffer RoundRectUniforms : register(b0, space1) {
     float4 uRect;
     float4 uRadius;
     float4 uViewport;
@@ -279,7 +301,7 @@ struct VSOutput {
     float4 tint : COLOR0;
 };
 
-cbuffer ImageUniforms : register(b0) {
+cbuffer ImageUniforms : register(b0, space1) {
     float4 uRect;
     float4 uUVRect;
     float4 uViewport;
@@ -400,6 +422,136 @@ float4 main(PSInput input) : SV_Target0 {
         return false;
     }
 
+    // MSDF 文字渲染着色器和管线
+    const char* kTextVS = R"(
+struct VSOutput {
+    float4 position : SV_Position;
+    float2 uv : TEXCOORD0;
+    float4 color : COLOR0;
+};
+
+cbuffer TextUniforms : register(b0, space1) {
+    float4 uRect;
+    float4 uUVRect;
+    float4 uViewport;
+    float4 uColor;
+};
+
+VSOutput main(uint vertexID : SV_VertexID) {
+    float2 local;
+    if (vertexID == 0) { local = float2(0.0, 0.0); }
+    else if (vertexID == 1) { local = float2(1.0, 0.0); }
+    else if (vertexID == 2) { local = float2(0.0, 1.0); }
+    else { local = float2(1.0, 1.0); }
+    float2 pos = uRect.xy + local * uRect.zw;
+    float2 ndc;
+    ndc.x = (pos.x / uViewport.x) * 2.0 - 1.0;
+    ndc.y = 1.0 - (pos.y / uViewport.y) * 2.0;
+    float2 uv = float2(lerp(uUVRect.x, uUVRect.z, local.x), lerp(uUVRect.y, uUVRect.w, local.y));
+    VSOutput o;
+    o.position = float4(ndc, 0.0, 1.0);
+    o.uv = uv;
+    o.color = uColor;
+    return o;
+}
+)";
+
+    const char* kTextFS = R"(
+Texture2D msdfTexture : register(t0);
+SamplerState msdfSampler : register(s0);
+
+struct PSInput {
+    float4 position : SV_Position;
+    float2 uv : TEXCOORD0;
+    float4 color : COLOR0;
+};
+
+float median(float r, float g, float b) {
+    return max(min(r, g), min(max(r, g), b));
+}
+
+float4 main(PSInput input) : SV_Target0 {
+    float3 msdf = msdfTexture.Sample(msdfSampler, input.uv).rgb;
+    float sd = median(msdf.r, msdf.g, msdf.b);
+    float screenPxDistance = 4.0 * (sd - 0.5);
+    float opacity = saturate(screenPxDistance + 0.5);
+    float4 color = input.color;
+    color.a *= opacity;
+    return color;
+}
+)";
+
+    text_vs_ = shader_manager_->loadShaderFromHLSL(
+        "dong_text_vs",
+        SDL_GPU_SHADERSTAGE_VERTEX,
+        kTextVS,
+        "main"
+    );
+    text_fs_ = shader_manager_->loadShaderFromHLSL(
+        "dong_text_fs",
+        SDL_GPU_SHADERSTAGE_FRAGMENT,
+        kTextFS,
+        "main"
+    );
+
+    if (!text_vs_ || !text_fs_) {
+        SDL_Log("GPUDriverSDL::initialize: failed to compile text shaders");
+        return false;
+    }
+
+    SDL_GPUGraphicsPipelineCreateInfo tpci{};
+    SDL_GPUColorTargetDescription color_desc_text{};
+    color_desc_text.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    color_desc_text.blend_state.enable_blend = true;
+    color_desc_text.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+    color_desc_text.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    color_desc_text.blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
+    color_desc_text.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+    color_desc_text.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    color_desc_text.blend_state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
+
+    tpci.target_info.num_color_targets = 1;
+    tpci.target_info.color_target_descriptions = &color_desc_text;
+    tpci.target_info.has_depth_stencil_target = false;
+
+    tpci.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLESTRIP;
+    tpci.vertex_shader = text_vs_;
+    tpci.fragment_shader = text_fs_;
+
+    tpci.vertex_input_state.num_vertex_buffers = 0;
+    tpci.vertex_input_state.vertex_buffer_descriptions = nullptr;
+    tpci.vertex_input_state.num_vertex_attributes = 0;
+    tpci.vertex_input_state.vertex_attributes = nullptr;
+
+    text_pipeline_ = SDL_CreateGPUGraphicsPipeline(dev, &tpci);
+    if (!text_pipeline_) {
+        SDL_Log("GPUDriverSDL::initialize: failed to create text pipeline: %s", SDL_GetError());
+        return false;
+    }
+
+    SDL_GPUSamplerCreateInfo text_sampler_info{};
+    text_sampler_info.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    text_sampler_info.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    text_sampler_info.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    text_sampler_info.mag_filter = SDL_GPU_FILTER_LINEAR;
+    text_sampler_info.min_filter = SDL_GPU_FILTER_LINEAR;
+    text_sampler_info.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_LINEAR;
+
+    text_sampler_ = SDL_CreateGPUSampler(dev, &text_sampler_info);
+    if (!text_sampler_) {
+        SDL_Log("GPUDriverSDL::initialize: failed to create text sampler: %s", SDL_GetError());
+        return false;
+    }
+
+    // 初始化字形 Atlas
+    glyph_atlas_ = std::make_unique<GlyphAtlas>(gpu_device_);
+    if (!glyph_atlas_->initialize(2048, 2048)) {
+        SDL_Log("GPUDriverSDL::initialize: failed to initialize glyph atlas");
+        glyph_atlas_.reset();
+        return false;
+    }
+
+    SDL_Log("GPUDriverSDL initialized successfully");
     return true;
 }
 
@@ -768,6 +920,94 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             SDL_BindGPUFragmentSamplers(pass, 0, &binding, 1);
 
             SDL_DrawGPUPrimitives(pass, 4, 1, 0, 0);
+            break;
+        }
+        case GPUCommandType::DrawText: {
+            // MSDF 文字渲染
+            if (!pass || !text_pipeline_ || !glyph_atlas_ || cmd.text.empty()) {
+                break;
+            }
+
+            // 默认字体路径（TODO: 从 font_family 映射）
+            std::string font_path = "/System/Library/Fonts/Helvetica.ttc";
+            if (!cmd.font_family.empty()) {
+                // 简单映射（可以扩展为完整的字体管理系统）
+                if (cmd.font_family == "serif") {
+                    font_path = "/System/Library/Fonts/Supplemental/Times New Roman.ttf";
+                } else if (cmd.font_family == "monospace") {
+                    font_path = "/System/Library/Fonts/Supplemental/Courier New.ttf";
+                }
+            }
+
+            struct TextUniformData {
+                float rect[4];
+                float uv_rect[4];
+                float viewport[4];
+                float color[4];
+            };
+
+            // 渲染每个字符
+            float cursor_x = cmd.rect.x;
+            float cursor_y = cmd.rect.y;
+
+            for (char c : cmd.text) {
+                uint32_t codepoint = static_cast<uint32_t>(static_cast<unsigned char>(c));
+                
+                // 添加字形到 Atlas（如果尚未缓存）
+                const AtlasEntry* entry = glyph_atlas_->addGlyph(codepoint, font_path);
+                if (!entry) {
+                    SDL_Log("GPUDriverSDL: failed to add glyph %u to atlas", codepoint);
+                    continue;
+                }
+
+                // 跳过空字形（如空格）
+                if (entry->metrics.width == 0.0f || entry->metrics.height == 0.0f) {
+                    cursor_x += entry->metrics.advance_x * (cmd.font_size / 32.0f);
+                    continue;
+                }
+
+                // 计算字形绘制位置（基于 bearing 和 metrics）
+                float scale = cmd.font_size / 32.0f;
+                float glyph_x = cursor_x + entry->metrics.bearing_x * scale;
+                float glyph_y = cursor_y - entry->metrics.bearing_y * scale;
+                float glyph_w = entry->metrics.width * scale;
+                float glyph_h = entry->metrics.height * scale;
+
+                TextUniformData u{};
+                u.rect[0] = glyph_x;
+                u.rect[1] = glyph_y;
+                u.rect[2] = glyph_w;
+                u.rect[3] = glyph_h;
+
+                u.uv_rect[0] = entry->u0;
+                u.uv_rect[1] = entry->v0;
+                u.uv_rect[2] = entry->u1;
+                u.uv_rect[3] = entry->v1;
+
+                u.viewport[0] = static_cast<float>(w);
+                u.viewport[1] = static_cast<float>(h);
+                u.viewport[2] = 0.0f;
+                u.viewport[3] = 0.0f;
+
+                u.color[0] = cmd.color.r;
+                u.color[1] = cmd.color.g;
+                u.color[2] = cmd.color.b;
+                u.color[3] = cmd.color.a;
+
+                SDL_PushGPUVertexUniformData(current_cmd_buf_, 0, &u, sizeof(u));
+
+                // 绑定 Atlas 纹理
+                SDL_GPUTextureSamplerBinding binding{};
+                binding.texture = glyph_atlas_->getAtlasTexture();
+                binding.sampler = text_sampler_;
+                SDL_BindGPUFragmentSamplers(pass, 0, &binding, 1);
+
+                SDL_BindGPUGraphicsPipeline(pass, text_pipeline_);
+                SDL_DrawGPUPrimitives(pass, 4, 1, 0, 0);
+
+                // 移动光标
+                cursor_x += entry->metrics.advance_x * scale;
+            }
             break;
         }
         default:

@@ -176,12 +176,13 @@ fn configureExample(
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
 ) void {
+    _ = target;
+    _ = optimize;
+    
     exe.addIncludePath(b.path("include"));
     exe.addIncludePath(b.path("src"));
     exe.addIncludePath(b.path("third_party/quickjs"));
     exe.addIncludePath(b.path("third_party/sdl/include"));
-
-    configureSkia(exe, b, target, optimize);
 
     exe.linkLibC();
     exe.linkLibCpp();
@@ -202,6 +203,101 @@ fn configureExample(
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+
+    // FreeType via CMake (static) ------------------------------------------
+    const freetype_build_dir = "third_party/freetype/build-zig";
+    const freetype_prefix = "zig-out/freetype";
+
+    const freetype_cmake_config = b.addSystemCommand(&.{
+        "cmake",
+        "-S", "third_party/freetype",
+        "-B", freetype_build_dir,
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DBUILD_SHARED_LIBS=OFF",
+        "-DFT_DISABLE_HARFBUZZ=ON",
+        "-DFT_DISABLE_PNG=ON",
+        "-DFT_DISABLE_ZLIB=ON",
+        "-DFT_DISABLE_BZIP2=ON",
+        "-DFT_DISABLE_BROTLI=ON",
+    });
+    const freetype_cmake_build = b.addSystemCommand(&.{
+        "cmake",
+        "--build", freetype_build_dir,
+        "--config", "Release",
+    });
+    freetype_cmake_build.step.dependOn(&freetype_cmake_config.step);
+
+    const freetype_cmake_install = b.addSystemCommand(&.{
+        "cmake",
+        "--install", freetype_build_dir,
+        "--prefix", freetype_prefix,
+    });
+    freetype_cmake_install.step.dependOn(&freetype_cmake_build.step);
+
+    // HarfBuzz via CMake (static) ------------------------------------------
+    const harfbuzz_build_dir = "third_party/harfbuzz/build-zig";
+    const harfbuzz_prefix = "zig-out/harfbuzz";
+
+    const freetype_include_abs = b.fmt("{s}/{s}/include/freetype2", .{b.build_root.path.?, freetype_prefix});
+    const freetype_lib_abs = b.fmt("{s}/{s}/lib/libfreetype.a", .{b.build_root.path.?, freetype_prefix});
+
+    const harfbuzz_cmake_config = b.addSystemCommand(&.{
+        "cmake",
+        "-S", "third_party/harfbuzz",
+        "-B", harfbuzz_build_dir,
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DBUILD_SHARED_LIBS=OFF",
+        "-DHB_HAVE_FREETYPE=ON",
+        b.fmt("-DFREETYPE_INCLUDE_DIRS={s}", .{freetype_include_abs}),
+        b.fmt("-DFREETYPE_LIBRARY={s}", .{freetype_lib_abs}),
+        "-DHB_HAVE_GLIB=OFF",
+        "-DHB_HAVE_ICU=OFF",
+        "-DHB_BUILD_UTILS=OFF",
+        "-DHB_BUILD_SUBSET=OFF",
+    });
+    const harfbuzz_cmake_build = b.addSystemCommand(&.{
+        "cmake",
+        "--build", harfbuzz_build_dir,
+        "--config", "Release",
+    });
+    harfbuzz_cmake_build.step.dependOn(&harfbuzz_cmake_config.step);
+    harfbuzz_cmake_build.step.dependOn(&freetype_cmake_install.step);
+
+    const harfbuzz_cmake_install = b.addSystemCommand(&.{
+        "cmake",
+        "--install", harfbuzz_build_dir,
+        "--prefix", harfbuzz_prefix,
+    });
+    harfbuzz_cmake_install.step.dependOn(&harfbuzz_cmake_build.step);
+
+    // msdfgen via CMake (static) -------------------------------------------
+    const msdfgen_build_dir = "third_party/msdfgen/build-zig";
+    const msdfgen_prefix = "zig-out/msdfgen";
+
+    const msdfgen_cmake_config = b.addSystemCommand(&.{
+        "cmake",
+        "-S", "third_party/msdfgen",
+        "-B", msdfgen_build_dir,
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DMSDFGEN_CORE_ONLY=ON",
+        "-DMSDFGEN_BUILD_STANDALONE=OFF",
+        "-DMSDFGEN_USE_VCPKG=OFF",
+        "-DMSDFGEN_INSTALL=ON",
+        "-DBUILD_SHARED_LIBS=OFF",
+    });
+    const msdfgen_cmake_build = b.addSystemCommand(&.{
+        "cmake",
+        "--build", msdfgen_build_dir,
+        "--config", "Release",
+    });
+    msdfgen_cmake_build.step.dependOn(&msdfgen_cmake_config.step);
+
+    const msdfgen_cmake_install = b.addSystemCommand(&.{
+        "cmake",
+        "--install", msdfgen_build_dir,
+        "--prefix", msdfgen_prefix,
+    });
+    msdfgen_cmake_install.step.dependOn(&msdfgen_cmake_build.step);
 
     // SDL3 via CMake (shared) ----------------------------------------------
     const sdl3_build_dir = "third_party/sdl/build-zig";
@@ -306,8 +402,11 @@ pub fn build(b: *std.Build) void {
     dong.addIncludePath(b.path("third_party/sdl/include"));
     dong.addIncludePath(b.path("third_party/SDL_shadercross/include"));
     dong.addIncludePath(.{ .cwd_relative = "/Users/lcle/VulkanSDK/1.4.328.1/macOS/include/spirv_cross" });
-
-    configureSkia(dong, b, target, optimize);
+    
+    // FreeType, HarfBuzz and msdfgen includes
+    dong.addIncludePath(.{ .cwd_relative = "zig-out/freetype/include/freetype2" });
+    dong.addIncludePath(.{ .cwd_relative = "zig-out/harfbuzz/include/harfbuzz" });
+    dong.addIncludePath(.{ .cwd_relative = "zig-out/msdfgen/include" });
 
     dong.addCSourceFiles(.{
         .files = &.{
@@ -324,13 +423,13 @@ pub fn build(b: *std.Build) void {
             "src/script/js_bindings.cpp",
             "src/render/painter.cpp",
             "src/render/render_surface.cpp",
-            "src/render/skia_backend.cpp",
             "src/render/resource_manager.cpp",
             "src/render/gpu_device.cpp",
             "src/render/gpu_surface.cpp",
             "src/render/gpu_painter.cpp",
             "src/render/gpu_driver_sdl.cpp",
             "src/render/shader_manager.cpp",
+            "src/render/glyph_atlas.cpp",
             "src/platform/sdl3_window.cpp",
         },
         .flags = &.{"-std=c++17"},
@@ -347,6 +446,16 @@ pub fn build(b: *std.Build) void {
     dong.linkLibrary(quickjs);
     dong.linkLibrary(lexbor);
     dong.linkLibrary(yoga);
+    
+    // Link FreeType, HarfBuzz and msdfgen (static libraries)
+    dong.addObjectFile(.{ .cwd_relative = "zig-out/freetype/lib/libfreetype.a" });
+    dong.addObjectFile(.{ .cwd_relative = "zig-out/harfbuzz/lib/libharfbuzz.a" });
+    dong.addObjectFile(.{ .cwd_relative = "zig-out/msdfgen/lib/libmsdfgen-core.a" });
+    
+    // Ensure FreeType, HarfBuzz and msdfgen are built before dong
+    dong.step.dependOn(&freetype_cmake_install.step);
+    dong.step.dependOn(&harfbuzz_cmake_install.step);
+    dong.step.dependOn(&msdfgen_cmake_install.step);
 
     b.installArtifact(dong);
 
@@ -413,7 +522,7 @@ pub fn build(b: *std.Build) void {
         .{ .name = "performance_demo", .source = "examples/performance_demo.cpp", .flags = &.{"-std=c++17"} },
         // 【新增】脏矩形优化演示
         .{ .name = "dirty_rect_optimization_demo", .source = "examples/dirty_rect_optimization_demo.cpp", .flags = &.{"-std=c++17"} },
-        .{ .name = "skia_cpu_demo", .source = "examples/skia_cpu_demo.cpp", .flags = &.{"-std=c++17"} },
+        // .{ .name = "skia_cpu_demo", .source = "examples/skia_cpu_demo.cpp", .flags = &.{"-std=c++17"} }, // 已移除Skia依赖
         .{ .name = "js_event_demo", .source = "examples/js_event_demo.cpp", .flags = &.{"-std=c++17"} },
         // 【新增】功能完整性演示
         .{ .name = "comprehensive_features_demo", .source = "examples/comprehensive_features_demo.cpp", .flags = &.{"-std=c++17"} },

@@ -8,9 +8,6 @@
 
 namespace dong::render {
 
-// Forward declarations
-class SkiaBackend;
-
 // Image cache entry
 struct ImageResource {
     std::string path;

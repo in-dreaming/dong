@@ -4,12 +4,14 @@
 #include <SDL3/SDL_gpu.h>
 #include <unordered_map>
 #include <string>
+#include <memory>
 
 namespace dong::render {
 
 class GPUDevice;
 class ShaderManager;
 class ResourceManager;
+class GlyphAtlas;
 
 // 基于 SDL_gpu 的 GPUDriver 实现（最小骨架）
 class GPUDriverSDL : public GPUDriver {
@@ -68,6 +70,13 @@ private:
     std::unordered_map<std::string, ImageAtlasEntry> image_atlas_entries_;
 
     bool ensureImageInAtlas(const std::string& src, ImageAtlasEntry& out_entry);
+
+    // MSDF 文字渲染
+    SDL_GPUShader* text_vs_ = nullptr;
+    SDL_GPUShader* text_fs_ = nullptr;
+    SDL_GPUGraphicsPipeline* text_pipeline_ = nullptr;
+    SDL_GPUSampler* text_sampler_ = nullptr;
+    std::unique_ptr<GlyphAtlas> glyph_atlas_;
 };
 
 } // namespace dong::render

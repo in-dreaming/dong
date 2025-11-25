@@ -5,34 +5,19 @@
 #include <cstring>
 #include <memory>
 
-#include <core/SkImage.h>
-#include <core/SkData.h>
-#include <core/SkTypeface.h>
-#include <core/SkFontMgr.h>
-#include <core/SkStream.h>
-#include <codec/SkCodec.h>
-#include <core/SkPixmap.h>
-#include <core/SkColor.h>
-#if defined(__APPLE__)
-#include <ports/SkFontMgr_mac_ct.h>
-#endif
+// TODO: 集成 stb_image 用于图片加载
+// TODO: 使用 FreeType + GlyphAtlas 替代字体管理
 
 namespace dong::render {
 
 // ImageResource destructor
 ImageResource::~ImageResource() {
-    if (sk_image) {
-        SkImage* img = reinterpret_cast<SkImage*>(sk_image);
-        SkSafeUnref(img);
-    }
+    // TODO: 清理图片资源
 }
 
 // FontResource destructor
 FontResource::~FontResource() {
-    if (sk_typeface) {
-        SkTypeface* tf = reinterpret_cast<SkTypeface*>(sk_typeface);
-        SkSafeUnref(tf);
-    }
+    // TODO: 清理字体资源
 }
 
 ResourceManager::ResourceManager() = default;
@@ -45,32 +30,11 @@ bool ResourceManager::getImagePixelsRGBA(const std::string& file_path,
                                          std::vector<uint8_t>& out_pixels,
                                          uint32_t& out_width,
                                          uint32_t& out_height) {
-    ImageResource* res = loadImage(file_path);
-    if (!res || !res->sk_image || res->width == 0 || res->height == 0) {
-        return false;
-    }
-
-    SkImage* image = reinterpret_cast<SkImage*>(res->sk_image);
-    out_width = res->width;
-    out_height = res->height;
-
-    SkImageInfo info = SkImageInfo::Make(
-        static_cast<int>(out_width),
-        static_cast<int>(out_height),
-        kRGBA_8888_SkColorType,
-        kPremul_SkAlphaType
-    );
-
-    out_pixels.resize(static_cast<size_t>(out_width) * static_cast<size_t>(out_height) * 4);
-    SkPixmap pixmap(info, out_pixels.data(), static_cast<size_t>(out_width) * 4);
-
-    if (!image->readPixels(pixmap, 0, 0)) {
-        out_pixels.clear();
-        out_width = out_height = 0;
-        return false;
-    }
-
-    return true;
+    // TODO: 使用 stb_image 实现
+    std::cerr << "[ResourceManager] getImagePixelsRGBA not implemented: " << file_path << std::endl;
+    out_width = 0;
+    out_height = 0;
+    return false;
 }
 
 ImageResource* ResourceManager::loadImage(const std::string& file_path) {
@@ -80,14 +44,9 @@ ImageResource* ResourceManager::loadImage(const std::string& file_path) {
         return it->second.get();
     }
     
-    // Try to read file
-    std::vector<uint8_t> data;
-    if (readFileBytes(file_path, data).empty() == false) {
-        return nullptr;
-    }
-    
-    // Try to load from memory
-    return loadImageFromMemory(file_path, data.data(), data.size());
+    // TODO: 使用 stb_image 加载图片
+    std::cerr << "[ResourceManager] loadImage not implemented: " << file_path << std::endl;
+    return nullptr;
 }
 
 ImageResource* ResourceManager::loadImageFromMemory(const std::string& name,
@@ -103,53 +62,9 @@ ImageResource* ResourceManager::loadImageFromMemory(const std::string& name,
         return it->second.get();
     }
     
-    // Create SkData from buffer
-    sk_sp<SkData> sk_data = SkData::MakeWithCopy(data, data_size);
-    if (!sk_data) {
-        std::cerr << "[ResourceManager] Failed to create SkData for: " << name << std::endl;
-        return nullptr;
-    }
-    
-    // Try to decode image directly from SkData using DeferredFromEncodedData
-    sk_sp<SkImage> image = SkImages::DeferredFromEncodedData(sk_data);
-    if (!image) {
-        std::cerr << "[ResourceManager] Failed to decode image: " << name << std::endl;
-        // Create placeholder: 32x32 red rectangle
-        SkImageInfo info = SkImageInfo::Make(32, 32, kRGBA_8888_SkColorType, kOpaque_SkAlphaType);
-        std::vector<uint32_t> red_pixels(32 * 32, 0xFFFF0000);
-        SkPixmap pixmap(info, red_pixels.data(), 32 * 4);
-        image = SkImages::RasterFromPixmapCopy(pixmap);
-        
-        if (image) {
-            auto resource = std::make_unique<ImageResource>();
-            resource->path = name;
-            resource->width = 32;
-            resource->height = 32;
-            resource->sk_image = image.release();
-            ImageResource* ptr = resource.get();
-            image_cache_[name] = std::move(resource);
-            std::cout << "[ResourceManager] Created placeholder for: " << name << std::endl;
-            return ptr;
-        }
-        return nullptr;
-    }
-    
-    // Cache the decoded image
-    int width = image->width();
-    int height = image->height();
-    
-    auto resource = std::make_unique<ImageResource>();
-    resource->path = name;
-    resource->width = width;
-    resource->height = height;
-    resource->sk_image = image.release();
-    
-    ImageResource* ptr = resource.get();
-    image_cache_[name] = std::move(resource);
-    
-    std::cout << "[ResourceManager] Loaded image: " << name << " (" << width << "x" << height << ")" << std::endl;
-    
-    return ptr;
+    // TODO: 使用 stb_image 解码
+    std::cerr << "[ResourceManager] loadImageFromMemory not implemented: " << name << std::endl;
+    return nullptr;
 }
 
 ImageResource* ResourceManager::getImage(const std::string& file_path) const {
@@ -161,8 +76,8 @@ ImageResource* ResourceManager::getImage(const std::string& file_path) const {
 }
 
 FontResource* ResourceManager::loadFont(const std::string& font_name,
-                                       const std::string& file_path,
-                                       float size) {
+                                        const std::string& file_path,
+                                        float size) {
     std::string cache_key = makeFontCacheKey(font_name, size);
     
     // Check cache
@@ -171,54 +86,9 @@ FontResource* ResourceManager::loadFont(const std::string& font_name,
         return it->second.get();
     }
     
-    // Try to load font file
-    std::vector<uint8_t> font_data;
-    std::string err = readFileBytes(file_path, font_data);
-    if (!err.empty()) {
-        std::cerr << "[ResourceManager] Failed to load font file: " << file_path << std::endl;
-        return nullptr;
-    }
-    
-    // Create SkData
-    sk_sp<SkData> sk_data = SkData::MakeWithCopy(font_data.data(), font_data.size());
-    if (!sk_data) {
-        return nullptr;
-    }
-    
-    // Get system font manager
-#if defined(__APPLE__)
-    sk_sp<SkFontMgr> mgr = SkFontMgr_New_CoreText(nullptr);
-#else
-    sk_sp<SkFontMgr> mgr = SkFontMgr::RefEmpty();
-#endif
-    
-    if (!mgr) {
-        return nullptr;
-    }
-    
-    // Try to create typeface from data
-    sk_sp<SkTypeface> typeface = mgr->makeFromData(sk_data);
-    if (!typeface) {
-        // Fallback to default
-        typeface = mgr->legacyMakeTypeface(font_name.c_str(), SkFontStyle::Normal());
-    }
-    
-    if (!typeface) {
-        return nullptr;
-    }
-    
-    // Store in cache
-    auto resource = std::make_unique<FontResource>();
-    resource->font_name = font_name;
-    resource->font_size = size;
-    resource->sk_typeface = typeface.release();
-    
-    FontResource* ptr = resource.get();
-    font_cache_[cache_key] = std::move(resource);
-    
-    std::cout << "[ResourceManager] Loaded font: " << font_name << " (" << size << "pt)" << std::endl;
-    
-    return ptr;
+    // TODO: 使用 FreeType 加载字体
+    std::cerr << "[ResourceManager] loadFont not implemented: " << font_name << std::endl;
+    return nullptr;
 }
 
 FontResource* ResourceManager::getFont(const std::string& font_name, float size) const {
@@ -231,50 +101,9 @@ FontResource* ResourceManager::getFont(const std::string& font_name, float size)
 }
 
 FontResource* ResourceManager::getSystemFont(const std::string& font_family, float size) {
-    std::string cache_key = makeFontCacheKey(font_family, size);
-    
-    // Check cache
-    auto it = font_cache_.find(cache_key);
-    if (it != font_cache_.end()) {
-        return it->second.get();
-    }
-    
-    // Get system font manager
-#if defined(__APPLE__)
-    sk_sp<SkFontMgr> mgr = SkFontMgr_New_CoreText(nullptr);
-#else
-    sk_sp<SkFontMgr> mgr = SkFontMgr::RefEmpty();
-#endif
-    
-    if (!mgr) {
-        return nullptr;
-    }
-    
-    // Try to find typeface by family name
-    sk_sp<SkTypeface> typeface = mgr->matchFamilyStyle(font_family.c_str(), SkFontStyle::Normal());
-    if (!typeface) {
-        // Fallback to system sans-serif
-        typeface = mgr->matchFamilyStyle("system-ui", SkFontStyle::Normal());
-    }
-    if (!typeface) {
-        // Last resort: default
-        typeface = mgr->legacyMakeTypeface(nullptr, SkFontStyle::Normal());
-    }
-    
-    if (!typeface) {
-        return nullptr;
-    }
-    
-    // Store in cache
-    auto resource = std::make_unique<FontResource>();
-    resource->font_name = font_family;
-    resource->font_size = size;
-    resource->sk_typeface = typeface.release();
-    
-    FontResource* ptr = resource.get();
-    font_cache_[cache_key] = std::move(resource);
-    
-    return ptr;
+    // TODO: 使用 FreeType + 系统字体查找
+    std::cerr << "[ResourceManager] getSystemFont not implemented: " << font_family << std::endl;
+    return nullptr;
 }
 
 void ResourceManager::clearImageCache() {
@@ -293,27 +122,28 @@ void ResourceManager::clear() {
 std::string ResourceManager::readFileBytes(const std::string& path, std::vector<uint8_t>& out_data) const {
     std::ifstream file(path, std::ios::binary | std::ios::ate);
     if (!file.is_open()) {
-        return "Cannot open file: " + path;
+        return "Failed to open file";
     }
     
-    std::streamsize size = file.tellg();
+    auto size = file.tellg();
     if (size <= 0) {
-        return "Invalid file size: " + path;
+        return "File is empty or invalid";
     }
     
     file.seekg(0, std::ios::beg);
-    out_data.resize(size);
+    out_data.resize(static_cast<size_t>(size));
     
     if (!file.read(reinterpret_cast<char*>(out_data.data()), size)) {
-        return "Failed to read file: " + path;
+        out_data.clear();
+        return "Failed to read file";
     }
     
-    return "";  // Success
+    return ""; // Success
 }
 
 std::string ResourceManager::makeFontCacheKey(const std::string& family, float size) const {
     std::ostringstream oss;
-    oss << family << ":" << size;
+    oss << family << "_" << static_cast<int>(size);
     return oss.str();
 }
 
