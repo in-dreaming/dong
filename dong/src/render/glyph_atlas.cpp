@@ -6,6 +6,7 @@
 
 // MSDF 生成库（仅核心）
 #include <msdfgen/msdfgen.h>
+#include <msdfgen/core/edge-coloring.h>
 
 // FreeType
 #include <ft2build.h>
@@ -91,6 +92,13 @@ GlyphAtlas::~GlyphAtlas() {
     }
 }
 
+std::string GlyphAtlas::makeGlyphKey(uint32_t codepoint, const std::string& font_path) const {
+    std::string key = font_path;
+    key.push_back('#');
+    key.append(std::to_string(codepoint));
+    return key;
+}
+
 bool GlyphAtlas::initialize(uint32_t width, uint32_t height) {
     if (!gpu_device_ || !gpu_device_->isInitialized()) {
         SDL_Log("GlyphAtlas::initialize: GPU device not initialized");
@@ -119,8 +127,11 @@ bool GlyphAtlas::initialize(uint32_t width, uint32_t height) {
     return true;
 }
 
-const AtlasEntry* GlyphAtlas::getGlyph(uint32_t codepoint) {
-    auto it = cache_.find(codepoint);
+const AtlasEntry* GlyphAtlas::getGlyph(uint32_t codepoint, const std::string& font_path) {
+    if (font_path.empty()) {
+        return nullptr;
+    }
+    auto it = cache_.find(makeGlyphKey(codepoint, font_path));
     if (it != cache_.end()) {
         return &it->second;
     }
@@ -128,8 +139,14 @@ const AtlasEntry* GlyphAtlas::getGlyph(uint32_t codepoint) {
 }
 
 const AtlasEntry* GlyphAtlas::addGlyph(uint32_t codepoint, const std::string& font_path) {
+    if (font_path.empty()) {
+        SDL_Log("GlyphAtlas::addGlyph: font path is empty for codepoint %u", codepoint);
+        return nullptr;
+    }
+
     // 检查是否已缓存
-    auto it = cache_.find(codepoint);
+    std::string key = makeGlyphKey(codepoint, font_path);
+    auto it = cache_.find(key);
     if (it != cache_.end()) {
         return &it->second;
     }
@@ -149,8 +166,8 @@ const AtlasEntry* GlyphAtlas::addGlyph(uint32_t codepoint, const std::string& fo
         // 空字形（如空格）
         AtlasEntry entry{};
         entry.metrics = metrics;
-        cache_[codepoint] = entry;
-        return &cache_[codepoint];
+        cache_[key] = entry;
+        return &cache_[key];
     }
 
     // 简单行优先装箱
@@ -200,7 +217,12 @@ const AtlasEntry* GlyphAtlas::addGlyph(uint32_t codepoint, const std::string& fo
         return nullptr;
     }
 
-    std::memcpy(mapped, bitmap.data(), buffer_size);
+    uint8_t* dst_bytes = static_cast<uint8_t*>(mapped);
+    for (uint32_t row = 0; row < glyph_height; ++row) {
+        const uint32_t src_row = glyph_height - 1 - row;
+        const uint8_t* src_ptr = bitmap.data() + src_row * stride;
+        std::memcpy(dst_bytes + row * stride, src_ptr, stride);
+    }
     SDL_UnmapGPUTransferBuffer(dev, transfer_buf);
 
     SDL_GPUCopyPass* copy_pass = SDL_BeginGPUCopyPass(cmd_buf);
@@ -230,6 +252,7 @@ const AtlasEntry* GlyphAtlas::addGlyph(uint32_t codepoint, const std::string& fo
     SDL_EndGPUCopyPass(copy_pass);
 
     gpu_device_->submitCommandBuffer(cmd_buf);
+    gpu_device_->waitForGPU();
     SDL_ReleaseGPUTransferBuffer(dev, transfer_buf);
 
     // 创建 AtlasEntry
@@ -241,11 +264,11 @@ const AtlasEntry* GlyphAtlas::addGlyph(uint32_t codepoint, const std::string& fo
     entry.v1 = static_cast<float>(dst_y + glyph_height) / static_cast<float>(atlas_height_);
     entry.metrics = metrics;
 
-    cache_[codepoint] = entry;
-    SDL_Log("GlyphAtlas: added glyph %u at (%u, %u), size (%u, %u)", 
-            codepoint, dst_x, dst_y, glyph_width, glyph_height);
+    cache_[key] = entry;
+    SDL_Log("GlyphAtlas: added glyph %u (%s) at (%u, %u), size (%u, %u)",
+            codepoint, font_path.c_str(), dst_x, dst_y, glyph_width, glyph_height);
 
-    return &cache_[codepoint];
+    return &cache_[key];
 }
 
 bool GlyphAtlas::generateMSDF(uint32_t codepoint, const std::string& font_path,
@@ -332,11 +355,14 @@ bool GlyphAtlas::generateMSDF(uint32_t codepoint, const std::string& font_path,
     
     double width = bounds.r - bounds.l;
     double height = bounds.t - bounds.b;
-    double scale = std::min((msdf_size - range * 2) / width, (msdf_size - range * 2) / height);
+    double safe_width = std::max(width, 1.0);
+    double safe_height = std::max(height, 1.0);
+    double scale = std::min((msdf_size - range * 2) / safe_width,
+                            (msdf_size - range * 2) / safe_height);
     
     msdfgen::Vector2 translate(
-        -bounds.l + (msdf_size / scale - width) * 0.5,
-        -bounds.b + (msdf_size / scale - height) * 0.5
+        -bounds.l + (msdf_size / scale - safe_width) * 0.5,
+        -bounds.b + (msdf_size / scale - safe_height) * 0.5
     );
 
     msdfgen::generateMSDF(msdf, shape, range, scale, translate);

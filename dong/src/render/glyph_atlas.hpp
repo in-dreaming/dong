@@ -40,7 +40,7 @@ public:
     bool initialize(uint32_t width = 2048, uint32_t height = 2048);
 
     // 查询字形是否已缓存
-    const AtlasEntry* getGlyph(uint32_t codepoint);
+    const AtlasEntry* getGlyph(uint32_t codepoint, const std::string& font_path);
 
     // 添加字形到 Atlas（生成 MSDF 并上传）
     const AtlasEntry* addGlyph(uint32_t codepoint, const std::string& font_path);
@@ -64,8 +64,10 @@ private:
     uint32_t cursor_y_ = 0;
     uint32_t row_height_ = 0;
 
-    // 缓存：codepoint -> AtlasEntry
-    std::unordered_map<uint32_t, AtlasEntry> cache_;
+    // 缓存：font_path#codepoint -> AtlasEntry
+    std::unordered_map<std::string, AtlasEntry> cache_;
+
+    std::string makeGlyphKey(uint32_t codepoint, const std::string& font_path) const;
 
     // 内部辅助：为指定字符生成 MSDF 位图
     bool generateMSDF(uint32_t codepoint, const std::string& font_path,

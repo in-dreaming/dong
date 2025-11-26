@@ -7,6 +7,226 @@
 #include <vector>
 #include <algorithm>
 #include <cstring>
+#include <filesystem>
+#include <cctype>
+#include <system_error>
+#include <unordered_map>
+
+namespace {
+
+std::string trimWhitespace(const std::string& input) {
+    size_t start = 0;
+    while (start < input.size() && std::isspace(static_cast<unsigned char>(input[start]))) {
+        ++start;
+    }
+    size_t end = input.size();
+    while (end > start && std::isspace(static_cast<unsigned char>(input[end - 1]))) {
+        --end;
+    }
+    return input.substr(start, end - start);
+}
+
+std::string toLowerAscii(std::string input) {
+    std::transform(input.begin(), input.end(), input.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    return input;
+}
+
+std::vector<std::string> splitFontFamilies(const std::string& value) {
+    std::vector<std::string> result;
+    if (value.empty()) {
+        return result;
+    }
+    size_t start = 0;
+    while (start < value.size()) {
+        size_t comma = value.find(',', start);
+        std::string token = value.substr(start, comma == std::string::npos ? std::string::npos : comma - start);
+        token = trimWhitespace(token);
+        if (!token.empty()) {
+            result.push_back(token);
+        }
+        if (comma == std::string::npos) {
+            break;
+        }
+        start = comma + 1;
+    }
+    return result;
+}
+
+std::string canonicalFontFamily(const std::string& name) {
+    std::string lower = toLowerAscii(name);
+    if (lower == "sans" || lower == "sans-serif" || lower == "arial" || lower == "helvetica") {
+        return "sans-serif";
+    }
+    if (lower == "serif" || lower == "times" || lower == "times new roman") {
+        return "serif";
+    }
+    if (lower == "monospace" || lower == "courier" || lower == "courier new" || lower == "menlo" || lower == "consolas") {
+        return "monospace";
+    }
+    return lower;
+}
+
+std::string resolveFontPath(const std::string& requested_family) {
+    namespace fs = std::filesystem;
+
+    static const std::unordered_map<std::string, std::vector<std::string>> kFontCandidates = {
+        {"sans-serif", {
+            "/System/Library/Fonts/Helvetica.ttc",
+            "/System/Library/Fonts/Supplemental/Arial.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "C:/Windows/Fonts/arial.ttf"
+        }},
+        {"arial", {
+            "/System/Library/Fonts/Supplemental/Arial.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "C:/Windows/Fonts/arial.ttf"
+        }},
+        {"helvetica", {
+            "/System/Library/Fonts/Helvetica.ttc",
+            "/System/Library/Fonts/Supplemental/Arial.ttf"
+        }},
+        {"serif", {
+            "/System/Library/Fonts/Supplemental/Times New Roman.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf",
+            "C:/Windows/Fonts/times.ttf"
+        }},
+        {"times", {
+            "/System/Library/Fonts/Supplemental/Times New Roman.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf",
+            "C:/Windows/Fonts/times.ttf"
+        }},
+        {"times new roman", {
+            "/System/Library/Fonts/Supplemental/Times New Roman.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf",
+            "C:/Windows/Fonts/times.ttf"
+        }},
+        {"monospace", {
+            "/System/Library/Fonts/Supplemental/Courier New.ttf",
+            "/System/Library/Fonts/Supplemental/Menlo.ttc",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+            "C:/Windows/Fonts/consola.ttf",
+            "C:/Windows/Fonts/cour.ttf"
+        }},
+        {"courier", {
+            "/System/Library/Fonts/Supplemental/Courier New.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+            "C:/Windows/Fonts/cour.ttf"
+        }},
+        {"courier new", {
+            "/System/Library/Fonts/Supplemental/Courier New.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+            "C:/Windows/Fonts/cour.ttf"
+        }},
+        {"menlo", {
+            "/System/Library/Fonts/Supplemental/Menlo.ttc"
+        }},
+        {"consolas", {
+            "C:/Windows/Fonts/consola.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"
+        }}
+    };
+
+    auto tryCandidates = [](const std::vector<std::string>& candidates) -> std::string {
+        namespace fs = std::filesystem;
+        for (const auto& candidate : candidates) {
+            if (candidate.empty()) {
+                continue;
+            }
+            std::error_code ec;
+            if (fs::exists(candidate, ec)) {
+                return candidate;
+            }
+        }
+        return {};
+    };
+
+    auto tryKey = [&](const std::string& key) -> std::string {
+        auto it = kFontCandidates.find(key);
+        if (it == kFontCandidates.end()) {
+            return {};
+        }
+        return tryCandidates(it->second);
+    };
+
+    auto families = splitFontFamilies(requested_family);
+    if (families.empty()) {
+        families.emplace_back("sans-serif");
+    }
+
+    for (const auto& family : families) {
+        std::string lower = toLowerAscii(family);
+        if (auto path = tryKey(lower); !path.empty()) {
+            return path;
+        }
+        std::string canonical = canonicalFontFamily(family);
+        if (auto path = tryKey(canonical); !path.empty()) {
+            return path;
+        }
+    }
+
+    if (auto path = tryKey("sans-serif"); !path.empty()) {
+        return path;
+    }
+
+    return {};
+}
+
+std::vector<uint32_t> decodeUtf8(const std::string& text) {
+    std::vector<uint32_t> codepoints;
+    size_t i = 0;
+    while (i < text.size()) {
+        uint8_t byte = static_cast<uint8_t>(text[i]);
+        uint32_t codepoint = 0;
+        size_t sequence_length = 0;
+
+        if ((byte & 0x80) == 0) {
+            codepoint = byte;
+            sequence_length = 1;
+        } else if ((byte & 0xE0) == 0xC0) {
+            codepoint = byte & 0x1F;
+            sequence_length = 2;
+        } else if ((byte & 0xF0) == 0xE0) {
+            codepoint = byte & 0x0F;
+            sequence_length = 3;
+        } else if ((byte & 0xF8) == 0xF0) {
+            codepoint = byte & 0x07;
+            sequence_length = 4;
+        } else {
+            ++i;
+            continue;
+        }
+
+        if (i + sequence_length > text.size()) {
+            break;
+        }
+
+        bool valid = true;
+        for (size_t j = 1; j < sequence_length; ++j) {
+            uint8_t continuation = static_cast<uint8_t>(text[i + j]);
+            if ((continuation & 0xC0) != 0x80) {
+                valid = false;
+                break;
+            }
+            codepoint = (codepoint << 6) | (continuation & 0x3F);
+        }
+        if (!valid) {
+            ++i;
+            continue;
+        }
+
+        if (sequence_length == 1) {
+            // already handled
+        }
+
+        codepoints.push_back(codepoint);
+        i += sequence_length;
+    }
+    return codepoints;
+}
+
+} // namespace
 
 namespace dong::render {
 
@@ -923,21 +1143,41 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             break;
         }
         case GPUCommandType::DrawText: {
-            // MSDF 文字渲染
             if (!pass || !text_pipeline_ || !glyph_atlas_ || cmd.text.empty()) {
                 break;
             }
 
-            // 默认字体路径（TODO: 从 font_family 映射）
-            std::string font_path = "/System/Library/Fonts/Helvetica.ttc";
-            if (!cmd.font_family.empty()) {
-                // 简单映射（可以扩展为完整的字体管理系统）
-                if (cmd.font_family == "serif") {
-                    font_path = "/System/Library/Fonts/Supplemental/Times New Roman.ttf";
-                } else if (cmd.font_family == "monospace") {
-                    font_path = "/System/Library/Fonts/Supplemental/Courier New.ttf";
-                }
+            std::string font_path = resolveFontPath(cmd.font_family);
+            if (font_path.empty()) {
+                SDL_Log("GPUDriverSDL: no valid font found for family '%s'", cmd.font_family.c_str());
+                break;
             }
+
+            SDL_GPUTexture* atlas_texture = glyph_atlas_->getAtlasTexture();
+            if (!atlas_texture || !text_sampler_) {
+                SDL_Log("GPUDriverSDL: glyph atlas texture unavailable");
+                break;
+            }
+
+            std::vector<uint32_t> codepoints = decodeUtf8(cmd.text);
+            if (codepoints.empty()) {
+                break;
+            }
+
+            float font_size = cmd.font_size > 0.0f ? cmd.font_size : 16.0f;
+            float baseline_x = cmd.rect.x;
+            float baseline_y = cmd.rect.y;
+            float cursor_x = baseline_x;
+            float cursor_y = baseline_y;
+            float line_advance = font_size * 1.25f;
+            float viewport_w = static_cast<float>(w);
+            float viewport_h = static_cast<float>(h);
+
+            SDL_GPUTextureSamplerBinding binding{};
+            binding.texture = atlas_texture;
+            binding.sampler = text_sampler_;
+            SDL_BindGPUFragmentSamplers(pass, 0, &binding, 1);
+            SDL_BindGPUGraphicsPipeline(pass, text_pipeline_);
 
             struct TextUniformData {
                 float rect[4];
@@ -946,32 +1186,36 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 float color[4];
             };
 
-            // 渲染每个字符
-            float cursor_x = cmd.rect.x;
-            float cursor_y = cmd.rect.y;
+            for (uint32_t codepoint : codepoints) {
+                if (codepoint == '\n') {
+                    cursor_x = baseline_x;
+                    cursor_y += line_advance;
+                    continue;
+                }
 
-            for (char c : cmd.text) {
-                uint32_t codepoint = static_cast<uint32_t>(static_cast<unsigned char>(c));
-                
-                // 添加字形到 Atlas（如果尚未缓存）
                 const AtlasEntry* entry = glyph_atlas_->addGlyph(codepoint, font_path);
                 if (!entry) {
-                    SDL_Log("GPUDriverSDL: failed to add glyph %u to atlas", codepoint);
                     continue;
                 }
 
-                // 跳过空字形（如空格）
-                if (entry->metrics.width == 0.0f || entry->metrics.height == 0.0f) {
-                    cursor_x += entry->metrics.advance_x * (cmd.font_size / 32.0f);
+                float scale = font_size / 32.0f;
+                float advance = entry->metrics.advance_x * scale;
+
+                if (entry->metrics.width <= 0.0f || entry->metrics.height <= 0.0f ||
+                    entry->u1 <= entry->u0 || entry->v1 <= entry->v0) {
+                    cursor_x += advance;
                     continue;
                 }
 
-                // 计算字形绘制位置（基于 bearing 和 metrics）
-                float scale = cmd.font_size / 32.0f;
                 float glyph_x = cursor_x + entry->metrics.bearing_x * scale;
                 float glyph_y = cursor_y - entry->metrics.bearing_y * scale;
-                float glyph_w = entry->metrics.width * scale;
-                float glyph_h = entry->metrics.height * scale;
+                float glyph_w = std::max(entry->metrics.width * scale, 0.0f);
+                float glyph_h = std::max(entry->metrics.height * scale, 0.0f);
+
+                if (glyph_w <= 0.0f || glyph_h <= 0.0f) {
+                    cursor_x += advance;
+                    continue;
+                }
 
                 TextUniformData u{};
                 u.rect[0] = glyph_x;
@@ -984,8 +1228,8 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 u.uv_rect[2] = entry->u1;
                 u.uv_rect[3] = entry->v1;
 
-                u.viewport[0] = static_cast<float>(w);
-                u.viewport[1] = static_cast<float>(h);
+                u.viewport[0] = viewport_w;
+                u.viewport[1] = viewport_h;
                 u.viewport[2] = 0.0f;
                 u.viewport[3] = 0.0f;
 
@@ -995,18 +1239,9 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 u.color[3] = cmd.color.a;
 
                 SDL_PushGPUVertexUniformData(current_cmd_buf_, 0, &u, sizeof(u));
-
-                // 绑定 Atlas 纹理
-                SDL_GPUTextureSamplerBinding binding{};
-                binding.texture = glyph_atlas_->getAtlasTexture();
-                binding.sampler = text_sampler_;
-                SDL_BindGPUFragmentSamplers(pass, 0, &binding, 1);
-
-                SDL_BindGPUGraphicsPipeline(pass, text_pipeline_);
                 SDL_DrawGPUPrimitives(pass, 4, 1, 0, 0);
 
-                // 移动光标
-                cursor_x += entry->metrics.advance_x * scale;
+                cursor_x += advance;
             }
             break;
         }
