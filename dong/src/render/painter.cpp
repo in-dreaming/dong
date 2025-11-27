@@ -67,15 +67,14 @@ static void parseCssColor(const std::string& css, uint8_t& r, uint8_t& g, uint8_
     r = g = b = 240;
 }
 
-static Color makeColorFromCss(const std::string& css, float opacity_multiplier = 1.0f) {
+static Color makeColorFromCss(const std::string& css) {
     uint8_t r8 = 255, g8 = 255, b8 = 255, a8 = 255;
     parseCssColor(css, r8, g8, b8, a8);
-    float a = (a8 / 255.0f) * opacity_multiplier;
     Color c;
     c.r = r8 / 255.0f;
     c.g = g8 / 255.0f;
     c.b = b8 / 255.0f;
-    c.a = a;
+    c.a = a8 / 255.0f;
     return c;
 }
 
@@ -108,10 +107,18 @@ static float estimateTextWidth(const std::string& text, float font_size) {
     return static_cast<float>(text.size()) * font_size * 0.55f;
 }
 
+static bool shouldClipOverflow(const std::string& overflow_value) {
+    std::string lowered = overflow_value;
+    std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    return lowered == "hidden" || lowered == "scroll";
+}
+
 } // anonymous namespace
 
 Painter::Painter(RenderSurface* surface)
-    : surface_(surface), layout_engine_(nullptr), current_opacity_(1.0f) {
+    : surface_(surface), layout_engine_(nullptr) {
 }
 
 Painter::~Painter() {
@@ -119,7 +126,6 @@ Painter::~Painter() {
 
 const DisplayList& Painter::buildDisplayList(const dom::DOMNodePtr& root, layout::Engine* layout_engine) {
     layout_engine_ = layout_engine;
-    current_opacity_ = 1.0f;
 
     display_list_builder_.clear();
 
@@ -152,19 +158,41 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         }
     }
 
-    // Opacity 累乘
-    float prev_opacity = current_opacity_;
-    current_opacity_ *= style.opacity;
 
     const std::string tag = node->getTagName();
 
+    Rect node_rect{};
+    bool has_layout_rect = false;
+    if (layout_node) {
+        node_rect.x = layout_node->layout.position[0];
+        node_rect.y = layout_node->layout.position[1];
+        node_rect.width = layout_node->layout.dimensions[0];
+        node_rect.height = layout_node->layout.dimensions[1];
+        has_layout_rect = node_rect.width > 0.0f && node_rect.height > 0.0f;
+    }
+
+    const bool should_apply_clip = has_layout_rect && shouldClipOverflow(style.overflow);
+
+    DisplayListBuilder::ScopedLayer opacity_scope;
+    float clamped_opacity = std::clamp(style.opacity, 0.0f, 1.0f);
+
+    Rect layer_bounds = node_rect;
+    if (!has_layout_rect && surface_) {
+        layer_bounds.x = 0.0f;
+        layer_bounds.y = 0.0f;
+        layer_bounds.width = static_cast<float>(surface_->getWidth());
+        layer_bounds.height = static_cast<float>(surface_->getHeight());
+    }
+
+    bool has_isolation = style.isolation_isolate && (layer_bounds.width > 0.0f && layer_bounds.height > 0.0f);
+    bool needs_layer = has_isolation || clamped_opacity < 0.999f;
+    if (needs_layer) {
+        opacity_scope = builder.pushLayer(clamped_opacity, has_isolation, layer_bounds);
+    }
+
     // 1. 背景
     if (layout_node && style.background_color != "transparent") {
-        Rect rect{};
-        rect.x = layout_node->layout.position[0];
-        rect.y = layout_node->layout.position[1];
-        rect.width = layout_node->layout.dimensions[0];
-        rect.height = layout_node->layout.dimensions[1];
+        Rect rect = node_rect;
 
         // root/html/body 填满 viewport
         if ((tag.empty() || tag == "html" || tag == "body") && surface_) {
@@ -175,12 +203,21 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         }
 
         if (rect.width > 0.0f && rect.height > 0.0f) {
-            Color c = makeColorFromCss(style.background_color, current_opacity_);
+            Color c = makeColorFromCss(style.background_color);
             if (style.border_radius > 0.0f) {
                 builder.addRoundedRect(rect, c, style.border_radius);
             } else {
                 builder.addRect(rect, c);
             }
+        }
+    }
+
+    DisplayListBuilder::ScopedClip clip_scope;
+    if (should_apply_clip) {
+        if (style.border_radius > 0.0f) {
+            clip_scope = builder.pushRoundedClip(node_rect, style.border_radius);
+        } else {
+            clip_scope = builder.pushClipRect(node_rect);
         }
     }
 
@@ -195,7 +232,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
             rect.height = layout_node->layout.dimensions[1];
 
             if (rect.width > 0.0f && rect.height > 0.0f) {
-                builder.addImage(rect, src, current_opacity_);
+                builder.addImage(rect, src, 1.0f);
             }
         }
     }
@@ -236,7 +273,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                 float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
                 float line_height = font_size * (tag == "h1" ? 1.25f : (tag == "h2" ? 1.2f : 1.35f));
 
-                Color text_color = makeColorFromCss(style.color, current_opacity_);
+                Color text_color = makeColorFromCss(style.color);
 
                 float inner_width = width - pad_left - pad_right;
                 if (inner_width <= 0.0f) inner_width = width > 0.0f ? width : 0.0f;
@@ -268,32 +305,57 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                     lines.push_back(text);
                 }
 
-                float first_baseline = y + pad_top + font_size;
-
                 for (size_t i = 0; i < lines.size(); ++i) {
                     const std::string& line = lines[i];
-                    float line_width = estimateTextWidth(line, font_size);
+
+                    TextShapeRequest request{};
+                    request.text = line;
+                    request.font_family = style.font_family;
+                    request.font_weight = style.font_weight;
+                    request.font_size = font_size;
+
+                    ShapedText shaped{};
+                    if (!text_shaper_.shape(request, shaped) || shaped.glyphs.empty()) {
+                        continue;
+                    }
+
+                    float line_width = shaped.width > 0.0f ? shaped.width : estimateTextWidth(line, font_size);
+                    float effective_line_height = shaped.line_height > 0.0f ? shaped.line_height : line_height;
+                    float ascent = shaped.ascent > 0.0f ? shaped.ascent : font_size;
+
                     float text_x = x + pad_left;
-                    
                     if (style.text_align == "center") {
                         text_x = x + pad_left + std::max(0.0f, (inner_width - line_width) * 0.5f);
                     } else if (style.text_align == "right") {
                         text_x = x + pad_left + std::max(0.0f, inner_width - line_width);
                     }
 
-                    float text_y = first_baseline + static_cast<float>(i) * line_height;
+                    float base_baseline = y + pad_top + ascent;
+                    float baseline_y = base_baseline + static_cast<float>(i) * effective_line_height;
 
                     DrawGlyphRunData glyph{};
-                    glyph.text = line;
                     glyph.rect.x = text_x;
-                    glyph.rect.y = text_y;
+                    glyph.rect.y = baseline_y - ascent;
                     glyph.rect.width = line_width;
-                    glyph.rect.height = line_height;
+                    glyph.rect.height = effective_line_height;
                     glyph.color = text_color;
                     glyph.font_size = font_size;
                     glyph.font_family = style.font_family;
                     glyph.font_weight = style.font_weight;
-                    builder.addGlyphRun(glyph);
+                    glyph.font_path = shaped.font_path;
+                    glyph.baseline_x = text_x;
+                    glyph.baseline_y = baseline_y;
+
+                    glyph.glyphs.reserve(shaped.glyphs.size());
+                    for (const auto& shaped_glyph : shaped.glyphs) {
+                        GlyphInstance instance{};
+                        instance.glyph_id = shaped_glyph.glyph_id;
+                        instance.pen_x = shaped_glyph.pen_x + text_x;
+                        instance.pen_y = shaped_glyph.pen_y + baseline_y;
+                        glyph.glyphs.push_back(instance);
+                    }
+
+                    builder.addGlyphRun(std::move(glyph));
                 }
             }
         }
@@ -309,7 +371,6 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         buildDisplayListNode(child, child_layout, builder);
     }
 
-    current_opacity_ = prev_opacity;
 }
 
 bool Painter::isNodeInDirtyRect(const layout::LayoutNode* layout_node) const {

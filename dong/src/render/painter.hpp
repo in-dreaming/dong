@@ -7,6 +7,7 @@
 #include "../layout/layout_engine.hpp"
 #include "render_surface.hpp"
 #include "display_list.hpp"
+#include "text_shaper.hpp"
 
 namespace dong::render {
 
@@ -25,12 +26,12 @@ public:
 private:
     RenderSurface* surface_;
     layout::Engine* layout_engine_;
-    float current_opacity_;
     layout::DirtyRect current_dirty_rect_;
     bool use_dirty_rect_ = true;
 
     // DisplayList 构建器
     DisplayListBuilder display_list_builder_;
+    TextShaper text_shaper_;
 
     // 从 DOM/Layout 构建 DisplayList（递归遍历）
     void buildDisplayListNode(const dom::DOMNodePtr& node,

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <vector>
 #include <cstdint>
 #include <string>
@@ -23,6 +24,10 @@ enum class GPUCommandType : uint8_t {
     DrawImageQuad,
     DrawRoundedRectQuad,
     DrawText,  // 文字绘制命令
+    PushClipRect,
+    PopClip,
+    BeginIsolatedLayer,
+    EndIsolatedLayer,
 };
 
 struct GPUViewport {
@@ -54,11 +59,13 @@ struct GPUCommand {
     // 图片绘制专用字段（仅在 DrawImageQuad 时使用）
     std::string image_src; // 原始图片资源标识（路径）
     float opacity = 1.0f;  // 图片整体透明度
+    float layer_opacity = 1.0f; // 图层合成透明度（BeginIsolatedLayer）
 
     // 文字绘制专用字段（仅在 DrawText 时使用）
-    std::string text;
     float font_size = 16.0f;
     std::string font_family;
+    std::string font_path;
+    std::vector<GlyphInstance> glyphs;
 };
 
 struct GPUCommandList {
@@ -78,6 +85,27 @@ public:
         int image_count = 0;
         int text_count = 0;
 
+        std::vector<float> draw_opacity_stack;
+        draw_opacity_stack.push_back(1.0f);
+        std::vector<bool> layer_isolate_stack;
+
+        auto apply_opacity = [](const Color& base_color, float opacity) {
+            Color result = base_color;
+            float clamped = std::clamp(opacity, 0.0f, 1.0f);
+            result.r *= clamped;
+            result.g *= clamped;
+            result.b *= clamped;
+            result.a *= clamped;
+            return result;
+        };
+
+        auto current_opacity = [&draw_opacity_stack]() {
+            if (draw_opacity_stack.empty()) {
+                return 1.0f;
+            }
+            return draw_opacity_stack.back();
+        };
+
         // 一个最小的实现：
         // - 为整个 DisplayList 生成一对 BeginFrame/EndFrame
         // - 在其中包一对 BeginPass/EndPass
@@ -91,12 +119,58 @@ public:
 
         for (const auto& item : dl.items) {
             switch (item.type) {
+            case DisplayItemType::PushLayer: {
+                float clamped = std::clamp(item.layer.opacity, 0.0f, 1.0f);
+                float parent = current_opacity();
+                bool isolate = item.layer.isolate;
+                if (isolate) {
+                    GPUCommand cmd{};
+                    cmd.type = GPUCommandType::BeginIsolatedLayer;
+                    cmd.rect = item.layer.bounds;
+                    cmd.layer_opacity = clamped;
+                    out.commands.push_back(cmd);
+                }
+                float next_opacity = isolate ? parent : parent * clamped;
+                draw_opacity_stack.push_back(next_opacity);
+                layer_isolate_stack.push_back(isolate);
+                break;
+            }
+            case DisplayItemType::PopLayer: {
+                if (!layer_isolate_stack.empty()) {
+                    bool isolate = layer_isolate_stack.back();
+                    layer_isolate_stack.pop_back();
+                    if (draw_opacity_stack.size() > 1) {
+                        draw_opacity_stack.pop_back();
+                    }
+                    if (isolate) {
+                        GPUCommand cmd{};
+                        cmd.type = GPUCommandType::EndIsolatedLayer;
+                        out.commands.push_back(cmd);
+                    }
+                }
+                break;
+            }
+            case DisplayItemType::PushClipRect:
+            case DisplayItemType::PushClipRoundedRect: {
+                GPUCommand cmd{};
+                cmd.type = GPUCommandType::PushClipRect;
+                cmd.rect = item.clip.rect;
+                cmd.radius = item.clip.is_rounded ? item.clip.radius : 0.0f;
+                out.commands.push_back(cmd);
+                break;
+            }
+            case DisplayItemType::PopClip: {
+                GPUCommand cmd{};
+                cmd.type = GPUCommandType::PopClip;
+                out.commands.push_back(cmd);
+                break;
+            }
             case DisplayItemType::DrawRect: {
                 GPUCommand cmd{};
                 cmd.type = GPUCommandType::DrawInstancedQuads;
                 cmd.instance_count = 1;
                 cmd.rect = item.rect.rect;
-                cmd.color = item.rect.color;
+                cmd.color = apply_opacity(item.rect.color, current_opacity());
                 out.commands.push_back(cmd);
                 rect_count++;
                 break;
@@ -106,7 +180,7 @@ public:
                 cmd.type = GPUCommandType::DrawRoundedRectQuad;
                 cmd.instance_count = 1;
                 cmd.rect = item.rounded_rect.rect;
-                cmd.color = item.rounded_rect.color;
+                cmd.color = apply_opacity(item.rounded_rect.color, current_opacity());
                 cmd.radius = item.rounded_rect.radius;
                 out.commands.push_back(cmd);
                 round_rect_count++;
@@ -117,7 +191,7 @@ public:
                 cmd.type = GPUCommandType::DrawImageQuad;
                 cmd.instance_count = 1;
                 cmd.rect = item.image.rect;
-                cmd.opacity = item.image.opacity;
+                cmd.opacity = item.image.opacity * current_opacity();
                 cmd.image_src = item.image.src;
                 out.commands.push_back(cmd);
                 image_count++;
@@ -128,10 +202,11 @@ public:
                 cmd.type = GPUCommandType::DrawText;
                 cmd.instance_count = 1;
                 cmd.rect = item.glyph_run.rect;
-                cmd.color = item.glyph_run.color;
-                cmd.text = item.glyph_run.text;
+                cmd.color = apply_opacity(item.glyph_run.color, current_opacity());
                 cmd.font_size = item.glyph_run.font_size;
                 cmd.font_family = item.glyph_run.font_family;
+                cmd.font_path = item.glyph_run.font_path;
+                cmd.glyphs = item.glyph_run.glyphs;
                 out.commands.push_back(cmd);
                 text_count++;
                 break;

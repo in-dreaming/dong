@@ -16,6 +16,9 @@ struct GlyphMetrics {
     float bearing_y = 0.0f;
     float width = 0.0f;
     float height = 0.0f;
+    float msdf_scale = 1.0f;
+    float msdf_translate_x = 0.0f;
+    float msdf_translate_y = 0.0f;
 };
 
 // Atlas 条目（UV 坐标 + 度量）
@@ -37,13 +40,16 @@ public:
     ~GlyphAtlas();
 
     // 初始化 Atlas（创建 GPU 纹理）
-    bool initialize(uint32_t width = 2048, uint32_t height = 2048);
+    bool initialize(uint32_t width = 2048,
+                    uint32_t height = 2048,
+                    uint32_t glyph_bitmap_size = 64,
+                    float glyph_distance_range = 8.0f);
 
     // 查询字形是否已缓存
-    const AtlasEntry* getGlyph(uint32_t codepoint, const std::string& font_path);
+    const AtlasEntry* getGlyph(uint32_t glyph_id, const std::string& font_path);
 
     // 添加字形到 Atlas（生成 MSDF 并上传）
-    const AtlasEntry* addGlyph(uint32_t codepoint, const std::string& font_path);
+    const AtlasEntry* addGlyph(uint32_t glyph_id, const std::string& font_path);
 
     // 获取 Atlas GPU 纹理（用于绑定到 shader）
     SDL_GPUTexture* getAtlasTexture() const { return atlas_texture_; }
@@ -51,6 +57,9 @@ public:
     // 获取 Atlas 尺寸
     uint32_t getWidth() const { return atlas_width_; }
     uint32_t getHeight() const { return atlas_height_; }
+
+    uint32_t getGlyphBitmapSize() const { return glyph_bitmap_size_; }
+    float getGlyphDistanceRange() const { return glyph_distance_range_; }
 
 private:
     GPUDevice* gpu_device_ = nullptr;
@@ -64,7 +73,10 @@ private:
     uint32_t cursor_y_ = 0;
     uint32_t row_height_ = 0;
 
-    // 缓存：font_path#codepoint -> AtlasEntry
+    uint32_t glyph_bitmap_size_ = 64;
+    float glyph_distance_range_ = 8.0f;
+
+    // 缓存：font_path#glyph_id -> AtlasEntry
     std::unordered_map<std::string, AtlasEntry> cache_;
 
     std::string makeGlyphKey(uint32_t codepoint, const std::string& font_path) const;

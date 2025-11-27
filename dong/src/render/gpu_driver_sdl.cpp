@@ -3,232 +3,45 @@
 #include "shader_manager.hpp"
 #include "resource_manager.hpp"
 #include "glyph_atlas.hpp"
+#include "font_resolver.hpp"
 #include <SDL3/SDL_log.h>
+#include <SDL3/SDL_video.h>
 #include <vector>
 #include <algorithm>
 #include <cstring>
-#include <filesystem>
-#include <cctype>
-#include <system_error>
 #include <unordered_map>
+#include <cmath>
+#include <limits>
+#include <utility>
+
+#include <ft2build.h>
+#include FT_FREETYPE_H
 
 namespace {
 
-std::string trimWhitespace(const std::string& input) {
-    size_t start = 0;
-    while (start < input.size() && std::isspace(static_cast<unsigned char>(input[start]))) {
-        ++start;
+constexpr float kSRGBGamma = 2.2f;
+
+float srgbChannelToLinear(float value) {
+    if (value <= 0.04045f) {
+        return value / 12.92f;
     }
-    size_t end = input.size();
-    while (end > start && std::isspace(static_cast<unsigned char>(input[end - 1]))) {
-        --end;
-    }
-    return input.substr(start, end - start);
-}
-
-std::string toLowerAscii(std::string input) {
-    std::transform(input.begin(), input.end(), input.begin(), [](unsigned char ch) {
-        return static_cast<char>(std::tolower(ch));
-    });
-    return input;
-}
-
-std::vector<std::string> splitFontFamilies(const std::string& value) {
-    std::vector<std::string> result;
-    if (value.empty()) {
-        return result;
-    }
-    size_t start = 0;
-    while (start < value.size()) {
-        size_t comma = value.find(',', start);
-        std::string token = value.substr(start, comma == std::string::npos ? std::string::npos : comma - start);
-        token = trimWhitespace(token);
-        if (!token.empty()) {
-            result.push_back(token);
-        }
-        if (comma == std::string::npos) {
-            break;
-        }
-        start = comma + 1;
-    }
-    return result;
-}
-
-std::string canonicalFontFamily(const std::string& name) {
-    std::string lower = toLowerAscii(name);
-    if (lower == "sans" || lower == "sans-serif" || lower == "arial" || lower == "helvetica") {
-        return "sans-serif";
-    }
-    if (lower == "serif" || lower == "times" || lower == "times new roman") {
-        return "serif";
-    }
-    if (lower == "monospace" || lower == "courier" || lower == "courier new" || lower == "menlo" || lower == "consolas") {
-        return "monospace";
-    }
-    return lower;
-}
-
-std::string resolveFontPath(const std::string& requested_family) {
-    namespace fs = std::filesystem;
-
-    static const std::unordered_map<std::string, std::vector<std::string>> kFontCandidates = {
-        {"sans-serif", {
-            "/System/Library/Fonts/Helvetica.ttc",
-            "/System/Library/Fonts/Supplemental/Arial.ttf",
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-            "C:/Windows/Fonts/arial.ttf"
-        }},
-        {"arial", {
-            "/System/Library/Fonts/Supplemental/Arial.ttf",
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-            "C:/Windows/Fonts/arial.ttf"
-        }},
-        {"helvetica", {
-            "/System/Library/Fonts/Helvetica.ttc",
-            "/System/Library/Fonts/Supplemental/Arial.ttf"
-        }},
-        {"serif", {
-            "/System/Library/Fonts/Supplemental/Times New Roman.ttf",
-            "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf",
-            "C:/Windows/Fonts/times.ttf"
-        }},
-        {"times", {
-            "/System/Library/Fonts/Supplemental/Times New Roman.ttf",
-            "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf",
-            "C:/Windows/Fonts/times.ttf"
-        }},
-        {"times new roman", {
-            "/System/Library/Fonts/Supplemental/Times New Roman.ttf",
-            "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf",
-            "C:/Windows/Fonts/times.ttf"
-        }},
-        {"monospace", {
-            "/System/Library/Fonts/Supplemental/Courier New.ttf",
-            "/System/Library/Fonts/Supplemental/Menlo.ttc",
-            "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
-            "C:/Windows/Fonts/consola.ttf",
-            "C:/Windows/Fonts/cour.ttf"
-        }},
-        {"courier", {
-            "/System/Library/Fonts/Supplemental/Courier New.ttf",
-            "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
-            "C:/Windows/Fonts/cour.ttf"
-        }},
-        {"courier new", {
-            "/System/Library/Fonts/Supplemental/Courier New.ttf",
-            "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
-            "C:/Windows/Fonts/cour.ttf"
-        }},
-        {"menlo", {
-            "/System/Library/Fonts/Supplemental/Menlo.ttc"
-        }},
-        {"consolas", {
-            "C:/Windows/Fonts/consola.ttf",
-            "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"
-        }}
-    };
-
-    auto tryCandidates = [](const std::vector<std::string>& candidates) -> std::string {
-        namespace fs = std::filesystem;
-        for (const auto& candidate : candidates) {
-            if (candidate.empty()) {
-                continue;
-            }
-            std::error_code ec;
-            if (fs::exists(candidate, ec)) {
-                return candidate;
-            }
-        }
-        return {};
-    };
-
-    auto tryKey = [&](const std::string& key) -> std::string {
-        auto it = kFontCandidates.find(key);
-        if (it == kFontCandidates.end()) {
-            return {};
-        }
-        return tryCandidates(it->second);
-    };
-
-    auto families = splitFontFamilies(requested_family);
-    if (families.empty()) {
-        families.emplace_back("sans-serif");
-    }
-
-    for (const auto& family : families) {
-        std::string lower = toLowerAscii(family);
-        if (auto path = tryKey(lower); !path.empty()) {
-            return path;
-        }
-        std::string canonical = canonicalFontFamily(family);
-        if (auto path = tryKey(canonical); !path.empty()) {
-            return path;
-        }
-    }
-
-    if (auto path = tryKey("sans-serif"); !path.empty()) {
-        return path;
-    }
-
-    return {};
-}
-
-std::vector<uint32_t> decodeUtf8(const std::string& text) {
-    std::vector<uint32_t> codepoints;
-    size_t i = 0;
-    while (i < text.size()) {
-        uint8_t byte = static_cast<uint8_t>(text[i]);
-        uint32_t codepoint = 0;
-        size_t sequence_length = 0;
-
-        if ((byte & 0x80) == 0) {
-            codepoint = byte;
-            sequence_length = 1;
-        } else if ((byte & 0xE0) == 0xC0) {
-            codepoint = byte & 0x1F;
-            sequence_length = 2;
-        } else if ((byte & 0xF0) == 0xE0) {
-            codepoint = byte & 0x0F;
-            sequence_length = 3;
-        } else if ((byte & 0xF8) == 0xF0) {
-            codepoint = byte & 0x07;
-            sequence_length = 4;
-        } else {
-            ++i;
-            continue;
-        }
-
-        if (i + sequence_length > text.size()) {
-            break;
-        }
-
-        bool valid = true;
-        for (size_t j = 1; j < sequence_length; ++j) {
-            uint8_t continuation = static_cast<uint8_t>(text[i + j]);
-            if ((continuation & 0xC0) != 0x80) {
-                valid = false;
-                break;
-            }
-            codepoint = (codepoint << 6) | (continuation & 0x3F);
-        }
-        if (!valid) {
-            ++i;
-            continue;
-        }
-
-        if (sequence_length == 1) {
-            // already handled
-        }
-
-        codepoints.push_back(codepoint);
-        i += sequence_length;
-    }
-    return codepoints;
+    return std::pow((value + 0.055f) / 1.055f, 2.4f);
 }
 
 } // namespace
 
 namespace dong::render {
+
+namespace {
+
+void writeLinearColor(const Color& color, float out_rgba[4]) {
+    out_rgba[0] = ::srgbChannelToLinear(color.r);
+    out_rgba[1] = ::srgbChannelToLinear(color.g);
+    out_rgba[2] = ::srgbChannelToLinear(color.b);
+    out_rgba[3] = color.a;
+}
+
+} // namespace
 
 GPUDriverSDL::GPUDriverSDL(GPUDevice* device, SDL_Window* window, ShaderManager* shader_manager)
     : gpu_device_(device), window_(window), shader_manager_(shader_manager) {}
@@ -309,8 +122,18 @@ GPUDriverSDL::~GPUDriverSDL() {
         }
     }
 
-    // GlyphAtlas 会在其析构函数中释放资源
-    glyph_atlas_.reset();
+    glyph_atlas_tiers_.clear();
+
+    for (auto& entry : ft_face_cache_) {
+        if (entry.second) {
+            FT_Done_Face(entry.second);
+        }
+    }
+    ft_face_cache_.clear();
+    if (ft_library_) {
+        FT_Done_FreeType(ft_library_);
+        ft_library_ = nullptr;
+    }
 }
 
 bool GPUDriverSDL::initialize() {
@@ -326,12 +149,16 @@ bool GPUDriverSDL::initialize() {
 struct VSOutput {
     float4 position : SV_Position;
     float4 color : COLOR0;
+    float2 pixel : TEXCOORD0;
 };
 
 cbuffer RectUniforms : register(b0, space1) {
     float4 uRect;
     float4 uColor;
     float4 uViewport;
+    float4 uClipRects[4];
+    float4 uClipRadii;
+    float4 uClipMeta;
 };
 
 VSOutput main(uint vertexID : SV_VertexID) {
@@ -347,6 +174,7 @@ VSOutput main(uint vertexID : SV_VertexID) {
     VSOutput o;
     o.position = float4(ndc, 0.0, 1.0);
     o.color = uColor;
+    o.pixel = pos;
     return o;
 }
 )";
@@ -355,10 +183,55 @@ VSOutput main(uint vertexID : SV_VertexID) {
 struct PSInput {
     float4 position : SV_Position;
     float4 color : COLOR0;
+    float2 pixel : TEXCOORD0;
 };
 
+cbuffer RectUniforms : register(b0, space1) {
+    float4 uRect;
+    float4 uColor;
+    float4 uViewport;
+    float4 uClipRects[4];
+    float4 uClipRadii;
+    float4 uClipMeta;
+};
+
+float3 linearToSRGB(float3 col) {
+    return pow(saturate(col), float3(1.0 / 2.2, 1.0 / 2.2, 1.0 / 2.2));
+}
+
+float sdRoundedClip(float2 pt, float4 rc, float rad) {
+    float2 halfSize = float2((rc.z - rc.x) * 0.5, (rc.w - rc.y) * 0.5);
+    float2 center = float2(rc.x, rc.y) + halfSize;
+    float2 local = pt - center;
+    float2 q = abs(local) - (halfSize - rad);
+    float2 qmax = float2(max(q.x, 0.0), max(q.y, 0.0));
+    return length(qmax) + min(max(q.x, q.y), 0.0) - rad;
+}
+
+bool discardByClip(float2 px) {
+    uint clipCount = (uint)uClipMeta.x;
+    for (uint i = 0; i < clipCount; ++i) {
+        float rad = uClipRadii[i];
+        float4 rc = uClipRects[i];
+        if (rad <= 0.0f) {
+            if (px.x < rc.x || px.x > rc.z || px.y < rc.y || px.y > rc.w) {
+                return true;
+            }
+            continue;
+        }
+        if (sdRoundedClip(px, rc, rad) > 0.0f) {
+            return true;
+        }
+    }
+    return false;
+}
+
 float4 main(PSInput input) : SV_Target0 {
-    return input.color;
+    if (discardByClip(input.pixel)) {
+        discard;
+    }
+    float3 srgb = linearToSRGB(input.color.rgb);
+    return float4(srgb, input.color.a);
 }
 )";
 
@@ -411,6 +284,7 @@ struct VSOutput {
     nointerpolation float2 size : TEXCOORD1;
     nointerpolation float radius : TEXCOORD2;
     float4 color : COLOR0;
+    float2 pixel : TEXCOORD3;
 };
 
 cbuffer RoundRectUniforms : register(b0, space1) {
@@ -418,6 +292,9 @@ cbuffer RoundRectUniforms : register(b0, space1) {
     float4 uRadius;
     float4 uViewport;
     float4 uColor;
+    float4 uClipRects[4];
+    float4 uClipRadii;
+    float4 uClipMeta;
 };
 
 VSOutput main(uint vertexID : SV_VertexID) {
@@ -439,6 +316,7 @@ VSOutput main(uint vertexID : SV_VertexID) {
     o.size = uRect.zw;
     o.radius = radius;
     o.color = uColor;
+    o.pixel = pos;
     return o;
 }
 )";
@@ -450,15 +328,54 @@ struct PSInput {
     nointerpolation float2 size : TEXCOORD1;
     nointerpolation float radius : TEXCOORD2;
     float4 color : COLOR0;
+    float2 pixel : TEXCOORD3;
 };
 
-float sdRoundRect(float2 p, float2 halfSize, float radius) {
-    float2 q = abs(p) - (halfSize - radius);
+cbuffer RoundRectUniforms : register(b0, space1) {
+    float4 uRect;
+    float4 uRadius;
+    float4 uViewport;
+    float4 uColor;
+    float4 uClipRects[4];
+    float4 uClipRadii;
+    float4 uClipMeta;
+};
+
+float sdRoundRect(float2 p, float2 halfSize, float rad) {
+    float2 q = abs(p) - (halfSize - rad);
     float2 qmax = float2(max(q.x, 0.0), max(q.y, 0.0));
-    return length(qmax) + min(max(q.x, q.y), 0.0) - radius;
+    return length(qmax) + min(max(q.x, q.y), 0.0) - rad;
+}
+
+float sdRoundedClip(float2 pt, float4 rc, float rad) {
+    float2 halfSize = float2((rc.z - rc.x) * 0.5, (rc.w - rc.y) * 0.5);
+    float2 center = float2(rc.x, rc.y) + halfSize;
+    float2 local = pt - center;
+    return sdRoundRect(local, halfSize, rad);
+}
+
+bool discardByClip(float2 px) {
+    uint clipCount = (uint)uClipMeta.x;
+    for (uint i = 0; i < clipCount; ++i) {
+        float rad = uClipRadii[i];
+        float4 rc = uClipRects[i];
+        if (rad <= 0.0f) {
+            if (px.x < rc.x || px.x > rc.z || px.y < rc.y || px.y > rc.w) {
+                return true;
+            }
+            continue;
+        }
+        if (sdRoundedClip(px, rc, rad) > 0.0f) {
+            return true;
+        }
+    }
+    return false;
 }
 
 float4 main(PSInput input) : SV_Target0 {
+    if (discardByClip(input.pixel)) {
+        discard;
+    }
     float2 size = input.size;
     float2 p = (input.local - 0.5) * size;
     float r = input.radius;
@@ -468,6 +385,7 @@ float4 main(PSInput input) : SV_Target0 {
     float alpha = saturate(0.5 - dist / aa);
     float4 base = input.color;
     base.a *= alpha;
+    base.rgb = pow(saturate(base.rgb), 1.0 / 2.2);
     return base;
 }
 )";
@@ -519,6 +437,7 @@ struct VSOutput {
     float4 position : SV_Position;
     float2 uv : TEXCOORD0;
     float4 tint : COLOR0;
+    float2 pixel : TEXCOORD1;
 };
 
 cbuffer ImageUniforms : register(b0, space1) {
@@ -526,6 +445,9 @@ cbuffer ImageUniforms : register(b0, space1) {
     float4 uUVRect;
     float4 uViewport;
     float4 uTint;
+    float4 uClipRects[4];
+    float4 uClipRadii;
+    float4 uClipMeta;
 };
 
 VSOutput main(uint vertexID : SV_VertexID) {
@@ -543,6 +465,7 @@ VSOutput main(uint vertexID : SV_VertexID) {
     o.position = float4(ndc, 0.0, 1.0);
     o.uv = uv;
     o.tint = uTint;
+    o.pixel = pos;
     return o;
 }
 )";
@@ -551,15 +474,68 @@ VSOutput main(uint vertexID : SV_VertexID) {
 Texture2D imageTexture : register(t0);
 SamplerState imageSampler : register(s0);
 
+cbuffer ImageUniforms : register(b0, space1) {
+    float4 uRect;
+    float4 uUVRect;
+    float4 uViewport;
+    float4 uTint;
+    float4 uClipRects[4];
+    float4 uClipRadii;
+    float4 uClipMeta;
+};
+
 struct PSInput {
     float4 position : SV_Position;
     float2 uv : TEXCOORD0;
     float4 tint : COLOR0;
+    float2 pixel : TEXCOORD1;
 };
 
+float3 srgbToLinear(float3 col) {
+    return pow(saturate(col), float3(2.2, 2.2, 2.2));
+}
+
+float3 linearToSRGB(float3 col) {
+    return pow(saturate(col), float3(1.0 / 2.2, 1.0 / 2.2, 1.0 / 2.2));
+}
+
+float sdRoundedClip(float2 pt, float4 rc, float rad) {
+    float2 halfSize = float2((rc.z - rc.x) * 0.5, (rc.w - rc.y) * 0.5);
+    float2 center = float2(rc.x, rc.y) + halfSize;
+    float2 local = pt - center;
+    float2 q = abs(local) - (halfSize - rad);
+    float2 qmax = float2(max(q.x, 0.0), max(q.y, 0.0));
+    return length(qmax) + min(max(q.x, q.y), 0.0) - rad;
+}
+
+bool discardByClip(float2 px) {
+    uint clipCount = (uint)uClipMeta.x;
+    for (uint i = 0; i < clipCount; ++i) {
+        float rad = uClipRadii[i];
+        float4 rc = uClipRects[i];
+        if (rad <= 0.0f) {
+            if (px.x < rc.x || px.x > rc.z || px.y < rc.y || px.y > rc.w) {
+                return true;
+            }
+            continue;
+        }
+        if (sdRoundedClip(px, rc, rad) > 0.0f) {
+            return true;
+        }
+    }
+    return false;
+}
+
 float4 main(PSInput input) : SV_Target0 {
-    float4 c = imageTexture.Sample(imageSampler, input.uv);
-    return c * input.tint;
+    if (discardByClip(input.pixel)) {
+        discard;
+    }
+    float4 tex = imageTexture.Sample(imageSampler, input.uv);
+    float3 linearSample = srgbToLinear(tex.rgb);
+    float3 tinted = linearSample * input.tint.rgb;
+    float3 srgbColor = linearToSRGB(tinted);
+    float alpha = tex.a * input.tint.a;
+    return float4(srgbColor, alpha);
 }
 )";
 
@@ -648,6 +624,7 @@ struct VSOutput {
     float4 position : SV_Position;
     float2 uv : TEXCOORD0;
     float4 color : COLOR0;
+    float2 pixel : TEXCOORD1;
 };
 
 cbuffer TextUniforms : register(b0, space1) {
@@ -655,6 +632,10 @@ cbuffer TextUniforms : register(b0, space1) {
     float4 uUVRect;
     float4 uViewport;
     float4 uColor;
+    float4 uParams;
+    float4 uClipRects[4];
+    float4 uClipRadii;
+    float4 uClipMeta;
 };
 
 VSOutput main(uint vertexID : SV_VertexID) {
@@ -672,6 +653,7 @@ VSOutput main(uint vertexID : SV_VertexID) {
     o.position = float4(ndc, 0.0, 1.0);
     o.uv = uv;
     o.color = uColor;
+    o.pixel = pos;
     return o;
 }
 )";
@@ -680,22 +662,101 @@ VSOutput main(uint vertexID : SV_VertexID) {
 Texture2D msdfTexture : register(t0);
 SamplerState msdfSampler : register(s0);
 
+cbuffer TextUniforms : register(b0, space1) {
+    float4 uRect;
+    float4 uUVRect;
+    float4 uViewport;
+    float4 uColor;
+    float4 uParams;
+    float4 uClipRects[4];
+    float4 uClipRadii;
+    float4 uClipMeta;
+};
+
 struct PSInput {
     float4 position : SV_Position;
     float2 uv : TEXCOORD0;
     float4 color : COLOR0;
+    float2 pixel : TEXCOORD1;
 };
 
 float median(float r, float g, float b) {
     return max(min(r, g), min(max(r, g), b));
 }
 
+float3 toLinear(float3 col, float gam) {
+    return pow(saturate(col), float3(gam, gam, gam));
+}
+
+float3 toSRGB(float3 col, float gam) {
+    float invGamma = 1.0 / gam;
+    return pow(saturate(col), float3(invGamma, invGamma, invGamma));
+}
+
+float sdRoundedClip(float2 pt, float4 rc, float rad) {
+    float2 halfSize = float2((rc.z - rc.x) * 0.5, (rc.w - rc.y) * 0.5);
+    float2 center = float2(rc.x, rc.y) + halfSize;
+    float2 local = pt - center;
+    float2 q = abs(local) - (halfSize - rad);
+    float2 qmax = float2(max(q.x, 0.0), max(q.y, 0.0));
+    return length(qmax) + min(max(q.x, q.y), 0.0) - rad;
+}
+
+bool discardByClip(float2 px) {
+    uint clipCount = (uint)uClipMeta.x;
+    for (uint i = 0; i < clipCount; ++i) {
+        float rad = uClipRadii[i];
+        float4 rc = uClipRects[i];
+        if (rad <= 0.0f) {
+            if (px.x < rc.x || px.x > rc.z || px.y < rc.y || px.y > rc.w) {
+                return true;
+            }
+            continue;
+        }
+        if (sdRoundedClip(px, rc, rad) > 0.0f) {
+            return true;
+        }
+    }
+    return false;
+}
+
 float4 main(PSInput input) : SV_Target0 {
+    if (discardByClip(input.pixel)) {
+        discard;
+    }
+
     float3 msdf = msdfTexture.Sample(msdfSampler, input.uv).rgb;
     float sd = median(msdf.r, msdf.g, msdf.b);
-    float screenPxDistance = 4.0 * (sd - 0.5);
-    float opacity = saturate(screenPxDistance + 0.5);
+    float sdf = sd - 0.5;
+
+    float distanceScale = uParams.x;
+    float invDevicePixelRatio = max(uParams.y, 1e-4);
+    float subpixelMask = uParams.z;
+    float gammaSigned = uParams.w;
+    float gammaMagnitude = max(abs(gammaSigned), 1e-3);
+    bool inputIsLinear = gammaSigned < 0.0;
+
+    // 将纹理中的归一化距离转换为屏幕像素距离
+    float screenPxDistance = sdf * distanceScale;
+    float smoothing = max(fwidth(screenPxDistance) * invDevicePixelRatio, 1e-4);
+
+    // 距离越小（越靠近/位于字内部），不透明度越高
+    float opacity = saturate(0.5 - screenPxDistance / smoothing);
+
+    if (subpixelMask > 0.5) {
+        float3 channelDistance = (msdf - float3(0.5, 0.5, 0.5)) * distanceScale;
+        float3 channelSmoothing = max(fwidth(channelDistance) * invDevicePixelRatio,
+                                      float3(1e-4, 1e-4, 1e-4));
+        float3 channelAlpha = saturate(0.5 - channelDistance / channelSmoothing);
+        opacity = dot(channelAlpha, float3(0.299, 0.587, 0.114));
+    }
+
+    float3 linearColor = inputIsLinear ? input.color.rgb : toLinear(input.color.rgb, gammaMagnitude);
+    linearColor *= opacity;
+    float3 srgbColor = toSRGB(linearColor, gammaMagnitude);
+
     float4 color = input.color;
+    color.rgb = srgbColor;
     color.a *= opacity;
     return color;
 }
@@ -763,13 +824,39 @@ float4 main(PSInput input) : SV_Target0 {
         return false;
     }
 
-    // 初始化字形 Atlas
-    glyph_atlas_ = std::make_unique<GlyphAtlas>(gpu_device_);
-    if (!glyph_atlas_->initialize(2048, 2048)) {
-        SDL_Log("GPUDriverSDL::initialize: failed to initialize glyph atlas");
-        glyph_atlas_.reset();
+    // 初始化多级字形 Atlas（根据字号挑选）
+    glyph_atlas_tiers_.clear();
+    struct GlyphTierConfig {
+        uint32_t bitmap_px;
+        float distance_range;
+    };
+    // 更细粒度的atlas分级，range增大以提高画质
+    const GlyphTierConfig tier_configs[] = {
+        {16u, 4.0f},    // 小字号 (8-16px)
+        {24u, 6.0f},    // 中字号 (17-24px)
+        {32u, 8.0f},    // 大字号 (25-32px)  
+        {48u, 10.0f},   // 特大字号 (33-48px)
+    };
+
+    for (const auto& cfg : tier_configs) {
+        auto atlas = std::make_unique<GlyphAtlas>(gpu_device_);
+        if (!atlas->initialize(2048, 2048, cfg.bitmap_px, cfg.distance_range)) {
+            SDL_Log("GPUDriverSDL::initialize: failed to initialize glyph atlas tier %u", cfg.bitmap_px);
+            return false;
+        }
+        GlyphAtlasTier tier{};
+        tier.bitmap_px = cfg.bitmap_px;
+        tier.distance_range = cfg.distance_range;
+        tier.atlas = std::move(atlas);
+        glyph_atlas_tiers_.push_back(std::move(tier));
+    }
+
+    if (FT_Init_FreeType(&ft_library_) != 0) {
+        SDL_Log("GPUDriverSDL::initialize: failed to initialize FreeType library for caching");
+        ft_library_ = nullptr;
         return false;
     }
+    ft_face_cache_.clear();
 
     SDL_Log("GPUDriverSDL initialized successfully");
     return true;
@@ -933,8 +1020,154 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
     Uint32 w = 0;
     Uint32 h = 0;
 
+    struct RenderTargetState {
+        SDL_GPUTexture* texture = nullptr;
+        Uint32 width = 0;
+        Uint32 height = 0;
+        bool is_swapchain = false;
+    };
+
+    struct IsolatedLayerState {
+        SDL_GPUTexture* texture = nullptr;
+        Uint32 width = 0;
+        Uint32 height = 0;
+        Rect bounds;
+        float opacity = 1.0f;
+    };
+
+    std::vector<RenderTargetState> render_target_stack;
+    std::vector<IsolatedLayerState> isolated_layer_stack;
+
+    auto current_target_dimensions = [&render_target_stack, &w, &h]() -> std::pair<Uint32, Uint32> {
+        if (render_target_stack.empty()) {
+            return {w, h};
+        }
+        return {render_target_stack.back().width, render_target_stack.back().height};
+    };
+
+    auto current_viewport = [&current_target_dimensions]() {
+        auto [cw, ch] = current_target_dimensions();
+        if (cw == 0) {
+            cw = 1;
+        }
+        if (ch == 0) {
+            ch = 1;
+        }
+        return std::pair<float, float>{static_cast<float>(cw), static_cast<float>(ch)};
+    };
+
+    auto write_viewport = [&current_viewport](float (&out)[4]) {
+        auto [vw, vh] = current_viewport();
+        out[0] = vw;
+        out[1] = vh;
+        out[2] = 0.0f;
+        out[3] = 0.0f;
+    };
+
+    float device_pixel_ratio = 1.0f;
+    if (window_) {
+        int logical_w = 0;
+        int logical_h = 0;
+        int drawable_w = 0;
+        int drawable_h = 0;
+        SDL_GetWindowSize(window_, &logical_w, &logical_h);
+        SDL_GetWindowSizeInPixels(window_, &drawable_w, &drawable_h);
+        if (logical_w > 0 && drawable_w > 0) {
+            device_pixel_ratio = static_cast<float>(drawable_w) / static_cast<float>(logical_w);
+        }
+    }
+    const float inv_device_pixel_ratio = device_pixel_ratio > 0.0f ? (1.0f / device_pixel_ratio) : 1.0f;
+
     SDL_GPUColorTargetInfo color_target{};
     SDL_GPURenderPass* pass = nullptr;
+
+    constexpr int kMaxRoundedClipUniforms = 4;
+
+    struct ClipStackEntry {
+        SDL_Rect scissor;
+        bool has_rounded;
+        Rect rounded_rect;
+        float rounded_radius;
+    };
+
+    struct ClipUniformBlock {
+        float clip_rects[kMaxRoundedClipUniforms][4];
+        float clip_radii[kMaxRoundedClipUniforms];
+        float clip_meta[4];
+    };
+
+    std::vector<ClipStackEntry> clip_stack;
+
+    auto apply_scissor = [&](SDL_GPURenderPass* target_pass) {
+        if (!target_pass) {
+            return;
+        }
+        if (clip_stack.empty()) {
+            SDL_SetGPUScissor(target_pass, nullptr);
+        } else {
+            SDL_SetGPUScissor(target_pass, &clip_stack.back().scissor);
+        }
+    };
+
+    auto to_sdl_rect = [](const Rect& rect) {
+        const float x0 = rect.x;
+        const float y0 = rect.y;
+        const float x1 = rect.x + rect.width;
+        const float y1 = rect.y + rect.height;
+        SDL_Rect result{};
+        result.x = static_cast<int>(std::floor(x0));
+        result.y = static_cast<int>(std::floor(y0));
+        const int right = static_cast<int>(std::ceil(x1));
+        const int bottom = static_cast<int>(std::ceil(y1));
+        result.w = std::max(0, right - result.x);
+        result.h = std::max(0, bottom - result.y);
+        return result;
+    };
+
+    auto intersect_rect = [](const SDL_Rect& a, const SDL_Rect& b) {
+        SDL_Rect out{};
+        const int x = std::max(a.x, b.x);
+        const int y = std::max(a.y, b.y);
+        const int right = std::min(a.x + a.w, b.x + b.w);
+        const int bottom = std::min(a.y + a.h, b.y + b.h);
+        out.x = x;
+        out.y = y;
+        out.w = std::max(0, right - x);
+        out.h = std::max(0, bottom - y);
+        return out;
+    };
+
+    auto fill_clip_uniform = [&](ClipUniformBlock& block) {
+        for (int i = 0; i < kMaxRoundedClipUniforms; ++i) {
+            block.clip_rects[i][0] = 0.0f;
+            block.clip_rects[i][1] = 0.0f;
+            block.clip_rects[i][2] = 0.0f;
+            block.clip_rects[i][3] = 0.0f;
+            block.clip_radii[i] = 0.0f;
+        }
+        block.clip_meta[0] = 0.0f;
+        block.clip_meta[1] = 0.0f;
+        block.clip_meta[2] = 0.0f;
+        block.clip_meta[3] = 0.0f;
+
+        int clip_index = 0;
+        for (const auto& entry : clip_stack) {
+            if (!entry.has_rounded) {
+                continue;
+            }
+            block.clip_rects[clip_index][0] = entry.rounded_rect.x;
+            block.clip_rects[clip_index][1] = entry.rounded_rect.y;
+            block.clip_rects[clip_index][2] = entry.rounded_rect.x + entry.rounded_rect.width;
+            block.clip_rects[clip_index][3] = entry.rounded_rect.y + entry.rounded_rect.height;
+            block.clip_radii[clip_index] = entry.rounded_radius;
+            ++clip_index;
+            if (clip_index >= kMaxRoundedClipUniforms) {
+                break;
+            }
+        }
+
+        block.clip_meta[0] = static_cast<float>(clip_index);
+    };
 
     for (const auto& cmd : commands.commands) {
         switch (cmd.type) {
@@ -960,6 +1193,10 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 return;
             }
 
+            render_target_stack.clear();
+            isolated_layer_stack.clear();
+            render_target_stack.push_back(RenderTargetState{swapchain_texture, w, h, true});
+
             color_target = {};
             color_target.texture = swapchain_texture;
             color_target.mip_level = 0;
@@ -984,6 +1221,9 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 SDL_Log("GPUDriverSDL::execute: failed to begin render pass: %s", SDL_GetError());
                 return;
             }
+
+            apply_scissor(pass);
+
             break;
         }
         case GPUCommandType::EndPass:
@@ -992,6 +1232,191 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 pass = nullptr;
             }
             break;
+        case GPUCommandType::PushClipRect: {
+            SDL_Rect clip = to_sdl_rect(cmd.rect);
+            if (!clip_stack.empty()) {
+                clip = intersect_rect(clip_stack.back().scissor, clip);
+            }
+            ClipStackEntry entry{};
+            entry.scissor = clip;
+            if (cmd.radius > 0.0f) {
+                entry.has_rounded = true;
+                entry.rounded_rect = cmd.rect;
+                entry.rounded_radius = cmd.radius;
+            }
+            clip_stack.push_back(entry);
+            apply_scissor(pass);
+            break;
+        }
+        case GPUCommandType::PopClip: {
+            if (!clip_stack.empty()) {
+                clip_stack.pop_back();
+            }
+            apply_scissor(pass);
+            break;
+        }
+        case GPUCommandType::BeginIsolatedLayer: {
+            if (pass) {
+                SDL_EndGPURenderPass(pass);
+                pass = nullptr;
+            }
+            if (render_target_stack.empty()) {
+                SDL_Log("GPUDriverSDL::execute: BeginIsolatedLayer without active render target");
+                break;
+            }
+
+            auto parent_state = render_target_stack.back();
+            Uint32 target_w = parent_state.width > 0 ? parent_state.width : w;
+            Uint32 target_h = parent_state.height > 0 ? parent_state.height : h;
+            if (target_w == 0) target_w = 1;
+            if (target_h == 0) target_h = 1;
+
+            SDL_GPUTextureCreateInfo tex_info{};
+            tex_info.type = SDL_GPU_TEXTURETYPE_2D;
+            tex_info.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+            tex_info.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
+            tex_info.width = target_w;
+            tex_info.height = target_h;
+            tex_info.layer_count_or_depth = 1;
+            tex_info.num_levels = 1;
+            tex_info.sample_count = SDL_GPU_SAMPLECOUNT_1;
+
+            SDL_GPUDevice* dev = gpu_device_->getHandle();
+            SDL_GPUTexture* layer_texture = dev ? SDL_CreateGPUTexture(dev, &tex_info) : nullptr;
+            if (!layer_texture) {
+                SDL_Log("GPUDriverSDL::execute: failed to create layer texture: %s", SDL_GetError());
+                break;
+            }
+
+            render_target_stack.push_back(RenderTargetState{layer_texture, target_w, target_h, false});
+
+            SDL_GPUColorTargetInfo layer_target{};
+            layer_target.texture = layer_texture;
+            layer_target.mip_level = 0;
+            layer_target.layer_or_depth_plane = 0;
+            layer_target.clear_color = SDL_FColor{0.0f, 0.0f, 0.0f, 0.0f};
+            layer_target.load_op = SDL_GPU_LOADOP_CLEAR;
+            layer_target.store_op = SDL_GPU_STOREOP_STORE;
+
+            pass = SDL_BeginGPURenderPass(current_cmd_buf_, &layer_target, 1, nullptr);
+            if (!pass) {
+                SDL_Log("GPUDriverSDL::execute: failed to begin layer pass: %s", SDL_GetError());
+                SDL_ReleaseGPUTexture(dev, layer_texture);
+                render_target_stack.pop_back();
+                break;
+            }
+
+            apply_scissor(pass);
+
+            IsolatedLayerState layer_state{};
+            layer_state.texture = layer_texture;
+            layer_state.width = target_w;
+            layer_state.height = target_h;
+            layer_state.bounds = cmd.rect;
+            layer_state.opacity = cmd.layer_opacity;
+            isolated_layer_stack.push_back(layer_state);
+            break;
+        }
+        case GPUCommandType::EndIsolatedLayer: {
+            if (render_target_stack.size() <= 1) {
+                SDL_Log("GPUDriverSDL::execute: EndIsolatedLayer without matching layer");
+                break;
+            }
+
+            SDL_GPUDevice* dev = gpu_device_->getHandle();
+
+            if (pass) {
+                SDL_EndGPURenderPass(pass);
+                pass = nullptr;
+            }
+
+            RenderTargetState layer_target_state = render_target_stack.back();
+            render_target_stack.pop_back();
+
+            SDL_GPUTexture* layer_texture = layer_target_state.texture;
+
+            if (isolated_layer_stack.empty()) {
+                SDL_Log("GPUDriverSDL::execute: layer stack underflow");
+                if (dev && layer_texture) {
+                    SDL_ReleaseGPUTexture(dev, layer_texture);
+                }
+                break;
+            }
+
+            IsolatedLayerState layer_info = isolated_layer_stack.back();
+            isolated_layer_stack.pop_back();
+
+            RenderTargetState parent_state = render_target_stack.back();
+
+            SDL_GPUColorTargetInfo parent_target{};
+            parent_target.texture = parent_state.texture;
+            parent_target.mip_level = 0;
+            parent_target.layer_or_depth_plane = 0;
+            parent_target.load_op = SDL_GPU_LOADOP_LOAD;
+            parent_target.store_op = SDL_GPU_STOREOP_STORE;
+
+            pass = SDL_BeginGPURenderPass(current_cmd_buf_, &parent_target, 1, nullptr);
+            if (!pass) {
+                SDL_Log("GPUDriverSDL::execute: failed to resume parent pass: %s", SDL_GetError());
+                if (dev && layer_texture) {
+                    SDL_ReleaseGPUTexture(dev, layer_texture);
+                }
+                break;
+            }
+
+            apply_scissor(pass);
+
+            if (image_pipeline_ && image_sampler_ && layer_texture &&
+                layer_info.bounds.width > 0.0f && layer_info.bounds.height > 0.0f) {
+                struct LayerCompositeUniforms {
+                    float rect[4];
+                    float uv_rect[4];
+                    float viewport[4];
+                    float tint[4];
+                    ClipUniformBlock clip;
+                };
+
+                LayerCompositeUniforms u{};
+                u.rect[0] = layer_info.bounds.x;
+                u.rect[1] = layer_info.bounds.y;
+                u.rect[2] = layer_info.bounds.width;
+                u.rect[3] = layer_info.bounds.height;
+
+                float tex_w = static_cast<float>(layer_info.width);
+                float tex_h = static_cast<float>(layer_info.height);
+                if (tex_w <= 0.0f) tex_w = 1.0f;
+                if (tex_h <= 0.0f) tex_h = 1.0f;
+                u.uv_rect[0] = layer_info.bounds.x / tex_w;
+                u.uv_rect[1] = layer_info.bounds.y / tex_h;
+                u.uv_rect[2] = (layer_info.bounds.x + layer_info.bounds.width) / tex_w;
+                u.uv_rect[3] = (layer_info.bounds.y + layer_info.bounds.height) / tex_h;
+
+                write_viewport(u.viewport);
+
+                u.tint[0] = 1.0f;
+                u.tint[1] = 1.0f;
+                u.tint[2] = 1.0f;
+                u.tint[3] = layer_info.opacity;
+                fill_clip_uniform(u.clip);
+
+                SDL_PushGPUVertexUniformData(current_cmd_buf_, 0, &u, sizeof(u));
+
+                SDL_BindGPUGraphicsPipeline(pass, image_pipeline_);
+
+                SDL_GPUTextureSamplerBinding binding{};
+                binding.texture = layer_texture;
+                binding.sampler = image_sampler_;
+                SDL_BindGPUFragmentSamplers(pass, 0, &binding, 1);
+
+                SDL_DrawGPUPrimitives(pass, 4, 1, 0, 0);
+            }
+
+            if (dev && layer_texture) {
+                SDL_ReleaseGPUTexture(dev, layer_texture);
+            }
+
+            break;
+        }
         case GPUCommandType::DrawInstancedQuads: {
             if (!pass || !rect_pipeline_) {
                 break;
@@ -1001,6 +1426,7 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 float rect[4];
                 float color[4];
                 float viewport[4];
+                ClipUniformBlock clip;
             };
 
             RectUniformData u{};
@@ -1009,15 +1435,10 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             u.rect[2] = cmd.rect.width;
             u.rect[3] = cmd.rect.height;
 
-            u.color[0] = cmd.color.r;
-            u.color[1] = cmd.color.g;
-            u.color[2] = cmd.color.b;
-            u.color[3] = cmd.color.a;
+            writeLinearColor(cmd.color, u.color);
 
-            u.viewport[0] = static_cast<float>(w);
-            u.viewport[1] = static_cast<float>(h);
-            u.viewport[2] = 0.0f;
-            u.viewport[3] = 0.0f;
+            write_viewport(u.viewport);
+            fill_clip_uniform(u.clip);
 
             SDL_PushGPUVertexUniformData(current_cmd_buf_, 0, &u, sizeof(u));
 
@@ -1035,6 +1456,7 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 float radius[4];
                 float viewport[4];
                 float color[4];
+                ClipUniformBlock clip;
             };
 
             RoundRectUniformData u{};
@@ -1048,15 +1470,10 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             u.radius[2] = cmd.radius;
             u.radius[3] = cmd.radius;
 
-            u.viewport[0] = static_cast<float>(w);
-            u.viewport[1] = static_cast<float>(h);
-            u.viewport[2] = 0.0f;
-            u.viewport[3] = 0.0f;
+            write_viewport(u.viewport);
 
-            u.color[0] = cmd.color.r;
-            u.color[1] = cmd.color.g;
-            u.color[2] = cmd.color.b;
-            u.color[3] = cmd.color.a;
+            writeLinearColor(cmd.color, u.color);
+            fill_clip_uniform(u.clip);
 
             SDL_PushGPUVertexUniformData(current_cmd_buf_, 0, &u, sizeof(u));
 
@@ -1082,6 +1499,7 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 float uv_rect[4];
                 float viewport[4];
                 float tint[4];
+                ClipUniformBlock clip;
             };
 
             ImageUniformData u{};
@@ -1120,15 +1538,13 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             u.uv_rect[2] = entry.u1;
             u.uv_rect[3] = entry.v1;
 
-            u.viewport[0] = static_cast<float>(w);
-            u.viewport[1] = static_cast<float>(h);
-            u.viewport[2] = 0.0f;
-            u.viewport[3] = 0.0f;
+            write_viewport(u.viewport);
 
             u.tint[0] = 1.0f;
             u.tint[1] = 1.0f;
             u.tint[2] = 1.0f;
             u.tint[3] = cmd.opacity;
+            fill_clip_uniform(u.clip);
 
             SDL_PushGPUVertexUniformData(current_cmd_buf_, 0, &u, sizeof(u));
 
@@ -1143,35 +1559,43 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             break;
         }
         case GPUCommandType::DrawText: {
-            if (!pass || !text_pipeline_ || !glyph_atlas_ || cmd.text.empty()) {
+            if (!pass || !text_pipeline_ || glyph_atlas_tiers_.empty() || cmd.glyphs.empty()) {
                 break;
             }
 
-            std::string font_path = resolveFontPath(cmd.font_family);
+            std::string font_path = !cmd.font_path.empty() ? cmd.font_path : resolveFontPath(cmd.font_family);
             if (font_path.empty()) {
                 SDL_Log("GPUDriverSDL: no valid font found for family '%s'", cmd.font_family.c_str());
                 break;
             }
 
-            SDL_GPUTexture* atlas_texture = glyph_atlas_->getAtlasTexture();
+            float font_size = cmd.font_size > 0.0f ? cmd.font_size : 16.0f;
+
+            GlyphAtlasTier* glyph_tier = selectGlyphAtlasTier(font_size);
+            if (!glyph_tier || !glyph_tier->atlas) {
+                SDL_Log("GPUDriverSDL: no glyph atlas tier available");
+                break;
+            }
+            GlyphAtlas* glyph_atlas = glyph_tier->atlas.get();
+            SDL_GPUTexture* atlas_texture = glyph_atlas ? glyph_atlas->getAtlasTexture() : nullptr;
             if (!atlas_texture || !text_sampler_) {
                 SDL_Log("GPUDriverSDL: glyph atlas texture unavailable");
                 break;
             }
+            float base_bitmap = static_cast<float>(glyph_tier->bitmap_px);
+            float glyph_scale = (base_bitmap > 0.0f) ? (font_size / base_bitmap) : 1.0f;
 
-            std::vector<uint32_t> codepoints = decodeUtf8(cmd.text);
-            if (codepoints.empty()) {
-                break;
-            }
+            // 严格按照文档公式：
+            // 1. FreeType 在 glyph_bitmap_size 像素下生成度量（metrics.*）
+            // 2. MSDF 在同样的 glyph_bitmap_size×glyph_bitmap_size 像素格子内编码，
+            //    range 表示“在 atlas 像素坐标系下，距轮廓 range 像素内 SDF 仍有效”。
+            // 3. 渲染到屏幕时，glyph 的缩放因子是 font_size / glyph_bitmap_size。
+            //    因此：screenPxDistance = (sd - 0.5) * range * (font_size / glyph_bitmap_size)。
+            const float atlas_px_size = base_bitmap > 0.0f ? base_bitmap : 1.0f;
+            const float distance_scale_global = (glyph_tier->distance_range / atlas_px_size) * font_size;
 
-            float font_size = cmd.font_size > 0.0f ? cmd.font_size : 16.0f;
-            float baseline_x = cmd.rect.x;
-            float baseline_y = cmd.rect.y;
-            float cursor_x = baseline_x;
-            float cursor_y = baseline_y;
-            float line_advance = font_size * 1.25f;
-            float viewport_w = static_cast<float>(w);
-            float viewport_h = static_cast<float>(h);
+            const float subpixel_flag = (font_size <= 18.0f) ? 1.0f : 0.0f;
+            const float gamma_correction = -kSRGBGamma;
 
             SDL_GPUTextureSamplerBinding binding{};
             binding.texture = atlas_texture;
@@ -1184,37 +1608,43 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 float uv_rect[4];
                 float viewport[4];
                 float color[4];
+                float params[4];
+                ClipUniformBlock clip;
             };
 
-            for (uint32_t codepoint : codepoints) {
-                if (codepoint == '\n') {
-                    cursor_x = baseline_x;
-                    cursor_y += line_advance;
+            int debug_count = 0;
+            for (const auto& glyph : cmd.glyphs) {
+                if (glyph.glyph_id == 0) {
                     continue;
                 }
 
-                const AtlasEntry* entry = glyph_atlas_->addGlyph(codepoint, font_path);
+                const AtlasEntry* entry = glyph_atlas->addGlyph(glyph.glyph_id, font_path);
                 if (!entry) {
                     continue;
                 }
 
-                float scale = font_size / 32.0f;
-                float advance = entry->metrics.advance_x * scale;
-
                 if (entry->metrics.width <= 0.0f || entry->metrics.height <= 0.0f ||
                     entry->u1 <= entry->u0 || entry->v1 <= entry->v0) {
-                    cursor_x += advance;
                     continue;
                 }
 
-                float glyph_x = cursor_x + entry->metrics.bearing_x * scale;
-                float glyph_y = cursor_y - entry->metrics.bearing_y * scale;
-                float glyph_w = std::max(entry->metrics.width * scale, 0.0f);
-                float glyph_h = std::max(entry->metrics.height * scale, 0.0f);
+                float glyph_x = glyph.pen_x + entry->metrics.bearing_x * glyph_scale;
+                float glyph_y = glyph.pen_y - entry->metrics.bearing_y * glyph_scale;
+                float glyph_w = std::max(entry->metrics.width * glyph_scale, 0.0f);
+                float glyph_h = std::max(entry->metrics.height * glyph_scale, 0.0f);
 
                 if (glyph_w <= 0.0f || glyph_h <= 0.0f) {
-                    cursor_x += advance;
                     continue;
+                }
+
+                // 使用全局的几何缩放：font_size / glyph_bitmap_size
+                // screenPxDistance = (sd - 0.5) * range * (font_size / glyph_bitmap_size)
+                const float distance_scale = distance_scale_global;
+
+                if (debug_count < 8) {
+                    SDL_Log("MSDF glyph=%u font_size=%.2f glyph_w=%.2f atlas_px=%.2f range=%.2f distance_scale=%.3f", 
+                            glyph.glyph_id, font_size, glyph_w, atlas_px_size, glyph_tier->distance_range, distance_scale);
+                    ++debug_count;
                 }
 
                 TextUniformData u{};
@@ -1228,21 +1658,20 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 u.uv_rect[2] = entry->u1;
                 u.uv_rect[3] = entry->v1;
 
-                u.viewport[0] = viewport_w;
-                u.viewport[1] = viewport_h;
-                u.viewport[2] = 0.0f;
-                u.viewport[3] = 0.0f;
+                write_viewport(u.viewport);
 
-                u.color[0] = cmd.color.r;
-                u.color[1] = cmd.color.g;
-                u.color[2] = cmd.color.b;
-                u.color[3] = cmd.color.a;
+            writeLinearColor(cmd.color, u.color);
+
+                u.params[0] = distance_scale;
+                u.params[1] = inv_device_pixel_ratio;
+                u.params[2] = subpixel_flag;
+                u.params[3] = gamma_correction;
+                fill_clip_uniform(u.clip);
 
                 SDL_PushGPUVertexUniformData(current_cmd_buf_, 0, &u, sizeof(u));
                 SDL_DrawGPUPrimitives(pass, 4, 1, 0, 0);
-
-                cursor_x += advance;
             }
+
             break;
         }
         default:
@@ -1255,6 +1684,54 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
         SDL_EndGPURenderPass(pass);
         pass = nullptr;
     }
+}
+
+GPUDriverSDL::GlyphAtlasTier* GPUDriverSDL::selectGlyphAtlasTier(float font_size) {
+    if (glyph_atlas_tiers_.empty()) {
+        return nullptr;
+    }
+    
+    // 选择 <= font_size 的最大 atlas (放大渲染，glyph_scale >= 1.0)
+    // 这样可以保留MSDF细节并通过放大获得清晰边缘
+    GlyphAtlasTier* best = nullptr;
+    uint32_t max_smaller_px = 0;
+    
+    for (auto& tier : glyph_atlas_tiers_) {
+        if (tier.bitmap_px <= static_cast<uint32_t>(std::ceil(font_size))) {
+            if (tier.bitmap_px > max_smaller_px) {
+                max_smaller_px = tier.bitmap_px;
+                best = &tier;
+            }
+        }
+    }
+    
+    // 如果没有找到，使用最小的 atlas (会有明显放大)
+    if (!best) {
+        best = &glyph_atlas_tiers_.front();
+    }
+    
+    return best;
+}
+
+FT_Face GPUDriverSDL::getOrCreateFace(const std::string& font_path, uint32_t pixel_size) {
+    if (!ft_library_ || font_path.empty()) {
+        return nullptr;
+    }
+    auto it = ft_face_cache_.find(font_path);
+    if (it == ft_face_cache_.end()) {
+        FT_Face face = nullptr;
+        if (FT_New_Face(ft_library_, font_path.c_str(), 0, &face) != 0) {
+            SDL_Log("GPUDriverSDL: failed to load font face '%s'", font_path.c_str());
+            return nullptr;
+        }
+        ft_face_cache_[font_path] = face;
+        it = ft_face_cache_.find(font_path);
+    }
+    FT_Face face = it->second;
+    if (face) {
+        FT_Set_Pixel_Sizes(face, 0, pixel_size);
+    }
+    return face;
 }
 
 } // namespace dong::render

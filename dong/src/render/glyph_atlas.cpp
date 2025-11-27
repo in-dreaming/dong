@@ -92,14 +92,17 @@ GlyphAtlas::~GlyphAtlas() {
     }
 }
 
-std::string GlyphAtlas::makeGlyphKey(uint32_t codepoint, const std::string& font_path) const {
+std::string GlyphAtlas::makeGlyphKey(uint32_t glyph_id, const std::string& font_path) const {
     std::string key = font_path;
     key.push_back('#');
-    key.append(std::to_string(codepoint));
+    key.append(std::to_string(glyph_id));
     return key;
 }
 
-bool GlyphAtlas::initialize(uint32_t width, uint32_t height) {
+bool GlyphAtlas::initialize(uint32_t width,
+                             uint32_t height,
+                             uint32_t glyph_bitmap_size,
+                             float glyph_distance_range) {
     if (!gpu_device_ || !gpu_device_->isInitialized()) {
         SDL_Log("GlyphAtlas::initialize: GPU device not initialized");
         return false;
@@ -107,6 +110,12 @@ bool GlyphAtlas::initialize(uint32_t width, uint32_t height) {
 
     atlas_width_ = width;
     atlas_height_ = height;
+    glyph_bitmap_size_ = glyph_bitmap_size;
+    glyph_distance_range_ = glyph_distance_range;
+    cursor_x_ = 0;
+    cursor_y_ = 0;
+    row_height_ = 0;
+    cache_.clear();
 
     SDL_GPUTextureCreateInfo tex_info{};
     tex_info.type = SDL_GPU_TEXTURETYPE_2D;
@@ -127,25 +136,25 @@ bool GlyphAtlas::initialize(uint32_t width, uint32_t height) {
     return true;
 }
 
-const AtlasEntry* GlyphAtlas::getGlyph(uint32_t codepoint, const std::string& font_path) {
+const AtlasEntry* GlyphAtlas::getGlyph(uint32_t glyph_id, const std::string& font_path) {
     if (font_path.empty()) {
         return nullptr;
     }
-    auto it = cache_.find(makeGlyphKey(codepoint, font_path));
+    auto it = cache_.find(makeGlyphKey(glyph_id, font_path));
     if (it != cache_.end()) {
         return &it->second;
     }
     return nullptr;
 }
 
-const AtlasEntry* GlyphAtlas::addGlyph(uint32_t codepoint, const std::string& font_path) {
+const AtlasEntry* GlyphAtlas::addGlyph(uint32_t glyph_id, const std::string& font_path) {
     if (font_path.empty()) {
-        SDL_Log("GlyphAtlas::addGlyph: font path is empty for codepoint %u", codepoint);
+        SDL_Log("GlyphAtlas::addGlyph: font path is empty for glyph %u", glyph_id);
         return nullptr;
     }
 
     // 检查是否已缓存
-    std::string key = makeGlyphKey(codepoint, font_path);
+    std::string key = makeGlyphKey(glyph_id, font_path);
     auto it = cache_.find(key);
     if (it != cache_.end()) {
         return &it->second;
@@ -157,8 +166,8 @@ const AtlasEntry* GlyphAtlas::addGlyph(uint32_t codepoint, const std::string& fo
     uint32_t glyph_height = 0;
     GlyphMetrics metrics;
 
-    if (!generateMSDF(codepoint, font_path, bitmap, glyph_width, glyph_height, metrics)) {
-        SDL_Log("GlyphAtlas::addGlyph: failed to generate MSDF for codepoint %u", codepoint);
+    if (!generateMSDF(glyph_id, font_path, bitmap, glyph_width, glyph_height, metrics)) {
+        SDL_Log("GlyphAtlas::addGlyph: failed to generate MSDF for glyph %u", glyph_id);
         return nullptr;
     }
 
@@ -266,12 +275,12 @@ const AtlasEntry* GlyphAtlas::addGlyph(uint32_t codepoint, const std::string& fo
 
     cache_[key] = entry;
     SDL_Log("GlyphAtlas: added glyph %u (%s) at (%u, %u), size (%u, %u)",
-            codepoint, font_path.c_str(), dst_x, dst_y, glyph_width, glyph_height);
+            glyph_id, font_path.c_str(), dst_x, dst_y, glyph_width, glyph_height);
 
     return &cache_[key];
 }
 
-bool GlyphAtlas::generateMSDF(uint32_t codepoint, const std::string& font_path,
+bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
                                std::vector<uint8_t>& out_bitmap,
                                uint32_t& out_width, uint32_t& out_height,
                                GlyphMetrics& out_metrics) {
@@ -289,12 +298,12 @@ bool GlyphAtlas::generateMSDF(uint32_t codepoint, const std::string& font_path,
         return false;
     }
 
-    // 设置字符大小（32px em size 用于 MSDF 生成）
-    FT_Set_Pixel_Sizes(face, 0, 32);
+    // 设置字符大小（按 Atlas 配置的基准像素生成 MSDF）
+    FT_Set_Pixel_Sizes(face, 0, static_cast<FT_UInt>(glyph_bitmap_size_));
 
     // 加载字形
-    if (FT_Load_Char(face, codepoint, FT_LOAD_NO_HINTING | FT_LOAD_NO_BITMAP) != 0) {
-        SDL_Log("GlyphAtlas::generateMSDF: failed to load glyph for codepoint %u", codepoint);
+    if (FT_Load_Glyph(face, glyph_id, FT_LOAD_NO_HINTING | FT_LOAD_NO_BITMAP) != 0) {
+        SDL_Log("GlyphAtlas::generateMSDF: failed to load glyph index %u", glyph_id);
         FT_Done_Face(face);
         FT_Done_FreeType(ft);
         return false;
@@ -332,7 +341,7 @@ bool GlyphAtlas::generateMSDF(uint32_t codepoint, const std::string& font_path,
     converter.finalize();
 
     if (shape.contours.empty()) {
-        SDL_Log("GlyphAtlas::generateMSDF: empty contours for codepoint %u", codepoint);
+        SDL_Log("GlyphAtlas::generateMSDF: empty contours for glyph %u", glyph_id);
         out_width = 0;
         out_height = 0;
         FT_Done_Face(face);
@@ -347,9 +356,9 @@ bool GlyphAtlas::generateMSDF(uint32_t codepoint, const std::string& font_path,
     // 计算边界
     msdfgen::Shape::Bounds bounds = shape.getBounds();
 
-    // 生成 MSDF（32x32 像素，4 像素 range）
-    const int msdf_size = 32;
-    const double range = 4.0;
+    // 生成 MSDF（可配置尺寸与 range）
+    const int msdf_size = static_cast<int>(glyph_bitmap_size_);
+    const double range = static_cast<double>(glyph_distance_range_);
     
     msdfgen::Bitmap<float, 3> msdf(msdf_size, msdf_size);
     
@@ -366,6 +375,10 @@ bool GlyphAtlas::generateMSDF(uint32_t codepoint, const std::string& font_path,
     );
 
     msdfgen::generateMSDF(msdf, shape, range, scale, translate);
+
+    out_metrics.msdf_scale = static_cast<float>(scale);
+    out_metrics.msdf_translate_x = static_cast<float>(translate.x);
+    out_metrics.msdf_translate_y = static_cast<float>(translate.y);
 
     // 转换为 RGBA8 格式
     out_width = msdf_size;

@@ -136,6 +136,8 @@ void StyleEngine::computeStyles(DOMNodePtr node) {
             computed.overflow = rule.style.overflow;
         if (rule.style.opacity != 1.0f)
             computed.opacity = rule.style.opacity;
+        if (rule.style.isolation_isolate)
+            computed.isolation_isolate = true;
         
         // Box model properties
         if (rule.style.width.unit != CSSValue::Unit::AUTO) 
@@ -836,6 +838,13 @@ void StyleEngine::applyStyleProperty(const std::string& property, const std::str
         if (v < 0.0f) v = 0.0f;
         if (v > 1.0f) v = 1.0f;
         style.opacity = v;
+    }
+    else if (prop == "isolation") {
+        std::string lowered = val;
+        std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char c) {
+            return static_cast<char>(std::tolower(c));
+        });
+        style.isolation_isolate = (lowered == "isolate");
     }
 }
 

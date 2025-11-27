@@ -176,8 +176,12 @@ fn configureExample(
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
 ) void {
-    _ = target;
     _ = optimize;
+    _ = target;
+
+    exe.linkFramework("CoreFoundation");
+    exe.linkFramework("CoreGraphics");
+    exe.linkFramework("CoreText");
     
     exe.addIncludePath(b.path("include"));
     exe.addIncludePath(b.path("src"));
@@ -426,6 +430,8 @@ pub fn build(b: *std.Build) void {
             "src/render/resource_manager.cpp",
             "src/render/gpu_device.cpp",
             "src/render/gpu_surface.cpp",
+            "src/render/font_resolver.cpp",
+            "src/render/text_shaper.cpp",
             "src/render/gpu_painter.cpp",
             "src/render/gpu_driver_sdl.cpp",
             "src/render/shader_manager.cpp",
@@ -530,6 +536,8 @@ pub fn build(b: *std.Build) void {
         .{ .name = "image_rendering_demo", .source = "examples/image_rendering_demo.cpp", .flags = &.{"-std=c++17"} },
         // GPU 后端完整视图 demo
         .{ .name = "gpu_view_demo", .source = "examples/gpu_view_demo.cpp", .flags = &.{"-std=c++17"} },
+        // CSS isolation 属性演示
+        .{ .name = "isolation_demo", .source = "examples/isolation_demo.cpp", .flags = &.{"-std=c++17"} },
     };
 
     inline for (example_defs) |info| {

@@ -5,6 +5,10 @@
 #include <unordered_map>
 #include <string>
 #include <memory>
+#include <vector>
+
+#include <ft2build.h>
+#include FT_FREETYPE_H
 
 namespace dong::render {
 
@@ -76,7 +80,19 @@ private:
     SDL_GPUShader* text_fs_ = nullptr;
     SDL_GPUGraphicsPipeline* text_pipeline_ = nullptr;
     SDL_GPUSampler* text_sampler_ = nullptr;
-    std::unique_ptr<GlyphAtlas> glyph_atlas_;
+
+    struct GlyphAtlasTier {
+        uint32_t bitmap_px = 0;
+        float distance_range = 0.0f;
+        std::unique_ptr<GlyphAtlas> atlas;
+    };
+
+    std::vector<GlyphAtlasTier> glyph_atlas_tiers_;
+    FT_Library ft_library_ = nullptr;
+    std::unordered_map<std::string, FT_Face> ft_face_cache_;
+
+    GlyphAtlasTier* selectGlyphAtlasTier(float font_size);
+    FT_Face getOrCreateFace(const std::string& font_path, uint32_t pixel_size);
 };
 
 } // namespace dong::render
