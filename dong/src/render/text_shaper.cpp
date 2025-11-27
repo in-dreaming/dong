@@ -116,6 +116,8 @@ bool TextShaper::shape(const TextShapeRequest& request, ShapedText& out_text) {
 
     const int32_t scale = static_cast<int32_t>(std::round(request.font_size * 64.0f));
     hb_font_set_scale(hb_font, scale, scale);
+
+    hb_ft_font_set_load_flags(hb_font, FT_LOAD_NO_HINTING | FT_LOAD_NO_BITMAP);
     hb_ft_font_set_funcs(hb_font);
 
     hb_buffer_t* buffer = hb_buffer_create();

@@ -725,21 +725,27 @@ float4 main(PSInput input) : SV_Target0 {
         discard;
     }
 
-    // 最简单、最常用的 MSDF 解码：只依赖 sigDist 和 fwidth(sigDist)。
+    // SDL 自带 MSDF 示例同构实现：screenPxRange(range, textureSize, fwidth(uv))
     float3 msdf = msdfTexture.Sample(msdfSampler, input.uv).rgb;
     float sd = median(msdf.r, msdf.g, msdf.b);
     float sigDist = sd - 0.5; // sigDist = 0 在轮廓线上
 
-    float pxRange = uParams.x;   // 目前先保留参数，不直接参与计算
-    float glyphScale = uParams.y;
+    float pxRange = uParams.x;   // MSDF 生成时的像素 range
     float subpixelMask = uParams.z;
     float gammaSigned = uParams.w;
     float gammaMagnitude = max(abs(gammaSigned), 1e-3);
     bool inputIsLinear = gammaSigned < 0.0;
 
-    // 基于 sigDist 自身的导数估计当前缩放下的像素宽度
-    float width = max(fwidth(sigDist), 1e-4);
-    float opacity = saturate(sigDist / width + 0.5);
+    uint texWidth, texHeight;
+    msdfTexture.GetDimensions(texWidth, texHeight);
+    float2 texSize = float2((float)texWidth, (float)texHeight);
+
+    float2 unitRange = float2(pxRange, pxRange) / texSize;
+    float2 screenTexSize = float2(1.0, 1.0) / fwidth(input.uv);
+    float screenPxRange = max(0.5 * dot(unitRange, screenTexSize), 1.0);
+
+    float screenPxDistance = screenPxRange * sigDist;
+    float opacity = saturate(screenPxDistance + 0.5);
 
     float3 linearColor = inputIsLinear ? input.color.rgb : toLinear(input.color.rgb, gammaMagnitude);
     linearColor *= opacity;
@@ -1575,9 +1581,8 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             float base_bitmap = static_cast<float>(glyph_tier->bitmap_px);
             float glyph_scale = (base_bitmap > 0.0f) ? (font_size / base_bitmap) : 1.0f;
 
-            // 与 demo 对齐：range 仅作为 pxRange 传入 shader，
-            // 由 shader 使用纹理导数和 fwidth(uv) 自动换算到屏幕像素距离。
-            const float px_range = glyph_tier->distance_range;
+            // atlas_range = MSDF 生成时的 range（以 atlas 像素为单位）
+            const float atlas_range = glyph_tier->distance_range;
 
             const float subpixel_flag = (font_size <= 18.0f) ? 1.0f : 0.0f;
             const float gamma_correction = -kSRGBGamma;
@@ -1637,11 +1642,13 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
 
             writeLinearColor(cmd.color, u.color);
 
-                // uParams.x = pxRange (msdfgen glyph_distance_range)
-                // uParams.y = glyphScale = font_size / bitmap_px
-                // 其余分量保留，以后可用于 subpixel/gamma 等扩展
+                // uParams.x = pxRange (MSDF 生成时的像素 range)
+                // uParams.y = 预留（目前未用）
+                // uParams.z = 预留（例如 subpixel 标志）
+                // uParams.w = gammaSigned
+                const float px_range = atlas_range;
                 u.params[0] = px_range;
-                u.params[1] = glyph_scale;
+                u.params[1] = 0.0f;
                 u.params[2] = subpixel_flag;
                 u.params[3] = gamma_correction;
                 fill_clip_uniform(u.clip);

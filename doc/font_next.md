@@ -1,25 +1,3 @@
-我先把你之前写的 `doc/next.md` 再读一遍，结合现在已经实现的 MSDF shader 情况，给你一份“从当前基线出发”的画质优化项 + TODO 清单。
-**Structuring the update**
-
-I need to break down what we've done and what's next. So far, we replaced MSDF sampling with the simpler `fwidth(sigDist)`, but the documentation still refers to recalibration with scale/translate. I can update the plan to reflect that we've made progress on recalibrating, but there's still more to do with scaling and translation.
-
-The user likely wants to know how we can further optimize the current rendering and a prioritized TODO list. I also noticed that while the big header is crisp, the smaller text appears slightly wobbly, which could be due to spacing. 
-
-I think a good format for the response includes a quick assessment of our progress and specific suggestions for visual improvements.**Summarizing rendering improvements**
-
-For small fonts, I realize we need to use different proportions. We could consider clamping the width for small letters to address thinness, perhaps by slightly enlarging them. For the color pipeline, we should convert CSS colors to linear upon upload, which will fix the washed-out appearance. It's also important to select a heavier font weight. 
-
-I need to ensure the viewport is set correctly and the OS scaling is off.
-
-In part two, I’ll summarize key technical tasks to recalibrate the MSDF sampling formula completely, integrate additional elements, and address hiDPI. Lastly, I’ll briefly mention the GPU driver improvements.**Clarifying next steps**
-
-I should ask the user which short-term items they'd like to focus on tackling. However, I need to remember not to ask for confirmation too many times; just one prompt at the end should suffice, like “Which one do you want to tackle first? I’ll help you write the code in that order.” Keeping the summary brief is important, so I'll ensure my response is concise while still addressing their preferences. Let's move forward with this approach!
-先给一个整体判断：  
-现在这版 MSDF 已经从“整条白砖”走到“字形可读、只是偏细偏灰”的阶段，接下来优化主要是“观感 + 精度”，不是“能不能用”。
-
-我分两块说：  
-1）在当前实现基础上还能立刻优化什么  
-2）整体 MSDF/GPU driver 的后续 TODO 列表（按优先级）
 
 一、在「当前这版」基础上还能做的画质优化（短期、立竿见影）
 
@@ -123,13 +101,3 @@ I should ask the user which short-term items they'd like to focus on tackling. H
 4) 多后端 + 离线/后台 MSDF 生成  
 - 在 `GPUDriver` 抽象下将来接 Metal/OpenGL/Vulkan。  
 - 根据 glyph atlas 需求，离线预生成或后台生成 MSDF 页，运行期只查表。
-
-——
-
-如果只看“眼睛现在看到的这张截图”，我会建议你的短期优先顺序是：
-
-1) 在当前 shader 上加“粗细/对比度”两个参数，调到自己满意；  
-2) 稍微调整 demo 的 CSS（字体族、字号、行距）让版面好看一点；  
-3) 然后再动多级 atlas + 字体度量层，这两步是把这套文字渲染从 demo 拉到“可以上 UI 产品”的关键。
-
-你可以先选一个你最想先搞的，比如“先把笔画调粗一点”或“先做多级 atlas”，我就按那个方向帮你具体改代码。
