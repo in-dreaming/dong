@@ -725,31 +725,21 @@ float4 main(PSInput input) : SV_Target0 {
         discard;
     }
 
+    // 最简单、最常用的 MSDF 解码：只依赖 sigDist 和 fwidth(sigDist)。
     float3 msdf = msdfTexture.Sample(msdfSampler, input.uv).rgb;
     float sd = median(msdf.r, msdf.g, msdf.b);
-    float sdf = sd - 0.5;
+    float sigDist = sd - 0.5; // sigDist = 0 在轮廓线上
 
-    float distanceScale = uParams.x;
-    float invDevicePixelRatio = max(uParams.y, 1e-4);
+    float pxRange = uParams.x;   // 目前先保留参数，不直接参与计算
+    float glyphScale = uParams.y;
     float subpixelMask = uParams.z;
     float gammaSigned = uParams.w;
     float gammaMagnitude = max(abs(gammaSigned), 1e-3);
     bool inputIsLinear = gammaSigned < 0.0;
 
-    // 将纹理中的归一化距离转换为屏幕像素距离
-    float screenPxDistance = sdf * distanceScale;
-    float smoothing = max(fwidth(screenPxDistance) * invDevicePixelRatio, 1e-4);
-
-    // 距离越小（越靠近/位于字内部），不透明度越高
-    float opacity = saturate(0.5 - screenPxDistance / smoothing);
-
-    if (subpixelMask > 0.5) {
-        float3 channelDistance = (msdf - float3(0.5, 0.5, 0.5)) * distanceScale;
-        float3 channelSmoothing = max(fwidth(channelDistance) * invDevicePixelRatio,
-                                      float3(1e-4, 1e-4, 1e-4));
-        float3 channelAlpha = saturate(0.5 - channelDistance / channelSmoothing);
-        opacity = dot(channelAlpha, float3(0.299, 0.587, 0.114));
-    }
+    // 基于 sigDist 自身的导数估计当前缩放下的像素宽度
+    float width = max(fwidth(sigDist), 1e-4);
+    float opacity = saturate(sigDist / width + 0.5);
 
     float3 linearColor = inputIsLinear ? input.color.rgb : toLinear(input.color.rgb, gammaMagnitude);
     linearColor *= opacity;
@@ -1585,14 +1575,9 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             float base_bitmap = static_cast<float>(glyph_tier->bitmap_px);
             float glyph_scale = (base_bitmap > 0.0f) ? (font_size / base_bitmap) : 1.0f;
 
-            // 严格按照文档公式：
-            // 1. FreeType 在 glyph_bitmap_size 像素下生成度量（metrics.*）
-            // 2. MSDF 在同样的 glyph_bitmap_size×glyph_bitmap_size 像素格子内编码，
-            //    range 表示“在 atlas 像素坐标系下，距轮廓 range 像素内 SDF 仍有效”。
-            // 3. 渲染到屏幕时，glyph 的缩放因子是 font_size / glyph_bitmap_size。
-            //    因此：screenPxDistance = (sd - 0.5) * range * (font_size / glyph_bitmap_size)。
-            const float atlas_px_size = base_bitmap > 0.0f ? base_bitmap : 1.0f;
-            const float distance_scale_global = (glyph_tier->distance_range / atlas_px_size) * font_size;
+            // 与 demo 对齐：range 仅作为 pxRange 传入 shader，
+            // 由 shader 使用纹理导数和 fwidth(uv) 自动换算到屏幕像素距离。
+            const float px_range = glyph_tier->distance_range;
 
             const float subpixel_flag = (font_size <= 18.0f) ? 1.0f : 0.0f;
             const float gamma_correction = -kSRGBGamma;
@@ -1637,16 +1622,6 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                     continue;
                 }
 
-                // 使用全局的几何缩放：font_size / glyph_bitmap_size
-                // screenPxDistance = (sd - 0.5) * range * (font_size / glyph_bitmap_size)
-                const float distance_scale = distance_scale_global;
-
-                if (debug_count < 8) {
-                    SDL_Log("MSDF glyph=%u font_size=%.2f glyph_w=%.2f atlas_px=%.2f range=%.2f distance_scale=%.3f", 
-                            glyph.glyph_id, font_size, glyph_w, atlas_px_size, glyph_tier->distance_range, distance_scale);
-                    ++debug_count;
-                }
-
                 TextUniformData u{};
                 u.rect[0] = glyph_x;
                 u.rect[1] = glyph_y;
@@ -1662,8 +1637,11 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
 
             writeLinearColor(cmd.color, u.color);
 
-                u.params[0] = distance_scale;
-                u.params[1] = inv_device_pixel_ratio;
+                // uParams.x = pxRange (msdfgen glyph_distance_range)
+                // uParams.y = glyphScale = font_size / bitmap_px
+                // 其余分量保留，以后可用于 subpixel/gamma 等扩展
+                u.params[0] = px_range;
+                u.params[1] = glyph_scale;
                 u.params[2] = subpixel_flag;
                 u.params[3] = gamma_correction;
                 fill_clip_uniform(u.clip);
