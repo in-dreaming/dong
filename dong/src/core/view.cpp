@@ -1,10 +1,17 @@
 #include "view.hpp"
 #include <cstdio>
 #include <string>
+#include <SDL3/SDL_log.h>
 #include "../dom/dom_manager.hpp"
 #include "../dom/event_system.hpp"
 #include "../render/render_surface.hpp"
 #include "../render/painter.hpp"
+#include "../render/gpu_device.hpp"
+#include "../render/gpu_surface.hpp"
+#include "../render/gpu_painter.hpp"
+#include "../render/shader_manager.hpp"
+#include "../render/gpu_ir.hpp"
+#include "../render/gpu_driver_sdl.hpp"
 #include "../script/script_engine.hpp"
 #include "../script/js_bindings.hpp"
 #include "../layout/layout_engine.hpp"
@@ -97,12 +104,31 @@ void View::resize(uint32_t width, uint32_t height) {
     width_ = width;
     height_ = height;
 
-    // 重新分配渲染表面
+    // 重新分配渲染表面（CPU 路径）
     if (render_surface && render_surface->getType() == render::RenderSurface::Type::CPU_BUFFER) {
         static_cast<render::CPUBufferSurface*>(render_surface.get())->resize(width, height);
     }
 
-    render_surface->markDirty();
+    // GPU 路径下还需要同步调整 GPU 表面和内容纹理尺寸
+    if (use_gpu_) {
+        // 外部 GPU 设备路径：单独维护一个 gpu_surface_
+        if (gpu_surface_) {
+            gpu_surface_->resize(width, height);
+        }
+        // 离屏 GPU 路径：render_surface 本身就是 GPU 纹理表面
+        if (render_surface && render_surface->getType() == render::RenderSurface::Type::GPU_TEXTURE) {
+            auto* gpu_tex_surface = static_cast<render::GPUTextureSurfaceImpl*>(render_surface.get());
+            gpu_tex_surface->resize(width, height);
+        }
+        // 内容纹理跟随 View 尺寸变化
+        if (gpu_painter_) {
+            gpu_painter_->resizeContentTexture(width, height);
+        }
+    }
+
+    if (render_surface) {
+        render_surface->markDirty();
+    }
 
     // 尺寸变化会影响整个布局
     if (dom_manager) {
@@ -129,12 +155,41 @@ void View::update() {
         }
     }
 
-    if (render_surface && render_surface->isDirty() && painter && dom_manager) {
-        auto root = dom_manager->getRoot();
-        if (root) {
-            painter->renderDOM(root, layout_engine.get());
-        }
+    if (!render_surface || !render_surface->isDirty() || !dom_manager) {
+        return;
     }
+
+    auto root = dom_manager->getRoot();
+    if (!root) {
+        return;
+    }
+
+    // GPU 路径：DisplayList → GPU 渲染
+    if (use_gpu_ && gpu_driver_ && painter) {
+        SDL_Log("[View::update] Building DisplayList...");
+        const render::DisplayList& dl = painter->buildDisplayList(root, layout_engine.get());
+        SDL_Log("[View::update] DisplayList built with %zu items", dl.items.size());
+        
+        render::GPUCompiler compiler;
+        render::GPUCommandList cmd_list;
+        SDL_Log("[View::update] Compiling DisplayList to GPUCommandList...");
+        compiler.compile(dl, cmd_list);
+        SDL_Log("[View::update] GPUCommandList compiled with %zu commands", cmd_list.commands.size());
+
+        SDL_Log("[View::update] Beginning GPU frame...");
+        gpu_driver_->beginFrame();
+        SDL_Log("[View::update] Executing GPUCommandList...");
+        gpu_driver_->execute(cmd_list);
+        SDL_Log("[View::update] Ending GPU frame...");
+        gpu_driver_->endFrame();
+        SDL_Log("[View::update] GPU frame completed");
+        return;
+    }
+
+    // CPU 路径（保留，暂时注释）
+    // if (painter) {
+    //     painter->renderDOM(root, layout_engine.get());
+    // }
 }
 
 void* View::get_pixel_buffer() {
@@ -262,16 +317,120 @@ void View::setRenderMode(bool use_gpu) {
 
     use_gpu_ = use_gpu;
 
-    if (use_gpu) {
-        // TODO: 创建 GPU 纹理表面
-        // render_surface = std::make_unique<render::GPUTextureSurface>(width_, height_, 0);
+    if (use_gpu_) {
+        // 创建 GPU 设备（离屏渲染，暂不绑定窗口）
+#ifdef __APPLE__
+        render::GPUDevice::CreateInfo ci{ SDL_GPU_SHADERFORMAT_MSL, false };
+#else
+        render::GPUDevice::CreateInfo ci{ SDL_GPU_SHADERFORMAT_SPIRV, false };
+#endif
+        gpu_device_ = std::make_unique<render::GPUDevice>();
+        if (!gpu_device_->initialize(ci)) {
+            gpu_device_.reset();
+            use_gpu_ = false;
+        }
+
+        if (use_gpu_) {
+            // 用 GPU 纹理替换渲染表面
+            auto gpu_surface = std::make_unique<render::GPUTextureSurfaceImpl>(
+                gpu_device_->getHandle(),
+                nullptr,
+                width_,
+                height_
+            );
+            render_surface = std::move(gpu_surface);
+
+            shader_manager_ = std::make_unique<render::ShaderManager>(gpu_device_.get());
+            gpu_painter_ = std::make_unique<render::GPUPainter>(
+                static_cast<render::GPUTextureSurfaceImpl*>(render_surface.get()),
+                gpu_device_.get(),
+                shader_manager_.get()
+            );
+            gpu_painter_->initialize();
+        }
     } else {
-        // 使用 CPU 缓冲
+        // 回退到 CPU 缓冲路径
+        gpu_painter_.reset();
+        shader_manager_.reset();
+        gpu_device_.reset();
         render_surface = std::make_unique<render::CPUBufferSurface>(width_, height_);
+        painter = std::make_unique<render::Painter>(render_surface.get());
     }
 
+    if (!use_gpu_ && !painter) {
+        // 如果 GPU 初始化失败，回退到 CPU
+        render_surface = std::make_unique<render::CPUBufferSurface>(width_, height_);
+        painter = std::make_unique<render::Painter>(render_surface.get());
+    }
+
+    if (render_surface) {
+        render_surface->markDirty();
+    }
+}
+
+void View::setExternalGPUDevice(SDL_GPUDevice* device, SDL_Window* window) {
+    if (!device || !window) {
+        return;
+    }
+
+#ifdef __APPLE__
+    SDL_GPUShaderFormat format = SDL_GPU_SHADERFORMAT_MSL;
+#else
+    SDL_GPUShaderFormat format = SDL_GPU_SHADERFORMAT_SPIRV;
+#endif
+
+    if (!gpu_device_) {
+        gpu_device_ = std::make_unique<render::GPUDevice>();
+    }
+    gpu_device_->adoptExternal(device, format);
+
+    // 释放旧的 CPU/GPU 表面和 Painter，避免悬空引用
+    painter.reset();
+    gpu_surface_.reset();
+    render_surface.reset();
+
+    // 创建 GPU 表面用于窗口绑定
+    gpu_surface_ = std::make_unique<render::GPUTextureSurfaceImpl>(
+        device,
+        window,
+        width_,
+        height_
+    );
+
+    // 始终创建 CPU 缓冲作为主渲染表面（由 CPU Painter 绘制）
+    auto cpu_surface = std::make_unique<render::CPUBufferSurface>(width_, height_);
+    render_surface = std::move(cpu_surface);
+
+    // 创建 CPU Painter 用于绘制 DOM（DisplayList 生成仍在 CPU 侧完成）
     painter = std::make_unique<render::Painter>(render_surface.get());
-    render_surface->markDirty();
+
+    shader_manager_ = std::make_unique<render::ShaderManager>(gpu_device_.get());
+    gpu_painter_.reset();
+
+    gpu_driver_ = std::make_unique<render::GPUDriverSDL>(
+        gpu_device_.get(),
+        window,
+        shader_manager_.get()
+    );
+
+    // TODO: 重新接入 ResourceManager（用于图片缓存）
+    // if (painter && gpu_driver_) {
+    //     auto* rm = painter->getResourceManager();
+    //     static_cast<render::GPUDriverSDL*>(gpu_driver_.get())->setImageResourceManager(rm);
+    // }
+
+    if (!static_cast<render::GPUDriverSDL*>(gpu_driver_.get())->initialize()) {
+        gpu_driver_.reset();
+        shader_manager_.reset();
+        gpu_surface_.reset();
+        use_gpu_ = false;
+        return;
+    }
+
+    use_gpu_ = true;
+    if (render_surface) {
+        render_surface->markDirty();
+    }
 }
 
 } // namespace dong

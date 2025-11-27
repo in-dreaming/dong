@@ -76,6 +76,18 @@ void dong_view_send_key_up(dong_view_t* view, uint32_t key_code) {
     reinterpret_cast<DongView*>(view)->handle_key_up(key_code);
 }
 
+void dong_view_set_render_mode(dong_view_t* view, bool use_gpu) {
+    if (!view) return;
+    reinterpret_cast<DongView*>(view)->setRenderMode(use_gpu);
+}
+
+void dong_view_set_external_gpu_device(dong_view_t* view, void* device, void* window) {
+    if (!view || !device || !window) return;
+    SDL_GPUDevice* gpu_device = reinterpret_cast<SDL_GPUDevice*>(device);
+    SDL_Window* sdl_window = reinterpret_cast<SDL_Window*>(window);
+    reinterpret_cast<DongView*>(view)->setExternalGPUDevice(gpu_device, sdl_window);
+}
+
 bool dong_view_eval(dong_view_t* view, const char* script) {
     if (!view || !script) return false;
     return reinterpret_cast<DongView*>(view)->eval_script(script);

@@ -1,9 +1,7 @@
 #include "painter.hpp"
-#include "skia_backend.hpp"
 #include <cstring>
 #include <iostream>
 #include <cstdint>
-#include <stdexcept>
 #include <algorithm>
 #include <vector>
 #include <sstream>
@@ -11,143 +9,13 @@
 
 namespace dong::render {
 
-Painter::Painter(RenderSurface* surface)
-    : surface_(surface), layout_engine_(nullptr), in_frame_(false), current_opacity_(1.0f),
-      sk_canvas_(nullptr), sk_surface_(nullptr) {
-    // Initialize Skia backend
-    auto backend = std::make_unique<SkiaBackend>(surface);
-    if (backend && backend->initialize()) {
-        sk_canvas_ = reinterpret_cast<void*>(backend->getCanvas());
-        sk_surface_ = reinterpret_cast<void*>(backend->getSurface());
-        skia_backend_ = std::move(backend);
-    }
-}
-
-Painter::~Painter() {
-    // Skia resources cleaned up by SkiaBackend destructor
-    skia_backend_.reset();
-}
-
-void Painter::beginFrame() {
-    if (!surface_) return;
-
-    in_frame_ = true;
-    current_opacity_ = 1.0f;
-
-    // Clear surface
-    surface_->lock();
-    surface_->clear(255, 255, 255, 255); // White background
-    surface_->unlock();
-}
-
-void Painter::endFrame() {
-    if (!surface_) return;
-
-    in_frame_ = false;
-
-    // Commit Skia drawing
-    if (skia_backend_) {
-        skia_backend_->flush();
-    }
-
-    // Mark surface as updated
-    surface_->unlock();
-}
-
-void Painter::renderDOM(const dom::DOMNodePtr& root, layout::Engine* layout_engine) {
-    if (!root) return;
-
-    layout_engine_ = layout_engine;
-
-    beginFrame();
-
-    if (layout_engine_) {
-        current_dirty_rect_ = layout_engine_->getDirtyRect();
-        const auto* layout_root = layout_engine_->getLayout(root);
-        if (layout_root) {
-            renderNode(root, layout_root);
-        }
-    } else {
-        current_dirty_rect_ = layout::DirtyRect();
-        renderNode(root, nullptr);
-    }
-
-    endFrame();
-    layout_engine_ = nullptr;
-}
-
-void Painter::renderNode(const dom::DOMNodePtr& node, const layout::LayoutNode* layout_node) {
-    if (!node) return;
-
-    const auto& style = node->getComputedStyle();
-    if (style.display == "none") {
-        return;
-    }
-
-    // Skip text nodes (rendered as part of parent element content)
-    if (node->getType() == dom::DOMNode::NodeType::TEXT) {
-        return;
-    }
-    
-
-
-    // Dirty rect optimization: skip nodes outside dirty region (but skip for img tags)
-    if (use_dirty_rect_ && !current_dirty_rect_.isEmpty() && layout_node && node->getTagName() != "img") {
-        if (!isNodeInDirtyRect(layout_node)) {
-            return;
-        }
-    }
-
-    // Opacity stack: 累乘当前节点的 opacity
-    float prev_opacity = current_opacity_;
-    current_opacity_ *= style.opacity;
-
-    bool pushed_clip = false;
-    
-    // Draw background and borders if layout provided
-    if (layout_node) {
-        // Apply overflow clipping for this node if requested
-        if (style.overflow == "hidden") {
-            float x = layout_node->layout.position[0];
-            float y = layout_node->layout.position[1];
-            float w = layout_node->layout.dimensions[0];
-            float h = layout_node->layout.dimensions[1];
-            if (w > 0.0f && h > 0.0f) {
-                setClipRect(x, y, w, h);
-                pushed_clip = true;
-            }
-        }
-
-        drawNodeBackground(node, layout_node);
-        drawNodeBorder(node, layout_node);
-        drawNodeContent(node, layout_node);
-    }
-
-    // Recursively render children
-    const auto& children = node->getChildren();
-    for (const auto& child : children) {
-        const layout::LayoutNode* child_layout = nullptr;
-        if (layout_engine_ && child && child->getType() == dom::DOMNode::NodeType::ELEMENT) {
-            child_layout = layout_engine_->getLayout(child);
-        }
-        renderNode(child, child_layout);
-    }
-
-    if (pushed_clip) {
-        clearClipRect();
-    }
-
-    current_opacity_ = prev_opacity;
-}
-
 namespace {
 
-// 简单 CSS 颜色解析器，支持 #rgb/#rrggbb 和少量命名色
+// CSS 颜色解析器
 static void parseCssColor(const std::string& css, uint8_t& r, uint8_t& g, uint8_t& b, uint8_t& a) {
     std::string s = css;
     a = 255;
 
-    // 去空格并转小写
     s.erase(std::remove_if(s.begin(), s.end(), ::isspace), s.end());
     std::transform(s.begin(), s.end(), s.begin(), ::tolower);
 
@@ -187,7 +55,7 @@ static void parseCssColor(const std::string& css, uint8_t& r, uint8_t& g, uint8_
         }
     }
 
-    // 简单命名色
+    // 命名颜色
     if (s == "white")      { r = g = b = 255; return; }
     if (s == "black")      { r = g = b = 0;   return; }
     if (s == "red")        { r = 255; g = 0;   b = 0;   return; }
@@ -196,14 +64,22 @@ static void parseCssColor(const std::string& css, uint8_t& r, uint8_t& g, uint8_
     if (s == "gray" || s == "grey") { r = g = b = 128; return; }
     if (s == "lightgray" || s == "lightgrey") { r = g = b = 211; return; }
 
-    // 兜底：浅灰
     r = g = b = 240;
 }
 
+static Color makeColorFromCss(const std::string& css) {
+    uint8_t r8 = 255, g8 = 255, b8 = 255, a8 = 255;
+    parseCssColor(css, r8, g8, b8, a8);
+    Color c;
+    c.r = r8 / 255.0f;
+    c.g = g8 / 255.0f;
+    c.b = b8 / 255.0f;
+    c.a = a8 / 255.0f;
+    return c;
+}
+
 static std::string collapseWhitespace(const std::string& input) {
-    if (input.empty()) {
-        return "";
-    }
+    if (input.empty()) return "";
 
     std::string output;
     output.reserve(input.size());
@@ -221,270 +97,301 @@ static std::string collapseWhitespace(const std::string& input) {
     }
 
     size_t first = output.find_first_not_of(' ');
-    if (first == std::string::npos) {
-        return "";
-    }
+    if (first == std::string::npos) return "";
     size_t last = output.find_last_not_of(' ');
     return output.substr(first, last - first + 1);
 }
 
+// 简单的文本宽度估算（后续用 HarfBuzz 替换）
+static float estimateTextWidth(const std::string& text, float font_size) {
+    return static_cast<float>(text.size()) * font_size * 0.55f;
+}
+
+static bool shouldClipOverflow(const std::string& overflow_value) {
+    std::string lowered = overflow_value;
+    std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    return lowered == "hidden" || lowered == "scroll";
+}
+
 } // anonymous namespace
 
-void Painter::drawNodeBackground(const dom::DOMNodePtr& node, const layout::LayoutNode* layout_node) {
-    if (!node || !layout_node || !skia_backend_) return;
-
-    const auto& style = node->getComputedStyle();
-    if (style.background_color == "transparent") return;
-
-    float x = layout_node->layout.position[0];
-    float y = layout_node->layout.position[1];
-    float width = layout_node->layout.dimensions[0];
-    float height = layout_node->layout.dimensions[1];
-
-    // Special-case root/html/body to fill the viewport horizontally
-    const std::string& tag = node->getTagName();
-    if ((tag.empty() || tag == "html" || tag == "body") && surface_) {
-        x = 0.0f;
-        y = 0.0f;
-        width = static_cast<float>(surface_->getWidth());
-        height = static_cast<float>(surface_->getHeight());
-    }
-
-    if (width <= 0.0f || height <= 0.0f) return;
-
-    uint8_t r = 240, g = 240, b = 240, a = 255;
-    parseCssColor(style.background_color, r, g, b, a);
-    a = static_cast<uint8_t>(a * current_opacity_);
-
-    if (style.border_radius > 0.0f) {
-        skia_backend_->drawRoundRect(x, y, width, height, style.border_radius,
-                                     r, g, b, a, 0.0f);
-    } else {
-        skia_backend_->drawRect(x, y, width, height, r, g, b, a);
-    }
+Painter::Painter(RenderSurface* surface)
+    : surface_(surface), layout_engine_(nullptr) {
 }
 
-void Painter::drawNodeBorder(const dom::DOMNodePtr& node, const layout::LayoutNode* layout_node) {
-    if (!node || !layout_node || !skia_backend_) return;
-
-    const auto& style = node->getComputedStyle();
-    float x = layout_node->layout.position[0];
-    float y = layout_node->layout.position[1];
-    float width = layout_node->layout.dimensions[0];
-    float height = layout_node->layout.dimensions[1];
-
-    // Draw border
-    if (style.border_width > 0 && style.border_color != "transparent") {
-        uint8_t r = 0, g = 0, b = 0, a = 255;
-        if (style.border_color == "red") { r = 255; }
-        else if (style.border_color == "blue") { b = 255; }
-        else if (style.border_color == "green") { g = 255; }
-        a = static_cast<uint8_t>(a * current_opacity_);
-
-        skia_backend_->drawStroke(x, y, width, height, style.border_width, r, g, b, a);
-    }
-
-    // Draw rounded corners
-    if (style.border_radius > 0) {
-        skia_backend_->drawRoundRect(x, y, width, height, style.border_radius,
-                                      50, 50, 50, 0, 0.5f);
-    }
+Painter::~Painter() {
 }
 
-void Painter::drawNodeContent(const dom::DOMNodePtr& node, const layout::LayoutNode* layout_node) {
-    if (!node || !layout_node || !skia_backend_) return;
+const DisplayList& Painter::buildDisplayList(const dom::DOMNodePtr& root, layout::Engine* layout_engine) {
+    layout_engine_ = layout_engine;
+
+    display_list_builder_.clear();
+
+    if (layout_engine_) {
+        current_dirty_rect_ = layout_engine_->getDirtyRect();
+        const auto* layout_root = layout_engine_->getLayout(root);
+        if (layout_root) {
+            buildDisplayListNode(root, layout_root, display_list_builder_);
+        }
+    }
+
+    layout_engine_ = nullptr;
+    return display_list_builder_.get();
+}
+
+void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
+                                   const layout::LayoutNode* layout_node,
+                                   DisplayListBuilder& builder) {
+    if (!node) return;
+
+    const auto& style = node->getComputedStyle();
+    if (style.display == "none") return;
+
+    if (node->getType() == dom::DOMNode::NodeType::TEXT) return;
+
+    // Dirty rect 优化
+    if (use_dirty_rect_ && !current_dirty_rect_.isEmpty() && layout_node) {
+        if (!isNodeInDirtyRect(layout_node)) {
+            return;
+        }
+    }
+
 
     const std::string tag = node->getTagName();
-    if (tag == "script" || tag == "style" || tag == "head") {
-        return;
+
+    Rect node_rect{};
+    bool has_layout_rect = false;
+    if (layout_node) {
+        node_rect.x = layout_node->layout.position[0];
+        node_rect.y = layout_node->layout.position[1];
+        node_rect.width = layout_node->layout.dimensions[0];
+        node_rect.height = layout_node->layout.dimensions[1];
+        has_layout_rect = node_rect.width > 0.0f && node_rect.height > 0.0f;
     }
 
-    // Handle img tag specially - draw the image
-    if (tag == "img") {
-        std::string src = node->getAttribute("src");
-        if (!src.empty()) {
-            const auto& style = node->getComputedStyle();
-            float x = layout_node->layout.position[0];
-            float y = layout_node->layout.position[1];
-            float width = layout_node->layout.dimensions[0];
-            float height = layout_node->layout.dimensions[1];
-            
-            uint8_t alpha = static_cast<uint8_t>(255 * current_opacity_);
-            skia_backend_->drawImage(src, x, y, width, height, alpha);
+    const bool should_apply_clip = has_layout_rect && shouldClipOverflow(style.overflow);
+
+    DisplayListBuilder::ScopedLayer opacity_scope;
+    float clamped_opacity = std::clamp(style.opacity, 0.0f, 1.0f);
+
+    Rect layer_bounds = node_rect;
+    if (!has_layout_rect && surface_) {
+        layer_bounds.x = 0.0f;
+        layer_bounds.y = 0.0f;
+        layer_bounds.width = static_cast<float>(surface_->getWidth());
+        layer_bounds.height = static_cast<float>(surface_->getHeight());
+    }
+
+    bool has_isolation = style.isolation_isolate && (layer_bounds.width > 0.0f && layer_bounds.height > 0.0f);
+    bool needs_layer = has_isolation || clamped_opacity < 0.999f;
+    if (needs_layer) {
+        opacity_scope = builder.pushLayer(clamped_opacity, has_isolation, layer_bounds);
+    }
+
+    // 1. 背景
+    if (layout_node && style.background_color != "transparent") {
+        Rect rect = node_rect;
+
+        // root/html/body 填满 viewport
+        if ((tag.empty() || tag == "html" || tag == "body") && surface_) {
+            rect.x = 0.0f;
+            rect.y = 0.0f;
+            rect.width = static_cast<float>(surface_->getWidth());
+            rect.height = static_cast<float>(surface_->getHeight());
         }
-        return;
-    }
 
-    bool has_text_child = false;
-    bool has_element_child = false;
-    std::string raw_text;
-    for (const auto& child : node->getChildren()) {
-        if (!child) continue;
-        if (child->getType() == dom::DOMNode::NodeType::TEXT) {
-            raw_text += child->getTextContent();
-            has_text_child = true;
-        } else if (child->getType() == dom::DOMNode::NodeType::ELEMENT) {
-            has_element_child = true;
-        }
-    }
-
-    const bool tag_prefers_text =
-        tag == "h1" || tag == "h2" || tag == "h3" || tag == "h4" ||
-        tag == "h5" || tag == "h6" || tag == "p" || tag == "span" ||
-        tag == "button" || tag == "code" || tag == "div" || tag == "footer";
-
-    if (!has_text_child) {
-        return;
-    }
-    if (!tag_prefers_text && has_element_child) {
-        return;
-    }
-
-    std::string text = collapseWhitespace(raw_text);
-    if (text.empty()) {
-        return;
-    }
-
-    const auto& style = node->getComputedStyle();
-    float x = layout_node->layout.position[0];
-    float y = layout_node->layout.position[1];
-    float width = layout_node->layout.dimensions[0];
-    float height = layout_node->layout.dimensions[1];
-
-    float pad_left = style.padding_left.isPixel() ? style.padding_left.value : 0.0f;
-    float pad_right = style.padding_right.isPixel() ? style.padding_right.value : 0.0f;
-    float pad_top = style.padding_top.isPixel() ? style.padding_top.value : 0.0f;
-    float pad_bottom = style.padding_bottom.isPixel() ? style.padding_bottom.value : 0.0f;
-
-    float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
-    float line_height = font_size * (tag == "h1" ? 1.25f : (tag == "h2" ? 1.2f : 1.35f));
-    if (tag == "button" || tag == "span") {
-        line_height = font_size * 1.2f;
-    }
-
-    uint8_t r = 0, g = 0, b = 0, a = 255;
-    parseCssColor(style.color, r, g, b, a);
-    a = static_cast<uint8_t>(a * current_opacity_);
-    uint8_t shadow_a = static_cast<uint8_t>(a * 0.6f);
-
-    auto measure = [&](const std::string& line) -> float {
-        if (!skia_backend_) {
-            return static_cast<float>(line.size()) * font_size * 0.5f;
-        }
-        return skia_backend_->measureTextWidth(line, font_size, style.font_family, style.font_weight);
-    };
-
-    float inner_width = width - pad_left - pad_right;
-    if (inner_width <= 0.0f) {
-        inner_width = width > 0.0f ? width : 0.0f;
-    }
-
-    std::vector<std::string> lines;
-    if (inner_width <= 0.0f) {
-        lines.push_back(text);
-    } else {
-        std::istringstream stream(text);
-        std::string word;
-        std::string current_line;
-        while (stream >> word) {
-            std::string candidate = current_line.empty() ? word : current_line + " " + word;
-            float candidate_width = measure(candidate);
-            if (candidate_width <= inner_width || current_line.empty()) {
-                current_line = candidate;
+        if (rect.width > 0.0f && rect.height > 0.0f) {
+            Color c = makeColorFromCss(style.background_color);
+            if (style.border_radius > 0.0f) {
+                builder.addRoundedRect(rect, c, style.border_radius);
             } else {
-                lines.push_back(current_line);
-                current_line = word;
+                builder.addRect(rect, c);
             }
         }
-        if (!current_line.empty()) {
-            lines.push_back(current_line);
+    }
+
+    DisplayListBuilder::ScopedClip clip_scope;
+    if (should_apply_clip) {
+        if (style.border_radius > 0.0f) {
+            clip_scope = builder.pushRoundedClip(node_rect, style.border_radius);
+        } else {
+            clip_scope = builder.pushClipRect(node_rect);
         }
     }
 
-    if (lines.empty()) {
-        lines.push_back(text);
+    // 2. 图片
+    if (layout_node && tag == "img") {
+        std::string src = node->getAttribute("src");
+        if (!src.empty()) {
+            Rect rect{};
+            rect.x = layout_node->layout.position[0];
+            rect.y = layout_node->layout.position[1];
+            rect.width = layout_node->layout.dimensions[0];
+            rect.height = layout_node->layout.dimensions[1];
+
+            if (rect.width > 0.0f && rect.height > 0.0f) {
+                builder.addImage(rect, src, 1.0f);
+            }
+        }
     }
 
-    float first_baseline;
-    if (height > font_size + pad_top + pad_bottom) {
-        first_baseline = y + pad_top + font_size;
-    } else {
-        first_baseline = y + height * 0.5f + font_size * 0.35f;
-    }
-
-    for (size_t i = 0; i < lines.size(); ++i) {
-        const std::string& line = lines[i];
-        float line_width = measure(line);
-        float text_x = x + pad_left;
-        if (style.text_align == "center") {
-            text_x = x + pad_left + std::max(0.0f, (inner_width - line_width) * 0.5f);
-        } else if (style.text_align == "right") {
-            text_x = x + pad_left + std::max(0.0f, inner_width - line_width);
+    // 3. 文本内容
+    if (layout_node && tag != "script" && tag != "style" && tag != "head" && tag != "img") {
+        bool has_text_child = false;
+        bool has_element_child = false;
+        std::string raw_text;
+        
+        for (const auto& child : node->getChildren()) {
+            if (!child) continue;
+            if (child->getType() == dom::DOMNode::NodeType::TEXT) {
+                raw_text += child->getTextContent();
+                has_text_child = true;
+            } else if (child->getType() == dom::DOMNode::NodeType::ELEMENT) {
+                has_element_child = true;
+            }
         }
 
-        float text_y = first_baseline + static_cast<float>(i) * line_height;
+        const bool tag_prefers_text =
+            tag == "h1" || tag == "h2" || tag == "h3" || tag == "h4" ||
+            tag == "h5" || tag == "h6" || tag == "p" || tag == "span" ||
+            tag == "button" || tag == "code" || tag == "div" || tag == "footer";
 
-        if (shadow_a > 0) {
-            skia_backend_->drawTextStyled(line, text_x + 1.0f, text_y + 1.0f,
-                                          font_size, style.font_family, style.font_weight,
-                                          0, 0, 0, shadow_a);
+        if (has_text_child && (tag_prefers_text || !has_element_child)) {
+            std::string text = collapseWhitespace(raw_text);
+            if (!text.empty()) {
+                float x = layout_node->layout.position[0];
+                float y = layout_node->layout.position[1];
+                float width = layout_node->layout.dimensions[0];
+                float height = layout_node->layout.dimensions[1];
+
+                float pad_left = style.padding_left.isPixel() ? style.padding_left.value : 0.0f;
+                float pad_right = style.padding_right.isPixel() ? style.padding_right.value : 0.0f;
+                float pad_top = style.padding_top.isPixel() ? style.padding_top.value : 0.0f;
+
+                float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
+                float line_height = font_size * (tag == "h1" ? 1.25f : (tag == "h2" ? 1.2f : 1.35f));
+
+                Color text_color = makeColorFromCss(style.color);
+
+                float inner_width = width - pad_left - pad_right;
+                if (inner_width <= 0.0f) inner_width = width > 0.0f ? width : 0.0f;
+
+                // 简单的换行逻辑
+                std::vector<std::string> lines;
+                if (inner_width <= 0.0f) {
+                    lines.push_back(text);
+                } else {
+                    std::istringstream stream(text);
+                    std::string word;
+                    std::string current_line;
+                    while (stream >> word) {
+                        std::string candidate = current_line.empty() ? word : current_line + " " + word;
+                        float candidate_width = estimateTextWidth(candidate, font_size);
+                        if (candidate_width <= inner_width || current_line.empty()) {
+                            current_line = candidate;
+                        } else {
+                            lines.push_back(current_line);
+                            current_line = word;
+                        }
+                    }
+                    if (!current_line.empty()) {
+                        lines.push_back(current_line);
+                    }
+                }
+
+                if (lines.empty()) {
+                    lines.push_back(text);
+                }
+
+                for (size_t i = 0; i < lines.size(); ++i) {
+                    const std::string& line = lines[i];
+
+                    TextShapeRequest request{};
+                    request.text = line;
+                    request.font_family = style.font_family;
+                    request.font_weight = style.font_weight;
+                    request.font_size = font_size;
+
+                    ShapedText shaped{};
+                    if (!text_shaper_.shape(request, shaped) || shaped.glyphs.empty()) {
+                        continue;
+                    }
+
+                    float line_width = shaped.width > 0.0f ? shaped.width : estimateTextWidth(line, font_size);
+                    float effective_line_height = shaped.line_height > 0.0f ? shaped.line_height : line_height;
+                    float ascent = shaped.ascent > 0.0f ? shaped.ascent : font_size;
+
+                    float text_x = x + pad_left;
+                    if (style.text_align == "center") {
+                        text_x = x + pad_left + std::max(0.0f, (inner_width - line_width) * 0.5f);
+                    } else if (style.text_align == "right") {
+                        text_x = x + pad_left + std::max(0.0f, inner_width - line_width);
+                    }
+
+                    float base_baseline = y + pad_top + ascent;
+                    float baseline_y = base_baseline + static_cast<float>(i) * effective_line_height;
+
+                    DrawGlyphRunData glyph{};
+                    glyph.rect.x = text_x;
+                    glyph.rect.y = baseline_y - ascent;
+                    glyph.rect.width = line_width;
+                    glyph.rect.height = effective_line_height;
+                    glyph.color = text_color;
+                    glyph.font_size = font_size;
+                    glyph.font_family = style.font_family;
+                    glyph.font_weight = style.font_weight;
+                    glyph.font_path = shaped.font_path;
+                    glyph.baseline_x = text_x;
+                    glyph.baseline_y = baseline_y;
+
+                    glyph.glyphs.reserve(shaped.glyphs.size());
+                    for (const auto& shaped_glyph : shaped.glyphs) {
+                        GlyphInstance instance{};
+                        instance.glyph_id = shaped_glyph.glyph_id;
+                        instance.pen_x = shaped_glyph.pen_x + text_x;
+                        instance.pen_y = shaped_glyph.pen_y + baseline_y;
+                        glyph.glyphs.push_back(instance);
+                    }
+
+                    builder.addGlyphRun(std::move(glyph));
+                }
+            }
         }
-
-        skia_backend_->drawTextStyled(line, text_x, text_y,
-                                      font_size, style.font_family, style.font_weight,
-                                      r, g, b, a);
     }
-}
 
-void Painter::drawRect(float x, float y, float width, float height,
-                       uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
-    if (skia_backend_) {
-        skia_backend_->drawRect(x, y, width, height, r, g, b, a);
+    // 4. 递归子节点
+    const auto& children = node->getChildren();
+    for (const auto& child : children) {
+        const layout::LayoutNode* child_layout = nullptr;
+        if (layout_engine_ && child && child->getType() == dom::DOMNode::NodeType::ELEMENT) {
+            child_layout = layout_engine_->getLayout(child);
+        }
+        buildDisplayListNode(child, child_layout, builder);
     }
-}
 
-void Painter::drawText(const std::string& text, float x, float y, float font_size,
-                       uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
-    if (skia_backend_) {
-        skia_backend_->drawText(text, x, y, font_size, r, g, b, a);
-    }
-}
-
-void Painter::drawImage(const std::string& image_path, float x, float y,
-                        float width, float height) {
-    if (skia_backend_) {
-        skia_backend_->drawImage(image_path, x, y, width, height);
-    }
-}
-
-void Painter::setClipRect(float x, float y, float width, float height) {
-    if (skia_backend_) {
-        skia_backend_->saveState();
-        skia_backend_->clipRect(x, y, width, height);
-    }
-}
-
-void Painter::clearClipRect() {
-    if (skia_backend_) {
-        skia_backend_->restoreState();
-    }
-}
-
-void Painter::setOpacity(float opacity) {
-    current_opacity_ = opacity;
 }
 
 bool Painter::isNodeInDirtyRect(const layout::LayoutNode* layout_node) const {
     if (!layout_node || current_dirty_rect_.isEmpty()) {
         return true;
     }
-    
-    float x = layout_node->layout.position[0];
-    float y = layout_node->layout.position[1];
-    float w = layout_node->layout.dimensions[0];
-    float h = layout_node->layout.dimensions[1];
-    
-    return current_dirty_rect_.intersects(x, y, w, h);
+
+    float node_x = layout_node->layout.position[0];
+    float node_y = layout_node->layout.position[1];
+    float node_w = layout_node->layout.dimensions[0];
+    float node_h = layout_node->layout.dimensions[1];
+
+    float dirty_x = current_dirty_rect_.x;
+    float dirty_y = current_dirty_rect_.y;
+    float dirty_w = current_dirty_rect_.width;
+    float dirty_h = current_dirty_rect_.height;
+
+    bool x_overlap = (node_x < dirty_x + dirty_w) && (node_x + node_w > dirty_x);
+    bool y_overlap = (node_y < dirty_y + dirty_h) && (node_y + node_h > dirty_y);
+
+    return x_overlap && y_overlap;
 }
 
 } // namespace dong::render

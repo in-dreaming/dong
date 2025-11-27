@@ -4,6 +4,10 @@
 #include <memory>
 #include <string>
 
+// Forward declare SDL types
+struct SDL_GPUDevice;
+struct SDL_Window;
+
 namespace dong::dom {
 class Manager;
 class EventDispatcher;
@@ -12,6 +16,11 @@ class EventDispatcher;
 namespace dong::render {
 class Painter;
 class RenderSurface;
+class GPUDevice;
+class GPUTextureSurfaceImpl;
+class GPUPainter;
+class ShaderManager;
+class GPUDriver;
 }
 
 namespace dong::script {
@@ -34,6 +43,7 @@ public:
     void resize(uint32_t width, uint32_t height);
     void update();
     void* get_pixel_buffer();
+    render::RenderSurface* getRenderSurface() const { return render_surface.get(); }
 
     // Input events (forwarded from C API)
     void handle_mouse_move(int32_t x, int32_t y);
@@ -52,6 +62,7 @@ public:
 
     // Rendering modes
     void setRenderMode(bool use_gpu);
+    void setExternalGPUDevice(SDL_GPUDevice* device, SDL_Window* window);
 
 private:
     uint32_t width_;
@@ -63,6 +74,14 @@ private:
     std::unique_ptr<render::Painter> painter;
     std::unique_ptr<script::ScriptEngine> script_engine;
     std::unique_ptr<script::JSBindings> js_bindings;
+
+    // GPU 渲染相关（可选）
+    std::unique_ptr<render::GPUDevice> gpu_device_;
+    std::unique_ptr<render::GPUTextureSurfaceImpl> gpu_surface_;
+    std::unique_ptr<render::ShaderManager> shader_manager_;
+    std::unique_ptr<render::GPUPainter> gpu_painter_;
+    std::unique_ptr<render::GPUDriver> gpu_driver_;
+
     bool use_gpu_;
     bool js_bindings_initialized_ = false;
     int32_t last_mouse_x_ = 0;

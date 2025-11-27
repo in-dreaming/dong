@@ -61,6 +61,7 @@ struct ComputedStyle {
     float border_width = 0.0f;
     std::string overflow = "visible"; // visible, hidden, scroll
     float opacity = 1.0f;              // 0.0 ~ 1.0
+    bool isolation_isolate = false;     // isolation: auto | isolate (default auto)
 
     // Text
     std::string font_family = "Arial";
