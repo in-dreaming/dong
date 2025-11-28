@@ -1578,8 +1578,10 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 SDL_Log("GPUDriverSDL: glyph atlas texture unavailable");
                 break;
             }
-            float base_bitmap = static_cast<float>(glyph_tier->bitmap_px);
-            float glyph_scale = (base_bitmap > 0.0f) ? (font_size / base_bitmap) : 1.0f;
+
+            // 以 glyph atlas 的参考像素字号为基准，按比例缩放到实际 font_size
+            const float atlas_font_px = static_cast<float>(glyph_tier->bitmap_px > 0 ? glyph_tier->bitmap_px : 16u);
+            const float glyph_scale = font_size / atlas_font_px;
 
             // atlas_range = MSDF 生成时的 range（以 atlas 像素为单位）
             const float atlas_range = glyph_tier->distance_range;
@@ -1618,14 +1620,18 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                     continue;
                 }
 
-                float glyph_x = glyph.pen_x + entry->metrics.bearing_x * glyph_scale;
-                float glyph_y = glyph.pen_y - entry->metrics.bearing_y * glyph_scale;
-                float glyph_w = std::max(entry->metrics.width * glyph_scale, 0.0f);
-                float glyph_h = std::max(entry->metrics.height * glyph_scale, 0.0f);
+                // GlyphMetrics 现在是基于 atlas_font_px 的像素度量，这里按 glyph_scale 线性缩放
+                const float bearing_x_px = entry->metrics.bearing_x * glyph_scale;
+                const float bearing_y_px = entry->metrics.bearing_y * glyph_scale;
+                const float glyph_w = std::max(entry->metrics.width * glyph_scale, 0.0f);
+                const float glyph_h = std::max(entry->metrics.height * glyph_scale, 0.0f);
 
                 if (glyph_w <= 0.0f || glyph_h <= 0.0f) {
                     continue;
                 }
+
+                float glyph_x = glyph.pen_x + bearing_x_px;
+                float glyph_y = glyph.pen_y - bearing_y_px;
 
                 TextUniformData u{};
                 u.rect[0] = glyph_x;
@@ -1640,7 +1646,7 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
 
                 write_viewport(u.viewport);
 
-            writeLinearColor(cmd.color, u.color);
+                writeLinearColor(cmd.color, u.color);
 
                 // uParams.x = pxRange (MSDF 生成时的像素 range)
                 // uParams.y = 预留（目前未用）

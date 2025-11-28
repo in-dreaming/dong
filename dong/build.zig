@@ -432,6 +432,7 @@ pub fn build(b: *std.Build) void {
             "src/render/gpu_surface.cpp",
             "src/render/font_resolver.cpp",
             "src/render/text_shaper.cpp",
+            "src/render/font_metrics.cpp",
             "src/render/gpu_painter.cpp",
             "src/render/gpu_driver_sdl.cpp",
             "src/render/shader_manager.cpp",

@@ -1,5 +1,6 @@
 #include "text_shaper.hpp"
 
+#include "font_metrics.hpp"
 #include "font_resolver.hpp"
 
 #include <SDL3/SDL_log.h>
@@ -24,75 +25,10 @@ uint32_t clampPixelSize(float font_size) {
 
 } // namespace
 
-TextShaper::TextShaper() {
-    initialize();
-}
-
-TextShaper::~TextShaper() {
-    for (auto& entry : face_cache_) {
-        if (entry.second) {
-            FT_Done_Face(entry.second);
-        }
-    }
-    face_cache_.clear();
-
-    if (ft_library_) {
-        FT_Done_FreeType(ft_library_);
-        ft_library_ = nullptr;
-    }
-}
-
-bool TextShaper::initialize() {
-    if (initialized_) {
-        return true;
-    }
-    if (FT_Init_FreeType(&ft_library_) != 0) {
-        SDL_Log("TextShaper: failed to initialize FreeType");
-        ft_library_ = nullptr;
-        initialized_ = false;
-        return false;
-    }
-    initialized_ = true;
-    return true;
-}
-
-bool TextShaper::ensureInitialized() {
-    if (initialized_) {
-        return true;
-    }
-    return initialize();
-}
-
-FT_Face TextShaper::getOrCreateFace(const std::string& font_path, uint32_t pixel_size) {
-    if (!ensureInitialized() || font_path.empty()) {
-        return nullptr;
-    }
-
-    std::string key = font_path + "#" + std::to_string(pixel_size);
-    auto it = face_cache_.find(key);
-    if (it != face_cache_.end()) {
-        return it->second;
-    }
-
-    FT_Face face = nullptr;
-    if (FT_New_Face(ft_library_, font_path.c_str(), 0, &face) != 0) {
-        SDL_Log("TextShaper: failed to load font face '%s'", font_path.c_str());
-        return nullptr;
-    }
-
-    FT_Set_Pixel_Sizes(face, 0, pixel_size);
-    face_cache_[key] = face;
-    return face;
-}
-
 bool TextShaper::shape(const TextShapeRequest& request, ShapedText& out_text) {
     out_text = {};
 
     if (request.text.empty()) {
-        return false;
-    }
-
-    if (!ensureInitialized()) {
         return false;
     }
 
@@ -102,22 +38,23 @@ bool TextShaper::shape(const TextShapeRequest& request, ShapedText& out_text) {
         return false;
     }
 
-    uint32_t pixel_size = clampPixelSize(request.font_size);
-    FT_Face face = getOrCreateFace(font_path, pixel_size);
+    const uint32_t pixel_size = clampPixelSize(request.font_size);
+    FT_Face face = getOrCreateFontFace(font_path, pixel_size);
     if (!face) {
+        SDL_Log("TextShaper: failed to get FT_Face for '%s'", font_path.c_str());
         return false;
     }
 
+    // 在像素空间下 shape：HarfBuzz 返回的 26.6 定点值直接代表像素坐标
     hb_font_t* hb_font = hb_ft_font_create_referenced(face);
     if (!hb_font) {
         SDL_Log("TextShaper: failed to create hb_font for '%s'", font_path.c_str());
         return false;
     }
 
-    const int32_t scale = static_cast<int32_t>(std::round(request.font_size * 64.0f));
-    hb_font_set_scale(hb_font, scale, scale);
-
-    hb_ft_font_set_load_flags(hb_font, FT_LOAD_NO_HINTING | FT_LOAD_NO_BITMAP);
+    // 使用无 hinting / 无 bitmap，但保持缩放，让 HarfBuzz 给出像素级几何
+    hb_ft_font_set_load_flags(hb_font,
+                              FT_LOAD_DEFAULT | FT_LOAD_NO_HINTING | FT_LOAD_NO_BITMAP);
     hb_ft_font_set_funcs(hb_font);
 
     hb_buffer_t* buffer = hb_buffer_create();
@@ -141,21 +78,23 @@ bool TextShaper::shape(const TextShapeRequest& request, ShapedText& out_text) {
         const hb_glyph_info_t& info = infos[i];
         const hb_glyph_position_t& pos = positions[i];
 
-        float x_offset = pos.x_offset / 64.0f;
-        float y_offset = pos.y_offset / 64.0f;
-        float x_advance = pos.x_advance / 64.0f;
-        float y_advance = pos.y_advance / 64.0f;
+        // HarfBuzz 返回的位置信息是 26.6 定点数（像素单位），直接转为像素
+        const float x_offset_px = static_cast<float>(pos.x_offset) / 64.0f;
+        const float y_offset_px = static_cast<float>(pos.y_offset) / 64.0f;
+        const float x_advance_px = static_cast<float>(pos.x_advance) / 64.0f;
+        const float y_advance_px = static_cast<float>(pos.y_advance) / 64.0f;
 
         ShapedGlyph glyph{};
         glyph.glyph_id = info.codepoint;
-        glyph.pen_x = pen_x + x_offset;
-        glyph.pen_y = pen_y - y_offset;
+        glyph.pen_x = pen_x + x_offset_px;
+        glyph.pen_y = pen_y - y_offset_px;
         out_text.glyphs.push_back(glyph);
 
-        pen_x += x_advance;
-        pen_y -= y_advance;
+        pen_x += x_advance_px;
+        pen_y -= y_advance_px;
     }
 
+    // 使用 FreeType size->metrics 的像素度量
     if (face->size) {
         out_text.ascent = static_cast<float>(face->size->metrics.ascender) / 64.0f;
         out_text.descent = std::fabs(static_cast<float>(face->size->metrics.descender) / 64.0f);

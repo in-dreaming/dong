@@ -2,11 +2,7 @@
 
 #include <cstdint>
 #include <string>
-#include <unordered_map>
 #include <vector>
-
-#include <ft2build.h>
-#include FT_FREETYPE_H
 
 namespace dong::render {
 
@@ -36,19 +32,11 @@ struct ShapedText {
 
 class TextShaper {
 public:
-    TextShaper();
-    ~TextShaper();
+    TextShaper() = default;
+    ~TextShaper() = default;
 
-    bool initialize();
+    // 对给定文本做 shaping，将结果写入 out_text。
     bool shape(const TextShapeRequest& request, ShapedText& out_text);
-
-private:
-    bool ensureInitialized();
-    FT_Face getOrCreateFace(const std::string& font_path, uint32_t pixel_size);
-
-    FT_Library ft_library_ = nullptr;
-    std::unordered_map<std::string, FT_Face> face_cache_;
-    bool initialized_ = false;
 };
 
 } // namespace dong::render

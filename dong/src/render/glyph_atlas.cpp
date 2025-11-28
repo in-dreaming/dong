@@ -1,5 +1,6 @@
 #include "glyph_atlas.hpp"
 #include "gpu_device.hpp"
+#include "font_metrics.hpp"
 #include <SDL3/SDL_log.h>
 #include <cstring>
 #include <algorithm>
@@ -284,32 +285,24 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
                                std::vector<uint8_t>& out_bitmap,
                                uint32_t& out_width, uint32_t& out_height,
                                GlyphMetrics& out_metrics) {
-    // 初始化 FreeType
-    FT_Library ft;
-    if (FT_Init_FreeType(&ft) != 0) {
-        SDL_Log("GlyphAtlas::generateMSDF: failed to initialize FreeType");
+    if (font_path.empty()) {
         return false;
     }
 
-    FT_Face face;
-    if (FT_New_Face(ft, font_path.c_str(), 0, &face) != 0) {
-        SDL_Log("GlyphAtlas::generateMSDF: failed to load font '%s'", font_path.c_str());
-        FT_Done_FreeType(ft);
+    // 使用共享的 FreeType 库与字体缓存
+    FT_Face face = getOrCreateFontFace(font_path, glyph_bitmap_size_);
+    if (!face) {
+        SDL_Log("GlyphAtlas::generateMSDF: failed to get FT_Face for '%s'", font_path.c_str());
         return false;
     }
 
-    // 设置字符大小（按 Atlas 配置的基准像素生成 MSDF）
-    FT_Set_Pixel_Sizes(face, 0, static_cast<FT_UInt>(glyph_bitmap_size_));
-
-    // 加载字形
-    if (FT_Load_Glyph(face, glyph_id, FT_LOAD_NO_HINTING | FT_LOAD_NO_BITMAP) != 0) {
+    // 加载字形：保持缩放，只关闭 hinting/bitmap，这里得到的是“参考像素尺寸下”的度量
+    if (FT_Load_Glyph(face, glyph_id, FT_LOAD_DEFAULT | FT_LOAD_NO_HINTING | FT_LOAD_NO_BITMAP) != 0) {
         SDL_Log("GlyphAtlas::generateMSDF: failed to load glyph index %u", glyph_id);
-        FT_Done_Face(face);
-        FT_Done_FreeType(ft);
         return false;
     }
 
-    // 获取度量信息
+    // 获取度量信息（像素空间，基于 glyph_bitmap_size_ 的参考字号）
     out_metrics.advance_x = static_cast<float>(face->glyph->advance.x) / 64.0f;
     out_metrics.bearing_x = static_cast<float>(face->glyph->metrics.horiBearingX) / 64.0f;
     out_metrics.bearing_y = static_cast<float>(face->glyph->metrics.horiBearingY) / 64.0f;
@@ -320,8 +313,6 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
     if (face->glyph->outline.n_points == 0) {
         out_width = 0;
         out_height = 0;
-        FT_Done_Face(face);
-        FT_Done_FreeType(ft);
         return true;
     }
 
@@ -344,8 +335,6 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
         SDL_Log("GlyphAtlas::generateMSDF: empty contours for glyph %u", glyph_id);
         out_width = 0;
         out_height = 0;
-        FT_Done_Face(face);
-        FT_Done_FreeType(ft);
         return true;
     }
 
@@ -395,9 +384,6 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
             out_bitmap[idx + 3] = 255;
         }
     }
-
-    FT_Done_Face(face);
-    FT_Done_FreeType(ft);
 
     return true;
 }
