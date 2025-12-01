@@ -334,16 +334,38 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                     if (line_width <= 0.0f) {
                         line_width = estimateTextWidth(line, font_size);
                     }
-                    
-                    float effective_line_height = shaped.line_height_units * scale;
-                    if (effective_line_height <= 0.0f) {
-                        effective_line_height = line_height;
+
+                    // 使用 TextShaper 提供的 line-height（design units）作为 CSS `line-height: normal` 的近似，
+                    // 再结合字体 ascent/descender，将多余的 leading 在行盒顶部/底部平均分摊，
+                    // 使得文本在灰色块内的垂直位置更接近浏览器行为。
+                    float line_height_units = shaped.line_height_units;
+                    float ascent_units = shaped.ascent_units;
+                    float descent_units = shaped.descent_units;
+
+                    if (line_height_units <= 0.0f) {
+                        line_height_units = font_size / std::max(scale, 1e-3f);
                     }
-                    
-                    float ascent = shaped.ascent_units * scale;
-                    if (ascent <= 0.0f) {
-                        ascent = font_size;
+                    if (ascent_units <= 0.0f) {
+                        ascent_units = font_size / std::max(scale, 1e-3f);
                     }
+                    // descent_units 一般为负值，如果缺失则按 0 处理
+                    float descent_abs_units = descent_units < 0.0f ? -descent_units : 0.0f;
+
+                    float metrics_height_units = ascent_units + descent_abs_units;
+                    if (metrics_height_units <= 0.0f) {
+                        metrics_height_units = line_height_units;
+                    }
+
+                    float extra_leading_units = line_height_units - metrics_height_units;
+                    if (extra_leading_units < 0.0f) {
+                        extra_leading_units = 0.0f;
+                    }
+                    float top_leading_units = extra_leading_units * 0.5f;
+
+                    float effective_line_height = line_height_units * scale;
+                    float ascent = ascent_units * scale;
+
+                    float baseline_offset = (top_leading_units + ascent_units) * scale;
 
                     float text_x = x + pad_left;
                     if (style.text_align == "center") {
@@ -352,7 +374,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                         text_x = x + pad_left + std::max(0.0f, inner_width - line_width);
                     }
 
-                    float base_baseline = y + pad_top + ascent;
+                    float base_baseline = y + pad_top + baseline_offset;
                     float baseline_y = base_baseline + static_cast<float>(i) * effective_line_height;
 
                     DrawGlyphRunData glyph{};

@@ -6,6 +6,8 @@
 #include <algorithm>
 #include <SDL3/SDL_log.h>
 
+#include "../render/text_shaper.hpp"
+
 namespace dong::layout {
 
 // DirtyRect implementation
@@ -37,6 +39,132 @@ bool DirtyRect::intersects(float px, float py, float pw, float ph) const {
 }
 
 namespace {
+
+using dong::render::TextShaper;
+using dong::render::TextShapeRequest;
+using dong::render::ShapedText;
+
+static std::string collapseWhitespace(const std::string& input) {
+    if (input.empty()) return "";
+    std::string output;
+    output.reserve(input.size());
+    bool in_space = false;
+    for (char c : input) {
+        if (std::isspace(static_cast<unsigned char>(c))) {
+            if (!in_space) {
+                output.push_back(' ');
+                in_space = true;
+            }
+        } else {
+            output.push_back(c);
+            in_space = false;
+        }
+    }
+    size_t first = output.find_first_not_of(' ');
+    if (first == std::string::npos) return "";
+    size_t last = output.find_last_not_of(' ');
+    return output.substr(first, last - first + 1);
+}
+
+float computeIntrinsicTextHeight(const dom::DOMNodePtr& node) {
+    if (!node) return 0.0f;
+    const auto& style = node->getComputedStyle();
+    float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
+
+    // 收集纯文本子节点（忽略嵌套元素）
+    bool has_text_child = false;
+    bool has_element_child = false;
+    std::string raw_text;
+    for (const auto& child : node->getChildren()) {
+        if (!child) continue;
+        if (child->getType() == dom::DOMNode::NodeType::TEXT) {
+            raw_text += child->getTextContent();
+            has_text_child = true;
+        } else if (child->getType() == dom::DOMNode::NodeType::ELEMENT) {
+            has_element_child = true;
+        }
+    }
+    const std::string tag = node->getTagName();
+    const bool tag_prefers_text =
+        tag == "h1" || tag == "h2" || tag == "h3" || tag == "h4" ||
+        tag == "h5" || tag == "h6" || tag == "p" || tag == "span" ||
+        tag == "button" || tag == "code" || tag == "div" || tag == "footer";
+    if (!has_text_child || (!tag_prefers_text && has_element_child)) {
+        return 0.0f;
+    }
+
+    std::string text = collapseWhitespace(raw_text);
+    if (text.empty()) return 0.0f;
+
+    TextShaper shaper;
+    TextShapeRequest req{};
+    req.text = text;
+    req.font_family = style.font_family;
+    req.font_weight = style.font_weight;
+    req.font_size = font_size;
+
+    ShapedText shaped{};
+    if (!shaper.shape(req, shaped) || shaped.glyphs.empty()) {
+        return 0.0f;
+    }
+
+    const float scale = shaped.scale_to_pixels;
+    float effective_line_height = shaped.line_height_units * scale;
+    if (effective_line_height <= 0.0f) {
+        effective_line_height = font_size * 1.35f;
+    }
+
+    float pad_top = style.padding_top.isPixel() ? style.padding_top.value : 0.0f;
+    float pad_bottom = style.padding_bottom.isPixel() ? style.padding_bottom.value : 0.0f;
+
+    return effective_line_height + pad_top + pad_bottom;
+}
+
+// Collapse vertical margins between two sibling block-like elements so that
+// the gap between them is closer to CSS's max(margin-bottom, margin-top)
+// instead of a simple sum. This is a simplified approximation that focuses
+// on pixel margins and common block layouts.
+void collapseVerticalMarginBetweenSiblings(const dom::DOMNodePtr& prev_node,
+                                           YGNode* prev_yoga,
+                                           const dom::DOMNodePtr& curr_node,
+                                           YGNode* curr_yoga) {
+    if (!prev_node || !curr_node || !prev_yoga || !curr_yoga) {
+        return;
+    }
+
+    const auto& prev_style = prev_node->getComputedStyle();
+    const auto& curr_style = curr_node->getComputedStyle();
+
+    // Do not attempt to collapse margins for flex items or non-visible blocks here.
+    if (prev_style.display == "flex" || curr_style.display == "flex") {
+        return;
+    }
+
+    float prev_mb = 0.0f;
+    if (prev_style.margin_bottom.isPixel()) {
+        prev_mb = prev_style.margin_bottom.value;
+    }
+
+    float curr_mt = 0.0f;
+    if (curr_style.margin_top.isPixel()) {
+        curr_mt = curr_style.margin_top.value;
+    }
+
+    if (prev_mb <= 0.0f || curr_mt <= 0.0f) {
+        return;
+    }
+
+    // We want gap = prev_mb + adjusted_top ~= max(prev_mb, curr_mt).
+    // Setting adjusted_top = max(curr_mt - prev_mb, 0) achieves that:
+    // - If curr_mt >= prev_mb: gap = prev_mb + (curr_mt - prev_mb) = curr_mt
+    // - If curr_mt <  prev_mb: gap = prev_mb
+    float adjusted_top = curr_mt - prev_mb;
+    if (adjusted_top < 0.0f) {
+        adjusted_top = 0.0f;
+    }
+
+    YGNodeStyleSetMargin(curr_yoga, YGEdgeTop, adjusted_top);
+}
 
 dom::DOMNodePtr firstElementChild(const dom::DOMNodePtr& node) {
     if (!node) {
@@ -255,10 +383,23 @@ YGNode* Engine::createYogaNode(dom::DOMNodePtr dom_node) {
     applyDOMStylesToYoga(dom_node, yoga_node);
 
     // Recursively create or reuse Yoga nodes for children
+    const auto& parent_style = dom_node->getComputedStyle();
+    const bool parent_is_block_like = parent_style.display != "flex";
+
+    dom::DOMNodePtr prev_element_child;
+    YGNode* prev_child_yoga = nullptr;
+
     for (const auto& child : dom_node->getChildren()) {
         if (child && child->getType() == dom::DOMNode::NodeType::ELEMENT) {
             YGNode* child_yoga = createYogaNode(child);
             if (child_yoga) {
+                // Approximate vertical margin collapsing between sibling block items
+                // for non-flex parents, so that gaps match CSS block layout better.
+                if (parent_is_block_like && prev_child_yoga) {
+                    collapseVerticalMarginBetweenSiblings(prev_element_child, prev_child_yoga,
+                                                          child, child_yoga);
+                }
+
                 YGNodeInsertChild(yoga_node, child_yoga, YGNodeGetChildCount(yoga_node));
 
                 auto& child_layout = layout_cache[child.get()];
@@ -266,6 +407,9 @@ YGNode* Engine::createYogaNode(dom::DOMNodePtr dom_node) {
                     child_layout = std::make_unique<LayoutNode>();
                 }
                 child_layout->yoga_node = child_yoga;
+
+                prev_element_child = child;
+                prev_child_yoga = child_yoga;
             }
         }
     }
@@ -320,16 +464,18 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
         }
     }
 
-    // Heuristic intrinsic sizing for text-like elements.
-    // Since Yoga does not know about our text measurement, many text containers would
-    // otherwise collapse to zero height. For common tags, ensure a reasonable
-    // minimum height based on font-size.
+    // 基于真实字体度量的 intrinsic sizing：
+    // 如果是文本主导的块级元素，且高度为 auto，则使用 TextShaper
+    // 计算一行文字的行高，并将 padding 一起纳入最小高度，避免文本容器高度
+    // 仅由 padding 决定，导致与浏览器差异过大。
     if ((tag == "h1" || tag == "h2" || tag == "h3" || tag == "h4" ||
-         tag == "h5" || tag == "h6" || tag == "p" || tag == "button") &&
+         tag == "h5" || tag == "h6" || tag == "p" || tag == "button" ||
+         tag == "div") &&
         style.height.isAuto()) {
-        float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
-        float line_height = font_size * 1.4f;
-        YGNodeStyleSetMinHeight(yoga_node, line_height);
+        float intrinsic_h = computeIntrinsicTextHeight(dom_node);
+        if (intrinsic_h > 0.0f) {
+            YGNodeStyleSetMinHeight(yoga_node, intrinsic_h);
+        }
     }
 }
 

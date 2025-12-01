@@ -2,6 +2,7 @@
 
 #include <SDL3/SDL_log.h>
 #include <cmath>
+#include FT_TRUETYPE_TABLES_H
 
 namespace dong::render {
 
@@ -82,10 +83,21 @@ bool getFontMetrics(FT_Face face, UnifiedFontMetrics& out_metrics) {
     }
 
     out_metrics.units_per_em = face->units_per_EM;
-    out_metrics.ascent_units = static_cast<float>(face->ascender);
-    out_metrics.descent_units = static_cast<float>(face->descender);
-    out_metrics.line_gap_units = static_cast<float>(face->height - face->ascender + face->descender);
-    out_metrics.height_units = static_cast<float>(face->height);
+
+    // 优先使用 OS/2 sTypo* 度量，使行高/ascent 更接近浏览器实现
+    TT_OS2* os2 = static_cast<TT_OS2*>(FT_Get_Sfnt_Table(face, ft_sfnt_os2));
+    if (os2 && os2->sTypoAscender != 0 && os2->sTypoDescender != 0) {
+        out_metrics.ascent_units = static_cast<float>(os2->sTypoAscender);
+        out_metrics.descent_units = static_cast<float>(os2->sTypoDescender);
+        out_metrics.line_gap_units = static_cast<float>(os2->sTypoLineGap);
+        out_metrics.height_units = out_metrics.ascent_units - out_metrics.descent_units + out_metrics.line_gap_units;
+    } else {
+        // 回退到 FreeType 提供的 ascender/descender/height
+        out_metrics.ascent_units = static_cast<float>(face->ascender);
+        out_metrics.descent_units = static_cast<float>(face->descender);
+        out_metrics.line_gap_units = static_cast<float>(face->height - face->ascender + face->descender);
+        out_metrics.height_units = static_cast<float>(face->height);
+    }
 
     return true;
 }

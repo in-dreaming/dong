@@ -123,15 +123,20 @@ std::vector<std::string> splitFontFamilies(const std::string& css_value) {
 
 std::string canonicalFontFamily(const std::string& name) {
     std::string lower = toLowerAscii(name);
-    if (lower == "sans" || lower == "sans-serif" || lower == "arial" || lower == "helvetica") {
+
+    // 只归一化 CSS generic family（sans-serif/serif/monospace），
+    // 保留 Arial/Helvetica 等具体家族名，避免覆盖掉作者明确指定的字体顺序。
+    if (lower == "sans" || lower == "sans-serif") {
         return "sans-serif";
     }
-    if (lower == "serif" || lower == "times" || lower == "times new roman") {
+    if (lower == "serif") {
         return "serif";
     }
-    if (lower == "monospace" || lower == "courier" || lower == "courier new" || lower == "menlo" || lower == "consolas") {
+    if (lower == "monospace") {
         return "monospace";
     }
+
+    // 其他一律按原样（小写）返回，例如 "arial"、"helvetica"、"times new roman" 等。
     return lower;
 }
 

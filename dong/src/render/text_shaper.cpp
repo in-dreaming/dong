@@ -16,7 +16,8 @@ namespace dong::render {
 
 namespace {
 
-constexpr float kDefaultLineHeightMultiplier = 1.35f;
+// Approximate CSS `line-height: normal` as ~1.2 * font-size.
+constexpr float kDefaultLineHeightMultiplier = 1.2f;
 
 } // namespace
 
@@ -109,7 +110,9 @@ bool TextShaper::shape(const TextShapeRequest& request, ShapedText& out_text) {
         pen_y_units -= y_advance_units;
     }
 
-    // 获取字体度量（design units）
+    // 获取字体度量（design units），并直接使用 OS/2 提供的 height_units
+    // 作为行高基础（接近现代浏览器对 `line-height: normal` 的实现），避免
+    // 自己拍一个常数放大 EM 导致额外的空白。
     UnifiedFontMetrics font_metrics;
     if (getFontMetrics(face, font_metrics)) {
         out_text.ascent_units = font_metrics.ascent_units;
@@ -117,7 +120,7 @@ bool TextShaper::shape(const TextShapeRequest& request, ShapedText& out_text) {
         out_text.line_height_units = font_metrics.height_units;
     }
 
-    // 如果度量无效，使用默认值
+    // 如果 height_units 无效，再退回到基于 EM 的默认倍数。
     if (out_text.line_height_units <= 0.0f) {
         out_text.line_height_units = static_cast<float>(units_per_em) * kDefaultLineHeightMultiplier;
     }
