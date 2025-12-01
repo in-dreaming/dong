@@ -1,4 +1,5 @@
 #include "painter.hpp"
+#include <SDL3/SDL_log.h>
 #include <cstring>
 #include <iostream>
 #include <cstdint>
@@ -319,9 +320,22 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                         continue;
                     }
 
-                    float line_width = shaped.width > 0.0f ? shaped.width : estimateTextWidth(line, font_size);
-                    float effective_line_height = shaped.line_height > 0.0f ? shaped.line_height : line_height;
-                    float ascent = shaped.ascent > 0.0f ? shaped.ascent : font_size;
+                    // 将 design units 转换为像素用于布局
+                    const float scale = shaped.scale_to_pixels;
+                    float line_width = shaped.width_units * scale;
+                    if (line_width <= 0.0f) {
+                        line_width = estimateTextWidth(line, font_size);
+                    }
+                    
+                    float effective_line_height = shaped.line_height_units * scale;
+                    if (effective_line_height <= 0.0f) {
+                        effective_line_height = line_height;
+                    }
+                    
+                    float ascent = shaped.ascent_units * scale;
+                    if (ascent <= 0.0f) {
+                        ascent = font_size;
+                    }
 
                     float text_x = x + pad_left;
                     if (style.text_align == "center") {
@@ -345,13 +359,18 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                     glyph.font_path = shaped.font_path;
                     glyph.baseline_x = text_x;
                     glyph.baseline_y = baseline_y;
+                    
+                    // 传递 design units 元数据
+                    glyph.units_per_em = shaped.units_per_em;
+                    glyph.scale_to_pixels = shaped.scale_to_pixels;
 
                     glyph.glyphs.reserve(shaped.glyphs.size());
                     for (const auto& shaped_glyph : shaped.glyphs) {
                         GlyphInstance instance{};
                         instance.glyph_id = shaped_glyph.glyph_id;
-                        instance.pen_x = shaped_glyph.pen_x + text_x;
-                        instance.pen_y = shaped_glyph.pen_y + baseline_y;
+                        // 保持 design units，不在此处缩放
+                        instance.pen_x_units = shaped_glyph.pen_x_units;
+                        instance.pen_y_units = shaped_glyph.pen_y_units;
                         glyph.glyphs.push_back(instance);
                     }
 

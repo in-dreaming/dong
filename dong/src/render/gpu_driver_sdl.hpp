@@ -29,6 +29,10 @@ public:
     void beginFrame() override;
     void endFrame() override;
     void execute(const GPUCommandList& commands) override;
+    
+    // Offscreen rendering support
+    void beginFrameOffscreen(SDL_GPUTexture* target, uint32_t width, uint32_t height) override;
+    void endFrameOffscreen() override;
 
     // 供外部注入图片资源管理器（用于从 Skia/CPU 侧取得图片像素）
     void setImageResourceManager(ResourceManager* manager) { image_resource_manager_ = manager; }
@@ -40,6 +44,11 @@ private:
     ResourceManager* image_resource_manager_ = nullptr;
     SDL_GPUCommandBuffer* current_cmd_buf_ = nullptr;
     bool in_frame_ = false;
+    
+    // Offscreen rendering support
+    SDL_GPUTexture* offscreen_target_ = nullptr;
+    uint32_t offscreen_width_ = 0;
+    uint32_t offscreen_height_ = 0;
 
     // 纯色矩形绘制管线
     SDL_GPUShader* rect_vs_ = nullptr;

@@ -18,11 +18,6 @@ namespace {
 
 constexpr float kDefaultLineHeightMultiplier = 1.35f;
 
-uint32_t clampPixelSize(float font_size) {
-    float clamped = std::max(1.0f, font_size);
-    return static_cast<uint32_t>(std::ceil(clamped));
-}
-
 } // namespace
 
 bool TextShaper::shape(const TextShapeRequest& request, ShapedText& out_text) {
@@ -38,23 +33,30 @@ bool TextShaper::shape(const TextShapeRequest& request, ShapedText& out_text) {
         return false;
     }
 
-    const uint32_t pixel_size = clampPixelSize(request.font_size);
-    FT_Face face = getOrCreateFontFace(font_path, pixel_size);
+    // 获取 design units face（无像素缩放）
+    FT_Face face = getOrCreateDesignUnitsFace(font_path);
     if (!face) {
-        SDL_Log("TextShaper: failed to get FT_Face for '%s'", font_path.c_str());
+        SDL_Log("TextShaper: failed to get design units face for '%s'", font_path.c_str());
         return false;
     }
 
-    // 在像素空间下 shape：HarfBuzz 返回的 26.6 定点值直接代表像素坐标
+    const uint32_t units_per_em = face->units_per_EM;
+    if (units_per_em == 0) {
+        SDL_Log("TextShaper: invalid units_per_em for '%s'", font_path.c_str());
+        return false;
+    }
+
+    // 创建 HarfBuzz 字体，配置为 design units 空间
     hb_font_t* hb_font = hb_ft_font_create_referenced(face);
     if (!hb_font) {
         SDL_Log("TextShaper: failed to create hb_font for '%s'", font_path.c_str());
         return false;
     }
 
-    // 使用无 hinting / 无 bitmap，但保持缩放，让 HarfBuzz 给出像素级几何
-    hb_ft_font_set_load_flags(hb_font,
-                              FT_LOAD_DEFAULT | FT_LOAD_NO_HINTING | FT_LOAD_NO_BITMAP);
+    // 关键：设置 HarfBuzz 字体缩放为 unitsPerEm（而非像素）
+    hb_font_set_scale(hb_font, units_per_em, units_per_em);
+    
+    // 使用 FT funcs 但不设置像素尺寸
     hb_ft_font_set_funcs(hb_font);
 
     hb_buffer_t* buffer = hb_buffer_create();
@@ -68,48 +70,53 @@ bool TextShaper::shape(const TextShapeRequest& request, ShapedText& out_text) {
     hb_glyph_position_t* positions = hb_buffer_get_glyph_positions(buffer, &glyph_count);
 
     out_text.font_path = font_path;
+    out_text.units_per_em = units_per_em;
+    out_text.scale_to_pixels = request.font_size / static_cast<float>(units_per_em);
     out_text.glyphs.clear();
     out_text.glyphs.reserve(glyph_count);
 
-    float pen_x = request.origin_x;
-    float pen_y = request.origin_y;
+    float pen_x_units = 0.0f;
+    float pen_y_units = 0.0f;
 
     for (unsigned i = 0; i < glyph_count; ++i) {
         const hb_glyph_info_t& info = infos[i];
         const hb_glyph_position_t& pos = positions[i];
 
-        // HarfBuzz 返回的位置信息是 26.6 定点数（像素单位），直接转为像素
-        const float x_offset_px = static_cast<float>(pos.x_offset) / 64.0f;
-        const float y_offset_px = static_cast<float>(pos.y_offset) / 64.0f;
-        const float x_advance_px = static_cast<float>(pos.x_advance) / 64.0f;
-        const float y_advance_px = static_cast<float>(pos.y_advance) / 64.0f;
+        // HarfBuzz 返回的是 26.6 定点数，但基于 units_per_em 缩放
+        // 除以 64.0 得到 design units
+        const float x_offset_units = static_cast<float>(pos.x_offset) / 64.0f;
+        const float y_offset_units = static_cast<float>(pos.y_offset) / 64.0f;
+        const float x_advance_units = static_cast<float>(pos.x_advance) / 64.0f;
+        const float y_advance_units = static_cast<float>(pos.y_advance) / 64.0f;
 
         ShapedGlyph glyph{};
         glyph.glyph_id = info.codepoint;
-        glyph.pen_x = pen_x + x_offset_px;
-        glyph.pen_y = pen_y - y_offset_px;
+        glyph.pen_x_units = pen_x_units + x_offset_units;
+        glyph.pen_y_units = pen_y_units - y_offset_units;
         out_text.glyphs.push_back(glyph);
 
-        pen_x += x_advance_px;
-        pen_y -= y_advance_px;
+        pen_x_units += x_advance_units;
+        pen_y_units -= y_advance_units;
     }
 
-    // 使用 FreeType size->metrics 的像素度量
-    if (face->size) {
-        out_text.ascent = static_cast<float>(face->size->metrics.ascender) / 64.0f;
-        out_text.descent = std::fabs(static_cast<float>(face->size->metrics.descender) / 64.0f);
-        out_text.line_height = static_cast<float>(face->size->metrics.height) / 64.0f;
+    // 获取字体度量（design units）
+    UnifiedFontMetrics font_metrics;
+    if (getFontMetrics(face, font_metrics)) {
+        out_text.ascent_units = font_metrics.ascent_units;
+        out_text.descent_units = font_metrics.descent_units;
+        out_text.line_height_units = font_metrics.height_units;
     }
 
-    if (out_text.line_height <= 0.0f) {
-        out_text.line_height = request.font_size * kDefaultLineHeightMultiplier;
+    // 如果度量无效，使用默认值
+    if (out_text.line_height_units <= 0.0f) {
+        out_text.line_height_units = static_cast<float>(units_per_em) * kDefaultLineHeightMultiplier;
     }
 
-    if (out_text.ascent <= 0.0f) {
-        out_text.ascent = request.font_size;
+    if (out_text.ascent_units <= 0.0f) {
+        out_text.ascent_units = static_cast<float>(units_per_em);
     }
 
-    out_text.width = pen_x - request.origin_x;
+    out_text.width_units = pen_x_units;
 
     hb_buffer_destroy(buffer);
     hb_font_destroy(hb_font);

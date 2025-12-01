@@ -65,7 +65,13 @@ struct GPUCommand {
     float font_size = 16.0f;
     std::string font_family;
     std::string font_path;
+    float baseline_x = 0.0f;
+    float baseline_y = 0.0f;
     std::vector<GlyphInstance> glyphs;
+    
+    // design units 元数据
+    uint32_t units_per_em = 0;
+    float scale_to_pixels = 1.0f;
 };
 
 struct GPUCommandList {
@@ -206,7 +212,11 @@ public:
                 cmd.font_size = item.glyph_run.font_size;
                 cmd.font_family = item.glyph_run.font_family;
                 cmd.font_path = item.glyph_run.font_path;
+                cmd.baseline_x = item.glyph_run.baseline_x;
+                cmd.baseline_y = item.glyph_run.baseline_y;
                 cmd.glyphs = item.glyph_run.glyphs;
+                cmd.units_per_em = item.glyph_run.units_per_em;
+                cmd.scale_to_pixels = item.glyph_run.scale_to_pixels;
                 out.commands.push_back(cmd);
                 text_count++;
                 break;

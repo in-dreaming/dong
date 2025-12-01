@@ -1,0 +1,23 @@
+{
+    "hooks": {
+        "PostToolUse": [
+            {
+                "matcher": "Edit|Write|MultiEdit",
+                "hooks": [
+                {
+                    "type": "command",
+                    "command": "pnpm run check",
+                    "timeout": 30
+                }
+                ]
+            }
+        ]
+    },
+    "permissions": {
+        "deny": [
+            "Read(./.env)",
+            "Read(./.env.*)",
+            "Read(./tmp/**)"
+        ]
+    }
+}

@@ -58,6 +58,21 @@ bool dong_view_eval(dong_view_t* view, const char* script);
 // string but still evaluates the script for side effects.
 const char* dong_view_eval_return(dong_view_t* view, const char* script);
 
+// Offscreen rendering support (底层接口)
+// Render to a GPU texture (SDL_GPUTexture*)
+// Returns the GPU texture on success, NULL on failure
+// Caller is responsible for releasing the texture with SDL_ReleaseGPUTexture()
+void* dong_view_render_to_gpu_texture(dong_view_t* view, void* gpu_device,
+                                      uint32_t width, uint32_t height);
+
+// Offscreen rendering support (上层接口)
+// Render to an offscreen texture and read back pixels
+// Returns true on success, pixels will be written to out_pixels (RGBA format)
+// out_pixels must be pre-allocated with size width * height * 4
+bool dong_view_render_offscreen(dong_view_t* view, void* gpu_device, 
+                                  uint32_t width, uint32_t height, 
+                                  uint8_t* out_pixels);
+
 #ifdef __cplusplus
 }
 #endif

@@ -27,7 +27,8 @@ public:
             self->shape_->contours.push_back(*self->current_contour_);
         }
         self->current_contour_ = std::make_unique<msdfgen::Contour>();
-        self->last_point_ = msdfgen::Point2(to->x / 64.0, to->y / 64.0);
+        // FT_LOAD_NO_SCALE 返回的是 design units，不需要除以 64
+        self->last_point_ = msdfgen::Point2(to->x, to->y);
         return 0;
     }
 
@@ -35,7 +36,7 @@ public:
         auto* self = static_cast<FTContourConverter*>(user);
         if (!self->current_contour_) return 1;
         
-        msdfgen::Point2 p(to->x / 64.0, to->y / 64.0);
+        msdfgen::Point2 p(to->x, to->y);
         self->current_contour_->addEdge(msdfgen::EdgeHolder(
             self->last_point_, p
         ));
@@ -47,8 +48,8 @@ public:
         auto* self = static_cast<FTContourConverter*>(user);
         if (!self->current_contour_) return 1;
         
-        msdfgen::Point2 c(control->x / 64.0, control->y / 64.0);
-        msdfgen::Point2 p(to->x / 64.0, to->y / 64.0);
+        msdfgen::Point2 c(control->x, control->y);
+        msdfgen::Point2 p(to->x, to->y);
         self->current_contour_->addEdge(msdfgen::EdgeHolder(
             self->last_point_, c, p
         ));
@@ -60,9 +61,9 @@ public:
         auto* self = static_cast<FTContourConverter*>(user);
         if (!self->current_contour_) return 1;
         
-        msdfgen::Point2 ctrl1(c1->x / 64.0, c1->y / 64.0);
-        msdfgen::Point2 ctrl2(c2->x / 64.0, c2->y / 64.0);
-        msdfgen::Point2 p(to->x / 64.0, to->y / 64.0);
+        msdfgen::Point2 ctrl1(c1->x, c1->y);
+        msdfgen::Point2 ctrl2(c2->x, c2->y);
+        msdfgen::Point2 p(to->x, to->y);
         self->current_contour_->addEdge(msdfgen::EdgeHolder(
             self->last_point_, ctrl1, ctrl2, p
         ));
@@ -289,25 +290,31 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
         return false;
     }
 
-    // 使用共享的 FreeType 库与字体缓存
-    FT_Face face = getOrCreateFontFace(font_path, glyph_bitmap_size_);
+    // 使用 design units face（无像素缩放）
+    FT_Face face = getOrCreateDesignUnitsFace(font_path);
     if (!face) {
-        SDL_Log("GlyphAtlas::generateMSDF: failed to get FT_Face for '%s'", font_path.c_str());
+        SDL_Log("GlyphAtlas::generateMSDF: failed to get design units face for '%s'", font_path.c_str());
         return false;
     }
 
-    // 加载字形：保持缩放，只关闭 hinting/bitmap，这里得到的是“参考像素尺寸下”的度量
-    if (FT_Load_Glyph(face, glyph_id, FT_LOAD_DEFAULT | FT_LOAD_NO_HINTING | FT_LOAD_NO_BITMAP) != 0) {
+    out_metrics.units_per_em = face->units_per_EM;
+    if (out_metrics.units_per_em == 0) {
+        SDL_Log("GlyphAtlas::generateMSDF: invalid units_per_em for '%s'", font_path.c_str());
+        return false;
+    }
+
+    // 加载字形：FT_LOAD_NO_SCALE 获取原始 design units 轮廓
+    if (FT_Load_Glyph(face, glyph_id, FT_LOAD_NO_SCALE) != 0) {
         SDL_Log("GlyphAtlas::generateMSDF: failed to load glyph index %u", glyph_id);
         return false;
     }
 
-    // 获取度量信息（像素空间，基于 glyph_bitmap_size_ 的参考字号）
-    out_metrics.advance_x = static_cast<float>(face->glyph->advance.x) / 64.0f;
-    out_metrics.bearing_x = static_cast<float>(face->glyph->metrics.horiBearingX) / 64.0f;
-    out_metrics.bearing_y = static_cast<float>(face->glyph->metrics.horiBearingY) / 64.0f;
-    out_metrics.width = static_cast<float>(face->glyph->metrics.width) / 64.0f;
-    out_metrics.height = static_cast<float>(face->glyph->metrics.height) / 64.0f;
+    // 获取度量信息（design units，无需除以 64）
+    out_metrics.advance_x_units = static_cast<float>(face->glyph->advance.x);
+    out_metrics.bearing_x_units = static_cast<float>(face->glyph->metrics.horiBearingX);
+    out_metrics.bearing_y_units = static_cast<float>(face->glyph->metrics.horiBearingY);
+    out_metrics.width_units = static_cast<float>(face->glyph->metrics.width);
+    out_metrics.height_units = static_cast<float>(face->glyph->metrics.height);
 
     // 如果是空字形（如空格），直接返回
     if (face->glyph->outline.n_points == 0) {
@@ -342,10 +349,10 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
     shape.normalize();
     msdfgen::edgeColoringSimple(shape, 3.0);
 
-    // 计算边界
+    // 计算边界（design units）
     msdfgen::Shape::Bounds bounds = shape.getBounds();
 
-    // 生成 MSDF（可配置尺寸与 range）
+    // 生成 MSDF（固定尺寸，字号无关）
     const int msdf_size = static_cast<int>(glyph_bitmap_size_);
     const double range = static_cast<double>(glyph_distance_range_);
     
@@ -358,32 +365,60 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
     double scale = std::min((msdf_size - range * 2) / safe_width,
                             (msdf_size - range * 2) / safe_height);
     
+    // translate的作用：将字形边界框的左下角移到原点，然后再平移使其居中
+    // 关键：translate 操作在缩放之前，单位是 design units
+    // 最简单的方式：将字形移到原点，让 msdfgen 自然居中
     msdfgen::Vector2 translate(
-        -bounds.l + (msdf_size / scale - safe_width) * 0.5,
-        -bounds.b + (msdf_size / scale - safe_height) * 0.5
+        -bounds.l,
+        -bounds.b
     );
+
+    SDL_Log("MSDF Gen: glyph=%u bounds=(%.1f,%.1f)-(%.1f,%.1f) size=%d range=%.1f scale=%.3f translate=(%.1f,%.1f)",
+            glyph_id, bounds.l, bounds.b, bounds.r, bounds.t, msdf_size, range, scale, translate.x, translate.y);
 
     msdfgen::generateMSDF(msdf, shape, range, scale, translate);
 
+    // 保存 MSDF 元数据（字号无关）
     out_metrics.msdf_scale = static_cast<float>(scale);
     out_metrics.msdf_translate_x = static_cast<float>(translate.x);
     out_metrics.msdf_translate_y = static_cast<float>(translate.y);
 
-    // 转换为 RGBA8 格式
+    // 转换为 RGBA8 格式，并做简单的数值统计 + 调试导出
     out_width = msdf_size;
     out_height = msdf_size;
     out_bitmap.resize(out_width * out_height * 4);
 
+    float min_r = 1.0f;
+    float max_r = 0.0f;
+    float sum_r = 0.0f;
+    int inside_count = 0;
+    int outside_count = 0;
+
     for (int y = 0; y < msdf_size; ++y) {
         for (int x = 0; x < msdf_size; ++x) {
             const float* pixel = msdf(x, y);
+            float r = std::clamp(pixel[0], 0.0f, 1.0f);
+            float g = std::clamp(pixel[1], 0.0f, 1.0f);
+            float b = std::clamp(pixel[2], 0.0f, 1.0f);
+
             int idx = (y * msdf_size + x) * 4;
-            out_bitmap[idx + 0] = static_cast<uint8_t>(std::clamp(pixel[0] * 255.0f, 0.0f, 255.0f));
-            out_bitmap[idx + 1] = static_cast<uint8_t>(std::clamp(pixel[1] * 255.0f, 0.0f, 255.0f));
-            out_bitmap[idx + 2] = static_cast<uint8_t>(std::clamp(pixel[2] * 255.0f, 0.0f, 255.0f));
+            out_bitmap[idx + 0] = static_cast<uint8_t>(r * 255.0f);
+            out_bitmap[idx + 1] = static_cast<uint8_t>(g * 255.0f);
+            out_bitmap[idx + 2] = static_cast<uint8_t>(b * 255.0f);
             out_bitmap[idx + 3] = 255;
+
+            if (r < min_r) min_r = r;
+            if (r > max_r) max_r = r;
+            sum_r += r;
+            
+            if (r > 0.5f) inside_count++;
+            else outside_count++;
         }
     }
+
+    float avg_r = sum_r / (msdf_size * msdf_size);
+    SDL_Log("MSDF Data: glyph=%u R[min=%.3f avg=%.3f max=%.3f] inside=%d outside=%d total=%d",
+            glyph_id, min_r, avg_r, max_r, inside_count, outside_count, msdf_size * msdf_size);
 
     return true;
 }

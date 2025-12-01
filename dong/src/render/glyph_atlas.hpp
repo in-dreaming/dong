@@ -9,16 +9,20 @@
 
 namespace dong::render {
 
-// 字形度量信息
+// 字形度量信息（design units 空间）
 struct GlyphMetrics {
-    float advance_x = 0.0f;
-    float bearing_x = 0.0f;
-    float bearing_y = 0.0f;
-    float width = 0.0f;
-    float height = 0.0f;
+    float advance_x_units = 0.0f;
+    float bearing_x_units = 0.0f;
+    float bearing_y_units = 0.0f;
+    float width_units = 0.0f;
+    float height_units = 0.0f;
+    
+    // MSDF 生成元数据（字号无关）
     float msdf_scale = 1.0f;
     float msdf_translate_x = 0.0f;
     float msdf_translate_y = 0.0f;
+    
+    uint32_t units_per_em = 0;     // 字体的 EM 单位
 };
 
 // Atlas 条目（UV 坐标 + 度量）
@@ -81,7 +85,7 @@ private:
 
     std::string makeGlyphKey(uint32_t codepoint, const std::string& font_path) const;
 
-    // 内部辅助：为指定字符生成 MSDF 位图
+    // 内部辅助：为指定字符生成 MSDF 位图（design units 模式）
     bool generateMSDF(uint32_t codepoint, const std::string& font_path,
                      std::vector<uint8_t>& out_bitmap,
                      uint32_t& out_width, uint32_t& out_height,

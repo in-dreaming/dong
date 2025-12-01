@@ -10,23 +10,27 @@ struct TextShapeRequest {
     std::string text;
     std::string font_family;
     std::string font_weight;
-    float font_size = 16.0f;
+    float font_size = 16.0f;       // 目标像素字号
     float origin_x = 0.0f;
     float origin_y = 0.0f;
 };
 
 struct ShapedGlyph {
     uint32_t glyph_id = 0;
-    float pen_x = 0.0f;
-    float pen_y = 0.0f;
+    float pen_x_units = 0.0f;      // design units
+    float pen_y_units = 0.0f;      // design units
 };
 
 struct ShapedText {
     std::string font_path;
-    float ascent = 0.0f;
-    float descent = 0.0f;
-    float line_height = 0.0f;
-    float width = 0.0f;
+    uint32_t units_per_em = 0;     // 字体的 EM 单位
+    float scale_to_pixels = 1.0f;  // font_size / units_per_em（用于下游缩放）
+    
+    float ascent_units = 0.0f;     // design units
+    float descent_units = 0.0f;    // design units
+    float line_height_units = 0.0f;// design units
+    float width_units = 0.0f;      // design units
+    
     std::vector<ShapedGlyph> glyphs;
 };
 
@@ -35,7 +39,7 @@ public:
     TextShaper() = default;
     ~TextShaper() = default;
 
-    // 对给定文本做 shaping，将结果写入 out_text。
+    // 对给定文本做 shaping，将结果写入 out_text（design units 空间）
     bool shape(const TextShapeRequest& request, ShapedText& out_text);
 };
 

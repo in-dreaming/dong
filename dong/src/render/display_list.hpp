@@ -54,8 +54,8 @@ struct DrawImageData {
 
 struct GlyphInstance {
     uint32_t glyph_id = 0;
-    float pen_x = 0.0f;
-    float pen_y = 0.0f;
+    float pen_x_units = 0.0f;      // design units（相对于文本起点）
+    float pen_y_units = 0.0f;      // design units
 };
 
 struct DrawGlyphRunData {
@@ -68,6 +68,10 @@ struct DrawGlyphRunData {
     float baseline_x = 0.0f;
     float baseline_y = 0.0f;
     std::vector<GlyphInstance> glyphs;
+    
+    // 新增：design units 元数据
+    uint32_t units_per_em = 0;
+    float scale_to_pixels = 1.0f;  // font_size / units_per_em
 };
 
 struct ClipData {

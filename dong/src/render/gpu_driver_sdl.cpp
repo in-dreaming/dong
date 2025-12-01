@@ -725,27 +725,17 @@ float4 main(PSInput input) : SV_Target0 {
         discard;
     }
 
-    // SDL 自带 MSDF 示例同构实现：screenPxRange(range, textureSize, fwidth(uv))
+    // 标准 MSDF 解码：使用 sigDist 与其导数做自适应平滑
     float3 msdf = msdfTexture.Sample(msdfSampler, input.uv).rgb;
     float sd = median(msdf.r, msdf.g, msdf.b);
     float sigDist = sd - 0.5; // sigDist = 0 在轮廓线上
 
-    float pxRange = uParams.x;   // MSDF 生成时的像素 range
-    float subpixelMask = uParams.z;
     float gammaSigned = uParams.w;
     float gammaMagnitude = max(abs(gammaSigned), 1e-3);
     bool inputIsLinear = gammaSigned < 0.0;
 
-    uint texWidth, texHeight;
-    msdfTexture.GetDimensions(texWidth, texHeight);
-    float2 texSize = float2((float)texWidth, (float)texHeight);
-
-    float2 unitRange = float2(pxRange, pxRange) / texSize;
-    float2 screenTexSize = float2(1.0, 1.0) / fwidth(input.uv);
-    float screenPxRange = max(0.5 * dot(unitRange, screenTexSize), 1.0);
-
-    float screenPxDistance = screenPxRange * sigDist;
-    float opacity = saturate(screenPxDistance + 0.5);
+    float width = fwidth(sigDist);
+    float opacity = saturate(sigDist / max(width, 1e-3) + 0.5);
 
     float3 linearColor = inputIsLinear ? input.color.rgb : toLinear(input.color.rgb, gammaMagnitude);
     linearColor *= opacity;
@@ -887,6 +877,58 @@ void GPUDriverSDL::endFrame() {
     in_frame_ = false;
 }
 
+void GPUDriverSDL::beginFrameOffscreen(SDL_GPUTexture* target, uint32_t width, uint32_t height) {
+    if (in_frame_) {
+        SDL_Log("GPUDriverSDL::beginFrameOffscreen: already in frame");
+        return;
+    }
+    if (!gpu_device_ || !gpu_device_->isInitialized() || !target) {
+        SDL_Log("GPUDriverSDL::beginFrameOffscreen: invalid parameters");
+        return;
+    }
+
+    current_cmd_buf_ = gpu_device_->acquireCommandBuffer();
+    if (!current_cmd_buf_) {
+        SDL_Log("GPUDriverSDL::beginFrameOffscreen: failed to acquire command buffer");
+        return;
+    }
+
+    // 保存纹理尺寸
+    offscreen_width_ = width;
+    offscreen_height_ = height;
+    
+    // 开始离屏渲染通道（清屏）
+    SDL_GPUColorTargetInfo color_target{};
+    color_target.texture = target;
+    color_target.mip_level = 0;
+    color_target.layer_or_depth_plane = 0;
+    color_target.clear_color = SDL_FColor{1.0f, 1.0f, 1.0f, 1.0f};  // 白色背景
+    color_target.load_op = SDL_GPU_LOADOP_CLEAR;
+    color_target.store_op = SDL_GPU_STOREOP_STORE;
+
+    SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(current_cmd_buf_, &color_target, 1, nullptr);
+    if (pass) {
+        SDL_EndGPURenderPass(pass);  // 先结束清除通道，后续 execute() 会开启新的通道
+    }
+
+    offscreen_target_ = target;
+    in_frame_ = true;
+}
+
+void GPUDriverSDL::endFrameOffscreen() {
+    if (!in_frame_ || !current_cmd_buf_ || !gpu_device_) {
+        return;
+    }
+
+    gpu_device_->submitCommandBuffer(current_cmd_buf_);
+    SDL_WaitForGPUIdle(gpu_device_->getHandle());  // 等待离屏渲染完成
+    current_cmd_buf_ = nullptr;
+    offscreen_target_ = nullptr;
+    offscreen_width_ = 0;
+    offscreen_height_ = 0;
+    in_frame_ = false;
+}
+
 bool GPUDriverSDL::ensureImageInAtlas(const std::string& src, ImageAtlasEntry& out_entry) {
     if (!gpu_device_ || !gpu_device_->isInitialized() || !image_atlas_texture_ || !current_cmd_buf_) {
         return false;
@@ -1007,7 +1049,7 @@ bool GPUDriverSDL::ensureImageInAtlas(const std::string& src, ImageAtlasEntry& o
 }
 
 void GPUDriverSDL::execute(const GPUCommandList& commands) {
-    if (!in_frame_ || !current_cmd_buf_ || !gpu_device_ || !window_) {
+    if (!in_frame_ || !current_cmd_buf_ || !gpu_device_) {
         SDL_Log("GPUDriverSDL::execute: invalid state");
         return;
     }
@@ -1015,6 +1057,28 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
     SDL_GPUTexture* swapchain_texture = nullptr;
     Uint32 w = 0;
     Uint32 h = 0;
+    
+    // 判断是离屏渲染还是窗口渲染
+    if (offscreen_target_) {
+        // 离屏渲染模式
+        swapchain_texture = offscreen_target_;
+        w = offscreen_width_;
+        h = offscreen_height_;
+    } else {
+        // 窗口渲染模式
+        if (!window_) {
+            SDL_Log("GPUDriverSDL::execute: no window for swapchain rendering");
+            return;
+        }
+        if (!SDL_AcquireGPUSwapchainTexture(current_cmd_buf_, window_, &swapchain_texture, &w, &h)) {
+            SDL_Log("GPUDriverSDL::execute: failed to acquire swapchain texture");
+            return;
+        }
+        if (!swapchain_texture) {
+            SDL_Log("GPUDriverSDL::execute: swapchain texture is null");
+            return;
+        }
+    }
 
     struct RenderTargetState {
         SDL_GPUTexture* texture = nullptr;
@@ -1179,26 +1243,28 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 pass = nullptr;
             }
 
-            if (!SDL_WaitAndAcquireGPUSwapchainTexture(
-                    current_cmd_buf_,
-                    window_,
-                    &swapchain_texture,
-                    &w,
-                    &h)) {
-                SDL_Log("GPUDriverSDL::execute: failed to acquire swapchain texture: %s", SDL_GetError());
-                return;
-            }
-
+            // 离屏渲染模式：swapchain_texture已经在execute()开头设置为offscreen_target_
+            // 窗口渲染模式：swapchain_texture已经在execute()开头从窗口获取
+            // 这里不应该再重新获取
+            
             render_target_stack.clear();
             isolated_layer_stack.clear();
-            render_target_stack.push_back(RenderTargetState{swapchain_texture, w, h, true});
+            render_target_stack.push_back(RenderTargetState{swapchain_texture, w, h, offscreen_target_ != nullptr});
 
             color_target = {};
             color_target.texture = swapchain_texture;
             color_target.mip_level = 0;
             color_target.layer_or_depth_plane = 0;
-            color_target.clear_color = SDL_FColor{0.0f, 0.0f, 0.0f, 1.0f};
-            color_target.load_op = SDL_GPU_LOADOP_CLEAR;
+            
+            // 离屏渲染：beginFrameOffscreen已经CLEAR过了，这里用LOAD
+            // 窗口渲染：需要CLEAR黑色背景
+            if (offscreen_target_) {
+                color_target.clear_color = SDL_FColor{1.0f, 1.0f, 1.0f, 1.0f};  // 离屏：白色（虽然会被LOAD忽略）
+                color_target.load_op = SDL_GPU_LOADOP_LOAD;  // 保留之前clear的内容
+            } else {
+                color_target.clear_color = SDL_FColor{0.0f, 0.0f, 0.0f, 1.0f};  // 窗口：黑色
+                color_target.load_op = SDL_GPU_LOADOP_CLEAR;
+            }
             color_target.store_op = SDL_GPU_STOREOP_STORE;
             color_target.resolve_texture = nullptr;
             color_target.resolve_mip_level = 0;
@@ -1579,13 +1645,9 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 break;
             }
 
-            // 以 glyph atlas 的参考像素字号为基准，按比例缩放到实际 font_size
-            const float atlas_font_px = static_cast<float>(glyph_tier->bitmap_px > 0 ? glyph_tier->bitmap_px : 16u);
-            const float glyph_scale = font_size / atlas_font_px;
-
-            // atlas_range = MSDF 生成时的 range（以 atlas 像素为单位）
+            // MSDF atlas 现在是字号无关的，度量都在 design units
+            // 我们使用每个 glyph 的 units_per_em 来缩放到像素
             const float atlas_range = glyph_tier->distance_range;
-
             const float subpixel_flag = (font_size <= 18.0f) ? 1.0f : 0.0f;
             const float gamma_correction = -kSRGBGamma;
 
@@ -1595,6 +1657,13 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             SDL_BindGPUFragmentSamplers(pass, 0, &binding, 1);
             SDL_BindGPUGraphicsPipeline(pass, text_pipeline_);
 
+            // 使用命令中统一的 pixel_scale（来自HarfBuzz整形时计算）
+            const float pixel_scale = cmd.scale_to_pixels;
+            
+            // 调试：输出关键参数
+            SDL_Log("DrawText: font_size=%.1f units_per_em=%u pixel_scale=%.4f",
+                   cmd.font_size, cmd.units_per_em, pixel_scale);
+            
             struct TextUniformData {
                 float rect[4];
                 float uv_rect[4];
@@ -1605,6 +1674,7 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             };
 
             int debug_count = 0;
+            
             for (const auto& glyph : cmd.glyphs) {
                 if (glyph.glyph_id == 0) {
                     continue;
@@ -1615,23 +1685,27 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                     continue;
                 }
 
-                if (entry->metrics.width <= 0.0f || entry->metrics.height <= 0.0f ||
+                if (entry->metrics.width_units <= 0.0f || entry->metrics.height_units <= 0.0f ||
                     entry->u1 <= entry->u0 || entry->v1 <= entry->v0) {
                     continue;
                 }
 
-                // GlyphMetrics 现在是基于 atlas_font_px 的像素度量，这里按 glyph_scale 线性缩放
-                const float bearing_x_px = entry->metrics.bearing_x * glyph_scale;
-                const float bearing_y_px = entry->metrics.bearing_y * glyph_scale;
-                const float glyph_w = std::max(entry->metrics.width * glyph_scale, 0.0f);
-                const float glyph_h = std::max(entry->metrics.height * glyph_scale, 0.0f);
+                // 使用统一的pixel_scale将 design units 缩放到像素
+                const float bearing_x_px = entry->metrics.bearing_x_units * pixel_scale;
+                const float bearing_y_px = entry->metrics.bearing_y_units * pixel_scale;
+                const float glyph_w = entry->metrics.width_units * pixel_scale;
+                const float glyph_h = entry->metrics.height_units * pixel_scale;
 
                 if (glyph_w <= 0.0f || glyph_h <= 0.0f) {
                     continue;
                 }
 
-                float glyph_x = glyph.pen_x + bearing_x_px;
-                float glyph_y = glyph.pen_y - bearing_y_px;
+                // pen 坐标也是 design units，需要缩放
+                const float pen_x_px = glyph.pen_x_units * pixel_scale + cmd.baseline_x;
+                const float pen_y_px = glyph.pen_y_units * pixel_scale + cmd.baseline_y;
+
+                float glyph_x = pen_x_px + bearing_x_px;
+                float glyph_y = pen_y_px - bearing_y_px;
 
                 TextUniformData u{};
                 u.rect[0] = glyph_x;
@@ -1648,21 +1722,46 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
 
                 writeLinearColor(cmd.color, u.color);
 
-                // uParams.x = pxRange (MSDF 生成时的像素 range)
-                // uParams.y = 预留（目前未用）
-                // uParams.z = 预留（例如 subpixel 标志）
-                // uParams.w = gammaSigned
-                const float px_range = atlas_range;
-                u.params[0] = px_range;
-                u.params[1] = 0.0f;
+                // 计算 UV 空间中的 pxRange
+                // MSDF 生成时在 glyph_bitmap_size x glyph_bitmap_size 纹理中使用了 atlas_range 像素的 range
+                // 这个 glyph 在 atlas 中占据的 UV 区域是 (u1-u0) x (v1-v0)
+                // 所以 UV 空间中的 range = atlas_range / glyph_bitmap_size * (u1-u0)
+                const float glyph_bitmap_size = static_cast<float>(glyph_tier->bitmap_px);
+                const float uv_width = entry->u1 - entry->u0;
+                const float uv_height = entry->v1 - entry->v0;
+                const float uv_range_x = (atlas_range / glyph_bitmap_size) * uv_width;
+                const float uv_range_y = (atlas_range / glyph_bitmap_size) * uv_height;
+                
+                // uParams.x = UV 空间中的 X 方向 range
+                // uParams.y = UV 空间中的 Y 方向 range
+                // uParams.z = subpixel 标志  
+                // uParams.w = gamma 校正
+                u.params[0] = uv_range_x;
+                u.params[1] = uv_range_y;
                 u.params[2] = subpixel_flag;
                 u.params[3] = gamma_correction;
                 fill_clip_uniform(u.clip);
 
                 SDL_PushGPUVertexUniformData(current_cmd_buf_, 0, &u, sizeof(u));
                 SDL_DrawGPUPrimitives(pass, 4, 1, 0, 0);
+                
+                // 详细调试前3个字形
+                if (debug_count < 3) {
+                    SDL_Log("GLYPH_RENDER[%d]: glyph_id=%u pos=(%.1f,%.1f) size=(%.1f,%.1f)", 
+                           debug_count, glyph.glyph_id, glyph_x, glyph_y, glyph_w, glyph_h);
+                    SDL_Log("  UV: (%.4f,%.4f)-(%.4f,%.4f) range=(%.4f,%.4f)", 
+                           entry->u0, entry->v0, entry->u1, entry->v1, uv_range_x, uv_range_y);
+                    SDL_Log("  metrics: width_units=%.1f height_units=%.1f bearing=(%.1f,%.1f)",
+                           entry->metrics.width_units, entry->metrics.height_units,
+                           entry->metrics.bearing_x_units, entry->metrics.bearing_y_units);
+                    SDL_Log("  pixel_scale=%.4f glyph_bitmap_size=%.0f atlas_range=%.1f",
+                           pixel_scale, glyph_bitmap_size, atlas_range);
+                }
+                
+                ++debug_count;
             }
 
+            SDL_Log("GPUDriverSDL: Rendered %d/%zu glyphs", debug_count, cmd.glyphs.size());
             break;
         }
         default:

@@ -1,7 +1,9 @@
 #include "view.hpp"
 #include <cstdio>
 #include <string>
+#include <cstring>
 #include <SDL3/SDL_log.h>
+#include <SDL3/SDL_gpu.h>
 #include "../dom/dom_manager.hpp"
 #include "../dom/event_system.hpp"
 #include "../render/render_surface.hpp"
@@ -186,10 +188,9 @@ void View::update() {
         return;
     }
 
-    // CPU 路径（保留，暂时注释）
-    // if (painter) {
-    //     painter->renderDOM(root, layout_engine.get());
-    // }
+    // CPU 路径已经不再支持（原有的 Skia 后端已移除）
+    // 如需像素读取，请使用 GPU 渲染模式 + offscreen texture
+    SDL_Log("[View::update] Warning: CPU render path is no longer supported");
 }
 
 void* View::get_pixel_buffer() {
@@ -197,6 +198,157 @@ void* View::get_pixel_buffer() {
         return render_surface->getCPUBuffer();
     }
     return nullptr;
+}
+
+SDL_GPUTexture* View::renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, uint32_t height) {
+    if (!device) {
+        SDL_Log("[View::renderToGPUTexture] Invalid device");
+        return nullptr;
+    }
+    
+    if (!gpu_driver_) {
+        SDL_Log("[View::renderToGPUTexture] GPU driver not initialized");
+        return nullptr;
+    }
+    
+    if (!painter) {
+        SDL_Log("[View::renderToGPUTexture] Painter not initialized");
+        return nullptr;
+    }
+    
+    // 1. 创建离屏渲染目标纹理
+    SDL_GPUTextureCreateInfo tex_info{};
+    tex_info.type = SDL_GPU_TEXTURETYPE_2D;
+    tex_info.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    tex_info.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    tex_info.width = width;
+    tex_info.height = height;
+    tex_info.layer_count_or_depth = 1;
+    tex_info.num_levels = 1;
+    tex_info.sample_count = SDL_GPU_SAMPLECOUNT_1;
+    
+    SDL_GPUTexture* offscreen_texture = SDL_CreateGPUTexture(device, &tex_info);
+    if (!offscreen_texture) {
+        SDL_Log("[View::renderToGPUTexture] Failed to create offscreen texture: %s", SDL_GetError());
+        return nullptr;
+    }
+    
+    // 2. 确保布局已计算
+    auto root = dom_manager ? dom_manager->getRoot() : nullptr;
+    if (!root) {
+        SDL_Log("[View::renderToGPUTexture] No DOM root");
+        SDL_ReleaseGPUTexture(device, offscreen_texture);
+        return nullptr;
+    }
+    
+    // 执行布局计算（如果需要）
+    if (layout_engine && root->isLayoutDirty()) {
+        SDL_Log("[View::renderToGPUTexture] Calculating layout...");
+        layout_engine->calculateLayout(root, static_cast<float>(width), static_cast<float>(height));
+        root->clearLayoutDirtyRecursive();
+        SDL_Log("[View::renderToGPUTexture] Layout calculated");
+    }
+    
+    // 3. 构建 DisplayList 并编译为 GPUCommandList
+    SDL_Log("[View::renderToGPUTexture] Building DisplayList...");
+    const render::DisplayList& dl = painter->buildDisplayList(root, layout_engine.get());
+    SDL_Log("[View::renderToGPUTexture] DisplayList has %zu items", dl.items.size());
+    
+    render::GPUCompiler compiler;
+    render::GPUCommandList cmd_list;
+    compiler.compile(dl, cmd_list);
+    SDL_Log("[View::renderToGPUTexture] GPUCommandList has %zu commands", cmd_list.commands.size());
+    
+    // 4. 执行离屏渲染
+    gpu_driver_->beginFrameOffscreen(offscreen_texture, width, height);
+    gpu_driver_->execute(cmd_list);
+    gpu_driver_->endFrameOffscreen();
+    
+    SDL_Log("[View::renderToGPUTexture] Successfully rendered to GPU texture %u x %u", width, height);
+    
+    // 返回纹理，调用者负责释放
+    return offscreen_texture;
+}
+
+bool View::renderOffscreen(SDL_GPUDevice* device, uint32_t width, uint32_t height, 
+                           uint8_t* out_pixels) {
+    if (!device || !out_pixels) {
+        SDL_Log("[View::renderOffscreen] Invalid parameters");
+        return false;
+    }
+    
+    // 1. 调用底层接口渲染到GPU纹理
+    SDL_GPUTexture* offscreen_texture = renderToGPUTexture(device, width, height);
+    if (!offscreen_texture) {
+        SDL_Log("[View::renderOffscreen] Failed to render to GPU texture");
+        return false;
+    }
+    
+    // 2. 创建传输缓冲区用于读回像素
+    // 2. 创建传输缓冲区用于读回像素
+    SDL_GPUTransferBufferCreateInfo transfer_info{};
+    transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_DOWNLOAD;
+    transfer_info.size = width * height * 4;
+    
+    SDL_GPUTransferBuffer* download_buffer = SDL_CreateGPUTransferBuffer(device, &transfer_info);
+    if (!download_buffer) {
+        SDL_Log("[View::renderOffscreen] Failed to create download buffer: %s", SDL_GetError());
+        SDL_ReleaseGPUTexture(device, offscreen_texture);
+        return false;
+    }
+    
+    // 3. 执行纹理到传输缓冲区的拷贝
+    SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(device);
+    if (!cmd) {
+        SDL_Log("[View::renderOffscreen] Failed to acquire command buffer: %s", SDL_GetError());
+        SDL_ReleaseGPUTransferBuffer(device, download_buffer);
+        SDL_ReleaseGPUTexture(device, offscreen_texture);
+        return false;
+    }
+    
+    SDL_GPUCopyPass* copy_pass = SDL_BeginGPUCopyPass(cmd);
+    
+    SDL_GPUTextureRegion src_region{};
+    src_region.texture = offscreen_texture;
+    src_region.mip_level = 0;
+    src_region.layer = 0;
+    src_region.x = 0;
+    src_region.y = 0;
+    src_region.z = 0;
+    src_region.w = width;
+    src_region.h = height;
+    src_region.d = 1;
+    
+    SDL_GPUTextureTransferInfo dst_transfer{};
+    dst_transfer.transfer_buffer = download_buffer;
+    dst_transfer.offset = 0;
+    dst_transfer.pixels_per_row = 0;
+    dst_transfer.rows_per_layer = 0;
+    
+    SDL_DownloadFromGPUTexture(copy_pass, &src_region, &dst_transfer);
+    SDL_EndGPUCopyPass(copy_pass);
+    
+    SDL_SubmitGPUCommandBuffer(cmd);
+    SDL_WaitForGPUIdle(device);
+    
+    // 4. Map 并复制像素数据
+    void* mapped = SDL_MapGPUTransferBuffer(device, download_buffer, false);
+    if (!mapped) {
+        SDL_Log("[View::renderOffscreen] Failed to map download buffer: %s", SDL_GetError());
+        SDL_ReleaseGPUTransferBuffer(device, download_buffer);
+        SDL_ReleaseGPUTexture(device, offscreen_texture);
+        return false;
+    }
+    
+    std::memcpy(out_pixels, mapped, width * height * 4);
+    SDL_UnmapGPUTransferBuffer(device, download_buffer);
+    
+    // 5. 清理资源
+    SDL_ReleaseGPUTransferBuffer(device, download_buffer);
+    SDL_ReleaseGPUTexture(device, offscreen_texture);
+    
+    SDL_Log("[View::renderOffscreen] Successfully rendered and read back %u x %u pixels", width, height);
+    return true;
 }
 
 bool View::eval_script(const char* code) {

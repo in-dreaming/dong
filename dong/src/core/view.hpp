@@ -6,6 +6,7 @@
 
 // Forward declare SDL types
 struct SDL_GPUDevice;
+struct SDL_GPUTexture;
 struct SDL_Window;
 
 namespace dong::dom {
@@ -63,6 +64,14 @@ public:
     // Rendering modes
     void setRenderMode(bool use_gpu);
     void setExternalGPUDevice(SDL_GPUDevice* device, SDL_Window* window);
+    
+    // Offscreen rendering API
+    // 底层接口：渲染到GPU纹理（调用者负责释放返回的纹理）
+    SDL_GPUTexture* renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, uint32_t height);
+    
+    // 上层接口：渲染到GPU纹理并回读到内存（基于 renderToGPUTexture 实现）
+    bool renderOffscreen(SDL_GPUDevice* device, uint32_t width, uint32_t height, 
+                        uint8_t* out_pixels);
 
 private:
     uint32_t width_;

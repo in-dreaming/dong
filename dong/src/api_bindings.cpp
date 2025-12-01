@@ -103,4 +103,19 @@ const char* dong_view_eval_return(dong_view_t* view, const char* script) {
     return cached_result.c_str();
 }
 
+void* dong_view_render_to_gpu_texture(dong_view_t* view, void* gpu_device,
+                                      uint32_t width, uint32_t height) {
+    if (!view || !gpu_device) return nullptr;
+    SDL_GPUDevice* device = reinterpret_cast<SDL_GPUDevice*>(gpu_device);
+    return reinterpret_cast<DongView*>(view)->renderToGPUTexture(device, width, height);
+}
+
+bool dong_view_render_offscreen(dong_view_t* view, void* gpu_device, 
+                                  uint32_t width, uint32_t height, 
+                                  uint8_t* out_pixels) {
+    if (!view || !gpu_device || !out_pixels) return false;
+    SDL_GPUDevice* device = reinterpret_cast<SDL_GPUDevice*>(gpu_device);
+    return reinterpret_cast<DongView*>(view)->renderOffscreen(device, width, height, out_pixels);
+}
+
 } // extern "C"
