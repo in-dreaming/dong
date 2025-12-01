@@ -4,6 +4,7 @@
 #include <yoga/Yoga.h>
 #include <iostream>
 #include <algorithm>
+#include <SDL3/SDL_log.h>
 
 namespace dong::layout {
 

@@ -74,6 +74,15 @@ bool TextShaper::shape(const TextShapeRequest& request, ShapedText& out_text) {
     out_text.scale_to_pixels = request.font_size / static_cast<float>(units_per_em);
     out_text.glyphs.clear();
     out_text.glyphs.reserve(glyph_count);
+    
+    // 调试日志
+    static int shape_count = 0;
+    if (shape_count < 5) {
+        SDL_Log("[TextShaper] Request #%d: font_size=%.1f units_per_em=%u scale=%.4f text='%s'",
+               shape_count, request.font_size, units_per_em, out_text.scale_to_pixels,
+               request.text.substr(0, 30).c_str());
+        ++shape_count;
+    }
 
     float pen_x_units = 0.0f;
     float pen_y_units = 0.0f;
@@ -82,12 +91,13 @@ bool TextShaper::shape(const TextShapeRequest& request, ShapedText& out_text) {
         const hb_glyph_info_t& info = infos[i];
         const hb_glyph_position_t& pos = positions[i];
 
-        // HarfBuzz 返回的是 26.6 定点数，但基于 units_per_em 缩放
-        // 除以 64.0 得到 design units
-        const float x_offset_units = static_cast<float>(pos.x_offset) / 64.0f;
-        const float y_offset_units = static_cast<float>(pos.y_offset) / 64.0f;
-        const float x_advance_units = static_cast<float>(pos.x_advance) / 64.0f;
-        const float y_advance_units = static_cast<float>(pos.y_advance) / 64.0f;
+        // 这里我们将 HarfBuzz 的位置直接视为 design units：
+        // hb_font_set_scale(hb_font, units_per_em, units_per_em) 之后，
+        // pos.x_advance 等已经按字体 design units 缩放，无需再除以 64。
+        const float x_offset_units = static_cast<float>(pos.x_offset);
+        const float y_offset_units = static_cast<float>(pos.y_offset);
+        const float x_advance_units = static_cast<float>(pos.x_advance);
+        const float y_advance_units = static_cast<float>(pos.y_advance);
 
         ShapedGlyph glyph{};
         glyph.glyph_id = info.codepoint;

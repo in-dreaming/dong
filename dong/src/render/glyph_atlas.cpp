@@ -3,6 +3,7 @@
 #include "font_metrics.hpp"
 #include <SDL3/SDL_log.h>
 #include <cstring>
+#include <cstdio>
 #include <algorithm>
 
 // MSDF 生成库（仅核心）
@@ -419,6 +420,41 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
     float avg_r = sum_r / (msdf_size * msdf_size);
     SDL_Log("MSDF Data: glyph=%u R[min=%.3f avg=%.3f max=%.3f] inside=%d outside=%d total=%d",
             glyph_id, min_r, avg_r, max_r, inside_count, outside_count, msdf_size * msdf_size);
+
+    // 调试：导出前几个字形的MSDF到文件
+    static int debug_glyph_count = 0;
+    if (debug_glyph_count < 3) {
+        char filename[256];
+        snprintf(filename, sizeof(filename), "msdf_debug_glyph_%u.bmp", glyph_id);
+        
+        FILE* f = fopen(filename, "wb");
+        if (f) {
+            // BMP header
+            uint32_t filesize = 54 + msdf_size * msdf_size * 3;
+            uint8_t header[54] = {0};
+            header[0] = 'B'; header[1] = 'M';
+            memcpy(header + 2, &filesize, 4);
+            header[10] = 54;
+            header[14] = 40;
+            memcpy(header + 18, &msdf_size, 4);
+            memcpy(header + 22, &msdf_size, 4);
+            *(uint16_t*)(header + 26) = 1;
+            *(uint16_t*)(header + 28) = 24;
+            fwrite(header, 1, 54, f);
+            
+            // Write pixels (BMP is bottom-up)
+            for (int y = msdf_size - 1; y >= 0; --y) {
+                for (int x = 0; x < msdf_size; ++x) {
+                    int idx = (y * msdf_size + x) * 4;
+                    uint8_t bgr[3] = {out_bitmap[idx + 2], out_bitmap[idx + 1], out_bitmap[idx + 0]};
+                    fwrite(bgr, 3, 1, f);
+                }
+            }
+            fclose(f);
+            SDL_Log("MSDF Debug: Exported %s", filename);
+        }
+        ++debug_glyph_count;
+    }
 
     return true;
 }

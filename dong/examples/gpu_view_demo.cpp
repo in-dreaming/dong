@@ -54,152 +54,42 @@ int main() {
     std::printf("[gpu_view_demo] Enabling GPU render mode on dong view...\n");
     dong_view_set_external_gpu_device(view, static_cast<void*>(device), static_cast<void*>(window.getHandle()));
 
+    // 使用与 gpu_texture_demo 相同的HTML内容进行对比测试
     const char* html = R"(
         <!DOCTYPE html>
         <html>
         <head>
-            <meta charset="utf-8" />
-            <title>Dong GPU View Demo</title>
             <style>
-                html, body {
-                    margin: 0;
-                    padding: 0;
-                    width: 100%;
-                    height: 100%;
-                }
-
                 body {
-                    background-color: #20262e;
+                    margin: 0;
+                    padding: 30px;
+                    background-color: #f5f5f5;
                     font-family: Arial, sans-serif;
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                    color: #ffffff;
                 }
-
-                .card {
-                    background-color: #2f3640;
-                    border-radius: 12px;
-                    padding: 24px 28px;
-                    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
-                    min-width: 520px;
-                }
-
+                
                 h1 {
-                    margin: 0 0 8px 0;
+                    font-size: 48px;
+                    color: #333333;
+                    margin: 20px 0;
+                }
+                
+                .info {
                     font-size: 24px;
+                    color: #666666;
+                    margin: 10px 0;
                 }
-
-                p {
-                    margin: 4px 0;
-                    color: #d0d0d0;
-                    line-height: 1.5;
-                }
-
-                .pill-row {
-                    margin: 12px 0 8px 0;
-                }
-
-                .pill {
-                    display: inline-block;
-                    padding: 4px 10px;
-                    border-radius: 999px;
-                    background-color: #374151;
-                    color: #e5e7eb;
-                    font-size: 12px;
-                    margin-right: 6px;
-                }
-
-                .button-row {
-                    margin-top: 16px;
-                    display: flex;
-                    gap: 10px;
-                }
-
-                .btn {
-                    padding: 8px 16px;
-                    border-radius: 6px;
-                    border: none;
-                    cursor: pointer;
-                    font-size: 14px;
-                }
-
-                .btn.primary {
-                    background-color: #3b82f6;
-                    color: #ffffff;
-                }
-
-                .btn.secondary {
-                    background-color: #4b5563;
-                    color: #e5e7eb;
-                }
-
-                #status {
-                    margin-top: 10px;
-                    font-size: 13px;
-                    color: #9ca3af;
+                
+                .highlight {
+                    font-size: 32px;
+                    color: #ff6600;
+                    font-weight: bold;
                 }
             </style>
         </head>
         <body>
-            <div class="card">
-                <h1>Dong GPU View Demo</h1>
-                <p>This window is driven by SDL3 + SDL_gpu, while Dong handles HTML/CSS/JS and DOM events.</p>
-                <div class="pill-row">
-                    <span class="pill">HTML/CSS</span>
-                    <span class="pill">DOM Events</span>
-                    <span class="pill">SDL_gpu</span>
-                </div>
-                <p>Move the mouse and click / press keys in this window. Events are forwarded to Dong's JS layer.</p>
-                <div class="button-row">
-                    <button class="btn primary" id="primaryBtn">Primary</button>
-                    <button class="btn secondary" id="secondaryBtn">Secondary</button>
-                </div>
-                <div id="status">Waiting for input...</div>
-            </div>
-
-            <script>
-                (function() {
-                    console.log('[GPU Demo] Script running');
-
-                    var primary = document.getElementById('primaryBtn');
-                    var secondary = document.getElementById('secondaryBtn');
-                    var status = document.getElementById('status');
-
-                    function setStatus(text) {
-                        if (status) {
-                            status.textContent = text;
-                        }
-                        console.log('[GPU Demo] ' + text);
-                    }
-
-                    if (primary) {
-                        primary.addEventListener('click', function() {
-                            setStatus('Primary button clicked.');
-                        });
-                    }
-
-                    if (secondary) {
-                        secondary.addEventListener('click', function() {
-                            setStatus('Secondary button clicked.');
-                        });
-                    }
-
-                    window.addEventListener('mousemove', function(ev) {
-                        setStatus('Mouse move: (' + ev.clientX + ', ' + ev.clientY + ')');
-                    });
-
-                    window.addEventListener('keydown', function(ev) {
-                        setStatus('Key down: ' + ev.key);
-                    });
-
-                    window.addEventListener('keyup', function(ev) {
-                        setStatus('Key up: ' + ev.key);
-                    });
-
-                    setStatus('GPU view initialized.');
-                })();
-            </script>
+            <h1>GPU Texture Demo</h1>
+            <div class="info">Two-layer offscreen rendering API</div>
+            <div class="highlight">renderToGPUTexture() + renderOffscreen()</div>
         </body>
         </html>
     )";

@@ -725,25 +725,33 @@ float4 main(PSInput input) : SV_Target0 {
         discard;
     }
 
-    // 标准 MSDF 解码：使用 sigDist 与其导数做自适应平滑
+    // 标准 MSDF 解码：使用 signed distance 与其导数做自适应平滑
     float3 msdf = msdfTexture.Sample(msdfSampler, input.uv).rgb;
     float sd = median(msdf.r, msdf.g, msdf.b);
-    float sigDist = sd - 0.5; // sigDist = 0 在轮廓线上
 
-    float gammaSigned = uParams.w;
-    float gammaMagnitude = max(abs(gammaSigned), 1e-3);
-    bool inputIsLinear = gammaSigned < 0.0;
+    // uParams.x/y 是 UV 空间中的 distance range（等价于 pxRange / textureSize）
+    float2 uvRange = float2(uParams.x, uParams.y);
 
-    float width = fwidth(sigDist);
-    float opacity = saturate(sigDist / max(width, 1e-3) + 0.5);
+    // 根据 UV 导数估算屏幕空间中 1 个 texel 的大小
+    float2 texelToScreen = float2(length(ddx(input.uv)), length(ddy(input.uv)));
+    texelToScreen = max(texelToScreen, float2(1e-6, 1e-6));
 
-    float3 linearColor = inputIsLinear ? input.color.rgb : toLinear(input.color.rgb, gammaMagnitude);
-    linearColor *= opacity;
-    float3 srgbColor = toSRGB(linearColor, gammaMagnitude);
+    // 屏幕空间的距离范围：range_uv / d(uv)/d(screen)
+    float2 screenPxRange2D = uvRange / texelToScreen;
+    float screenPxRange = max(min(screenPxRange2D.x, screenPxRange2D.y), 1.0);
 
-    float4 color = input.color;
+    // signed distance 映射到 [0,1] alpha
+    float screenPxDistance = screenPxRange * (sd - 0.5);
+    float opacity = saturate(screenPxDistance + 0.5);
+
+    // input.color 已在顶点阶段转为线性空间
+    float3 linearColor = input.color.rgb * opacity;
+    float gamma = (uParams.w != 0.0) ? -uParams.w : 2.2;
+    float3 srgbColor = toSRGB(linearColor, gamma);
+
+    float4 color;
     color.rgb = srgbColor;
-    color.a *= opacity;
+    color.a = input.color.a * opacity;
     return color;
 }
 )";
@@ -1064,6 +1072,7 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
         swapchain_texture = offscreen_target_;
         w = offscreen_width_;
         h = offscreen_height_;
+        SDL_Log("[GPUDriverSDL::execute] Offscreen mode: viewport = %u x %u", w, h);
     } else {
         // 窗口渲染模式
         if (!window_) {
@@ -1116,12 +1125,16 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
         return std::pair<float, float>{static_cast<float>(cw), static_cast<float>(ch)};
     };
 
-    auto write_viewport = [&current_viewport](float (&out)[4]) {
+    auto write_viewport = [&current_viewport, frame_count=0](float (&out)[4]) mutable {
         auto [vw, vh] = current_viewport();
         out[0] = vw;
         out[1] = vh;
         out[2] = 0.0f;
         out[3] = 0.0f;
+        if (frame_count < 5) {  // 只打印前5次
+            SDL_Log("[write_viewport #%d] Setting viewport uniform: %.1f x %.1f", frame_count, vw, vh);
+            frame_count++;
+        }
     };
 
     float device_pixel_ratio = 1.0f;
@@ -1706,6 +1719,15 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
 
                 float glyph_x = pen_x_px + bearing_x_px;
                 float glyph_y = pen_y_px - bearing_y_px;
+                
+                // 调试：打印前3个字形的坐标计算过程
+                if (debug_count < 3) {
+                    SDL_Log("[GLYPH_CALC #%d] baseline=(%.1f,%.1f) pen_units=(%.1f,%.1f) pixel_scale=%.4f",
+                           debug_count, cmd.baseline_x, cmd.baseline_y, 
+                           glyph.pen_x_units, glyph.pen_y_units, pixel_scale);
+                    SDL_Log("[GLYPH_CALC #%d] pen_px=(%.1f,%.1f) bearing_px=(%.1f,%.1f) final_pos=(%.1f,%.1f)",
+                           debug_count, pen_x_px, pen_y_px, bearing_x_px, bearing_y_px, glyph_x, glyph_y);
+                }
 
                 TextUniformData u{};
                 u.rect[0] = glyph_x;
