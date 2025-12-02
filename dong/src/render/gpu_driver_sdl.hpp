@@ -37,6 +37,12 @@ public:
     // 供外部注入图片资源管理器（用于从 Skia/CPU 侧取得图片像素）
     void setImageResourceManager(ResourceManager* manager) { image_resource_manager_ = manager; }
 
+    // Debug: 启用时在 execute 末尾按 draw_batches 做一次批次遍历并输出日志
+    void setDebugLogDrawBatches(bool enable) { debug_log_draw_batches_ = enable; }
+
+    // Debug: 打印隔离图层缓存（重栅格 / 缓存复用）情况
+    void setDebugLogLayerCache(bool enable) { debug_log_layer_cache_ = enable; }
+
 private:
     GPUDevice* gpu_device_;
     SDL_Window* window_;
@@ -44,6 +50,8 @@ private:
     ResourceManager* image_resource_manager_ = nullptr;
     SDL_GPUCommandBuffer* current_cmd_buf_ = nullptr;
     bool in_frame_ = false;
+    bool debug_log_draw_batches_ = false;
+    bool debug_log_layer_cache_ = false;
     
     // Offscreen rendering support
     SDL_GPUTexture* offscreen_target_ = nullptr;
@@ -71,6 +79,17 @@ private:
     Uint32 atlas_cursor_x_ = 0;
     Uint32 atlas_cursor_y_ = 0;
     Uint32 atlas_row_height_ = 0;
+
+    // 图层离屏渲染目标缓存池：按尺寸复用纹理，减少反复创建/销毁
+    struct LayerRenderTarget {
+        SDL_GPUTexture* texture = nullptr;
+        Uint32 width = 0;
+        Uint32 height = 0;
+        uint64_t layer_id = 0;       // 绑定的逻辑图层 ID（0 表示未绑定）
+        bool in_use = false;         // 本帧是否作为 render target 正在使用
+        bool valid_for_cache = false;// 纹理内容是否可作为缓存复用
+    };
+    std::vector<LayerRenderTarget> layer_render_targets_;
 
     struct ImageAtlasEntry {
         float u0;

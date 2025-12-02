@@ -13,6 +13,7 @@
 #include <cmath>
 #include <limits>
 #include <utility>
+#include <cstdlib>
 
 #include <ft2build.h>
 #include FT_FREETYPE_H
@@ -120,6 +121,15 @@ GPUDriverSDL::~GPUDriverSDL() {
             SDL_ReleaseGPUSampler(dev, text_sampler_);
             text_sampler_ = nullptr;
         }
+
+        // 释放图层离屏渲染缓存纹理
+        for (auto& entry : layer_render_targets_) {
+            if (entry.texture) {
+                SDL_ReleaseGPUTexture(dev, entry.texture);
+                entry.texture = nullptr;
+            }
+        }
+        layer_render_targets_.clear();
     }
 
     glyph_atlas_tiers_.clear();
@@ -620,40 +630,54 @@ float4 main(PSInput input) : SV_Target0 {
 
     // MSDF 文字渲染着色器和管线
     const char* kTextVS = R"(
+struct GlyphInstanceData {
+    float4 rect;
+    float4 uvRect;
+    float4 color;
+    float4 params;
+};
+
 struct VSOutput {
     float4 position : SV_Position;
     float2 uv : TEXCOORD0;
     float4 color : COLOR0;
     float2 pixel : TEXCOORD1;
+    float4 params : TEXCOORD2;
 };
 
 cbuffer TextUniforms : register(b0, space1) {
-    float4 uRect;
-    float4 uUVRect;
     float4 uViewport;
-    float4 uColor;
-    float4 uParams;
     float4 uClipRects[4];
     float4 uClipRadii;
     float4 uClipMeta;
+    GlyphInstanceData uGlyphs[64];
 };
 
-VSOutput main(uint vertexID : SV_VertexID) {
+VSOutput main(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID) {
     float2 local;
     if (vertexID == 0) { local = float2(0.0, 0.0); }
     else if (vertexID == 1) { local = float2(1.0, 0.0); }
     else if (vertexID == 2) { local = float2(0.0, 1.0); }
     else { local = float2(1.0, 1.0); }
-    float2 pos = uRect.xy + local * uRect.zw;
+
+    GlyphInstanceData glyph = uGlyphs[instanceID];
+
+    float2 pos = glyph.rect.xy + local * glyph.rect.zw;
     float2 ndc;
     ndc.x = (pos.x / uViewport.x) * 2.0 - 1.0;
     ndc.y = 1.0 - (pos.y / uViewport.y) * 2.0;
-    float2 uv = float2(lerp(uUVRect.x, uUVRect.z, local.x), lerp(uUVRect.y, uUVRect.w, local.y));
+
+    float2 uv = float2(
+        lerp(glyph.uvRect.x, glyph.uvRect.z, local.x),
+        lerp(glyph.uvRect.y, glyph.uvRect.w, local.y)
+    );
+
     VSOutput o;
     o.position = float4(ndc, 0.0, 1.0);
     o.uv = uv;
-    o.color = uColor;
+    o.color = glyph.color;
     o.pixel = pos;
+    o.params = glyph.params;
     return o;
 }
 )";
@@ -662,15 +686,19 @@ VSOutput main(uint vertexID : SV_VertexID) {
 Texture2D msdfTexture : register(t0);
 SamplerState msdfSampler : register(s0);
 
+struct GlyphInstanceData {
+    float4 rect;
+    float4 uvRect;
+    float4 color;
+    float4 params;
+};
+
 cbuffer TextUniforms : register(b0, space1) {
-    float4 uRect;
-    float4 uUVRect;
     float4 uViewport;
-    float4 uColor;
-    float4 uParams;
     float4 uClipRects[4];
     float4 uClipRadii;
     float4 uClipMeta;
+    GlyphInstanceData uGlyphs[64];
 };
 
 struct PSInput {
@@ -678,6 +706,7 @@ struct PSInput {
     float2 uv : TEXCOORD0;
     float4 color : COLOR0;
     float2 pixel : TEXCOORD1;
+    float4 params : TEXCOORD2;
 };
 
 float median(float r, float g, float b) {
@@ -726,17 +755,17 @@ float4 main(PSInput input) : SV_Target0 {
     }
 
     // 基于 msdfgen + fwidth 的 MSDF 解码：
-    // 1. uParams.x 传入屏幕空间 pxRange（像素）
+    // 1. params.x 传入屏幕空间 pxRange（像素）
     // 2. median 取 signed distance（0.5 为轮廓）并按 pxRange 缩放
     // 3. 使用 fwidth(dist) * inv_device_pixel_ratio 估算当前缩放下 1 逻辑像素的距离变化
     // 4. 按 dist / width + 0.5 做归一化，保证不同缩放与 DPI 下边缘宽度一致
     float3 msdf = msdfTexture.Sample(msdfSampler, input.uv).rgb;
     float sd = median(msdf.r, msdf.g, msdf.b);
 
-    float pxRange = max(uParams.x, 1.0f);
+    float pxRange = max(input.params.x, 1.0f);
     float dist = (sd - 0.5f) * pxRange;
 
-    float invDPR = uParams.y;
+    float invDPR = input.params.y;
     float dx = ddx(dist);
     float dy = ddy(dist);
     float fw = abs(dx) + abs(dy);
@@ -749,7 +778,7 @@ float4 main(PSInput input) : SV_Target0 {
 
     // input.color 已经是线性空间，在这里叠加 alpha 再转回 sRGB
     float3 linearColor = input.color.rgb;
-    float gamma = (uParams.w != 0.0f) ? -uParams.w : 2.2f;
+    float gamma = (input.params.w != 0.0f) ? -input.params.w : 2.2f;
     float3 srgbColor = toSRGB(linearColor * alpha, gamma);
 
     float4 color;
@@ -1108,10 +1137,17 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
         Uint32 height = 0;
         Rect bounds;
         float opacity = 1.0f;
+        uint64_t id = 0;
+        bool dirty = true;
+        LayerRenderTarget* cache_entry = nullptr;
+        float transform[6] = {1.0f, 0.0f, 0.0f,
+                              0.0f, 1.0f, 0.0f};
+        float scroll[2] = {0.0f, 0.0f};
     };
 
     std::vector<RenderTargetState> render_target_stack;
     std::vector<IsolatedLayerState> isolated_layer_stack;
+    int skip_draw_depth = 0; // 大于 0 时，跳过图层内部的绘制命令，仅在 EndIsolatedLayer 处做合成
 
     auto current_target_dimensions = [&render_target_stack, &w, &h]() -> std::pair<Uint32, Uint32> {
         if (render_target_stack.empty()) {
@@ -1265,6 +1301,12 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
     };
 
     for (const auto& cmd : commands.commands) {
+        // 当在非脏隔离图层内部时，跳过除 Begin/EndIsolatedLayer 以外的命令
+        if (skip_draw_depth > 0 && cmd.type != GPUCommandType::BeginIsolatedLayer &&
+            cmd.type != GPUCommandType::EndIsolatedLayer) {
+            continue;
+        }
+
         switch (cmd.type) {
         case GPUCommandType::BeginFrame:
             // beginFrame 已经处理命令缓冲了，这里忽略
@@ -1354,14 +1396,19 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             break;
         }
         case GPUCommandType::BeginIsolatedLayer: {
-            if (pass) {
-                SDL_EndGPURenderPass(pass);
-                pass = nullptr;
-            }
             if (render_target_stack.empty()) {
                 SDL_Log("GPUDriverSDL::execute: BeginIsolatedLayer without active render target");
                 break;
             }
+
+            SDL_GPUDevice* dev = gpu_device_ ? gpu_device_->getHandle() : nullptr;
+            if (!dev) {
+                SDL_Log("GPUDriverSDL::execute: no GPU device for isolated layer");
+                break;
+            }
+
+            const uint64_t layer_id = cmd.layer_id;
+            const bool layer_dirty = cmd.layer_dirty;
 
             auto parent_state = render_target_stack.back();
             Uint32 target_w = parent_state.width > 0 ? parent_state.width : w;
@@ -1369,21 +1416,150 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             if (target_w == 0) target_w = 1;
             if (target_h == 0) target_h = 1;
 
-            SDL_GPUTextureCreateInfo tex_info{};
-            tex_info.type = SDL_GPU_TEXTURETYPE_2D;
-            tex_info.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
-            tex_info.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
-            tex_info.width = target_w;
-            tex_info.height = target_h;
-            tex_info.layer_count_or_depth = 1;
-            tex_info.num_levels = 1;
-            tex_info.sample_count = SDL_GPU_SAMPLECOUNT_1;
+            LayerRenderTarget* cache_entry = nullptr;
 
-            SDL_GPUDevice* dev = gpu_device_->getHandle();
-            SDL_GPUTexture* layer_texture = dev ? SDL_CreateGPUTexture(dev, &tex_info) : nullptr;
-            if (!layer_texture) {
-                SDL_Log("GPUDriverSDL::execute: failed to create layer texture: %s", SDL_GetError());
+            // 如果标记为非脏图层，尝试直接复用已有缓存，不切换 render target
+            if (!layer_dirty && layer_id != 0) {
+                for (auto& entry : layer_render_targets_) {
+                    if (entry.layer_id == layer_id && entry.texture &&
+                        entry.valid_for_cache && entry.width == target_w && entry.height == target_h) {
+                        cache_entry = &entry;
+                        break;
+                    }
+                }
+            }
+
+            IsolatedLayerState layer_state{};
+            layer_state.bounds = cmd.rect;
+            layer_state.opacity = cmd.layer_opacity;
+            layer_state.id = layer_id;
+            layer_state.dirty = layer_dirty;
+            layer_state.cache_entry = cache_entry;
+            for (int i = 0; i < 6; ++i) {
+                layer_state.transform[i] = cmd.layer_transform[i];
+            }
+            layer_state.scroll[0] = cmd.layer_scroll[0];
+            layer_state.scroll[1] = cmd.layer_scroll[1];
+
+            if (!layer_dirty && cache_entry && cache_entry->texture) {
+                // 非脏图层且有有效缓存：不切换 render target，仅记录状态并开始跳过内部绘制
+                if (debug_log_layer_cache_) {
+                    SDL_Log("[GPUDriverSDL layer-cache] reuse layer id=%llu size=%ux%u bounds=(%.1f,%.1f,%.1f,%.1f)",
+                            static_cast<unsigned long long>(layer_id),
+                            static_cast<unsigned int>(cache_entry->width),
+                            static_cast<unsigned int>(cache_entry->height),
+                            layer_state.bounds.x,
+                            layer_state.bounds.y,
+                            layer_state.bounds.width,
+                            layer_state.bounds.height);
+                }
+                layer_state.texture = cache_entry->texture;
+                layer_state.width = cache_entry->width;
+                layer_state.height = cache_entry->height;
+                isolated_layer_stack.push_back(layer_state);
+                ++skip_draw_depth;
                 break;
+            }
+
+            // 脏图层：需要重新栅格，切换到离屏纹理
+            if (pass) {
+                SDL_EndGPURenderPass(pass);
+                pass = nullptr;
+            }
+
+            SDL_GPUTexture* layer_texture = nullptr;
+
+            // 优先复用同一 layer_id 的缓存纹理
+            if (layer_id != 0) {
+                for (auto& entry : layer_render_targets_) {
+                    if (entry.layer_id == layer_id && entry.texture && !entry.in_use) {
+                        if (entry.width != target_w || entry.height != target_h) {
+                            SDL_ReleaseGPUTexture(dev, entry.texture);
+                            entry.texture = nullptr;
+                            entry.valid_for_cache = false;
+                            entry.width = target_w;
+                            entry.height = target_h;
+                        }
+                        if (!entry.texture) {
+                            SDL_GPUTextureCreateInfo tex_info{};
+                            tex_info.type = SDL_GPU_TEXTURETYPE_2D;
+                            tex_info.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+                            tex_info.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
+                            tex_info.width = target_w;
+                            tex_info.height = target_h;
+                            tex_info.layer_count_or_depth = 1;
+                            tex_info.num_levels = 1;
+                            tex_info.sample_count = SDL_GPU_SAMPLECOUNT_1;
+                            entry.texture = SDL_CreateGPUTexture(dev, &tex_info);
+                            if (!entry.texture) {
+                                SDL_Log("GPUDriverSDL::execute: failed to recreate layer texture: %s", SDL_GetError());
+                                break;
+                            }
+                        }
+                        entry.in_use = true;
+                        entry.valid_for_cache = false;
+                        layer_texture = entry.texture;
+                        cache_entry = &entry;
+                        break;
+                    }
+                }
+            }
+
+            // 其次复用未绑定 layer_id 的空闲纹理
+            if (!layer_texture) {
+                for (auto& entry : layer_render_targets_) {
+                    if (entry.layer_id == 0 && !entry.in_use && entry.texture &&
+                        entry.width == target_w && entry.height == target_h) {
+                        entry.in_use = true;
+                        entry.valid_for_cache = false;
+                        entry.layer_id = layer_id;
+                        layer_texture = entry.texture;
+                        cache_entry = &entry;
+                        break;
+                    }
+                }
+            }
+
+            // 都没有的话，新建一个并加入池
+            if (!layer_texture) {
+                SDL_GPUTextureCreateInfo tex_info{};
+                tex_info.type = SDL_GPU_TEXTURETYPE_2D;
+                tex_info.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+                tex_info.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
+                tex_info.width = target_w;
+                tex_info.height = target_h;
+                tex_info.layer_count_or_depth = 1;
+                tex_info.num_levels = 1;
+                tex_info.sample_count = SDL_GPU_SAMPLECOUNT_1;
+
+                layer_texture = SDL_CreateGPUTexture(dev, &tex_info);
+                if (!layer_texture) {
+                    SDL_Log("GPUDriverSDL::execute: failed to create layer texture: %s", SDL_GetError());
+                    break;
+                }
+
+                LayerRenderTarget entry{};
+                entry.texture = layer_texture;
+                entry.width = target_w;
+                entry.height = target_h;
+                entry.layer_id = layer_id;
+                entry.in_use = true;
+                entry.valid_for_cache = false;
+                layer_render_targets_.push_back(entry);
+                cache_entry = &layer_render_targets_.back();
+            }
+
+            if (debug_log_layer_cache_) {
+                const Uint32 log_width = target_w;
+                const Uint32 log_height = target_h;
+                SDL_Log("[GPUDriverSDL layer-cache] rasterize layer id=%llu size=%ux%u bounds=(%.1f,%.1f,%.1f,%.1f)",
+                        static_cast<unsigned long long>(layer_id),
+                        static_cast<unsigned int>(log_width),
+                        static_cast<unsigned int>(log_height),
+                        layer_state.bounds.x,
+                        layer_state.bounds.y,
+                        layer_state.bounds.width,
+                        layer_state.bounds.height);
             }
 
             render_target_stack.push_back(RenderTargetState{layer_texture, target_w, target_h, false});
@@ -1401,28 +1577,102 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 SDL_Log("GPUDriverSDL::execute: failed to begin layer pass: %s", SDL_GetError());
                 SDL_ReleaseGPUTexture(dev, layer_texture);
                 render_target_stack.pop_back();
+                if (cache_entry) {
+                    cache_entry->texture = nullptr;
+                    cache_entry->in_use = false;
+                    cache_entry->valid_for_cache = false;
+                    cache_entry->layer_id = 0;
+                }
                 break;
             }
 
             apply_scissor(pass);
             pipeline_state.reset();
 
-            IsolatedLayerState layer_state{};
             layer_state.texture = layer_texture;
             layer_state.width = target_w;
             layer_state.height = target_h;
-            layer_state.bounds = cmd.rect;
-            layer_state.opacity = cmd.layer_opacity;
+            layer_state.cache_entry = cache_entry;
             isolated_layer_stack.push_back(layer_state);
             break;
         }
         case GPUCommandType::EndIsolatedLayer: {
-            if (render_target_stack.size() <= 1) {
+            if (isolated_layer_stack.empty()) {
                 SDL_Log("GPUDriverSDL::execute: EndIsolatedLayer without matching layer");
                 break;
             }
 
-            SDL_GPUDevice* dev = gpu_device_->getHandle();
+            IsolatedLayerState layer_info = isolated_layer_stack.back();
+            isolated_layer_stack.pop_back();
+
+            SDL_GPUDevice* dev = gpu_device_ ? gpu_device_->getHandle() : nullptr;
+
+            // 如果这是一个非脏图层，我们之前没有切换 render target，也不需要结束子 pass
+            if (!layer_info.dirty) {
+                if (skip_draw_depth > 0) {
+                    --skip_draw_depth;
+                }
+
+                SDL_GPUTexture* layer_texture = layer_info.texture;
+                if (!pass || !image_pipeline_ || !image_sampler_ || !layer_texture) {
+                    break;
+                }
+
+                if (layer_info.bounds.width <= 0.0f || layer_info.bounds.height <= 0.0f) {
+                    break;
+                }
+
+                struct LayerCompositeUniforms {
+                    float rect[4];
+                    float uv_rect[4];
+                    float viewport[4];
+                    float tint[4];
+                    ClipUniformBlock clip;
+                };
+
+                LayerCompositeUniforms u{};
+                u.rect[0] = layer_info.bounds.x;
+                u.rect[1] = layer_info.bounds.y;
+                u.rect[2] = layer_info.bounds.width;
+                u.rect[3] = layer_info.bounds.height;
+
+                float tex_w = static_cast<float>(layer_info.width);
+                float tex_h = static_cast<float>(layer_info.height);
+                if (tex_w <= 0.0f) tex_w = 1.0f;
+                if (tex_h <= 0.0f) tex_h = 1.0f;
+                u.uv_rect[0] = layer_info.bounds.x / tex_w;
+                u.uv_rect[1] = layer_info.bounds.y / tex_h;
+                u.uv_rect[2] = (layer_info.bounds.x + layer_info.bounds.width) / tex_w;
+                u.uv_rect[3] = (layer_info.bounds.y + layer_info.bounds.height) / tex_h;
+
+                write_viewport(u.viewport);
+
+                u.tint[0] = 1.0f;
+                u.tint[1] = 1.0f;
+                u.tint[2] = 1.0f;
+                u.tint[3] = layer_info.opacity;
+                fill_clip_uniform(u.clip);
+
+                SDL_PushGPUVertexUniformData(current_cmd_buf_, 0, &u, sizeof(u));
+
+                SDL_BindGPUGraphicsPipeline(pass, image_pipeline_);
+
+                SDL_GPUTextureSamplerBinding binding{};
+                binding.texture = layer_texture;
+                binding.sampler = image_sampler_;
+                SDL_BindGPUFragmentSamplers(pass, 0, &binding, 1);
+
+                SDL_DrawGPUPrimitives(pass, 4, 1, 0, 0);
+
+                // 非脏图层的缓存纹理保持在池中，valid_for_cache 标志不变
+                break;
+            }
+
+            // 脏图层：需要结束子 pass 并合成到父 render target
+            if (render_target_stack.size() <= 1) {
+                SDL_Log("GPUDriverSDL::execute: EndIsolatedLayer without matching layer render target");
+                break;
+            }
 
             if (pass) {
                 SDL_EndGPURenderPass(pass);
@@ -1434,16 +1684,9 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
 
             SDL_GPUTexture* layer_texture = layer_target_state.texture;
 
-            if (isolated_layer_stack.empty()) {
-                SDL_Log("GPUDriverSDL::execute: layer stack underflow");
-                if (dev && layer_texture) {
-                    SDL_ReleaseGPUTexture(dev, layer_texture);
-                }
+            if (!dev || !layer_texture) {
                 break;
             }
-
-            IsolatedLayerState layer_info = isolated_layer_stack.back();
-            isolated_layer_stack.pop_back();
 
             RenderTargetState parent_state = render_target_stack.back();
 
@@ -1457,15 +1700,12 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             pass = SDL_BeginGPURenderPass(current_cmd_buf_, &parent_target, 1, nullptr);
             if (!pass) {
                 SDL_Log("GPUDriverSDL::execute: failed to resume parent pass: %s", SDL_GetError());
-                if (dev && layer_texture) {
-                    SDL_ReleaseGPUTexture(dev, layer_texture);
-                }
                 break;
             }
 
             apply_scissor(pass);
 
-            if (image_pipeline_ && image_sampler_ && layer_texture &&
+            if (image_pipeline_ && image_sampler_ &&
                 layer_info.bounds.width > 0.0f && layer_info.bounds.height > 0.0f) {
                 struct LayerCompositeUniforms {
                     float rect[4];
@@ -1510,8 +1750,22 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 SDL_DrawGPUPrimitives(pass, 4, 1, 0, 0);
             }
 
-            if (dev && layer_texture) {
-                SDL_ReleaseGPUTexture(dev, layer_texture);
+            // 将本次渲染结果标记为可缓存，下次若 layer_dirty=false 可直接复用
+            if (layer_info.cache_entry) {
+                layer_info.cache_entry->in_use = false;
+                layer_info.cache_entry->valid_for_cache = true;
+            } else {
+                // 未能关联到缓存条目的纹理仍按旧逻辑归还到池中
+                for (auto& entry : layer_render_targets_) {
+                    if (entry.texture == layer_texture) {
+                        entry.in_use = false;
+                        entry.valid_for_cache = true;
+                        if (entry.layer_id == 0) {
+                            entry.layer_id = layer_info.id;
+                        }
+                        break;
+                    }
+                }
             }
 
             break;
@@ -1694,10 +1948,7 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 break;
             }
 
-            // MSDF atlas 现在是字号无关的，度量都在 design units
-            // 我们使用每个 glyph 的 units_per_em 来缩放到像素
             const float atlas_range = glyph_tier->distance_range;
-            const float subpixel_flag = (font_size <= 18.0f) ? 1.0f : 0.0f;
             const float gamma_correction = -kSRGBGamma;
 
             if (pipeline_state.active != PipelineBindingState::ActivePipeline::Text) {
@@ -1713,19 +1964,38 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 pipeline_state.text_sampler_bound = true;
             }
 
-            // 使用命令中统一的 pixel_scale（来自HarfBuzz整形时计算）
             const float pixel_scale = cmd.scale_to_pixels;
-            struct TextUniformData {
+
+            constexpr int kMaxGlyphsPerBatch = 64;
+
+            struct GlyphInstanceUniform {
                 float rect[4];
                 float uv_rect[4];
-                float viewport[4];
                 float color[4];
                 float params[4];
-                ClipUniformBlock clip;
             };
 
-            int debug_count = 0;
-            
+            struct TextBatchUniformData {
+                float viewport[4];
+                ClipUniformBlock clip;
+                GlyphInstanceUniform glyphs[kMaxGlyphsPerBatch];
+            };
+
+            TextBatchUniformData batch_uniform{};
+            write_viewport(batch_uniform.viewport);
+            fill_clip_uniform(batch_uniform.clip);
+
+            int glyphs_in_batch = 0;
+
+            auto flush_batch = [&]() {
+                if (glyphs_in_batch <= 0) {
+                    return;
+                }
+                SDL_PushGPUVertexUniformData(current_cmd_buf_, 0, &batch_uniform, sizeof(batch_uniform));
+                SDL_DrawGPUPrimitives(pass, 4, static_cast<Uint32>(glyphs_in_batch), 0, 0);
+                glyphs_in_batch = 0;
+            };
+
             for (const auto& glyph : cmd.glyphs) {
                 if (glyph.glyph_id == 0) {
                     continue;
@@ -1741,7 +2011,6 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                     continue;
                 }
 
-                // 使用统一的pixel_scale将 design units 缩放到像素
                 const float bearing_x_px = entry->metrics.bearing_x_units * pixel_scale;
                 const float bearing_y_px = entry->metrics.bearing_y_units * pixel_scale;
                 const float glyph_w = entry->metrics.width_units * pixel_scale;
@@ -1751,58 +2020,62 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                     continue;
                 }
 
-                // pen 坐标也是 design units，需要缩放
                 const float pen_x_px = glyph.pen_x_units * pixel_scale + cmd.baseline_x;
                 const float pen_y_px = glyph.pen_y_units * pixel_scale + cmd.baseline_y;
 
                 float glyph_x = pen_x_px + bearing_x_px;
                 float glyph_y = pen_y_px - bearing_y_px;
-                TextUniformData u{};
-                u.rect[0] = glyph_x;
-                u.rect[1] = glyph_y;
-                u.rect[2] = glyph_w;
-                u.rect[3] = glyph_h;
 
-                u.uv_rect[0] = entry->u0;
-                u.uv_rect[1] = entry->v0;
-                u.uv_rect[2] = entry->u1;
-                u.uv_rect[3] = entry->v1;
+                GlyphInstanceUniform& dst = batch_uniform.glyphs[glyphs_in_batch];
+                dst.rect[0] = glyph_x;
+                dst.rect[1] = glyph_y;
+                dst.rect[2] = glyph_w;
+                dst.rect[3] = glyph_h;
 
-                write_viewport(u.viewport);
+                dst.uv_rect[0] = entry->u0;
+                dst.uv_rect[1] = entry->v0;
+                dst.uv_rect[2] = entry->u1;
+                dst.uv_rect[3] = entry->v1;
 
-                writeLinearColor(cmd.color, u.color);
+                writeLinearColor(cmd.color, dst.color);
 
-                // 根据 msdfgen 的 scale 和 HarfBuzz 的 pixel_scale 计算屏幕空间 pxRange：
-                // 设计单位 → MSDF 像素：msdf_scale
-                // 设计单位 → 屏幕像素：pixel_scale
-                // 因此 MSDF 像素 → 屏幕像素 ≈ pixel_scale / msdf_scale
-                // 屏幕空间的距离范围 pxRange_screen ≈ atlas_range * (pixel_scale / msdf_scale)
                 const float msdf_scale = (entry->metrics.msdf_scale > 0.0f)
                     ? entry->metrics.msdf_scale
                     : 1.0f;
                 const float px_range_screen = atlas_range * (pixel_scale / msdf_scale);
 
-                // uParams.x = 屏幕空间 pxRange（像素）
-                // uParams.y = inv_device_pixel_ratio
-                // uParams.z = 保留
-                // uParams.w = gamma 校正
-                u.params[0] = px_range_screen;
-                u.params[1] = inv_device_pixel_ratio;
-                u.params[2] = 0.0f;
-                u.params[3] = gamma_correction;
-                fill_clip_uniform(u.clip);
+                dst.params[0] = px_range_screen;
+                dst.params[1] = inv_device_pixel_ratio;
+                dst.params[2] = 0.0f;
+                dst.params[3] = gamma_correction;
 
-                SDL_PushGPUVertexUniformData(current_cmd_buf_, 0, &u, sizeof(u));
-                SDL_DrawGPUPrimitives(pass, 4, 1, 0, 0);
+                ++glyphs_in_batch;
 
-                ++debug_count;
+                if (glyphs_in_batch == kMaxGlyphsPerBatch) {
+                    flush_batch();
+                }
             }
+
+            flush_batch();
 
             break;
         }
         default:
             // 目前先忽略其他绘制类命令
             break;
+        }
+    }
+
+    // Debug: 按 GPUCommandList 中的 draw_batches 做一次批次遍历并输出日志
+    if (debug_log_draw_batches_ && !commands.draw_batches.empty()) {
+        for (size_t i = 0; i < commands.draw_batches.size(); ++i) {
+            const DrawBatchRange& batch = commands.draw_batches[i];
+            SDL_Log("[GPUDriverSDL debug] draw batch %zu: type=%d, sort_key=0x%llx, count=%u, start=%u", 
+                    i,
+                    static_cast<int>(batch.type),
+                    static_cast<unsigned long long>(batch.sort_key),
+                    batch.count,
+                    batch.start);
         }
     }
 
@@ -1883,7 +2156,23 @@ std::unique_ptr<GPUDriver> CreateGPUDriver(
         if (!device || !window || !shader_manager) {
             return nullptr;
         }
-        return std::make_unique<GPUDriverSDL>(device, window, shader_manager);
+        auto driver = std::make_unique<GPUDriverSDL>(device, window, shader_manager);
+
+        // 通过环境变量控制调试日志：
+        //   DONG_DEBUG_DRAW_BATCHES=1       → 打印 draw_batches 日志
+        //   DONG_DEBUG_LAYER_CACHE=1        → 打印图层缓存（重栅格 / 复用）日志
+        if (const char* env_batches = std::getenv("DONG_DEBUG_DRAW_BATCHES")) {
+            if (env_batches[0] == '1') {
+                driver->setDebugLogDrawBatches(true);
+            }
+        }
+        if (const char* env_layer_cache = std::getenv("DONG_DEBUG_LAYER_CACHE")) {
+            if (env_layer_cache[0] == '1') {
+                driver->setDebugLogLayerCache(true);
+            }
+        }
+
+        return driver;
     }
     return nullptr;
 }

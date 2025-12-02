@@ -151,7 +151,6 @@ void View::update() {
         auto root = dom_manager->getRoot();
         if (root && root->isLayoutDirty()) {
             layout_engine->calculateLayout(root, static_cast<float>(width_), static_cast<float>(height_));
-            root->clearLayoutDirtyRecursive();
             if (render_surface) {
                 render_surface->markDirty();
             }
@@ -213,7 +212,8 @@ void View::update() {
         render::GPUCompiler compiler;
         render::GPUCommandList cmd_list;
         SDL_Log("[View::update] Compiling DisplayList to GPUCommandList...");
-        compiler.compile(dl, cmd_list);
+        const render::LayerTree& layer_tree = painter->getLayerTree();
+        compiler.compile(dl, cmd_list, &layer_tree);
         SDL_Log("[View::update] GPUCommandList compiled with %zu commands", cmd_list.commands.size());
 
         SDL_Log("[View::update] Beginning GPU frame...");
@@ -223,6 +223,14 @@ void View::update() {
         SDL_Log("[View::update] Ending GPU frame...");
         gpu_driver_->endFrame();
         SDL_Log("[View::update] GPU frame completed");
+
+        // 完成一帧渲染后再清除 layout dirty 标记，保证 Painter 在本帧能看到每个节点的 dirty 状态
+        if (dom_manager) {
+            auto root_after = dom_manager->getRoot();
+            if (root_after) {
+                root_after->clearLayoutDirtyRecursive();
+            }
+        }
         return;
     }
 
@@ -343,7 +351,8 @@ SDL_GPUTexture* View::renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, 
     
     render::GPUCompiler compiler;
     render::GPUCommandList cmd_list;
-    compiler.compile(dl, cmd_list);
+    const render::LayerTree& layer_tree = painter->getLayerTree();
+    compiler.compile(dl, cmd_list, &layer_tree);
     SDL_Log("[View::renderToGPUTexture] GPUCommandList has %zu commands", cmd_list.commands.size());
     
     // 4. 执行离屏渲染

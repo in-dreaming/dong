@@ -129,6 +129,8 @@ const DisplayList& Painter::buildDisplayList(const dom::DOMNodePtr& root, layout
     layout_engine_ = layout_engine;
 
     display_list_builder_.clear();
+    layer_tree_.clear();
+    layer_stack_.clear();
 
     if (layout_engine_) {
         current_dirty_rect_ = layout_engine_->getDirtyRect();
@@ -187,8 +189,35 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
 
     bool has_isolation = style.isolation_isolate && (layer_bounds.width > 0.0f && layer_bounds.height > 0.0f);
     bool needs_layer = has_isolation || clamped_opacity < 0.999f;
+    int parent_layer_index = layer_stack_.empty() ? -1 : layer_stack_.back();
+    bool pushed_layer_node = false;
     if (needs_layer) {
-        opacity_scope = builder.pushLayer(clamped_opacity, has_isolation, layer_bounds);
+        uint64_t layer_id = reinterpret_cast<uint64_t>(node.get());
+        bool layer_dirty = node->isLayoutDirty();
+        if (!layer_dirty && use_dirty_rect_ && !current_dirty_rect_.isEmpty()) {
+            layer_dirty = isRectInDirtyRect(layer_bounds);
+        }
+
+        // 在 LayerTree 中记录这一层
+        LayerNode layer_node;
+        layer_node.id = layer_id;
+        layer_node.type = has_isolation ? LayerType::Surface : LayerType::Opacity;
+        layer_node.bounds = layer_bounds;
+        layer_node.opacity = clamped_opacity;
+        layer_node.transform = LayerTransform::identity();
+        layer_node.scroll_x = 0.0f;
+        layer_node.scroll_y = 0.0f;
+        layer_node.is_surface = has_isolation;
+        layer_node.content_dirty = layer_dirty;
+        layer_node.transform_dirty = false;
+        layer_node.opacity_dirty = false;
+        layer_node.scroll_dirty = false;
+
+        const int this_index = layer_tree_.addNode(layer_node, parent_layer_index);
+        layer_stack_.push_back(this_index);
+        pushed_layer_node = true;
+
+        opacity_scope = builder.pushLayer(clamped_opacity, has_isolation, layer_bounds, layer_id, layer_dirty);
     }
 
     // 1. 背景
@@ -419,6 +448,10 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         buildDisplayListNode(child, child_layout, builder);
     }
 
+    if (pushed_layer_node && !layer_stack_.empty()) {
+        layer_stack_.pop_back();
+    }
+
 }
 
 bool Painter::isNodeInDirtyRect(const layout::LayoutNode* layout_node) const {
@@ -426,10 +459,23 @@ bool Painter::isNodeInDirtyRect(const layout::LayoutNode* layout_node) const {
         return true;
     }
 
-    float node_x = layout_node->layout.position[0];
-    float node_y = layout_node->layout.position[1];
-    float node_w = layout_node->layout.dimensions[0];
-    float node_h = layout_node->layout.dimensions[1];
+    Rect rect{};
+    rect.x = layout_node->layout.position[0];
+    rect.y = layout_node->layout.position[1];
+    rect.width = layout_node->layout.dimensions[0];
+    rect.height = layout_node->layout.dimensions[1];
+    return isRectInDirtyRect(rect);
+}
+
+bool Painter::isRectInDirtyRect(const Rect& rect) const {
+    if (current_dirty_rect_.isEmpty()) {
+        return true;
+    }
+
+    float node_x = rect.x;
+    float node_y = rect.y;
+    float node_w = rect.width;
+    float node_h = rect.height;
 
     float dirty_x = current_dirty_rect_.x;
     float dirty_y = current_dirty_rect_.y;

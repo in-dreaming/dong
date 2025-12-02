@@ -6,6 +6,7 @@
 #include <string>
 #include <functional>
 #include "display_list.hpp"
+#include "layer_tree.hpp"
 #include <SDL3/SDL_log.h>
 
 namespace dong::render {
@@ -55,6 +56,13 @@ struct GPUCommand {
     std::string image_src; // 原始图片资源标识（路径）
     float opacity = 1.0f;  // 图片整体透明度
     float layer_opacity = 1.0f; // 图层合成透明度（BeginIsolatedLayer）
+    uint64_t layer_id = 0;      // 图层的稳定 ID，用于跨帧缓存
+    bool layer_dirty = true;    // 本帧该图层是否需要重新栅格
+
+    // LayerTree 相关属性：目前主要由 Begin/EndIsolatedLayer 使用
+    float layer_transform[6] = {1.0f, 0.0f, 0.0f,
+                                0.0f, 1.0f, 0.0f};
+    float layer_scroll[2] = {0.0f, 0.0f};
 
     // 文字绘制专用字段（仅在 DrawText 时使用）
     float font_size = 16.0f;
@@ -69,16 +77,38 @@ struct GPUCommand {
     float scale_to_pixels = 1.0f;
 };
 
+struct DrawBatchRange {
+    uint32_t start = 0;      // 在 sorted_draw_indices 中的起始位置
+    uint32_t count = 0;      // 连续归为同一批次的绘制命令数量
+    uint64_t sort_key = 0;   // 该批次共享的 sort_key（pipeline+资源）
+    GPUCommandType type = GPUCommandType::BeginFrame; // 该批次的命令类型
+};
+
 struct GPUCommandList {
     std::vector<GPUCommand> commands;
+
+    // 基于 sort_key 的排序视图（不改变 commands 的存储顺序）
+    // 元素为 commands 的索引，按 sort_key 升序稳定排序
+    std::vector<uint32_t> sorted_draw_indices;
+
+    // 将 sorted_draw_indices 中连续、且 sort_key/type 相同的绘制命令
+    // 聚合成批次，方便后端按批次遍历或做进一步优化。
+    std::vector<DrawBatchRange> draw_batches;
 };
 
 // DisplayList → GPUCommandList 的编译器骨架
 class GPUCompiler {
 public:
-    // 简化版编译接口：只处理最基础的 rect / image / text 类型
-    void compile(const DisplayList& dl, GPUCommandList& out) {
+    // 支持可选的 LayerTree，用于在图层命令上携带 transform/scroll 等属性
+    void compile(const DisplayList& dl, GPUCommandList& out, const LayerTree* layer_tree = nullptr) {
         out.commands.clear();
+
+        auto find_layer_by_id = [layer_tree](uint64_t id) -> const LayerNode* {
+            if (!layer_tree || !id) {
+                return nullptr;
+            }
+            return layer_tree->findById(id);
+        };
 
         // 统计各种类型
         int rect_count = 0;
@@ -89,6 +119,8 @@ public:
         std::vector<float> draw_opacity_stack;
         draw_opacity_stack.push_back(1.0f);
         std::vector<bool> layer_isolate_stack;
+        std::vector<uint64_t> layer_id_stack;
+        std::vector<bool> layer_dirty_stack;
 
         auto apply_opacity = [](const Color& base_color, float opacity) {
             Color result = base_color;
@@ -161,28 +193,68 @@ public:
                 float clamped = std::clamp(item.layer.opacity, 0.0f, 1.0f);
                 float parent = current_opacity();
                 bool isolate = item.layer.isolate;
+                uint64_t layer_id = item.layer.id;
+                bool is_dirty = item.layer.is_dirty;
+
+                const LayerNode* layer_node = find_layer_by_id(layer_id);
+
                 if (isolate) {
                     GPUCommand cmd{};
                     cmd.type = GPUCommandType::BeginIsolatedLayer;
                     cmd.rect = item.layer.bounds;
                     cmd.layer_opacity = clamped;
+                    cmd.layer_id = layer_id;
+                    cmd.layer_dirty = is_dirty;
+
+                    if (layer_node) {
+                        for (int i = 0; i < 6; ++i) {
+                            cmd.layer_transform[i] = layer_node->transform.m[i];
+                        }
+                        cmd.layer_scroll[0] = layer_node->scroll_x;
+                        cmd.layer_scroll[1] = layer_node->scroll_y;
+                    }
+
                     out.commands.push_back(cmd);
                 }
                 float next_opacity = isolate ? parent : parent * clamped;
                 draw_opacity_stack.push_back(next_opacity);
                 layer_isolate_stack.push_back(isolate);
+                layer_id_stack.push_back(layer_id);
+                layer_dirty_stack.push_back(is_dirty);
                 break;
             }
             case DisplayItemType::PopLayer: {
                 if (!layer_isolate_stack.empty()) {
                     bool isolate = layer_isolate_stack.back();
                     layer_isolate_stack.pop_back();
+                    uint64_t layer_id = 0;
+                    bool is_dirty = true;
+                    if (!layer_id_stack.empty()) {
+                        layer_id = layer_id_stack.back();
+                        layer_id_stack.pop_back();
+                    }
+                    if (!layer_dirty_stack.empty()) {
+                        is_dirty = layer_dirty_stack.back();
+                        layer_dirty_stack.pop_back();
+                    }
                     if (draw_opacity_stack.size() > 1) {
                         draw_opacity_stack.pop_back();
                     }
                     if (isolate) {
                         GPUCommand cmd{};
                         cmd.type = GPUCommandType::EndIsolatedLayer;
+                        cmd.layer_id = layer_id;
+                        cmd.layer_dirty = is_dirty;
+
+                        const LayerNode* layer_node = find_layer_by_id(layer_id);
+                        if (layer_node) {
+                            for (int i = 0; i < 6; ++i) {
+                                cmd.layer_transform[i] = layer_node->transform.m[i];
+                            }
+                            cmd.layer_scroll[0] = layer_node->scroll_x;
+                            cmd.layer_scroll[1] = layer_node->scroll_y;
+                        }
+
                         out.commands.push_back(cmd);
                     }
                 }
@@ -271,9 +343,68 @@ public:
         end_frame.type = GPUCommandType::EndFrame;
         out.commands.push_back(end_frame);
 
+        // 基于 sort_key 构建绘制命令的排序视图和批次描述。
+        out.sorted_draw_indices.clear();
+        out.draw_batches.clear();
+
+        // 收集所有绘制类命令的索引。
+        for (uint32_t i = 0; i < out.commands.size(); ++i) {
+            const GPUCommandType t = out.commands[i].type;
+            switch (t) {
+            case GPUCommandType::DrawInstancedQuads:
+            case GPUCommandType::DrawRoundedRectQuad:
+            case GPUCommandType::DrawImageQuad:
+            case GPUCommandType::DrawText:
+                out.sorted_draw_indices.push_back(i);
+                break;
+            default:
+                break;
+            }
+        }
+
+        // 按 sort_key 升序稳定排序（同 key 时保留原始顺序，用索引比较保证稳定性）。
+        std::sort(out.sorted_draw_indices.begin(), out.sorted_draw_indices.end(),
+                  [&out](uint32_t a, uint32_t b) {
+                      const GPUCommand& ca = out.commands[a];
+                      const GPUCommand& cb = out.commands[b];
+                      if (ca.sort_key < cb.sort_key) return true;
+                      if (ca.sort_key > cb.sort_key) return false;
+                      return a < b;
+                  });
+
+        // 将排序后的绘制命令按 sort_key/type 聚合成批次。
+        if (!out.sorted_draw_indices.empty()) {
+            DrawBatchRange current{};
+            const uint32_t first_index = out.sorted_draw_indices[0];
+            current.start = 0;
+            current.count = 1;
+            current.sort_key = out.commands[first_index].sort_key;
+            current.type = out.commands[first_index].type;
+
+            for (uint32_t i = 1; i < out.sorted_draw_indices.size(); ++i) {
+                const uint32_t cmd_index = out.sorted_draw_indices[i];
+                const GPUCommand& cmd = out.commands[cmd_index];
+                if (cmd.sort_key == current.sort_key && cmd.type == current.type) {
+                    ++current.count;
+                } else {
+                    out.draw_batches.push_back(current);
+                    current.start = i;
+                    current.count = 1;
+                    current.sort_key = cmd.sort_key;
+                    current.type = cmd.type;
+                }
+            }
+            out.draw_batches.push_back(current);
+        }
+
         // 输出统计信息
-        SDL_Log("GPU Compiler: %d rects, %d round_rects, %d images, %d texts -> %zu GPU commands",
-                rect_count, round_rect_count, image_count, text_count, out.commands.size());
+        SDL_Log("GPU Compiler: %d rects, %d round_rects, %d images, %d texts -> %zu GPU commands, %zu draw batches",
+                rect_count,
+                round_rect_count,
+                image_count,
+                text_count,
+                out.commands.size(),
+                out.draw_batches.size());
     }
 };
 

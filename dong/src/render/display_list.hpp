@@ -84,6 +84,8 @@ struct LayerData {
     Rect bounds;
     float opacity = 1.0f;
     bool isolate = false;
+    uint64_t id = 0;      // 跨帧标识图层的稳定 ID（例如 DOM 节点指针）
+    bool is_dirty = true; // 本帧是否需要重新栅格（否则可复用缓存纹理）
 };
 
 struct DisplayItem {
@@ -224,7 +226,11 @@ public:
         list_.items.push_back(std::move(item));
     }
 
-    ScopedLayer pushLayer(float opacity, bool isolate = false, const Rect& bounds = Rect{}) {
+    ScopedLayer pushLayer(float opacity,
+                          bool isolate = false,
+                          const Rect& bounds = Rect{},
+                          uint64_t layer_id = 0,
+                          bool is_dirty = true) {
         float clamped = std::clamp(opacity, 0.0f, 1.0f);
         bool requires_layer = isolate || clamped < 0.999f;
         if (!requires_layer) {
@@ -236,6 +242,8 @@ public:
         item.layer.bounds = bounds;
         item.layer.opacity = clamped;
         item.layer.isolate = isolate;
+        item.layer.id = layer_id;
+        item.layer.is_dirty = is_dirty;
         list_.items.push_back(item);
         ++layer_depth_;
         return ScopedLayer(this, true);
