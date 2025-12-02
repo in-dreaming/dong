@@ -725,36 +725,22 @@ float4 main(PSInput input) : SV_Target0 {
         discard;
     }
 
-    // 参考 msdfText.wgsl / Paul Houx 的写法：
-    // 1. median 取 signed distance
-    // 2. 用 atlas 尺寸 * UV 导数估算屏幕空间缩放
-    // 3. pxRange 控制边缘宽度，避免轮廓外“阴影带”
+    // 使用 msdfgen 官方推荐的基于 fwidth 的 MSDF 解码：
+    // 1. median 取 signed distance（0.5 为轮廓）
+    // 2. 对 signed distance 做 fwidth，得到屏幕空间中 1 像素对应的距离变化
+    // 3. 按 dist / width + 0.5 做归一化，保证不同缩放下边缘宽度一致
     float3 msdf = msdfTexture.Sample(msdfSampler, input.uv).rgb;
     float sd = median(msdf.r, msdf.g, msdf.b);
 
-    // uParams.x = pxRange（msdfgen 距离场 range，像素单位）
-    // uParams.y = atlasWidth
-    // uParams.z = atlasHeight
-    // uParams.w = gamma（符号同之前约定）
-    float pxRange = max(uParams.x, 1.0f);
-    float2 texSize = float2(uParams.y, uParams.z);
-
-    float2 dx = texSize * float2(ddx(input.uv.x), ddy(input.uv.x));
-    float2 dy = texSize * float2(ddx(input.uv.y), ddy(input.uv.y));
-
-    float invLen = rsqrt(dot(dx, dx) + dot(dy, dy) + 1e-8f);
-    float toPixels = pxRange * invLen;
-
-    float sigDist = sd - 0.5f;
-    float pxDist = sigDist * toPixels;
-
-    const float edgeWidth = 0.5f;
-    float alpha = smoothstep(-edgeWidth, edgeWidth, pxDist);
+    float dist = sd - 0.5f;
+    float width = max(fwidth(dist), 1.0f / 256.0f);
+    float alpha = saturate(dist / width + 0.5f);
 
     if (alpha <= 0.0f) {
         discard;
     }
 
+    // input.color 已经是线性空间，在这里叠加 alpha 再转回 sRGB
     float3 linearColor = input.color.rgb;
     float gamma = (uParams.w != 0.0f) ? -uParams.w : 2.2f;
     float3 srgbColor = toSRGB(linearColor * alpha, gamma);
