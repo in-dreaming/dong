@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <string>
 #include <cstring>
+#include <functional>
 #include <SDL3/SDL_log.h>
 #include <SDL3/SDL_gpu.h>
 #include "../dom/dom_manager.hpp"
@@ -154,6 +155,43 @@ void View::update() {
             if (render_surface) {
                 render_surface->markDirty();
             }
+            
+            // 输出布局调试信息
+            auto htmls = dom_manager->getElementsByTagName("html");
+            if (!htmls.empty()) {
+                const auto* layout = layout_engine->getLayout(htmls[0]);
+                if (layout) {
+                    SDL_Log("[View::update Layout] html: at (%.1f, %.1f) size %.1fx%.1f",
+                           layout->x, layout->y, layout->width, layout->height);
+                }
+            }
+            
+            auto bodies = dom_manager->getElementsByTagName("body");
+            if (!bodies.empty()) {
+                const auto* layout = layout_engine->getLayout(bodies[0]);
+                if (layout) {
+                    SDL_Log("[View::update Layout] body: at (%.1f, %.1f) size %.1fx%.1f",
+                           layout->x, layout->y, layout->width, layout->height);
+                }
+            }
+            
+            auto h1s = dom_manager->getElementsByTagName("h1");
+            if (!h1s.empty()) {
+                const auto* layout = layout_engine->getLayout(h1s[0]);
+                if (layout) {
+                    SDL_Log("[View::update Layout] h1: at (%.1f, %.1f) size %.1fx%.1f",
+                           layout->x, layout->y, layout->width, layout->height);
+                }
+            }
+            
+            auto divs = dom_manager->getElementsByTagName("div");
+            for (size_t i = 0; i < divs.size() && i < 3; i++) {
+                const auto* layout = layout_engine->getLayout(divs[i]);
+                if (layout) {
+                    SDL_Log("[View::update Layout] div[%zu]: at (%.1f, %.1f) size %.1fx%.1f",
+                           i, layout->x, layout->y, layout->width, layout->height);
+                }
+            }
         }
     }
 
@@ -216,10 +254,10 @@ SDL_GPUTexture* View::renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, 
         return nullptr;
     }
     
-    // 1. 创建离屏渲染目标纹理
+    // 1. 创建离屏渲染目标纹理（使用UNORM格式，shader手动处理gamma）
     SDL_GPUTextureCreateInfo tex_info{};
     tex_info.type = SDL_GPU_TEXTURETYPE_2D;
-    tex_info.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    tex_info.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;  // UNORM格式，不自动gamma校正
     tex_info.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
     tex_info.width = width;
     tex_info.height = height;
@@ -241,12 +279,61 @@ SDL_GPUTexture* View::renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, 
         return nullptr;
     }
     
+    SDL_Log("[View::renderToGPUTexture] root->isLayoutDirty() = %s", root->isLayoutDirty() ? "TRUE" : "FALSE");
+    
     // 执行布局计算（如果需要）
     if (layout_engine && root->isLayoutDirty()) {
         SDL_Log("[View::renderToGPUTexture] Calculating layout...");
         layout_engine->calculateLayout(root, static_cast<float>(width), static_cast<float>(height));
         root->clearLayoutDirtyRecursive();
         SDL_Log("[View::renderToGPUTexture] Layout calculated");
+    }
+    
+    std::printf("[DEBUG] After layout check\n");
+    std::fflush(stdout);
+    
+    // 无条件输出所有主要元素的布局
+    if (layout_engine && dom_manager) {
+        auto htmls = dom_manager->getElementsByTagName("html");
+        std::printf("[Layout] Found %zu html elements\n", htmls.size());
+        if (!htmls.empty()) {
+            const auto* layout = layout_engine->getLayout(htmls[0]);
+            if (layout) {
+                std::printf("[Layout] html: at (%.1f, %.1f) size %.1fx%.1f\n",
+                       layout->x, layout->y, layout->width, layout->height);
+            }
+        }
+        
+        auto bodies = dom_manager->getElementsByTagName("body");
+        std::printf("[Layout] Found %zu body elements\n", bodies.size());
+        if (!bodies.empty()) {
+            const auto* layout = layout_engine->getLayout(bodies[0]);
+            if (layout) {
+                std::printf("[Layout] body: at (%.1f, %.1f) size %.1fx%.1f\n",
+                       layout->x, layout->y, layout->width, layout->height);
+            }
+        }
+        
+        auto h1s = dom_manager->getElementsByTagName("h1");
+        std::printf("[Layout] Found %zu h1 elements\n", h1s.size());
+        if (!h1s.empty()) {
+            const auto* layout = layout_engine->getLayout(h1s[0]);
+            if (layout) {
+                std::printf("[Layout] h1: at (%.1f, %.1f) size %.1fx%.1f\n",
+                       layout->x, layout->y, layout->width, layout->height);
+            }
+        }
+        
+        auto divs = dom_manager->getElementsByTagName("div");
+        std::printf("[Layout] Found %zu div elements\n", divs.size());
+        for (size_t i = 0; i < divs.size(); i++) {
+            const auto* layout = layout_engine->getLayout(divs[i]);
+            if (layout) {
+                std::printf("[Layout] div[%zu]: at (%.1f, %.1f) size %.1fx%.1f\n",
+                       i, layout->x, layout->y, layout->width, layout->height);
+            }
+        }
+        std::fflush(stdout);
     }
     
     // 3. 构建 DisplayList 并编译为 GPUCommandList

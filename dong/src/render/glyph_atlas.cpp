@@ -182,10 +182,12 @@ const AtlasEntry* GlyphAtlas::addGlyph(uint32_t glyph_id, const std::string& fon
         return &cache_[key];
     }
 
-    // 简单行优先装箱
-    if (cursor_x_ + glyph_width > atlas_width_) {
+    // 简单行优先装箱，加入统一的 atlas padding，避免 MSDF 线性采样时跨到相邻字形
+    constexpr uint32_t kAtlasPadding = 1;
+
+    if (cursor_x_ + glyph_width + kAtlasPadding > atlas_width_) {
         cursor_x_ = 0;
-        cursor_y_ += row_height_;
+        cursor_y_ += row_height_ + kAtlasPadding;
         row_height_ = 0;
     }
 
@@ -196,7 +198,7 @@ const AtlasEntry* GlyphAtlas::addGlyph(uint32_t glyph_id, const std::string& fon
 
     uint32_t dst_x = cursor_x_;
     uint32_t dst_y = cursor_y_;
-    cursor_x_ += glyph_width;
+    cursor_x_ += glyph_width + kAtlasPadding;
     row_height_ = std::max(row_height_, glyph_height);
 
     // 上传到 GPU（通过 transfer buffer）
@@ -352,6 +354,12 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
 
     // 计算边界（design units）
     msdfgen::Shape::Bounds bounds = shape.getBounds();
+
+    // 使用 msdfgen 的 bounds 统一几何度量（与 MSDF 纹理坐标系对齐）
+    out_metrics.bearing_x_units = static_cast<float>(bounds.l);
+    out_metrics.bearing_y_units = static_cast<float>(bounds.t);
+    out_metrics.width_units = static_cast<float>(bounds.r - bounds.l);
+    out_metrics.height_units = static_cast<float>(bounds.t - bounds.b);
 
     // 生成 MSDF（固定尺寸，字号无关）
     const int msdf_size = static_cast<int>(glyph_bitmap_size_);

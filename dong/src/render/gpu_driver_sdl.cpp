@@ -725,33 +725,43 @@ float4 main(PSInput input) : SV_Target0 {
         discard;
     }
 
-    // 标准 MSDF 解码：使用 signed distance 与其导数做自适应平滑
+    // 参考 msdfText.wgsl / Paul Houx 的写法：
+    // 1. median 取 signed distance
+    // 2. 用 atlas 尺寸 * UV 导数估算屏幕空间缩放
+    // 3. pxRange 控制边缘宽度，避免轮廓外“阴影带”
     float3 msdf = msdfTexture.Sample(msdfSampler, input.uv).rgb;
     float sd = median(msdf.r, msdf.g, msdf.b);
 
-    // uParams.x/y 是 UV 空间中的 distance range（等价于 pxRange / textureSize）
-    float2 uvRange = float2(uParams.x, uParams.y);
+    // uParams.x = pxRange（msdfgen 距离场 range，像素单位）
+    // uParams.y = atlasWidth
+    // uParams.z = atlasHeight
+    // uParams.w = gamma（符号同之前约定）
+    float pxRange = max(uParams.x, 1.0f);
+    float2 texSize = float2(uParams.y, uParams.z);
 
-    // 根据 UV 导数估算屏幕空间中 1 个 texel 的大小
-    float2 texelToScreen = float2(length(ddx(input.uv)), length(ddy(input.uv)));
-    texelToScreen = max(texelToScreen, float2(1e-6, 1e-6));
+    float2 dx = texSize * float2(ddx(input.uv.x), ddy(input.uv.x));
+    float2 dy = texSize * float2(ddx(input.uv.y), ddy(input.uv.y));
 
-    // 屏幕空间的距离范围：range_uv / d(uv)/d(screen)
-    float2 screenPxRange2D = uvRange / texelToScreen;
-    float screenPxRange = max(min(screenPxRange2D.x, screenPxRange2D.y), 1.0);
+    float invLen = rsqrt(dot(dx, dx) + dot(dy, dy) + 1e-8f);
+    float toPixels = pxRange * invLen;
 
-    // signed distance 映射到 [0,1] alpha
-    float screenPxDistance = screenPxRange * (sd - 0.5);
-    float opacity = saturate(screenPxDistance + 0.5);
+    float sigDist = sd - 0.5f;
+    float pxDist = sigDist * toPixels;
 
-    // input.color 已在顶点阶段转为线性空间
-    float3 linearColor = input.color.rgb * opacity;
-    float gamma = (uParams.w != 0.0) ? -uParams.w : 2.2;
-    float3 srgbColor = toSRGB(linearColor, gamma);
+    const float edgeWidth = 0.5f;
+    float alpha = smoothstep(-edgeWidth, edgeWidth, pxDist);
+
+    if (alpha <= 0.0f) {
+        discard;
+    }
+
+    float3 linearColor = input.color.rgb;
+    float gamma = (uParams.w != 0.0f) ? -uParams.w : 2.2f;
+    float3 srgbColor = toSRGB(linearColor * alpha, gamma);
 
     float4 color;
     color.rgb = srgbColor;
-    color.a = input.color.a * opacity;
+    color.a = input.color.a * alpha;
     return color;
 }
 )";
@@ -824,12 +834,12 @@ float4 main(PSInput input) : SV_Target0 {
         uint32_t bitmap_px;
         float distance_range;
     };
-    // 更细粒度的atlas分级，range增大以提高画质
+    // Atlas 分级只区分 bitmap 尺寸，distance_range 统一为 4.0（与 msdfgen 默认 pxRange 对齐）
     const GlyphTierConfig tier_configs[] = {
         {16u, 4.0f},    // 小字号 (8-16px)
-        {24u, 6.0f},    // 中字号 (17-24px)
-        {32u, 8.0f},    // 大字号 (25-32px)  
-        {48u, 10.0f},   // 特大字号 (33-48px)
+        {24u, 4.0f},    // 中字号 (17-24px)
+        {32u, 4.0f},    // 大字号 (25-32px)  
+        {48u, 4.0f},    // 特大字号 (33-48px)
     };
 
     for (const auto& cfg : tier_configs) {
@@ -1744,23 +1754,15 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
 
                 writeLinearColor(cmd.color, u.color);
 
-                // 计算 UV 空间中的 pxRange
-                // MSDF 生成时在 glyph_bitmap_size x glyph_bitmap_size 纹理中使用了 atlas_range 像素的 range
-                // 这个 glyph 在 atlas 中占据的 UV 区域是 (u1-u0) x (v1-v0)
-                // 所以 UV 空间中的 range = atlas_range / glyph_bitmap_size * (u1-u0)
-                const float glyph_bitmap_size = static_cast<float>(glyph_tier->bitmap_px);
-                const float uv_width = entry->u1 - entry->u0;
-                const float uv_height = entry->v1 - entry->v0;
-                const float uv_range_x = (atlas_range / glyph_bitmap_size) * uv_width;
-                const float uv_range_y = (atlas_range / glyph_bitmap_size) * uv_height;
-                
-                // uParams.x = UV 空间中的 X 方向 range
-                // uParams.y = UV 空间中的 Y 方向 range
-                // uParams.z = subpixel 标志  
+                // uParams.x = pxRange（MSDF distanceRange，像素单位）
+                // uParams.y = atlasWidth
+                // uParams.z = atlasHeight
                 // uParams.w = gamma 校正
-                u.params[0] = uv_range_x;
-                u.params[1] = uv_range_y;
-                u.params[2] = subpixel_flag;
+                const float atlas_w = static_cast<float>(glyph_atlas->getWidth());
+                const float atlas_h = static_cast<float>(glyph_atlas->getHeight());
+                u.params[0] = atlas_range;
+                u.params[1] = atlas_w;
+                u.params[2] = atlas_h;
                 u.params[3] = gamma_correction;
                 fill_clip_uniform(u.clip);
 
@@ -1771,13 +1773,15 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 if (debug_count < 3) {
                     SDL_Log("GLYPH_RENDER[%d]: glyph_id=%u pos=(%.1f,%.1f) size=(%.1f,%.1f)", 
                            debug_count, glyph.glyph_id, glyph_x, glyph_y, glyph_w, glyph_h);
-                    SDL_Log("  UV: (%.4f,%.4f)-(%.4f,%.4f) range=(%.4f,%.4f)", 
-                           entry->u0, entry->v0, entry->u1, entry->v1, uv_range_x, uv_range_y);
+                    SDL_Log("  UV: (%.4f,%.4f)-(%.4f,%.4f)", 
+                           entry->u0, entry->v0, entry->u1, entry->v1);
                     SDL_Log("  metrics: width_units=%.1f height_units=%.1f bearing=(%.1f,%.1f)",
                            entry->metrics.width_units, entry->metrics.height_units,
                            entry->metrics.bearing_x_units, entry->metrics.bearing_y_units);
-                    SDL_Log("  pixel_scale=%.4f glyph_bitmap_size=%.0f atlas_range=%.1f",
-                           pixel_scale, glyph_bitmap_size, atlas_range);
+                    SDL_Log("  pixel_scale=%.4f atlas_range=%.1f atlas_size=(%.0f,%.0f)",
+                           pixel_scale, atlas_range,
+                           static_cast<float>(glyph_atlas->getWidth()),
+                           static_cast<float>(glyph_atlas->getHeight()));
                 }
                 
                 ++debug_count;
