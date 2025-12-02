@@ -4,54 +4,49 @@
 #include <vector>
 #include <cstdint>
 #include <string>
+#include <functional>
 #include "display_list.hpp"
 #include <SDL3/SDL_log.h>
 
 namespace dong::render {
 
 // GPU 级别的命令类型（与具体后端无关）
+// 目前仅包含 DisplayList → GPUDriverSDL 实际会用到的子集。
+// 后续如果增加新的 UI 原语，应在这里显式扩展并在 GPUDriver 中实现。
 enum class GPUCommandType : uint8_t {
     BeginFrame,
     EndFrame,
     BeginPass,
     EndPass,
-    SetViewport,
-    SetPipeline,
-    BindTexture,
-    BindSampler,
-    BindInstanceBuffer,
-    DrawInstancedQuads,
-    DrawImageQuad,
-    DrawRoundedRectQuad,
-    DrawText,  // 文字绘制命令
+
+    // 绘制命令：一条命令对应一个“逻辑图元批次”
+    // 后续可以通过 instance buffer 将其中的 rect/image/text 扩展为真正的 GPU instancing。
+    DrawInstancedQuads,      // 纯色矩形（当前每条命令只画 1 个 quad）
+    DrawImageQuad,           // 图片 quad
+    DrawRoundedRectQuad,     // 圆角矩形 quad（analytic SDF）
+    DrawText,                // 文本 glyph run
+
+    // 剪裁与图层命令
     PushClipRect,
     PopClip,
     BeginIsolatedLayer,
     EndIsolatedLayer,
 };
 
-struct GPUViewport {
-    float x = 0.0f;
-    float y = 0.0f;
-    float width = 0.0f;
-    float height = 0.0f;
-};
-
-// 为了保持 IR 简单，这里用整型 id 代表各种资源（pipeline / texture / buffer）
-using PipelineId = uint32_t;
-using TextureId = uint32_t;
-using BufferId = uint32_t;
-
+// GPU 级别的通用命令。这里刻意只保留当前真实使用的字段，
+// 避免为了“未来也许会用”的场景引入多余的抽象。
 struct GPUCommand {
     GPUCommandType type;
 
-    GPUViewport viewport{};
-    PipelineId pipeline = 0;
-    TextureId texture = 0;
-    BufferId instance_buffer = 0;
-    uint32_t instance_count = 0;
+    // 当前所有绘制命令的 instance_count 都为 1；
+    // 引入 instance buffer 后可以将多个实例合并到同一命令。
+    uint32_t instance_count = 1;
 
-    // 最小实现：为 DrawRect / DrawRoundedRect / DrawImage 携带一份立即模式的矩形和颜色数据
+    // 基于 pipeline / 资源的排序 key，供后续批处理/排序使用。
+    // 当前编译阶段会填充该字段，但执行阶段仍按原始顺序渲染。
+    uint64_t sort_key = 0;
+
+    // 通用几何/颜色参数：不同命令按需读取
     Rect rect;      // 目标矩形（像素坐标）
     Color color;    // 颜色或调制色（用于纯色/圆角矩形、后续也可用于调制图片）
     float radius = 0.0f; // 圆角矩形半径（仅在 DrawRoundedRectQuad 时使用）
@@ -69,7 +64,7 @@ struct GPUCommand {
     float baseline_y = 0.0f;
     std::vector<GlyphInstance> glyphs;
     
-    // design units 元数据
+    // design units 元数据（文本布局与渲染共享）
     uint32_t units_per_em = 0;
     float scale_to_pixels = 1.0f;
 };
@@ -110,6 +105,43 @@ public:
                 return 1.0f;
             }
             return draw_opacity_stack.back();
+        };
+
+        auto make_sort_key = [](GPUCommandType type, const GPUCommand& cmd) {
+            uint64_t pipeline_id = 0;
+            switch (type) {
+            case GPUCommandType::DrawInstancedQuads:
+                pipeline_id = 1; // 纯色矩形管线
+                break;
+            case GPUCommandType::DrawRoundedRectQuad:
+                pipeline_id = 2; // 圆角矩形管线
+                break;
+            case GPUCommandType::DrawImageQuad:
+                pipeline_id = 3; // 图片管线
+                break;
+            case GPUCommandType::DrawText:
+                pipeline_id = 4; // 文本管线
+                break;
+            default:
+                pipeline_id = 0; // 非绘制类命令
+                break;
+            }
+
+            uint64_t resource_hash = 0;
+            if (type == GPUCommandType::DrawImageQuad) {
+                if (!cmd.image_src.empty()) {
+                    resource_hash = static_cast<uint64_t>(std::hash<std::string>{}(cmd.image_src));
+                }
+            } else if (type == GPUCommandType::DrawText) {
+                const std::string& key = !cmd.font_path.empty() ? cmd.font_path : cmd.font_family;
+                if (!key.empty()) {
+                    resource_hash = static_cast<uint64_t>(std::hash<std::string>{}(key));
+                }
+            }
+
+            // sort_key 的低 8 位用于标记 pipeline，
+            // 高位用于资源 hash，便于后续按 pipeline/纹理分组和排序。
+            return (resource_hash << 8) | (pipeline_id & 0xffu);
         };
 
         // 一个最小的实现：
@@ -177,6 +209,7 @@ public:
                 cmd.instance_count = 1;
                 cmd.rect = item.rect.rect;
                 cmd.color = apply_opacity(item.rect.color, current_opacity());
+                cmd.sort_key = make_sort_key(cmd.type, cmd);
                 out.commands.push_back(cmd);
                 rect_count++;
                 break;
@@ -188,6 +221,7 @@ public:
                 cmd.rect = item.rounded_rect.rect;
                 cmd.color = apply_opacity(item.rounded_rect.color, current_opacity());
                 cmd.radius = item.rounded_rect.radius;
+                cmd.sort_key = make_sort_key(cmd.type, cmd);
                 out.commands.push_back(cmd);
                 round_rect_count++;
                 break;
@@ -199,6 +233,7 @@ public:
                 cmd.rect = item.image.rect;
                 cmd.opacity = item.image.opacity * current_opacity();
                 cmd.image_src = item.image.src;
+                cmd.sort_key = make_sort_key(cmd.type, cmd);
                 out.commands.push_back(cmd);
                 image_count++;
                 break;
@@ -217,6 +252,7 @@ public:
                 cmd.glyphs = item.glyph_run.glyphs;
                 cmd.units_per_em = item.glyph_run.units_per_em;
                 cmd.scale_to_pixels = item.glyph_run.scale_to_pixels;
+                cmd.sort_key = make_sort_key(cmd.type, cmd);
                 out.commands.push_back(cmd);
                 text_count++;
                 break;
