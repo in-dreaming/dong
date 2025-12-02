@@ -725,15 +725,22 @@ float4 main(PSInput input) : SV_Target0 {
         discard;
     }
 
-    // 使用 msdfgen 官方推荐的基于 fwidth 的 MSDF 解码：
-    // 1. median 取 signed distance（0.5 为轮廓）
-    // 2. 对 signed distance 做 fwidth，得到屏幕空间中 1 像素对应的距离变化
-    // 3. 按 dist / width + 0.5 做归一化，保证不同缩放下边缘宽度一致
+    // 基于 msdfgen + fwidth 的 MSDF 解码：
+    // 1. uParams.x 传入屏幕空间 pxRange（像素）
+    // 2. median 取 signed distance（0.5 为轮廓）并按 pxRange 缩放
+    // 3. 使用 fwidth(dist) * inv_device_pixel_ratio 估算当前缩放下 1 逻辑像素的距离变化
+    // 4. 按 dist / width + 0.5 做归一化，保证不同缩放与 DPI 下边缘宽度一致
     float3 msdf = msdfTexture.Sample(msdfSampler, input.uv).rgb;
     float sd = median(msdf.r, msdf.g, msdf.b);
 
-    float dist = sd - 0.5f;
-    float width = max(fwidth(dist), 1.0f / 256.0f);
+    float pxRange = max(uParams.x, 1.0f);
+    float dist = (sd - 0.5f) * pxRange;
+
+    float invDPR = uParams.y;
+    float dx = ddx(dist);
+    float dy = ddy(dist);
+    float fw = abs(dx) + abs(dy);
+    float width = max(fw * max(invDPR, 1.0f / 8.0f), 1.0f / 256.0f);
     float alpha = saturate(dist / width + 0.5f);
 
     if (alpha <= 0.0f) {
@@ -814,7 +821,10 @@ float4 main(PSInput input) : SV_Target0 {
         return false;
     }
 
-    // 初始化多级字形 Atlas（根据字号挑选）
+    // 初始化多级字形 Atlas（根据字号挑选）。
+    // bitmap_px 表示单个 glyph 的 MSDF 纹理分辨率，
+    // 这里采用 (32, 48, 72, 96) 四档，覆盖从小字号到标题字号的主流范围。
+    // 未来如果需要支持更大字号，只需在此新增配置项即可。
     glyph_atlas_tiers_.clear();
     struct GlyphTierConfig {
         uint32_t bitmap_px;
@@ -822,10 +832,10 @@ float4 main(PSInput input) : SV_Target0 {
     };
     // Atlas 分级只区分 bitmap 尺寸，distance_range 统一为 4.0（与 msdfgen 默认 pxRange 对齐）
     const GlyphTierConfig tier_configs[] = {
-        {16u, 4.0f},    // 小字号 (8-16px)
-        {24u, 4.0f},    // 中字号 (17-24px)
-        {32u, 4.0f},    // 大字号 (25-32px)  
-        {48u, 4.0f},    // 特大字号 (33-48px)
+        {32u, 4.0f},    // 正文/小号文本主力档位
+        {48u, 4.0f},    // 中号/UI 控件文本
+        {72u, 4.0f},    // 大号标题
+        {96u, 4.0f},    // 特大号标题或放大预览
     };
 
     for (const auto& cfg : tier_configs) {
@@ -1121,16 +1131,12 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
         return std::pair<float, float>{static_cast<float>(cw), static_cast<float>(ch)};
     };
 
-    auto write_viewport = [&current_viewport, frame_count=0](float (&out)[4]) mutable {
+    auto write_viewport = [&current_viewport](float (&out)[4]) {
         auto [vw, vh] = current_viewport();
         out[0] = vw;
         out[1] = vh;
         out[2] = 0.0f;
         out[3] = 0.0f;
-        if (frame_count < 5) {  // 只打印前5次
-            SDL_Log("[write_viewport #%d] Setting viewport uniform: %.1f x %.1f", frame_count, vw, vh);
-            frame_count++;
-        }
     };
 
     float device_pixel_ratio = 1.0f;
@@ -1668,11 +1674,6 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
 
             // 使用命令中统一的 pixel_scale（来自HarfBuzz整形时计算）
             const float pixel_scale = cmd.scale_to_pixels;
-            
-            // 调试：输出关键参数
-            SDL_Log("DrawText: font_size=%.1f units_per_em=%u pixel_scale=%.4f",
-                   cmd.font_size, cmd.units_per_em, pixel_scale);
-            
             struct TextUniformData {
                 float rect[4];
                 float uv_rect[4];
@@ -1715,16 +1716,6 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
 
                 float glyph_x = pen_x_px + bearing_x_px;
                 float glyph_y = pen_y_px - bearing_y_px;
-                
-                // 调试：打印前3个字形的坐标计算过程
-                if (debug_count < 3) {
-                    SDL_Log("[GLYPH_CALC #%d] baseline=(%.1f,%.1f) pen_units=(%.1f,%.1f) pixel_scale=%.4f",
-                           debug_count, cmd.baseline_x, cmd.baseline_y, 
-                           glyph.pen_x_units, glyph.pen_y_units, pixel_scale);
-                    SDL_Log("[GLYPH_CALC #%d] pen_px=(%.1f,%.1f) bearing_px=(%.1f,%.1f) final_pos=(%.1f,%.1f)",
-                           debug_count, pen_x_px, pen_y_px, bearing_x_px, bearing_y_px, glyph_x, glyph_y);
-                }
-
                 TextUniformData u{};
                 u.rect[0] = glyph_x;
                 u.rect[1] = glyph_y;
@@ -1740,40 +1731,32 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
 
                 writeLinearColor(cmd.color, u.color);
 
-                // uParams.x = pxRange（MSDF distanceRange，像素单位）
-                // uParams.y = atlasWidth
-                // uParams.z = atlasHeight
+                // 根据 msdfgen 的 scale 和 HarfBuzz 的 pixel_scale 计算屏幕空间 pxRange：
+                // 设计单位 → MSDF 像素：msdf_scale
+                // 设计单位 → 屏幕像素：pixel_scale
+                // 因此 MSDF 像素 → 屏幕像素 ≈ pixel_scale / msdf_scale
+                // 屏幕空间的距离范围 pxRange_screen ≈ atlas_range * (pixel_scale / msdf_scale)
+                const float msdf_scale = (entry->metrics.msdf_scale > 0.0f)
+                    ? entry->metrics.msdf_scale
+                    : 1.0f;
+                const float px_range_screen = atlas_range * (pixel_scale / msdf_scale);
+
+                // uParams.x = 屏幕空间 pxRange（像素）
+                // uParams.y = inv_device_pixel_ratio
+                // uParams.z = 保留
                 // uParams.w = gamma 校正
-                const float atlas_w = static_cast<float>(glyph_atlas->getWidth());
-                const float atlas_h = static_cast<float>(glyph_atlas->getHeight());
-                u.params[0] = atlas_range;
-                u.params[1] = atlas_w;
-                u.params[2] = atlas_h;
+                u.params[0] = px_range_screen;
+                u.params[1] = inv_device_pixel_ratio;
+                u.params[2] = 0.0f;
                 u.params[3] = gamma_correction;
                 fill_clip_uniform(u.clip);
 
                 SDL_PushGPUVertexUniformData(current_cmd_buf_, 0, &u, sizeof(u));
                 SDL_DrawGPUPrimitives(pass, 4, 1, 0, 0);
-                
-                // 详细调试前3个字形
-                if (debug_count < 3) {
-                    SDL_Log("GLYPH_RENDER[%d]: glyph_id=%u pos=(%.1f,%.1f) size=(%.1f,%.1f)", 
-                           debug_count, glyph.glyph_id, glyph_x, glyph_y, glyph_w, glyph_h);
-                    SDL_Log("  UV: (%.4f,%.4f)-(%.4f,%.4f)", 
-                           entry->u0, entry->v0, entry->u1, entry->v1);
-                    SDL_Log("  metrics: width_units=%.1f height_units=%.1f bearing=(%.1f,%.1f)",
-                           entry->metrics.width_units, entry->metrics.height_units,
-                           entry->metrics.bearing_x_units, entry->metrics.bearing_y_units);
-                    SDL_Log("  pixel_scale=%.4f atlas_range=%.1f atlas_size=(%.0f,%.0f)",
-                           pixel_scale, atlas_range,
-                           static_cast<float>(glyph_atlas->getWidth()),
-                           static_cast<float>(glyph_atlas->getHeight()));
-                }
-                
+
                 ++debug_count;
             }
 
-            SDL_Log("GPUDriverSDL: Rendered %d/%zu glyphs", debug_count, cmd.glyphs.size());
             break;
         }
         default:
@@ -1792,26 +1775,39 @@ GPUDriverSDL::GlyphAtlasTier* GPUDriverSDL::selectGlyphAtlasTier(float font_size
     if (glyph_atlas_tiers_.empty()) {
         return nullptr;
     }
-    
-    // 选择 <= font_size 的最大 atlas (放大渲染，glyph_scale >= 1.0)
-    // 这样可以保留MSDF细节并通过放大获得清晰边缘
+
+    // 将字号映射到“期望的 MSDF 像素分辨率”，再在现有档位中选择最近的一档：
+    //   target_msdf_px ≈ ceil(font_px_size / 1.5)
+    // 这样可以：
+    //   - 小字号不会浪费过高分辨率；
+    //   - 大字号也不会因为 atlas 过小而出现过度放大模糊。
+    const float clamped_font_size = std::max(font_size, 1.0f);
+    const float target_msdf_px_f = std::ceil(clamped_font_size / 1.5f);
+    const uint32_t target_msdf_px = target_msdf_px_f > 0.0f
+        ? static_cast<uint32_t>(target_msdf_px_f)
+        : 16u;
+
     GlyphAtlasTier* best = nullptr;
-    uint32_t max_smaller_px = 0;
-    
+    uint32_t best_error = std::numeric_limits<uint32_t>::max();
+
     for (auto& tier : glyph_atlas_tiers_) {
-        if (tier.bitmap_px <= static_cast<uint32_t>(std::ceil(font_size))) {
-            if (tier.bitmap_px > max_smaller_px) {
-                max_smaller_px = tier.bitmap_px;
-                best = &tier;
-            }
+        const uint32_t tier_px = tier.bitmap_px;
+        const uint32_t error = (tier_px > target_msdf_px)
+            ? (tier_px - target_msdf_px)
+            : (target_msdf_px - tier_px);
+        if (error < best_error) {
+            best_error = error;
+            best = &tier;
+        } else if (error == best_error && best && tier_px > best->bitmap_px) {
+            // 误差相同时，偏向更高分辨率的一档，保证质量优先
+            best = &tier;
         }
     }
-    
-    // 如果没有找到，使用最小的 atlas (会有明显放大)
+
     if (!best) {
         best = &glyph_atlas_tiers_.front();
     }
-    
+
     return best;
 }
 

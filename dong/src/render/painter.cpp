@@ -272,8 +272,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                 float pad_top = style.padding_top.isPixel() ? style.padding_top.value : 0.0f;
 
                 float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
-                float line_height = font_size * (tag == "h1" ? 1.25f : (tag == "h2" ? 1.2f : 1.35f));
-                
+
                 // 调试：输出布局和字体大小
                 static int text_debug_count = 0;
                 if (text_debug_count < 5) {
