@@ -1,14 +1,28 @@
 #pragma once
 
+#include <memory>
 #include "gpu_ir.hpp"
 #include <SDL3/SDL_gpu.h>
 
+struct SDL_Window;
+
 namespace dong::render {
+
+class GPUDevice;
+class ShaderManager;
+
+// 支持多后端选择的枚举，目前仅实现 SDL_gpu 后端
+enum class GPUBackendType : uint8_t {
+    SDL_GPU = 0,
+};
 
 // 抽象 GPUDriver，后端（基于 SDL_gpu / OpenGL / Metal 等）实现该接口
 class GPUDriver {
 public:
     virtual ~GPUDriver() = default;
+
+    // 后端初始化接口，由工厂创建实例后调用
+    virtual bool initialize() = 0;
 
     virtual void beginFrame() = 0;
     virtual void endFrame() = 0;
@@ -22,5 +36,13 @@ public:
     }
     virtual void endFrameOffscreen() {}
 };
+
+// GPUDriver 工厂：根据后端类型创建具体实现
+std::unique_ptr<GPUDriver> CreateGPUDriver(
+    GPUBackendType backend,
+    GPUDevice* device,
+    SDL_Window* window,
+    ShaderManager* shader_manager
+);
 
 } // namespace dong::render

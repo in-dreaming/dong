@@ -1171,7 +1171,27 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
         float clip_meta[4];
     };
 
+    struct PipelineBindingState {
+        enum class ActivePipeline : uint8_t {
+            None,
+            Rect,
+            RoundRect,
+            Image,
+            Text,
+        } active = ActivePipeline::None;
+
+        bool image_sampler_bound = false;
+        bool text_sampler_bound = false;
+
+        void reset() {
+            active = ActivePipeline::None;
+            image_sampler_bound = false;
+            text_sampler_bound = false;
+        }
+    };
+
     std::vector<ClipStackEntry> clip_stack;
+    PipelineBindingState pipeline_state;
 
     auto apply_scissor = [&](SDL_GPURenderPass* target_pass) {
         if (!target_pass) {
@@ -1300,6 +1320,7 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             }
 
             apply_scissor(pass);
+            pipeline_state.reset();
 
             break;
         }
@@ -1384,6 +1405,7 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             }
 
             apply_scissor(pass);
+            pipeline_state.reset();
 
             IsolatedLayerState layer_state{};
             layer_state.texture = layer_texture;
@@ -1519,7 +1541,10 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
 
             SDL_PushGPUVertexUniformData(current_cmd_buf_, 0, &u, sizeof(u));
 
-            SDL_BindGPUGraphicsPipeline(pass, rect_pipeline_);
+            if (pipeline_state.active != PipelineBindingState::ActivePipeline::Rect) {
+                SDL_BindGPUGraphicsPipeline(pass, rect_pipeline_);
+                pipeline_state.active = PipelineBindingState::ActivePipeline::Rect;
+            }
             SDL_DrawGPUPrimitives(pass, 4, 1, 0, 0);
             break;
         }
@@ -1554,7 +1579,10 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
 
             SDL_PushGPUVertexUniformData(current_cmd_buf_, 0, &u, sizeof(u));
 
-            SDL_BindGPUGraphicsPipeline(pass, round_rect_pipeline_);
+            if (pipeline_state.active != PipelineBindingState::ActivePipeline::RoundRect) {
+                SDL_BindGPUGraphicsPipeline(pass, round_rect_pipeline_);
+                pipeline_state.active = PipelineBindingState::ActivePipeline::RoundRect;
+            }
             SDL_DrawGPUPrimitives(pass, 4, 1, 0, 0);
             break;
         }
@@ -1625,12 +1653,18 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
 
             SDL_PushGPUVertexUniformData(current_cmd_buf_, 0, &u, sizeof(u));
 
-            SDL_BindGPUGraphicsPipeline(pass, image_pipeline_);
+            if (pipeline_state.active != PipelineBindingState::ActivePipeline::Image) {
+                SDL_BindGPUGraphicsPipeline(pass, image_pipeline_);
+                pipeline_state.active = PipelineBindingState::ActivePipeline::Image;
+            }
 
-            SDL_GPUTextureSamplerBinding binding{};
-            binding.texture = image_atlas_texture_;
-            binding.sampler = image_sampler_;
-            SDL_BindGPUFragmentSamplers(pass, 0, &binding, 1);
+            if (!pipeline_state.image_sampler_bound) {
+                SDL_GPUTextureSamplerBinding binding{};
+                binding.texture = image_atlas_texture_;
+                binding.sampler = image_sampler_;
+                SDL_BindGPUFragmentSamplers(pass, 0, &binding, 1);
+                pipeline_state.image_sampler_bound = true;
+            }
 
             SDL_DrawGPUPrimitives(pass, 4, 1, 0, 0);
             break;
@@ -1666,11 +1700,18 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             const float subpixel_flag = (font_size <= 18.0f) ? 1.0f : 0.0f;
             const float gamma_correction = -kSRGBGamma;
 
-            SDL_GPUTextureSamplerBinding binding{};
-            binding.texture = atlas_texture;
-            binding.sampler = text_sampler_;
-            SDL_BindGPUFragmentSamplers(pass, 0, &binding, 1);
-            SDL_BindGPUGraphicsPipeline(pass, text_pipeline_);
+            if (pipeline_state.active != PipelineBindingState::ActivePipeline::Text) {
+                SDL_BindGPUGraphicsPipeline(pass, text_pipeline_);
+                pipeline_state.active = PipelineBindingState::ActivePipeline::Text;
+            }
+
+            if (!pipeline_state.text_sampler_bound) {
+                SDL_GPUTextureSamplerBinding binding{};
+                binding.texture = atlas_texture;
+                binding.sampler = text_sampler_;
+                SDL_BindGPUFragmentSamplers(pass, 0, &binding, 1);
+                pipeline_state.text_sampler_bound = true;
+            }
 
             // 使用命令中统一的 pixel_scale（来自HarfBuzz整形时计算）
             const float pixel_scale = cmd.scale_to_pixels;
@@ -1830,6 +1871,21 @@ FT_Face GPUDriverSDL::getOrCreateFace(const std::string& font_path, uint32_t pix
         FT_Set_Pixel_Sizes(face, 0, pixel_size);
     }
     return face;
+}
+
+std::unique_ptr<GPUDriver> CreateGPUDriver(
+    GPUBackendType backend,
+    GPUDevice* device,
+    SDL_Window* window,
+    ShaderManager* shader_manager
+) {
+    if (backend == GPUBackendType::SDL_GPU) {
+        if (!device || !window || !shader_manager) {
+            return nullptr;
+        }
+        return std::make_unique<GPUDriverSDL>(device, window, shader_manager);
+    }
+    return nullptr;
 }
 
 } // namespace dong::render

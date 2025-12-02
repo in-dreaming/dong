@@ -24,7 +24,7 @@ public:
     ~GPUDriverSDL() override;
 
     // 目前只做基本有效性检查
-    bool initialize();
+    bool initialize() override;
 
     void beginFrame() override;
     void endFrame() override;

@@ -14,7 +14,7 @@
 #include "../render/gpu_painter.hpp"
 #include "../render/shader_manager.hpp"
 #include "../render/gpu_ir.hpp"
-#include "../render/gpu_driver_sdl.hpp"
+#include "../render/gpu_driver.hpp"
 #include "../script/script_engine.hpp"
 #include "../script/js_bindings.hpp"
 #include "../layout/layout_engine.hpp"
@@ -646,7 +646,8 @@ void View::setExternalGPUDevice(SDL_GPUDevice* device, SDL_Window* window) {
     shader_manager_ = std::make_unique<render::ShaderManager>(gpu_device_.get());
     gpu_painter_.reset();
 
-    gpu_driver_ = std::make_unique<render::GPUDriverSDL>(
+    gpu_driver_ = render::CreateGPUDriver(
+        render::GPUBackendType::SDL_GPU,
         gpu_device_.get(),
         window,
         shader_manager_.get()
@@ -655,10 +656,10 @@ void View::setExternalGPUDevice(SDL_GPUDevice* device, SDL_Window* window) {
     // TODO: 重新接入 ResourceManager（用于图片缓存）
     // if (painter && gpu_driver_) {
     //     auto* rm = painter->getResourceManager();
-    //     static_cast<render::GPUDriverSDL*>(gpu_driver_.get())->setImageResourceManager(rm);
+    //     gpu_driver_->setImageResourceManager(rm);
     // }
 
-    if (!static_cast<render::GPUDriverSDL*>(gpu_driver_.get())->initialize()) {
+    if (!gpu_driver_ || !gpu_driver_->initialize()) {
         gpu_driver_.reset();
         shader_manager_.reset();
         gpu_surface_.reset();
