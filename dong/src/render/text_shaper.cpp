@@ -104,6 +104,8 @@ bool TextShaper::shape(const TextShapeRequest& request, ShapedText& out_text) {
         glyph.glyph_id = info.codepoint;
         glyph.pen_x_units = pen_x_units + x_offset_units;
         glyph.pen_y_units = pen_y_units - y_offset_units;
+        glyph.advance_x_units = x_advance_units;
+        glyph.cluster = info.cluster; // UTF-8 字节偏移
         out_text.glyphs.push_back(glyph);
 
         pen_x_units += x_advance_units;

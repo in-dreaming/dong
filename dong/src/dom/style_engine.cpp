@@ -7,6 +7,29 @@
 
 namespace dong::dom {
 
+namespace {
+
+LayoutMode deriveLayoutModeFromDisplay(const ComputedStyle& style) {
+    const std::string& d = style.display;
+    if (d == "none") {
+        return LayoutMode::None;
+    }
+    if (d == "flex") {
+        return LayoutMode::Flex;
+    }
+    if (d == "inline") {
+        return LayoutMode::Inline;
+    }
+    if (d == "inline-block") {
+        // 外层盒仍按 block 参与布局，由行内格式化上下文负责其内联表现
+        return LayoutMode::Block;
+    }
+    // 其它 display 值目前统一视为块级盒
+    return LayoutMode::Block;
+}
+
+} // anonymous namespace
+
 void Stylesheet::addRule(const std::string& selector, const ComputedStyle& style, 
                          int specificity, int order) {
     rules.push_back({selector, style, specificity, order});
@@ -122,6 +145,8 @@ void StyleEngine::computeStyles(DOMNodePtr node) {
             computed.font_weight = rule.style.font_weight;
         if (!rule.style.text_align.empty()) 
             computed.text_align = rule.style.text_align;
+        if (rule.style.letter_spacing_em != 0.0f)
+            computed.letter_spacing_em = rule.style.letter_spacing_em;
         if (!rule.style.display.empty()) 
             computed.display = rule.style.display;
         if (!rule.style.position.empty()) 
@@ -168,6 +193,15 @@ void StyleEngine::computeStyles(DOMNodePtr node) {
             computed.padding_bottom = rule.style.padding_bottom;
         if (rule.style.padding_left.unit != CSSValue::Unit::AUTO) 
             computed.padding_left = rule.style.padding_left;
+        // Position offsets
+        if (rule.style.top.unit != CSSValue::Unit::AUTO)
+            computed.top = rule.style.top;
+        if (rule.style.right.unit != CSSValue::Unit::AUTO)
+            computed.right = rule.style.right;
+        if (rule.style.bottom.unit != CSSValue::Unit::AUTO)
+            computed.bottom = rule.style.bottom;
+        if (rule.style.left.unit != CSSValue::Unit::AUTO)
+            computed.left = rule.style.left;
         
         // Flexbox
         if (!rule.style.flex_direction.empty()) 
@@ -214,6 +248,9 @@ void StyleEngine::computeStyles(DOMNodePtr node) {
             computed.text_align = parent_style.text_align;
         }
     }
+
+    // Derive layout mode from final computed display
+    computed.layout_mode = deriveLayoutModeFromDisplay(computed);
 
     // Recursively compute styles for children
     for (const auto& child : node->getChildren()) {
@@ -705,11 +742,50 @@ void StyleEngine::applyStyleProperty(const std::string& property, const std::str
     else if (prop == "text-align") {
         style.text_align = val;
     }
+    else if (prop == "letter-spacing") {
+        std::string lowered = val;
+        std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char c) {
+            return static_cast<char>(std::tolower(c));
+        });
+        float em = 0.0f;
+        if (lowered == "normal") {
+            em = 0.0f;
+        } else {
+            em = parseFloat(lowered);
+            if (lowered.find("px") != std::string::npos) {
+                float font_px = style.font_size > 0.0f ? style.font_size : 16.0f;
+                if (font_px > 0.0f) {
+                    em = em / font_px;
+                }
+            }
+        }
+        style.letter_spacing_em = em;
+    }
     else if (prop == "display") {
         style.display = val;
     }
     else if (prop == "position") {
         style.position = val;
+    }
+    else if (prop == "top") {
+        style.top = parseLength(val);
+    }
+    else if (prop == "right") {
+        style.right = parseLength(val);
+    }
+    else if (prop == "bottom") {
+        style.bottom = parseLength(val);
+    }
+    else if (prop == "left") {
+        style.left = parseLength(val);
+    }
+    else if (prop == "z-index") {
+        // 仅支持整数 z-index，非法值按 0 处理
+        try {
+            style.z_index = std::stoi(val);
+        } catch (...) {
+            style.z_index = 0;
+        }
     }
     else if (prop == "overflow") {
         style.overflow = val;
@@ -832,6 +908,103 @@ void StyleEngine::applyStyleProperty(const std::string& property, const std::str
     }
     else if (prop == "border-color") {
         style.border_color = val;
+    }
+    else if (prop == "box-shadow") {
+        style.box_shadows.clear();
+        std::string src = val;
+
+        // 按逗号拆分多个阴影，注意跳过 rgba(...) 内部的逗号
+        std::vector<std::string> shadow_parts;
+        int paren_depth = 0;
+        std::string current;
+        for (char c : src) {
+            if (c == '(') {
+                ++paren_depth;
+                current.push_back(c);
+            } else if (c == ')') {
+                --paren_depth;
+                current.push_back(c);
+            } else if (c == ',' && paren_depth == 0) {
+                std::string trimmed = trimWhitespace(current);
+                if (!trimmed.empty()) {
+                    shadow_parts.push_back(trimmed);
+                }
+                current.clear();
+            } else {
+                current.push_back(c);
+            }
+        }
+        if (!current.empty()) {
+            std::string trimmed = trimWhitespace(current);
+            if (!trimmed.empty()) {
+                shadow_parts.push_back(trimmed);
+            }
+        }
+
+        for (const std::string& part_raw : shadow_parts) {
+            std::string part = trimWhitespace(part_raw);
+            if (part.empty() || part == "none") {
+                continue;
+            }
+
+            // 从左到右先取 offset/blur/spread，遇到第一个以字母或 '#' 开头的 token 后，剩余部分当作颜色
+            std::vector<std::string> length_tokens;
+            size_t color_start = std::string::npos;
+
+            size_t i = 0;
+            const size_t n = part.size();
+            while (i < n) {
+                while (i < n && std::isspace(static_cast<unsigned char>(part[i]))) {
+                    ++i;
+                }
+                if (i >= n) break;
+                size_t token_start = i;
+                while (i < n && !std::isspace(static_cast<unsigned char>(part[i]))) {
+                    ++i;
+                }
+                size_t token_end = i;
+                if (token_end <= token_start) break;
+                std::string token = part.substr(token_start, token_end - token_start);
+
+                if (!token.empty() && (token[0] == '#' || std::isalpha(static_cast<unsigned char>(token[0])))) {
+                    color_start = token_start;
+                    break;
+                }
+                length_tokens.push_back(token);
+            }
+
+            BoxShadow shadow;
+
+            if (!length_tokens.empty()) {
+                // offset-x, offset-y, blur-radius, spread-radius
+                if (length_tokens.size() >= 1) {
+                    shadow.offset_x = parseLength(length_tokens[0]).value;
+                }
+                if (length_tokens.size() >= 2) {
+                    shadow.offset_y = parseLength(length_tokens[1]).value;
+                }
+                if (length_tokens.size() >= 3) {
+                    shadow.blur_radius = parseLength(length_tokens[2]).value;
+                }
+                if (length_tokens.size() >= 4) {
+                    shadow.spread_radius = parseLength(length_tokens[3]).value;
+                }
+            }
+
+            if (color_start != std::string::npos) {
+                std::string color_str = trimWhitespace(part.substr(color_start));
+                if (!color_str.empty()) {
+                    shadow.color = color_str;
+                }
+            }
+
+            // 若未提供颜色，则使用当前文本色作为阴影颜色的基准
+            if (shadow.color.empty()) {
+                shadow.color = style.color;
+            }
+
+            style.box_shadows.push_back(shadow);
+        }
     }
     else if (prop == "opacity") {
         float v = parseFloat(val);

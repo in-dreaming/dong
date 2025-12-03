@@ -83,6 +83,12 @@ private:
     // Cleanup
     void destroyYogaNode(YGNode* node);
 
+    // Inline formatting context layout
+    void layoutInlineFormattingContexts(dom::DOMNodePtr root);
+
+    // Positioned layout (position: absolute)
+    void layoutPositionedElements(dom::DOMNodePtr root);
+
     // Incremental layout helpers
     bool calculateLayoutIncremental(dom::DOMNodePtr dom_node, YGNode* yoga_node,
                                     float parent_x, float parent_y);

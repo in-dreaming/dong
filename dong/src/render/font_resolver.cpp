@@ -31,6 +31,43 @@ std::string toLowerAscii(std::string input) {
 }
 
 const std::unordered_map<std::string, std::vector<std::string>> kFontCandidates = {
+    // 系统 UI 字体族：-apple-system / BlinkMacSystemFont / system-ui
+    {"-apple-system", {
+        // macOS 优先选择 SF 系列，其次 Helvetica/Arial
+        "/System/Library/Fonts/SFNS.ttf",
+        "/System/Library/Fonts/SFNSDisplay.ttf",
+        "/System/Library/Fonts/SFNSRounded.ttf",
+        "/System/Library/Fonts/SF-Pro.ttf",
+        "/System/Library/Fonts/Helvetica.ttc",
+        "/System/Library/Fonts/Supplemental/Arial.ttf",
+        // Linux 常见替代
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        // Windows 常见替代
+        "C:/Windows/Fonts/segoeui.ttf",
+        "C:/Windows/Fonts/arial.ttf"
+    }},
+    {"system-ui", {
+        "/System/Library/Fonts/SFNS.ttf",
+        "/System/Library/Fonts/SFNSDisplay.ttf",
+        "/System/Library/Fonts/SFNSRounded.ttf",
+        "/System/Library/Fonts/SF-Pro.ttf",
+        "/System/Library/Fonts/Helvetica.ttc",
+        "/System/Library/Fonts/Supplemental/Arial.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "C:/Windows/Fonts/segoeui.ttf",
+        "C:/Windows/Fonts/arial.ttf"
+    }},
+    {"blinkmacsystemfont", {
+        "/System/Library/Fonts/SFNS.ttf",
+        "/System/Library/Fonts/SFNSDisplay.ttf",
+        "/System/Library/Fonts/SFNSRounded.ttf",
+        "/System/Library/Fonts/SF-Pro.ttf",
+        "/System/Library/Fonts/Helvetica.ttc",
+        "/System/Library/Fonts/Supplemental/Arial.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "C:/Windows/Fonts/segoeui.ttf",
+        "C:/Windows/Fonts/arial.ttf"
+    }},
     {"sans-serif", {
         "/System/Library/Fonts/Helvetica.ttc",
         "/System/Library/Fonts/Supplemental/Arial.ttf",
@@ -60,6 +97,12 @@ const std::unordered_map<std::string, std::vector<std::string>> kFontCandidates 
         "/System/Library/Fonts/Supplemental/Times New Roman.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf",
         "C:/Windows/Fonts/times.ttf"
+    }},
+    {"segoe ui", {
+        "C:/Windows/Fonts/segoeui.ttf",
+        "C:/Windows/Fonts/arial.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/System/Library/Fonts/Supplemental/Arial.ttf"
     }},
     {"monospace", {
         "/System/Library/Fonts/Supplemental/Courier New.ttf",
@@ -122,10 +165,19 @@ std::vector<std::string> splitFontFamilies(const std::string& css_value) {
 }
 
 std::string canonicalFontFamily(const std::string& name) {
-    std::string lower = toLowerAscii(name);
+    // 去掉首尾空白与引号
+    std::string trimmed = trimWhitespace(name);
+    if (!trimmed.empty() && (trimmed.front() == '"' || trimmed.front() == '\'') && trimmed.back() == trimmed.front()) {
+        if (trimmed.size() > 2) {
+            trimmed = trimmed.substr(1, trimmed.size() - 2);
+        } else {
+            trimmed.clear();
+        }
+    }
 
-    // 只归一化 CSS generic family（sans-serif/serif/monospace），
-    // 保留 Arial/Helvetica 等具体家族名，避免覆盖掉作者明确指定的字体顺序。
+    std::string lower = toLowerAscii(trimmed);
+
+    // 归一化 CSS generic family
     if (lower == "sans" || lower == "sans-serif") {
         return "sans-serif";
     }
@@ -136,7 +188,12 @@ std::string canonicalFontFamily(const std::string& name) {
         return "monospace";
     }
 
-    // 其他一律按原样（小写）返回，例如 "arial"、"helvetica"、"times new roman" 等。
+    // 系统 UI 字体族映射到统一 key，方便在映射表中维护候选路径
+    if (lower == "-apple-system" || lower == "blinkmacsystemfont" || lower == "system-ui") {
+        return "-apple-system";
+    }
+
+    // 常见具体家族名保持小写形式，例如 "arial"、"helvetica"、"times new roman"、"segoe ui" 等
     return lower;
 }
 

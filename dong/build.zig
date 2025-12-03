@@ -562,6 +562,10 @@ pub fn build(b: *std.Build) void {
         .{ .name = "gpu_view_demo", .source = "examples/gpu_view_demo.cpp", .flags = &.{"-std=c++17"} },
         // GPU 截图 demo（捕获渲染结果到图片）
         .{ .name = "gpu_screenshot_demo", .source = "examples/gpu_screenshot_demo.cpp", .flags = &.{"-std=c++17"} },
+        // GPU 截图 demo - 基础布局 + 文本 + 颜色 对齐
+        .{ .name = "gpu_screenshot_demo_basic_layout", .source = "examples/gpu_screenshot_demo_basic_layout.cpp", .flags = &.{"-std=c++17"} },
+        // GlyphAtlas 压测 demo（大量 CJK 字符触发多页与淘汰）
+        .{ .name = "gpu_screenshot_demo_glyph_stress", .source = "examples/gpu_screenshot_demo_glyph_stress.cpp", .flags = &.{"-std=c++17"} },
         // GPU 截图分析（使用新的离屏渲染 API）
         .{ .name = "gpu_screenshot_analysis", .source = "examples/gpu_screenshot_analysis.cpp", .flags = &.{"-std=c++17"} },
         // GPU 纹理渲染 demo（展示两层离屏渲染API）

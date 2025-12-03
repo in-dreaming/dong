@@ -12,13 +12,73 @@ namespace dong::render {
 
 namespace {
 
-// CSS 颜色解析器
+// CSS 颜色解析器（正式版）：支持 #rgb/#rgba/#rrggbb/#rrggbbaa 与 rgb()/rgba() 子集
 static void parseCssColor(const std::string& css, uint8_t& r, uint8_t& g, uint8_t& b, uint8_t& a) {
-    std::string s = css;
-    a = 255;
+    auto clampToByte = [](int v) -> uint8_t {
+        if (v < 0) return 0;
+        if (v > 255) return 255;
+        return static_cast<uint8_t>(v);
+    };
 
-    s.erase(std::remove_if(s.begin(), s.end(), ::isspace), s.end());
-    std::transform(s.begin(), s.end(), s.begin(), ::tolower);
+    auto parseHexNibble = [](char c) -> int {
+        if (c >= '0' && c <= '9') return c - '0';
+        if (c >= 'a' && c <= 'f') return 10 + (c - 'a');
+        if (c >= 'A' && c <= 'F') return 10 + (c - 'A');
+        return 0;
+    };
+
+    auto parseHex2 = [&](char c1, char c2) -> uint8_t {
+        int hi = parseHexNibble(c1);
+        int lo = parseHexNibble(c2);
+        return clampToByte((hi << 4) | lo);
+    };
+
+    auto parseComponent = [&](const std::string& s, bool is_alpha, int& out_int, float& out_alpha) {
+        std::string v = s;
+        // 去首尾空白
+        v.erase(v.begin(), std::find_if(v.begin(), v.end(), [](unsigned char ch) { return !std::isspace(ch); }));
+        while (!v.empty() && std::isspace(static_cast<unsigned char>(v.back()))) {
+            v.pop_back();
+        }
+
+        bool is_percent = false;
+        if (!v.empty() && v.back() == '%') {
+            is_percent = true;
+            v.pop_back();
+        }
+
+        float f = 0.0f;
+        try {
+            f = std::stof(v);
+        } catch (...) {
+            f = 0.0f;
+        }
+
+        if (!is_alpha) {
+            if (is_percent) {
+                f = f * 255.0f / 100.0f;
+            }
+            out_int = static_cast<int>(std::round(f));
+            out_alpha = 1.0f;
+        } else {
+            if (is_percent) {
+                f = f / 100.0f;
+            }
+            if (f < 0.0f) f = 0.0f;
+            if (f > 1.0f) f = 1.0f;
+            out_int = static_cast<int>(std::round(f * 255.0f));
+            out_alpha = f;
+        }
+    };
+
+    // 预处理：去空白并转小写
+    std::string s = css;
+    s.erase(std::remove_if(s.begin(), s.end(), [](unsigned char ch) { return std::isspace(ch); }), s.end());
+    std::transform(s.begin(), s.end(), s.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+
+    // 默认值：不合法时给一个可见的浅灰色，方便调试
+    r = g = b = 240;
+    a = 255;
 
     if (s.empty() || s == "transparent") {
         r = g = b = 0;
@@ -26,46 +86,100 @@ static void parseCssColor(const std::string& css, uint8_t& r, uint8_t& g, uint8_
         return;
     }
 
+    // 十六进制形式
     if (!s.empty() && s[0] == '#') {
-        if (s.size() == 4) { // #rgb
-            auto hex = [](char c) -> uint8_t {
-                if (c >= '0' && c <= '9') return c - '0';
-                if (c >= 'a' && c <= 'f') return 10 + (c - 'a');
-                return 0;
-            };
-            uint8_t r4 = hex(s[1]);
-            uint8_t g4 = hex(s[2]);
-            uint8_t b4 = hex(s[3]);
-            r = (r4 << 4) | r4;
-            g = (g4 << 4) | g4;
-            b = (b4 << 4) | b4;
+        if (s.size() == 4) {          // #rgb
+            int r4 = parseHexNibble(s[1]);
+            int g4 = parseHexNibble(s[2]);
+            int b4 = parseHexNibble(s[3]);
+            r = clampToByte((r4 << 4) | r4);
+            g = clampToByte((g4 << 4) | g4);
+            b = clampToByte((b4 << 4) | b4);
+            a = 255;
             return;
-        } else if (s.size() == 7) { // #rrggbb
-            auto hex2 = [](char c1, char c2) -> uint8_t {
-                auto hex = [](char c) -> uint8_t {
-                    if (c >= '0' && c <= '9') return c - '0';
-                    if (c >= 'a' && c <= 'f') return 10 + (c - 'a');
-                    return 0;
-                };
-                return static_cast<uint8_t>((hex(c1) << 4) | hex(c2));
-            };
-            r = hex2(s[1], s[2]);
-            g = hex2(s[3], s[4]);
-            b = hex2(s[5], s[6]);
+        } else if (s.size() == 5) {  // #rgba
+            int r4 = parseHexNibble(s[1]);
+            int g4 = parseHexNibble(s[2]);
+            int b4 = parseHexNibble(s[3]);
+            int a4 = parseHexNibble(s[4]);
+            r = clampToByte((r4 << 4) | r4);
+            g = clampToByte((g4 << 4) | g4);
+            b = clampToByte((b4 << 4) | b4);
+            a = clampToByte((a4 << 4) | a4);
+            return;
+        } else if (s.size() == 7) {  // #rrggbb
+            r = parseHex2(s[1], s[2]);
+            g = parseHex2(s[3], s[4]);
+            b = parseHex2(s[5], s[6]);
+            a = 255;
+            return;
+        } else if (s.size() == 9) {  // #rrggbbaa
+            r = parseHex2(s[1], s[2]);
+            g = parseHex2(s[3], s[4]);
+            b = parseHex2(s[5], s[6]);
+            a = parseHex2(s[7], s[8]);
             return;
         }
     }
 
-    // 命名颜色
-    if (s == "white")      { r = g = b = 255; return; }
-    if (s == "black")      { r = g = b = 0;   return; }
-    if (s == "red")        { r = 255; g = 0;   b = 0;   return; }
-    if (s == "green")      { r = 0;   g = 128; b = 0;   return; }
-    if (s == "blue")       { r = 0;   g = 0;   b = 255; return; }
-    if (s == "gray" || s == "grey") { r = g = b = 128; return; }
-    if (s == "lightgray" || s == "lightgrey") { r = g = b = 211; return; }
+    // rgb()/rgba()
+    auto startsWith = [](const std::string& str, const char* prefix) {
+        const size_t len = std::strlen(prefix);
+        return str.size() >= len && std::equal(prefix, prefix + len, str.begin());
+    };
 
-    r = g = b = 240;
+    if (startsWith(s, "rgb(") || startsWith(s, "rgba(")) {
+        bool has_alpha = startsWith(s, "rgba(");
+        size_t lparen = s.find('(');
+        size_t rparen = s.rfind(')');
+        if (lparen != std::string::npos && rparen != std::string::npos && rparen > lparen + 1) {
+            std::string args = s.substr(lparen + 1, rparen - lparen - 1);
+            std::vector<std::string> parts;
+            std::string current;
+            for (char c : args) {
+                if (c == ',') {
+                    if (!current.empty()) {
+                        parts.push_back(current);
+                        current.clear();
+                    }
+                } else {
+                    current.push_back(c);
+                }
+            }
+            if (!current.empty()) {
+                parts.push_back(current);
+            }
+
+            int r_int = 0, g_int = 0, b_int = 0, a_int = 255;
+            float a_float = 1.0f;
+            if ((has_alpha && parts.size() == 4) || (!has_alpha && parts.size() == 3)) {
+                int dummy_int = 0;
+                float dummy_alpha = 1.0f;
+                parseComponent(parts[0], false, r_int, dummy_alpha);
+                parseComponent(parts[1], false, g_int, dummy_alpha);
+                parseComponent(parts[2], false, b_int, dummy_alpha);
+                if (has_alpha) {
+                    parseComponent(parts[3], true, a_int, a_float);
+                }
+                r = clampToByte(r_int);
+                g = clampToByte(g_int);
+                b = clampToByte(b_int);
+                a = clampToByte(a_int);
+                return;
+            }
+        }
+    }
+
+    // 命名颜色（子集），其他未覆盖的颜色名可以按需要继续扩充
+    if (s == "white")      { r = g = b = 255; a = 255; return; }
+    if (s == "black")      { r = g = b = 0;   a = 255; return; }
+    if (s == "red")        { r = 255; g = 0;   b = 0;   a = 255; return; }
+    if (s == "green")      { r = 0;   g = 128; b = 0;   a = 255; return; }
+    if (s == "blue")       { r = 0;   g = 0;   b = 255; a = 255; return; }
+    if (s == "gray" || s == "grey") { r = g = b = 128; a = 255; return; }
+    if (s == "lightgray" || s == "lightgrey") { r = g = b = 211; a = 255; return; }
+
+    // 其它情况保留默认浅灰，方便后续调试定位未实现的颜色格式
 }
 
 static Color makeColorFromCss(const std::string& css) {
@@ -174,6 +288,15 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         has_layout_rect = node_rect.width > 0.0f && node_rect.height > 0.0f;
     }
 
+    // Debug: log layout rect for the ABS badge node to verify it has a non-zero box
+    {
+        std::string debug_class = node->getAttribute("class");
+        if (debug_class.find("abs-badge") != std::string::npos) {
+            SDL_Log("[Painter] ABS badge layout rect: x=%.1f y=%.1f w=%.1f h=%.1f has_layout_rect=%d",
+                    node_rect.x, node_rect.y, node_rect.width, node_rect.height, has_layout_rect ? 1 : 0);
+        }
+    }
+
     const bool should_apply_clip = has_layout_rect && shouldClipOverflow(style.overflow);
 
     DisplayListBuilder::ScopedLayer opacity_scope;
@@ -233,8 +356,8 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         opacity_scope = builder.pushLayer(clamped_opacity, has_isolation, layer_bounds, layer_id, layer_dirty);
     }
 
-    // 1. 背景
-    if (layout_node && style.background_color != "transparent") {
+    // 1. 背景与阴影
+    if (layout_node) {
         Rect rect = node_rect;
 
         // root/html/body 填满 viewport
@@ -245,7 +368,32 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
             rect.height = static_cast<float>(surface_->getHeight());
         }
 
-        if (rect.width > 0.0f && rect.height > 0.0f) {
+        // 1.1 box-shadow（先画在背景之下）
+        if (!style.box_shadows.empty() && rect.width > 0.0f && rect.height > 0.0f) {
+            for (const auto& shadow : style.box_shadows) {
+                if (shadow.color.empty()) continue;
+                Color sc = makeColorFromCss(shadow.color);
+
+                Rect shadow_rect = rect;
+                shadow_rect.x += shadow.offset_x;
+                shadow_rect.y += shadow.offset_y;
+                shadow_rect.x -= shadow.spread_radius;
+                shadow_rect.y -= shadow.spread_radius;
+                shadow_rect.width += shadow.spread_radius * 2.0f;
+                shadow_rect.height += shadow.spread_radius * 2.0f;
+
+                if (shadow_rect.width <= 0.0f || shadow_rect.height <= 0.0f) {
+                    continue;
+                }
+
+                float radius = style.border_radius;
+                if (radius < 0.0f) radius = 0.0f;
+                builder.addRoundedRect(shadow_rect, sc, radius);
+            }
+        }
+
+        // 1.2 背景填充
+        if (style.background_color != "transparent" && rect.width > 0.0f && rect.height > 0.0f) {
             Color c = makeColorFromCss(style.background_color);
             if (style.border_radius > 0.0f) {
                 builder.addRoundedRect(rect, c, style.border_radius);
@@ -302,6 +450,10 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
             tag == "button" || tag == "code" || tag == "div" || tag == "footer";
 
         if (has_text_child && (tag_prefers_text || !has_element_child)) {
+            std::string debug_class = node->getAttribute("class");
+            if (debug_class.find("abs-badge") != std::string::npos) {
+                SDL_Log("[Painter] ABS badge text raw='%s'", raw_text.c_str());
+            }
             std::string text = collapseWhitespace(raw_text);
             if (!text.empty()) {
                 float x = layout_node->layout.position[0];
@@ -328,124 +480,256 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                 float inner_width = width - pad_left - pad_right;
                 if (inner_width <= 0.0f) inner_width = width > 0.0f ? width : 0.0f;
 
-                // 简单的换行逻辑
-                std::vector<std::string> lines;
-                if (inner_width <= 0.0f) {
-                    lines.push_back(text);
-                } else {
-                    std::istringstream stream(text);
-                    std::string word;
-                    std::string current_line;
-                    while (stream >> word) {
-                        std::string candidate = current_line.empty() ? word : current_line + " " + word;
-                        float candidate_width = estimateTextWidth(candidate, font_size);
-                        if (candidate_width <= inner_width || current_line.empty()) {
-                            current_line = candidate;
+                // 使用 HarfBuzz 做一次完整 shaping，并基于 glyph 宽度进行换行
+                TextShapeRequest full_req{};
+                full_req.text = text;
+                full_req.font_family = style.font_family;
+                full_req.font_weight = style.font_weight;
+                full_req.font_size = font_size;
+
+                ShapedText shaped_full{};
+                if (!text_shaper_.shape(full_req, shaped_full) || shaped_full.glyphs.empty()) {
+                    return;
+                }
+
+                const float scale = shaped_full.scale_to_pixels;
+
+                float letter_spacing_em = style.letter_spacing_em;
+                float letter_spacing_px = 0.0f;
+                float letter_spacing_units = 0.0f;
+                if (letter_spacing_em != 0.0f) {
+                    letter_spacing_px = letter_spacing_em * font_size;
+                    if (scale > 0.0f) {
+                        letter_spacing_units = letter_spacing_px / scale;
+                    }
+                }
+
+                // 行高/基线度量（设计单位）
+                float line_height_units = shaped_full.line_height_units;
+                float ascent_units = shaped_full.ascent_units;
+                float descent_units = shaped_full.descent_units;
+
+                if (line_height_units <= 0.0f) {
+                    line_height_units = font_size / std::max(scale, 1e-3f);
+                }
+                if (ascent_units <= 0.0f) {
+                    ascent_units = font_size / std::max(scale, 1e-3f);
+                }
+                float descent_abs_units = descent_units < 0.0f ? -descent_units : 0.0f;
+                float metrics_height_units = ascent_units + descent_abs_units;
+                if (metrics_height_units <= 0.0f) {
+                    metrics_height_units = line_height_units;
+                }
+                float extra_leading_units = line_height_units - metrics_height_units;
+                if (extra_leading_units < 0.0f) {
+                    extra_leading_units = 0.0f;
+                }
+                float top_leading_units = extra_leading_units * 0.5f;
+
+                float effective_line_height = line_height_units * scale;
+                float ascent_px = ascent_units * scale;
+                float baseline_offset = (top_leading_units + ascent_units) * scale;
+
+                // 基于 UTF-8 字节偏移构建潜在换行点（空格 + CJK 字符后）
+                std::vector<size_t> break_points;
+                break_points.reserve(text.size() + 1);
+
+                const auto push_break = [&](size_t byte_index) {
+                    if (!break_points.empty() && break_points.back() == byte_index) {
+                        return;
+                    }
+                    break_points.push_back(byte_index);
+                };
+
+                size_t i_byte = 0;
+                while (i_byte < text.size()) {
+                    unsigned char c = static_cast<unsigned char>(text[i_byte]);
+                    size_t char_start = i_byte;
+                    size_t char_len = 1;
+                    if ((c & 0b10000000) == 0) {
+                        // ASCII
+                        i_byte += 1;
+                        if (c == ' ') {
+                            push_break(i_byte); // 在空格之后允许换行
+                        }
+                        continue;
+                    } else if ((c & 0b11100000) == 0b11000000) {
+                        char_len = 2;
+                    } else if ((c & 0b11110000) == 0b11100000) {
+                        char_len = 3;
+                    } else if ((c & 0b11111000) == 0b11110000) {
+                        char_len = 4;
+                    }
+                    i_byte += char_len;
+                    // 对于非 ASCII（如 CJK），在字符后允许换行
+                    push_break(i_byte);
+                }
+
+                // 保证文本末尾是一个换行候选
+                if (break_points.empty() || break_points.back() != text.size()) {
+                    break_points.push_back(text.size());
+                }
+
+                const auto measure_range_units = [&](size_t byte_start, size_t byte_end) -> float {
+                    const auto& glyphs = shaped_full.glyphs;
+                    int first = -1;
+                    int last = -1;
+                    int glyph_count = 0;
+                    for (size_t gi = 0; gi < glyphs.size(); ++gi) {
+                        uint32_t cluster = glyphs[gi].cluster;
+                        if (cluster < byte_start) {
+                            continue;
+                        }
+                        if (cluster >= byte_end) {
+                            break;
+                        }
+                        if (first == -1) {
+                            first = static_cast<int>(gi);
+                        }
+                        last = static_cast<int>(gi);
+                        ++glyph_count;
+                    }
+                    if (first == -1 || last == -1 || glyph_count == 0) {
+                        return 0.0f;
+                    }
+                    const ShapedGlyph& g_first = shaped_full.glyphs[static_cast<size_t>(first)];
+                    const ShapedGlyph& g_last = shaped_full.glyphs[static_cast<size_t>(last)];
+                    float left = g_first.pen_x_units;
+                    float right = g_last.pen_x_units + g_last.advance_x_units;
+                    float w = right - left;
+                    if (glyph_count > 1 && letter_spacing_units != 0.0f) {
+                        w += letter_spacing_units * static_cast<float>(glyph_count - 1);
+                    }
+                    return w > 0.0f ? w : 0.0f;
+                };
+
+                const auto glyph_range_for_bytes = [&](size_t byte_start, size_t byte_end,
+                                                       int& out_first, int& out_last) {
+                    out_first = -1;
+                    out_last = -1;
+                    const auto& glyphs = shaped_full.glyphs;
+                    for (size_t gi = 0; gi < glyphs.size(); ++gi) {
+                        uint32_t cluster = glyphs[gi].cluster;
+                        if (cluster < byte_start) {
+                            continue;
+                        }
+                        if (cluster >= byte_end) {
+                            break;
+                        }
+                        if (out_first == -1) {
+                            out_first = static_cast<int>(gi);
+                        }
+                        out_last = static_cast<int>(gi);
+                    }
+                };
+
+                const float max_line_width_px = inner_width;
+                size_t text_len = text.size();
+                size_t line_start = 0;
+                int line_index = 0;
+
+                while (line_start < text_len) {
+                    // 跳过行首空格
+                    while (line_start < text_len && text[line_start] == ' ') {
+                        ++line_start;
+                    }
+                    if (line_start >= text_len) {
+                        break;
+                    }
+
+                    float best_width_units = 0.0f;
+                    size_t best_break = text_len;
+                    bool found_any = false;
+
+                    for (size_t bp : break_points) {
+                        if (bp <= line_start) {
+                            continue;
+                        }
+                        float w_units = measure_range_units(line_start, bp);
+                        float w_px = w_units * scale;
+                        if (w_px <= max_line_width_px + 0.1f) {
+                            found_any = true;
+                            best_break = bp;
+                            best_width_units = w_units;
                         } else {
-                            lines.push_back(current_line);
-                            current_line = word;
+                            // 后续 break point 只会更宽，直接停止
+                            break;
                         }
                     }
-                    if (!current_line.empty()) {
-                        lines.push_back(current_line);
+
+                    if (!found_any) {
+                        // 无法在当前行宽内找到 break point，强制在第一个可用 break 或文本末尾换行
+                        size_t fallback_break = text_len;
+                        for (size_t bp : break_points) {
+                            if (bp > line_start) {
+                                fallback_break = bp;
+                                break;
+                            }
+                        }
+                        best_break = fallback_break;
+                        best_width_units = measure_range_units(line_start, best_break);
                     }
-                }
 
-                if (lines.empty()) {
-                    lines.push_back(text);
-                }
-
-                for (size_t i = 0; i < lines.size(); ++i) {
-                    const std::string& line = lines[i];
-
-                    TextShapeRequest request{};
-                    request.text = line;
-                    request.font_family = style.font_family;
-                    request.font_weight = style.font_weight;
-                    request.font_size = font_size;
-
-                    ShapedText shaped{};
-                    if (!text_shaper_.shape(request, shaped) || shaped.glyphs.empty()) {
+                    int first_glyph = -1;
+                    int last_glyph = -1;
+                    glyph_range_for_bytes(line_start, best_break, first_glyph, last_glyph);
+                    if (first_glyph == -1 || last_glyph == -1) {
+                        // 没有 glyph（可能是全空格），直接结束
+                        line_start = best_break;
                         continue;
                     }
 
-                    // 将 design units 转换为像素用于布局
-                    const float scale = shaped.scale_to_pixels;
-                    float line_width = shaped.width_units * scale;
-                    if (line_width <= 0.0f) {
-                        line_width = estimateTextWidth(line, font_size);
-                    }
-
-                    // 使用 TextShaper 提供的 line-height（design units）作为 CSS `line-height: normal` 的近似，
-                    // 再结合字体 ascent/descender，将多余的 leading 在行盒顶部/底部平均分摊，
-                    // 使得文本在灰色块内的垂直位置更接近浏览器行为。
-                    float line_height_units = shaped.line_height_units;
-                    float ascent_units = shaped.ascent_units;
-                    float descent_units = shaped.descent_units;
-
-                    if (line_height_units <= 0.0f) {
-                        line_height_units = font_size / std::max(scale, 1e-3f);
-                    }
-                    if (ascent_units <= 0.0f) {
-                        ascent_units = font_size / std::max(scale, 1e-3f);
-                    }
-                    // descent_units 一般为负值，如果缺失则按 0 处理
-                    float descent_abs_units = descent_units < 0.0f ? -descent_units : 0.0f;
-
-                    float metrics_height_units = ascent_units + descent_abs_units;
-                    if (metrics_height_units <= 0.0f) {
-                        metrics_height_units = line_height_units;
-                    }
-
-                    float extra_leading_units = line_height_units - metrics_height_units;
-                    if (extra_leading_units < 0.0f) {
-                        extra_leading_units = 0.0f;
-                    }
-                    float top_leading_units = extra_leading_units * 0.5f;
-
-                    float effective_line_height = line_height_units * scale;
-                    float ascent = ascent_units * scale;
-
-                    float baseline_offset = (top_leading_units + ascent_units) * scale;
+                    float line_width_px = best_width_units * scale;
 
                     float text_x = x + pad_left;
                     if (style.text_align == "center") {
-                        text_x = x + pad_left + std::max(0.0f, (inner_width - line_width) * 0.5f);
+                        text_x = x + pad_left + std::max(0.0f, (inner_width - line_width_px) * 0.5f);
                     } else if (style.text_align == "right") {
-                        text_x = x + pad_left + std::max(0.0f, inner_width - line_width);
+                        text_x = x + pad_left + std::max(0.0f, inner_width - line_width_px);
                     }
 
                     float base_baseline = y + pad_top + baseline_offset;
-                    float baseline_y = base_baseline + static_cast<float>(i) * effective_line_height;
+                    float baseline_y = base_baseline + static_cast<float>(line_index) * effective_line_height;
 
-                    DrawGlyphRunData glyph{};
-                    glyph.rect.x = text_x;
-                    glyph.rect.y = baseline_y - ascent;
-                    glyph.rect.width = line_width;
-                    glyph.rect.height = effective_line_height;
-                    glyph.color = text_color;
-                    glyph.font_size = font_size;
-                    glyph.font_family = style.font_family;
-                    glyph.font_weight = style.font_weight;
-                    glyph.font_path = shaped.font_path;
-                    glyph.baseline_x = text_x;
-                    glyph.baseline_y = baseline_y;
-                    
-                    // 传递 design units 元数据
-                    glyph.units_per_em = shaped.units_per_em;
-                    glyph.scale_to_pixels = shaped.scale_to_pixels;
+                    DrawGlyphRunData glyph_run{};
+                    glyph_run.rect.x = text_x;
+                    glyph_run.rect.y = baseline_y - ascent_px;
+                    glyph_run.rect.width = line_width_px;
+                    glyph_run.rect.height = effective_line_height;
+                    glyph_run.color = text_color;
+                    glyph_run.font_size = font_size;
+                    glyph_run.font_family = style.font_family;
+                    glyph_run.font_weight = style.font_weight;
+                    glyph_run.font_path = shaped_full.font_path;
+                    glyph_run.baseline_x = text_x;
+                    glyph_run.baseline_y = baseline_y;
+                    glyph_run.units_per_em = shaped_full.units_per_em;
+                    glyph_run.scale_to_pixels = shaped_full.scale_to_pixels;
 
-                    glyph.glyphs.reserve(shaped.glyphs.size());
-                    for (const auto& shaped_glyph : shaped.glyphs) {
-                        GlyphInstance instance{};
-                        instance.glyph_id = shaped_glyph.glyph_id;
-                        // 保持 design units，不在此处缩放
-                        instance.pen_x_units = shaped_glyph.pen_x_units;
-                        instance.pen_y_units = shaped_glyph.pen_y_units;
-                        glyph.glyphs.push_back(instance);
+                    const auto& glyphs = shaped_full.glyphs;
+                    glyph_run.glyphs.reserve(static_cast<size_t>(last_glyph - first_glyph + 1));
+
+                    float first_pen_x_units = glyphs[static_cast<size_t>(first_glyph)].pen_x_units;
+
+                    int glyph_index_in_run = 0;
+                    for (int gi = first_glyph; gi <= last_glyph; ++gi) {
+                        const ShapedGlyph& sg = glyphs[static_cast<size_t>(gi)];
+                        GlyphInstance inst{};
+                        inst.glyph_id = sg.glyph_id;
+                        float base_x_units = sg.pen_x_units - first_pen_x_units;
+                        if (letter_spacing_units != 0.0f && glyph_index_in_run > 0) {
+                            base_x_units += letter_spacing_units * static_cast<float>(glyph_index_in_run);
+                        }
+                        inst.pen_x_units = base_x_units;
+                        inst.pen_y_units = sg.pen_y_units;
+                        glyph_run.glyphs.push_back(inst);
+                        ++glyph_index_in_run;
                     }
 
-                    builder.addGlyphRun(std::move(glyph));
+                    builder.addGlyphRun(std::move(glyph_run));
+
+                    line_start = best_break;
+                    ++line_index;
                 }
             }
         }

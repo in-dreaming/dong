@@ -17,8 +17,10 @@ struct TextShapeRequest {
 
 struct ShapedGlyph {
     uint32_t glyph_id = 0;
-    float pen_x_units = 0.0f;      // design units
-    float pen_y_units = 0.0f;      // design units
+    float pen_x_units = 0.0f;       // design units，基线起点 x
+    float pen_y_units = 0.0f;       // design units，基线起点 y
+    float advance_x_units = 0.0f;   // design units，水平方向 advance
+    uint32_t cluster = 0;           // 输入文本中的 UTF-8 字节偏移
 };
 
 struct ShapedText {

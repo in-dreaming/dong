@@ -1987,29 +1987,19 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 break;
             }
             GlyphAtlas* glyph_atlas = glyph_tier->atlas.get();
-            SDL_GPUTexture* atlas_texture = glyph_atlas ? glyph_atlas->getAtlasTexture() : nullptr;
-            if (!atlas_texture || !text_sampler_) {
-                SDL_Log("GPUDriverSDL: glyph atlas texture unavailable");
+            if (!glyph_atlas || !text_sampler_) {
+                SDL_Log("GPUDriverSDL: glyph atlas unavailable");
                 break;
             }
 
             const float atlas_range = glyph_tier->distance_range;
             const float gamma_correction = -kSRGBGamma;
+            const float pixel_scale = cmd.scale_to_pixels;
 
             if (pipeline_state.active != PipelineBindingState::ActivePipeline::Text) {
                 SDL_BindGPUGraphicsPipeline(pass, text_pipeline_);
                 pipeline_state.active = PipelineBindingState::ActivePipeline::Text;
             }
-
-            if (!pipeline_state.text_sampler_bound) {
-                SDL_GPUTextureSamplerBinding binding{};
-                binding.texture = atlas_texture;
-                binding.sampler = text_sampler_;
-                SDL_BindGPUFragmentSamplers(pass, 0, &binding, 1);
-                pipeline_state.text_sampler_bound = true;
-            }
-
-            const float pixel_scale = cmd.scale_to_pixels;
 
             constexpr int kMaxGlyphsPerBatch = 64;
 
@@ -2026,21 +2016,19 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 GlyphInstanceUniform glyphs[kMaxGlyphsPerBatch];
             };
 
+            struct PreparedGlyph {
+                GlyphInstanceUniform instance;
+                uint32_t atlas_page;
+            };
+
             TextBatchUniformData batch_uniform{};
             write_viewport(batch_uniform.viewport);
             fill_clip_uniform(batch_uniform.clip);
 
-            int glyphs_in_batch = 0;
+            std::vector<PreparedGlyph> prepared;
+            prepared.reserve(cmd.glyphs.size());
 
-            auto flush_batch = [&]() {
-                if (glyphs_in_batch <= 0) {
-                    return;
-                }
-                SDL_PushGPUVertexUniformData(current_cmd_buf_, 0, &batch_uniform, sizeof(batch_uniform));
-                SDL_DrawGPUPrimitives(pass, 4, static_cast<Uint32>(glyphs_in_batch), 0, 0);
-                glyphs_in_batch = 0;
-            };
-
+            // 第一步：遍历所有 glyph，确保它们被放入 atlas，并记录每个 glyph 属于哪一页
             for (const auto& glyph : cmd.glyphs) {
                 if (glyph.glyph_id == 0) {
                     continue;
@@ -2071,37 +2059,85 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 float glyph_x = pen_x_px + bearing_x_px;
                 float glyph_y = pen_y_px - bearing_y_px;
 
-                GlyphInstanceUniform& dst = batch_uniform.glyphs[glyphs_in_batch];
-                dst.rect[0] = glyph_x;
-                dst.rect[1] = glyph_y;
-                dst.rect[2] = glyph_w;
-                dst.rect[3] = glyph_h;
+                GlyphInstanceUniform inst{};
+                inst.rect[0] = glyph_x;
+                inst.rect[1] = glyph_y;
+                inst.rect[2] = glyph_w;
+                inst.rect[3] = glyph_h;
 
-                dst.uv_rect[0] = entry->u0;
-                dst.uv_rect[1] = entry->v0;
-                dst.uv_rect[2] = entry->u1;
-                dst.uv_rect[3] = entry->v1;
+                inst.uv_rect[0] = entry->u0;
+                inst.uv_rect[1] = entry->v0;
+                inst.uv_rect[2] = entry->u1;
+                inst.uv_rect[3] = entry->v1;
 
-                writeLinearColor(cmd.color, dst.color);
+                writeLinearColor(cmd.color, inst.color);
 
                 const float msdf_scale = (entry->metrics.msdf_scale > 0.0f)
                     ? entry->metrics.msdf_scale
                     : 1.0f;
                 const float px_range_screen = atlas_range * (pixel_scale / msdf_scale);
 
-                dst.params[0] = px_range_screen;
-                dst.params[1] = inv_device_pixel_ratio;
-                dst.params[2] = msdf_subpixel_enabled_ ? 1.0f : 0.0f;
-                dst.params[3] = gamma_correction;
+                inst.params[0] = px_range_screen;
+                inst.params[1] = inv_device_pixel_ratio;
+                inst.params[2] = msdf_subpixel_enabled_ ? 1.0f : 0.0f;
+                inst.params[3] = gamma_correction;
 
-                ++glyphs_in_batch;
-
-                if (glyphs_in_batch == kMaxGlyphsPerBatch) {
-                    flush_batch();
-                }
+                PreparedGlyph pg{};
+                pg.instance = inst;
+                pg.atlas_page = entry->atlas_page;
+                prepared.push_back(pg);
             }
 
-            flush_batch();
+            if (prepared.empty()) {
+                break;
+            }
+
+            // 第二步：按 atlas_page 分批绘制，每个批次绑定对应页纹理
+            uint32_t page_count = glyph_atlas->getPageCount();
+            for (uint32_t page_index = 0; page_index < page_count; ++page_index) {
+                SDL_GPUTexture* atlas_texture = glyph_atlas->getAtlasTextureForPage(page_index);
+                if (!atlas_texture) {
+                    continue;
+                }
+
+                SDL_GPUTextureSamplerBinding binding{};
+                binding.texture = atlas_texture;
+                binding.sampler = text_sampler_;
+                SDL_BindGPUFragmentSamplers(pass, 0, &binding, 1);
+                pipeline_state.text_sampler_bound = true;
+
+                int glyphs_in_batch = 0;
+
+                auto flush_batch = [&]() {
+                    if (glyphs_in_batch <= 0) {
+                        return;
+                    }
+                    SDL_PushGPUVertexUniformData(current_cmd_buf_, 0, &batch_uniform, sizeof(batch_uniform));
+                    SDL_DrawGPUPrimitives(pass, 4, static_cast<Uint32>(glyphs_in_batch), 0, 0);
+                    glyphs_in_batch = 0;
+                };
+
+                for (const auto& pg : prepared) {
+                    if (pg.atlas_page != page_index) {
+                        continue;
+                    }
+
+                    if (glyphs_in_batch == 0) {
+                        // 首个 glyph 时刷新 viewport/clip，确保在多次 flush 时仍保持正确
+                        write_viewport(batch_uniform.viewport);
+                        fill_clip_uniform(batch_uniform.clip);
+                    }
+
+                    batch_uniform.glyphs[glyphs_in_batch] = pg.instance;
+                    ++glyphs_in_batch;
+
+                    if (glyphs_in_batch == kMaxGlyphsPerBatch) {
+                        flush_batch();
+                    }
+                }
+
+                flush_batch();
+            }
 
             break;
         }

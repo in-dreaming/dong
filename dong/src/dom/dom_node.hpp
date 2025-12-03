@@ -31,6 +31,23 @@ struct CSSValue {
     bool isPixel() const { return unit == Unit::PIXEL; }
 };
 
+// box-shadow 描述（样式层），由 Painter 解释为阴影绘制
+struct BoxShadow {
+    float offset_x = 0.0f;
+    float offset_y = 0.0f;
+    float blur_radius = 0.0f;
+    float spread_radius = 0.0f;
+    std::string color; // 原始 CSS 颜色字符串
+};
+
+// Layout modes used by the layout engine (derived from CSS display/position)
+enum class LayoutMode {
+    Block,   // block-level boxes, including outer box of inline-block
+    Inline,  // inline formatting context / inline-level boxes
+    Flex,    // flex containers/items
+    None     // display:none
+};
+
 // Computed style properties
 struct ComputedStyle {
     // Box Model
@@ -50,8 +67,14 @@ struct ComputedStyle {
     CSSValue padding_left;
 
     // Layout
-    std::string display = "block";  // block, inline, flex, none
+    std::string display = "block";  // block, inline, inline-block, flex, none
+    LayoutMode layout_mode = LayoutMode::Block;
     std::string position = "static"; // static, relative, absolute, fixed
+    CSSValue top;
+    CSSValue right;
+    CSSValue bottom;
+    CSSValue left;
+    int z_index = 0;
 
     // Visual
     std::string background_color = "#ffffff";
@@ -62,12 +85,14 @@ struct ComputedStyle {
     std::string overflow = "visible"; // visible, hidden, scroll
     float opacity = 1.0f;              // 0.0 ~ 1.0
     bool isolation_isolate = false;     // isolation: auto | isolate (default auto)
+    std::vector<BoxShadow> box_shadows; // box-shadow 列表
 
     // Text
     std::string font_family = "Arial";
     float font_size = 16.0f;
     std::string font_weight = "normal"; // normal, bold
     std::string text_align = "left";    // left, center, right
+    float letter_spacing_em = 0.0f;      // letter-spacing，以 em 为单位，0 表示 normal
 
     // Flexbox properties
     std::string flex_direction = "row";     // row, column

@@ -89,10 +89,32 @@ GlyphAtlas::GlyphAtlas(GPUDevice* gpu_device)
     : gpu_device_(gpu_device) {}
 
 GlyphAtlas::~GlyphAtlas() {
-    if (atlas_texture_ && gpu_device_ && gpu_device_->isInitialized()) {
-        SDL_ReleaseGPUTexture(gpu_device_->getHandle(), atlas_texture_);
-        atlas_texture_ = nullptr;
+    if (!gpu_device_ || !gpu_device_->isInitialized()) {
+        return;
     }
+
+    SDL_GPUDevice* dev = gpu_device_->getHandle();
+    for (auto& page : pages_) {
+        if (page.texture) {
+            SDL_ReleaseGPUTexture(dev, page.texture);
+            page.texture = nullptr;
+        }
+    }
+    pages_.clear();
+}
+
+SDL_GPUTexture* GlyphAtlas::getAtlasTexture() const {
+    if (pages_.empty()) {
+        return nullptr;
+    }
+    return pages_.front().texture;
+}
+
+SDL_GPUTexture* GlyphAtlas::getAtlasTextureForPage(uint32_t page_index) const {
+    if (page_index >= pages_.size()) {
+        return nullptr;
+    }
+    return pages_[page_index].texture;
 }
 
 std::string GlyphAtlas::makeGlyphKey(uint32_t glyph_id, const std::string& font_path) const {
@@ -100,6 +122,161 @@ std::string GlyphAtlas::makeGlyphKey(uint32_t glyph_id, const std::string& font_
     key.push_back('#');
     key.append(std::to_string(glyph_id));
     return key;
+}
+
+bool GlyphAtlas::createPage() {
+    if (!gpu_device_ || !gpu_device_->isInitialized()) {
+        SDL_Log("GlyphAtlas::createPage: GPU device not initialized");
+        return false;
+    }
+
+    if (pages_.size() >= max_pages_) {
+        return false;
+    }
+
+    SDL_GPUDevice* dev = gpu_device_->getHandle();
+
+    SDL_GPUTextureCreateInfo tex_info{};
+    tex_info.type = SDL_GPU_TEXTURETYPE_2D;
+    tex_info.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    tex_info.width = atlas_width_;
+    tex_info.height = atlas_height_;
+    tex_info.layer_count_or_depth = 1;
+    tex_info.num_levels = 1;
+    tex_info.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+
+    SDL_GPUTexture* texture = SDL_CreateGPUTexture(dev, &tex_info);
+    if (!texture) {
+        SDL_Log("GlyphAtlas::createPage: failed to create atlas texture: %s", SDL_GetError());
+        return false;
+    }
+
+    AtlasPage page{};
+    page.texture = texture;
+    page.width = atlas_width_;
+    page.height = atlas_height_;
+    page.cursor_x = 0;
+    page.cursor_y = 0;
+    page.row_height = 0;
+    page.page_index = static_cast<uint32_t>(pages_.size());
+    page.glyph_count = 0;
+    page.last_used = 0;
+
+    pages_.push_back(page);
+    SDL_Log("GlyphAtlas: created page %u (%u x %u)", page.page_index, atlas_width_, atlas_height_);
+    return true;
+}
+
+GlyphAtlas::AtlasPage* GlyphAtlas::evictAndRecyclePage() {
+    if (pages_.empty()) {
+        return nullptr;
+    }
+
+    // 选择最久未使用且承载了 glyph 的页
+    uint64_t oldest_use = UINT64_MAX;
+    AtlasPage* victim = nullptr;
+    for (auto& page : pages_) {
+        if (page.glyph_count == 0) {
+            continue;
+        }
+        if (page.last_used < oldest_use) {
+            oldest_use = page.last_used;
+            victim = &page;
+        }
+    }
+
+    if (!victim) {
+        // 所有页都没有 glyph，直接复用第 0 页
+        victim = &pages_.front();
+    }
+
+    SDL_GPUDevice* dev = gpu_device_->getHandle();
+    if (victim->texture) {
+        SDL_ReleaseGPUTexture(dev, victim->texture);
+        victim->texture = nullptr;
+    }
+
+    // 从缓存中删除该页上的所有 glyph
+    auto it = page_to_keys_.find(victim->page_index);
+    if (it != page_to_keys_.end()) {
+        for (const auto& key : it->second) {
+            cache_.erase(key);
+        }
+        it->second.clear();
+    }
+
+    // 重新创建纹理并重置装箱状态
+    SDL_GPUTextureCreateInfo tex_info{};
+    tex_info.type = SDL_GPU_TEXTURETYPE_2D;
+    tex_info.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    tex_info.width = atlas_width_;
+    tex_info.height = atlas_height_;
+    tex_info.layer_count_or_depth = 1;
+    tex_info.num_levels = 1;
+    tex_info.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+
+    victim->texture = SDL_CreateGPUTexture(dev, &tex_info);
+    if (!victim->texture) {
+        SDL_Log("GlyphAtlas::evictAndRecyclePage: failed to recreate atlas texture: %s", SDL_GetError());
+        victim->width = 0;
+        victim->height = 0;
+        victim->cursor_x = victim->cursor_y = victim->row_height = 0;
+        victim->glyph_count = 0;
+        victim->last_used = 0;
+        return nullptr;
+    }
+
+    victim->width = atlas_width_;
+    victim->height = atlas_height_;
+    victim->cursor_x = 0;
+    victim->cursor_y = 0;
+    victim->row_height = 0;
+    victim->glyph_count = 0;
+    victim->last_used = 0;
+
+    SDL_Log("GlyphAtlas: evicted and recycled page %u", victim->page_index);
+    return victim;
+}
+
+GlyphAtlas::AtlasPage* GlyphAtlas::selectPageForGlyph(uint32_t glyph_width, uint32_t glyph_height) {
+    if (glyph_width == 0 || glyph_height == 0) {
+        return nullptr;
+    }
+    if (glyph_width > atlas_width_ || glyph_height > atlas_height_) {
+        SDL_Log("GlyphAtlas::selectPageForGlyph: glyph too large for atlas page (%u x %u)",
+                glyph_width, glyph_height);
+        return nullptr;
+    }
+
+    constexpr uint32_t kAtlasPadding = 1;
+
+    // 先尝试在现有页中找到能容纳该 glyph 的页
+    for (auto& page : pages_) {
+        uint32_t test_cursor_x = page.cursor_x;
+        uint32_t test_cursor_y = page.cursor_y;
+        uint32_t test_row_height = page.row_height;
+
+        if (test_cursor_x + glyph_width + kAtlasPadding > page.width) {
+            test_cursor_x = 0;
+            test_cursor_y += test_row_height + kAtlasPadding;
+            test_row_height = 0;
+        }
+
+        if (test_cursor_y + glyph_height <= page.height) {
+            return &page;
+        }
+    }
+
+    // 没有合适页：尝试新建一页
+    if (pages_.size() < max_pages_) {
+        if (!createPage()) {
+            return nullptr;
+        }
+        return &pages_.back();
+    }
+
+    // 超过最大页数：进行页级 LRU 淘汰并复用
+    return evictAndRecyclePage();
 }
 
 bool GlyphAtlas::initialize(uint32_t width,
@@ -115,27 +292,17 @@ bool GlyphAtlas::initialize(uint32_t width,
     atlas_height_ = height;
     glyph_bitmap_size_ = glyph_bitmap_size;
     glyph_distance_range_ = glyph_distance_range;
-    cursor_x_ = 0;
-    cursor_y_ = 0;
-    row_height_ = 0;
     cache_.clear();
+    page_to_keys_.clear();
+    pages_.clear();
+    usage_counter_ = 0;
 
-    SDL_GPUTextureCreateInfo tex_info{};
-    tex_info.type = SDL_GPU_TEXTURETYPE_2D;
-    tex_info.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
-    tex_info.width = atlas_width_;
-    tex_info.height = atlas_height_;
-    tex_info.layer_count_or_depth = 1;
-    tex_info.num_levels = 1;
-    tex_info.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
-
-    atlas_texture_ = SDL_CreateGPUTexture(gpu_device_->getHandle(), &tex_info);
-    if (!atlas_texture_) {
-        SDL_Log("GlyphAtlas::initialize: failed to create atlas texture: %s", SDL_GetError());
+    if (!createPage()) {
+        SDL_Log("GlyphAtlas::initialize: failed to create initial page");
         return false;
     }
 
-    SDL_Log("GlyphAtlas initialized: %u x %u", atlas_width_, atlas_height_);
+    SDL_Log("GlyphAtlas initialized: %u x %u, max_pages=%u", atlas_width_, atlas_height_, max_pages_);
     return true;
 }
 
@@ -145,6 +312,10 @@ const AtlasEntry* GlyphAtlas::getGlyph(uint32_t glyph_id, const std::string& fon
     }
     auto it = cache_.find(makeGlyphKey(glyph_id, font_path));
     if (it != cache_.end()) {
+        const AtlasEntry& entry = it->second;
+        if (entry.atlas_page < pages_.size()) {
+            pages_[entry.atlas_page].last_used = ++usage_counter_;
+        }
         return &it->second;
     }
     return nullptr;
@@ -160,6 +331,10 @@ const AtlasEntry* GlyphAtlas::addGlyph(uint32_t glyph_id, const std::string& fon
     std::string key = makeGlyphKey(glyph_id, font_path);
     auto it = cache_.find(key);
     if (it != cache_.end()) {
+        const AtlasEntry& entry = it->second;
+        if (entry.atlas_page < pages_.size()) {
+            pages_[entry.atlas_page].last_used = ++usage_counter_;
+        }
         return &it->second;
     }
 
@@ -178,28 +353,34 @@ const AtlasEntry* GlyphAtlas::addGlyph(uint32_t glyph_id, const std::string& fon
         // 空字形（如空格）
         AtlasEntry entry{};
         entry.metrics = metrics;
+        entry.atlas_page = 0;
         cache_[key] = entry;
         return &cache_[key];
     }
 
-    // 简单行优先装箱，加入统一的 atlas padding，避免 MSDF 线性采样时跨到相邻字形
-    constexpr uint32_t kAtlasPadding = 1;
-
-    if (cursor_x_ + glyph_width + kAtlasPadding > atlas_width_) {
-        cursor_x_ = 0;
-        cursor_y_ += row_height_ + kAtlasPadding;
-        row_height_ = 0;
-    }
-
-    if (cursor_y_ + glyph_height > atlas_height_) {
-        SDL_Log("GlyphAtlas::addGlyph: atlas is full");
+    AtlasPage* page = selectPageForGlyph(glyph_width, glyph_height);
+    if (!page || !page->texture) {
+        SDL_Log("GlyphAtlas::addGlyph: no available atlas page for glyph %u", glyph_id);
         return nullptr;
     }
 
-    uint32_t dst_x = cursor_x_;
-    uint32_t dst_y = cursor_y_;
-    cursor_x_ += glyph_width + kAtlasPadding;
-    row_height_ = std::max(row_height_, glyph_height);
+    constexpr uint32_t kAtlasPadding = 1;
+
+    if (page->cursor_x + glyph_width + kAtlasPadding > page->width) {
+        page->cursor_x = 0;
+        page->cursor_y += page->row_height + kAtlasPadding;
+        page->row_height = 0;
+    }
+
+    if (page->cursor_y + glyph_height > page->height) {
+        SDL_Log("GlyphAtlas::addGlyph: selected page overflows for glyph %u", glyph_id);
+        return nullptr;
+    }
+
+    uint32_t dst_x = page->cursor_x;
+    uint32_t dst_y = page->cursor_y;
+    page->cursor_x += glyph_width + kAtlasPadding;
+    page->row_height = std::max(page->row_height, glyph_height);
 
     // 上传到 GPU（通过 transfer buffer）
     SDL_GPUDevice* dev = gpu_device_->getHandle();
@@ -252,7 +433,7 @@ const AtlasEntry* GlyphAtlas::addGlyph(uint32_t glyph_id, const std::string& fon
     tex_transfer.offset = 0;
 
     SDL_GPUTextureRegion region{};
-    region.texture = atlas_texture_;
+    region.texture = page->texture;
     region.mip_level = 0;
     region.layer = 0;
     region.x = dst_x;
@@ -271,16 +452,20 @@ const AtlasEntry* GlyphAtlas::addGlyph(uint32_t glyph_id, const std::string& fon
 
     // 创建 AtlasEntry
     AtlasEntry entry{};
-    entry.atlas_page = 0;
-    entry.u0 = static_cast<float>(dst_x) / static_cast<float>(atlas_width_);
-    entry.v0 = static_cast<float>(dst_y) / static_cast<float>(atlas_height_);
-    entry.u1 = static_cast<float>(dst_x + glyph_width) / static_cast<float>(atlas_width_);
-    entry.v1 = static_cast<float>(dst_y + glyph_height) / static_cast<float>(atlas_height_);
+    entry.atlas_page = page->page_index;
+    entry.u0 = static_cast<float>(dst_x) / static_cast<float>(page->width);
+    entry.v0 = static_cast<float>(dst_y) / static_cast<float>(page->height);
+    entry.u1 = static_cast<float>(dst_x + glyph_width) / static_cast<float>(page->width);
+    entry.v1 = static_cast<float>(dst_y + glyph_height) / static_cast<float>(page->height);
     entry.metrics = metrics;
 
     cache_[key] = entry;
-    SDL_Log("GlyphAtlas: added glyph %u (%s) at (%u, %u), size (%u, %u)",
-            glyph_id, font_path.c_str(), dst_x, dst_y, glyph_width, glyph_height);
+    page_to_keys_[page->page_index].push_back(key);
+    page->glyph_count += 1;
+    page->last_used = ++usage_counter_;
+
+    SDL_Log("GlyphAtlas: added glyph %u (%s) at page %u (%u, %u), size (%u, %u)",
+            glyph_id, font_path.c_str(), page->page_index, dst_x, dst_y, glyph_width, glyph_height);
 
     return &cache_[key];
 }

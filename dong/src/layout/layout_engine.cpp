@@ -136,7 +136,8 @@ void collapseVerticalMarginBetweenSiblings(const dom::DOMNodePtr& prev_node,
     const auto& curr_style = curr_node->getComputedStyle();
 
     // Do not attempt to collapse margins for flex items or non-visible blocks here.
-    if (prev_style.display == "flex" || curr_style.display == "flex") {
+    if (prev_style.layout_mode == dom::LayoutMode::Flex ||
+        curr_style.layout_mode == dom::LayoutMode::Flex) {
         return;
     }
 
@@ -176,6 +177,145 @@ dom::DOMNodePtr firstElementChild(const dom::DOMNodePtr& node) {
         }
     }
     return nullptr;
+}
+
+struct InlineMetrics {
+    float content_width_px = 0.0f;
+    float line_height_px = 0.0f;
+    float baseline_from_content_top_px = 0.0f;
+};
+
+static bool computeInlineMetricsForNode(const dom::DOMNodePtr& node,
+                                        InlineMetrics& out_metrics,
+                                        float fallback_font_size_px) {
+    if (!node) {
+        return false;
+    }
+
+    const auto& style = node->getComputedStyle();
+    float font_size_px = style.font_size > 0.0f ? style.font_size : fallback_font_size_px;
+    if (font_size_px <= 0.0f) {
+        font_size_px = 16.0f;
+    }
+
+    // 收集该元素直接子节点中的文本，忽略嵌套元素，保持与 Painter 文本绘制一致
+    bool has_text_child = false;
+    bool has_element_child = false;
+    std::string raw_text;
+    for (const auto& child : node->getChildren()) {
+        if (!child) continue;
+        if (child->getType() == dom::DOMNode::NodeType::TEXT) {
+            raw_text += child->getTextContent();
+            has_text_child = true;
+        } else if (child->getType() == dom::DOMNode::NodeType::ELEMENT) {
+            has_element_child = true;
+        }
+    }
+
+    const std::string tag = node->getTagName();
+    const bool tag_prefers_text =
+        tag == "h1" || tag == "h2" || tag == "h3" || tag == "h4" ||
+        tag == "h5" || tag == "h6" || tag == "p" || tag == "span" ||
+        tag == "button" || tag == "code" || tag == "div" || tag == "footer";
+
+    if (!has_text_child || (!tag_prefers_text && has_element_child)) {
+        return false;
+    }
+
+    std::string text = collapseWhitespace(raw_text);
+    if (text.empty()) {
+        return false;
+    }
+
+    TextShaper shaper;
+    TextShapeRequest req{};
+    req.text = text;
+    req.font_family = style.font_family;
+    req.font_weight = style.font_weight;
+    req.font_size = font_size_px;
+
+    ShapedText shaped{};
+    if (!shaper.shape(req, shaped) || shaped.glyphs.empty()) {
+        return false;
+    }
+
+    const float scale = shaped.scale_to_pixels;
+
+    // 宽度：整段文本的 glyph 范围
+    float content_width_units = shaped.width_units;
+    if (content_width_units < 0.0f) {
+        content_width_units = 0.0f;
+    }
+    out_metrics.content_width_px = content_width_units * scale;
+
+    // 行高与 baseline：复用 Painter 中的度量逻辑，保证一致
+    float line_height_units = shaped.line_height_units;
+    float ascent_units = shaped.ascent_units;
+    float descent_units = shaped.descent_units;
+
+    if (line_height_units <= 0.0f) {
+        line_height_units = font_size_px / std::max(scale, 1e-3f);
+    }
+    if (ascent_units <= 0.0f) {
+        ascent_units = font_size_px / std::max(scale, 1e-3f);
+    }
+
+    float descent_abs_units = descent_units < 0.0f ? -descent_units : 0.0f;
+    float metrics_height_units = ascent_units + descent_abs_units;
+    if (metrics_height_units <= 0.0f) {
+        metrics_height_units = line_height_units;
+    }
+    float extra_leading_units = line_height_units - metrics_height_units;
+    if (extra_leading_units < 0.0f) {
+        extra_leading_units = 0.0f;
+    }
+    float top_leading_units = extra_leading_units * 0.5f;
+
+    out_metrics.line_height_px = line_height_units * scale;
+    out_metrics.baseline_from_content_top_px = (top_leading_units + ascent_units) * scale;
+    return true;
+}
+
+bool isInlineLevelDisplay(const std::string& display) {
+    return display == "inline" || display == "inline-block";
+}
+
+bool isInlineFormattingContext(const dom::DOMNodePtr& node) {
+    if (!node || node->getType() != dom::DOMNode::NodeType::ELEMENT) {
+        return false;
+    }
+
+    const auto& style = node->getComputedStyle();
+
+    // 不在根级大容器上启用内联格式化，避免一次性重写太多布局
+    const std::string tag = node->getTagName();
+    if (tag == "html" || tag == "body") {
+        return false;
+    }
+
+    if (style.display == "none" || style.display == "flex") {
+        return false;
+    }
+
+    bool has_inline_child = false;
+    bool has_block_like_child = false;
+
+    for (const auto& child : node->getChildren()) {
+        if (!child || child->getType() != dom::DOMNode::NodeType::ELEMENT) {
+            continue;
+        }
+        const auto& cs = child->getComputedStyle();
+        if (isInlineLevelDisplay(cs.display)) {
+            has_inline_child = true;
+        } else if (cs.display == "block" || cs.display == "flex" || cs.display == "none") {
+            has_block_like_child = true;
+        }
+    }
+
+    // 仅当存在 inline/inline-block 子元素，且没有混入其他 block/flex 子元素时，
+    // 将该容器视为内联格式化上下文。这样可以安全地覆盖 align_basic_layout 等场景，
+    // 又不影响通用 block 布局。
+    return has_inline_child && !has_block_like_child;
 }
 
 } // anonymous namespace
@@ -317,6 +457,13 @@ void Engine::calculateLayout(dom::DOMNodePtr root, float width, float height) {
 
     extractLayoutRecursive(layout_root_dom, yoga_root, 0.0f, 0.0f);
 
+    // After Yoga layout, run inline formatting context layout to adjust
+    // inline/inline-block children inside suitable containers.
+    layoutInlineFormattingContexts(layout_root_dom);
+
+    // Then layout positioned elements (position:absolute) relative to their containing blocks.
+    layoutPositionedElements(layout_root_dom);
+
     // Ensure the #document node itself still has a layout entry so rendering can start from it
     if (layout_root_dom.get() != root.get()) {
         auto& doc_layout = layout_cache[root.get()];
@@ -384,7 +531,7 @@ YGNode* Engine::createYogaNode(dom::DOMNodePtr dom_node) {
 
     // Recursively create or reuse Yoga nodes for children
     const auto& parent_style = dom_node->getComputedStyle();
-    const bool parent_is_block_like = parent_style.display != "flex";
+    const bool parent_is_block_like = (parent_style.layout_mode == dom::LayoutMode::Block);
 
     dom::DOMNodePtr prev_element_child;
     YGNode* prev_child_yoga = nullptr;
@@ -442,7 +589,7 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
     if (auto parent = dom_node->getParent()) {
         if (parent->getType() == dom::DOMNode::NodeType::ELEMENT) {
             const auto& parent_style = parent->getComputedStyle();
-            if (parent_style.display == "flex") {
+            if (parent_style.layout_mode == dom::LayoutMode::Flex) {
                 std::string dir = parent_style.flex_direction;
                 if (dir.empty()) dir = "row";
                 if (dir == "row" || dir == "row-reverse") {
@@ -482,18 +629,22 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
 void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yoga_node) {
     if (!yoga_node) return;
 
-    // Set display
-    if (style.display == "none") {
-        YGNodeStyleSetDisplay(yoga_node, YGDisplayNone);
-    } else if (style.display == "flex") {
-        YGNodeStyleSetDisplay(yoga_node, YGDisplayFlex);
-    } else {
-        YGNodeStyleSetDisplay(yoga_node, YGDisplayFlex);
+    // Set display based on layout mode
+    switch (style.layout_mode) {
+        case dom::LayoutMode::None:
+            YGNodeStyleSetDisplay(yoga_node, YGDisplayNone);
+            break;
+        case dom::LayoutMode::Block:
+        case dom::LayoutMode::Inline:
+        case dom::LayoutMode::Flex:
+        default:
+            YGNodeStyleSetDisplay(yoga_node, YGDisplayFlex);
+            break;
     }
 
     // Set flex direction
-    // For display:flex, respect flex_direction; for normal block layout, prefer column
-    if (style.display == "flex") {
+    // For flex layout, respect flex_direction; for block/inline, approximate as vertical stack
+    if (style.layout_mode == dom::LayoutMode::Flex) {
         if (style.flex_direction == "column") {
             YGNodeStyleSetFlexDirection(yoga_node, YGFlexDirectionColumn);
         } else if (style.flex_direction == "column-reverse") {
@@ -504,7 +655,7 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
             YGNodeStyleSetFlexDirection(yoga_node, YGFlexDirectionRow);
         }
     } else {
-        // Approximate block layout as a vertical stack
+        // Approximate block/inline layout as a vertical stack
         YGNodeStyleSetFlexDirection(yoga_node, YGFlexDirectionColumn);
     }
 
@@ -532,6 +683,29 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
         YGNodeStyleSetAlignItems(yoga_node, YGAlignFlexStart);
     }
 
+    // Set position type and offsets (relative/absolute)
+    if (style.position == "absolute") {
+        YGNodeStyleSetPositionType(yoga_node, YGPositionTypeAbsolute);
+    } else {
+        // static/relative/fixed 目前统一映射为 Yoga 的 relative，
+        // 但通过位置属性（top/right/bottom/left）实现 relative 偏移。
+        YGNodeStyleSetPositionType(yoga_node, YGPositionTypeRelative);
+    }
+
+    auto setPositionIfNeeded = [&](YGEdge edge, const dom::CSSValue& v) {
+        using Unit = dom::CSSValue::Unit;
+        if (v.unit == Unit::PIXEL) {
+            YGNodeStyleSetPosition(yoga_node, edge, v.value);
+        } else if (v.unit == Unit::PERCENT) {
+            YGNodeStyleSetPositionPercent(yoga_node, edge, v.value);
+        }
+    };
+
+    setPositionIfNeeded(YGEdgeTop, style.top);
+    setPositionIfNeeded(YGEdgeRight, style.right);
+    setPositionIfNeeded(YGEdgeBottom, style.bottom);
+    setPositionIfNeeded(YGEdgeLeft, style.left);
+
     // Set dimensions
     bool has_explicit_width = false;
     bool has_explicit_height = false;
@@ -552,10 +726,17 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
         has_explicit_height = true;
     }
 
-    // Fallback: for block-like elements without an explicit width,
+    // Fallback: for block-level elements without an explicit width,
     // stretch to full available width. This approximates HTML block layout
     // when we don't have intrinsic content measurement.
-    if (!has_explicit_width && style.display != "inline") {
+    //
+    // IMPORTANT: Do not apply this fallback to position:absolute elements.
+    // Absolute positioned boxes should use intrinsic sizing (or shrink-to-fit),
+    // otherwise Yoga will give them a 100% width box, which breaks the
+    // expected CSS semantics for badge-like elements such as `.abs-badge`.
+    if (!has_explicit_width &&
+        style.layout_mode == dom::LayoutMode::Block &&
+        style.position != "absolute") {
         YGNodeStyleSetWidthPercent(yoga_node, 100.0f);
     }
 
@@ -692,6 +873,407 @@ void Engine::destroyYogaNode(YGNode* node) {
     if (node) {
         YGNodeFree(node);
     }
+}
+
+void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
+    if (!root) {
+        return;
+    }
+
+    std::function<void(const dom::DOMNodePtr&)> walk;
+    walk = [this, &walk](const dom::DOMNodePtr& node) {
+        if (!node) {
+            return;
+        }
+
+        if (isInlineFormattingContext(node)) {
+            auto it_container = layout_cache.find(node.get());
+            if (it_container != layout_cache.end() && it_container->second) {
+                LayoutNode* container_layout = it_container->second.get();
+                const auto& container_style = node->getComputedStyle();
+
+                float container_x = container_layout->x;
+                float container_y = container_layout->y;
+                float container_w = container_layout->width;
+
+                float pad_left = container_style.padding_left.isPixel() ? container_style.padding_left.value : 0.0f;
+                float pad_right = container_style.padding_right.isPixel() ? container_style.padding_right.value : 0.0f;
+                float pad_top = container_style.padding_top.isPixel() ? container_style.padding_top.value : 0.0f;
+
+                float content_x = container_x + pad_left;
+                float content_y = container_y + pad_top;
+                float content_w = container_w - pad_left - pad_right;
+                if (content_w <= 0.0f) {
+                    content_w = container_w;
+                }
+
+                InlineMetrics container_metrics{};
+                bool has_container_text_metrics = computeInlineMetricsForNode(node, container_metrics, container_style.font_size);
+                float container_baseline_from_border_top = 0.0f;
+                float container_line_height_px = 0.0f;
+                if (has_container_text_metrics) {
+                    float border_w_container = container_style.border_width;
+                    if (border_w_container < 0.0f) {
+                        border_w_container = 0.0f;
+                    }
+                    container_line_height_px = container_metrics.line_height_px;
+                    container_baseline_from_border_top =
+                        border_w_container +
+                        (container_style.padding_top.isPixel() ? container_style.padding_top.value : 0.0f) +
+                        container_metrics.baseline_from_content_top_px;
+                }
+
+                struct InlineItem {
+                    dom::DOMNodePtr node;
+                    float margin_left = 0.0f;
+                    float margin_right = 0.0f;
+                    float preferred_width = 0.0f;
+                    float baseline_from_border_top = 0.0f;
+                    float line_height_px = 0.0f;
+                    float offset_x_in_content = 0.0f;
+                };
+
+                std::vector<InlineItem> items;
+                items.reserve(node->getChildren().size());
+
+                for (const auto& child : node->getChildren()) {
+                    if (!child || child->getType() != dom::DOMNode::NodeType::ELEMENT) {
+                        continue;
+                    }
+
+                    const auto& child_style = child->getComputedStyle();
+                    if (child_style.position == "absolute") {
+                        // 绝对定位元素不参与内联格式化上下文，由专门的定位布局阶段处理
+                        continue;
+                    }
+                    if (!isInlineLevelDisplay(child_style.display)) {
+                        continue;
+                    }
+
+                    InlineMetrics metrics{};
+                    if (!computeInlineMetricsForNode(child, metrics, container_style.font_size)) {
+                        continue;
+                    }
+
+                    InlineItem item{};
+                    item.node = child;
+
+                    item.margin_left = parsePixelValue(child_style.margin_left, content_w);
+                    item.margin_right = parsePixelValue(child_style.margin_right, content_w);
+
+                    float pad_l = child_style.padding_left.isPixel() ? child_style.padding_left.value : 0.0f;
+                    float pad_r = child_style.padding_right.isPixel() ? child_style.padding_right.value : 0.0f;
+                    float border_w = child_style.border_width;
+                    if (border_w < 0.0f) {
+                        border_w = 0.0f;
+                    }
+
+                    float width_px = 0.0f;
+                    if (child_style.width.isPixel()) {
+                        width_px = child_style.width.value;
+                    } else if (child_style.width.isPercent()) {
+                        width_px = parsePercentValue(child_style.width, content_w);
+                    } else {
+                        width_px = metrics.content_width_px + pad_l + pad_r + border_w * 2.0f;
+                    }
+                    if (width_px <= 0.0f) {
+                        width_px = metrics.line_height_px;
+                    }
+
+                    item.preferred_width = width_px;
+                    item.line_height_px = metrics.line_height_px;
+                    item.baseline_from_border_top = border_w + (child_style.padding_top.isPixel() ? child_style.padding_top.value : 0.0f) + metrics.baseline_from_content_top_px;
+
+                    items.push_back(item);
+                }
+
+                if (!items.empty() && content_w > 0.0f) {
+                    struct LineInfo {
+                        std::vector<size_t> item_indices;
+                        float max_baseline_from_border_top = 0.0f;
+                        float max_line_height_px = 0.0f;
+                    };
+
+                    std::vector<LineInfo> lines;
+                    LineInfo current_line{};
+                    if (has_container_text_metrics) {
+                        current_line.max_baseline_from_border_top = container_baseline_from_border_top;
+                        current_line.max_line_height_px = container_line_height_px;
+                    }
+                    float current_line_used_w = 0.0f;
+
+                    for (size_t i = 0; i < items.size(); ++i) {
+                        InlineItem& item = items[i];
+                        float total_w = item.margin_left + item.preferred_width + item.margin_right;
+
+                        if (!current_line.item_indices.empty() && current_line_used_w + total_w > content_w + 0.1f) {
+                            lines.push_back(current_line);
+                            current_line = LineInfo{};
+                            if (has_container_text_metrics) {
+                                current_line.max_baseline_from_border_top = container_baseline_from_border_top;
+                                current_line.max_line_height_px = container_line_height_px;
+                            }
+                            current_line_used_w = 0.0f;
+                        }
+
+                        item.offset_x_in_content = current_line_used_w + item.margin_left;
+                        current_line.item_indices.push_back(i);
+                        current_line_used_w += total_w;
+
+                        if (item.baseline_from_border_top > current_line.max_baseline_from_border_top) {
+                            current_line.max_baseline_from_border_top = item.baseline_from_border_top;
+                        }
+                        if (item.line_height_px > current_line.max_line_height_px) {
+                            current_line.max_line_height_px = item.line_height_px;
+                        }
+                    }
+
+                    if (!current_line.item_indices.empty()) {
+                        lines.push_back(current_line);
+                    }
+
+                    float current_line_top = content_y;
+                    for (const LineInfo& line : lines) {
+                        float baseline_y = current_line_top + line.max_baseline_from_border_top;
+
+                        for (size_t idx : line.item_indices) {
+                            InlineItem& item = items[idx];
+                            auto it_child_layout = layout_cache.find(item.node.get());
+                            if (it_child_layout == layout_cache.end() || !it_child_layout->second) {
+                                continue;
+                            }
+                            LayoutNode* child_layout = it_child_layout->second.get();
+
+                            float new_x = content_x + item.offset_x_in_content;
+                            float new_y = baseline_y - item.baseline_from_border_top;
+
+                            bool layout_changed = (child_layout->x != new_x) || (child_layout->y != new_y) ||
+                                                  (child_layout->width != item.preferred_width);
+
+                            child_layout->x = new_x;
+                            child_layout->y = new_y;
+                            child_layout->width = item.preferred_width;
+                            // 高度仍然沿用 Yoga 给出的值（如果存在），避免影响父级垂直布局。
+                            // 若 Yoga 未提供合理高度，则至少保证高度不小于一行文本。
+                            if (child_layout->height <= 0.0f) {
+                                child_layout->height = line.max_line_height_px;
+                            }
+
+                            child_layout->layout.position[0] = child_layout->x;
+                            child_layout->layout.position[1] = child_layout->y;
+                            child_layout->layout.dimensions[0] = child_layout->width;
+                            child_layout->layout.dimensions[1] = child_layout->height;
+
+                            if (layout_changed) {
+                                dirty_rect_.expand(child_layout->x,
+                                                   child_layout->y,
+                                                   child_layout->width,
+                                                   child_layout->height);
+                            }
+                        }
+
+                        current_line_top += line.max_line_height_px;
+                    }
+                }
+            }
+        }
+
+        for (const auto& child : node->getChildren()) {
+            if (child && child->getType() == dom::DOMNode::NodeType::ELEMENT) {
+                walk(child);
+            }
+        }
+    };
+
+    walk(root);
+}
+
+void Engine::layoutPositionedElements(dom::DOMNodePtr root) {
+    if (!root) {
+        return;
+    }
+
+    std::function<void(const dom::DOMNodePtr&)> walk;
+    walk = [this, root, &walk](const dom::DOMNodePtr& node) {
+        if (!node) {
+            return;
+        }
+
+        const auto& style = node->getComputedStyle();
+        if (style.position == "absolute") {
+            // Find containing block: nearest ancestor with position != static.
+            dom::DOMNodePtr containing_block = nullptr;
+            dom::DOMNodePtr current = node->getParent();
+            while (current) {
+                const auto& cs = current->getComputedStyle();
+                if (cs.position != "static") {
+                    containing_block = current;
+                    break;
+                }
+                current = current->getParent();
+            }
+
+            if (!containing_block) {
+                // Fallback to the layout root if no positioned ancestor is found.
+                containing_block = root;
+            }
+
+            auto it_layout = layout_cache.find(node.get());
+            auto it_cb_layout = layout_cache.find(containing_block.get());
+            if (it_layout != layout_cache.end() && it_layout->second &&
+                it_cb_layout != layout_cache.end() && it_cb_layout->second) {
+                LayoutNode* layout = it_layout->second.get();
+                LayoutNode* cb_layout = it_cb_layout->second.get();
+
+                const auto& cb_style = containing_block->getComputedStyle();
+                const auto& abs_style = node->getComputedStyle();
+
+                std::string debug_class = node->getAttribute("class");
+                bool debug_is_abs_badge = debug_class.find("abs-badge") != std::string::npos;
+
+                float cb_x = cb_layout->x;
+                float cb_y = cb_layout->y;
+                float cb_w = cb_layout->width;
+                float cb_h = cb_layout->height;
+
+                if (cb_w <= 0.0f || cb_h <= 0.0f) {
+                    // Degenerate containing block, keep existing layout.
+                } else {
+                    // 若 absolute 盒子的 CSS width/height 为 auto（未显式指定），
+                    // 则无论 Yoga 给出的尺寸为何，都基于文本内容做一次 intrinsic sizing：
+                    // 宽度 = 文本内容宽 + 水平 padding + border；
+                    // 高度 = 一行文本行高 + 垂直 padding + border。
+                    const bool abs_width_auto = abs_style.width.isAuto();
+                    const bool abs_height_auto = abs_style.height.isAuto();
+                    if (abs_width_auto || abs_height_auto ||
+                        layout->width <= 0.0f || layout->height <= 0.0f) {
+                        InlineMetrics metrics{};
+                        if (computeInlineMetricsForNode(node, metrics, abs_style.font_size)) {
+                            float pad_l = abs_style.padding_left.isPixel() ? abs_style.padding_left.value : 0.0f;
+                            float pad_r = abs_style.padding_right.isPixel() ? abs_style.padding_right.value : 0.0f;
+                            float pad_t = abs_style.padding_top.isPixel() ? abs_style.padding_top.value : 0.0f;
+                            float pad_b = abs_style.padding_bottom.isPixel() ? abs_style.padding_bottom.value : 0.0f;
+                            float border_w = abs_style.border_width;
+                            if (border_w < 0.0f) {
+                                border_w = 0.0f;
+                            }
+                            float box_w_intrinsic = metrics.content_width_px + pad_l + pad_r + border_w * 2.0f;
+                            float box_h_intrinsic = metrics.line_height_px + pad_t + pad_b + border_w * 2.0f;
+
+                            if (debug_is_abs_badge) {
+                                SDL_Log("[LayoutEngine] ABS badge intrinsic: content_w=%.2f line_h=%.2f pad_l=%.1f pad_r=%.1f pad_t=%.1f pad_b=%.1f border=%.1f -> box_w=%.2f box_h=%.2f (width_auto=%d height_auto=%d before: w=%.2f h=%.2f)",
+                                        metrics.content_width_px, metrics.line_height_px,
+                                        pad_l, pad_r, pad_t, pad_b, border_w,
+                                        box_w_intrinsic, box_h_intrinsic,
+                                        abs_width_auto ? 1 : 0, abs_height_auto ? 1 : 0,
+                                        layout->width, layout->height);
+                            }
+
+                            if (box_w_intrinsic > 0.0f && box_h_intrinsic > 0.0f) {
+                                if (abs_width_auto || layout->width <= 0.0f) {
+                                    layout->width = box_w_intrinsic;
+                                }
+                                if (abs_height_auto || layout->height <= 0.0f) {
+                                    layout->height = box_h_intrinsic;
+                                }
+                                layout->layout.dimensions[0] = layout->width;
+                                layout->layout.dimensions[1] = layout->height;
+
+                                if (debug_is_abs_badge) {
+                                    SDL_Log("[LayoutEngine] ABS badge final size: w=%.2f h=%.2f",
+                                            layout->width, layout->height);
+                                }
+                            }
+                        } else if (debug_is_abs_badge) {
+                            SDL_Log("[LayoutEngine] ABS badge intrinsic metrics FAILED (font_size=%.1f)",
+                                    abs_style.font_size);
+                        }
+                    } else if (debug_is_abs_badge) {
+                        SDL_Log("[LayoutEngine] ABS badge intrinsic sizing skipped (width_auto=%d height_auto=%d layout_w=%.2f layout_h=%.2f)",
+                                abs_width_auto ? 1 : 0, abs_height_auto ? 1 : 0,
+                                layout->width, layout->height);
+                    }
+
+                    // In CSS，包含块通常是 padding box。这里先基于 border box，后续可视需要加上 padding。
+                    auto computeOffsetPx = [this](const dom::CSSValue& v, float parent_size) -> float {
+                        if (v.isPixel()) {
+                            return v.value;
+                        }
+                        if (v.isPercent()) {
+                            return parsePercentValue(v, parent_size);
+                        }
+                        return 0.0f;
+                    };
+
+                    bool has_left = style.left.isPixel() || style.left.isPercent();
+                    bool has_right = style.right.isPixel() || style.right.isPercent();
+                    bool has_top = style.top.isPixel() || style.top.isPercent();
+                    bool has_bottom = style.bottom.isPixel() || style.bottom.isPercent();
+
+                    float left_px = has_left ? computeOffsetPx(style.left, cb_w) : 0.0f;
+                    float right_px = has_right ? computeOffsetPx(style.right, cb_w) : 0.0f;
+                    float top_px = has_top ? computeOffsetPx(style.top, cb_h) : 0.0f;
+                    float bottom_px = has_bottom ? computeOffsetPx(style.bottom, cb_h) : 0.0f;
+
+                    if (debug_is_abs_badge) {
+                        SDL_Log("[LayoutEngine] ABS badge offsets: has_left=%d has_right=%d has_top=%d has_bottom=%d left_px=%.1f right_px=%.1f top_px=%.1f bottom_px=%.1f cb=(%.1f,%.1f,%.1f,%.1f) box=(%.1f,%.1f)",
+                                has_left ? 1 : 0, has_right ? 1 : 0,
+                                has_top ? 1 : 0, has_bottom ? 1 : 0,
+                                left_px, right_px, top_px, bottom_px,
+                                cb_x, cb_y, cb_w, cb_h,
+                                layout->width, layout->height);
+                    }
+
+                    float box_w = layout->width;
+                    float box_h = layout->height;
+
+                    float offset_x_local = 0.0f;
+                    float offset_y_local = 0.0f;
+
+                    // Horizontal: prefer left if specified; otherwise use right.
+                    if (has_left) {
+                        offset_x_local = left_px;
+                    } else if (has_right) {
+                        offset_x_local = cb_w - right_px - box_w;
+                    } else {
+                        // No explicit offset: keep the original relative offset within containing block.
+                        offset_x_local = layout->x - cb_x;
+                    }
+
+                    // Vertical: prefer top if specified; otherwise use bottom.
+                    if (has_top) {
+                        offset_y_local = top_px;
+                    } else if (has_bottom) {
+                        offset_y_local = cb_h - bottom_px - box_h;
+                    } else {
+                        offset_y_local = layout->y - cb_y;
+                    }
+
+                    float new_x = cb_x + offset_x_local;
+                    float new_y = cb_y + offset_y_local;
+
+                    bool layout_changed = (layout->x != new_x) || (layout->y != new_y);
+
+                    layout->x = new_x;
+                    layout->y = new_y;
+                    layout->layout.position[0] = new_x;
+                    layout->layout.position[1] = new_y;
+
+                    if (layout_changed) {
+                        dirty_rect_.expand(new_x, new_y, layout->width, layout->height);
+                    }
+                }
+            }
+        }
+
+        for (const auto& child : node->getChildren()) {
+            if (child && child->getType() == dom::DOMNode::NodeType::ELEMENT) {
+                walk(child);
+            }
+        }
+    };
+
+    walk(root);
 }
 
 } // namespace dong::layout

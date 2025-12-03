@@ -56,9 +56,17 @@ public:
     const AtlasEntry* addGlyph(uint32_t glyph_id, const std::string& font_path);
 
     // 获取 Atlas GPU 纹理（用于绑定到 shader）
-    SDL_GPUTexture* getAtlasTexture() const { return atlas_texture_; }
+    // 为了兼容旧代码，此接口返回第 0 页的纹理；
+    // 新代码应优先使用 getAtlasTextureForPage/ getPageCount 组合。
+    SDL_GPUTexture* getAtlasTexture() const;
 
-    // 获取 Atlas 尺寸
+    // 按页获取 Atlas 纹理；若页索引越界或纹理不存在则返回 nullptr。
+    SDL_GPUTexture* getAtlasTextureForPage(uint32_t page_index) const;
+
+    // 当前已分配的页数
+    uint32_t getPageCount() const { return static_cast<uint32_t>(pages_.size()); }
+
+    // 获取 Atlas 页的逻辑尺寸（所有页共享相同尺寸）
     uint32_t getWidth() const { return atlas_width_; }
     uint32_t getHeight() const { return atlas_height_; }
 
@@ -66,24 +74,43 @@ public:
     float getGlyphDistanceRange() const { return glyph_distance_range_; }
 
 private:
+    struct AtlasPage {
+        SDL_GPUTexture* texture = nullptr;
+        uint32_t width = 0;
+        uint32_t height = 0;
+        uint32_t cursor_x = 0;
+        uint32_t cursor_y = 0;
+        uint32_t row_height = 0;
+        uint32_t page_index = 0;
+        uint32_t glyph_count = 0;
+        uint64_t last_used = 0;
+    };
+
     GPUDevice* gpu_device_ = nullptr;
-    SDL_GPUTexture* atlas_texture_ = nullptr;
 
     uint32_t atlas_width_ = 2048;
     uint32_t atlas_height_ = 2048;
 
-    // 简单装箱：行优先
-    uint32_t cursor_x_ = 0;
-    uint32_t cursor_y_ = 0;
-    uint32_t row_height_ = 0;
-
     uint32_t glyph_bitmap_size_ = 64;
     float glyph_distance_range_ = 8.0f;
+
+    // 页集合与总体容量限制
+    std::vector<AtlasPage> pages_;
+    uint32_t max_pages_ = 4;
+    uint64_t usage_counter_ = 0;
 
     // 缓存：font_path#glyph_id -> AtlasEntry
     std::unordered_map<std::string, AtlasEntry> cache_;
 
+    // 反向索引：page_index -> 该页上承载的 glyph key 列表
+    std::unordered_map<uint32_t, std::vector<std::string> > page_to_keys_;
+
     std::string makeGlyphKey(uint32_t codepoint, const std::string& font_path) const;
+
+    // 页管理
+    bool createPage();
+    AtlasPage* selectPageForGlyph(uint32_t glyph_width, uint32_t glyph_height);
+    AtlasPage* evictAndRecyclePage();
 
     // 内部辅助：为指定字符生成 MSDF 位图（design units 模式）
     bool generateMSDF(uint32_t codepoint, const std::string& font_path,

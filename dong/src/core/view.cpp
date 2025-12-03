@@ -321,9 +321,11 @@ SDL_GPUTexture* View::renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, 
     
     SDL_Log("[View::renderToGPUTexture] root->isLayoutDirty() = %s", root->isLayoutDirty() ? "TRUE" : "FALSE");
     
-    // 执行布局计算（如果需要）
-    if (layout_engine && root->isLayoutDirty()) {
-        SDL_Log("[View::renderToGPUTexture] Calculating layout...");
+    // 为离屏渲染强制执行一次完整布局，以确保 absolute / inline 等最新逻辑
+    // 始终生效，而不是依赖增量 dirty 标记（截图对齐场景更看重正确性而非微观性能）。
+    if (layout_engine) {
+        SDL_Log("[View::renderToGPUTexture] Calculating layout (offscreen pass, forced)...");
+        root->markLayoutDirty();
         layout_engine->calculateLayout(root, static_cast<float>(width), static_cast<float>(height));
         root->clearLayoutDirtyRecursive();
         SDL_Log("[View::renderToGPUTexture] Layout calculated");
@@ -373,6 +375,26 @@ SDL_GPUTexture* View::renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, 
                        i, layout->x, layout->y, layout->width, layout->height);
             }
         }
+
+        auto badges = dom_manager->getElementsByClassName("abs-badge");
+        std::printf("[Layout] Found %zu elements with class 'abs-badge'\n", badges.size());
+        for (size_t i = 0; i < badges.size(); ++i) {
+            const auto* layout = layout_engine->getLayout(badges[i]);
+            const auto& st = badges[i]->getComputedStyle();
+            if (layout) {
+                std::printf("[Layout] abs-badge[%zu]: at (%.1f, %.1f) size %.1fx%.1f display=%s position=%s\n",
+                           i,
+                           layout->x, layout->y, layout->width, layout->height,
+                           st.display.c_str(), st.position.c_str());
+            } else {
+                std::printf("[Layout] abs-badge[%zu]: NO LAYOUT (display=%s position=%s)\n",
+                           i, st.display.c_str(), st.position.c_str());
+            }
+        }
+
+        auto chips = dom_manager->getElementsByClassName("inline-chip");
+        std::printf("[Layout] Found %zu elements with class 'inline-chip'\n", chips.size());
+
         std::fflush(stdout);
     }
     
