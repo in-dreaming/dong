@@ -77,14 +77,6 @@ bool TextShaper::shape(const TextShapeRequest& request, ShapedText& out_text) {
     out_text.glyphs.reserve(glyph_count);
     
     // 调试日志
-    static int shape_count = 0;
-    if (shape_count < 5) {
-        SDL_Log("[TextShaper] Request #%d: font_size=%.1f units_per_em=%u scale=%.4f text='%s'",
-               shape_count, request.font_size, units_per_em, out_text.scale_to_pixels,
-               request.text.substr(0, 30).c_str());
-        ++shape_count;
-    }
-
     float pen_x_units = 0.0f;
     float pen_y_units = 0.0f;
 

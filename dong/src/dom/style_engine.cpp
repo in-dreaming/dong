@@ -165,6 +165,8 @@ void StyleEngine::computeStyles(DOMNodePtr node) {
             computed.font_size = rule.style.font_size;
         if (!rule.style.font_weight.empty()) 
             computed.font_weight = rule.style.font_weight;
+        if (!rule.style.font_family.empty() && rule.style.font_family != "Arial")
+            computed.font_family = rule.style.font_family;
         if (!rule.style.text_align.empty()) 
             computed.text_align = rule.style.text_align;
         if (rule.style.letter_spacing_em != 0.0f)
