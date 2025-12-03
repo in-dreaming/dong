@@ -21,7 +21,11 @@ struct CSSValue {
     };
 
     float value = 0.0f;
-    Unit unit = Unit::AUTO;
+    // Default to PIXEL (0px) for margin/padding properties.
+    // This matches CSS behavior where unset margins default to 0, not auto.
+    // Properties that should default to auto (like width/height) must be
+    // explicitly initialized with Unit::AUTO.
+    Unit unit = Unit::PIXEL;
 
     CSSValue() = default;
     CSSValue(float v, Unit u) : value(v), unit(u) {}
@@ -51,12 +55,14 @@ enum class LayoutMode {
 // Computed style properties
 struct ComputedStyle {
     // Box Model
-    CSSValue width;
-    CSSValue height;
-    CSSValue min_width;
-    CSSValue max_width;
-    CSSValue min_height;
-    CSSValue max_height;
+    // width/height default to AUTO (auto-sizing)
+    CSSValue width = CSSValue(0.0f, CSSValue::Unit::AUTO);
+    CSSValue height = CSSValue(0.0f, CSSValue::Unit::AUTO);
+    CSSValue min_width = CSSValue(0.0f, CSSValue::Unit::AUTO);
+    CSSValue max_width = CSSValue(0.0f, CSSValue::Unit::AUTO);
+    CSSValue min_height = CSSValue(0.0f, CSSValue::Unit::AUTO);
+    CSSValue max_height = CSSValue(0.0f, CSSValue::Unit::AUTO);
+    // margins/paddings default to 0px (PIXEL), not auto
     CSSValue margin_top;
     CSSValue margin_right;
     CSSValue margin_bottom;
@@ -71,10 +77,11 @@ struct ComputedStyle {
     std::string display = "block";  // block, inline, inline-block, flex, none
     LayoutMode layout_mode = LayoutMode::Block;
     std::string position = "static"; // static, relative, absolute, fixed
-    CSSValue top;
-    CSSValue right;
-    CSSValue bottom;
-    CSSValue left;
+    // Position offsets default to AUTO (not set)
+    CSSValue top = CSSValue(0.0f, CSSValue::Unit::AUTO);
+    CSSValue right = CSSValue(0.0f, CSSValue::Unit::AUTO);
+    CSSValue bottom = CSSValue(0.0f, CSSValue::Unit::AUTO);
+    CSSValue left = CSSValue(0.0f, CSSValue::Unit::AUTO);
     int z_index = 0;
 
     // Visual
@@ -107,7 +114,7 @@ struct ComputedStyle {
     float flex = 0.0f;
     float flex_grow = 0.0f;
     float flex_shrink = 1.0f;
-    CSSValue flex_basis;
+    CSSValue flex_basis = CSSValue(0.0f, CSSValue::Unit::AUTO);  // default to auto
     float gap = 0.0f;                       // gap 属性（flex/grid 容器间距）
 
     // Transform（极简版，仅 translate/scale，用于 LayerTree + 缓存覆盖）
