@@ -187,7 +187,16 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         layer_bounds.height = static_cast<float>(surface_->getHeight());
     }
 
-    bool has_isolation = style.isolation_isolate && (layer_bounds.width > 0.0f && layer_bounds.height > 0.0f);
+    const bool is_scroll_container =
+        should_apply_clip &&
+        (style.overflow == "scroll" || style.overflow == "auto");
+
+    const bool has_transform =
+        (style.transform_translate_x != 0.0f || style.transform_translate_y != 0.0f ||
+         style.transform_scale_x != 1.0f || style.transform_scale_y != 1.0f);
+
+    bool has_isolation = (style.isolation_isolate || is_scroll_container || has_transform) &&
+                         (layer_bounds.width > 0.0f && layer_bounds.height > 0.0f);
     bool needs_layer = has_isolation || clamped_opacity < 0.999f;
     int parent_layer_index = layer_stack_.empty() ? -1 : layer_stack_.back();
     bool pushed_layer_node = false;
@@ -205,6 +214,10 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         layer_node.bounds = layer_bounds;
         layer_node.opacity = clamped_opacity;
         layer_node.transform = LayerTransform::identity();
+        layer_node.transform.m[0] = style.transform_scale_x;
+        layer_node.transform.m[4] = style.transform_scale_y;
+        layer_node.transform.m[2] = style.transform_translate_x;
+        layer_node.transform.m[5] = style.transform_translate_y;
         layer_node.scroll_x = 0.0f;
         layer_node.scroll_y = 0.0f;
         layer_node.is_surface = has_isolation;

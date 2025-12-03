@@ -770,7 +770,7 @@ float4 main(PSInput input) : SV_Target0 {
     float dy = ddy(dist);
     float fw = abs(dx) + abs(dy);
     float width = max(fw * max(invDPR, 1.0f / 8.0f), 1.0f / 256.0f);
-    float alpha = saturate(dist / width + 0.5f);
+    float alpha = saturate(dist / width + 0.02f);
 
     if (alpha <= 0.0f) {
         discard;
@@ -907,6 +907,7 @@ void GPUDriverSDL::beginFrame() {
         return;
     }
 
+    ++frame_index_;
     in_frame_ = true;
 }
 
@@ -935,6 +936,8 @@ void GPUDriverSDL::beginFrameOffscreen(SDL_GPUTexture* target, uint32_t width, u
         SDL_Log("GPUDriverSDL::beginFrameOffscreen: failed to acquire command buffer");
         return;
     }
+
+    ++frame_index_;
 
     // 保存纹理尺寸
     offscreen_width_ = width;
@@ -1228,6 +1231,8 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
 
     std::vector<ClipStackEntry> clip_stack;
     PipelineBindingState pipeline_state;
+    uint32_t debug_layer_cache_rasterized = 0;
+    uint32_t debug_layer_cache_reused = 0;
 
     auto apply_scissor = [&](SDL_GPURenderPass* target_pass) {
         if (!target_pass) {
@@ -1444,7 +1449,9 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             if (!layer_dirty && cache_entry && cache_entry->texture) {
                 // 非脏图层且有有效缓存：不切换 render target，仅记录状态并开始跳过内部绘制
                 if (debug_log_layer_cache_) {
-                    SDL_Log("[GPUDriverSDL layer-cache] reuse layer id=%llu size=%ux%u bounds=(%.1f,%.1f,%.1f,%.1f)",
+                    ++debug_layer_cache_reused;
+                    SDL_Log("[GPUDriverSDL layer-cache] frame=%llu reuse layer id=%llu size=%ux%u bounds=(%.1f,%.1f,%.1f,%.1f)",
+                            frame_index_,
                             static_cast<unsigned long long>(layer_id),
                             static_cast<unsigned int>(cache_entry->width),
                             static_cast<unsigned int>(cache_entry->height),
@@ -1552,7 +1559,9 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             if (debug_log_layer_cache_) {
                 const Uint32 log_width = target_w;
                 const Uint32 log_height = target_h;
-                SDL_Log("[GPUDriverSDL layer-cache] rasterize layer id=%llu size=%ux%u bounds=(%.1f,%.1f,%.1f,%.1f)",
+                ++debug_layer_cache_rasterized;
+                SDL_Log("[GPUDriverSDL layer-cache] frame=%llu rasterize layer id=%llu size=%ux%u bounds=(%.1f,%.1f,%.1f,%.1f)",
+                        frame_index_,
                         static_cast<unsigned long long>(layer_id),
                         static_cast<unsigned int>(log_width),
                         static_cast<unsigned int>(log_height),
@@ -1631,10 +1640,20 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 };
 
                 LayerCompositeUniforms u{};
-                u.rect[0] = layer_info.bounds.x;
-                u.rect[1] = layer_info.bounds.y;
-                u.rect[2] = layer_info.bounds.width;
-                u.rect[3] = layer_info.bounds.height;
+                float sx = layer_info.transform[0];
+                float sy = layer_info.transform[4];
+                if (sx == 0.0f) sx = 1.0f;
+                if (sy == 0.0f) sy = 1.0f;
+                float tx = layer_info.transform[2];
+                float ty = layer_info.transform[5];
+                float draw_x = layer_info.bounds.x + tx;
+                float draw_y = layer_info.bounds.y + ty;
+                float draw_w = layer_info.bounds.width * sx;
+                float draw_h = layer_info.bounds.height * sy;
+                u.rect[0] = draw_x;
+                u.rect[1] = draw_y;
+                u.rect[2] = draw_w;
+                u.rect[3] = draw_h;
 
                 float tex_w = static_cast<float>(layer_info.width);
                 float tex_h = static_cast<float>(layer_info.height);
@@ -1716,10 +1735,20 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 };
 
                 LayerCompositeUniforms u{};
-                u.rect[0] = layer_info.bounds.x;
-                u.rect[1] = layer_info.bounds.y;
-                u.rect[2] = layer_info.bounds.width;
-                u.rect[3] = layer_info.bounds.height;
+                float sx = layer_info.transform[0];
+                float sy = layer_info.transform[4];
+                if (sx == 0.0f) sx = 1.0f;
+                if (sy == 0.0f) sy = 1.0f;
+                float tx = layer_info.transform[2];
+                float ty = layer_info.transform[5];
+                float draw_x = layer_info.bounds.x + tx;
+                float draw_y = layer_info.bounds.y + ty;
+                float draw_w = layer_info.bounds.width * sx;
+                float draw_h = layer_info.bounds.height * sy;
+                u.rect[0] = draw_x;
+                u.rect[1] = draw_y;
+                u.rect[2] = draw_w;
+                u.rect[3] = draw_h;
 
                 float tex_w = static_cast<float>(layer_info.width);
                 float tex_h = static_cast<float>(layer_info.height);
@@ -2064,6 +2093,13 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             // 目前先忽略其他绘制类命令
             break;
         }
+    }
+
+    if (debug_log_layer_cache_ && (debug_layer_cache_rasterized > 0 || debug_layer_cache_reused > 0)) {
+        SDL_Log("[GPUDriverSDL layer-cache] frame=%llu summary: rasterize=%u, reuse=%u",
+                frame_index_,
+                static_cast<unsigned int>(debug_layer_cache_rasterized),
+                static_cast<unsigned int>(debug_layer_cache_reused));
     }
 
     // Debug: 按 GPUCommandList 中的 draw_batches 做一次批次遍历并输出日志

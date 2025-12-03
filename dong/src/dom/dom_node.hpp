@@ -77,6 +77,12 @@ struct ComputedStyle {
     float flex_grow = 0.0f;
     float flex_shrink = 1.0f;
     CSSValue flex_basis;
+
+    // Transform（极简版，仅 translate/scale，用于 LayerTree + 缓存覆盖）
+    float transform_translate_x = 0.0f;
+    float transform_translate_y = 0.0f;
+    float transform_scale_x = 1.0f;
+    float transform_scale_y = 1.0f;
 };
 
 // DOM Node representation

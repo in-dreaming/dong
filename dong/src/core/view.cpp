@@ -3,6 +3,7 @@
 #include <string>
 #include <cstring>
 #include <functional>
+#include <cstdlib>
 #include <SDL3/SDL_log.h>
 #include <SDL3/SDL_gpu.h>
 #include "../dom/dom_manager.hpp"
@@ -56,6 +57,36 @@ DOMNodePtr hitTestElementAt(dong::dom::Manager* dom_mgr, dong::layout::Engine* l
     auto root = dom_mgr->getRoot();
     if (!root) return nullptr;
     return hitTestRecursive(root, layout_engine, x, y);
+}
+
+void debugLogLayerTreeIfEnabled(const dong::render::LayerTree& tree) {
+    const char* env = std::getenv("DONG_DEBUG_LAYER_TREE");
+    if (!env || env[0] != '1') {
+        return;
+    }
+
+    SDL_Log("[LayerTree] nodes=%zu, root=%d",
+            tree.nodes.size(),
+            tree.root_index);
+
+    for (std::size_t i = 0; i < tree.nodes.size(); ++i) {
+        const auto& node = tree.nodes[i];
+        SDL_Log("[LayerTree] node[%zu]: id=%llu parent=%d type=%d bounds=(%.1f,%.1f,%.1f,%.1f) opacity=%.3f surface=%d dirty(content=%d,transform=%d,opacity=%d,scroll=%d)",
+                i,
+                static_cast<unsigned long long>(node.id),
+                node.parent,
+                static_cast<int>(node.type),
+                node.bounds.x,
+                node.bounds.y,
+                node.bounds.width,
+                node.bounds.height,
+                node.opacity,
+                node.is_surface ? 1 : 0,
+                node.content_dirty ? 1 : 0,
+                node.transform_dirty ? 1 : 0,
+                node.opacity_dirty ? 1 : 0,
+                node.scroll_dirty ? 1 : 0);
+    }
 }
 
 } // anonymous namespace
@@ -213,6 +244,7 @@ void View::update() {
         render::GPUCommandList cmd_list;
         SDL_Log("[View::update] Compiling DisplayList to GPUCommandList...");
         const render::LayerTree& layer_tree = painter->getLayerTree();
+        debugLogLayerTreeIfEnabled(layer_tree);
         compiler.compile(dl, cmd_list, &layer_tree);
         SDL_Log("[View::update] GPUCommandList compiled with %zu commands", cmd_list.commands.size());
 
@@ -352,6 +384,7 @@ SDL_GPUTexture* View::renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, 
     render::GPUCompiler compiler;
     render::GPUCommandList cmd_list;
     const render::LayerTree& layer_tree = painter->getLayerTree();
+    debugLogLayerTreeIfEnabled(layer_tree);
     compiler.compile(dl, cmd_list, &layer_tree);
     SDL_Log("[View::renderToGPUTexture] GPUCommandList has %zu commands", cmd_list.commands.size());
     

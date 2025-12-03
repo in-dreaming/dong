@@ -52,6 +52,7 @@ private:
     bool in_frame_ = false;
     bool debug_log_draw_batches_ = false;
     bool debug_log_layer_cache_ = false;
+    unsigned long long frame_index_ = 0;
     
     // Offscreen rendering support
     SDL_GPUTexture* offscreen_target_ = nullptr;

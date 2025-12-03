@@ -846,6 +846,102 @@ void StyleEngine::applyStyleProperty(const std::string& property, const std::str
         });
         style.isolation_isolate = (lowered == "isolate");
     }
+    else if (prop == "transform") {
+        // 极简 transform 支持：只解析 translate/scale，用于 LayerTree 图层平移/缩放
+        std::string lowered = val;
+        std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char c) {
+            return static_cast<char>(std::tolower(c));
+        });
+
+        // 默认重置为 identity
+        style.transform_translate_x = 0.0f;
+        style.transform_translate_y = 0.0f;
+        style.transform_scale_x = 1.0f;
+        style.transform_scale_y = 1.0f;
+
+        auto trim = [this](const std::string& s) {
+            return trimWhitespace(s);
+        };
+
+        if (lowered == "none") {
+            return;
+        }
+
+        auto parseArgs = [&trim](const std::string& args) -> std::vector<std::string> {
+            std::vector<std::string> result;
+            std::string current;
+            for (char c : args) {
+                if (c == ',' || std::isspace(static_cast<unsigned char>(c))) {
+                    if (!current.empty()) {
+                        result.push_back(trim(current));
+                        current.clear();
+                    }
+                } else {
+                    current.push_back(c);
+                }
+            }
+            if (!current.empty()) {
+                result.push_back(trim(current));
+            }
+            return result;
+        };
+
+        auto parseLengthToPx = [&](const std::string& s) -> float {
+            CSSValue v = parseLength(s);
+            if (v.unit == CSSValue::Unit::PIXEL) {
+                return v.value;
+            }
+            return 0.0f;
+        };
+
+        auto handleFunc = [&](const std::string& func_name, const std::string& args_raw) {
+            std::string name = trim(func_name);
+            std::string args = trim(args_raw);
+
+            if (name == "translate" || name == "translate3d") {
+                auto parts = parseArgs(args);
+                if (!parts.empty()) {
+                    style.transform_translate_x = parseLengthToPx(parts[0]);
+                    if (parts.size() > 1) {
+                        style.transform_translate_y = parseLengthToPx(parts[1]);
+                    }
+                }
+            } else if (name == "translatex") {
+                style.transform_translate_x = parseLengthToPx(args);
+            } else if (name == "translatey") {
+                style.transform_translate_y = parseLengthToPx(args);
+            } else if (name == "scale") {
+                auto parts = parseArgs(args);
+                if (!parts.empty()) {
+                    float sx = parseFloat(parts[0]);
+                    float sy = (parts.size() > 1) ? parseFloat(parts[1]) : sx;
+                    if (sx != 0.0f) style.transform_scale_x = sx;
+                    if (sy != 0.0f) style.transform_scale_y = sy;
+                }
+            } else if (name == "scalex") {
+                float sx = parseFloat(args);
+                if (sx != 0.0f) style.transform_scale_x = sx;
+            } else if (name == "scaley") {
+                float sy = parseFloat(args);
+                if (sy != 0.0f) style.transform_scale_y = sy;
+            }
+        };
+
+        // 允许 transform 里同时出现 scale/translate，顺序目前不影响（仅做简单组合）
+        size_t pos = 0;
+        while (pos < lowered.size()) {
+            size_t lparen = lowered.find('(', pos);
+            if (lparen == std::string::npos) break;
+            size_t rparen = lowered.find(')', lparen + 1);
+            if (rparen == std::string::npos) break;
+
+            std::string func_name = lowered.substr(pos, lparen - pos);
+            std::string args = lowered.substr(lparen + 1, rparen - lparen - 1);
+            handleFunc(func_name, args);
+
+            pos = rparen + 1;
+        }
+    }
 }
 
 std::pair<std::string, ComputedStyle> StyleEngine::parseRule(const std::string& rule_str) {
