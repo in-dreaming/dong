@@ -20,11 +20,12 @@ enum class GPUCommandType : uint8_t {
     BeginPass,
     EndPass,
 
-    // 绘制命令：一条命令对应一个“逻辑图元批次”
+    // 绘制命令：一条命令对应一个"逻辑图元批次"
     // 后续可以通过 instance buffer 将其中的 rect/image/text 扩展为真正的 GPU instancing。
     DrawInstancedQuads,      // 纯色矩形（当前每条命令只画 1 个 quad）
     DrawImageQuad,           // 图片 quad
     DrawRoundedRectQuad,     // 圆角矩形 quad（analytic SDF）
+    DrawShadowQuad,          // 带模糊的阴影 quad（SDF + blur）
     DrawText,                // 文本 glyph run
 
     // 剪裁与图层命令
@@ -35,7 +36,7 @@ enum class GPUCommandType : uint8_t {
 };
 
 // GPU 级别的通用命令。这里刻意只保留当前真实使用的字段，
-// 避免为了“未来也许会用”的场景引入多余的抽象。
+// 避免为了"未来也许会用"的场景引入多余的抽象。
 struct GPUCommand {
     GPUCommandType type;
 
@@ -50,7 +51,8 @@ struct GPUCommand {
     // 通用几何/颜色参数：不同命令按需读取
     Rect rect;      // 目标矩形（像素坐标）
     Color color;    // 颜色或调制色（用于纯色/圆角矩形、后续也可用于调制图片）
-    float radius = 0.0f; // 圆角矩形半径（仅在 DrawRoundedRectQuad 时使用）
+    float radius = 0.0f; // 圆角矩形半径（仅在 DrawRoundedRectQuad/DrawShadowQuad 时使用）
+    float blur = 0.0f;   // 模糊半径（仅在 DrawShadowQuad 时使用）
 
     // 图片绘制专用字段（仅在 DrawImageQuad 时使用）
     std::string image_src; // 原始图片资源标识（路径）
@@ -147,6 +149,9 @@ public:
                 break;
             case GPUCommandType::DrawRoundedRectQuad:
                 pipeline_id = 2; // 圆角矩形管线
+                break;
+            case GPUCommandType::DrawShadowQuad:
+                pipeline_id = 5; // 阴影管线
                 break;
             case GPUCommandType::DrawImageQuad:
                 pipeline_id = 3; // 图片管线
@@ -298,6 +303,19 @@ public:
                 round_rect_count++;
                 break;
             }
+            case DisplayItemType::DrawShadow: {
+                GPUCommand cmd{};
+                cmd.type = GPUCommandType::DrawShadowQuad;
+                cmd.instance_count = 1;
+                cmd.rect = item.shadow.rect;
+                cmd.color = apply_opacity(item.shadow.color, current_opacity());
+                cmd.radius = item.shadow.radius;
+                cmd.blur = item.shadow.blur;
+                cmd.sort_key = make_sort_key(cmd.type, cmd);
+                out.commands.push_back(cmd);
+                round_rect_count++;  // 统计为圆角矩形类
+                break;
+            }
             case DisplayItemType::DrawImage: {
                 GPUCommand cmd{};
                 cmd.type = GPUCommandType::DrawImageQuad;
@@ -353,6 +371,7 @@ public:
             switch (t) {
             case GPUCommandType::DrawInstancedQuads:
             case GPUCommandType::DrawRoundedRectQuad:
+            case GPUCommandType::DrawShadowQuad:
             case GPUCommandType::DrawImageQuad:
             case GPUCommandType::DrawText:
                 out.sorted_draw_indices.push_back(i);

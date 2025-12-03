@@ -26,6 +26,7 @@ struct Rect {
 enum class DisplayItemType : uint8_t {
     DrawRect,
     DrawRoundedRect,
+    DrawShadow,      // box-shadow with blur
     DrawImage,
     DrawGlyphRun,
     PushLayer,
@@ -44,6 +45,13 @@ struct DrawRoundedRectData {
     Rect rect;
     Color color;
     float radius = 0.0f;
+};
+
+struct DrawShadowData {
+    Rect rect;           // 阴影的目标矩形（已包含 offset 和 spread）
+    Color color;
+    float radius = 0.0f; // 圆角半径
+    float blur = 0.0f;   // 模糊半径
 };
 
 struct DrawImageData {
@@ -94,6 +102,7 @@ struct DisplayItem {
     // 为简化实现，这里不用 union，而是根据 type 只访问对应字段
     DrawRectData rect;
     DrawRoundedRectData rounded_rect;
+    DrawShadowData shadow;
     DrawImageData image;
     DrawGlyphRunData glyph_run;
     ClipData clip;
@@ -207,6 +216,16 @@ public:
         item.rounded_rect.rect = rect;
         item.rounded_rect.color = color;
         item.rounded_rect.radius = radius;
+        list_.items.push_back(std::move(item));
+    }
+
+    void addShadow(const Rect& rect, const Color& color, float radius, float blur) {
+        DisplayItem item{};
+        item.type = DisplayItemType::DrawShadow;
+        item.shadow.rect = rect;
+        item.shadow.color = color;
+        item.shadow.radius = radius;
+        item.shadow.blur = blur;
         list_.items.push_back(std::move(item));
     }
 

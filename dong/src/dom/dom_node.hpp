@@ -93,6 +93,11 @@ struct ComputedStyle {
     std::string font_weight = "normal"; // normal, bold
     std::string text_align = "left";    // left, center, right
     float letter_spacing_em = 0.0f;      // letter-spacing，以 em 为单位，0 表示 normal
+    float word_spacing_px = 0.0f;        // word-spacing，以像素为单位，0 表示 normal
+    float line_height = -1.0f;           // line-height，-1 表示 normal（使用字体度量），>0 为倍数或像素值
+    bool line_height_is_unitless = true; // true: line_height 是倍数；false: line_height 是像素值
+    std::string text_transform = "none"; // none, uppercase, lowercase, capitalize
+    std::string vertical_align = "baseline"; // baseline, top, middle, bottom
 
     // Flexbox properties
     std::string flex_direction = "row";     // row, column
@@ -102,6 +107,7 @@ struct ComputedStyle {
     float flex_grow = 0.0f;
     float flex_shrink = 1.0f;
     CSSValue flex_basis;
+    float gap = 0.0f;                       // gap 属性（flex/grid 容器间距）
 
     // Transform（极简版，仅 translate/scale，用于 LayerTree + 缓存覆盖）
     float transform_translate_x = 0.0f;

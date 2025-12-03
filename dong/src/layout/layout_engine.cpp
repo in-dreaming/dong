@@ -253,6 +253,18 @@ static bool computeInlineMetricsForNode(const dom::DOMNodePtr& node,
     float ascent_units = shaped.ascent_units;
     float descent_units = shaped.descent_units;
 
+    // 应用 CSS line-height 属性
+    if (style.line_height > 0.0f) {
+        if (style.line_height_is_unitless) {
+            // 倍数：line-height * font-size
+            float css_line_height_px = style.line_height * font_size_px;
+            line_height_units = css_line_height_px / std::max(scale, 1e-3f);
+        } else {
+            // 像素值
+            line_height_units = style.line_height / std::max(scale, 1e-3f);
+        }
+    }
+
     if (line_height_units <= 0.0f) {
         line_height_units = font_size_px / std::max(scale, 1e-3f);
     }
@@ -305,6 +317,7 @@ bool isInlineFormattingContext(const dom::DOMNodePtr& node) {
             continue;
         }
         const auto& cs = child->getComputedStyle();
+        
         if (isInlineLevelDisplay(cs.display)) {
             has_inline_child = true;
         } else if (cs.display == "block" || cs.display == "flex" || cs.display == "none") {
@@ -683,6 +696,11 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
         YGNodeStyleSetAlignItems(yoga_node, YGAlignFlexStart);
     }
 
+    // Set gap for flex containers
+    if (style.gap > 0.0f) {
+        YGNodeStyleSetGap(yoga_node, YGGutterAll, style.gap);
+    }
+
     // Set position type and offsets (relative/absolute)
     if (style.position == "absolute") {
         YGNodeStyleSetPositionType(yoga_node, YGPositionTypeAbsolute);
@@ -730,13 +748,16 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
     // stretch to full available width. This approximates HTML block layout
     // when we don't have intrinsic content measurement.
     //
-    // IMPORTANT: Do not apply this fallback to position:absolute elements.
-    // Absolute positioned boxes should use intrinsic sizing (or shrink-to-fit),
-    // otherwise Yoga will give them a 100% width box, which breaks the
-    // expected CSS semantics for badge-like elements such as `.abs-badge`.
+    // IMPORTANT: Do not apply this fallback to:
+    // - position:absolute elements (should use intrinsic/shrink-to-fit sizing)
+    // - inline-block elements (should size to content, not stretch to 100%)
+    // Otherwise Yoga will give them a 100% width box, which breaks the
+    // expected CSS semantics.
+    const bool is_inline_block = (style.display == "inline-block");
     if (!has_explicit_width &&
         style.layout_mode == dom::LayoutMode::Block &&
-        style.position != "absolute") {
+        style.position != "absolute" &&
+        !is_inline_block) {
         YGNodeStyleSetWidthPercent(yoga_node, 100.0f);
     }
 
@@ -928,9 +949,11 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
                     float margin_left = 0.0f;
                     float margin_right = 0.0f;
                     float preferred_width = 0.0f;
+                    float preferred_height = 0.0f;
                     float baseline_from_border_top = 0.0f;
                     float line_height_px = 0.0f;
                     float offset_x_in_content = 0.0f;
+                    std::string vertical_align = "baseline"; // baseline, top, middle, bottom
                 };
 
                 std::vector<InlineItem> items;
@@ -942,6 +965,7 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
                     }
 
                     const auto& child_style = child->getComputedStyle();
+                    
                     if (child_style.position == "absolute") {
                         // 绝对定位元素不参与内联格式化上下文，由专门的定位布局阶段处理
                         continue;
@@ -963,6 +987,8 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
 
                     float pad_l = child_style.padding_left.isPixel() ? child_style.padding_left.value : 0.0f;
                     float pad_r = child_style.padding_right.isPixel() ? child_style.padding_right.value : 0.0f;
+                    float pad_t = child_style.padding_top.isPixel() ? child_style.padding_top.value : 0.0f;
+                    float pad_b = child_style.padding_bottom.isPixel() ? child_style.padding_bottom.value : 0.0f;
                     float border_w = child_style.border_width;
                     if (border_w < 0.0f) {
                         border_w = 0.0f;
@@ -980,9 +1006,25 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
                         width_px = metrics.line_height_px;
                     }
 
+                    // 计算高度：优先使用 CSS 指定的高度，否则使用文本行高 + padding + border
+                    float height_px = 0.0f;
+                    if (child_style.height.isPixel()) {
+                        height_px = child_style.height.value;
+                    } else if (child_style.height.isPercent()) {
+                        // 百分比高度暂不支持，使用内容高度
+                        height_px = metrics.line_height_px + pad_t + pad_b + border_w * 2.0f;
+                    } else {
+                        height_px = metrics.line_height_px + pad_t + pad_b + border_w * 2.0f;
+                    }
+                    if (height_px <= 0.0f) {
+                        height_px = metrics.line_height_px;
+                    }
+
                     item.preferred_width = width_px;
-                    item.line_height_px = metrics.line_height_px;
-                    item.baseline_from_border_top = border_w + (child_style.padding_top.isPixel() ? child_style.padding_top.value : 0.0f) + metrics.baseline_from_content_top_px;
+                    item.preferred_height = height_px;
+                    item.line_height_px = height_px;  // 使用元素高度作为行高贡献
+                    item.baseline_from_border_top = border_w + pad_t + metrics.baseline_from_content_top_px;
+                    item.vertical_align = child_style.vertical_align;
 
                     items.push_back(item);
                 }
@@ -1045,19 +1087,34 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
                             LayoutNode* child_layout = it_child_layout->second.get();
 
                             float new_x = content_x + item.offset_x_in_content;
-                            float new_y = baseline_y - item.baseline_from_border_top;
+                            float new_y = 0.0f;
+
+                            // 根据 vertical-align 计算 Y 坐标
+                            const std::string& va = item.vertical_align;
+                            if (va == "top") {
+                                // 顶部对齐：元素顶部与行顶部对齐
+                                new_y = current_line_top;
+                            } else if (va == "bottom") {
+                                // 底部对齐：元素底部与行底部对齐
+                                new_y = current_line_top + line.max_line_height_px - item.preferred_height;
+                            } else if (va == "middle") {
+                                // 中间对齐：元素中心与行中心对齐
+                                float line_center = current_line_top + line.max_line_height_px * 0.5f;
+                                new_y = line_center - item.preferred_height * 0.5f;
+                            } else {
+                                // baseline（默认）：元素 baseline 与行 baseline 对齐
+                                new_y = baseline_y - item.baseline_from_border_top;
+                            }
 
                             bool layout_changed = (child_layout->x != new_x) || (child_layout->y != new_y) ||
-                                                  (child_layout->width != item.preferred_width);
+                                                  (child_layout->width != item.preferred_width) ||
+                                                  (child_layout->height != item.preferred_height);
 
                             child_layout->x = new_x;
                             child_layout->y = new_y;
                             child_layout->width = item.preferred_width;
-                            // 高度仍然沿用 Yoga 给出的值（如果存在），避免影响父级垂直布局。
-                            // 若 Yoga 未提供合理高度，则至少保证高度不小于一行文本。
-                            if (child_layout->height <= 0.0f) {
-                                child_layout->height = line.max_line_height_px;
-                            }
+                            // 使用计算出的 preferred_height，它已经考虑了 CSS 指定的高度
+                            child_layout->height = item.preferred_height;
 
                             child_layout->layout.position[0] = child_layout->x;
                             child_layout->layout.position[1] = child_layout->y;
@@ -1100,6 +1157,80 @@ void Engine::layoutPositionedElements(dom::DOMNodePtr root) {
         }
 
         const auto& style = node->getComputedStyle();
+
+        // Handle position: relative
+        // Relative positioning: element stays in normal flow but is visually offset
+        // by top/right/bottom/left values. This offset does NOT affect sibling layout.
+        if (style.position == "relative") {
+            auto it_layout = layout_cache.find(node.get());
+            if (it_layout != layout_cache.end() && it_layout->second) {
+                LayoutNode* layout = it_layout->second.get();
+
+                // Compute offset values
+                auto computeOffsetPx = [this](const dom::CSSValue& v, float reference_size) -> float {
+                    if (v.isPixel()) {
+                        return v.value;
+                    }
+                    if (v.isPercent()) {
+                        return parsePercentValue(v, reference_size);
+                    }
+                    return 0.0f;
+                };
+
+                // For relative positioning, percentages are relative to the containing block
+                // (parent's content box). We use the layout dimensions as approximation.
+                float ref_w = layout->width;
+                float ref_h = layout->height;
+                if (auto parent = node->getParent()) {
+                    auto it_parent = layout_cache.find(parent.get());
+                    if (it_parent != layout_cache.end() && it_parent->second) {
+                        ref_w = it_parent->second->width;
+                        ref_h = it_parent->second->height;
+                    }
+                }
+
+                bool has_left = style.left.isPixel() || style.left.isPercent();
+                bool has_right = style.right.isPixel() || style.right.isPercent();
+                bool has_top = style.top.isPixel() || style.top.isPercent();
+                bool has_bottom = style.bottom.isPixel() || style.bottom.isPercent();
+
+                float offset_x = 0.0f;
+                float offset_y = 0.0f;
+
+                // Horizontal: left takes precedence over right
+                if (has_left) {
+                    offset_x = computeOffsetPx(style.left, ref_w);
+                } else if (has_right) {
+                    offset_x = -computeOffsetPx(style.right, ref_w);
+                }
+
+                // Vertical: top takes precedence over bottom
+                if (has_top) {
+                    offset_y = computeOffsetPx(style.top, ref_h);
+                } else if (has_bottom) {
+                    offset_y = -computeOffsetPx(style.bottom, ref_h);
+                }
+
+                // Apply offset to the layout position
+                if (offset_x != 0.0f || offset_y != 0.0f) {
+                    float new_x = layout->x + offset_x;
+                    float new_y = layout->y + offset_y;
+
+                    bool layout_changed = (layout->x != new_x) || (layout->y != new_y);
+
+                    layout->x = new_x;
+                    layout->y = new_y;
+                    layout->layout.position[0] = new_x;
+                    layout->layout.position[1] = new_y;
+
+                    if (layout_changed) {
+                        dirty_rect_.expand(new_x, new_y, layout->width, layout->height);
+                    }
+                }
+            }
+        }
+
+        // Handle position: absolute
         if (style.position == "absolute") {
             // Find containing block: nearest ancestor with position != static.
             dom::DOMNodePtr containing_block = nullptr;

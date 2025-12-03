@@ -73,6 +73,11 @@ private:
     SDL_GPUShader* round_rect_fs_ = nullptr;
     SDL_GPUGraphicsPipeline* round_rect_pipeline_ = nullptr;
 
+    // 阴影绘制管线（SDF + blur）
+    SDL_GPUShader* shadow_vs_ = nullptr;
+    SDL_GPUShader* shadow_fs_ = nullptr;
+    SDL_GPUGraphicsPipeline* shadow_pipeline_ = nullptr;
+
     // 图片绘制相关：基于一个简单的 2D atlas 纹理
     SDL_GPUShader* image_vs_ = nullptr;
     SDL_GPUShader* image_fs_ = nullptr;

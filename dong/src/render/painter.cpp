@@ -388,7 +388,14 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
 
                 float radius = style.border_radius;
                 if (radius < 0.0f) radius = 0.0f;
-                builder.addRoundedRect(shadow_rect, sc, radius);
+
+                // 使用带模糊的阴影绘制
+                float blur = shadow.blur_radius;
+                if (blur > 0.0f) {
+                    builder.addShadow(shadow_rect, sc, radius, blur);
+                } else {
+                    builder.addRoundedRect(shadow_rect, sc, radius);
+                }
             }
         }
 
@@ -399,6 +406,37 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                 builder.addRoundedRect(rect, c, style.border_radius);
             } else {
                 builder.addRect(rect, c);
+            }
+        }
+
+        // 1.3 边框绘制
+        if (style.border_width > 0.0f && rect.width > 0.0f && rect.height > 0.0f) {
+            Color border_color = makeColorFromCss(style.border_color);
+            float bw = style.border_width;
+            float radius = style.border_radius;
+            if (radius < 0.0f) radius = 0.0f;
+
+            // 绘制四条边框（简化实现：使用四个矩形）
+            // 上边框
+            Rect top_border{rect.x, rect.y, rect.width, bw};
+            // 下边框
+            Rect bottom_border{rect.x, rect.y + rect.height - bw, rect.width, bw};
+            // 左边框
+            Rect left_border{rect.x, rect.y + bw, bw, rect.height - 2 * bw};
+            // 右边框
+            Rect right_border{rect.x + rect.width - bw, rect.y + bw, bw, rect.height - 2 * bw};
+
+            if (radius > 0.0f) {
+                // 对于圆角边框，使用描边方式（目前简化为四个矩形，后续可改进）
+                builder.addRect(top_border, border_color);
+                builder.addRect(bottom_border, border_color);
+                builder.addRect(left_border, border_color);
+                builder.addRect(right_border, border_color);
+            } else {
+                builder.addRect(top_border, border_color);
+                builder.addRect(bottom_border, border_color);
+                builder.addRect(left_border, border_color);
+                builder.addRect(right_border, border_color);
             }
         }
     }
@@ -455,6 +493,21 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                 SDL_Log("[Painter] ABS badge text raw='%s'", raw_text.c_str());
             }
             std::string text = collapseWhitespace(raw_text);
+
+            // 应用 text-transform
+            if (!text.empty() && !style.text_transform.empty() && style.text_transform != "none") {
+                if (style.text_transform == "uppercase") {
+                    std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) {
+                        return static_cast<char>(std::toupper(c));
+                    });
+                } else if (style.text_transform == "lowercase") {
+                    std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) {
+                        return static_cast<char>(std::tolower(c));
+                    });
+                }
+                // capitalize 暂不支持（需要更复杂的 Unicode 处理）
+            }
+
             if (!text.empty()) {
                 float x = layout_node->layout.position[0];
                 float y = layout_node->layout.position[1];
@@ -504,10 +557,30 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                     }
                 }
 
+                // word-spacing: 额外的单词间距（应用于空格字符）
+                float word_spacing_px = style.word_spacing_px;
+                float word_spacing_units = 0.0f;
+                if (word_spacing_px != 0.0f && scale > 0.0f) {
+                    word_spacing_units = word_spacing_px / scale;
+                }
+
                 // 行高/基线度量（设计单位）
+                // 优先使用 CSS line-height，如果未设置则使用字体度量
                 float line_height_units = shaped_full.line_height_units;
                 float ascent_units = shaped_full.ascent_units;
                 float descent_units = shaped_full.descent_units;
+
+                // 应用 CSS line-height 属性
+                if (style.line_height > 0.0f) {
+                    if (style.line_height_is_unitless) {
+                        // 倍数：line-height * font-size
+                        float css_line_height_px = style.line_height * font_size;
+                        line_height_units = css_line_height_px / std::max(scale, 1e-3f);
+                    } else {
+                        // 像素值
+                        line_height_units = style.line_height / std::max(scale, 1e-3f);
+                    }
+                }
 
                 if (line_height_units <= 0.0f) {
                     line_height_units = font_size / std::max(scale, 1e-3f);
@@ -575,6 +648,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                     int first = -1;
                     int last = -1;
                     int glyph_count = 0;
+                    int space_count = 0;
                     for (size_t gi = 0; gi < glyphs.size(); ++gi) {
                         uint32_t cluster = glyphs[gi].cluster;
                         if (cluster < byte_start) {
@@ -588,6 +662,10 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                         }
                         last = static_cast<int>(gi);
                         ++glyph_count;
+                        // 统计空格数量用于 word-spacing
+                        if (cluster < text.size() && text[cluster] == ' ') {
+                            ++space_count;
+                        }
                     }
                     if (first == -1 || last == -1 || glyph_count == 0) {
                         return 0.0f;
@@ -599,6 +677,10 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                     float w = right - left;
                     if (glyph_count > 1 && letter_spacing_units != 0.0f) {
                         w += letter_spacing_units * static_cast<float>(glyph_count - 1);
+                    }
+                    // 应用 word-spacing
+                    if (space_count > 0 && word_spacing_units != 0.0f) {
+                        w += word_spacing_units * static_cast<float>(space_count);
                     }
                     return w > 0.0f ? w : 0.0f;
                 };
@@ -712,6 +794,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                     float first_pen_x_units = glyphs[static_cast<size_t>(first_glyph)].pen_x_units;
 
                     int glyph_index_in_run = 0;
+                    int accumulated_spaces = 0;  // 累计空格数用于 word-spacing
                     for (int gi = first_glyph; gi <= last_glyph; ++gi) {
                         const ShapedGlyph& sg = glyphs[static_cast<size_t>(gi)];
                         GlyphInstance inst{};
@@ -720,10 +803,18 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                         if (letter_spacing_units != 0.0f && glyph_index_in_run > 0) {
                             base_x_units += letter_spacing_units * static_cast<float>(glyph_index_in_run);
                         }
+                        // 应用 word-spacing：在空格之后的字符添加额外间距
+                        if (word_spacing_units != 0.0f && accumulated_spaces > 0) {
+                            base_x_units += word_spacing_units * static_cast<float>(accumulated_spaces);
+                        }
                         inst.pen_x_units = base_x_units;
                         inst.pen_y_units = sg.pen_y_units;
                         glyph_run.glyphs.push_back(inst);
                         ++glyph_index_in_run;
+                        // 检查当前 glyph 是否对应空格字符
+                        if (sg.cluster < text.size() && text[sg.cluster] == ' ') {
+                            ++accumulated_spaces;
+                        }
                     }
 
                     builder.addGlyphRun(std::move(glyph_run));
@@ -735,14 +826,46 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         }
     }
 
-    // 4. 递归子节点
+    // 4. 递归子节点（按 z-index 排序）
     const auto& children = node->getChildren();
+    
+    // 收集需要绘制的子元素及其 z-index
+    struct ChildWithZIndex {
+        dom::DOMNodePtr child;
+        int z_index;
+        size_t original_order;
+    };
+    std::vector<ChildWithZIndex> sorted_children;
+    sorted_children.reserve(children.size());
+    
+    size_t order = 0;
     for (const auto& child : children) {
-        const layout::LayoutNode* child_layout = nullptr;
-        if (layout_engine_ && child && child->getType() == dom::DOMNode::NodeType::ELEMENT) {
-            child_layout = layout_engine_->getLayout(child);
+        if (!child || child->getType() != dom::DOMNode::NodeType::ELEMENT) {
+            continue;
         }
-        buildDisplayListNode(child, child_layout, builder);
+        const auto& child_style = child->getComputedStyle();
+        ChildWithZIndex item{};
+        item.child = child;
+        item.z_index = child_style.z_index;
+        item.original_order = order++;
+        sorted_children.push_back(item);
+    }
+    
+    // 按 z-index 升序排序，相同 z-index 保持 DOM 顺序
+    std::sort(sorted_children.begin(), sorted_children.end(),
+              [](const ChildWithZIndex& a, const ChildWithZIndex& b) {
+                  if (a.z_index != b.z_index) {
+                      return a.z_index < b.z_index;
+                  }
+                  return a.original_order < b.original_order;
+              });
+    
+    for (const auto& item : sorted_children) {
+        const layout::LayoutNode* child_layout = nullptr;
+        if (layout_engine_) {
+            child_layout = layout_engine_->getLayout(item.child);
+        }
+        buildDisplayListNode(item.child, child_layout, builder);
     }
 
     if (pushed_layer_node && !layer_stack_.empty()) {

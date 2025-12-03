@@ -22,11 +22,9 @@ namespace {
 
 constexpr float kSRGBGamma = 2.2f;
 
+// 使用简化的 gamma 2.2 近似，与 shader 保持一致
 float srgbChannelToLinear(float value) {
-    if (value <= 0.04045f) {
-        return value / 12.92f;
-    }
-    return std::pow((value + 0.055f) / 1.055f, 2.4f);
+    return std::pow(std::max(0.0f, std::min(1.0f, value)), kSRGBGamma);
 }
 
 } // namespace
@@ -441,6 +439,180 @@ float4 main(PSInput input) : SV_Target0 {
         return false;
     }
 
+    // 阴影绘制着色器：使用 SDF + 模糊半径实现柔和阴影边缘
+    const char* kShadowVS = R"(
+struct VSOutput {
+    float4 position : SV_Position;
+    float2 local : TEXCOORD0;
+    nointerpolation float2 size : TEXCOORD1;
+    nointerpolation float radius : TEXCOORD2;
+    nointerpolation float blur : TEXCOORD3;
+    float4 color : COLOR0;
+    float2 pixel : TEXCOORD4;
+};
+
+cbuffer ShadowUniforms : register(b0, space1) {
+    float4 uRect;
+    float4 uRadius;   // x=corner radius, y=blur radius
+    float4 uViewport;
+    float4 uColor;
+    float4 uClipRects[4];
+    float4 uClipRadii;
+    float4 uClipMeta;
+};
+
+VSOutput main(uint vertexID : SV_VertexID) {
+    float2 local;
+    if (vertexID == 0) { local = float2(0.0, 0.0); }
+    else if (vertexID == 1) { local = float2(1.0, 0.0); }
+    else if (vertexID == 2) { local = float2(0.0, 1.0); }
+    else { local = float2(1.0, 1.0); }
+    
+    float blur = uRadius.y;
+    // 扩展绘制区域以容纳模糊
+    float2 expanded_rect_pos = uRect.xy - blur;
+    float2 expanded_rect_size = uRect.zw + blur * 2.0;
+    
+    float2 pos = expanded_rect_pos + local * expanded_rect_size;
+    float2 ndc;
+    ndc.x = (pos.x / uViewport.x) * 2.0 - 1.0;
+    ndc.y = 1.0 - (pos.y / uViewport.y) * 2.0;
+    
+    float radius = uRadius.x;
+    radius = min(radius, min(uRect.z, uRect.w) * 0.5 - 0.5);
+    radius = max(radius, 0.0);
+    
+    VSOutput o;
+    o.position = float4(ndc, 0.0, 1.0);
+    // local 坐标相对于原始矩形（不是扩展后的）
+    o.local = (local * expanded_rect_size - blur) / uRect.zw;
+    o.size = uRect.zw;
+    o.radius = radius;
+    o.blur = blur;
+    o.color = uColor;
+    o.pixel = pos;
+    return o;
+}
+)";
+
+    const char* kShadowFS = R"(
+struct PSInput {
+    float4 position : SV_Position;
+    float2 local : TEXCOORD0;
+    nointerpolation float2 size : TEXCOORD1;
+    nointerpolation float radius : TEXCOORD2;
+    nointerpolation float blur : TEXCOORD3;
+    float4 color : COLOR0;
+    float2 pixel : TEXCOORD4;
+};
+
+cbuffer ShadowUniforms : register(b0, space1) {
+    float4 uRect;
+    float4 uRadius;
+    float4 uViewport;
+    float4 uColor;
+    float4 uClipRects[4];
+    float4 uClipRadii;
+    float4 uClipMeta;
+};
+
+float sdRoundRect(float2 p, float2 halfSize, float rad) {
+    float2 q = abs(p) - (halfSize - rad);
+    float2 qmax = float2(max(q.x, 0.0), max(q.y, 0.0));
+    return length(qmax) + min(max(q.x, q.y), 0.0) - rad;
+}
+
+float sdRoundedClip(float2 pt, float4 rc, float rad) {
+    float2 halfSize = float2((rc.z - rc.x) * 0.5, (rc.w - rc.y) * 0.5);
+    float2 center = float2(rc.x, rc.y) + halfSize;
+    float2 local = pt - center;
+    return sdRoundRect(local, halfSize, rad);
+}
+
+bool discardByClip(float2 px) {
+    uint clipCount = (uint)uClipMeta.x;
+    for (uint i = 0; i < clipCount; ++i) {
+        float rad = uClipRadii[i];
+        float4 rc = uClipRects[i];
+        if (rad <= 0.0f) {
+            if (px.x < rc.x || px.x > rc.z || px.y < rc.y || px.y > rc.w) {
+                return true;
+            }
+            continue;
+        }
+        if (sdRoundedClip(px, rc, rad) > 0.0f) {
+            return true;
+        }
+    }
+    return false;
+}
+
+float4 main(PSInput input) : SV_Target0 {
+    if (discardByClip(input.pixel)) {
+        discard;
+    }
+    
+    float2 size = input.size;
+    float2 p = (input.local - 0.5) * size;
+    float r = input.radius;
+    float blur = input.blur;
+    float2 halfSize = size * 0.5;
+    
+    float dist = sdRoundRect(p, halfSize, r);
+    
+    // 使用 smoothstep 实现模糊效果
+    // blur 为 0 时退化为硬边缘
+    float sigma = max(blur, 0.5);
+    float alpha = 1.0 - smoothstep(-sigma, sigma, dist);
+    
+    float4 base = input.color;
+    base.a *= alpha;
+    base.rgb = pow(saturate(base.rgb), 1.0 / 2.2);
+    return base;
+}
+)";
+
+    shadow_vs_ = shader_manager_->loadShaderFromHLSL(
+        "dong_shadow_vs",
+        SDL_GPU_SHADERSTAGE_VERTEX,
+        kShadowVS,
+        "main"
+    );
+    shadow_fs_ = shader_manager_->loadShaderFromHLSL(
+        "dong_shadow_fs",
+        SDL_GPU_SHADERSTAGE_FRAGMENT,
+        kShadowFS,
+        "main"
+    );
+
+    if (!shadow_vs_ || !shadow_fs_) {
+        SDL_Log("GPUDriverSDL::initialize: failed to compile shadow shaders");
+        return false;
+    }
+
+    SDL_GPUGraphicsPipelineCreateInfo shadow_ci{};
+    SDL_GPUColorTargetDescription color_desc_shadow{};
+    color_desc_shadow.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+
+    shadow_ci.target_info.num_color_targets = 1;
+    shadow_ci.target_info.color_target_descriptions = &color_desc_shadow;
+    shadow_ci.target_info.has_depth_stencil_target = false;
+
+    shadow_ci.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLESTRIP;
+    shadow_ci.vertex_shader = shadow_vs_;
+    shadow_ci.fragment_shader = shadow_fs_;
+
+    shadow_ci.vertex_input_state.num_vertex_buffers = 0;
+    shadow_ci.vertex_input_state.vertex_buffer_descriptions = nullptr;
+    shadow_ci.vertex_input_state.num_vertex_attributes = 0;
+    shadow_ci.vertex_input_state.vertex_attributes = nullptr;
+
+    shadow_pipeline_ = SDL_CreateGPUGraphicsPipeline(dev, &shadow_ci);
+    if (!shadow_pipeline_) {
+        SDL_Log("GPUDriverSDL::initialize: failed to create shadow pipeline: %s", SDL_GetError());
+        return false;
+    }
+
     // 图片绘制着色器：使用 SV_VertexID 生成矩形，并根据 atlas UV 采样
     const char* kImageVS = R"(
 struct VSOutput {
@@ -774,33 +946,41 @@ float4 main(PSInput input) : SV_Target0 {
     float subpixel = input.params.z;
 
     float alpha;
-    float3 linearColor;
 
     if (subpixel > 0.5f) {
         // 简单 subpixel 路径：对 RGB 三个通道分别计算 coverage
         float3 dist_rgb = (msdf - 0.5f) * pxRange;
-        float3 alpha_rgb = saturate(dist_rgb / width + 0.02f);
+        // 使用标准 MSDF 公式：dist / width + 0.5，然后 saturate 到 [0,1]
+        float3 alpha_rgb = saturate(dist_rgb / width + 0.5f);
         alpha = max(alpha_rgb.r, max(alpha_rgb.g, alpha_rgb.b));
         if (alpha <= 0.0f) {
             discard;
         }
-        linearColor = input.color.rgb * alpha_rgb;
+        // 先将线性颜色转为 sRGB，再乘以各通道 coverage
+        // 这样避免了对预乘颜色做 gamma 校正导致的颜色变亮问题
+        float gamma = (input.params.w != 0.0f) ? -input.params.w : 2.2f;
+        float3 srgbBase = toSRGB(input.color.rgb, gamma);
+        float3 srgbColor = srgbBase * alpha_rgb;
+        float4 color;
+        color.rgb = srgbColor;
+        color.a = input.color.a * alpha;
+        return color;
     } else {
         // 灰度 MSDF 路径
-        alpha = saturate(dist / width + 0.02f);
+        // 使用标准 MSDF 公式：dist / width + 0.5
+        alpha = saturate(dist / width + 0.5f);
         if (alpha <= 0.0f) {
             discard;
         }
-        linearColor = input.color.rgb * alpha;
+        // 先将线性颜色转为 sRGB，再输出
+        // alpha 用于混合，不参与颜色值本身的计算
+        float gamma = (input.params.w != 0.0f) ? -input.params.w : 2.2f;
+        float3 srgbColor = toSRGB(input.color.rgb, gamma);
+        float4 color;
+        color.rgb = srgbColor;
+        color.a = input.color.a * alpha;
+        return color;
     }
-
-    float gamma = (input.params.w != 0.0f) ? -input.params.w : 2.2f;
-    float3 srgbColor = toSRGB(linearColor, gamma);
-
-    float4 color;
-    color.rgb = srgbColor;
-    color.a = input.color.a * alpha;
-    return color;
 }
 )";
 
@@ -1231,6 +1411,7 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             None,
             Rect,
             RoundRect,
+            Shadow,
             Image,
             Text,
         } active = ActivePipeline::None;
@@ -1881,6 +2062,44 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             if (pipeline_state.active != PipelineBindingState::ActivePipeline::RoundRect) {
                 SDL_BindGPUGraphicsPipeline(pass, round_rect_pipeline_);
                 pipeline_state.active = PipelineBindingState::ActivePipeline::RoundRect;
+            }
+            SDL_DrawGPUPrimitives(pass, 4, 1, 0, 0);
+            break;
+        }
+        case GPUCommandType::DrawShadowQuad: {
+            if (!pass || !shadow_pipeline_) {
+                break;
+            }
+
+            struct ShadowUniformData {
+                float rect[4];
+                float radius[4];   // x=corner radius, y=blur radius
+                float viewport[4];
+                float color[4];
+                ClipUniformBlock clip;
+            };
+
+            ShadowUniformData u{};
+            u.rect[0] = cmd.rect.x;
+            u.rect[1] = cmd.rect.y;
+            u.rect[2] = cmd.rect.width;
+            u.rect[3] = cmd.rect.height;
+
+            u.radius[0] = cmd.radius;
+            u.radius[1] = cmd.blur;
+            u.radius[2] = 0.0f;
+            u.radius[3] = 0.0f;
+
+            write_viewport(u.viewport);
+
+            writeLinearColor(cmd.color, u.color);
+            fill_clip_uniform(u.clip);
+
+            SDL_PushGPUVertexUniformData(current_cmd_buf_, 0, &u, sizeof(u));
+
+            if (pipeline_state.active != PipelineBindingState::ActivePipeline::Shadow) {
+                SDL_BindGPUGraphicsPipeline(pass, shadow_pipeline_);
+                pipeline_state.active = PipelineBindingState::ActivePipeline::Shadow;
             }
             SDL_DrawGPUPrimitives(pass, 4, 1, 0, 0);
             break;

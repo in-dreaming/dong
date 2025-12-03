@@ -147,6 +147,8 @@ void StyleEngine::computeStyles(DOMNodePtr node) {
             computed.text_align = rule.style.text_align;
         if (rule.style.letter_spacing_em != 0.0f)
             computed.letter_spacing_em = rule.style.letter_spacing_em;
+        if (rule.style.word_spacing_px != 0.0f)
+            computed.word_spacing_px = rule.style.word_spacing_px;
         if (!rule.style.display.empty()) 
             computed.display = rule.style.display;
         if (!rule.style.position.empty()) 
@@ -218,6 +220,18 @@ void StyleEngine::computeStyles(DOMNodePtr node) {
             computed.flex_shrink = rule.style.flex_shrink;
         if (rule.style.flex_basis.unit != CSSValue::Unit::AUTO) 
             computed.flex_basis = rule.style.flex_basis;
+        if (rule.style.gap > 0.0f)
+            computed.gap = rule.style.gap;
+        
+        // Text properties
+        if (rule.style.line_height > 0.0f || rule.style.line_height == -1.0f) {
+            computed.line_height = rule.style.line_height;
+            computed.line_height_is_unitless = rule.style.line_height_is_unitless;
+        }
+        if (!rule.style.text_transform.empty() && rule.style.text_transform != "none")
+            computed.text_transform = rule.style.text_transform;
+        if (!rule.style.vertical_align.empty() && rule.style.vertical_align != "baseline")
+            computed.vertical_align = rule.style.vertical_align;
     }
 
     static const std::unordered_set<std::string> kAlwaysHiddenTags = {
@@ -761,6 +775,55 @@ void StyleEngine::applyStyleProperty(const std::string& property, const std::str
         }
         style.letter_spacing_em = em;
     }
+    else if (prop == "word-spacing") {
+        // word-spacing: normal | <length>
+        std::string lowered = val;
+        std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char c) {
+            return static_cast<char>(std::tolower(c));
+        });
+        float px = 0.0f;
+        if (lowered == "normal") {
+            px = 0.0f;
+        } else {
+            px = parseFloat(lowered);
+            // 如果是 em 单位，转换为像素
+            if (lowered.find("em") != std::string::npos) {
+                float font_px = style.font_size > 0.0f ? style.font_size : 16.0f;
+                px = px * font_px;
+            }
+            // px 单位或无单位数字直接使用
+        }
+        style.word_spacing_px = px;
+    }
+    else if (prop == "line-height") {
+        // line-height: normal | <number> | <length> | <percentage>
+        std::string lowered = val;
+        std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char c) {
+            return static_cast<char>(std::tolower(c));
+        });
+        if (lowered == "normal") {
+            style.line_height = -1.0f;
+            style.line_height_is_unitless = true;
+        } else if (lowered.find("px") != std::string::npos) {
+            // 像素值
+            style.line_height = parseFloat(lowered);
+            style.line_height_is_unitless = false;
+        } else if (lowered.find('%') != std::string::npos) {
+            // 百分比：转换为倍数
+            style.line_height = parseFloat(lowered) / 100.0f;
+            style.line_height_is_unitless = true;
+        } else {
+            // 无单位数字（倍数）
+            style.line_height = parseFloat(lowered);
+            style.line_height_is_unitless = true;
+        }
+    }
+    else if (prop == "text-transform") {
+        style.text_transform = val;
+    }
+    else if (prop == "vertical-align") {
+        style.vertical_align = val;
+    }
     else if (prop == "display") {
         style.display = val;
     }
@@ -900,6 +963,9 @@ void StyleEngine::applyStyleProperty(const std::string& property, const std::str
     else if (prop == "flex-basis") {
         style.flex_basis = parseLength(val);
     }
+    else if (prop == "gap") {
+        style.gap = parseFloat(val);
+    }
     else if (prop == "border-radius") {
         style.border_radius = parseFloat(val);
     }
@@ -908,6 +974,51 @@ void StyleEngine::applyStyleProperty(const std::string& property, const std::str
     }
     else if (prop == "border-color") {
         style.border_color = val;
+    }
+    else if (prop == "border") {
+        // border 简写：border: <width> <style> <color>
+        // 目前仅解析 width 和 color，style 暂时忽略
+        std::istringstream iss(val);
+        std::string part;
+        std::vector<std::string> parts;
+        while (iss >> part) {
+            parts.push_back(part);
+        }
+        for (const auto& p : parts) {
+            // 尝试解析为宽度（以数字开头）
+            if (!p.empty() && (std::isdigit(static_cast<unsigned char>(p[0])) || p[0] == '.')) {
+                style.border_width = parseFloat(p);
+            }
+            // 尝试解析为颜色（以 # 或字母开头，排除 style 关键字）
+            else if (!p.empty() && (p[0] == '#' || 
+                     (std::isalpha(static_cast<unsigned char>(p[0])) &&
+                      p != "solid" && p != "dashed" && p != "dotted" && 
+                      p != "double" && p != "none" && p != "hidden"))) {
+                style.border_color = p;
+            }
+            // border-style 暂时忽略（solid/dashed/dotted 等）
+        }
+    }
+    else if (prop == "border-top" || prop == "border-right" || 
+             prop == "border-bottom" || prop == "border-left") {
+        // 单边 border 简写，目前简化处理为全局 border
+        std::istringstream iss(val);
+        std::string part;
+        std::vector<std::string> parts;
+        while (iss >> part) {
+            parts.push_back(part);
+        }
+        for (const auto& p : parts) {
+            if (!p.empty() && (std::isdigit(static_cast<unsigned char>(p[0])) || p[0] == '.')) {
+                style.border_width = parseFloat(p);
+            }
+            else if (!p.empty() && (p[0] == '#' || 
+                     (std::isalpha(static_cast<unsigned char>(p[0])) &&
+                      p != "solid" && p != "dashed" && p != "dotted" && 
+                      p != "double" && p != "none" && p != "hidden"))) {
+                style.border_color = p;
+            }
+        }
     }
     else if (prop == "box-shadow") {
         style.box_shadows.clear();
