@@ -4,6 +4,7 @@
 #include <cctype>
 #include <iostream>
 #include <unordered_set>
+#include <SDL3/SDL_log.h>
 
 namespace dong::dom {
 
@@ -80,6 +81,12 @@ std::vector<CSSRule> StyleEngine::parseCSS(const std::string& css) {
             if (!single_selector.empty()) {
                 // Parse declarations into ComputedStyle
                 auto style = ComputedStyle();
+                // 重要：将这些属性设置为空，表示"未设置"。
+                // ComputedStyle 有默认值，但在 CSS 规则中，如果没有显式设置这些属性，
+                // 我们不应该用默认值覆盖元素的原有值。
+                style.display = "";
+                style.background_color = "";
+                style.color = "";
                 
                 // Parse individual declarations
                 auto decls = splitDeclarations(declarations);
@@ -114,10 +121,17 @@ void StyleEngine::computeStyles(DOMNodePtr node) {
     // Collect all matching rules for this node
     std::vector<CSSRule> matching_rules;
     
+    std::string node_class = node->getAttribute("class");
+    bool debug_soft = node_class.find("soft") != std::string::npos;
+    
     for (const auto& sheet : stylesheets) {
         for (const auto& rule : sheet.getRules()) {
             if (matchesSelector(rule.selector, node)) {
                 matching_rules.push_back(rule);
+                if (debug_soft) {
+                    SDL_Log("[computeStyles] soft element matched selector='%s' bg='%s'",
+                            rule.selector.c_str(), rule.style.background_color.c_str());
+                }
             }
         }
     }
@@ -133,12 +147,20 @@ void StyleEngine::computeStyles(DOMNodePtr node) {
     
     // Apply rules in cascade order (later rules override earlier ones)
     auto& computed = node->getComputedStyle();
+    
     for (const auto& rule : matching_rules) {
         // Merge styles with proper cascade
-        if (!rule.style.color.empty() && rule.style.color != "#000000") 
+        // 只有当规则显式设置了属性（非空）时才应用
+        if (!rule.style.color.empty()) {
             computed.color = rule.style.color;
-        if (!rule.style.background_color.empty() && rule.style.background_color != "#ffffff") 
+        }
+        if (!rule.style.background_color.empty()) {
             computed.background_color = rule.style.background_color;
+            if (debug_soft) {
+                SDL_Log("[computeStyles] soft: applying bg='%s' from selector='%s'",
+                        rule.style.background_color.c_str(), rule.selector.c_str());
+            }
+        }
         if (rule.style.font_size != 16.0f) 
             computed.font_size = rule.style.font_size;
         if (!rule.style.font_weight.empty()) 
@@ -161,6 +183,8 @@ void StyleEngine::computeStyles(DOMNodePtr node) {
             computed.border_color = rule.style.border_color;
         if (!rule.style.overflow.empty() && rule.style.overflow != "visible")
             computed.overflow = rule.style.overflow;
+        if (rule.style.box_sizing != "content-box")
+            computed.box_sizing = rule.style.box_sizing;
         if (rule.style.opacity != 1.0f)
             computed.opacity = rule.style.opacity;
         if (rule.style.isolation_isolate)
@@ -232,6 +256,10 @@ void StyleEngine::computeStyles(DOMNodePtr node) {
             computed.text_transform = rule.style.text_transform;
         if (!rule.style.vertical_align.empty() && rule.style.vertical_align != "baseline")
             computed.vertical_align = rule.style.vertical_align;
+    }
+    
+    if (debug_soft) {
+        SDL_Log("[computeStyles] soft element FINAL bg='%s'", computed.background_color.c_str());
     }
 
     static const std::unordered_set<std::string> kAlwaysHiddenTags = {
@@ -743,6 +771,10 @@ void StyleEngine::applyStyleProperty(const std::string& property, const std::str
     }
     else if (prop == "background-color" || prop == "background") {
         style.background_color = val;
+        // 调试：检查 rgba 背景色是否被正确解析
+        if (val.find("rgba") != std::string::npos) {
+            SDL_Log("[StyleEngine] background-color set to rgba: '%s'", val.c_str());
+        }
     }
     else if (prop == "font-size") {
         style.font_size = parseFloat(val);
@@ -852,6 +884,18 @@ void StyleEngine::applyStyleProperty(const std::string& property, const std::str
     }
     else if (prop == "overflow") {
         style.overflow = val;
+    }
+    else if (prop == "box-sizing") {
+        // box-sizing: content-box | border-box
+        std::string lowered = val;
+        std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char c) {
+            return static_cast<char>(std::tolower(c));
+        });
+        if (lowered == "border-box") {
+            style.box_sizing = "border-box";
+        } else {
+            style.box_sizing = "content-box";
+        }
     }
     else if (prop == "width") {
         style.width = parseLength(val);
@@ -1230,6 +1274,10 @@ void StyleEngine::applyStyleProperty(const std::string& property, const std::str
 
 std::pair<std::string, ComputedStyle> StyleEngine::parseRule(const std::string& rule_str) {
     ComputedStyle style;
+    // 重要：将 display 设置为空，表示"未设置"。
+    // ComputedStyle 的默认值是 "block"，但在 CSS 规则中，如果没有显式设置 display，
+    // 我们不应该用默认值覆盖元素的原有 display 值。
+    style.display = "";
     std::string selector;
     
     size_t brace = rule_str.find('{');

@@ -3,6 +3,7 @@
 #include <lexbor/html/html.h>
 #include <lexbor/dom/dom.h>
 #include <lexbor/css/css.h>
+#include <SDL3/SDL_log.h>
 #include <iostream>
 #include <cctype>
 #include <algorithm>

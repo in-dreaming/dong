@@ -83,6 +83,9 @@ private:
     // Cleanup
     void destroyYogaNode(YGNode* node);
 
+    // Block formatting context layout (margin: auto centering, etc.)
+    void layoutBlockFormattingContext(dom::DOMNodePtr root);
+
     // Inline formatting context layout
     void layoutInlineFormattingContexts(dom::DOMNodePtr root);
 

@@ -470,6 +470,11 @@ void Engine::calculateLayout(dom::DOMNodePtr root, float width, float height) {
 
     extractLayoutRecursive(layout_root_dom, yoga_root, 0.0f, 0.0f);
 
+    // After Yoga layout, apply Block Formatting Context adjustments:
+    // - margin: auto horizontal centering
+    // - margin-left: auto / margin-right: auto alignment
+    layoutBlockFormattingContext(layout_root_dom);
+
     // After Yoga layout, run inline formatting context layout to adjust
     // inline/inline-block children inside suitable containers.
     layoutInlineFormattingContexts(layout_root_dom);
@@ -586,6 +591,13 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
 
     mapComputedStylesToYoga(style, yoga_node);
 
+    // 如果当前节点是内联格式化上下文（包含 inline/inline-block 子元素），
+    // 设置为 flex-direction: row，让 Yoga 能正确计算容器高度
+    if (isInlineFormattingContext(dom_node)) {
+        YGNodeStyleSetFlexDirection(yoga_node, YGFlexDirectionRow);
+        YGNodeStyleSetFlexWrap(yoga_node, YGWrapWrap); // 允许换行
+    }
+
     bool width_converted_to_max = false;
     float converted_width_value = 0.0f;
     if (style.width.isPercent() && style.width.value >= 100.0f &&
@@ -670,6 +682,11 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
     } else {
         // Approximate block/inline layout as a vertical stack
         YGNodeStyleSetFlexDirection(yoga_node, YGFlexDirectionColumn);
+        
+        // 但如果是 inline-block 元素，设置为 row 方向，让 Yoga 能正确计算其尺寸
+        if (style.display == "inline-block") {
+            YGNodeStyleSetFlexDirection(yoga_node, YGFlexDirectionRow);
+        }
     }
 
     // Set justify content
@@ -725,11 +742,33 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
     setPositionIfNeeded(YGEdgeLeft, style.left);
 
     // Set dimensions
+    // Note: Yoga uses border-box model internally. When CSS box-sizing is content-box,
+    // we need to add padding and border to the specified width/height.
     bool has_explicit_width = false;
     bool has_explicit_height = false;
 
+    // Calculate padding and border for content-box adjustment
+    float pad_h = 0.0f; // horizontal padding (left + right)
+    float pad_v = 0.0f; // vertical padding (top + bottom)
+    float border_h = 0.0f; // horizontal border (left + right)
+    float border_v = 0.0f; // vertical border (top + bottom)
+    
+    if (style.box_sizing == "content-box") {
+        if (style.padding_left.isPixel()) pad_h += style.padding_left.value;
+        if (style.padding_right.isPixel()) pad_h += style.padding_right.value;
+        if (style.padding_top.isPixel()) pad_v += style.padding_top.value;
+        if (style.padding_bottom.isPixel()) pad_v += style.padding_bottom.value;
+        border_h = style.border_width * 2.0f;
+        border_v = style.border_width * 2.0f;
+    }
+
     if (style.width.isPixel()) {
-        YGNodeStyleSetWidth(yoga_node, style.width.value);
+        float width_for_yoga = style.width.value;
+        if (style.box_sizing == "content-box") {
+            // content-box: CSS width is content width, add padding and border for Yoga
+            width_for_yoga += pad_h + border_h;
+        }
+        YGNodeStyleSetWidth(yoga_node, width_for_yoga);
         has_explicit_width = true;
     } else if (style.width.isPercent()) {
         YGNodeStyleSetWidthPercent(yoga_node, style.width.value);
@@ -737,7 +776,12 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
     }
 
     if (style.height.isPixel()) {
-        YGNodeStyleSetHeight(yoga_node, style.height.value);
+        float height_for_yoga = style.height.value;
+        if (style.box_sizing == "content-box") {
+            // content-box: CSS height is content height, add padding and border for Yoga
+            height_for_yoga += pad_v + border_v;
+        }
+        YGNodeStyleSetHeight(yoga_node, height_for_yoga);
         has_explicit_height = true;
     } else if (style.height.isPercent()) {
         YGNodeStyleSetHeightPercent(yoga_node, style.height.value);
@@ -762,28 +806,43 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
     }
 
     // Set margins
+    // Note: margin: auto is handled differently depending on context:
+    // - In flex containers: Yoga's YGNodeStyleSetMarginAuto handles it correctly
+    // - In block formatting context: layoutBlockFormattingContext() handles it after Yoga layout
     if (style.margin_top.isPixel()) {
         YGNodeStyleSetMargin(yoga_node, YGEdgeTop, style.margin_top.value);
     } else if (style.margin_top.isPercent()) {
         YGNodeStyleSetMarginPercent(yoga_node, YGEdgeTop, style.margin_top.value);
+    } else if (style.margin_top.isAuto()) {
+        // margin-top: auto - in flex context, this enables vertical centering
+        YGNodeStyleSetMarginAuto(yoga_node, YGEdgeTop);
     }
 
     if (style.margin_right.isPixel()) {
         YGNodeStyleSetMargin(yoga_node, YGEdgeRight, style.margin_right.value);
     } else if (style.margin_right.isPercent()) {
         YGNodeStyleSetMarginPercent(yoga_node, YGEdgeRight, style.margin_right.value);
+    } else if (style.margin_right.isAuto()) {
+        // margin-right: auto - in flex context, pushes element to the left
+        YGNodeStyleSetMarginAuto(yoga_node, YGEdgeRight);
     }
 
     if (style.margin_bottom.isPixel()) {
         YGNodeStyleSetMargin(yoga_node, YGEdgeBottom, style.margin_bottom.value);
     } else if (style.margin_bottom.isPercent()) {
         YGNodeStyleSetMarginPercent(yoga_node, YGEdgeBottom, style.margin_bottom.value);
+    } else if (style.margin_bottom.isAuto()) {
+        // margin-bottom: auto - in flex context, this enables vertical centering
+        YGNodeStyleSetMarginAuto(yoga_node, YGEdgeBottom);
     }
 
     if (style.margin_left.isPixel()) {
         YGNodeStyleSetMargin(yoga_node, YGEdgeLeft, style.margin_left.value);
     } else if (style.margin_left.isPercent()) {
         YGNodeStyleSetMarginPercent(yoga_node, YGEdgeLeft, style.margin_left.value);
+    } else if (style.margin_left.isAuto()) {
+        // margin-left: auto - in flex context, pushes element to the right
+        YGNodeStyleSetMarginAuto(yoga_node, YGEdgeLeft);
     }
 
     // Set padding
@@ -845,23 +904,40 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
     }
 
     // Set min/max width and height
+    // Note: min/max constraints also need box-sizing adjustment for content-box
     if (style.min_width.isPixel()) {
-        YGNodeStyleSetMinWidth(yoga_node, style.min_width.value);
+        float min_w = style.min_width.value;
+        if (style.box_sizing == "content-box") {
+            min_w += pad_h + border_h;
+        }
+        YGNodeStyleSetMinWidth(yoga_node, min_w);
     } else if (style.min_width.isPercent()) {
         YGNodeStyleSetMinWidthPercent(yoga_node, style.min_width.value);
     }
     if (style.max_width.isPixel()) {
-        YGNodeStyleSetMaxWidth(yoga_node, style.max_width.value);
+        float max_w = style.max_width.value;
+        if (style.box_sizing == "content-box") {
+            max_w += pad_h + border_h;
+        }
+        YGNodeStyleSetMaxWidth(yoga_node, max_w);
     } else if (style.max_width.isPercent()) {
         YGNodeStyleSetMaxWidthPercent(yoga_node, style.max_width.value);
     }
     if (style.min_height.isPixel()) {
-        YGNodeStyleSetMinHeight(yoga_node, style.min_height.value);
+        float min_h = style.min_height.value;
+        if (style.box_sizing == "content-box") {
+            min_h += pad_v + border_v;
+        }
+        YGNodeStyleSetMinHeight(yoga_node, min_h);
     } else if (style.min_height.isPercent()) {
         YGNodeStyleSetMinHeightPercent(yoga_node, style.min_height.value);
     }
     if (style.max_height.isPixel()) {
-        YGNodeStyleSetMaxHeight(yoga_node, style.max_height.value);
+        float max_h = style.max_height.value;
+        if (style.box_sizing == "content-box") {
+            max_h += pad_v + border_v;
+        }
+        YGNodeStyleSetMaxHeight(yoga_node, max_h);
     } else if (style.max_height.isPercent()) {
         YGNodeStyleSetMaxHeightPercent(yoga_node, style.max_height.value);
     }
@@ -894,6 +970,166 @@ void Engine::destroyYogaNode(YGNode* node) {
     if (node) {
         YGNodeFree(node);
     }
+}
+
+// ============================================================================
+// Block Formatting Context: margin: auto handling
+// ============================================================================
+//
+// CSS 2.1 §10.3.3: Block-level, non-replaced elements in normal flow
+//
+// The constraint equation for horizontal layout:
+//   margin-left + border-left + padding-left + width + padding-right + border-right + margin-right = containing block width
+//
+// When margin-left and margin-right are both 'auto':
+//   - If width is not 'auto': margins are equal, centering the element
+//   - If width is 'auto': margins compute to 0
+//
+// When only margin-left is 'auto':
+//   - Element is right-aligned within containing block
+//
+// When only margin-right is 'auto':
+//   - Element is left-aligned (default behavior, no adjustment needed)
+//
+// Note: margin-top: auto and margin-bottom: auto compute to 0 in block formatting context
+// (they only have special meaning in flex/grid contexts)
+//
+void Engine::layoutBlockFormattingContext(dom::DOMNodePtr root) {
+    if (!root) {
+        return;
+    }
+
+    std::function<void(const dom::DOMNodePtr&, const dom::DOMNodePtr&)> walk;
+    walk = [this, &walk](const dom::DOMNodePtr& node, const dom::DOMNodePtr& parent) {
+        if (!node) {
+            return;
+        }
+
+        const auto& style = node->getComputedStyle();
+
+        // Only process block-level elements in normal flow
+        // Skip: display:none, position:absolute/fixed, inline/inline-block, flex items
+        const bool is_block_in_flow =
+            style.layout_mode == dom::LayoutMode::Block &&
+            style.position != "absolute" &&
+            style.position != "fixed" &&
+            style.display != "inline" &&
+            style.display != "inline-block";
+
+        if (is_block_in_flow && parent) {
+            const bool margin_left_auto = style.margin_left.isAuto();
+            const bool margin_right_auto = style.margin_right.isAuto();
+
+            // Check if parent is a flex container - margin:auto has different semantics in flex
+            const auto& parent_style = parent->getComputedStyle();
+            const bool parent_is_flex = (parent_style.layout_mode == dom::LayoutMode::Flex);
+
+            // Only apply block formatting context margin:auto if parent is NOT flex
+            // (Yoga handles margin:auto correctly for flex items)
+            if (!parent_is_flex && (margin_left_auto || margin_right_auto)) {
+                auto it_layout = layout_cache.find(node.get());
+                auto it_parent_layout = layout_cache.find(parent.get());
+
+                if (it_layout != layout_cache.end() && it_layout->second &&
+                    it_parent_layout != layout_cache.end() && it_parent_layout->second) {
+                    
+                    LayoutNode* layout = it_layout->second.get();
+                    LayoutNode* parent_layout = it_parent_layout->second.get();
+
+                    // Get containing block's content width (parent width minus its padding)
+                    float parent_pad_left = parent_style.padding_left.isPixel() ? parent_style.padding_left.value : 0.0f;
+                    float parent_pad_right = parent_style.padding_right.isPixel() ? parent_style.padding_right.value : 0.0f;
+                    float containing_block_width = parent_layout->width - parent_pad_left - parent_pad_right;
+
+                    // Element's box width (already computed by Yoga, includes border/padding if box-sizing: border-box)
+                    float element_width = layout->width;
+
+                    // Get explicit margin values (non-auto margins)
+                    float margin_left_px = 0.0f;
+                    float margin_right_px = 0.0f;
+                    if (!margin_left_auto && style.margin_left.isPixel()) {
+                        margin_left_px = style.margin_left.value;
+                    } else if (!margin_left_auto && style.margin_left.isPercent()) {
+                        margin_left_px = parsePercentValue(style.margin_left, containing_block_width);
+                    }
+                    if (!margin_right_auto && style.margin_right.isPixel()) {
+                        margin_right_px = style.margin_right.value;
+                    } else if (!margin_right_auto && style.margin_right.isPercent()) {
+                        margin_right_px = parsePercentValue(style.margin_right, containing_block_width);
+                    }
+
+                    // Calculate remaining space
+                    float remaining_space = containing_block_width - element_width - margin_left_px - margin_right_px;
+                    if (remaining_space < 0.0f) {
+                        remaining_space = 0.0f;
+                    }
+
+                    // Calculate new X position based on margin:auto rules
+                    float new_x = layout->x;
+                    float content_start_x = parent_layout->x + parent_pad_left;
+
+                    if (margin_left_auto && margin_right_auto) {
+                        // Both auto: center the element
+                        // margin-left = margin-right = remaining_space / 2
+                        float auto_margin = remaining_space / 2.0f;
+                        new_x = content_start_x + auto_margin;
+                    } else if (margin_left_auto && !margin_right_auto) {
+                        // Only margin-left is auto: right-align
+                        // margin-left = remaining_space
+                        new_x = content_start_x + remaining_space;
+                    } else if (!margin_left_auto && margin_right_auto) {
+                        // Only margin-right is auto: left-align (default)
+                        // margin-right absorbs remaining space, element stays at left
+                        new_x = content_start_x + margin_left_px;
+                    }
+
+                    // Apply the new position if changed
+                    if (layout->x != new_x) {
+                        float old_x = layout->x;
+                        layout->x = new_x;
+                        layout->layout.position[0] = new_x;
+
+                        // Mark dirty region
+                        dirty_rect_.expand(old_x, layout->y, layout->width, layout->height);
+                        dirty_rect_.expand(new_x, layout->y, layout->width, layout->height);
+
+                        // Recursively update all descendant positions
+                        // Since we changed this node's X, all children need their absolute X updated
+                        float delta_x = new_x - old_x;
+                        std::function<void(const dom::DOMNodePtr&)> updateChildPositions;
+                        updateChildPositions = [this, delta_x, &updateChildPositions](const dom::DOMNodePtr& child_node) {
+                            if (!child_node) return;
+                            for (const auto& grandchild : child_node->getChildren()) {
+                                if (!grandchild || grandchild->getType() != dom::DOMNode::NodeType::ELEMENT) {
+                                    continue;
+                                }
+                                auto it = layout_cache.find(grandchild.get());
+                                if (it != layout_cache.end() && it->second) {
+                                    LayoutNode* child_layout = it->second.get();
+                                    child_layout->x += delta_x;
+                                    child_layout->layout.position[0] = child_layout->x;
+                                    dirty_rect_.expand(child_layout->x, child_layout->y,
+                                                       child_layout->width, child_layout->height);
+                                }
+                                updateChildPositions(grandchild);
+                            }
+                        };
+                        updateChildPositions(node);
+                    }
+                }
+            }
+        }
+
+        // Recursively process children
+        for (const auto& child : node->getChildren()) {
+            if (child && child->getType() == dom::DOMNode::NodeType::ELEMENT) {
+                walk(child, node);
+            }
+        }
+    };
+
+    // Start from root with no parent
+    walk(root, nullptr);
 }
 
 void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
@@ -975,7 +1211,14 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
                     }
 
                     InlineMetrics metrics{};
-                    if (!computeInlineMetricsForNode(child, metrics, container_style.font_size)) {
+                    bool has_text_metrics = computeInlineMetricsForNode(child, metrics, container_style.font_size);
+
+                    // 即使没有文本度量，只要有显式 width/height，也应该参与布局
+                    bool has_explicit_width = child_style.width.isPixel() || child_style.width.isPercent();
+                    bool has_explicit_height = child_style.height.isPixel() || child_style.height.isPercent();
+                    
+                    if (!has_text_metrics && !has_explicit_width && !has_explicit_height) {
+                        // 既没有文本内容，也没有显式尺寸，跳过
                         continue;
                     }
 
@@ -994,16 +1237,20 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
                         border_w = 0.0f;
                     }
 
+                    // 计算宽度：优先使用 CSS 显式指定的宽度
                     float width_px = 0.0f;
                     if (child_style.width.isPixel()) {
                         width_px = child_style.width.value;
                     } else if (child_style.width.isPercent()) {
                         width_px = parsePercentValue(child_style.width, content_w);
-                    } else {
+                    } else if (has_text_metrics) {
                         width_px = metrics.content_width_px + pad_l + pad_r + border_w * 2.0f;
                     }
-                    if (width_px <= 0.0f) {
+                    if (width_px <= 0.0f && has_text_metrics) {
                         width_px = metrics.line_height_px;
+                    }
+                    if (width_px <= 0.0f) {
+                        width_px = 16.0f; // 最小 fallback
                     }
 
                     // 计算高度：优先使用 CSS 指定的高度，否则使用文本行高 + padding + border
@@ -1012,18 +1259,30 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
                         height_px = child_style.height.value;
                     } else if (child_style.height.isPercent()) {
                         // 百分比高度暂不支持，使用内容高度
-                        height_px = metrics.line_height_px + pad_t + pad_b + border_w * 2.0f;
-                    } else {
+                        if (has_text_metrics) {
+                            height_px = metrics.line_height_px + pad_t + pad_b + border_w * 2.0f;
+                        }
+                    } else if (has_text_metrics) {
                         height_px = metrics.line_height_px + pad_t + pad_b + border_w * 2.0f;
                     }
-                    if (height_px <= 0.0f) {
+                    if (height_px <= 0.0f && has_text_metrics) {
                         height_px = metrics.line_height_px;
+                    }
+                    if (height_px <= 0.0f) {
+                        height_px = 16.0f; // 最小 fallback
                     }
 
                     item.preferred_width = width_px;
                     item.preferred_height = height_px;
                     item.line_height_px = height_px;  // 使用元素高度作为行高贡献
-                    item.baseline_from_border_top = border_w + pad_t + metrics.baseline_from_content_top_px;
+                    
+                    // baseline 计算：有文本时使用文本 baseline，否则使用底部对齐近似
+                    if (has_text_metrics) {
+                        item.baseline_from_border_top = border_w + pad_t + metrics.baseline_from_content_top_px;
+                    } else {
+                        // 无文本内容时，baseline 近似为元素底部（符合 CSS inline-block 的默认行为）
+                        item.baseline_from_border_top = height_px;
+                    }
                     item.vertical_align = child_style.vertical_align;
 
                     items.push_back(item);

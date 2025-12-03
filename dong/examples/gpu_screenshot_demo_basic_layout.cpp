@@ -471,8 +471,8 @@ int main() {
                 <div class="color-card">
                     <div class="color-row">
                         <div class="color-swatch primary">
-                            <div class="color-label">Primary</div>
-                            <div class="color-code">#1D4ED8 on #EFF6FF</div>
+                            <div class="color-label" style="color:#eff6ff;">Primary</div>
+                            <div class="color-code" style="color:#eff6ff;">#1D4ED8 on #EFF6FF</div>
                             <div class="color-caption">用于对齐前景/背景颜色和对比度。</div>
                         </div>
                         <div class="color-swatch muted">

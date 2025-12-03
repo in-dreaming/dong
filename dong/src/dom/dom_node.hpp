@@ -65,6 +65,7 @@ struct ComputedStyle {
     CSSValue padding_right;
     CSSValue padding_bottom;
     CSSValue padding_left;
+    std::string box_sizing = "content-box"; // content-box (default) or border-box
 
     // Layout
     std::string display = "block";  // block, inline, inline-block, flex, none
@@ -77,7 +78,7 @@ struct ComputedStyle {
     int z_index = 0;
 
     // Visual
-    std::string background_color = "#ffffff";
+    std::string background_color = "transparent";  // 默认透明，不绘制背景
     std::string color = "#000000";
     float border_radius = 0.0f;
     std::string border_color = "#000000";

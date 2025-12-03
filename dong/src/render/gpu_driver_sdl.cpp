@@ -18,25 +18,16 @@
 #include <ft2build.h>
 #include FT_FREETYPE_H
 
-namespace {
-
-constexpr float kSRGBGamma = 2.2f;
-
-// 使用简化的 gamma 2.2 近似，与 shader 保持一致
-float srgbChannelToLinear(float value) {
-    return std::pow(std::max(0.0f, std::min(1.0f, value)), kSRGBGamma);
-}
-
-} // namespace
-
 namespace dong::render {
 
 namespace {
 
+// 直接传递 sRGB 颜色，不做 gamma 转换
+// 因为 CSS 颜色本身就是 sRGB 空间，且 GPU 混合也在 sRGB 空间进行
 void writeLinearColor(const Color& color, float out_rgba[4]) {
-    out_rgba[0] = ::srgbChannelToLinear(color.r);
-    out_rgba[1] = ::srgbChannelToLinear(color.g);
-    out_rgba[2] = ::srgbChannelToLinear(color.b);
+    out_rgba[0] = color.r;
+    out_rgba[1] = color.g;
+    out_rgba[2] = color.b;
     out_rgba[3] = color.a;
 }
 
@@ -203,10 +194,6 @@ cbuffer RectUniforms : register(b0, space1) {
     float4 uClipMeta;
 };
 
-float3 linearToSRGB(float3 col) {
-    return pow(saturate(col), float3(1.0 / 2.2, 1.0 / 2.2, 1.0 / 2.2));
-}
-
 float sdRoundedClip(float2 pt, float4 rc, float rad) {
     float2 halfSize = float2((rc.z - rc.x) * 0.5, (rc.w - rc.y) * 0.5);
     float2 center = float2(rc.x, rc.y) + halfSize;
@@ -238,8 +225,8 @@ float4 main(PSInput input) : SV_Target0 {
     if (discardByClip(input.pixel)) {
         discard;
     }
-    float3 srgb = linearToSRGB(input.color.rgb);
-    return float4(srgb, input.color.a);
+    // 直接输出 sRGB 颜色，不做 gamma 转换
+    return input.color;
 }
 )";
 
@@ -264,6 +251,14 @@ float4 main(PSInput input) : SV_Target0 {
     SDL_GPUGraphicsPipelineCreateInfo pci{};
     SDL_GPUColorTargetDescription color_desc{};
     color_desc.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    // 启用 alpha 混合，支持半透明背景
+    color_desc.blend_state.enable_blend = true;
+    color_desc.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+    color_desc.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    color_desc.blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
+    color_desc.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+    color_desc.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    color_desc.blend_state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
 
     pci.target_info.num_color_targets = 1;
     pci.target_info.color_target_descriptions = &color_desc;
@@ -393,7 +388,7 @@ float4 main(PSInput input) : SV_Target0 {
     float alpha = saturate(0.5 - dist / aa);
     float4 base = input.color;
     base.a *= alpha;
-    base.rgb = pow(saturate(base.rgb), 1.0 / 2.2);
+    // 直接输出 sRGB 颜色，不做 gamma 转换
     return base;
 }
 )";
@@ -419,6 +414,14 @@ float4 main(PSInput input) : SV_Target0 {
     SDL_GPUGraphicsPipelineCreateInfo rrci{};
     SDL_GPUColorTargetDescription color_desc_rr{};
     color_desc_rr.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    // 启用 alpha 混合，支持半透明背景和抗锯齿边缘
+    color_desc_rr.blend_state.enable_blend = true;
+    color_desc_rr.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+    color_desc_rr.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    color_desc_rr.blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
+    color_desc_rr.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+    color_desc_rr.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    color_desc_rr.blend_state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
 
     rrci.target_info.num_color_targets = 1;
     rrci.target_info.color_target_descriptions = &color_desc_rr;
@@ -567,7 +570,7 @@ float4 main(PSInput input) : SV_Target0 {
     
     float4 base = input.color;
     base.a *= alpha;
-    base.rgb = pow(saturate(base.rgb), 1.0 / 2.2);
+    // 直接输出 sRGB 颜色，不做 gamma 转换
     return base;
 }
 )";
@@ -593,6 +596,14 @@ float4 main(PSInput input) : SV_Target0 {
     SDL_GPUGraphicsPipelineCreateInfo shadow_ci{};
     SDL_GPUColorTargetDescription color_desc_shadow{};
     color_desc_shadow.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    // 启用 alpha 混合，支持半透明阴影
+    color_desc_shadow.blend_state.enable_blend = true;
+    color_desc_shadow.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+    color_desc_shadow.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    color_desc_shadow.blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
+    color_desc_shadow.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+    color_desc_shadow.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    color_desc_shadow.blend_state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
 
     shadow_ci.target_info.num_color_targets = 1;
     shadow_ci.target_info.color_target_descriptions = &color_desc_shadow;
@@ -673,14 +684,6 @@ struct PSInput {
     float2 pixel : TEXCOORD1;
 };
 
-float3 srgbToLinear(float3 col) {
-    return pow(saturate(col), float3(2.2, 2.2, 2.2));
-}
-
-float3 linearToSRGB(float3 col) {
-    return pow(saturate(col), float3(1.0 / 2.2, 1.0 / 2.2, 1.0 / 2.2));
-}
-
 float sdRoundedClip(float2 pt, float4 rc, float rad) {
     float2 halfSize = float2((rc.z - rc.x) * 0.5, (rc.w - rc.y) * 0.5);
     float2 center = float2(rc.x, rc.y) + halfSize;
@@ -713,11 +716,10 @@ float4 main(PSInput input) : SV_Target0 {
         discard;
     }
     float4 tex = imageTexture.Sample(imageSampler, input.uv);
-    float3 linearSample = srgbToLinear(tex.rgb);
-    float3 tinted = linearSample * input.tint.rgb;
-    float3 srgbColor = linearToSRGB(tinted);
+    // 直接在 sRGB 空间做 tint 乘法（简化处理）
+    float3 tinted = tex.rgb * input.tint.rgb;
     float alpha = tex.a * input.tint.a;
-    return float4(srgbColor, alpha);
+    return float4(tinted, alpha);
 }
 )";
 
@@ -742,6 +744,14 @@ float4 main(PSInput input) : SV_Target0 {
     SDL_GPUGraphicsPipelineCreateInfo ipci{};
     SDL_GPUColorTargetDescription color_desc2{};
     color_desc2.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    // 启用 alpha 混合，支持半透明图片
+    color_desc2.blend_state.enable_blend = true;
+    color_desc2.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+    color_desc2.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    color_desc2.blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
+    color_desc2.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+    color_desc2.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    color_desc2.blend_state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
 
     ipci.target_info.num_color_targets = 1;
     ipci.target_info.color_target_descriptions = &color_desc2;
@@ -956,11 +966,8 @@ float4 main(PSInput input) : SV_Target0 {
         if (alpha <= 0.0f) {
             discard;
         }
-        // 先将线性颜色转为 sRGB，再乘以各通道 coverage
-        // 这样避免了对预乘颜色做 gamma 校正导致的颜色变亮问题
-        float gamma = (input.params.w != 0.0f) ? -input.params.w : 2.2f;
-        float3 srgbBase = toSRGB(input.color.rgb, gamma);
-        float3 srgbColor = srgbBase * alpha_rgb;
+        // 颜色已经是 sRGB 空间，直接使用
+        float3 srgbColor = input.color.rgb * alpha_rgb;
         float4 color;
         color.rgb = srgbColor;
         color.a = input.color.a * alpha;
@@ -972,12 +979,9 @@ float4 main(PSInput input) : SV_Target0 {
         if (alpha <= 0.0f) {
             discard;
         }
-        // 先将线性颜色转为 sRGB，再输出
-        // alpha 用于混合，不参与颜色值本身的计算
-        float gamma = (input.params.w != 0.0f) ? -input.params.w : 2.2f;
-        float3 srgbColor = toSRGB(input.color.rgb, gamma);
+        // 颜色已经是 sRGB 空间，直接使用
         float4 color;
-        color.rgb = srgbColor;
+        color.rgb = input.color.rgb;
         color.a = input.color.a * alpha;
         return color;
     }
@@ -2212,7 +2216,7 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             }
 
             const float atlas_range = glyph_tier->distance_range;
-            const float gamma_correction = -kSRGBGamma;
+            const float gamma_correction = -2.2f;  // sRGB gamma 值
             const float pixel_scale = cmd.scale_to_pixels;
 
             if (pipeline_state.active != PipelineBindingState::ActivePipeline::Text) {
