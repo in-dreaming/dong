@@ -43,6 +43,9 @@ public:
     // Debug: 打印隔离图层缓存（重栅格 / 缓存复用）情况
     void setDebugLogLayerCache(bool enable) { debug_log_layer_cache_ = enable; }
 
+    // MSDF 文本：是否启用 subpixel 渲染路径
+    void setMsdfSubpixelEnabled(bool enable) { msdf_subpixel_enabled_ = enable; }
+
 private:
     GPUDevice* gpu_device_;
     SDL_Window* window_;
@@ -52,6 +55,7 @@ private:
     bool in_frame_ = false;
     bool debug_log_draw_batches_ = false;
     bool debug_log_layer_cache_ = false;
+    bool msdf_subpixel_enabled_ = false;
     unsigned long long frame_index_ = 0;
     
     // Offscreen rendering support

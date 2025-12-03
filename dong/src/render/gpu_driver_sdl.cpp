@@ -763,23 +763,39 @@ float4 main(PSInput input) : SV_Target0 {
     float sd = median(msdf.r, msdf.g, msdf.b);
 
     float pxRange = max(input.params.x, 1.0f);
-    float dist = (sd - 0.5f) * pxRange;
-
     float invDPR = input.params.y;
+
+    float dist = (sd - 0.5f) * pxRange;
     float dx = ddx(dist);
     float dy = ddy(dist);
     float fw = abs(dx) + abs(dy);
     float width = max(fw * max(invDPR, 1.0f / 8.0f), 1.0f / 256.0f);
-    float alpha = saturate(dist / width + 0.02f);
 
-    if (alpha <= 0.0f) {
-        discard;
+    float subpixel = input.params.z;
+
+    float alpha;
+    float3 linearColor;
+
+    if (subpixel > 0.5f) {
+        // 简单 subpixel 路径：对 RGB 三个通道分别计算 coverage
+        float3 dist_rgb = (msdf - 0.5f) * pxRange;
+        float3 alpha_rgb = saturate(dist_rgb / width + 0.02f);
+        alpha = max(alpha_rgb.r, max(alpha_rgb.g, alpha_rgb.b));
+        if (alpha <= 0.0f) {
+            discard;
+        }
+        linearColor = input.color.rgb * alpha_rgb;
+    } else {
+        // 灰度 MSDF 路径
+        alpha = saturate(dist / width + 0.02f);
+        if (alpha <= 0.0f) {
+            discard;
+        }
+        linearColor = input.color.rgb * alpha;
     }
 
-    // input.color 已经是线性空间，在这里叠加 alpha 再转回 sRGB
-    float3 linearColor = input.color.rgb;
     float gamma = (input.params.w != 0.0f) ? -input.params.w : 2.2f;
-    float3 srgbColor = toSRGB(linearColor * alpha, gamma);
+    float3 srgbColor = toSRGB(linearColor, gamma);
 
     float4 color;
     color.rgb = srgbColor;
@@ -2075,7 +2091,7 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
 
                 dst.params[0] = px_range_screen;
                 dst.params[1] = inv_device_pixel_ratio;
-                dst.params[2] = 0.0f;
+                dst.params[2] = msdf_subpixel_enabled_ ? 1.0f : 0.0f;
                 dst.params[3] = gamma_correction;
 
                 ++glyphs_in_batch;
@@ -2205,6 +2221,11 @@ std::unique_ptr<GPUDriver> CreateGPUDriver(
         if (const char* env_layer_cache = std::getenv("DONG_DEBUG_LAYER_CACHE")) {
             if (env_layer_cache[0] == '1') {
                 driver->setDebugLogLayerCache(true);
+            }
+        }
+        if (const char* env_subpixel = std::getenv("DONG_MSDF_SUBPIXEL")) {
+            if (env_subpixel[0] == '1') {
+                driver->setMsdfSubpixelEnabled(true);
             }
         }
 

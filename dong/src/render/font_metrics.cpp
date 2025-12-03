@@ -17,6 +17,14 @@ std::unordered_map<std::string, FT_Face> g_design_face_cache;
 // 旧缓存：像素 face（key: font_path#pixel_size，用于过渡期）
 std::unordered_map<std::string, FT_Face> g_pixel_face_cache;
 
+// 简单 LRU：记录最近使用帧次或计数
+std::unordered_map<std::string, uint64_t> g_design_face_last_used;
+std::unordered_map<std::string, uint64_t> g_pixel_face_last_used;
+uint64_t g_face_usage_counter = 0;
+
+constexpr std::size_t kMaxDesignFaces = 32;
+constexpr std::size_t kMaxPixelFaces = 64;
+
 std::string makePixelFaceKey(const std::string& font_path, uint32_t pixel_size) {
     std::string key = font_path;
     key.push_back('#');
@@ -61,8 +69,11 @@ FT_Face getOrCreateDesignUnitsFace(const std::string& font_path) {
         return nullptr;
     }
 
+    ++g_face_usage_counter;
+
     auto it = g_design_face_cache.find(font_path);
     if (it != g_design_face_cache.end()) {
+        g_design_face_last_used[font_path] = g_face_usage_counter;
         return it->second;
     }
 
@@ -74,6 +85,31 @@ FT_Face getOrCreateDesignUnitsFace(const std::string& font_path) {
 
     // 不设置 pixel size，保持 design units 模式
     g_design_face_cache.emplace(font_path, face);
+    g_design_face_last_used[font_path] = g_face_usage_counter;
+
+    if (g_design_face_cache.size() > kMaxDesignFaces) {
+        // 简单淘汰：移除最久未使用的一个 face
+        std::string oldest_key;
+        uint64_t oldest_use = UINT64_MAX;
+        for (const auto& kv : g_design_face_last_used) {
+            if (kv.second < oldest_use) {
+                oldest_use = kv.second;
+                oldest_key = kv.first;
+            }
+        }
+        if (!oldest_key.empty()) {
+            auto it_face = g_design_face_cache.find(oldest_key);
+            if (it_face != g_design_face_cache.end()) {
+                if (it_face->second) {
+                    FT_Done_Face(it_face->second);
+                }
+                g_design_face_cache.erase(it_face);
+            }
+            g_design_face_last_used.erase(oldest_key);
+            SDL_Log("FontMetrics: evicted design-units face '%s' from cache", oldest_key.c_str());
+        }
+    }
+
     return face;
 }
 
@@ -131,9 +167,12 @@ FT_Face getOrCreateFontFace(const std::string& font_path, uint32_t pixel_size) {
         return nullptr;
     }
 
+    ++g_face_usage_counter;
+
     const std::string key = makePixelFaceKey(font_path, pixel_size);
     auto it = g_pixel_face_cache.find(key);
     if (it != g_pixel_face_cache.end()) {
+        g_pixel_face_last_used[key] = g_face_usage_counter;
         return it->second;
     }
 
@@ -146,6 +185,30 @@ FT_Face getOrCreateFontFace(const std::string& font_path, uint32_t pixel_size) {
     FT_Set_Pixel_Sizes(face, 0, pixel_size);
 
     g_pixel_face_cache.emplace(key, face);
+    g_pixel_face_last_used[key] = g_face_usage_counter;
+
+    if (g_pixel_face_cache.size() > kMaxPixelFaces) {
+        std::string oldest_key;
+        uint64_t oldest_use = UINT64_MAX;
+        for (const auto& kv : g_pixel_face_last_used) {
+            if (kv.second < oldest_use) {
+                oldest_use = kv.second;
+                oldest_key = kv.first;
+            }
+        }
+        if (!oldest_key.empty()) {
+            auto it_face = g_pixel_face_cache.find(oldest_key);
+            if (it_face != g_pixel_face_cache.end()) {
+                if (it_face->second) {
+                    FT_Done_Face(it_face->second);
+                }
+                g_pixel_face_cache.erase(it_face);
+            }
+            g_pixel_face_last_used.erase(oldest_key);
+            SDL_Log("FontMetrics: evicted pixel face '%s' from cache", oldest_key.c_str());
+        }
+    }
+
     return face;
 }
 
