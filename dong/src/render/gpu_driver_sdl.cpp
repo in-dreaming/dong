@@ -1059,12 +1059,14 @@ float4 main(PSInput input) : SV_Target0 {
         uint32_t bitmap_px;
         float distance_range;
     };
-    // Atlas 分级只区分 bitmap 尺寸，distance_range 统一为 4.0（与 msdfgen 默认 pxRange 对齐）
+    // Atlas 分级只区分 bitmap 尺寸，distance_range 根据 bitmap 尺寸调整
+    // 更大的 distance_range 可以提供更好的抗锯齿效果，但会占用更多的字形空间
+    // 一般建议 distance_range 约为 bitmap 尺寸的 1/8 到 1/4
     const GlyphTierConfig tier_configs[] = {
-        {32u, 4.0f},    // 正文/小号文本主力档位
-        {48u, 4.0f},    // 中号/UI 控件文本
-        {72u, 4.0f},    // 大号标题
-        {96u, 4.0f},    // 特大号标题或放大预览
+        {32u, 4.0f},    // 正文/小号文本主力档位 (range = 32/8 = 4)
+        {48u, 6.0f},    // 中号/UI 控件文本 (range = 48/8 = 6)
+        {72u, 8.0f},    // 大号标题 (range = 72/9 = 8)
+        {96u, 10.0f},   // 特大号标题或放大预览 (range = 96/9.6 ≈ 10)
     };
 
     for (const auto& cfg : tier_configs) {
@@ -2267,10 +2269,24 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                     continue;
                 }
 
-                const float bearing_x_px = entry->metrics.bearing_x_units * pixel_scale;
-                const float bearing_y_px = entry->metrics.bearing_y_units * pixel_scale;
-                const float glyph_w = entry->metrics.width_units * pixel_scale;
-                const float glyph_h = entry->metrics.height_units * pixel_scale;
+                const float msdf_scale = (entry->metrics.msdf_scale > 0.0f)
+                    ? entry->metrics.msdf_scale
+                    : 1.0f;
+                
+                // MSDF 纹理包含字形 + padding (range 像素)
+                // 渲染时需要考虑 padding 的影响
+                // padding 在 design units 中的大小 = range / msdf_scale
+                const float padding_units = atlas_range / msdf_scale;
+                
+                // 字形渲染尺寸 = (字形尺寸 + 2 * padding) * pixel_scale
+                const float glyph_w = (entry->metrics.width_units + 2.0f * padding_units) * pixel_scale;
+                const float glyph_h = (entry->metrics.height_units + 2.0f * padding_units) * pixel_scale;
+                
+                // bearing 需要调整，因为 MSDF 纹理左下角有 padding
+                // 原始 bearing_x 是从 pen position 到字形左边缘的距离
+                // 现在需要从 pen position 到 MSDF 纹理左边缘的距离 = bearing_x - padding
+                const float bearing_x_px = (entry->metrics.bearing_x_units - padding_units) * pixel_scale;
+                const float bearing_y_px = (entry->metrics.bearing_y_units + padding_units) * pixel_scale;
 
                 if (glyph_w <= 0.0f || glyph_h <= 0.0f) {
                     continue;
@@ -2295,9 +2311,6 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
 
                 writeLinearColor(cmd.color, inst.color);
 
-                const float msdf_scale = (entry->metrics.msdf_scale > 0.0f)
-                    ? entry->metrics.msdf_scale
-                    : 1.0f;
                 const float px_range_screen = atlas_range * (pixel_scale / msdf_scale);
 
                 inst.params[0] = px_range_screen;

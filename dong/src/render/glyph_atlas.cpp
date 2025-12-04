@@ -556,15 +556,21 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
     double height = bounds.t - bounds.b;
     double safe_width = std::max(width, 1.0);
     double safe_height = std::max(height, 1.0);
+    
+    // 计算 scale：使字形 + padding 能完全放入 MSDF 纹理
+    // 字形在 MSDF 纹理中占用 (msdf_size - 2*range) 像素
     double scale = std::min((msdf_size - range * 2) / safe_width,
                             (msdf_size - range * 2) / safe_height);
     
-    // translate的作用：将字形边界框的左下角移到原点，然后再平移使其居中
-    // 关键：translate 操作在缩放之前，单位是 design units
-    // 最简单的方式：将字形移到原点，让 msdfgen 自然居中
+    // translate 的计算：
+    // msdfgen 的 Projection 是 project(coord) = coord * scale + translate
+    // 我们希望字形左下角在 MSDF 纹理中位于 (range, range)
+    // 字形左下角在 shape 坐标系中是 (bounds.l, bounds.b)
+    // 所以 bounds.l * scale + translate.x = range
+    // translate.x = range - bounds.l * scale
     msdfgen::Vector2 translate(
-        -bounds.l,
-        -bounds.b
+        range - bounds.l * scale,
+        range - bounds.b * scale
     );
 
     msdfgen::generateMSDF(msdf, shape, range, scale, translate);
