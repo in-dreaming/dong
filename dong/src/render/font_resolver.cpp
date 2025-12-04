@@ -30,6 +30,7 @@ std::string toLowerAscii(std::string input) {
     return input;
 }
 
+// 预设字体候选列表：key 为 canonical family（或 generic family），value 为候选路径
 const std::unordered_map<std::string, std::vector<std::string>> kFontCandidates = {
     // 系统 UI 字体族：-apple-system / BlinkMacSystemFont / system-ui
     {"-apple-system", {
@@ -140,6 +141,74 @@ std::string findExistingFont(const std::vector<std::string>& candidates) {
     return {};
 }
 
+// 将 CSS font-weight 规范化为数值 100–900，未知值回退为 400
+int normalizeFontWeight(const std::string& css_weight) {
+    std::string trimmed = trimWhitespace(css_weight);
+    if (trimmed.empty()) {
+        return 400;
+    }
+    std::string lower = toLowerAscii(trimmed);
+    if (lower == "normal") {
+        return 400;
+    }
+    if (lower == "bold") {
+        return 700;
+    }
+    if (lower == "bolder") {
+        return 700;
+    }
+    if (lower == "lighter") {
+        return 300;
+    }
+
+    // 数值形式，如 "500"、"700"
+    int value = 400;
+    try {
+        value = std::stoi(lower);
+    } catch (...) {
+        return 400;
+    }
+    if (value < 100) value = 100;
+    if (value > 900) value = 900;
+    // 规范到 100 的倍数
+    int rem = value % 100;
+    if (rem != 0) {
+        value = value - rem + (rem >= 50 ? 100 : 0);
+    }
+    return value;
+}
+
+// 根据 family + weight 追加更精细的候选路径（例如为粗体优先尝试 Bold 字体文件），
+// 若找不到对应文件，会自然回退到 kFontCandidates 中的通用列表。
+void appendCandidatesForFamilyAndWeight(const std::string& canonical_family,
+                                        int numeric_weight,
+                                        std::vector<std::string>& out) {
+    auto it = kFontCandidates.find(canonical_family);
+
+    const bool is_bold = numeric_weight >= 600;
+    if (is_bold) {
+        // 针对粗体优先尝试常见 Bold 变体路径（若不存在会被忽略）
+        if (canonical_family == "-apple-system" || canonical_family == "sans-serif") {
+            out.push_back("/System/Library/Fonts/Supplemental/Arial Bold.ttf");
+            out.push_back("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf");
+            out.push_back("C:/Windows/Fonts/arialbd.ttf");
+        } else if (canonical_family == "serif") {
+            out.push_back("/System/Library/Fonts/Supplemental/Times New Roman Bold.ttf");
+            out.push_back("/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf");
+            out.push_back("C:/Windows/Fonts/timesbd.ttf");
+        } else if (canonical_family == "monospace") {
+            out.push_back("/System/Library/Fonts/Supplemental/Courier New Bold.ttf");
+            out.push_back("/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf");
+            out.push_back("C:/Windows/Fonts/consolab.ttf");
+        }
+    }
+
+    // 通用候选（包含 SF/Helvetica/Arial 等），始终作为回退
+    if (it != kFontCandidates.end()) {
+        out.insert(out.end(), it->second.begin(), it->second.end());
+    }
+}
+
 } // namespace
 
 std::vector<std::string> splitFontFamilies(const std::string& css_value) {
@@ -197,22 +266,25 @@ std::string canonicalFontFamily(const std::string& name) {
     return lower;
 }
 
-std::string resolveFontPath(const std::string& requested_family) {
+std::string resolveFontPath(const std::string& requested_family,
+                            const std::string& font_weight) {
     auto families = splitFontFamilies(requested_family);
     if (families.empty()) {
         families.push_back("sans-serif");
     }
 
+    const int numeric_weight = normalizeFontWeight(font_weight);
+
     std::vector<std::string> candidate_paths;
-    candidate_paths.reserve(families.size() * 3);
+    candidate_paths.reserve(families.size() * 4);
 
     for (const auto& family : families) {
         std::string canonical = canonicalFontFamily(family);
-        auto it = kFontCandidates.find(canonical);
-        if (it != kFontCandidates.end()) {
-            candidate_paths.insert(candidate_paths.end(), it->second.begin(), it->second.end());
-            continue;
-        }
+
+        // 优先根据 canonical family + weight 追加更精细的候选
+        appendCandidatesForFamilyAndWeight(canonical, numeric_weight, candidate_paths);
+
+        // 其次尝试 exact key（方便未来为具体 family 单独配置）
         auto exact = kFontCandidates.find(toLowerAscii(family));
         if (exact != kFontCandidates.end()) {
             candidate_paths.insert(candidate_paths.end(), exact->second.begin(), exact->second.end());
@@ -220,10 +292,16 @@ std::string resolveFontPath(const std::string& requested_family) {
     }
 
     if (candidate_paths.empty()) {
-        candidate_paths = kFontCandidates.at("sans-serif");
+        // 兜底使用 sans-serif 的候选列表
+        appendCandidatesForFamilyAndWeight("sans-serif", numeric_weight, candidate_paths);
     }
 
     return findExistingFont(candidate_paths);
+}
+
+std::string resolveFontPath(const std::string& requested_family) {
+    // 兼容旧接口：不传 weight 等价于 normal/400
+    return resolveFontPath(requested_family, "normal");
 }
 
 } // namespace dong::render

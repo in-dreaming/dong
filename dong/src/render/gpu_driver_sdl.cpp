@@ -2198,7 +2198,9 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 break;
             }
 
-            std::string font_path = !cmd.font_path.empty() ? cmd.font_path : resolveFontPath(cmd.font_family);
+            std::string font_path = !cmd.font_path.empty()
+                ? cmd.font_path
+                : resolveFontPath(cmd.font_family, cmd.font_weight);
             if (font_path.empty()) {
                 SDL_Log("GPUDriverSDL: no valid font found for family '%s'", cmd.font_family.c_str());
                 break;

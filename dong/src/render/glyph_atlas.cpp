@@ -537,14 +537,12 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
     shape.normalize();
     msdfgen::edgeColoringSimple(shape, 3.0);
 
-    // 计算边界（design units）
+    // 计算边界（design units），仅用于确定 MSDF 投影区域
+    // 注意：真正用于排版/基线对齐的字形度量（bearing/width/height）
+    // 已经从 FreeType/OS2 提取，保存在 out_metrics 中，后续不再被 bounds 覆盖。
+    // 这样 GlyphAtlas / TextShaper / Painter 全部共享同一套设计单位度量，
+    // 与浏览器的基线和行高定义保持一致，避免每个字形因为局部 bounds 差异产生“参差不齐”的视觉错位。
     msdfgen::Shape::Bounds bounds = shape.getBounds();
-
-    // 使用 msdfgen 的 bounds 统一几何度量（与 MSDF 纹理坐标系对齐）
-    out_metrics.bearing_x_units = static_cast<float>(bounds.l);
-    out_metrics.bearing_y_units = static_cast<float>(bounds.t);
-    out_metrics.width_units = static_cast<float>(bounds.r - bounds.l);
-    out_metrics.height_units = static_cast<float>(bounds.t - bounds.b);
 
     // 生成 MSDF（固定尺寸，字号无关）
     const int msdf_size = static_cast<int>(glyph_bitmap_size_);

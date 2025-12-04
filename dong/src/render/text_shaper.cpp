@@ -28,7 +28,7 @@ bool TextShaper::shape(const TextShapeRequest& request, ShapedText& out_text) {
         return false;
     }
 
-    std::string font_path = resolveFontPath(request.font_family);
+    std::string font_path = resolveFontPath(request.font_family, request.font_weight);
     if (font_path.empty()) {
         SDL_Log("TextShaper: failed to resolve font family '%s'", request.font_family.c_str());
         return false;
