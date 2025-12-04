@@ -947,11 +947,11 @@ float4 main(PSInput input) : SV_Target0 {
     float pxRange = max(input.params.x, 1.0f);
     float invDPR = input.params.y;
 
-    float dist = (sd - 0.5f) * pxRange;
-    float dx = ddx(dist);
-    float dy = ddy(dist);
-    float fw = abs(dx) + abs(dy);
-    float width = max(fw * max(invDPR, 1.0f / 8.0f), 1.0f / 256.0f);
+    // 将 signed distance 映射到屏幕像素距离，并用 fwidth 估算当前缩放下的边缘宽度
+    // 使用 msdfgen 官方约定：distanceSignCorrection 已经保证填充区域对应 (sd > 0.5)
+    // 即 glyph 内部 median(msdf) > 0.5，外部 < 0.5。
+    float screenPxDistance = (sd - 0.5f) * pxRange;
+    float screenPxRange = max(fwidth(screenPxDistance) * max(invDPR, 1.0f / 8.0f), 1.0f / 256.0f);
 
     float subpixel = input.params.z;
 
@@ -960,8 +960,9 @@ float4 main(PSInput input) : SV_Target0 {
     if (subpixel > 0.5f) {
         // 简单 subpixel 路径：对 RGB 三个通道分别计算 coverage
         float3 dist_rgb = (msdf - 0.5f) * pxRange;
-        // 使用标准 MSDF 公式：dist / width + 0.5，然后 saturate 到 [0,1]
-        float3 alpha_rgb = saturate(dist_rgb / width + 0.5f);
+        float3 range_rgb = max(fwidth(dist_rgb) * max(invDPR, 1.0f / 8.0f), 1.0f / 256.0f);
+        // 使用标准 MSDF 公式：dist / range + 0.5，然后 saturate 到 [0,1]
+        float3 alpha_rgb = saturate(dist_rgb / range_rgb + 0.5f);
         alpha = max(alpha_rgb.r, max(alpha_rgb.g, alpha_rgb.b));
         if (alpha <= 0.0f) {
             discard;
@@ -974,15 +975,14 @@ float4 main(PSInput input) : SV_Target0 {
         return color;
     } else {
         // 灰度 MSDF 路径
-        // 使用标准 MSDF 公式：dist / width + 0.5
-        alpha = saturate(dist / width + 0.5f);
-        if (alpha <= 0.0f) {
+        // 使用标准 MSDF 公式：screenPxDistance / screenPxRange + 0.5
+        float alpha_gray = saturate(screenPxDistance / screenPxRange + 0.5f);
+        if (alpha_gray <= 0.0f) {
             discard;
         }
-        // 颜色已经是 sRGB 空间，直接使用
         float4 color;
         color.rgb = input.color.rgb;
-        color.a = input.color.a * alpha;
+        color.a = input.color.a * alpha_gray;
         return color;
     }
 }
@@ -2020,6 +2020,10 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             u.rect[2] = cmd.rect.width;
             u.rect[3] = cmd.rect.height;
 
+            SDL_Log("[RECT] rect=(%.2f,%.2f,%.2f,%.2f) color=(%.3f,%.3f,%.3f,%.3f)",
+                    cmd.rect.x, cmd.rect.y, cmd.rect.width, cmd.rect.height,
+                    cmd.color.r, cmd.color.g, cmd.color.b, cmd.color.a);
+
             writeLinearColor(cmd.color, u.color);
 
             write_viewport(u.viewport);
@@ -2057,6 +2061,11 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             u.radius[1] = cmd.radius;
             u.radius[2] = cmd.radius;
             u.radius[3] = cmd.radius;
+
+            SDL_Log("[RRECT] rect=(%.2f,%.2f,%.2f,%.2f) radius=%.2f color=(%.3f,%.3f,%.3f,%.3f)",
+                    cmd.rect.x, cmd.rect.y, cmd.rect.width, cmd.rect.height,
+                    cmd.radius,
+                    cmd.color.r, cmd.color.g, cmd.color.b, cmd.color.a);
 
             write_viewport(u.viewport);
 
@@ -2310,6 +2319,27 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 inst.uv_rect[1] = entry->v0;
                 inst.uv_rect[2] = entry->u1;
                 inst.uv_rect[3] = entry->v1;
+
+                SDL_Log("[TEXT] glyph=%u font='%s' page=%u pen=(%.2f,%.2f) rect=(%.2f,%.2f,%.2f,%.2f) uv=(%.4f,%.4f,%.4f,%.4f) metrics_w=%.1f h=%.1f bx=%.1f by=%.1f padding_units=%.2f pixel_scale=%.4f",
+                        glyph.glyph_id,
+                        font_path.c_str(),
+                        entry->atlas_page,
+                        pen_x_px,
+                        pen_y_px,
+                        glyph_x,
+                        glyph_y,
+                        glyph_w,
+                        glyph_h,
+                        entry->u0,
+                        entry->v0,
+                        entry->u1,
+                        entry->v1,
+                        entry->metrics.width_units,
+                        entry->metrics.height_units,
+                        entry->metrics.bearing_x_units,
+                        entry->metrics.bearing_y_units,
+                        padding_units,
+                        pixel_scale);
 
                 writeLinearColor(cmd.color, inst.color);
 

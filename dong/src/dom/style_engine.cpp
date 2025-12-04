@@ -50,19 +50,39 @@ void StyleEngine::addStylesheet(const std::string& css) {
 std::vector<CSSRule> StyleEngine::parseCSS(const std::string& css) {
     std::vector<CSSRule> result;
     
+    // 首先移除 CSS 注释（/* ... */）
+    std::string css_no_comments;
+    css_no_comments.reserve(css.length());
+    size_t i = 0;
+    while (i < css.length()) {
+        if (i + 1 < css.length() && css[i] == '/' && css[i + 1] == '*') {
+            // 找到注释开始，跳过直到找到 */
+            size_t end = css.find("*/", i + 2);
+            if (end != std::string::npos) {
+                i = end + 2;
+            } else {
+                // 没有找到注释结束，跳过剩余内容
+                break;
+            }
+        } else {
+            css_no_comments += css[i];
+            ++i;
+        }
+    }
+    
     size_t pos = 0;
-    while (pos < css.length()) {
+    while (pos < css_no_comments.length()) {
         // Find opening brace
-        size_t brace_open = css.find('{', pos);
+        size_t brace_open = css_no_comments.find('{', pos);
         if (brace_open == std::string::npos) break;
         
         // Find closing brace
-        size_t brace_close = css.find('}', brace_open);
+        size_t brace_close = css_no_comments.find('}', brace_open);
         if (brace_close == std::string::npos) break;
         
         // Extract selector and declarations
-        std::string selector = css.substr(pos, brace_open - pos);
-        std::string declarations = css.substr(brace_open + 1, brace_close - brace_open - 1);
+        std::string selector = css_no_comments.substr(pos, brace_open - pos);
+        std::string declarations = css_no_comments.substr(brace_open + 1, brace_close - brace_open - 1);
         
         selector = trimWhitespace(selector);
         
@@ -875,6 +895,36 @@ void StyleEngine::applyStyleProperty(const std::string& property, const std::str
     }
     else if (prop == "left") {
         style.left = parseLength(val);
+    }
+    else if (prop == "inset") {
+        // CSS inset shorthand: top/right/bottom/left
+        std::istringstream iss(val);
+        std::string part;
+        std::vector<std::string> parts;
+        while (iss >> part) {
+            parts.push_back(part);
+        }
+        if (parts.size() == 1) {
+            auto v = parseLength(parts[0]);
+            style.top = style.right = style.bottom = style.left = v;
+        } else if (parts.size() == 2) {
+            auto v1 = parseLength(parts[0]); // block (top/bottom)
+            auto v2 = parseLength(parts[1]); // inline (left/right)
+            style.top = style.bottom = v1;
+            style.left = style.right = v2;
+        } else if (parts.size() == 3) {
+            auto v1 = parseLength(parts[0]); // top
+            auto v2 = parseLength(parts[1]); // inline
+            auto v3 = parseLength(parts[2]); // bottom
+            style.top = v1;
+            style.left = style.right = v2;
+            style.bottom = v3;
+        } else if (parts.size() >= 4) {
+            style.top = parseLength(parts[0]);
+            style.right = parseLength(parts[1]);
+            style.bottom = parseLength(parts[2]);
+            style.left = parseLength(parts[3]);
+        }
     }
     else if (prop == "z-index") {
         // 仅支持整数 z-index，非法值按 0 处理

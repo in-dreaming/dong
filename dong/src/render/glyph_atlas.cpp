@@ -9,6 +9,7 @@
 // MSDF 生成库（仅核心）
 #include <msdfgen/msdfgen.h>
 #include <msdfgen/core/edge-coloring.h>
+#include <msdfgen/core/rasterization.h>
 
 // FreeType
 #include <ft2build.h>
@@ -504,6 +505,16 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
     out_metrics.width_units = static_cast<float>(face->glyph->metrics.width);
     out_metrics.height_units = static_cast<float>(face->glyph->metrics.height);
 
+    SDL_Log("[MSDF] glyph=%u font='%s' units_per_em=%u metrics: adv=%.1f bx=%.1f by=%.1f w=%.1f h=%.1f",
+            glyph_id,
+            font_path.c_str(),
+            out_metrics.units_per_em,
+            out_metrics.advance_x_units,
+            out_metrics.bearing_x_units,
+            out_metrics.bearing_y_units,
+            out_metrics.width_units,
+            out_metrics.height_units);
+
     // 如果是空字形（如空格），直接返回
     if (face->glyph->outline.n_points == 0) {
         out_width = 0;
@@ -544,6 +555,11 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
     // 与浏览器的基线和行高定义保持一致，避免每个字形因为局部 bounds 差异产生“参差不齐”的视觉错位。
     msdfgen::Shape::Bounds bounds = shape.getBounds();
 
+    SDL_Log("[MSDF] glyph=%u font='%s' bounds: l=%.1f b=%.1f r=%.1f t=%.1f",
+            glyph_id,
+            font_path.c_str(),
+            bounds.l, bounds.b, bounds.r, bounds.t);
+
     // 生成 MSDF（固定尺寸，字号无关）
     const int msdf_size = static_cast<int>(glyph_bitmap_size_);
     const double range = static_cast<double>(glyph_distance_range_);
@@ -559,6 +575,14 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
     // 字形在 MSDF 纹理中占用 (msdf_size - 2*range) 像素
     double scale = std::min((msdf_size - range * 2) / safe_width,
                             (msdf_size - range * 2) / safe_height);
+
+    SDL_Log("[MSDF] glyph=%u msdf_size=%d range=%.2f width=%.2f height=%.2f safe_w=%.2f safe_h=%.2f scale=%.4f",
+            glyph_id,
+            msdf_size,
+            range,
+            width, height,
+            safe_width, safe_height,
+            scale);
     
     // translate 的计算：
     // msdfgen 的 Projection 是 project(coord) = coord * scale + translate
@@ -571,7 +595,12 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
         range - bounds.b * scale
     );
 
+    SDL_Log("[MSDF] glyph=%u translate: tx=%.2f ty=%.2f", glyph_id, translate.x, translate.y);
+
     msdfgen::generateMSDF(msdf, shape, range, scale, translate);
+    // 使用官方的 distanceSignCorrection 统一 MSDF 的符号约定，使填充区域
+    // 在所有字体/字重下都保持一致，避免粗体等 glyph 出现“内部/外部符号反转”。
+    msdfgen::distanceSignCorrection(msdf, shape, msdfgen::Vector2(scale, scale), translate);
 
     // 保存 MSDF 元数据（字号无关，design units → MSDF 像素的缩放和偏移）
     out_metrics.msdf_scale = static_cast<float>(scale);

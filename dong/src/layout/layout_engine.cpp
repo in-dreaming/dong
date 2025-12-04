@@ -110,8 +110,11 @@ float computeIntrinsicTextHeight(const dom::DOMNodePtr& node) {
 
     const float scale = shaped.scale_to_pixels;
     float effective_line_height = shaped.line_height_units * scale;
-    if (effective_line_height <= 0.0f) {
-        effective_line_height = font_size * 1.35f;
+    // 对标浏览器对 `line-height: normal` 的近似：不少于 ~1.2 * font-size，
+    // 避免大字号文本的行盒过小，导致后续块级元素“顶上来”覆盖文字。
+    const float min_line_height = font_size * 1.2f;
+    if (effective_line_height < min_line_height) {
+        effective_line_height = min_line_height;
     }
 
     float pad_top = style.padding_top.isPixel() ? style.padding_top.value : 0.0f;
@@ -267,6 +270,12 @@ static bool computeInlineMetricsForNode(const dom::DOMNodePtr& node,
 
     if (line_height_units <= 0.0f) {
         line_height_units = font_size_px / std::max(scale, 1e-3f);
+    }
+    // 对 `line-height: normal` 做一个浏览器级别的下限：不少于 1.2 * font-size，
+    // 保证行盒高度足够容纳大字号 glyph，避免块级兄弟元素压住上一行文本。
+    const float min_line_height_px = font_size_px * 1.2f;
+    if (line_height_units * scale < min_line_height_px) {
+        line_height_units = min_line_height_px / std::max(scale, 1e-3f);
     }
     if (ascent_units <= 0.0f) {
         ascent_units = font_size_px / std::max(scale, 1e-3f);

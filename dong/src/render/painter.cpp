@@ -227,7 +227,8 @@ static bool shouldClipOverflow(const std::string& overflow_value) {
     std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char c) {
         return static_cast<char>(std::tolower(c));
     });
-    return lowered == "hidden" || lowered == "scroll";
+    // CSS 语义：overflow:hidden/scroll/auto 都需要建立裁剪上下文
+    return lowered == "hidden" || lowered == "scroll" || lowered == "auto";
 }
 
 } // anonymous namespace
@@ -286,15 +287,6 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         node_rect.width = layout_node->layout.dimensions[0];
         node_rect.height = layout_node->layout.dimensions[1];
         has_layout_rect = node_rect.width > 0.0f && node_rect.height > 0.0f;
-    }
-
-    // Debug: log layout rect for the ABS badge node to verify it has a non-zero box
-    {
-        std::string debug_class = node->getAttribute("class");
-        if (debug_class.find("abs-badge") != std::string::npos) {
-            SDL_Log("[Painter] ABS badge layout rect: x=%.1f y=%.1f w=%.1f h=%.1f has_layout_rect=%d",
-                    node_rect.x, node_rect.y, node_rect.width, node_rect.height, has_layout_rect ? 1 : 0);
-        }
     }
 
     const bool should_apply_clip = has_layout_rect && shouldClipOverflow(style.overflow);

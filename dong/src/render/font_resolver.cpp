@@ -34,11 +34,14 @@ std::string toLowerAscii(std::string input) {
 const std::unordered_map<std::string, std::vector<std::string>> kFontCandidates = {
     // 系统 UI 字体族：-apple-system / BlinkMacSystemFont / system-ui
     {"-apple-system", {
-        // macOS 优先选择 SF 系列，其次 Helvetica/Arial
+        // macOS 上优先使用实际存在的 CJK 无衬线字体，其次 SF 系列和西文字体
+        "/System/Library/Fonts/Hiragino Sans GB.ttc",
+        "/System/Library/Fonts/STHeiti Light.ttc",
+        "/System/Library/Fonts/STHeiti Medium.ttc",
         "/System/Library/Fonts/SFNS.ttf",
         "/System/Library/Fonts/SFNSDisplay.ttf",
         "/System/Library/Fonts/SFNSRounded.ttf",
-        "/System/Library/Fonts/SF-Pro.ttf",
+        "/System/Library/Fonts/SFCompact.ttf",
         "/System/Library/Fonts/Helvetica.ttc",
         "/System/Library/Fonts/Supplemental/Arial.ttf",
         // Linux 常见替代
@@ -70,6 +73,10 @@ const std::unordered_map<std::string, std::vector<std::string>> kFontCandidates 
         "C:/Windows/Fonts/arial.ttf"
     }},
     {"sans-serif", {
+        // 优先选择具有良好 CJK 覆盖的系统无衬线字体
+        "/System/Library/Fonts/Hiragino Sans GB.ttc",
+        "/System/Library/Fonts/STHeiti Light.ttc",
+        "/System/Library/Fonts/STHeiti Medium.ttc",
         "/System/Library/Fonts/Helvetica.ttc",
         "/System/Library/Fonts/Supplemental/Arial.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
