@@ -2316,9 +2316,11 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 inst.rect[3] = glyph_h;
 
                 inst.uv_rect[0] = entry->u0;
-                inst.uv_rect[1] = entry->v0;
+                // 交换 UV 的 V 坐标：msdfgen 的 y=0 在底部，但渲染矩形的 y=0 在顶部
+                // 所以需要翻转 V 坐标
+                inst.uv_rect[1] = entry->v1;
                 inst.uv_rect[2] = entry->u1;
-                inst.uv_rect[3] = entry->v1;
+                inst.uv_rect[3] = entry->v0;
 
                 SDL_Log("[TEXT] glyph=%u font='%s' page=%u pen=(%.2f,%.2f) rect=(%.2f,%.2f,%.2f,%.2f) uv=(%.4f,%.4f,%.4f,%.4f) metrics_w=%.1f h=%.1f bx=%.1f by=%.1f padding_units=%.2f pixel_scale=%.4f",
                         glyph.glyph_id,

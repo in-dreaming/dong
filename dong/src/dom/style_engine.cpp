@@ -278,6 +278,11 @@ void StyleEngine::computeStyles(DOMNodePtr node) {
             computed.text_transform = rule.style.text_transform;
         if (!rule.style.vertical_align.empty() && rule.style.vertical_align != "baseline")
             computed.vertical_align = rule.style.vertical_align;
+        
+        // Box shadow
+        if (!rule.style.box_shadows.empty()) {
+            computed.box_shadows = rule.style.box_shadows;
+        }
     }
     
     if (debug_soft) {

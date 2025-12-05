@@ -414,11 +414,8 @@ const AtlasEntry* GlyphAtlas::addGlyph(uint32_t glyph_id, const std::string& fon
     }
 
     uint8_t* dst_bytes = static_cast<uint8_t*>(mapped);
-    for (uint32_t row = 0; row < glyph_height; ++row) {
-        const uint32_t src_row = glyph_height - 1 - row;
-        const uint8_t* src_ptr = bitmap.data() + src_row * stride;
-        std::memcpy(dst_bytes + row * stride, src_ptr, stride);
-    }
+    // 直接复制，Y 轴翻转已经在 generateMSDF 中完成
+    std::memcpy(dst_bytes, bitmap.data(), bitmap.size());
     SDL_UnmapGPUTransferBuffer(dev, transfer_buf);
 
     SDL_GPUCopyPass* copy_pass = SDL_BeginGPUCopyPass(cmd_buf);
@@ -552,7 +549,7 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
     // 注意：真正用于排版/基线对齐的字形度量（bearing/width/height）
     // 已经从 FreeType/OS2 提取，保存在 out_metrics 中，后续不再被 bounds 覆盖。
     // 这样 GlyphAtlas / TextShaper / Painter 全部共享同一套设计单位度量，
-    // 与浏览器的基线和行高定义保持一致，避免每个字形因为局部 bounds 差异产生“参差不齐”的视觉错位。
+    // 与浏览器的基线和行高定义保持一致，避免每个字形因为局部 bounds 差异产生"参差不齐"的视觉错位。
     msdfgen::Shape::Bounds bounds = shape.getBounds();
 
     SDL_Log("[MSDF] glyph=%u font='%s' bounds: l=%.1f b=%.1f r=%.1f t=%.1f",
@@ -599,8 +596,11 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
 
     msdfgen::generateMSDF(msdf, shape, range, scale, translate);
     // 使用官方的 distanceSignCorrection 统一 MSDF 的符号约定，使填充区域
-    // 在所有字体/字重下都保持一致，避免粗体等 glyph 出现“内部/外部符号反转”。
+    // 在所有字体/字重下都保持一致，避免粗体等 glyph 出现"内部/外部符号反转"。
     msdfgen::distanceSignCorrection(msdf, shape, msdfgen::Vector2(scale, scale), translate);
+
+    // 调试：检查 MSDF 纹理中特定位置的距离值（仅在需要时启用）
+    // 注意：msdfgen 使用数学坐标系，y=0 在底部
 
     // 保存 MSDF 元数据（字号无关，design units → MSDF 像素的缩放和偏移）
     out_metrics.msdf_scale = static_cast<float>(scale);
@@ -608,6 +608,7 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
     out_metrics.msdf_translate_y = static_cast<float>(translate.y);
 
     // 转换为 RGBA8 格式（RGB = MSDF 通道，A 恒为 1.0）
+    // 不做 Y 轴翻转，在渲染时通过交换 UV 的 V 坐标来处理
     out_width = msdf_size;
     out_height = msdf_size;
     out_bitmap.resize(out_width * out_height * 4);
