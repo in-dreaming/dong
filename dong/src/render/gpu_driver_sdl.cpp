@@ -950,36 +950,41 @@ float4 main(PSInput input) : SV_Target0 {
     }
 
     // 基于 msdfgen + fwidth 的 MSDF 解码：
-    // 1. params.x 传入屏幕空间 pxRange（像素）
-    // 2. median 取 signed distance（0.5 为轮廓）并按 pxRange 缩放
-    // 3. 使用 fwidth(dist) * inv_device_pixel_ratio 估算当前缩放下 1 逻辑像素的距离变化
-    // 4. 按 dist / width + 0.5 做归一化，保证不同缩放与 DPI 下边缘宽度一致
+    // 使用 msdfgen 官方约定：distanceSignCorrection 已经保证填充区域对应 (sd > 0.5)
+    // 即 glyph 内部 median(msdf) > 0.5，外部 < 0.5。
     float3 msdf = msdfTexture.Sample(msdfSampler, input.uv).rgb;
     float sd = median(msdf.r, msdf.g, msdf.b);
 
     float pxRange = max(input.params.x, 1.0f);
     float invDPR = input.params.y;
-
-    // 将 signed distance 映射到屏幕像素距离，并用 fwidth 估算当前缩放下的边缘宽度
-    // 使用 msdfgen 官方约定：distanceSignCorrection 已经保证填充区域对应 (sd > 0.5)
-    // 即 glyph 内部 median(msdf) > 0.5，外部 < 0.5。
-    float screenPxDistance = (sd - 0.5f) * pxRange;
-    float screenPxRange = max(fwidth(screenPxDistance) * max(invDPR, 1.0f / 8.0f), 1.0f / 256.0f);
-
     float subpixel = input.params.z;
+
+    // 计算屏幕空间像素距离
+    float screenPxDistance = (sd - 0.5f) * pxRange;
+    
+    // 使用 fwidth 估算边缘宽度，但添加更稳定的下限和上限
+    // 下限防止边缘过于锐利产生锯齿，上限防止边缘过于模糊
+    float fw = fwidth(screenPxDistance);
+    float dprFactor = max(invDPR, 0.25f);  // 至少 0.25，防止极端锐利
+    float screenPxRange = clamp(fw * dprFactor, 0.5f, 2.0f);  // 限制在 0.5-2.0 像素范围内
 
     float alpha;
 
     if (subpixel > 0.5f) {
-        // 简单 subpixel 路径：对 RGB 三个通道分别计算 coverage
+        // Subpixel 路径：对 RGB 三个通道分别计算 coverage
         float3 dist_rgb = (msdf - 0.5f) * pxRange;
-        float3 range_rgb = max(fwidth(dist_rgb) * max(invDPR, 1.0f / 8.0f), 1.0f / 256.0f);
+        float3 fw_rgb = fwidth(dist_rgb);
+        float3 range_rgb = clamp(fw_rgb * dprFactor, 0.5f, 2.0f);
+        
         // 使用标准 MSDF 公式：dist / range + 0.5，然后 saturate 到 [0,1]
         float3 alpha_rgb = saturate(dist_rgb / range_rgb + 0.5f);
         alpha = max(alpha_rgb.r, max(alpha_rgb.g, alpha_rgb.b));
-        if (alpha <= 0.0f) {
+        
+        // 早期剔除完全透明的像素
+        if (alpha < 0.004f) {  // 1/255 ≈ 0.004
             discard;
         }
+        
         // 颜色已经是 sRGB 空间，直接使用
         float3 srgbColor = input.color.rgb * alpha_rgb;
         float4 color;
@@ -990,9 +995,12 @@ float4 main(PSInput input) : SV_Target0 {
         // 灰度 MSDF 路径
         // 使用标准 MSDF 公式：screenPxDistance / screenPxRange + 0.5
         float alpha_gray = saturate(screenPxDistance / screenPxRange + 0.5f);
-        if (alpha_gray <= 0.0f) {
+        
+        // 早期剔除完全透明的像素
+        if (alpha_gray < 0.004f) {
             discard;
         }
+        
         float4 color;
         color.rgb = input.color.rgb;
         color.a = input.color.a * alpha_gray;

@@ -466,7 +466,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
     // 3. 文本内容
     if (layout_node && tag != "script" && tag != "style" && tag != "head" && tag != "img") {
         bool has_text_child = false;
-        bool has_element_child = false;
+        bool has_inline_element_child = false;
         std::string raw_text;
         
         for (const auto& child : node->getChildren()) {
@@ -475,7 +475,11 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                 raw_text += child->getTextContent();
                 has_text_child = true;
             } else if (child->getType() == dom::DOMNode::NodeType::ELEMENT) {
-                has_element_child = true;
+                const auto& child_style = child->getComputedStyle();
+                // 检查是否为 inline/inline-block 元素
+                if (child_style.display == "inline" || child_style.display == "inline-block") {
+                    has_inline_element_child = true;
+                }
             }
         }
 
@@ -484,7 +488,131 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
             tag == "h5" || tag == "h6" || tag == "p" || tag == "span" ||
             tag == "button" || tag == "code" || tag == "div" || tag == "footer";
 
-        if (has_text_child && (tag_prefers_text || !has_element_child)) {
+        // 当有 inline 子元素时，需要按顺序处理每个子节点，避免文本重叠
+        if (has_text_child && has_inline_element_child && tag_prefers_text) {
+            // 混合内容：有 TEXT 节点和 inline 元素
+            // 按子节点顺序分别绘制每个 TEXT 段落，计算正确的起始 X 位置
+            float x = layout_node->layout.position[0];
+            float y = layout_node->layout.position[1];
+            float width = layout_node->layout.dimensions[0];
+
+            float pad_left = style.padding_left.isPixel() ? style.padding_left.value : 0.0f;
+            float pad_right = style.padding_right.isPixel() ? style.padding_right.value : 0.0f;
+            float pad_top = style.padding_top.isPixel() ? style.padding_top.value : 0.0f;
+
+            float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
+            Color text_color = makeColorFromCss(style.color);
+
+            float inner_width = width - pad_left - pad_right;
+            if (inner_width <= 0.0f) inner_width = width > 0.0f ? width : 0.0f;
+
+            // 计算累计 X 偏移，遍历每个子节点
+            float cumulative_x_offset = 0.0f;
+
+            for (const auto& child : node->getChildren()) {
+                if (!child) continue;
+
+                if (child->getType() == dom::DOMNode::NodeType::ELEMENT) {
+                    const auto& child_style = child->getComputedStyle();
+                    if (child_style.display == "inline" || child_style.display == "inline-block") {
+                        // 获取 inline 元素的布局宽度（包括 margin）
+                        const layout::LayoutNode* child_layout = layout_engine_ ? layout_engine_->getLayout(child) : nullptr;
+                        if (child_layout) {
+                            float child_width = child_layout->layout.dimensions[0];
+                            float margin_left = 0.0f, margin_right = 0.0f;
+                            if (child_style.margin_left.isPixel()) margin_left = child_style.margin_left.value;
+                            if (child_style.margin_right.isPixel()) margin_right = child_style.margin_right.value;
+                            cumulative_x_offset += margin_left + child_width + margin_right;
+                        }
+                    }
+                } else if (child->getType() == dom::DOMNode::NodeType::TEXT) {
+                    std::string text_content = child->getTextContent();
+                    std::string text = collapseWhitespace(text_content);
+                    if (text.empty()) continue;
+
+                    // 使用 HarfBuzz shaping
+                    TextShapeRequest req{};
+                    req.text = text;
+                    req.font_family = style.font_family;
+                    req.font_weight = style.font_weight;
+                    req.font_size = font_size;
+
+                    ShapedText shaped{};
+                    if (!text_shaper_.shape(req, shaped) || shaped.glyphs.empty()) {
+                        continue;
+                    }
+
+                    const float scale = shaped.scale_to_pixels;
+                    float text_width_px = shaped.width_units * scale;
+
+                    // baseline 计算
+                    float line_height_units = shaped.line_height_units;
+                    float ascent_units = shaped.ascent_units;
+                    float descent_units = shaped.descent_units;
+
+                    if (style.line_height > 0.0f) {
+                        if (style.line_height_is_unitless) {
+                            float css_line_height_px = style.line_height * font_size;
+                            line_height_units = css_line_height_px / std::max(scale, 1e-3f);
+                        } else {
+                            line_height_units = style.line_height / std::max(scale, 1e-3f);
+                        }
+                    }
+                    if (line_height_units <= 0.0f) {
+                        line_height_units = font_size / std::max(scale, 1e-3f);
+                    }
+                    if (ascent_units <= 0.0f) {
+                        ascent_units = font_size / std::max(scale, 1e-3f);
+                    }
+
+                    float descent_abs_units = descent_units < 0.0f ? -descent_units : 0.0f;
+                    float metrics_height_units = ascent_units + descent_abs_units;
+                    if (metrics_height_units <= 0.0f) {
+                        metrics_height_units = line_height_units;
+                    }
+                    float extra_leading_units = line_height_units - metrics_height_units;
+                    if (extra_leading_units < 0.0f) extra_leading_units = 0.0f;
+                    float top_leading_units = extra_leading_units * 0.5f;
+                    float baseline_offset = (top_leading_units + ascent_units) * scale;
+                    float ascent_px = ascent_units * scale;
+                    float effective_line_height = line_height_units * scale;
+
+                    // 计算文本起始位置（考虑累计偏移）
+                    float text_x = x + pad_left + cumulative_x_offset;
+                    float baseline_y = y + pad_top + baseline_offset;
+
+                    DrawGlyphRunData glyph_run{};
+                    glyph_run.rect.x = text_x;
+                    glyph_run.rect.y = baseline_y - ascent_px;
+                    glyph_run.rect.width = text_width_px;
+                    glyph_run.rect.height = effective_line_height;
+                    glyph_run.color = text_color;
+                    glyph_run.font_size = font_size;
+                    glyph_run.font_family = style.font_family;
+                    glyph_run.font_weight = style.font_weight;
+                    glyph_run.font_path = shaped.font_path;
+                    glyph_run.baseline_x = text_x;
+                    glyph_run.baseline_y = baseline_y;
+                    glyph_run.units_per_em = shaped.units_per_em;
+                    glyph_run.scale_to_pixels = shaped.scale_to_pixels;
+
+                    const auto& glyphs = shaped.glyphs;
+                    glyph_run.glyphs.reserve(glyphs.size());
+                    for (const auto& sg : glyphs) {
+                        GlyphInstance inst{};
+                        inst.glyph_id = sg.glyph_id;
+                        inst.pen_x_units = sg.pen_x_units;
+                        inst.pen_y_units = sg.pen_y_units;
+                        glyph_run.glyphs.push_back(inst);
+                    }
+
+                    builder.addGlyphRun(std::move(glyph_run));
+
+                    // 更新累计宽度
+                    cumulative_x_offset += text_width_px;
+                }
+            }
+        } else if (has_text_child && (tag_prefers_text || !has_inline_element_child)) {
             std::string debug_class = node->getAttribute("class");
             if (debug_class.find("abs-badge") != std::string::npos) {
                 SDL_Log("[Painter] ABS badge text raw='%s'", raw_text.c_str());

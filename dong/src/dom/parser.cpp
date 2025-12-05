@@ -160,6 +160,11 @@ void Parser::applyDefaultStyles(DOMNodePtr node) {
     }
     else if (tag == "span" || tag == "a" || tag == "b" || tag == "i" || tag == "strong" || tag == "em") {
         style.display = "inline";
+        // 粗体和斜体标签的默认样式
+        if (tag == "b" || tag == "strong") {
+            style.font_weight = "bold";
+        }
+        // TODO: 支持 <i> 和 <em> 的斜体样式
     }
     else if (tag == "h1" || tag == "h2" || tag == "h3" || tag == "h4" || tag == "h5" || tag == "h6") {
         style.display = "block";
