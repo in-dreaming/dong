@@ -245,7 +245,7 @@ int main() {
         <body>
             <!-- 区块 1：原始 MSDF 大字号基线测试 -->
             <div class="section-title">MSDF baseline</div>
-            <div class="test-line size-72">ABC</div>
+            <div class="test-line size-72">ABCqypj</div>
             <div class="test-line size-48">Test</div>
             <div class="test-line size-36">Hello</div>
 

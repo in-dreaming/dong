@@ -533,15 +533,14 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
             safe_width, safe_height,
             scale);
     
-    // translate 的计算：
-    // msdfgen 的 Projection 是 project(coord) = coord * scale + translate
-    // 我们希望字形左下角在 MSDF 纹理中位于 (range, range)
-    // 字形左下角在 shape 坐标系中是 (bounds.l, bounds.b)
-    // 所以 bounds.l * scale + translate.x = range
-    // translate.x = range - bounds.l * scale
+    // 正确的 translate 计算
+    // msdfgen 的 Projection 公式是: msdf_coord = scale * (shape_coord + translate)
+    // 我们希望字形左下角 (bounds.l, bounds.b) 在 MSDF 纹理中位于 (range, range)
+    // 所以: range = scale * (bounds.l + translate.x)
+    // translate.x = range / scale - bounds.l
     msdfgen::Vector2 translate(
-        range - bounds.l * scale,
-        range - bounds.b * scale
+        range / scale - bounds.l,
+        range / scale - bounds.b
     );
 
     SDL_Log("[MSDF] glyph=%u translate: tx=%.2f ty=%.2f", glyph_id, translate.x, translate.y);
