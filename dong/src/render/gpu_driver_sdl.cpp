@@ -949,43 +949,46 @@ float4 main(PSInput input) : SV_Target0 {
         discard;
     }
 
-    // 基于 msdfgen + fwidth 的 MSDF 解码：
-    // 使用 msdfgen 官方约定：distanceSignCorrection 已经保证填充区域对应 (sd > 0.5)
-    // 即 glyph 内部 median(msdf) > 0.5，外部 < 0.5。
+    // 基于 msdfgen + fwidth 的 MSDF 解码
     float3 msdf = msdfTexture.Sample(msdfSampler, input.uv).rgb;
     float sd = median(msdf.r, msdf.g, msdf.b);
 
+    // pxRange 是屏幕空间的距离场范围
+    // 确保至少为 1 像素
     float pxRange = max(input.params.x, 1.0f);
-    float invDPR = input.params.y;
     float subpixel = input.params.z;
 
     // 计算屏幕空间像素距离
+    // sd = 0.5 是边缘，> 0.5 是字形内部，< 0.5 是字形外部
     float screenPxDistance = (sd - 0.5f) * pxRange;
     
-    // 使用 fwidth 估算边缘宽度，但添加更稳定的下限和上限
-    // 下限防止边缘过于锐利产生锯齿，上限防止边缘过于模糊
-    float fw = fwidth(screenPxDistance);
-    float dprFactor = max(invDPR, 0.25f);  // 至少 0.25，防止极端锐利
-    float screenPxRange = clamp(fw * dprFactor, 0.5f, 2.0f);  // 限制在 0.5-2.0 像素范围内
+    // 【正式方案】严格处理字形外部区域
+    // 如果 screenPxDistance < -0.5（在字形外部超过半个像素），直接丢弃
+    // 这确保 padding 区域完全透明，避免相邻字符渲染时的混合问题
+    if (screenPxDistance < -0.5f) {
+        discard;
+    }
+    
+    // 使用 pxRange 本身作为抗锯齿宽度的基准
+    // 这样边缘过渡带与 MSDF 的距离场范围保持一致
+    float screenPxRange = clamp(pxRange, 0.5f, 2.0f);
 
     float alpha;
 
     if (subpixel > 0.5f) {
-        // Subpixel 路径：对 RGB 三个通道分别计算 coverage
+        // Subpixel 路径
         float3 dist_rgb = (msdf - 0.5f) * pxRange;
-        float3 fw_rgb = fwidth(dist_rgb);
-        float3 range_rgb = clamp(fw_rgb * dprFactor, 0.5f, 2.0f);
         
-        // 使用标准 MSDF 公式：dist / range + 0.5，然后 saturate 到 [0,1]
+        // 使用与灰度路径相同的范围
+        float3 range_rgb = float3(screenPxRange, screenPxRange, screenPxRange);
+        
         float3 alpha_rgb = saturate(dist_rgb / range_rgb + 0.5f);
         alpha = max(alpha_rgb.r, max(alpha_rgb.g, alpha_rgb.b));
         
-        // 早期剔除完全透明的像素
-        if (alpha < 0.004f) {  // 1/255 ≈ 0.004
+        if (alpha < 0.004f) {
             discard;
         }
         
-        // 颜色已经是 sRGB 空间，直接使用
         float3 srgbColor = input.color.rgb * alpha_rgb;
         float4 color;
         color.rgb = srgbColor;
@@ -993,10 +996,8 @@ float4 main(PSInput input) : SV_Target0 {
         return color;
     } else {
         // 灰度 MSDF 路径
-        // 使用标准 MSDF 公式：screenPxDistance / screenPxRange + 0.5
         float alpha_gray = saturate(screenPxDistance / screenPxRange + 0.5f);
         
-        // 早期剔除完全透明的像素
         if (alpha_gray < 0.004f) {
             discard;
         }
@@ -2330,18 +2331,32 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 const float pen_x_px = glyph.pen_x_units * pixel_scale + cmd.baseline_x;
                 const float pen_y_px = glyph.pen_y_units * pixel_scale + cmd.baseline_y;
 
-                // 使用 bounds 来计算精确的 bearing
-                // bounds_left 是字形左边缘相对于原点的位置（design units）
-                // bounds_top 是字形顶部相对于 baseline 的位置（design units，正值向上）
-                // 
-                // 在屏幕坐标系中（y 向下为正）：
-                // - glyph_x = pen_x + bounds_left - padding
-                // - glyph_y = pen_y - bounds_top - padding
+                // MSDF 纹理布局：
+                // - 纹理中心是字形的 bounds 区域
+                // - bounds 周围有 padding（距离场范围 = atlas_range 像素）
+                // - 纹理从 (0,0) 开始对应 (bounds_left - range/scale, bounds_bottom - range/scale)
+                //
+                // 渲染时需要将纹理正确定位到屏幕上：
+                // - 字形的左边缘应该在 pen_x + bearing_x
+                // - 字形的顶部应该在 pen_y - bearing_y
+                //
+                // 问题：padding_units = range / msdf_scale 因字形大小而异
+                // 这导致相邻字符的视觉位置不一致。
+                //
+                // 解决方案：
+                // 1. 使用 bounds_left（不是 bearing_x）来定位，因为 MSDF 纹理是基于 bounds 生成的
+                // 2. padding 使用精确的公式：screen_padding = (range / msdf_scale) * pixel_scale
+                // 3. 这样计算出的 rect 位置是精确的，字形内容会正确对齐到屏幕
+                //
+                // 虽然不同字形的 screen_padding 不同，但只要公式正确，字形内容的位置就是正确的：
+                // 字形左边缘 = rect_x + screen_padding = pen_x + bounds_left - padding + padding = pen_x + bounds_left ✓
+                
                 const float bounds_left_px = entry->metrics.bounds_left * pixel_scale;
                 const float bounds_top_px = entry->metrics.bounds_top * pixel_scale;
                 const float padding_px = padding_units * pixel_scale;
 
-                // 字形左上角位置
+                // 字形左上角位置（这是 MSDF rect 的位置，包含 padding）
+                // 字形实际内容从 rect 的 (padding, padding) 位置开始
                 float glyph_x = pen_x_px + bounds_left_px - padding_px;
                 float glyph_y = pen_y_px - bounds_top_px - padding_px;
 
@@ -2479,16 +2494,15 @@ GPUDriverSDL::GlyphAtlasTier* GPUDriverSDL::selectGlyphAtlasTier(float font_size
         return nullptr;
     }
 
-    // 将字号映射到“期望的 MSDF 像素分辨率”，再在现有档位中选择最近的一档：
-    //   target_msdf_px ≈ ceil(font_px_size / 1.5)
-    // 这样可以：
-    //   - 小字号不会浪费过高分辨率；
-    //   - 大字号也不会因为 atlas 过小而出现过度放大模糊。
+    // 将字号映射到"期望的 MSDF 像素分辨率"，再在现有档位中选择最近的一档。
+    // 使用较高的 MSDF 分辨率以保证小字号文本的清晰度：
+    //   target_msdf_px ≈ font_px_size * 2.5
+    // 这样对于 13px 字号会选择 32px tier，而不是更低的分辨率
     const float clamped_font_size = std::max(font_size, 1.0f);
-    const float target_msdf_px_f = std::ceil(clamped_font_size / 1.5f);
+    const float target_msdf_px_f = std::ceil(clamped_font_size * 2.5f);
     const uint32_t target_msdf_px = target_msdf_px_f > 0.0f
         ? static_cast<uint32_t>(target_msdf_px_f)
-        : 16u;
+        : 32u;
 
     GlyphAtlasTier* best = nullptr;
     uint32_t best_error = std::numeric_limits<uint32_t>::max();

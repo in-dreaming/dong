@@ -158,11 +158,15 @@ void Parser::applyDefaultStyles(DOMNodePtr node) {
         tag == "section" || tag == "article" || tag == "nav" || tag == "header" || tag == "footer") {
         style.display = "block";
     }
-    else if (tag == "span" || tag == "a" || tag == "b" || tag == "i" || tag == "strong" || tag == "em") {
+    else if (tag == "span" || tag == "a" || tag == "b" || tag == "i" || tag == "strong" || tag == "em" || tag == "code") {
         style.display = "inline";
         // 粗体和斜体标签的默认样式
         if (tag == "b" || tag == "strong") {
             style.font_weight = "bold";
+        }
+        // <code> 标签默认使用等宽字体
+        if (tag == "code") {
+            style.font_family = "Menlo, Consolas, monospace";
         }
         // TODO: 支持 <i> 和 <em> 的斜体样式
     }

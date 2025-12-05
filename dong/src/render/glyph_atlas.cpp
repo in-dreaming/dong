@@ -525,12 +525,11 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
     double scale = std::min((msdf_size - range * 2) / safe_width,
                             (msdf_size - range * 2) / safe_height);
 
-    SDL_Log("[MSDF] glyph=%u msdf_size=%d range=%.2f width=%.2f height=%.2f safe_w=%.2f safe_h=%.2f scale=%.4f",
+    SDL_Log("[MSDF] glyph=%u msdf_size=%d range=%.2f width=%.2f height=%.2f scale=%.4f",
             glyph_id,
             msdf_size,
             range,
             width, height,
-            safe_width, safe_height,
             scale);
     
     // 正确的 translate 计算
@@ -558,20 +557,38 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
     out_metrics.msdf_translate_x = static_cast<float>(translate.x);
     out_metrics.msdf_translate_y = static_cast<float>(translate.y);
 
+    // 计算字形+padding在MSDF纹理中的实际像素尺寸
+    // 字形宽度（像素）= width * scale
+    // 字形高度（像素）= height * scale
+    // 字形+padding宽度 = width * scale + 2 * range
+    // 字形+padding高度 = height * scale + 2 * range
+    // 
+    // 注意：我们只输出字形+padding的区域，而不是整个msdf_size x msdf_size纹理
+    // 这样可以确保UV坐标和渲染rect尺寸完全匹配
+    const int actual_glyph_w = static_cast<int>(std::ceil(width * scale + 2 * range));
+    const int actual_glyph_h = static_cast<int>(std::ceil(height * scale + 2 * range));
+    
+    // 确保不超过msdf_size
+    const int crop_w = std::min(actual_glyph_w, msdf_size);
+    const int crop_h = std::min(actual_glyph_h, msdf_size);
+
+    SDL_Log("[MSDF] glyph=%u actual_size=(%d, %d) crop_size=(%d, %d)",
+            glyph_id, actual_glyph_w, actual_glyph_h, crop_w, crop_h);
+
     // 转换为 RGBA8 格式（RGB = MSDF 通道，A 恒为 1.0）
-    // 不做 Y 轴翻转，在渲染时通过交换 UV 的 V 坐标来处理
-    out_width = msdf_size;
-    out_height = msdf_size;
+    // 只输出字形+padding的区域
+    out_width = static_cast<uint32_t>(crop_w);
+    out_height = static_cast<uint32_t>(crop_h);
     out_bitmap.resize(out_width * out_height * 4);
 
-    for (int y = 0; y < msdf_size; ++y) {
-        for (int x = 0; x < msdf_size; ++x) {
+    for (int y = 0; y < crop_h; ++y) {
+        for (int x = 0; x < crop_w; ++x) {
             const float* pixel = msdf(x, y);
             float r = std::clamp(pixel[0], 0.0f, 1.0f);
             float g = std::clamp(pixel[1], 0.0f, 1.0f);
             float b = std::clamp(pixel[2], 0.0f, 1.0f);
 
-            int idx = (y * msdf_size + x) * 4;
+            int idx = (y * crop_w + x) * 4;
             out_bitmap[idx + 0] = static_cast<uint8_t>(r * 255.0f);
             out_bitmap[idx + 1] = static_cast<uint8_t>(g * 255.0f);
             out_bitmap[idx + 2] = static_cast<uint8_t>(b * 255.0f);

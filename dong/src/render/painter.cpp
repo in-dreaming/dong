@@ -489,9 +489,10 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
             tag == "button" || tag == "code" || tag == "div" || tag == "footer";
 
         // 当有 inline 子元素时，需要按顺序处理每个子节点，避免文本重叠
+        // 使用容器层完全接管混合内容的布局和绘制
         if (has_text_child && has_inline_element_child && tag_prefers_text) {
             // 混合内容：有 TEXT 节点和 inline 元素
-            // 按子节点顺序分别绘制每个 TEXT 段落，计算正确的起始 X 位置
+            // 按子节点顺序分别绘制每个内容，计算正确的起始 X 位置
             float x = layout_node->layout.position[0];
             float y = layout_node->layout.position[1];
             float width = layout_node->layout.dimensions[0];
@@ -500,94 +501,173 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
             float pad_right = style.padding_right.isPixel() ? style.padding_right.value : 0.0f;
             float pad_top = style.padding_top.isPixel() ? style.padding_top.value : 0.0f;
 
-            float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
-            Color text_color = makeColorFromCss(style.color);
+            float container_font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
+            Color container_text_color = makeColorFromCss(style.color);
 
             float inner_width = width - pad_left - pad_right;
             if (inner_width <= 0.0f) inner_width = width > 0.0f ? width : 0.0f;
 
-            // 计算累计 X 偏移，遍历每个子节点
-            float cumulative_x_offset = 0.0f;
+            // 计算容器的 baseline 度量
+            float container_baseline_offset = 0.0f;
+            float container_ascent_px = 0.0f;
+            float container_line_height_px = 0.0f;
+            {
+                TextShapeRequest req{};
+                req.text = "X";  // 使用 X 作为基准字符
+                req.font_family = style.font_family;
+                req.font_weight = style.font_weight;
+                req.font_size = container_font_size;
+                ShapedText shaped{};
+                if (text_shaper_.shape(req, shaped)) {
+                    float scale = shaped.scale_to_pixels;
+                    float ascent_units = shaped.ascent_units > 0.0f ? shaped.ascent_units : container_font_size / scale;
+                    float descent_units = shaped.descent_units;
+                    float line_height_units = shaped.line_height_units;
+                    
+                    if (style.line_height > 0.0f) {
+                        if (style.line_height_is_unitless) {
+                            line_height_units = (style.line_height * container_font_size) / std::max(scale, 1e-3f);
+                        } else {
+                            line_height_units = style.line_height / std::max(scale, 1e-3f);
+                        }
+                    }
+                    if (line_height_units <= 0.0f) line_height_units = container_font_size / scale;
+                    
+                    float descent_abs_units = descent_units < 0.0f ? -descent_units : 0.0f;
+                    float metrics_height_units = ascent_units + descent_abs_units;
+                    float extra_leading_units = std::max(line_height_units - metrics_height_units, 0.0f);
+                    float top_leading_units = extra_leading_units * 0.5f;
+                    
+                    container_baseline_offset = (top_leading_units + ascent_units) * scale;
+                    container_ascent_px = ascent_units * scale;
+                    container_line_height_px = line_height_units * scale;
+                }
+            }
 
+            float cumulative_x_offset = 0.0f;
+            float baseline_y = y + pad_top + container_baseline_offset;
+
+            // 按子节点顺序处理所有内容（TEXT 和 inline ELEMENT）
             for (const auto& child : node->getChildren()) {
                 if (!child) continue;
 
                 if (child->getType() == dom::DOMNode::NodeType::ELEMENT) {
                     const auto& child_style = child->getComputedStyle();
                     if (child_style.display == "inline" || child_style.display == "inline-block") {
-                        // 获取 inline 元素的布局宽度（包括 margin）
-                        const layout::LayoutNode* child_layout = layout_engine_ ? layout_engine_->getLayout(child) : nullptr;
-                        if (child_layout) {
-                            float child_width = child_layout->layout.dimensions[0];
-                            float margin_left = 0.0f, margin_right = 0.0f;
-                            if (child_style.margin_left.isPixel()) margin_left = child_style.margin_left.value;
-                            if (child_style.margin_right.isPixel()) margin_right = child_style.margin_right.value;
-                            cumulative_x_offset += margin_left + child_width + margin_right;
+                        // 获取 inline 元素的文本内容并直接在此绘制
+                        // 而不是依赖递归绘制（因为 layout engine 没有为此计算正确位置）
+                        std::string child_text;
+                        for (const auto& grandchild : child->getChildren()) {
+                            if (grandchild && grandchild->getType() == dom::DOMNode::NodeType::TEXT) {
+                                child_text += grandchild->getTextContent();
+                            }
                         }
+                        child_text = collapseWhitespace(child_text);
+                        
+                        if (!child_text.empty()) {
+                            // 使用 inline 元素的样式
+                            float child_font_size = child_style.font_size > 0.0f ? child_style.font_size : container_font_size;
+                            std::string child_font_family = !child_style.font_family.empty() ? child_style.font_family : style.font_family;
+                            std::string child_font_weight = !child_style.font_weight.empty() ? child_style.font_weight : style.font_weight;
+                            Color child_color = makeColorFromCss(!child_style.color.empty() ? child_style.color : style.color);
+                            
+                            TextShapeRequest req{};
+                            req.text = child_text;
+                            req.font_family = child_font_family;
+                            req.font_weight = child_font_weight;
+                            req.font_size = child_font_size;
+                            
+                            ShapedText shaped{};
+                            if (text_shaper_.shape(req, shaped) && !shaped.glyphs.empty()) {
+                                float scale = shaped.scale_to_pixels;
+                                float text_width_px = shaped.width_units * scale;
+                                float ascent_units = shaped.ascent_units > 0.0f ? shaped.ascent_units : child_font_size / scale;
+                                float ascent_px = ascent_units * scale;
+                                
+                                // 计算 inline 元素的 padding
+                                float child_pad_left = child_style.padding_left.isPixel() ? child_style.padding_left.value : 0.0f;
+                                float child_pad_right = child_style.padding_right.isPixel() ? child_style.padding_right.value : 0.0f;
+                                
+                                float text_x = x + pad_left + cumulative_x_offset + child_pad_left;
+                                
+                                // 绘制 inline 元素的背景（如果有）
+                                if (!child_style.background_color.empty() && child_style.background_color != "transparent") {
+                                    Color bg_color = makeColorFromCss(child_style.background_color);
+                                    float bg_radius = child_style.border_radius > 0.0f ? child_style.border_radius : 0.0f;
+                                    Rect bg_rect{};
+                                    bg_rect.x = x + pad_left + cumulative_x_offset;
+                                    bg_rect.y = baseline_y - container_ascent_px;
+                                    bg_rect.width = text_width_px + child_pad_left + child_pad_right;
+                                    bg_rect.height = container_line_height_px;
+                                    if (bg_radius > 0.0f) {
+                                        builder.addRoundedRect(bg_rect, bg_color, bg_radius);
+                                    } else {
+                                        builder.addRect(bg_rect, bg_color);
+                                    }
+                                }
+                                
+                                DrawGlyphRunData glyph_run{};
+                                glyph_run.rect.x = text_x;
+                                glyph_run.rect.y = baseline_y - ascent_px;
+                                glyph_run.rect.width = text_width_px;
+                                glyph_run.rect.height = container_line_height_px;
+                                glyph_run.color = child_color;
+                                glyph_run.font_size = child_font_size;
+                                glyph_run.font_family = child_font_family;
+                                glyph_run.font_weight = child_font_weight;
+                                glyph_run.font_path = shaped.font_path;
+                                glyph_run.baseline_x = text_x;
+                                glyph_run.baseline_y = baseline_y;
+                                glyph_run.units_per_em = shaped.units_per_em;
+                                glyph_run.scale_to_pixels = shaped.scale_to_pixels;
+                                
+                                for (const auto& sg : shaped.glyphs) {
+                                    GlyphInstance inst{};
+                                    inst.glyph_id = sg.glyph_id;
+                                    inst.pen_x_units = sg.pen_x_units;
+                                    inst.pen_y_units = sg.pen_y_units;
+                                    glyph_run.glyphs.push_back(inst);
+                                }
+                                
+                                builder.addGlyphRun(std::move(glyph_run));
+                                cumulative_x_offset += text_width_px + child_pad_left + child_pad_right;
+                            }
+                        }
+                        
+                        // 标记该 inline 元素已经在容器层绘制，跳过递归绘制
+                        // 通过设置一个临时标志（使用 DOM attribute）
+                        child->setAttribute("__inline_rendered__", "1");
                     }
                 } else if (child->getType() == dom::DOMNode::NodeType::TEXT) {
                     std::string text_content = child->getTextContent();
                     std::string text = collapseWhitespace(text_content);
                     if (text.empty()) continue;
 
-                    // 使用 HarfBuzz shaping
                     TextShapeRequest req{};
                     req.text = text;
                     req.font_family = style.font_family;
                     req.font_weight = style.font_weight;
-                    req.font_size = font_size;
+                    req.font_size = container_font_size;
 
                     ShapedText shaped{};
                     if (!text_shaper_.shape(req, shaped) || shaped.glyphs.empty()) {
                         continue;
                     }
 
-                    const float scale = shaped.scale_to_pixels;
+                    float scale = shaped.scale_to_pixels;
                     float text_width_px = shaped.width_units * scale;
-
-                    // baseline 计算
-                    float line_height_units = shaped.line_height_units;
-                    float ascent_units = shaped.ascent_units;
-                    float descent_units = shaped.descent_units;
-
-                    if (style.line_height > 0.0f) {
-                        if (style.line_height_is_unitless) {
-                            float css_line_height_px = style.line_height * font_size;
-                            line_height_units = css_line_height_px / std::max(scale, 1e-3f);
-                        } else {
-                            line_height_units = style.line_height / std::max(scale, 1e-3f);
-                        }
-                    }
-                    if (line_height_units <= 0.0f) {
-                        line_height_units = font_size / std::max(scale, 1e-3f);
-                    }
-                    if (ascent_units <= 0.0f) {
-                        ascent_units = font_size / std::max(scale, 1e-3f);
-                    }
-
-                    float descent_abs_units = descent_units < 0.0f ? -descent_units : 0.0f;
-                    float metrics_height_units = ascent_units + descent_abs_units;
-                    if (metrics_height_units <= 0.0f) {
-                        metrics_height_units = line_height_units;
-                    }
-                    float extra_leading_units = line_height_units - metrics_height_units;
-                    if (extra_leading_units < 0.0f) extra_leading_units = 0.0f;
-                    float top_leading_units = extra_leading_units * 0.5f;
-                    float baseline_offset = (top_leading_units + ascent_units) * scale;
+                    float ascent_units = shaped.ascent_units > 0.0f ? shaped.ascent_units : container_font_size / scale;
                     float ascent_px = ascent_units * scale;
-                    float effective_line_height = line_height_units * scale;
 
-                    // 计算文本起始位置（考虑累计偏移）
                     float text_x = x + pad_left + cumulative_x_offset;
-                    float baseline_y = y + pad_top + baseline_offset;
 
                     DrawGlyphRunData glyph_run{};
                     glyph_run.rect.x = text_x;
                     glyph_run.rect.y = baseline_y - ascent_px;
                     glyph_run.rect.width = text_width_px;
-                    glyph_run.rect.height = effective_line_height;
-                    glyph_run.color = text_color;
-                    glyph_run.font_size = font_size;
+                    glyph_run.rect.height = container_line_height_px;
+                    glyph_run.color = container_text_color;
+                    glyph_run.font_size = container_font_size;
                     glyph_run.font_family = style.font_family;
                     glyph_run.font_weight = style.font_weight;
                     glyph_run.font_path = shaped.font_path;
@@ -596,9 +676,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                     glyph_run.units_per_em = shaped.units_per_em;
                     glyph_run.scale_to_pixels = shaped.scale_to_pixels;
 
-                    const auto& glyphs = shaped.glyphs;
-                    glyph_run.glyphs.reserve(glyphs.size());
-                    for (const auto& sg : glyphs) {
+                    for (const auto& sg : shaped.glyphs) {
                         GlyphInstance inst{};
                         inst.glyph_id = sg.glyph_id;
                         inst.pen_x_units = sg.pen_x_units;
@@ -607,8 +685,6 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                     }
 
                     builder.addGlyphRun(std::move(glyph_run));
-
-                    // 更新累计宽度
                     cumulative_x_offset += text_width_px;
                 }
             }
@@ -986,6 +1062,11 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
               });
     
     for (const auto& item : sorted_children) {
+        // 跳过已经在容器层绘制过的 inline 元素
+        if (item.child->getAttribute("__inline_rendered__") == "1") {
+            item.child->setAttribute("__inline_rendered__", "");  // 清除标记
+            continue;
+        }
         const layout::LayoutNode* child_layout = nullptr;
         if (layout_engine_) {
             child_layout = layout_engine_->getLayout(item.child);
