@@ -109,7 +109,31 @@ View::View(uint32_t width, uint32_t height)
 }
 
 View::~View() {
-    // All resources are cleaned up via unique_ptr destructors
+    // 显式清理 GPU 资源，确保在外部 window/device 被销毁前释放引用
+    // 这很重要，因为 gpu_driver_ 和 shader_manager_ 可能持有外部传入的 window/device 指针
+    
+    // 首先清理 GPU 驱动，它可能持有 window/device 的引用
+    if (gpu_driver_) {
+        gpu_driver_.reset();
+    }
+    
+    // 在设备仍然有效时清理 ShaderManager（它需要设备来释放 shader）
+    // 必须在 gpu_device_ 被重置前清理
+    if (shader_manager_ && gpu_device_ && gpu_device_->isInitialized()) {
+        shader_manager_->releaseAll();
+    }
+    shader_manager_.reset();
+    
+    // 清理其他 GPU 相关资源
+    gpu_painter_.reset();
+    gpu_surface_.reset();
+    
+    // gpu_device_ 如果是 adoptExternal 的，由外部管理生命周期
+    // 我们只需要重置指针，避免在析构时访问已销毁的设备
+    // unique_ptr 会自动处理，但我们需要确保顺序正确
+    gpu_device_.reset();
+    
+    // 其他资源通过 unique_ptr 自动清理
 }
 
 void View::load_html(const char* html) {

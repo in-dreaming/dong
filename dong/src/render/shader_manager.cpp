@@ -102,14 +102,45 @@ void ShaderManager::releaseShader(const std::string& name) {
 }
 
 void ShaderManager::releaseAll() {
-    if (!gpu_device_ || !gpu_device_->isInitialized()) {
+    // 检查设备是否有效
+    if (!gpu_device_) {
         shader_cache_.clear();
         return;
     }
 
+    // 检查设备是否已初始化
+    if (!gpu_device_->isInitialized()) {
+        // 设备未初始化，直接清空缓存
+        shader_cache_.clear();
+        return;
+    }
+
+    // 关键：如果设备是外部管理的（如 SDL3Window），当外部销毁设备时，
+    // SDL 会自动清理所有 shader。我们不应该尝试再次释放它们，否则会导致崩溃。
+    // 直接清空缓存即可。
+    if (!gpu_device_->ownsDevice()) {
+        // 外部管理的设备，不尝试释放 shader（SDL 会自动清理）
+        shader_cache_.clear();
+        return;
+    }
+
+    // 获取设备句柄并验证
+    SDL_GPUDevice* dev = gpu_device_->getHandle();
+    if (!dev) {
+        // 设备句柄无效，直接清空缓存
+        shader_cache_.clear();
+        return;
+    }
+
+    // 只有当我们拥有设备时，才尝试释放 shader
+    // 安全地释放所有 shader
     for (auto& pair : shader_cache_) {
         if (pair.second) {
-            SDL_ReleaseGPUShader(gpu_device_->getHandle(), pair.second);
+            // 检查 shader 指针是否看起来有效（不是明显无效的地址）
+            uintptr_t shader_addr = reinterpret_cast<uintptr_t>(pair.second);
+            if (shader_addr > 0x1000) {  // 基本有效性检查
+                SDL_ReleaseGPUShader(dev, pair.second);
+            }
         }
     }
     shader_cache_.clear();

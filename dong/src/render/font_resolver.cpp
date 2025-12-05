@@ -1,4 +1,5 @@
 #include "font_resolver.hpp"
+#include "font_finder.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -10,6 +11,16 @@
 namespace dong::render {
 
 namespace {
+
+// 确保字体查找系统已初始化（延迟初始化）
+void ensureFontFinderInitialized() {
+    static bool initialized = false;
+    if (!initialized) {
+        initializeFontFinder();
+        initialized = true;
+    }
+}
+
 
 std::string trimWhitespace(const std::string& input) {
     size_t start = 0;
@@ -275,6 +286,9 @@ std::string canonicalFontFamily(const std::string& name) {
 
 std::string resolveFontPath(const std::string& requested_family,
                             const std::string& font_weight) {
+    // 确保字体查找系统已初始化
+    ensureFontFinderInitialized();
+    
     auto families = splitFontFamilies(requested_family);
     if (families.empty()) {
         families.push_back("sans-serif");
@@ -282,6 +296,26 @@ std::string resolveFontPath(const std::string& requested_family,
 
     const int numeric_weight = normalizeFontWeight(font_weight);
 
+    // 1. 首先尝试系统字体查找 API
+    for (const auto& family : families) {
+        std::string canonical = canonicalFontFamily(family);
+        std::vector<FontMatch> system_matches = findSystemFonts(canonical, numeric_weight);
+        
+        if (!system_matches.empty()) {
+            // 返回第一个匹配的字体路径
+            std::string path = system_matches[0].path;
+            namespace fs = std::filesystem;
+            std::error_code ec;
+            if (fs::exists(path, ec) && !ec) {
+                return path;
+            }
+        }
+    }
+
+    // 2. 如果系统字体查找失败，检查用户自定义字体路径
+    // (这部分已经在 findSystemFonts 中处理，因为它会检查自定义路径)
+
+    // 3. 最后回退到现有的硬编码路径列表
     std::vector<std::string> candidate_paths;
     candidate_paths.reserve(families.size() * 4);
 

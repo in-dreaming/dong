@@ -38,14 +38,20 @@ GPUDriverSDL::GPUDriverSDL(GPUDevice* device, SDL_Window* window, ShaderManager*
 
 GPUDriverSDL::~GPUDriverSDL() {
     // 确保命令缓冲已提交，避免泄漏
-    if (in_frame_ && gpu_device_ && current_cmd_buf_) {
+    // 注意：在析构时，外部设备可能已经被销毁，需要小心检查
+    if (in_frame_ && gpu_device_ && gpu_device_->isInitialized() && current_cmd_buf_) {
         gpu_device_->submitCommandBuffer(current_cmd_buf_);
     }
     current_cmd_buf_ = nullptr;
     in_frame_ = false;
 
+    // 检查设备是否仍然有效（可能已被外部销毁）
     if (gpu_device_ && gpu_device_->isInitialized()) {
         SDL_GPUDevice* dev = gpu_device_->getHandle();
+        if (!dev) {
+            // 设备已被外部销毁，跳过资源清理
+            return;
+        }
         if (rect_pipeline_) {
             SDL_ReleaseGPUGraphicsPipeline(dev, rect_pipeline_);
             rect_pipeline_ = nullptr;
@@ -121,8 +127,10 @@ GPUDriverSDL::~GPUDriverSDL() {
         layer_render_targets_.clear();
     }
 
+    // 清理字形图集（不依赖 GPU 设备）
     glyph_atlas_tiers_.clear();
 
+    // 清理 FreeType 资源（不依赖 GPU 设备）
     for (auto& entry : ft_face_cache_) {
         if (entry.second) {
             FT_Done_Face(entry.second);
@@ -133,6 +141,11 @@ GPUDriverSDL::~GPUDriverSDL() {
         FT_Done_FreeType(ft_library_);
         ft_library_ = nullptr;
     }
+    
+    // 重置指针，避免悬空引用
+    gpu_device_ = nullptr;
+    window_ = nullptr;
+    shader_manager_ = nullptr;
 }
 
 bool GPUDriverSDL::initialize() {

@@ -42,6 +42,9 @@ public:
     // 检查是否初始化
     bool isInitialized() const { return device_ != nullptr; }
 
+    // 检查是否拥有设备（false 表示设备由外部管理）
+    bool ownsDevice() const { return owns_device_; }
+
 private:
     SDL_GPUDevice* device_ = nullptr;
     SDL_GPUShaderFormat shader_format_ = SDL_GPU_SHADERFORMAT_INVALID;

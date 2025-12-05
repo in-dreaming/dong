@@ -6,10 +6,11 @@
 #include <cstdio>
 #include <algorithm>
 
-// MSDF 生成库（仅核心）
+// MSDF 生成库
 #include <msdfgen/msdfgen.h>
 #include <msdfgen/core/edge-coloring.h>
 #include <msdfgen/core/rasterization.h>
+#include <msdfgen/ext/import-font.h>
 
 // FreeType
 #include <ft2build.h>
@@ -17,74 +18,6 @@
 #include FT_OUTLINE_H
 
 namespace dong::render {
-
-// FreeType outline 转换为 msdfgen::Shape 的辅助类
-class FTContourConverter {
-public:
-    explicit FTContourConverter(msdfgen::Shape* shape) : shape_(shape) {}
-
-    static int moveTo(const FT_Vector* to, void* user) {
-        auto* self = static_cast<FTContourConverter*>(user);
-        if (self->current_contour_) {
-            self->shape_->contours.push_back(*self->current_contour_);
-        }
-        self->current_contour_ = std::make_unique<msdfgen::Contour>();
-        // FT_LOAD_NO_SCALE 返回的是 design units，不需要除以 64
-        self->last_point_ = msdfgen::Point2(to->x, to->y);
-        return 0;
-    }
-
-    static int lineTo(const FT_Vector* to, void* user) {
-        auto* self = static_cast<FTContourConverter*>(user);
-        if (!self->current_contour_) return 1;
-        
-        msdfgen::Point2 p(to->x, to->y);
-        self->current_contour_->addEdge(msdfgen::EdgeHolder(
-            self->last_point_, p
-        ));
-        self->last_point_ = p;
-        return 0;
-    }
-
-    static int conicTo(const FT_Vector* control, const FT_Vector* to, void* user) {
-        auto* self = static_cast<FTContourConverter*>(user);
-        if (!self->current_contour_) return 1;
-        
-        msdfgen::Point2 c(control->x, control->y);
-        msdfgen::Point2 p(to->x, to->y);
-        self->current_contour_->addEdge(msdfgen::EdgeHolder(
-            self->last_point_, c, p
-        ));
-        self->last_point_ = p;
-        return 0;
-    }
-
-    static int cubicTo(const FT_Vector* c1, const FT_Vector* c2, const FT_Vector* to, void* user) {
-        auto* self = static_cast<FTContourConverter*>(user);
-        if (!self->current_contour_) return 1;
-        
-        msdfgen::Point2 ctrl1(c1->x, c1->y);
-        msdfgen::Point2 ctrl2(c2->x, c2->y);
-        msdfgen::Point2 p(to->x, to->y);
-        self->current_contour_->addEdge(msdfgen::EdgeHolder(
-            self->last_point_, ctrl1, ctrl2, p
-        ));
-        self->last_point_ = p;
-        return 0;
-    }
-
-    void finalize() {
-        if (current_contour_) {
-            shape_->contours.push_back(*current_contour_);
-            current_contour_.reset();
-        }
-    }
-
-private:
-    msdfgen::Shape* shape_;
-    std::unique_ptr<msdfgen::Contour> current_contour_;
-    msdfgen::Point2 last_point_;
-};
 
 GlyphAtlas::GlyphAtlas(GPUDevice* gpu_device)
     : gpu_device_(gpu_device) {}
@@ -528,19 +461,19 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
     }
 
     // 将 FreeType outline 转换为 msdfgen::Shape
+    // 使用 msdfgen 官方 API，scale = 1.0 因为 FT_LOAD_NO_SCALE 已经是 design units
     msdfgen::Shape shape;
-    FTContourConverter converter(&shape);
-    
-    FT_Outline_Funcs callbacks{};
-    callbacks.move_to = &FTContourConverter::moveTo;
-    callbacks.line_to = &FTContourConverter::lineTo;
-    callbacks.conic_to = &FTContourConverter::conicTo;
-    callbacks.cubic_to = &FTContourConverter::cubicTo;
-    callbacks.shift = 0;
-    callbacks.delta = 0;
-
-    FT_Outline_Decompose(&face->glyph->outline, &callbacks, &converter);
-    converter.finalize();
+    FT_Error error = msdfgen::readFreetypeOutline(shape, &face->glyph->outline, 1.0);
+    if (error != 0) {
+        SDL_Log("GlyphAtlas::generateMSDF: failed to convert outline: %d", error);
+        out_width = 0;
+        out_height = 0;
+        out_metrics.bounds_left = 0.0f;
+        out_metrics.bounds_bottom = 0.0f;
+        out_metrics.bounds_right = 0.0f;
+        out_metrics.bounds_top = 0.0f;
+        return false;
+    }
 
     if (shape.contours.empty()) {
         SDL_Log("GlyphAtlas::generateMSDF: empty contours for glyph %u", glyph_id);

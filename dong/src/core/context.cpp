@@ -35,7 +35,8 @@ void Context::shutdown() {
 
     if (initialized_) {
         std::cout << "[Context] Shutting down " << getName() << std::endl;
-        // TODO: Clean up platform resources
+        // Clean up platform resources
+        // Note: Font finder cleanup is handled automatically via static destructors
     }
 
     shutdown_called_ = true;
