@@ -540,6 +540,30 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
             out_metrics.width_units,
             out_metrics.height_units);
 
+    // 计算逻辑 bbox（基线坐标系）
+    // 这是用于排版和渲染的统一坐标系：
+    // - baseline 在 y=0
+    // - logical_top = bearing_y（字形顶部到基线的距离，正值）
+    // - logical_bottom = bearing_y - height（字形底部到基线的距离，descender 为负值）
+    // - logical_left = bearing_x（字形左边缘相对于 pen position）
+    // - logical_right = bearing_x + width
+    //
+    // 注意：FreeType 的 metrics.horiBearingY 是字形顶部到基线的距离（正值）
+    // metrics.height 是字形的总高度
+    // 所以 logical_bottom = horiBearingY - height
+    // 对于有 descender 的字符（如 y, p, q），logical_bottom 会是负值
+    out_metrics.logical_left = out_metrics.bearing_x_units;
+    out_metrics.logical_right = out_metrics.bearing_x_units + out_metrics.width_units;
+    out_metrics.logical_top = out_metrics.bearing_y_units;
+    out_metrics.logical_bottom = out_metrics.bearing_y_units - out_metrics.height_units;
+
+    SDL_Log("[MSDF] glyph=%u logical: l=%.1f b=%.1f r=%.1f t=%.1f",
+            glyph_id,
+            out_metrics.logical_left,
+            out_metrics.logical_bottom,
+            out_metrics.logical_right,
+            out_metrics.logical_top);
+
     // 如果是空字形（如空格），直接返回
     if (face->glyph->outline.n_points == 0) {
         out_width = 0;
@@ -613,20 +637,64 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
     
     double width = bounds.r - bounds.l;
     double height = bounds.t - bounds.b;
-    double safe_width = std::max(width, 1.0);
-    double safe_height = std::max(height, 1.0);
     
-    // 计算 scale：使字形 + padding 能完全放入 MSDF 纹理
-    // 字形在 MSDF 纹理中占用 (msdf_size - 2*range) 像素
-    double scale = std::min((msdf_size - range * 2) / safe_width,
-                            (msdf_size - range * 2) / safe_height);
+    // ========== 关键修复：使用统一的 scale ==========
+    //
+    // 问题：之前的逻辑让每个字形填满 MSDF 纹理，导致小字形（如冒号、句号）
+    // 的 msdf_scale 非常大，渲染时 screenPxRange 太小（< 1），导致模糊。
+    //
+    // 解决方案：使用基于 units_per_em 的统一 scale，而不是基于字形大小。
+    // 这样所有字形使用相同的 msdf_scale，确保 screenPxRange 一致。
+    //
+    // 计算方式：
+    // - 假设典型字形高度约为 units_per_em（实际上大多数字形高度在 0.7~1.0 em）
+    // - scale = (msdf_size - 2*range) / units_per_em
+    // - 这样 1 em 高度的字形正好填满 MSDF 纹理的可用区域
+    //
+    // 优点：
+    // 1. 所有字形使用相同的 msdf_scale，screenPxRange 一致
+    // 2. 小字形（如冒号）在 MSDF 纹理中占用较少空间，但抗锯齿效果正常
+    // 3. 大字形（如 "國"）可能超出 MSDF 纹理，需要裁剪或使用更大的 tier
+    //
+    // 缺点：
+    // - 小字形的 MSDF 纹理利用率较低
+    // - 大字形可能需要更大的 tier
+    //
+    // 为了处理超大字形，我们仍然检查字形是否能放入纹理，
+    // 如果不能，则回退到基于字形大小的 scale（但设置最小值）
+    
+    const double units_per_em = static_cast<double>(out_metrics.units_per_em);
+    const double available_size = msdf_size - range * 2;
+    
+    // 基于 units_per_em 的统一 scale
+    double uniform_scale = available_size / units_per_em;
+    
+    // 检查字形是否能放入纹理
+    double glyph_width_msdf = width * uniform_scale;
+    double glyph_height_msdf = height * uniform_scale;
+    
+    double scale;
+    if (glyph_width_msdf <= available_size && glyph_height_msdf <= available_size) {
+        // 字形能放入纹理，使用统一 scale
+        scale = uniform_scale;
+    } else {
+        // 字形太大，需要缩小以适应纹理
+        // 但设置最小 scale 为 uniform_scale 的一半，避免 screenPxRange 过大
+        double fit_scale = std::min(available_size / std::max(width, 1.0),
+                                    available_size / std::max(height, 1.0));
+        scale = std::max(fit_scale, uniform_scale * 0.5);
+        
+        SDL_Log("[MSDF] glyph=%u WARNING: glyph too large (%.1fx%.1f), using fit_scale=%.4f",
+                glyph_id, width, height, scale);
+    }
 
-    SDL_Log("[MSDF] glyph=%u msdf_size=%d range=%.2f width=%.2f height=%.2f scale=%.4f",
+    SDL_Log("[MSDF] glyph=%u msdf_size=%d range=%.2f width=%.2f height=%.2f scale=%.4f (uniform=%.4f)",
             glyph_id,
             msdf_size,
             range,
             width, height,
-            scale);
+            scale,
+            uniform_scale);
     
     // 正确的 translate 计算
     // msdfgen 的 Projection 公式是: msdf_coord = scale * (shape_coord + translate)
@@ -653,38 +721,66 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
     out_metrics.msdf_translate_x = static_cast<float>(translate.x);
     out_metrics.msdf_translate_y = static_cast<float>(translate.y);
 
-    // 计算字形+padding在MSDF纹理中的实际像素尺寸
-    // 字形宽度（像素）= width * scale
-    // 字形高度（像素）= height * scale
-    // 字形+padding宽度 = width * scale + 2 * range
-    // 字形+padding高度 = height * scale + 2 * range
-    // 
-    // 注意：我们只输出字形+padding的区域，而不是整个msdf_size x msdf_size纹理
-    // 这样可以确保UV坐标和渲染rect尺寸完全匹配
-    const int actual_glyph_w = static_cast<int>(std::ceil(width * scale + 2 * range));
-    const int actual_glyph_h = static_cast<int>(std::ceil(height * scale + 2 * range));
+    // ========== MSDF 纹理输出 ==========
+    //
+    // 重要：不裁剪 MSDF 纹理，始终输出完整的 msdf_size x msdf_size
+    //
+    // 原因：
+    // 1. MSDF 生成时，字形被放置在 (range, range) 位置（通过 translate）
+    // 2. 如果裁剪纹理，需要同时调整 UV 坐标，这很容易出错
+    // 3. 保持完整纹理可以简化 UV 映射：UV 直接对应 [0,1] 范围
+    //
+    // 缺点是浪费一些 Atlas 空间，但对于小字号文本来说，
+    // 32x32 或 48x48 的纹理大小是可以接受的。
+    //
+    // 如果将来需要优化空间，可以：
+    // 1. 正确计算裁剪区域（从 (0,0) 到 (width*scale + 2*range, height*scale + 2*range)）
+    // 2. 在 GlyphMetrics 中存储裁剪偏移
+    // 3. 在 GPU 端正确计算 UV 映射
     
-    // 确保不超过msdf_size
-    const int crop_w = std::min(actual_glyph_w, msdf_size);
-    const int crop_h = std::min(actual_glyph_h, msdf_size);
-
-    SDL_Log("[MSDF] glyph=%u actual_size=(%d, %d) crop_size=(%d, %d)",
-            glyph_id, actual_glyph_w, actual_glyph_h, crop_w, crop_h);
-
-    // 转换为 RGBA8 格式（RGB = MSDF 通道，A 恒为 1.0）
-    // 只输出字形+padding的区域
-    out_width = static_cast<uint32_t>(crop_w);
-    out_height = static_cast<uint32_t>(crop_h);
+    out_width = static_cast<uint32_t>(msdf_size);
+    out_height = static_cast<uint32_t>(msdf_size);
     out_bitmap.resize(out_width * out_height * 4);
 
-    for (int y = 0; y < crop_h; ++y) {
-        for (int x = 0; x < crop_w; ++x) {
+    SDL_Log("[MSDF] glyph=%u output_size=(%u, %u) glyph_in_msdf: pos=(%.1f,%.1f) size=(%.1f,%.1f)",
+            glyph_id, out_width, out_height,
+            range, range,
+            width * scale, height * scale);
+
+    // 转换为 RGBA8 格式（RGB = MSDF 通道，A 恒为 1.0）
+    // 
+    // 重要：Y 轴翻转
+    // - msdfgen 使用数学坐标系（Y 向上），y=0 是底部
+    // - GPU 纹理使用屏幕坐标系（Y 向下），y=0 是顶部
+    // - 在这里翻转 Y 轴，这样 GPU 端不需要翻转 UV
+    // 
+    // 翻转后的坐标映射：
+    // - 输出 bitmap 的 y=0 对应 msdfgen 的 y=msdf_size-1（纹理顶部）
+    // - 输出 bitmap 的 y=msdf_size-1 对应 msdfgen 的 y=0（纹理底部）
+    // 
+    // 这样，字形在 GPU 纹理中的位置：
+    // - 字形顶部在 GPU y = msdf_size - 1 - (range + glyph_height_msdf) + 1 = msdf_size - range - glyph_height_msdf
+    // - 简化：字形顶部在 GPU y = range（因为 msdf_size - range - glyph_height_msdf ≈ range 对于典型字形）
+    // - 实际上，字形顶部在 GPU y = msdf_size - (range + glyph_height_msdf)
+    //
+    // 更准确的分析：
+    // - msdfgen 中，字形底部在 y = range，字形顶部在 y = range + glyph_height_msdf
+    // - 翻转后，字形底部在 GPU y = msdf_size - 1 - range
+    // - 翻转后，字形顶部在 GPU y = msdf_size - 1 - (range + glyph_height_msdf)
+    //
+    // 但这对于渲染位置计算来说太复杂了。
+    // 更简单的方法：保持 msdfgen 的坐标系，在 GPU 端翻转 UV。
+    // 
+    // 实际上，当前的 UV 翻转方案是正确的，问题在于位置计算。
+    // 让我们保持当前的 Y 轴方向，但修正位置计算。
+    for (int y = 0; y < msdf_size; ++y) {
+        for (int x = 0; x < msdf_size; ++x) {
             const float* pixel = msdf(x, y);
             float r = std::clamp(pixel[0], 0.0f, 1.0f);
             float g = std::clamp(pixel[1], 0.0f, 1.0f);
             float b = std::clamp(pixel[2], 0.0f, 1.0f);
 
-            int idx = (y * crop_w + x) * 4;
+            int idx = (y * msdf_size + x) * 4;
             out_bitmap[idx + 0] = static_cast<uint8_t>(r * 255.0f);
             out_bitmap[idx + 1] = static_cast<uint8_t>(g * 255.0f);
             out_bitmap[idx + 2] = static_cast<uint8_t>(b * 255.0f);

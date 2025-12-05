@@ -22,12 +22,30 @@ struct GlyphMetrics {
     float msdf_translate_x = 0.0f;
     float msdf_translate_y = 0.0f;
     
-    // 字形轮廓的实际边界（design units，用于精确定位）
+    // 字形轮廓的实际边界（design units，用于 MSDF 投影）
     // 这些值来自 msdfgen::Shape::getBounds()，可能与 FreeType metrics 略有不同
     float bounds_left = 0.0f;
     float bounds_bottom = 0.0f;
     float bounds_right = 0.0f;
     float bounds_top = 0.0f;
+    
+    // 逻辑 bbox（design units，基线坐标系）
+    // 这是用于排版和渲染的统一坐标系：
+    // - baseline 在 y=0
+    // - logical_top > 0 表示字形顶部在基线上方
+    // - logical_bottom < 0 表示字形底部在基线下方（descender）
+    // - logical_left 通常 >= 0，表示字形左边缘相对于 pen position
+    // - logical_right 表示字形右边缘相对于 pen position
+    //
+    // 这些值直接用于计算屏幕空间矩形：
+    // screen_top = baseline_y - logical_top * scale
+    // screen_bottom = baseline_y - logical_bottom * scale
+    // screen_left = pen_x + logical_left * scale
+    // screen_right = pen_x + logical_right * scale
+    float logical_left = 0.0f;
+    float logical_bottom = 0.0f;
+    float logical_right = 0.0f;
+    float logical_top = 0.0f;
     
     uint32_t units_per_em = 0;     // 字体的 EM 单位
 };

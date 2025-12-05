@@ -269,6 +269,11 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
 
     if (node->getType() == dom::DOMNode::NodeType::TEXT) return;
 
+    // Debug: log all elements
+    const std::string tag = node->getTagName();
+    std::string dbg_class = node->getAttribute("class");
+    SDL_Log("[Painter] buildDisplayListNode: tag='%s' class='%s'", tag.c_str(), dbg_class.c_str());
+
     // Dirty rect 优化
     if (use_dirty_rect_ && !current_dirty_rect_.isEmpty() && layout_node) {
         if (!isNodeInDirtyRect(layout_node)) {
@@ -277,9 +282,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
     }
 
 
-    const std::string tag = node->getTagName();
-
-    Rect node_rect{};
+    Rect node_rect{};;
     bool has_layout_rect = false;
     if (layout_node) {
         node_rect.x = layout_node->layout.position[0];
@@ -465,6 +468,16 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
 
     // 3. 文本内容
     if (layout_node && tag != "script" && tag != "style" && tag != "head" && tag != "img") {
+        std::string debug_class = node->getAttribute("class");
+        if (debug_class.find("overlay-row") != std::string::npos) {
+            SDL_Log("[Painter] overlay-row: checking children, count=%zu", node->getChildren().size());
+            for (const auto& child : node->getChildren()) {
+                if (child) {
+                    SDL_Log("[Painter] overlay-row child type=%d text='%s'",
+                            static_cast<int>(child->getType()), child->getTextContent().c_str());
+                }
+            }
+        }
         bool has_text_child = false;
         bool has_inline_element_child = false;
         std::string raw_text;
@@ -488,9 +501,17 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
             tag == "h5" || tag == "h6" || tag == "p" || tag == "span" ||
             tag == "button" || tag == "code" || tag == "div" || tag == "footer";
 
+        if (debug_class.find("overlay-row") != std::string::npos) {
+            SDL_Log("[Painter] overlay-row: has_text=%d has_inline=%d tag_prefers=%d raw='%s'",
+                    has_text_child, has_inline_element_child, tag_prefers_text, raw_text.c_str());
+        }
+
         // 当有 inline 子元素时，需要按顺序处理每个子节点，避免文本重叠
         // 使用容器层完全接管混合内容的布局和绘制
         if (has_text_child && has_inline_element_child && tag_prefers_text) {
+            if (debug_class.find("overlay-row") != std::string::npos) {
+                SDL_Log("[Painter] overlay-row MIXED PATH raw_text='%s'", raw_text.c_str());
+            }
             // 混合内容：有 TEXT 节点和 inline 元素
             // 按子节点顺序分别绘制每个内容，计算正确的起始 X 位置
             float x = layout_node->layout.position[0];
@@ -693,7 +714,13 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
             if (debug_class.find("abs-badge") != std::string::npos) {
                 SDL_Log("[Painter] ABS badge text raw='%s'", raw_text.c_str());
             }
+            if (debug_class.find("overlay-row") != std::string::npos) {
+                SDL_Log("[Painter] overlay-row raw_text='%s' (len=%zu)", raw_text.c_str(), raw_text.size());
+            }
             std::string text = collapseWhitespace(raw_text);
+            if (debug_class.find("overlay-row") != std::string::npos) {
+                SDL_Log("[Painter] overlay-row after collapse='%s' (len=%zu)", text.c_str(), text.size());
+            }
 
             // 应用 text-transform
             if (!text.empty() && !style.text_transform.empty() && style.text_transform != "none") {
