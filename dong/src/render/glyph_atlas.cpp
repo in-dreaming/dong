@@ -85,6 +85,53 @@ bool GlyphAtlas::createPage() {
         return false;
     }
 
+    // 关键：GPU 纹理创建后内容是未定义的，必须初始化为全黑（MSDF 外部值 = 0）
+    // 否则 glyph 之间的 padding 区域会包含垃圾数据，导致渲染时出现细线
+    {
+        uint32_t buffer_size = atlas_width_ * atlas_height_ * 4;
+        
+        SDL_GPUTransferBufferCreateInfo transfer_info{};
+        transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+        transfer_info.size = buffer_size;
+        
+        SDL_GPUTransferBuffer* transfer_buf = SDL_CreateGPUTransferBuffer(dev, &transfer_info);
+        if (transfer_buf) {
+            void* mapped = SDL_MapGPUTransferBuffer(dev, transfer_buf, false);
+            if (mapped) {
+                // 全黑 = RGBA(0,0,0,255)，MSDF 中 0 表示字形外部（距离场负值）
+                std::memset(mapped, 0, buffer_size);
+                SDL_UnmapGPUTransferBuffer(dev, transfer_buf);
+                
+                SDL_GPUCommandBuffer* cmd_buf = gpu_device_->acquireCommandBuffer();
+                if (cmd_buf) {
+                    SDL_GPUCopyPass* copy_pass = SDL_BeginGPUCopyPass(cmd_buf);
+                    if (copy_pass) {
+                        SDL_GPUTextureTransferInfo tex_transfer{};
+                        tex_transfer.transfer_buffer = transfer_buf;
+                        tex_transfer.offset = 0;
+                        
+                        SDL_GPUTextureRegion region{};
+                        region.texture = texture;
+                        region.mip_level = 0;
+                        region.layer = 0;
+                        region.x = 0;
+                        region.y = 0;
+                        region.z = 0;
+                        region.w = atlas_width_;
+                        region.h = atlas_height_;
+                        region.d = 1;
+                        
+                        SDL_UploadToGPUTexture(copy_pass, &tex_transfer, &region, false);
+                        SDL_EndGPUCopyPass(copy_pass);
+                    }
+                    gpu_device_->submitCommandBuffer(cmd_buf);
+                    gpu_device_->waitForGPU();
+                }
+            }
+            SDL_ReleaseGPUTransferBuffer(dev, transfer_buf);
+        }
+    }
+
     AtlasPage page{};
     page.texture = texture;
     page.width = atlas_width_;
@@ -97,7 +144,7 @@ bool GlyphAtlas::createPage() {
     page.last_used = 0;
 
     pages_.push_back(page);
-    SDL_Log("GlyphAtlas: created page %u (%u x %u)", page.page_index, atlas_width_, atlas_height_);
+    SDL_Log("GlyphAtlas: created page %u (%u x %u), initialized to black", page.page_index, atlas_width_, atlas_height_);
     return true;
 }
 
@@ -158,6 +205,51 @@ GlyphAtlas::AtlasPage* GlyphAtlas::evictAndRecyclePage() {
         victim->glyph_count = 0;
         victim->last_used = 0;
         return nullptr;
+    }
+
+    // 关键：初始化纹理为全黑，避免垃圾数据导致的细线问题
+    {
+        uint32_t buffer_size = atlas_width_ * atlas_height_ * 4;
+        
+        SDL_GPUTransferBufferCreateInfo transfer_info{};
+        transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+        transfer_info.size = buffer_size;
+        
+        SDL_GPUTransferBuffer* transfer_buf = SDL_CreateGPUTransferBuffer(dev, &transfer_info);
+        if (transfer_buf) {
+            void* mapped = SDL_MapGPUTransferBuffer(dev, transfer_buf, false);
+            if (mapped) {
+                std::memset(mapped, 0, buffer_size);
+                SDL_UnmapGPUTransferBuffer(dev, transfer_buf);
+                
+                SDL_GPUCommandBuffer* cmd_buf = gpu_device_->acquireCommandBuffer();
+                if (cmd_buf) {
+                    SDL_GPUCopyPass* copy_pass = SDL_BeginGPUCopyPass(cmd_buf);
+                    if (copy_pass) {
+                        SDL_GPUTextureTransferInfo tex_transfer{};
+                        tex_transfer.transfer_buffer = transfer_buf;
+                        tex_transfer.offset = 0;
+                        
+                        SDL_GPUTextureRegion region{};
+                        region.texture = victim->texture;
+                        region.mip_level = 0;
+                        region.layer = 0;
+                        region.x = 0;
+                        region.y = 0;
+                        region.z = 0;
+                        region.w = atlas_width_;
+                        region.h = atlas_height_;
+                        region.d = 1;
+                        
+                        SDL_UploadToGPUTexture(copy_pass, &tex_transfer, &region, false);
+                        SDL_EndGPUCopyPass(copy_pass);
+                    }
+                    gpu_device_->submitCommandBuffer(cmd_buf);
+                    gpu_device_->waitForGPU();
+                }
+            }
+            SDL_ReleaseGPUTransferBuffer(dev, transfer_buf);
+        }
     }
 
     victim->width = atlas_width_;
@@ -514,6 +606,10 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
     const double range = static_cast<double>(glyph_distance_range_);
     
     msdfgen::Bitmap<float, 3> msdf(msdf_size, msdf_size);
+    // 关键：msdfgen::Bitmap 构造函数不初始化内存，必须手动清零
+    // 否则字形边界外的区域会包含垃圾数据，导致渲染时出现细线/噪点
+    // 使用 operator float*() 获取像素指针
+    std::memset(static_cast<float*>(msdf), 0, sizeof(float) * 3 * msdf_size * msdf_size);
     
     double width = bounds.r - bounds.l;
     double height = bounds.t - bounds.b;
