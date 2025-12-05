@@ -249,7 +249,9 @@ GlyphAtlas::AtlasPage* GlyphAtlas::selectPageForGlyph(uint32_t glyph_width, uint
         return nullptr;
     }
 
-    constexpr uint32_t kAtlasPadding = 1;
+    // Atlas 中 glyph 之间的 padding，防止线性采样时采样到相邻 glyph
+    // 2 像素足以防止双线性插值时的边界泄漏
+    constexpr uint32_t kAtlasPadding = 2;
 
     // 先尝试在现有页中找到能容纳该 glyph 的页
     for (auto& page : pages_) {
@@ -365,7 +367,8 @@ const AtlasEntry* GlyphAtlas::addGlyph(uint32_t glyph_id, const std::string& fon
         return nullptr;
     }
 
-    constexpr uint32_t kAtlasPadding = 1;
+    // Atlas 中 glyph 之间的 padding，防止线性采样时采样到相邻 glyph
+    constexpr uint32_t kAtlasPadding = 2;
 
     if (page->cursor_x + glyph_width + kAtlasPadding > page->width) {
         page->cursor_x = 0;
@@ -516,6 +519,11 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
     if (face->glyph->outline.n_points == 0) {
         out_width = 0;
         out_height = 0;
+        // 空字形没有边界，初始化为 0
+        out_metrics.bounds_left = 0.0f;
+        out_metrics.bounds_bottom = 0.0f;
+        out_metrics.bounds_right = 0.0f;
+        out_metrics.bounds_top = 0.0f;
         return true;
     }
 
@@ -538,6 +546,11 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
         SDL_Log("GlyphAtlas::generateMSDF: empty contours for glyph %u", glyph_id);
         out_width = 0;
         out_height = 0;
+        // 空字形没有边界，初始化为 0
+        out_metrics.bounds_left = 0.0f;
+        out_metrics.bounds_bottom = 0.0f;
+        out_metrics.bounds_right = 0.0f;
+        out_metrics.bounds_top = 0.0f;
         return true;
     }
 
@@ -551,6 +564,12 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
     // 这样 GlyphAtlas / TextShaper / Painter 全部共享同一套设计单位度量，
     // 与浏览器的基线和行高定义保持一致，避免每个字形因为局部 bounds 差异产生"参差不齐"的视觉错位。
     msdfgen::Shape::Bounds bounds = shape.getBounds();
+    
+    // 保存实际边界信息，用于精确的 glyph 定位
+    out_metrics.bounds_left = static_cast<float>(bounds.l);
+    out_metrics.bounds_bottom = static_cast<float>(bounds.b);
+    out_metrics.bounds_right = static_cast<float>(bounds.r);
+    out_metrics.bounds_top = static_cast<float>(bounds.t);
 
     SDL_Log("[MSDF] glyph=%u font='%s' bounds: l=%.1f b=%.1f r=%.1f t=%.1f",
             glyph_id,

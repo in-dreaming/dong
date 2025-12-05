@@ -2285,29 +2285,44 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                     : 1.0f;
                 
                 // MSDF 纹理包含字形 + padding (range 像素)
-                // 渲染时需要考虑 padding 的影响
                 // padding 在 design units 中的大小 = range / msdf_scale
                 const float padding_units = atlas_range / msdf_scale;
                 
-                // 字形渲染尺寸 = (字形尺寸 + 2 * padding) * pixel_scale
-                const float glyph_w = (entry->metrics.width_units + 2.0f * padding_units) * pixel_scale;
-                const float glyph_h = (entry->metrics.height_units + 2.0f * padding_units) * pixel_scale;
+                // 使用 bounds 来计算实际的字形尺寸（与 MSDF 生成时一致）
+                // bounds 是字形轮廓的实际边界，可能与 FreeType metrics 略有不同
+                const float bounds_width = entry->metrics.bounds_right - entry->metrics.bounds_left;
+                const float bounds_height = entry->metrics.bounds_top - entry->metrics.bounds_bottom;
                 
-                // bearing 需要调整，因为 MSDF 纹理左下角有 padding
-                // 原始 bearing_x 是从 pen position 到字形左边缘的距离
-                // 现在需要从 pen position 到 MSDF 纹理左边缘的距离 = bearing_x - padding
-                const float bearing_x_px = (entry->metrics.bearing_x_units - padding_units) * pixel_scale;
-                const float bearing_y_px = (entry->metrics.bearing_y_units + padding_units) * pixel_scale;
+                // 如果 bounds 无效，回退到 metrics
+                const float actual_width_units = (bounds_width > 0.0f) ? bounds_width : entry->metrics.width_units;
+                const float actual_height_units = (bounds_height > 0.0f) ? bounds_height : entry->metrics.height_units;
+                
+                // 字形渲染尺寸 = (字形尺寸 + 2 * padding) * pixel_scale
+                const float glyph_w = (actual_width_units + 2.0f * padding_units) * pixel_scale;
+                const float glyph_h = (actual_height_units + 2.0f * padding_units) * pixel_scale;
 
                 if (glyph_w <= 0.0f || glyph_h <= 0.0f) {
                     continue;
                 }
 
+                // pen position 是 baseline 上的当前绘制位置
                 const float pen_x_px = glyph.pen_x_units * pixel_scale + cmd.baseline_x;
                 const float pen_y_px = glyph.pen_y_units * pixel_scale + cmd.baseline_y;
 
-                float glyph_x = pen_x_px + bearing_x_px;
-                float glyph_y = pen_y_px - bearing_y_px;
+                // 使用 bounds 来计算精确的 bearing
+                // bounds_left 是字形左边缘相对于原点的位置（design units）
+                // bounds_top 是字形顶部相对于 baseline 的位置（design units，正值向上）
+                // 
+                // 在屏幕坐标系中（y 向下为正）：
+                // - glyph_x = pen_x + bounds_left - padding
+                // - glyph_y = pen_y - bounds_top - padding
+                const float bounds_left_px = entry->metrics.bounds_left * pixel_scale;
+                const float bounds_top_px = entry->metrics.bounds_top * pixel_scale;
+                const float padding_px = padding_units * pixel_scale;
+
+                // 字形左上角位置
+                float glyph_x = pen_x_px + bounds_left_px - padding_px;
+                float glyph_y = pen_y_px - bounds_top_px - padding_px;
 
                 GlyphInstanceUniform inst{};
                 inst.rect[0] = glyph_x;
@@ -2322,9 +2337,8 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 inst.uv_rect[2] = entry->u1;
                 inst.uv_rect[3] = entry->v0;
 
-                SDL_Log("[TEXT] glyph=%u font='%s' page=%u pen=(%.2f,%.2f) rect=(%.2f,%.2f,%.2f,%.2f) uv=(%.4f,%.4f,%.4f,%.4f) metrics_w=%.1f h=%.1f bx=%.1f by=%.1f padding_units=%.2f pixel_scale=%.4f",
+                SDL_Log("[TEXT] glyph=%u page=%u pen=(%.2f,%.2f) rect=(%.2f,%.2f,%.2f,%.2f) bounds=(%.1f,%.1f,%.1f,%.1f) padding=%.2f scale=%.4f",
                         glyph.glyph_id,
-                        font_path.c_str(),
                         entry->atlas_page,
                         pen_x_px,
                         pen_y_px,
@@ -2332,14 +2346,10 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                         glyph_y,
                         glyph_w,
                         glyph_h,
-                        entry->u0,
-                        entry->v0,
-                        entry->u1,
-                        entry->v1,
-                        entry->metrics.width_units,
-                        entry->metrics.height_units,
-                        entry->metrics.bearing_x_units,
-                        entry->metrics.bearing_y_units,
+                        entry->metrics.bounds_left,
+                        entry->metrics.bounds_bottom,
+                        entry->metrics.bounds_right,
+                        entry->metrics.bounds_top,
                         padding_units,
                         pixel_scale);
 

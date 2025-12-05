@@ -865,6 +865,76 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         buildDisplayListNode(item.child, child_layout, builder);
     }
 
+    // 5. 滚动条渲染（在子节点之后绘制，确保滚动条在内容之上）
+    if (is_scroll_container && layout_node && node_rect.width > 0.0f && node_rect.height > 0.0f) {
+        // 计算内容高度（所有子元素的最大底部位置）
+        float content_bottom = node_rect.y;
+        for (const auto& child : node->getChildren()) {
+            if (!child || child->getType() != dom::DOMNode::NodeType::ELEMENT) {
+                continue;
+            }
+            const layout::LayoutNode* child_layout = layout_engine_ ? layout_engine_->getLayout(child) : nullptr;
+            if (child_layout) {
+                float child_bottom = child_layout->layout.position[1] + child_layout->layout.dimensions[1];
+                if (child_bottom > content_bottom) {
+                    content_bottom = child_bottom;
+                }
+            }
+        }
+        
+        float content_height = content_bottom - node_rect.y;
+        float visible_height = node_rect.height;
+        
+        // 只有当内容高度大于可视高度时才显示滚动条
+        if (content_height > visible_height + 1.0f) {
+            // 滚动条参数
+            constexpr float kScrollbarWidth = 8.0f;
+            constexpr float kScrollbarMinThumbHeight = 20.0f;
+            constexpr float kScrollbarPadding = 2.0f;
+            
+            // 滚动条轨道位置（在容器右侧）
+            Rect track_rect{};
+            track_rect.x = node_rect.x + node_rect.width - kScrollbarWidth - kScrollbarPadding;
+            track_rect.y = node_rect.y + kScrollbarPadding;
+            track_rect.width = kScrollbarWidth;
+            track_rect.height = node_rect.height - kScrollbarPadding * 2.0f;
+            
+            // 绘制滚动条轨道（半透明灰色背景）
+            Color track_color{};
+            track_color.r = 0.0f;
+            track_color.g = 0.0f;
+            track_color.b = 0.0f;
+            track_color.a = 0.1f;
+            builder.addRoundedRect(track_rect, track_color, kScrollbarWidth * 0.5f);
+            
+            // 计算滑块高度和位置
+            float thumb_height_ratio = visible_height / content_height;
+            float thumb_height = std::max(kScrollbarMinThumbHeight, track_rect.height * thumb_height_ratio);
+            
+            // 当前滚动位置（暂时假设为 0，后续需要从 scroll_y 获取）
+            float scroll_position = 0.0f;  // TODO: 从 layer_node.scroll_y 获取
+            float max_scroll = content_height - visible_height;
+            float scroll_ratio = (max_scroll > 0.0f) ? (scroll_position / max_scroll) : 0.0f;
+            scroll_ratio = std::clamp(scroll_ratio, 0.0f, 1.0f);
+            
+            float thumb_y = track_rect.y + (track_rect.height - thumb_height) * scroll_ratio;
+            
+            Rect thumb_rect{};
+            thumb_rect.x = track_rect.x;
+            thumb_rect.y = thumb_y;
+            thumb_rect.width = kScrollbarWidth;
+            thumb_rect.height = thumb_height;
+            
+            // 绘制滑块（半透明深灰色）
+            Color thumb_color{};
+            thumb_color.r = 0.4f;
+            thumb_color.g = 0.4f;
+            thumb_color.b = 0.4f;
+            thumb_color.a = 0.5f;
+            builder.addRoundedRect(thumb_rect, thumb_color, kScrollbarWidth * 0.5f);
+        }
+    }
+
     if (pushed_layer_node && !layer_stack_.empty()) {
         layer_stack_.pop_back();
     }

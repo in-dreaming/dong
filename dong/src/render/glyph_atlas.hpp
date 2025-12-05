@@ -22,6 +22,13 @@ struct GlyphMetrics {
     float msdf_translate_x = 0.0f;
     float msdf_translate_y = 0.0f;
     
+    // 字形轮廓的实际边界（design units，用于精确定位）
+    // 这些值来自 msdfgen::Shape::getBounds()，可能与 FreeType metrics 略有不同
+    float bounds_left = 0.0f;
+    float bounds_bottom = 0.0f;
+    float bounds_right = 0.0f;
+    float bounds_top = 0.0f;
+    
     uint32_t units_per_em = 0;     // 字体的 EM 单位
 };
 
