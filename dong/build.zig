@@ -248,6 +248,7 @@ pub fn build(b: *std.Build) void {
     const harfbuzz_build_dir = "third_party/harfbuzz/build-zig";
     const harfbuzz_prefix = "zig-out/harfbuzz";
 
+    // Use absolute paths for FreeType
     const freetype_include_abs = b.fmt("{s}/{s}/include/freetype2", .{ b.build_root.path.?, freetype_prefix });
     const freetype_lib_abs = b.fmt("{s}/{s}/lib/libfreetype.a", .{ b.build_root.path.?, freetype_prefix });
 
@@ -290,6 +291,10 @@ pub fn build(b: *std.Build) void {
     const msdfgen_build_dir = "third_party/msdfgen/build-zig";
     const msdfgen_prefix = "zig-out/msdfgen";
 
+    // msdfgen-ext needs FreeType, so we need to provide the paths
+    const msdfgen_freetype_include_abs = b.fmt("{s}/{s}/include/freetype2", .{ b.build_root.path.?, freetype_prefix });
+    const msdfgen_freetype_lib_abs = b.fmt("{s}/{s}/lib/libfreetype.a", .{ b.build_root.path.?, freetype_prefix });
+
     const msdfgen_cmake_config = b.addSystemCommand(&.{
         "cmake",
         "-S",
@@ -297,11 +302,16 @@ pub fn build(b: *std.Build) void {
         "-B",
         msdfgen_build_dir,
         "-DCMAKE_BUILD_TYPE=Release",
-        "-DMSDFGEN_CORE_ONLY=ON",
+        "-DMSDFGEN_CORE_ONLY=OFF",
         "-DMSDFGEN_BUILD_STANDALONE=OFF",
         "-DMSDFGEN_USE_VCPKG=OFF",
         "-DMSDFGEN_INSTALL=ON",
         "-DBUILD_SHARED_LIBS=OFF",
+        "-DMSDFGEN_USE_SKIA=OFF",
+        "-DMSDFGEN_DISABLE_SVG=ON",
+        "-DMSDFGEN_DISABLE_PNG=ON",
+        b.fmt("-DFREETYPE_INCLUDE_DIRS={s}", .{msdfgen_freetype_include_abs}),
+        b.fmt("-DFREETYPE_LIBRARY={s}", .{msdfgen_freetype_lib_abs}),
     });
     const msdfgen_cmake_build = b.addSystemCommand(&.{
         "cmake",
@@ -311,6 +321,7 @@ pub fn build(b: *std.Build) void {
         "Release",
     });
     msdfgen_cmake_build.step.dependOn(&msdfgen_cmake_config.step);
+    msdfgen_cmake_build.step.dependOn(&freetype_cmake_install.step);
 
     const msdfgen_cmake_install = b.addSystemCommand(&.{
         "cmake",
@@ -454,6 +465,7 @@ pub fn build(b: *std.Build) void {
             "src/render/gpu_device.cpp",
             "src/render/gpu_surface.cpp",
             "src/render/font_resolver.cpp",
+            "src/render/font_finder.cpp",
             "src/render/text_shaper.cpp",
             "src/render/font_metrics.cpp",
             "src/render/gpu_painter.cpp",
@@ -461,6 +473,9 @@ pub fn build(b: *std.Build) void {
             "src/render/shader_manager.cpp",
             "src/render/glyph_atlas.cpp",
             "src/platform/sdl3_window.cpp",
+            "src/input/input_adapter_sdl3.cpp",
+            "src/dom/focus_manager.cpp",
+            "src/dom/input_element.cpp",
         },
         .flags = &.{"-std=c++17"},
     });
@@ -480,7 +495,9 @@ pub fn build(b: *std.Build) void {
     // Link FreeType, HarfBuzz and msdfgen (static libraries)
     dong.addObjectFile(.{ .cwd_relative = "zig-out/freetype/lib/libfreetype.a" });
     dong.addObjectFile(.{ .cwd_relative = "zig-out/harfbuzz/lib/libharfbuzz.a" });
+    // msdfgen-ext depends on msdfgen-core, so we need to link both
     dong.addObjectFile(.{ .cwd_relative = "zig-out/msdfgen/lib/libmsdfgen-core.a" });
+    dong.addObjectFile(.{ .cwd_relative = "zig-out/msdfgen/lib/libmsdfgen-ext.a" });
 
     // Ensure FreeType, HarfBuzz and msdfgen are built before dong
     dong.step.dependOn(&freetype_cmake_install.step);
@@ -570,6 +587,8 @@ pub fn build(b: *std.Build) void {
         .{ .name = "gpu_screenshot_analysis", .source = "examples/gpu_screenshot_analysis.cpp", .flags = &.{"-std=c++17"} },
         // GPU 纹理渲染 demo（展示两层离屏渲染API）
         .{ .name = "gpu_texture_demo", .source = "examples/gpu_texture_demo.cpp", .flags = &.{"-std=c++17"} },
+        // 交互式 demo（按钮点击、ScrollView、文字输入）
+        .{ .name = "interactive_demo", .source = "examples/interactive_demo.cpp", .flags = &.{"-std=c++17"} },
         // 离屏渲染测试（简单版本）
         .{ .name = "offscreen_test", .source = "examples/offscreen_test.cpp", .flags = &.{"-std=c++17"} },
         // 离屏渲染测试（最简化版本）
