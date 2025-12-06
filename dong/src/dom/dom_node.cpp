@@ -108,6 +108,24 @@ void DOMNode::clearLayoutDirtyRecursive() {
     }
 }
 
+void DOMNode::scrollBy(float dx, float dy) {
+    if (!isScrollContainer()) return;
+    
+    // 计算最大滚动范围（需要布局信息）
+    // 这里假设 content_width_/content_height_ 已由布局引擎设置
+    // 实际的容器尺寸需要从布局结果获取
+    scroll_x_ = std::max(0.0f, scroll_x_ + dx);
+    scroll_y_ = std::max(0.0f, scroll_y_ + dy);
+    
+    // TODO: 需要从布局结果获取容器尺寸来限制最大滚动
+    // 暂时不限制最大值，由渲染层处理
+}
+
+bool DOMNode::isScrollContainer() const {
+    const auto& overflow = computed_style.overflow;
+    return overflow == "scroll" || overflow == "auto" || overflow == "hidden";
+}
+
 void DOMNode::print(int depth) const {
     for (int i = 0; i < depth; ++i) std::cout << "  ";
 

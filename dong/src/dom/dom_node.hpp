@@ -169,6 +169,19 @@ public:
     void clearLayoutDirtyRecursive();
     bool isLayoutDirty() const { return layout_dirty_; }
 
+    // Scroll state (for overflow: scroll/auto containers)
+    float getScrollX() const { return scroll_x_; }
+    float getScrollY() const { return scroll_y_; }
+    void setScrollX(float x) { scroll_x_ = x; }
+    void setScrollY(float y) { scroll_y_ = y; }
+    void scrollBy(float dx, float dy);
+    bool isScrollContainer() const;
+    
+    // Content size (set by layout engine for scroll calculations)
+    float getContentWidth() const { return content_width_; }
+    float getContentHeight() const { return content_height_; }
+    void setContentSize(float w, float h) { content_width_ = w; content_height_ = h; }
+
     // Traversal helpers
     DOMNodePtr getElementById(const std::string& id);
     std::vector<DOMNodePtr> getElementsByTagName(const std::string& tag);
@@ -184,6 +197,12 @@ private:
     std::unordered_map<std::string, std::string> attributes;
     ComputedStyle computed_style;
     bool layout_dirty_ = true;
+    
+    // Scroll state
+    float scroll_x_ = 0.0f;
+    float scroll_y_ = 0.0f;
+    float content_width_ = 0.0f;
+    float content_height_ = 0.0f;
 
     std::weak_ptr<DOMNode> parent;
     std::vector<DOMNodePtr> children;

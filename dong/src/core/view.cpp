@@ -8,6 +8,8 @@
 #include <SDL3/SDL_gpu.h>
 #include "../dom/dom_manager.hpp"
 #include "../dom/event_system.hpp"
+#include "../dom/focus_manager.hpp"
+#include "../dom/input_element.hpp"
 #include "../render/render_surface.hpp"
 #include "../render/painter.hpp"
 #include "../render/gpu_device.hpp"
@@ -99,11 +101,14 @@ View::View(uint32_t width, uint32_t height)
       painter(nullptr),
       script_engine(std::make_unique<script::ScriptEngine>()),
       event_dispatcher(std::make_unique<dom::EventDispatcher>()),
+      focus_manager(std::make_unique<dom::FocusManager>()),
       js_bindings(std::make_unique<script::JSBindings>(
           script_engine.get(),
           dom_manager.get(),
           event_dispatcher.get()
       )) {
+    // 设置焦点管理器的事件分发器
+    focus_manager->setEventDispatcher(event_dispatcher.get());
     // Defer JS bindings initialization until after first HTML load / script eval
     painter = std::make_unique<render::Painter>(render_surface.get());
 }
@@ -561,9 +566,64 @@ void View::handle_mouse_down(int32_t button) {
 void View::handle_mouse_up(int32_t button) {
     dispatchMouseEventToJS("mouseup", last_mouse_x_, last_mouse_y_, button);
     dispatchMouseEventToJS("click", last_mouse_x_, last_mouse_y_, button);
+    
+    // 处理焦点：点击时尝试聚焦被点击的元素
+    if (focus_manager && dom_manager && layout_engine) {
+        auto clicked = hitTestElementAt(dom_manager.get(), layout_engine.get(), 
+                                        last_mouse_x_, last_mouse_y_);
+        if (clicked) {
+            focus_manager->focusOnClick(clicked);
+        }
+    }
 }
 
 void View::handle_key_down(uint32_t key_code) {
+    // SDL3 键码定义
+    constexpr uint32_t SDLK_TAB = 9;
+    constexpr uint32_t SDLK_BACKSPACE = 8;
+    constexpr uint32_t SDLK_DELETE = 127;
+    constexpr uint32_t SDLK_LEFT = 0x40000050;
+    constexpr uint32_t SDLK_RIGHT = 0x4000004F;
+    
+    // Tab 键焦点切换
+    if (key_code == SDLK_TAB && focus_manager && dom_manager) {
+        focus_manager->moveFocus(dom_manager->getRoot(), false);
+        return;
+    }
+    
+    // 处理可编辑元素的键盘输入
+    if (focus_manager) {
+        auto focused = focus_manager->getFocusedElement();
+        if (focused && dom::isEditableElement(focused)) {
+            auto* state = dom::getInputState(focused);
+            if (state) {
+                bool handled = false;
+                
+                if (key_code == SDLK_BACKSPACE) {
+                    state->deleteBackward();
+                    handled = true;
+                } else if (key_code == SDLK_DELETE) {
+                    state->deleteForward();
+                    handled = true;
+                } else if (key_code == SDLK_LEFT) {
+                    state->moveCursor(-1);
+                    handled = true;
+                } else if (key_code == SDLK_RIGHT) {
+                    state->moveCursor(1);
+                    handled = true;
+                }
+                
+                if (handled) {
+                    // 同步到 DOM 属性
+                    focused->setAttribute("value", state->getValue());
+                    if (render_surface) {
+                        render_surface->markDirty();
+                    }
+                }
+            }
+        }
+    }
+    
     dispatchKeyEventToJS("keydown", key_code);
 }
 
@@ -637,6 +697,122 @@ void View::dispatchKeyEventToJS(const char* type, uint32_t key_code) {
     }
 
     js_bindings->dispatchKeyEvent(node_id, type, key_code);
+}
+
+void View::handle_mouse_wheel(float delta_x, float delta_y) {
+    // 查找鼠标位置下的滚动容器
+    auto scroll_container = findScrollContainerAt(last_mouse_x_, last_mouse_y_);
+    if (scroll_container) {
+        // 滚动速度系数
+        constexpr float kScrollSpeed = 20.0f;
+        scroll_container->scrollBy(delta_x * kScrollSpeed, delta_y * kScrollSpeed);
+        
+        // 标记需要重新渲染
+        if (render_surface) {
+            render_surface->markDirty();
+        }
+        
+        // 触发 wheel 事件到 JS
+        dispatchWheelEventToJS(delta_x, delta_y);
+    }
+}
+
+void View::handle_text_input(const char* text) {
+    if (!text || !text[0]) return;
+    
+    // 获取当前焦点元素
+    dom::DOMNodePtr focused;
+    if (focus_manager) {
+        focused = focus_manager->getFocusedElement();
+    }
+    
+    // 如果焦点元素是可编辑的，更新其内容
+    if (focused && dom::isEditableElement(focused)) {
+        auto* state = dom::getInputState(focused);
+        if (state) {
+            state->insertText(text);
+            // 同步到 DOM 属性
+            focused->setAttribute("value", state->getValue());
+            // 标记需要重新渲染
+            if (render_surface) {
+                render_surface->markDirty();
+            }
+        }
+    }
+    
+    // 触发 input 事件到 JS
+    dispatchTextInputEventToJS(text);
+}
+
+void View::dispatchWheelEventToJS(float delta_x, float delta_y) {
+    if (!script_engine || !js_bindings || !event_dispatcher) return;
+    
+    // 查找事件目标
+    auto target = hitTestElementAt(dom_manager.get(), layout_engine.get(), 
+                                   last_mouse_x_, last_mouse_y_);
+    if (!target && dom_manager) {
+        target = dom_manager->getRoot();
+    }
+    if (!target) return;
+    
+    // 创建 wheel 事件
+    dom::Event event = event_dispatcher->createMouseEvent(
+        dom::EventType::MOUSE_MOVE,  // TODO: 添加 WHEEL 事件类型
+        last_mouse_x_, last_mouse_y_, 0);
+    event.type_name = "wheel";
+    event.target = target;
+    event.current_target = target;
+    // TODO: 将 delta_x/delta_y 存入事件数据
+    
+    event_dispatcher->dispatch(event);
+}
+
+void View::dispatchTextInputEventToJS(const char* text) {
+    if (!script_engine || !js_bindings || !event_dispatcher) return;
+    if (!text) return;
+    
+    // TODO: 获取当前焦点元素作为目标
+    // 暂时使用 body 或第一个 input 元素
+    dom::DOMNodePtr target;
+    if (dom_manager) {
+        auto inputs = dom_manager->getElementsByTagName("input");
+        if (!inputs.empty()) {
+            target = inputs[0];
+        } else {
+            auto bodies = dom_manager->getElementsByTagName("body");
+            if (!bodies.empty()) {
+                target = bodies[0];
+            }
+        }
+    }
+    if (!target) return;
+    
+    // 创建 input 事件
+    dom::Event event = event_dispatcher->createEvent(dom::EventType::INPUT);
+    event.target = target;
+    event.current_target = target;
+    event.data["inputText"] = text;
+    
+    event_dispatcher->dispatch(event);
+}
+
+dom::DOMNodePtr View::findScrollContainerAt(int32_t x, int32_t y) {
+    if (!dom_manager || !layout_engine) return nullptr;
+    
+    // 首先找到点击位置的元素
+    auto element = hitTestElementAt(dom_manager.get(), layout_engine.get(), x, y);
+    if (!element) return nullptr;
+    
+    // 向上查找滚动容器
+    auto current = element;
+    while (current) {
+        if (current->isScrollContainer()) {
+            return current;
+        }
+        current = current->getParent();
+    }
+    
+    return nullptr;
 }
 
 void View::setRenderMode(bool use_gpu) {

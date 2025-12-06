@@ -12,6 +12,9 @@ struct SDL_Window;
 namespace dong::dom {
 class Manager;
 class EventDispatcher;
+class FocusManager;
+class DOMNode;
+using DOMNodePtr = std::shared_ptr<DOMNode>;
 }
 
 namespace dong::render {
@@ -50,8 +53,10 @@ public:
     void handle_mouse_move(int32_t x, int32_t y);
     void handle_mouse_down(int32_t button);
     void handle_mouse_up(int32_t button);
+    void handle_mouse_wheel(float delta_x, float delta_y);
     void handle_key_down(uint32_t key_code);
     void handle_key_up(uint32_t key_code);
+    void handle_text_input(const char* text);
 
     // DOM access
     dom::Manager* getDOMManager() const { return dom_manager.get(); }
@@ -80,6 +85,7 @@ private:
     std::unique_ptr<layout::Engine> layout_engine;
     std::unique_ptr<render::RenderSurface> render_surface;
     std::unique_ptr<dom::EventDispatcher> event_dispatcher;
+    std::unique_ptr<dom::FocusManager> focus_manager;
     std::unique_ptr<render::Painter> painter;
     std::unique_ptr<script::ScriptEngine> script_engine;
     std::unique_ptr<script::JSBindings> js_bindings;
@@ -101,6 +107,11 @@ private:
     void ensureJSBindingsInitialized();
     void dispatchMouseEventToJS(const char* type, int32_t x, int32_t y, int32_t button);
     void dispatchKeyEventToJS(const char* type, uint32_t key_code);
+    void dispatchWheelEventToJS(float delta_x, float delta_y);
+    void dispatchTextInputEventToJS(const char* text);
+    
+    // 查找滚动容器（overflow: scroll/auto）
+    dom::DOMNodePtr findScrollContainerAt(int32_t x, int32_t y);
 };
 
 } // namespace dong

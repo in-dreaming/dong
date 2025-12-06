@@ -76,6 +76,16 @@ void dong_view_send_key_up(dong_view_t* view, uint32_t key_code) {
     reinterpret_cast<DongView*>(view)->handle_key_up(key_code);
 }
 
+void dong_view_send_mouse_wheel(dong_view_t* view, float delta_x, float delta_y) {
+    if (!view) return;
+    reinterpret_cast<DongView*>(view)->handle_mouse_wheel(delta_x, delta_y);
+}
+
+void dong_view_send_text_input(dong_view_t* view, const char* text) {
+    if (!view) return;
+    reinterpret_cast<DongView*>(view)->handle_text_input(text);
+}
+
 void dong_view_set_render_mode(dong_view_t* view, bool use_gpu) {
     if (!view) return;
     reinterpret_cast<DongView*>(view)->setRenderMode(use_gpu);
