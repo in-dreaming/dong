@@ -150,9 +150,7 @@ void View::load_html(const char* html) {
             js_bindings->resetForNewDOM();
         }
         // 标记需要重新渲染
-        if (render_surface) {
-            render_surface->markDirty();
-        }
+        markNeedsRepaint();
         // 新的 DOM 树需要重新布局
         auto root = dom_manager->getRoot();
         if (root) {
@@ -189,9 +187,7 @@ void View::resize(uint32_t width, uint32_t height) {
         }
     }
 
-    if (render_surface) {
-        render_surface->markDirty();
-    }
+    markNeedsRepaint();
 
     // 尺寸变化会影响整个布局
     if (dom_manager) {
@@ -211,9 +207,7 @@ void View::update() {
         auto root = dom_manager->getRoot();
         if (root && root->isLayoutDirty()) {
             layout_engine->calculateLayout(root, static_cast<float>(width_), static_cast<float>(height_));
-            if (render_surface) {
-                render_surface->markDirty();
-            }
+            markNeedsRepaint();
             
             // 输出布局调试信息
             auto htmls = dom_manager->getElementsByTagName("html");
@@ -254,44 +248,53 @@ void View::update() {
         }
     }
 
-    if (!render_surface || !render_surface->isDirty() || !dom_manager) {
-        return;
-    }
-
-    auto root = dom_manager->getRoot();
-    if (!root) {
-        return;
-    }
-
     // GPU 路径：DisplayList → GPU 渲染
-    if (use_gpu_ && gpu_driver_ && painter) {
-        SDL_Log("[View::update] Building DisplayList...");
-        const render::DisplayList& dl = painter->buildDisplayList(root, layout_engine.get());
-        SDL_Log("[View::update] DisplayList built with %zu items", dl.items.size());
-        
-        render::GPUCompiler compiler;
-        render::GPUCommandList cmd_list;
-        SDL_Log("[View::update] Compiling DisplayList to GPUCommandList...");
-        const render::LayerTree& layer_tree = painter->getLayerTree();
-        debugLogLayerTreeIfEnabled(layer_tree);
-        compiler.compile(dl, cmd_list, &layer_tree);
-        SDL_Log("[View::update] GPUCommandList compiled with %zu commands", cmd_list.commands.size());
-
-        SDL_Log("[View::update] Beginning GPU frame...");
-        gpu_driver_->beginFrame();
-        SDL_Log("[View::update] Executing GPUCommandList...");
-        gpu_driver_->execute(cmd_list);
-        SDL_Log("[View::update] Ending GPU frame...");
-        gpu_driver_->endFrame();
-        SDL_Log("[View::update] GPU frame completed");
-
-        // 完成一帧渲染后再清除 layout dirty 标记，保证 Painter 在本帧能看到每个节点的 dirty 状态
-        if (dom_manager) {
-            auto root_after = dom_manager->getRoot();
-            if (root_after) {
-                root_after->clearLayoutDirtyRecursive();
-            }
+    // 注意：对于 swapchain 渲染，每帧都必须获取 swapchain 纹理并提交命令
+    // 否则会导致闪烁（因为 swapchain 是双缓冲/三缓冲的）
+    if (use_gpu_ && gpu_driver_ && painter && dom_manager) {
+        auto root = dom_manager->getRoot();
+        if (!root) {
+            return;
         }
+        
+        // 确保缓存命令列表已初始化
+        if (!cached_cmd_list_) {
+            cached_cmd_list_ = std::make_unique<render::GPUCommandList>();
+            commands_dirty_ = true;
+        }
+        
+        // 只在内容变化时重新构建 DisplayList 和 GPUCommandList
+        bool need_rebuild = commands_dirty_;
+        
+        if (need_rebuild) {
+            SDL_Log("[View::update] Building DisplayList...");
+            const render::DisplayList& dl = painter->buildDisplayList(root, layout_engine.get());
+            SDL_Log("[View::update] DisplayList built with %zu items", dl.items.size());
+            
+            // 缓存编译后的命令列表
+            cached_cmd_list_->commands.clear();
+            cached_cmd_list_->sorted_draw_indices.clear();
+            cached_cmd_list_->draw_batches.clear();
+            
+            render::GPUCompiler compiler;
+            SDL_Log("[View::update] Compiling DisplayList to GPUCommandList...");
+            const render::LayerTree& layer_tree = painter->getLayerTree();
+            debugLogLayerTreeIfEnabled(layer_tree);
+            compiler.compile(dl, *cached_cmd_list_, &layer_tree);
+            SDL_Log("[View::update] GPUCommandList compiled with %zu commands", cached_cmd_list_->commands.size());
+            
+            // 清除命令脏标记（下次只有在 markNeedsRepaint 时才会重建）
+            commands_dirty_ = false;
+
+            // 清除 layout dirty 标记
+            root->clearLayoutDirtyRecursive();
+        }
+
+        // 每帧都执行渲染（即使使用缓存的命令列表）
+        gpu_driver_->beginFrame();
+        gpu_driver_->execute(*cached_cmd_list_);
+        gpu_driver_->endFrame();
+        
         return;
     }
 
@@ -545,6 +548,13 @@ std::string View::eval_script_with_return(const char* code) {
     return last_eval_return_value_;
 }
 
+void View::markNeedsRepaint() {
+    commands_dirty_ = true;
+    if (render_surface) {
+        render_surface->markDirty();
+    }
+}
+
 void View::ensureJSBindingsInitialized() {
     if (js_bindings_initialized_ || !js_bindings || !script_engine) return;
     JSContext* ctx = script_engine->getContext();
@@ -616,9 +626,8 @@ void View::handle_key_down(uint32_t key_code) {
                 if (handled) {
                     // 同步到 DOM 属性
                     focused->setAttribute("value", state->getValue());
-                    if (render_surface) {
-                        render_surface->markDirty();
-                    }
+                    // 标记需要重新渲染
+                    markNeedsRepaint();
                 }
             }
         }
@@ -708,9 +717,7 @@ void View::handle_mouse_wheel(float delta_x, float delta_y) {
         scroll_container->scrollBy(delta_x * kScrollSpeed, delta_y * kScrollSpeed);
         
         // 标记需要重新渲染
-        if (render_surface) {
-            render_surface->markDirty();
-        }
+        markNeedsRepaint();
         
         // 触发 wheel 事件到 JS
         dispatchWheelEventToJS(delta_x, delta_y);
@@ -734,9 +741,7 @@ void View::handle_text_input(const char* text) {
             // 同步到 DOM 属性
             focused->setAttribute("value", state->getValue());
             // 标记需要重新渲染
-            if (render_surface) {
-                render_surface->markDirty();
-            }
+            markNeedsRepaint();
         }
     }
     
@@ -866,9 +871,7 @@ void View::setRenderMode(bool use_gpu) {
         painter = std::make_unique<render::Painter>(render_surface.get());
     }
 
-    if (render_surface) {
-        render_surface->markDirty();
-    }
+    markNeedsRepaint();
 }
 
 void View::setExternalGPUDevice(SDL_GPUDevice* device, SDL_Window* window) {
@@ -932,9 +935,7 @@ void View::setExternalGPUDevice(SDL_GPUDevice* device, SDL_Window* window) {
     }
 
     use_gpu_ = true;
-    if (render_surface) {
-        render_surface->markDirty();
-    }
+    markNeedsRepaint();
 }
 
 } // namespace dong

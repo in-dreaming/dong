@@ -25,6 +25,7 @@ class GPUTextureSurfaceImpl;
 class GPUPainter;
 class ShaderManager;
 class GPUDriver;
+struct GPUCommandList;
 }
 
 namespace dong::script {
@@ -97,13 +98,20 @@ private:
     std::unique_ptr<render::GPUPainter> gpu_painter_;
     std::unique_ptr<render::GPUDriver> gpu_driver_;
 
+    // 缓存的 GPU 命令列表（用于 swapchain 渲染时避免每帧重新编译）
+    std::unique_ptr<render::GPUCommandList> cached_cmd_list_;
+
     bool use_gpu_;
+    // 标记当前 DisplayList / GPUCommandList 是否需要重建
+    bool commands_dirty_ = true;
     bool js_bindings_initialized_ = false;
     int32_t last_mouse_x_ = 0;
     int32_t last_mouse_y_ = 0;
     // 【缺口3】缓存最后的 eval 返回值
     std::string last_eval_return_value_;
 
+    // 标记当前视图需要重新构建 DisplayList / GPUCommandList
+    void markNeedsRepaint();
     void ensureJSBindingsInitialized();
     void dispatchMouseEventToJS(const char* type, int32_t x, int32_t y, int32_t button);
     void dispatchKeyEventToJS(const char* type, uint32_t key_code);

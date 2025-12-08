@@ -46,6 +46,9 @@ public:
     // MSDF 文本：是否启用 subpixel 渲染路径
     void setMsdfSubpixelEnabled(bool enable) { msdf_subpixel_enabled_ = enable; }
 
+    // 启用或关闭图层缓存复用（默认关闭，确保正确性优先）
+    void setLayerCacheEnabled(bool enable) { layer_cache_enabled_ = enable; }
+
 private:
     GPUDevice* gpu_device_;
     SDL_Window* window_;
@@ -56,12 +59,20 @@ private:
     bool debug_log_draw_batches_ = false;
     bool debug_log_layer_cache_ = false;
     bool msdf_subpixel_enabled_ = false;
+    bool layer_cache_enabled_ = false; // 新增：控制是否复用隔离层缓存纹理
+    bool debug_rt_enabled_ = false;    // 调试：打印帧级 / RenderTarget / 图层合成日志
     unsigned long long frame_index_ = 0;
     
     // Offscreen rendering support
     SDL_GPUTexture* offscreen_target_ = nullptr;
     uint32_t offscreen_width_ = 0;
     uint32_t offscreen_height_ = 0;
+
+    // 中间渲染纹理：用于避免直接在 swapchain 上进行多次 render pass
+    // 所有渲染先在此纹理上进行，最后 blit 到 swapchain
+    SDL_GPUTexture* intermediate_texture_ = nullptr;
+    uint32_t intermediate_width_ = 0;
+    uint32_t intermediate_height_ = 0;
 
     // 纯色矩形绘制管线
     SDL_GPUShader* rect_vs_ = nullptr;

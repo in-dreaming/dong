@@ -1,0 +1,123 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug Current Demo",
+            "program": "${workspaceFolder}/dong/zig-out/bin/${fileBasenameNoExtension}",
+            "args": [],
+            "cwd": "${workspaceFolder}/dong",
+            "preLaunchTask": "build-debug",
+            "env": {
+                "DONG_DEBUG_LAYER_CACHE": "1",
+                "DONG_DEBUG_DRAW_BATCHES": "1",
+                "DONG_DEBUG_LAYER_TREE": "1",
+                "DONG_LAYER_CACHE": "1"
+            },
+            "stopOnEntry": false,
+            "console": "integratedTerminal",
+            "sourceLanguages": ["cpp", "c"],
+            "sourceMap": {
+                "${workspaceFolder}/dong": "${workspaceFolder}/dong"
+            },
+            "initCommands": [
+                "settings set target.process.stop-on-sharedlibrary-events false"
+            ]
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug simple_demo",
+            "program": "${workspaceFolder}/dong/zig-out/bin/simple_demo",
+            "args": [],
+            "cwd": "${workspaceFolder}/dong",
+            "preLaunchTask": "build-debug",
+            "env": {},
+            "stopOnEntry": false,
+            "console": "integratedTerminal",
+            "sourceLanguages": ["cpp", "c"]
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug basic_demo",
+            "program": "${workspaceFolder}/dong/zig-out/bin/basic_demo",
+            "args": [],
+            "cwd": "${workspaceFolder}/dong",
+            "preLaunchTask": "build-debug",
+            "env": {},
+            "stopOnEntry": false,
+            "console": "integratedTerminal",
+            "sourceLanguages": ["cpp", "c"]
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug interactive_demo",
+            "program": "${workspaceFolder}/dong/zig-out/bin/interactive_demo",
+            "args": [],
+            "cwd": "${workspaceFolder}/dong",
+            "preLaunchTask": "build-debug",
+            "env": {
+                "DONG_DEBUG_LAYER_CACHE": "1",
+                "DONG_DEBUG_DRAW_BATCHES": "1",
+                "DONG_DEBUG_LAYER_TREE": "1",
+                "DONG_LAYER_CACHE": "1"
+            },
+            "stopOnEntry": false,
+            "console": "integratedTerminal",
+            "sourceLanguages": ["cpp", "c"]
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug complete_demo",
+            "program": "${workspaceFolder}/dong/zig-out/bin/complete_demo",
+            "args": [],
+            "cwd": "${workspaceFolder}/dong",
+            "preLaunchTask": "build-debug",
+            "env": {},
+            "stopOnEntry": false,
+            "console": "integratedTerminal",
+            "sourceLanguages": ["cpp", "c"]
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug gpu_view_demo",
+            "program": "${workspaceFolder}/dong/zig-out/bin/gpu_view_demo",
+            "args": [],
+            "cwd": "${workspaceFolder}/dong",
+            "preLaunchTask": "build-debug",
+            "env": {},
+            "stopOnEntry": false,
+            "console": "integratedTerminal",
+            "sourceLanguages": ["cpp", "c"]
+        },
+        {
+            "type": "lldb",
+            "request": "attach",
+            "name": "Attach to Process",
+            "pid": "${command:pickProcess}"
+        }
+    ],
+    "inputs": [
+        {
+            "id": "demoName",
+            "type": "pickString",
+            "description": "Select demo to debug",
+            "options": [
+                "simple_demo",
+                "basic_demo",
+                "complete_demo",
+                "interactive_demo",
+                "gpu_view_demo",
+                "gpu_screenshot_demo",
+                "isolation_demo",
+                "comprehensive_features_demo"
+            ],
+            "default": "simple_demo"
+        }
+    ]
+}

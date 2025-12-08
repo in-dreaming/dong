@@ -12,3 +12,5 @@ mac
 ```
 zig build examples   -Doptimize=ReleaseSmall
 ```
+
+zig build examples   -Doptimize=Debug

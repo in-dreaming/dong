@@ -117,6 +117,12 @@ GPUDriverSDL::~GPUDriverSDL() {
             text_sampler_ = nullptr;
         }
 
+        // 释放中间渲染纹理
+        if (intermediate_texture_) {
+            SDL_ReleaseGPUTexture(dev, intermediate_texture_);
+            intermediate_texture_ = nullptr;
+        }
+
         // 释放图层离屏渲染缓存纹理
         for (auto& entry : layer_render_targets_) {
             if (entry.texture) {
@@ -1117,6 +1123,10 @@ float4 main(PSInput input) : SV_Target0 {
         return false;
     }
     ft_face_cache_.clear();
+    
+    // 暂时强制开启 RenderTarget/图层合成调试日志，方便定位问题（后续再收回到环境变量开关）
+    debug_rt_enabled_ = true;
+    SDL_Log("GPUDriverSDL: RT debug logs FORCED ON (ignore DONG_DEBUG_RT for now)");
 
     SDL_Log("GPUDriverSDL initialized successfully");
     return true;
@@ -1140,6 +1150,15 @@ void GPUDriverSDL::beginFrame() {
 
     ++frame_index_;
     in_frame_ = true;
+
+    // 重置所有图层渲染目标的 in_use 标志，以便新帧可以复用缓存
+    for (auto& entry : layer_render_targets_) {
+        entry.in_use = false;
+    }
+
+    if (debug_rt_enabled_) {
+        SDL_Log("[GPUDriverSDL::beginFrame] frame=%llu mode=window", frame_index_);
+    }
 }
 
 void GPUDriverSDL::endFrame() {
@@ -1169,6 +1188,15 @@ void GPUDriverSDL::beginFrameOffscreen(SDL_GPUTexture* target, uint32_t width, u
     }
 
     ++frame_index_;
+
+    // 重置所有图层渲染目标的 in_use 标志，以便新帧可以复用缓存
+    for (auto& entry : layer_render_targets_) {
+        entry.in_use = false;
+    }
+
+    if (debug_rt_enabled_) {
+        SDL_Log("[GPUDriverSDL::beginFrameOffscreen] frame=%llu target=%p size=%ux%u", frame_index_, (void*)target, width, height);
+    }
 
     // 保存纹理尺寸
     offscreen_width_ = width;
@@ -1331,30 +1359,77 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
         return;
     }
 
-    SDL_GPUTexture* swapchain_texture = nullptr;
+    SDL_GPUDevice* dev = gpu_device_->getHandle();
+    SDL_GPUTexture* real_swapchain_texture = nullptr;  // 真正的 swapchain 纹理，用于最后 blit
+    SDL_GPUTexture* swapchain_texture = nullptr;       // 实际用于渲染的纹理（可能是中间纹理）
     Uint32 w = 0;
     Uint32 h = 0;
+    bool use_intermediate = false;  // 是否使用中间纹理
     
     // 判断是离屏渲染还是窗口渲染
     if (offscreen_target_) {
-        // 离屏渲染模式
+        // 离屏渲染模式：直接使用目标纹理
         swapchain_texture = offscreen_target_;
         w = offscreen_width_;
         h = offscreen_height_;
-        SDL_Log("[GPUDriverSDL::execute] Offscreen mode: viewport = %u x %u", w, h);
+        if (debug_rt_enabled_) {
+            SDL_Log("[GPUDriverSDL::execute] frame=%llu mode=offscreen viewport=%ux%u", frame_index_, w, h);
+        }
     } else {
-        // 窗口渲染模式
+        // 窗口渲染模式：使用中间纹理避免 swapchain 多次 render pass 问题
         if (!window_) {
             SDL_Log("GPUDriverSDL::execute: no window for swapchain rendering");
             return;
         }
-        if (!SDL_AcquireGPUSwapchainTexture(current_cmd_buf_, window_, &swapchain_texture, &w, &h)) {
+        if (!SDL_AcquireGPUSwapchainTexture(current_cmd_buf_, window_, &real_swapchain_texture, &w, &h)) {
             SDL_Log("GPUDriverSDL::execute: failed to acquire swapchain texture");
             return;
         }
-        if (!swapchain_texture) {
-            SDL_Log("GPUDriverSDL::execute: swapchain texture is null");
+        if (!real_swapchain_texture) {
+            SDL_Log("GPUDriverSDL::execute: swapchain texture is null (frame=%llu)", frame_index_);
             return;
+        }
+        
+        // 创建或复用中间纹理
+        if (!intermediate_texture_ || intermediate_width_ != w || intermediate_height_ != h) {
+            if (intermediate_texture_) {
+                SDL_ReleaseGPUTexture(dev, intermediate_texture_);
+                intermediate_texture_ = nullptr;
+            }
+            
+            SDL_GPUTextureCreateInfo tex_info{};
+            tex_info.type = SDL_GPU_TEXTURETYPE_2D;
+            tex_info.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+            tex_info.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
+            tex_info.width = w;
+            tex_info.height = h;
+            tex_info.layer_count_or_depth = 1;
+            tex_info.num_levels = 1;
+            tex_info.sample_count = SDL_GPU_SAMPLECOUNT_1;
+            
+            intermediate_texture_ = SDL_CreateGPUTexture(dev, &tex_info);
+            if (!intermediate_texture_) {
+                SDL_Log("GPUDriverSDL::execute: failed to create intermediate texture: %s", SDL_GetError());
+                // 回退到直接使用 swapchain
+                swapchain_texture = real_swapchain_texture;
+            } else {
+                intermediate_width_ = w;
+                intermediate_height_ = h;
+                swapchain_texture = intermediate_texture_;
+                use_intermediate = true;
+                if (debug_rt_enabled_) {
+                    SDL_Log("[GPUDriverSDL::execute] frame=%llu created intermediate texture %p size=%ux%u",
+                            frame_index_, (void*)intermediate_texture_, w, h);
+                }
+            }
+        } else {
+            swapchain_texture = intermediate_texture_;
+            use_intermediate = true;
+        }
+        
+        if (debug_rt_enabled_) {
+            SDL_Log("[GPUDriverSDL::execute] frame=%llu mode=window viewport=%ux%u swapchain=%p intermediate=%p use_intermediate=%d",
+                    frame_index_, w, h, (void*)real_swapchain_texture, (void*)intermediate_texture_, use_intermediate ? 1 : 0);
         }
     }
 
@@ -1382,6 +1457,20 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
     std::vector<RenderTargetState> render_target_stack;
     std::vector<IsolatedLayerState> isolated_layer_stack;
     int skip_draw_depth = 0; // 大于 0 时，跳过图层内部的绘制命令，仅在 EndIsolatedLayer 处做合成
+
+    auto log_render_target_stack = [&](const char* prefix) {
+        if (!debug_rt_enabled_) {
+            return;
+        }
+        if (render_target_stack.empty()) {
+            SDL_Log("%s frame=%llu rt_depth=0 (swapchain=%p)", prefix, frame_index_, (void*)swapchain_texture);
+            return;
+        }
+        const RenderTargetState& top = render_target_stack.back();
+        SDL_Log("%s frame=%llu rt_depth=%zu top_rt=%p size=%ux%u is_swapchain=%d", prefix,
+                frame_index_, render_target_stack.size(), (void*)top.texture,
+                top.width, top.height, top.is_swapchain ? 1 : 0);
+    };
 
     auto current_target_dimensions = [&render_target_stack, &w, &h]() -> std::pair<Uint32, Uint32> {
         if (render_target_stack.empty()) {
@@ -1541,6 +1630,10 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
         // 当在非脏隔离图层内部时，跳过除 Begin/EndIsolatedLayer 以外的命令
         if (skip_draw_depth > 0 && cmd.type != GPUCommandType::BeginIsolatedLayer &&
             cmd.type != GPUCommandType::EndIsolatedLayer) {
+            if (debug_rt_enabled_) {
+                SDL_Log("[GPUDriverSDL::execute] frame=%llu skip cmd type=%d due_to_non_dirty_layer depth=%d",
+                        frame_index_, static_cast<int>(cmd.type), skip_draw_depth);
+            }
             continue;
         }
 
@@ -1563,7 +1656,13 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             
             render_target_stack.clear();
             isolated_layer_stack.clear();
-            render_target_stack.push_back(RenderTargetState{swapchain_texture, w, h, offscreen_target_ != nullptr});
+            // 修复 is_swapchain 的逻辑：当没有离屏目标时，就是 swapchain
+            render_target_stack.push_back(RenderTargetState{swapchain_texture, w, h, offscreen_target_ == nullptr});
+
+            if (debug_rt_enabled_) {
+                SDL_Log("[GPUDriverSDL::execute] BeginPass frame=%llu swapchain_texture=%p is_swapchain=%d",
+                        frame_index_, (void*)swapchain_texture, offscreen_target_ == nullptr ? 1 : 0);
+            }
 
             color_target = {};
             color_target.texture = swapchain_texture;
@@ -1608,6 +1707,38 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 SDL_EndGPURenderPass(pass);
                 pass = nullptr;
             }
+            
+            // 如果使用了中间纹理，将其 blit 到真正的 swapchain
+            if (use_intermediate && real_swapchain_texture && intermediate_texture_) {
+                if (debug_rt_enabled_) {
+                    SDL_Log("[GPUDriverSDL::execute] frame=%llu EndPass: blit intermediate=%p to swapchain=%p",
+                            frame_index_, (void*)intermediate_texture_, (void*)real_swapchain_texture);
+                }
+                
+                // 使用 blit 将中间纹理复制到 swapchain
+                SDL_GPUBlitInfo blit_info{};
+                blit_info.source.texture = intermediate_texture_;
+                blit_info.source.mip_level = 0;
+                blit_info.source.layer_or_depth_plane = 0;
+                blit_info.source.x = 0;
+                blit_info.source.y = 0;
+                blit_info.source.w = w;
+                blit_info.source.h = h;
+                
+                blit_info.destination.texture = real_swapchain_texture;
+                blit_info.destination.mip_level = 0;
+                blit_info.destination.layer_or_depth_plane = 0;
+                blit_info.destination.x = 0;
+                blit_info.destination.y = 0;
+                blit_info.destination.w = w;
+                blit_info.destination.h = h;
+                
+                blit_info.load_op = SDL_GPU_LOADOP_DONT_CARE;
+                blit_info.filter = SDL_GPU_FILTER_NEAREST;
+                blit_info.cycle = false;
+                
+                SDL_BlitGPUTexture(current_cmd_buf_, &blit_info);
+            }
             break;
         case GPUCommandType::PushClipRect: {
             SDL_Rect clip = to_sdl_rect(cmd.rect);
@@ -1639,6 +1770,13 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             }
 
             SDL_GPUDevice* dev = gpu_device_ ? gpu_device_->getHandle() : nullptr;
+
+            if (debug_rt_enabled_) {
+                SDL_Log("[GPUDriverSDL::execute] BeginIsolatedLayer frame=%llu layer_id=%llu layer_dirty=%d skip_depth=%d",
+                        frame_index_, static_cast<unsigned long long>(cmd.layer_id), cmd.layer_dirty ? 1 : 0,
+                        skip_draw_depth);
+                log_render_target_stack("  RT before BeginIsolatedLayer");
+            }
             if (!dev) {
                 SDL_Log("GPUDriverSDL::execute: no GPU device for isolated layer");
                 break;
@@ -1655,8 +1793,9 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
 
             LayerRenderTarget* cache_entry = nullptr;
 
-            // 如果标记为非脏图层，尝试直接复用已有缓存，不切换 render target
-            if (!layer_dirty && layer_id != 0) {
+            // 优先检查是否有有效的缓存可以复用（无论 layer_dirty 标志如何）
+            // 这样可以解决缓存的命令列表中 layer_dirty 标志不更新的问题
+            if (layer_id != 0) {
                 for (auto& entry : layer_render_targets_) {
                     if (entry.layer_id == layer_id && entry.texture &&
                         entry.valid_for_cache && entry.width == target_w && entry.height == target_h) {
@@ -1678,8 +1817,10 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             layer_state.scroll[0] = cmd.layer_scroll[0];
             layer_state.scroll[1] = cmd.layer_scroll[1];
 
-            if (!layer_dirty && cache_entry && cache_entry->texture) {
-                // 非脏图层且有有效缓存：不切换 render target，仅记录状态并开始跳过内部绘制
+            // 如果有有效缓存，优先复用缓存（无论 layer_dirty 标志如何）
+            // 这样可以解决缓存的命令列表中 layer_dirty 标志不更新的问题
+            if (layer_cache_enabled_ && cache_entry && cache_entry->texture) {
+                // 有有效缓存：不切换 render target，仅记录状态并开始跳过内部绘制
                 if (debug_log_layer_cache_) {
                     ++debug_layer_cache_reused;
                     SDL_Log("[GPUDriverSDL layer-cache] frame=%llu reuse layer id=%llu size=%ux%u bounds=(%.1f,%.1f,%.1f,%.1f)",
@@ -1830,6 +1971,9 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             apply_scissor(pass);
             pipeline_state.reset();
 
+            // 本帧已经为该图层开启了单独的 render pass，视为"脏图层"
+            // 确保 EndIsolatedLayer 走重栅格路径，而不是复用缓存路径
+            layer_state.dirty = true;
             layer_state.texture = layer_texture;
             layer_state.width = target_w;
             layer_state.height = target_h;
@@ -1927,106 +2071,100 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
 
             if (pass) {
                 SDL_EndGPURenderPass(pass);
-                pass = nullptr;
             }
 
-            RenderTargetState layer_target_state = render_target_stack.back();
+            RenderTargetState child_target = render_target_stack.back();
             render_target_stack.pop_back();
 
-            SDL_GPUTexture* layer_texture = layer_target_state.texture;
+            RenderTargetState& parent_target = render_target_stack.back();
 
-            if (!dev || !layer_texture) {
-                break;
+            if (debug_rt_enabled_) {
+                SDL_Log("[GPUDriverSDL::execute] EndIsolatedLayer frame=%llu layer_id=%llu dirty=%d compositing child_rt=%p -> parent_rt=%p",
+                        frame_index_, static_cast<unsigned long long>(layer_info.id), layer_info.dirty ? 1 : 0,
+                        (void*)child_target.texture, (void*)parent_target.texture);
+                log_render_target_stack("  RT at EndIsolatedLayer");
             }
 
-            RenderTargetState parent_state = render_target_stack.back();
+            // 重新开启父 render target 的 pass，用于合成子图层纹理
+            SDL_GPUColorTargetInfo color_target{};
+            color_target.texture = parent_target.texture;
+            color_target.mip_level = 0;
+            color_target.layer_or_depth_plane = 0;
+            color_target.load_op = SDL_GPU_LOADOP_LOAD;
+            color_target.store_op = parent_target.is_swapchain ? SDL_GPU_STOREOP_STORE : SDL_GPU_STOREOP_STORE;
 
-            SDL_GPUColorTargetInfo parent_target{};
-            parent_target.texture = parent_state.texture;
-            parent_target.mip_level = 0;
-            parent_target.layer_or_depth_plane = 0;
-            parent_target.load_op = SDL_GPU_LOADOP_LOAD;
-            parent_target.store_op = SDL_GPU_STOREOP_STORE;
-
-            pass = SDL_BeginGPURenderPass(current_cmd_buf_, &parent_target, 1, nullptr);
+            pass = SDL_BeginGPURenderPass(current_cmd_buf_, &color_target, 1, nullptr);
             if (!pass) {
-                SDL_Log("GPUDriverSDL::execute: failed to resume parent pass: %s", SDL_GetError());
+                SDL_Log("GPUDriverSDL::execute: failed to begin parent render pass for EndIsolatedLayer");
                 break;
             }
 
             apply_scissor(pass);
+            pipeline_state.reset();
 
-            if (image_pipeline_ && image_sampler_ &&
-                layer_info.bounds.width > 0.0f && layer_info.bounds.height > 0.0f) {
-                struct LayerCompositeUniforms {
-                    float rect[4];
-                    float uv_rect[4];
-                    float viewport[4];
-                    float tint[4];
-                    ClipUniformBlock clip;
-                };
-
-                LayerCompositeUniforms u{};
-                float sx = layer_info.transform[0];
-                float sy = layer_info.transform[4];
-                if (sx == 0.0f) sx = 1.0f;
-                if (sy == 0.0f) sy = 1.0f;
-                float tx = layer_info.transform[2];
-                float ty = layer_info.transform[5];
-                float draw_x = layer_info.bounds.x + tx;
-                float draw_y = layer_info.bounds.y + ty;
-                float draw_w = layer_info.bounds.width * sx;
-                float draw_h = layer_info.bounds.height * sy;
-                u.rect[0] = draw_x;
-                u.rect[1] = draw_y;
-                u.rect[2] = draw_w;
-                u.rect[3] = draw_h;
-
-                float tex_w = static_cast<float>(layer_info.width);
-                float tex_h = static_cast<float>(layer_info.height);
-                if (tex_w <= 0.0f) tex_w = 1.0f;
-                if (tex_h <= 0.0f) tex_h = 1.0f;
-                u.uv_rect[0] = layer_info.bounds.x / tex_w;
-                u.uv_rect[1] = layer_info.bounds.y / tex_h;
-                u.uv_rect[2] = (layer_info.bounds.x + layer_info.bounds.width) / tex_w;
-                u.uv_rect[3] = (layer_info.bounds.y + layer_info.bounds.height) / tex_h;
-
-                write_viewport(u.viewport);
-
-                u.tint[0] = 1.0f;
-                u.tint[1] = 1.0f;
-                u.tint[2] = 1.0f;
-                u.tint[3] = layer_info.opacity;
-                fill_clip_uniform(u.clip);
-
-                SDL_PushGPUVertexUniformData(current_cmd_buf_, 0, &u, sizeof(u));
-
-                SDL_BindGPUGraphicsPipeline(pass, image_pipeline_);
-
-                SDL_GPUTextureSamplerBinding binding{};
-                binding.texture = layer_texture;
-                binding.sampler = image_sampler_;
-                SDL_BindGPUFragmentSamplers(pass, 0, &binding, 1);
-
-                SDL_DrawGPUPrimitives(pass, 4, 1, 0, 0);
+            if (!image_pipeline_ || !image_sampler_ || !child_target.texture) {
+                break;
             }
 
-            // 将本次渲染结果标记为可缓存，下次若 layer_dirty=false 可直接复用
+            if (layer_info.bounds.width <= 0.0f || layer_info.bounds.height <= 0.0f) {
+                break;
+            }
+
+            struct LayerCompositeUniforms {
+                float rect[4];
+                float uv_rect[4];
+                float viewport[4];
+                float tint[4];
+                ClipUniformBlock clip;
+            };
+
+            LayerCompositeUniforms u{};
+            float sx = layer_info.transform[0];
+            float sy = layer_info.transform[4];
+            if (sx == 0.0f) sx = 1.0f;
+            if (sy == 0.0f) sy = 1.0f;
+            float tx = layer_info.transform[2];
+            float ty = layer_info.transform[5];
+            float draw_x = layer_info.bounds.x + tx;
+            float draw_y = layer_info.bounds.y + ty;
+            float draw_w = layer_info.bounds.width * sx;
+            float draw_h = layer_info.bounds.height * sy;
+            u.rect[0] = draw_x;
+            u.rect[1] = draw_y;
+            u.rect[2] = draw_w;
+            u.rect[3] = draw_h;
+
+            float tex_w = static_cast<float>(child_target.width);
+            float tex_h = static_cast<float>(child_target.height);
+            if (tex_w <= 0.0f) tex_w = 1.0f;
+            if (tex_h <= 0.0f) tex_h = 1.0f;
+            u.uv_rect[0] = layer_info.bounds.x / tex_w;
+            u.uv_rect[1] = layer_info.bounds.y / tex_h;
+            u.uv_rect[2] = (layer_info.bounds.x + layer_info.bounds.width) / tex_w;
+            u.uv_rect[3] = (layer_info.bounds.y + layer_info.bounds.height) / tex_h;
+
+            write_viewport(u.viewport);
+
+            u.tint[0] = 1.0f;
+            u.tint[1] = 1.0f;
+            u.tint[2] = 1.0f;
+            u.tint[3] = layer_info.opacity;
+            fill_clip_uniform(u.clip);
+
+            SDL_PushGPUVertexUniformData(current_cmd_buf_, 0, &u, sizeof(u));
+
+            SDL_BindGPUGraphicsPipeline(pass, image_pipeline_);
+
+            SDL_GPUTextureSamplerBinding binding{};
+            binding.texture = child_target.texture;
+            binding.sampler = image_sampler_;
+            SDL_BindGPUFragmentSamplers(pass, 0, &binding, 1);
+
+            SDL_DrawGPUPrimitives(pass, 4, 1, 0, 0);
+
+            // 合成完成后，子 render target 保留在缓存池以便复用
             if (layer_info.cache_entry) {
-                layer_info.cache_entry->in_use = false;
                 layer_info.cache_entry->valid_for_cache = true;
-            } else {
-                // 未能关联到缓存条目的纹理仍按旧逻辑归还到池中
-                for (auto& entry : layer_render_targets_) {
-                    if (entry.texture == layer_texture) {
-                        entry.in_use = false;
-                        entry.valid_for_cache = true;
-                        if (entry.layer_id == 0) {
-                            entry.layer_id = layer_info.id;
-                        }
-                        break;
-                    }
-                }
             }
 
             break;
@@ -2649,6 +2787,13 @@ std::unique_ptr<GPUDriver> CreateGPUDriver(
         if (const char* env_subpixel = std::getenv("DONG_MSDF_SUBPIXEL")) {
             if (env_subpixel[0] == '1') {
                 driver->setMsdfSubpixelEnabled(true);
+            }
+        }
+        // 可选启用图层缓存（默认关闭，避免影响渲染正确性）。
+        // 通过环境变量 DONG_LAYER_CACHE=1 显式开启。
+        if (const char* env_layer_cache_enable = std::getenv("DONG_LAYER_CACHE")) {
+            if (env_layer_cache_enable[0] == '1') {
+                driver->setLayerCacheEnabled(true);
             }
         }
 

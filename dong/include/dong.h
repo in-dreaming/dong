@@ -31,12 +31,15 @@ uint32_t dong_view_get_texture_id(dong_view_t* view);
 
 // 5. Input Events (host -> engine -> DOM -> JS)
 // Mouse coordinates are in view space pixels.
-// Supported JS event types: "mousemove", "mousedown", "mouseup", "click", "keydown", "keyup".
+// Supported JS event types: "mousemove", "mousedown", "mouseup", "click", "wheel",
+//                           "keydown", "keyup", "input", "focus", "blur".
 void dong_view_send_mouse_move(dong_view_t* view, int32_t x, int32_t y);
 void dong_view_send_mouse_down(dong_view_t* view, int32_t button);
 void dong_view_send_mouse_up(dong_view_t* view, int32_t button);
+void dong_view_send_mouse_wheel(dong_view_t* view, float delta_x, float delta_y);
 void dong_view_send_key_down(dong_view_t* view, uint32_t key_code);
 void dong_view_send_key_up(dong_view_t* view, uint32_t key_code);
+void dong_view_send_text_input(dong_view_t* view, const char* text);
 
 // 6. Rendering mode control
 // When use_gpu is true, the view will use the SDL_gpu-based GPU backend
