@@ -102,6 +102,7 @@ int main() {
                                       static_cast<void*>(window.getHandle()));
 
     // 4. 加载测试 HTML - 大字号 MSDF 文字（与原 demo 一致）
+    // <!font-family: Arial, sans-serif;/>
     const char* html = R"(
         <!DOCTYPE html>
         <html>
