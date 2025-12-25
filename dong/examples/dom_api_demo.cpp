@@ -12,7 +12,6 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
-#include <unistd.h>
 
 void save_ppm(const char* filename, uint8_t* buffer, int width, int height) {
     FILE* f = fopen(filename, "wb");

@@ -4,6 +4,7 @@
 #include <yoga/Yoga.h>
 #include <iostream>
 #include <algorithm>
+#include <functional>
 #include <SDL3/SDL_log.h>
 
 #include "../render/text_shaper.hpp"

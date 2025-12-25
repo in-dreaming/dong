@@ -115,8 +115,7 @@ bool SDL3Window::createGPUDevice(bool debug_mode) {
 #else
     SDL_GPUShaderFormat format_flags =
         SDL_GPU_SHADERFORMAT_SPIRV |
-        SDL_GPU_SHADERFORMAT_DXIL |
-        SDL_GPU_SHADERFORMAT_HLSL;
+        SDL_GPU_SHADERFORMAT_DXIL;
 #endif
 
     gpu_device_ = SDL_CreateGPUDevice(format_flags, debug_mode, nullptr);
