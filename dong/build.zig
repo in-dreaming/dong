@@ -95,26 +95,21 @@ pub fn build(b: *std.Build) void {
         b.fmt("{s}/{s}/lib/libfreetype.a", .{ b.build_root.path.?, freetype_prefix });
 
     // ==========================================================================
-    // QuickJS via CMake
-    // Windows: MinGW GCC (shared DLL) - avoids clang-cl inline asm issues
-    // macOS/Linux: System compiler (static)
+    // QuickJS via CMake (static library for all platforms)
+    // Uses compat layer on Windows for POSIX features (sys/time.h)
     // ==========================================================================
     var quickjs_cmake_args = std.ArrayList([]const u8).init(b.allocator);
     quickjs_cmake_args.appendSlice(&.{
         "cmake", "-S", "third_party/quickjs_make", "-B", quickjs_build_dir,
+        b.fmt("-DCMAKE_BUILD_TYPE={s}", .{cmake_build_type}),
+        "-DBUILD_SHARED_LIBS=OFF",
     }) catch unreachable;
 
     if (is_windows) {
         quickjs_cmake_args.appendSlice(&.{
-            "-G", "MinGW Makefiles",
-            "-DCMAKE_BUILD_TYPE=Release",
-            "-DCMAKE_C_COMPILER=gcc",
-            "-DBUILD_SHARED_LIBS=ON",
-        }) catch unreachable;
-    } else {
-        quickjs_cmake_args.appendSlice(&.{
-            "-DCMAKE_BUILD_TYPE=Release",
-            "-DBUILD_SHARED_LIBS=OFF",
+            "-G", "Ninja",
+            "-DCMAKE_C_COMPILER=clang-cl",
+            "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL",
         }) catch unreachable;
     }
 

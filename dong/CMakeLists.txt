@@ -33,38 +33,19 @@ set(SDL3_PREFIX "${CMAKE_SOURCE_DIR}/zig-out/sdl3")
 set(QUICKJS_PREFIX "${CMAKE_SOURCE_DIR}/zig-out/quickjs")
 
 # =============================================================================
-# QuickJS library
-# Windows: pre-built DLL from MinGW
-# macOS/Linux: static library
+# QuickJS library (static for all platforms - ensures ABI compatibility)
 # =============================================================================
+add_library(quickjs STATIC IMPORTED GLOBAL)
 if(WIN32)
-    add_library(quickjs SHARED IMPORTED GLOBAL)
     set_target_properties(quickjs PROPERTIES
-        IMPORTED_LOCATION "${QUICKJS_PREFIX}/bin/quickjs.dll"
-        IMPORTED_IMPLIB "${QUICKJS_PREFIX}/lib/quickjs.dll.a"
+        IMPORTED_LOCATION "${QUICKJS_PREFIX}/lib/quickjs.lib"
         INTERFACE_INCLUDE_DIRECTORIES "${QUICKJS_PREFIX}/include"
     )
-elseif(APPLE)
-    add_library(quickjs STATIC IMPORTED GLOBAL)
+else()
     set_target_properties(quickjs PROPERTIES
         IMPORTED_LOCATION "${QUICKJS_PREFIX}/lib/libquickjs.a"
         INTERFACE_INCLUDE_DIRECTORIES "${QUICKJS_PREFIX}/include"
     )
-else()
-    # Linux - try static first, fall back to shared
-    if(EXISTS "${QUICKJS_PREFIX}/lib/libquickjs.a")
-        add_library(quickjs STATIC IMPORTED GLOBAL)
-        set_target_properties(quickjs PROPERTIES
-            IMPORTED_LOCATION "${QUICKJS_PREFIX}/lib/libquickjs.a"
-            INTERFACE_INCLUDE_DIRECTORIES "${QUICKJS_PREFIX}/include"
-        )
-    else()
-        add_library(quickjs SHARED IMPORTED GLOBAL)
-        set_target_properties(quickjs PROPERTIES
-            IMPORTED_LOCATION "${QUICKJS_PREFIX}/lib/libquickjs.so"
-            INTERFACE_INCLUDE_DIRECTORIES "${QUICKJS_PREFIX}/include"
-        )
-    endif()
 endif()
 
 # =============================================================================
@@ -183,6 +164,17 @@ if(WIN32)
         "${MSDFGEN_PREFIX}/lib/msdfgen-core.lib"
         "${MSDFGEN_PREFIX}/lib/msdfgen-ext.lib"
     )
+    # Link clang compiler-rt builtins for __udivti3 etc (used by QuickJS BigInt)
+    if(CMAKE_C_COMPILER_ID MATCHES "Clang")
+        get_filename_component(CLANG_BIN_DIR "${CMAKE_C_COMPILER}" DIRECTORY)
+        get_filename_component(CLANG_ROOT "${CLANG_BIN_DIR}" DIRECTORY)
+        # Try to find clang_rt.builtins
+        file(GLOB CLANG_RT_BUILTINS "${CLANG_ROOT}/lib/clang/*/lib/windows/clang_rt.builtins-x86_64.lib")
+        if(CLANG_RT_BUILTINS)
+            list(GET CLANG_RT_BUILTINS 0 CLANG_RT_BUILTIN)
+            target_link_libraries(dong PUBLIC "${CLANG_RT_BUILTIN}")
+        endif()
+    endif()
 else()
     target_link_libraries(dong PUBLIC
         "${FREETYPE_PREFIX}/lib/libfreetype.a"
@@ -314,11 +306,6 @@ if(BUILD_EXAMPLES)
     install(TARGETS ${EXAMPLE_TARGETS}
         RUNTIME DESTINATION bin
     )
-endif()
-
-# Copy QuickJS DLL to bin (Windows only)
-if(WIN32)
-    install(FILES "${QUICKJS_PREFIX}/bin/quickjs.dll" DESTINATION bin)
 endif()
 
 # Copy SDL3 DLL/dylib to bin

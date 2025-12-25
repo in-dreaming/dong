@@ -9,12 +9,14 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
 
-option(BUILD_SHARED_LIBS "Build shared library" ON)
+# Always build static library for ABI compatibility
+# This ensures QuickJS links correctly with the main project regardless of compiler
+option(BUILD_SHARED_LIBS "Build shared library" OFF)
 
 # QuickJS source directory (git submodule)
 set(QUICKJS_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../quickjs")
 
-# Source files
+# Source files - only core files needed (not quickjs-libc.c which has more POSIX deps)
 set(QUICKJS_SOURCES
     ${QUICKJS_SRC_DIR}/quickjs.c
     ${QUICKJS_SRC_DIR}/libregexp.c
@@ -23,52 +25,56 @@ set(QUICKJS_SOURCES
     ${QUICKJS_SRC_DIR}/dtoa.c
 )
 
-# Create library
-if(BUILD_SHARED_LIBS)
-    add_library(quickjs SHARED ${QUICKJS_SOURCES})
-    target_compile_definitions(quickjs PRIVATE JS_SHARED_LIBRARY)
-    if(WIN32)
-        set_target_properties(quickjs PROPERTIES
-            WINDOWS_EXPORT_ALL_SYMBOLS ON
-            PREFIX ""
-            IMPORT_PREFIX ""
-            RUNTIME_OUTPUT_NAME "quickjs"
-            ARCHIVE_OUTPUT_NAME "quickjs"
-        )
-    endif()
-else()
-    add_library(quickjs STATIC ${QUICKJS_SOURCES})
-endif()
+# Create static library
+add_library(quickjs STATIC ${QUICKJS_SOURCES})
 
 target_include_directories(quickjs PUBLIC 
     $<BUILD_INTERFACE:${QUICKJS_SRC_DIR}>
     $<INSTALL_INTERFACE:include>
 )
 
-target_compile_definitions(quickjs PRIVATE _GNU_SOURCE CONFIG_VERSION="2024-02-14")
+# Add compat directory for Windows builds (provides sys/time.h)
+if(WIN32 AND NOT MINGW)
+    target_include_directories(quickjs PRIVATE 
+        "${CMAKE_CURRENT_SOURCE_DIR}/compat"
+    )
+endif()
+
+target_compile_definitions(quickjs PRIVATE 
+    _GNU_SOURCE 
+    CONFIG_VERSION="2024-02-14"
+)
 
 if(WIN32)
     target_compile_definitions(quickjs PRIVATE _CRT_SECURE_NO_WARNINGS)
     if(MINGW)
         # MinGW specific settings
         target_compile_definitions(quickjs PRIVATE __USE_MINGW_ANSI_STDIO=1)
-        target_link_libraries(quickjs PRIVATE pthread)
+    else()
+        # MSVC/clang-cl specific settings
+        # Disable CONFIG_ATOMICS by pretending to be EMSCRIPTEN for this check
+        # This avoids the pthread_cond dependency
+        target_compile_definitions(quickjs PRIVATE 
+            _CRT_NONSTDC_NO_DEPRECATE
+            EMSCRIPTEN=1
+        )
+        # Suppress specific warnings and force include alloca.h
+        if(CMAKE_C_COMPILER_ID MATCHES "Clang")
+            target_compile_options(quickjs PRIVATE 
+                -Wno-implicit-const-int-float-conversion
+                -Wno-deprecated-declarations
+                /FIalloca.h
+            )
+        endif()
     endif()
 endif()
 
-# Install - use explicit install commands for MinGW compatibility
-if(WIN32 AND BUILD_SHARED_LIBS)
-    # Install DLL to bin directory
-    install(FILES $<TARGET_FILE:quickjs> DESTINATION bin)
-    # Install import library to lib directory
-    install(FILES $<TARGET_LINKER_FILE:quickjs> DESTINATION lib)
-else()
-    install(TARGETS quickjs
-        RUNTIME DESTINATION bin
-        LIBRARY DESTINATION lib
-        ARCHIVE DESTINATION lib
-    )
-endif()
+# Install
+install(TARGETS quickjs
+    RUNTIME DESTINATION bin
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+)
 
 install(FILES 
     ${QUICKJS_SRC_DIR}/quickjs.h

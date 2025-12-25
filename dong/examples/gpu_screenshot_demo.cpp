@@ -57,7 +57,7 @@ bool writeBMP(const char* filename, uint32_t width, uint32_t height, const uint8
 }
 
 int main() {
-    std::printf("=== GPU Screenshot Demo - MSDF Offscreen ===\n");
+    SDL_Log("=== GPU Screenshot Demo - MSDF Offscreen ===");
 
     // 1. 创建带 GPU 的 SDL 窗口（复用现有 SDL3Window 封装）
     SDL3Window::CreateInfo ci{};
@@ -69,37 +69,38 @@ int main() {
 
     SDL3Window window;
     if (!window.initialize(ci)) {
-        std::printf("ERROR: Failed to initialize SDL3Window: %s\n", SDL_GetError());
+        SDL_Log("ERROR: Failed to initialize SDL3Window: %s", SDL_GetError());
         return 1;
     }
 
     SDL_GPUDevice* device = window.getGPUDevice();
     if (!device) {
-        std::printf("ERROR: GPU device is null\n");
+        SDL_Log("ERROR: GPU device is null");
         return 1;
     }
 
     // 2. 创建 Dong 上下文 + 视图
-    std::printf("[Init] Creating dong context...\n");
+    SDL_Log("[Init] Creating dong context...");
     dong_context_t* ctx = dong_create_context();
     if (!ctx) {
-        std::printf("ERROR: Failed to create dong context\n");
+        SDL_Log("ERROR: Failed to create dong context");
         return 1;
     }
 
-    std::printf("[Init] Creating dong view...\n");
+    SDL_Log("[Init] Creating dong view...");
     dong_view_t* view = dong_view_create(ctx, ci.width, ci.height);
     if (!view) {
-        std::printf("ERROR: Failed to create dong view\n");
+        SDL_Log("ERROR: Failed to create dong view");
         dong_destroy_context(ctx);
         return 1;
     }
 
     // 3. 切换到 GPU 渲染模式
-    std::printf("[Init] Enabling GPU render mode...\n");
+    SDL_Log("[Init] Enabling GPU render mode...");
     dong_view_set_external_gpu_device(view,
                                       static_cast<void*>(device),
                                       static_cast<void*>(window.getHandle()));
+    SDL_Log("[Init] GPU render mode enabled");
 
     // 4. 加载测试 HTML - 大字号 MSDF 文字（与原 demo 一致）
     // <!font-family: Arial, sans-serif;/>
@@ -280,12 +281,14 @@ int main() {
         </html>
     )";
 
-    std::printf("[Load] Loading HTML...\n");
+    SDL_Log("[Load] Loading HTML...");
     dong_view_load_html(view, html);
+    SDL_Log("[Load] HTML loaded successfully");
 
     // 5. 给 Dong 一点时间做首次布局/渲染（可选）
-    std::printf("[Render] Letting view update once...\n");
+    SDL_Log("[Render] Letting view update once...");
     dong_view_update(view);
+    SDL_Log("[Render] View updated");
     SDL_Delay(200);
 
     // 6. 使用 dong_view_render_offscreen 渲染到 RGBA 缓冲
@@ -293,16 +296,16 @@ int main() {
     const uint32_t height = ci.height;
     std::vector<uint8_t> pixels(width * height * 4);
 
-    std::printf("[Render] Rendering offscreen via dong_view_render_offscreen(%ux%u)...\n",
+    SDL_Log("[Render] Rendering offscreen via dong_view_render_offscreen(%ux%u)...",
                 width, height);
     if (!dong_view_render_offscreen(view,
                                     static_cast<void*>(device),
                                     width,
                                     height,
                                     pixels.data())) {
-        std::printf("ERROR: dong_view_render_offscreen failed\n");
+        SDL_Log("ERROR: dong_view_render_offscreen failed");
 
-        std::printf("[Cleanup] Shutting down...\n");
+        SDL_Log("[Cleanup] Shutting down...");
         dong_view_destroy(view);
         dong_destroy_context(ctx);
         return 1;
@@ -311,13 +314,13 @@ int main() {
     // 7. 保存 BMP
     const char* output_file = "zig-out/tmp/gpu_screenshot.bmp";
     if (writeBMP(output_file, width, height, pixels.data())) {
-        std::printf("[Save] Saved to %s\n", output_file);
+        SDL_Log("[Save] Saved to %s", output_file);
     } else {
-        std::printf("ERROR: Failed to save BMP\n");
+        SDL_Log("ERROR: Failed to save BMP");
     }
 
     // 8. 简单像素统计（参考 gpu_screenshot_analysis 的风格）
-    std::printf("\n=== PIXEL ANALYSIS ===\n");
+    SDL_Log("=== PIXEL ANALYSIS ===");
     int total_pixels = static_cast<int>(width * height);
     int total_black = 0, total_white = 0, total_gray = 0;
 
@@ -329,22 +332,23 @@ int main() {
         else total_gray++;
     }
 
-    std::printf("Total pixels: %d\n", total_pixels);
-    std::printf("  Black (<50): %d (%.1f%%)\n", total_black, 100.0 * total_black / total_pixels);
-    std::printf("  Gray (50-200): %d (%.1f%%)\n", total_gray, 100.0 * total_gray / total_pixels);
-    std::printf("  White (>200): %d (%.1f%%)\n", total_white, 100.0 * total_white / total_pixels);
+    SDL_Log("Total pixels: %d", total_pixels);
+    SDL_Log("  Black (<50): %d (%.1f%%)", total_black, 100.0 * total_black / total_pixels);
+    SDL_Log("  Gray (50-200): %d (%.1f%%)", total_gray, 100.0 * total_gray / total_pixels);
+    SDL_Log("  White (>200): %d (%.1f%%)", total_white, 100.0 * total_white / total_pixels);
 
     if (total_white == total_pixels) {
-        std::printf("\n⚠️  WARNING: Image is all white! Offscreen rendering produced blank output.\n");
+        SDL_Log("WARNING: Image is all white! Offscreen rendering produced blank output.");
     } else if (total_black > 100 || total_gray > 100) {
-        std::printf("\n✅ SUCCESS: Text pixels detected in offscreen screenshot!\n");
+        SDL_Log("SUCCESS: Text pixels detected in offscreen screenshot!");
     }
 
+
     // 9. 清理
-    std::printf("\n[Cleanup] Shutting down...\n");
+    SDL_Log("[Cleanup] Shutting down...");
     dong_view_destroy(view);
     dong_destroy_context(ctx);
 
-    std::printf("[Done] Check %s for the captured MSDF text.\n", output_file);
+    SDL_Log("[Done] Check %s for the captured MSDF text.", output_file);
     return 0;
 }
