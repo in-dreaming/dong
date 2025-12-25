@@ -33,22 +33,38 @@ set(SDL3_PREFIX "${CMAKE_SOURCE_DIR}/zig-out/sdl3")
 set(QUICKJS_PREFIX "${CMAKE_SOURCE_DIR}/zig-out/quickjs")
 
 # =============================================================================
-# QuickJS library (pre-built DLL from MinGW)
+# QuickJS library
+# Windows: pre-built DLL from MinGW
+# macOS/Linux: static library
 # =============================================================================
-add_library(quickjs SHARED IMPORTED GLOBAL)
 if(WIN32)
+    add_library(quickjs SHARED IMPORTED GLOBAL)
     set_target_properties(quickjs PROPERTIES
         IMPORTED_LOCATION "${QUICKJS_PREFIX}/bin/quickjs.dll"
         IMPORTED_IMPLIB "${QUICKJS_PREFIX}/lib/quickjs.dll.a"
         INTERFACE_INCLUDE_DIRECTORIES "${QUICKJS_PREFIX}/include"
     )
-    # For MinGW-built DLL, we need to copy runtime dependencies
-    # The main project links against the import library
-else()
+elseif(APPLE)
+    add_library(quickjs STATIC IMPORTED GLOBAL)
     set_target_properties(quickjs PROPERTIES
-        IMPORTED_LOCATION "${QUICKJS_PREFIX}/lib/libquickjs.so"
+        IMPORTED_LOCATION "${QUICKJS_PREFIX}/lib/libquickjs.a"
         INTERFACE_INCLUDE_DIRECTORIES "${QUICKJS_PREFIX}/include"
     )
+else()
+    # Linux - try static first, fall back to shared
+    if(EXISTS "${QUICKJS_PREFIX}/lib/libquickjs.a")
+        add_library(quickjs STATIC IMPORTED GLOBAL)
+        set_target_properties(quickjs PROPERTIES
+            IMPORTED_LOCATION "${QUICKJS_PREFIX}/lib/libquickjs.a"
+            INTERFACE_INCLUDE_DIRECTORIES "${QUICKJS_PREFIX}/include"
+        )
+    else()
+        add_library(quickjs SHARED IMPORTED GLOBAL)
+        set_target_properties(quickjs PROPERTIES
+            IMPORTED_LOCATION "${QUICKJS_PREFIX}/lib/libquickjs.so"
+            INTERFACE_INCLUDE_DIRECTORIES "${QUICKJS_PREFIX}/include"
+        )
+    endif()
 endif()
 
 # =============================================================================
@@ -192,8 +208,12 @@ if(BUILD_EXAMPLES)
         if(WIN32)
             target_link_directories(${name} PRIVATE "${SDL3_PREFIX}/lib")
             target_link_libraries(${name} PRIVATE SDL3)
+        elseif(APPLE)
+            target_link_directories(${name} PRIVATE "${SDL3_PREFIX}/lib")
+            target_link_libraries(${name} PRIVATE SDL3)
         else()
-            target_link_libraries(${name} PRIVATE "${SDL3_PREFIX}/lib/libSDL3.so")
+            target_link_directories(${name} PRIVATE "${SDL3_PREFIX}/lib")
+            target_link_libraries(${name} PRIVATE SDL3)
         endif()
         
         # Vulkan SDK
@@ -278,7 +298,36 @@ install(TARGETS dong lexbor yoga
 
 install(DIRECTORY include/ DESTINATION include)
 
-# Copy QuickJS DLL to bin
+# Install examples
+if(BUILD_EXAMPLES)
+    # Get all example targets
+    set(EXAMPLE_TARGETS simple_demo basic_demo)
+    foreach(example ${CPP_EXAMPLES})
+        if(TARGET ${example})
+            list(APPEND EXAMPLE_TARGETS ${example})
+        endif()
+    endforeach()
+    if(TARGET msdf_cpu_test)
+        list(APPEND EXAMPLE_TARGETS msdf_cpu_test)
+    endif()
+    
+    install(TARGETS ${EXAMPLE_TARGETS}
+        RUNTIME DESTINATION bin
+    )
+endif()
+
+# Copy QuickJS DLL to bin (Windows only)
 if(WIN32)
     install(FILES "${QUICKJS_PREFIX}/bin/quickjs.dll" DESTINATION bin)
+endif()
+
+# Copy SDL3 DLL/dylib to bin
+if(WIN32)
+    install(FILES "${SDL3_PREFIX}/bin/SDL3.dll" DESTINATION bin)
+elseif(APPLE)
+    file(GLOB SDL3_DYLIBS "${SDL3_PREFIX}/lib/libSDL3*.dylib")
+    install(FILES ${SDL3_DYLIBS} DESTINATION lib)
+else()
+    file(GLOB SDL3_SOS "${SDL3_PREFIX}/lib/libSDL3*.so*")
+    install(FILES ${SDL3_SOS} DESTINATION lib)
 endif()
