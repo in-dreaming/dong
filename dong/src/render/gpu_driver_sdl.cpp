@@ -984,25 +984,72 @@ bool discardByClip(float2 px) {
     return false;
 }
 
+// 使用 fwidth 动态计算 screenPxRange，实现更精确的抗锯齿
+// params.x = 预计算的 screenPxRange（作为备用）
+// params.y = distance_range / msdf_texture_size（用于 fwidth 计算）
+float calcScreenPxRange(float2 uv, float precomputed, float unitRange) {
+    // 使用 fwidth 计算 UV 在屏幕空间的变化率
+    // fwidth(uv) 返回 uv 在相邻像素间的变化量
+    float2 screenTexSize = float2(1.0, 1.0) / fwidth(uv);
+    
+    // unitRange = distance_range / texture_size
+    // screenPxRange = unitRange * screenTexSize（取平均）
+    float dynamicRange = 0.5 * (unitRange * screenTexSize.x + unitRange * screenTexSize.y);
+    
+    // 确保 screenPxRange 至少为 2.0，以获得良好的抗锯齿效果
+    // msdfgen 官方建议 screenPxRange >= 2
+    return max(max(dynamicRange, precomputed), 2.0);
+}
+
+// 计算 MSDF 的 opacity，使用改进的抗锯齿算法
+float calcMSDFOpacity(float3 msdf, float screenPxRange) {
+    float sd = median(msdf.r, msdf.g, msdf.b);
+    float screenPxDistance = screenPxRange * (sd - 0.5);
+    
+    // 使用 smoothstep 实现更平滑的抗锯齿过渡
+    // 扩展过渡范围以获得更柔和的边缘
+    return smoothstep(-0.5, 0.5, screenPxDistance);
+}
+
 float4 main(PSInput input) : SV_Target0 {
     if (discardByClip(input.pixel)) {
         discard;
     }
 
-    // 采样 MSDF 纹理
-    float3 msdf = msdfTexture.Sample(msdfSampler, input.uv).rgb;
+    // 使用 fwidth 动态计算 screenPxRange
+    float precomputedRange = input.params.x;
+    float unitRange = input.params.y;  // distance_range / msdf_texture_size
+    float screenPxRange = calcScreenPxRange(input.uv, precomputedRange, unitRange);
     
-    // 计算中值距离
-    float sd = median(msdf.r, msdf.g, msdf.b);
+    // 计算 UV 的偏导数，用于超采样
+    float2 dUVdx = ddx(input.uv);
+    float2 dUVdy = ddy(input.uv);
     
-    // screenPxRange 从 params.x 传入
-    float screenPxRange = input.params.x;
+    // 检测是否在边缘区域（需要超采样）
+    float3 msdfCenter = msdfTexture.Sample(msdfSampler, input.uv).rgb;
+    float sdCenter = median(msdfCenter.r, msdfCenter.g, msdfCenter.b);
     
-    // 计算屏幕空间距离
-    float screenPxDistance = screenPxRange * (sd - 0.5);
-    
-    // 计算不透明度
-    float opacity = clamp(screenPxDistance + 0.5, 0.0, 1.0);
+    // 如果距离边缘较近（0.3 < sd < 0.7），进行 4x 超采样以减少锯齿
+    float opacity;
+    if (sdCenter > 0.3 && sdCenter < 0.7) {
+        // 4x 超采样：在像素内的 4 个位置采样
+        float2 offset = float2(0.25, 0.25);
+        
+        float3 msdf1 = msdfTexture.Sample(msdfSampler, input.uv + dUVdx * offset.x + dUVdy * offset.y).rgb;
+        float3 msdf2 = msdfTexture.Sample(msdfSampler, input.uv - dUVdx * offset.x + dUVdy * offset.y).rgb;
+        float3 msdf3 = msdfTexture.Sample(msdfSampler, input.uv + dUVdx * offset.x - dUVdy * offset.y).rgb;
+        float3 msdf4 = msdfTexture.Sample(msdfSampler, input.uv - dUVdx * offset.x - dUVdy * offset.y).rgb;
+        
+        float op1 = calcMSDFOpacity(msdf1, screenPxRange);
+        float op2 = calcMSDFOpacity(msdf2, screenPxRange);
+        float op3 = calcMSDFOpacity(msdf3, screenPxRange);
+        float op4 = calcMSDFOpacity(msdf4, screenPxRange);
+        
+        opacity = (op1 + op2 + op3 + op4) * 0.25;
+    } else {
+        // 远离边缘，使用单次采样
+        opacity = calcMSDFOpacity(msdfCenter, screenPxRange);
+    }
     
     // 输出颜色
     float4 result;
@@ -2727,13 +2774,17 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 //
                 // msdfgen 官方要求：screenPxRange >= 1，最好 >= 2
                 const float px_range_screen = atlas_range * (glyph_pixel_scale / msdf_scale);
+                
+                // unitRange = distance_range / msdf_texture_size
+                // 用于着色器中 fwidth 动态计算 screenPxRange
+                const float unit_range = atlas_range / msdf_size;
 
                 if (debug_text)
-                SDL_Log("[TEXT] glyph=%u screenPxRange=%.2f (atlas_range=%.1f, glyph_pixel_scale=%.6f, msdf_scale=%.6f)",
-                        glyph.glyph_id, px_range_screen, atlas_range, glyph_pixel_scale, msdf_scale);
+                SDL_Log("[TEXT] glyph=%u screenPxRange=%.2f unitRange=%.4f (atlas_range=%.1f, msdf_size=%.0f, glyph_pixel_scale=%.6f, msdf_scale=%.6f)",
+                        glyph.glyph_id, px_range_screen, unit_range, atlas_range, msdf_size, glyph_pixel_scale, msdf_scale);
 
                 inst.params[0] = px_range_screen;
-                inst.params[1] = inv_device_pixel_ratio;
+                inst.params[1] = unit_range;  // 传递 unitRange 给着色器用于 fwidth 计算
                 inst.params[2] = msdf_subpixel_enabled_ ? 1.0f : 0.0f;
                 inst.params[3] = gamma_correction;
 

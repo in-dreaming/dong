@@ -170,7 +170,7 @@ int main() {
     }
 
     // 7. 保存 BMP
-    const char* output_file = "zig-out/tmp/gpu_screenshot_fontonly.bmp";
+    const char* output_file = "gpu_screenshot_fontonly.bmp";
     if (writeBMP(output_file, width, height, pixels.data())) {
         SDL_Log("[Save] Saved to %s", output_file);
     } else {
