@@ -61,7 +61,9 @@ endif()
 
 add_library(lexbor STATIC ${LEXBOR_SOURCES})
 target_include_directories(lexbor PUBLIC third_party/lexbor/source)
-target_compile_definitions(lexbor PRIVATE LEXBOR_STATIC)
+# LEXBOR_STATIC must be PUBLIC so that consumers of lexbor also see it
+# Otherwise LXB_API expands to __declspec(dllimport) causing link warnings and crashes
+target_compile_definitions(lexbor PUBLIC LEXBOR_STATIC)
 
 # =============================================================================
 # Yoga library
@@ -256,6 +258,7 @@ if(BUILD_EXAMPLES)
         image_rendering_demo
         gpu_view_demo
         gpu_screenshot_demo
+        gpu_screenshot_demo_fontonly
         gpu_screenshot_demo_basic_layout
         gpu_screenshot_demo_glyph_stress
         gpu_screenshot_analysis

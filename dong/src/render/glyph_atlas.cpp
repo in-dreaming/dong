@@ -109,6 +109,8 @@ bool GlyphAtlas::createPage() {
                         SDL_GPUTextureTransferInfo tex_transfer{};
                         tex_transfer.transfer_buffer = transfer_buf;
                         tex_transfer.offset = 0;
+                        tex_transfer.pixels_per_row = atlas_width_;   // 关键：设置每行像素数
+                        tex_transfer.rows_per_layer = atlas_height_;  // 关键：设置每层行数
                         
                         SDL_GPUTextureRegion region{};
                         region.texture = texture;
@@ -444,6 +446,17 @@ const AtlasEntry* GlyphAtlas::addGlyph(uint32_t glyph_id, const std::string& fon
     uint8_t* dst_bytes = static_cast<uint8_t*>(mapped);
     // 直接复制，Y 轴翻转已经在 generateMSDF 中完成
     std::memcpy(dst_bytes, bitmap.data(), bitmap.size());
+    
+    // DEBUG: 验证上传前的数据
+    int upload_non_zero = 0;
+    for (size_t i = 0; i < bitmap.size(); i += 4) {
+        if (dst_bytes[i] > 0 || dst_bytes[i+1] > 0 || dst_bytes[i+2] > 0) {
+            upload_non_zero++;
+        }
+    }
+    SDL_Log("[ATLAS UPLOAD] glyph=%u bitmap_size=%zu non_zero_pixels=%d dst=(%u,%u) size=(%u,%u) texture=%p",
+            glyph_id, bitmap.size(), upload_non_zero, dst_x, dst_y, glyph_width, glyph_height, (void*)page->texture);
+    
     SDL_UnmapGPUTransferBuffer(dev, transfer_buf);
 
     SDL_GPUCopyPass* copy_pass = SDL_BeginGPUCopyPass(cmd_buf);
@@ -457,6 +470,8 @@ const AtlasEntry* GlyphAtlas::addGlyph(uint32_t glyph_id, const std::string& fon
     SDL_GPUTextureTransferInfo tex_transfer{};
     tex_transfer.transfer_buffer = transfer_buf;
     tex_transfer.offset = 0;
+    tex_transfer.pixels_per_row = glyph_width;  // 关键：设置每行像素数
+    tex_transfer.rows_per_layer = glyph_height; // 关键：设置每层行数
 
     SDL_GPUTextureRegion region{};
     region.texture = page->texture;
@@ -523,12 +538,15 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
         return false;
     }
 
-    // 获取度量信息（design units，无需除以 64）
-    out_metrics.advance_x_units = static_cast<float>(face->glyph->advance.x);
-    out_metrics.bearing_x_units = static_cast<float>(face->glyph->metrics.horiBearingX);
-    out_metrics.bearing_y_units = static_cast<float>(face->glyph->metrics.horiBearingY);
-    out_metrics.width_units = static_cast<float>(face->glyph->metrics.width);
-    out_metrics.height_units = static_cast<float>(face->glyph->metrics.height);
+    // 获取度量信息（design units）
+    // FreeType 的 advance/metrics 是 26.6 fixed point，即使 FT_LOAD_NO_SCALE 也一样。
+    constexpr float kFtFixedToUnits = 1.0f / 64.0f;
+    out_metrics.advance_x_units = static_cast<float>(face->glyph->advance.x) * kFtFixedToUnits;
+    out_metrics.bearing_x_units = static_cast<float>(face->glyph->metrics.horiBearingX) * kFtFixedToUnits;
+    out_metrics.bearing_y_units = static_cast<float>(face->glyph->metrics.horiBearingY) * kFtFixedToUnits;
+    out_metrics.width_units = static_cast<float>(face->glyph->metrics.width) * kFtFixedToUnits;
+    out_metrics.height_units = static_cast<float>(face->glyph->metrics.height) * kFtFixedToUnits;
+
 
     SDL_Log("[MSDF] glyph=%u font='%s' units_per_em=%u metrics: adv=%.1f bx=%.1f by=%.1f w=%.1f h=%.1f",
             glyph_id,
@@ -577,9 +595,11 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
     }
 
     // 将 FreeType outline 转换为 msdfgen::Shape
-    // 使用 msdfgen 官方 API，scale = 1.0 因为 FT_LOAD_NO_SCALE 已经是 design units
+    // 注意：在 FT_LOAD_NO_SCALE 模式下，outline 点坐标已经是 font units（不是 26.6 fixed point），不需要再做 1/64 缩放。
     msdfgen::Shape shape;
     FT_Error error = msdfgen::readFreetypeOutline(shape, &face->glyph->outline, 1.0);
+
+
     if (error != 0) {
         SDL_Log("GlyphAtlas::generateMSDF: failed to convert outline: %d", error);
         out_width = 0;
@@ -773,12 +793,37 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
     // 
     // 实际上，当前的 UV 翻转方案是正确的，问题在于位置计算。
     // 让我们保持当前的 Y 轴方向，但修正位置计算。
+    
+    // DEBUG: 检查 MSDF 数据是否正确生成
+    float min_r = 1.0f, max_r = 0.0f;
+    float min_g = 1.0f, max_g = 0.0f;
+    float min_b = 1.0f, max_b = 0.0f;
+    int non_zero_count = 0;
+    
     for (int y = 0; y < msdf_size; ++y) {
+        // Y 轴翻转：msdfgen 使用数学坐标系（Y 向上），GPU 纹理使用屏幕坐标系（Y 向下）
+        // 从 msdfgen 的 (msdf_size - 1 - y) 行读取，写入输出的 y 行
+        const int src_y = msdf_size - 1 - y;
         for (int x = 0; x < msdf_size; ++x) {
-            const float* pixel = msdf(x, y);
-            float r = std::clamp(pixel[0], 0.0f, 1.0f);
-            float g = std::clamp(pixel[1], 0.0f, 1.0f);
-            float b = std::clamp(pixel[2], 0.0f, 1.0f);
+            const float* pixel = msdf(x, src_y);
+
+            // msdfgen 输出的是"有符号距离"（以像素为单位的距离范围由 `range` 控制），
+            // 需要按官方编码方式映射到 [0,1]：encoded = distance / range + 0.5。
+            const float inv_range = static_cast<float>(1.0 / range);
+            float r = std::clamp(pixel[0] * inv_range + 0.5f, 0.0f, 1.0f);
+            float g = std::clamp(pixel[1] * inv_range + 0.5f, 0.0f, 1.0f);
+            float b = std::clamp(pixel[2] * inv_range + 0.5f, 0.0f, 1.0f);
+
+            min_r = std::min(min_r, r);
+            max_r = std::max(max_r, r);
+            min_g = std::min(min_g, g);
+            max_g = std::max(max_g, g);
+            min_b = std::min(min_b, b);
+            max_b = std::max(max_b, b);
+
+            if (r > 0.01f || g > 0.01f || b > 0.01f) {
+                non_zero_count++;
+            }
 
             int idx = (y * msdf_size + x) * 4;
             out_bitmap[idx + 0] = static_cast<uint8_t>(r * 255.0f);
@@ -787,6 +832,12 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
             out_bitmap[idx + 3] = 255;
         }
     }
+
+    
+    SDL_Log("[MSDF DEBUG] glyph=%u msdf_size=%d non_zero_pixels=%d (%.1f%%) r=[%.3f,%.3f] g=[%.3f,%.3f] b=[%.3f,%.3f]",
+            glyph_id, msdf_size, non_zero_count, 
+            100.0f * non_zero_count / (msdf_size * msdf_size),
+            min_r, max_r, min_g, max_g, min_b, max_b);
 
     return true;
 }

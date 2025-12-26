@@ -21,17 +21,22 @@ Parser::~Parser() {
 }
 
 DOMNodePtr Parser::parse(const std::string& html) {
+    SDL_Log("[Parser::parse] Entry, html length=%zu", html.length());
+    
     doc = lxb_html_document_create();
     if (!doc) {
+        SDL_Log("[Parser::parse] Failed to create Lexbor HTML document");
         std::cerr << "Failed to create Lexbor HTML document" << std::endl;
         return nullptr;
     }
+    SDL_Log("[Parser::parse] Document created");
 
     lxb_status_t status = lxb_html_document_parse(
         doc,
         reinterpret_cast<const uint8_t*>(html.c_str()),
         html.length()
     );
+    SDL_Log("[Parser::parse] lxb_html_document_parse returned status=%d", (int)status);
 
     if (status != LXB_STATUS_OK) {
         std::cerr << "Failed to parse HTML: status " << status << std::endl;
@@ -42,21 +47,31 @@ DOMNodePtr Parser::parse(const std::string& html) {
 
     lxb_dom_node_t* root = lxb_dom_interface_node(doc);
     if (!root) {
+        SDL_Log("[Parser::parse] Failed to get root node");
         std::cerr << "Failed to get root node from Lexbor document" << std::endl;
         return nullptr;
     }
+    SDL_Log("[Parser::parse] Got root node, converting to DOMNode...");
 
     auto dom_root = lexborNodeToDOMNode(root);
+    SDL_Log("[Parser::parse] lexborNodeToDOMNode done, dom_root=%p", dom_root.get());
+    
     if (dom_root) {
+        SDL_Log("[Parser::parse] Applying default styles...");
         applyDefaultStyles(dom_root);
         
+        SDL_Log("[Parser::parse] Creating StyleEngine...");
         // Extract styles from <style> tags and compute CSS-based styles
         auto style_engine = std::make_unique<StyleEngine>();
+        SDL_Log("[Parser::parse] Extracting and applying styles...");
         extractAndApplyStyles(dom_root, style_engine.get());
+        SDL_Log("[Parser::parse] Computing styles...");
         style_engine->computeStyles(dom_root);
         
+        SDL_Log("[Parser::parse] Parsing inline styles...");
         // Apply inline styles (override stylesheet rules)
         parseInlineStyles(dom_root);
+        SDL_Log("[Parser::parse] Done");
     }
 
     return dom_root;
@@ -416,3 +431,4 @@ void Parser::parsePaddingShorthand(const std::string& value, ComputedStyle& styl
 }
 
 } // namespace dong::dom
+  

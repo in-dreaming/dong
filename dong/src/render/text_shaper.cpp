@@ -80,15 +80,21 @@ bool TextShaper::shape(const TextShapeRequest& request, ShapedText& out_text) {
     float pen_x_units = 0.0f;
     float pen_y_units = 0.0f;
 
+    // 注意：当 hb_font_set_scale 设置为 units_per_em 时，
+    // HarfBuzz 返回的 x_advance/y_advance 已经是 design units，不需要再除以 64。
+    // 只有 x_offset/y_offset 仍然是 26.6 fixed point 格式。
+    constexpr float kHbPosScale = 1.0f / 64.0f; // 仅用于 offset
+
     for (unsigned i = 0; i < glyph_count; ++i) {
         const hb_glyph_info_t& info = infos[i];
         const hb_glyph_position_t& pos = positions[i];
 
-        // 这里我们将 HarfBuzz 的位置直接视为 design units：
-        // hb_font_set_scale(hb_font, units_per_em, units_per_em) 之后，
-        // pos.x_advance 等已经按字体 design units 缩放，无需再除以 64。
-        const float x_offset_units = static_cast<float>(pos.x_offset);
-        const float y_offset_units = static_cast<float>(pos.y_offset);
+        // x_offset/y_offset 是 26.6 fixed point，需要除以 64
+        const float x_offset_units = static_cast<float>(pos.x_offset) * kHbPosScale;
+        const float y_offset_units = static_cast<float>(pos.y_offset) * kHbPosScale;
+        
+        // x_advance/y_advance 在 hb_font_set_scale 设置为 units_per_em 后，
+        // 直接就是 design units，不需要除以 64
         const float x_advance_units = static_cast<float>(pos.x_advance);
         const float y_advance_units = static_cast<float>(pos.y_advance);
 
@@ -103,6 +109,7 @@ bool TextShaper::shape(const TextShapeRequest& request, ShapedText& out_text) {
         pen_x_units += x_advance_units;
         pen_y_units -= y_advance_units;
     }
+
 
     // 获取字体度量（design units），并直接使用 OS/2 提供的 height_units
     // 作为行高基础（接近现代浏览器对 `line-height: normal` 的实现），避免

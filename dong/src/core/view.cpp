@@ -142,12 +142,20 @@ View::~View() {
 }
 
 void View::load_html(const char* html) {
-    if (!html || !dom_manager) return;
+    SDL_Log("[View::load_html] Entry");
+    if (!html || !dom_manager) {
+        SDL_Log("[View::load_html] Early return: html=%p, dom_manager=%p", html, dom_manager.get());
+        return;
+    }
     
+    SDL_Log("[View::load_html] Calling dom_manager->loadHTML...");
     if (dom_manager->loadHTML(html)) {
+        SDL_Log("[View::load_html] loadHTML succeeded");
         // DOM 树被整体替换，清理 JS 侧的节点映射和事件监听
         if (js_bindings) {
+            SDL_Log("[View::load_html] Calling js_bindings->resetForNewDOM...");
             js_bindings->resetForNewDOM();
+            SDL_Log("[View::load_html] resetForNewDOM done");
         }
         // 标记需要重新渲染
         markNeedsRepaint();
@@ -156,6 +164,9 @@ void View::load_html(const char* html) {
         if (root) {
             root->markLayoutDirty();
         }
+        SDL_Log("[View::load_html] Done");
+    } else {
+        SDL_Log("[View::load_html] loadHTML failed");
     }
 }
 
@@ -342,6 +353,7 @@ SDL_GPUTexture* View::renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, 
         SDL_Log("[View::renderToGPUTexture] Failed to create offscreen texture: %s", SDL_GetError());
         return nullptr;
     }
+    SDL_Log("[View::renderToGPUTexture] Created offscreen texture %p size=%ux%u", (void*)offscreen_texture, width, height);
     
     // 2. 确保布局已计算
     auto root = dom_manager ? dom_manager->getRoot() : nullptr;
@@ -466,6 +478,7 @@ bool View::renderOffscreen(SDL_GPUDevice* device, uint32_t width, uint32_t heigh
         SDL_Log("[View::renderOffscreen] Failed to render to GPU texture");
         return false;
     }
+    SDL_Log("[View::renderOffscreen] Got texture %p, now downloading...", (void*)offscreen_texture);
     
     // 2. 创建传输缓冲区用于读回像素
     // 2. 创建传输缓冲区用于读回像素
@@ -523,7 +536,34 @@ bool View::renderOffscreen(SDL_GPUDevice* device, uint32_t width, uint32_t heigh
         return false;
     }
     
+    // 调试：检查 mapped 数据的前几个像素
+    const uint8_t* mapped_bytes = static_cast<const uint8_t*>(mapped);
+    SDL_Log("[View::renderOffscreen] First 10 pixels from mapped buffer:");
+    for (int i = 0; i < 10; ++i) {
+        int idx = i * 4;
+        SDL_Log("  mapped[%d] = R:%d G:%d B:%d A:%d", 
+                i, mapped_bytes[idx], mapped_bytes[idx+1], mapped_bytes[idx+2], mapped_bytes[idx+3]);
+    }
+    // 检查中间区域
+    int mid_y = 10;
+    SDL_Log("[View::renderOffscreen] Row %d from mapped buffer:", mid_y);
+    for (int x = 0; x < 50; x += 10) {
+        int idx = (mid_y * width + x) * 4;
+        SDL_Log("  mapped[%d,%d] = R:%d G:%d B:%d A:%d", 
+                x, mid_y, mapped_bytes[idx], mapped_bytes[idx+1], mapped_bytes[idx+2], mapped_bytes[idx+3]);
+    }
+    
     std::memcpy(out_pixels, mapped, width * height * 4);
+    
+    // 验证复制是否正确
+    SDL_Log("[View::renderOffscreen] Verifying copy - Row 10:");
+    for (int x = 0; x < 50; x += 10) {
+        int idx = (10 * width + x) * 4;
+        SDL_Log("  out_pixels[%d,10] = R:%d G:%d B:%d A:%d (mapped: R:%d G:%d B:%d A:%d)", 
+                x, out_pixels[idx], out_pixels[idx+1], out_pixels[idx+2], out_pixels[idx+3],
+                mapped_bytes[idx], mapped_bytes[idx+1], mapped_bytes[idx+2], mapped_bytes[idx+3]);
+    }
+    
     SDL_UnmapGPUTransferBuffer(device, download_buffer);
     
     // 5. 清理资源

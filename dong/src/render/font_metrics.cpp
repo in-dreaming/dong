@@ -149,12 +149,16 @@ bool getGlyphMetrics(FT_Face face, uint32_t glyph_id, UnifiedGlyphMetrics& out_m
         return false;
     }
 
+    // FreeType glyph metrics are 26.6 fixed point.
+    constexpr float kFtFixedToUnits = 1.0f / 64.0f;
+
     out_metrics.glyph_id = glyph_id;
-    out_metrics.advance_x_units = static_cast<float>(face->glyph->advance.x);
-    out_metrics.bearing_x_units = static_cast<float>(face->glyph->metrics.horiBearingX);
-    out_metrics.bearing_y_units = static_cast<float>(face->glyph->metrics.horiBearingY);
-    out_metrics.width_units = static_cast<float>(face->glyph->metrics.width);
-    out_metrics.height_units = static_cast<float>(face->glyph->metrics.height);
+    out_metrics.advance_x_units = static_cast<float>(face->glyph->advance.x) * kFtFixedToUnits;
+    out_metrics.bearing_x_units = static_cast<float>(face->glyph->metrics.horiBearingX) * kFtFixedToUnits;
+    out_metrics.bearing_y_units = static_cast<float>(face->glyph->metrics.horiBearingY) * kFtFixedToUnits;
+    out_metrics.width_units = static_cast<float>(face->glyph->metrics.width) * kFtFixedToUnits;
+    out_metrics.height_units = static_cast<float>(face->glyph->metrics.height) * kFtFixedToUnits;
+
 
     return true;
 }
