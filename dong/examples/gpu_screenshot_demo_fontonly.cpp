@@ -170,104 +170,11 @@ int main() {
     }
 
     // 7. 保存 BMP
-    const char* output_file = "zig-out/tmp/gpu_screenshot.bmp";
+    const char* output_file = "zig-out/tmp/gpu_screenshot_fontonly.bmp";
     if (writeBMP(output_file, width, height, pixels.data())) {
         SDL_Log("[Save] Saved to %s", output_file);
     } else {
         SDL_Log("ERROR: Failed to save BMP");
-    }
-
-    // 8. 简单像素统计（参考 gpu_screenshot_analysis 的风格）
-    SDL_Log("=== PIXEL ANALYSIS ===");
-    int total_pixels = static_cast<int>(width * height);
-    int total_black = 0, total_white = 0, total_gray = 0;
-    int total_red = 0;  // 红色像素计数
-
-    // 打印前 10 个像素的 RGBA 值
-    SDL_Log("First 10 pixels (RGBA):");
-    for (int i = 0; i < 10 && i < total_pixels; ++i) {
-        int idx = i * 4;
-        SDL_Log("  pixel[%d] = R:%d G:%d B:%d A:%d", 
-                i, pixels[idx], pixels[idx+1], pixels[idx+2], pixels[idx+3]);
-    }
-    
-    // 检查 row 10（与 view.cpp 中的调试对应）
-    SDL_Log("Row 10 from demo pixels array:");
-    for (int x = 0; x < 50; x += 10) {
-        int idx = (10 * width + x) * 4;
-        SDL_Log("  pixels[%d,10] = R:%d G:%d B:%d A:%d", 
-                x, pixels[idx], pixels[idx+1], pixels[idx+2], pixels[idx+3]);
-    }
-    
-    // 检查 (1,1) 附近的像素
-    SDL_Log("Checking around (1,1):");
-    for (int y = 0; y <= 3; ++y) {
-        for (int x = 0; x <= 3; ++x) {
-            int idx = (y * width + x) * 4;
-            SDL_Log("  pixels[%d,%d] = R:%d G:%d B:%d A:%d", 
-                    x, y, pixels[idx], pixels[idx+1], pixels[idx+2], pixels[idx+3]);
-        }
-    }
-
-    // 找到第一个非白色像素的位置
-    SDL_Log("Searching for first non-white pixel...");
-    bool found_non_white = false;
-    for (int y = 0; y < (int)height && !found_non_white; ++y) {
-        for (int x = 0; x < (int)width && !found_non_white; ++x) {
-            int idx = (y * width + x) * 4;
-            if (pixels[idx] < 255 || pixels[idx+1] < 255 || pixels[idx+2] < 255) {
-                SDL_Log("  First non-white at (%d,%d) = R:%d G:%d B:%d A:%d", 
-                        x, y, pixels[idx], pixels[idx+1], pixels[idx+2], pixels[idx+3]);
-                // 打印周围 5x5 区域
-                SDL_Log("  Surrounding 5x5 area:");
-                for (int dy = -2; dy <= 2; ++dy) {
-                    int py = y + dy;
-                    if (py < 0 || py >= (int)height) continue;
-                    char line[256] = "    ";
-                    for (int dx = -2; dx <= 2; ++dx) {
-                        int px = x + dx;
-                        if (px < 0 || px >= (int)width) {
-                            strcat(line, "--- ");
-                            continue;
-                        }
-                        int pidx = (py * width + px) * 4;
-                        char buf[32];
-                        snprintf(buf, sizeof(buf), "%3d ", (pixels[pidx] + pixels[pidx+1] + pixels[pidx+2]) / 3);
-                        strcat(line, buf);
-                    }
-                    SDL_Log("%s", line);
-                }
-                found_non_white = true;
-            }
-        }
-    }
-    if (!found_non_white) {
-        SDL_Log("  No non-white pixel found!");
-    }
-
-    for (int i = 0; i < total_pixels; ++i) {
-        int idx = i * 4;
-        int brightness = (pixels[idx] + pixels[idx + 1] + pixels[idx + 2]) / 3;
-        if (brightness < 50) total_black++;
-        else if (brightness > 200) total_white++;
-        else total_gray++;
-        
-        // 检测红色像素 (R > 200, G < 100, B < 100)
-        if (pixels[idx] > 200 && pixels[idx+1] < 100 && pixels[idx+2] < 100) {
-            total_red++;
-        }
-    }
-
-    SDL_Log("Total pixels: %d", total_pixels);
-    SDL_Log("  Black (<50): %d (%.1f%%)", total_black, 100.0 * total_black / total_pixels);
-    SDL_Log("  Gray (50-200): %d (%.1f%%)", total_gray, 100.0 * total_gray / total_pixels);
-    SDL_Log("  White (>200): %d (%.1f%%)", total_white, 100.0 * total_white / total_pixels);
-    SDL_Log("  Red pixels: %d", total_red);
-
-    if (total_white == total_pixels) {
-        SDL_Log("WARNING: Image is all white! Offscreen rendering produced blank output.");
-    } else if (total_black > 100 || total_gray > 100) {
-        SDL_Log("SUCCESS: Text pixels detected in offscreen screenshot!");
     }
 
 
