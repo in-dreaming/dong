@@ -64,6 +64,8 @@ struct GlyphInstance {
     uint32_t glyph_id = 0;
     float pen_x_units = 0.0f;      // design units（相对于文本起点）
     float pen_y_units = 0.0f;      // design units
+    std::string font_path;         // 该 glyph 使用的字体路径（支持字体回退）
+    uint32_t units_per_em = 0;     // 该字体的 units_per_em
 };
 
 struct DrawGlyphRunData {

@@ -647,6 +647,8 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                                     inst.glyph_id = sg.glyph_id;
                                     inst.pen_x_units = sg.pen_x_units;
                                     inst.pen_y_units = sg.pen_y_units;
+                                    inst.font_path = sg.font_path;
+                                    inst.units_per_em = sg.units_per_em;
                                     glyph_run.glyphs.push_back(inst);
                                 }
                                 
@@ -702,6 +704,8 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                         inst.glyph_id = sg.glyph_id;
                         inst.pen_x_units = sg.pen_x_units;
                         inst.pen_y_units = sg.pen_y_units;
+                        inst.font_path = sg.font_path;
+                        inst.units_per_em = sg.units_per_em;
                         glyph_run.glyphs.push_back(inst);
                     }
 
@@ -1037,6 +1041,8 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                         }
                         inst.pen_x_units = base_x_units;
                         inst.pen_y_units = sg.pen_y_units;
+                        inst.font_path = sg.font_path;
+                        inst.units_per_em = sg.units_per_em;
                         glyph_run.glyphs.push_back(inst);
                         ++glyph_index_in_run;
                         // 检查当前 glyph 是否对应空格字符

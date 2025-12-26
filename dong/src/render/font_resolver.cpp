@@ -148,6 +148,32 @@ const std::unordered_map<std::string, std::vector<std::string>> kFontCandidates 
     }},
 };
 
+// CJK 字体回退列表（按优先级排序）
+const std::vector<std::string> kCJKFallbackFonts = {
+    // Windows 中文字体
+    "C:/Windows/Fonts/msyh.ttc",      // Microsoft YaHei (微软雅黑)
+    "C:/Windows/Fonts/msyhbd.ttc",    // Microsoft YaHei Bold
+    "C:/Windows/Fonts/simsun.ttc",    // SimSun (宋体)
+    "C:/Windows/Fonts/simhei.ttf",    // SimHei (黑体)
+    "C:/Windows/Fonts/simkai.ttf",    // KaiTi (楷体)
+    "C:/Windows/Fonts/STXIHEI.TTF",   // STXihei
+    "C:/Windows/Fonts/STKAITI.TTF",   // STKaiti
+    "C:/Windows/Fonts/STFANGSO.TTF",  // STFangsong
+    "C:/Windows/Fonts/mingliu.ttc",   // MingLiU (细明体)
+    // macOS 中文字体
+    "/System/Library/Fonts/Hiragino Sans GB.ttc",
+    "/System/Library/Fonts/STHeiti Light.ttc",
+    "/System/Library/Fonts/STHeiti Medium.ttc",
+    "/System/Library/Fonts/PingFang.ttc",
+    "/Library/Fonts/Songti.ttc",
+    "/Library/Fonts/Kaiti.ttc",
+    // Linux 中文字体
+    "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+    "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+};
+
 std::string findExistingFont(const std::vector<std::string>& candidates) {
     namespace fs = std::filesystem;
     for (const auto& path : candidates) {
@@ -343,6 +369,85 @@ std::string resolveFontPath(const std::string& requested_family,
 std::string resolveFontPath(const std::string& requested_family) {
     // 兼容旧接口：不传 weight 等价于 normal/400
     return resolveFontPath(requested_family, "normal");
+}
+
+std::vector<std::string> getCJKFallbackFonts() {
+    std::vector<std::string> result;
+    result.reserve(kCJKFallbackFonts.size());
+    
+    namespace fs = std::filesystem;
+    for (const auto& path : kCJKFallbackFonts) {
+        std::error_code ec;
+        if (fs::exists(path, ec) && !ec) {
+            result.push_back(path);
+        }
+    }
+    
+    return result;
+}
+
+// FreeType 库实例（用于检查字符支持）
+// 注意：这里使用静态变量，实际项目中应该考虑更好的生命周期管理
+#include <ft2build.h>
+#include FT_FREETYPE_H
+
+namespace {
+
+// 延迟初始化的 FreeType 库
+FT_Library getFTLibrary() {
+    static FT_Library library = nullptr;
+    static bool initialized = false;
+    
+    if (!initialized) {
+        if (FT_Init_FreeType(&library) != 0) {
+            library = nullptr;
+        }
+        initialized = true;
+    }
+    
+    return library;
+}
+
+// 检查字体是否支持指定的 Unicode 码点
+bool fontSupportsCodepoint(const std::string& font_path, uint32_t codepoint) {
+    FT_Library library = getFTLibrary();
+    if (!library) {
+        return false;
+    }
+    
+    FT_Face face = nullptr;
+    if (FT_New_Face(library, font_path.c_str(), 0, &face) != 0) {
+        return false;
+    }
+    
+    FT_UInt glyph_index = FT_Get_Char_Index(face, codepoint);
+    FT_Done_Face(face);
+    
+    return glyph_index != 0;
+}
+
+} // namespace
+
+std::string findFontForCodepoint(uint32_t codepoint, 
+                                  const std::string& primary_font) {
+    // 首先检查主字体
+    if (!primary_font.empty() && fontSupportsCodepoint(primary_font, codepoint)) {
+        return primary_font;
+    }
+    
+    // 尝试 CJK 回退字体
+    for (const auto& fallback : kCJKFallbackFonts) {
+        namespace fs = std::filesystem;
+        std::error_code ec;
+        if (fs::exists(fallback, ec) && !ec) {
+            if (fontSupportsCodepoint(fallback, codepoint)) {
+                return fallback;
+            }
+        }
+    }
+    
+    // 没有找到支持该字符的字体
+    return {};
 }
 
 } // namespace dong::render

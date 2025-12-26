@@ -2483,10 +2483,11 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             SDL_Log("[DrawText] glyphs_count=%zu baseline=(%.2f,%.2f) font_size=%.1f",
                     cmd.glyphs.size(), cmd.baseline_x, cmd.baseline_y, cmd.font_size);
 
-            std::string font_path = !cmd.font_path.empty()
+            // 默认字体路径（用于没有指定 font_path 的 glyph）
+            std::string default_font_path = !cmd.font_path.empty()
                 ? cmd.font_path
                 : resolveFontPath(cmd.font_family, cmd.font_weight);
-            if (font_path.empty()) {
+            if (default_font_path.empty()) {
                 SDL_Log("GPUDriverSDL: no valid font found for family '%s'", cmd.font_family.c_str());
                 break;
             }
@@ -2552,7 +2553,18 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                     continue;
                 }
 
-                const AtlasEntry* entry = glyph_atlas->addGlyph(glyph.glyph_id, font_path);
+                // 使用 glyph 自己的 font_path（支持字体回退），如果为空则使用默认字体
+                std::string glyph_font_path = !glyph.font_path.empty() 
+                    ? glyph.font_path 
+                    : default_font_path;
+                
+                // 计算该 glyph 的 pixel_scale（可能使用不同字体的 units_per_em）
+                float glyph_pixel_scale = pixel_scale;
+                if (glyph.units_per_em > 0 && glyph.units_per_em != cmd.units_per_em) {
+                    glyph_pixel_scale = font_size / static_cast<float>(glyph.units_per_em);
+                }
+
+                const AtlasEntry* entry = glyph_atlas->addGlyph(glyph.glyph_id, glyph_font_path);
                 if (!entry) {
                     SDL_Log("[DrawText] SKIP glyph[%zu]: glyph_id=%u entry=null", glyph_idx, glyph.glyph_id);
                     continue;
@@ -2572,7 +2584,7 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                     : 1.0f;
                 
                 SDL_Log("[DrawText] glyph[%zu]: glyph_id=%u msdf_scale=%.6f pixel_scale=%.6f entry_uv=(%.4f,%.4f,%.4f,%.4f)",
-                        glyph_idx, glyph.glyph_id, msdf_scale, pixel_scale,
+                        glyph_idx, glyph.glyph_id, msdf_scale, glyph_pixel_scale,
                         entry->u0, entry->v0, entry->u1, entry->v1);
                 
                 // ========== MSDF 纹理渲染方案 ==========
@@ -2583,9 +2595,9 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 // - 字形尺寸：bounds_width * msdf_scale x bounds_height * msdf_scale
                 //
                 // 渲染策略：
-                // - 渲染矩形尺寸 = msdf_size * (pixel_scale / msdf_scale)
+                // - 渲染矩形尺寸 = msdf_size * (glyph_pixel_scale / msdf_scale)
                 // - 这样可以保证 MSDF 纹理中的每个像素都正确映射到屏幕
-                // - 字形在渲染矩形中的位置由 range * (pixel_scale / msdf_scale) 确定
+                // - 字形在渲染矩形中的位置由 range * (glyph_pixel_scale / msdf_scale) 确定
                 //
                 // 注意：这种方案会导致渲染矩形比实际字形大（包含 padding 和可能的空白区域）
                 // 但这是正确的，因为 MSDF 需要 padding 来实现抗锯齿
@@ -2593,9 +2605,9 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 // 获取 MSDF 纹理的实际尺寸（从 tier 配置获取）
                 const float msdf_size = static_cast<float>(glyph_tier->bitmap_px);
                 
-                // 渲染矩形尺寸 = msdf_size * (pixel_scale / msdf_scale)
+                // 渲染矩形尺寸 = msdf_size * (glyph_pixel_scale / msdf_scale)
                 // 这是 MSDF 纹理在屏幕上应该占用的像素数
-                const float render_scale = pixel_scale / msdf_scale;
+                const float render_scale = glyph_pixel_scale / msdf_scale;
                 const float glyph_w = msdf_size * render_scale;
                 const float glyph_h = msdf_size * render_scale;
 
@@ -2604,8 +2616,8 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 }
 
                 // pen position 是 baseline 上的当前绘制位置
-                const float pen_x_px = glyph.pen_x_units * pixel_scale + cmd.baseline_x;
-                const float pen_y_px = glyph.pen_y_units * pixel_scale + cmd.baseline_y;
+                const float pen_x_px = glyph.pen_x_units * glyph_pixel_scale + cmd.baseline_x;
+                const float pen_y_px = glyph.pen_y_units * glyph_pixel_scale + cmd.baseline_y;
 
                 // ========== 字形位置计算（考虑 UV 翻转）==========
                 //
@@ -2636,17 +2648,17 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 // - 在屏幕上，这个距离 = (msdf_size - range - glyph_h_msdf) * render_scale
                 //
                 // glyph_y = (字形顶部屏幕位置) - (渲染矩形顶部到字形顶部的距离)
-                //         = (pen_y - bounds_top * pixel_scale) - (msdf_size - range - glyph_h_msdf) * render_scale
+                //         = (pen_y - bounds_top * glyph_pixel_scale) - (msdf_size - range - glyph_h_msdf) * render_scale
                 //
                 // 其中 glyph_h_msdf = bounds_height * msdf_scale
                 //      bounds_height = bounds_top - bounds_bottom
                 //
                 // 展开：
-                // glyph_y = pen_y - bounds_top * pixel_scale - (msdf_size - range) * render_scale + bounds_height * msdf_scale * render_scale
-                //         = pen_y - bounds_top * pixel_scale - (msdf_size - range) * render_scale + bounds_height * pixel_scale
-                //         = pen_y - bounds_top * pixel_scale + bounds_height * pixel_scale - (msdf_size - range) * render_scale
-                //         = pen_y + (bounds_height - bounds_top) * pixel_scale - (msdf_size - range) * render_scale
-                //         = pen_y - bounds_bottom * pixel_scale - (msdf_size - range) * render_scale
+                // glyph_y = pen_y - bounds_top * glyph_pixel_scale - (msdf_size - range) * render_scale + bounds_height * msdf_scale * render_scale
+                //         = pen_y - bounds_top * glyph_pixel_scale - (msdf_size - range) * render_scale + bounds_height * glyph_pixel_scale
+                //         = pen_y - bounds_top * glyph_pixel_scale + bounds_height * glyph_pixel_scale - (msdf_size - range) * render_scale
+                //         = pen_y + (bounds_height - bounds_top) * glyph_pixel_scale - (msdf_size - range) * render_scale
+                //         = pen_y - bounds_bottom * glyph_pixel_scale - (msdf_size - range) * render_scale
                 //
                 // 类似地，对于 glyph_x：
                 // - 渲染矩形左边对应 msdfgen 纹理左边（x = 0）
@@ -2655,11 +2667,11 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 // - 在屏幕上，这个距离 = range * render_scale
                 //
                 // glyph_x = (字形左边屏幕位置) - (渲染矩形左边到字形左边的距离)
-                //         = (pen_x + bounds_left * pixel_scale) - range * render_scale
+                //         = (pen_x + bounds_left * glyph_pixel_scale) - range * render_scale
                 
                 const float range_px = atlas_range * render_scale;
-                const float bounds_left_px = entry->metrics.bounds_left * pixel_scale;
-                const float bounds_bottom_px = entry->metrics.bounds_bottom * pixel_scale;
+                const float bounds_left_px = entry->metrics.bounds_left * glyph_pixel_scale;
+                const float bounds_bottom_px = entry->metrics.bounds_bottom * glyph_pixel_scale;
 
                 // 字形左边缘位置 - range 偏移
                 float glyph_x = pen_x_px + bounds_left_px - range_px;
@@ -2704,21 +2716,21 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 writeLinearColor(cmd.color, inst.color);
 
                 // 计算 screenPxRange：MSDF 距离场范围在屏幕空间的像素数
-                // 公式：screenPxRange = atlas_range * (pixel_scale / msdf_scale)
+                // 公式：screenPxRange = atlas_range * (glyph_pixel_scale / msdf_scale)
                 // 
                 // 验证：
                 // - atlas_range = MSDF 纹理中的 range（像素），例如 8.0
                 // - msdf_scale = design units → MSDF 像素的缩放因子
-                // - pixel_scale = design units → 屏幕像素的缩放因子
-                // - pixel_scale / msdf_scale = 屏幕像素 / MSDF 像素 的比例
-                // - 所以 atlas_range * (pixel_scale / msdf_scale) = MSDF 中的 range 在屏幕上对应多少像素
+                // - glyph_pixel_scale = design units → 屏幕像素的缩放因子
+                // - glyph_pixel_scale / msdf_scale = 屏幕像素 / MSDF 像素 的比例
+                // - 所以 atlas_range * (glyph_pixel_scale / msdf_scale) = MSDF 中的 range 在屏幕上对应多少像素
                 //
                 // msdfgen 官方要求：screenPxRange >= 1，最好 >= 2
-                const float px_range_screen = atlas_range * (pixel_scale / msdf_scale);
+                const float px_range_screen = atlas_range * (glyph_pixel_scale / msdf_scale);
 
                 if (debug_text)
-                SDL_Log("[TEXT] glyph=%u screenPxRange=%.2f (atlas_range=%.1f, pixel_scale=%.6f, msdf_scale=%.6f)",
-                        glyph.glyph_id, px_range_screen, atlas_range, pixel_scale, msdf_scale);
+                SDL_Log("[TEXT] glyph=%u screenPxRange=%.2f (atlas_range=%.1f, glyph_pixel_scale=%.6f, msdf_scale=%.6f)",
+                        glyph.glyph_id, px_range_screen, atlas_range, glyph_pixel_scale, msdf_scale);
 
                 inst.params[0] = px_range_screen;
                 inst.params[1] = inv_device_pixel_ratio;

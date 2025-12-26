@@ -21,12 +21,14 @@ struct ShapedGlyph {
     float pen_y_units = 0.0f;       // design units，基线起点 y
     float advance_x_units = 0.0f;   // design units，水平方向 advance
     uint32_t cluster = 0;           // 输入文本中的 UTF-8 字节偏移
+    std::string font_path;          // 该 glyph 使用的字体路径（支持字体回退）
+    uint32_t units_per_em = 0;      // 该字体的 units_per_em
 };
 
 struct ShapedText {
-    std::string font_path;
-    uint32_t units_per_em = 0;     // 字体的 EM 单位
-    float scale_to_pixels = 1.0f;  // font_size / units_per_em（用于下游缩放）
+    std::string font_path;          // 主字体路径（可能部分 glyph 使用回退字体）
+    uint32_t units_per_em = 0;      // 主字体的 EM 单位
+    float scale_to_pixels = 1.0f;   // font_size / units_per_em（用于下游缩放）
     
     float ascent_units = 0.0f;     // design units
     float descent_units = 0.0f;    // design units
