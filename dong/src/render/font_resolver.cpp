@@ -43,16 +43,29 @@ std::string toLowerAscii(std::string input) {
 
 // 预设字体候选列表：key 为 canonical family（或 generic family），value 为候选路径
 const std::unordered_map<std::string, std::vector<std::string>> kFontCandidates = {
+    // Inter 字体 - 现代无衬线字体，用于英文/数字
+    {"inter", {
+        // Windows
+        "C:/Windows/Fonts/Inter-Regular.ttf",
+        "C:/Windows/Fonts/Inter-Medium.ttf",
+        "C:/Windows/Fonts/inter.ttf",
+        // macOS
+        "/Library/Fonts/Inter-Regular.ttf",
+        "/System/Library/Fonts/Inter.ttf",
+        // Linux
+        "/usr/share/fonts/truetype/inter/Inter-Regular.ttf",
+        "/usr/share/fonts/opentype/inter/Inter-Regular.otf",
+    }},
     // 系统 UI 字体族：-apple-system / BlinkMacSystemFont / system-ui
+    // 优先使用 Inter，然后回退到系统字体
     {"-apple-system", {
-        // macOS 上优先使用实际存在的 CJK 无衬线字体，其次 SF 系列和西文字体
-        "/System/Library/Fonts/Hiragino Sans GB.ttc",
-        "/System/Library/Fonts/STHeiti Light.ttc",
-        "/System/Library/Fonts/STHeiti Medium.ttc",
+        // Inter 优先（英文/数字）
+        "C:/Windows/Fonts/Inter-Regular.ttf",
+        "/Library/Fonts/Inter-Regular.ttf",
+        "/usr/share/fonts/truetype/inter/Inter-Regular.ttf",
+        // macOS 系统字体
         "/System/Library/Fonts/SFNS.ttf",
         "/System/Library/Fonts/SFNSDisplay.ttf",
-        "/System/Library/Fonts/SFNSRounded.ttf",
-        "/System/Library/Fonts/SFCompact.ttf",
         "/System/Library/Fonts/Helvetica.ttc",
         "/System/Library/Fonts/Supplemental/Arial.ttf",
         // Linux 常见替代
@@ -62,10 +75,13 @@ const std::unordered_map<std::string, std::vector<std::string>> kFontCandidates 
         "C:/Windows/Fonts/arial.ttf"
     }},
     {"system-ui", {
+        // Inter 优先
+        "C:/Windows/Fonts/Inter-Regular.ttf",
+        "/Library/Fonts/Inter-Regular.ttf",
+        "/usr/share/fonts/truetype/inter/Inter-Regular.ttf",
+        // 系统字体
         "/System/Library/Fonts/SFNS.ttf",
         "/System/Library/Fonts/SFNSDisplay.ttf",
-        "/System/Library/Fonts/SFNSRounded.ttf",
-        "/System/Library/Fonts/SF-Pro.ttf",
         "/System/Library/Fonts/Helvetica.ttc",
         "/System/Library/Fonts/Supplemental/Arial.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
@@ -73,10 +89,13 @@ const std::unordered_map<std::string, std::vector<std::string>> kFontCandidates 
         "C:/Windows/Fonts/arial.ttf"
     }},
     {"blinkmacsystemfont", {
+        // Inter 优先
+        "C:/Windows/Fonts/Inter-Regular.ttf",
+        "/Library/Fonts/Inter-Regular.ttf",
+        "/usr/share/fonts/truetype/inter/Inter-Regular.ttf",
+        // 系统字体
         "/System/Library/Fonts/SFNS.ttf",
         "/System/Library/Fonts/SFNSDisplay.ttf",
-        "/System/Library/Fonts/SFNSRounded.ttf",
-        "/System/Library/Fonts/SF-Pro.ttf",
         "/System/Library/Fonts/Helvetica.ttc",
         "/System/Library/Fonts/Supplemental/Arial.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
@@ -84,21 +103,32 @@ const std::unordered_map<std::string, std::vector<std::string>> kFontCandidates 
         "C:/Windows/Fonts/arial.ttf"
     }},
     {"sans-serif", {
-        // 优先选择具有良好 CJK 覆盖的系统无衬线字体
-        "/System/Library/Fonts/Hiragino Sans GB.ttc",
-        "/System/Library/Fonts/STHeiti Light.ttc",
-        "/System/Library/Fonts/STHeiti Medium.ttc",
+        // Inter 优先（英文/数字）
+        "C:/Windows/Fonts/Inter-Regular.ttf",
+        "/Library/Fonts/Inter-Regular.ttf",
+        "/usr/share/fonts/truetype/inter/Inter-Regular.ttf",
+        // 回退到系统无衬线字体
         "/System/Library/Fonts/Helvetica.ttc",
         "/System/Library/Fonts/Supplemental/Arial.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         "C:/Windows/Fonts/arial.ttf"
     }},
     {"arial", {
+        // Inter 优先
+        "C:/Windows/Fonts/Inter-Regular.ttf",
+        "/Library/Fonts/Inter-Regular.ttf",
+        "/usr/share/fonts/truetype/inter/Inter-Regular.ttf",
+        // Arial 回退
         "/System/Library/Fonts/Supplemental/Arial.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         "C:/Windows/Fonts/arial.ttf"
     }},
     {"helvetica", {
+        // Inter 优先
+        "C:/Windows/Fonts/Inter-Regular.ttf",
+        "/Library/Fonts/Inter-Regular.ttf",
+        "/usr/share/fonts/truetype/inter/Inter-Regular.ttf",
+        // Helvetica 回退
         "/System/Library/Fonts/Helvetica.ttc",
         "/System/Library/Fonts/Supplemental/Arial.ttf"
     }},
@@ -118,6 +148,9 @@ const std::unordered_map<std::string, std::vector<std::string>> kFontCandidates 
         "C:/Windows/Fonts/times.ttf"
     }},
     {"segoe ui", {
+        // Inter 优先
+        "C:/Windows/Fonts/Inter-Regular.ttf",
+        // Segoe UI 回退
         "C:/Windows/Fonts/segoeui.ttf",
         "C:/Windows/Fonts/arial.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
@@ -146,30 +179,44 @@ const std::unordered_map<std::string, std::vector<std::string>> kFontCandidates 
     {"consolas", {
         "/System/Library/Fonts/consola.ttf"
     }},
+    // 中文字体
+    {"pingfang sc", {
+        "/System/Library/Fonts/PingFang.ttc",
+        "/Library/Fonts/PingFang.ttc",
+    }},
+    {"microsoft yahei ui", {
+        "C:/Windows/Fonts/msyh.ttc",
+        "C:/Windows/Fonts/msyhbd.ttc",
+    }},
+    {"microsoft yahei", {
+        "C:/Windows/Fonts/msyh.ttc",
+        "C:/Windows/Fonts/msyhbd.ttc",
+    }},
 };
 
 // CJK 字体回退列表（按优先级排序）
+// Windows 优先使用 Microsoft YaHei UI，macOS 优先使用 PingFang SC
 const std::vector<std::string> kCJKFallbackFonts = {
-    // Windows 中文字体
-    "C:/Windows/Fonts/msyh.ttc",      // Microsoft YaHei (微软雅黑)
-    "C:/Windows/Fonts/msyhbd.ttc",    // Microsoft YaHei Bold
+    // Windows 中文字体 - Microsoft YaHei UI 优先
+    "C:/Windows/Fonts/msyh.ttc",      // Microsoft YaHei UI (微软雅黑)
+    "C:/Windows/Fonts/msyhbd.ttc",    // Microsoft YaHei UI Bold
+    "C:/Windows/Fonts/msjh.ttc",      // Microsoft JhengHei (微软正黑)
     "C:/Windows/Fonts/simsun.ttc",    // SimSun (宋体)
     "C:/Windows/Fonts/simhei.ttf",    // SimHei (黑体)
     "C:/Windows/Fonts/simkai.ttf",    // KaiTi (楷体)
     "C:/Windows/Fonts/STXIHEI.TTF",   // STXihei
-    "C:/Windows/Fonts/STKAITI.TTF",   // STKaiti
-    "C:/Windows/Fonts/STFANGSO.TTF",  // STFangsong
     "C:/Windows/Fonts/mingliu.ttc",   // MingLiU (细明体)
-    // macOS 中文字体
-    "/System/Library/Fonts/Hiragino Sans GB.ttc",
-    "/System/Library/Fonts/STHeiti Light.ttc",
+    // macOS 中文字体 - PingFang SC 优先
+    "/System/Library/Fonts/PingFang.ttc",           // PingFang SC (苹方)
+    "/Library/Fonts/PingFang.ttc",
+    "/System/Library/Fonts/STHeiti Light.ttc",      // STHeiti (华文黑体)
     "/System/Library/Fonts/STHeiti Medium.ttc",
-    "/System/Library/Fonts/PingFang.ttc",
-    "/Library/Fonts/Songti.ttc",
-    "/Library/Fonts/Kaiti.ttc",
+    "/System/Library/Fonts/Hiragino Sans GB.ttc",   // Hiragino Sans GB (冬青黑体)
+    "/Library/Fonts/Songti.ttc",                    // Songti SC (宋体)
+    "/Library/Fonts/Kaiti.ttc",                     // Kaiti SC (楷体)
     // Linux 中文字体
-    "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
     "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
     "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
     "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
 };

@@ -45,19 +45,17 @@ DOMNodePtr Parser::parse(const std::string& html) {
         return nullptr;
     }
 
+
     lxb_dom_node_t* root = lxb_dom_interface_node(doc);
     if (!root) {
         SDL_Log("[Parser::parse] Failed to get root node");
         std::cerr << "Failed to get root node from Lexbor document" << std::endl;
         return nullptr;
     }
-    SDL_Log("[Parser::parse] Got root node, converting to DOMNode...");
 
     auto dom_root = lexborNodeToDOMNode(root);
-    SDL_Log("[Parser::parse] lexborNodeToDOMNode done, dom_root=%p", dom_root.get());
     
     if (dom_root) {
-        SDL_Log("[Parser::parse] Applying default styles...");
         applyDefaultStyles(dom_root);
         
         SDL_Log("[Parser::parse] Creating StyleEngine...");

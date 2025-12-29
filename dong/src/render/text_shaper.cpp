@@ -91,8 +91,10 @@ CachedFontInfo* getOrCreateFontInfo(const std::string& font_path) {
 }
 
 // 对单个字符进行 shaping
+// primary_units_per_em: 主字体的 units_per_em，用于统一坐标系
 bool shapeChar(const std::string& text, size_t byte_start, size_t byte_end,
                CachedFontInfo* font_info, const std::string& font_path,
+               uint32_t primary_units_per_em,
                float& pen_x_units, float& pen_y_units,
                std::vector<ShapedGlyph>& out_glyphs) {
     if (!font_info || !font_info->hb_font) {
@@ -110,16 +112,31 @@ bool shapeChar(const std::string& text, size_t byte_start, size_t byte_end,
     hb_glyph_info_t* infos = hb_buffer_get_glyph_infos(buffer, &glyph_count);
     hb_glyph_position_t* positions = hb_buffer_get_glyph_positions(buffer, &glyph_count);
     
-    constexpr float kHbPosScale = 1.0f / 64.0f;
+    // HarfBuzz 的 position 值需要根据字体的 scale 设置来解释
+    // 我们在 hb_font_set_scale 中设置了 (units_per_em, units_per_em)
+    // 所以返回的值已经是 design units
+    
+    // 当使用回退字体时，需要将 advance 从回退字体的 units 转换为主字体的 units
+    // 这样所有字符的位置都在同一个坐标系中
+    const float units_scale = (font_info->units_per_em > 0 && primary_units_per_em > 0)
+        ? static_cast<float>(primary_units_per_em) / static_cast<float>(font_info->units_per_em)
+        : 1.0f;
     
     for (unsigned i = 0; i < glyph_count; ++i) {
         const hb_glyph_info_t& info = infos[i];
         const hb_glyph_position_t& pos = positions[i];
         
-        const float x_offset_units = static_cast<float>(pos.x_offset) * kHbPosScale;
-        const float y_offset_units = static_cast<float>(pos.y_offset) * kHbPosScale;
-        const float x_advance_units = static_cast<float>(pos.x_advance);
-        const float y_advance_units = static_cast<float>(pos.y_advance);
+        // HarfBuzz 返回的值已经是 design units（因为我们设置了 scale = units_per_em）
+        const float x_offset_units = static_cast<float>(pos.x_offset) * units_scale;
+        const float y_offset_units = static_cast<float>(pos.y_offset) * units_scale;
+        const float x_advance_units = static_cast<float>(pos.x_advance) * units_scale;
+        const float y_advance_units = static_cast<float>(pos.y_advance) * units_scale;
+        
+        // Debug: check for abnormal values
+        if (x_advance_units > 100000.0f || x_advance_units < -100000.0f) {
+            SDL_Log("[shapeChar] WARN: glyph_id=%u x_advance_units=%.1f (raw=%d scale=%.3f)",
+                    info.codepoint, x_advance_units, pos.x_advance, units_scale);
+        }
         
         ShapedGlyph glyph{};
         glyph.glyph_id = info.codepoint;
@@ -128,7 +145,7 @@ bool shapeChar(const std::string& text, size_t byte_start, size_t byte_end,
         glyph.advance_x_units = x_advance_units;
         glyph.cluster = static_cast<uint32_t>(byte_start + info.cluster);
         glyph.font_path = font_path;
-        glyph.units_per_em = font_info->units_per_em;
+        glyph.units_per_em = font_info->units_per_em;  // 保留原始字体的 units_per_em
         out_glyphs.push_back(glyph);
         
         pen_x_units += x_advance_units;
@@ -202,6 +219,9 @@ bool TextShaper::shape(const TextShapeRequest& request, ShapedText& out_text) {
                 if (fallback_font) {
                     FT_UInt fallback_glyph = FT_Get_Char_Index(fallback_font->face, codepoint);
                     if (fallback_glyph != 0) {
+                        SDL_Log("[TextShaper] Fallback for U+%04X: '%s' (units_per_em=%u, primary=%u)",
+                                codepoint, fallback_path.c_str(), 
+                                fallback_font->units_per_em, primary_font->units_per_em);
                         font_to_use = fallback_path;
                         font_info = fallback_font;
                         break;
@@ -210,8 +230,9 @@ bool TextShaper::shape(const TextShapeRequest& request, ShapedText& out_text) {
             }
         }
         
-        // 对该字符进行 shaping
+        // 对该字符进行 shaping，传入主字体的 units_per_em 以统一坐标系
         shapeChar(text, i, char_end, font_info, font_to_use,
+                  primary_font->units_per_em,
                   pen_x_units, pen_y_units, out_text.glyphs);
         
         i = char_end;
@@ -223,6 +244,13 @@ bool TextShaper::shape(const TextShapeRequest& request, ShapedText& out_text) {
         out_text.ascent_units = font_metrics.ascent_units;
         out_text.descent_units = font_metrics.descent_units;
         out_text.line_height_units = font_metrics.height_units;
+        
+        SDL_Log("[TextShaper] font='%s' units_per_em=%u ascent=%.1f descent=%.1f line_height=%.1f",
+                primary_font_path.c_str(),
+                font_metrics.units_per_em,
+                font_metrics.ascent_units,
+                font_metrics.descent_units,
+                font_metrics.height_units);
     }
 
     if (out_text.line_height_units <= 0.0f) {
@@ -234,6 +262,9 @@ bool TextShaper::shape(const TextShapeRequest& request, ShapedText& out_text) {
     }
 
     out_text.width_units = pen_x_units;
+    
+    SDL_Log("[TextShaper] result: width_units=%.1f line_height_units=%.1f scale=%.6f",
+            out_text.width_units, out_text.line_height_units, out_text.scale_to_pixels);
 
     return true;
 }

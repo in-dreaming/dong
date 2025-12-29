@@ -106,13 +106,30 @@ float computeIntrinsicTextHeight(const dom::DOMNodePtr& node) {
 
     ShapedText shaped{};
     if (!shaper.shape(req, shaped) || shaped.glyphs.empty()) {
+        SDL_Log("[computeIntrinsicTextHeight] shaping failed for text='%s' font_size=%.1f", 
+                text.c_str(), font_size);
         return 0.0f;
     }
 
     const float scale = shaped.scale_to_pixels;
+    
+    // Validate scale
+    if (scale <= 0.0f || scale > 1.0f || !std::isfinite(scale)) {
+        SDL_Log("[computeIntrinsicTextHeight] INVALID scale=%.6f for text='%s'", scale, text.substr(0, 20).c_str());
+        return font_size * 1.2f;  // fallback
+    }
+    
     float effective_line_height = shaped.line_height_units * scale;
+    
+    // Validate line_height_units
+    if (shaped.line_height_units <= 0.0f || shaped.line_height_units > 100000.0f || !std::isfinite(shaped.line_height_units)) {
+        SDL_Log("[computeIntrinsicTextHeight] INVALID line_height_units=%.1f for text='%s'", 
+                shaped.line_height_units, text.substr(0, 20).c_str());
+        return font_size * 1.2f;  // fallback
+    }
+    
     // 对标浏览器对 `line-height: normal` 的近似：不少于 ~1.2 * font-size，
-    // 避免大字号文本的行盒过小，导致后续块级元素“顶上来”覆盖文字。
+    // 避免大字号文本的行盒过小，导致后续块级元素"顶上来"覆盖文字。
     const float min_line_height = font_size * 1.2f;
     if (effective_line_height < min_line_height) {
         effective_line_height = min_line_height;
@@ -121,7 +138,16 @@ float computeIntrinsicTextHeight(const dom::DOMNodePtr& node) {
     float pad_top = style.padding_top.isPixel() ? style.padding_top.value : 0.0f;
     float pad_bottom = style.padding_bottom.isPixel() ? style.padding_bottom.value : 0.0f;
 
-    return effective_line_height + pad_top + pad_bottom;
+    float result = effective_line_height + pad_top + pad_bottom;
+    
+    // Final validation
+    if (result > 10000.0f || result < 0.0f || !std::isfinite(result)) {
+        SDL_Log("[computeIntrinsicTextHeight] INVALID result=%.1f for text='%s' (effective_line_height=%.1f scale=%.6f line_height_units=%.1f)",
+                result, text.substr(0, 20).c_str(), effective_line_height, scale, shaped.line_height_units);
+        return font_size * 1.2f;  // fallback
+    }
+    
+    return result;
 }
 
 // Collapse vertical margins between two sibling block-like elements so that
@@ -407,6 +433,7 @@ void Engine::calculateLayout(dom::DOMNodePtr root, float width, float height) {
     YGNodeStyleSetWidth(yoga_root, width);
     YGNodeStyleSetHeight(yoga_root, height);
 
+
     // Calculate layout
     YGNodeCalculateLayout(yoga_root, width, height, YGDirectionLTR);
 
@@ -595,6 +622,7 @@ YGNode* Engine::createYogaNode(dom::DOMNodePtr dom_node) {
 void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
     if (!dom_node || !yoga_node) return;
 
+
     const auto& style = dom_node->getComputedStyle();
 
     const std::string& tag = dom_node->getTagName();
@@ -655,8 +683,10 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
          tag == "div") &&
         style.height.isAuto()) {
         float intrinsic_h = computeIntrinsicTextHeight(dom_node);
-        if (intrinsic_h > 0.0f) {
+        if (intrinsic_h > 0.0f && intrinsic_h < 10000.0f) {
             YGNodeStyleSetMinHeight(yoga_node, intrinsic_h);
+            // Also set the height explicitly to avoid Yoga calculating a huge value
+            YGNodeStyleSetHeight(yoga_node, intrinsic_h);
         }
     }
 }
@@ -720,6 +750,7 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
     } else if (style.align_items == "stretch") {
         YGNodeStyleSetAlignItems(yoga_node, YGAlignStretch);
     } else {
+        // Default to flex-start, not stretch
         YGNodeStyleSetAlignItems(yoga_node, YGAlignFlexStart);
     }
 
@@ -903,6 +934,14 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
         YGNodeStyleSetFlexBasis(yoga_node, flex_basis.value);
     } else if (flex_basis.isPercent()) {
         YGNodeStyleSetFlexBasisPercent(yoga_node, flex_basis.value);
+    } else {
+        // For auto flex-basis in block layout, set to 0 to prevent Yoga from
+        // using content-based sizing which can cause incorrect height calculations
+        if (style.layout_mode == dom::LayoutMode::Block) {
+            YGNodeStyleSetFlexBasis(yoga_node, 0.0f);
+        } else {
+            YGNodeStyleSetFlexBasisAuto(yoga_node);
+        }
     }
 
     // Map border width into Yoga so that border participates in box model sizing

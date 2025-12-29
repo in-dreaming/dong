@@ -115,7 +115,7 @@ int main() {
                     padding: 10px;
                 }
                 .title {
-                    font-size: 72px;
+                    font-size: 32px;
                     color: rgb(237, 46, 46);
                     margin: 10px 0;
                 }
@@ -124,17 +124,45 @@ int main() {
                     color: rgb(50, 100, 200);
                     margin: 10px 0;
                 }
-                .text {
+                .text36 {
                     font-size: 36px;
+                    color: rgb(50, 50, 50);
+                    margin: 10px 0;
+                }
+                .text24 {
+                    font-size: 24px;
+                    color: rgb(50, 50, 50);
+                    margin: 10px 0;
+                }
+                .text16 {
+                    font-size: 16px;
+                    color: rgb(50, 50, 50);
+                    margin: 10px 0;
+                }
+                .text12 {
+                    font-size: 12px;
+                    color: rgb(50, 50, 50);
+                    margin: 10px 0;
+                }
+                .text8 {
+                    font-size: 8px;
                     color: rgb(50, 50, 50);
                     margin: 10px 0;
                 }
             </style>
         </head>
         <body>
-            <div class="title">MSDF OK!</div>
-            <div class="subtitle">Font Test</div>
-            <div class="text">ABC 123</div>
+            <div class="title">Hello 你好 World</div>
+            <div class="subtitle">Test 测试 Mixed</div>
+            <div class="text36">hejkpq 36</div>
+            <div class="text24">hejkpq 24</div>
+            <div class="text16">hejkpq 16</div>
+            <div class="text12">hejkpq 12</div>
+            <div class="text36">耋耄 36</div>
+            <div class="text24">耋耄 24</div>
+            <div class="text16">耋耄 16</div>
+            <div class="text12">耋耄 12</div>
+            <div class="text8">耋耄 8</div>
         </body>
         </html>
     )";
@@ -170,7 +198,7 @@ int main() {
     }
 
     // 7. 保存 BMP
-    const char* output_file = "gpu_screenshot_fontonly.bmp";
+    const char* output_file = "zig-out/tmp/gpu_screenshot_fontonly.bmp";
     if (writeBMP(output_file, width, height, pixels.data())) {
         SDL_Log("[Save] Saved to %s", output_file);
     } else {
