@@ -296,13 +296,15 @@ pub fn build(b: *std.Build) void {
     // ==========================================================================
     // Build steps
     // ==========================================================================
-    const examples_step = b.step("examples", "Build all examples");
-    examples_step.dependOn(&cmake_build.step);
-
-    // Install step
+    
+    // Install step (cmake --install)
     const cmake_install = b.addSystemCommand(&.{ "cmake", "--install", cmake_build_dir, "--prefix", "zig-out" });
     cmake_install.step.dependOn(&cmake_build.step);
     b.getInstallStep().dependOn(&cmake_install.step);
+    
+    // examples step now also installs to zig-out/bin
+    const examples_step = b.step("examples", "Build all examples and install to zig-out/bin");
+    examples_step.dependOn(&cmake_install.step);
 
     // ==========================================================================
     // Individual dependency build steps (for debugging/manual builds)
