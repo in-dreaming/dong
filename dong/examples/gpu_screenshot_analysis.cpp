@@ -2,6 +2,8 @@
 #include <cstdint>
 #include <vector>
 #include <cstring>
+#include <cstdlib>
+#include <algorithm>
 #include <dong.h>
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_gpu.h>

@@ -1,6 +1,8 @@
 #include <cstdio>
 #include <cstdint>
 #include <vector>
+#include <cstdlib>
+#include <algorithm>
 
 #include <dong.h>
 #include <SDL3/SDL.h>

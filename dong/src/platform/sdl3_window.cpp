@@ -132,6 +132,24 @@ bool SDL3Window::createGPUDevice(bool debug_mode) {
         return false;
     }
 
+    // 设置 swapchain 参数：使用 MAILBOX 模式
+    // MAILBOX 模式会在有新帧时丢弃旧帧，避免 swapchain 纹理为 null 的问题
+    // 如果 MAILBOX 不支持，回退到 VSYNC
+    if (!SDL_SetGPUSwapchainParameters(
+        gpu_device_,
+        window_,
+        SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
+        SDL_GPU_PRESENTMODE_MAILBOX
+    )) {
+        SDL_Log("MAILBOX present mode not supported, falling back to VSYNC");
+        SDL_SetGPUSwapchainParameters(
+            gpu_device_,
+            window_,
+            SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
+            SDL_GPU_PRESENTMODE_VSYNC
+        );
+    }
+
     SDL_Log("GPU device created and claimed for window");
     return true;
 }

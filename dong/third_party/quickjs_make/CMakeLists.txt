@@ -52,11 +52,13 @@ if(WIN32)
         target_compile_definitions(quickjs PRIVATE __USE_MINGW_ANSI_STDIO=1)
     else()
         # MSVC/clang-cl specific settings
-        # Disable CONFIG_ATOMICS by pretending to be EMSCRIPTEN for this check
-        # This avoids the pthread_cond dependency
+        # Use EMSCRIPTEN=1 to disable CONFIG_ATOMICS (avoids pthread_cond dependency)
+        # This also disables DIRECT_DISPATCH (uses switch-case instead of computed goto)
+        # Enable CONFIG_STACK_CHECK for proper stack overflow detection
         target_compile_definitions(quickjs PRIVATE 
             _CRT_NONSTDC_NO_DEPRECATE
             EMSCRIPTEN=1
+            CONFIG_STACK_CHECK
         )
         # Suppress specific warnings and force include alloca.h
         if(CMAKE_C_COMPILER_ID MATCHES "Clang")
@@ -64,6 +66,10 @@ if(WIN32)
                 -Wno-implicit-const-int-float-conversion
                 -Wno-deprecated-declarations
                 /FIalloca.h
+                # Disable stack security check to avoid false positives with alloca
+                /GS-
+                # Disable optimizations that might interfere with alloca
+                /Oy-
             )
         endif()
     endif()

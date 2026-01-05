@@ -21,8 +21,8 @@ using dong::input::InputEvent;
 using dong::input::InputEventType;
 
 int main() {
-    std::printf("=== Dong Engine Interactive Demo ===\n");
-    std::printf("Features: Button clicks, ScrollView, Text input\n\n");
+    SDL_Log("=== Dong Engine Interactive Demo ===");
+    SDL_Log("Features: Button clicks, ScrollView, Text input");
 
     // 1. 创建带 GPU 的 SDL 窗口
     SDL3Window::CreateInfo ci{};
@@ -34,27 +34,27 @@ int main() {
 
     SDL3Window window;
     if (!window.initialize(ci)) {
-        std::printf("ERROR: Failed to initialize SDL3Window: %s\n", SDL_GetError());
+        SDL_Log("ERROR: Failed to initialize SDL3Window: %s", SDL_GetError());
         return 1;
     }
 
     SDL_GPUDevice* device = window.getGPUDevice();
     if (!device) {
-        std::printf("ERROR: GPU device is null after initialization.\n");
+        SDL_Log("ERROR: GPU device is null after initialization.");
         return 1;
     }
 
     // 2. 创建 Dong 上下文和视图
-    std::printf("[interactive_demo] Creating dong context...\n");
+    SDL_Log("[interactive_demo] Creating dong context...");
     dong_context_t* ctx = dong_create_context();
     if (!ctx) {
-        std::printf("ERROR: Failed to create dong context\n");
+        SDL_Log("ERROR: Failed to create dong context");
         return 1;
     }
 
     dong_view_t* view = dong_view_create(ctx, ci.width, ci.height);
     if (!view) {
-        std::printf("ERROR: Failed to create dong view\n");
+        SDL_Log("ERROR: Failed to create dong view");
         dong_destroy_context(ctx);
         return 1;
     }
@@ -227,9 +227,10 @@ int main() {
         </html>
     )";
 
-    std::printf("[interactive_demo] Loading HTML...\n");
+    SDL_Log("[interactive_demo] Loading HTML...");
     dong_view_load_html(view, html);
     dong_view_update(view);
+    SDL_Log("[interactive_demo] First update complete, installing JS handlers...");
 
     // 4. 安装 JavaScript 事件处理
     const char* js_code = R"JS(
@@ -343,11 +344,13 @@ int main() {
         console.log("[JS] All event handlers installed");
     )JS";
 
+    SDL_Log("[interactive_demo] About to call dong_view_eval...");
     if (!dong_view_eval(view, js_code)) {
-        std::printf("WARNING: JS eval failed\n");
+        SDL_Log("WARNING: JS eval failed");
     } else {
-        std::printf("[interactive_demo] JavaScript handlers installed\n");
+        SDL_Log("[interactive_demo] JavaScript handlers installed");
     }
+    SDL_Log("[interactive_demo] JS eval returned");
 
     // 5. 创建输入适配器
     auto input_adapter = dong::input::createSDL3InputAdapter(window.getHandle());
@@ -402,13 +405,17 @@ int main() {
     // 启用文本输入（激活 IME）
     input_adapter->startTextInput();
 
-    std::printf("[interactive_demo] Entering main loop...\n");
-    std::printf("Instructions:\n");
-    std::printf("  - Click buttons to increment counter\n");
-    std::printf("  - Scroll mouse wheel over the list\n");
-    std::printf("  - Click input fields and type text\n");
-    std::printf("  - Press Tab to navigate between focusable elements\n");
-    std::printf("  - Close window to exit\n\n");
+    SDL_Log("[interactive_demo] Entering main loop...");
+    SDL_Log("Instructions:");
+    SDL_Log("  - Click buttons to increment counter");
+    SDL_Log("  - Scroll mouse wheel over the list");
+    SDL_Log("  - Click input fields and type text");
+    SDL_Log("  - Press Tab to navigate between focusable elements");
+    SDL_Log("  - Close window to exit");
+
+    // 自动退出帧数（0 表示不自动退出）
+    constexpr int AUTO_EXIT_FRAMES = 0;
+    int frame_count = 0;
 
     // 6. 主循环
     while (running) {
@@ -420,18 +427,25 @@ int main() {
 
         // 更新和渲染
         dong_view_update(view);
+        ++frame_count;
+
+        // 自动退出检查
+        if (AUTO_EXIT_FRAMES > 0 && frame_count >= AUTO_EXIT_FRAMES) {
+            SDL_Log("[interactive_demo] Auto-exit after %d frames", frame_count);
+            break;
+        }
 
         // 简单限帧
         SDL_Delay(16);
     }
 
-    std::printf("[interactive_demo] Exiting...\n");
+    SDL_Log("[interactive_demo] Exiting...");
 
     // 7. 清理
     input_adapter->stopTextInput();
     dong_view_free(view);
     dong_destroy_context(ctx);
 
-    std::printf("=== Interactive Demo Complete ===\n");
+    SDL_Log("=== Interactive Demo Complete ===");
     return 0;
 }

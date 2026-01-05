@@ -24,6 +24,10 @@ public:
     // 后端初始化接口，由工厂创建实例后调用
     virtual bool initialize() = 0;
 
+    // 预处理命令列表中的资源（如 glyph 纹理上传）
+    // 必须在 beginFrame() 之前调用，避免在 render pass 中进行纹理上传
+    virtual void prepareResources(const GPUCommandList& commands) { (void)commands; }
+
     virtual void beginFrame() = 0;
     virtual void endFrame() = 0;
 

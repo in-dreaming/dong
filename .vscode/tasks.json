@@ -72,6 +72,16 @@
             "dependsOn": ["clean", "build-debug"],
             "dependsOrder": "sequence",
             "problemMatcher": []
+        },
+        {
+            "label": "cmake-build-debug",
+            "type": "shell",
+            "command": "cmake --build build-cmake --config Debug --target interactive_demo",
+            "options": {
+                "cwd": "${workspaceFolder}/dong"
+            },
+            "problemMatcher": ["$gcc", "$msCompile"],
+            "group": "build"
         }
     ]
 }

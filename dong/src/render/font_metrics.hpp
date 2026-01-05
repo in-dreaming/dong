@@ -2,6 +2,7 @@
 
 #include <string>
 #include <unordered_map>
+#include <cstdint>
 
 #include <ft2build.h>
 #include FT_FREETYPE_H

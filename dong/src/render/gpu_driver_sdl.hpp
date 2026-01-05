@@ -30,6 +30,9 @@ public:
     void endFrame() override;
     void execute(const GPUCommandList& commands) override;
     
+    // 预处理命令列表中的资源（如 glyph 纹理上传）
+    void prepareResources(const GPUCommandList& commands) override;
+    
     // Offscreen rendering support
     void beginFrameOffscreen(SDL_GPUTexture* target, uint32_t width, uint32_t height) override;
     void endFrameOffscreen() override;
@@ -59,7 +62,7 @@ private:
     bool debug_log_draw_batches_ = false;
     bool debug_log_layer_cache_ = false;
     bool msdf_subpixel_enabled_ = false;
-    bool layer_cache_enabled_ = false; // 新增：控制是否复用隔离层缓存纹理
+    bool layer_cache_enabled_ = true; // 新增：控制是否复用隔离层缓存纹理
     bool debug_rt_enabled_ = false;    // 调试：打印帧级 / RenderTarget / 图层合成日志
     unsigned long long frame_index_ = 0;
     

@@ -7,6 +7,7 @@
 #include <vector>
 #include <sstream>
 #include <cctype>
+#include <cmath>
 
 namespace dong::render {
 

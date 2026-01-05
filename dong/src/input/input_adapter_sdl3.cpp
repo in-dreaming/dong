@@ -48,7 +48,18 @@ bool SDL3InputAdapter::pollEvents() {
     while (SDL_PollEvent(&ev)) {
         switch (ev.type) {
             case SDL_EVENT_QUIT:
+                SDL_Log("[SDL3InputAdapter] SDL_EVENT_QUIT received");
+                // 发送窗口关闭事件
+                if (callback_) {
+                    InputEvent e;
+                    e.type = InputEventType::Window;
+                    e.window.type = WindowEvent::Type::CloseRequested;
+                    e.timestamp = ev.common.timestamp;
+                    callback_(std::move(e));
+                }
+                return false;
             case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+                SDL_Log("[SDL3InputAdapter] SDL_EVENT_WINDOW_CLOSE_REQUESTED received");
                 // 发送窗口关闭事件
                 if (callback_) {
                     InputEvent e;

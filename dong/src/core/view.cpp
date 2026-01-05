@@ -276,6 +276,7 @@ void View::update() {
         
         // 只在内容变化时重新构建 DisplayList 和 GPUCommandList
         bool need_rebuild = commands_dirty_;
+        SDL_Log("[View::update] need_rebuild=%d commands_dirty_=%d", need_rebuild ? 1 : 0, commands_dirty_ ? 1 : 0);
         
         if (need_rebuild) {
             SDL_Log("[View::update] Building DisplayList...");
@@ -302,9 +303,13 @@ void View::update() {
         }
 
         // 每帧都执行渲染（即使使用缓存的命令列表）
+        // 关键：在 beginFrame() 之前预处理资源（如 glyph 纹理上传）
+        // 这样可以避免在 render pass 中进行纹理上传导致的 GPU 状态冲突
+        gpu_driver_->prepareResources(*cached_cmd_list_);
         gpu_driver_->beginFrame();
         gpu_driver_->execute(*cached_cmd_list_);
         gpu_driver_->endFrame();
+        SDL_Log("[View::update] GPU frame complete");
         
         return;
     }
@@ -575,9 +580,17 @@ bool View::renderOffscreen(SDL_GPUDevice* device, uint32_t width, uint32_t heigh
 }
 
 bool View::eval_script(const char* code) {
-    if (!code || !script_engine) return false;
+    SDL_Log("[View::eval_script] Entry, code=%p, script_engine=%p", (void*)code, (void*)script_engine.get());
+    if (!code || !script_engine) {
+        SDL_Log("[View::eval_script] Early return: null code or script_engine");
+        return false;
+    }
+    SDL_Log("[View::eval_script] Calling ensureJSBindingsInitialized...");
     ensureJSBindingsInitialized();
-    return script_engine->eval(std::string(code));
+    SDL_Log("[View::eval_script] ensureJSBindingsInitialized done, calling script_engine->eval...");
+    bool result = script_engine->eval(std::string(code));
+    SDL_Log("[View::eval_script] eval returned %d", result ? 1 : 0);
+    return result;
 }
 
 // 【缺口3】执行脚本并返回结果
@@ -596,10 +609,21 @@ void View::markNeedsRepaint() {
 }
 
 void View::ensureJSBindingsInitialized() {
-    if (js_bindings_initialized_ || !js_bindings || !script_engine) return;
+    SDL_Log("[View::ensureJSBindingsInitialized] Entry, initialized=%d, js_bindings=%p, script_engine=%p",
+            js_bindings_initialized_ ? 1 : 0, (void*)js_bindings.get(), (void*)script_engine.get());
+    if (js_bindings_initialized_ || !js_bindings || !script_engine) {
+        SDL_Log("[View::ensureJSBindingsInitialized] Early return");
+        return;
+    }
     JSContext* ctx = script_engine->getContext();
-    if (!ctx) return;
+    SDL_Log("[View::ensureJSBindingsInitialized] Got JSContext=%p", (void*)ctx);
+    if (!ctx) {
+        SDL_Log("[View::ensureJSBindingsInitialized] ctx is null, returning");
+        return;
+    }
+    SDL_Log("[View::ensureJSBindingsInitialized] Calling js_bindings->initialize()...");
     js_bindings->initialize();
+    SDL_Log("[View::ensureJSBindingsInitialized] initialize() done");
     js_bindings_initialized_ = true;
 }
 

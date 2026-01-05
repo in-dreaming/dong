@@ -2,62 +2,74 @@
 #include <cstdio>
 #include <cstring>
 #include <iostream>
+#include <SDL3/SDL_log.h>
 
 extern "C" {
 #include "quickjs.h"
 }
 
-namespace dong::script {
-
-// Helper: Get JSBindings pointer from global context
-static JSBindings* g_bindings = nullptr;
+// Global bindings pointer - accessible from C callback functions
+static dong::script::JSBindings* g_bindings = nullptr;
 
 // ============================================================
-// Console API Implementation
+// Console API Implementation - extern "C" for QuickJS callbacks
 // ============================================================
+
+extern "C" {
 
 static JSValue console_log(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val;
+    SDL_Log("[console_log] Entry, argc=%d", argc);
+    std::string output;
     for (int i = 0; i < argc; i++) {
-        if (i > 0) std::cout << " ";
+        if (i > 0) output += " ";
+        SDL_Log("[console_log] Processing arg %d", i);
         const char* str = JS_ToCString(ctx, argv[i]);
+        SDL_Log("[console_log] JS_ToCString returned %p", (void*)str);
         if (str) {
-            std::cout << str;
+            output += str;
             JS_FreeCString(ctx, str);
         } else {
-            std::cout << "[object]";
+            output += "[object]";
         }
     }
-    std::cout << std::endl;
+    SDL_Log("[JS] %s", output.c_str());
     return JS_UNDEFINED;
 }
 
 static JSValue console_warn(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-    std::cout << "[WARN] ";
+    (void)this_val;
+    std::string output = "[WARN] ";
     for (int i = 0; i < argc; i++) {
-        if (i > 0) std::cout << " ";
+        if (i > 0) output += " ";
         const char* str = JS_ToCString(ctx, argv[i]);
         if (str) {
-            std::cout << str;
+            output += str;
             JS_FreeCString(ctx, str);
         }
     }
-    std::cout << std::endl;
+    SDL_Log("[JS] %s", output.c_str());
     return JS_UNDEFINED;
 }
 
 static JSValue console_error(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-    std::cerr << "[ERROR] ";
+    (void)this_val;
+    std::string output = "[ERROR] ";
     for (int i = 0; i < argc; i++) {
-        if (i > 0) std::cerr << " ";
+        if (i > 0) output += " ";
         const char* str = JS_ToCString(ctx, argv[i]);
         if (str) {
-            std::cerr << str;
+            output += str;
             JS_FreeCString(ctx, str);
         }
     }
-    std::cerr << std::endl;
+    SDL_Log("[JS] %s", output.c_str());
     return JS_UNDEFINED;
 }
+
+} // extern "C"
+
+namespace dong::script {
 
 // ============================================================
 // Document API Implementation
@@ -711,43 +723,72 @@ JSBindings::~JSBindings() {
 }
 
 void JSBindings::initialize() {
+    SDL_Log("[JSBindings::initialize] Entry, engine_=%p", (void*)engine_);
     if (!engine_) return;
 
     initializeConsoleAPI();
+    SDL_Log("[JSBindings::initialize] ConsoleAPI done");
     initializeDocumentAPI();
+    SDL_Log("[JSBindings::initialize] DocumentAPI done");
     initializeElementAPI();
+    SDL_Log("[JSBindings::initialize] ElementAPI done");
     initializeEventAPI();
+    SDL_Log("[JSBindings::initialize] EventAPI done");
 }
 
 void JSBindings::initializeConsoleAPI() {
-    if (!engine_) return;
+    SDL_Log("[JSBindings::initializeConsoleAPI] Entry");
+    if (!engine_) {
+        SDL_Log("[JSBindings::initializeConsoleAPI] engine_ is null");
+        return;
+    }
 
     JSContext* ctx = engine_->getContext();
-    if (!ctx) return;
+    SDL_Log("[JSBindings::initializeConsoleAPI] ctx=%p", (void*)ctx);
+    if (!ctx) {
+        SDL_Log("[JSBindings::initializeConsoleAPI] ctx is null");
+        return;
+    }
     
     JSValue global = JS_GetGlobalObject(ctx);
+    SDL_Log("[JSBindings::initializeConsoleAPI] Got global object");
     JSValue console = JS_NewObject(ctx);
+    SDL_Log("[JSBindings::initializeConsoleAPI] Created console object");
 
     JS_SetPropertyStr(ctx, console, "log",
-        JS_NewCFunction(ctx, console_log, "log", -1));
+        JS_NewCFunction(ctx, console_log, "log", 1));
+    SDL_Log("[JSBindings::initializeConsoleAPI] Added log");
     JS_SetPropertyStr(ctx, console, "warn",
-        JS_NewCFunction(ctx, console_warn, "warn", -1));
+        JS_NewCFunction(ctx, console_warn, "warn", 1));
+    SDL_Log("[JSBindings::initializeConsoleAPI] Added warn");
     JS_SetPropertyStr(ctx, console, "error",
-        JS_NewCFunction(ctx, console_error, "error", -1));
+        JS_NewCFunction(ctx, console_error, "error", 1));
+    SDL_Log("[JSBindings::initializeConsoleAPI] Added error");
 
     // JS_SetPropertyStr takes ownership of 'console', so we must NOT free it afterwards.
     JS_SetPropertyStr(ctx, global, "console", console);
     JS_FreeValue(ctx, global);
+    SDL_Log("[JSBindings::initializeConsoleAPI] Done");
 }
 
 void JSBindings::initializeDocumentAPI() {
-    if (!engine_) return;
+    SDL_Log("[JSBindings::initializeDocumentAPI] Entry");
+    if (!engine_) {
+        SDL_Log("[JSBindings::initializeDocumentAPI] engine_ is null");
+        return;
+    }
 
     JSContext* ctx = engine_->getContext();
-    if (!ctx) return;
+    SDL_Log("[JSBindings::initializeDocumentAPI] ctx=%p", (void*)ctx);
+    if (!ctx) {
+        SDL_Log("[JSBindings::initializeDocumentAPI] ctx is null");
+        return;
+    }
     
     JSValue global = JS_GetGlobalObject(ctx);
+    SDL_Log("[JSBindings::initializeDocumentAPI] Got global object");
     JSValue document = JS_NewObject(ctx);
+    SDL_Log("[JSBindings::initializeDocumentAPI] Created document object");
 
     // Document methods
     JS_SetPropertyStr(ctx, document, "getElementById",
@@ -760,38 +801,54 @@ void JSBindings::initializeDocumentAPI() {
         JS_NewCFunction(ctx, doc_querySelector, "querySelector", 1));
     JS_SetPropertyStr(ctx, document, "querySelectorAll",
         JS_NewCFunction(ctx, doc_querySelectorAll, "querySelectorAll", 1));
+    SDL_Log("[JSBindings::initializeDocumentAPI] Added query methods");
     
     // 【缺口1】DOM 创建 API
     JS_SetPropertyStr(ctx, document, "createElement",
         JS_NewCFunction(ctx, doc_createElement, "createElement", 1));
     JS_SetPropertyStr(ctx, document, "createTextNode",
         JS_NewCFunction(ctx, doc_createTextNode, "createTextNode", 1));
+    SDL_Log("[JSBindings::initializeDocumentAPI] Added create methods");
 
     // Document object references
+    SDL_Log("[JSBindings::initializeDocumentAPI] Setting up body, dom_manager_=%p", (void*)dom_manager_);
     JSValue body = JS_NewObject(ctx);
     if (dom_manager_) {
+        SDL_Log("[JSBindings::initializeDocumentAPI] Getting root...");
         auto root = dom_manager_->getRoot();
+        SDL_Log("[JSBindings::initializeDocumentAPI] root=%p", (void*)root.get());
         if (root) {
+            SDL_Log("[JSBindings::initializeDocumentAPI] Getting body elements...");
             auto body_nodes = dom_manager_->getElementsByTagName("body");
+            SDL_Log("[JSBindings::initializeDocumentAPI] body_nodes.size()=%zu", body_nodes.size());
             if (!body_nodes.empty()) {
+                SDL_Log("[JSBindings::initializeDocumentAPI] Creating JS element for body...");
                 body = createJSElement(ctx, body_nodes[0]);
+                SDL_Log("[JSBindings::initializeDocumentAPI] body JS element created");
             }
         }
     }
     JS_SetPropertyStr(ctx, document, "body", body);
+    SDL_Log("[JSBindings::initializeDocumentAPI] body set");
 
     JSValue html = JS_NewObject(ctx);
     if (dom_manager_) {
+        SDL_Log("[JSBindings::initializeDocumentAPI] Getting html elements...");
         auto html_nodes = dom_manager_->getElementsByTagName("html");
+        SDL_Log("[JSBindings::initializeDocumentAPI] html_nodes.size()=%zu", html_nodes.size());
         if (!html_nodes.empty()) {
+            SDL_Log("[JSBindings::initializeDocumentAPI] Creating JS element for html...");
             html = createJSElement(ctx, html_nodes[0]);
+            SDL_Log("[JSBindings::initializeDocumentAPI] html JS element created");
         }
     }
     JS_SetPropertyStr(ctx, document, "documentElement", html);
+    SDL_Log("[JSBindings::initializeDocumentAPI] documentElement set");
 
     // JS_SetPropertyStr takes ownership of 'document'
     JS_SetPropertyStr(ctx, global, "document", document);
     JS_FreeValue(ctx, global);
+    SDL_Log("[JSBindings::initializeDocumentAPI] Done");
 }
 
 void JSBindings::initializeElementAPI() {

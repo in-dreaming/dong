@@ -70,6 +70,21 @@
             "sourceLanguages": ["cpp", "c"]
         },
         {
+            "type": "cppvsdbg",
+            "request": "launch",
+            "name": "Debug interactive_demo (CMake/MSVC)",
+            "program": "${workspaceFolder}/dong/build-cmake/interactive_demo.exe",
+            "args": [],
+            "cwd": "${workspaceFolder}/dong/build-cmake",
+            "preLaunchTask": "cmake-build-debug",
+            "env": {
+                "DONG_DEBUG_LAYER_CACHE": "1",
+                "DONG_DEBUG_DRAW_BATCHES": "1"
+            },
+            "stopOnEntry": false,
+            "console": "integratedTerminal"
+        },
+        {
             "type": "lldb",
             "request": "launch",
             "name": "Debug complete_demo",

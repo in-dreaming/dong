@@ -1016,40 +1016,18 @@ float4 main(PSInput input) : SV_Target0 {
         discard;
     }
 
+    // 采样 MSDF 纹理
+    float3 msdf = msdfTexture.Sample(msdfSampler, input.uv).rgb;
+    float sd = median(msdf.r, msdf.g, msdf.b);
+    
     // 使用 fwidth 动态计算 screenPxRange
     float precomputedRange = input.params.x;
-    float unitRange = input.params.y;  // distance_range / msdf_texture_size
+    float unitRange = input.params.y;
     float screenPxRange = calcScreenPxRange(input.uv, precomputedRange, unitRange);
     
-    // 计算 UV 的偏导数，用于超采样
-    float2 dUVdx = ddx(input.uv);
-    float2 dUVdy = ddy(input.uv);
-    
-    // 检测是否在边缘区域（需要超采样）
-    float3 msdfCenter = msdfTexture.Sample(msdfSampler, input.uv).rgb;
-    float sdCenter = median(msdfCenter.r, msdfCenter.g, msdfCenter.b);
-    
-    // 如果距离边缘较近（0.3 < sd < 0.7），进行 4x 超采样以减少锯齿
-    float opacity;
-    if (sdCenter > 0.3 && sdCenter < 0.7) {
-        // 4x 超采样：在像素内的 4 个位置采样
-        float2 offset = float2(0.25, 0.25);
-        
-        float3 msdf1 = msdfTexture.Sample(msdfSampler, input.uv + dUVdx * offset.x + dUVdy * offset.y).rgb;
-        float3 msdf2 = msdfTexture.Sample(msdfSampler, input.uv - dUVdx * offset.x + dUVdy * offset.y).rgb;
-        float3 msdf3 = msdfTexture.Sample(msdfSampler, input.uv + dUVdx * offset.x - dUVdy * offset.y).rgb;
-        float3 msdf4 = msdfTexture.Sample(msdfSampler, input.uv - dUVdx * offset.x - dUVdy * offset.y).rgb;
-        
-        float op1 = calcMSDFOpacity(msdf1, screenPxRange);
-        float op2 = calcMSDFOpacity(msdf2, screenPxRange);
-        float op3 = calcMSDFOpacity(msdf3, screenPxRange);
-        float op4 = calcMSDFOpacity(msdf4, screenPxRange);
-        
-        opacity = (op1 + op2 + op3 + op4) * 0.25;
-    } else {
-        // 远离边缘，使用单次采样
-        opacity = calcMSDFOpacity(msdfCenter, screenPxRange);
-    }
+    // 计算 opacity
+    float screenPxDistance = screenPxRange * (sd - 0.5);
+    float opacity = smoothstep(-0.5, 0.5, screenPxDistance);
     
     // 输出颜色
     float4 result;
@@ -1174,15 +1152,80 @@ float4 main(PSInput input) : SV_Target0 {
     }
     ft_face_cache_.clear();
     
-    // 暂时强制开启 RenderTarget/图层合成调试日志，方便定位问题（后续再收回到环境变量开关）
-    debug_rt_enabled_ = true;
-    SDL_Log("GPUDriverSDL: RT debug logs FORCED ON (ignore DONG_DEBUG_RT for now)");
+    // RenderTarget/图层合成调试日志默认关闭，可通过环境变量 DONG_DEBUG_RT=1 开启
+    debug_rt_enabled_ = false;
 
     SDL_Log("GPUDriverSDL initialized successfully");
     return true;
 }
 
+void GPUDriverSDL::prepareResources(const GPUCommandList& commands) {
+    if (!gpu_device_ || !gpu_device_->isInitialized()) {
+        SDL_Log("[prepareResources] SKIP: gpu_device not ready");
+        return;
+    }
+
+    SDL_Log("[prepareResources] START frame=%llu commands=%zu", frame_index_ + 1, commands.commands.size());
+
+    // ========== 关键修复：在 beginFrame() 之前预处理所有 glyph ==========
+    // 
+    // 问题：在 Vulkan 中，当 render pass 正在进行时，不能上传纹理数据。
+    // 纹理上传需要 copy pass，而 copy pass 和 render pass 不能同时进行。
+    // 
+    // 解决方案：在 beginFrame() 之前预先遍历所有 DrawText 命令，
+    // 确保所有需要的 glyph 都已经上传到 atlas。这样纹理上传的 command buffer
+    // 会在主渲染 command buffer 之前完成。
+    //
+    for (const auto& cmd : commands.commands) {
+        if (cmd.type != GPUCommandType::DrawText) {
+            continue;
+        }
+        if (cmd.glyphs.empty()) {
+            continue;
+        }
+
+        // 确定字体路径
+        std::string font_path = !cmd.font_path.empty()
+            ? cmd.font_path
+            : resolveFontPath(cmd.font_family, cmd.font_weight);
+        if (font_path.empty()) {
+            continue;
+        }
+
+        // 选择合适的 glyph atlas tier
+        float font_size = cmd.font_size > 0.0f ? cmd.font_size : 16.0f;
+        GlyphAtlasTier* glyph_tier = selectGlyphAtlasTier(font_size);
+        if (!glyph_tier || !glyph_tier->atlas) {
+            continue;
+        }
+        GlyphAtlas* glyph_atlas = glyph_tier->atlas.get();
+        if (!glyph_atlas) {
+            continue;
+        }
+
+        // 预先添加所有 glyph 到 atlas（这会触发 MSDF 生成和纹理上传）
+        int glyph_count = 0;
+        for (const auto& glyph : cmd.glyphs) {
+            if (glyph.glyph_id == 0) {
+                continue;
+            }
+            // 使用 glyph 自己的 font_path（支持字体回退），如果为空则使用默认字体
+            // 这与 execute() 中的逻辑保持一致
+            std::string glyph_font_path = !glyph.font_path.empty() 
+                ? glyph.font_path 
+                : font_path;
+            // addGlyph 会检查缓存，如果已存在则直接返回
+            glyph_atlas->addGlyph(glyph.glyph_id, glyph_font_path);
+            glyph_count++;
+        }
+        SDL_Log("[prepareResources] DrawText: font='%s' size=%.1f glyphs=%d tier=%upx", 
+                font_path.c_str(), font_size, glyph_count, glyph_tier->bitmap_px);
+    }
+    SDL_Log("[prepareResources] END frame=%llu", frame_index_ + 1);
+}
+
 void GPUDriverSDL::beginFrame() {
+    SDL_Log("[GPUDriverSDL::beginFrame] START frame=%llu in_frame=%d", frame_index_ + 1, in_frame_ ? 1 : 0);
     if (in_frame_) {
         SDL_Log("GPUDriverSDL::beginFrame: already in frame");
         return;
@@ -1212,11 +1255,13 @@ void GPUDriverSDL::beginFrame() {
 }
 
 void GPUDriverSDL::endFrame() {
+    SDL_Log("[GPUDriverSDL::endFrame] START frame=%llu in_frame=%d", frame_index_, in_frame_ ? 1 : 0);
     if (!in_frame_ || !current_cmd_buf_ || !gpu_device_) {
         return;
     }
 
     gpu_device_->submitCommandBuffer(current_cmd_buf_);
+    SDL_Log("[GPUDriverSDL::endFrame] command buffer submitted");
     current_cmd_buf_ = nullptr;
     in_frame_ = false;
 }
@@ -1404,52 +1449,8 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
 
     SDL_GPUDevice* dev = gpu_device_->getHandle();
 
-    // ========== 关键修复：在 render pass 之前预处理所有 glyph ==========
-    // 
-    // 问题：在 Vulkan 中，当 render pass 正在进行时，不能上传纹理数据。
-    // 纹理上传需要 copy pass，而 copy pass 和 render pass 不能同时进行。
-    // 在 macOS/Metal 上这可能工作，但在 Windows/Vulkan 上会导致文字不显示。
-    //
-    // 解决方案：在开始 render pass 之前，预先遍历所有 DrawText 命令，
-    // 确保所有需要的 glyph 都已经上传到 atlas。
-    //
-    for (const auto& cmd : commands.commands) {
-        if (cmd.type != GPUCommandType::DrawText) {
-            continue;
-        }
-        if (cmd.glyphs.empty()) {
-            continue;
-        }
-
-        // 确定字体路径
-        std::string font_path = !cmd.font_path.empty()
-            ? cmd.font_path
-            : resolveFontPath(cmd.font_family, cmd.font_weight);
-        if (font_path.empty()) {
-            continue;
-        }
-
-        // 选择合适的 glyph atlas tier
-        float font_size = cmd.font_size > 0.0f ? cmd.font_size : 16.0f;
-        GlyphAtlasTier* glyph_tier = selectGlyphAtlasTier(font_size);
-        if (!glyph_tier || !glyph_tier->atlas) {
-            continue;
-        }
-        GlyphAtlas* glyph_atlas = glyph_tier->atlas.get();
-        if (!glyph_atlas) {
-            continue;
-        }
-
-        // 预先添加所有 glyph 到 atlas（这会触发 MSDF 生成和纹理上传）
-        for (const auto& glyph : cmd.glyphs) {
-            if (glyph.glyph_id == 0) {
-                continue;
-            }
-            // addGlyph 会检查缓存，如果已存在则直接返回
-            glyph_atlas->addGlyph(glyph.glyph_id, font_path);
-        }
-    }
-    // ========== 预处理结束 ==========
+    // 注意：glyph 预处理已移到 prepareResources()，必须在 beginFrame() 之前调用
+    
     SDL_GPUTexture* real_swapchain_texture = nullptr;  // 真正的 swapchain 纹理，用于最后 blit
     SDL_GPUTexture* swapchain_texture = nullptr;       // 实际用于渲染的纹理（可能是中间纹理）
     Uint32 w = 0;
@@ -1476,7 +1477,10 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             return;
         }
         if (!real_swapchain_texture) {
-            SDL_Log("GPUDriverSDL::execute: swapchain texture is null (frame=%llu)", frame_index_);
+            // Swapchain texture is null - this is normal when window is minimized or
+            // during certain vsync situations. Skip rendering this frame but still
+            // submit the command buffer to keep the GPU pipeline flowing.
+            SDL_Log("[GPUDriverSDL::execute] swapchain texture is null, skipping frame");
             return;
         }
         
@@ -1740,9 +1744,12 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                     frame_index_, static_cast<int>(cmd.type), skip_draw_depth);
         }
         
-        // 当在非脏隔离图层内部时，跳过除 Begin/EndIsolatedLayer 以外的命令
+        // 当在非脏隔离图层内部时，跳过除 Begin/EndIsolatedLayer 和 BeginPass/EndPass 以外的命令
+        // 注意：BeginPass/EndPass 必须始终执行，否则会导致 blit 操作被跳过
         if (skip_draw_depth > 0 && cmd.type != GPUCommandType::BeginIsolatedLayer &&
-            cmd.type != GPUCommandType::EndIsolatedLayer) {
+            cmd.type != GPUCommandType::EndIsolatedLayer &&
+            cmd.type != GPUCommandType::BeginPass &&
+            cmd.type != GPUCommandType::EndPass) {
             if (debug_rt_enabled_) {
                 SDL_Log("[GPUDriverSDL::execute] frame=%llu skip cmd type=%d due_to_non_dirty_layer depth=%d",
                         frame_index_, static_cast<int>(cmd.type), skip_draw_depth);
@@ -1773,8 +1780,8 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             render_target_stack.push_back(RenderTargetState{swapchain_texture, w, h, offscreen_target_ == nullptr});
 
             if (debug_rt_enabled_) {
-                SDL_Log("[GPUDriverSDL::execute] BeginPass frame=%llu swapchain_texture=%p is_swapchain=%d",
-                        frame_index_, (void*)swapchain_texture, offscreen_target_ == nullptr ? 1 : 0);
+                SDL_Log("[GPUDriverSDL::execute] BeginPass frame=%llu swapchain_texture=%p is_swapchain=%d viewport=%ux%u",
+                        frame_index_, (void*)swapchain_texture, offscreen_target_ == nullptr ? 1 : 0, w, h);
             }
 
             color_target = {};
@@ -1827,8 +1834,8 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
         }
         case GPUCommandType::EndPass:
             if (debug_rt_enabled_) {
-                SDL_Log("[GPUDriverSDL::execute] frame=%llu EndPass: pass=%p offscreen=%d",
-                        frame_index_, (void*)pass, offscreen_target_ != nullptr ? 1 : 0);
+                SDL_Log("[GPUDriverSDL::execute] frame=%llu EndPass: pass=%p offscreen=%d use_intermediate=%d",
+                        frame_index_, (void*)pass, offscreen_target_ != nullptr ? 1 : 0, use_intermediate ? 1 : 0);
             }
             if (pass) {
                 SDL_EndGPURenderPass(pass);
@@ -1963,6 +1970,8 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 layer_state.texture = cache_entry->texture;
                 layer_state.width = cache_entry->width;
                 layer_state.height = cache_entry->height;
+                // 复用缓存时，标记为非脏，这样 EndIsolatedLayer 会走缓存合成路径
+                layer_state.dirty = false;
                 isolated_layer_stack.push_back(layer_state);
                 ++skip_draw_depth;
                 break;
@@ -2343,10 +2352,6 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
 
             write_viewport(u.viewport);
             
-            SDL_Log("[RECT] rect=(%.2f,%.2f,%.2f,%.2f) color=(%.3f,%.3f,%.3f,%.3f) viewport=(%.1f,%.1f)",
-                    cmd.rect.x, cmd.rect.y, cmd.rect.width, cmd.rect.height,
-                    cmd.color.r, cmd.color.g, cmd.color.b, cmd.color.a,
-                    u.viewport[0], u.viewport[1]);
             fill_clip_uniform(u.clip);
 
             SDL_PushGPUVertexUniformData(current_cmd_buf_, 0, &u, sizeof(u));
@@ -2381,11 +2386,6 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             u.radius[1] = cmd.radius;
             u.radius[2] = cmd.radius;
             u.radius[3] = cmd.radius;
-
-            SDL_Log("[RRECT] rect=(%.2f,%.2f,%.2f,%.2f) radius=%.2f color=(%.3f,%.3f,%.3f,%.3f)",
-                    cmd.rect.x, cmd.rect.y, cmd.rect.width, cmd.rect.height,
-                    cmd.radius,
-                    cmd.color.r, cmd.color.g, cmd.color.b, cmd.color.a);
 
             write_viewport(u.viewport);
 
@@ -2524,11 +2524,13 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
         }
         case GPUCommandType::DrawText: {
             if (!pass || !text_pipeline_ || glyph_atlas_tiers_.empty() || cmd.glyphs.empty()) {
+                SDL_Log("[DrawText] EARLY EXIT: pass=%p text_pipeline=%p tiers_empty=%d glyphs_empty=%d",
+                        (void*)pass, (void*)text_pipeline_, glyph_atlas_tiers_.empty() ? 1 : 0, cmd.glyphs.empty() ? 1 : 0);
                 break;
             }
 
-            SDL_Log("[DrawText] glyphs_count=%zu baseline=(%.2f,%.2f) font_size=%.1f",
-                    cmd.glyphs.size(), cmd.baseline_x, cmd.baseline_y, cmd.font_size);
+            SDL_Log("[DrawText] frame=%llu glyphs_count=%zu baseline=(%.2f,%.2f) font_size=%.1f",
+                    frame_index_, cmd.glyphs.size(), cmd.baseline_x, cmd.baseline_y, cmd.font_size);
 
             // 默认字体路径（用于没有指定 font_path 的 glyph）
             std::string default_font_path = !cmd.font_path.empty()
@@ -2543,7 +2545,7 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
 
             GlyphAtlasTier* glyph_tier = selectGlyphAtlasTier(font_size);
             if (!glyph_tier || !glyph_tier->atlas) {
-                SDL_Log("GPUDriverSDL: no glyph atlas tier available");
+                SDL_Log("GPUDriverSDL: no glyph atlas tier available for font_size=%.1f", font_size);
                 break;
             }
             GlyphAtlas* glyph_atlas = glyph_tier->atlas.get();
@@ -2551,6 +2553,9 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 SDL_Log("GPUDriverSDL: glyph atlas unavailable");
                 break;
             }
+
+            SDL_Log("[DrawText] using tier=%upx atlas=%p font=%s", 
+                    glyph_tier->bitmap_px, (void*)glyph_atlas, default_font_path.c_str());
 
             const float atlas_range = glyph_tier->distance_range;
             const float gamma_correction = -2.2f;  // sRGB gamma 值
@@ -2596,7 +2601,6 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             for (size_t glyph_idx = 0; glyph_idx < cmd.glyphs.size(); ++glyph_idx) {
                 const auto& glyph = cmd.glyphs[glyph_idx];
                 if (glyph.glyph_id == 0) {
-                    SDL_Log("[DrawText] SKIP glyph[%zu]: glyph_id=0 (space)", glyph_idx);
                     continue;
                 }
 
@@ -2613,14 +2617,15 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
 
                 const AtlasEntry* entry = glyph_atlas->addGlyph(glyph.glyph_id, glyph_font_path);
                 if (!entry) {
-                    SDL_Log("[DrawText] SKIP glyph[%zu]: glyph_id=%u entry=null", glyph_idx, glyph.glyph_id);
+                    SDL_Log("[DrawText] SKIP glyph[%zu]: glyph_id=%u no_entry (font=%s)", 
+                            glyph_idx, glyph.glyph_id, glyph_font_path.c_str());
                     continue;
                 }
 
                 if (entry->metrics.width_units <= 0.0f || entry->metrics.height_units <= 0.0f ||
                     entry->u1 <= entry->u0 || entry->v1 <= entry->v0) {
-                    SDL_Log("[DrawText] SKIP glyph[%zu]: glyph_id=%u invalid_metrics (w=%.1f h=%.1f u0=%.4f u1=%.4f v0=%.4f v1=%.4f)",
-                            glyph_idx, glyph.glyph_id,
+                    SDL_Log("[DrawText] SKIP glyph[%zu]: glyph_id=%u invalid_metrics (w=%.1f h=%.1f u0=%.4f u1=%.4f v0=%.4f v1=%.4f)", 
+                            glyph_idx, glyph.glyph_id, 
                             entry->metrics.width_units, entry->metrics.height_units,
                             entry->u0, entry->u1, entry->v0, entry->v1);
                     continue;
@@ -2629,10 +2634,6 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 const float msdf_scale = (entry->metrics.msdf_scale > 0.0f)
                     ? entry->metrics.msdf_scale
                     : 1.0f;
-                
-                SDL_Log("[DrawText] glyph[%zu]: glyph_id=%u msdf_scale=%.6f pixel_scale=%.6f entry_uv=(%.4f,%.4f,%.4f,%.4f)",
-                        glyph_idx, glyph.glyph_id, msdf_scale, glyph_pixel_scale,
-                        entry->u0, entry->v0, entry->u1, entry->v1);
                 
                 // ========== MSDF 纹理渲染方案 ==========
                 //
@@ -2659,6 +2660,8 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 const float glyph_h = msdf_size * render_scale;
 
                 if (glyph_w <= 0.0f || glyph_h <= 0.0f) {
+                    SDL_Log("[DrawText] SKIP glyph[%zu]: glyph_id=%u zero_size (w=%.1f h=%.1f render_scale=%.4f msdf_size=%.0f)",
+                            glyph_idx, glyph.glyph_id, glyph_w, glyph_h, render_scale, msdf_size);
                     continue;
                 }
 
@@ -2740,7 +2743,7 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 inst.uv_rect[2] = entry->u1;
                 inst.uv_rect[3] = entry->v1;
 
-                const bool debug_text = false;
+                const bool debug_text = true;
 
                 if (debug_text)
                 SDL_Log("[TEXT] glyph=%u page=%u pen=(%.2f,%.2f) rect=(%.2f,%.2f,%.2f,%.2f) bounds=(%.1f,%.1f,%.1f,%.1f) msdf_size=%.0f render_scale=%.4f range_px=%.2f",
@@ -2779,14 +2782,16 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 // 用于着色器中 fwidth 动态计算 screenPxRange
                 const float unit_range = atlas_range / msdf_size;
 
-                if (debug_text)
-                SDL_Log("[TEXT] glyph=%u screenPxRange=%.2f unitRange=%.4f (atlas_range=%.1f, msdf_size=%.0f, glyph_pixel_scale=%.6f, msdf_scale=%.6f)",
-                        glyph.glyph_id, px_range_screen, unit_range, atlas_range, msdf_size, glyph_pixel_scale, msdf_scale);
-
                 inst.params[0] = px_range_screen;
                 inst.params[1] = unit_range;  // 传递 unitRange 给着色器用于 fwidth 计算
                 inst.params[2] = msdf_subpixel_enabled_ ? 1.0f : 0.0f;
-                inst.params[3] = gamma_correction;
+                inst.params[3] = gamma_correction;  // 正常模式
+
+                if (debug_text)
+                SDL_Log("[TEXT] glyph=%u screenPxRange=%.2f unitRange=%.4f params=(%.2f,%.4f,%.1f,%.2f) uv=(%.4f,%.4f,%.4f,%.4f)",
+                        glyph.glyph_id, px_range_screen, unit_range,
+                        inst.params[0], inst.params[1], inst.params[2], inst.params[3],
+                        inst.uv_rect[0], inst.uv_rect[1], inst.uv_rect[2], inst.uv_rect[3]);
 
                 PreparedGlyph pg{};
                 pg.instance = inst;
@@ -2794,24 +2799,22 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 prepared.push_back(pg);
             }
 
+            SDL_Log("[DrawText] frame=%llu prepared=%zu glyphs for rendering", frame_index_, prepared.size());
+            
             if (prepared.empty()) {
+                SDL_Log("[DrawText] frame=%llu ABORT: no glyphs prepared!", frame_index_);
                 break;
             }
 
             // 第二步：按 atlas_page 分批绘制，每个批次绑定对应页纹理
             uint32_t page_count = glyph_atlas->getPageCount();
-            SDL_Log("[TEXT RENDER] tier=%upx atlas=%p page_count=%u prepared_glyphs=%zu",
-                    glyph_tier->bitmap_px, (void*)glyph_atlas, page_count, prepared.size());
+            SDL_Log("[DrawText] frame=%llu rendering %zu glyphs across %u pages", frame_index_, prepared.size(), page_count);
             
             for (uint32_t page_index = 0; page_index < page_count; ++page_index) {
                 SDL_GPUTexture* atlas_texture = glyph_atlas->getAtlasTextureForPage(page_index);
                 if (!atlas_texture) {
-                    SDL_Log("[TEXT RENDER] page=%u texture=NULL (skipped)", page_index);
                     continue;
                 }
-
-                SDL_Log("[TEXT RENDER] binding page=%u texture=%p sampler=%p",
-                        page_index, (void*)atlas_texture, (void*)text_sampler_);
 
                 SDL_GPUTextureSamplerBinding binding{};
                 binding.texture = atlas_texture;
@@ -2977,8 +2980,8 @@ std::unique_ptr<GPUDriver> CreateGPUDriver(
             }
         }
         if (const char* env_layer_cache = std::getenv("DONG_DEBUG_LAYER_CACHE")) {
-            if (env_layer_cache[0] == '1') {
-                driver->setDebugLogLayerCache(true);
+            if (env_layer_cache[0] == '0') {
+                driver->setDebugLogLayerCache(false);
             }
         }
         if (const char* env_subpixel = std::getenv("DONG_MSDF_SUBPIXEL")) {
@@ -2989,8 +2992,8 @@ std::unique_ptr<GPUDriver> CreateGPUDriver(
         // 可选启用图层缓存（默认关闭，避免影响渲染正确性）。
         // 通过环境变量 DONG_LAYER_CACHE=1 显式开启。
         if (const char* env_layer_cache_enable = std::getenv("DONG_LAYER_CACHE")) {
-            if (env_layer_cache_enable[0] == '1') {
-                driver->setLayerCacheEnabled(true);
+            if (env_layer_cache_enable[0] == '0') {
+                driver->setLayerCacheEnabled(false);
             }
         }
 

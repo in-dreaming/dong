@@ -5,6 +5,7 @@
 #include <iostream>
 #include <algorithm>
 #include <functional>
+#include <cmath>
 #include <SDL3/SDL_log.h>
 
 #include "../render/text_shaper.hpp"
