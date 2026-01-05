@@ -434,15 +434,18 @@ void Engine::calculateLayout(dom::DOMNodePtr root, float width, float height) {
     YGNodeStyleSetWidth(yoga_root, width);
     YGNodeStyleSetHeight(yoga_root, height);
 
-
     // Calculate layout
     YGNodeCalculateLayout(yoga_root, width, height, YGDirectionLTR);
 
     // Extract layout info back to cache (recursively). Convert Yoga's relative
     // positions into absolute coordinates so the painter can use them directly.
-    std::function<void(dom::DOMNodePtr, YGNode*, float, float)> extractLayoutRecursive =
+    // 
+    // WORKAROUND: Yoga sometimes calculates huge height values (> 100000) for elements
+    // that are siblings of scroll containers. This appears to be a Yoga bug related to
+    // overflow handling. We detect and correct these values during extraction.
+    std::function<void(dom::DOMNodePtr, YGNode*, float, float, float)> extractLayoutRecursive =
         [this, &extractLayoutRecursive](dom::DOMNodePtr dom_node, YGNode* yoga_node,
-                                        float parent_x, float parent_y) {
+                                        float parent_x, float parent_y, float cumulative_sibling_height) {
             if (!dom_node || !yoga_node) return;
 
             auto& node_layout = layout_cache[dom_node.get()];
@@ -462,6 +465,33 @@ void Engine::calculateLayout(dom::DOMNodePtr root, float width, float height) {
             float new_y = parent_y + top;
             float new_width = width;
             float new_height = height;
+            
+            // Workaround: detect and fix Yoga layout calculation bugs
+            // Sometimes Yoga returns huge values (> 100000) for height, which indicates a bug
+            // related to scroll containers. We detect and correct these values.
+            const auto& style = dom_node->getComputedStyle();
+            
+            if (new_height > 100000.0f || !std::isfinite(new_height)) {
+                // Try to use the style height if available
+                if (style.height.isPixel()) {
+                    new_height = style.height.value;
+                } else {
+                    // Fallback to a reasonable default based on content
+                    for (const auto& child : dom_node->getChildren()) {
+                        if (child && child->getType() == dom::DOMNode::NodeType::TEXT) {
+                            float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
+                            new_height = font_size * 1.2f;
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            // Fix huge top values by using cumulative sibling height tracking
+            if (top > 100000.0f || !std::isfinite(top)) {
+                // Use the cumulative height from previous siblings
+                new_y = parent_y + cumulative_sibling_height;
+            }
 
             // Check if layout changed: position or size differs
             bool layout_changed = is_new_layout || 
@@ -475,6 +505,10 @@ void Engine::calculateLayout(dom::DOMNodePtr root, float width, float height) {
             node_layout->width = new_width;
             node_layout->height = new_height;
             node_layout->layout_recalculated = true;
+            
+            // Debug: log button-row and button layout
+            const std::string debug_class = dom_node->getAttribute("class");
+            const std::string tag = dom_node->getTagName();
 
             // Keep legacy fields and new layout struct in sync (absolute coords)
             node_layout->layout.position[0] = node_layout->x;
@@ -488,8 +522,14 @@ void Engine::calculateLayout(dom::DOMNodePtr root, float width, float height) {
             }
 
             // Recursively extract child layouts. Only ELEMENT nodes get Yoga children.
+            // Track cumulative height of siblings for position correction
             uint32_t child_count = YGNodeGetChildCount(yoga_node);
             uint32_t yoga_child_index = 0;
+            float child_cumulative_height = 0.0f;
+            
+            // Get parent padding for child positioning
+            float parent_padding_top = style.padding_top.isPixel() ? style.padding_top.value : 0.0f;
+            
             for (const auto& child_dom : dom_node->getChildren()) {
                 if (!child_dom || child_dom->getType() != dom::DOMNode::NodeType::ELEMENT) {
                     continue;
@@ -499,14 +539,26 @@ void Engine::calculateLayout(dom::DOMNodePtr root, float width, float height) {
                 }
                 YGNode* child_yoga = YGNodeGetChild(yoga_node, yoga_child_index);
                 if (child_yoga) {
+                    // Pass cumulative sibling height for position correction
                     extractLayoutRecursive(child_dom, child_yoga,
-                                            node_layout->x, node_layout->y);
+                                            node_layout->x, node_layout->y,
+                                            parent_padding_top + child_cumulative_height);
+                    
+                    // Get the child's corrected height for cumulative tracking
+                    auto child_layout = layout_cache.find(child_dom.get());
+                    if (child_layout != layout_cache.end() && child_layout->second) {
+                        float child_h = child_layout->second->height;
+                        // Also add margin-bottom if present
+                        const auto& child_style = child_dom->getComputedStyle();
+                        float margin_bottom = child_style.margin_bottom.isPixel() ? child_style.margin_bottom.value : 0.0f;
+                        child_cumulative_height += child_h + margin_bottom;
+                    }
                 }
                 ++yoga_child_index;
             }
         };
 
-    extractLayoutRecursive(layout_root_dom, yoga_root, 0.0f, 0.0f);
+    extractLayoutRecursive(layout_root_dom, yoga_root, 0.0f, 0.0f, 0.0f);
 
     // After Yoga layout, apply Block Formatting Context adjustments:
     // - margin: auto horizontal centering
@@ -623,9 +675,7 @@ YGNode* Engine::createYogaNode(dom::DOMNodePtr dom_node) {
 void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
     if (!dom_node || !yoga_node) return;
 
-
     const auto& style = dom_node->getComputedStyle();
-
     const std::string& tag = dom_node->getTagName();
 
     mapComputedStylesToYoga(style, yoga_node);
@@ -684,6 +734,7 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
          tag == "div") &&
         style.height.isAuto()) {
         float intrinsic_h = computeIntrinsicTextHeight(dom_node);
+        
         if (intrinsic_h > 0.0f && intrinsic_h < 10000.0f) {
             YGNodeStyleSetMinHeight(yoga_node, intrinsic_h);
             // Also set the height explicitly to avoid Yoga calculating a huge value
@@ -759,6 +810,16 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
     if (style.gap > 0.0f) {
         YGNodeStyleSetGap(yoga_node, YGGutterAll, style.gap);
     }
+    
+    // Set overflow for scroll containers
+    // When overflow is hidden/scroll/auto, Yoga should not expand to fit content
+    if (style.overflow == "scroll") {
+        YGNodeStyleSetOverflow(yoga_node, YGOverflowScroll);
+    } else if (style.overflow == "hidden" || style.overflow == "auto") {
+        YGNodeStyleSetOverflow(yoga_node, YGOverflowHidden);
+    } else {
+        YGNodeStyleSetOverflow(yoga_node, YGOverflowVisible);
+    }
 
     // Set position type and offsets (relative/absolute)
     if (style.position == "absolute") {
@@ -825,6 +886,11 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
         }
         YGNodeStyleSetHeight(yoga_node, height_for_yoga);
         has_explicit_height = true;
+        
+        // For scroll/overflow containers, also set max-height to prevent Yoga from expanding
+        if (style.overflow == "scroll" || style.overflow == "hidden" || style.overflow == "auto") {
+            YGNodeStyleSetMaxHeight(yoga_node, height_for_yoga);
+        }
     } else if (style.height.isPercent()) {
         YGNodeStyleSetHeightPercent(yoga_node, style.height.value);
         has_explicit_height = true;
@@ -931,6 +997,13 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
 
     YGNodeStyleSetFlexGrow(yoga_node, flex_grow);
     YGNodeStyleSetFlexShrink(yoga_node, flex_shrink);
+    
+    // For flex containers without explicit height, prevent shrinking to 0
+    // by setting flex-shrink to 0 when they are children of column flex containers
+    if (style.layout_mode == dom::LayoutMode::Flex && style.height.isAuto()) {
+        YGNodeStyleSetFlexShrink(yoga_node, 0.0f);
+    }
+    
     if (flex_basis.isPixel()) {
         YGNodeStyleSetFlexBasis(yoga_node, flex_basis.value);
     } else if (flex_basis.isPercent()) {
@@ -938,7 +1011,12 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
     } else {
         // For auto flex-basis in block layout, set to 0 to prevent Yoga from
         // using content-based sizing which can cause incorrect height calculations
-        if (style.layout_mode == dom::LayoutMode::Block) {
+        // BUT: only do this if the element has explicit height, otherwise let Yoga
+        // calculate content-based height
+        // ALSO: don't do this for flex containers, they need auto flex-basis
+        if (style.layout_mode == dom::LayoutMode::Block && 
+            style.display != "flex" &&
+            (style.height.isPixel() || style.height.isPercent())) {
             YGNodeStyleSetFlexBasis(yoga_node, 0.0f);
         } else {
             YGNodeStyleSetFlexBasisAuto(yoga_node);

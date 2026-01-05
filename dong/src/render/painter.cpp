@@ -509,7 +509,9 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
 
         // 当有 inline 子元素时，需要按顺序处理每个子节点，避免文本重叠
         // 使用容器层完全接管混合内容的布局和绘制
-        if (has_text_child && has_inline_element_child && tag_prefers_text) {
+        // 注意：如果容器是 flex 布局，不应该使用混合内容路径，因为 flex 会正确计算子元素位置
+        const bool is_flex_container = (style.display == "flex" || style.display == "inline-flex");
+        if (has_text_child && has_inline_element_child && tag_prefers_text && !is_flex_container) {
             if (debug_class.find("overlay-row") != std::string::npos) {
                 SDL_Log("[Painter] overlay-row MIXED PATH raw_text='%s'", raw_text.c_str());
             }
@@ -656,11 +658,11 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                                 builder.addGlyphRun(std::move(glyph_run));
                                 cumulative_x_offset += text_width_px + child_pad_left + child_pad_right;
                             }
+                            
+                            // 只有当文本内容被成功绘制时，才标记该 inline 元素已经在容器层绘制
+                            // 对于没有文本内容的元素（如 input），让它通过正常递归来绘制
+                            child->setAttribute("__inline_rendered__", "1");
                         }
-                        
-                        // 标记该 inline 元素已经在容器层绘制，跳过递归绘制
-                        // 通过设置一个临时标志（使用 DOM attribute）
-                        child->setAttribute("__inline_rendered__", "1");
                     }
                 } else if (child->getType() == dom::DOMNode::NodeType::TEXT) {
                     std::string text_content = child->getTextContent();
