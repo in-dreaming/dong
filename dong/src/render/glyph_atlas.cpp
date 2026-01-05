@@ -1,6 +1,7 @@
 #include "glyph_atlas.hpp"
 #include "gpu_device.hpp"
 #include "font_metrics.hpp"
+#include "../core/log.h"
 #include <SDL3/SDL_log.h>
 #include <cstring>
 #include <cstdio>
@@ -146,7 +147,7 @@ bool GlyphAtlas::createPage() {
     page.last_used = 0;
 
     pages_.push_back(page);
-    SDL_Log("GlyphAtlas: created page %u (%u x %u), initialized to black", page.page_index, atlas_width_, atlas_height_);
+    DONG_LOG_DEBUG("GlyphAtlas: created page %u (%u x %u), initialized to black", page.page_index, atlas_width_, atlas_height_);
     return true;
 }
 
@@ -262,7 +263,7 @@ GlyphAtlas::AtlasPage* GlyphAtlas::evictAndRecyclePage() {
     victim->glyph_count = 0;
     victim->last_used = 0;
 
-    SDL_Log("GlyphAtlas: evicted and recycled page %u", victim->page_index);
+    DONG_LOG_DEBUG("GlyphAtlas: evicted and recycled page %u", victim->page_index);
     return victim;
 }
 
@@ -327,12 +328,13 @@ bool GlyphAtlas::initialize(uint32_t width,
     pages_.clear();
     usage_counter_ = 0;
 
+
     if (!createPage()) {
-        SDL_Log("GlyphAtlas::initialize: failed to create initial page");
+        DONG_LOG_ERROR("GlyphAtlas::initialize: failed to create initial page");
         return false;
     }
 
-    SDL_Log("GlyphAtlas initialized: %u x %u, max_pages=%u", atlas_width_, atlas_height_, max_pages_);
+    DONG_LOG_INFO("GlyphAtlas initialized: %u x %u, max_pages=%u", atlas_width_, atlas_height_, max_pages_);
     return true;
 }
 

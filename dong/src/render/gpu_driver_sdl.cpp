@@ -4,6 +4,7 @@
 #include "resource_manager.hpp"
 #include "glyph_atlas.hpp"
 #include "font_resolver.hpp"
+#include "../core/log.h"
 #include <SDL3/SDL_log.h>
 #include <SDL3/SDL_video.h>
 #include <vector>
@@ -1165,7 +1166,7 @@ void GPUDriverSDL::prepareResources(const GPUCommandList& commands) {
         return;
     }
 
-    SDL_Log("[prepareResources] START frame=%llu commands=%zu", frame_index_ + 1, commands.commands.size());
+    DONG_LOG_VERBOSE("[prepareResources] START frame=%llu commands=%zu", frame_index_ + 1, commands.commands.size());
 
     // ========== 关键修复：在 beginFrame() 之前预处理所有 glyph ==========
     // 
@@ -1218,16 +1219,16 @@ void GPUDriverSDL::prepareResources(const GPUCommandList& commands) {
             glyph_atlas->addGlyph(glyph.glyph_id, glyph_font_path);
             glyph_count++;
         }
-        SDL_Log("[prepareResources] DrawText: font='%s' size=%.1f glyphs=%d tier=%upx", 
+        DONG_LOG_DEBUG("[prepareResources] DrawText: font='%s' size=%.1f glyphs=%d tier=%upx", 
                 font_path.c_str(), font_size, glyph_count, glyph_tier->bitmap_px);
     }
-    SDL_Log("[prepareResources] END frame=%llu", frame_index_ + 1);
+    DONG_LOG_DEBUG("[prepareResources] END frame=%llu", frame_index_ + 1);
 }
 
 void GPUDriverSDL::beginFrame() {
-    SDL_Log("[GPUDriverSDL::beginFrame] START frame=%llu in_frame=%d", frame_index_ + 1, in_frame_ ? 1 : 0);
+    DONG_LOG_DEBUG("[GPUDriverSDL::beginFrame] START frame=%llu in_frame=%d", frame_index_ + 1, in_frame_ ? 1 : 0);
     if (in_frame_) {
-        SDL_Log("GPUDriverSDL::beginFrame: already in frame");
+        DONG_LOG_WARN("GPUDriverSDL::beginFrame: already in frame");
         return;
     }
     if (!gpu_device_ || !gpu_device_->isInitialized()) {
@@ -1255,30 +1256,30 @@ void GPUDriverSDL::beginFrame() {
 }
 
 void GPUDriverSDL::endFrame() {
-    SDL_Log("[GPUDriverSDL::endFrame] START frame=%llu in_frame=%d", frame_index_, in_frame_ ? 1 : 0);
+    DONG_LOG_DEBUG("[GPUDriverSDL::endFrame] START frame=%llu in_frame=%d", frame_index_, in_frame_ ? 1 : 0);
     if (!in_frame_ || !current_cmd_buf_ || !gpu_device_) {
         return;
     }
 
     gpu_device_->submitCommandBuffer(current_cmd_buf_);
-    SDL_Log("[GPUDriverSDL::endFrame] command buffer submitted");
+    DONG_LOG_DEBUG("[GPUDriverSDL::endFrame] command buffer submitted");
     current_cmd_buf_ = nullptr;
     in_frame_ = false;
 }
 
 void GPUDriverSDL::beginFrameOffscreen(SDL_GPUTexture* target, uint32_t width, uint32_t height) {
     if (in_frame_) {
-        SDL_Log("GPUDriverSDL::beginFrameOffscreen: already in frame");
+        DONG_LOG_WARN("GPUDriverSDL::beginFrameOffscreen: already in frame");
         return;
     }
     if (!gpu_device_ || !gpu_device_->isInitialized() || !target) {
-        SDL_Log("GPUDriverSDL::beginFrameOffscreen: invalid parameters");
+        DONG_LOG_ERROR("GPUDriverSDL::beginFrameOffscreen: invalid parameters");
         return;
     }
 
     current_cmd_buf_ = gpu_device_->acquireCommandBuffer();
     if (!current_cmd_buf_) {
-        SDL_Log("GPUDriverSDL::beginFrameOffscreen: failed to acquire command buffer");
+        DONG_LOG_ERROR("GPUDriverSDL::beginFrameOffscreen: failed to acquire command buffer");
         return;
     }
 
@@ -1290,7 +1291,7 @@ void GPUDriverSDL::beginFrameOffscreen(SDL_GPUTexture* target, uint32_t width, u
     }
 
     if (debug_rt_enabled_) {
-        SDL_Log("[GPUDriverSDL::beginFrameOffscreen] frame=%llu target=%p size=%ux%u", frame_index_, (void*)target, width, height);
+        DONG_LOG_DEBUG("[GPUDriverSDL::beginFrameOffscreen] frame=%llu target=%p size=%ux%u", frame_index_, (void*)target, width, height);
     }
 
     // 保存纹理尺寸
@@ -1306,15 +1307,15 @@ void GPUDriverSDL::beginFrameOffscreen(SDL_GPUTexture* target, uint32_t width, u
 
 void GPUDriverSDL::endFrameOffscreen() {
     if (!in_frame_ || !current_cmd_buf_ || !gpu_device_) {
-        SDL_Log("[GPUDriverSDL::endFrameOffscreen] Invalid state: in_frame=%d cmd_buf=%p gpu_device=%p",
+        DONG_LOG_WARN("[GPUDriverSDL::endFrameOffscreen] Invalid state: in_frame=%d cmd_buf=%p gpu_device=%p",
                 in_frame_, (void*)current_cmd_buf_, (void*)gpu_device_);
         return;
     }
 
-    SDL_Log("[GPUDriverSDL::endFrameOffscreen] Submitting command buffer %p", (void*)current_cmd_buf_);
+    DONG_LOG_DEBUG("[GPUDriverSDL::endFrameOffscreen] Submitting command buffer %p", (void*)current_cmd_buf_);
     gpu_device_->submitCommandBuffer(current_cmd_buf_);
     SDL_WaitForGPUIdle(gpu_device_->getHandle());  // 等待离屏渲染完成
-    SDL_Log("[GPUDriverSDL::endFrameOffscreen] GPU idle, rendering complete");
+    DONG_LOG_DEBUG("[GPUDriverSDL::endFrameOffscreen] GPU idle, rendering complete");
     current_cmd_buf_ = nullptr;
     offscreen_target_ = nullptr;
     offscreen_width_ = 0;
@@ -2524,12 +2525,12 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
         }
         case GPUCommandType::DrawText: {
             if (!pass || !text_pipeline_ || glyph_atlas_tiers_.empty() || cmd.glyphs.empty()) {
-                SDL_Log("[DrawText] EARLY EXIT: pass=%p text_pipeline=%p tiers_empty=%d glyphs_empty=%d",
+                DONG_LOG_WARN("[DrawText] EARLY EXIT: pass=%p text_pipeline=%p tiers_empty=%d glyphs_empty=%d",
                         (void*)pass, (void*)text_pipeline_, glyph_atlas_tiers_.empty() ? 1 : 0, cmd.glyphs.empty() ? 1 : 0);
                 break;
             }
 
-            SDL_Log("[DrawText] frame=%llu glyphs_count=%zu baseline=(%.2f,%.2f) font_size=%.1f",
+            DONG_LOG_DEBUG("[DrawText] frame=%llu glyphs_count=%zu baseline=(%.2f,%.2f) font_size=%.1f",
                     frame_index_, cmd.glyphs.size(), cmd.baseline_x, cmd.baseline_y, cmd.font_size);
 
             // 默认字体路径（用于没有指定 font_path 的 glyph）
@@ -2537,7 +2538,7 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 ? cmd.font_path
                 : resolveFontPath(cmd.font_family, cmd.font_weight);
             if (default_font_path.empty()) {
-                SDL_Log("GPUDriverSDL: no valid font found for family '%s'", cmd.font_family.c_str());
+                DONG_LOG_WARN("GPUDriverSDL: no valid font found for family '%s'", cmd.font_family.c_str());
                 break;
             }
 
@@ -2545,16 +2546,16 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
 
             GlyphAtlasTier* glyph_tier = selectGlyphAtlasTier(font_size);
             if (!glyph_tier || !glyph_tier->atlas) {
-                SDL_Log("GPUDriverSDL: no glyph atlas tier available for font_size=%.1f", font_size);
+                DONG_LOG_WARN("GPUDriverSDL: no glyph atlas tier available for font_size=%.1f", font_size);
                 break;
             }
             GlyphAtlas* glyph_atlas = glyph_tier->atlas.get();
             if (!glyph_atlas || !text_sampler_) {
-                SDL_Log("GPUDriverSDL: glyph atlas unavailable");
+                DONG_LOG_WARN("GPUDriverSDL: glyph atlas unavailable");
                 break;
             }
 
-            SDL_Log("[DrawText] using tier=%upx atlas=%p font=%s", 
+            DONG_LOG_DEBUG("[DrawText] using tier=%upx atlas=%p font=%s", 
                     glyph_tier->bitmap_px, (void*)glyph_atlas, default_font_path.c_str());
 
             const float atlas_range = glyph_tier->distance_range;
@@ -2617,14 +2618,14 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
 
                 const AtlasEntry* entry = glyph_atlas->addGlyph(glyph.glyph_id, glyph_font_path);
                 if (!entry) {
-                    SDL_Log("[DrawText] SKIP glyph[%zu]: glyph_id=%u no_entry (font=%s)", 
+                    DONG_LOG_VERBOSE("[DrawText] SKIP glyph[%zu]: glyph_id=%u no_entry (font=%s)", 
                             glyph_idx, glyph.glyph_id, glyph_font_path.c_str());
                     continue;
                 }
 
                 if (entry->metrics.width_units <= 0.0f || entry->metrics.height_units <= 0.0f ||
                     entry->u1 <= entry->u0 || entry->v1 <= entry->v0) {
-                    SDL_Log("[DrawText] SKIP glyph[%zu]: glyph_id=%u invalid_metrics (w=%.1f h=%.1f u0=%.4f u1=%.4f v0=%.4f v1=%.4f)", 
+                    DONG_LOG_VERBOSE("[DrawText] SKIP glyph[%zu]: glyph_id=%u invalid_metrics (w=%.1f h=%.1f u0=%.4f u1=%.4f v0=%.4f v1=%.4f)", 
                             glyph_idx, glyph.glyph_id, 
                             entry->metrics.width_units, entry->metrics.height_units,
                             entry->u0, entry->u1, entry->v0, entry->v1);
@@ -2660,7 +2661,7 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 const float glyph_h = msdf_size * render_scale;
 
                 if (glyph_w <= 0.0f || glyph_h <= 0.0f) {
-                    SDL_Log("[DrawText] SKIP glyph[%zu]: glyph_id=%u zero_size (w=%.1f h=%.1f render_scale=%.4f msdf_size=%.0f)",
+                    DONG_LOG_VERBOSE("[DrawText] SKIP glyph[%zu]: glyph_id=%u zero_size (w=%.1f h=%.1f render_scale=%.4f msdf_size=%.0f)",
                             glyph_idx, glyph.glyph_id, glyph_w, glyph_h, render_scale, msdf_size);
                     continue;
                 }
@@ -2743,10 +2744,7 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 inst.uv_rect[2] = entry->u1;
                 inst.uv_rect[3] = entry->v1;
 
-                const bool debug_text = true;
-
-                if (debug_text)
-                SDL_Log("[TEXT] glyph=%u page=%u pen=(%.2f,%.2f) rect=(%.2f,%.2f,%.2f,%.2f) bounds=(%.1f,%.1f,%.1f,%.1f) msdf_size=%.0f render_scale=%.4f range_px=%.2f",
+                DONG_LOG_VERBOSE("[TEXT] glyph=%u page=%u pen=(%.2f,%.2f) rect=(%.2f,%.2f,%.2f,%.2f) bounds=(%.1f,%.1f,%.1f,%.1f) msdf_size=%.0f render_scale=%.4f range_px=%.2f",
                         glyph.glyph_id,
                         entry->atlas_page,
                         pen_x_px,
@@ -2787,8 +2785,7 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 inst.params[2] = msdf_subpixel_enabled_ ? 1.0f : 0.0f;
                 inst.params[3] = gamma_correction;  // 正常模式
 
-                if (debug_text)
-                SDL_Log("[TEXT] glyph=%u screenPxRange=%.2f unitRange=%.4f params=(%.2f,%.4f,%.1f,%.2f) uv=(%.4f,%.4f,%.4f,%.4f)",
+                DONG_LOG_VERBOSE("[TEXT] glyph=%u screenPxRange=%.2f unitRange=%.4f params=(%.2f,%.4f,%.1f,%.2f) uv=(%.4f,%.4f,%.4f,%.4f)",
                         glyph.glyph_id, px_range_screen, unit_range,
                         inst.params[0], inst.params[1], inst.params[2], inst.params[3],
                         inst.uv_rect[0], inst.uv_rect[1], inst.uv_rect[2], inst.uv_rect[3]);
@@ -2799,16 +2796,16 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 prepared.push_back(pg);
             }
 
-            SDL_Log("[DrawText] frame=%llu prepared=%zu glyphs for rendering", frame_index_, prepared.size());
+            DONG_LOG_DEBUG("[DrawText] frame=%llu prepared=%zu glyphs for rendering", frame_index_, prepared.size());
             
             if (prepared.empty()) {
-                SDL_Log("[DrawText] frame=%llu ABORT: no glyphs prepared!", frame_index_);
+                DONG_LOG_WARN("[DrawText] frame=%llu ABORT: no glyphs prepared!", frame_index_);
                 break;
             }
 
             // 第二步：按 atlas_page 分批绘制，每个批次绑定对应页纹理
             uint32_t page_count = glyph_atlas->getPageCount();
-            SDL_Log("[DrawText] frame=%llu rendering %zu glyphs across %u pages", frame_index_, prepared.size(), page_count);
+            DONG_LOG_DEBUG("[DrawText] frame=%llu rendering %zu glyphs across %u pages", frame_index_, prepared.size(), page_count);
             
             for (uint32_t page_index = 0; page_index < page_count; ++page_index) {
                 SDL_GPUTexture* atlas_texture = glyph_atlas->getAtlasTextureForPage(page_index);

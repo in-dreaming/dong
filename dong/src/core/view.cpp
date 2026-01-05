@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <SDL3/SDL_log.h>
 #include <SDL3/SDL_gpu.h>
+#include "log.h"
 #include "../dom/dom_manager.hpp"
 #include "../dom/event_system.hpp"
 #include "../dom/focus_manager.hpp"
@@ -225,7 +226,7 @@ void View::update() {
             if (!htmls.empty()) {
                 const auto* layout = layout_engine->getLayout(htmls[0]);
                 if (layout) {
-                    SDL_Log("[View::update Layout] html: at (%.1f, %.1f) size %.1fx%.1f",
+                    DONG_LOG_DEBUG("[View::update Layout] html: at (%.1f, %.1f) size %.1fx%.1f",
                            layout->x, layout->y, layout->width, layout->height);
                 }
             }
@@ -234,7 +235,7 @@ void View::update() {
             if (!bodies.empty()) {
                 const auto* layout = layout_engine->getLayout(bodies[0]);
                 if (layout) {
-                    SDL_Log("[View::update Layout] body: at (%.1f, %.1f) size %.1fx%.1f",
+                    DONG_LOG_DEBUG("[View::update Layout] body: at (%.1f, %.1f) size %.1fx%.1f",
                            layout->x, layout->y, layout->width, layout->height);
                 }
             }
@@ -243,7 +244,7 @@ void View::update() {
             if (!h1s.empty()) {
                 const auto* layout = layout_engine->getLayout(h1s[0]);
                 if (layout) {
-                    SDL_Log("[View::update Layout] h1: at (%.1f, %.1f) size %.1fx%.1f",
+                    DONG_LOG_DEBUG("[View::update Layout] h1: at (%.1f, %.1f) size %.1fx%.1f",
                            layout->x, layout->y, layout->width, layout->height);
                 }
             }
@@ -252,7 +253,7 @@ void View::update() {
             for (size_t i = 0; i < divs.size() && i < 3; i++) {
                 const auto* layout = layout_engine->getLayout(divs[i]);
                 if (layout) {
-                    SDL_Log("[View::update Layout] div[%zu]: at (%.1f, %.1f) size %.1fx%.1f",
+                    DONG_LOG_DEBUG("[View::update Layout] div[%zu]: at (%.1f, %.1f) size %.1fx%.1f",
                            i, layout->x, layout->y, layout->width, layout->height);
                 }
             }
@@ -276,12 +277,12 @@ void View::update() {
         
         // 只在内容变化时重新构建 DisplayList 和 GPUCommandList
         bool need_rebuild = commands_dirty_;
-        SDL_Log("[View::update] need_rebuild=%d commands_dirty_=%d", need_rebuild ? 1 : 0, commands_dirty_ ? 1 : 0);
+        DONG_LOG_VERBOSE("[View::update] need_rebuild=%d commands_dirty_=%d", need_rebuild ? 1 : 0, commands_dirty_ ? 1 : 0);
         
         if (need_rebuild) {
-            SDL_Log("[View::update] Building DisplayList...");
+            DONG_LOG_DEBUG("[View::update] Building DisplayList...");
             const render::DisplayList& dl = painter->buildDisplayList(root, layout_engine.get());
-            SDL_Log("[View::update] DisplayList built with %zu items", dl.items.size());
+            DONG_LOG_DEBUG("[View::update] DisplayList built with %zu items", dl.items.size());
             
             // 缓存编译后的命令列表
             cached_cmd_list_->commands.clear();
@@ -289,11 +290,11 @@ void View::update() {
             cached_cmd_list_->draw_batches.clear();
             
             render::GPUCompiler compiler;
-            SDL_Log("[View::update] Compiling DisplayList to GPUCommandList...");
+            DONG_LOG_DEBUG("[View::update] Compiling DisplayList to GPUCommandList...");
             const render::LayerTree& layer_tree = painter->getLayerTree();
             debugLogLayerTreeIfEnabled(layer_tree);
             compiler.compile(dl, *cached_cmd_list_, &layer_tree);
-            SDL_Log("[View::update] GPUCommandList compiled with %zu commands", cached_cmd_list_->commands.size());
+            DONG_LOG_DEBUG("[View::update] GPUCommandList compiled with %zu commands", cached_cmd_list_->commands.size());
             
             // 清除命令脏标记（下次只有在 markNeedsRepaint 时才会重建）
             commands_dirty_ = false;
@@ -309,7 +310,7 @@ void View::update() {
         gpu_driver_->beginFrame();
         gpu_driver_->execute(*cached_cmd_list_);
         gpu_driver_->endFrame();
-        SDL_Log("[View::update] GPU frame complete");
+        DONG_LOG_VERBOSE("[View::update] GPU frame complete");
         
         return;
     }
