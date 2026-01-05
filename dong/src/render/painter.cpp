@@ -337,8 +337,8 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         layer_node.transform.m[4] = style.transform_scale_y;
         layer_node.transform.m[2] = style.transform_translate_x;
         layer_node.transform.m[5] = style.transform_translate_y;
-        layer_node.scroll_x = 0.0f;
-        layer_node.scroll_y = 0.0f;
+        layer_node.scroll_x = node->getScrollX();
+        layer_node.scroll_y = node->getScrollY();
         layer_node.is_surface = has_isolation;
         layer_node.content_dirty = layer_dirty;
         layer_node.transform_dirty = false;
@@ -1063,8 +1063,100 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         }
     }
 
+    // 3.5 Input 元素特殊渲染：显示 value 或 placeholder
+    if (layout_node && tag == "input") {
+        float x = layout_node->layout.position[0];
+        float y = layout_node->layout.position[1];
+        float width = layout_node->layout.dimensions[0];
+        float height = layout_node->layout.dimensions[1];
+        
+        float pad_left = style.padding_left.isPixel() ? style.padding_left.value : 0.0f;
+        float pad_top = style.padding_top.isPixel() ? style.padding_top.value : 0.0f;
+        
+        float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
+        
+        // 获取 value 或 placeholder
+        std::string display_text = node->getAttribute("value");
+        Color text_color = makeColorFromCss(style.color);
+        
+        if (display_text.empty()) {
+            display_text = node->getAttribute("placeholder");
+            // placeholder 使用半透明颜色
+            text_color.a *= 0.5f;
+        }
+        
+        if (!display_text.empty() && width > 0.0f && height > 0.0f) {
+            TextShapeRequest req{};
+            req.text = display_text;
+            req.font_family = style.font_family;
+            req.font_weight = style.font_weight;
+            req.font_size = font_size;
+            
+            ShapedText shaped{};
+            if (text_shaper_.shape(req, shaped) && !shaped.glyphs.empty()) {
+                float scale = shaped.scale_to_pixels;
+                float ascent_units = shaped.ascent_units > 0.0f ? shaped.ascent_units : font_size / scale;
+                float descent_units = shaped.descent_units;
+                float line_height_units = shaped.line_height_units;
+                
+                if (line_height_units <= 0.0f) line_height_units = font_size / scale;
+                
+                float descent_abs_units = descent_units < 0.0f ? -descent_units : 0.0f;
+                float metrics_height_units = ascent_units + descent_abs_units;
+                float extra_leading_units = std::max(line_height_units - metrics_height_units, 0.0f);
+                float top_leading_units = extra_leading_units * 0.5f;
+                
+                float baseline_offset = (top_leading_units + ascent_units) * scale;
+                float text_height_px = line_height_units * scale;
+                
+                // 垂直居中
+                float text_y = y + (height - text_height_px) * 0.5f;
+                float baseline_y = text_y + baseline_offset;
+                float text_x = x + pad_left;
+                
+                DrawGlyphRunData glyph_run{};
+                glyph_run.rect.x = text_x;
+                glyph_run.rect.y = text_y;
+                glyph_run.rect.width = shaped.width_units * scale;
+                glyph_run.rect.height = text_height_px;
+                glyph_run.color = text_color;
+                glyph_run.font_size = font_size;
+                glyph_run.font_family = style.font_family;
+                glyph_run.font_weight = style.font_weight;
+                glyph_run.font_path = shaped.font_path;
+                glyph_run.baseline_x = text_x;
+                glyph_run.baseline_y = baseline_y;
+                glyph_run.units_per_em = shaped.units_per_em;
+                glyph_run.scale_to_pixels = shaped.scale_to_pixels;
+                
+                for (const auto& sg : shaped.glyphs) {
+                    GlyphInstance inst{};
+                    inst.glyph_id = sg.glyph_id;
+                    inst.pen_x_units = sg.pen_x_units;
+                    inst.pen_y_units = sg.pen_y_units;
+                    inst.font_path = sg.font_path;
+                    inst.units_per_em = sg.units_per_em;
+                    glyph_run.glyphs.push_back(inst);
+                }
+                
+                builder.addGlyphRun(std::move(glyph_run));
+            }
+        }
+    }
+
     // 4. 递归子节点（按 z-index 排序）
     const auto& children = node->getChildren();
+    
+    // 如果是滚动容器，应用滚动偏移到子元素
+    bool applied_scroll_translate = false;
+    if (is_scroll_container) {
+        float scroll_x = node->getScrollX();
+        float scroll_y = node->getScrollY();
+        if (scroll_x != 0.0f || scroll_y != 0.0f) {
+            builder.pushTranslate(-scroll_x, -scroll_y);
+            applied_scroll_translate = true;
+        }
+    }
     
     // 收集需要绘制的子元素及其 z-index
     struct ChildWithZIndex {
@@ -1108,6 +1200,11 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
             child_layout = layout_engine_->getLayout(item.child);
         }
         buildDisplayListNode(item.child, child_layout, builder);
+    }
+    
+    // 恢复滚动偏移
+    if (applied_scroll_translate) {
+        builder.popTranslate();
     }
 
     // 5. 滚动条渲染（在子节点之后绘制，确保滚动条在内容之上）

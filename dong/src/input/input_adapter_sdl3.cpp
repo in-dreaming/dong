@@ -174,6 +174,7 @@ bool SDL3InputAdapter::pollEvents() {
                 break;
 
             case SDL_EVENT_TEXT_INPUT:
+                SDL_Log("[SDL3InputAdapter] SDL_EVENT_TEXT_INPUT: text='%s'", ev.text.text);
                 if (callback_) {
                     InputEvent e;
                     e.type = InputEventType::TextInput;

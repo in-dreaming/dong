@@ -28,7 +28,7 @@ int main() {
     SDL3Window::CreateInfo ci{};
     ci.title = "Dong Interactive Demo";
     ci.width = 800;
-    ci.height = 600;
+    ci.height = 1280;
     ci.use_gpu = true;
     ci.debug_mode = false;
 

@@ -202,12 +202,30 @@ public:
         list_.items.clear();
         layer_depth_ = 0;
         clip_depth_ = 0;
+        translate_x_ = 0.0f;
+        translate_y_ = 0.0f;
+    }
+
+    // 滚动偏移管理
+    void pushTranslate(float dx, float dy) {
+        translate_stack_.push_back({translate_x_, translate_y_});
+        translate_x_ += dx;
+        translate_y_ += dy;
+    }
+
+    void popTranslate() {
+        if (!translate_stack_.empty()) {
+            auto prev = translate_stack_.back();
+            translate_stack_.pop_back();
+            translate_x_ = prev.first;
+            translate_y_ = prev.second;
+        }
     }
 
     void addRect(const Rect& rect, const Color& color) {
         DisplayItem item{};
         item.type = DisplayItemType::DrawRect;
-        item.rect.rect = rect;
+        item.rect.rect = applyTranslate(rect);
         item.rect.color = color;
         list_.items.push_back(std::move(item));
     }
@@ -215,7 +233,7 @@ public:
     void addRoundedRect(const Rect& rect, const Color& color, float radius) {
         DisplayItem item{};
         item.type = DisplayItemType::DrawRoundedRect;
-        item.rounded_rect.rect = rect;
+        item.rounded_rect.rect = applyTranslate(rect);
         item.rounded_rect.color = color;
         item.rounded_rect.radius = radius;
         list_.items.push_back(std::move(item));
@@ -224,7 +242,7 @@ public:
     void addShadow(const Rect& rect, const Color& color, float radius, float blur) {
         DisplayItem item{};
         item.type = DisplayItemType::DrawShadow;
-        item.shadow.rect = rect;
+        item.shadow.rect = applyTranslate(rect);
         item.shadow.color = color;
         item.shadow.radius = radius;
         item.shadow.blur = blur;
@@ -234,7 +252,7 @@ public:
     void addImage(const Rect& rect, const std::string& src, float opacity) {
         DisplayItem item{};
         item.type = DisplayItemType::DrawImage;
-        item.image.rect = rect;
+        item.image.rect = applyTranslate(rect);
         item.image.src = src;
         item.image.opacity = opacity;
         list_.items.push_back(std::move(item));
@@ -243,6 +261,10 @@ public:
     void addGlyphRun(DrawGlyphRunData data) {
         DisplayItem item{};
         item.type = DisplayItemType::DrawGlyphRun;
+        // 应用 translate 到 glyph run 的位置
+        data.rect = applyTranslate(data.rect);
+        data.baseline_x += translate_x_;
+        data.baseline_y += translate_y_;
         item.glyph_run = std::move(data);
         list_.items.push_back(std::move(item));
     }
@@ -326,9 +348,19 @@ private:
         return rect.width > 0.0f && rect.height > 0.0f;
     }
 
+    Rect applyTranslate(const Rect& rect) const {
+        Rect result = rect;
+        result.x += translate_x_;
+        result.y += translate_y_;
+        return result;
+    }
+
     DisplayList list_;
     int layer_depth_ = 0;
     int clip_depth_ = 0;
+    float translate_x_ = 0.0f;
+    float translate_y_ = 0.0f;
+    std::vector<std::pair<float, float>> translate_stack_;
 };
 
 } // namespace dong::render

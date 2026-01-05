@@ -536,11 +536,18 @@ void Engine::calculateLayout(dom::DOMNodePtr root, float width, float height) {
             // Sometimes Yoga returns huge values (> 100000) for height, which indicates a bug
             // related to scroll containers. We detect and correct these values.
             const auto& style = dom_node->getComputedStyle();
+            const std::string node_tag = dom_node->getTagName();
             
             if (new_height > 100000.0f || !std::isfinite(new_height)) {
                 // Try to use the style height if available
                 if (style.height.isPixel()) {
                     new_height = style.height.value;
+                } else if (node_tag == "input") {
+                    // input 元素：使用 font-size + padding 计算高度
+                    float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
+                    float pad_top = style.padding_top.isPixel() ? style.padding_top.value : 0.0f;
+                    float pad_bottom = style.padding_bottom.isPixel() ? style.padding_bottom.value : 0.0f;
+                    new_height = font_size * 1.2f + pad_top + pad_bottom;
                 } else {
                     // Fallback to a reasonable default based on content
                     for (const auto& child : dom_node->getChildren()) {
@@ -808,6 +815,25 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
             YGNodeStyleSetMinHeight(yoga_node, intrinsic_h);
             // 移除显式 height 设置，让 Yoga 根据内容自动计算高度
             // YGNodeStyleSetHeight(yoga_node, intrinsic_h);
+        }
+    }
+    
+    // input 元素是 replaced element，需要设置默认的内在尺寸
+    // CSS 标准：input 元素有默认的宽度和高度
+    if (tag == "input") {
+        // 计算 input 的高度：font-size + padding
+        float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
+        float pad_top = style.padding_top.isPixel() ? style.padding_top.value : 0.0f;
+        float pad_bottom = style.padding_bottom.isPixel() ? style.padding_bottom.value : 0.0f;
+        float input_height = font_size * 1.2f + pad_top + pad_bottom;
+        
+        // 强制设置 input 高度，不管 style.height 是什么
+        YGNodeStyleSetHeight(yoga_node, input_height);
+        
+        // input 默认是 block 级别，宽度 100%（由 CSS 设置）
+        // 但如果没有显式宽度，给一个默认最小宽度
+        if (style.width.isAuto()) {
+            YGNodeStyleSetMinWidth(yoga_node, 150.0f);  // 默认最小宽度
         }
     }
     

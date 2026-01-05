@@ -30,28 +30,44 @@ namespace {
 using dong::dom::DOMNodePtr;
 
 DOMNodePtr hitTestRecursive(const DOMNodePtr& node, dong::layout::Engine* layout_engine,
-                            int32_t x, int32_t y) {
+                            int32_t x, int32_t y, int depth = 0) {
     if (!node || !layout_engine) return nullptr;
 
-    DOMNodePtr best;
     const auto* layout = layout_engine->getLayout(node);
-    if (layout) {
-        float lx = layout->x;
-        float ly = layout->y;
-        float w = layout->width;
-        float h = layout->height;
-        if (x >= lx && x <= lx + w && y >= ly && y <= ly + h) {
-            best = node;
-        }
+    if (!layout) return nullptr;
+    
+    float lx = layout->x;
+    float ly = layout->y;
+    float w = layout->width;
+    float h = layout->height;
+    
+    // 检查点是否在当前节点范围内
+    bool in_bounds = (x >= lx && x <= lx + w && y >= ly && y <= ly + h);
+    
+    // 调试：打印 input 和 input-group 的布局
+    std::string tag = node->getTagName();
+    std::string cls = node->getAttribute("class");
+    if (tag == "input" || cls.find("input") != std::string::npos) {
+        DONG_LOG_INFO("[hitTest] %s.%s at (%.1f,%.1f) size %.1fx%.1f, point (%d,%d), in_bounds=%d",
+                     tag.c_str(), cls.c_str(), lx, ly, w, h, x, y, in_bounds ? 1 : 0);
     }
-
-    for (const auto& child : node->getChildren()) {
-        auto child_hit = hitTestRecursive(child, layout_engine, x, y);
+    
+    if (!in_bounds) {
+        return nullptr;  // 不在范围内，直接返回
+    }
+    
+    // 在范围内，先检查子节点（深度优先，返回最深的命中元素）
+    // 按 z-index 逆序遍历，优先返回 z-index 高的元素
+    const auto& children = node->getChildren();
+    for (auto it = children.rbegin(); it != children.rend(); ++it) {
+        auto child_hit = hitTestRecursive(*it, layout_engine, x, y, depth + 1);
         if (child_hit) {
-            best = child_hit;
+            return child_hit;  // 找到子节点命中，立即返回
         }
     }
-    return best;
+    
+    // 没有子节点命中，返回当前节点
+    return node;
 }
 
 DOMNodePtr hitTestElementAt(dong::dom::Manager* dom_mgr, dong::layout::Engine* layout_engine,
@@ -646,8 +662,15 @@ void View::handle_mouse_up(int32_t button) {
     if (focus_manager && dom_manager && layout_engine) {
         auto clicked = hitTestElementAt(dom_manager.get(), layout_engine.get(), 
                                         last_mouse_x_, last_mouse_y_);
+        DONG_LOG_INFO("[View::handle_mouse_up] clicked at (%d,%d), element=%p tag=%s",
+                       last_mouse_x_, last_mouse_y_,
+                       clicked.get(),
+                       clicked ? clicked->getTagName().c_str() : "null");
         if (clicked) {
-            focus_manager->focusOnClick(clicked);
+            bool changed = focus_manager->focusOnClick(clicked);
+            DONG_LOG_INFO("[View::handle_mouse_up] focusOnClick returned %d, focused=%p",
+                           changed ? 1 : 0,
+                           focus_manager->getFocusedElement().get());
         }
     }
 }
@@ -774,12 +797,22 @@ void View::dispatchKeyEventToJS(const char* type, uint32_t key_code) {
 }
 
 void View::handle_mouse_wheel(float delta_x, float delta_y) {
+    DONG_LOG_INFO("[View::handle_mouse_wheel] delta=(%.2f, %.2f) at (%d,%d)", 
+                  delta_x, delta_y, last_mouse_x_, last_mouse_y_);
+    
     // 查找鼠标位置下的滚动容器
     auto scroll_container = findScrollContainerAt(last_mouse_x_, last_mouse_y_);
+    DONG_LOG_INFO("[View::handle_mouse_wheel] scroll_container=%p tag=%s",
+                  scroll_container.get(),
+                  scroll_container ? scroll_container->getTagName().c_str() : "null");
+    
     if (scroll_container) {
         // 滚动速度系数
         constexpr float kScrollSpeed = 20.0f;
+        float old_scroll_y = scroll_container->getScrollY();
         scroll_container->scrollBy(delta_x * kScrollSpeed, delta_y * kScrollSpeed);
+        DONG_LOG_INFO("[View::handle_mouse_wheel] scrollBy: old_y=%.1f new_y=%.1f",
+                      old_scroll_y, scroll_container->getScrollY());
         
         // 标记需要重新渲染
         markNeedsRepaint();
@@ -792,22 +825,32 @@ void View::handle_mouse_wheel(float delta_x, float delta_y) {
 void View::handle_text_input(const char* text) {
     if (!text || !text[0]) return;
     
+    DONG_LOG_INFO("[View::handle_text_input] text='%s'", text);
+    
     // 获取当前焦点元素
     dom::DOMNodePtr focused;
     if (focus_manager) {
         focused = focus_manager->getFocusedElement();
     }
     
+    DONG_LOG_INFO("[View::handle_text_input] focused=%p, tag=%s", 
+                   focused.get(), 
+                   focused ? focused->getTagName().c_str() : "null");
+    
     // 如果焦点元素是可编辑的，更新其内容
     if (focused && dom::isEditableElement(focused)) {
         auto* state = dom::getInputState(focused);
+        DONG_LOG_INFO("[View::handle_text_input] isEditable=true, state=%p", state);
         if (state) {
             state->insertText(text);
             // 同步到 DOM 属性
             focused->setAttribute("value", state->getValue());
+            DONG_LOG_INFO("[View::handle_text_input] new value='%s'", state->getValue().c_str());
             // 标记需要重新渲染
             markNeedsRepaint();
         }
+    } else {
+        DONG_LOG_INFO("[View::handle_text_input] not editable or no focus");
     }
     
     // 触发 input 事件到 JS
