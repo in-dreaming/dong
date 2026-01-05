@@ -1084,23 +1084,23 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
         YGNodeStyleSetFlexShrink(yoga_node, 0.0f);
     }
     
+    // 符合 CSS Flexbox 标准：
+    // 当元素有显式 height 时，在 column 方向的 flex 容器中应该尊重该高度
+    // 通过设置 flex-basis 为显式高度值，并禁止收缩来实现
+    if (style.height.isPixel()) {
+        // 有显式像素高度的元素，设置 flex-shrink: 0 防止被压缩
+        // 这符合 CSS 标准：显式尺寸应该被尊重
+        YGNodeStyleSetFlexShrink(yoga_node, 0.0f);
+    }
+    
     if (flex_basis.isPixel()) {
         YGNodeStyleSetFlexBasis(yoga_node, flex_basis.value);
     } else if (flex_basis.isPercent()) {
         YGNodeStyleSetFlexBasisPercent(yoga_node, flex_basis.value);
     } else {
-        // For auto flex-basis in block layout, set to 0 to prevent Yoga from
-        // using content-based sizing which can cause incorrect height calculations
-        // BUT: only do this if the element has explicit height, otherwise let Yoga
-        // calculate content-based height
-        // ALSO: don't do this for flex containers, they need auto flex-basis
-        if (style.layout_mode == dom::LayoutMode::Block && 
-            style.display != "flex" &&
-            (style.height.isPixel() || style.height.isPercent())) {
-            YGNodeStyleSetFlexBasis(yoga_node, 0.0f);
-        } else {
-            YGNodeStyleSetFlexBasisAuto(yoga_node);
-        }
+        // flex-basis: auto 时，Yoga 会使用 width/height 属性作为基准
+        // 这是符合 CSS 标准的行为
+        YGNodeStyleSetFlexBasisAuto(yoga_node);
     }
 
     // Map border width into Yoga so that border participates in box model sizing
