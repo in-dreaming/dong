@@ -63,7 +63,7 @@ int main() {
     SDL3Window::CreateInfo ci{};
     ci.title = "GPU Screenshot Demo";
     ci.width = 800;
-    ci.height = 400;
+    ci.height = 1200;
     ci.use_gpu = true;
     ci.debug_mode = false;
 

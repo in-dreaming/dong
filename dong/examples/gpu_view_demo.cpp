@@ -16,7 +16,7 @@ int main() {
     SDL3Window::CreateInfo ci{};
     ci.title = "Dong GPU View Demo";
     ci.width = 960;
-    ci.height = 600;
+    ci.height = 1280;
     ci.use_gpu = true;
     ci.debug_mode = false;
 

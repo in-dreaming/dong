@@ -68,6 +68,62 @@ static std::string collapseWhitespace(const std::string& input) {
     return output.substr(first, last - first + 1);
 }
 
+// 计算元素的内在文本宽度（包含 padding），用于按钮等 inline-block 元素的自适应宽度
+// 符合 CSS 标准：width: auto 时，元素宽度 = 内容宽度 + padding + border
+float computeIntrinsicTextWidth(const dom::DOMNodePtr& node) {
+    if (!node) return 0.0f;
+    const auto& style = node->getComputedStyle();
+    float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
+
+    // 收集纯文本子节点
+    bool has_text_child = false;
+    std::string raw_text;
+    for (const auto& child : node->getChildren()) {
+        if (!child) continue;
+        if (child->getType() == dom::DOMNode::NodeType::TEXT) {
+            raw_text += child->getTextContent();
+            has_text_child = true;
+        }
+    }
+    if (!has_text_child) return 0.0f;
+
+    std::string text = collapseWhitespace(raw_text);
+    if (text.empty()) return 0.0f;
+
+    TextShaper shaper;
+    TextShapeRequest req{};
+    req.text = text;
+    req.font_family = style.font_family;
+    req.font_weight = style.font_weight;
+    req.font_size = font_size;
+
+    ShapedText shaped{};
+    if (!shaper.shape(req, shaped) || shaped.glyphs.empty()) {
+        return 0.0f;
+    }
+
+    const float scale = shaped.scale_to_pixels;
+    if (scale <= 0.0f || !std::isfinite(scale)) {
+        return 0.0f;
+    }
+
+    float content_width = shaped.width_units * scale;
+    if (content_width < 0.0f) content_width = 0.0f;
+
+    // 加上 padding 和 border
+    float pad_left = style.padding_left.isPixel() ? style.padding_left.value : 0.0f;
+    float pad_right = style.padding_right.isPixel() ? style.padding_right.value : 0.0f;
+    float border_w = style.border_width > 0.0f ? style.border_width : 0.0f;
+
+    float result = content_width + pad_left + pad_right + border_w * 2.0f;
+    
+    if (result > 10000.0f || result < 0.0f || !std::isfinite(result)) {
+        return 0.0f;
+    }
+    
+    return result;
+}
+
 float computeIntrinsicTextHeight(const dom::DOMNodePtr& node) {
     if (!node) return 0.0f;
     const auto& style = node->getComputedStyle();
@@ -211,9 +267,12 @@ dom::DOMNodePtr firstElementChild(const dom::DOMNodePtr& node) {
 }
 
 struct InlineMetrics {
-    float content_width_px = 0.0f;
+    float content_width_px = 0.0f;        // 纯文本内容宽度（不含 padding）
     float line_height_px = 0.0f;
     float baseline_from_content_top_px = 0.0f;
+    float padding_left_px = 0.0f;         // 左侧 padding
+    float padding_right_px = 0.0f;        // 右侧 padding
+    float total_width_px = 0.0f;          // 完整宽度 = content + padding
 };
 
 static bool computeInlineMetricsForNode(const dom::DOMNodePtr& node,
@@ -278,6 +337,13 @@ static bool computeInlineMetricsForNode(const dom::DOMNodePtr& node,
         content_width_units = 0.0f;
     }
     out_metrics.content_width_px = content_width_units * scale;
+
+    // 符合 CSS 盒模型标准：计算包含 padding 的完整宽度
+    out_metrics.padding_left_px = style.padding_left.isPixel() ? style.padding_left.value : 0.0f;
+    out_metrics.padding_right_px = style.padding_right.isPixel() ? style.padding_right.value : 0.0f;
+    out_metrics.total_width_px = out_metrics.content_width_px + 
+                                  out_metrics.padding_left_px + 
+                                  out_metrics.padding_right_px;
 
     // 行高与 baseline：复用 Painter 中的度量逻辑，保证一致
     float line_height_units = shaped.line_height_units;
@@ -729,6 +795,9 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
     // 如果是文本主导的块级元素，且高度为 auto，则使用 TextShaper
     // 计算一行文字的行高，并将 padding 一起纳入最小高度，避免文本容器高度
     // 仅由 padding 决定，导致与浏览器差异过大。
+    // 
+    // 符合 CSS 标准：仅设置 min-height，让容器能够根据子元素内容自然扩展，
+    // 避免显式锁定 height 导致多子元素容器被压缩。
     if ((tag == "h1" || tag == "h2" || tag == "h3" || tag == "h4" ||
          tag == "h5" || tag == "h6" || tag == "p" || tag == "button" ||
          tag == "div") &&
@@ -737,8 +806,18 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
         
         if (intrinsic_h > 0.0f && intrinsic_h < 10000.0f) {
             YGNodeStyleSetMinHeight(yoga_node, intrinsic_h);
-            // Also set the height explicitly to avoid Yoga calculating a huge value
-            YGNodeStyleSetHeight(yoga_node, intrinsic_h);
+            // 移除显式 height 设置，让 Yoga 根据内容自动计算高度
+            // YGNodeStyleSetHeight(yoga_node, intrinsic_h);
+        }
+    }
+    
+    // 符合 CSS 标准：为 button 元素设置基于文本内容的最小宽度
+    // 按钮默认是 inline-block，宽度应自适应内容 + padding
+    // 这确保按钮不会因为 flex 容器压缩而截断文字
+    if (tag == "button" && style.width.isAuto()) {
+        float intrinsic_w = computeIntrinsicTextWidth(dom_node);
+        if (intrinsic_w > 0.0f && intrinsic_w < 10000.0f) {
+            YGNodeStyleSetMinWidth(yoga_node, intrinsic_w);
         }
     }
 }
@@ -887,10 +966,11 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
         YGNodeStyleSetHeight(yoga_node, height_for_yoga);
         has_explicit_height = true;
         
-        // For scroll/overflow containers, also set max-height to prevent Yoga from expanding
-        if (style.overflow == "scroll" || style.overflow == "hidden" || style.overflow == "auto") {
-            YGNodeStyleSetMaxHeight(yoga_node, height_for_yoga);
-        }
+        // 符合 CSS 标准：移除 overflow 容器的 max-height 限制
+        // 让内容根据 CSS height 属性自然布局，避免非标准压缩
+        // if (style.overflow == "scroll" || style.overflow == "hidden" || style.overflow == "auto") {
+        //     YGNodeStyleSetMaxHeight(yoga_node, height_for_yoga);
+        // }
     } else if (style.height.isPercent()) {
         YGNodeStyleSetHeightPercent(yoga_node, style.height.value);
         has_explicit_height = true;
@@ -1372,7 +1452,8 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
                     } else if (child_style.width.isPercent()) {
                         width_px = parsePercentValue(child_style.width, content_w);
                     } else if (has_text_metrics) {
-                        width_px = metrics.content_width_px + pad_l + pad_r + border_w * 2.0f;
+                        // 符合 CSS 标准：使用包含 padding 的完整宽度 + border
+                        width_px = metrics.total_width_px + border_w * 2.0f;
                     }
                     if (width_px <= 0.0f && has_text_metrics) {
                         width_px = metrics.line_height_px;
@@ -1667,21 +1748,20 @@ void Engine::layoutPositionedElements(dom::DOMNodePtr root) {
                         layout->width <= 0.0f || layout->height <= 0.0f) {
                         InlineMetrics metrics{};
                         if (computeInlineMetricsForNode(node, metrics, abs_style.font_size)) {
-                            float pad_l = abs_style.padding_left.isPixel() ? abs_style.padding_left.value : 0.0f;
-                            float pad_r = abs_style.padding_right.isPixel() ? abs_style.padding_right.value : 0.0f;
                             float pad_t = abs_style.padding_top.isPixel() ? abs_style.padding_top.value : 0.0f;
                             float pad_b = abs_style.padding_bottom.isPixel() ? abs_style.padding_bottom.value : 0.0f;
                             float border_w = abs_style.border_width;
                             if (border_w < 0.0f) {
                                 border_w = 0.0f;
                             }
-                            float box_w_intrinsic = metrics.content_width_px + pad_l + pad_r + border_w * 2.0f;
+                            // 符合 CSS 标准：使用包含 padding 的完整宽度
+                            float box_w_intrinsic = metrics.total_width_px + border_w * 2.0f;
                             float box_h_intrinsic = metrics.line_height_px + pad_t + pad_b + border_w * 2.0f;
 
                             if (debug_is_abs_badge) {
-                                SDL_Log("[LayoutEngine] ABS badge intrinsic: content_w=%.2f line_h=%.2f pad_l=%.1f pad_r=%.1f pad_t=%.1f pad_b=%.1f border=%.1f -> box_w=%.2f box_h=%.2f (width_auto=%d height_auto=%d before: w=%.2f h=%.2f)",
-                                        metrics.content_width_px, metrics.line_height_px,
-                                        pad_l, pad_r, pad_t, pad_b, border_w,
+                                SDL_Log("[LayoutEngine] ABS badge intrinsic: content_w=%.2f total_w=%.2f line_h=%.2f pad_l=%.1f pad_r=%.1f pad_t=%.1f pad_b=%.1f border=%.1f -> box_w=%.2f box_h=%.2f (width_auto=%d height_auto=%d before: w=%.2f h=%.2f)",
+                                        metrics.content_width_px, metrics.total_width_px, metrics.line_height_px,
+                                        metrics.padding_left_px, metrics.padding_right_px, pad_t, pad_b, border_w,
                                         box_w_intrinsic, box_h_intrinsic,
                                         abs_width_auto ? 1 : 0, abs_height_auto ? 1 : 0,
                                         layout->width, layout->height);
