@@ -52,6 +52,10 @@ public:
     // 启用或关闭图层缓存复用（默认关闭，确保正确性优先）
     void setLayerCacheEnabled(bool enable) { layer_cache_enabled_ = enable; }
 
+    // Workaround: 在隔离层切换时拆分 command buffer，避免同一纹理在同一 command buffer 内多次 Begin/End render pass 导致内容丢失。
+    void setSplitCommandBufferForIsolatedLayers(bool enable) { split_cmd_buf_for_isolated_layers_ = enable; }
+
+
 private:
     GPUDevice* gpu_device_;
     SDL_Window* window_;
@@ -63,7 +67,9 @@ private:
     bool debug_log_layer_cache_ = false;
     bool msdf_subpixel_enabled_ = false;
     bool layer_cache_enabled_ = true; // 新增：控制是否复用隔离层缓存纹理
+    bool split_cmd_buf_for_isolated_layers_ = true; // Workaround: 拆分 command buffer 以规避 LOADOP/多 pass 问题
     bool debug_rt_enabled_ = false;    // 调试：打印帧级 / RenderTarget / 图层合成日志
+
     unsigned long long frame_index_ = 0;
     
     // Offscreen rendering support
@@ -96,8 +102,11 @@ private:
     SDL_GPUShader* image_vs_ = nullptr;
     SDL_GPUShader* image_fs_ = nullptr;
     SDL_GPUGraphicsPipeline* image_pipeline_ = nullptr;
+    // 专用于“备份/恢复父 render target”的 copy 管线：关闭 blending，避免把颜色再乘一次 alpha
+    SDL_GPUGraphicsPipeline* image_copy_pipeline_ = nullptr;
     SDL_GPUTexture* image_atlas_texture_ = nullptr;
     SDL_GPUSampler* image_sampler_ = nullptr;
+
     Uint32 image_atlas_width_ = 0;
     Uint32 image_atlas_height_ = 0;
     Uint32 atlas_cursor_x_ = 0;

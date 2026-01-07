@@ -1738,8 +1738,16 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
         block.clip_meta[0] = static_cast<float>(clip_index);
     };
 
+    int cmd_index = 0;
     for (const auto& cmd : commands.commands) {
-        // 调试：输出每个命令的类型
+        // 调试：只输出 clip 相关命令
+        if (cmd.type == GPUCommandType::PushClipRect) {
+            SDL_Log("[GPU Execute] cmd[%d] PushClipRect: y=%.1f h=%.1f skip_depth=%d", 
+                    cmd_index, cmd.rect.y, cmd.rect.height, skip_draw_depth);
+        } else if (cmd.type == GPUCommandType::PopClip) {
+            SDL_Log("[GPU Execute] cmd[%d] PopClip skip_depth=%d", cmd_index, skip_draw_depth);
+        }
+        cmd_index++;
         if (debug_rt_enabled_ && offscreen_target_) {
             SDL_Log("[GPUDriverSDL::execute] frame=%llu processing cmd type=%d skip_depth=%d",
                     frame_index_, static_cast<int>(cmd.type), skip_draw_depth);
@@ -1876,7 +1884,11 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             }
             break;
         case GPUCommandType::PushClipRect: {
+            SDL_Log("[GPU Execute] ENTER PushClipRect case");
             SDL_Rect clip = to_sdl_rect(cmd.rect);
+            SDL_Log("[GPU] PushClipRect: x=%.1f y=%.1f w=%.1f h=%.1f -> SDL x=%d y=%d w=%d h=%d",
+                    cmd.rect.x, cmd.rect.y, cmd.rect.width, cmd.rect.height,
+                    clip.x, clip.y, clip.w, clip.h);
             if (!clip_stack.empty()) {
                 clip = intersect_rect(clip_stack.back().scissor, clip);
             }
@@ -1905,6 +1917,10 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             }
 
             SDL_GPUDevice* dev = gpu_device_ ? gpu_device_->getHandle() : nullptr;
+
+            // 始终打印 BeginIsolatedLayer 日志
+            SDL_Log("[GPU Execute] BeginIsolatedLayer: layer_id=%llu layer_dirty=%d skip_depth=%d",
+                    static_cast<unsigned long long>(cmd.layer_id), cmd.layer_dirty ? 1 : 0, skip_draw_depth);
 
             if (debug_rt_enabled_) {
                 SDL_Log("[GPUDriverSDL::execute] BeginIsolatedLayer frame=%llu layer_id=%llu layer_dirty=%d skip_depth=%d",
@@ -1952,9 +1968,9 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             layer_state.scroll[0] = cmd.layer_scroll[0];
             layer_state.scroll[1] = cmd.layer_scroll[1];
 
-            // 如果有有效缓存，优先复用缓存（无论 layer_dirty 标志如何）
-            // 这样可以解决缓存的命令列表中 layer_dirty 标志不更新的问题
-            if (layer_cache_enabled_ && cache_entry && cache_entry->texture) {
+            // 只有当图层非脏且有有效缓存时才复用缓存
+            // 当 layer_dirty=true 时，必须重新绘制（例如滚动容器内容变化）
+            if (layer_cache_enabled_ && !layer_dirty && cache_entry && cache_entry->texture) {
                 // 有有效缓存：不切换 render target，仅记录状态并开始跳过内部绘制
                 if (debug_log_layer_cache_) {
                     ++debug_layer_cache_reused;
@@ -2367,6 +2383,11 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
         case GPUCommandType::DrawRoundedRectQuad: {
             if (!pass || !round_rect_pipeline_) {
                 break;
+            }
+
+            // 调试：只打印滚动容器内元素的坐标
+            if (cmd.rect.y > 200.0f && cmd.rect.y < 600.0f) {
+                SDL_Log("[GPU Execute] DrawRoundedRect: y=%.1f", cmd.rect.y);
             }
 
             struct RoundRectUniformData {

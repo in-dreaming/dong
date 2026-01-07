@@ -5,6 +5,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <SDL3/SDL_log.h>
 
 namespace dong::render {
 
@@ -233,7 +234,12 @@ public:
     void addRoundedRect(const Rect& rect, const Color& color, float radius) {
         DisplayItem item{};
         item.type = DisplayItemType::DrawRoundedRect;
-        item.rounded_rect.rect = applyTranslate(rect);
+        Rect translated = applyTranslate(rect);
+        if (translate_y_ != 0.0f) {
+            SDL_Log("[DisplayList] addRoundedRect: input_y=%.1f translate_y=%.1f output_y=%.1f",
+                    rect.y, translate_y_, translated.y);
+        }
+        item.rounded_rect.rect = translated;
         item.rounded_rect.color = color;
         item.rounded_rect.radius = radius;
         list_.items.push_back(std::move(item));

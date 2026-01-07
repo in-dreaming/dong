@@ -127,8 +127,26 @@ bool GlyphAtlas::createPage() {
                         SDL_UploadToGPUTexture(copy_pass, &tex_transfer, &region, false);
                         SDL_EndGPUCopyPass(copy_pass);
                     }
-                    gpu_device_->submitCommandBuffer(cmd_buf);
-                    gpu_device_->waitForGPU();
+
+                    // 使用 fence 精确等待该 command buffer 完成，避免某些后端 copy/transfer 队列
+                    // 在 WaitForGPUIdle 下仍存在时序差异，导致首帧采样到未完成上传的 atlas。
+                    SDL_GPUFence* fence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd_buf);
+                    if (fence) {
+                        SDL_GPUFence* fences[] = { fence };
+                        if (!SDL_WaitForGPUFences(dev, true, fences, 1)) {
+                            SDL_Log("GlyphAtlas::evictAndRecyclePage: SDL_WaitForGPUFences failed: %s", SDL_GetError());
+
+                            gpu_device_->waitForGPU();
+                        }
+                        SDL_ReleaseGPUFence(dev, fence);
+                    } else {
+                        SDL_Log("GlyphAtlas::evictAndRecyclePage: SDL_SubmitGPUCommandBufferAndAcquireFence failed: %s", SDL_GetError());
+
+                        gpu_device_->submitCommandBuffer(cmd_buf);
+                        gpu_device_->waitForGPU();
+                    }
+
+
                 }
             }
             SDL_ReleaseGPUTransferBuffer(dev, transfer_buf);
@@ -247,8 +265,24 @@ GlyphAtlas::AtlasPage* GlyphAtlas::evictAndRecyclePage() {
                         SDL_UploadToGPUTexture(copy_pass, &tex_transfer, &region, false);
                         SDL_EndGPUCopyPass(copy_pass);
                     }
-                    gpu_device_->submitCommandBuffer(cmd_buf);
-                    gpu_device_->waitForGPU();
+
+                    SDL_GPUFence* fence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd_buf);
+                    if (fence) {
+                        SDL_GPUFence* fences[] = { fence };
+                        if (!SDL_WaitForGPUFences(dev, true, fences, 1)) {
+                            SDL_Log("GlyphAtlas::evictAndRecyclePage: SDL_WaitForGPUFences failed: %s", SDL_GetError());
+
+                            gpu_device_->waitForGPU();
+                        }
+                        SDL_ReleaseGPUFence(dev, fence);
+                    } else {
+                        SDL_Log("GlyphAtlas::evictAndRecyclePage: SDL_SubmitGPUCommandBufferAndAcquireFence failed: %s", SDL_GetError());
+
+                        gpu_device_->submitCommandBuffer(cmd_buf);
+                        gpu_device_->waitForGPU();
+                    }
+
+
                 }
             }
             SDL_ReleaseGPUTransferBuffer(dev, transfer_buf);
@@ -489,9 +523,23 @@ const AtlasEntry* GlyphAtlas::addGlyph(uint32_t glyph_id, const std::string& fon
     SDL_UploadToGPUTexture(copy_pass, &tex_transfer, &region, false);
     SDL_EndGPUCopyPass(copy_pass);
 
-    gpu_device_->submitCommandBuffer(cmd_buf);
-    gpu_device_->waitForGPU();
+    SDL_GPUFence* fence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd_buf);
+    if (fence) {
+        SDL_GPUFence* fences[] = { fence };
+        if (!SDL_WaitForGPUFences(dev, true, fences, 1)) {
+            SDL_Log("GlyphAtlas::addGlyph: SDL_WaitForGPUFences failed: %s", SDL_GetError());
+            gpu_device_->waitForGPU();
+        }
+        SDL_ReleaseGPUFence(dev, fence);
+    } else {
+        SDL_Log("GlyphAtlas::addGlyph: SDL_SubmitGPUCommandBufferAndAcquireFence failed: %s", SDL_GetError());
+        gpu_device_->submitCommandBuffer(cmd_buf);
+        gpu_device_->waitForGPU();
+    }
+
+
     SDL_ReleaseGPUTransferBuffer(dev, transfer_buf);
+
 
     // 创建 AtlasEntry
     AtlasEntry entry{};
@@ -550,7 +598,7 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
     out_metrics.height_units = static_cast<float>(face->glyph->metrics.height) * kFtFixedToUnits;
 
 
-    SDL_Log("[MSDF] glyph=%u font='%s' units_per_em=%u metrics: adv=%.1f bx=%.1f by=%.1f w=%.1f h=%.1f",
+    DONG_LOG_DEBUG("[MSDF] glyph=%u font='%s' units_per_em=%u metrics: adv=%.1f bx=%.1f by=%.1f w=%.1f h=%.1f",
             glyph_id,
             font_path.c_str(),
             out_metrics.units_per_em,
@@ -577,7 +625,7 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
     out_metrics.logical_top = out_metrics.bearing_y_units;
     out_metrics.logical_bottom = out_metrics.bearing_y_units - out_metrics.height_units;
 
-    SDL_Log("[MSDF] glyph=%u logical: l=%.1f b=%.1f r=%.1f t=%.1f",
+    DONG_LOG_DEBUG("[MSDF] glyph=%u logical: l=%.1f b=%.1f r=%.1f t=%.1f",
             glyph_id,
             out_metrics.logical_left,
             out_metrics.logical_bottom,
@@ -642,7 +690,7 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
     out_metrics.bounds_right = static_cast<float>(bounds.r);
     out_metrics.bounds_top = static_cast<float>(bounds.t);
 
-    SDL_Log("[MSDF] glyph=%u font='%s' bounds: l=%.1f b=%.1f r=%.1f t=%.1f",
+    DONG_LOG_DEBUG("[MSDF] glyph=%u font='%s' bounds: l=%.1f b=%.1f r=%.1f t=%.1f",
             glyph_id,
             font_path.c_str(),
             bounds.l, bounds.b, bounds.r, bounds.t);
@@ -706,11 +754,11 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
                                     available_size / std::max(height, 1.0));
         scale = std::max(fit_scale, uniform_scale * 0.5);
         
-        SDL_Log("[MSDF] glyph=%u WARNING: glyph too large (%.1fx%.1f), using fit_scale=%.4f",
+        DONG_LOG_DEBUG("[MSDF] glyph=%u WARNING: glyph too large (%.1fx%.1f), using fit_scale=%.4f",
                 glyph_id, width, height, scale);
     }
 
-    SDL_Log("[MSDF] glyph=%u msdf_size=%d range=%.2f width=%.2f height=%.2f scale=%.4f (uniform=%.4f)",
+    DONG_LOG_DEBUG("[MSDF] glyph=%u msdf_size=%d range=%.2f width=%.2f height=%.2f scale=%.4f (uniform=%.4f)",
             glyph_id,
             msdf_size,
             range,
@@ -728,7 +776,7 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
         range / scale - bounds.b
     );
 
-    SDL_Log("[MSDF] glyph=%u translate: tx=%.2f ty=%.2f", glyph_id, translate.x, translate.y);
+    DONG_LOG_DEBUG("[MSDF] glyph=%u translate: tx=%.2f ty=%.2f", glyph_id, translate.x, translate.y);
 
     msdfgen::generateMSDF(msdf, shape, range, scale, translate);
     // 使用官方的 distanceSignCorrection 统一 MSDF 的符号约定，使填充区域
@@ -764,7 +812,7 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
     out_height = static_cast<uint32_t>(msdf_size);
     out_bitmap.resize(out_width * out_height * 4);
 
-    SDL_Log("[MSDF] glyph=%u output_size=(%u, %u) glyph_in_msdf: pos=(%.1f,%.1f) size=(%.1f,%.1f)",
+    DONG_LOG_DEBUG("[MSDF] glyph=%u output_size=(%u, %u) glyph_in_msdf: pos=(%.1f,%.1f) size=(%.1f,%.1f)",
             glyph_id, out_width, out_height,
             range, range,
             width * scale, height * scale);

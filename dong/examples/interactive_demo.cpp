@@ -414,7 +414,7 @@ int main() {
     SDL_Log("  - Close window to exit");
 
     // 自动退出帧数（0 表示不自动退出）
-    constexpr int AUTO_EXIT_FRAMES = 0;
+    constexpr int AUTO_EXIT_FRAMES = 2;
     int frame_count = 0;
 
     // 6. 主循环

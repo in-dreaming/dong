@@ -322,6 +322,10 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
     if (needs_layer) {
         uint64_t layer_id = reinterpret_cast<uint64_t>(node.get());
         bool layer_dirty = node->isLayoutDirty();
+        // 滚动容器始终标记为脏，因为滚动内容会随着滚动位置改变
+        if (is_scroll_container) {
+            layer_dirty = true;
+        }
         if (!layer_dirty && use_dirty_rect_ && !current_dirty_rect_.isEmpty()) {
             layer_dirty = isRectInDirtyRect(layer_bounds);
         }
@@ -1253,8 +1257,8 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
             float thumb_height_ratio = visible_height / content_height;
             float thumb_height = std::max(kScrollbarMinThumbHeight, track_rect.height * thumb_height_ratio);
             
-            // 当前滚动位置（暂时假设为 0，后续需要从 scroll_y 获取）
-            float scroll_position = 0.0f;  // TODO: 从 layer_node.scroll_y 获取
+            // 从节点获取当前滚动位置
+            float scroll_position = node->getScrollY();
             float max_scroll = content_height - visible_height;
             float scroll_ratio = (max_scroll > 0.0f) ? (scroll_position / max_scroll) : 0.0f;
             scroll_ratio = std::clamp(scroll_ratio, 0.0f, 1.0f);

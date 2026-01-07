@@ -271,70 +271,71 @@ int main() {
     dong_view_load_html(view, html);
     SDL_Log("[Load] HTML loaded successfully");
 
-    // 5. 给 Dong 一点时间做首次布局/渲染（可选）
-    SDL_Log("[Render] Letting view update once...");
-    dong_view_update(view);
-    SDL_Log("[Render] View updated");
-    SDL_Delay(200);
+    // 辅助函数：渲染一帧并保存截图
+    auto renderAndSave = [&](int frame_num, const char* filename) {
+        const uint32_t w = ci.width;
+        const uint32_t h = ci.height;
+        std::vector<uint8_t> pixels(w * h * 4);
 
-    // 6. 使用 dong_view_render_offscreen 渲染到 RGBA 缓冲
-    const uint32_t width = ci.width;
-    const uint32_t height = ci.height;
-    std::vector<uint8_t> pixels(width * height * 4);
+        SDL_Log("[Frame %d] Rendering offscreen...", frame_num);
+        // 注意：不调用 dong_view_update，因为它会尝试渲染到窗口
+        // dong_view_render_offscreen 内部会更新布局
+        
+        if (!dong_view_render_offscreen(view, static_cast<void*>(device), w, h, pixels.data())) {
+            SDL_Log("ERROR: dong_view_render_offscreen failed for frame %d", frame_num);
+            return false;
+        }
 
-    SDL_Log("[Render] Rendering offscreen via dong_view_render_offscreen(%ux%u)...",
-                width, height);
-    if (!dong_view_render_offscreen(view,
-                                    static_cast<void*>(device),
-                                    width,
-                                    height,
-                                    pixels.data())) {
-        SDL_Log("ERROR: dong_view_render_offscreen failed");
+        if (writeBMP(filename, w, h, pixels.data())) {
+            SDL_Log("[Frame %d] Saved to %s", frame_num, filename);
+        }
 
-        SDL_Log("[Cleanup] Shutting down...");
+        // 像素统计
+        int total = static_cast<int>(w * h);
+        int black = 0, gray = 0, white = 0;
+        for (int i = 0; i < total; ++i) {
+            int idx = i * 4;
+            int brightness = (pixels[idx] + pixels[idx + 1] + pixels[idx + 2]) / 3;
+            if (brightness < 50) black++;
+            else if (brightness > 200) white++;
+            else gray++;
+        }
+        SDL_Log("[Frame %d] Pixels: black=%d(%.1f%%) gray=%d(%.1f%%) white=%d(%.1f%%)",
+                frame_num, black, 100.0*black/total, gray, 100.0*gray/total, white, 100.0*white/total);
+        
+        return true;
+    };
+
+
+
+    // 渲染第1帧
+    if (!renderAndSave(1, "frame1.bmp")) {
         dong_view_destroy(view);
         dong_destroy_context(ctx);
         return 1;
     }
 
-    // 7. 保存 BMP
-    const char* output_file = "zig-out/tmp/gpu_screenshot.bmp";
-    if (writeBMP(output_file, width, height, pixels.data())) {
-        SDL_Log("[Save] Saved to %s", output_file);
-    } else {
-        SDL_Log("ERROR: Failed to save BMP");
+    // 渲染第2帧
+    if (!renderAndSave(2, "frame2.bmp")) {
+        dong_view_destroy(view);
+        dong_destroy_context(ctx);
+        return 1;
     }
 
-    // 8. 简单像素统计（参考 gpu_screenshot_analysis 的风格）
-    SDL_Log("=== PIXEL ANALYSIS ===");
-    int total_pixels = static_cast<int>(width * height);
-    int total_black = 0, total_white = 0, total_gray = 0;
-
-    for (int i = 0; i < total_pixels; ++i) {
-        int idx = i * 4;
-        int brightness = (pixels[idx] + pixels[idx + 1] + pixels[idx + 2]) / 3;
-        if (brightness < 50) total_black++;
-        else if (brightness > 200) total_white++;
-        else total_gray++;
-    }
-
-    SDL_Log("Total pixels: %d", total_pixels);
-    SDL_Log("  Black (<50): %d (%.1f%%)", total_black, 100.0 * total_black / total_pixels);
-    SDL_Log("  Gray (50-200): %d (%.1f%%)", total_gray, 100.0 * total_gray / total_pixels);
-    SDL_Log("  White (>200): %d (%.1f%%)", total_white, 100.0 * total_white / total_pixels);
-
-    if (total_white == total_pixels) {
-        SDL_Log("WARNING: Image is all white! Offscreen rendering produced blank output.");
-    } else if (total_black > 100 || total_gray > 100) {
-        SDL_Log("SUCCESS: Text pixels detected in offscreen screenshot!");
+    // 渲染第3帧
+    if (!renderAndSave(3, "frame3.bmp")) {
+        dong_view_destroy(view);
+        dong_destroy_context(ctx);
+        return 1;
     }
 
 
-    // 9. 清理
+
+    // 清理
     SDL_Log("[Cleanup] Shutting down...");
     dong_view_destroy(view);
     dong_destroy_context(ctx);
 
-    SDL_Log("[Done] Check %s for the captured MSDF text.", output_file);
+    SDL_Log("[Done] Check frame1.bmp, frame2.bmp, frame3.bmp");
     return 0;
 }

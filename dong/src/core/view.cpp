@@ -477,6 +477,16 @@ SDL_GPUTexture* View::renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, 
     SDL_Log("[View::renderToGPUTexture] GPUCommandList has %zu commands", cmd_list.commands.size());
     
     // 4. 执行离屏渲染
+    // 关键：在 beginFrame() 之前预处理资源（如 glyph 纹理上传）
+    // 这样可以避免在 render pass 中进行纹理上传导致的 GPU 状态冲突
+    // 
+    // 首帧修复：在 prepareResources 之前等待 GPU 空闲，确保 atlas 纹理初始化完成。
+    // GlyphAtlas::initialize() 会创建初始页面并填充全黑，这个操作使用独立的 command buffer。
+    // 虽然内部使用了 fence 等待，但在某些驱动下可能存在缓存一致性问题。
+    if (gpu_device_ && gpu_device_->isInitialized()) {
+        SDL_WaitForGPUIdle(gpu_device_->getHandle());
+    }
+    gpu_driver_->prepareResources(cmd_list);
     gpu_driver_->beginFrameOffscreen(offscreen_texture, width, height);
     gpu_driver_->execute(cmd_list);
     gpu_driver_->endFrameOffscreen();
@@ -546,8 +556,24 @@ bool View::renderOffscreen(SDL_GPUDevice* device, uint32_t width, uint32_t heigh
     SDL_DownloadFromGPUTexture(copy_pass, &src_region, &dst_transfer);
     SDL_EndGPUCopyPass(copy_pass);
     
-    SDL_SubmitGPUCommandBuffer(cmd);
-    SDL_WaitForGPUIdle(device);
+    // 关键：读回（Download）路径要用 fence 来精确等待 command buffer 完成。
+    // SDL 文档明确建议：提交 download 的 command buffer 后用
+    // SDL_SubmitGPUCommandBufferAndAcquireFence + SDL_WaitForGPUFences。
+    // 否则在部分后端/驱动下，首帧可能 map 到尚未填充完的 download buffer，表现为截图缺字/缺内容。
+    SDL_GPUFence* fence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd);
+    if (fence) {
+        SDL_GPUFence* fences[] = { fence };
+        if (!SDL_WaitForGPUFences(device, true, fences, 1)) {
+            SDL_Log("[View::renderOffscreen] SDL_WaitForGPUFences failed: %s", SDL_GetError());
+            SDL_WaitForGPUIdle(device);
+        }
+        SDL_ReleaseGPUFence(device, fence);
+    } else {
+        SDL_Log("[View::renderOffscreen] SDL_SubmitGPUCommandBufferAndAcquireFence failed: %s", SDL_GetError());
+        SDL_SubmitGPUCommandBuffer(cmd);
+        SDL_WaitForGPUIdle(device);
+    }
+
     
     // 4. Map 并复制像素数据
     void* mapped = SDL_MapGPUTransferBuffer(device, download_buffer, false);
