@@ -759,14 +759,6 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
 
                 float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
 
-                // 调试：输出布局和字体大小
-                static int text_debug_count = 0;
-                if (text_debug_count < 5) {
-                    SDL_Log("[Painter] Text #%d: layout=(%.1f,%.1f) size=%.1fx%.1f font_size=%.1f",
-                           text_debug_count, x, y, width, height, font_size);
-                    ++text_debug_count;
-                }
-
                 Color text_color = makeColorFromCss(style.color);
 
                 float inner_width = width - pad_left - pad_right;

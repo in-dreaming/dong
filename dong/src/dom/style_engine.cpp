@@ -798,10 +798,6 @@ void StyleEngine::applyStyleProperty(const std::string& property, const std::str
     }
     else if (prop == "background-color" || prop == "background") {
         style.background_color = val;
-        // 调试：检查 rgba 背景色是否被正确解析
-        if (val.find("rgba") != std::string::npos) {
-            SDL_Log("[StyleEngine] background-color set to rgba: '%s'", val.c_str());
-        }
     }
     else if (prop == "font-size") {
         style.font_size = parseFloat(val);

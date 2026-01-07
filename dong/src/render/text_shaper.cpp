@@ -14,6 +14,7 @@
 #include <string>
 #include <unordered_map>
 #include <utility>
+#include "../core/log.h"
 
 namespace dong::render {
 
@@ -219,7 +220,7 @@ bool TextShaper::shape(const TextShapeRequest& request, ShapedText& out_text) {
                 if (fallback_font) {
                     FT_UInt fallback_glyph = FT_Get_Char_Index(fallback_font->face, codepoint);
                     if (fallback_glyph != 0) {
-                        SDL_Log("[TextShaper] Fallback for U+%04X: '%s' (units_per_em=%u, primary=%u)",
+                        DONG_LOG_DEBUG("[TextShaper] Fallback for U+%04X: '%s' (units_per_em=%u, primary=%u)",
                                 codepoint, fallback_path.c_str(), 
                                 fallback_font->units_per_em, primary_font->units_per_em);
                         font_to_use = fallback_path;
@@ -245,7 +246,7 @@ bool TextShaper::shape(const TextShapeRequest& request, ShapedText& out_text) {
         out_text.descent_units = font_metrics.descent_units;
         out_text.line_height_units = font_metrics.height_units;
         
-        SDL_Log("[TextShaper] font='%s' units_per_em=%u ascent=%.1f descent=%.1f line_height=%.1f",
+        DONG_LOG_DEBUG("[TextShaper] font='%s' units_per_em=%u ascent=%.1f descent=%.1f line_height=%.1f",
                 primary_font_path.c_str(),
                 font_metrics.units_per_em,
                 font_metrics.ascent_units,
@@ -263,7 +264,7 @@ bool TextShaper::shape(const TextShapeRequest& request, ShapedText& out_text) {
 
     out_text.width_units = pen_x_units;
     
-    SDL_Log("[TextShaper] result: width_units=%.1f line_height_units=%.1f scale=%.6f",
+    DONG_LOG_DEBUG("[TextShaper] result: width_units=%.1f line_height_units=%.1f scale=%.6f",
             out_text.width_units, out_text.line_height_units, out_text.scale_to_pixels);
 
     return true;

@@ -18,27 +18,8 @@
 
 #include <ft2build.h>
 #include FT_FREETYPE_H
-#include <fstream>
-#include <sstream>
-#include <chrono>
 
 namespace dong::render {
-
-// #region agent log
-namespace {
-    void writeDebugLog(const char* location, const char* message, const std::string& data_json, const char* hypothesis_id = "A") {
-        std::ofstream log_file("d:\\mix\\agents\\game\\indr\\dong\\.cursor\\debug.log", std::ios::app);
-        if (log_file.is_open()) {
-            auto now = std::chrono::system_clock::now();
-            auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
-            log_file << "{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"" << hypothesis_id
-                     << "\",\"location\":\"" << location << "\",\"message\":\"" << message 
-                     << "\",\"data\":" << data_json << ",\"timestamp\":" << timestamp << "}\n";
-            log_file.close();
-        }
-    }
-}
-// #endregion agent log
 
 namespace {
 
@@ -1773,10 +1754,10 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
     for (const auto& cmd : commands.commands) {
         // 调试：只输出 clip 相关命令
         if (cmd.type == GPUCommandType::PushClipRect) {
-            SDL_Log("[GPU Execute] cmd[%d] PushClipRect: y=%.1f h=%.1f skip_depth=%d", 
+            DONG_LOG_DEBUG("[GPU Execute] cmd[%d] PushClipRect: y=%.1f h=%.1f skip_depth=%d", 
                     cmd_index, cmd.rect.y, cmd.rect.height, skip_draw_depth);
         } else if (cmd.type == GPUCommandType::PopClip) {
-            SDL_Log("[GPU Execute] cmd[%d] PopClip skip_depth=%d", cmd_index, skip_draw_depth);
+            DONG_LOG_DEBUG("[GPU Execute] cmd[%d] PopClip skip_depth=%d", cmd_index, skip_draw_depth);
         }
         cmd_index++;
         if (debug_rt_enabled_ && offscreen_target_) {
@@ -1790,14 +1771,6 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             cmd.type != GPUCommandType::EndIsolatedLayer &&
             cmd.type != GPUCommandType::BeginPass &&
             cmd.type != GPUCommandType::EndPass) {
-            // #region agent log
-            if (cmd.type == GPUCommandType::DrawText) {
-                std::ostringstream json;
-                json << "{\"frame\":\"" << frame_index_ << "\",\"cmd_index\":" << cmd_index 
-                     << ",\"skip_depth\":" << skip_draw_depth << ",\"cmd_type\":\"DrawText\"}";
-                writeDebugLog("gpu_driver_sdl.cpp:1762", "DrawText skipped due to skip_draw_depth", json.str(), "B");
-            }
-            // #endregion agent log
             if (debug_rt_enabled_) {
                 SDL_Log("[GPUDriverSDL::execute] frame=%llu skip cmd type=%d due_to_non_dirty_layer depth=%d",
                         frame_index_, static_cast<int>(cmd.type), skip_draw_depth);
@@ -1896,15 +1869,8 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 // window 模式：此时才 acquire swapchain texture（必须用当前 command buffer）
                 if (!offscreen_target_) {
                     Uint32 sw = 0, sh = 0;
-                    // #region agent log
-                    {
-                        std::ostringstream json;
-                        json << "{\"frame\":\"" << frame_index_
-                             << "\",\"cmd_buf\":\"" << (void*)current_cmd_buf_
-                             << "\",\"win_size\":{\"w\":" << w << ",\"h\":" << h << "}}";
-                        writeDebugLog("gpu_driver_sdl.cpp:1886", "EndPass acquiring swapchain (window mode)", json.str(), "J");
-                    }
-                    // #endregion agent log
+                    DONG_LOG_DEBUG("[GPUDriverSDL] EndPass acquiring swapchain (window mode) frame=%llu cmd_buf=%p win_size=%ux%u",
+                            frame_index_, (void*)current_cmd_buf_, w, h);
                     if (!SDL_AcquireGPUSwapchainTexture(current_cmd_buf_, window_, &real_swapchain_texture, &sw, &sh)) {
                         SDL_Log("GPUDriverSDL::execute: failed to acquire swapchain texture at EndPass");
                         break;
@@ -1913,15 +1879,8 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                         SDL_Log("[GPUDriverSDL::execute] swapchain texture is null at EndPass, skipping blit");
                         break;
                     }
-                    // #region agent log
-                    {
-                        std::ostringstream json;
-                        json << "{\"frame\":\"" << frame_index_
-                             << "\",\"swapchain_tex\":\"" << (void*)real_swapchain_texture
-                             << "\",\"swapchain_size\":{\"w\":" << sw << ",\"h\":" << sh << "}}";
-                        writeDebugLog("gpu_driver_sdl.cpp:1893", "EndPass acquired swapchain (window mode)", json.str(), "J");
-                    }
-                    // #endregion agent log
+                    DONG_LOG_DEBUG("[GPUDriverSDL] EndPass acquired swapchain (window mode) frame=%llu swapchain_tex=%p swapchain_size=%ux%u",
+                            frame_index_, (void*)real_swapchain_texture, sw, sh);
                     // 如果尺寸不一致，取交集尺寸，避免越界
                     if (sw != w || sh != h) {
                         const Uint32 new_w = (sw < w) ? sw : w;
@@ -1969,9 +1928,9 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             }
             break;
         case GPUCommandType::PushClipRect: {
-            SDL_Log("[GPU Execute] ENTER PushClipRect case");
+            DONG_LOG_DEBUG("[GPU Execute] ENTER PushClipRect case");
             SDL_Rect clip = to_sdl_rect(cmd.rect);
-            SDL_Log("[GPU] PushClipRect: x=%.1f y=%.1f w=%.1f h=%.1f -> SDL x=%d y=%d w=%d h=%d",
+            DONG_LOG_DEBUG("[GPU] PushClipRect: x=%.1f y=%.1f w=%.1f h=%.1f -> SDL x=%d y=%d w=%d h=%d",
                     cmd.rect.x, cmd.rect.y, cmd.rect.width, cmd.rect.height,
                     clip.x, clip.y, clip.w, clip.h);
             if (!clip_stack.empty()) {
@@ -1985,36 +1944,13 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 entry.rounded_radius = cmd.radius;
             }
             clip_stack.push_back(entry);
-            // #region agent log
-            {
-                std::ostringstream json;
-                json << "{\"frame\":\"" << frame_index_ << "\",\"clip_stack_size_after\":" << clip_stack.size()
-                     << ",\"clip\":{\"x\":" << clip.x << ",\"y\":" << clip.y << ",\"w\":" << clip.w << ",\"h\":" << clip.h
-                     << ",\"has_rounded\":" << (entry.has_rounded ? "true" : "false") << "}}";
-                writeDebugLog("gpu_driver_sdl.cpp:1929", "PushClipRect", json.str(), "E");
-            }
-            // #endregion agent log
             apply_scissor(pass);
             break;
         }
         case GPUCommandType::PopClip: {
-            // #region agent log
-            {
-                std::ostringstream json;
-                json << "{\"frame\":\"" << frame_index_ << "\",\"clip_stack_size_before\":" << clip_stack.size() << "}";
-                writeDebugLog("gpu_driver_sdl.cpp:1933", "PopClip before", json.str(), "E");
-            }
-            // #endregion agent log
             if (!clip_stack.empty()) {
                 clip_stack.pop_back();
             }
-            // #region agent log
-            {
-                std::ostringstream json;
-                json << "{\"frame\":\"" << frame_index_ << "\",\"clip_stack_size_after\":" << clip_stack.size() << "}";
-                writeDebugLog("gpu_driver_sdl.cpp:1935", "PopClip after", json.str(), "E");
-            }
-            // #endregion agent log
             apply_scissor(pass);
             break;
         }
@@ -2027,8 +1963,8 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             SDL_GPUDevice* dev = gpu_device_ ? gpu_device_->getHandle() : nullptr;
 
             // 始终打印 BeginIsolatedLayer 日志
-            SDL_Log("[GPU Execute] BeginIsolatedLayer: layer_id=%llu layer_dirty=%d skip_depth=%d",
-                    static_cast<unsigned long long>(cmd.layer_id), cmd.layer_dirty ? 1 : 0, skip_draw_depth);
+            // SDL_Log("[GPU Execute] BeginIsolatedLayer: layer_id=%llu layer_dirty=%d skip_depth=%d",
+            //         static_cast<unsigned long long>(cmd.layer_id), cmd.layer_dirty ? 1 : 0, skip_draw_depth);
 
             if (debug_rt_enabled_) {
                 SDL_Log("[GPUDriverSDL::execute] BeginIsolatedLayer frame=%llu layer_id=%llu layer_dirty=%d skip_depth=%d",
@@ -2078,20 +2014,6 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
 
             // 只有当图层非脏且有有效缓存时才复用缓存
             // 当 layer_dirty=true 时，必须重新绘制（例如滚动容器内容变化）
-            // #region agent log
-            {
-                std::ostringstream json;
-                json << "{\"frame\":\"" << frame_index_ << "\",\"layer_id\":\"" << layer_id 
-                     << "\",\"layer_dirty\":" << (layer_dirty ? "true" : "false")
-                     << ",\"cache_enabled\":" << (layer_cache_enabled_ ? "true" : "false")
-                     << ",\"has_cache_entry\":" << (cache_entry != nullptr ? "true" : "false")
-                     << ",\"cache_texture\":" << (cache_entry && cache_entry->texture ? "true" : "false")
-                     << ",\"will_reuse_cache\":" << ((layer_cache_enabled_ && !layer_dirty && cache_entry && cache_entry->texture) ? "true" : "false")
-                     << ",\"bounds\":{\"x\":" << layer_state.bounds.x << ",\"y\":" << layer_state.bounds.y 
-                     << ",\"w\":" << layer_state.bounds.width << ",\"h\":" << layer_state.bounds.height << "}}";
-                writeDebugLog("gpu_driver_sdl.cpp:1973", "BeginIsolatedLayer cache decision", json.str(), "A");
-            }
-            // #endregion agent log
             if (layer_cache_enabled_ && !layer_dirty && cache_entry && cache_entry->texture) {
                 // 有有效缓存：不切换 render target，仅记录状态并开始跳过内部绘制
                 if (debug_log_layer_cache_) {
@@ -2106,14 +2028,6 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                             layer_state.bounds.width,
                             layer_state.bounds.height);
                 }
-                // #region agent log
-                {
-                    std::ostringstream json;
-                    json << "{\"frame\":\"" << frame_index_ << "\",\"layer_id\":\"" << layer_id 
-                         << "\",\"skip_depth_before\":" << skip_draw_depth << "}";
-                    writeDebugLog("gpu_driver_sdl.cpp:1993", "Reusing cache, incrementing skip_draw_depth", json.str(), "A");
-                }
-                // #endregion agent log
                 layer_state.texture = cache_entry->texture;
                 layer_state.width = cache_entry->width;
                 layer_state.height = cache_entry->height;
@@ -2125,15 +2039,6 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             }
 
             // 脏图层：需要重新栅格，切换到离屏纹理
-            // #region agent log
-            {
-                std::ostringstream json;
-                json << "{\"frame\":\"" << frame_index_ << "\",\"layer_id\":\"" << static_cast<unsigned long long>(layer_id)
-                     << "\",\"pass_exists\":" << (pass != nullptr ? "true" : "false")
-                     << ",\"current_rt_stack_size\":" << render_target_stack.size() << "}";
-                writeDebugLog("gpu_driver_sdl.cpp:2071", "BeginIsolatedLayer ending pass before rasterize", json.str(), "G");
-            }
-            // #endregion agent log
             if (pass) {
                 SDL_EndGPURenderPass(pass);
                 pass = nullptr;
@@ -2142,16 +2047,8 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             // Workaround: 在隔离层切换时拆分 command buffer，避免同一纹理在同一 command buffer 内多次 Begin/End render pass 导致内容丢失
             // 目前仅在离屏渲染模式启用（窗口 swapchain texture 与 command buffer 绑定，拆分需要额外处理 AcquireGPUSwapchainTexture）。
             if (split_cmd_buf_for_isolated_layers_) {
-                // #region agent log
-                {
-                    std::ostringstream json;
-                    json << "{\"frame\":\"" << frame_index_
-                         << "\",\"where\":\"BeginIsolatedLayer(before_layer_pass)\""
-                         << ",\"offscreen\":" << (offscreen_target_ ? "true" : "false")
-                         << ",\"cmd_buf_old\":\"" << (void*)current_cmd_buf_ << "\"}";
-                    writeDebugLog("gpu_driver_sdl.cpp:2090", "Split command buffer for isolated layer", json.str(), "I");
-                }
-                // #endregion agent log
+                DONG_LOG_DEBUG("[GPUDriverSDL] Split command buffer for isolated layer frame=%llu where=BeginIsolatedLayer(before_layer_pass) offscreen=%d cmd_buf_old=%p",
+                        frame_index_, offscreen_target_ ? 1 : 0, (void*)current_cmd_buf_);
 
                 if ((offscreen_target_ || use_intermediate) && gpu_device_ && current_cmd_buf_) {
                     gpu_device_->submitCommandBuffer(current_cmd_buf_);
@@ -2162,15 +2059,8 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                     }
                 }
 
-                // #region agent log
-                {
-                    std::ostringstream json;
-                    json << "{\"frame\":\"" << frame_index_
-                         << "\",\"where\":\"BeginIsolatedLayer(before_layer_pass)\""
-                         << ",\"cmd_buf_new\":\"" << (void*)current_cmd_buf_ << "\"}";
-                    writeDebugLog("gpu_driver_sdl.cpp:2090", "Split command buffer done", json.str(), "I");
-                }
-                // #endregion agent log
+                DONG_LOG_DEBUG("[GPUDriverSDL] Split command buffer done frame=%llu where=BeginIsolatedLayer(before_layer_pass) cmd_buf_new=%p",
+                        frame_index_, (void*)current_cmd_buf_);
             }
 
             SDL_GPUTexture* layer_texture = nullptr;
@@ -2331,28 +2221,10 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             SDL_GPUDevice* dev = gpu_device_ ? gpu_device_->getHandle() : nullptr;
 
             // 如果这是一个非脏图层，我们之前没有切换 render target，也不需要结束子 pass
-            // #region agent log
-            {
-                std::ostringstream json;
-                json << "{\"frame\":\"" << frame_index_ << "\",\"layer_id\":\"" << layer_info.id 
-                     << "\",\"layer_dirty\":" << (layer_info.dirty ? "true" : "false")
-                     << ",\"skip_depth_before\":" << skip_draw_depth << ",\"path\":\"" 
-                     << (layer_info.dirty ? "rasterize" : "cache_composite") << "\"}";
-                writeDebugLog("gpu_driver_sdl.cpp:2161", "EndIsolatedLayer path decision", json.str(), "C");
-            }
-            // #endregion agent log
             if (!layer_info.dirty) {
                 if (skip_draw_depth > 0) {
                     --skip_draw_depth;
                 }
-                // #region agent log
-                {
-                    std::ostringstream json;
-                    json << "{\"frame\":\"" << frame_index_ << "\",\"layer_id\":\"" << layer_info.id 
-                         << "\",\"skip_depth_after\":" << skip_draw_depth << "}";
-                    writeDebugLog("gpu_driver_sdl.cpp:2163", "Decrementing skip_draw_depth for cache composite", json.str(), "C");
-                }
-                // #endregion agent log
 
                 SDL_GPUTexture* layer_texture = layer_info.texture;
                 if (!pass || !image_pipeline_ || !image_sampler_ || !layer_texture) {
@@ -2433,16 +2305,8 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             // Workaround: 在隔离层切换时拆分 command buffer，避免同一纹理在同一 command buffer 内多次 Begin/End render pass 导致内容丢失
             // 目前仅在离屏渲染模式启用（窗口 swapchain texture 与 command buffer 绑定，拆分需要额外处理 AcquireGPUSwapchainTexture）。
             if (split_cmd_buf_for_isolated_layers_) {
-                // #region agent log
-                {
-                    std::ostringstream json;
-                    json << "{\"frame\":\"" << frame_index_
-                         << "\",\"where\":\"EndIsolatedLayer(before_parent_pass)\""
-                         << ",\"offscreen\":" << (offscreen_target_ ? "true" : "false")
-                         << ",\"cmd_buf_old\":\"" << (void*)current_cmd_buf_ << "\"}";
-                    writeDebugLog("gpu_driver_sdl.cpp:2400", "Split command buffer for isolated layer", json.str(), "I");
-                }
-                // #endregion agent log
+                DONG_LOG_DEBUG("[GPUDriverSDL] Split command buffer for isolated layer frame=%llu where=EndIsolatedLayer(before_parent_pass) offscreen=%d cmd_buf_old=%p",
+                        frame_index_, offscreen_target_ ? 1 : 0, (void*)current_cmd_buf_);
 
                 if ((offscreen_target_ || use_intermediate) && gpu_device_ && current_cmd_buf_) {
                     gpu_device_->submitCommandBuffer(current_cmd_buf_);
@@ -2453,15 +2317,8 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                     }
                 }
 
-                // #region agent log
-                {
-                    std::ostringstream json;
-                    json << "{\"frame\":\"" << frame_index_
-                         << "\",\"where\":\"EndIsolatedLayer(before_parent_pass)\""
-                         << ",\"cmd_buf_new\":\"" << (void*)current_cmd_buf_ << "\"}";
-                    writeDebugLog("gpu_driver_sdl.cpp:2400", "Split command buffer done", json.str(), "I");
-                }
-                // #endregion agent log
+                DONG_LOG_DEBUG("[GPUDriverSDL] Split command buffer done frame=%llu where=EndIsolatedLayer(before_parent_pass) cmd_buf_new=%p",
+                        frame_index_, (void*)current_cmd_buf_);
             }
 
             RenderTargetState child_target = render_target_stack.back();
@@ -2483,17 +2340,6 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             color_target.layer_or_depth_plane = 0;
             color_target.load_op = SDL_GPU_LOADOP_LOAD;
             color_target.store_op = parent_target.is_swapchain ? SDL_GPU_STOREOP_STORE : SDL_GPU_STOREOP_STORE;
-
-            // #region agent log
-            {
-                std::ostringstream json;
-                json << "{\"frame\":\"" << frame_index_ << "\",\"layer_id\":\"" << layer_info.id
-                     << "\",\"clip_stack_size\":" << clip_stack.size()
-                     << ",\"parent_texture\":" << (parent_target.texture ? "valid" : "null")
-                     << ",\"load_op\":\"LOAD\",\"parent_size\":{\"w\":" << parent_target.width << ",\"h\":" << parent_target.height << "}}";
-                writeDebugLog("gpu_driver_sdl.cpp:2344", "EndIsolatedLayer reopening parent pass", json.str(), "F");
-            }
-            // #endregion agent log
 
             pass = SDL_BeginGPURenderPass(current_cmd_buf_, &color_target, 1, nullptr);
             if (!pass) {
@@ -2544,16 +2390,6 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             float draw_w = layer_info.bounds.width * sx;
             float draw_h = layer_info.bounds.height * sy;
             
-            // #region agent log
-            {
-                std::ostringstream json;
-                json << "{\"frame\":\"" << frame_index_ << "\",\"layer_id\":\"" << layer_info.id
-                     << "\",\"draw_rect\":{\"x\":" << draw_x << ",\"y\":" << draw_y
-                     << ",\"w\":" << draw_w << ",\"h\":" << draw_h
-                     << "},\"parent_size\":{\"w\":" << parent_target.width << ",\"h\":" << parent_target.height << "}}";
-                writeDebugLog("gpu_driver_sdl.cpp:2409", "EndIsolatedLayer composite rect", json.str(), "H");
-            }
-            // #endregion agent log
             u.rect[0] = draw_x;
             u.rect[1] = draw_y;
             u.rect[2] = draw_w;
@@ -2631,11 +2467,6 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
         case GPUCommandType::DrawRoundedRectQuad: {
             if (!pass || !round_rect_pipeline_) {
                 break;
-            }
-
-            // 调试：只打印滚动容器内元素的坐标
-            if (cmd.rect.y > 200.0f && cmd.rect.y < 600.0f) {
-                SDL_Log("[GPU Execute] DrawRoundedRect: y=%.1f", cmd.rect.y);
             }
 
             struct RoundRectUniformData {
@@ -2793,16 +2624,6 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             break;
         }
         case GPUCommandType::DrawText: {
-            // #region agent log
-            {
-                std::ostringstream json;
-                json << "{\"frame\":\"" << frame_index_ << "\",\"skip_depth\":" << skip_draw_depth 
-                     << ",\"has_pass\":" << (pass != nullptr ? "true" : "false")
-                     << ",\"glyphs_count\":" << cmd.glyphs.size() << ",\"baseline\":{\"x\":" 
-                     << cmd.baseline_x << ",\"y\":" << cmd.baseline_y << "}}";
-                writeDebugLog("gpu_driver_sdl.cpp:2547", "DrawText command executed", json.str(), "B");
-            }
-            // #endregion agent log
             if (!pass || !text_pipeline_ || glyph_atlas_tiers_.empty() || cmd.glyphs.empty()) {
                 DONG_LOG_WARN("[DrawText] EARLY EXIT: pass=%p text_pipeline=%p tiers_empty=%d glyphs_empty=%d",
                         (void*)pass, (void*)text_pipeline_, glyph_atlas_tiers_.empty() ? 1 : 0, cmd.glyphs.empty() ? 1 : 0);
@@ -2872,45 +2693,12 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
 
             TextBatchUniformData batch_uniform{};
             write_viewport(batch_uniform.viewport);
-            // #region agent log
-            {
-                std::ostringstream json;
-                json << "{\"frame\":\"" << frame_index_ << "\",\"clip_stack_size\":" << clip_stack.size() << ",\"clip_rects\":[";
-                for (size_t i = 0; i < clip_stack.size(); ++i) {
-                    if (i > 0) json << ",";
-                    json << "{\"x\":" << clip_stack[i].scissor.x << ",\"y\":" << clip_stack[i].scissor.y
-                         << ",\"w\":" << clip_stack[i].scissor.w << ",\"h\":" << clip_stack[i].scissor.h
-                         << ",\"has_rounded\":" << (clip_stack[i].has_rounded ? "true" : "false") << "}";
-                }
-                json << "],\"baseline_y\":" << cmd.baseline_y << "}";
-                writeDebugLog("gpu_driver_sdl.cpp:2694", "DrawText clip_stack state", json.str(), "E");
-            }
-            // #endregion agent log
             fill_clip_uniform(batch_uniform.clip);
-            // #region agent log
-            {
-                std::ostringstream json;
-                json << "{\"frame\":\"" << frame_index_ << "\",\"clip_count\":" << (int)batch_uniform.clip.clip_meta[0]
-                     << ",\"clip_rects\":[";
-                int clip_count = (int)batch_uniform.clip.clip_meta[0];
-                for (int i = 0; i < clip_count && i < kMaxRoundedClipUniforms; ++i) {
-                    if (i > 0) json << ",";
-                    json << "{\"x\":" << batch_uniform.clip.clip_rects[i][0] << ",\"y\":" << batch_uniform.clip.clip_rects[i][1]
-                         << ",\"x2\":" << batch_uniform.clip.clip_rects[i][2] << ",\"y2\":" << batch_uniform.clip.clip_rects[i][3]
-                         << ",\"radius\":" << batch_uniform.clip.clip_radii[i] << "}";
-                }
-                json << "],\"baseline_y\":" << cmd.baseline_y << "}";
-                writeDebugLog("gpu_driver_sdl.cpp:2695", "DrawText fill_clip_uniform result", json.str(), "E");
-            }
-            // #endregion agent log
 
             std::vector<PreparedGlyph> prepared;
             prepared.reserve(cmd.glyphs.size());
 
             // 第一步：遍历所有 glyph，确保它们被放入 atlas，并记录每个 glyph 属于哪一页
-            bool first_glyph_logged_outside_scroll = false;
-            bool first_glyph_logged_inside_scroll = false;
-            const float scroll_top_y = 277.0f;  // 对应 BeginIsolatedLayer 中 scrollview 的 bounds.y
             for (size_t glyph_idx = 0; glyph_idx < cmd.glyphs.size(); ++glyph_idx) {
                 const auto& glyph = cmd.glyphs[glyph_idx];
                 if (glyph.glyph_id == 0) {
@@ -3101,31 +2889,6 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                         glyph.glyph_id, px_range_screen, unit_range,
                         inst.params[0], inst.params[1], inst.params[2], inst.params[3],
                         inst.uv_rect[0], inst.uv_rect[1], inst.uv_rect[2], inst.uv_rect[3]);
-
-                // #region agent log
-                // 记录首个 scrollview 外/内的 glyph 的 rect/uv 信息，用于对比帧之间是否一致
-                if (!first_glyph_logged_outside_scroll && cmd.baseline_y < scroll_top_y) {
-                    first_glyph_logged_outside_scroll = true;
-                    std::ostringstream json;
-                    json << "{\"frame\":\"" << frame_index_ << "\",\"baseline_y\":" << cmd.baseline_y
-                         << ",\"glyph_id\":" << glyph.glyph_id
-                         << ",\"rect\":{\"x\":" << inst.rect[0] << ",\"y\":" << inst.rect[1]
-                         << ",\"w\":" << inst.rect[2] << ",\"h\":" << inst.rect[3]
-                         << "},\"uv\":{\"u0\":" << inst.uv_rect[0] << ",\"v0\":" << inst.uv_rect[1]
-                         << ",\"u1\":" << inst.uv_rect[2] << ",\"v1\":" << inst.uv_rect[3] << "}}";
-                    writeDebugLog("gpu_driver_sdl.cpp:2885", "Glyph outside scrollview", json.str(), "D");
-                } else if (!first_glyph_logged_inside_scroll && cmd.baseline_y >= scroll_top_y) {
-                    first_glyph_logged_inside_scroll = true;
-                    std::ostringstream json;
-                    json << "{\"frame\":\"" << frame_index_ << "\",\"baseline_y\":" << cmd.baseline_y
-                         << ",\"glyph_id\":" << glyph.glyph_id
-                         << ",\"rect\":{\"x\":" << inst.rect[0] << ",\"y\":" << inst.rect[1]
-                         << ",\"w\":" << inst.rect[2] << ",\"h\":" << inst.rect[3]
-                         << "},\"uv\":{\"u0\":" << inst.uv_rect[0] << ",\"v0\":" << inst.uv_rect[1]
-                         << ",\"u1\":" << inst.uv_rect[2] << ",\"v1\":" << inst.uv_rect[3] << "}}";
-                    writeDebugLog("gpu_driver_sdl.cpp:2893", "Glyph inside scrollview", json.str(), "D");
-                }
-                // #endregion agent log
 
                 PreparedGlyph pg{};
                 pg.instance = inst;

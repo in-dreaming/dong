@@ -44,13 +44,6 @@ DOMNodePtr hitTestRecursive(const DOMNodePtr& node, dong::layout::Engine* layout
     // 检查点是否在当前节点范围内
     bool in_bounds = (x >= lx && x <= lx + w && y >= ly && y <= ly + h);
     
-    // 调试：打印 input 和 input-group 的布局
-    std::string tag = node->getTagName();
-    std::string cls = node->getAttribute("class");
-    if (tag == "input" || cls.find("input") != std::string::npos) {
-        DONG_LOG_INFO("[hitTest] %s.%s at (%.1f,%.1f) size %.1fx%.1f, point (%d,%d), in_bounds=%d",
-                     tag.c_str(), cls.c_str(), lx, ly, w, h, x, y, in_bounds ? 1 : 0);
-    }
     
     if (!in_bounds) {
         return nullptr;  // 不在范围内，直接返回
@@ -584,33 +577,9 @@ bool View::renderOffscreen(SDL_GPUDevice* device, uint32_t width, uint32_t heigh
         return false;
     }
     
-    // 调试：检查 mapped 数据的前几个像素
-    const uint8_t* mapped_bytes = static_cast<const uint8_t*>(mapped);
-    SDL_Log("[View::renderOffscreen] First 10 pixels from mapped buffer:");
-    for (int i = 0; i < 10; ++i) {
-        int idx = i * 4;
-        SDL_Log("  mapped[%d] = R:%d G:%d B:%d A:%d", 
-                i, mapped_bytes[idx], mapped_bytes[idx+1], mapped_bytes[idx+2], mapped_bytes[idx+3]);
-    }
-    // 检查中间区域
-    int mid_y = 10;
-    SDL_Log("[View::renderOffscreen] Row %d from mapped buffer:", mid_y);
-    for (int x = 0; x < 50; x += 10) {
-        int idx = (mid_y * width + x) * 4;
-        SDL_Log("  mapped[%d,%d] = R:%d G:%d B:%d A:%d", 
-                x, mid_y, mapped_bytes[idx], mapped_bytes[idx+1], mapped_bytes[idx+2], mapped_bytes[idx+3]);
-    }
-    
+
     std::memcpy(out_pixels, mapped, width * height * 4);
     
-    // 验证复制是否正确
-    SDL_Log("[View::renderOffscreen] Verifying copy - Row 10:");
-    for (int x = 0; x < 50; x += 10) {
-        int idx = (10 * width + x) * 4;
-        SDL_Log("  out_pixels[%d,10] = R:%d G:%d B:%d A:%d (mapped: R:%d G:%d B:%d A:%d)", 
-                x, out_pixels[idx], out_pixels[idx+1], out_pixels[idx+2], out_pixels[idx+3],
-                mapped_bytes[idx], mapped_bytes[idx+1], mapped_bytes[idx+2], mapped_bytes[idx+3]);
-    }
     
     SDL_UnmapGPUTransferBuffer(device, download_buffer);
     
@@ -618,21 +587,20 @@ bool View::renderOffscreen(SDL_GPUDevice* device, uint32_t width, uint32_t heigh
     SDL_ReleaseGPUTransferBuffer(device, download_buffer);
     SDL_ReleaseGPUTexture(device, offscreen_texture);
     
-    SDL_Log("[View::renderOffscreen] Successfully rendered and read back %u x %u pixels", width, height);
     return true;
 }
 
 bool View::eval_script(const char* code) {
-    SDL_Log("[View::eval_script] Entry, code=%p, script_engine=%p", (void*)code, (void*)script_engine.get());
+    DONG_LOG_DEBUG("[View::eval_script] Entry, code=%p, script_engine=%p", (void*)code, (void*)script_engine.get());
     if (!code || !script_engine) {
         SDL_Log("[View::eval_script] Early return: null code or script_engine");
         return false;
     }
-    SDL_Log("[View::eval_script] Calling ensureJSBindingsInitialized...");
+    DONG_LOG_DEBUG("[View::eval_script] Calling ensureJSBindingsInitialized...");
     ensureJSBindingsInitialized();
-    SDL_Log("[View::eval_script] ensureJSBindingsInitialized done, calling script_engine->eval...");
+    DONG_LOG_DEBUG("[View::eval_script] ensureJSBindingsInitialized done, calling script_engine->eval...");
     bool result = script_engine->eval(std::string(code));
-    SDL_Log("[View::eval_script] eval returned %d", result ? 1 : 0);
+    DONG_LOG_DEBUG("[View::eval_script] eval returned %d", result ? 1 : 0);
     return result;
 }
 
