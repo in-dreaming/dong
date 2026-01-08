@@ -8,7 +8,7 @@
 #include <sstream>
 #include <cctype>
 #include <cmath>
-
+#include "../core/log.h"
 namespace dong::render {
 
 namespace {
@@ -273,7 +273,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
     // Debug: log all elements
     const std::string tag = node->getTagName();
     std::string dbg_class = node->getAttribute("class");
-    SDL_Log("[Painter] buildDisplayListNode: tag='%s' class='%s'", tag.c_str(), dbg_class.c_str());
+    DONG_LOG_DEBUG("[Painter] buildDisplayListNode: tag='%s' class='%s'", tag.c_str(), dbg_class.c_str());
 
     // Dirty rect 优化
     if (use_dirty_rect_ && !current_dirty_rect_.isEmpty() && layout_node) {
@@ -402,11 +402,6 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         // 1.2 背景填充
         if (style.background_color != "transparent" && rect.width > 0.0f && rect.height > 0.0f) {
             Color c = makeColorFromCss(style.background_color);
-            // 调试：检查 rgba 背景色
-            if (style.background_color.find("rgba") != std::string::npos) {
-                SDL_Log("[Painter] rgba bg='%s' -> Color(%.3f, %.3f, %.3f, %.3f)",
-                        style.background_color.c_str(), c.r, c.g, c.b, c.a);
-            }
             if (style.border_radius > 0.0f) {
                 builder.addRoundedRect(rect, c, style.border_radius);
             } else {

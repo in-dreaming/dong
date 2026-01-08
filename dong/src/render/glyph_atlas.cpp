@@ -490,7 +490,7 @@ const AtlasEntry* GlyphAtlas::addGlyph(uint32_t glyph_id, const std::string& fon
             upload_non_zero++;
         }
     }
-    SDL_Log("[ATLAS UPLOAD] glyph=%u bitmap_size=%zu non_zero_pixels=%d dst=(%u,%u) size=(%u,%u) texture=%p",
+    DONG_LOG_DEBUG("[ATLAS UPLOAD] glyph=%u bitmap_size=%zu non_zero_pixels=%d dst=(%u,%u) size=(%u,%u) texture=%p",
             glyph_id, bitmap.size(), upload_non_zero, dst_x, dst_y, glyph_width, glyph_height, (void*)page->texture);
     
     SDL_UnmapGPUTransferBuffer(dev, transfer_buf);
@@ -555,7 +555,7 @@ const AtlasEntry* GlyphAtlas::addGlyph(uint32_t glyph_id, const std::string& fon
     page->glyph_count += 1;
     page->last_used = ++usage_counter_;
 
-    SDL_Log("GlyphAtlas: added glyph %u (%s) at page %u (%u, %u), size (%u, %u)",
+    DONG_LOG_DEBUG("GlyphAtlas: added glyph %u (%s) at page %u (%u, %u), size (%u, %u)",
             glyph_id, font_path.c_str(), page->page_index, dst_x, dst_y, glyph_width, glyph_height);
 
     return &cache_[key];
@@ -884,7 +884,7 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
     }
 
     
-    SDL_Log("[MSDF DEBUG] glyph=%u msdf_size=%d non_zero_pixels=%d (%.1f%%) r=[%.3f,%.3f] g=[%.3f,%.3f] b=[%.3f,%.3f]",
+    DONG_LOG_DEBUG("[MSDF DEBUG] glyph=%u msdf_size=%d non_zero_pixels=%d (%.1f%%) r=[%.3f,%.3f] g=[%.3f,%.3f] b=[%.3f,%.3f]",
             glyph_id, msdf_size, non_zero_count, 
             100.0f * non_zero_count / (msdf_size * msdf_size),
             min_r, max_r, min_g, max_g, min_b, max_b);

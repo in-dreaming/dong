@@ -3,7 +3,7 @@
 #include <cstring>
 #include <iostream>
 #include <SDL3/SDL_log.h>
-
+#include "../core/log.h"
 extern "C" {
 #include "quickjs.h"
 }
@@ -19,13 +19,13 @@ extern "C" {
 
 static JSValue console_log(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     (void)this_val;
-    SDL_Log("[console_log] Entry, argc=%d", argc);
+    DONG_LOG_DEBUG("[console_log] Entry, argc=%d", argc);
     std::string output;
     for (int i = 0; i < argc; i++) {
         if (i > 0) output += " ";
-        SDL_Log("[console_log] Processing arg %d", i);
+        DONG_LOG_DEBUG("[console_log] Processing arg %d", i);
         const char* str = JS_ToCString(ctx, argv[i]);
-        SDL_Log("[console_log] JS_ToCString returned %p", (void*)str);
+        DONG_LOG_DEBUG("[console_log] JS_ToCString returned %p", (void*)str);
         if (str) {
             output += str;
             JS_FreeCString(ctx, str);
@@ -33,7 +33,7 @@ static JSValue console_log(JSContext* ctx, JSValueConst this_val, int argc, JSVa
             output += "[object]";
         }
     }
-    SDL_Log("[JS] %s", output.c_str());
+    DONG_LOG_DEBUG("[JS] %s", output.c_str());
     return JS_UNDEFINED;
 }
 
@@ -48,7 +48,7 @@ static JSValue console_warn(JSContext* ctx, JSValueConst this_val, int argc, JSV
             JS_FreeCString(ctx, str);
         }
     }
-    SDL_Log("[JS] %s", output.c_str());
+    DONG_LOG_DEBUG("[JS] %s", output.c_str());
     return JS_UNDEFINED;
 }
 
@@ -63,7 +63,7 @@ static JSValue console_error(JSContext* ctx, JSValueConst this_val, int argc, JS
             JS_FreeCString(ctx, str);
         }
     }
-    SDL_Log("[JS] %s", output.c_str());
+    DONG_LOG_DEBUG("[JS] %s", output.c_str());
     return JS_UNDEFINED;
 }
 

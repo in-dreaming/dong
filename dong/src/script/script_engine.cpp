@@ -2,6 +2,7 @@
 #include <cstring>
 #include <cstdio>
 #include <SDL3/SDL_log.h>
+#include "../core/log.h"
 
 namespace dong::script {
 
@@ -49,61 +50,61 @@ ScriptEngine::~ScriptEngine() {
 }
 
 bool ScriptEngine::eval(const std::string& code) {
-    SDL_Log("[ScriptEngine::eval] Entry, context_=%p, code.length()=%zu", (void*)context_, code.length());
+    DONG_LOG_DEBUG("[ScriptEngine::eval] Entry, context_=%p, code.length()=%zu", (void*)context_, code.length());
     if (!context_) {
-        SDL_Log("[ScriptEngine::eval] context_ is null, returning false");
+        DONG_LOG_DEBUG("[ScriptEngine::eval] context_ is null, returning false");
         return false;
     }
 
     // Print first 100 chars of code for debugging
     std::string preview = code.substr(0, 100);
-    SDL_Log("[ScriptEngine::eval] Code preview: %.100s...", preview.c_str());
+    DONG_LOG_DEBUG("[ScriptEngine::eval] Code preview: %.100s...", preview.c_str());
     
     // Test 1: simple expression
-    SDL_Log("[ScriptEngine::eval] Test 1: simple expression...");
+    DONG_LOG_DEBUG("[ScriptEngine::eval] Test 1: simple expression...");
     JSValue test1 = JS_Eval(context_, "1+1", 3, "<test1>", JS_EVAL_TYPE_GLOBAL);
     if (JS_IsException(test1)) {
-        SDL_Log("[ScriptEngine::eval] Test 1 FAILED!");
+        DONG_LOG_DEBUG("[ScriptEngine::eval] Test 1 FAILED!");
         JS_FreeValue(context_, test1);
         return false;
     }
-    SDL_Log("[ScriptEngine::eval] Test 1 passed");
+    DONG_LOG_DEBUG("[ScriptEngine::eval] Test 1 passed");
     JS_FreeValue(context_, test1);
     
     // Test 2: Check if console exists
-    SDL_Log("[ScriptEngine::eval] Test 2: checking console object..."); fflush(stdout); fflush(stderr);
+    DONG_LOG_DEBUG("[ScriptEngine::eval] Test 2: checking console object..."); fflush(stdout); fflush(stderr);
     JSValue global = JS_GetGlobalObject(context_);
-    SDL_Log("[ScriptEngine::eval] Test 2a: got global"); fflush(stdout); fflush(stderr);
+    DONG_LOG_DEBUG("[ScriptEngine::eval] Test 2a: got global"); fflush(stdout); fflush(stderr);
     JSValue console_val = JS_GetPropertyStr(context_, global, "console");
-    SDL_Log("[ScriptEngine::eval] Test 2b: got console property"); fflush(stdout); fflush(stderr);
-    SDL_Log("[ScriptEngine::eval] console is undefined: %d, null: %d, object: %d",
+    DONG_LOG_DEBUG("[ScriptEngine::eval] Test 2b: got console property"); fflush(stdout); fflush(stderr);
+    DONG_LOG_DEBUG("[ScriptEngine::eval] console is undefined: %d, null: %d, object: %d",
             JS_IsUndefined(console_val), JS_IsNull(console_val), JS_IsObject(console_val));
     fflush(stdout); fflush(stderr);
     
     if (JS_IsObject(console_val)) {
-        SDL_Log("[ScriptEngine::eval] Test 2c: getting log property..."); fflush(stdout); fflush(stderr);
+        DONG_LOG_DEBUG("[ScriptEngine::eval] Test 2c: getting log property..."); fflush(stdout); fflush(stderr);
         JSValue log_val = JS_GetPropertyStr(context_, console_val, "log");
-        SDL_Log("[ScriptEngine::eval] Test 2d: got log property"); fflush(stdout); fflush(stderr);
-        SDL_Log("[ScriptEngine::eval] console.log is undefined: %d, function: %d",
+        DONG_LOG_DEBUG("[ScriptEngine::eval] Test 2d: got log property"); fflush(stdout); fflush(stderr);
+        DONG_LOG_DEBUG("[ScriptEngine::eval] console.log is undefined: %d, function: %d",
                 JS_IsUndefined(log_val), JS_IsFunction(context_, log_val));
         fflush(stdout); fflush(stderr);
         JS_FreeValue(context_, log_val);
     }
     JS_FreeValue(context_, console_val);
     JS_FreeValue(context_, global);
-    SDL_Log("[ScriptEngine::eval] Test 2 done"); fflush(stdout); fflush(stderr);
+    DONG_LOG_DEBUG("[ScriptEngine::eval] Test 2 done"); fflush(stdout); fflush(stderr);
     
     // Test 3: Try calling console.log directly via JS_Call
-    SDL_Log("[ScriptEngine::eval] Test 3: calling console.log via JS_Call..."); fflush(stdout); fflush(stderr);
+    DONG_LOG_DEBUG("[ScriptEngine::eval] Test 3: calling console.log via JS_Call..."); fflush(stdout); fflush(stderr);
     global = JS_GetGlobalObject(context_);
     console_val = JS_GetPropertyStr(context_, global, "console");
     if (JS_IsObject(console_val)) {
         JSValue log_func = JS_GetPropertyStr(context_, console_val, "log");
         if (JS_IsFunction(context_, log_func)) {
             JSValue arg = JS_NewString(context_, "direct call test");
-            SDL_Log("[ScriptEngine::eval] Test 3a: About to call JS_Call..."); fflush(stdout); fflush(stderr);
+            DONG_LOG_DEBUG("[ScriptEngine::eval] Test 3a: About to call JS_Call..."); fflush(stdout); fflush(stderr);
             JSValue call_result = JS_Call(context_, log_func, console_val, 1, &arg);
-            SDL_Log("[ScriptEngine::eval] Test 3b: JS_Call returned"); fflush(stdout); fflush(stderr);
+            DONG_LOG_DEBUG("[ScriptEngine::eval] Test 3b: JS_Call returned"); fflush(stdout); fflush(stderr);
             JS_FreeValue(context_, call_result);
             JS_FreeValue(context_, arg);
         }
@@ -111,69 +112,69 @@ bool ScriptEngine::eval(const std::string& code) {
     }
     JS_FreeValue(context_, console_val);
     JS_FreeValue(context_, global);
-    SDL_Log("[ScriptEngine::eval] Test 3 done"); fflush(stdout); fflush(stderr);
+    DONG_LOG_DEBUG("[ScriptEngine::eval] Test 3 done"); fflush(stdout); fflush(stderr);
     
     // Test 4: Narrowing down the crash
-    SDL_Log("[ScriptEngine::eval] Test 4: Narrowing down..."); fflush(stdout); fflush(stderr);
+    DONG_LOG_DEBUG("[ScriptEngine::eval] Test 4: Narrowing down..."); fflush(stdout); fflush(stderr);
     
     // Test 4a: Simple number
-    SDL_Log("[ScriptEngine::eval] Test 4a: Just a number..."); fflush(stdout); fflush(stderr);
+    DONG_LOG_DEBUG("[ScriptEngine::eval] Test 4a: Just a number..."); fflush(stdout); fflush(stderr);
     const char* test4a_code = "42";
     JSValue test4a = JS_Eval(context_, test4a_code, strlen(test4a_code), "<test4a>", JS_EVAL_TYPE_GLOBAL);
-    SDL_Log("[ScriptEngine::eval] Test 4a returned, exception: %d", JS_IsException(test4a)); fflush(stdout); fflush(stderr);
+    DONG_LOG_DEBUG("[ScriptEngine::eval] Test 4a returned, exception: %d", JS_IsException(test4a)); fflush(stdout); fflush(stderr);
     JS_FreeValue(context_, test4a);
     
     // Test 4b: Simple string
-    SDL_Log("[ScriptEngine::eval] Test 4b: Just a string..."); fflush(stdout); fflush(stderr);
+    DONG_LOG_DEBUG("[ScriptEngine::eval] Test 4b: Just a string..."); fflush(stdout); fflush(stderr);
     const char* test4b_code = "'hello'";
     JSValue test4b = JS_Eval(context_, test4b_code, strlen(test4b_code), "<test4b>", JS_EVAL_TYPE_GLOBAL);
-    SDL_Log("[ScriptEngine::eval] Test 4b returned, exception: %d", JS_IsException(test4b)); fflush(stdout); fflush(stderr);
+    DONG_LOG_DEBUG("[ScriptEngine::eval] Test 4b returned, exception: %d", JS_IsException(test4b)); fflush(stdout); fflush(stderr);
     JS_FreeValue(context_, test4b);
     
     // Test 4c: Object literal
-    SDL_Log("[ScriptEngine::eval] Test 4c: Object literal..."); fflush(stdout); fflush(stderr);
+    DONG_LOG_DEBUG("[ScriptEngine::eval] Test 4c: Object literal..."); fflush(stdout); fflush(stderr);
     const char* test4c_code = "({a:1})";
     JSValue test4c = JS_Eval(context_, test4c_code, strlen(test4c_code), "<test4c>", JS_EVAL_TYPE_GLOBAL);
-    SDL_Log("[ScriptEngine::eval] Test 4c returned, exception: %d", JS_IsException(test4c)); fflush(stdout); fflush(stderr);
+    DONG_LOG_DEBUG("[ScriptEngine::eval] Test 4c returned, exception: %d", JS_IsException(test4c)); fflush(stdout); fflush(stderr);
     JS_FreeValue(context_, test4c);
     
     // Test 4d: Array literal
-    SDL_Log("[ScriptEngine::eval] Test 4d: Array literal..."); fflush(stdout); fflush(stderr);
+    DONG_LOG_DEBUG("[ScriptEngine::eval] Test 4d: Array literal..."); fflush(stdout); fflush(stderr);
     const char* test4d_code = "[1,2,3]";
     JSValue test4d = JS_Eval(context_, test4d_code, strlen(test4d_code), "<test4d>", JS_EVAL_TYPE_GLOBAL);
-    SDL_Log("[ScriptEngine::eval] Test 4d returned, exception: %d", JS_IsException(test4d)); fflush(stdout); fflush(stderr);
+    DONG_LOG_DEBUG("[ScriptEngine::eval] Test 4d returned, exception: %d", JS_IsException(test4d)); fflush(stdout); fflush(stderr);
     JS_FreeValue(context_, test4d);
     
     // Test 4e: var declaration (global scope, no lexical env needed)
-    SDL_Log("[ScriptEngine::eval] Test 4e: var y = 1..."); fflush(stdout); fflush(stderr);
+    DONG_LOG_DEBUG("[ScriptEngine::eval] Test 4e: var y = 1..."); fflush(stdout); fflush(stderr);
     const char* test4e_code = "var y = 1";
-    SDL_Log("[ScriptEngine::eval] Test 4e: about to compile..."); fflush(stdout); fflush(stderr);
+    DONG_LOG_DEBUG("[ScriptEngine::eval] Test 4e: about to compile..."); fflush(stdout); fflush(stderr);
     JSValue test4e_compiled = JS_Eval(context_, test4e_code, strlen(test4e_code), "<test4e>", JS_EVAL_FLAG_COMPILE_ONLY);
-    SDL_Log("[ScriptEngine::eval] Test 4e: compile returned, exception: %d", JS_IsException(test4e_compiled)); fflush(stdout); fflush(stderr);
+    DONG_LOG_DEBUG("[ScriptEngine::eval] Test 4e: compile returned, exception: %d", JS_IsException(test4e_compiled)); fflush(stdout); fflush(stderr);
     if (!JS_IsException(test4e_compiled)) {
-        SDL_Log("[ScriptEngine::eval] Test 4e: about to execute..."); fflush(stdout); fflush(stderr);
+        DONG_LOG_DEBUG("[ScriptEngine::eval] Test 4e: about to execute..."); fflush(stdout); fflush(stderr);
         JSValue test4e = JS_EvalFunction(context_, test4e_compiled);
-        SDL_Log("[ScriptEngine::eval] Test 4e returned, exception: %d", JS_IsException(test4e)); fflush(stdout); fflush(stderr);
+        DONG_LOG_DEBUG("[ScriptEngine::eval] Test 4e returned, exception: %d", JS_IsException(test4e)); fflush(stdout); fflush(stderr);
         JS_FreeValue(context_, test4e);
     } else {
         JS_FreeValue(context_, test4e_compiled);
     }
     
     // Test 4f: let declaration (needs lexical env)
-    SDL_Log("[ScriptEngine::eval] Test 4f: let x = 1..."); fflush(stdout); fflush(stderr);
+    DONG_LOG_DEBUG("[ScriptEngine::eval] Test 4f: let x = 1..."); fflush(stdout); fflush(stderr);
     const char* test4f_code = "let x = 1";
     JSValue test4f = JS_Eval(context_, test4f_code, strlen(test4f_code), "<test4f>", JS_EVAL_TYPE_GLOBAL);
-    SDL_Log("[ScriptEngine::eval] Test 4f returned, exception: %d", JS_IsException(test4f)); fflush(stdout); fflush(stderr);
+    DONG_LOG_DEBUG("[ScriptEngine::eval] Test 4f returned, exception: %d", JS_IsException(test4f)); fflush(stdout); fflush(stderr);
     JS_FreeValue(context_, test4f);
     
-    SDL_Log("[ScriptEngine::eval] Test 4 done"); fflush(stdout); fflush(stderr);
+    DONG_LOG_DEBUG("[ScriptEngine::eval] Test 4 done"); fflush(stdout); fflush(stderr);
     
     // Skip Test 5 for now - go directly to actual code
-    SDL_Log("[ScriptEngine::eval] Going to actual eval..."); fflush(stdout); fflush(stderr);
+    DONG_LOG_DEBUG("[ScriptEngine::eval] Going to actual eval..."); fflush(stdout); fflush(stderr);
     
-    SDL_Log("[ScriptEngine::eval] Calling JS_Eval with actual code..."); fflush(stdout); fflush(stderr);
+    DONG_LOG_DEBUG("[ScriptEngine::eval] Calling JS_Eval with actual code..."); fflush(stdout); fflush(stderr);
     JSValue result = JS_Eval(context_, code.c_str(), code.length(), "<eval>", JS_EVAL_TYPE_GLOBAL);
-    SDL_Log("[ScriptEngine::eval] JS_Eval returned"); fflush(stdout); fflush(stderr);
+    DONG_LOG_DEBUG("[ScriptEngine::eval] JS_Eval returned"); fflush(stdout); fflush(stderr);
 
     if (JS_IsException(result)) {
         // 获取异常信息

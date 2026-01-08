@@ -378,96 +378,29 @@ SDL_GPUTexture* View::renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, 
         return nullptr;
     }
     
-    SDL_Log("[View::renderToGPUTexture] root->isLayoutDirty() = %s", root->isLayoutDirty() ? "TRUE" : "FALSE");
+    DONG_LOG_DEBUG("[View::renderToGPUTexture] root->isLayoutDirty() = %s", root->isLayoutDirty() ? "TRUE" : "FALSE");
     
     // 为离屏渲染强制执行一次完整布局，以确保 absolute / inline 等最新逻辑
     // 始终生效，而不是依赖增量 dirty 标记（截图对齐场景更看重正确性而非微观性能）。
     if (layout_engine) {
-        SDL_Log("[View::renderToGPUTexture] Calculating layout (offscreen pass, forced)...");
+        DONG_LOG_DEBUG("[View::renderToGPUTexture] Calculating layout (offscreen pass, forced)...");
         root->markLayoutDirty();
         layout_engine->calculateLayout(root, static_cast<float>(width), static_cast<float>(height));
         root->clearLayoutDirtyRecursive();
-        SDL_Log("[View::renderToGPUTexture] Layout calculated");
-    }
-    
-    std::printf("[DEBUG] After layout check\n");
-    std::fflush(stdout);
-    
-    // 无条件输出所有主要元素的布局
-    if (layout_engine && dom_manager) {
-        auto htmls = dom_manager->getElementsByTagName("html");
-        std::printf("[Layout] Found %zu html elements\n", htmls.size());
-        if (!htmls.empty()) {
-            const auto* layout = layout_engine->getLayout(htmls[0]);
-            if (layout) {
-                std::printf("[Layout] html: at (%.1f, %.1f) size %.1fx%.1f\n",
-                       layout->x, layout->y, layout->width, layout->height);
-            }
-        }
-        
-        auto bodies = dom_manager->getElementsByTagName("body");
-        std::printf("[Layout] Found %zu body elements\n", bodies.size());
-        if (!bodies.empty()) {
-            const auto* layout = layout_engine->getLayout(bodies[0]);
-            if (layout) {
-                std::printf("[Layout] body: at (%.1f, %.1f) size %.1fx%.1f\n",
-                       layout->x, layout->y, layout->width, layout->height);
-            }
-        }
-        
-        auto h1s = dom_manager->getElementsByTagName("h1");
-        std::printf("[Layout] Found %zu h1 elements\n", h1s.size());
-        if (!h1s.empty()) {
-            const auto* layout = layout_engine->getLayout(h1s[0]);
-            if (layout) {
-                std::printf("[Layout] h1: at (%.1f, %.1f) size %.1fx%.1f\n",
-                       layout->x, layout->y, layout->width, layout->height);
-            }
-        }
-        
-        auto divs = dom_manager->getElementsByTagName("div");
-        std::printf("[Layout] Found %zu div elements\n", divs.size());
-        for (size_t i = 0; i < divs.size(); i++) {
-            const auto* layout = layout_engine->getLayout(divs[i]);
-            if (layout) {
-                std::printf("[Layout] div[%zu]: at (%.1f, %.1f) size %.1fx%.1f\n",
-                       i, layout->x, layout->y, layout->width, layout->height);
-            }
-        }
-
-        auto badges = dom_manager->getElementsByClassName("abs-badge");
-        std::printf("[Layout] Found %zu elements with class 'abs-badge'\n", badges.size());
-        for (size_t i = 0; i < badges.size(); ++i) {
-            const auto* layout = layout_engine->getLayout(badges[i]);
-            const auto& st = badges[i]->getComputedStyle();
-            if (layout) {
-                std::printf("[Layout] abs-badge[%zu]: at (%.1f, %.1f) size %.1fx%.1f display=%s position=%s\n",
-                           i,
-                           layout->x, layout->y, layout->width, layout->height,
-                           st.display.c_str(), st.position.c_str());
-            } else {
-                std::printf("[Layout] abs-badge[%zu]: NO LAYOUT (display=%s position=%s)\n",
-                           i, st.display.c_str(), st.position.c_str());
-            }
-        }
-
-        auto chips = dom_manager->getElementsByClassName("inline-chip");
-        std::printf("[Layout] Found %zu elements with class 'inline-chip'\n", chips.size());
-
-        std::fflush(stdout);
+        DONG_LOG_DEBUG("[View::renderToGPUTexture] Layout calculated");
     }
     
     // 3. 构建 DisplayList 并编译为 GPUCommandList
-    SDL_Log("[View::renderToGPUTexture] Building DisplayList...");
+    DONG_LOG_DEBUG("[View::renderToGPUTexture] Building DisplayList...");
     const render::DisplayList& dl = painter->buildDisplayList(root, layout_engine.get());
-    SDL_Log("[View::renderToGPUTexture] DisplayList has %zu items", dl.items.size());
+    DONG_LOG_DEBUG("[View::renderToGPUTexture] DisplayList has %zu items", dl.items.size());
     
     render::GPUCompiler compiler;
     render::GPUCommandList cmd_list;
     const render::LayerTree& layer_tree = painter->getLayerTree();
     debugLogLayerTreeIfEnabled(layer_tree);
     compiler.compile(dl, cmd_list, &layer_tree);
-    SDL_Log("[View::renderToGPUTexture] GPUCommandList has %zu commands", cmd_list.commands.size());
+    DONG_LOG_DEBUG("[View::renderToGPUTexture] GPUCommandList has %zu commands", cmd_list.commands.size());
     
     // 4. 执行离屏渲染
     // 关键：在 beginFrame() 之前预处理资源（如 glyph 纹理上传）
@@ -484,7 +417,7 @@ SDL_GPUTexture* View::renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, 
     gpu_driver_->execute(cmd_list);
     gpu_driver_->endFrameOffscreen();
     
-    SDL_Log("[View::renderToGPUTexture] Successfully rendered to GPU texture %u x %u", width, height);
+    DONG_LOG_DEBUG("[View::renderToGPUTexture] Successfully rendered to GPU texture %u x %u", width, height);
     
     // 返回纹理，调用者负责释放
     return offscreen_texture;

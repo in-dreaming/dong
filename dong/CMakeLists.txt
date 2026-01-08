@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 project(dong LANGUAGES C CXX)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_C_STANDARD 11)
 
@@ -13,7 +13,7 @@ endif()
 # Windows MSVC runtime
 if(WIN32 AND NOT MINGW)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
-    add_compile_options(/MD)
+    add_compile_options(/MD /permissive-)
 endif()
 
 # =============================================================================
@@ -269,6 +269,7 @@ if(BUILD_EXAMPLES)
         msdf_soft_render
         isolation_demo
         sdl_gpu_demo
+        3d_rt
     )
 
     foreach(example ${CPP_EXAMPLES})

@@ -456,7 +456,7 @@ FT_Library getFTLibrary() {
 }
 
 // 检查字体是否支持指定的 Unicode 码点
-bool fontSupportsCodepoint(const std::string& font_path, uint32_t codepoint) {
+bool fontSupportsCodepoint(const ::std::string& font_path, uint32_t codepoint) {
     FT_Library library = getFTLibrary();
     if (!library) {
         return false;
@@ -475,8 +475,8 @@ bool fontSupportsCodepoint(const std::string& font_path, uint32_t codepoint) {
 
 } // namespace
 
-std::string findFontForCodepoint(uint32_t codepoint, 
-                                  const std::string& primary_font) {
+::std::string findFontForCodepoint(uint32_t codepoint, 
+                                  const ::std::string& primary_font) {
     // 首先检查主字体
     if (!primary_font.empty() && fontSupportsCodepoint(primary_font, codepoint)) {
         return primary_font;
@@ -484,8 +484,8 @@ std::string findFontForCodepoint(uint32_t codepoint,
     
     // 尝试 CJK 回退字体
     for (const auto& fallback : kCJKFallbackFonts) {
-        namespace fs = std::filesystem;
-        std::error_code ec;
+        namespace fs = ::std::filesystem;
+        ::std::error_code ec;
         if (fs::exists(fallback, ec) && !ec) {
             if (fontSupportsCodepoint(fallback, codepoint)) {
                 return fallback;
