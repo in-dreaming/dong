@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            margin: 0;
+            padding: 20px;
+            background-color: #1a1a2e;
+            color: #eaeaea;
+            font-family: Arial, sans-serif;
+        }
+        
+        h1 {
+            font-size: 28px;
+            color: #00d4ff;
+            margin-bottom: 20px;
+        }
+        
+        .section {
+            background-color: #16213e;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+        
+        .section-title {
+            font-size: 18px;
+            color: #e94560;
+            margin-bottom: 12px;
+        }
+        
+        .button-row {
+            display: flex;
+            gap: 12px;
+        }
+        
+        button {
+            background-color: #0f3460;
+            color: #ffffff;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-size: 16px;
+        }
+        
+        #click-count {
+            margin-top: 12px;
+            font-size: 14px;
+            color: #94a3b8;
+        }
+    </style>
+</head>
+<body>
+    <h1>Hello (Script Tag)</h1>
+    
+    <!-- Button Section -->
+    <div class="section">
+        <div class="section-title">Button Clicks</div>
+        <div class="button-row">
+            <button id="btn-primary">Hello</button>
+        </div>
+        <div id="click-count">Clicks: 0</div>
+    </div>
+    
+    <!-- Inline script for initialization -->
+    <script>
+        console.log("[JS] Screen 2 inline script - initializing...");
+    </script>
+    
+    <!-- External script for event handlers -->
+    <script src="data/screen2.js"></script>
+</body>
+</html>

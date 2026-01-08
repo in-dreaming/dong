@@ -4,8 +4,11 @@
 #include <cstring>
 #include <functional>
 #include <cstdlib>
+#include <fstream>
+#include <sstream>
 #include <SDL3/SDL_log.h>
 #include <SDL3/SDL_gpu.h>
+#include <SDL3/SDL_filesystem.h>
 #include "log.h"
 #include "../dom/dom_manager.hpp"
 #include "../dom/event_system.hpp"
@@ -184,6 +187,9 @@ void View::load_html(const char* html) {
         
         // 执行 <script> 标签中的 JavaScript 代码
         if (script_engine && dom_manager) {
+            // 确保 JS bindings 已初始化（包括 console 等全局对象）
+            ensureJSBindingsInitialized();
+            
             auto scripts = dom_manager->getElementsByTagName("script");
             SDL_Log("[View::load_html] Found %zu script tags", scripts.size());
             
@@ -206,17 +212,46 @@ void View::load_html(const char* html) {
             
             for (const auto& script : scripts) {
                 if (script) {
-                    // 获取 script 标签的文本内容
                     std::string code;
-                    SDL_Log("[View::load_html] Script tag has %zu children", script->getChildren().size());
-                    for (const auto& child : script->getChildren()) {
-                        if (child) {
-                            SDL_Log("[View::load_html] Script child type=%d", (int)child->getType());
-                            if (child->getType() == dom::DOMNode::NodeType::TEXT) {
-                                code += child->getTextContent();
+                    
+                    // 检查是否有 src 属性（外部脚本）
+                    std::string src = script->getAttribute("src");
+                    if (!src.empty()) {
+                        SDL_Log("[View::load_html] Loading external script: %s", src.c_str());
+                        
+                        // 尝试直接打开文件
+                        std::ifstream file(src);
+                        if (!file.is_open()) {
+                            // 如果失败，尝试使用 SDL 基础路径
+                            const char* basePath = SDL_GetBasePath();
+                            if (basePath) {
+                                std::string fullPath = std::string(basePath) + src;
+                                SDL_Log("[View::load_html] Trying with base path: %s", fullPath.c_str());
+                                file.open(fullPath);
+                            }
+                        }
+                        
+                        if (file.is_open()) {
+                            std::stringstream buffer;
+                            buffer << file.rdbuf();
+                            code = buffer.str();
+                            SDL_Log("[View::load_html] Loaded external script (%zu chars)", code.length());
+                        } else {
+                            SDL_Log("[View::load_html] Failed to load external script: %s", src.c_str());
+                        }
+                    } else {
+                        // 获取 script 标签的文本内容（inline 脚本）
+                        SDL_Log("[View::load_html] Script tag has %zu children", script->getChildren().size());
+                        for (const auto& child : script->getChildren()) {
+                            if (child) {
+                                SDL_Log("[View::load_html] Script child type=%d", (int)child->getType());
+                                if (child->getType() == dom::DOMNode::NodeType::TEXT) {
+                                    code += child->getTextContent();
+                                }
                             }
                         }
                     }
+                    
                     if (!code.empty()) {
                         SDL_Log("[View::load_html] Executing script (%zu chars)", code.length());
                         script_engine->eval(code);
