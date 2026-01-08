@@ -26,7 +26,7 @@ public:
     
     // 移动参数
     float move_speed = 5.0f;
-    float mouse_sensitivity = 0.002f;
+    float mouse_sensitivity = 0.01f;
     float sprint_multiplier = 2.0f;
     
     // 视角参数
@@ -50,10 +50,14 @@ public:
 
     // 获取右方向（水平面上）
     Vec3 getRight() const {
+        // 右向量 = 前向量绕Y轴顺时针旋转90度
+        // 前向量: {sin(yaw), 0, cos(yaw)}
+        // 右向量: {cos(yaw), 0, -sin(yaw)} 但鼠标yaw是反向的
+        // 所以实际右向量需要取反
         return Vec3{
-            std::cos(yaw),
+            -std::cos(yaw),
             0,
-            -std::sin(yaw)
+            std::sin(yaw)
         };
     }
 
@@ -107,7 +111,7 @@ public:
                 int mouse_delta_x, int mouse_delta_y) {
         // 视角控制（右键按住时）
         if (right_mouse_down) {
-            yaw += mouse_delta_x * mouse_sensitivity;
+            yaw -= mouse_delta_x * mouse_sensitivity;
             pitch -= mouse_delta_y * mouse_sensitivity;
             pitch = clamp(pitch, -pitch_limit, pitch_limit);
         }

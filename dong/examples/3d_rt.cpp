@@ -440,13 +440,15 @@ int main() {
         return 1;
     }
 
-    // 创建纯色管线
+    // 创建纯色管线（用于地面网格 - 使用 LINE_LIST）
     pipeInfo.fragment_shader = fsColor;
+    pipeInfo.primitive_type = SDL_GPU_PRIMITIVETYPE_LINELIST;  // 地面网格是线段
     SDL_GPUGraphicsPipeline* colorPipeline = SDL_CreateGPUGraphicsPipeline(device, &pipeInfo);
     if (!colorPipeline) {
         SDL_Log("Failed to create color pipeline: %s", SDL_GetError());
         return 1;
     }
+    SDL_Log("Created color pipeline with LINE_LIST primitive type for grid");
 
     // 创建采样器
     SDL_GPUSamplerCreateInfo samplerInfo{};
@@ -457,25 +459,32 @@ int main() {
     samplerInfo.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
     SDL_GPUSampler* sampler = SDL_CreateGPUSampler(device, &samplerInfo);
 
-    // 创建地面网格顶点
+    // 创建地面网格顶点（使用 LINE_LIST，每两个顶点一条线）
     std::vector<Vertex3D> gridVerts;
     const float gridSize = 20.0f;
     const int gridLines = 21;
     for (int i = 0; i < gridLines; i++) {
         float t = -gridSize / 2 + (gridSize / (gridLines - 1)) * i;
-        // X 方向线
+        // X 方向线（从 -gridSize/2 到 +gridSize/2，Z 坐标固定为 t）
         gridVerts.push_back({-gridSize / 2, 0, t, 0, 0});
         gridVerts.push_back({gridSize / 2, 0, t, 1, 0});
-        // Z 方向线
+        // Z 方向线（从 -gridSize/2 到 +gridSize/2，X 坐标固定为 t）
         gridVerts.push_back({t, 0, -gridSize / 2, 0, 0});
         gridVerts.push_back({t, 0, gridSize / 2, 0, 1});
     }
+    SDL_Log("Created grid with %zu vertices (%d lines * 2 vertices per line * 2 directions)", 
+            gridVerts.size(), gridLines);
 
     // 创建顶点缓冲区
     SDL_GPUBufferCreateInfo vbInfo{};
     vbInfo.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
     vbInfo.size = (Uint32)(gridVerts.size() * sizeof(Vertex3D));
     SDL_GPUBuffer* gridVB = SDL_CreateGPUBuffer(device, &vbInfo);
+    if (!gridVB) {
+        SDL_Log("ERROR: Failed to create grid vertex buffer: %s", SDL_GetError());
+        return 1;
+    }
+    SDL_Log("Created grid vertex buffer: %zu vertices, %zu bytes", gridVerts.size(), gridVerts.size() * sizeof(Vertex3D));
     
     // 创建 Dong 上下文
     dong_context_t* ctx = dong_create_context();
@@ -581,14 +590,18 @@ int main() {
     SDL_Log("Press TAB to toggle billboard mode, 1-3 to select panels");
 
     while (running) {
+        SDL_Log("[MAIN LOOP] ===== Frame %u START =====", frameCount);
         auto now = std::chrono::high_resolution_clock::now();
         float dt = std::chrono::duration<float>(now - lastTime).count();
         lastTime = now;
 
         input.resetFrameState();
 
+        SDL_Log("[MAIN LOOP] Frame %u: Polling events...", frameCount);
         SDL_Event event;
+        int eventCount = 0;
         while (SDL_PollEvent(&event)) {
+            eventCount++;
             input.handleEvent(event);
 
             if (event.type == SDL_EVENT_QUIT || event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED) {
@@ -670,6 +683,9 @@ int main() {
                 }
             }
         }
+        if (eventCount > 0) {
+            SDL_Log("[MAIN LOOP] Frame %u: processed %d events", frameCount, eventCount);
+        }
 
         // 相机更新
         camera.update(dt, input.keys, input.right_mouse_down, input.mouse_delta_x, input.mouse_delta_y);
@@ -694,6 +710,7 @@ int main() {
         }
 
         // 更新 UI（这会标记内容是否变化）
+        SDL_Log("[MAIN LOOP] Frame %u: Updating UI panels...", frameCount);
         for (int i = 0; i < NUM_PANELS; i++) {
             dong_view_update(panels[i].view);
         }
@@ -701,14 +718,17 @@ int main() {
         // 渲染 UI 到纹理（每帧都更新，因为 UI 可能变化）
         // 注意：dong_view_render_to_gpu_texture 内部会创建并提交 command buffer
         // 它使用独立的 offscreen 渲染路径，不会与主循环的 command buffer 冲突
+        SDL_Log("[MAIN LOOP] Frame %u: Rendering UI panels to textures...", frameCount);
         for (int i = 0; i < NUM_PANELS; i++) {
             // 释放旧纹理
             if (panels[i].render_texture) {
+                SDL_Log("[MAIN LOOP] Frame %u: Releasing old texture for panel %d", frameCount, i);
                 SDL_ReleaseGPUTexture(device, panels[i].render_texture);
                 panels[i].render_texture = nullptr;
             }
             
             // 渲染到 GPU 纹理（内部会等待 GPU 空闲并提交）
+            SDL_Log("[MAIN LOOP] Frame %u: Rendering panel %d to texture...", frameCount, i);
             panels[i].render_texture = (SDL_GPUTexture*)dong_view_render_to_gpu_texture(
                 panels[i].view, device, panels[i].width, panels[i].height);
             
@@ -718,6 +738,7 @@ int main() {
                 running = false;
                 break;
             }
+            SDL_Log("[MAIN LOOP] Frame %u: Panel %d rendered successfully", frameCount, i);
         }
         
         if (!running) {
@@ -725,20 +746,36 @@ int main() {
             break;  // 如果渲染失败，退出主循环
         }
         
-        frameCount++;
+        SDL_Log("[MAIN LOOP] Frame %u: All panels rendered successfully", frameCount);
+        SDL_Log("[MAIN LOOP] Frame %u: Acquiring command buffer for 3D scene...", frameCount);
 
         // 获取命令缓冲区（用于主场景渲染）
         SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(device);
         if (!cmd) {
-            SDL_Log("Warning: Failed to acquire command buffer: %s", SDL_GetError());
+            SDL_Log("ERROR: Failed to acquire command buffer (frame %u): %s", frameCount, SDL_GetError());
             SDL_Delay(16);
-            continue;
+            running = false;
+            break;
         }
+        SDL_Log("[MAIN LOOP] Frame %u: Command buffer acquired successfully", frameCount);
 
-        // 开始 copy pass - 上传所有数据
+        // 开始 copy pass - 上传所有数据（必须在 swapchain 获取之前）
+        SDL_Log("[MAIN LOOP] Frame %u: Beginning copy pass to upload vertex data...", frameCount);
+        fflush(stdout);  // 确保日志立即输出
         SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(cmd);
+        if (!copyPass) {
+            SDL_Log("ERROR: Failed to begin copy pass (frame %u): %s", frameCount, SDL_GetError());
+            fflush(stdout);
+            SDL_SubmitGPUCommandBuffer(cmd);
+            running = false;
+            break;
+        }
+        SDL_Log("[MAIN LOOP] Frame %u: Copy pass begun successfully", frameCount);
+        fflush(stdout);
 
         // 上传地面网格顶点
+        SDL_Log("[MAIN LOOP] Frame %u: Uploading grid vertices (%zu vertices, %zu bytes)...", 
+                frameCount, gridVerts.size(), gridVerts.size() * sizeof(Vertex3D));
         {
             SDL_GPUTransferBufferCreateInfo tbInfo{};
             tbInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
@@ -757,9 +794,11 @@ int main() {
             dstRegion.size = (Uint32)(gridVerts.size() * sizeof(Vertex3D));
             SDL_UploadToGPUBuffer(copyPass, &srcLoc, &dstRegion, false);
             SDL_ReleaseGPUTransferBuffer(device, transferBuf);
+            SDL_Log("[MAIN LOOP] Frame %u: Grid vertices uploaded successfully", frameCount);
         }
 
         // 上传面板顶点
+        SDL_Log("[MAIN LOOP] Frame %u: Uploading panel vertices...", frameCount);
         for (int i = 0; i < NUM_PANELS; i++) {
             if (!panels[i].render_texture) continue;  // 跳过未成功渲染的面板
             
@@ -791,20 +830,33 @@ int main() {
             SDL_UploadToGPUBuffer(copyPass, &panelSrcLoc, &panelDstRegion, false);
             SDL_ReleaseGPUTransferBuffer(device, panelTransfer);
         }
+        SDL_Log("[MAIN LOOP] Frame %u: All vertex data uploaded, ending copy pass...", frameCount);
+        fflush(stdout);
         SDL_EndGPUCopyPass(copyPass);
+        SDL_Log("[MAIN LOOP] Frame %u: Copy pass ended successfully", frameCount);
+        fflush(stdout);
+        
+        // 注意：copy pass 结束后，顶点数据已经上传到 GPU
+        // 但是，在同一个 command buffer 中，我们可以继续使用这些数据
+        // 不需要等待 GPU 同步，因为 copy pass 和 render pass 在同一个 command buffer 中
 
-        // 获取 swapchain
+        // 获取 swapchain（必须在 copy pass 之后，但在 render pass 之前）
+        SDL_Log("[MAIN LOOP] Frame %u: Acquiring swapchain texture...", frameCount);
         SDL_GPUTexture* swapchain = nullptr;
         Uint32 sw, sh;
         if (!SDL_WaitAndAcquireGPUSwapchainTexture(cmd, window, &swapchain, &sw, &sh) || !swapchain) {
-            SDL_Log("Warning: Failed to acquire swapchain texture: %s", SDL_GetError());
+            SDL_Log("ERROR: Failed to acquire swapchain texture (frame %u): %s", frameCount, SDL_GetError());
             SDL_SubmitGPUCommandBuffer(cmd);
             SDL_Delay(16);
-            continue;
+            running = false;
+            break;
         }
+        SDL_Log("[MAIN LOOP] Frame %u: Swapchain acquired: %ux%u", frameCount, sw, sh);
 
         // 创建/重建深度纹理
+        SDL_Log("[MAIN LOOP] Frame %u: Checking depth texture...", frameCount);
         if (!depthTexture || depthW != sw || depthH != sh) {
+            SDL_Log("[MAIN LOOP] Frame %u: Creating/recreating depth texture...", frameCount);
             if (depthTexture) {
                 SDL_ReleaseGPUTexture(device, depthTexture);
                 depthTexture = nullptr;
@@ -828,9 +880,13 @@ int main() {
             }
             depthW = sw;
             depthH = sh;
+            SDL_Log("[MAIN LOOP] Frame %u: Depth texture ready: %ux%u", frameCount, depthW, depthH);
+        } else {
+            SDL_Log("[MAIN LOOP] Frame %u: Depth texture already exists: %ux%u", frameCount, depthW, depthH);
         }
 
         // 开始渲染 pass
+        SDL_Log("[MAIN LOOP] Frame %u: Beginning render pass...", frameCount);
         SDL_GPUColorTargetInfo colorTarget{};
         colorTarget.texture = swapchain;
         colorTarget.clear_color = SDL_FColor{0.08f, 0.08f, 0.12f, 1.0f};
@@ -844,15 +900,33 @@ int main() {
         depthTarget.store_op = SDL_GPU_STOREOP_DONT_CARE;
 
         SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cmd, &colorTarget, 1, &depthTarget);
+        if (!pass) {
+            SDL_Log("ERROR: Failed to begin render pass (frame %u): %s", frameCount, SDL_GetError());
+            SDL_ReleaseGPUTexture(device, swapchain);
+            SDL_SubmitGPUCommandBuffer(cmd);
+            running = false;
+            break;
+        }
+        SDL_Log("[MAIN LOOP] Frame %u: Render pass begun successfully", frameCount);
 
         float aspect = (float)sw / (float)sh;
         Mat4 vp = camera.getViewProjectionMatrix(aspect);
         Mat4 identity = Mat4::identity();
 
         // 绘制地面网格
+        SDL_Log("[MAIN LOOP] Frame %u: Drawing ground grid...", frameCount);
+        SDL_Log("[MAIN LOOP] Frame %u: Binding color pipeline...", frameCount);
         SDL_BindGPUGraphicsPipeline(pass, colorPipeline);
+        SDL_Log("[MAIN LOOP] Frame %u: Binding vertex buffer (gridVB=%p, size=%zu bytes)...", 
+                frameCount, (void*)gridVB, gridVerts.size() * sizeof(Vertex3D));
+        if (!gridVB) {
+            SDL_Log("ERROR: gridVB is null!");
+            running = false;
+            break;
+        }
         SDL_GPUBufferBinding vbBinding{gridVB, 0};
         SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
+        SDL_Log("[MAIN LOOP] Frame %u: Vertex buffer bound successfully", frameCount);
 
         Uniforms3D gridUniforms{};
         memcpy(gridUniforms.mvp, vp.m, sizeof(float) * 16);
@@ -865,11 +939,33 @@ int main() {
         gridUniforms.highlight[1] = 0;
         gridUniforms.highlight[2] = 0;
         gridUniforms.highlight[3] = 0;
+        SDL_Log("[MAIN LOOP] Frame %u: Pushing grid uniforms (gridVerts.size()=%zu, uniformSize=%zu)...", 
+                frameCount, gridVerts.size(), sizeof(gridUniforms));
+        SDL_Log("[MAIN LOOP] Frame %u: About to call SDL_PushGPUVertexUniformData...", frameCount);
         SDL_PushGPUVertexUniformData(cmd, 0, &gridUniforms, sizeof(gridUniforms));
+        SDL_Log("[MAIN LOOP] Frame %u: SDL_PushGPUVertexUniformData completed", frameCount);
+        SDL_Log("[MAIN LOOP] Frame %u: About to call SDL_PushGPUFragmentUniformData...", frameCount);
         SDL_PushGPUFragmentUniformData(cmd, 0, &gridUniforms, sizeof(gridUniforms));
-        SDL_DrawGPUPrimitives(pass, (Uint32)gridVerts.size(), 1, 0, 0);
+        SDL_Log("[MAIN LOOP] Frame %u: SDL_PushGPUFragmentUniformData completed", frameCount);
+        // 对于 LINE_LIST，顶点数应该是偶数（每两个顶点一条线）
+        Uint32 numVertices = (Uint32)gridVerts.size();
+        Uint32 numLines = numVertices / 2;
+        SDL_Log("[MAIN LOOP] Frame %u: About to call SDL_DrawGPUPrimitives with %u vertices (%u lines)...", 
+                frameCount, numVertices, numLines);
+        SDL_Log("[MAIN LOOP] Frame %u: gridVB=%p, gridVB size should be %zu bytes", 
+                frameCount, (void*)gridVB, gridVerts.size() * sizeof(Vertex3D));
+        fflush(stdout);
+        
+        // 注意：对于 LINE_LIST，SDL_DrawGPUPrimitives 的 num_vertices 应该是总顶点数
+        // GPU 会自动将每两个顶点解释为一条线
+        SDL_DrawGPUPrimitives(pass, numVertices, 1, 0, 0);
+        
+        SDL_Log("[MAIN LOOP] Frame %u: SDL_DrawGPUPrimitives completed", frameCount);
+        fflush(stdout);
+        SDL_Log("[MAIN LOOP] Frame %u: Ground grid drawn successfully", frameCount);
 
         // 绘制 UI 面板
+        SDL_Log("[MAIN LOOP] Frame %u: Drawing UI panels...", frameCount);
         SDL_BindGPUGraphicsPipeline(pass, texturePipeline);
         
         for (int i = 0; i < NUM_PANELS; i++) {
@@ -897,8 +993,11 @@ int main() {
 
             SDL_DrawGPUPrimitives(pass, 6, 1, 0, 0);
         }
+        SDL_Log("[MAIN LOOP] Frame %u: All UI panels drawn", frameCount);
 
+        SDL_Log("[MAIN LOOP] Frame %u: Ending render pass...", frameCount);
         SDL_EndGPURenderPass(pass);
+        SDL_Log("[MAIN LOOP] Frame %u: Render pass ended, submitting command buffer...", frameCount);
         
         // 提交命令缓冲区（提交后 swapchain 会自动 present）
         if (!SDL_SubmitGPUCommandBuffer(cmd)) {
@@ -907,11 +1006,16 @@ int main() {
             running = false;
             break;
         }
+        SDL_Log("[MAIN LOOP] Frame %u: Command buffer submitted successfully", frameCount);
         
         // 注意：swapchain 纹理会在下次 acquire 时自动释放，不需要手动释放
-
+        
+        frameCount++;
+        SDL_Log("[MAIN LOOP] Frame %u: Complete, delaying...", frameCount);
         SDL_Delay(16);
     }
+    
+    SDL_Log("[MAIN LOOP] Exited main loop, frameCount=%u, running=%d", frameCount, running ? 1 : 0);
 
     // 清理
     SDL_Log("Cleaning up...");

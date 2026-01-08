@@ -270,6 +270,7 @@ if(BUILD_EXAMPLES)
         isolation_demo
         sdl_gpu_demo
         3d_rt
+        3d_cube
     )
 
     foreach(example ${CPP_EXAMPLES})
