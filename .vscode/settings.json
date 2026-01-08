@@ -15,7 +15,10 @@
     "files.associations": {
         "*.hpp": "cpp",
         "*.cpp": "cpp",
-        "*.h": "c"
+        "*.h": "c",
+        "any": "cpp",
+        "filesystem": "cpp",
+        "xstring": "cpp"
     },
     
     // 搜索排除

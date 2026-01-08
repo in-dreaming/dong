@@ -1,7 +1,7 @@
 /**
- * Dong Engine 3D Cube Demo
+ * Dong Engine 3D Screen Demo
  * 
- * 在3D空间中渲染一个旋转的立方体
+ * 在3D空间中渲染立方体和两个"屏幕"，屏幕内容来自实时渲染的RT
  * 
  * 控制说明：
  * - 右键按住 + 鼠标移动：控制视角
@@ -23,48 +23,17 @@
 
 #include "utils/math3d.hpp"
 #include "utils/camera.hpp"
+#include "utils/gpu_utils.hpp"
 
 using namespace dong::utils;
 
-// 顶点着色器 (HLSL)
-static const char* kVertexShader = R"(
-struct VSInput {
-    float3 position : TEXCOORD0;
-    float3 normal : TEXCOORD1;
-    float3 color : TEXCOORD2;
-};
-
-struct VSOutput {
-    float4 position : SV_Position;
-    float3 worldPos : TEXCOORD0;
-    float3 normal : TEXCOORD1;
-    float3 color : TEXCOORD2;
-};
-
-cbuffer Uniforms : register(b0, space1) {
-    float4x4 uMVP;
-    float4x4 uModel;
-    float4 uLightDir;
-    float4 uAmbient;
-};
-
-VSOutput main(VSInput input) {
-    VSOutput output;
-    output.position = mul(uMVP, float4(input.position, 1.0));
-    output.worldPos = mul(uModel, float4(input.position, 1.0)).xyz;
-    output.normal = mul((float3x3)uModel, input.normal);
-    output.color = input.color;
-    return output;
-}
-)";
-
-// 片段着色器 (HLSL)
-static const char* kFragmentShader = R"(
+// RT 场景片段着色器（动画颜色效果）
+static const char* kRTFragmentShader = R"(
 cbuffer Uniforms : register(b0, space3) {
     float4x4 uMVP;
     float4x4 uModel;
     float4 uLightDir;
-    float4 uAmbient;
+    float4 uAmbient;  // w = time
 };
 
 struct PSInput {
@@ -77,191 +46,51 @@ struct PSInput {
 float4 main(PSInput input) : SV_Target0 {
     float3 N = normalize(input.normal);
     float3 L = normalize(uLightDir.xyz);
-    
-    // 漫反射光照
     float diff = max(dot(N, L), 0.0);
-    float3 diffuse = input.color * diff;
     
-    // 环境光
-    float3 ambient = input.color * uAmbient.xyz;
+    float time = uAmbient.w;
+    float3 animColor = input.color;
+    animColor.r *= 0.5 + 0.5 * sin(time * 2.0);
+    animColor.g *= 0.5 + 0.5 * sin(time * 2.0 + 2.094);
+    animColor.b *= 0.5 + 0.5 * sin(time * 2.0 + 4.189);
     
-    // 最终颜色
-    float3 result = ambient + diffuse * 0.8;
+    float3 ambient = animColor * uAmbient.xyz;
+    float3 result = ambient + animColor * diff * 0.8;
     return float4(result, 1.0);
 }
 )";
 
-// 地面网格着色器
-static const char* kGridFragShader = R"(
-cbuffer Uniforms : register(b0, space3) {
-    float4x4 uMVP;
-    float4x4 uModel;
-    float4 uLightDir;
-    float4 uAmbient;
+// 屏幕信息
+struct Screen3D {
+    SDL_GPUTexture* colorTexture = nullptr;
+    SDL_GPUTexture* depthTexture = nullptr;
+    SDL_GPUBuffer* quadVB = nullptr;
+    Vec3 position;
+    float yaw = 0;
+    float width = 2.0f;
+    float height = 1.5f;
+    uint32_t rtWidth = 512;
+    uint32_t rtHeight = 384;
+    float cubeRotation = 0.0f;
+    float cubeRotationSpeed = 1.0f;
+    float timeOffset = 0.0f;
+    bool hovered = false;
 };
 
-struct PSInput {
-    float4 position : SV_Position;
-    float3 worldPos : TEXCOORD0;
-    float3 normal : TEXCOORD1;
-    float3 color : TEXCOORD2;
-};
-
-float4 main(PSInput input) : SV_Target0 {
-    // 基于距离的淡出效果
-    float dist = length(input.worldPos.xz);
-    float fade = 1.0 - smoothstep(8.0, 15.0, dist);
-    return float4(input.color, fade);
-}
-)";
-
-// 顶点结构
-struct Vertex {
-    float x, y, z;    // 位置
-    float nx, ny, nz; // 法线
-    float r, g, b;    // 颜色
-};
-
-// Uniform 数据
-struct Uniforms {
-    float mvp[16];
-    float model[16];
-    float lightDir[4];
-    float ambient[4];
-};
-
-// 编译着色器
-static SDL_GPUShader* compileShader(SDL_GPUDevice* device, SDL_GPUShaderStage stage,
-                                    const char* hlsl, const char* entry) {
-    SDL_GPUShaderFormat formats = SDL_GetGPUShaderFormats(device);
-    
-    SDL_ShaderCross_HLSL_Info info{};
-    info.source = hlsl;
-    info.entrypoint = entry;
-    info.shader_stage = (stage == SDL_GPU_SHADERSTAGE_VERTEX) ? 
-                        SDL_SHADERCROSS_SHADERSTAGE_VERTEX : 
-                        SDL_SHADERCROSS_SHADERSTAGE_FRAGMENT;
-    
-    if (formats & SDL_GPU_SHADERFORMAT_SPIRV) {
-        size_t bytecode_size = 0;
-        void* bytecode = SDL_ShaderCross_CompileSPIRVFromHLSL(&info, &bytecode_size);
-        if (!bytecode) {
-            SDL_Log("Failed to compile HLSL to SPIRV: %s", SDL_GetError());
-            return nullptr;
-        }
-        
-        SDL_GPUShaderCreateInfo sci{};
-        sci.code = (const Uint8*)bytecode;
-        sci.code_size = bytecode_size;
-        sci.entrypoint = entry;
-        sci.format = SDL_GPU_SHADERFORMAT_SPIRV;
-        sci.stage = stage;
-        sci.num_uniform_buffers = 1;
-        
-        SDL_GPUShader* shader = SDL_CreateGPUShader(device, &sci);
-        SDL_free(bytecode);
-        return shader;
-    }
-    
-    if (formats & SDL_GPU_SHADERFORMAT_DXIL) {
-        size_t bytecode_size = 0;
-        void* bytecode = SDL_ShaderCross_CompileDXILFromHLSL(&info, &bytecode_size);
-        if (!bytecode) {
-            SDL_Log("Failed to compile HLSL to DXIL: %s", SDL_GetError());
-            return nullptr;
-        }
-        
-        SDL_GPUShaderCreateInfo sci{};
-        sci.code = (const Uint8*)bytecode;
-        sci.code_size = bytecode_size;
-        sci.entrypoint = entry;
-        sci.format = SDL_GPU_SHADERFORMAT_DXIL;
-        sci.stage = stage;
-        sci.num_uniform_buffers = 1;
-        
-        SDL_GPUShader* shader = SDL_CreateGPUShader(device, &sci);
-        SDL_free(bytecode);
-        return shader;
-    }
-    
-    SDL_Log("No supported shader format found");
-    return nullptr;
+// 获取屏幕的世界变换矩阵
+Mat4 getScreenTransform(const Screen3D& screen) {
+    return Mat4::translate(screen.position) * Mat4::rotateY(screen.yaw);
 }
 
-// 生成立方体顶点（每个面不同颜色）
-static std::vector<Vertex> generateCube() {
-    std::vector<Vertex> verts;
-    
-    // 面颜色
-    struct Face { float nx, ny, nz; float r, g, b; };
-    Face faces[6] = {
-        { 0,  0,  1, 0.9f, 0.3f, 0.3f}, // 前面 - 红
-        { 0,  0, -1, 0.3f, 0.9f, 0.3f}, // 后面 - 绿
-        { 1,  0,  0, 0.3f, 0.3f, 0.9f}, // 右面 - 蓝
-        {-1,  0,  0, 0.9f, 0.9f, 0.3f}, // 左面 - 黄
-        { 0,  1,  0, 0.9f, 0.3f, 0.9f}, // 上面 - 紫
-        { 0, -1,  0, 0.3f, 0.9f, 0.9f}, // 下面 - 青
-    };
-    
-    // 立方体顶点位置（中心在原点，边长为1）
-    float s = 0.5f;
-    float cubeVerts[8][3] = {
-        {-s, -s,  s}, { s, -s,  s}, { s,  s,  s}, {-s,  s,  s}, // 前面
-        {-s, -s, -s}, { s, -s, -s}, { s,  s, -s}, {-s,  s, -s}, // 后面
-    };
-    
-    // 面的顶点索引
-    int faceIndices[6][4] = {
-        {0, 1, 2, 3}, // 前
-        {5, 4, 7, 6}, // 后
-        {1, 5, 6, 2}, // 右
-        {4, 0, 3, 7}, // 左
-        {3, 2, 6, 7}, // 上
-        {4, 5, 1, 0}, // 下
-    };
-    
-    for (int f = 0; f < 6; f++) {
-        auto& face = faces[f];
-        int* idx = faceIndices[f];
-        
-        // 两个三角形
-        auto addVert = [&](int i) {
-            verts.push_back({
-                cubeVerts[idx[i]][0], cubeVerts[idx[i]][1], cubeVerts[idx[i]][2],
-                face.nx, face.ny, face.nz,
-                face.r, face.g, face.b
-            });
-        };
-        
-        addVert(0); addVert(1); addVert(2);
-        addVert(0); addVert(2); addVert(3);
-    }
-    
-    return verts;
-}
-
-// 生成地面网格
-static std::vector<Vertex> generateGrid() {
-    std::vector<Vertex> verts;
-    const float gridSize = 20.0f;
-    const int gridLines = 21;
-    float color = 0.4f;
-    
-    for (int i = 0; i < gridLines; i++) {
-        float t = -gridSize / 2 + (gridSize / (gridLines - 1)) * i;
-        // X 方向线
-        verts.push_back({-gridSize / 2, 0, t, 0, 1, 0, color, color, color * 1.2f});
-        verts.push_back({gridSize / 2, 0, t, 0, 1, 0, color, color, color * 1.2f});
-        // Z 方向线
-        verts.push_back({t, 0, -gridSize / 2, 0, 1, 0, color, color, color * 1.2f});
-        verts.push_back({t, 0, gridSize / 2, 0, 1, 0, color, color, color * 1.2f});
-    }
-    
-    return verts;
+// 获取屏幕的 Quad3D（用于射线检测）
+Quad3D getScreenQuad(const Screen3D& screen) {
+    Vec3 right = Vec3{std::cos(screen.yaw), 0, -std::sin(screen.yaw)};
+    Vec3 up = Vec3{0, 1, 0};
+    return Quad3D(screen.position, right, up, screen.width, screen.height);
 }
 
 int main() {
-    SDL_Log("=== Dong 3D Cube Demo ===");
+    SDL_Log("=== Dong 3D Screen Demo ===");
     SDL_Log("Controls: RMB+Mouse=Look, WASD=Move, Q/E=Up/Down, Shift=Sprint, ESC=Exit");
 
     if (!SDL_Init(SDL_INIT_VIDEO)) {
@@ -275,7 +104,7 @@ int main() {
     }
 
     const int WIN_W = 1280, WIN_H = 720;
-    SDL_Window* window = SDL_CreateWindow("Dong 3D Cube Demo", WIN_W, WIN_H, SDL_WINDOW_RESIZABLE);
+    SDL_Window* window = SDL_CreateWindow("Dong 3D Screen Demo", WIN_W, WIN_H, SDL_WINDOW_RESIZABLE);
     if (!window) {
         SDL_Log("Failed to create window: %s", SDL_GetError());
         return 1;
@@ -295,25 +124,38 @@ int main() {
     }
 
     // 编译着色器
-    SDL_GPUShader* vs = compileShader(device, SDL_GPU_SHADERSTAGE_VERTEX, kVertexShader, "main");
-    SDL_GPUShader* fsCube = compileShader(device, SDL_GPU_SHADERSTAGE_FRAGMENT, kFragmentShader, "main");
-    SDL_GPUShader* fsGrid = compileShader(device, SDL_GPU_SHADERSTAGE_FRAGMENT, kGridFragShader, "main");
+    SDL_GPUShader* vs3d = compileShader(device, SDL_GPU_SHADERSTAGE_VERTEX, kVertexShader3D, "main");
+    SDL_GPUShader* fsCube = compileShader(device, SDL_GPU_SHADERSTAGE_FRAGMENT, kFragmentShader3D, "main");
+    SDL_GPUShader* fsGrid = compileShader(device, SDL_GPU_SHADERSTAGE_FRAGMENT, kFragmentShaderGrid, "main");
+    SDL_GPUShader* fsRT = compileShader(device, SDL_GPU_SHADERSTAGE_FRAGMENT, kRTFragmentShader, "main");
+    SDL_GPUShader* vsTextured = compileShader(device, SDL_GPU_SHADERSTAGE_VERTEX, kVertexShaderTextured, "main");
+    SDL_GPUShader* fsTextured = compileShader(device, SDL_GPU_SHADERSTAGE_FRAGMENT, kFragmentShaderTextured, "main", 1);
     
-    if (!vs || !fsCube || !fsGrid) {
+    if (!vs3d || !fsCube || !fsGrid || !fsRT || !vsTextured || !fsTextured) {
         SDL_Log("Failed to compile shaders");
         return 1;
     }
 
-    // 顶点布局
-    SDL_GPUVertexBufferDescription vbDesc{};
-    vbDesc.slot = 0;
-    vbDesc.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
-    vbDesc.pitch = sizeof(Vertex);
+    // 3D 顶点布局
+    SDL_GPUVertexBufferDescription vbDesc3D{};
+    vbDesc3D.slot = 0;
+    vbDesc3D.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
+    vbDesc3D.pitch = sizeof(Vertex3D);
 
-    SDL_GPUVertexAttribute attrs[3] = {};
-    attrs[0].buffer_slot = 0; attrs[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3; attrs[0].location = 0; attrs[0].offset = 0;
-    attrs[1].buffer_slot = 0; attrs[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3; attrs[1].location = 1; attrs[1].offset = sizeof(float) * 3;
-    attrs[2].buffer_slot = 0; attrs[2].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3; attrs[2].location = 2; attrs[2].offset = sizeof(float) * 6;
+    SDL_GPUVertexAttribute attrs3D[3] = {};
+    attrs3D[0].buffer_slot = 0; attrs3D[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3; attrs3D[0].location = 0; attrs3D[0].offset = 0;
+    attrs3D[1].buffer_slot = 0; attrs3D[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3; attrs3D[1].location = 1; attrs3D[1].offset = sizeof(float) * 3;
+    attrs3D[2].buffer_slot = 0; attrs3D[2].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3; attrs3D[2].location = 2; attrs3D[2].offset = sizeof(float) * 6;
+
+    // 纹理顶点布局
+    SDL_GPUVertexBufferDescription vbDescUV{};
+    vbDescUV.slot = 0;
+    vbDescUV.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
+    vbDescUV.pitch = sizeof(VertexUV);
+
+    SDL_GPUVertexAttribute attrsUV[2] = {};
+    attrsUV[0].buffer_slot = 0; attrsUV[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3; attrsUV[0].location = 0; attrsUV[0].offset = 0;
+    attrsUV[1].buffer_slot = 0; attrsUV[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2; attrsUV[1].location = 1; attrsUV[1].offset = sizeof(float) * 3;
 
     // 立方体管线
     SDL_GPUColorTargetDescription colorDesc{};
@@ -321,7 +163,7 @@ int main() {
     colorDesc.blend_state.enable_blend = false;
 
     SDL_GPUGraphicsPipelineCreateInfo pipeInfo{};
-    pipeInfo.vertex_shader = vs;
+    pipeInfo.vertex_shader = vs3d;
     pipeInfo.fragment_shader = fsCube;
     pipeInfo.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
     pipeInfo.target_info.num_color_targets = 1;
@@ -332,20 +174,20 @@ int main() {
     pipeInfo.depth_stencil_state.enable_depth_write = true;
     pipeInfo.depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_LESS;
     pipeInfo.vertex_input_state.num_vertex_buffers = 1;
-    pipeInfo.vertex_input_state.vertex_buffer_descriptions = &vbDesc;
+    pipeInfo.vertex_input_state.vertex_buffer_descriptions = &vbDesc3D;
     pipeInfo.vertex_input_state.num_vertex_attributes = 3;
-    pipeInfo.vertex_input_state.vertex_attributes = attrs;
+    pipeInfo.vertex_input_state.vertex_attributes = attrs3D;
     pipeInfo.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_BACK;
     pipeInfo.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
     pipeInfo.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
 
     SDL_GPUGraphicsPipeline* cubePipeline = SDL_CreateGPUGraphicsPipeline(device, &pipeInfo);
-    if (!cubePipeline) {
-        SDL_Log("Failed to create cube pipeline: %s", SDL_GetError());
-        return 1;
-    }
+    
+    // RT 场景管线
+    pipeInfo.fragment_shader = fsRT;
+    SDL_GPUGraphicsPipeline* rtCubePipeline = SDL_CreateGPUGraphicsPipeline(device, &pipeInfo);
 
-    // 网格管线（LINE_LIST，带混合）
+    // 网格管线
     colorDesc.blend_state.enable_blend = true;
     colorDesc.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
     colorDesc.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
@@ -359,10 +201,31 @@ int main() {
     pipeInfo.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
     
     SDL_GPUGraphicsPipeline* gridPipeline = SDL_CreateGPUGraphicsPipeline(device, &pipeInfo);
-    if (!gridPipeline) {
-        SDL_Log("Failed to create grid pipeline: %s", SDL_GetError());
+
+    // 屏幕纹理管线
+    colorDesc.blend_state.enable_blend = true;
+    pipeInfo.vertex_shader = vsTextured;
+    pipeInfo.fragment_shader = fsTextured;
+    pipeInfo.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+    pipeInfo.vertex_input_state.vertex_buffer_descriptions = &vbDescUV;
+    pipeInfo.vertex_input_state.num_vertex_attributes = 2;
+    pipeInfo.vertex_input_state.vertex_attributes = attrsUV;
+    pipeInfo.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
+    
+    SDL_GPUGraphicsPipeline* screenPipeline = SDL_CreateGPUGraphicsPipeline(device, &pipeInfo);
+
+    if (!cubePipeline || !rtCubePipeline || !gridPipeline || !screenPipeline) {
+        SDL_Log("Failed to create pipelines");
         return 1;
     }
+
+    // 创建采样器
+    SDL_GPUSamplerCreateInfo samplerInfo{};
+    samplerInfo.min_filter = SDL_GPU_FILTER_LINEAR;
+    samplerInfo.mag_filter = SDL_GPU_FILTER_LINEAR;
+    samplerInfo.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    samplerInfo.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    SDL_GPUSampler* sampler = SDL_CreateGPUSampler(device, &samplerInfo);
 
     // 生成几何体
     auto cubeVerts = generateCube();
@@ -372,24 +235,62 @@ int main() {
     SDL_GPUBufferCreateInfo vbInfo{};
     vbInfo.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
     
-    vbInfo.size = (Uint32)(cubeVerts.size() * sizeof(Vertex));
+    vbInfo.size = (Uint32)(cubeVerts.size() * sizeof(Vertex3D));
     SDL_GPUBuffer* cubeVB = SDL_CreateGPUBuffer(device, &vbInfo);
     
-    vbInfo.size = (Uint32)(gridVerts.size() * sizeof(Vertex));
+    vbInfo.size = (Uint32)(gridVerts.size() * sizeof(Vertex3D));
     SDL_GPUBuffer* gridVB = SDL_CreateGPUBuffer(device, &vbInfo);
+
+    // 创建两个屏幕
+    Screen3D screens[2];
+    
+    // 屏幕1：左侧
+    screens[0].position = Vec3{-3.0f, 1.5f, -2.0f};
+    screens[0].yaw = 0.4f;
+    screens[0].width = 2.5f;
+    screens[0].height = 1.875f;
+    screens[0].rtWidth = 640;
+    screens[0].rtHeight = 480;
+    screens[0].cubeRotationSpeed = 1.2f;
+    screens[0].timeOffset = 0.0f;
+    
+    // 屏幕2：右侧
+    screens[1].position = Vec3{3.0f, 1.5f, -2.0f};
+    screens[1].yaw = -0.4f;
+    screens[1].width = 2.5f;
+    screens[1].height = 1.875f;
+    screens[1].rtWidth = 640;
+    screens[1].rtHeight = 480;
+    screens[1].cubeRotationSpeed = 0.8f;
+    screens[1].timeOffset = 3.14159f;
+
+    // 为每个屏幕创建 RT 和顶点缓冲
+    for (int i = 0; i < 2; i++) {
+        screens[i].colorTexture = createRenderTargetTexture(device, screens[i].rtWidth, screens[i].rtHeight);
+        screens[i].depthTexture = createDepthTexture(device, screens[i].rtWidth, screens[i].rtHeight);
+        
+        vbInfo.size = sizeof(VertexUV) * 6;
+        screens[i].quadVB = SDL_CreateGPUBuffer(device, &vbInfo);
+        
+        if (!screens[i].colorTexture || !screens[i].depthTexture || !screens[i].quadVB) {
+            SDL_Log("Failed to create screen %d resources", i);
+            return 1;
+        }
+    }
 
     // 相机
     FPSCamera camera;
-    camera.position = Vec3{3.0f, 2.0f, 5.0f};
-    camera.yaw = -2.5f;
-    camera.pitch = -0.3f;
+    camera.position = Vec3{0.0f, 2.0f, 6.0f};
+    camera.yaw = -3.14159f;
+    camera.pitch = -0.2f;
 
     InputState input;
     
     SDL_GPUTexture* depthTexture = nullptr;
     uint32_t depthW = 0, depthH = 0;
     
-    float cubeRotation = 0.0f;
+    float mainCubeRotation = 0.0f;
+    float totalTime = 0.0f;
     
     auto lastTime = std::chrono::high_resolution_clock::now();
     bool running = true;
@@ -400,7 +301,12 @@ int main() {
         float dt = std::chrono::duration<float>(now - lastTime).count();
         lastTime = now;
         
-        cubeRotation += dt * 0.5f;
+        mainCubeRotation += dt * 0.5f;
+        totalTime += dt;
+        
+        for (int i = 0; i < 2; i++) {
+            screens[i].cubeRotation += dt * screens[i].cubeRotationSpeed;
+        }
 
         input.resetFrameState();
 
@@ -419,6 +325,14 @@ int main() {
         camera.update(dt, input.keys, input.right_mouse_down, input.mouse_delta_x, input.mouse_delta_y);
         SDL_SetWindowRelativeMouseMode(window, input.right_mouse_down);
 
+        // 射线检测屏幕悬停
+        Ray hoverRay = camera.pixelToRay(input.mouse_x, input.mouse_y, winW, winH);
+        for (int i = 0; i < 2; i++) {
+            Quad3D quad = getScreenQuad(screens[i]);
+            Vec2 uv = quad.intersect(hoverRay);
+            screens[i].hovered = (uv.x >= 0);
+        }
+
         SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(device);
         if (!cmd) {
             SDL_Delay(16);
@@ -427,42 +341,61 @@ int main() {
 
         // Copy pass - 上传顶点数据
         SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(cmd);
+        uploadVertices(device, copyPass, cubeVB, cubeVerts);
+        uploadVertices(device, copyPass, gridVB, gridVerts);
         
-        // 上传立方体顶点
-        {
-            SDL_GPUTransferBufferCreateInfo tbInfo{};
-            tbInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-            tbInfo.size = (Uint32)(cubeVerts.size() * sizeof(Vertex));
-            SDL_GPUTransferBuffer* tb = SDL_CreateGPUTransferBuffer(device, &tbInfo);
-            void* ptr = SDL_MapGPUTransferBuffer(device, tb, false);
-            memcpy(ptr, cubeVerts.data(), cubeVerts.size() * sizeof(Vertex));
-            SDL_UnmapGPUTransferBuffer(device, tb);
-            
-            SDL_GPUTransferBufferLocation src{}; src.transfer_buffer = tb;
-            SDL_GPUBufferRegion dst{}; dst.buffer = cubeVB; dst.size = tbInfo.size;
-            SDL_UploadToGPUBuffer(copyPass, &src, &dst, false);
-            SDL_ReleaseGPUTransferBuffer(device, tb);
+        // 上传屏幕四边形顶点
+        for (int i = 0; i < 2; i++) {
+            auto quadVerts = generateQuad(screens[i].width, screens[i].height);
+            uploadVertices(device, copyPass, screens[i].quadVB, quadVerts);
         }
-        
-        // 上传网格顶点
-        {
-            SDL_GPUTransferBufferCreateInfo tbInfo{};
-            tbInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-            tbInfo.size = (Uint32)(gridVerts.size() * sizeof(Vertex));
-            SDL_GPUTransferBuffer* tb = SDL_CreateGPUTransferBuffer(device, &tbInfo);
-            void* ptr = SDL_MapGPUTransferBuffer(device, tb, false);
-            memcpy(ptr, gridVerts.data(), gridVerts.size() * sizeof(Vertex));
-            SDL_UnmapGPUTransferBuffer(device, tb);
-            
-            SDL_GPUTransferBufferLocation src{}; src.transfer_buffer = tb;
-            SDL_GPUBufferRegion dst{}; dst.buffer = gridVB; dst.size = tbInfo.size;
-            SDL_UploadToGPUBuffer(copyPass, &src, &dst, false);
-            SDL_ReleaseGPUTransferBuffer(device, tb);
-        }
-        
         SDL_EndGPUCopyPass(copyPass);
 
-        // 获取 swapchain
+        // ========== 渲染到 RT ==========
+        for (int i = 0; i < 2; i++) {
+            SDL_GPUColorTargetInfo rtColorTarget{};
+            rtColorTarget.texture = screens[i].colorTexture;
+            rtColorTarget.clear_color = SDL_FColor{0.05f, 0.05f, 0.1f, 1.0f};
+            rtColorTarget.load_op = SDL_GPU_LOADOP_CLEAR;
+            rtColorTarget.store_op = SDL_GPU_STOREOP_STORE;
+
+            SDL_GPUDepthStencilTargetInfo rtDepthTarget{};
+            rtDepthTarget.texture = screens[i].depthTexture;
+            rtDepthTarget.clear_depth = 1.0f;
+            rtDepthTarget.load_op = SDL_GPU_LOADOP_CLEAR;
+            rtDepthTarget.store_op = SDL_GPU_STOREOP_DONT_CARE;
+
+            SDL_GPURenderPass* rtPass = SDL_BeginGPURenderPass(cmd, &rtColorTarget, 1, &rtDepthTarget);
+            
+            // RT 相机（固定视角看立方体）
+            float rtAspect = (float)screens[i].rtWidth / screens[i].rtHeight;
+            Mat4 rtView = Mat4::lookAt(Vec3{0, 1.5f, 3.0f}, Vec3{0, 0, 0}, Vec3{0, 1, 0});
+            Mat4 rtProj = Mat4::perspective(radians(60.0f), rtAspect, 0.1f, 100.0f);
+            Mat4 rtVP = rtProj * rtView;
+            
+            // 绘制旋转立方体
+            SDL_BindGPUGraphicsPipeline(rtPass, rtCubePipeline);
+            SDL_GPUBufferBinding cubeBinding{cubeVB, 0};
+            SDL_BindGPUVertexBuffers(rtPass, 0, &cubeBinding, 1);
+            
+            Mat4 cubeModel = Mat4::rotateY(screens[i].cubeRotation) * Mat4::rotateX(screens[i].cubeRotation * 0.7f);
+            Mat4 cubeMVP = rtVP * cubeModel;
+            
+            Uniforms3D cubeUniforms{};
+            memcpy(cubeUniforms.mvp, cubeMVP.m, sizeof(float) * 16);
+            memcpy(cubeUniforms.model, cubeModel.m, sizeof(float) * 16);
+            cubeUniforms.lightDir[0] = 0.5f; cubeUniforms.lightDir[1] = 1.0f; cubeUniforms.lightDir[2] = 0.3f;
+            cubeUniforms.ambient[0] = 0.3f; cubeUniforms.ambient[1] = 0.3f; cubeUniforms.ambient[2] = 0.35f;
+            cubeUniforms.ambient[3] = totalTime + screens[i].timeOffset;  // 时间传入 w 分量
+            
+            SDL_PushGPUVertexUniformData(cmd, 0, &cubeUniforms, sizeof(cubeUniforms));
+            SDL_PushGPUFragmentUniformData(cmd, 0, &cubeUniforms, sizeof(cubeUniforms));
+            SDL_DrawGPUPrimitives(rtPass, (Uint32)cubeVerts.size(), 1, 0, 0);
+            
+            SDL_EndGPURenderPass(rtPass);
+        }
+
+        // ========== 渲染主场景 ==========
         SDL_GPUTexture* swapchain = nullptr;
         Uint32 sw, sh;
         if (!SDL_WaitAndAcquireGPUSwapchainTexture(cmd, window, &swapchain, &sw, &sh) || !swapchain) {
@@ -474,21 +407,11 @@ int main() {
         // 深度纹理
         if (!depthTexture || depthW != sw || depthH != sh) {
             if (depthTexture) SDL_ReleaseGPUTexture(device, depthTexture);
-            SDL_GPUTextureCreateInfo depthInfo{};
-            depthInfo.type = SDL_GPU_TEXTURETYPE_2D;
-            depthInfo.format = SDL_GPU_TEXTUREFORMAT_D24_UNORM;
-            depthInfo.width = sw;
-            depthInfo.height = sh;
-            depthInfo.layer_count_or_depth = 1;
-            depthInfo.num_levels = 1;
-            depthInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
-            depthInfo.usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET;
-            depthTexture = SDL_CreateGPUTexture(device, &depthInfo);
+            depthTexture = createDepthTexture(device, sw, sh);
             depthW = sw;
             depthH = sh;
         }
 
-        // 渲染
         SDL_GPUColorTargetInfo colorTarget{};
         colorTarget.texture = swapchain;
         colorTarget.clear_color = SDL_FColor{0.1f, 0.1f, 0.15f, 1.0f};
@@ -513,7 +436,7 @@ int main() {
         SDL_GPUBufferBinding gridBinding{gridVB, 0};
         SDL_BindGPUVertexBuffers(pass, 0, &gridBinding, 1);
         
-        Uniforms gridUniforms{};
+        Uniforms3D gridUniforms{};
         Mat4 identity = Mat4::identity();
         memcpy(gridUniforms.mvp, vp.m, sizeof(float) * 16);
         memcpy(gridUniforms.model, identity.m, sizeof(float) * 16);
@@ -524,24 +447,49 @@ int main() {
         SDL_PushGPUFragmentUniformData(cmd, 0, &gridUniforms, sizeof(gridUniforms));
         SDL_DrawGPUPrimitives(pass, (Uint32)gridVerts.size(), 1, 0, 0);
 
-        // 绘制立方体
+        // 绘制主立方体
         SDL_BindGPUGraphicsPipeline(pass, cubePipeline);
         SDL_GPUBufferBinding cubeBinding{cubeVB, 0};
         SDL_BindGPUVertexBuffers(pass, 0, &cubeBinding, 1);
         
-        // 立方体变换：位置 + 旋转
-        Mat4 cubeModel = Mat4::translate(Vec3{0, 0.5f, 0}) * Mat4::rotateY(cubeRotation);
-        Mat4 cubeMVP = vp * cubeModel;
+        Mat4 mainCubeModel = Mat4::translate(Vec3{0, 0.5f, 0}) * Mat4::rotateY(mainCubeRotation);
+        Mat4 mainCubeMVP = vp * mainCubeModel;
         
-        Uniforms cubeUniforms{};
-        memcpy(cubeUniforms.mvp, cubeMVP.m, sizeof(float) * 16);
-        memcpy(cubeUniforms.model, cubeModel.m, sizeof(float) * 16);
-        cubeUniforms.lightDir[0] = 0.5f; cubeUniforms.lightDir[1] = 1.0f; cubeUniforms.lightDir[2] = 0.3f;
-        cubeUniforms.ambient[0] = 0.2f; cubeUniforms.ambient[1] = 0.2f; cubeUniforms.ambient[2] = 0.25f;
+        Uniforms3D mainCubeUniforms{};
+        memcpy(mainCubeUniforms.mvp, mainCubeMVP.m, sizeof(float) * 16);
+        memcpy(mainCubeUniforms.model, mainCubeModel.m, sizeof(float) * 16);
+        mainCubeUniforms.lightDir[0] = 0.5f; mainCubeUniforms.lightDir[1] = 1.0f; mainCubeUniforms.lightDir[2] = 0.3f;
+        mainCubeUniforms.ambient[0] = 0.2f; mainCubeUniforms.ambient[1] = 0.2f; mainCubeUniforms.ambient[2] = 0.25f;
         
-        SDL_PushGPUVertexUniformData(cmd, 0, &cubeUniforms, sizeof(cubeUniforms));
-        SDL_PushGPUFragmentUniformData(cmd, 0, &cubeUniforms, sizeof(cubeUniforms));
+        SDL_PushGPUVertexUniformData(cmd, 0, &mainCubeUniforms, sizeof(mainCubeUniforms));
+        SDL_PushGPUFragmentUniformData(cmd, 0, &mainCubeUniforms, sizeof(mainCubeUniforms));
         SDL_DrawGPUPrimitives(pass, (Uint32)cubeVerts.size(), 1, 0, 0);
+
+        // 绘制屏幕
+        SDL_BindGPUGraphicsPipeline(pass, screenPipeline);
+        
+        for (int i = 0; i < 2; i++) {
+            SDL_GPUBufferBinding screenBinding{screens[i].quadVB, 0};
+            SDL_BindGPUVertexBuffers(pass, 0, &screenBinding, 1);
+            
+            SDL_GPUTextureSamplerBinding texBinding{screens[i].colorTexture, sampler};
+            SDL_BindGPUFragmentSamplers(pass, 0, &texBinding, 1);
+            
+            Mat4 screenModel = getScreenTransform(screens[i]);
+            Mat4 screenMVP = vp * screenModel;
+            
+            UniformsTextured screenUniforms{};
+            memcpy(screenUniforms.mvp, screenMVP.m, sizeof(float) * 16);
+            memcpy(screenUniforms.model, screenModel.m, sizeof(float) * 16);
+            screenUniforms.color[0] = 1.0f; screenUniforms.color[1] = 1.0f;
+            screenUniforms.color[2] = 1.0f; screenUniforms.color[3] = 1.0f;
+            screenUniforms.highlight[0] = screens[i].hovered ? 1.0f : 0.0f;
+            screenUniforms.highlight[1] = 0.0f;
+            
+            SDL_PushGPUVertexUniformData(cmd, 0, &screenUniforms, sizeof(screenUniforms));
+            SDL_PushGPUFragmentUniformData(cmd, 0, &screenUniforms, sizeof(screenUniforms));
+            SDL_DrawGPUPrimitives(pass, 6, 1, 0, 0);
+        }
 
         SDL_EndGPURenderPass(pass);
         SDL_SubmitGPUCommandBuffer(cmd);
@@ -551,13 +499,26 @@ int main() {
 
     // 清理
     if (depthTexture) SDL_ReleaseGPUTexture(device, depthTexture);
+    
+    for (int i = 0; i < 2; i++) {
+        if (screens[i].colorTexture) SDL_ReleaseGPUTexture(device, screens[i].colorTexture);
+        if (screens[i].depthTexture) SDL_ReleaseGPUTexture(device, screens[i].depthTexture);
+        if (screens[i].quadVB) SDL_ReleaseGPUBuffer(device, screens[i].quadVB);
+    }
+    
     SDL_ReleaseGPUBuffer(device, cubeVB);
     SDL_ReleaseGPUBuffer(device, gridVB);
+    SDL_ReleaseGPUSampler(device, sampler);
     SDL_ReleaseGPUGraphicsPipeline(device, cubePipeline);
+    SDL_ReleaseGPUGraphicsPipeline(device, rtCubePipeline);
     SDL_ReleaseGPUGraphicsPipeline(device, gridPipeline);
-    SDL_ReleaseGPUShader(device, vs);
+    SDL_ReleaseGPUGraphicsPipeline(device, screenPipeline);
+    SDL_ReleaseGPUShader(device, vs3d);
     SDL_ReleaseGPUShader(device, fsCube);
     SDL_ReleaseGPUShader(device, fsGrid);
+    SDL_ReleaseGPUShader(device, fsRT);
+    SDL_ReleaseGPUShader(device, vsTextured);
+    SDL_ReleaseGPUShader(device, fsTextured);
     
     SDL_DestroyGPUDevice(device);
     SDL_DestroyWindow(window);

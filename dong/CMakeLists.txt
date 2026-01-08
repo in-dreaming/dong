@@ -271,6 +271,7 @@ if(BUILD_EXAMPLES)
         sdl_gpu_demo
         3d_rt
         3d_cube
+        3d_screen
     )
 
     foreach(example ${CPP_EXAMPLES})
