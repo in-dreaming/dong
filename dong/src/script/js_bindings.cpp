@@ -22,13 +22,10 @@ extern "C" {
 
 static JSValue console_log(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     (void)this_val;
-    DONG_LOG_DEBUG("[console_log] Entry, argc=%d", argc);
     std::string output;
     for (int i = 0; i < argc; i++) {
         if (i > 0) output += " ";
-        DONG_LOG_DEBUG("[console_log] Processing arg %d", i);
         const char* str = JS_ToCString(ctx, argv[i]);
-        DONG_LOG_DEBUG("[console_log] JS_ToCString returned %p", (void*)str);
         if (str) {
             output += str;
             JS_FreeCString(ctx, str);
@@ -355,14 +352,12 @@ static JSValue elem_addEventListener(JSContext* ctx, JSValueConst this_val, int 
     // Read the internal node id stored on the element wrapper
     JSValue id_val = JS_GetPropertyStr(ctx, this_val, "__node_id__");
     if (JS_IsUndefined(id_val)) {
-        SDL_Log("[addEventListener] ERROR: __node_id__ is undefined");
         JS_FreeValue(ctx, id_val);
         return JS_UNDEFINED;
     }
 
     int64_t node_id = 0;
     if (JS_ToInt64(ctx, &node_id, id_val) != 0) {
-        SDL_Log("[addEventListener] ERROR: failed to convert __node_id__ to int64");
         JS_FreeValue(ctx, id_val);
         return JS_UNDEFINED;
     }
@@ -373,8 +368,6 @@ static JSValue elem_addEventListener(JSContext* ctx, JSValueConst this_val, int 
         return JS_UNDEFINED;
     }
 
-    SDL_Log("[addEventListener] node_id=%lld type=%s", (long long)node_id, type_cstr);
-
     auto bindings = getBindingsFromContext(ctx);
     if (bindings) {
         std::string type_str(type_cstr);
@@ -384,11 +377,7 @@ static JSValue elem_addEventListener(JSContext* ctx, JSValueConst this_val, int 
         // native EventDispatcher can handle bubbling along the DOM tree.
         dom::DOMNodePtr node = JSBindings::getNodeOpaque(ctx, this_val);
         if (node) {
-            SDL_Log("[addEventListener] node found, tag=%s, calling ensureEventBridgeForNode", 
-                    node->getTagName().c_str());
             bindings->ensureEventBridgeForNode(node, type_str, static_cast<uint64_t>(node_id));
-        } else {
-            SDL_Log("[addEventListener] WARNING: getNodeOpaque returned nullptr");
         }
     }
 
@@ -740,8 +729,6 @@ JSBindings::JSBindings(ScriptEngine* engine, dom::Manager* dom_manager,
     // Set context opaque to this JSBindings instance for per-context lookup
     if (engine_ && engine_->getContext()) {
         JS_SetContextOpaque(engine_->getContext(), this);
-        SDL_Log("[JSBindings] Set context opaque for ctx=%p to this=%p", 
-                (void*)engine_->getContext(), (void*)this);
     }
 }
 
@@ -754,72 +741,43 @@ JSBindings::~JSBindings() {
 }
 
 void JSBindings::initialize() {
-    SDL_Log("[JSBindings::initialize] Entry, engine_=%p", (void*)engine_);
     if (!engine_) return;
 
     initializeConsoleAPI();
-    SDL_Log("[JSBindings::initialize] ConsoleAPI done");
     initializeDocumentAPI();
-    SDL_Log("[JSBindings::initialize] DocumentAPI done");
     initializeElementAPI();
-    SDL_Log("[JSBindings::initialize] ElementAPI done");
     initializeEventAPI();
-    SDL_Log("[JSBindings::initialize] EventAPI done");
 }
 
 void JSBindings::initializeConsoleAPI() {
-    SDL_Log("[JSBindings::initializeConsoleAPI] Entry");
-    if (!engine_) {
-        SDL_Log("[JSBindings::initializeConsoleAPI] engine_ is null");
-        return;
-    }
+    if (!engine_) return;
 
     JSContext* ctx = engine_->getContext();
-    SDL_Log("[JSBindings::initializeConsoleAPI] ctx=%p", (void*)ctx);
-    if (!ctx) {
-        SDL_Log("[JSBindings::initializeConsoleAPI] ctx is null");
-        return;
-    }
+    if (!ctx) return;
     
     JSValue global = JS_GetGlobalObject(ctx);
-    SDL_Log("[JSBindings::initializeConsoleAPI] Got global object");
     JSValue console = JS_NewObject(ctx);
-    SDL_Log("[JSBindings::initializeConsoleAPI] Created console object");
 
     JS_SetPropertyStr(ctx, console, "log",
         JS_NewCFunction(ctx, console_log, "log", 1));
-    SDL_Log("[JSBindings::initializeConsoleAPI] Added log");
     JS_SetPropertyStr(ctx, console, "warn",
         JS_NewCFunction(ctx, console_warn, "warn", 1));
-    SDL_Log("[JSBindings::initializeConsoleAPI] Added warn");
     JS_SetPropertyStr(ctx, console, "error",
         JS_NewCFunction(ctx, console_error, "error", 1));
-    SDL_Log("[JSBindings::initializeConsoleAPI] Added error");
 
     // JS_SetPropertyStr takes ownership of 'console', so we must NOT free it afterwards.
     JS_SetPropertyStr(ctx, global, "console", console);
     JS_FreeValue(ctx, global);
-    SDL_Log("[JSBindings::initializeConsoleAPI] Done");
 }
 
 void JSBindings::initializeDocumentAPI() {
-    SDL_Log("[JSBindings::initializeDocumentAPI] Entry");
-    if (!engine_) {
-        SDL_Log("[JSBindings::initializeDocumentAPI] engine_ is null");
-        return;
-    }
+    if (!engine_) return;
 
     JSContext* ctx = engine_->getContext();
-    SDL_Log("[JSBindings::initializeDocumentAPI] ctx=%p", (void*)ctx);
-    if (!ctx) {
-        SDL_Log("[JSBindings::initializeDocumentAPI] ctx is null");
-        return;
-    }
+    if (!ctx) return;
     
     JSValue global = JS_GetGlobalObject(ctx);
-    SDL_Log("[JSBindings::initializeDocumentAPI] Got global object");
     JSValue document = JS_NewObject(ctx);
-    SDL_Log("[JSBindings::initializeDocumentAPI] Created document object");
 
     // Document methods
     JS_SetPropertyStr(ctx, document, "getElementById",
@@ -832,54 +790,38 @@ void JSBindings::initializeDocumentAPI() {
         JS_NewCFunction(ctx, doc_querySelector, "querySelector", 1));
     JS_SetPropertyStr(ctx, document, "querySelectorAll",
         JS_NewCFunction(ctx, doc_querySelectorAll, "querySelectorAll", 1));
-    SDL_Log("[JSBindings::initializeDocumentAPI] Added query methods");
     
-    // 【缺口1】DOM 创建 API
+    // DOM 创建 API
     JS_SetPropertyStr(ctx, document, "createElement",
         JS_NewCFunction(ctx, doc_createElement, "createElement", 1));
     JS_SetPropertyStr(ctx, document, "createTextNode",
         JS_NewCFunction(ctx, doc_createTextNode, "createTextNode", 1));
-    SDL_Log("[JSBindings::initializeDocumentAPI] Added create methods");
 
     // Document object references
-    SDL_Log("[JSBindings::initializeDocumentAPI] Setting up body, dom_manager_=%p", (void*)dom_manager_);
     JSValue body = JS_NewObject(ctx);
     if (dom_manager_) {
-        SDL_Log("[JSBindings::initializeDocumentAPI] Getting root...");
         auto root = dom_manager_->getRoot();
-        SDL_Log("[JSBindings::initializeDocumentAPI] root=%p", (void*)root.get());
         if (root) {
-            SDL_Log("[JSBindings::initializeDocumentAPI] Getting body elements...");
             auto body_nodes = dom_manager_->getElementsByTagName("body");
-            SDL_Log("[JSBindings::initializeDocumentAPI] body_nodes.size()=%zu", body_nodes.size());
             if (!body_nodes.empty()) {
-                SDL_Log("[JSBindings::initializeDocumentAPI] Creating JS element for body...");
                 body = createJSElement(ctx, body_nodes[0]);
-                SDL_Log("[JSBindings::initializeDocumentAPI] body JS element created");
             }
         }
     }
     JS_SetPropertyStr(ctx, document, "body", body);
-    SDL_Log("[JSBindings::initializeDocumentAPI] body set");
 
     JSValue html = JS_NewObject(ctx);
     if (dom_manager_) {
-        SDL_Log("[JSBindings::initializeDocumentAPI] Getting html elements...");
         auto html_nodes = dom_manager_->getElementsByTagName("html");
-        SDL_Log("[JSBindings::initializeDocumentAPI] html_nodes.size()=%zu", html_nodes.size());
         if (!html_nodes.empty()) {
-            SDL_Log("[JSBindings::initializeDocumentAPI] Creating JS element for html...");
             html = createJSElement(ctx, html_nodes[0]);
-            SDL_Log("[JSBindings::initializeDocumentAPI] html JS element created");
         }
     }
     JS_SetPropertyStr(ctx, document, "documentElement", html);
-    SDL_Log("[JSBindings::initializeDocumentAPI] documentElement set");
 
     // JS_SetPropertyStr takes ownership of 'document'
     JS_SetPropertyStr(ctx, global, "document", document);
     JS_FreeValue(ctx, global);
-    SDL_Log("[JSBindings::initializeDocumentAPI] Done");
 }
 
 void JSBindings::initializeElementAPI() {
@@ -1035,33 +977,17 @@ void JSBindings::ensureEventBridgeForNode(const dom::DOMNodePtr& node, const std
 }
 
 void JSBindings::dispatchMouseEvent(uint64_t node_id, const char* type, int32_t x, int32_t y, int32_t button) {
-    SDL_Log("[dispatchMouseEvent] node_id=%llu type=%s pos=(%d,%d)", 
-            (unsigned long long)node_id, type, x, y);
-    
-    if (!engine_) {
-        SDL_Log("[dispatchMouseEvent] ERROR: engine_ is null");
-        return;
-    }
+    if (!engine_) return;
     JSContext* ctx = engine_->getContext();
-    if (!ctx) {
-        SDL_Log("[dispatchMouseEvent] ERROR: ctx is null");
-        return;
-    }
+    if (!ctx) return;
 
     auto node_it = listeners_.find(node_id);
-    if (node_it == listeners_.end()) {
-        SDL_Log("[dispatchMouseEvent] no listeners for node_id=%llu", (unsigned long long)node_id);
-        return;
-    }
+    if (node_it == listeners_.end()) return;
     auto& type_map = node_it->second;
     auto type_it = type_map.find(type);
-    if (type_it == type_map.end()) {
-        SDL_Log("[dispatchMouseEvent] no listeners for type=%s", type);
-        return;
-    }
+    if (type_it == type_map.end()) return;
 
     auto& funcs = type_it->second;
-    SDL_Log("[dispatchMouseEvent] found %zu listeners for type=%s", funcs.size(), type);
 
     for (auto& fn : funcs) {
         if (!JS_IsFunction(ctx, fn)) continue;

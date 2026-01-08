@@ -348,22 +348,12 @@ int main() {
     )JS";
 
     // 执行 JS 代码
-    SDL_Log("[3d_screen_html] About to eval JS for screen 0, view=%p", (void*)screens[0].html.view);
-    bool result0 = screens[0].html.eval(js_code_screen1);
-    SDL_Log("[3d_screen_html] Screen 0 eval returned %d", result0 ? 1 : 0);
-    if (!result0) {
+    if (!screens[0].html.eval(js_code_screen1)) {
         SDL_Log("WARNING: JS eval failed for screen 1");
-    } else {
-        SDL_Log("[3d_screen_html] JavaScript handlers installed for screen 1");
     }
     
-    SDL_Log("[3d_screen_html] About to eval JS for screen 1, view=%p", (void*)screens[1].html.view);
-    bool result1 = screens[1].html.eval(js_code_screen2);
-    SDL_Log("[3d_screen_html] Screen 1 eval returned %d", result1 ? 1 : 0);
-    if (!result1) {
+    if (!screens[1].html.eval(js_code_screen2)) {
         SDL_Log("WARNING: JS eval failed for screen 2");
-    } else {
-        SDL_Log("[3d_screen_html] JavaScript handlers installed for screen 2");
     }
 
     // 相机
