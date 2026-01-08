@@ -269,7 +269,6 @@ if(BUILD_EXAMPLES)
         msdf_soft_render
         isolation_demo
         sdl_gpu_demo
-        3d_rt
         3d_cube
         3d_screen
         3d_screen_html
