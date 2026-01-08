@@ -272,6 +272,7 @@ if(BUILD_EXAMPLES)
         3d_rt
         3d_cube
         3d_screen
+        3d_screen_html
     )
 
     foreach(example ${CPP_EXAMPLES})

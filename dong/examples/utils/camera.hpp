@@ -149,7 +149,11 @@ struct InputState {
     bool left_mouse_down = false;
     bool right_mouse_down = false;
     bool middle_mouse_down = false;
+    bool left_mouse_pressed = false;   // 本帧按下
+    bool left_mouse_released = false;  // 本帧释放
     float wheel_delta = 0.0f;
+    float mouse_wheel_x = 0.0f;
+    float mouse_wheel_y = 0.0f;
 
     void handleEvent(const SDL_Event& event) {
         switch (event.type) {
@@ -170,17 +174,25 @@ struct InputState {
                 mouse_y = static_cast<int>(event.motion.y);
                 break;
             case SDL_EVENT_MOUSE_BUTTON_DOWN:
-                if (event.button.button == SDL_BUTTON_LEFT) left_mouse_down = true;
+                if (event.button.button == SDL_BUTTON_LEFT) {
+                    left_mouse_down = true;
+                    left_mouse_pressed = true;
+                }
                 if (event.button.button == SDL_BUTTON_RIGHT) right_mouse_down = true;
                 if (event.button.button == SDL_BUTTON_MIDDLE) middle_mouse_down = true;
                 break;
             case SDL_EVENT_MOUSE_BUTTON_UP:
-                if (event.button.button == SDL_BUTTON_LEFT) left_mouse_down = false;
+                if (event.button.button == SDL_BUTTON_LEFT) {
+                    left_mouse_down = false;
+                    left_mouse_released = true;
+                }
                 if (event.button.button == SDL_BUTTON_RIGHT) right_mouse_down = false;
                 if (event.button.button == SDL_BUTTON_MIDDLE) middle_mouse_down = false;
                 break;
             case SDL_EVENT_MOUSE_WHEEL:
                 wheel_delta = event.wheel.y;
+                mouse_wheel_x = event.wheel.x;
+                mouse_wheel_y = event.wheel.y;
                 break;
             default:
                 break;
@@ -191,6 +203,10 @@ struct InputState {
         mouse_delta_x = 0;
         mouse_delta_y = 0;
         wheel_delta = 0.0f;
+        mouse_wheel_x = 0.0f;
+        mouse_wheel_y = 0.0f;
+        left_mouse_pressed = false;
+        left_mouse_released = false;
     }
 };
 

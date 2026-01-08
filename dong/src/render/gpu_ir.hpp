@@ -8,6 +8,7 @@
 #include "display_list.hpp"
 #include "layer_tree.hpp"
 #include <SDL3/SDL_log.h>
+#include "../core/log.h"
 
 namespace dong::render {
 
@@ -419,7 +420,7 @@ public:
         }
 
         // 输出统计信息
-        SDL_Log("GPU Compiler: %d rects, %d round_rects, %d images, %d texts -> %zu GPU commands, %zu draw batches",
+        DONG_LOG_DEBUG("GPU Compiler: %d rects, %d round_rects, %d images, %d texts -> %zu GPU commands, %zu draw batches",
                 rect_count,
                 round_rect_count,
                 image_count,

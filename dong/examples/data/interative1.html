@@ -156,5 +156,41 @@
             <div class="status-bar" id="status">
                 Ready. Press Tab to navigate, click buttons, scroll the list, or type in inputs.
             </div>
+            
+            <script>
+                // Button click handlers
+                document.getElementById('btn-primary').addEventListener('click', function() {
+                    console.log('[JS] Primary button clicked!');
+                    var countEl = document.getElementById('click-count');
+                    var count = parseInt(countEl.textContent.replace('Clicks: ', '')) + 1;
+                    countEl.textContent = 'Clicks: ' + count;
+                });
+                
+                document.getElementById('btn-secondary').addEventListener('click', function() {
+                    console.log('[JS] Secondary button clicked!');
+                });
+                
+                document.getElementById('btn-reset').addEventListener('click', function() {
+                    console.log('[JS] Reset button clicked!');
+                    document.getElementById('click-count').textContent = 'Clicks: 0';
+                });
+                
+                // Input handlers
+                document.getElementById('name-input').addEventListener('input', function(e) {
+                    console.log('[JS] Name input changed: ' + e.target.value);
+                    updatePreview();
+                });
+                
+                document.getElementById('message-input').addEventListener('input', function(e) {
+                    console.log('[JS] Message input changed: ' + e.target.value);
+                    updatePreview();
+                });
+                
+                function updatePreview() {
+                    var name = document.getElementById('name-input').value || '(no name)';
+                    var msg = document.getElementById('message-input').value || '(no message)';
+                    document.getElementById('input-preview').textContent = 'Preview: ' + name + ' says: ' + msg;
+                }
+            </script>
         </body>
         </html>

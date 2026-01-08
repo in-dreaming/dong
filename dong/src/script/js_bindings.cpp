@@ -8,8 +8,11 @@ extern "C" {
 #include "quickjs.h"
 }
 
-// Global bindings pointer - accessible from C callback functions
-static dong::script::JSBindings* g_bindings = nullptr;
+// Helper to get JSBindings from context opaque data
+static dong::script::JSBindings* getBindingsFromContext(JSContext* ctx) {
+    if (!ctx) return nullptr;
+    return static_cast<dong::script::JSBindings*>(JS_GetContextOpaque(ctx));
+}
 
 // ============================================================
 // Console API Implementation - extern "C" for QuickJS callbacks
@@ -33,7 +36,7 @@ static JSValue console_log(JSContext* ctx, JSValueConst this_val, int argc, JSVa
             output += "[object]";
         }
     }
-    DONG_LOG_DEBUG("[JS] %s", output.c_str());
+    DONG_LOG_INFO("[JS] %s", output.c_str());
     return JS_UNDEFINED;
 }
 
@@ -48,7 +51,7 @@ static JSValue console_warn(JSContext* ctx, JSValueConst this_val, int argc, JSV
             JS_FreeCString(ctx, str);
         }
     }
-    DONG_LOG_DEBUG("[JS] %s", output.c_str());
+    DONG_LOG_WARN("[JS] %s", output.c_str());
     return JS_UNDEFINED;
 }
 
@@ -63,7 +66,7 @@ static JSValue console_error(JSContext* ctx, JSValueConst this_val, int argc, JS
             JS_FreeCString(ctx, str);
         }
     }
-    DONG_LOG_DEBUG("[JS] %s", output.c_str());
+    DONG_LOG_ERROR("[JS] %s", output.c_str());
     return JS_UNDEFINED;
 }
 
@@ -76,12 +79,13 @@ namespace dong::script {
 // ============================================================
 
 static JSValue doc_getElementById(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-    if (!g_bindings || argc < 1) return JS_NULL;
+    auto bindings = getBindingsFromContext(ctx);
+    if (!bindings || argc < 1) return JS_NULL;
     
     const char* id = JS_ToCString(ctx, argv[0]);
     if (!id) return JS_NULL;
     
-    auto dom_mgr = g_bindings->dom_manager_;
+    auto dom_mgr = bindings->dom_manager_;
     if (!dom_mgr) {
         JS_FreeCString(ctx, id);
         return JS_NULL;
@@ -91,22 +95,23 @@ static JSValue doc_getElementById(JSContext* ctx, JSValueConst this_val, int arg
     JS_FreeCString(ctx, id);
     
     if (!node) return JS_NULL;
-    return g_bindings->createJSElement(ctx, node);
+    return bindings->createJSElement(ctx, node);
 }
 
 static JSValue doc_getElementsByTagName(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-    if (!g_bindings || argc < 1) return JS_NewArray(ctx);
+    auto bindings = getBindingsFromContext(ctx);
+    if (!bindings || argc < 1) return JS_NewArray(ctx);
     
     const char* tag = JS_ToCString(ctx, argv[0]);
     if (!tag) return JS_NewArray(ctx);
     
-    auto dom_mgr = g_bindings->dom_manager_;
+    auto dom_mgr = bindings->dom_manager_;
     JSValue arr = JS_NewArray(ctx);
     
     if (dom_mgr) {
         auto nodes = dom_mgr->getElementsByTagName(tag);
         for (size_t i = 0; i < nodes.size(); ++i) {
-            JSValue elem = g_bindings->createJSElement(ctx, nodes[i]);
+            JSValue elem = bindings->createJSElement(ctx, nodes[i]);
             JS_SetPropertyUint32(ctx, arr, i, elem);
         }
     }
@@ -116,18 +121,19 @@ static JSValue doc_getElementsByTagName(JSContext* ctx, JSValueConst this_val, i
 }
 
 static JSValue doc_getElementsByClassName(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-    if (!g_bindings || argc < 1) return JS_NewArray(ctx);
+    auto bindings = getBindingsFromContext(ctx);
+    if (!bindings || argc < 1) return JS_NewArray(ctx);
     
     const char* cls = JS_ToCString(ctx, argv[0]);
     if (!cls) return JS_NewArray(ctx);
     
-    auto dom_mgr = g_bindings->dom_manager_;
+    auto dom_mgr = bindings->dom_manager_;
     JSValue arr = JS_NewArray(ctx);
     
     if (dom_mgr) {
         auto nodes = dom_mgr->getElementsByClassName(cls);
         for (size_t i = 0; i < nodes.size(); ++i) {
-            JSValue elem = g_bindings->createJSElement(ctx, nodes[i]);
+            JSValue elem = bindings->createJSElement(ctx, nodes[i]);
             JS_SetPropertyUint32(ctx, arr, i, elem);
         }
     }
@@ -137,33 +143,34 @@ static JSValue doc_getElementsByClassName(JSContext* ctx, JSValueConst this_val,
 }
 
 static JSValue doc_querySelector(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-    if (!g_bindings || argc < 1) return JS_NULL;
+    auto bindings = getBindingsFromContext(ctx);
+    if (!bindings || argc < 1) return JS_NULL;
     
     const char* selector = JS_ToCString(ctx, argv[0]);
     if (!selector) return JS_NULL;
     
     // For now, simple implementation - could use style engine for selector parsing
-    auto dom_mgr = g_bindings->dom_manager_;
+    auto dom_mgr = bindings->dom_manager_;
     JSValue result = JS_NULL;
     
     if (dom_mgr) {
         // Try parsing as ID selector
         if (selector[0] == '#') {
             auto node = dom_mgr->getElementById(selector + 1);
-            if (node) result = g_bindings->createJSElement(ctx, node);
+            if (node) result = bindings->createJSElement(ctx, node);
         }
         // Try parsing as tag selector
         else if (selector[0] != '.' && selector[0] != '[') {
             auto nodes = dom_mgr->getElementsByTagName(selector);
             if (!nodes.empty()) {
-                result = g_bindings->createJSElement(ctx, nodes[0]);
+                result = bindings->createJSElement(ctx, nodes[0]);
             }
         }
         // Try parsing as class selector
         else if (selector[0] == '.') {
             auto nodes = dom_mgr->getElementsByClassName(selector + 1);
             if (!nodes.empty()) {
-                result = g_bindings->createJSElement(ctx, nodes[0]);
+                result = bindings->createJSElement(ctx, nodes[0]);
             }
         }
     }
@@ -173,12 +180,13 @@ static JSValue doc_querySelector(JSContext* ctx, JSValueConst this_val, int argc
 }
 
 static JSValue doc_querySelectorAll(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-    if (!g_bindings || argc < 1) return JS_NewArray(ctx);
+    auto bindings = getBindingsFromContext(ctx);
+    if (!bindings || argc < 1) return JS_NewArray(ctx);
     
     const char* selector = JS_ToCString(ctx, argv[0]);
     if (!selector) return JS_NewArray(ctx);
     
-    auto dom_mgr = g_bindings->dom_manager_;
+    auto dom_mgr = bindings->dom_manager_;
     JSValue arr = JS_NewArray(ctx);
     
     if (dom_mgr) {
@@ -197,7 +205,7 @@ static JSValue doc_querySelectorAll(JSContext* ctx, JSValueConst this_val, int a
         }
         
         for (size_t i = 0; i < nodes.size(); ++i) {
-            JSValue elem = g_bindings->createJSElement(ctx, nodes[i]);
+            JSValue elem = bindings->createJSElement(ctx, nodes[i]);
             JS_SetPropertyUint32(ctx, arr, i, elem);
         }
     }
@@ -211,7 +219,8 @@ static JSValue doc_querySelectorAll(JSContext* ctx, JSValueConst this_val, int a
 // ============================================================
 
 static JSValue doc_createElement(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-    if (!g_bindings || argc < 1) return JS_NULL;
+    auto bindings = getBindingsFromContext(ctx);
+    if (!bindings || argc < 1) return JS_NULL;
     
     const char* tag = JS_ToCString(ctx, argv[0]);
     if (!tag) return JS_NULL;
@@ -224,11 +233,12 @@ static JSValue doc_createElement(JSContext* ctx, JSValueConst this_val, int argc
     if (!node) return JS_NULL;
     
     // 返回 JS 元素对象
-    return g_bindings->createJSElement(ctx, node);
+    return bindings->createJSElement(ctx, node);
 }
 
 static JSValue doc_createTextNode(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-    if (!g_bindings || argc < 1) return JS_NULL;
+    auto bindings = getBindingsFromContext(ctx);
+    if (!bindings || argc < 1) return JS_NULL;
     
     const char* text = JS_ToCString(ctx, argv[0]);
     if (!text) return JS_NULL;
@@ -241,7 +251,7 @@ static JSValue doc_createTextNode(JSContext* ctx, JSValueConst this_val, int arg
     
     if (!node) return JS_NULL;
     
-    return g_bindings->createJSElement(ctx, node);
+    return bindings->createJSElement(ctx, node);
 }
 
 // ============================================================
@@ -345,12 +355,14 @@ static JSValue elem_addEventListener(JSContext* ctx, JSValueConst this_val, int 
     // Read the internal node id stored on the element wrapper
     JSValue id_val = JS_GetPropertyStr(ctx, this_val, "__node_id__");
     if (JS_IsUndefined(id_val)) {
+        SDL_Log("[addEventListener] ERROR: __node_id__ is undefined");
         JS_FreeValue(ctx, id_val);
         return JS_UNDEFINED;
     }
 
     int64_t node_id = 0;
     if (JS_ToInt64(ctx, &node_id, id_val) != 0) {
+        SDL_Log("[addEventListener] ERROR: failed to convert __node_id__ to int64");
         JS_FreeValue(ctx, id_val);
         return JS_UNDEFINED;
     }
@@ -361,15 +373,22 @@ static JSValue elem_addEventListener(JSContext* ctx, JSValueConst this_val, int 
         return JS_UNDEFINED;
     }
 
-    if (g_bindings) {
+    SDL_Log("[addEventListener] node_id=%lld type=%s", (long long)node_id, type_cstr);
+
+    auto bindings = getBindingsFromContext(ctx);
+    if (bindings) {
         std::string type_str(type_cstr);
-        g_bindings->registerEventListener(static_cast<uint64_t>(node_id), type_str, argv[1]);
+        bindings->registerEventListener(static_cast<uint64_t>(node_id), type_str, argv[1]);
 
         // Bridge this JS listener into the C++ DOM event system so that
         // native EventDispatcher can handle bubbling along the DOM tree.
         dom::DOMNodePtr node = JSBindings::getNodeOpaque(ctx, this_val);
         if (node) {
-            g_bindings->ensureEventBridgeForNode(node, type_str, static_cast<uint64_t>(node_id));
+            SDL_Log("[addEventListener] node found, tag=%s, calling ensureEventBridgeForNode", 
+                    node->getTagName().c_str());
+            bindings->ensureEventBridgeForNode(node, type_str, static_cast<uint64_t>(node_id));
+        } else {
+            SDL_Log("[addEventListener] WARNING: getNodeOpaque returned nullptr");
         }
     }
 
@@ -403,8 +422,9 @@ static JSValue elem_removeEventListener(JSContext* ctx, JSValueConst this_val, i
         return JS_UNDEFINED;
     }
 
-    if (g_bindings) {
-        g_bindings->removeEventListener(static_cast<uint64_t>(node_id), std::string(type_cstr), argv[1]);
+    auto bindings = getBindingsFromContext(ctx);
+    if (bindings) {
+        bindings->removeEventListener(static_cast<uint64_t>(node_id), std::string(type_cstr), argv[1]);
     }
 
     JS_FreeCString(ctx, type_cstr);
@@ -442,11 +462,14 @@ static JSValue elem_getChildren(JSContext* ctx, JSValueConst this_val, int argc,
     auto node = JSBindings::getNodeOpaque(ctx, this_val);
     if (!node) return JS_NewArray(ctx);
     
+    auto bindings = getBindingsFromContext(ctx);
+    if (!bindings) return JS_NewArray(ctx);
+    
     JSValue arr = JS_NewArray(ctx);
     const auto& children = node->getChildren();
     
     for (size_t i = 0; i < children.size(); ++i) {
-        JSValue child = g_bindings->createJSElement(ctx, children[i]);
+        JSValue child = bindings->createJSElement(ctx, children[i]);
         JS_SetPropertyUint32(ctx, arr, i, child);
     }
     
@@ -714,12 +737,20 @@ static JSValue keyboard_event_constructor(JSContext* ctx, JSValueConst this_val,
 JSBindings::JSBindings(ScriptEngine* engine, dom::Manager* dom_manager, 
                        dom::EventDispatcher* event_dispatcher)
     : engine_(engine), dom_manager_(dom_manager), event_dispatcher_(event_dispatcher) {
-    g_bindings = this;
+    // Set context opaque to this JSBindings instance for per-context lookup
+    if (engine_ && engine_->getContext()) {
+        JS_SetContextOpaque(engine_->getContext(), this);
+        SDL_Log("[JSBindings] Set context opaque for ctx=%p to this=%p", 
+                (void*)engine_->getContext(), (void*)this);
+    }
 }
 
 JSBindings::~JSBindings() {
     resetForNewDOM();
-    g_bindings = nullptr;
+    // Clear context opaque
+    if (engine_ && engine_->getContext()) {
+        JS_SetContextOpaque(engine_->getContext(), nullptr);
+    }
 }
 
 void JSBindings::initialize() {
@@ -1004,17 +1035,33 @@ void JSBindings::ensureEventBridgeForNode(const dom::DOMNodePtr& node, const std
 }
 
 void JSBindings::dispatchMouseEvent(uint64_t node_id, const char* type, int32_t x, int32_t y, int32_t button) {
-    if (!engine_) return;
+    SDL_Log("[dispatchMouseEvent] node_id=%llu type=%s pos=(%d,%d)", 
+            (unsigned long long)node_id, type, x, y);
+    
+    if (!engine_) {
+        SDL_Log("[dispatchMouseEvent] ERROR: engine_ is null");
+        return;
+    }
     JSContext* ctx = engine_->getContext();
-    if (!ctx) return;
+    if (!ctx) {
+        SDL_Log("[dispatchMouseEvent] ERROR: ctx is null");
+        return;
+    }
 
     auto node_it = listeners_.find(node_id);
-    if (node_it == listeners_.end()) return;
+    if (node_it == listeners_.end()) {
+        SDL_Log("[dispatchMouseEvent] no listeners for node_id=%llu", (unsigned long long)node_id);
+        return;
+    }
     auto& type_map = node_it->second;
     auto type_it = type_map.find(type);
-    if (type_it == type_map.end()) return;
+    if (type_it == type_map.end()) {
+        SDL_Log("[dispatchMouseEvent] no listeners for type=%s", type);
+        return;
+    }
 
     auto& funcs = type_it->second;
+    SDL_Log("[dispatchMouseEvent] found %zu listeners for type=%s", funcs.size(), type);
 
     for (auto& fn : funcs) {
         if (!JS_IsFunction(ctx, fn)) continue;
@@ -1147,7 +1194,8 @@ void JSBindings::resetForNewDOM() {
 
 // Static helper methods
 dom::DOMNodePtr JSBindings::getNodeOpaque(JSContext* ctx, JSValue val) {
-    if (!g_bindings) return nullptr;
+    auto bindings = getBindingsFromContext(ctx);
+    if (!bindings) return nullptr;
 
     JSValue id_val = JS_GetPropertyStr(ctx, val, "__node_id__");
     if (JS_IsUndefined(id_val)) {
@@ -1162,24 +1210,25 @@ dom::DOMNodePtr JSBindings::getNodeOpaque(JSContext* ctx, JSValue val) {
     }
     JS_FreeValue(ctx, id_val);
 
-    auto it = g_bindings->id_to_node_.find(static_cast<uint64_t>(id));
-    if (it != g_bindings->id_to_node_.end()) {
+    auto it = bindings->id_to_node_.find(static_cast<uint64_t>(id));
+    if (it != bindings->id_to_node_.end()) {
         return it->second;
     }
     return nullptr;
 }
 
 void JSBindings::setNodeOpaque(JSContext* ctx, JSValue val, dom::DOMNodePtr node) {
-    if (!g_bindings || !node) return;
+    auto bindings = getBindingsFromContext(ctx);
+    if (!bindings || !node) return;
 
     uint64_t id = 0;
-    auto it = g_bindings->node_to_id_.find(node.get());
-    if (it != g_bindings->node_to_id_.end()) {
+    auto it = bindings->node_to_id_.find(node.get());
+    if (it != bindings->node_to_id_.end()) {
         id = it->second;
     } else {
-        id = g_bindings->next_js_id_++;
-        g_bindings->id_to_node_[id] = node;
-        g_bindings->node_to_id_[node.get()] = id;
+        id = bindings->next_js_id_++;
+        bindings->id_to_node_[id] = node;
+        bindings->node_to_id_[node.get()] = id;
     }
 
     JS_SetPropertyStr(ctx, val, "__node_id__", JS_NewInt64(ctx, static_cast<int64_t>(id)));

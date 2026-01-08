@@ -1,0 +1,178 @@
+#pragma once
+
+#include <dong.h>
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_gpu.h>
+#include <string>
+#include <fstream>
+#include <sstream>
+
+namespace dong::utils {
+
+// ============================================================================
+// Dong 引擎辅助函数
+// ============================================================================
+
+// 读取文件内容
+inline std::string readFile(const char* path) {
+    std::ifstream file(path);
+    if (!file.is_open()) {
+        SDL_Log("Failed to open file: %s", path);
+        return "";
+    }
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    return buffer.str();
+}
+
+// 获取可执行文件所在目录
+inline std::string getExeDir() {
+    const char* basePath = SDL_GetBasePath();
+    std::string result = basePath ? basePath : "";
+    return result;
+}
+
+// 构建数据文件路径
+inline std::string getDataPath(const char* filename) {
+    return getExeDir() + "data/" + filename;
+}
+
+// ============================================================================
+// 3D HTML 屏幕结构
+// ============================================================================
+
+// 用于在 3D 空间中显示 HTML 内容的屏幕
+struct HtmlScreen3D {
+    // Dong 引擎资源
+    dong_view_t* view = nullptr;
+    SDL_GPUTexture* renderTexture = nullptr;
+    
+    // 3D 空间属性
+    SDL_GPUBuffer* quadVB = nullptr;
+    float posX = 0, posY = 0, posZ = 0;
+    float yaw = 0;
+    float width = 2.5f;      // 3D 空间中的宽度
+    float height = 1.875f;   // 3D 空间中的高度
+    uint32_t rtWidth = 800;  // RT 像素宽度
+    uint32_t rtHeight = 600; // RT 像素高度
+    
+    // 交互状态
+    bool hovered = false;
+    bool focused = false;
+    
+    // 鼠标在屏幕上的位置（0-1 UV 坐标）
+    float mouseU = 0, mouseV = 0;
+    
+    // 初始化 HTML 屏幕
+    bool init(dong_context_t* ctx, SDL_GPUDevice* device, SDL_Window* window,
+              const char* htmlContent, uint32_t w, uint32_t h) {
+        rtWidth = w;
+        rtHeight = h;
+        
+        // 创建 dong view
+        view = dong_view_create(ctx, rtWidth, rtHeight);
+        if (!view) {
+            SDL_Log("Failed to create dong view");
+            return false;
+        }
+        
+        // 设置 GPU 渲染模式
+        dong_view_set_external_gpu_device(view, device, window);
+        
+        // 加载 HTML
+        dong_view_load_html(view, htmlContent);
+        // 注意：不调用 dong_view_update()，因为它会渲染到 swapchain
+        // dong_view_render_to_gpu_texture() 内部会处理布局计算
+        
+        // 创建顶点缓冲区
+        SDL_GPUBufferCreateInfo vbInfo{};
+        vbInfo.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
+        vbInfo.size = sizeof(float) * 5 * 6; // 6 vertices, 5 floats each (pos + uv)
+        quadVB = SDL_CreateGPUBuffer(device, &vbInfo);
+        
+        if (!quadVB) {
+            SDL_Log("Failed to create quad vertex buffer");
+            return false;
+        }
+        
+        return true;
+    }
+    
+    // 更新并渲染到纹理
+    void update(SDL_GPUDevice* device) {
+        if (!view) return;
+        
+        // 注意：不调用 dong_view_update()，因为它会渲染到 swapchain
+        // dong_view_render_to_gpu_texture() 内部会处理布局计算和渲染
+        
+        // 渲染到新纹理
+        SDL_GPUTexture* newTexture = (SDL_GPUTexture*)dong_view_render_to_gpu_texture(
+            view, device, rtWidth, rtHeight);
+        
+        // 只有新纹理创建成功后才释放旧纹理
+        if (newTexture) {
+            if (renderTexture) {
+                SDL_ReleaseGPUTexture(device, renderTexture);
+            }
+            renderTexture = newTexture;
+        }
+    }
+    
+    // 发送鼠标移动事件
+    void sendMouseMove(int32_t x, int32_t y) {
+        if (view) dong_view_send_mouse_move(view, x, y);
+    }
+    
+    // 发送鼠标按下事件
+    void sendMouseDown(int32_t button) {
+        if (view) dong_view_send_mouse_down(view, button);
+    }
+    
+    // 发送鼠标释放事件
+    void sendMouseUp(int32_t button) {
+        if (view) dong_view_send_mouse_up(view, button);
+    }
+    
+    // 发送滚轮事件
+    void sendMouseWheel(float dx, float dy) {
+        if (view) dong_view_send_mouse_wheel(view, dx, dy);
+    }
+    
+    // 发送按键事件
+    void sendKeyDown(uint32_t keyCode) {
+        if (view) dong_view_send_key_down(view, keyCode);
+    }
+    
+    void sendKeyUp(uint32_t keyCode) {
+        if (view) dong_view_send_key_up(view, keyCode);
+    }
+    
+    // 发送文本输入
+    void sendTextInput(const char* text) {
+        if (view) dong_view_send_text_input(view, text);
+    }
+    
+    // 执行 JavaScript 代码
+    bool eval(const char* js_code) {
+        if (view) return dong_view_eval(view, js_code);
+        return false;
+    }
+    
+    // 清理资源
+    void cleanup(SDL_GPUDevice* device) {
+        if (renderTexture) {
+            SDL_ReleaseGPUTexture(device, renderTexture);
+            renderTexture = nullptr;
+        }
+        if (quadVB) {
+            SDL_ReleaseGPUBuffer(device, quadVB);
+            quadVB = nullptr;
+        }
+        if (view) {
+            dong_view_free(view);
+            view = nullptr;
+        }
+    }
+};
+
+} // namespace dong::utils

@@ -41,6 +41,12 @@ DOMNodePtr hitTestRecursive(const DOMNodePtr& node, dong::layout::Engine* layout
     float w = layout->width;
     float h = layout->height;
     
+    // 调试：打印 input 元素的布局信息
+    if (node->getTagName() == "input") {
+        DONG_LOG_INFO("[hitTest] input id=%s bounds=(%.1f,%.1f,%.1f,%.1f) test=(%d,%d)",
+                      node->getAttribute("id").c_str(), lx, ly, w, h, x, y);
+    }
+    
     // 检查点是否在当前节点范围内
     bool in_bounds = (x >= lx && x <= lx + w && y >= ly && y <= ly + h);
     
@@ -158,6 +164,7 @@ void View::load_html(const char* html) {
         return;
     }
     
+    SDL_Log("[View::load_html] HTML length=%zu", strlen(html));
     SDL_Log("[View::load_html] Calling dom_manager->loadHTML...");
     if (dom_manager->loadHTML(html)) {
         SDL_Log("[View::load_html] loadHTML succeeded");
@@ -174,6 +181,52 @@ void View::load_html(const char* html) {
         if (root) {
             root->markLayoutDirty();
         }
+        
+        // 执行 <script> 标签中的 JavaScript 代码
+        if (script_engine && dom_manager) {
+            auto scripts = dom_manager->getElementsByTagName("script");
+            SDL_Log("[View::load_html] Found %zu script tags", scripts.size());
+            
+            // 调试：打印所有标签
+            auto root = dom_manager->getRoot();
+            if (root) {
+                std::function<void(const dom::DOMNodePtr&, int)> printTree = [&](const dom::DOMNodePtr& node, int depth) {
+                    if (!node) return;
+                    std::string indent(depth * 2, ' ');
+                    if (node->getType() == dom::DOMNode::NodeType::ELEMENT) {
+                        SDL_Log("[View::load_html] %s<%s>", indent.c_str(), node->getTagName().c_str());
+                    }
+                    for (const auto& child : node->getChildren()) {
+                        printTree(child, depth + 1);
+                    }
+                };
+                SDL_Log("[View::load_html] DOM Tree:");
+                printTree(root, 0);
+            }
+            
+            for (const auto& script : scripts) {
+                if (script) {
+                    // 获取 script 标签的文本内容
+                    std::string code;
+                    SDL_Log("[View::load_html] Script tag has %zu children", script->getChildren().size());
+                    for (const auto& child : script->getChildren()) {
+                        if (child) {
+                            SDL_Log("[View::load_html] Script child type=%d", (int)child->getType());
+                            if (child->getType() == dom::DOMNode::NodeType::TEXT) {
+                                code += child->getTextContent();
+                            }
+                        }
+                    }
+                    if (!code.empty()) {
+                        SDL_Log("[View::load_html] Executing script (%zu chars)", code.length());
+                        script_engine->eval(code);
+                    } else {
+                        SDL_Log("[View::load_html] Script tag is empty");
+                    }
+                }
+            }
+        }
+        
         SDL_Log("[View::load_html] Done");
     } else {
         SDL_Log("[View::load_html] loadHTML failed");
@@ -368,7 +421,7 @@ SDL_GPUTexture* View::renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, 
         SDL_Log("[View::renderToGPUTexture] Failed to create offscreen texture: %s", SDL_GetError());
         return nullptr;
     }
-    SDL_Log("[View::renderToGPUTexture] Created offscreen texture %p size=%ux%u", (void*)offscreen_texture, width, height);
+    DONG_LOG_DEBUG("[View::renderToGPUTexture] Created offscreen texture %p size=%ux%u", (void*)offscreen_texture, width, height);
     
     // 2. 确保布局已计算
     auto root = dom_manager ? dom_manager->getRoot() : nullptr;
@@ -553,21 +606,21 @@ void View::markNeedsRepaint() {
 }
 
 void View::ensureJSBindingsInitialized() {
-    SDL_Log("[View::ensureJSBindingsInitialized] Entry, initialized=%d, js_bindings=%p, script_engine=%p",
-            js_bindings_initialized_ ? 1 : 0, (void*)js_bindings.get(), (void*)script_engine.get());
+    SDL_Log("[View::ensureJSBindingsInitialized] this=%p, initialized=%d, js_bindings=%p, script_engine=%p",
+            (void*)this, js_bindings_initialized_ ? 1 : 0, (void*)js_bindings.get(), (void*)script_engine.get());
     if (js_bindings_initialized_ || !js_bindings || !script_engine) {
-        SDL_Log("[View::ensureJSBindingsInitialized] Early return");
+        SDL_Log("[View::ensureJSBindingsInitialized] this=%p Early return (already initialized)", (void*)this);
         return;
     }
     JSContext* ctx = script_engine->getContext();
-    SDL_Log("[View::ensureJSBindingsInitialized] Got JSContext=%p", (void*)ctx);
+    SDL_Log("[View::ensureJSBindingsInitialized] this=%p Got JSContext=%p", (void*)this, (void*)ctx);
     if (!ctx) {
-        SDL_Log("[View::ensureJSBindingsInitialized] ctx is null, returning");
+        SDL_Log("[View::ensureJSBindingsInitialized] this=%p ctx is null, returning", (void*)this);
         return;
     }
-    SDL_Log("[View::ensureJSBindingsInitialized] Calling js_bindings->initialize()...");
+    SDL_Log("[View::ensureJSBindingsInitialized] this=%p Calling js_bindings->initialize()...", (void*)this);
     js_bindings->initialize();
-    SDL_Log("[View::ensureJSBindingsInitialized] initialize() done");
+    SDL_Log("[View::ensureJSBindingsInitialized] this=%p initialize() done", (void*)this);
     js_bindings_initialized_ = true;
 }
 
@@ -727,6 +780,13 @@ void View::handle_mouse_wheel(float delta_x, float delta_y) {
     DONG_LOG_INFO("[View::handle_mouse_wheel] delta=(%.2f, %.2f) at (%d,%d)", 
                   delta_x, delta_y, last_mouse_x_, last_mouse_y_);
     
+    // 先检查 hitTest 是否能找到元素
+    auto hit_element = hitTestElementAt(dom_manager.get(), layout_engine.get(), 
+                                        last_mouse_x_, last_mouse_y_);
+    DONG_LOG_INFO("[View::handle_mouse_wheel] hitTestElementAt returned %p tag=%s",
+                  hit_element.get(),
+                  hit_element ? hit_element->getTagName().c_str() : "null");
+    
     // 查找鼠标位置下的滚动容器
     auto scroll_container = findScrollContainerAt(last_mouse_x_, last_mouse_y_);
     DONG_LOG_INFO("[View::handle_mouse_wheel] scroll_container=%p tag=%s",
@@ -737,7 +797,17 @@ void View::handle_mouse_wheel(float delta_x, float delta_y) {
         // 滚动速度系数
         constexpr float kScrollSpeed = 20.0f;
         float old_scroll_y = scroll_container->getScrollY();
-        scroll_container->scrollBy(delta_x * kScrollSpeed, delta_y * kScrollSpeed);
+        
+        // 调试：检查 isScrollContainer 状态
+        DONG_LOG_INFO("[View::handle_mouse_wheel] container id=%s overflow=%s isScrollContainer=%d",
+                      scroll_container->getAttribute("id").c_str(),
+                      scroll_container->getComputedStyle().overflow.c_str(),
+                      scroll_container->isScrollContainer() ? 1 : 0);
+        
+        // 注意：SDL 滚轮 y 正值=向上滚动，负值=向下滚动
+        // 但 scroll_y 增加表示内容向上移动（向下滚动）
+        // 所以需要反转 delta_y
+        scroll_container->scrollBy(delta_x * kScrollSpeed, -delta_y * kScrollSpeed);
         DONG_LOG_INFO("[View::handle_mouse_wheel] scrollBy: old_y=%.1f new_y=%.1f",
                       old_scroll_y, scroll_container->getScrollY());
         
