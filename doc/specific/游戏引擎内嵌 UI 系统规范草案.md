@@ -151,7 +151,6 @@
 
 ### 4. 支持的 JavaScript 全局 API 与宿主绑定
 #### `engine` 全局对象
-- **`engine.loadScene(name: string): Promise<void>`**: 切换或加载场景，推荐异步并通过线程安全方式通知主线程。
 - **`engine.log(message: string): void`**: 输出日志，便于调试。
 - **`engine.quit(): void`**: 退出游戏或关闭应用，可加确认或权限检查。
 - **`engine.triggerEvent(name: string, data: any): void`**: 向游戏逻辑发布自定义事件，推荐事件总线/发布订阅机制。
