@@ -305,7 +305,8 @@ struct EngineImpl {
                                                       last_mouse_x, last_mouse_y);
         if (scroll_container) {
             constexpr float kScrollSpeed = 20.0f;
-            scroll_container->scrollBy(delta_x * kScrollSpeed, -delta_y * kScrollSpeed);
+            // dong 约定：delta_y 正值=向下滚动（内容向上移动，scroll_y 增加）
+            scroll_container->scrollBy(delta_x * kScrollSpeed, delta_y * kScrollSpeed);
             markNeedsRepaint();
         }
     }

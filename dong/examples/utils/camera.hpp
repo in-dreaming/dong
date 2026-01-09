@@ -192,7 +192,9 @@ struct InputState {
             case SDL_EVENT_MOUSE_WHEEL:
                 wheel_delta = event.wheel.y;
                 mouse_wheel_x = event.wheel.x;
-                mouse_wheel_y = event.wheel.y;
+                // SDL 滚轮 y 正值=向上滚动，dong 约定 delta_y 正值=向下滚动
+                // 取反以匹配 dong 语义
+                mouse_wheel_y = -event.wheel.y;
                 break;
             default:
                 break;

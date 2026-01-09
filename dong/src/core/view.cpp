@@ -839,10 +839,9 @@ void View::handle_mouse_wheel(float delta_x, float delta_y) {
                       scroll_container->getComputedStyle().overflow.c_str(),
                       scroll_container->isScrollContainer() ? 1 : 0);
         
-        // 注意：SDL 滚轮 y 正值=向上滚动，负值=向下滚动
-        // 但 scroll_y 增加表示内容向上移动（向下滚动）
-        // 所以需要反转 delta_y
-        scroll_container->scrollBy(delta_x * kScrollSpeed, -delta_y * kScrollSpeed);
+        // dong 约定：delta_y 正值=向下滚动（内容向上移动，scroll_y 增加）
+        // 调用方（如 SDL3InputAdapter）负责将平台值转换为此语义
+        scroll_container->scrollBy(delta_x * kScrollSpeed, delta_y * kScrollSpeed);
         DONG_LOG_INFO("[View::handle_mouse_wheel] scrollBy: old_y=%.1f new_y=%.1f",
                       old_scroll_y, scroll_container->getScrollY());
         
