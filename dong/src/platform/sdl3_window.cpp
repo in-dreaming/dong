@@ -1,4 +1,4 @@
-#include "sdl3_window.hpp"
+﻿#include "sdl3_window.hpp"
 #include <SDL3/SDL_log.h>
 
 namespace dong::platform {

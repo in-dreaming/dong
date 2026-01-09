@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "dom_node.hpp"
 #include "parser.hpp"

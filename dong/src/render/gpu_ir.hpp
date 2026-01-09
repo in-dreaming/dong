@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <algorithm>
 #include <vector>
@@ -7,7 +7,6 @@
 #include <functional>
 #include "display_list.hpp"
 #include "layer_tree.hpp"
-#include <SDL3/SDL_log.h>
 #include "../core/log.h"
 
 namespace dong::render {

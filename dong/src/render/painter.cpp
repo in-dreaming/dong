@@ -1,5 +1,4 @@
-#include "painter.hpp"
-#include <SDL3/SDL_log.h>
+﻿#include "painter.hpp"
 #include <cstring>
 #include <iostream>
 #include <cstdint>
@@ -13,7 +12,7 @@ namespace dong::render {
 
 namespace {
 
-// CSS 颜色解析器（正式版）：支持 #rgb/#rgba/#rrggbb/#rrggbbaa 与 rgb()/rgba() 子集
+// CSS 棰滆壊瑙ｆ瀽鍣紙姝ｅ紡鐗堬級锛氭敮鎸?#rgb/#rgba/#rrggbb/#rrggbbaa 涓?rgb()/rgba() 瀛愰泦
 static void parseCssColor(const std::string& css, uint8_t& r, uint8_t& g, uint8_t& b, uint8_t& a) {
     auto clampToByte = [](int v) -> uint8_t {
         if (v < 0) return 0;
@@ -36,7 +35,7 @@ static void parseCssColor(const std::string& css, uint8_t& r, uint8_t& g, uint8_
 
     auto parseComponent = [&](const std::string& s, bool is_alpha, int& out_int, float& out_alpha) {
         std::string v = s;
-        // 去首尾空白
+        // 鍘婚灏剧┖鐧?
         v.erase(v.begin(), std::find_if(v.begin(), v.end(), [](unsigned char ch) { return !std::isspace(ch); }));
         while (!v.empty() && std::isspace(static_cast<unsigned char>(v.back()))) {
             v.pop_back();
@@ -72,12 +71,12 @@ static void parseCssColor(const std::string& css, uint8_t& r, uint8_t& g, uint8_
         }
     };
 
-    // 预处理：去空白并转小写
+    // 棰勫鐞嗭細鍘荤┖鐧藉苟杞皬鍐?
     std::string s = css;
     s.erase(std::remove_if(s.begin(), s.end(), [](unsigned char ch) { return std::isspace(ch); }), s.end());
     std::transform(s.begin(), s.end(), s.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
 
-    // 默认值：不合法时给一个可见的浅灰色，方便调试
+    // 榛樿鍊硷細涓嶅悎娉曟椂缁欎竴涓彲瑙佺殑娴呯伆鑹诧紝鏂逛究璋冭瘯
     r = g = b = 240;
     a = 255;
 
@@ -87,7 +86,7 @@ static void parseCssColor(const std::string& css, uint8_t& r, uint8_t& g, uint8_
         return;
     }
 
-    // 十六进制形式
+    // 鍗佸叚杩涘埗褰㈠紡
     if (!s.empty() && s[0] == '#') {
         if (s.size() == 4) {          // #rgb
             int r4 = parseHexNibble(s[1]);
@@ -171,7 +170,7 @@ static void parseCssColor(const std::string& css, uint8_t& r, uint8_t& g, uint8_
         }
     }
 
-    // 命名颜色（子集），其他未覆盖的颜色名可以按需要继续扩充
+    // 鍛藉悕棰滆壊锛堝瓙闆嗭級锛屽叾浠栨湭瑕嗙洊鐨勯鑹插悕鍙互鎸夐渶瑕佺户缁墿鍏?
     if (s == "white")      { r = g = b = 255; a = 255; return; }
     if (s == "black")      { r = g = b = 0;   a = 255; return; }
     if (s == "red")        { r = 255; g = 0;   b = 0;   a = 255; return; }
@@ -180,7 +179,7 @@ static void parseCssColor(const std::string& css, uint8_t& r, uint8_t& g, uint8_
     if (s == "gray" || s == "grey") { r = g = b = 128; a = 255; return; }
     if (s == "lightgray" || s == "lightgrey") { r = g = b = 211; a = 255; return; }
 
-    // 其它情况保留默认浅灰，方便后续调试定位未实现的颜色格式
+    // 鍏跺畠鎯呭喌淇濈暀榛樿娴呯伆锛屾柟渚垮悗缁皟璇曞畾浣嶆湭瀹炵幇鐨勯鑹叉牸寮?
 }
 
 static Color makeColorFromCss(const std::string& css) {
@@ -218,7 +217,7 @@ static std::string collapseWhitespace(const std::string& input) {
     return output.substr(first, last - first + 1);
 }
 
-// 简单的文本宽度估算（后续用 HarfBuzz 替换）
+// 绠€鍗曠殑鏂囨湰瀹藉害浼扮畻锛堝悗缁敤 HarfBuzz 鏇挎崲锛?
 static float estimateTextWidth(const std::string& text, float font_size) {
     return static_cast<float>(text.size()) * font_size * 0.55f;
 }
@@ -228,7 +227,7 @@ static bool shouldClipOverflow(const std::string& overflow_value) {
     std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char c) {
         return static_cast<char>(std::tolower(c));
     });
-    // CSS 语义：overflow:hidden/scroll/auto 都需要建立裁剪上下文
+    // CSS 璇箟锛歰verflow:hidden/scroll/auto 閮介渶瑕佸缓绔嬭鍓笂涓嬫枃
     return lowered == "hidden" || lowered == "scroll" || lowered == "auto";
 }
 
@@ -275,7 +274,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
     std::string dbg_class = node->getAttribute("class");
     DONG_LOG_DEBUG("[Painter] buildDisplayListNode: tag='%s' class='%s'", tag.c_str(), dbg_class.c_str());
 
-    // Dirty rect 优化
+    // Dirty rect 浼樺寲
     if (use_dirty_rect_ && !current_dirty_rect_.isEmpty() && layout_node) {
         if (!isNodeInDirtyRect(layout_node)) {
             return;
@@ -322,7 +321,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
     if (needs_layer) {
         uint64_t layer_id = reinterpret_cast<uint64_t>(node.get());
         bool layer_dirty = node->isLayoutDirty();
-        // 滚动容器始终标记为脏，因为滚动内容会随着滚动位置改变
+        // 婊氬姩瀹瑰櫒濮嬬粓鏍囪涓鸿剰锛屽洜涓烘粴鍔ㄥ唴瀹逛細闅忕潃婊氬姩浣嶇疆鏀瑰彉
         if (is_scroll_container) {
             layer_dirty = true;
         }
@@ -330,7 +329,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
             layer_dirty = isRectInDirtyRect(layer_bounds);
         }
 
-        // 在 LayerTree 中记录这一层
+        // 鍦?LayerTree 涓褰曡繖涓€灞?
         LayerNode layer_node;
         layer_node.id = layer_id;
         layer_node.type = has_isolation ? LayerType::Surface : LayerType::Opacity;
@@ -356,11 +355,11 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         opacity_scope = builder.pushLayer(clamped_opacity, has_isolation, layer_bounds, layer_id, layer_dirty);
     }
 
-    // 1. 背景与阴影
+    // 1. 鑳屾櫙涓庨槾褰?
     if (layout_node) {
         Rect rect = node_rect;
 
-        // root/html/body 填满 viewport
+        // root/html/body 濉弧 viewport
         if ((tag.empty() || tag == "html" || tag == "body") && surface_) {
             rect.x = 0.0f;
             rect.y = 0.0f;
@@ -368,7 +367,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
             rect.height = static_cast<float>(surface_->getHeight());
         }
 
-        // 1.1 box-shadow（先画在背景之下）
+        // 1.1 box-shadow锛堝厛鐢诲湪鑳屾櫙涔嬩笅锛?
         if (!style.box_shadows.empty() && rect.width > 0.0f && rect.height > 0.0f) {
             for (const auto& shadow : style.box_shadows) {
                 if (shadow.color.empty()) continue;
@@ -389,7 +388,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                 float radius = style.border_radius;
                 if (radius < 0.0f) radius = 0.0f;
 
-                // 使用带模糊的阴影绘制
+                // 浣跨敤甯︽ā绯婄殑闃村奖缁樺埗
                 float blur = shadow.blur_radius;
                 if (blur > 0.0f) {
                     builder.addShadow(shadow_rect, sc, radius, blur);
@@ -399,7 +398,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
             }
         }
 
-        // 1.2 背景填充
+        // 1.2 鑳屾櫙濉厖
         if (style.background_color != "transparent" && rect.width > 0.0f && rect.height > 0.0f) {
             Color c = makeColorFromCss(style.background_color);
             if (style.border_radius > 0.0f) {
@@ -409,25 +408,25 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
             }
         }
 
-        // 1.3 边框绘制
+        // 1.3 杈规缁樺埗
         if (style.border_width > 0.0f && rect.width > 0.0f && rect.height > 0.0f) {
             Color border_color = makeColorFromCss(style.border_color);
             float bw = style.border_width;
             float radius = style.border_radius;
             if (radius < 0.0f) radius = 0.0f;
 
-            // 绘制四条边框（简化实现：使用四个矩形）
-            // 上边框
+            // 缁樺埗鍥涙潯杈规锛堢畝鍖栧疄鐜帮細浣跨敤鍥涗釜鐭╁舰锛?
+            // 涓婅竟妗?
             Rect top_border{rect.x, rect.y, rect.width, bw};
-            // 下边框
+            // 涓嬭竟妗?
             Rect bottom_border{rect.x, rect.y + rect.height - bw, rect.width, bw};
-            // 左边框
+            // 宸﹁竟妗?
             Rect left_border{rect.x, rect.y + bw, bw, rect.height - 2 * bw};
-            // 右边框
+            // 鍙宠竟妗?
             Rect right_border{rect.x + rect.width - bw, rect.y + bw, bw, rect.height - 2 * bw};
 
             if (radius > 0.0f) {
-                // 对于圆角边框，使用描边方式（目前简化为四个矩形，后续可改进）
+                // 瀵逛簬鍦嗚杈规锛屼娇鐢ㄦ弿杈规柟寮忥紙鐩墠绠€鍖栦负鍥涗釜鐭╁舰锛屽悗缁彲鏀硅繘锛?
                 builder.addRect(top_border, border_color);
                 builder.addRect(bottom_border, border_color);
                 builder.addRect(left_border, border_color);
@@ -450,7 +449,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         }
     }
 
-    // 2. 图片
+    // 2. 鍥剧墖
     if (layout_node && tag == "img") {
         std::string src = node->getAttribute("src");
         if (!src.empty()) {
@@ -466,14 +465,14 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         }
     }
 
-    // 3. 文本内容
+    // 3. 鏂囨湰鍐呭
     if (layout_node && tag != "script" && tag != "style" && tag != "head" && tag != "img") {
         std::string debug_class = node->getAttribute("class");
         if (debug_class.find("overlay-row") != std::string::npos) {
-            SDL_Log("[Painter] overlay-row: checking children, count=%zu", node->getChildren().size());
+            DONG_LOG_INFO("[Painter] overlay-row: checking children, count=%zu", node->getChildren().size());
             for (const auto& child : node->getChildren()) {
                 if (child) {
-                    SDL_Log("[Painter] overlay-row child type=%d text='%s'",
+                    DONG_LOG_INFO("[Painter] overlay-row child type=%d text='%s'",
                             static_cast<int>(child->getType()), child->getTextContent().c_str());
                 }
             }
@@ -489,7 +488,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                 has_text_child = true;
             } else if (child->getType() == dom::DOMNode::NodeType::ELEMENT) {
                 const auto& child_style = child->getComputedStyle();
-                // 检查是否为 inline/inline-block 元素
+                // 妫€鏌ユ槸鍚︿负 inline/inline-block 鍏冪礌
                 if (child_style.display == "inline" || child_style.display == "inline-block") {
                     has_inline_element_child = true;
                 }
@@ -502,20 +501,20 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
             tag == "button" || tag == "code" || tag == "div" || tag == "footer";
 
         if (debug_class.find("overlay-row") != std::string::npos) {
-            SDL_Log("[Painter] overlay-row: has_text=%d has_inline=%d tag_prefers=%d raw='%s'",
+            DONG_LOG_INFO("[Painter] overlay-row: has_text=%d has_inline=%d tag_prefers=%d raw='%s'",
                     has_text_child, has_inline_element_child, tag_prefers_text, raw_text.c_str());
         }
 
-        // 当有 inline 子元素时，需要按顺序处理每个子节点，避免文本重叠
-        // 使用容器层完全接管混合内容的布局和绘制
-        // 注意：如果容器是 flex 布局，不应该使用混合内容路径，因为 flex 会正确计算子元素位置
+        // 褰撴湁 inline 瀛愬厓绱犳椂锛岄渶瑕佹寜椤哄簭澶勭悊姣忎釜瀛愯妭鐐癸紝閬垮厤鏂囨湰閲嶅彔
+        // 浣跨敤瀹瑰櫒灞傚畬鍏ㄦ帴绠℃贩鍚堝唴瀹圭殑甯冨眬鍜岀粯鍒?
+        // 娉ㄦ剰锛氬鏋滃鍣ㄦ槸 flex 甯冨眬锛屼笉搴旇浣跨敤娣峰悎鍐呭璺緞锛屽洜涓?flex 浼氭纭绠楀瓙鍏冪礌浣嶇疆
         const bool is_flex_container = (style.display == "flex" || style.display == "inline-flex");
         if (has_text_child && has_inline_element_child && tag_prefers_text && !is_flex_container) {
             if (debug_class.find("overlay-row") != std::string::npos) {
-                SDL_Log("[Painter] overlay-row MIXED PATH raw_text='%s'", raw_text.c_str());
+                DONG_LOG_INFO("[Painter] overlay-row MIXED PATH raw_text='%s'", raw_text.c_str());
             }
-            // 混合内容：有 TEXT 节点和 inline 元素
-            // 按子节点顺序分别绘制每个内容，计算正确的起始 X 位置
+            // 娣峰悎鍐呭锛氭湁 TEXT 鑺傜偣鍜?inline 鍏冪礌
+            // 鎸夊瓙鑺傜偣椤哄簭鍒嗗埆缁樺埗姣忎釜鍐呭锛岃绠楁纭殑璧峰 X 浣嶇疆
             float x = layout_node->layout.position[0];
             float y = layout_node->layout.position[1];
             float width = layout_node->layout.dimensions[0];
@@ -530,13 +529,13 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
             float inner_width = width - pad_left - pad_right;
             if (inner_width <= 0.0f) inner_width = width > 0.0f ? width : 0.0f;
 
-            // 计算容器的 baseline 度量
+            // 璁＄畻瀹瑰櫒鐨?baseline 搴﹂噺
             float container_baseline_offset = 0.0f;
             float container_ascent_px = 0.0f;
             float container_line_height_px = 0.0f;
             {
                 TextShapeRequest req{};
-                req.text = "X";  // 使用 X 作为基准字符
+                req.text = "X";  // 浣跨敤 X 浣滀负鍩哄噯瀛楃
                 req.font_family = style.font_family;
                 req.font_weight = style.font_weight;
                 req.font_size = container_font_size;
@@ -570,15 +569,15 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
             float cumulative_x_offset = 0.0f;
             float baseline_y = y + pad_top + container_baseline_offset;
 
-            // 按子节点顺序处理所有内容（TEXT 和 inline ELEMENT）
+            // 鎸夊瓙鑺傜偣椤哄簭澶勭悊鎵€鏈夊唴瀹癸紙TEXT 鍜?inline ELEMENT锛?
             for (const auto& child : node->getChildren()) {
                 if (!child) continue;
 
                 if (child->getType() == dom::DOMNode::NodeType::ELEMENT) {
                     const auto& child_style = child->getComputedStyle();
                     if (child_style.display == "inline" || child_style.display == "inline-block") {
-                        // 获取 inline 元素的文本内容并直接在此绘制
-                        // 而不是依赖递归绘制（因为 layout engine 没有为此计算正确位置）
+                        // 鑾峰彇 inline 鍏冪礌鐨勬枃鏈唴瀹瑰苟鐩存帴鍦ㄦ缁樺埗
+                        // 鑰屼笉鏄緷璧栭€掑綊缁樺埗锛堝洜涓?layout engine 娌℃湁涓烘璁＄畻姝ｇ‘浣嶇疆锛?
                         std::string child_text;
                         for (const auto& grandchild : child->getChildren()) {
                             if (grandchild && grandchild->getType() == dom::DOMNode::NodeType::TEXT) {
@@ -588,7 +587,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                         child_text = collapseWhitespace(child_text);
                         
                         if (!child_text.empty()) {
-                            // 使用 inline 元素的样式
+                            // 浣跨敤 inline 鍏冪礌鐨勬牱寮?
                             float child_font_size = child_style.font_size > 0.0f ? child_style.font_size : container_font_size;
                             std::string child_font_family = !child_style.font_family.empty() ? child_style.font_family : style.font_family;
                             std::string child_font_weight = !child_style.font_weight.empty() ? child_style.font_weight : style.font_weight;
@@ -607,13 +606,13 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                                 float ascent_units = shaped.ascent_units > 0.0f ? shaped.ascent_units : child_font_size / scale;
                                 float ascent_px = ascent_units * scale;
                                 
-                                // 计算 inline 元素的 padding
+                                // 璁＄畻 inline 鍏冪礌鐨?padding
                                 float child_pad_left = child_style.padding_left.isPixel() ? child_style.padding_left.value : 0.0f;
                                 float child_pad_right = child_style.padding_right.isPixel() ? child_style.padding_right.value : 0.0f;
                                 
                                 float text_x = x + pad_left + cumulative_x_offset + child_pad_left;
                                 
-                                // 绘制 inline 元素的背景（如果有）
+                                // 缁樺埗 inline 鍏冪礌鐨勮儗鏅紙濡傛灉鏈夛級
                                 if (!child_style.background_color.empty() && child_style.background_color != "transparent") {
                                     Color bg_color = makeColorFromCss(child_style.background_color);
                                     float bg_radius = child_style.border_radius > 0.0f ? child_style.border_radius : 0.0f;
@@ -658,8 +657,8 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                                 cumulative_x_offset += text_width_px + child_pad_left + child_pad_right;
                             }
                             
-                            // 只有当文本内容被成功绘制时，才标记该 inline 元素已经在容器层绘制
-                            // 对于没有文本内容的元素（如 input），让它通过正常递归来绘制
+                            // 鍙湁褰撴枃鏈唴瀹硅鎴愬姛缁樺埗鏃讹紝鎵嶆爣璁拌 inline 鍏冪礌宸茬粡鍦ㄥ鍣ㄥ眰缁樺埗
+                            // 瀵逛簬娌℃湁鏂囨湰鍐呭鐨勫厓绱狅紙濡?input锛夛紝璁╁畠閫氳繃姝ｅ父閫掑綊鏉ョ粯鍒?
                             child->setAttribute("__inline_rendered__", "1");
                         }
                     }
@@ -718,17 +717,17 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         } else if (has_text_child && (tag_prefers_text || !has_inline_element_child)) {
             std::string debug_class = node->getAttribute("class");
             if (debug_class.find("abs-badge") != std::string::npos) {
-                SDL_Log("[Painter] ABS badge text raw='%s'", raw_text.c_str());
+                DONG_LOG_INFO("[Painter] ABS badge text raw='%s'", raw_text.c_str());
             }
             if (debug_class.find("overlay-row") != std::string::npos) {
-                SDL_Log("[Painter] overlay-row raw_text='%s' (len=%zu)", raw_text.c_str(), raw_text.size());
+                DONG_LOG_INFO("[Painter] overlay-row raw_text='%s' (len=%zu)", raw_text.c_str(), raw_text.size());
             }
             std::string text = collapseWhitespace(raw_text);
             if (debug_class.find("overlay-row") != std::string::npos) {
-                SDL_Log("[Painter] overlay-row after collapse='%s' (len=%zu)", text.c_str(), text.size());
+                DONG_LOG_INFO("[Painter] overlay-row after collapse='%s' (len=%zu)", text.c_str(), text.size());
             }
 
-            // 应用 text-transform
+            // 搴旂敤 text-transform
             if (!text.empty() && !style.text_transform.empty() && style.text_transform != "none") {
                 if (style.text_transform == "uppercase") {
                     std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) {
@@ -739,7 +738,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                         return static_cast<char>(std::tolower(c));
                     });
                 }
-                // capitalize 暂不支持（需要更复杂的 Unicode 处理）
+                // capitalize 鏆備笉鏀寔锛堥渶瑕佹洿澶嶆潅鐨?Unicode 澶勭悊锛?
             }
 
             if (!text.empty()) {
@@ -759,7 +758,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                 float inner_width = width - pad_left - pad_right;
                 if (inner_width <= 0.0f) inner_width = width > 0.0f ? width : 0.0f;
 
-                // 使用 HarfBuzz 做一次完整 shaping，并基于 glyph 宽度进行换行
+                // 浣跨敤 HarfBuzz 鍋氫竴娆″畬鏁?shaping锛屽苟鍩轰簬 glyph 瀹藉害杩涜鎹㈣
                 TextShapeRequest full_req{};
                 full_req.text = text;
                 full_req.font_family = style.font_family;
@@ -783,27 +782,27 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                     }
                 }
 
-                // word-spacing: 额外的单词间距（应用于空格字符）
+                // word-spacing: 棰濆鐨勫崟璇嶉棿璺濓紙搴旂敤浜庣┖鏍煎瓧绗︼級
                 float word_spacing_px = style.word_spacing_px;
                 float word_spacing_units = 0.0f;
                 if (word_spacing_px != 0.0f && scale > 0.0f) {
                     word_spacing_units = word_spacing_px / scale;
                 }
 
-                // 行高/基线度量（设计单位）
-                // 优先使用 CSS line-height，如果未设置则使用字体度量
+                // 琛岄珮/鍩虹嚎搴﹂噺锛堣璁″崟浣嶏級
+                // 浼樺厛浣跨敤 CSS line-height锛屽鏋滄湭璁剧疆鍒欎娇鐢ㄥ瓧浣撳害閲?
                 float line_height_units = shaped_full.line_height_units;
                 float ascent_units = shaped_full.ascent_units;
                 float descent_units = shaped_full.descent_units;
 
-                // 应用 CSS line-height 属性
+                // 搴旂敤 CSS line-height 灞炴€?
                 if (style.line_height > 0.0f) {
                     if (style.line_height_is_unitless) {
-                        // 倍数：line-height * font-size
+                        // 鍊嶆暟锛歭ine-height * font-size
                         float css_line_height_px = style.line_height * font_size;
                         line_height_units = css_line_height_px / std::max(scale, 1e-3f);
                     } else {
-                        // 像素值
+                        // 鍍忕礌鍊?
                         line_height_units = style.line_height / std::max(scale, 1e-3f);
                     }
                 }
@@ -829,7 +828,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                 float ascent_px = ascent_units * scale;
                 float baseline_offset = (top_leading_units + ascent_units) * scale;
 
-                // 基于 UTF-8 字节偏移构建潜在换行点（空格 + CJK 字符后）
+                // 鍩轰簬 UTF-8 瀛楄妭鍋忕Щ鏋勫缓娼滃湪鎹㈣鐐癸紙绌烘牸 + CJK 瀛楃鍚庯級
                 std::vector<size_t> break_points;
                 break_points.reserve(text.size() + 1);
 
@@ -849,7 +848,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                         // ASCII
                         i_byte += 1;
                         if (c == ' ') {
-                            push_break(i_byte); // 在空格之后允许换行
+                            push_break(i_byte); // 鍦ㄧ┖鏍间箣鍚庡厑璁告崲琛?
                         }
                         continue;
                     } else if ((c & 0b11100000) == 0b11000000) {
@@ -860,11 +859,11 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                         char_len = 4;
                     }
                     i_byte += char_len;
-                    // 对于非 ASCII（如 CJK），在字符后允许换行
+                    // 瀵逛簬闈?ASCII锛堝 CJK锛夛紝鍦ㄥ瓧绗﹀悗鍏佽鎹㈣
                     push_break(i_byte);
                 }
 
-                // 保证文本末尾是一个换行候选
+                // 淇濊瘉鏂囨湰鏈熬鏄竴涓崲琛屽€欓€?
                 if (break_points.empty() || break_points.back() != text.size()) {
                     break_points.push_back(text.size());
                 }
@@ -888,7 +887,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                         }
                         last = static_cast<int>(gi);
                         ++glyph_count;
-                        // 统计空格数量用于 word-spacing
+                        // 缁熻绌烘牸鏁伴噺鐢ㄤ簬 word-spacing
                         if (cluster < text.size() && text[cluster] == ' ') {
                             ++space_count;
                         }
@@ -904,7 +903,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                     if (glyph_count > 1 && letter_spacing_units != 0.0f) {
                         w += letter_spacing_units * static_cast<float>(glyph_count - 1);
                     }
-                    // 应用 word-spacing
+                    // 搴旂敤 word-spacing
                     if (space_count > 0 && word_spacing_units != 0.0f) {
                         w += word_spacing_units * static_cast<float>(space_count);
                     }
@@ -937,7 +936,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                 int line_index = 0;
 
                 while (line_start < text_len) {
-                    // 跳过行首空格
+                    // 璺宠繃琛岄绌烘牸
                     while (line_start < text_len && text[line_start] == ' ') {
                         ++line_start;
                     }
@@ -960,13 +959,13 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                             best_break = bp;
                             best_width_units = w_units;
                         } else {
-                            // 后续 break point 只会更宽，直接停止
+                            // 鍚庣画 break point 鍙細鏇村锛岀洿鎺ュ仠姝?
                             break;
                         }
                     }
 
                     if (!found_any) {
-                        // 无法在当前行宽内找到 break point，强制在第一个可用 break 或文本末尾换行
+                        // 鏃犳硶鍦ㄥ綋鍓嶈瀹藉唴鎵惧埌 break point锛屽己鍒跺湪绗竴涓彲鐢?break 鎴栨枃鏈湯灏炬崲琛?
                         size_t fallback_break = text_len;
                         for (size_t bp : break_points) {
                             if (bp > line_start) {
@@ -982,7 +981,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                     int last_glyph = -1;
                     glyph_range_for_bytes(line_start, best_break, first_glyph, last_glyph);
                     if (first_glyph == -1 || last_glyph == -1) {
-                        // 没有 glyph（可能是全空格），直接结束
+                        // 娌℃湁 glyph锛堝彲鑳芥槸鍏ㄧ┖鏍硷級锛岀洿鎺ョ粨鏉?
                         line_start = best_break;
                         continue;
                     }
@@ -1020,7 +1019,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                     float first_pen_x_units = glyphs[static_cast<size_t>(first_glyph)].pen_x_units;
 
                     int glyph_index_in_run = 0;
-                    int accumulated_spaces = 0;  // 累计空格数用于 word-spacing
+                    int accumulated_spaces = 0;  // 绱绌烘牸鏁扮敤浜?word-spacing
                     for (int gi = first_glyph; gi <= last_glyph; ++gi) {
                         const ShapedGlyph& sg = glyphs[static_cast<size_t>(gi)];
                         GlyphInstance inst{};
@@ -1029,7 +1028,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                         if (letter_spacing_units != 0.0f && glyph_index_in_run > 0) {
                             base_x_units += letter_spacing_units * static_cast<float>(glyph_index_in_run);
                         }
-                        // 应用 word-spacing：在空格之后的字符添加额外间距
+                        // 搴旂敤 word-spacing锛氬湪绌烘牸涔嬪悗鐨勫瓧绗︽坊鍔犻澶栭棿璺?
                         if (word_spacing_units != 0.0f && accumulated_spaces > 0) {
                             base_x_units += word_spacing_units * static_cast<float>(accumulated_spaces);
                         }
@@ -1039,7 +1038,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                         inst.units_per_em = sg.units_per_em;
                         glyph_run.glyphs.push_back(inst);
                         ++glyph_index_in_run;
-                        // 检查当前 glyph 是否对应空格字符
+                        // 妫€鏌ュ綋鍓?glyph 鏄惁瀵瑰簲绌烘牸瀛楃
                         if (sg.cluster < text.size() && text[sg.cluster] == ' ') {
                             ++accumulated_spaces;
                         }
@@ -1054,7 +1053,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         }
     }
 
-    // 3.5 Input 元素特殊渲染：显示 value 或 placeholder
+    // 3.5 Input 鍏冪礌鐗规畩娓叉煋锛氭樉绀?value 鎴?placeholder
     if (layout_node && tag == "input") {
         float x = layout_node->layout.position[0];
         float y = layout_node->layout.position[1];
@@ -1066,13 +1065,13 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         
         float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
         
-        // 获取 value 或 placeholder
+        // 鑾峰彇 value 鎴?placeholder
         std::string display_text = node->getAttribute("value");
         Color text_color = makeColorFromCss(style.color);
         
         if (display_text.empty()) {
             display_text = node->getAttribute("placeholder");
-            // placeholder 使用半透明颜色
+            // placeholder 浣跨敤鍗婇€忔槑棰滆壊
             text_color.a *= 0.5f;
         }
         
@@ -1100,7 +1099,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                 float baseline_offset = (top_leading_units + ascent_units) * scale;
                 float text_height_px = line_height_units * scale;
                 
-                // 垂直居中
+                // 鍨傜洿灞呬腑
                 float text_y = y + (height - text_height_px) * 0.5f;
                 float baseline_y = text_y + baseline_offset;
                 float text_x = x + pad_left;
@@ -1135,10 +1134,10 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         }
     }
 
-    // 4. 递归子节点（按 z-index 排序）
+    // 4. 閫掑綊瀛愯妭鐐癸紙鎸?z-index 鎺掑簭锛?
     const auto& children = node->getChildren();
     
-    // 如果是滚动容器，应用滚动偏移到子元素
+    // 濡傛灉鏄粴鍔ㄥ鍣紝搴旂敤婊氬姩鍋忕Щ鍒板瓙鍏冪礌
     bool applied_scroll_translate = false;
     if (is_scroll_container) {
         float scroll_x = node->getScrollX();
@@ -1149,7 +1148,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         }
     }
     
-    // 收集需要绘制的子元素及其 z-index
+    // 鏀堕泦闇€瑕佺粯鍒剁殑瀛愬厓绱犲強鍏?z-index
     struct ChildWithZIndex {
         dom::DOMNodePtr child;
         int z_index;
@@ -1171,7 +1170,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         sorted_children.push_back(item);
     }
     
-    // 按 z-index 升序排序，相同 z-index 保持 DOM 顺序
+    // 鎸?z-index 鍗囧簭鎺掑簭锛岀浉鍚?z-index 淇濇寔 DOM 椤哄簭
     std::sort(sorted_children.begin(), sorted_children.end(),
               [](const ChildWithZIndex& a, const ChildWithZIndex& b) {
                   if (a.z_index != b.z_index) {
@@ -1181,9 +1180,9 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
               });
     
     for (const auto& item : sorted_children) {
-        // 跳过已经在容器层绘制过的 inline 元素
+        // 璺宠繃宸茬粡鍦ㄥ鍣ㄥ眰缁樺埗杩囩殑 inline 鍏冪礌
         if (item.child->getAttribute("__inline_rendered__") == "1") {
-            item.child->setAttribute("__inline_rendered__", "");  // 清除标记
+            item.child->setAttribute("__inline_rendered__", "");  // 娓呴櫎鏍囪
             continue;
         }
         const layout::LayoutNode* child_layout = nullptr;
@@ -1193,14 +1192,14 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         buildDisplayListNode(item.child, child_layout, builder);
     }
     
-    // 恢复滚动偏移
+    // 鎭㈠婊氬姩鍋忕Щ
     if (applied_scroll_translate) {
         builder.popTranslate();
     }
 
-    // 5. 滚动条渲染（在子节点之后绘制，确保滚动条在内容之上）
+    // 5. 婊氬姩鏉℃覆鏌擄紙鍦ㄥ瓙鑺傜偣涔嬪悗缁樺埗锛岀‘淇濇粴鍔ㄦ潯鍦ㄥ唴瀹逛箣涓婏級
     if (is_scroll_container && layout_node && node_rect.width > 0.0f && node_rect.height > 0.0f) {
-        // 计算内容高度（所有子元素的最大底部位置）
+        // 璁＄畻鍐呭楂樺害锛堟墍鏈夊瓙鍏冪礌鐨勬渶澶у簳閮ㄤ綅缃級
         float content_bottom = node_rect.y;
         for (const auto& child : node->getChildren()) {
             if (!child || child->getType() != dom::DOMNode::NodeType::ELEMENT) {
@@ -1218,21 +1217,21 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         float content_height = content_bottom - node_rect.y;
         float visible_height = node_rect.height;
         
-        // 只有当内容高度大于可视高度时才显示滚动条
+        // 鍙湁褰撳唴瀹归珮搴﹀ぇ浜庡彲瑙嗛珮搴︽椂鎵嶆樉绀烘粴鍔ㄦ潯
         if (content_height > visible_height + 1.0f) {
-            // 滚动条参数
+            // 婊氬姩鏉″弬鏁?
             constexpr float kScrollbarWidth = 8.0f;
             constexpr float kScrollbarMinThumbHeight = 20.0f;
             constexpr float kScrollbarPadding = 2.0f;
             
-            // 滚动条轨道位置（在容器右侧）
+            // 婊氬姩鏉¤建閬撲綅缃紙鍦ㄥ鍣ㄥ彸渚э級
             Rect track_rect{};
             track_rect.x = node_rect.x + node_rect.width - kScrollbarWidth - kScrollbarPadding;
             track_rect.y = node_rect.y + kScrollbarPadding;
             track_rect.width = kScrollbarWidth;
             track_rect.height = node_rect.height - kScrollbarPadding * 2.0f;
             
-            // 绘制滚动条轨道（半透明灰色背景）
+            // 缁樺埗婊氬姩鏉¤建閬擄紙鍗婇€忔槑鐏拌壊鑳屾櫙锛?
             Color track_color{};
             track_color.r = 0.0f;
             track_color.g = 0.0f;
@@ -1240,11 +1239,11 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
             track_color.a = 0.1f;
             builder.addRoundedRect(track_rect, track_color, kScrollbarWidth * 0.5f);
             
-            // 计算滑块高度和位置
+            // 璁＄畻婊戝潡楂樺害鍜屼綅缃?
             float thumb_height_ratio = visible_height / content_height;
             float thumb_height = std::max(kScrollbarMinThumbHeight, track_rect.height * thumb_height_ratio);
             
-            // 从节点获取当前滚动位置
+            // 浠庤妭鐐硅幏鍙栧綋鍓嶆粴鍔ㄤ綅缃?
             float scroll_position = node->getScrollY();
             float max_scroll = content_height - visible_height;
             float scroll_ratio = (max_scroll > 0.0f) ? (scroll_position / max_scroll) : 0.0f;
@@ -1258,7 +1257,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
             thumb_rect.width = kScrollbarWidth;
             thumb_rect.height = thumb_height;
             
-            // 绘制滑块（半透明深灰色）
+            // 缁樺埗婊戝潡锛堝崐閫忔槑娣辩伆鑹诧級
             Color thumb_color{};
             thumb_color.r = 0.4f;
             thumb_color.g = 0.4f;

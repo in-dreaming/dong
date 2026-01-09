@@ -1,9 +1,9 @@
-#include "parser.hpp"
+﻿#include "parser.hpp"
+#include "../core/log.h"
 #include "style_engine.hpp"
 #include <lexbor/html/html.h>
 #include <lexbor/dom/dom.h>
 #include <lexbor/css/css.h>
-#include <SDL3/SDL_log.h>
 #include <iostream>
 #include <cctype>
 #include <algorithm>
@@ -21,22 +21,22 @@ Parser::~Parser() {
 }
 
 DOMNodePtr Parser::parse(const std::string& html) {
-    SDL_Log("[Parser::parse] Entry, html length=%zu", html.length());
+    DONG_LOG_INFO("[Parser::parse] Entry, html length=%zu", html.length());
     
     doc = lxb_html_document_create();
     if (!doc) {
-        SDL_Log("[Parser::parse] Failed to create Lexbor HTML document");
+        DONG_LOG_INFO("[Parser::parse] Failed to create Lexbor HTML document");
         std::cerr << "Failed to create Lexbor HTML document" << std::endl;
         return nullptr;
     }
-    SDL_Log("[Parser::parse] Document created");
+    DONG_LOG_INFO("[Parser::parse] Document created");
 
     lxb_status_t status = lxb_html_document_parse(
         doc,
         reinterpret_cast<const uint8_t*>(html.c_str()),
         html.length()
     );
-    SDL_Log("[Parser::parse] lxb_html_document_parse returned status=%d", (int)status);
+    DONG_LOG_INFO("[Parser::parse] lxb_html_document_parse returned status=%d", (int)status);
 
     if (status != LXB_STATUS_OK) {
         std::cerr << "Failed to parse HTML: status " << status << std::endl;
@@ -48,7 +48,7 @@ DOMNodePtr Parser::parse(const std::string& html) {
 
     lxb_dom_node_t* root = lxb_dom_interface_node(doc);
     if (!root) {
-        SDL_Log("[Parser::parse] Failed to get root node");
+        DONG_LOG_INFO("[Parser::parse] Failed to get root node");
         std::cerr << "Failed to get root node from Lexbor document" << std::endl;
         return nullptr;
     }
@@ -58,18 +58,18 @@ DOMNodePtr Parser::parse(const std::string& html) {
     if (dom_root) {
         applyDefaultStyles(dom_root);
         
-        SDL_Log("[Parser::parse] Creating StyleEngine...");
+        DONG_LOG_INFO("[Parser::parse] Creating StyleEngine...");
         // Extract styles from <style> tags and compute CSS-based styles
         auto style_engine = std::make_unique<StyleEngine>();
-        SDL_Log("[Parser::parse] Extracting and applying styles...");
+        DONG_LOG_INFO("[Parser::parse] Extracting and applying styles...");
         extractAndApplyStyles(dom_root, style_engine.get());
-        SDL_Log("[Parser::parse] Computing styles...");
+        DONG_LOG_INFO("[Parser::parse] Computing styles...");
         style_engine->computeStyles(dom_root);
         
-        SDL_Log("[Parser::parse] Parsing inline styles...");
+        DONG_LOG_INFO("[Parser::parse] Parsing inline styles...");
         // Apply inline styles (override stylesheet rules)
         parseInlineStyles(dom_root);
-        SDL_Log("[Parser::parse] Done");
+        DONG_LOG_INFO("[Parser::parse] Done");
     }
 
     return dom_root;
@@ -173,15 +173,15 @@ void Parser::applyDefaultStyles(DOMNodePtr node) {
     }
     else if (tag == "span" || tag == "a" || tag == "b" || tag == "i" || tag == "strong" || tag == "em" || tag == "code") {
         style.display = "inline";
-        // 粗体和斜体标签的默认样式
+        // 绮椾綋鍜屾枩浣撴爣绛剧殑榛樿鏍峰紡
         if (tag == "b" || tag == "strong") {
             style.font_weight = "bold";
         }
-        // <code> 标签默认使用等宽字体
+        // <code> 鏍囩榛樿浣跨敤绛夊瀛椾綋
         if (tag == "code") {
             style.font_family = "Menlo, Consolas, monospace";
         }
-        // TODO: 支持 <i> 和 <em> 的斜体样式
+        // TODO: 鏀寔 <i> 鍜?<em> 鐨勬枩浣撴牱寮?
     }
     else if (tag == "h1" || tag == "h2" || tag == "h3" || tag == "h4" || tag == "h5" || tag == "h6") {
         style.display = "block";

@@ -1,11 +1,11 @@
-#pragma once
+﻿#pragma once
 
 #include <algorithm>
 #include <cstdint>
 #include <string>
 #include <utility>
 #include <vector>
-#include <SDL3/SDL_log.h>
+
 
 namespace dong::render {
 

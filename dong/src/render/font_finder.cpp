@@ -1,6 +1,6 @@
-#include "font_finder.hpp"
+﻿#include "font_finder.hpp"
+#include "../core/log.h"
 
-#include <SDL3/SDL_log.h>
 #include <algorithm>
 #include <filesystem>
 #include <unordered_set>
@@ -17,16 +17,16 @@ namespace dong::render {
 
 namespace {
 
-// 用户自定义字体路径列表
+// 鐢ㄦ埛鑷畾涔夊瓧浣撹矾寰勫垪琛?
 std::vector<std::string> g_custom_font_paths;
 bool g_font_finder_initialized = false;
 
-// 支持的字体文件扩展名
+// 鏀寔鐨勫瓧浣撴枃浠舵墿灞曞悕
 const std::unordered_set<std::string> kFontExtensions = {
     ".ttf", ".otf", ".ttc", ".otc", ".woff", ".woff2"
 };
 
-// 检查文件是否为字体文件
+// 妫€鏌ユ枃浠舵槸鍚︿负瀛椾綋鏂囦欢
 bool isFontFile(const std::string& path) {
     namespace fs = std::filesystem;
     std::error_code ec;
@@ -39,7 +39,7 @@ bool isFontFile(const std::string& path) {
     return kFontExtensions.find(ext) != kFontExtensions.end();
 }
 
-// 扫描目录中的字体文件
+// 鎵弿鐩綍涓殑瀛椾綋鏂囦欢
 void scanDirectoryForFonts(const std::string& dir_path, std::vector<std::string>& out_fonts) {
     namespace fs = std::filesystem;
     std::error_code ec;
@@ -55,11 +55,11 @@ void scanDirectoryForFonts(const std::string& dir_path, std::vector<std::string>
             }
         }
     } catch (const std::exception& e) {
-        SDL_Log("FontFinder: error scanning directory '%s': %s", dir_path.c_str(), e.what());
+        DONG_LOG_INFO("FontFinder: error scanning directory '%s': %s", dir_path.c_str(), e.what());
     }
 }
 
-// 从自定义路径收集字体文件
+// 浠庤嚜瀹氫箟璺緞鏀堕泦瀛椾綋鏂囦欢
 std::vector<std::string> collectCustomFonts() {
     std::vector<std::string> fonts;
     namespace fs = std::filesystem;
@@ -82,7 +82,7 @@ std::vector<FontMatch> findSystemFonts(const std::string& family_name, int weigh
     std::vector<FontMatch> matches;
     
     if (!g_font_finder_initialized) {
-        SDL_Log("FontFinder: not initialized, falling back to hardcoded paths");
+        DONG_LOG_INFO("FontFinder: not initialized, falling back to hardcoded paths");
         return matches;
     }
     
@@ -220,23 +220,23 @@ void addCustomFontPath(const std::string& path) {
         return;
     }
     
-    // 检查路径是否存在
+    // 妫€鏌ヨ矾寰勬槸鍚﹀瓨鍦?
     if (!fs::exists(path, ec) || ec) {
-        SDL_Log("FontFinder: custom font path does not exist: '%s'", path.c_str());
+        DONG_LOG_INFO("FontFinder: custom font path does not exist: '%s'", path.c_str());
         return;
     }
     
-    // 检查是否已添加
+    // 妫€鏌ユ槸鍚﹀凡娣诲姞
     auto it = std::find(g_custom_font_paths.begin(), g_custom_font_paths.end(), path);
     if (it == g_custom_font_paths.end()) {
         g_custom_font_paths.push_back(path);
-        SDL_Log("FontFinder: added custom font path: '%s'", path.c_str());
+        DONG_LOG_INFO("FontFinder: added custom font path: '%s'", path.c_str());
     }
 }
 
 void clearCustomFontPaths() {
     g_custom_font_paths.clear();
-    SDL_Log("FontFinder: cleared all custom font paths");
+    DONG_LOG_INFO("FontFinder: cleared all custom font paths");
 }
 
 bool initializeFontFinder() {

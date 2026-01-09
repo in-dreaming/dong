@@ -1,4 +1,4 @@
-#include "gpu_painter.hpp"
+﻿#include "gpu_painter.hpp"
 #include "gpu_device.hpp"
 #include "shader_manager.hpp"
 #include "gpu_surface.hpp"

@@ -98,10 +98,88 @@ else()
 endif()
 
 # =============================================================================
-# Dong core library
+# Dong libraries
 # =============================================================================
-add_library(dong STATIC
+# dong: platform-agnostic core (will become dong.dll)
+add_library(dong SHARED
     src/api_bindings.cpp
+    src/core/context.cpp
+    src/dom/dom_manager.cpp
+    src/dom/dom_node.cpp
+    src/dom/event_system.cpp
+    src/dom/parser.cpp
+    src/dom/style_engine.cpp
+    src/dom/focus_manager.cpp
+    src/dom/input_element.cpp
+    src/layout/layout_engine.cpp
+    src/script/script_engine.cpp
+    src/script/js_bindings.cpp
+    src/render/painter.cpp
+    src/render/render_surface.cpp
+    src/render/resource_manager.cpp
+    src/render/font_resolver.cpp
+    src/render/font_finder.cpp
+    src/render/text_shaper.cpp
+    src/render/font_metrics.cpp
+)
+
+target_include_directories(dong PUBLIC
+    include
+    src
+    ${QUICKJS_PREFIX}/include
+    third_party/lexbor/source
+    third_party/yoga
+    ${FREETYPE_PREFIX}/include/freetype2
+    ${HARFBUZZ_PREFIX}/include/harfbuzz
+    ${MSDFGEN_PREFIX}/include
+)
+
+# Define DONG_BUILDING_DLL for export macros
+target_compile_definitions(dong PRIVATE DONG_BUILDING_DLL)
+
+target_link_libraries(dong PUBLIC quickjs lexbor yoga)
+
+# Link FreeType, HarfBuzz, msdfgen
+if(WIN32)
+    target_link_libraries(dong PUBLIC
+        "${FREETYPE_PREFIX}/lib/freetype.lib"
+        "${HARFBUZZ_PREFIX}/lib/harfbuzz.lib"
+        "${MSDFGEN_PREFIX}/lib/msdfgen-core.lib"
+        "${MSDFGEN_PREFIX}/lib/msdfgen-ext.lib"
+    )
+    # Link clang compiler-rt builtins for __udivti3 etc (used by QuickJS BigInt)
+    # QuickJS is built with Zig/Clang, so we always need builtins regardless of host compiler
+    # Try LLVM installation first (has __udivti3), then fallback to VS bundled version
+    if(NOT DEFINED CLANG_RT_BUILTIN)
+        file(GLOB CLANG_RT_BUILTINS_LLVM
+            "C:/env/llvm/*/lib/clang/*/lib/windows/clang_rt.builtins-x86_64.lib"
+        )
+        file(GLOB CLANG_RT_BUILTINS_VS
+            "C:/Program Files/Microsoft Visual Studio/2022/*/VC/Tools/MSVC/*/lib/x64/clang_rt.builtins-x86_64.lib"
+        )
+        if(CLANG_RT_BUILTINS_LLVM)
+            list(GET CLANG_RT_BUILTINS_LLVM 0 CLANG_RT_BUILTIN)
+            set(CLANG_RT_BUILTIN "${CLANG_RT_BUILTIN}" CACHE FILEPATH "Clang RT builtins library" FORCE)
+        elseif(CLANG_RT_BUILTINS_VS)
+            list(GET CLANG_RT_BUILTINS_VS 0 CLANG_RT_BUILTIN)
+            set(CLANG_RT_BUILTIN "${CLANG_RT_BUILTIN}" CACHE FILEPATH "Clang RT builtins library" FORCE)
+        endif()
+    endif()
+    if(CLANG_RT_BUILTIN)
+        target_link_libraries(dong PUBLIC "${CLANG_RT_BUILTIN}")
+    endif()
+else()
+    target_link_libraries(dong PUBLIC
+        "${FREETYPE_PREFIX}/lib/libfreetype.a"
+        "${HARFBUZZ_PREFIX}/lib/libharfbuzz.a"
+        "${MSDFGEN_PREFIX}/lib/libmsdfgen-core.a"
+        "${MSDFGEN_PREFIX}/lib/libmsdfgen-ext.a"
+    )
+endif()
+
+# dong_legacy: temporary compatibility library (still SDL-coupled)
+add_library(dong_legacy STATIC
+    src/api_bindings_legacy.cpp
     src/core/context.cpp
     src/core/view.cpp
     src/dom/dom_manager.cpp
@@ -132,7 +210,7 @@ add_library(dong STATIC
     third_party/SDL_shadercross/src/SDL_shadercross.c
 )
 
-target_include_directories(dong PUBLIC
+target_include_directories(dong_legacy PUBLIC
     include
     src
     ${QUICKJS_PREFIX}/include
@@ -148,42 +226,58 @@ target_include_directories(dong PUBLIC
 
 if(VULKAN_SDK_PATH)
     if(WIN32)
-        target_include_directories(dong PUBLIC "${VULKAN_SDK_PATH}/Include/spirv_cross")
+        target_include_directories(dong_legacy PUBLIC "${VULKAN_SDK_PATH}/Include/spirv_cross")
     else()
-        target_include_directories(dong PUBLIC "${VULKAN_SDK_PATH}/include/spirv_cross")
+        target_include_directories(dong_legacy PUBLIC "${VULKAN_SDK_PATH}/include/spirv_cross")
     endif()
 endif()
 
-target_compile_definitions(dong PRIVATE SDL_SHADERCROSS_DXC)
+target_compile_definitions(dong_legacy PRIVATE SDL_SHADERCROSS_DXC)
 
-target_link_libraries(dong PUBLIC quickjs lexbor yoga)
+target_link_libraries(dong_legacy PUBLIC quickjs lexbor yoga)
 
-# Link FreeType, HarfBuzz, msdfgen
 if(WIN32)
-    target_link_libraries(dong PUBLIC
+    target_link_libraries(dong_legacy PUBLIC
         "${FREETYPE_PREFIX}/lib/freetype.lib"
         "${HARFBUZZ_PREFIX}/lib/harfbuzz.lib"
         "${MSDFGEN_PREFIX}/lib/msdfgen-core.lib"
         "${MSDFGEN_PREFIX}/lib/msdfgen-ext.lib"
     )
     # Link clang compiler-rt builtins for __udivti3 etc (used by QuickJS BigInt)
-    if(CMAKE_C_COMPILER_ID MATCHES "Clang")
-        get_filename_component(CLANG_BIN_DIR "${CMAKE_C_COMPILER}" DIRECTORY)
-        get_filename_component(CLANG_ROOT "${CLANG_BIN_DIR}" DIRECTORY)
-        # Try to find clang_rt.builtins
-        file(GLOB CLANG_RT_BUILTINS "${CLANG_ROOT}/lib/clang/*/lib/windows/clang_rt.builtins-x86_64.lib")
-        if(CLANG_RT_BUILTINS)
-            list(GET CLANG_RT_BUILTINS 0 CLANG_RT_BUILTIN)
-            target_link_libraries(dong PUBLIC "${CLANG_RT_BUILTIN}")
-        endif()
+    if(CLANG_RT_BUILTIN)
+        target_link_libraries(dong_legacy PUBLIC "${CLANG_RT_BUILTIN}")
     endif()
 else()
-    target_link_libraries(dong PUBLIC
+    target_link_libraries(dong_legacy PUBLIC
         "${FREETYPE_PREFIX}/lib/libfreetype.a"
         "${HARFBUZZ_PREFIX}/lib/libharfbuzz.a"
         "${MSDFGEN_PREFIX}/lib/libmsdfgen-core.a"
         "${MSDFGEN_PREFIX}/lib/libmsdfgen-ext.a"
     )
+endif()
+
+# =============================================================================
+# Plugins
+# =============================================================================
+option(BUILD_PLUGINS "Build dong plugins" ON)
+if(BUILD_PLUGINS)
+    add_subdirectory(plugins/sdl)
+endif()
+
+# =============================================================================
+# Apps
+# =============================================================================
+option(BUILD_APPS "Build dong apps" ON)
+if(BUILD_APPS)
+    add_subdirectory(apps/dong_app)
+endif()
+
+# =============================================================================
+# Tools
+# =============================================================================
+option(BUILD_TOOLS "Build dong tools" ON)
+if(BUILD_TOOLS)
+    add_subdirectory(tools/runner)
 endif()
 
 # =============================================================================
@@ -195,7 +289,7 @@ if(BUILD_EXAMPLES)
     # Common function to configure examples
     function(add_dong_example name source)
         add_executable(${name} ${source})
-        target_link_libraries(${name} PRIVATE dong)
+        target_link_libraries(${name} PRIVATE dong_legacy)
         
         # SDL3
         target_include_directories(${name} PRIVATE "${SDL3_PREFIX}/include")
@@ -242,33 +336,18 @@ if(BUILD_EXAMPLES)
 
     # C++ examples
     set(CPP_EXAMPLES
-        complete_demo
-        dom_test
+        # Minimal set + must-keep demos
         integration_demo
-        js_api_test
-        render_and_script_demo
-        style_cascade_test
-        dom_api_demo
-        style_modification_demo
-        js_return_value_demo
-        performance_demo
-        dirty_rect_optimization_demo
-        js_event_demo
-        comprehensive_features_demo
-        image_rendering_demo
-        gpu_view_demo
+        sdl_gpu_demo
+
         gpu_screenshot_demo
         gpu_screenshot_demo_fontonly
         gpu_screenshot_demo_basic_layout
         gpu_screenshot_demo_glyph_stress
         gpu_screenshot_analysis
-        gpu_texture_demo
+
         interactive_demo
-        offscreen_test
-        simple_offscreen
-        msdf_soft_render
-        isolation_demo
-        sdl_gpu_demo
+
         3d_cube
         3d_screen
         3d_screen_html
@@ -281,10 +360,6 @@ if(BUILD_EXAMPLES)
         endif()
     endforeach()
 
-    # Special case for msdf_cpu_test
-    if(EXISTS "${CMAKE_SOURCE_DIR}/examples/msdf_cpu_render_test.cpp")
-        add_dong_example(msdf_cpu_test "examples/msdf_cpu_render_test.cpp")
-    endif()
 endif()
 
 # =============================================================================

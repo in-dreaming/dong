@@ -1,4 +1,4 @@
-#include "glyph_atlas.hpp"
+﻿#include "glyph_atlas.hpp"
 #include "gpu_device.hpp"
 #include "font_metrics.hpp"
 #include "../core/log.h"

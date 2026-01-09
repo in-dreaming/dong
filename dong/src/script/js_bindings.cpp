@@ -1,8 +1,7 @@
-#include "js_bindings.hpp"
+﻿#include "js_bindings.hpp"
 #include <cstdio>
 #include <cstring>
 #include <iostream>
-#include <SDL3/SDL_log.h>
 #include "../core/log.h"
 extern "C" {
 #include "quickjs.h"
@@ -212,7 +211,7 @@ static JSValue doc_querySelectorAll(JSContext* ctx, JSValueConst this_val, int a
 }
 
 // ============================================================
-// 【缺口1】DOM 创建 API
+// 銆愮己鍙?銆慏OM 鍒涘缓 API
 // ============================================================
 
 static JSValue doc_createElement(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
@@ -222,14 +221,14 @@ static JSValue doc_createElement(JSContext* ctx, JSValueConst this_val, int argc
     const char* tag = JS_ToCString(ctx, argv[0]);
     if (!tag) return JS_NULL;
     
-    // 创建新 DOM 节点
+    // 鍒涘缓鏂?DOM 鑺傜偣
     auto node = std::make_shared<dong::dom::DOMNode>(dong::dom::DOMNode::NodeType::ELEMENT, tag);
     
     JS_FreeCString(ctx, tag);
     
     if (!node) return JS_NULL;
     
-    // 返回 JS 元素对象
+    // 杩斿洖 JS 鍏冪礌瀵硅薄
     return bindings->createJSElement(ctx, node);
 }
 
@@ -240,7 +239,7 @@ static JSValue doc_createTextNode(JSContext* ctx, JSValueConst this_val, int arg
     const char* text = JS_ToCString(ctx, argv[0]);
     if (!text) return JS_NULL;
     
-    // 创建文本节点
+    // 鍒涘缓鏂囨湰鑺傜偣
     auto node = std::make_shared<dong::dom::DOMNode>(dong::dom::DOMNode::NodeType::TEXT, "");
     node->setTextContent(text);
     
@@ -466,10 +465,10 @@ static JSValue elem_getChildren(JSContext* ctx, JSValueConst this_val, int argc,
 }
 
 // ============================================================
-// 【缺口2】样式修改 API - element.style.*
+// 銆愮己鍙?銆戞牱寮忎慨鏀?API - element.style.*
 // ============================================================
 
-// 获取样式对象（代理，允许读写）
+// 鑾峰彇鏍峰紡瀵硅薄锛堜唬鐞嗭紝鍏佽璇诲啓锛?
 static JSValue elem_getStyle(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     auto node = JSBindings::getNodeOpaque(ctx, this_val);
     if (!node) return JS_NewObject(ctx);
@@ -477,11 +476,11 @@ static JSValue elem_getStyle(JSContext* ctx, JSValueConst this_val, int argc, JS
     auto& style = node->getComputedStyle();
     JSValue style_obj = JS_NewObject(ctx);
     
-    // 绑定节点指针到 style 对象，方便后续修改
+    // 缁戝畾鑺傜偣鎸囬拡鍒?style 瀵硅薄锛屾柟渚垮悗缁慨鏀?
     JSValue node_ref = JS_DupValue(ctx, this_val);
     JS_SetPropertyStr(ctx, style_obj, "__element__", node_ref);
     
-    // 暴露可修改的样式属性
+    // 鏆撮湶鍙慨鏀圭殑鏍峰紡灞炴€?
     JS_SetPropertyStr(ctx, style_obj, "color", JS_NewString(ctx, style.color.c_str()));
     JS_SetPropertyStr(ctx, style_obj, "backgroundColor", JS_NewString(ctx, style.background_color.c_str()));
     JS_SetPropertyStr(ctx, style_obj, "fontSize", JS_NewFloat64(ctx, style.font_size));
@@ -503,7 +502,7 @@ static JSValue elem_setStyle(JSContext* ctx, JSValueConst this_val, JSValue styl
     
     auto& style = node->getComputedStyle();
     
-    // 读取样式字符串或数字
+    // 璇诲彇鏍峰紡瀛楃涓叉垨鏁板瓧
     std::string str_val;
     double num_val = 0;
     
@@ -517,7 +516,7 @@ static JSValue elem_setStyle(JSContext* ctx, JSValueConst this_val, JSValue styl
         JS_ToFloat64(ctx, &num_val, value);
     }
     
-    // 更新对应的样式属性
+    // 鏇存柊瀵瑰簲鐨勬牱寮忓睘鎬?
     if (strcmp(prop, "color") == 0) style.color = str_val;
     else if (strcmp(prop, "backgroundColor") == 0) style.background_color = str_val;
     else if (strcmp(prop, "fontSize") == 0) style.font_size = (float)num_val;
@@ -530,13 +529,13 @@ static JSValue elem_setStyle(JSContext* ctx, JSValueConst this_val, JSValue styl
     else if (strcmp(prop, "borderWidth") == 0) style.border_width = (float)num_val;
     else if (strcmp(prop, "borderColor") == 0) style.border_color = str_val;
     
-    // 标记为脏，需要重新布局
+    // 鏍囪涓鸿剰锛岄渶瑕侀噸鏂板竷灞€
     node->markLayoutDirty();
     
     return JS_UNDEFINED;
 }
 
-// classList 支持
+// classList 鏀寔
 static JSValue elem_classList_add(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     if (argc < 1) return JS_UNDEFINED;
     
@@ -546,10 +545,10 @@ static JSValue elem_classList_add(JSContext* ctx, JSValueConst this_val, int arg
     const char* cls = JS_ToCString(ctx, argv[0]);
     if (!cls) return JS_UNDEFINED;
     
-    // 获取当前 class 属性
+    // 鑾峰彇褰撳墠 class 灞炴€?
     std::string classes = node->getAttribute("class");
     
-    // 添加到 class 列表
+    // 娣诲姞鍒?class 鍒楄〃
     if (classes.empty()) {
         classes = cls;
     } else if (classes.find(cls) == std::string::npos) {
@@ -571,15 +570,15 @@ static JSValue elem_classList_remove(JSContext* ctx, JSValueConst this_val, int 
     const char* cls = JS_ToCString(ctx, argv[0]);
     if (!cls) return JS_UNDEFINED;
     
-    // 获取当前 class 属性
+    // 鑾峰彇褰撳墠 class 灞炴€?
     std::string classes = node->getAttribute("class");
     std::string cls_str(cls);
     
-    // 从 class 列表中移除
+    // 浠?class 鍒楄〃涓Щ闄?
     size_t pos = classes.find(cls_str);
     if (pos != std::string::npos) {
         classes.erase(pos, cls_str.length());
-        // 清理多余空格
+        // 娓呯悊澶氫綑绌烘牸
         while (!classes.empty() && classes.front() == ' ') classes.erase(0, 1);
         while (!classes.empty() && classes.back() == ' ') classes.pop_back();
     }
@@ -620,7 +619,7 @@ static JSValue elem_classList_toggle(JSContext* ctx, JSValueConst this_val, int 
     node->setAttribute("class", classes);
     JS_FreeCString(ctx, cls);
     
-    return JS_NewBool(ctx, !present);  // 返回是否已添加
+    return JS_NewBool(ctx, !present);  // 杩斿洖鏄惁宸叉坊鍔?
 }
 
 static JSValue elem_getClassList(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
@@ -629,7 +628,7 @@ static JSValue elem_getClassList(JSContext* ctx, JSValueConst this_val, int argc
     
     JSValue classList = JS_NewObject(ctx);
     
-    // 绑定方法
+    // 缁戝畾鏂规硶
     JS_SetPropertyStr(ctx, classList, "add",
         JS_NewCFunction(ctx, elem_classList_add, "add", 1));
     JS_SetPropertyStr(ctx, classList, "remove",
@@ -637,7 +636,7 @@ static JSValue elem_getClassList(JSContext* ctx, JSValueConst this_val, int argc
     JS_SetPropertyStr(ctx, classList, "toggle",
         JS_NewCFunction(ctx, elem_classList_toggle, "toggle", 1));
     
-    // 保存节点引用
+    // 淇濆瓨鑺傜偣寮曠敤
     JSValue node_ref = JS_DupValue(ctx, this_val);
     JS_SetPropertyStr(ctx, classList, "__element__", node_ref);
     
@@ -791,7 +790,7 @@ void JSBindings::initializeDocumentAPI() {
     JS_SetPropertyStr(ctx, document, "querySelectorAll",
         JS_NewCFunction(ctx, doc_querySelectorAll, "querySelectorAll", 1));
     
-    // DOM 创建 API
+    // DOM 鍒涘缓 API
     JS_SetPropertyStr(ctx, document, "createElement",
         JS_NewCFunction(ctx, doc_createElement, "createElement", 1));
     JS_SetPropertyStr(ctx, document, "createTextNode",
@@ -885,7 +884,7 @@ JSValue JSBindings::createJSElement(JSContext* ctx, const dom::DOMNodePtr& node)
     JS_SetPropertyStr(ctx, elem, "getChildren",
         JS_NewCFunction(ctx, elem_getChildren, "getChildren", 0));
     
-    // 【缺口2】样式修改 - element.style 和 classList
+    // 銆愮己鍙?銆戞牱寮忎慨鏀?- element.style 鍜?classList
     JS_SetPropertyStr(ctx, elem, "style", elem_getStyle(ctx, elem, 0, nullptr));
     JS_SetPropertyStr(ctx, elem, "classList", elem_getClassList(ctx, elem, 0, nullptr));
 
@@ -924,8 +923,8 @@ void JSBindings::removeEventListener(uint64_t node_id, const std::string& type, 
 
     auto& entries = type_it->second;
     for (auto it = entries.begin(); it != entries.end(); ++it) {
-        // QuickJS API 在不同版本中未提供统一的 JS_IsStrictEqual/JS_StrictEqual，
-        // 这里我们只需要判断两个函数是否是同一个 JS 对象，所以用 tag+指针比较即可。
+        // QuickJS API 鍦ㄤ笉鍚岀増鏈腑鏈彁渚涚粺涓€鐨?JS_IsStrictEqual/JS_StrictEqual锛?
+        // 杩欓噷鎴戜滑鍙渶瑕佸垽鏂袱涓嚱鏁版槸鍚︽槸鍚屼竴涓?JS 瀵硅薄锛屾墍浠ョ敤 tag+鎸囬拡姣旇緝鍗冲彲銆?
         JSValue a = *it;
         JSValue b = handler;
         if (JS_VALUE_GET_TAG(a) == JS_VALUE_GET_TAG(b) && JS_VALUE_GET_PTR(a) == JS_VALUE_GET_PTR(b)) {

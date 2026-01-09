@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "display_list.hpp"
 #include <SDL3/SDL_gpu.h>

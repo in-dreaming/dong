@@ -1,4 +1,4 @@
-#include "input_adapter_sdl3.hpp"
+﻿#include "input_adapter_sdl3.hpp"
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_keyboard.h>

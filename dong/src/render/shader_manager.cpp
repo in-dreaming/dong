@@ -1,4 +1,4 @@
-#include "shader_manager.hpp"
+﻿#include "shader_manager.hpp"
 #include "gpu_device.hpp"
 #include <SDL3/SDL_log.h>
 #include <SDL3_shadercross/SDL_shadercross.h>

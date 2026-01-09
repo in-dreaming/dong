@@ -1,10 +1,10 @@
-#include "style_engine.hpp"
+﻿#include "style_engine.hpp"
+#include "../core/log.h"
 #include <algorithm>
 #include <sstream>
 #include <cctype>
 #include <iostream>
 #include <unordered_set>
-#include <SDL3/SDL_log.h>
 
 namespace dong::dom {
 
@@ -22,10 +22,10 @@ LayoutMode deriveLayoutModeFromDisplay(const ComputedStyle& style) {
         return LayoutMode::Inline;
     }
     if (d == "inline-block") {
-        // 外层盒仍按 block 参与布局，由行内格式化上下文负责其内联表现
+        // 澶栧眰鐩掍粛鎸?block 鍙備笌甯冨眬锛岀敱琛屽唴鏍煎紡鍖栦笂涓嬫枃璐熻矗鍏跺唴鑱旇〃鐜?
         return LayoutMode::Block;
     }
-    // 其它 display 值目前统一视为块级盒
+    // 鍏跺畠 display 鍊肩洰鍓嶇粺涓€瑙嗕负鍧楃骇鐩?
     return LayoutMode::Block;
 }
 
@@ -50,18 +50,18 @@ void StyleEngine::addStylesheet(const std::string& css) {
 std::vector<CSSRule> StyleEngine::parseCSS(const std::string& css) {
     std::vector<CSSRule> result;
     
-    // 首先移除 CSS 注释（/* ... */）
+    // 棣栧厛绉婚櫎 CSS 娉ㄩ噴锛?* ... */锛?
     std::string css_no_comments;
     css_no_comments.reserve(css.length());
     size_t i = 0;
     while (i < css.length()) {
         if (i + 1 < css.length() && css[i] == '/' && css[i + 1] == '*') {
-            // 找到注释开始，跳过直到找到 */
+            // 鎵惧埌娉ㄩ噴寮€濮嬶紝璺宠繃鐩村埌鎵惧埌 */
             size_t end = css.find("*/", i + 2);
             if (end != std::string::npos) {
                 i = end + 2;
             } else {
-                // 没有找到注释结束，跳过剩余内容
+                // 娌℃湁鎵惧埌娉ㄩ噴缁撴潫锛岃烦杩囧墿浣欏唴瀹?
                 break;
             }
         } else {
@@ -101,9 +101,9 @@ std::vector<CSSRule> StyleEngine::parseCSS(const std::string& css) {
             if (!single_selector.empty()) {
                 // Parse declarations into ComputedStyle
                 auto style = ComputedStyle();
-                // 重要：将这些属性设置为空，表示"未设置"。
-                // ComputedStyle 有默认值，但在 CSS 规则中，如果没有显式设置这些属性，
-                // 我们不应该用默认值覆盖元素的原有值。
+                // 閲嶈锛氬皢杩欎簺灞炴€ц缃负绌猴紝琛ㄧず"鏈缃?銆?
+                // ComputedStyle 鏈夐粯璁ゅ€硷紝浣嗗湪 CSS 瑙勫垯涓紝濡傛灉娌℃湁鏄惧紡璁剧疆杩欎簺灞炴€э紝
+                // 鎴戜滑涓嶅簲璇ョ敤榛樿鍊艰鐩栧厓绱犵殑鍘熸湁鍊笺€?
                 style.display = "";
                 style.background_color = "";
                 style.color = "";
@@ -149,7 +149,7 @@ void StyleEngine::computeStyles(DOMNodePtr node) {
             if (matchesSelector(rule.selector, node)) {
                 matching_rules.push_back(rule);
                 if (debug_soft) {
-                    SDL_Log("[computeStyles] soft element matched selector='%s' bg='%s'",
+                    DONG_LOG_INFO("[computeStyles] soft element matched selector='%s' bg='%s'",
                             rule.selector.c_str(), rule.style.background_color.c_str());
                 }
             }
@@ -170,14 +170,14 @@ void StyleEngine::computeStyles(DOMNodePtr node) {
     
     for (const auto& rule : matching_rules) {
         // Merge styles with proper cascade
-        // 只有当规则显式设置了属性（非空）时才应用
+        // 鍙湁褰撹鍒欐樉寮忚缃簡灞炴€э紙闈炵┖锛夋椂鎵嶅簲鐢?
         if (!rule.style.color.empty()) {
             computed.color = rule.style.color;
         }
         if (!rule.style.background_color.empty()) {
             computed.background_color = rule.style.background_color;
             if (debug_soft) {
-                SDL_Log("[computeStyles] soft: applying bg='%s' from selector='%s'",
+                DONG_LOG_INFO("[computeStyles] soft: applying bg='%s' from selector='%s'",
                         rule.style.background_color.c_str(), rule.selector.c_str());
             }
         }
@@ -286,7 +286,7 @@ void StyleEngine::computeStyles(DOMNodePtr node) {
     }
     
     if (debug_soft) {
-        SDL_Log("[computeStyles] soft element FINAL bg='%s'", computed.background_color.c_str());
+        DONG_LOG_INFO("[computeStyles] soft element FINAL bg='%s'", computed.background_color.c_str());
     }
 
     static const std::unordered_set<std::string> kAlwaysHiddenTags = {
@@ -841,12 +841,12 @@ void StyleEngine::applyStyleProperty(const std::string& property, const std::str
             px = 0.0f;
         } else {
             px = parseFloat(lowered);
-            // 如果是 em 单位，转换为像素
+            // 濡傛灉鏄?em 鍗曚綅锛岃浆鎹负鍍忕礌
             if (lowered.find("em") != std::string::npos) {
                 float font_px = style.font_size > 0.0f ? style.font_size : 16.0f;
                 px = px * font_px;
             }
-            // px 单位或无单位数字直接使用
+            // px 鍗曚綅鎴栨棤鍗曚綅鏁板瓧鐩存帴浣跨敤
         }
         style.word_spacing_px = px;
     }
@@ -860,15 +860,15 @@ void StyleEngine::applyStyleProperty(const std::string& property, const std::str
             style.line_height = -1.0f;
             style.line_height_is_unitless = true;
         } else if (lowered.find("px") != std::string::npos) {
-            // 像素值
+            // 鍍忕礌鍊?
             style.line_height = parseFloat(lowered);
             style.line_height_is_unitless = false;
         } else if (lowered.find('%') != std::string::npos) {
-            // 百分比：转换为倍数
+            // 鐧惧垎姣旓細杞崲涓哄€嶆暟
             style.line_height = parseFloat(lowered) / 100.0f;
             style.line_height_is_unitless = true;
         } else {
-            // 无单位数字（倍数）
+            // 鏃犲崟浣嶆暟瀛楋紙鍊嶆暟锛?
             style.line_height = parseFloat(lowered);
             style.line_height_is_unitless = true;
         }
@@ -928,7 +928,7 @@ void StyleEngine::applyStyleProperty(const std::string& property, const std::str
         }
     }
     else if (prop == "z-index") {
-        // 仅支持整数 z-index，非法值按 0 处理
+        // 浠呮敮鎸佹暣鏁?z-index锛岄潪娉曞€兼寜 0 澶勭悊
         try {
             style.z_index = std::stoi(val);
         } catch (...) {
@@ -1073,8 +1073,8 @@ void StyleEngine::applyStyleProperty(const std::string& property, const std::str
         style.border_color = val;
     }
     else if (prop == "border") {
-        // border 简写：border: <width> <style> <color>
-        // 目前仅解析 width 和 color，style 暂时忽略
+        // border 绠€鍐欙細border: <width> <style> <color>
+        // 鐩墠浠呰В鏋?width 鍜?color锛宻tyle 鏆傛椂蹇界暐
         std::istringstream iss(val);
         std::string part;
         std::vector<std::string> parts;
@@ -1082,23 +1082,23 @@ void StyleEngine::applyStyleProperty(const std::string& property, const std::str
             parts.push_back(part);
         }
         for (const auto& p : parts) {
-            // 尝试解析为宽度（以数字开头）
+            // 灏濊瘯瑙ｆ瀽涓哄搴︼紙浠ユ暟瀛楀紑澶达級
             if (!p.empty() && (std::isdigit(static_cast<unsigned char>(p[0])) || p[0] == '.')) {
                 style.border_width = parseFloat(p);
             }
-            // 尝试解析为颜色（以 # 或字母开头，排除 style 关键字）
+            // 灏濊瘯瑙ｆ瀽涓洪鑹诧紙浠?# 鎴栧瓧姣嶅紑澶达紝鎺掗櫎 style 鍏抽敭瀛楋級
             else if (!p.empty() && (p[0] == '#' || 
                      (std::isalpha(static_cast<unsigned char>(p[0])) &&
                       p != "solid" && p != "dashed" && p != "dotted" && 
                       p != "double" && p != "none" && p != "hidden"))) {
                 style.border_color = p;
             }
-            // border-style 暂时忽略（solid/dashed/dotted 等）
+            // border-style 鏆傛椂蹇界暐锛坰olid/dashed/dotted 绛夛級
         }
     }
     else if (prop == "border-top" || prop == "border-right" || 
              prop == "border-bottom" || prop == "border-left") {
-        // 单边 border 简写，目前简化处理为全局 border
+        // 鍗曡竟 border 绠€鍐欙紝鐩墠绠€鍖栧鐞嗕负鍏ㄥ眬 border
         std::istringstream iss(val);
         std::string part;
         std::vector<std::string> parts;
@@ -1121,7 +1121,7 @@ void StyleEngine::applyStyleProperty(const std::string& property, const std::str
         style.box_shadows.clear();
         std::string src = val;
 
-        // 按逗号拆分多个阴影，注意跳过 rgba(...) 内部的逗号
+        // 鎸夐€楀彿鎷嗗垎澶氫釜闃村奖锛屾敞鎰忚烦杩?rgba(...) 鍐呴儴鐨勯€楀彿
         std::vector<std::string> shadow_parts;
         int paren_depth = 0;
         std::string current;
@@ -1155,7 +1155,7 @@ void StyleEngine::applyStyleProperty(const std::string& property, const std::str
                 continue;
             }
 
-            // 从左到右先取 offset/blur/spread，遇到第一个以字母或 '#' 开头的 token 后，剩余部分当作颜色
+            // 浠庡乏鍒板彸鍏堝彇 offset/blur/spread锛岄亣鍒扮涓€涓互瀛楁瘝鎴?'#' 寮€澶寸殑 token 鍚庯紝鍓╀綑閮ㄥ垎褰撲綔棰滆壊
             std::vector<std::string> length_tokens;
             size_t color_start = std::string::npos;
 
@@ -1206,7 +1206,7 @@ void StyleEngine::applyStyleProperty(const std::string& property, const std::str
                 }
             }
 
-            // 若未提供颜色，则使用当前文本色作为阴影颜色的基准
+            // 鑻ユ湭鎻愪緵棰滆壊锛屽垯浣跨敤褰撳墠鏂囨湰鑹蹭綔涓洪槾褰遍鑹茬殑鍩哄噯
             if (shadow.color.empty()) {
                 shadow.color = style.color;
             }
@@ -1228,13 +1228,13 @@ void StyleEngine::applyStyleProperty(const std::string& property, const std::str
         style.isolation_isolate = (lowered == "isolate");
     }
     else if (prop == "transform") {
-        // 极简 transform 支持：只解析 translate/scale，用于 LayerTree 图层平移/缩放
+        // 鏋佺畝 transform 鏀寔锛氬彧瑙ｆ瀽 translate/scale锛岀敤浜?LayerTree 鍥惧眰骞崇Щ/缂╂斁
         std::string lowered = val;
         std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char c) {
             return static_cast<char>(std::tolower(c));
         });
 
-        // 默认重置为 identity
+        // 榛樿閲嶇疆涓?identity
         style.transform_translate_x = 0.0f;
         style.transform_translate_y = 0.0f;
         style.transform_scale_x = 1.0f;
@@ -1308,7 +1308,7 @@ void StyleEngine::applyStyleProperty(const std::string& property, const std::str
             }
         };
 
-        // 允许 transform 里同时出现 scale/translate，顺序目前不影响（仅做简单组合）
+        // 鍏佽 transform 閲屽悓鏃跺嚭鐜?scale/translate锛岄『搴忕洰鍓嶄笉褰卞搷锛堜粎鍋氱畝鍗曠粍鍚堬級
         size_t pos = 0;
         while (pos < lowered.size()) {
             size_t lparen = lowered.find('(', pos);
@@ -1327,9 +1327,9 @@ void StyleEngine::applyStyleProperty(const std::string& property, const std::str
 
 std::pair<std::string, ComputedStyle> StyleEngine::parseRule(const std::string& rule_str) {
     ComputedStyle style;
-    // 重要：将 display 设置为空，表示"未设置"。
-    // ComputedStyle 的默认值是 "block"，但在 CSS 规则中，如果没有显式设置 display，
-    // 我们不应该用默认值覆盖元素的原有 display 值。
+    // 閲嶈锛氬皢 display 璁剧疆涓虹┖锛岃〃绀?鏈缃?銆?
+    // ComputedStyle 鐨勯粯璁ゅ€兼槸 "block"锛屼絾鍦?CSS 瑙勫垯涓紝濡傛灉娌℃湁鏄惧紡璁剧疆 display锛?
+    // 鎴戜滑涓嶅簲璇ョ敤榛樿鍊艰鐩栧厓绱犵殑鍘熸湁 display 鍊笺€?
     style.display = "";
     std::string selector;
     

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "render_surface.hpp"
 #include <SDL3/SDL_gpu.h>

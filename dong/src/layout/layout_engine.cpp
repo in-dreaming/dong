@@ -1,4 +1,5 @@
-#include "layout_engine.hpp"
+﻿#include "layout_engine.hpp"
+#include "../core/log.h"
 #include <yoga/YGNode.h>
 #include <yoga/YGConfig.h>
 #include <yoga/Yoga.h>
@@ -6,7 +7,6 @@
 #include <algorithm>
 #include <functional>
 #include <cmath>
-#include <SDL3/SDL_log.h>
 
 #include "../render/text_shaper.hpp"
 
@@ -68,14 +68,14 @@ static std::string collapseWhitespace(const std::string& input) {
     return output.substr(first, last - first + 1);
 }
 
-// 计算元素的内在文本宽度（包含 padding），用于按钮等 inline-block 元素的自适应宽度
-// 符合 CSS 标准：width: auto 时，元素宽度 = 内容宽度 + padding + border
+// 璁＄畻鍏冪礌鐨勫唴鍦ㄦ枃鏈搴︼紙鍖呭惈 padding锛夛紝鐢ㄤ簬鎸夐挳绛?inline-block 鍏冪礌鐨勮嚜閫傚簲瀹藉害
+// 绗﹀悎 CSS 鏍囧噯锛歸idth: auto 鏃讹紝鍏冪礌瀹藉害 = 鍐呭瀹藉害 + padding + border
 float computeIntrinsicTextWidth(const dom::DOMNodePtr& node) {
     if (!node) return 0.0f;
     const auto& style = node->getComputedStyle();
     float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
 
-    // 收集纯文本子节点
+    // 鏀堕泦绾枃鏈瓙鑺傜偣
     bool has_text_child = false;
     std::string raw_text;
     for (const auto& child : node->getChildren()) {
@@ -110,7 +110,7 @@ float computeIntrinsicTextWidth(const dom::DOMNodePtr& node) {
     float content_width = shaped.width_units * scale;
     if (content_width < 0.0f) content_width = 0.0f;
 
-    // 加上 padding 和 border
+    // 鍔犱笂 padding 鍜?border
     float pad_left = style.padding_left.isPixel() ? style.padding_left.value : 0.0f;
     float pad_right = style.padding_right.isPixel() ? style.padding_right.value : 0.0f;
     float border_w = style.border_width > 0.0f ? style.border_width : 0.0f;
@@ -129,7 +129,7 @@ float computeIntrinsicTextHeight(const dom::DOMNodePtr& node) {
     const auto& style = node->getComputedStyle();
     float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
 
-    // 收集纯文本子节点（忽略嵌套元素）
+    // 鏀堕泦绾枃鏈瓙鑺傜偣锛堝拷鐣ュ祵濂楀厓绱狅級
     bool has_text_child = false;
     bool has_element_child = false;
     std::string raw_text;
@@ -163,7 +163,7 @@ float computeIntrinsicTextHeight(const dom::DOMNodePtr& node) {
 
     ShapedText shaped{};
     if (!shaper.shape(req, shaped) || shaped.glyphs.empty()) {
-        SDL_Log("[computeIntrinsicTextHeight] shaping failed for text='%s' font_size=%.1f", 
+        DONG_LOG_INFO("[computeIntrinsicTextHeight] shaping failed for text='%s' font_size=%.1f", 
                 text.c_str(), font_size);
         return 0.0f;
     }
@@ -172,7 +172,7 @@ float computeIntrinsicTextHeight(const dom::DOMNodePtr& node) {
     
     // Validate scale
     if (scale <= 0.0f || scale > 1.0f || !std::isfinite(scale)) {
-        SDL_Log("[computeIntrinsicTextHeight] INVALID scale=%.6f for text='%s'", scale, text.substr(0, 20).c_str());
+        DONG_LOG_INFO("[computeIntrinsicTextHeight] INVALID scale=%.6f for text='%s'", scale, text.substr(0, 20).c_str());
         return font_size * 1.2f;  // fallback
     }
     
@@ -180,13 +180,13 @@ float computeIntrinsicTextHeight(const dom::DOMNodePtr& node) {
     
     // Validate line_height_units
     if (shaped.line_height_units <= 0.0f || shaped.line_height_units > 100000.0f || !std::isfinite(shaped.line_height_units)) {
-        SDL_Log("[computeIntrinsicTextHeight] INVALID line_height_units=%.1f for text='%s'", 
+        DONG_LOG_INFO("[computeIntrinsicTextHeight] INVALID line_height_units=%.1f for text='%s'", 
                 shaped.line_height_units, text.substr(0, 20).c_str());
         return font_size * 1.2f;  // fallback
     }
     
-    // 对标浏览器对 `line-height: normal` 的近似：不少于 ~1.2 * font-size，
-    // 避免大字号文本的行盒过小，导致后续块级元素"顶上来"覆盖文字。
+    // 瀵规爣娴忚鍣ㄥ `line-height: normal` 鐨勮繎浼硷細涓嶅皯浜?~1.2 * font-size锛?
+    // 閬垮厤澶у瓧鍙锋枃鏈殑琛岀洅杩囧皬锛屽鑷村悗缁潡绾у厓绱?椤朵笂鏉?瑕嗙洊鏂囧瓧銆?
     const float min_line_height = font_size * 1.2f;
     if (effective_line_height < min_line_height) {
         effective_line_height = min_line_height;
@@ -199,7 +199,7 @@ float computeIntrinsicTextHeight(const dom::DOMNodePtr& node) {
     
     // Final validation
     if (result > 10000.0f || result < 0.0f || !std::isfinite(result)) {
-        SDL_Log("[computeIntrinsicTextHeight] INVALID result=%.1f for text='%s' (effective_line_height=%.1f scale=%.6f line_height_units=%.1f)",
+        DONG_LOG_INFO("[computeIntrinsicTextHeight] INVALID result=%.1f for text='%s' (effective_line_height=%.1f scale=%.6f line_height_units=%.1f)",
                 result, text.substr(0, 20).c_str(), effective_line_height, scale, shaped.line_height_units);
         return font_size * 1.2f;  // fallback
     }
@@ -267,12 +267,12 @@ dom::DOMNodePtr firstElementChild(const dom::DOMNodePtr& node) {
 }
 
 struct InlineMetrics {
-    float content_width_px = 0.0f;        // 纯文本内容宽度（不含 padding）
+    float content_width_px = 0.0f;        // 绾枃鏈唴瀹瑰搴︼紙涓嶅惈 padding锛?
     float line_height_px = 0.0f;
     float baseline_from_content_top_px = 0.0f;
-    float padding_left_px = 0.0f;         // 左侧 padding
-    float padding_right_px = 0.0f;        // 右侧 padding
-    float total_width_px = 0.0f;          // 完整宽度 = content + padding
+    float padding_left_px = 0.0f;         // 宸︿晶 padding
+    float padding_right_px = 0.0f;        // 鍙充晶 padding
+    float total_width_px = 0.0f;          // 瀹屾暣瀹藉害 = content + padding
 };
 
 static bool computeInlineMetricsForNode(const dom::DOMNodePtr& node,
@@ -288,7 +288,7 @@ static bool computeInlineMetricsForNode(const dom::DOMNodePtr& node,
         font_size_px = 16.0f;
     }
 
-    // 收集该元素直接子节点中的文本，忽略嵌套元素，保持与 Painter 文本绘制一致
+    // 鏀堕泦璇ュ厓绱犵洿鎺ュ瓙鑺傜偣涓殑鏂囨湰锛屽拷鐣ュ祵濂楀厓绱狅紝淇濇寔涓?Painter 鏂囨湰缁樺埗涓€鑷?
     bool has_text_child = false;
     bool has_element_child = false;
     std::string raw_text;
@@ -331,33 +331,33 @@ static bool computeInlineMetricsForNode(const dom::DOMNodePtr& node,
 
     const float scale = shaped.scale_to_pixels;
 
-    // 宽度：整段文本的 glyph 范围
+    // 瀹藉害锛氭暣娈垫枃鏈殑 glyph 鑼冨洿
     float content_width_units = shaped.width_units;
     if (content_width_units < 0.0f) {
         content_width_units = 0.0f;
     }
     out_metrics.content_width_px = content_width_units * scale;
 
-    // 符合 CSS 盒模型标准：计算包含 padding 的完整宽度
+    // 绗﹀悎 CSS 鐩掓ā鍨嬫爣鍑嗭細璁＄畻鍖呭惈 padding 鐨勫畬鏁村搴?
     out_metrics.padding_left_px = style.padding_left.isPixel() ? style.padding_left.value : 0.0f;
     out_metrics.padding_right_px = style.padding_right.isPixel() ? style.padding_right.value : 0.0f;
     out_metrics.total_width_px = out_metrics.content_width_px + 
                                   out_metrics.padding_left_px + 
                                   out_metrics.padding_right_px;
 
-    // 行高与 baseline：复用 Painter 中的度量逻辑，保证一致
+    // 琛岄珮涓?baseline锛氬鐢?Painter 涓殑搴﹂噺閫昏緫锛屼繚璇佷竴鑷?
     float line_height_units = shaped.line_height_units;
     float ascent_units = shaped.ascent_units;
     float descent_units = shaped.descent_units;
 
-    // 应用 CSS line-height 属性
+    // 搴旂敤 CSS line-height 灞炴€?
     if (style.line_height > 0.0f) {
         if (style.line_height_is_unitless) {
-            // 倍数：line-height * font-size
+            // 鍊嶆暟锛歭ine-height * font-size
             float css_line_height_px = style.line_height * font_size_px;
             line_height_units = css_line_height_px / std::max(scale, 1e-3f);
         } else {
-            // 像素值
+            // 鍍忕礌鍊?
             line_height_units = style.line_height / std::max(scale, 1e-3f);
         }
     }
@@ -365,8 +365,8 @@ static bool computeInlineMetricsForNode(const dom::DOMNodePtr& node,
     if (line_height_units <= 0.0f) {
         line_height_units = font_size_px / std::max(scale, 1e-3f);
     }
-    // 对 `line-height: normal` 做一个浏览器级别的下限：不少于 1.2 * font-size，
-    // 保证行盒高度足够容纳大字号 glyph，避免块级兄弟元素压住上一行文本。
+    // 瀵?`line-height: normal` 鍋氫竴涓祻瑙堝櫒绾у埆鐨勪笅闄愶細涓嶅皯浜?1.2 * font-size锛?
+    // 淇濊瘉琛岀洅楂樺害瓒冲瀹圭撼澶у瓧鍙?glyph锛岄伩鍏嶅潡绾у厔寮熷厓绱犲帇浣忎笂涓€琛屾枃鏈€?
     const float min_line_height_px = font_size_px * 1.2f;
     if (line_height_units * scale < min_line_height_px) {
         line_height_units = min_line_height_px / std::max(scale, 1e-3f);
@@ -402,7 +402,7 @@ bool isInlineFormattingContext(const dom::DOMNodePtr& node) {
 
     const auto& style = node->getComputedStyle();
 
-    // 不在根级大容器上启用内联格式化，避免一次性重写太多布局
+    // 涓嶅湪鏍圭骇澶у鍣ㄤ笂鍚敤鍐呰仈鏍煎紡鍖栵紝閬垮厤涓€娆℃€ч噸鍐欏お澶氬竷灞€
     const std::string tag = node->getTagName();
     if (tag == "html" || tag == "body") {
         return false;
@@ -428,9 +428,9 @@ bool isInlineFormattingContext(const dom::DOMNodePtr& node) {
         }
     }
 
-    // 仅当存在 inline/inline-block 子元素，且没有混入其他 block/flex 子元素时，
-    // 将该容器视为内联格式化上下文。这样可以安全地覆盖 align_basic_layout 等场景，
-    // 又不影响通用 block 布局。
+    // 浠呭綋瀛樺湪 inline/inline-block 瀛愬厓绱狅紝涓旀病鏈夋贩鍏ュ叾浠?block/flex 瀛愬厓绱犳椂锛?
+    // 灏嗚瀹瑰櫒瑙嗕负鍐呰仈鏍煎紡鍖栦笂涓嬫枃銆傝繖鏍峰彲浠ュ畨鍏ㄥ湴瑕嗙洊 align_basic_layout 绛夊満鏅紝
+    // 鍙堜笉褰卞搷閫氱敤 block 甯冨眬銆?
     return has_inline_child && !has_block_like_child;
 }
 
@@ -543,7 +543,7 @@ void Engine::calculateLayout(dom::DOMNodePtr root, float width, float height) {
                 if (style.height.isPixel()) {
                     new_height = style.height.value;
                 } else if (node_tag == "input") {
-                    // input 元素：使用 font-size + padding 计算高度
+                    // input 鍏冪礌锛氫娇鐢?font-size + padding 璁＄畻楂樺害
                     float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
                     float pad_top = style.padding_top.isPixel() ? style.padding_top.value : 0.0f;
                     float pad_bottom = style.padding_bottom.isPixel() ? style.padding_bottom.value : 0.0f;
@@ -753,11 +753,11 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
 
     mapComputedStylesToYoga(style, yoga_node);
 
-    // 如果当前节点是内联格式化上下文（包含 inline/inline-block 子元素），
-    // 设置为 flex-direction: row，让 Yoga 能正确计算容器高度
+    // 濡傛灉褰撳墠鑺傜偣鏄唴鑱旀牸寮忓寲涓婁笅鏂囷紙鍖呭惈 inline/inline-block 瀛愬厓绱狅級锛?
+    // 璁剧疆涓?flex-direction: row锛岃 Yoga 鑳芥纭绠楀鍣ㄩ珮搴?
     if (isInlineFormattingContext(dom_node)) {
         YGNodeStyleSetFlexDirection(yoga_node, YGFlexDirectionRow);
-        YGNodeStyleSetFlexWrap(yoga_node, YGWrapWrap); // 允许换行
+        YGNodeStyleSetFlexWrap(yoga_node, YGWrapWrap); // 鍏佽鎹㈣
     }
 
     bool width_converted_to_max = false;
@@ -798,13 +798,13 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
         }
     }
 
-    // 基于真实字体度量的 intrinsic sizing：
-    // 如果是文本主导的块级元素，且高度为 auto，则使用 TextShaper
-    // 计算一行文字的行高，并将 padding 一起纳入最小高度，避免文本容器高度
-    // 仅由 padding 决定，导致与浏览器差异过大。
+    // 鍩轰簬鐪熷疄瀛椾綋搴﹂噺鐨?intrinsic sizing锛?
+    // 濡傛灉鏄枃鏈富瀵肩殑鍧楃骇鍏冪礌锛屼笖楂樺害涓?auto锛屽垯浣跨敤 TextShaper
+    // 璁＄畻涓€琛屾枃瀛楃殑琛岄珮锛屽苟灏?padding 涓€璧风撼鍏ユ渶灏忛珮搴︼紝閬垮厤鏂囨湰瀹瑰櫒楂樺害
+    // 浠呯敱 padding 鍐冲畾锛屽鑷翠笌娴忚鍣ㄥ樊寮傝繃澶с€?
     // 
-    // 符合 CSS 标准：仅设置 min-height，让容器能够根据子元素内容自然扩展，
-    // 避免显式锁定 height 导致多子元素容器被压缩。
+    // 绗﹀悎 CSS 鏍囧噯锛氫粎璁剧疆 min-height锛岃瀹瑰櫒鑳藉鏍规嵁瀛愬厓绱犲唴瀹硅嚜鐒舵墿灞曪紝
+    // 閬垮厤鏄惧紡閿佸畾 height 瀵艰嚧澶氬瓙鍏冪礌瀹瑰櫒琚帇缂┿€?
     if ((tag == "h1" || tag == "h2" || tag == "h3" || tag == "h4" ||
          tag == "h5" || tag == "h6" || tag == "p" || tag == "button" ||
          tag == "div") &&
@@ -813,33 +813,33 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
         
         if (intrinsic_h > 0.0f && intrinsic_h < 10000.0f) {
             YGNodeStyleSetMinHeight(yoga_node, intrinsic_h);
-            // 移除显式 height 设置，让 Yoga 根据内容自动计算高度
+            // 绉婚櫎鏄惧紡 height 璁剧疆锛岃 Yoga 鏍规嵁鍐呭鑷姩璁＄畻楂樺害
             // YGNodeStyleSetHeight(yoga_node, intrinsic_h);
         }
     }
     
-    // input 元素是 replaced element，需要设置默认的内在尺寸
-    // CSS 标准：input 元素有默认的宽度和高度
+    // input 鍏冪礌鏄?replaced element锛岄渶瑕佽缃粯璁ょ殑鍐呭湪灏哄
+    // CSS 鏍囧噯锛歩nput 鍏冪礌鏈夐粯璁ょ殑瀹藉害鍜岄珮搴?
     if (tag == "input") {
-        // 计算 input 的高度：font-size + padding
+        // 璁＄畻 input 鐨勯珮搴︼細font-size + padding
         float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
         float pad_top = style.padding_top.isPixel() ? style.padding_top.value : 0.0f;
         float pad_bottom = style.padding_bottom.isPixel() ? style.padding_bottom.value : 0.0f;
         float input_height = font_size * 1.2f + pad_top + pad_bottom;
         
-        // 强制设置 input 高度，不管 style.height 是什么
+        // 寮哄埗璁剧疆 input 楂樺害锛屼笉绠?style.height 鏄粈涔?
         YGNodeStyleSetHeight(yoga_node, input_height);
         
-        // input 默认是 block 级别，宽度 100%（由 CSS 设置）
-        // 但如果没有显式宽度，给一个默认最小宽度
+        // input 榛樿鏄?block 绾у埆锛屽搴?100%锛堢敱 CSS 璁剧疆锛?
+        // 浣嗗鏋滄病鏈夋樉寮忓搴︼紝缁欎竴涓粯璁ゆ渶灏忓搴?
         if (style.width.isAuto()) {
-            YGNodeStyleSetMinWidth(yoga_node, 150.0f);  // 默认最小宽度
+            YGNodeStyleSetMinWidth(yoga_node, 150.0f);  // 榛樿鏈€灏忓搴?
         }
     }
     
-    // 符合 CSS 标准：为 button 元素设置基于文本内容的最小宽度
-    // 按钮默认是 inline-block，宽度应自适应内容 + padding
-    // 这确保按钮不会因为 flex 容器压缩而截断文字
+    // 绗﹀悎 CSS 鏍囧噯锛氫负 button 鍏冪礌璁剧疆鍩轰簬鏂囨湰鍐呭鐨勬渶灏忓搴?
+    // 鎸夐挳榛樿鏄?inline-block锛屽搴﹀簲鑷€傚簲鍐呭 + padding
+    // 杩欑‘淇濇寜閽笉浼氬洜涓?flex 瀹瑰櫒鍘嬬缉鑰屾埅鏂枃瀛?
     if (tag == "button" && style.width.isAuto()) {
         float intrinsic_w = computeIntrinsicTextWidth(dom_node);
         if (intrinsic_w > 0.0f && intrinsic_w < 10000.0f) {
@@ -880,7 +880,7 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
         // Approximate block/inline layout as a vertical stack
         YGNodeStyleSetFlexDirection(yoga_node, YGFlexDirectionColumn);
         
-        // 但如果是 inline-block 元素，设置为 row 方向，让 Yoga 能正确计算其尺寸
+        // 浣嗗鏋滄槸 inline-block 鍏冪礌锛岃缃负 row 鏂瑰悜锛岃 Yoga 鑳芥纭绠楀叾灏哄
         if (style.display == "inline-block") {
             YGNodeStyleSetFlexDirection(yoga_node, YGFlexDirectionRow);
         }
@@ -930,8 +930,8 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
     if (style.position == "absolute") {
         YGNodeStyleSetPositionType(yoga_node, YGPositionTypeAbsolute);
     } else {
-        // static/relative/fixed 目前统一映射为 Yoga 的 relative，
-        // 但通过位置属性（top/right/bottom/left）实现 relative 偏移。
+        // static/relative/fixed 鐩墠缁熶竴鏄犲皠涓?Yoga 鐨?relative锛?
+        // 浣嗛€氳繃浣嶇疆灞炴€э紙top/right/bottom/left锛夊疄鐜?relative 鍋忕Щ銆?
         YGNodeStyleSetPositionType(yoga_node, YGPositionTypeRelative);
     }
 
@@ -992,8 +992,8 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
         YGNodeStyleSetHeight(yoga_node, height_for_yoga);
         has_explicit_height = true;
         
-        // 符合 CSS 标准：移除 overflow 容器的 max-height 限制
-        // 让内容根据 CSS height 属性自然布局，避免非标准压缩
+        // 绗﹀悎 CSS 鏍囧噯锛氱Щ闄?overflow 瀹瑰櫒鐨?max-height 闄愬埗
+        // 璁╁唴瀹规牴鎹?CSS height 灞炴€ц嚜鐒跺竷灞€锛岄伩鍏嶉潪鏍囧噯鍘嬬缉
         // if (style.overflow == "scroll" || style.overflow == "hidden" || style.overflow == "auto") {
         //     YGNodeStyleSetMaxHeight(yoga_node, height_for_yoga);
         // }
@@ -1110,12 +1110,12 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
         YGNodeStyleSetFlexShrink(yoga_node, 0.0f);
     }
     
-    // 符合 CSS Flexbox 标准：
-    // 当元素有显式 height 时，在 column 方向的 flex 容器中应该尊重该高度
-    // 通过设置 flex-basis 为显式高度值，并禁止收缩来实现
+    // 绗﹀悎 CSS Flexbox 鏍囧噯锛?
+    // 褰撳厓绱犳湁鏄惧紡 height 鏃讹紝鍦?column 鏂瑰悜鐨?flex 瀹瑰櫒涓簲璇ュ皧閲嶈楂樺害
+    // 閫氳繃璁剧疆 flex-basis 涓烘樉寮忛珮搴﹀€硷紝骞剁姝㈡敹缂╂潵瀹炵幇
     if (style.height.isPixel()) {
-        // 有显式像素高度的元素，设置 flex-shrink: 0 防止被压缩
-        // 这符合 CSS 标准：显式尺寸应该被尊重
+        // 鏈夋樉寮忓儚绱犻珮搴︾殑鍏冪礌锛岃缃?flex-shrink: 0 闃叉琚帇缂?
+        // 杩欑鍚?CSS 鏍囧噯锛氭樉寮忓昂瀵稿簲璇ヨ灏婇噸
         YGNodeStyleSetFlexShrink(yoga_node, 0.0f);
     }
     
@@ -1124,8 +1124,8 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
     } else if (flex_basis.isPercent()) {
         YGNodeStyleSetFlexBasisPercent(yoga_node, flex_basis.value);
     } else {
-        // flex-basis: auto 时，Yoga 会使用 width/height 属性作为基准
-        // 这是符合 CSS 标准的行为
+        // flex-basis: auto 鏃讹紝Yoga 浼氫娇鐢?width/height 灞炴€т綔涓哄熀鍑?
+        // 杩欐槸绗﹀悎 CSS 鏍囧噯鐨勮涓?
         YGNodeStyleSetFlexBasisAuto(yoga_node);
     }
 
@@ -1210,7 +1210,7 @@ void Engine::destroyYogaNode(YGNode* node) {
 // Block Formatting Context: margin: auto handling
 // ============================================================================
 //
-// CSS 2.1 §10.3.3: Block-level, non-replaced elements in normal flow
+// CSS 2.1 搂10.3.3: Block-level, non-replaced elements in normal flow
 //
 // The constraint equation for horizontal layout:
 //   margin-left + border-left + padding-left + width + padding-right + border-right + margin-right = containing block width
@@ -1437,7 +1437,7 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
                     const auto& child_style = child->getComputedStyle();
                     
                     if (child_style.position == "absolute") {
-                        // 绝对定位元素不参与内联格式化上下文，由专门的定位布局阶段处理
+                        // 缁濆瀹氫綅鍏冪礌涓嶅弬涓庡唴鑱旀牸寮忓寲涓婁笅鏂囷紝鐢变笓闂ㄧ殑瀹氫綅甯冨眬闃舵澶勭悊
                         continue;
                     }
                     if (!isInlineLevelDisplay(child_style.display)) {
@@ -1447,12 +1447,12 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
                     InlineMetrics metrics{};
                     bool has_text_metrics = computeInlineMetricsForNode(child, metrics, container_style.font_size);
 
-                    // 即使没有文本度量，只要有显式 width/height，也应该参与布局
+                    // 鍗充娇娌℃湁鏂囨湰搴﹂噺锛屽彧瑕佹湁鏄惧紡 width/height锛屼篃搴旇鍙備笌甯冨眬
                     bool has_explicit_width = child_style.width.isPixel() || child_style.width.isPercent();
                     bool has_explicit_height = child_style.height.isPixel() || child_style.height.isPercent();
                     
                     if (!has_text_metrics && !has_explicit_width && !has_explicit_height) {
-                        // 既没有文本内容，也没有显式尺寸，跳过
+                        // 鏃㈡病鏈夋枃鏈唴瀹癸紝涔熸病鏈夋樉寮忓昂瀵革紝璺宠繃
                         continue;
                     }
 
@@ -1471,29 +1471,29 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
                         border_w = 0.0f;
                     }
 
-                    // 计算宽度：优先使用 CSS 显式指定的宽度
+                    // 璁＄畻瀹藉害锛氫紭鍏堜娇鐢?CSS 鏄惧紡鎸囧畾鐨勫搴?
                     float width_px = 0.0f;
                     if (child_style.width.isPixel()) {
                         width_px = child_style.width.value;
                     } else if (child_style.width.isPercent()) {
                         width_px = parsePercentValue(child_style.width, content_w);
                     } else if (has_text_metrics) {
-                        // 符合 CSS 标准：使用包含 padding 的完整宽度 + border
+                        // 绗﹀悎 CSS 鏍囧噯锛氫娇鐢ㄥ寘鍚?padding 鐨勫畬鏁村搴?+ border
                         width_px = metrics.total_width_px + border_w * 2.0f;
                     }
                     if (width_px <= 0.0f && has_text_metrics) {
                         width_px = metrics.line_height_px;
                     }
                     if (width_px <= 0.0f) {
-                        width_px = 16.0f; // 最小 fallback
+                        width_px = 16.0f; // 鏈€灏?fallback
                     }
 
-                    // 计算高度：优先使用 CSS 指定的高度，否则使用文本行高 + padding + border
+                    // 璁＄畻楂樺害锛氫紭鍏堜娇鐢?CSS 鎸囧畾鐨勯珮搴︼紝鍚﹀垯浣跨敤鏂囨湰琛岄珮 + padding + border
                     float height_px = 0.0f;
                     if (child_style.height.isPixel()) {
                         height_px = child_style.height.value;
                     } else if (child_style.height.isPercent()) {
-                        // 百分比高度暂不支持，使用内容高度
+                        // 鐧惧垎姣旈珮搴︽殏涓嶆敮鎸侊紝浣跨敤鍐呭楂樺害
                         if (has_text_metrics) {
                             height_px = metrics.line_height_px + pad_t + pad_b + border_w * 2.0f;
                         }
@@ -1504,18 +1504,18 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
                         height_px = metrics.line_height_px;
                     }
                     if (height_px <= 0.0f) {
-                        height_px = 16.0f; // 最小 fallback
+                        height_px = 16.0f; // 鏈€灏?fallback
                     }
 
                     item.preferred_width = width_px;
                     item.preferred_height = height_px;
-                    item.line_height_px = height_px;  // 使用元素高度作为行高贡献
+                    item.line_height_px = height_px;  // 浣跨敤鍏冪礌楂樺害浣滀负琛岄珮璐＄尞
                     
-                    // baseline 计算：有文本时使用文本 baseline，否则使用底部对齐近似
+                    // baseline 璁＄畻锛氭湁鏂囨湰鏃朵娇鐢ㄦ枃鏈?baseline锛屽惁鍒欎娇鐢ㄥ簳閮ㄥ榻愯繎浼?
                     if (has_text_metrics) {
                         item.baseline_from_border_top = border_w + pad_t + metrics.baseline_from_content_top_px;
                     } else {
-                        // 无文本内容时，baseline 近似为元素底部（符合 CSS inline-block 的默认行为）
+                        // 鏃犳枃鏈唴瀹规椂锛宐aseline 杩戜技涓哄厓绱犲簳閮紙绗﹀悎 CSS inline-block 鐨勯粯璁よ涓猴級
                         item.baseline_from_border_top = height_px;
                     }
                     item.vertical_align = child_style.vertical_align;
@@ -1583,20 +1583,20 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
                             float new_x = content_x + item.offset_x_in_content;
                             float new_y = 0.0f;
 
-                            // 根据 vertical-align 计算 Y 坐标
+                            // 鏍规嵁 vertical-align 璁＄畻 Y 鍧愭爣
                             const std::string& va = item.vertical_align;
                             if (va == "top") {
-                                // 顶部对齐：元素顶部与行顶部对齐
+                                // 椤堕儴瀵归綈锛氬厓绱犻《閮ㄤ笌琛岄《閮ㄥ榻?
                                 new_y = current_line_top;
                             } else if (va == "bottom") {
-                                // 底部对齐：元素底部与行底部对齐
+                                // 搴曢儴瀵归綈锛氬厓绱犲簳閮ㄤ笌琛屽簳閮ㄥ榻?
                                 new_y = current_line_top + line.max_line_height_px - item.preferred_height;
                             } else if (va == "middle") {
-                                // 中间对齐：元素中心与行中心对齐
+                                // 涓棿瀵归綈锛氬厓绱犱腑蹇冧笌琛屼腑蹇冨榻?
                                 float line_center = current_line_top + line.max_line_height_px * 0.5f;
                                 new_y = line_center - item.preferred_height * 0.5f;
                             } else {
-                                // baseline（默认）：元素 baseline 与行 baseline 对齐
+                                // baseline锛堥粯璁わ級锛氬厓绱?baseline 涓庤 baseline 瀵归綈
                                 new_y = baseline_y - item.baseline_from_border_top;
                             }
 
@@ -1607,7 +1607,7 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
                             child_layout->x = new_x;
                             child_layout->y = new_y;
                             child_layout->width = item.preferred_width;
-                            // 使用计算出的 preferred_height，它已经考虑了 CSS 指定的高度
+                            // 浣跨敤璁＄畻鍑虹殑 preferred_height锛屽畠宸茬粡鑰冭檻浜?CSS 鎸囧畾鐨勯珮搴?
                             child_layout->height = item.preferred_height;
 
                             child_layout->layout.position[0] = child_layout->x;
@@ -1764,10 +1764,10 @@ void Engine::layoutPositionedElements(dom::DOMNodePtr root) {
                 if (cb_w <= 0.0f || cb_h <= 0.0f) {
                     // Degenerate containing block, keep existing layout.
                 } else {
-                    // 若 absolute 盒子的 CSS width/height 为 auto（未显式指定），
-                    // 则无论 Yoga 给出的尺寸为何，都基于文本内容做一次 intrinsic sizing：
-                    // 宽度 = 文本内容宽 + 水平 padding + border；
-                    // 高度 = 一行文本行高 + 垂直 padding + border。
+                    // 鑻?absolute 鐩掑瓙鐨?CSS width/height 涓?auto锛堟湭鏄惧紡鎸囧畾锛夛紝
+                    // 鍒欐棤璁?Yoga 缁欏嚭鐨勫昂瀵镐负浣曪紝閮藉熀浜庢枃鏈唴瀹瑰仛涓€娆?intrinsic sizing锛?
+                    // 瀹藉害 = 鏂囨湰鍐呭瀹?+ 姘村钩 padding + border锛?
+                    // 楂樺害 = 涓€琛屾枃鏈楂?+ 鍨傜洿 padding + border銆?
                     const bool abs_width_auto = abs_style.width.isAuto();
                     const bool abs_height_auto = abs_style.height.isAuto();
                     if (abs_width_auto || abs_height_auto ||
@@ -1780,12 +1780,12 @@ void Engine::layoutPositionedElements(dom::DOMNodePtr root) {
                             if (border_w < 0.0f) {
                                 border_w = 0.0f;
                             }
-                            // 符合 CSS 标准：使用包含 padding 的完整宽度
+                            // 绗﹀悎 CSS 鏍囧噯锛氫娇鐢ㄥ寘鍚?padding 鐨勫畬鏁村搴?
                             float box_w_intrinsic = metrics.total_width_px + border_w * 2.0f;
                             float box_h_intrinsic = metrics.line_height_px + pad_t + pad_b + border_w * 2.0f;
 
                             if (debug_is_abs_badge) {
-                                SDL_Log("[LayoutEngine] ABS badge intrinsic: content_w=%.2f total_w=%.2f line_h=%.2f pad_l=%.1f pad_r=%.1f pad_t=%.1f pad_b=%.1f border=%.1f -> box_w=%.2f box_h=%.2f (width_auto=%d height_auto=%d before: w=%.2f h=%.2f)",
+                                DONG_LOG_INFO("[LayoutEngine] ABS badge intrinsic: content_w=%.2f total_w=%.2f line_h=%.2f pad_l=%.1f pad_r=%.1f pad_t=%.1f pad_b=%.1f border=%.1f -> box_w=%.2f box_h=%.2f (width_auto=%d height_auto=%d before: w=%.2f h=%.2f)",
                                         metrics.content_width_px, metrics.total_width_px, metrics.line_height_px,
                                         metrics.padding_left_px, metrics.padding_right_px, pad_t, pad_b, border_w,
                                         box_w_intrinsic, box_h_intrinsic,
@@ -1804,21 +1804,21 @@ void Engine::layoutPositionedElements(dom::DOMNodePtr root) {
                                 layout->layout.dimensions[1] = layout->height;
 
                                 if (debug_is_abs_badge) {
-                                    SDL_Log("[LayoutEngine] ABS badge final size: w=%.2f h=%.2f",
+                                    DONG_LOG_INFO("[LayoutEngine] ABS badge final size: w=%.2f h=%.2f",
                                             layout->width, layout->height);
                                 }
                             }
                         } else if (debug_is_abs_badge) {
-                            SDL_Log("[LayoutEngine] ABS badge intrinsic metrics FAILED (font_size=%.1f)",
+                            DONG_LOG_INFO("[LayoutEngine] ABS badge intrinsic metrics FAILED (font_size=%.1f)",
                                     abs_style.font_size);
                         }
                     } else if (debug_is_abs_badge) {
-                        SDL_Log("[LayoutEngine] ABS badge intrinsic sizing skipped (width_auto=%d height_auto=%d layout_w=%.2f layout_h=%.2f)",
+                        DONG_LOG_INFO("[LayoutEngine] ABS badge intrinsic sizing skipped (width_auto=%d height_auto=%d layout_w=%.2f layout_h=%.2f)",
                                 abs_width_auto ? 1 : 0, abs_height_auto ? 1 : 0,
                                 layout->width, layout->height);
                     }
 
-                    // In CSS，包含块通常是 padding box。这里先基于 border box，后续可视需要加上 padding。
+                    // In CSS锛屽寘鍚潡閫氬父鏄?padding box銆傝繖閲屽厛鍩轰簬 border box锛屽悗缁彲瑙嗛渶瑕佸姞涓?padding銆?
                     auto computeOffsetPx = [this](const dom::CSSValue& v, float parent_size) -> float {
                         if (v.isPixel()) {
                             return v.value;
@@ -1840,7 +1840,7 @@ void Engine::layoutPositionedElements(dom::DOMNodePtr root) {
                     float bottom_px = has_bottom ? computeOffsetPx(style.bottom, cb_h) : 0.0f;
 
                     if (debug_is_abs_badge) {
-                        SDL_Log("[LayoutEngine] ABS badge offsets: has_left=%d has_right=%d has_top=%d has_bottom=%d left_px=%.1f right_px=%.1f top_px=%.1f bottom_px=%.1f cb=(%.1f,%.1f,%.1f,%.1f) box=(%.1f,%.1f)",
+                        DONG_LOG_INFO("[LayoutEngine] ABS badge offsets: has_left=%d has_right=%d has_top=%d has_bottom=%d left_px=%.1f right_px=%.1f top_px=%.1f bottom_px=%.1f cb=(%.1f,%.1f,%.1f,%.1f) box=(%.1f,%.1f)",
                                 has_left ? 1 : 0, has_right ? 1 : 0,
                                 has_top ? 1 : 0, has_bottom ? 1 : 0,
                                 left_px, right_px, top_px, bottom_px,

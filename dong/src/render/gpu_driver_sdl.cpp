@@ -1,4 +1,4 @@
-#include "gpu_driver_sdl.hpp"
+﻿#include "gpu_driver_sdl.hpp"
 #include "gpu_device.hpp"
 #include "shader_manager.hpp"
 #include "resource_manager.hpp"

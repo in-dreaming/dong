@@ -2,6 +2,8 @@ zig-cache/
 zig-out/
 zig-build-output/
 build/
+build-cmake-core/
+build-ninja-core/
 .DS_Store
 *.o
 *.a

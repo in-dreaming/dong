@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "gpu_driver.hpp"
 #include <SDL3/SDL_gpu.h>

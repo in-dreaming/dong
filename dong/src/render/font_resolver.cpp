@@ -1,4 +1,4 @@
-#include "font_resolver.hpp"
+﻿#include "font_resolver.hpp"
 #include "font_finder.hpp"
 
 #include <algorithm>
@@ -12,7 +12,7 @@ namespace dong::render {
 
 namespace {
 
-// 确保字体查找系统已初始化（延迟初始化）
+// Ensure font finder is initialized (lazy init)
 void ensureFontFinderInitialized() {
     static bool initialized = false;
     if (!initialized) {
@@ -41,9 +41,9 @@ std::string toLowerAscii(std::string input) {
     return input;
 }
 
-// 预设字体候选列表：key 为 canonical family（或 generic family），value 为候选路径
+// Preset font candidate list: key is canonical family (or generic family), value is candidate paths
 const std::unordered_map<std::string, std::vector<std::string>> kFontCandidates = {
-    // Inter 字体 - 现代无衬线字体，用于英文/数字
+    // Inter font - modern sans-serif for English/numbers
     {"inter", {
         // Windows
         "C:/Windows/Fonts/Inter-Regular.ttf",
@@ -56,30 +56,30 @@ const std::unordered_map<std::string, std::vector<std::string>> kFontCandidates 
         "/usr/share/fonts/truetype/inter/Inter-Regular.ttf",
         "/usr/share/fonts/opentype/inter/Inter-Regular.otf",
     }},
-    // 系统 UI 字体族：-apple-system / BlinkMacSystemFont / system-ui
-    // 优先使用 Inter，然后回退到系统字体
+    // System UI font family: -apple-system / BlinkMacSystemFont / system-ui
+    // Prefer Inter, then fallback to system fonts
     {"-apple-system", {
-        // Inter 优先（英文/数字）
+        // Inter first (English/numbers)
         "C:/Windows/Fonts/Inter-Regular.ttf",
         "/Library/Fonts/Inter-Regular.ttf",
         "/usr/share/fonts/truetype/inter/Inter-Regular.ttf",
-        // macOS 系统字体
+        // macOS system fonts
         "/System/Library/Fonts/SFNS.ttf",
         "/System/Library/Fonts/SFNSDisplay.ttf",
         "/System/Library/Fonts/Helvetica.ttc",
         "/System/Library/Fonts/Supplemental/Arial.ttf",
-        // Linux 常见替代
+        // Linux common alternatives
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        // Windows 常见替代
+        // Windows common alternatives
         "C:/Windows/Fonts/segoeui.ttf",
         "C:/Windows/Fonts/arial.ttf"
     }},
     {"system-ui", {
-        // Inter 优先
+        // Inter first
         "C:/Windows/Fonts/Inter-Regular.ttf",
         "/Library/Fonts/Inter-Regular.ttf",
         "/usr/share/fonts/truetype/inter/Inter-Regular.ttf",
-        // 系统字体
+        // System fonts
         "/System/Library/Fonts/SFNS.ttf",
         "/System/Library/Fonts/SFNSDisplay.ttf",
         "/System/Library/Fonts/Helvetica.ttc",
@@ -89,11 +89,11 @@ const std::unordered_map<std::string, std::vector<std::string>> kFontCandidates 
         "C:/Windows/Fonts/arial.ttf"
     }},
     {"blinkmacsystemfont", {
-        // Inter 优先
+        // Inter first
         "C:/Windows/Fonts/Inter-Regular.ttf",
         "/Library/Fonts/Inter-Regular.ttf",
         "/usr/share/fonts/truetype/inter/Inter-Regular.ttf",
-        // 系统字体
+        // System fonts
         "/System/Library/Fonts/SFNS.ttf",
         "/System/Library/Fonts/SFNSDisplay.ttf",
         "/System/Library/Fonts/Helvetica.ttc",
@@ -103,32 +103,32 @@ const std::unordered_map<std::string, std::vector<std::string>> kFontCandidates 
         "C:/Windows/Fonts/arial.ttf"
     }},
     {"sans-serif", {
-        // Inter 优先（英文/数字）
+        // Inter first (English/numbers)
         "C:/Windows/Fonts/Inter-Regular.ttf",
         "/Library/Fonts/Inter-Regular.ttf",
         "/usr/share/fonts/truetype/inter/Inter-Regular.ttf",
-        // 回退到系统无衬线字体
+        // Fallback to system sans-serif
         "/System/Library/Fonts/Helvetica.ttc",
         "/System/Library/Fonts/Supplemental/Arial.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         "C:/Windows/Fonts/arial.ttf"
     }},
     {"arial", {
-        // Inter 优先
+        // Inter first
         "C:/Windows/Fonts/Inter-Regular.ttf",
         "/Library/Fonts/Inter-Regular.ttf",
         "/usr/share/fonts/truetype/inter/Inter-Regular.ttf",
-        // Arial 回退
+        // Arial fallback
         "/System/Library/Fonts/Supplemental/Arial.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         "C:/Windows/Fonts/arial.ttf"
     }},
     {"helvetica", {
-        // Inter 优先
+        // Inter first
         "C:/Windows/Fonts/Inter-Regular.ttf",
         "/Library/Fonts/Inter-Regular.ttf",
         "/usr/share/fonts/truetype/inter/Inter-Regular.ttf",
-        // Helvetica 回退
+        // Helvetica fallback
         "/System/Library/Fonts/Helvetica.ttc",
         "/System/Library/Fonts/Supplemental/Arial.ttf"
     }},
@@ -148,9 +148,9 @@ const std::unordered_map<std::string, std::vector<std::string>> kFontCandidates 
         "C:/Windows/Fonts/times.ttf"
     }},
     {"segoe ui", {
-        // Inter 优先
+        // Inter first
         "C:/Windows/Fonts/Inter-Regular.ttf",
-        // Segoe UI 回退
+        // Segoe UI fallback
         "C:/Windows/Fonts/segoeui.ttf",
         "C:/Windows/Fonts/arial.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
@@ -179,7 +179,7 @@ const std::unordered_map<std::string, std::vector<std::string>> kFontCandidates 
     {"consolas", {
         "/System/Library/Fonts/consola.ttf"
     }},
-    // 中文字体
+    // Chinese fonts
     {"pingfang sc", {
         "/System/Library/Fonts/PingFang.ttc",
         "/Library/Fonts/PingFang.ttc",
@@ -194,27 +194,27 @@ const std::unordered_map<std::string, std::vector<std::string>> kFontCandidates 
     }},
 };
 
-// CJK 字体回退列表（按优先级排序）
-// Windows 优先使用 Microsoft YaHei UI，macOS 优先使用 PingFang SC
+// CJK font fallback list (sorted by priority)
+// Windows prefers Microsoft YaHei UI, macOS prefers PingFang SC
 const std::vector<std::string> kCJKFallbackFonts = {
-    // Windows 中文字体 - Microsoft YaHei UI 优先
-    "C:/Windows/Fonts/msyh.ttc",      // Microsoft YaHei UI (微软雅黑)
+    // Windows Chinese fonts - Microsoft YaHei UI first
+    "C:/Windows/Fonts/msyh.ttc",      // Microsoft YaHei UI
     "C:/Windows/Fonts/msyhbd.ttc",    // Microsoft YaHei UI Bold
-    "C:/Windows/Fonts/msjh.ttc",      // Microsoft JhengHei (微软正黑)
-    "C:/Windows/Fonts/simsun.ttc",    // SimSun (宋体)
-    "C:/Windows/Fonts/simhei.ttf",    // SimHei (黑体)
-    "C:/Windows/Fonts/simkai.ttf",    // KaiTi (楷体)
+    "C:/Windows/Fonts/msjh.ttc",      // Microsoft JhengHei
+    "C:/Windows/Fonts/simsun.ttc",    // SimSun
+    "C:/Windows/Fonts/simhei.ttf",    // SimHei
+    "C:/Windows/Fonts/simkai.ttf",    // KaiTi
     "C:/Windows/Fonts/STXIHEI.TTF",   // STXihei
-    "C:/Windows/Fonts/mingliu.ttc",   // MingLiU (细明体)
-    // macOS 中文字体 - PingFang SC 优先
-    "/System/Library/Fonts/PingFang.ttc",           // PingFang SC (苹方)
+    "C:/Windows/Fonts/mingliu.ttc",   // MingLiU
+    // macOS Chinese fonts - PingFang SC first
+    "/System/Library/Fonts/PingFang.ttc",           // PingFang SC
     "/Library/Fonts/PingFang.ttc",
-    "/System/Library/Fonts/STHeiti Light.ttc",      // STHeiti (华文黑体)
+    "/System/Library/Fonts/STHeiti Light.ttc",      // STHeiti
     "/System/Library/Fonts/STHeiti Medium.ttc",
-    "/System/Library/Fonts/Hiragino Sans GB.ttc",   // Hiragino Sans GB (冬青黑体)
-    "/Library/Fonts/Songti.ttc",                    // Songti SC (宋体)
-    "/Library/Fonts/Kaiti.ttc",                     // Kaiti SC (楷体)
-    // Linux 中文字体
+    "/System/Library/Fonts/Hiragino Sans GB.ttc",   // Hiragino Sans GB
+    "/Library/Fonts/Songti.ttc",                    // Songti SC
+    "/Library/Fonts/Kaiti.ttc",                     // Kaiti SC
+    // Linux Chinese fonts
     "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
     "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
     "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
@@ -232,7 +232,7 @@ std::string findExistingFont(const std::vector<std::string>& candidates) {
     return {};
 }
 
-// 将 CSS font-weight 规范化为数值 100–900，未知值回退为 400
+// Normalize CSS font-weight to numeric 100-900, unknown values fallback to 400
 int normalizeFontWeight(const std::string& css_weight) {
     std::string trimmed = trimWhitespace(css_weight);
     if (trimmed.empty()) {
@@ -252,7 +252,7 @@ int normalizeFontWeight(const std::string& css_weight) {
         return 300;
     }
 
-    // 数值形式，如 "500"、"700"
+    // Numeric form, e.g. "500", "700"
     int value = 400;
     try {
         value = std::stoi(lower);
@@ -261,7 +261,7 @@ int normalizeFontWeight(const std::string& css_weight) {
     }
     if (value < 100) value = 100;
     if (value > 900) value = 900;
-    // 规范到 100 的倍数
+    // Normalize to multiples of 100
     int rem = value % 100;
     if (rem != 0) {
         value = value - rem + (rem >= 50 ? 100 : 0);
@@ -269,8 +269,8 @@ int normalizeFontWeight(const std::string& css_weight) {
     return value;
 }
 
-// 根据 family + weight 追加更精细的候选路径（例如为粗体优先尝试 Bold 字体文件），
-// 若找不到对应文件，会自然回退到 kFontCandidates 中的通用列表。
+// Append more refined candidate paths based on family + weight (e.g. prefer Bold font files for bold weight),
+// if the corresponding file is not found, it will naturally fallback to the generic list in kFontCandidates.
 void appendCandidatesForFamilyAndWeight(const std::string& canonical_family,
                                         int numeric_weight,
                                         std::vector<std::string>& out) {
@@ -278,7 +278,7 @@ void appendCandidatesForFamilyAndWeight(const std::string& canonical_family,
 
     const bool is_bold = numeric_weight >= 600;
     if (is_bold) {
-        // 针对粗体优先尝试常见 Bold 变体路径（若不存在会被忽略）
+        // For bold, prefer common Bold variant paths (ignored if not exist)
         if (canonical_family == "-apple-system" || canonical_family == "sans-serif") {
             out.push_back("/System/Library/Fonts/Supplemental/Arial Bold.ttf");
             out.push_back("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf");
@@ -294,7 +294,7 @@ void appendCandidatesForFamilyAndWeight(const std::string& canonical_family,
         }
     }
 
-    // 通用候选（包含 SF/Helvetica/Arial 等），始终作为回退
+    // Generic candidates (including SF/Helvetica/Arial etc), always as fallback
     if (it != kFontCandidates.end()) {
         out.insert(out.end(), it->second.begin(), it->second.end());
     }
@@ -325,7 +325,7 @@ std::vector<std::string> splitFontFamilies(const std::string& css_value) {
 }
 
 std::string canonicalFontFamily(const std::string& name) {
-    // 去掉首尾空白与引号
+    // Remove leading/trailing whitespace and quotes
     std::string trimmed = trimWhitespace(name);
     if (!trimmed.empty() && (trimmed.front() == '"' || trimmed.front() == '\'') && trimmed.back() == trimmed.front()) {
         if (trimmed.size() > 2) {
@@ -337,7 +337,7 @@ std::string canonicalFontFamily(const std::string& name) {
 
     std::string lower = toLowerAscii(trimmed);
 
-    // 归一化 CSS generic family
+    // Normalize CSS generic family
     if (lower == "sans" || lower == "sans-serif") {
         return "sans-serif";
     }
@@ -348,18 +348,18 @@ std::string canonicalFontFamily(const std::string& name) {
         return "monospace";
     }
 
-    // 系统 UI 字体族映射到统一 key，方便在映射表中维护候选路径
+    // Map system UI font families to unified key
     if (lower == "-apple-system" || lower == "blinkmacsystemfont" || lower == "system-ui") {
         return "-apple-system";
     }
 
-    // 常见具体家族名保持小写形式，例如 "arial"、"helvetica"、"times new roman"、"segoe ui" 等
+    // Common specific family names kept in lowercase, e.g. "arial", "helvetica", "times new roman", "segoe ui"
     return lower;
 }
 
 std::string resolveFontPath(const std::string& requested_family,
                             const std::string& font_weight) {
-    // 确保字体查找系统已初始化
+    // Ensure font finder is initialized
     ensureFontFinderInitialized();
     
     auto families = splitFontFamilies(requested_family);
@@ -369,13 +369,13 @@ std::string resolveFontPath(const std::string& requested_family,
 
     const int numeric_weight = normalizeFontWeight(font_weight);
 
-    // 1. 首先尝试系统字体查找 API
+    // 1. First try system font lookup API
     for (const auto& family : families) {
         std::string canonical = canonicalFontFamily(family);
         std::vector<FontMatch> system_matches = findSystemFonts(canonical, numeric_weight);
         
         if (!system_matches.empty()) {
-            // 返回第一个匹配的字体路径
+            // Return first matched font path
             std::string path = system_matches[0].path;
             namespace fs = std::filesystem;
             std::error_code ec;
@@ -385,20 +385,20 @@ std::string resolveFontPath(const std::string& requested_family,
         }
     }
 
-    // 2. 如果系统字体查找失败，检查用户自定义字体路径
-    // (这部分已经在 findSystemFonts 中处理，因为它会检查自定义路径)
+    // 2. If system font lookup fails, check user-defined font paths
+    // (this is already handled in findSystemFonts as it checks custom paths)
 
-    // 3. 最后回退到现有的硬编码路径列表
+    // 3. Finally fallback to existing hardcoded path list
     std::vector<std::string> candidate_paths;
     candidate_paths.reserve(families.size() * 4);
 
     for (const auto& family : families) {
         std::string canonical = canonicalFontFamily(family);
 
-        // 优先根据 canonical family + weight 追加更精细的候选
+        // First append refined candidates based on canonical family + weight
         appendCandidatesForFamilyAndWeight(canonical, numeric_weight, candidate_paths);
 
-        // 其次尝试 exact key（方便未来为具体 family 单独配置）
+        // Then try exact key (for future per-family configuration)
         auto exact = kFontCandidates.find(toLowerAscii(family));
         if (exact != kFontCandidates.end()) {
             candidate_paths.insert(candidate_paths.end(), exact->second.begin(), exact->second.end());
@@ -406,7 +406,7 @@ std::string resolveFontPath(const std::string& requested_family,
     }
 
     if (candidate_paths.empty()) {
-        // 兜底使用 sans-serif 的候选列表
+        // Fallback to sans-serif candidates
         appendCandidatesForFamilyAndWeight("sans-serif", numeric_weight, candidate_paths);
     }
 
@@ -414,7 +414,7 @@ std::string resolveFontPath(const std::string& requested_family,
 }
 
 std::string resolveFontPath(const std::string& requested_family) {
-    // 兼容旧接口：不传 weight 等价于 normal/400
+    // Compatibility: no weight equals normal/400
     return resolveFontPath(requested_family, "normal");
 }
 
@@ -433,14 +433,14 @@ std::vector<std::string> getCJKFallbackFonts() {
     return result;
 }
 
-// FreeType 库实例（用于检查字符支持）
-// 注意：这里使用静态变量，实际项目中应该考虑更好的生命周期管理
+// FreeType library instance (for checking character support)
+// Note: using static variable here, real projects should consider better lifecycle management
 #include <ft2build.h>
 #include FT_FREETYPE_H
 
 namespace {
 
-// 延迟初始化的 FreeType 库
+// Lazy-initialized FreeType library
 FT_Library getFTLibrary() {
     static FT_Library library = nullptr;
     static bool initialized = false;
@@ -455,7 +455,7 @@ FT_Library getFTLibrary() {
     return library;
 }
 
-// 检查字体是否支持指定的 Unicode 码点
+// Check if font supports specified Unicode codepoint
 bool fontSupportsCodepoint(const ::std::string& font_path, uint32_t codepoint) {
     FT_Library library = getFTLibrary();
     if (!library) {
@@ -477,12 +477,12 @@ bool fontSupportsCodepoint(const ::std::string& font_path, uint32_t codepoint) {
 
 ::std::string findFontForCodepoint(uint32_t codepoint, 
                                   const ::std::string& primary_font) {
-    // 首先检查主字体
+    // First check primary font
     if (!primary_font.empty() && fontSupportsCodepoint(primary_font, codepoint)) {
         return primary_font;
     }
     
-    // 尝试 CJK 回退字体
+    // Try CJK fallback fonts
     for (const auto& fallback : kCJKFallbackFonts) {
         namespace fs = ::std::filesystem;
         ::std::error_code ec;
@@ -493,7 +493,7 @@ bool fontSupportsCodepoint(const ::std::string& font_path, uint32_t codepoint) {
         }
     }
     
-    // 没有找到支持该字符的字体
+    // No font found supporting this character
     return {};
 }
 

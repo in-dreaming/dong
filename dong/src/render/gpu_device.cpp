@@ -1,4 +1,4 @@
-#include "gpu_device.hpp"
+﻿#include "gpu_device.hpp"
 #include <SDL3/SDL_log.h>
 #include <cstring>
 

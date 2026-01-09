@@ -1,12 +1,11 @@
-#include "script_engine.hpp"
+﻿#include "script_engine.hpp"
 #include <cstring>
 #include <cstdio>
-#include <SDL3/SDL_log.h>
 #include "../core/log.h"
 
 namespace dong::script {
 
-// 简单的 console.log 实现，直接打印到 stderr
+// 绠€鍗曠殑 console.log 瀹炵幇锛岀洿鎺ユ墦鍗板埌 stderr
 static JSValue js_console_log(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     (void)this_val;
     for (int i = 0; i < argc; i++) {
@@ -22,11 +21,11 @@ static JSValue js_console_log(JSContext* ctx, JSValueConst this_val, int argc, J
 }
 
 ScriptEngine::ScriptEngine() : runtime_(nullptr), context_(nullptr) {
-    // 创建 QuickJS 运行时
+    // 鍒涘缓 QuickJS 杩愯鏃?
     runtime_ = JS_NewRuntime();
     if (!runtime_) return;
 
-    // 创建 JavaScript 上下文
+    // 鍒涘缓 JavaScript 涓婁笅鏂?
     context_ = JS_NewContext(runtime_);
     if (!context_) {
         JS_FreeRuntime(runtime_);
@@ -34,7 +33,7 @@ ScriptEngine::ScriptEngine() : runtime_(nullptr), context_(nullptr) {
         return;
     }
 
-    // 初始化内置绑定
+    // 鍒濆鍖栧唴缃粦瀹?
     initializeBuiltins();
 }
 
@@ -177,7 +176,7 @@ bool ScriptEngine::eval(const std::string& code) {
     DONG_LOG_DEBUG("[ScriptEngine::eval] JS_Eval returned"); fflush(stdout); fflush(stderr);
 
     if (JS_IsException(result)) {
-        // 获取异常信息
+        // 鑾峰彇寮傚父淇℃伅
         JSValue exception = JS_GetException(context_);
         const char* error_str = JS_ToCString(context_, exception);
         if (error_str) {
@@ -186,7 +185,7 @@ bool ScriptEngine::eval(const std::string& code) {
         }
         JS_FreeValue(context_, exception);
 
-        // 调试 console 绑定状态
+        // 璋冭瘯 console 缁戝畾鐘舵€?
         JSValue global = JS_GetGlobalObject(context_);
         JSValue console_val = JS_GetPropertyStr(context_, global, "console");
         const char* console_type = JS_IsUndefined(console_val) ? "undefined" :
@@ -221,14 +220,14 @@ bool ScriptEngine::eval(const std::string& code) {
     return true;
 }
 
-// 【缺口3】执行代码并返回字符串化的结果
+// 銆愮己鍙?銆戞墽琛屼唬鐮佸苟杩斿洖瀛楃涓插寲鐨勭粨鏋?
 std::string ScriptEngine::evalWithReturn(const std::string& code) {
     if (!context_) return "";
 
     JSValue result = JS_Eval(context_, code.c_str(), code.length(), "<eval>", 0);
 
     if (JS_IsException(result)) {
-        // 获取异常信息
+        // 鑾峰彇寮傚父淇℃伅
         JSValue exception = JS_GetException(context_);
         const char* error_str = JS_ToCString(context_, exception);
         std::string error_msg = error_str ? error_str : "Unknown error";
@@ -239,7 +238,7 @@ std::string ScriptEngine::evalWithReturn(const std::string& code) {
         return "";
     }
 
-    // 将结果转换为字符串
+    // 灏嗙粨鏋滆浆鎹负瀛楃涓?
     std::string return_value;
     
     if (JS_IsString(result)) {
@@ -251,7 +250,7 @@ std::string ScriptEngine::evalWithReturn(const std::string& code) {
     } else if (JS_IsNumber(result)) {
         double num = 0;
         JS_ToFloat64(context_, &num, result);
-        // 转换为字符串
+        // 杞崲涓哄瓧绗︿覆
         char buf[64];
         snprintf(buf, sizeof(buf), "%.17g", num);
         return_value = buf;
@@ -262,7 +261,7 @@ std::string ScriptEngine::evalWithReturn(const std::string& code) {
     } else if (JS_IsUndefined(result)) {
         return_value = "undefined";
     } else if (JS_IsObject(result)) {
-        // 对象转字符串 - 调用 JSON.stringify
+        // 瀵硅薄杞瓧绗︿覆 - 璋冪敤 JSON.stringify
         JSValue global = JS_GetGlobalObject(context_);
         JSValue json = JS_GetPropertyStr(context_, global, "JSON");
         if (!JS_IsUndefined(json) && !JS_IsNull(json)) {
@@ -311,7 +310,7 @@ JSValue* ScriptEngine::callFunction(const std::string& function_name, int argc, 
         return nullptr;
     }
 
-    // 返回结果（调用者需要释放）
+    // 杩斿洖缁撴灉锛堣皟鐢ㄨ€呴渶瑕侀噴鏀撅級
     JSValue* ret = new JSValue(result);
     return ret;
 }
@@ -322,7 +321,7 @@ void ScriptEngine::bindGlobalObject(const std::string& name, void* object) {
     JSValue global = JS_GetGlobalObject(context_);
     JSValue obj = JS_NewObject(context_);
 
-    // 将对象指针存储为 opaque 数据
+    // 灏嗗璞℃寚閽堝瓨鍌ㄤ负 opaque 鏁版嵁
     JS_SetOpaque(obj, object);
 
     JS_SetPropertyStr(context_, global, name.c_str(), obj);
@@ -330,23 +329,23 @@ void ScriptEngine::bindGlobalObject(const std::string& name, void* object) {
 }
 
 void ScriptEngine::bindGlobalFunction(const std::string& name, void* func) {
-    // TODO: 使用 JS_NewCFunction 包装 C 函数
+    // TODO: 浣跨敤 JS_NewCFunction 鍖呰 C 鍑芥暟
     (void)name;
     (void)func;
 }
 
 void ScriptEngine::processPendingTasks() {
-    // TODO: 运行微任务队列（Promise）
-    // 可选：定期调用 js_std_loop() 或类似的任务处理函数
+    // TODO: 杩愯寰换鍔￠槦鍒楋紙Promise锛?
+    // 鍙€夛細瀹氭湡璋冪敤 js_std_loop() 鎴栫被浼肩殑浠诲姟澶勭悊鍑芥暟
 }
 
 void ScriptEngine::initializeBuiltins() {
     if (!context_) return;
 
-    // 初始化 console 对象（可选）
-    // TODO: 为 console.log 等提供实现
+    // 鍒濆鍖?console 瀵硅薄锛堝彲閫夛級
+    // TODO: 涓?console.log 绛夋彁渚涘疄鐜?
 
-    // 其他内置对象初始化在 DOM 绑定层进行
+    // 鍏朵粬鍐呯疆瀵硅薄鍒濆鍖栧湪 DOM 缁戝畾灞傝繘琛?
 }
 
 } // namespace dong::script
