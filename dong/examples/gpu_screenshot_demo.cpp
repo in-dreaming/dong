@@ -102,169 +102,101 @@ int main() {
                                       static_cast<void*>(window.getHandle()));
     SDL_Log("[Init] GPU render mode enabled");
 
-    // 4. 加载测试 HTML - 大字号 MSDF 文字（与原 demo 一致）
-    // <!font-family: Arial, sans-serif;/>
+    // 4. 测试 feature_test.html 的子特性 - Page 6: Transform
     const char* html = R"(
 <!DOCTYPE html>
-        <html>
-        <head>
-            <style>
-                * {
-                    box-sizing: border-box;
-                }
-                body {
-                    margin: 0;
-                    padding: 20px;
-                    background-color: #1a1a2e;
-                    color: #eaeaea;
-                    font-family: Arial, sans-serif;
-                }
-                
-                h1 {
-                    font-size: 28px;
-                    color: #00d4ff;
-                    margin-bottom: 20px;
-                }
-                
-                .section {
-                    background-color: #16213e;
-                    border-radius: 8px;
-                    padding: 16px;
-                    margin-bottom: 16px;
-                }
-                
-                .section-title {
-                    font-size: 18px;
-                    color: #e94560;
-                    margin-bottom: 12px;
-                }
-                
-                /* Button Section */
-                .button-row {
-                    display: flex;
-                    gap: 12px;
-                }
-                
-                button {
-                    background-color: #0f3460;
-                    color: #ffffff;
-                    padding: 12px 24px;
-                    border-radius: 6px;
-                    font-size: 16px;
-                }
-                
-                #click-count {
-                    margin-top: 12px;
-                    font-size: 14px;
-                    color: #94a3b8;
-                }
-                
-                /* ScrollView Section */
-                .scroll-container {
-                    overflow: scroll;
-                    height: 150px;
-                    background-color: #0f3460;
-                    border-radius: 6px;
-                    padding: 8px;
-                }
-                
-                .scroll-item {
-                    padding: 10px;
-                    margin-bottom: 8px;
-                    background-color: #1a1a2e;
-                    border-radius: 4px;
-                }
-                
-                /* Input Section */
-                .input-group {
-                    margin-bottom: 12px;
-                }
-                
-                .input-label {
-                    font-size: 14px;
-                    color: #94a3b8;
-                    margin-bottom: 6px;
-                }
-                
-                input {
-                    width: 100%;
-                    padding: 12px;
-                    background-color: #0f3460;
-                    color: #ffffff;
-                    border-radius: 6px;
-                    font-size: 16px;
-                }
-                
-                #input-preview {
-                    margin-top: 12px;
-                    padding: 12px;
-                    background-color: #0f3460;
-                    border-radius: 6px;
-                    font-size: 14px;
-                    color: #94a3b8;
-                }
-                
-                /* Status Bar */
-                .status-bar {
-                    position: fixed;
-                    bottom: 0;
-                    left: 0;
-                    right: 0;
-                    padding: 8px 20px;
-                    background-color: #0f3460;
-                    font-size: 12px;
-                    color: #64748b;
-                }
-            </style>
-        </head>
-        <body>
-            <h1>Dong Interactive Demo</h1>
-            
-            <!-- Button Section -->
-            <div class="section">
-                <div class="section-title">Button Clicks</div>
-                <div class="button-row">
-                    <button id="btn-primary">Primary Button</button>
-                    <button id="btn-secondary">Secondary</button>
-                    <button id="btn-reset">Reset</button>
-                </div>
-                <div id="click-count">Clicks: 0</div>
-            </div>
-            
-            <!-- ScrollView Section -->
-            <div class="section">
-                <div class="section-title">ScrollView (use mouse wheel)</div>
-                <div class="scroll-container" id="scroll-area">
-                    <div class="scroll-item">Item 1 - Scroll down to see more</div>
-                    <div class="scroll-item">Item 2 - Lorem ipsum dolor sit amet</div>
-                    <div class="scroll-item">Item 3 - Consectetur adipiscing elit</div>
-                    <div class="scroll-item">Item 4 - Sed do eiusmod tempor</div>
-                    <div class="scroll-item">Item 5 - Incididunt ut labore</div>
-                    <div class="scroll-item">Item 6 - Et dolore magna aliqua</div>
-                    <div class="scroll-item">Item 7 - Ut enim ad minim veniam</div>
-                    <div class="scroll-item">Item 8 - Quis nostrud exercitation</div>
-                </div>
-            </div>
-            
-            <!-- Input Section -->
-            <div class="section">
-                <div class="section-title">Text Input</div>
-                <div class="input-group">
-                    <div class="input-label">Enter your name:</div>
-                    <input type="text" id="name-input" placeholder="Type here..." />
-                </div>
-                <div class="input-group">
-                    <div class="input-label">Enter your message:</div>
-                    <input type="text" id="message-input" placeholder="Your message..." />
-                </div>
-                <div id="input-preview">Preview: (type something above)</div>
-            </div>
-            
-            <div class="status-bar" id="status">
-                Ready. Press Tab to navigate, click buttons, scroll the list, or type in inputs.
-            </div>
-        </body>
-        </html>
+<html>
+<head>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            padding: 20px;
+            background-color: #1a1a2e;
+            color: #eaeaea;
+            font-family: Arial, sans-serif;
+        }
+        .section {
+            background-color: #16213e;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+        .section-title {
+            font-size: 16px;
+            color: #e94560;
+            margin-bottom: 12px;
+        }
+        .demo-row {
+            margin-bottom: 12px;
+        }
+        /* Transform styles */
+        .transform-box {
+            width: 80px;
+            height: 50px;
+            display: inline-block;
+            border-radius: 6px;
+            font-size: 12px;
+            margin: 20px;
+            text-align: center;
+            color: #ffffff;
+        }
+        .transform-rotate-15 {
+            transform: rotate(15deg);
+            background-color: #7b2cbf;
+        }
+        .transform-rotate-45 {
+            transform: rotate(45deg);
+            background-color: #e94560;
+        }
+        .transform-rotate-neg {
+            transform: rotate(-30deg);
+            background-color: #00d4ff;
+        }
+        .transform-skew-x {
+            transform: skewX(15deg);
+            background-color: #ff6b35;
+        }
+        .transform-skew-y {
+            transform: skewY(10deg);
+            background-color: #00ff88;
+        }
+        .transform-skew-both {
+            transform: skew(10deg, 5deg);
+            background-color: #ffd93d;
+            color: #1a1a2e;
+        }
+        .transform-combined {
+            transform: rotate(10deg) scale(1.1);
+            background-color: #9d4edd;
+        }
+    </style>
+</head>
+<body>
+    <div class="section">
+        <div class="section-title">CSS Transform: Rotate</div>
+        <div class="demo-row">
+            <div class="transform-box transform-rotate-15">15deg</div>
+            <div class="transform-box transform-rotate-45">45deg</div>
+            <div class="transform-box transform-rotate-neg">-30deg</div>
+        </div>
+    </div>
+    <div class="section">
+        <div class="section-title">CSS Transform: Skew</div>
+        <div class="demo-row">
+            <div class="transform-box transform-skew-x">skewX(15)</div>
+            <div class="transform-box transform-skew-y">skewY(10)</div>
+            <div class="transform-box transform-skew-both">skew(10,5)</div>
+        </div>
+    </div>
+    <div class="section">
+        <div class="section-title">CSS Transform: Combined</div>
+        <div class="demo-row">
+            <div class="transform-box transform-combined">rotate+scale</div>
+        </div>
+    </div>
+</body>
+</html>
     )";
 
     SDL_Log("[Load] Loading HTML...");
@@ -309,25 +241,25 @@ int main() {
 
 
     // 渲染第1帧
-    if (!renderAndSave(1, "frame1.bmp")) {
+    if (!renderAndSave(1, "zig-out/tmp/gpu_screenshot_demo.bmp")) {
         dong_view_destroy(view);
         dong_destroy_context(ctx);
         return 1;
     }
 
-    // 渲染第2帧
-    if (!renderAndSave(2, "frame2.bmp")) {
-        dong_view_destroy(view);
-        dong_destroy_context(ctx);
-        return 1;
-    }
+    // // 渲染第2帧
+    // if (!renderAndSave(2, "frame2.bmp")) {
+    //     dong_view_destroy(view);
+    //     dong_destroy_context(ctx);
+    //     return 1;
+    // }
 
-    // 渲染第3帧
-    if (!renderAndSave(3, "frame3.bmp")) {
-        dong_view_destroy(view);
-        dong_destroy_context(ctx);
-        return 1;
-    }
+    // // 渲染第3帧
+    // if (!renderAndSave(3, "frame3.bmp")) {
+    //     dong_view_destroy(view);
+    //     dong_destroy_context(ctx);
+    //     return 1;
+    // }
 
 
 
@@ -336,6 +268,6 @@ int main() {
     dong_view_destroy(view);
     dong_destroy_context(ctx);
 
-    SDL_Log("[Done] Check frame1.bmp, frame2.bmp, frame3.bmp");
+    SDL_Log("[Done] Check zig-out/tmp/gpu_screenshot_demo.bmp");
     return 0;
 }

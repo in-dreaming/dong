@@ -173,14 +173,24 @@ public:
     // Node properties
     NodeType getType() const { return type; }
     const std::string& getTagName() const { return tag_name; }
-    const std::string& getTextContent() const { return text_content; }
+    
+    // 获取节点的文本内容（对于 ELEMENT 节点，递归获取所有后代 TEXT 节点的内容）
+    std::string getTextContent() const;
+    
+    // 获取节点自身的原始文本内容（不递归）
+    const std::string& getRawTextContent() const { return text_content; }
+    
     void setTextContent(const std::string& text) {
         text_content = text;
         markLayoutDirty();
     }
 
+    void setInlineStyleProperty(const std::string& property, const std::string& value);
+    std::string getInlineStyleProperty(const std::string& property) const;
+
     // Attributes
     void setAttribute(const std::string& key, const std::string& value);
+
     std::string getAttribute(const std::string& key) const;
     bool hasAttribute(const std::string& key) const;
     const std::unordered_map<std::string, std::string>& getAttributes() const {
@@ -222,8 +232,10 @@ private:
     std::string tag_name;
     std::string text_content;
     std::unordered_map<std::string, std::string> attributes;
+    std::unordered_map<std::string, std::string> inline_styles_;
     ComputedStyle computed_style;
     bool layout_dirty_ = true;
+
     
     // Scroll state
     float scroll_x_ = 0.0f;

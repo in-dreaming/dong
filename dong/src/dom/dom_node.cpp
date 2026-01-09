@@ -1,8 +1,28 @@
 ﻿#include "dom_node.hpp"
+#include "style_engine.hpp"
 #include <iostream>
 #include <algorithm>
+#include <cctype>
 
 namespace dong::dom {
+
+// 获取节点的文本内容（符合 DOM 标准）
+// 对于 TEXT 节点，返回自身的文本内容
+// 对于 ELEMENT 节点，递归获取所有后代 TEXT 节点的内容拼接
+std::string DOMNode::getTextContent() const {
+    if (type == NodeType::TEXT) {
+        return text_content;
+    }
+    
+    // 对于 ELEMENT 节点，递归收集所有后代 TEXT 节点的内容
+    std::string result;
+    for (const auto& child : children) {
+        if (!child) continue;
+        result += child->getTextContent();
+    }
+    return result;
+}
+
 
 DOMNode::DOMNode(NodeType type, const std::string& name)
     : type(type), tag_name(name) {}
@@ -88,7 +108,61 @@ std::vector<DOMNodePtr> DOMNode::getElementsByClassName(const std::string& cls) 
     return result;
 }
 
+namespace {
+std::string normalizePropertyKey(const std::string& property) {
+    std::string key;
+    key.reserve(property.size());
+    for (char c : property) {
+        key.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+    }
+    return key;
+}
+}
+
+void DOMNode::setInlineStyleProperty(const std::string& property, const std::string& value) {
+    const std::string key = normalizePropertyKey(property);
+    if (value.empty()) {
+        inline_styles_.erase(key);
+    } else {
+        inline_styles_[key] = value;
+    }
+
+    if (inline_styles_.empty()) {
+        attributes.erase("style");
+    } else {
+        std::string style_str;
+        bool first = true;
+        for (const auto& entry : inline_styles_) {
+            if (entry.second.empty()) continue;
+            if (!first) {
+                style_str.append(" ");
+            }
+            style_str.append(entry.first);
+            style_str.append(":");
+            style_str.append(entry.second);
+            style_str.append(";");
+            first = false;
+        }
+        if (!style_str.empty()) {
+            attributes["style"] = style_str;
+        }
+    }
+
+    StyleEngine::applyInlineStyleProperty(key, value, computed_style);
+    markLayoutDirty();
+}
+
+std::string DOMNode::getInlineStyleProperty(const std::string& property) const {
+    const std::string key = normalizePropertyKey(property);
+    auto it = inline_styles_.find(key);
+    if (it == inline_styles_.end()) {
+        return "";
+    }
+    return it->second;
+}
+
 void DOMNode::markLayoutDirty() {
+
     if (layout_dirty_) {
         return;
     }

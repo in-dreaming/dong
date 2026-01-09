@@ -2,6 +2,8 @@
 #include <cstdio>
 #include <cstring>
 #include <iostream>
+#include <cctype>
+#include <algorithm>
 #include "../core/log.h"
 extern "C" {
 #include "quickjs.h"
@@ -69,6 +71,213 @@ static JSValue console_error(JSContext* ctx, JSValueConst this_val, int argc, JS
 } // extern "C"
 
 namespace dong::script {
+
+namespace {
+
+// Helper to update layout_mode when display changes
+dom::LayoutMode deriveLayoutModeFromDisplay(const std::string& display) {
+    if (display == "none") {
+        return dom::LayoutMode::None;
+    }
+    if (display == "flex") {
+        return dom::LayoutMode::Flex;
+    }
+    if (display == "inline") {
+        return dom::LayoutMode::Inline;
+    }
+    // block, inline-block, and others are treated as Block
+    return dom::LayoutMode::Block;
+}
+
+std::string camelToCss(const std::string& property) {
+    std::string css;
+    css.reserve(property.size() * 2);
+    for (char c : property) {
+        if (std::isupper(static_cast<unsigned char>(c))) {
+            css.push_back('-');
+            css.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+        } else {
+            css.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+        }
+    }
+    return css;
+}
+
+std::string jsValueToString(JSContext* ctx, JSValueConst value) {
+    JSValue str = JS_ToString(ctx, value);
+    if (JS_IsException(str)) {
+        JS_FreeValue(ctx, str);
+        return "";
+    }
+    const char* cstr = JS_ToCString(ctx, str);
+    std::string result = cstr ? cstr : "";
+    if (cstr) {
+        JS_FreeCString(ctx, cstr);
+    }
+    JS_FreeValue(ctx, str);
+    return result;
+}
+
+std::string getComputedStyleValue(const dom::ComputedStyle& style, const std::string& css_prop) {
+    if (css_prop == "display") return style.display;
+    if (css_prop == "color") return style.color;
+    if (css_prop == "background-color") return style.background_color;
+    if (css_prop == "font-size") return std::to_string(style.font_size);
+    if (css_prop == "font-weight") return style.font_weight;
+    if (css_prop == "text-align") return style.text_align;
+    if (css_prop == "position") return style.position;
+    if (css_prop == "opacity") return std::to_string(style.opacity);
+    if (css_prop == "border-radius") return std::to_string(style.border_radius);
+    if (css_prop == "border-width") return std::to_string(style.border_width);
+    if (css_prop == "border-color") return style.border_color;
+    return "";
+}
+
+JSValue style_proxy_get(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val;
+    if (argc < 2) {
+        return JS_UNDEFINED;
+    }
+
+    JSValueConst target = argv[0];
+    JSValueConst prop = argv[1];
+
+    if (JS_IsSymbol(prop)) {
+        JSAtom atom = JS_ValueToAtom(ctx, prop);
+        JSValue val = JS_GetProperty(ctx, target, atom);
+        JS_FreeAtom(ctx, atom);
+        return val;
+    }
+
+    const char* prop_cstr = JS_ToCString(ctx, prop);
+    if (!prop_cstr) {
+        return JS_UNDEFINED;
+    }
+    std::string prop_str(prop_cstr);
+    JS_FreeCString(ctx, prop_cstr);
+
+    if (prop_str == "__element__") {
+        return JS_GetPropertyStr(ctx, target, "__element__");
+    }
+
+    JSAtom atom = JS_ValueToAtom(ctx, prop);
+    JSValue stored = JS_GetProperty(ctx, target, atom);
+    JS_FreeAtom(ctx, atom);
+    if (!JS_IsUndefined(stored)) {
+        return stored;
+    }
+    JS_FreeValue(ctx, stored);
+
+    JSValue element = JS_GetPropertyStr(ctx, target, "__element__");
+    if (JS_IsUndefined(element)) {
+        JS_FreeValue(ctx, element);
+        return JS_UNDEFINED;
+    }
+    auto node = JSBindings::getNodeOpaque(ctx, element);
+    JS_FreeValue(ctx, element);
+    if (!node) {
+        return JS_UNDEFINED;
+    }
+
+    std::string css_prop = camelToCss(prop_str);
+    std::string inline_value = node->getInlineStyleProperty(css_prop);
+    std::string final_value = inline_value;
+    if (final_value.empty()) {
+        final_value = getComputedStyleValue(node->getComputedStyle(), css_prop);
+    }
+
+    if (final_value.empty()) {
+        return JS_UNDEFINED;
+    }
+    return JS_NewString(ctx, final_value.c_str());
+}
+
+JSValue style_proxy_set(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val;
+    if (argc < 3) {
+        return JS_FALSE;
+    }
+
+    JSValueConst target = argv[0];
+    JSValueConst prop = argv[1];
+    JSValueConst value = argv[2];
+
+    if (JS_IsSymbol(prop)) {
+        JSAtom atom = JS_ValueToAtom(ctx, prop);
+        JSValue target_dup = JS_DupValue(ctx, target);
+        int rc = JS_SetProperty(ctx, target_dup, atom, JS_DupValue(ctx, value));
+        JS_FreeAtom(ctx, atom);
+        JS_FreeValue(ctx, target_dup);
+        return rc == 0 ? JS_TRUE : JS_FALSE;
+    }
+
+    const char* prop_cstr = JS_ToCString(ctx, prop);
+    if (!prop_cstr) {
+        return JS_FALSE;
+    }
+    std::string prop_str(prop_cstr);
+    JS_FreeCString(ctx, prop_cstr);
+
+    if (prop_str == "__element__") {
+        JSValue target_dup = JS_DupValue(ctx, target);
+        JS_SetPropertyStr(ctx, target_dup, "__element__", JS_DupValue(ctx, value));
+        JS_FreeValue(ctx, target_dup);
+        return JS_TRUE;
+    }
+
+    JSValue element = JS_GetPropertyStr(ctx, target, "__element__");
+    if (JS_IsUndefined(element)) {
+        JS_FreeValue(ctx, element);
+        return JS_FALSE;
+    }
+    auto node = JSBindings::getNodeOpaque(ctx, element);
+    JS_FreeValue(ctx, element);
+    if (!node) {
+        return JS_FALSE;
+    }
+
+    std::string css_prop = camelToCss(prop_str);
+    std::string value_str = jsValueToString(ctx, value);
+    node->setInlineStyleProperty(css_prop, value_str);
+
+    JSValue target_dup = JS_DupValue(ctx, target);
+    JSAtom atom = JS_ValueToAtom(ctx, prop);
+    JS_SetProperty(ctx, target_dup, atom, JS_DupValue(ctx, value));
+    JS_FreeAtom(ctx, atom);
+    JS_FreeValue(ctx, target_dup);
+
+    return JS_TRUE;
+}
+
+JSValue createStyleProxy(JSContext* ctx, JSValueConst element, const dom::DOMNodePtr& node) {
+    JSValue target = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, target, "__element__", JS_DupValue(ctx, element));
+
+    // Seed common properties for easier inspection
+    if (node) {
+        const auto& style = node->getComputedStyle();
+        JS_SetPropertyStr(ctx, target, "display", JS_NewString(ctx, style.display.c_str()));
+        JS_SetPropertyStr(ctx, target, "color", JS_NewString(ctx, style.color.c_str()));
+        JS_SetPropertyStr(ctx, target, "backgroundColor", JS_NewString(ctx, style.background_color.c_str()));
+    }
+
+    JSValue handler = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, handler, "get", JS_NewCFunction(ctx, style_proxy_get, "style_get", 3));
+    JS_SetPropertyStr(ctx, handler, "set", JS_NewCFunction(ctx, style_proxy_set, "style_set", 4));
+
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue proxy_ctor = JS_GetPropertyStr(ctx, global, "Proxy");
+    JS_FreeValue(ctx, global);
+
+    JSValue argv_local[2] = { target, handler };
+    JSValue proxy = JS_CallConstructor(ctx, proxy_ctor, 2, argv_local);
+    JS_FreeValue(ctx, proxy_ctor);
+    JS_FreeValue(ctx, target);
+    JS_FreeValue(ctx, handler);
+    return proxy;
+}
+
+} // namespace
 
 // ============================================================
 // Document API Implementation
@@ -465,35 +674,16 @@ static JSValue elem_getChildren(JSContext* ctx, JSValueConst this_val, int argc,
 }
 
 // ============================================================
-// 銆愮己鍙?銆戞牱寮忎慨鏀?API - element.style.*
+// 样式修改 API - element.style.*
 // ============================================================
 
-// 鑾峰彇鏍峰紡瀵硅薄锛堜唬鐞嗭紝鍏佽璇诲啓锛?
+// 获取样式对象（代理，允许读写）
 static JSValue elem_getStyle(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc;
+    (void)argv;
     auto node = JSBindings::getNodeOpaque(ctx, this_val);
     if (!node) return JS_NewObject(ctx);
-    
-    auto& style = node->getComputedStyle();
-    JSValue style_obj = JS_NewObject(ctx);
-    
-    // 缁戝畾鑺傜偣鎸囬拡鍒?style 瀵硅薄锛屾柟渚垮悗缁慨鏀?
-    JSValue node_ref = JS_DupValue(ctx, this_val);
-    JS_SetPropertyStr(ctx, style_obj, "__element__", node_ref);
-    
-    // 鏆撮湶鍙慨鏀圭殑鏍峰紡灞炴€?
-    JS_SetPropertyStr(ctx, style_obj, "color", JS_NewString(ctx, style.color.c_str()));
-    JS_SetPropertyStr(ctx, style_obj, "backgroundColor", JS_NewString(ctx, style.background_color.c_str()));
-    JS_SetPropertyStr(ctx, style_obj, "fontSize", JS_NewFloat64(ctx, style.font_size));
-    JS_SetPropertyStr(ctx, style_obj, "fontWeight", JS_NewString(ctx, style.font_weight.c_str()));
-    JS_SetPropertyStr(ctx, style_obj, "textAlign", JS_NewString(ctx, style.text_align.c_str()));
-    JS_SetPropertyStr(ctx, style_obj, "display", JS_NewString(ctx, style.display.c_str()));
-    JS_SetPropertyStr(ctx, style_obj, "position", JS_NewString(ctx, style.position.c_str()));
-    JS_SetPropertyStr(ctx, style_obj, "opacity", JS_NewFloat64(ctx, style.opacity));
-    JS_SetPropertyStr(ctx, style_obj, "borderRadius", JS_NewFloat64(ctx, style.border_radius));
-    JS_SetPropertyStr(ctx, style_obj, "borderWidth", JS_NewFloat64(ctx, style.border_width));
-    JS_SetPropertyStr(ctx, style_obj, "borderColor", JS_NewString(ctx, style.border_color.c_str()));
-    
-    return style_obj;
+    return createStyleProxy(ctx, this_val, node);
 }
 
 static JSValue elem_setStyle(JSContext* ctx, JSValueConst this_val, JSValue style_obj, const char* prop, JSValue value) {
@@ -502,7 +692,6 @@ static JSValue elem_setStyle(JSContext* ctx, JSValueConst this_val, JSValue styl
     
     auto& style = node->getComputedStyle();
     
-    // 璇诲彇鏍峰紡瀛楃涓叉垨鏁板瓧
     std::string str_val;
     double num_val = 0;
     
@@ -516,132 +705,239 @@ static JSValue elem_setStyle(JSContext* ctx, JSValueConst this_val, JSValue styl
         JS_ToFloat64(ctx, &num_val, value);
     }
     
-    // 鏇存柊瀵瑰簲鐨勬牱寮忓睘鎬?
     if (strcmp(prop, "color") == 0) style.color = str_val;
     else if (strcmp(prop, "backgroundColor") == 0) style.background_color = str_val;
     else if (strcmp(prop, "fontSize") == 0) style.font_size = (float)num_val;
     else if (strcmp(prop, "fontWeight") == 0) style.font_weight = str_val;
     else if (strcmp(prop, "textAlign") == 0) style.text_align = str_val;
-    else if (strcmp(prop, "display") == 0) style.display = str_val;
+    else if (strcmp(prop, "display") == 0) {
+        style.display = str_val;
+        style.layout_mode = deriveLayoutModeFromDisplay(str_val);
+    }
     else if (strcmp(prop, "position") == 0) style.position = str_val;
     else if (strcmp(prop, "opacity") == 0) style.opacity = (float)num_val;
     else if (strcmp(prop, "borderRadius") == 0) style.border_radius = (float)num_val;
     else if (strcmp(prop, "borderWidth") == 0) style.border_width = (float)num_val;
     else if (strcmp(prop, "borderColor") == 0) style.border_color = str_val;
     
-    // 鏍囪涓鸿剰锛岄渶瑕侀噸鏂板竷灞€
     node->markLayoutDirty();
     
     return JS_UNDEFINED;
 }
 
-// classList 鏀寔
+// className getter/setter
+static JSValue elem_getClassName(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc;
+    (void)argv;
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_NewString(ctx, "");
+    std::string cls = node->getAttribute("class");
+    return JS_NewString(ctx, cls.c_str());
+}
+
+static JSValue elem_setClassName(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_UNDEFINED;
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_UNDEFINED;
+    
+    const char* cls = JS_ToCString(ctx, argv[0]);
+    if (cls) {
+        node->setAttribute("class", cls);
+        JS_FreeCString(ctx, cls);
+        
+        // Trigger style recomputation
+        auto* bindings = getBindingsFromContext(ctx);
+        if (bindings && bindings->dom_manager_) {
+            bindings->dom_manager_->recomputeNodeStyle(node);
+        }
+    }
+    return JS_UNDEFINED;
+}
+
+// classList 支持 - 从 __element__ 取节点
 static JSValue elem_classList_add(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     if (argc < 1) return JS_UNDEFINED;
-    
-    auto node = JSBindings::getNodeOpaque(ctx, this_val);
-    if (!node) return JS_UNDEFINED;
-    
-    const char* cls = JS_ToCString(ctx, argv[0]);
-    if (!cls) return JS_UNDEFINED;
-    
-    // 鑾峰彇褰撳墠 class 灞炴€?
-    std::string classes = node->getAttribute("class");
-    
-    // 娣诲姞鍒?class 鍒楄〃
-    if (classes.empty()) {
-        classes = cls;
-    } else if (classes.find(cls) == std::string::npos) {
-        classes += " " + std::string(cls);
-    }
-    
-    node->setAttribute("class", classes);
-    JS_FreeCString(ctx, cls);
-    
-    return JS_UNDEFINED;
-}
 
-static JSValue elem_classList_remove(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-    if (argc < 1) return JS_UNDEFINED;
-    
-    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    JSValue elem = JS_GetPropertyStr(ctx, this_val, "__element__");
+    auto node = JSBindings::getNodeOpaque(ctx, elem);
+    JS_FreeValue(ctx, elem);
     if (!node) return JS_UNDEFINED;
-    
+
     const char* cls = JS_ToCString(ctx, argv[0]);
     if (!cls) return JS_UNDEFINED;
-    
-    // 鑾峰彇褰撳墠 class 灞炴€?
+
     std::string classes = node->getAttribute("class");
     std::string cls_str(cls);
-    
-    // 浠?class 鍒楄〃涓Щ闄?
-    size_t pos = classes.find(cls_str);
-    if (pos != std::string::npos) {
-        classes.erase(pos, cls_str.length());
-        // 娓呯悊澶氫綑绌烘牸
-        while (!classes.empty() && classes.front() == ' ') classes.erase(0, 1);
-        while (!classes.empty() && classes.back() == ' ') classes.pop_back();
-    }
-    
-    node->setAttribute("class", classes);
-    JS_FreeCString(ctx, cls);
-    
-    return JS_UNDEFINED;
-}
 
-static JSValue elem_classList_toggle(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-    if (argc < 1) return JS_UNDEFINED;
-    
-    auto node = JSBindings::getNodeOpaque(ctx, this_val);
-    if (!node) return JS_UNDEFINED;
-    
-    const char* cls = JS_ToCString(ctx, argv[0]);
-    if (!cls) return JS_UNDEFINED;
-    
-    std::string classes = node->getAttribute("class");
-    std::string cls_str(cls);
-    
-    bool present = classes.find(cls_str) != std::string::npos;
-    
-    if (present) {
-        size_t pos = classes.find(cls_str);
-        classes.erase(pos, cls_str.length());
-        while (!classes.empty() && classes.front() == ' ') classes.erase(0, 1);
-        while (!classes.empty() && classes.back() == ' ') classes.pop_back();
-    } else {
+    bool found = false;
+    size_t start = 0;
+    while (start < classes.size()) {
+        size_t end = classes.find(' ', start);
+        if (end == std::string::npos) end = classes.size();
+        if (classes.substr(start, end - start) == cls_str) {
+            found = true;
+            break;
+        }
+        start = end + 1;
+    }
+
+    if (!found) {
         if (classes.empty()) {
             classes = cls_str;
         } else {
             classes += " " + cls_str;
         }
+        node->setAttribute("class", classes);
+        
+        // Trigger style recomputation
+        auto* bindings = getBindingsFromContext(ctx);
+        if (bindings && bindings->dom_manager_) {
+            bindings->dom_manager_->recomputeNodeStyle(node);
+        }
+    }
+
+    JS_FreeCString(ctx, cls);
+    return JS_UNDEFINED;
+}
+
+static JSValue elem_classList_remove(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_UNDEFINED;
+
+    JSValue elem = JS_GetPropertyStr(ctx, this_val, "__element__");
+    auto node = JSBindings::getNodeOpaque(ctx, elem);
+    JS_FreeValue(ctx, elem);
+    if (!node) return JS_UNDEFINED;
+
+    const char* cls = JS_ToCString(ctx, argv[0]);
+    if (!cls) return JS_UNDEFINED;
+
+    std::string classes = node->getAttribute("class");
+    std::string cls_str(cls);
+
+    std::string result;
+    size_t start = 0;
+    while (start < classes.size()) {
+        size_t end = classes.find(' ', start);
+        if (end == std::string::npos) end = classes.size();
+        std::string token = classes.substr(start, end - start);
+        if (!token.empty() && token != cls_str) {
+            if (!result.empty()) result += ' ';
+            result += token;
+        }
+        start = end + 1;
+    }
+
+    node->setAttribute("class", result);
+    
+    // Trigger style recomputation
+    auto* bindings = getBindingsFromContext(ctx);
+    if (bindings && bindings->dom_manager_) {
+        bindings->dom_manager_->recomputeNodeStyle(node);
     }
     
-    node->setAttribute("class", classes);
     JS_FreeCString(ctx, cls);
+    return JS_UNDEFINED;
+}
+
+static JSValue elem_classList_toggle(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_UNDEFINED;
+
+    JSValue elem = JS_GetPropertyStr(ctx, this_val, "__element__");
+    auto node = JSBindings::getNodeOpaque(ctx, elem);
+    JS_FreeValue(ctx, elem);
+    if (!node) return JS_UNDEFINED;
+
+    const char* cls = JS_ToCString(ctx, argv[0]);
+    if (!cls) return JS_UNDEFINED;
+
+    std::string classes = node->getAttribute("class");
+    std::string cls_str(cls);
+
+    bool found = false;
+    std::string result;
+    size_t start = 0;
+    while (start < classes.size()) {
+        size_t end = classes.find(' ', start);
+        if (end == std::string::npos) end = classes.size();
+        std::string token = classes.substr(start, end - start);
+        if (!token.empty()) {
+            if (token == cls_str) {
+                found = true;
+            } else {
+                if (!result.empty()) result += ' ';
+                result += token;
+            }
+        }
+        start = end + 1;
+    }
+
+    if (!found) {
+        if (!result.empty()) result += ' ';
+        result += cls_str;
+    }
+
+    node->setAttribute("class", result);
     
-    return JS_NewBool(ctx, !present);  // 杩斿洖鏄惁宸叉坊鍔?
+    // Trigger style recomputation
+    auto* bindings = getBindingsFromContext(ctx);
+    if (bindings && bindings->dom_manager_) {
+        bindings->dom_manager_->recomputeNodeStyle(node);
+    }
+    
+    JS_FreeCString(ctx, cls);
+    return JS_NewBool(ctx, !found);
+}
+
+static JSValue elem_classList_contains(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_FALSE;
+
+    JSValue elem = JS_GetPropertyStr(ctx, this_val, "__element__");
+    auto node = JSBindings::getNodeOpaque(ctx, elem);
+    JS_FreeValue(ctx, elem);
+    if (!node) return JS_FALSE;
+
+    const char* cls = JS_ToCString(ctx, argv[0]);
+    if (!cls) return JS_FALSE;
+
+    std::string classes = node->getAttribute("class");
+    std::string cls_str(cls);
+    JS_FreeCString(ctx, cls);
+
+    size_t start = 0;
+    while (start < classes.size()) {
+        size_t end = classes.find(' ', start);
+        if (end == std::string::npos) end = classes.size();
+        if (classes.substr(start, end - start) == cls_str) {
+            return JS_TRUE;
+        }
+        start = end + 1;
+    }
+    return JS_FALSE;
 }
 
 static JSValue elem_getClassList(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc;
+    (void)argv;
     auto node = JSBindings::getNodeOpaque(ctx, this_val);
     if (!node) return JS_NewObject(ctx);
-    
+
     JSValue classList = JS_NewObject(ctx);
-    
-    // 缁戝畾鏂规硶
+
+    JSValue node_ref = JS_DupValue(ctx, this_val);
+    JS_SetPropertyStr(ctx, classList, "__element__", node_ref);
+
     JS_SetPropertyStr(ctx, classList, "add",
         JS_NewCFunction(ctx, elem_classList_add, "add", 1));
     JS_SetPropertyStr(ctx, classList, "remove",
         JS_NewCFunction(ctx, elem_classList_remove, "remove", 1));
     JS_SetPropertyStr(ctx, classList, "toggle",
         JS_NewCFunction(ctx, elem_classList_toggle, "toggle", 1));
-    
-    // 淇濆瓨鑺傜偣寮曠敤
-    JSValue node_ref = JS_DupValue(ctx, this_val);
-    JS_SetPropertyStr(ctx, classList, "__element__", node_ref);
-    
+    JS_SetPropertyStr(ctx, classList, "contains",
+        JS_NewCFunction(ctx, elem_classList_contains, "contains", 1));
+
     return classList;
 }
+
 
 // ============================================================
 // Event API Implementation
@@ -862,8 +1158,15 @@ JSValue JSBindings::createJSElement(JSContext* ctx, const dom::DOMNodePtr& node)
     JS_SetPropertyStr(ctx, elem, "tagName", JS_NewString(ctx, node->getTagName().c_str()));
     JS_SetPropertyStr(ctx, elem, "id", 
         JS_NewString(ctx, node->hasAttribute("id") ? node->getAttribute("id").c_str() : ""));
-    JS_SetPropertyStr(ctx, elem, "className",
-        JS_NewString(ctx, node->hasAttribute("class") ? node->getAttribute("class").c_str() : ""));
+    
+    // className - use getter/setter for dynamic access
+    JSAtom className_atom = JS_NewAtom(ctx, "className");
+    JSValue getter = JS_NewCFunction(ctx, elem_getClassName, "get className", 0);
+    JSValue setter = JS_NewCFunction(ctx, elem_setClassName, "set className", 1);
+    JS_DefinePropertyGetSet(ctx, elem, className_atom, getter, setter,
+        JS_PROP_ENUMERABLE | JS_PROP_CONFIGURABLE);
+    JS_FreeAtom(ctx, className_atom);
+    
     JS_SetPropertyStr(ctx, elem, "textContent", JS_NewString(ctx, node->getTextContent().c_str()));
     
     // Methods
@@ -884,7 +1187,7 @@ JSValue JSBindings::createJSElement(JSContext* ctx, const dom::DOMNodePtr& node)
     JS_SetPropertyStr(ctx, elem, "getChildren",
         JS_NewCFunction(ctx, elem_getChildren, "getChildren", 0));
     
-    // 銆愮己鍙?銆戞牱寮忎慨鏀?- element.style 鍜?classList
+    // style and classList
     JS_SetPropertyStr(ctx, elem, "style", elem_getStyle(ctx, elem, 0, nullptr));
     JS_SetPropertyStr(ctx, elem, "classList", elem_getClassList(ctx, elem, 0, nullptr));
 

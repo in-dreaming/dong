@@ -23,13 +23,15 @@ public:
 
     // Parse HTML with inline CSS
     DOMNodePtr parseWithCSS(const std::string& html, const std::string& css);
+    
+    // Extract styles from <style> tags and add to StyleEngine
+    void extractAndApplyStyles(DOMNodePtr node, class StyleEngine* style_engine);
 
 private:
     DOMNodePtr lexborNodeToDOMNode(lxb_dom_node_t* lexbor_node);
     void applyDefaultStyles(DOMNodePtr node);
     void parseInlineStyles(DOMNodePtr node);
     void parseCSSAndApply(DOMNodePtr node, const std::string& css);
-    void extractAndApplyStyles(DOMNodePtr node, class StyleEngine* style_engine);
     
     // CSS value parsing helpers
     CSSValue parseCSSValue(const std::string& value);

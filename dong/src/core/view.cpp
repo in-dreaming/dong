@@ -524,9 +524,8 @@ bool View::renderOffscreen(SDL_GPUDevice* device, uint32_t width, uint32_t heigh
         SDL_Log("[View::renderOffscreen] Failed to render to GPU texture");
         return false;
     }
-    SDL_Log("[View::renderOffscreen] Got texture %p, now downloading...", (void*)offscreen_texture);
+    DONG_LOG_DEBUG("[View::renderOffscreen] Got texture %p, now downloading...", (void*)offscreen_texture);
     
-    // 2. 创建传输缓冲区用于读回像素
     // 2. 创建传输缓冲区用于读回像素
     SDL_GPUTransferBufferCreateInfo transfer_info{};
     transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_DOWNLOAD;
@@ -597,7 +596,6 @@ bool View::renderOffscreen(SDL_GPUDevice* device, uint32_t width, uint32_t heigh
         SDL_ReleaseGPUTexture(device, offscreen_texture);
         return false;
     }
-    
 
     std::memcpy(out_pixels, mapped, width * height * 4);
     

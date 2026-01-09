@@ -53,8 +53,13 @@ public:
     // Parse CSS and extract rules
     std::vector<CSSRule> parseCSS(const std::string& css);
 
+    static void applyInlineStyleProperty(const std::string& property,
+                                         const std::string& value,
+                                         ComputedStyle& style);
+
     // Calculate computed styles for a node (considering cascade)
     void computeStyles(DOMNodePtr node);
+
 
     // Check if selector matches node
     bool matches(const std::string& selector, DOMNodePtr node);

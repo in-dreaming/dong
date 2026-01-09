@@ -782,6 +782,13 @@ std::vector<std::string> StyleEngine::splitDeclarations(const std::string& css) 
     return result;
 }
 
+void StyleEngine::applyInlineStyleProperty(const std::string& property,
+                                           const std::string& value,
+                                           ComputedStyle& style) {
+    StyleEngine engine;
+    engine.applyStyleProperty(property, value, style);
+}
+
 void StyleEngine::applyStyleProperty(const std::string& property, const std::string& value, 
                                      ComputedStyle& style) {
     std::string prop = trimWhitespace(property);

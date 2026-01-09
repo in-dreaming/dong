@@ -1802,8 +1802,8 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             render_target_stack.push_back(RenderTargetState{swapchain_texture, w, h, offscreen_target_ == nullptr});
 
             if (debug_rt_enabled_) {
-                SDL_Log("[GPUDriverSDL::execute] BeginPass frame=%llu swapchain_texture=%p is_swapchain=%d viewport=%ux%u",
-                        frame_index_, (void*)swapchain_texture, offscreen_target_ == nullptr ? 1 : 0, w, h);
+                SDL_Log("[GPUDriverSDL::execute] BeginPass frame=%llu swapchain_texture=%p offscreen_target_=%p is_offscreen=%d viewport=%ux%u",
+                        frame_index_, (void*)swapchain_texture, (void*)offscreen_target_, offscreen_target_ != nullptr ? 1 : 0, w, h);
             }
 
             color_target = {};
@@ -1876,7 +1876,7 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                         break;
                     }
                     if (!real_swapchain_texture) {
-                        SDL_Log("[GPUDriverSDL::execute] swapchain texture is null at EndPass, skipping blit");
+                        // Swapchain 不可用（窗口最小化或未准备好），静默跳过此帧
                         break;
                     }
                     DONG_LOG_DEBUG("[GPUDriverSDL] EndPass acquired swapchain (window mode) frame=%llu swapchain_tex=%p swapchain_size=%ux%u",
@@ -2466,6 +2466,7 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
         }
         case GPUCommandType::DrawRoundedRectQuad: {
             if (!pass || !round_rect_pipeline_) {
+                SDL_Log("[ROUND_RECT] SKIP: pass=%p round_rect_pipeline_=%p", (void*)pass, (void*)round_rect_pipeline_);
                 break;
             }
 

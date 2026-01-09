@@ -1450,8 +1450,10 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
                     // 鍗充娇娌℃湁鏂囨湰搴﹂噺锛屽彧瑕佹湁鏄惧紡 width/height锛屼篃搴旇鍙備笌甯冨眬
                     bool has_explicit_width = child_style.width.isPixel() || child_style.width.isPercent();
                     bool has_explicit_height = child_style.height.isPixel() || child_style.height.isPercent();
+                    bool has_min_width = child_style.min_width.isPixel() || child_style.min_width.isPercent();
+                    bool has_min_height = child_style.min_height.isPixel() || child_style.min_height.isPercent();
                     
-                    if (!has_text_metrics && !has_explicit_width && !has_explicit_height) {
+                    if (!has_text_metrics && !has_explicit_width && !has_explicit_height && !has_min_width && !has_min_height) {
                         // 鏃㈡病鏈夋枃鏈唴瀹癸紝涔熸病鏈夋樉寮忓昂瀵革紝璺宠繃
                         continue;
                     }
@@ -1485,7 +1487,16 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
                         width_px = metrics.line_height_px;
                     }
                     if (width_px <= 0.0f) {
-                        width_px = 16.0f; // 鏈€灏?fallback
+                        width_px = 16.0f; // fallback
+                    }
+                    // 应用 min-width
+                    if (child_style.min_width.isPixel() && child_style.min_width.value > width_px) {
+                        width_px = child_style.min_width.value;
+                    } else if (child_style.min_width.isPercent()) {
+                        float min_w = parsePercentValue(child_style.min_width, content_w);
+                        if (min_w > width_px) {
+                            width_px = min_w;
+                        }
                     }
 
                     // 璁＄畻楂樺害锛氫紭鍏堜娇鐢?CSS 鎸囧畾鐨勯珮搴︼紝鍚﹀垯浣跨敤鏂囨湰琛岄珮 + padding + border
@@ -1504,7 +1515,13 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
                         height_px = metrics.line_height_px;
                     }
                     if (height_px <= 0.0f) {
-                        height_px = 16.0f; // 鏈€灏?fallback
+                        height_px = 16.0f; // fallback
+                    }
+                    // 应用 min-height
+                    if (child_style.min_height.isPixel() && child_style.min_height.value > height_px) {
+                        height_px = child_style.min_height.value;
+                    } else if (child_style.min_height.isPercent()) {
+                        // 百分比 min-height 暂不支持
                     }
 
                     item.preferred_width = width_px;
@@ -1625,6 +1642,23 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
 
                         current_line_top += line.max_line_height_px;
                     }
+                    
+                    // 更新容器高度：IFC 容器的高度应该包含所有行的高度
+                    // 计算内容区域的总高度
+                    float total_content_height = current_line_top - content_y;
+                    if (total_content_height > 0.0f) {
+                        float pad_bottom = container_style.padding_bottom.isPixel() ? container_style.padding_bottom.value : 0.0f;
+                        float new_container_height = pad_top + total_content_height + pad_bottom;
+                        
+                        // 只有当计算出的高度大于 Yoga 计算的高度时才更新
+                        // （如果 CSS 指定了固定高度，应该尊重它）
+                        if (!container_style.height.isPixel() && new_container_height > container_layout->height) {
+                            container_layout->height = new_container_height;
+                            container_layout->layout.dimensions[1] = new_container_height;
+                            dirty_rect_.expand(container_layout->x, container_layout->y,
+                                             container_layout->width, container_layout->height);
+                        }
+                    }
                 }
             }
         }
@@ -1637,6 +1671,232 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
     };
 
     walk(root);
+    
+    // 第二遍：自底向上传播高度变化
+    // 当 IFC 容器的高度被更新后，其父容器（block 容器）的高度也需要更新
+    std::function<float(const dom::DOMNodePtr&)> propagateHeights;
+    propagateHeights = [this, &propagateHeights](const dom::DOMNodePtr& node) -> float {
+        if (!node || node->getType() != dom::DOMNode::NodeType::ELEMENT) {
+            return 0.0f;
+        }
+        
+        const auto& style = node->getComputedStyle();
+        if (style.display == "none") {
+            return 0.0f;
+        }
+        
+        auto it = layout_cache.find(node.get());
+        if (it == layout_cache.end() || !it->second) {
+            return 0.0f;
+        }
+        LayoutNode* layout = it->second.get();
+        
+        // 如果是绝对定位元素，不参与高度计算
+        if (style.position == "absolute" || style.position == "fixed") {
+            return 0.0f;
+        }
+        
+        // 递归计算子元素的最大底部位置
+        float max_child_bottom = 0.0f;
+        for (const auto& child : node->getChildren()) {
+            if (!child || child->getType() != dom::DOMNode::NodeType::ELEMENT) {
+                continue;
+            }
+            const auto& child_style = child->getComputedStyle();
+            if (child_style.display == "none" || 
+                child_style.position == "absolute" || 
+                child_style.position == "fixed") {
+                continue;
+            }
+            
+            float child_bottom = propagateHeights(child);
+            if (child_bottom > max_child_bottom) {
+                max_child_bottom = child_bottom;
+            }
+        }
+        
+        // 如果子元素的底部超出了当前容器的高度，更新容器高度
+        if (max_child_bottom > 0.0f && !style.height.isPixel()) {
+            float pad_bottom = style.padding_bottom.isPixel() ? style.padding_bottom.value : 0.0f;
+            float border_bottom = style.border_width > 0.0f ? style.border_width : 0.0f;
+            float required_height = max_child_bottom - layout->y + pad_bottom + border_bottom;
+            
+            if (required_height > layout->height) {
+                layout->height = required_height;
+                layout->layout.dimensions[1] = required_height;
+                dirty_rect_.expand(layout->x, layout->y, layout->width, layout->height);
+            }
+        }
+        
+        // 返回当前元素的底部位置
+        return layout->y + layout->height;
+    };
+    
+    propagateHeights(root);
+    
+    // 第三遍：修正因 IFC 高度变化导致的兄弟元素 Y 坐标偏移
+    // 只处理那些包含 IFC 容器的父元素，并且只调整后续兄弟的 Y 坐标
+    std::function<void(const dom::DOMNodePtr&, float)> adjustSiblingPositions;
+    adjustSiblingPositions = [this, &adjustSiblingPositions](const dom::DOMNodePtr& node, float parent_delta_y) {
+        if (!node || node->getType() != dom::DOMNode::NodeType::ELEMENT) {
+            return;
+        }
+        
+        const auto& style = node->getComputedStyle();
+        if (style.display == "none") {
+            return;
+        }
+        
+        auto it = layout_cache.find(node.get());
+        if (it == layout_cache.end() || !it->second) {
+            return;
+        }
+        LayoutNode* layout = it->second.get();
+        
+        // 如果父元素移动了，先移动当前元素
+        if (std::abs(parent_delta_y) > 0.1f) {
+            layout->y += parent_delta_y;
+            layout->layout.position[1] = layout->y;
+            dirty_rect_.expand(layout->x, layout->y, layout->width, layout->height);
+        }
+        
+        // 检查是否需要调整子元素的 Y 坐标
+        // 只有当容器包含 IFC 容器时才需要处理
+        bool has_ifc_child = false;
+        for (const auto& child : node->getChildren()) {
+            if (child && child->getType() == dom::DOMNode::NodeType::ELEMENT) {
+                if (isInlineFormattingContext(child)) {
+                    has_ifc_child = true;
+                    break;
+                }
+            }
+        }
+        
+        if (has_ifc_child) {
+            // 遍历子元素，计算累积的 Y 偏移
+            float cumulative_delta_y = 0.0f;
+            dom::DOMNodePtr prev_child = nullptr;
+            
+            for (const auto& child : node->getChildren()) {
+                if (!child || child->getType() != dom::DOMNode::NodeType::ELEMENT) {
+                    continue;
+                }
+                
+                const auto& child_style = child->getComputedStyle();
+                if (child_style.display == "none" || 
+                    child_style.position == "absolute" || 
+                    child_style.position == "fixed" ||
+                    child_style.display == "inline" || 
+                    child_style.display == "inline-block") {
+                    continue;
+                }
+                
+                auto child_it = layout_cache.find(child.get());
+                if (child_it == layout_cache.end() || !child_it->second) {
+                    continue;
+                }
+                LayoutNode* child_layout = child_it->second.get();
+                
+                // 如果前一个元素是 IFC 容器，检查它的高度是否增加了
+                if (prev_child && isInlineFormattingContext(prev_child)) {
+                    auto prev_it = layout_cache.find(prev_child.get());
+                    if (prev_it != layout_cache.end() && prev_it->second) {
+                        LayoutNode* prev_layout = prev_it->second.get();
+                        float margin_bottom = prev_child->getComputedStyle().margin_bottom.isPixel() 
+                                             ? prev_child->getComputedStyle().margin_bottom.value : 0.0f;
+                        float margin_top = child_style.margin_top.isPixel() 
+                                          ? child_style.margin_top.value : 0.0f;
+                        
+                        float expected_y = prev_layout->y + prev_layout->height + margin_bottom + margin_top;
+                        float delta = expected_y - child_layout->y;
+                        
+                        if (delta > 0.1f) {
+                            cumulative_delta_y += delta;
+                        }
+                    }
+                }
+                
+                // 应用累积的偏移
+                if (std::abs(cumulative_delta_y) > 0.1f) {
+                    child_layout->y += cumulative_delta_y;
+                    child_layout->layout.position[1] = child_layout->y;
+                    dirty_rect_.expand(child_layout->x, child_layout->y, 
+                                     child_layout->width, child_layout->height);
+                    
+                    // 如果这个元素是 IFC 容器，移动其 inline-block 子元素
+                    if (isInlineFormattingContext(child)) {
+                        for (const auto& grandchild : child->getChildren()) {
+                            if (!grandchild || grandchild->getType() != dom::DOMNode::NodeType::ELEMENT) {
+                                continue;
+                            }
+                            const auto& grandchild_style = grandchild->getComputedStyle();
+                            if (grandchild_style.display != "inline" && grandchild_style.display != "inline-block") {
+                                continue;
+                            }
+                            auto gc_it = layout_cache.find(grandchild.get());
+                            if (gc_it != layout_cache.end() && gc_it->second) {
+                                gc_it->second->y += cumulative_delta_y;
+                                gc_it->second->layout.position[1] += cumulative_delta_y;
+                                dirty_rect_.expand(gc_it->second->x, gc_it->second->y,
+                                                 gc_it->second->width, gc_it->second->height);
+                            }
+                        }
+                    }
+                }
+                
+                prev_child = child;
+            }
+            
+            // 如果有子元素移动了，更新容器高度
+            if (std::abs(cumulative_delta_y) > 0.1f && !style.height.isPixel()) {
+                float pad_bottom = style.padding_bottom.isPixel() ? style.padding_bottom.value : 0.0f;
+                
+                // 找到最后一个可见子元素的底部
+                float max_bottom = layout->y;
+                for (const auto& child : node->getChildren()) {
+                    if (!child || child->getType() != dom::DOMNode::NodeType::ELEMENT) {
+                        continue;
+                    }
+                    const auto& child_style = child->getComputedStyle();
+                    if (child_style.display == "none" || 
+                        child_style.position == "absolute" || 
+                        child_style.position == "fixed") {
+                        continue;
+                    }
+                    auto child_it = layout_cache.find(child.get());
+                    if (child_it != layout_cache.end() && child_it->second) {
+                        float margin_bottom = child_style.margin_bottom.isPixel() 
+                                             ? child_style.margin_bottom.value : 0.0f;
+                        float child_bottom = child_it->second->y + child_it->second->height + margin_bottom;
+                        if (child_bottom > max_bottom) {
+                            max_bottom = child_bottom;
+                        }
+                    }
+                }
+                
+                float new_height = max_bottom - layout->y + pad_bottom;
+                if (new_height > layout->height) {
+                    layout->height = new_height;
+                    layout->layout.dimensions[1] = new_height;
+                    dirty_rect_.expand(layout->x, layout->y, layout->width, layout->height);
+                }
+            }
+        }
+        
+        // 递归处理子元素
+        for (const auto& child : node->getChildren()) {
+            if (child && child->getType() == dom::DOMNode::NodeType::ELEMENT) {
+                const auto& child_style = child->getComputedStyle();
+                if (child_style.display != "none" && 
+                    child_style.position != "absolute" && 
+                    child_style.position != "fixed") {
+                    adjustSiblingPositions(child, 0.0f);
+                }
+            }
+        }
+    };
+    
+    adjustSiblingPositions(root, 0.0f);
 }
 
 void Engine::layoutPositionedElements(dom::DOMNodePtr root) {

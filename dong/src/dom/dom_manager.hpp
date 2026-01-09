@@ -6,6 +6,9 @@
 
 namespace dong::dom {
 
+// Forward declaration
+class StyleEngine;
+
 // Manages DOM tree and provides query/modification APIs
 class Manager {
 public:
@@ -29,12 +32,17 @@ public:
     // Style queries
     const ComputedStyle& getComputedStyle(DOMNodePtr node);
 
+    // Runtime style recomputation (for class changes)
+    void recomputeNodeStyle(DOMNodePtr node);
+    StyleEngine* getStyleEngine() const { return style_engine.get(); }
+
     // Debug
     void printTree();
 
 private:
     DOMNodePtr root;
     std::unique_ptr<Parser> parser;
+    std::unique_ptr<StyleEngine> style_engine;
 };
 
 } // namespace dong::dom

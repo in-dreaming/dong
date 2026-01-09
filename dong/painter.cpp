@@ -292,6 +292,21 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         node_rect.height = layout_node->layout.dimensions[1];
         has_layout_rect = node_rect.width > 0.0f && node_rect.height > 0.0f;
     }
+    
+    // Debug: 检查 demo-item 的布局
+    std::string debug_class = node->getAttribute("class");
+    if (debug_class.find("demo-item") != std::string::npos) {
+        DONG_LOG_INFO("[Painter] demo-item: layout_node=%p has_layout_rect=%d rect=(%.1f,%.1f,%.1f,%.1f) display=%s",
+                      layout_node, has_layout_rect, node_rect.x, node_rect.y, node_rect.width, node_rect.height,
+                      style.display.c_str());
+    }
+    // Debug: 检查 tab-page 和 demo-row 的 display
+    if (debug_class.find("tab-page") != std::string::npos || debug_class.find("demo-row") != std::string::npos) {
+        std::string node_id = node->getAttribute("id");
+        DONG_LOG_INFO("[Painter] %s (id=%s): display=%s has_layout_rect=%d rect=(%.1f,%.1f,%.1f,%.1f)",
+                      debug_class.c_str(), node_id.c_str(), style.display.c_str(),
+                      has_layout_rect, node_rect.x, node_rect.y, node_rect.width, node_rect.height);
+    }
 
     const bool should_apply_clip = has_layout_rect && shouldClipOverflow(style.overflow);
 

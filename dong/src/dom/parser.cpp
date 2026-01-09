@@ -228,7 +228,6 @@ void Parser::parseInlineStyles(DOMNodePtr node) {
 
     if (node->hasAttribute("style")) {
         std::string style_str = node->getAttribute("style");
-        auto& computed_style = node->getComputedStyle();
         
         size_t pos = 0;
         while (pos < style_str.length()) {
@@ -249,69 +248,7 @@ void Parser::parseInlineStyles(DOMNodePtr node) {
             value.erase(0, value.find_first_not_of(" \t"));
             value.erase(value.find_last_not_of(" \t") + 1);
             
-            if (property == "color") {
-                computed_style.color = value;
-            }
-            else if (property == "background-color" || property == "background") {
-                computed_style.background_color = value;
-            }
-            else if (property == "font-size") {
-                computed_style.font_size = parseLength(value);
-            }
-            else if (property == "font-weight") {
-                computed_style.font_weight = value;
-            }
-            else if (property == "text-align") {
-                computed_style.text_align = value;
-            }
-            else if (property == "width") {
-                computed_style.width = parseCSSValue(value);
-            }
-            else if (property == "height") {
-                computed_style.height = parseCSSValue(value);
-            }
-            else if (property == "margin") {
-                parseMarginShorthand(value, computed_style);
-            }
-            else if (property == "margin-top") {
-                computed_style.margin_top = parseCSSValue(value);
-            }
-            else if (property == "margin-right") {
-                computed_style.margin_right = parseCSSValue(value);
-            }
-            else if (property == "margin-bottom") {
-                computed_style.margin_bottom = parseCSSValue(value);
-            }
-            else if (property == "margin-left") {
-                computed_style.margin_left = parseCSSValue(value);
-            }
-            else if (property == "padding") {
-                parsePaddingShorthand(value, computed_style);
-            }
-            else if (property == "padding-top") {
-                computed_style.padding_top = parseCSSValue(value);
-            }
-            else if (property == "padding-right") {
-                computed_style.padding_right = parseCSSValue(value);
-            }
-            else if (property == "padding-bottom") {
-                computed_style.padding_bottom = parseCSSValue(value);
-            }
-            else if (property == "padding-left") {
-                computed_style.padding_left = parseCSSValue(value);
-            }
-            else if (property == "display") {
-                computed_style.display = value;
-            }
-            else if (property == "flex-direction") {
-                computed_style.flex_direction = value;
-            }
-            else if (property == "justify-content") {
-                computed_style.justify_content = value;
-            }
-            else if (property == "align-items") {
-                computed_style.align_items = value;
-            }
+            node->setInlineStyleProperty(property, value);
         }
     }
 
