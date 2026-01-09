@@ -207,12 +207,12 @@ def analyze_rendering_with_llm(base64_image_data, mime_type, html_string, debug=
         return f"An unexpected error occurred: {e}"
 
 if __name__ == "__main__":
-    # if len(sys.argv) != 3:
-    #     print("Usage: python vision_analysis_proxy.py <path_to_image> <path_to_html_file>")
-    #     sys.exit(1)
+    if len(sys.argv) != 3:
+        print("Usage: python vision_analysis_proxy.py <path_to_image> <path_to_html_file>")
+        sys.exit(1)
 
-    image_path = 'b.png'#sys.argv[1]
-    html_file_path = 'a.html'#sys.argv[2]
+    image_path = sys.argv[1]
+    html_file_path = sys.argv[2]
 
     # 1. 读取 HTML 文件
     try:
