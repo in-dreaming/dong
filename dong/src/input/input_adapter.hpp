@@ -3,6 +3,7 @@
 #include "input_types.hpp"
 #include <functional>
 #include <memory>
+#include <string>
 
 namespace dong::input {
 
@@ -76,6 +77,12 @@ public:
      * 获取修饰键状态
      */
     virtual KeyModifiers getKeyModifiers() const = 0;
+
+    /**
+     * 设置鼠标光标样式
+     * @param cursor_name CSS 光标名称：auto, default, pointer, text, move, wait, help, crosshair, not-allowed, grab, grabbing
+     */
+    virtual void setCursor(const std::string& cursor_name) = 0;
 };
 
 using InputAdapterPtr = std::unique_ptr<InputAdapter>;

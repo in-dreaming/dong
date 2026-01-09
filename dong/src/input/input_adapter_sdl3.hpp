@@ -30,6 +30,7 @@ public:
     void setTextInputRect(int32_t x, int32_t y, int32_t w, int32_t h) override;
     void getMousePosition(int32_t* x, int32_t* y) const override;
     KeyModifiers getKeyModifiers() const override;
+    void setCursor(const std::string& cursor_name) override;
 
 private:
     SDL_Window* window_ = nullptr;

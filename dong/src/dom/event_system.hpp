@@ -18,6 +18,16 @@ enum class EventType {
     MOUSE_UP,
     MOUSE_ENTER,
     MOUSE_LEAVE,
+    // Pointer events (unified mouse/touch/pen)
+    POINTER_DOWN,
+    POINTER_UP,
+    POINTER_MOVE,
+    POINTER_ENTER,
+    POINTER_LEAVE,
+    POINTER_OVER,
+    POINTER_OUT,
+    POINTER_CANCEL,
+    // Keyboard events
     KEY_DOWN,
     KEY_UP,
     KEY_PRESS,
@@ -29,6 +39,13 @@ enum class EventType {
     CUSTOM
 };
 
+// Pointer type for unified pointer events
+enum class PointerType {
+    MOUSE,
+    TOUCH,
+    PEN
+};
+
 // Event object
 struct Event {
     EventType type;
@@ -36,10 +53,20 @@ struct Event {
     DOMNodePtr target;
     DOMNodePtr current_target;
     
-    // Mouse event data
+    // Mouse/Pointer event data
     int32_t mouse_x = 0;
     int32_t mouse_y = 0;
     int32_t mouse_button = 0;
+    
+    // Pointer-specific data
+    int32_t pointer_id = 0;          // Unique pointer identifier
+    PointerType pointer_type = PointerType::MOUSE;
+    float pressure = 0.0f;           // Pressure (0.0-1.0)
+    float tilt_x = 0.0f;             // Tilt angle X
+    float tilt_y = 0.0f;             // Tilt angle Y
+    int32_t width = 1;               // Contact width
+    int32_t height = 1;              // Contact height
+    bool is_primary = true;          // Is primary pointer
     
     // Keyboard event data
     uint32_t key_code = 0;
@@ -79,6 +106,9 @@ public:
     Event createEvent(EventType type);
     Event createMouseEvent(EventType type, int32_t x, int32_t y, int32_t button = 0);
     Event createKeyEvent(EventType type, uint32_t key_code);
+    Event createPointerEvent(EventType type, int32_t x, int32_t y, 
+                             int32_t pointer_id = 0, PointerType pointer_type = PointerType::MOUSE,
+                             int32_t button = 0, float pressure = 0.5f);
 
 private:
     struct ListenerEntry {
@@ -99,6 +129,16 @@ private:
         {"mouseup", EventType::MOUSE_UP},
         {"mouseenter", EventType::MOUSE_ENTER},
         {"mouseleave", EventType::MOUSE_LEAVE},
+        // Pointer events
+        {"pointerdown", EventType::POINTER_DOWN},
+        {"pointerup", EventType::POINTER_UP},
+        {"pointermove", EventType::POINTER_MOVE},
+        {"pointerenter", EventType::POINTER_ENTER},
+        {"pointerleave", EventType::POINTER_LEAVE},
+        {"pointerover", EventType::POINTER_OVER},
+        {"pointerout", EventType::POINTER_OUT},
+        {"pointercancel", EventType::POINTER_CANCEL},
+        // Keyboard events
         {"keydown", EventType::KEY_DOWN},
         {"keyup", EventType::KEY_UP},
         {"keypress", EventType::KEY_PRESS},

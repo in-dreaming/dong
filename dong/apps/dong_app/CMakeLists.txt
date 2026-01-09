@@ -46,3 +46,6 @@ elseif(APPLE)
         "-framework CoreText"
     )
 endif()
+
+# Install
+install(TARGETS dong_app RUNTIME DESTINATION bin)

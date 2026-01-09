@@ -19,3 +19,6 @@ else()
 endif()
 
 # Export all symbols on Windows is handled by __declspec(dllexport) in code.
+
+# Install
+install(TARGETS dong_plugin_sdl RUNTIME DESTINATION bin LIBRARY DESTINATION bin)

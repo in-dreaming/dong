@@ -86,11 +86,24 @@ struct ComputedStyle {
 
     // Visual
     std::string background_color = "transparent";  // 默认透明，不绘制背景
+    std::string background_image;                   // url(...) 或空
+    std::string background_size = "auto";           // auto, cover, contain, <length>
+    std::string background_repeat = "repeat";       // repeat, repeat-x, repeat-y, no-repeat
+    std::string background_position = "0% 0%";      // 位置
     std::string color = "#000000";
     float border_radius = 0.0f;
     std::string border_color = "#000000";
     float border_width = 0.0f;
     std::string overflow = "visible"; // visible, hidden, scroll
+    std::string visibility = "visible"; // visible, hidden, collapse
+    std::string cursor = "auto";       // auto, default, pointer, text, move, etc.
+    
+    // Outline (不影响布局，绘制在边框外)
+    float outline_width = 0.0f;
+    std::string outline_color = "#000000";
+    std::string outline_style = "none"; // none, solid, dashed, dotted
+    float outline_offset = 0.0f;
+    
     float opacity = 1.0f;              // 0.0 ~ 1.0
     bool isolation_isolate = false;     // isolation: auto | isolate (default auto)
     std::vector<BoxShadow> box_shadows; // box-shadow 列表
@@ -99,13 +112,22 @@ struct ComputedStyle {
     std::string font_family = "Arial";
     float font_size = 16.0f;
     std::string font_weight = "normal"; // normal, bold
+    std::string font_style = "normal";  // normal, italic, oblique
     std::string text_align = "left";    // left, center, right
+    std::string text_decoration = "none"; // none, underline, line-through, overline
+    std::string text_decoration_color;    // 默认使用 color
     float letter_spacing_em = 0.0f;      // letter-spacing，以 em 为单位，0 表示 normal
     float word_spacing_px = 0.0f;        // word-spacing，以像素为单位，0 表示 normal
     float line_height = -1.0f;           // line-height，-1 表示 normal（使用字体度量），>0 为倍数或像素值
     bool line_height_is_unitless = true; // true: line_height 是倍数；false: line_height 是像素值
     std::string text_transform = "none"; // none, uppercase, lowercase, capitalize
     std::string vertical_align = "baseline"; // baseline, top, middle, bottom
+    
+    // Text shadow
+    float text_shadow_offset_x = 0.0f;
+    float text_shadow_offset_y = 0.0f;
+    float text_shadow_blur = 0.0f;
+    std::string text_shadow_color;
 
     // Flexbox properties
     std::string flex_direction = "row";     // row, column
@@ -122,6 +144,11 @@ struct ComputedStyle {
     float transform_translate_y = 0.0f;
     float transform_scale_x = 1.0f;
     float transform_scale_y = 1.0f;
+    float transform_rotate = 0.0f;       // 旋转角度（度）
+    float transform_skew_x = 0.0f;       // X 倾斜角度（度）
+    float transform_skew_y = 0.0f;       // Y 倾斜角度（度）
+    float transform_origin_x = 50.0f;    // 变换原点 X（百分比，50 = 中心）
+    float transform_origin_y = 50.0f;    // 变换原点 Y（百分比，50 = 中心）
 };
 
 // DOM Node representation

@@ -91,6 +91,14 @@ Event EventDispatcher::createEvent(EventType type) {
         case EventType::MOUSE_UP: event.type_name = "mouseup"; break;
         case EventType::MOUSE_ENTER: event.type_name = "mouseenter"; break;
         case EventType::MOUSE_LEAVE: event.type_name = "mouseleave"; break;
+        case EventType::POINTER_DOWN: event.type_name = "pointerdown"; break;
+        case EventType::POINTER_UP: event.type_name = "pointerup"; break;
+        case EventType::POINTER_MOVE: event.type_name = "pointermove"; break;
+        case EventType::POINTER_ENTER: event.type_name = "pointerenter"; break;
+        case EventType::POINTER_LEAVE: event.type_name = "pointerleave"; break;
+        case EventType::POINTER_OVER: event.type_name = "pointerover"; break;
+        case EventType::POINTER_OUT: event.type_name = "pointerout"; break;
+        case EventType::POINTER_CANCEL: event.type_name = "pointercancel"; break;
         case EventType::KEY_DOWN: event.type_name = "keydown"; break;
         case EventType::KEY_UP: event.type_name = "keyup"; break;
         case EventType::KEY_PRESS: event.type_name = "keypress"; break;
@@ -116,6 +124,20 @@ Event EventDispatcher::createMouseEvent(EventType type, int32_t x, int32_t y, in
 Event EventDispatcher::createKeyEvent(EventType type, uint32_t key_code) {
     Event event = createEvent(type);
     event.key_code = key_code;
+    return event;
+}
+
+Event EventDispatcher::createPointerEvent(EventType type, int32_t x, int32_t y, 
+                                          int32_t pointer_id, PointerType pointer_type,
+                                          int32_t button, float pressure) {
+    Event event = createEvent(type);
+    event.mouse_x = x;
+    event.mouse_y = y;
+    event.mouse_button = button;
+    event.pointer_id = pointer_id;
+    event.pointer_type = pointer_type;
+    event.pressure = pressure;
+    event.is_primary = (pointer_id == 0);
     return event;
 }
 

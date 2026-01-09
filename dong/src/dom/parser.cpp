@@ -199,6 +199,21 @@ void Parser::applyDefaultStyles(DOMNodePtr node) {
     else if (tag == "img" || tag == "video") {
         style.display = "inline-block";
     }
+    else if (tag == "br") {
+        // <br> 是自闭合换行标签，使用 block 显示以强制换行
+        style.display = "block";
+        // 设置为 0 高度，仅用于换行
+        style.height = CSSValue(0.0f, CSSValue::Unit::PIXEL);
+    }
+    else if (tag == "hr") {
+        // <hr> 是水平线标签
+        style.display = "block";
+        style.height = CSSValue(1.0f, CSSValue::Unit::PIXEL);
+        style.margin_top = CSSValue(8.0f, CSSValue::Unit::PIXEL);
+        style.margin_bottom = CSSValue(8.0f, CSSValue::Unit::PIXEL);
+        style.border_width = 0.0f;
+        style.background_color = "#cccccc";
+    }
     else {
         style.display = "block";
     }

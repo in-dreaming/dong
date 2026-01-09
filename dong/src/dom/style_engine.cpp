@@ -181,13 +181,28 @@ void StyleEngine::computeStyles(DOMNodePtr node) {
                         rule.style.background_color.c_str(), rule.selector.c_str());
             }
         }
+        if (!rule.style.background_image.empty())
+            computed.background_image = rule.style.background_image;
+        if (!rule.style.background_size.empty() && rule.style.background_size != "auto")
+            computed.background_size = rule.style.background_size;
+        if (!rule.style.background_repeat.empty() && rule.style.background_repeat != "repeat")
+            computed.background_repeat = rule.style.background_repeat;
+        if (!rule.style.background_position.empty())
+            computed.background_position = rule.style.background_position;
         if (rule.style.font_size != 16.0f) 
             computed.font_size = rule.style.font_size;
         if (!rule.style.font_weight.empty()) 
             computed.font_weight = rule.style.font_weight;
+        if (!rule.style.font_style.empty() && rule.style.font_style != "normal")
+            computed.font_style = rule.style.font_style;
         if (!rule.style.font_family.empty() && rule.style.font_family != "Arial")
             computed.font_family = rule.style.font_family;
         if (!rule.style.text_align.empty()) 
+            computed.text_align = rule.style.text_align;
+        if (!rule.style.text_decoration.empty() && rule.style.text_decoration != "none")
+            computed.text_decoration = rule.style.text_decoration;
+        if (!rule.style.text_decoration_color.empty())
+            computed.text_decoration_color = rule.style.text_decoration_color; 
             computed.text_align = rule.style.text_align;
         if (rule.style.letter_spacing_em != 0.0f)
             computed.letter_spacing_em = rule.style.letter_spacing_em;
@@ -205,6 +220,18 @@ void StyleEngine::computeStyles(DOMNodePtr node) {
             computed.border_color = rule.style.border_color;
         if (!rule.style.overflow.empty() && rule.style.overflow != "visible")
             computed.overflow = rule.style.overflow;
+        if (!rule.style.visibility.empty() && rule.style.visibility != "visible")
+            computed.visibility = rule.style.visibility;
+        if (!rule.style.cursor.empty() && rule.style.cursor != "auto")
+            computed.cursor = rule.style.cursor;
+        if (rule.style.outline_width != 0.0f)
+            computed.outline_width = rule.style.outline_width;
+        if (!rule.style.outline_color.empty() && rule.style.outline_color != "#000000")
+            computed.outline_color = rule.style.outline_color;
+        if (!rule.style.outline_style.empty() && rule.style.outline_style != "none")
+            computed.outline_style = rule.style.outline_style;
+        if (rule.style.outline_offset != 0.0f)
+            computed.outline_offset = rule.style.outline_offset;
         if (rule.style.box_sizing != "content-box")
             computed.box_sizing = rule.style.box_sizing;
         if (rule.style.opacity != 1.0f)
@@ -279,6 +306,14 @@ void StyleEngine::computeStyles(DOMNodePtr node) {
         if (!rule.style.vertical_align.empty() && rule.style.vertical_align != "baseline")
             computed.vertical_align = rule.style.vertical_align;
         
+        // Text shadow
+        if (rule.style.text_shadow_offset_x != 0.0f || rule.style.text_shadow_offset_y != 0.0f || 
+            rule.style.text_shadow_blur != 0.0f || !rule.style.text_shadow_color.empty()) {
+            computed.text_shadow_offset_x = rule.style.text_shadow_offset_x;
+            computed.text_shadow_offset_y = rule.style.text_shadow_offset_y;
+            computed.text_shadow_blur = rule.style.text_shadow_blur;
+            computed.text_shadow_color = rule.style.text_shadow_color;
+        }
         // Box shadow
         if (!rule.style.box_shadows.empty()) {
             computed.box_shadows = rule.style.box_shadows;
@@ -797,7 +832,31 @@ void StyleEngine::applyStyleProperty(const std::string& property, const std::str
         style.color = val;
     }
     else if (prop == "background-color" || prop == "background") {
-        style.background_color = val;
+        // background 简写可能包含多个值，这里简化处理
+        // 如果值包含 url(...)，则是 background-image
+        if (val.find("url(") != std::string::npos) {
+            // 提取 url(...) 部分
+            size_t url_start = val.find("url(");
+            size_t url_end = val.find(")", url_start);
+            if (url_end != std::string::npos) {
+                std::string url_part = val.substr(url_start, url_end - url_start + 1);
+                style.background_image = url_part;
+            }
+        } else {
+            style.background_color = val;
+        }
+    }
+    else if (prop == "background-image") {
+        style.background_image = val;
+    }
+    else if (prop == "background-size") {
+        style.background_size = val;
+    }
+    else if (prop == "background-repeat") {
+        style.background_repeat = val;
+    }
+    else if (prop == "background-position") {
+        style.background_position = val;
     }
     else if (prop == "font-size") {
         style.font_size = parseFloat(val);
@@ -805,11 +864,38 @@ void StyleEngine::applyStyleProperty(const std::string& property, const std::str
     else if (prop == "font-weight") {
         style.font_weight = val;
     }
+    else if (prop == "font-style") {
+        // font-style: normal | italic | oblique
+        std::string lowered = val;
+        std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char c) {
+            return static_cast<char>(std::tolower(c));
+        });
+        if (lowered == "italic" || lowered == "oblique") {
+            style.font_style = lowered;
+        } else {
+            style.font_style = "normal";
+        }
+    }
     else if (prop == "font-family") {
         style.font_family = val;
     }
     else if (prop == "text-align") {
         style.text_align = val;
+    }
+    else if (prop == "text-decoration" || prop == "text-decoration-line") {
+        // text-decoration: none | underline | line-through | overline
+        std::string lowered = val;
+        std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char c) {
+            return static_cast<char>(std::tolower(c));
+        });
+        if (lowered == "underline" || lowered == "line-through" || lowered == "overline") {
+            style.text_decoration = lowered;
+        } else {
+            style.text_decoration = "none";
+        }
+    }
+    else if (prop == "text-decoration-color") {
+        style.text_decoration_color = val;
     }
     else if (prop == "letter-spacing") {
         std::string lowered = val;
@@ -876,6 +962,38 @@ void StyleEngine::applyStyleProperty(const std::string& property, const std::str
     else if (prop == "text-transform") {
         style.text_transform = val;
     }
+    else if (prop == "text-shadow") {
+        // text-shadow: <offset-x> <offset-y> [<blur-radius>] <color>
+        // 简化解析：仅支持单个 text-shadow
+        std::istringstream iss(val);
+        std::string part;
+        std::vector<std::string> parts;
+        while (iss >> part) {
+            parts.push_back(part);
+        }
+        
+        std::vector<float> lengths;
+        std::string color;
+        
+        for (const auto& p : parts) {
+            if (!p.empty() && (std::isdigit(static_cast<unsigned char>(p[0])) || p[0] == '-' || p[0] == '.')) {
+                lengths.push_back(parseFloat(p));
+            } else if (!p.empty() && (p[0] == '#' || std::isalpha(static_cast<unsigned char>(p[0])))) {
+                color = p;
+            }
+        }
+        
+        if (lengths.size() >= 2) {
+            style.text_shadow_offset_x = lengths[0];
+            style.text_shadow_offset_y = lengths[1];
+            if (lengths.size() >= 3) {
+                style.text_shadow_blur = lengths[2];
+            }
+        }
+        if (!color.empty()) {
+            style.text_shadow_color = color;
+        }
+    }
     else if (prop == "vertical-align") {
         style.vertical_align = val;
     }
@@ -938,6 +1056,18 @@ void StyleEngine::applyStyleProperty(const std::string& property, const std::str
     else if (prop == "overflow") {
         style.overflow = val;
     }
+    else if (prop == "visibility") {
+        // visibility: visible | hidden | collapse
+        std::string lowered = val;
+        std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char c) {
+            return static_cast<char>(std::tolower(c));
+        });
+        if (lowered == "hidden" || lowered == "collapse") {
+            style.visibility = lowered;
+        } else {
+            style.visibility = "visible";
+        }
+    }
     else if (prop == "box-sizing") {
         // box-sizing: content-box | border-box
         std::string lowered = val;
@@ -949,6 +1079,14 @@ void StyleEngine::applyStyleProperty(const std::string& property, const std::str
         } else {
             style.box_sizing = "content-box";
         }
+    }
+    else if (prop == "cursor") {
+        // cursor: auto | default | pointer | text | move | wait | help | crosshair | not-allowed | grab | grabbing
+        std::string lowered = val;
+        std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char c) {
+            return static_cast<char>(std::tolower(c));
+        });
+        style.cursor = lowered;
     }
     else if (prop == "width") {
         style.width = parseLength(val);
@@ -1116,6 +1254,38 @@ void StyleEngine::applyStyleProperty(const std::string& property, const std::str
                 style.border_color = p;
             }
         }
+    }
+    else if (prop == "outline") {
+        // outline 简写：outline: <width> <style> <color>
+        std::istringstream iss(val);
+        std::string part;
+        std::vector<std::string> parts;
+        while (iss >> part) {
+            parts.push_back(part);
+        }
+        for (const auto& p : parts) {
+            if (!p.empty() && (std::isdigit(static_cast<unsigned char>(p[0])) || p[0] == '.')) {
+                style.outline_width = parseFloat(p);
+            }
+            else if (p == "solid" || p == "dashed" || p == "dotted" || p == "none") {
+                style.outline_style = p;
+            }
+            else if (!p.empty() && (p[0] == '#' || std::isalpha(static_cast<unsigned char>(p[0])))) {
+                style.outline_color = p;
+            }
+        }
+    }
+    else if (prop == "outline-width") {
+        style.outline_width = parseFloat(val);
+    }
+    else if (prop == "outline-color") {
+        style.outline_color = val;
+    }
+    else if (prop == "outline-style") {
+        style.outline_style = val;
+    }
+    else if (prop == "outline-offset") {
+        style.outline_offset = parseFloat(val);
     }
     else if (prop == "box-shadow") {
         style.box_shadows.clear();
@@ -1305,6 +1475,26 @@ void StyleEngine::applyStyleProperty(const std::string& property, const std::str
             } else if (name == "scaley") {
                 float sy = parseFloat(args);
                 if (sy != 0.0f) style.transform_scale_y = sy;
+            } else if (name == "rotate") {
+                float angle = parseFloat(args);
+                if (args.find("rad") != std::string::npos) {
+                    angle = angle * 180.0f / 3.14159265358979f;
+                } else if (args.find("turn") != std::string::npos) {
+                    angle = angle * 360.0f;
+                }
+                style.transform_rotate = angle;
+            } else if (name == "skew") {
+                auto parts = parseArgs(args);
+                if (!parts.empty()) {
+                    float ax = parseFloat(parts[0]);
+                    float ay = (parts.size() > 1) ? parseFloat(parts[1]) : 0.0f;
+                    style.transform_skew_x = ax;
+                    style.transform_skew_y = ay;
+                }
+            } else if (name == "skewx") {
+                style.transform_skew_x = parseFloat(args);
+            } else if (name == "skewy") {
+                style.transform_skew_y = parseFloat(args);
             }
         };
 
@@ -1321,6 +1511,40 @@ void StyleEngine::applyStyleProperty(const std::string& property, const std::str
             handleFunc(func_name, args);
 
             pos = rparen + 1;
+        }
+    }
+    else if (prop == "transform-origin") {
+        // transform-origin: <x> <y>
+        // 支持: left/center/right/top/bottom 或百分比或像素值
+        std::istringstream iss(val);
+        std::string part;
+        std::vector<std::string> parts;
+        while (iss >> part) {
+            parts.push_back(part);
+        }
+        
+        auto parseOriginValue = [&](const std::string& v) -> float {
+            std::string lowered = v;
+            std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char c) {
+                return static_cast<char>(std::tolower(c));
+            });
+            if (lowered == "left" || lowered == "top") return 0.0f;
+            if (lowered == "center") return 50.0f;
+            if (lowered == "right" || lowered == "bottom") return 100.0f;
+            if (lowered.find('%') != std::string::npos) {
+                return parseFloat(lowered);
+            }
+            // 像素值暂时转换为百分比（假设 100px = 50%）
+            return parseFloat(lowered) * 0.5f;
+        };
+        
+        if (!parts.empty()) {
+            style.transform_origin_x = parseOriginValue(parts[0]);
+            if (parts.size() > 1) {
+                style.transform_origin_y = parseOriginValue(parts[1]);
+            } else {
+                style.transform_origin_y = style.transform_origin_x;
+            }
         }
     }
 }

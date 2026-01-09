@@ -241,6 +241,56 @@ KeyModifiers SDL3InputAdapter::getKeyModifiers() const {
     return getCurrentModifiers();
 }
 
+void SDL3InputAdapter::setCursor(const std::string& cursor_name) {
+    SDL_SystemCursor sdl_cursor = SDL_SYSTEM_CURSOR_DEFAULT;
+    
+    if (cursor_name == "pointer" || cursor_name == "hand") {
+        sdl_cursor = SDL_SYSTEM_CURSOR_POINTER;
+    } else if (cursor_name == "text" || cursor_name == "ibeam") {
+        sdl_cursor = SDL_SYSTEM_CURSOR_TEXT;
+    } else if (cursor_name == "move" || cursor_name == "all-scroll") {
+        sdl_cursor = SDL_SYSTEM_CURSOR_MOVE;
+    } else if (cursor_name == "wait") {
+        sdl_cursor = SDL_SYSTEM_CURSOR_WAIT;
+    } else if (cursor_name == "progress") {
+        sdl_cursor = SDL_SYSTEM_CURSOR_PROGRESS;
+    } else if (cursor_name == "crosshair") {
+        sdl_cursor = SDL_SYSTEM_CURSOR_CROSSHAIR;
+    } else if (cursor_name == "not-allowed" || cursor_name == "no-drop") {
+        sdl_cursor = SDL_SYSTEM_CURSOR_NOT_ALLOWED;
+    } else if (cursor_name == "n-resize" || cursor_name == "s-resize" || cursor_name == "ns-resize") {
+        sdl_cursor = SDL_SYSTEM_CURSOR_NS_RESIZE;
+    } else if (cursor_name == "e-resize" || cursor_name == "w-resize" || cursor_name == "ew-resize") {
+        sdl_cursor = SDL_SYSTEM_CURSOR_EW_RESIZE;
+    } else if (cursor_name == "ne-resize" || cursor_name == "sw-resize" || cursor_name == "nesw-resize") {
+        sdl_cursor = SDL_SYSTEM_CURSOR_NESW_RESIZE;
+    } else if (cursor_name == "nw-resize" || cursor_name == "se-resize" || cursor_name == "nwse-resize") {
+        sdl_cursor = SDL_SYSTEM_CURSOR_NWSE_RESIZE;
+    } else if (cursor_name == "grab") {
+        // SDL3 没有 grab 光标，使用 move 代替
+        sdl_cursor = SDL_SYSTEM_CURSOR_MOVE;
+    } else if (cursor_name == "grabbing") {
+        // SDL3 没有 grabbing 光标，使用 move 代替
+        sdl_cursor = SDL_SYSTEM_CURSOR_MOVE;
+    } else if (cursor_name == "help") {
+        // SDL3 没有 help 光标，使用默认
+        sdl_cursor = SDL_SYSTEM_CURSOR_DEFAULT;
+    } else if (cursor_name == "none") {
+        // 隐藏光标
+        SDL_HideCursor();
+        return;
+    } else {
+        // auto, default 或其他未知值
+        sdl_cursor = SDL_SYSTEM_CURSOR_DEFAULT;
+    }
+    
+    SDL_ShowCursor();
+    SDL_Cursor* cursor = SDL_CreateSystemCursor(sdl_cursor);
+    if (cursor) {
+        SDL_SetCursor(cursor);
+    }
+}
+
 // 工厂函数
 InputAdapterPtr createSDL3InputAdapter(SDL_Window* window) {
     return std::make_unique<SDL3InputAdapter>(window);
