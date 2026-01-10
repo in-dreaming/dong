@@ -362,4 +362,26 @@ pub fn build(b: *std.Build) void {
     run_feature_tests.step.dependOn(&cmake_install.step);
     const run_feature_tests_step = b.step("run-feature-tests", "Run feature tests");
     run_feature_tests_step.dependOn(&run_feature_tests.step);
+
+    // HTML render test - renders HTML to BMP for visual verification
+    // Usage: zig build run-html-test -- <html_file> [output.bmp] [width] [height]
+    const run_html_test = b.addSystemCommand(&.{
+        if (is_windows) "zig-out\\bin\\html_render_test.exe" else "zig-out/bin/html_render_test",
+    });
+    run_html_test.step.dependOn(&cmake_install.step);
+    if (b.args) |args| {
+        run_html_test.addArgs(args);
+    }
+    const run_html_test_step = b.step("run-html-test", "Run HTML render test (pass args with --)");
+    run_html_test_step.dependOn(&run_html_test.step);
+
+    // Batch render all test HTML files
+    const render_all_tests = b.addSystemCommand(if (is_windows) &.{
+        "cmd", "/c", "for %f in (zig-out\\bin\\data\\tests\\*.html) do zig-out\\bin\\html_render_test.exe %f zig-out\\tmp\\tests\\%~nf.bmp 800 600",
+    } else &.{
+        "sh", "-c", "for f in zig-out/bin/data/tests/*.html; do ./zig-out/bin/html_render_test \"$f\" \"zig-out/tmp/tests/$(basename \"$f\" .html).bmp\" 800 600; done",
+    });
+    render_all_tests.step.dependOn(&cmake_install.step);
+    const render_all_step = b.step("render-all-tests", "Render all test HTML files to BMP");
+    render_all_step.dependOn(&render_all_tests.step);
 }

@@ -45,6 +45,11 @@ void dong_view_send_key_down(dong_view_t* view, uint32_t key_code);
 void dong_view_send_key_up(dong_view_t* view, uint32_t key_code);
 void dong_view_send_text_input(dong_view_t* view, const char* text);
 
+// Get the CSS cursor style at the given position
+// Returns a string like "auto", "pointer", "text", "move", etc.
+// The returned string is valid until the next call to this function.
+const char* dong_view_get_cursor_at(dong_view_t* view, int32_t x, int32_t y);
+
 // 6. Rendering mode control
 // When use_gpu is true, the view will use the SDL_gpu-based GPU backend
 // instead of the CPU backend for rendering.

@@ -676,6 +676,35 @@ void View::handle_mouse_move(int32_t x, int32_t y) {
     dispatchMouseEventToJS("mousemove", last_mouse_x_, last_mouse_y_, 0);
 }
 
+const std::string& View::getCursorAt(int32_t x, int32_t y) {
+    static const std::string default_cursor = "auto";
+    
+    if (!dom_manager || !layout_engine) {
+        cached_cursor_style_ = default_cursor;
+        return cached_cursor_style_;
+    }
+    
+    auto element = hitTestElementAt(dom_manager.get(), layout_engine.get(), x, y);
+    if (!element) {
+        cached_cursor_style_ = default_cursor;
+        return cached_cursor_style_;
+    }
+    
+    // Walk up the tree to find the first element with a non-auto cursor
+    auto current = element;
+    while (current) {
+        const auto& cursor = current->getComputedStyle().cursor;
+        if (!cursor.empty() && cursor != "auto") {
+            cached_cursor_style_ = cursor;
+            return cached_cursor_style_;
+        }
+        current = current->getParent();
+    }
+    
+    cached_cursor_style_ = default_cursor;
+    return cached_cursor_style_;
+}
+
 void View::handle_mouse_down(int32_t button) {
     dispatchMouseEventToJS("mousedown", last_mouse_x_, last_mouse_y_, button);
 }

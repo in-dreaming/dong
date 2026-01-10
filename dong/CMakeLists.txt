@@ -373,6 +373,9 @@ if(BUILD_EXAMPLES)
         3d_screen
         3d_screen_html
         3d_screen_script
+
+        # HTML render test tool
+        html_render_test
     )
 
     foreach(example ${CPP_EXAMPLES})
@@ -448,6 +451,14 @@ if(BUILD_EXAMPLES)
     install(TARGETS ${EXAMPLE_TARGETS}
         RUNTIME DESTINATION bin
     )
+    
+    # Install data directory for examples
+    if(EXISTS "${CMAKE_SOURCE_DIR}/examples/data")
+        install(DIRECTORY "${CMAKE_SOURCE_DIR}/examples/data"
+            DESTINATION bin
+            FILES_MATCHING PATTERN "*.html" PATTERN "*.js" PATTERN "*.css"
+        )
+    endif()
 endif()
 
 # Copy SDL3 DLL/dylib to bin

@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            padding: 20px;
+            background-color: #1a1a2e;
+            color: #eaeaea;
+            font-family: Arial, sans-serif;
+        }
+        .section {
+            background-color: #16213e;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+        .section-title {
+            font-size: 16px;
+            color: #e94560;
+            margin-bottom: 12px;
+        }
+        .demo-row {
+            margin-bottom: 12px;
+        }
+        .transform-box {
+            width: 80px;
+            height: 50px;
+            display: inline-block;
+            border-radius: 6px;
+            font-size: 12px;
+            margin: 20px;
+            text-align: center;
+            line-height: 50px;
+            color: #ffffff;
+        }
+        .transform-rotate-15 {
+            transform: rotate(15deg);
+            background-color: #7b2cbf;
+        }
+        .transform-rotate-45 {
+            transform: rotate(45deg);
+            background-color: #e94560;
+        }
+        .transform-rotate-neg {
+            transform: rotate(-30deg);
+            background-color: #00d4ff;
+        }
+        .transform-skew-x {
+            transform: skewX(15deg);
+            background-color: #ff6b35;
+        }
+        .transform-skew-y {
+            transform: skewY(10deg);
+            background-color: #00ff88;
+        }
+        .transform-skew-both {
+            transform: skew(10deg, 5deg);
+            background-color: #ffd93d;
+            color: #1a1a2e;
+        }
+        .transform-combined {
+            transform: rotate(10deg) scale(1.1);
+            background-color: #9d4edd;
+        }
+    </style>
+</head>
+<body>
+    <div class="section">
+        <div class="section-title">CSS Transform: Rotate</div>
+        <div class="demo-row">
+            <div class="transform-box transform-rotate-15">15deg</div>
+            <div class="transform-box transform-rotate-45">45deg</div>
+            <div class="transform-box transform-rotate-neg">-30deg</div>
+        </div>
+    </div>
+    <div class="section">
+        <div class="section-title">CSS Transform: Skew</div>
+        <div class="demo-row">
+            <div class="transform-box transform-skew-x">skewX(15)</div>
+            <div class="transform-box transform-skew-y">skewY(10)</div>
+            <div class="transform-box transform-skew-both">skew(10,5)</div>
+        </div>
+    </div>
+    <div class="section">
+        <div class="section-title">CSS Transform: Combined</div>
+        <div class="demo-row">
+            <div class="transform-box transform-combined">rotate+scale</div>
+        </div>
+    </div>
+</body>
+</html>

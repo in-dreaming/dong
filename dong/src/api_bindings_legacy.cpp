@@ -56,6 +56,11 @@ void dong_view_send_mouse_move(dong_view_t* view, int32_t x, int32_t y) {
     reinterpret_cast<DongView*>(view)->handle_mouse_move(x, y);
 }
 
+const char* dong_view_get_cursor_at(dong_view_t* view, int32_t x, int32_t y) {
+    if (!view) return "auto";
+    return reinterpret_cast<DongView*>(view)->getCursorAt(x, y).c_str();
+}
+
 void dong_view_send_mouse_down(dong_view_t* view, int32_t button) {
     if (!view) return;
     reinterpret_cast<DongView*>(view)->handle_mouse_down(button);

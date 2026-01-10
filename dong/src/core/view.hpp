@@ -59,6 +59,9 @@ public:
     void handle_key_up(uint32_t key_code);
     void handle_text_input(const char* text);
 
+    // Get the CSS cursor style at the given position
+    const std::string& getCursorAt(int32_t x, int32_t y);
+
     // DOM access
     dom::Manager* getDOMManager() const { return dom_manager.get(); }
 
@@ -107,6 +110,8 @@ private:
     bool js_bindings_initialized_ = false;
     int32_t last_mouse_x_ = 0;
     int32_t last_mouse_y_ = 0;
+    // Cached cursor style for getCursorAt
+    std::string cached_cursor_style_ = "auto";
     // 【缺口3】缓存最后的 eval 返回值
     std::string last_eval_return_value_;
 

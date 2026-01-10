@@ -10,11 +10,89 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <unordered_map>
 
 #if defined(_WIN32)
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #endif
+
+// Cursor management
+static std::unordered_map<std::string, SDL_Cursor*> cursor_cache;
+static std::string current_cursor_name;
+
+static SDL_Cursor* getOrCreateCursor(const std::string& cursor_name) {
+    auto it = cursor_cache.find(cursor_name);
+    if (it != cursor_cache.end()) {
+        return it->second;
+    }
+    
+    SDL_SystemCursor sdl_cursor = SDL_SYSTEM_CURSOR_DEFAULT;
+    
+    if (cursor_name == "pointer" || cursor_name == "hand") {
+        sdl_cursor = SDL_SYSTEM_CURSOR_POINTER;
+    } else if (cursor_name == "text" || cursor_name == "ibeam") {
+        sdl_cursor = SDL_SYSTEM_CURSOR_TEXT;
+    } else if (cursor_name == "move" || cursor_name == "all-scroll") {
+        sdl_cursor = SDL_SYSTEM_CURSOR_MOVE;
+    } else if (cursor_name == "wait") {
+        sdl_cursor = SDL_SYSTEM_CURSOR_WAIT;
+    } else if (cursor_name == "progress") {
+        sdl_cursor = SDL_SYSTEM_CURSOR_PROGRESS;
+    } else if (cursor_name == "crosshair") {
+        sdl_cursor = SDL_SYSTEM_CURSOR_CROSSHAIR;
+    } else if (cursor_name == "not-allowed" || cursor_name == "no-drop") {
+        sdl_cursor = SDL_SYSTEM_CURSOR_NOT_ALLOWED;
+    } else if (cursor_name == "n-resize" || cursor_name == "s-resize" || cursor_name == "ns-resize") {
+        sdl_cursor = SDL_SYSTEM_CURSOR_NS_RESIZE;
+    } else if (cursor_name == "e-resize" || cursor_name == "w-resize" || cursor_name == "ew-resize") {
+        sdl_cursor = SDL_SYSTEM_CURSOR_EW_RESIZE;
+    } else if (cursor_name == "ne-resize" || cursor_name == "sw-resize" || cursor_name == "nesw-resize") {
+        sdl_cursor = SDL_SYSTEM_CURSOR_NESW_RESIZE;
+    } else if (cursor_name == "nw-resize" || cursor_name == "se-resize" || cursor_name == "nwse-resize") {
+        sdl_cursor = SDL_SYSTEM_CURSOR_NWSE_RESIZE;
+    } else if (cursor_name == "grab" || cursor_name == "grabbing") {
+        sdl_cursor = SDL_SYSTEM_CURSOR_MOVE;  // SDL3 doesn't have grab cursor
+    }
+    
+    SDL_Cursor* cursor = SDL_CreateSystemCursor(sdl_cursor);
+    if (cursor) {
+        cursor_cache[cursor_name] = cursor;
+    }
+    return cursor;
+}
+
+static void updateCursor(dong_view_t* view, int32_t x, int32_t y) {
+    const char* cursor_name = dong_view_get_cursor_at(view, x, y);
+    if (!cursor_name) cursor_name = "auto";
+    
+    std::string name(cursor_name);
+    if (name == current_cursor_name) {
+        return;  // No change needed
+    }
+    
+    current_cursor_name = name;
+    
+    if (name == "none") {
+        SDL_HideCursor();
+        return;
+    }
+    
+    SDL_ShowCursor();
+    SDL_Cursor* cursor = getOrCreateCursor(name);
+    if (cursor) {
+        SDL_SetCursor(cursor);
+    }
+}
+
+static void cleanupCursors() {
+    for (auto& pair : cursor_cache) {
+        if (pair.second) {
+            SDL_DestroyCursor(pair.second);
+        }
+    }
+    cursor_cache.clear();
+}
 
 static void print_err(const char* msg) {
     std::fprintf(stderr, "[dong_app] %s\n", msg ? msg : "(null)");
@@ -231,6 +309,7 @@ int main(int argc, char** argv) {
                 break;
             case DONG_INPUT_EVENT_MOUSE_MOVE:
                 dong_view_send_mouse_move(view, (int32_t)ev.x, (int32_t)ev.y);
+                updateCursor(view, (int32_t)ev.x, (int32_t)ev.y);
                 break;
             case DONG_INPUT_EVENT_MOUSE_BUTTON:
                 if (ev.b != 0) {
@@ -272,6 +351,7 @@ int main(int argc, char** argv) {
 
     std::printf("[dong_app] Shutting down...\n");
 
+    cleanupCursors();
     dong_view_destroy(view);
     plugin->renderer_shutdown(nullptr, gpu_device);
     plugin->window_destroy(nullptr, window);
