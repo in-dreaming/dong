@@ -396,11 +396,15 @@ int main(int argc, char* argv[]) {
 
     // 加载 HTML
     SDL_Log("[Load] Loading HTML...");
+    SDL_Log("[Debug] HTML content length: %zu", html_content.length());
+    SDL_Log("[Debug] About to call dong_view_load_html...");
     dong_view_load_html(view, html_content.c_str());
     SDL_Log("[Load] HTML loaded successfully");
 
+    SDL_Log("[Debug] About to create pixel buffer...");
     // 渲染到像素缓冲区（逐帧导出）
     std::vector<uint8_t> pixels(width * height * 4);
+    SDL_Log("[Debug] Pixel buffer created, size=%zu", pixels.size());
 
     auto logPixelStats = [&](uint32_t frame_index) {
         int total = static_cast<int>(width * height);
@@ -421,8 +425,11 @@ int main(int argc, char* argv[]) {
 
     SDL_Log("[Render] Rendering offscreen...");
     for (uint32_t fi = 0; fi < frames; ++fi) {
+        SDL_Log("[Render] Frame %u: do_update=%d", fi, do_update ? 1 : 0);
         if (do_update) {
+            SDL_Log("[Render] Calling dong_view_update...");
             dong_view_update(view);
+            SDL_Log("[Render] dong_view_update completed");
         }
 
         if (!dong_view_render_offscreen(view, static_cast<void*>(device), width, height, pixels.data())) {

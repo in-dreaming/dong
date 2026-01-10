@@ -312,11 +312,18 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
 
     const bool has_transform =
         (style.transform_translate_x != 0.0f || style.transform_translate_y != 0.0f ||
-         style.transform_scale_x != 1.0f || style.transform_scale_y != 1.0f);
+         style.transform_scale_x != 1.0f || style.transform_scale_y != 1.0f ||
+         style.transform_rotate != 0.0f || style.transform_skew_x != 0.0f || style.transform_skew_y != 0.0f);
 
     bool has_isolation = (style.isolation_isolate || is_scroll_container || has_transform) &&
                          (layer_bounds.width > 0.0f && layer_bounds.height > 0.0f);
     bool needs_layer = has_isolation || clamped_opacity < 0.999f;
+    
+    // 强制为有transform的元素创建layer，确保transform能被应用
+    if (has_transform) {
+        needs_layer = true;
+        has_isolation = true;
+    }
     int parent_layer_index = layer_stack_.empty() ? -1 : layer_stack_.back();
     bool pushed_layer_node = false;
     if (needs_layer) {
@@ -337,10 +344,55 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         layer_node.bounds = layer_bounds;
         layer_node.opacity = clamped_opacity;
         layer_node.transform = LayerTransform::identity();
-        layer_node.transform.m[0] = style.transform_scale_x;
-        layer_node.transform.m[4] = style.transform_scale_y;
-        layer_node.transform.m[2] = style.transform_translate_x;
-        layer_node.transform.m[5] = style.transform_translate_y;
+        
+        // 构建完整的 2D 变换矩阵：T * R * K * S
+        // 其中 T=translate, R=rotate, K=skew, S=scale
+        // 还需要考虑 transform-origin
+        
+        float sx = style.transform_scale_x;
+        float sy = style.transform_scale_y;
+        float tx = style.transform_translate_x;
+        float ty = style.transform_translate_y;
+        float angle_rad = style.transform_rotate * 3.14159265358979f / 180.0f;
+        float skew_x_rad = style.transform_skew_x * 3.14159265358979f / 180.0f;
+        float skew_y_rad = style.transform_skew_y * 3.14159265358979f / 180.0f;
+        
+        // Transform origin
+        // 注意：DisplayList 里的坐标是“全局像素坐标”（包含 layout position），
+        // 所以 transform-origin 也必须落在全局坐标系里，否则会绕 (0,0) 错误旋转/倾斜。
+        float origin_rel_x = layer_bounds.width * style.transform_origin_x / 100.0f;
+        float origin_rel_y = layer_bounds.height * style.transform_origin_y / 100.0f;
+        float origin_x = layer_bounds.x + origin_rel_x;
+        float origin_y = layer_bounds.y + origin_rel_y;
+        
+        float cos_r = cosf(angle_rad);
+        float sin_r = sinf(angle_rad);
+        float tan_kx = tanf(skew_x_rad);
+        float tan_ky = tanf(skew_y_rad);
+        
+        // 组合变换矩阵：先平移到原点，应用变换，再平移回来
+        // 最终矩阵 = T_final * T_transform * T_origin
+        // 其中：
+        // T_origin = translate(-origin_x, -origin_y)  // 平移到变换原点
+        // T_transform = S * K * R                     // 缩放、剪切、旋转
+        // T_final = translate(origin_x + tx, origin_y + ty)  // 平移回来并加上额外平移
+        
+        float m00 = sx * cos_r - sy * sin_r * tan_ky;
+        float m01 = sx * sin_r + sy * cos_r * tan_kx;
+        float m10 = -sx * sin_r * tan_ky;
+        float m11 = sy * cos_r;
+        
+        // 计算最终的平移分量（考虑 transform-origin）
+        float final_tx = origin_x + tx - (m00 * origin_x + m01 * origin_y);
+        float final_ty = origin_y + ty - (m10 * origin_x + m11 * origin_y);
+
+        
+        layer_node.transform.m[0] = m00;      // m00
+        layer_node.transform.m[1] = m01;      // m01
+        layer_node.transform.m[2] = final_tx; // m02 (translate_x)
+        layer_node.transform.m[3] = m10;      // m10
+        layer_node.transform.m[4] = m11;      // m11
+        layer_node.transform.m[5] = final_ty; // m12 (translate_y)
         layer_node.scroll_x = node->getScrollX();
         layer_node.scroll_y = node->getScrollY();
         layer_node.is_surface = has_isolation;

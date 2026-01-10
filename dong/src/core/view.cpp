@@ -387,7 +387,7 @@ void View::update() {
         
         // 只在内容变化时重新构建 DisplayList 和 GPUCommandList
         bool need_rebuild = commands_dirty_;
-        DONG_LOG_VERBOSE("[View::update] need_rebuild=%d commands_dirty_=%d", need_rebuild ? 1 : 0, commands_dirty_ ? 1 : 0);
+        DONG_LOG_INFO("[View::update] need_rebuild=%d commands_dirty_=%d", need_rebuild ? 1 : 0, commands_dirty_ ? 1 : 0);
         
         if (need_rebuild) {
             DONG_LOG_DEBUG("[View::update] Building DisplayList...");
@@ -402,11 +402,22 @@ void View::update() {
             render::GPUCompiler compiler;
             DONG_LOG_DEBUG("[View::update] Compiling DisplayList to GPUCommandList...");
             const render::LayerTree& layer_tree = painter->getLayerTree();
+            
+            // DEBUG: 强制打印LayerTree信息
+            DONG_LOG_INFO("[LayerTree] nodes=%zu, root=%d", layer_tree.nodes.size(), layer_tree.root_index);
+            for (std::size_t i = 0; i < layer_tree.nodes.size(); ++i) {
+                const auto& node = layer_tree.nodes[i];
+                DONG_LOG_INFO("[LayerTree] node[%zu]: id=%llu bounds=(%.1f,%.1f,%.1f,%.1f) opacity=%.3f",
+                    i, static_cast<unsigned long long>(node.id),
+                    node.bounds.x, node.bounds.y, node.bounds.width, node.bounds.height, node.opacity);
+            }
+            
             debugLogLayerTreeIfEnabled(layer_tree);
             compiler.compile(dl, *cached_cmd_list_, &layer_tree);
-            DONG_LOG_DEBUG("[View::update] GPUCommandList compiled with %zu commands", cached_cmd_list_->commands.size());
+            DONG_LOG_INFO("[View::update] GPUCommandList compiled with %zu commands", cached_cmd_list_->commands.size());
             
             // 清除命令脏标记（下次只有在 markNeedsRepaint 时才会重建）
+            DONG_LOG_INFO("[View::update] Setting commands_dirty_ = false");
             commands_dirty_ = false;
 
             // 清除 layout dirty 标记
@@ -645,6 +656,7 @@ std::string View::eval_script_with_return(const char* code) {
 }
 
 void View::markNeedsRepaint() {
+    DONG_LOG_INFO("[View::markNeedsRepaint] Setting commands_dirty_ = true");
     commands_dirty_ = true;
     if (render_surface) {
         render_surface->markDirty();

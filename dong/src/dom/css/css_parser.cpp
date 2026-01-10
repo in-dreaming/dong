@@ -1663,9 +1663,10 @@ void CSSParser::applyProperty(const std::string& property, const std::string& va
     else if (prop == "touch-action") {
         style.touch_action = val;
     }
-    else if (prop == "caret-color") {
+    if (prop == "caret-color") {
         style.caret_color = parseColor(val);
     }
+
     // Float/Clear
     else if (prop == "float") {
         style.float_value = val;

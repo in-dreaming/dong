@@ -6,6 +6,8 @@
 #include <utility>
 #include <vector>
 
+#include "../core/log.h"
+
 
 namespace dong::render {
 
@@ -282,6 +284,7 @@ public:
                           bool is_dirty = true) {
         float clamped = std::clamp(opacity, 0.0f, 1.0f);
         bool requires_layer = isolate || clamped < 0.999f;
+        
         if (!requires_layer) {
             return ScopedLayer();
         }

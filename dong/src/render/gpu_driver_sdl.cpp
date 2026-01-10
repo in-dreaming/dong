@@ -188,6 +188,7 @@ cbuffer RectUniforms : register(b0, space1) {
     float4 uRect;
     float4 uColor;
     float4 uViewport;
+    float4 uTransform[2];  // 2D transform matrix: [m0,m1,m2,0] [m3,m4,m5,0]
     float4 uClipRects[4];
     float4 uClipRadii;
     float4 uClipMeta;
@@ -199,14 +200,26 @@ VSOutput main(uint vertexID : SV_VertexID) {
     else if (vertexID == 1) { local = float2(1.0, 0.0); }
     else if (vertexID == 2) { local = float2(0.0, 1.0); }
     else { local = float2(1.0, 1.0); }
+    
+    // 计算本地坐标
     float2 pos = uRect.xy + local * uRect.zw;
+    
+    // 应用 2D transform: [x', y'] = [m0 m1 m2] [x]
+    //                                [m3 m4 m5] [y]
+    //                                           [1]
+    float2 transformed;
+    transformed.x = uTransform[0].x * pos.x + uTransform[0].y * pos.y + uTransform[0].z;
+    transformed.y = uTransform[1].x * pos.x + uTransform[1].y * pos.y + uTransform[1].z;
+    
+    // 转换到 NDC
     float2 ndc;
-    ndc.x = (pos.x / uViewport.x) * 2.0 - 1.0;
-    ndc.y = 1.0 - (pos.y / uViewport.y) * 2.0;
+    ndc.x = (transformed.x / uViewport.x) * 2.0 - 1.0;
+    ndc.y = 1.0 - (transformed.y / uViewport.y) * 2.0;
+    
     VSOutput o;
     o.position = float4(ndc, 0.0, 1.0);
     o.color = uColor;
-    o.pixel = pos;
+    o.pixel = transformed;  // 使用变换后的坐标用于 clipping
     return o;
 }
 )";
@@ -223,6 +236,7 @@ cbuffer RectUniforms : register(b0, space3) {
     float4 uRect;
     float4 uColor;
     float4 uViewport;
+    float4 uTransform[2];  // 2D transform matrix: [m0,m1,m2,0] [m3,m4,m5,0]
     float4 uClipRects[4];
     float4 uClipRadii;
     float4 uClipMeta;
@@ -328,6 +342,7 @@ cbuffer RoundRectUniforms : register(b0, space1) {
     float4 uRect;
     float4 uRadius;
     float4 uViewport;
+    float4 uTransform[2];  // 2D transform matrix
     float4 uColor;
     float4 uClipRects[4];
     float4 uClipRadii;
@@ -340,10 +355,20 @@ VSOutput main(uint vertexID : SV_VertexID) {
     else if (vertexID == 1) { local = float2(1.0, 0.0); }
     else if (vertexID == 2) { local = float2(0.0, 1.0); }
     else { local = float2(1.0, 1.0); }
+    
+    // 计算本地坐标
     float2 pos = uRect.xy + local * uRect.zw;
+    
+    // 应用 2D transform
+    float2 transformed;
+    transformed.x = uTransform[0].x * pos.x + uTransform[0].y * pos.y + uTransform[0].z;
+    transformed.y = uTransform[1].x * pos.x + uTransform[1].y * pos.y + uTransform[1].z;
+    
+    // 转换到 NDC
     float2 ndc;
-    ndc.x = (pos.x / uViewport.x) * 2.0 - 1.0;
-    ndc.y = 1.0 - (pos.y / uViewport.y) * 2.0;
+    ndc.x = (transformed.x / uViewport.x) * 2.0 - 1.0;
+    ndc.y = 1.0 - (transformed.y / uViewport.y) * 2.0;
+    
     float radius = uRadius.x;
     radius = min(radius, min(uRect.z, uRect.w) * 0.5 - 0.5);
     radius = max(radius, 0.0);
@@ -353,7 +378,7 @@ VSOutput main(uint vertexID : SV_VertexID) {
     o.size = uRect.zw;
     o.radius = radius;
     o.color = uColor;
-    o.pixel = pos;
+    o.pixel = transformed;  // 使用变换后的坐标
     return o;
 }
 )";
@@ -373,6 +398,7 @@ cbuffer RoundRectUniforms : register(b0, space3) {
     float4 uRect;
     float4 uRadius;
     float4 uViewport;
+    float4 uTransform[2];  // 2D transform matrix
     float4 uColor;
     float4 uClipRects[4];
     float4 uClipRadii;
@@ -493,6 +519,7 @@ cbuffer ShadowUniforms : register(b0, space1) {
     float4 uRect;
     float4 uRadius;   // x=corner radius, y=blur radius
     float4 uViewport;
+    float4 uTransform[2];  // 2D transform matrix
     float4 uColor;
     float4 uClipRects[4];
     float4 uClipRadii;
@@ -512,9 +539,15 @@ VSOutput main(uint vertexID : SV_VertexID) {
     float2 expanded_rect_size = uRect.zw + blur * 2.0;
     
     float2 pos = expanded_rect_pos + local * expanded_rect_size;
+
+    // 应用 2D transform
+    float2 transformed;
+    transformed.x = uTransform[0].x * pos.x + uTransform[0].y * pos.y + uTransform[0].z;
+    transformed.y = uTransform[1].x * pos.x + uTransform[1].y * pos.y + uTransform[1].z;
+
     float2 ndc;
-    ndc.x = (pos.x / uViewport.x) * 2.0 - 1.0;
-    ndc.y = 1.0 - (pos.y / uViewport.y) * 2.0;
+    ndc.x = (transformed.x / uViewport.x) * 2.0 - 1.0;
+    ndc.y = 1.0 - (transformed.y / uViewport.y) * 2.0;
     
     float radius = uRadius.x;
     radius = min(radius, min(uRect.z, uRect.w) * 0.5 - 0.5);
@@ -528,7 +561,7 @@ VSOutput main(uint vertexID : SV_VertexID) {
     o.radius = radius;
     o.blur = blur;
     o.color = uColor;
-    o.pixel = pos;
+    o.pixel = transformed;
     return o;
 }
 )";
@@ -549,6 +582,7 @@ cbuffer ShadowUniforms : register(b0, space3) {
     float4 uRect;
     float4 uRadius;
     float4 uViewport;
+    float4 uTransform[2];  // 2D transform matrix
     float4 uColor;
     float4 uClipRects[4];
     float4 uClipRadii;
@@ -673,6 +707,7 @@ cbuffer ImageUniforms : register(b0, space1) {
     float4 uRect;
     float4 uUVRect;
     float4 uViewport;
+    float4 uTransform[2];  // 2D transform matrix
     float4 uTint;
     float4 uClipRects[4];
     float4 uClipRadii;
@@ -686,15 +721,21 @@ VSOutput main(uint vertexID : SV_VertexID) {
     else if (vertexID == 2) { local = float2(0.0, 1.0); }
     else { local = float2(1.0, 1.0); }
     float2 pos = uRect.xy + local * uRect.zw;
+
+    // 应用 2D transform
+    float2 transformed;
+    transformed.x = uTransform[0].x * pos.x + uTransform[0].y * pos.y + uTransform[0].z;
+    transformed.y = uTransform[1].x * pos.x + uTransform[1].y * pos.y + uTransform[1].z;
+
     float2 ndc;
-    ndc.x = (pos.x / uViewport.x) * 2.0 - 1.0;
-    ndc.y = 1.0 - (pos.y / uViewport.y) * 2.0;
+    ndc.x = (transformed.x / uViewport.x) * 2.0 - 1.0;
+    ndc.y = 1.0 - (transformed.y / uViewport.y) * 2.0;
     float2 uv = float2(lerp(uUVRect.x, uUVRect.z, local.x), lerp(uUVRect.y, uUVRect.w, local.y));
     VSOutput o;
     o.position = float4(ndc, 0.0, 1.0);
     o.uv = uv;
     o.tint = uTint;
-    o.pixel = pos;
+    o.pixel = transformed;
     return o;
 }
 )";
@@ -709,6 +750,7 @@ cbuffer ImageUniforms : register(b0, space3) {
     float4 uRect;
     float4 uUVRect;
     float4 uViewport;
+    float4 uTransform[2];  // 2D transform matrix
     float4 uTint;
     float4 uClipRects[4];
     float4 uClipRadii;
@@ -871,10 +913,11 @@ struct VSOutput {
 // 总大小 <= 4096 bytes 以兼容大多数 GPU
 cbuffer TextUniforms : register(b0, space1) {
     float4 uViewport;           // offset 0, size 16
-    float4 uClipRects[4];       // offset 16, size 64
-    float4 uClipRadii;          // offset 80, size 16
-    float4 uClipMeta;           // offset 96, size 16
-    float4 uGlyphData[248];     // offset 112, size 3968 (62 glyphs * 4 float4)
+    float4 uTransform[2];       // offset 16, size 32
+    float4 uClipRects[4];       // offset 48, size 64
+    float4 uClipRadii;          // offset 112, size 16
+    float4 uClipMeta;           // offset 128, size 16
+    float4 uGlyphData[244];     // offset 144, size 3904 (61 glyphs * 4 float4)
 };
 
 VSOutput main(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID) {
@@ -893,9 +936,15 @@ VSOutput main(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID) {
     float4 params = uGlyphData[base + 3];
 
     float2 pos = rect.xy + local * rect.zw;
+
+    // 应用 2D transform
+    float2 transformed;
+    transformed.x = uTransform[0].x * pos.x + uTransform[0].y * pos.y + uTransform[0].z;
+    transformed.y = uTransform[1].x * pos.x + uTransform[1].y * pos.y + uTransform[1].z;
+
     float2 ndc;
-    ndc.x = (pos.x / uViewport.x) * 2.0 - 1.0;
-    ndc.y = 1.0 - (pos.y / uViewport.y) * 2.0;
+    ndc.x = (transformed.x / uViewport.x) * 2.0 - 1.0;
+    ndc.y = 1.0 - (transformed.y / uViewport.y) * 2.0;
 
     float2 uv = float2(
         lerp(uvRect.x, uvRect.z, local.x),
@@ -906,7 +955,7 @@ VSOutput main(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID) {
     o.position = float4(ndc, 0.0, 1.0);
     o.uv = uv;
     o.color = color;
-    o.pixel = pos;
+    o.pixel = transformed;
     o.params = params;
     o.debug = rect;  // 调试用
     return o;
@@ -930,10 +979,11 @@ struct GlyphInstanceData {
 // 布局必须与 Vertex Shader (space1) 和 C++ TextBatchUniformData 完全一致
 cbuffer TextUniforms : register(b0, space3) {
     float4 uViewport;           // offset 0, size 16
-    float4 uClipRects[4];       // offset 16, size 64
-    float4 uClipRadii;          // offset 80, size 16
-    float4 uClipMeta;           // offset 96, size 16
-    float4 uGlyphData[248];     // offset 112, size 3968 (62 glyphs * 4 float4)
+    float4 uTransform[2];       // offset 16, size 32
+    float4 uClipRects[4];       // offset 48, size 64
+    float4 uClipRadii;          // offset 112, size 16
+    float4 uClipMeta;           // offset 128, size 16
+    float4 uGlyphData[244];     // offset 144, size 3904 (61 glyphs * 4 float4)
 };
 
 struct PSInput {
@@ -1556,8 +1606,10 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
         uint64_t id = 0;
         bool dirty = true;
         LayerRenderTarget* cache_entry = nullptr;
-        float transform[6] = {1.0f, 0.0f, 0.0f,
-                              0.0f, 1.0f, 0.0f};
+        float draw_transform[6] = {1.0f, 0.0f, 0.0f,
+                                   0.0f, 1.0f, 0.0f};
+        float composite_transform[6] = {1.0f, 0.0f, 0.0f,
+                                        0.0f, 1.0f, 0.0f};
         float scroll[2] = {0.0f, 0.0f};
     };
 
@@ -1603,6 +1655,42 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
         out[1] = vh;
         out[2] = 0.0f;
         out[3] = 0.0f;
+    };
+
+    auto get_current_transform = [&isolated_layer_stack]() -> const float* {
+        if (!isolated_layer_stack.empty()) {
+            const float* transform = isolated_layer_stack.back().draw_transform;
+            SDL_Log("[GET_TRANSFORM] Using draw transform: [%.3f %.3f %.1f; %.3f %.3f %.1f]",
+                transform[0], transform[1], transform[2], transform[3], transform[4], transform[5]);
+            return transform;
+        }
+        // 返回单位矩阵
+        SDL_Log("[GET_TRANSFORM] Using identity matrix (no isolated layers)");
+        static const float identity[6] = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f};
+        return identity;
+    };
+
+    auto write_transform = [](float (&out)[8], const float transform[6]) {
+        // 填充 2D transform 矩阵到 uniform buffer
+        // 格式: [m0,m1,m2,0] [m3,m4,m5,0]
+        out[0] = transform[0];  // m0
+        out[1] = transform[1];  // m1
+        out[2] = transform[2];  // m2
+        out[3] = 0.0f;          // padding
+        out[4] = transform[3];  // m3
+        out[5] = transform[4];  // m4
+        out[6] = transform[5];  // m5
+        out[7] = 0.0f;          // padding
+        
+        // DEBUG: 打印非单位矩阵
+        bool is_identity = (transform[0] == 1.0f && transform[1] == 0.0f && transform[2] == 0.0f &&
+                           transform[3] == 0.0f && transform[4] == 1.0f && transform[5] == 0.0f);
+        if (!is_identity) {
+            SDL_Log("[GPU_TRANSFORM] matrix=[%.3f %.3f %.1f; %.3f %.3f %.1f]",
+                transform[0], transform[1], transform[2], transform[3], transform[4], transform[5]);
+        } else {
+            SDL_Log("[GPU_TRANSFORM] identity matrix");
+        }
     };
 
     float device_pixel_ratio = 1.0f;
@@ -1873,7 +1961,7 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                             frame_index_, (void*)current_cmd_buf_, w, h);
                     // 这里必须确保拿到可用的 swapchain texture。
                     // SDL_gpu 在非阻塞 Acquire 模式下可能出现：返回成功但 texture==NULL（通常意味着 frames-in-flight 未完成，应该跳帧）。
-                    // 这会导致“低频闪烁/画面大多停留在旧帧”。这里改用阻塞 WaitAndAcquire 来保证确定性。
+                    // 这会导致"低频闪烁/画面大多停留在旧帧"。这里改用阻塞 WaitAndAcquire 来保证确定性。
                     if (!SDL_WaitAndAcquireGPUSwapchainTexture(current_cmd_buf_, window_, &real_swapchain_texture, &sw, &sh)) {
                         SDL_Log("GPUDriverSDL::execute: failed to wait+acquire swapchain texture at EndPass");
                         break;
@@ -2010,8 +2098,11 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             layer_state.dirty = layer_dirty;
             layer_state.cache_entry = cache_entry;
             for (int i = 0; i < 6; ++i) {
-                layer_state.transform[i] = cmd.layer_transform[i];
+                layer_state.composite_transform[i] = cmd.layer_transform[i];
+                layer_state.draw_transform[i] = 0.0f;
             }
+            layer_state.draw_transform[0] = 1.0f;
+            layer_state.draw_transform[4] = 1.0f;
             layer_state.scroll[0] = cmd.layer_scroll[0];
             layer_state.scroll[1] = cmd.layer_scroll[1];
 
@@ -2242,25 +2333,16 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                     float rect[4];
                     float uv_rect[4];
                     float viewport[4];
+                    float transform[8];  // 2x4 matrix
                     float tint[4];
                     ClipUniformBlock clip;
                 };
 
                 LayerCompositeUniforms u{};
-                float sx = layer_info.transform[0];
-                float sy = layer_info.transform[4];
-                if (sx == 0.0f) sx = 1.0f;
-                if (sy == 0.0f) sy = 1.0f;
-                float tx = layer_info.transform[2];
-                float ty = layer_info.transform[5];
-                float draw_x = layer_info.bounds.x + tx;
-                float draw_y = layer_info.bounds.y + ty;
-                float draw_w = layer_info.bounds.width * sx;
-                float draw_h = layer_info.bounds.height * sy;
-                u.rect[0] = draw_x;
-                u.rect[1] = draw_y;
-                u.rect[2] = draw_w;
-                u.rect[3] = draw_h;
+                u.rect[0] = layer_info.bounds.x;
+                u.rect[1] = layer_info.bounds.y;
+                u.rect[2] = layer_info.bounds.width;
+                u.rect[3] = layer_info.bounds.height;
 
                 float tex_w = static_cast<float>(layer_info.width);
                 float tex_h = static_cast<float>(layer_info.height);
@@ -2272,6 +2354,7 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 u.uv_rect[3] = (layer_info.bounds.y + layer_info.bounds.height) / tex_h;
 
                 write_viewport(u.viewport);
+                write_transform(u.transform, layer_info.composite_transform);
 
                 u.tint[0] = 1.0f;
                 u.tint[1] = 1.0f;
@@ -2280,6 +2363,7 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 fill_clip_uniform(u.clip);
 
                 SDL_PushGPUVertexUniformData(current_cmd_buf_, 0, &u, sizeof(u));
+                SDL_PushGPUFragmentUniformData(current_cmd_buf_, 0, &u, sizeof(u));
 
                 SDL_BindGPUGraphicsPipeline(pass, image_pipeline_);
 
@@ -2377,26 +2461,16 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 float rect[4];
                 float uv_rect[4];
                 float viewport[4];
+                float transform[8];  // 2x4 matrix
                 float tint[4];
                 ClipUniformBlock clip;
             };
 
             LayerCompositeUniforms u{};
-            float sx = layer_info.transform[0];
-            float sy = layer_info.transform[4];
-            if (sx == 0.0f) sx = 1.0f;
-            if (sy == 0.0f) sy = 1.0f;
-            float tx = layer_info.transform[2];
-            float ty = layer_info.transform[5];
-            float draw_x = layer_info.bounds.x + tx;
-            float draw_y = layer_info.bounds.y + ty;
-            float draw_w = layer_info.bounds.width * sx;
-            float draw_h = layer_info.bounds.height * sy;
-            
-            u.rect[0] = draw_x;
-            u.rect[1] = draw_y;
-            u.rect[2] = draw_w;
-            u.rect[3] = draw_h;
+            u.rect[0] = layer_info.bounds.x;
+            u.rect[1] = layer_info.bounds.y;
+            u.rect[2] = layer_info.bounds.width;
+            u.rect[3] = layer_info.bounds.height;
 
             float tex_w = static_cast<float>(child_target.width);
             float tex_h = static_cast<float>(child_target.height);
@@ -2408,6 +2482,7 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             u.uv_rect[3] = (layer_info.bounds.y + layer_info.bounds.height) / tex_h;
 
             write_viewport(u.viewport);
+            write_transform(u.transform, layer_info.composite_transform);
 
             u.tint[0] = 1.0f;
             u.tint[1] = 1.0f;
@@ -2416,6 +2491,7 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             fill_clip_uniform(u.clip);
 
             SDL_PushGPUVertexUniformData(current_cmd_buf_, 0, &u, sizeof(u));
+            SDL_PushGPUFragmentUniformData(current_cmd_buf_, 0, &u, sizeof(u));
 
             SDL_BindGPUGraphicsPipeline(pass, image_pipeline_);
 
@@ -2443,6 +2519,7 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 float rect[4];
                 float color[4];
                 float viewport[4];
+                float transform[8];  // 2x4 matrix: [m0,m1,m2,0] [m3,m4,m5,0]
                 ClipUniformBlock clip;
             };
 
@@ -2455,10 +2532,12 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             writeLinearColor(cmd.color, u.color);
 
             write_viewport(u.viewport);
+            write_transform(u.transform, get_current_transform());
             
             fill_clip_uniform(u.clip);
 
             SDL_PushGPUVertexUniformData(current_cmd_buf_, 0, &u, sizeof(u));
+            SDL_PushGPUFragmentUniformData(current_cmd_buf_, 0, &u, sizeof(u));
 
             if (pipeline_state.active != PipelineBindingState::ActivePipeline::Rect) {
                 SDL_BindGPUGraphicsPipeline(pass, rect_pipeline_);
@@ -2468,6 +2547,9 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             break;
         }
         case GPUCommandType::DrawRoundedRectQuad: {
+            SDL_Log("[GPU_CMD] DrawRoundedRectQuad: rect=(%.1f,%.1f,%.1f,%.1f)",
+                cmd.rect.x, cmd.rect.y, cmd.rect.width, cmd.rect.height);
+            
             if (!pass || !round_rect_pipeline_) {
                 SDL_Log("[ROUND_RECT] SKIP: pass=%p round_rect_pipeline_=%p", (void*)pass, (void*)round_rect_pipeline_);
                 break;
@@ -2481,6 +2563,7 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 float rect[4];
                 float radius[4];
                 float viewport[4];
+                float transform[8];  // 2x4 matrix
                 float color[4];
                 ClipUniformBlock clip;
             };
@@ -2497,6 +2580,7 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             u.radius[3] = cmd.radius;
 
             write_viewport(u.viewport);
+            write_transform(u.transform, get_current_transform());
 
             writeLinearColor(cmd.color, u.color);
             fill_clip_uniform(u.clip);
@@ -2520,6 +2604,7 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 float rect[4];
                 float radius[4];   // x=corner radius, y=blur radius
                 float viewport[4];
+                float transform[8];  // 2x4 matrix
                 float color[4];
                 ClipUniformBlock clip;
             };
@@ -2536,6 +2621,7 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             u.radius[3] = 0.0f;
 
             write_viewport(u.viewport);
+            write_transform(u.transform, get_current_transform());
 
             writeLinearColor(cmd.color, u.color);
             fill_clip_uniform(u.clip);
@@ -2567,6 +2653,7 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 float rect[4];
                 float uv_rect[4];
                 float viewport[4];
+                float transform[8];  // 2x4 matrix
                 float tint[4];
                 ClipUniformBlock clip;
             };
@@ -2608,6 +2695,7 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             u.uv_rect[3] = entry.v1;
 
             write_viewport(u.viewport);
+            write_transform(u.transform, get_current_transform());
 
             u.tint[0] = 1.0f;
             u.tint[1] = 1.0f;
@@ -2616,6 +2704,7 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             fill_clip_uniform(u.clip);
 
             SDL_PushGPUVertexUniformData(current_cmd_buf_, 0, &u, sizeof(u));
+            SDL_PushGPUFragmentUniformData(current_cmd_buf_, 0, &u, sizeof(u));
 
             if (pipeline_state.active != PipelineBindingState::ActivePipeline::Image) {
                 SDL_BindGPUGraphicsPipeline(pass, image_pipeline_);
@@ -2680,7 +2769,7 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             // 重要：SDL_GPU uniform buffer 通常有 4096 字节限制
             // 布局：viewport(16) + clip(96) = 112 bytes header
             // 剩余：4096 - 112 = 3984 bytes，可容纳 62 个 glyph (每个 64 bytes)
-            constexpr int kMaxGlyphsPerBatch = 62;
+            constexpr int kMaxGlyphsPerBatch = 61;
 
             struct GlyphInstanceUniform {
                 float rect[4];
@@ -2692,9 +2781,10 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             // viewport 和 clip 在前，glyphs 在后，总大小 <= 4096 bytes
             struct TextBatchUniformData {
                 float viewport[4];                                 // offset 0, size 16
-                ClipUniformBlock clip;                             // offset 16, size 96
-                GlyphInstanceUniform glyphs[kMaxGlyphsPerBatch];   // offset 112, size 3968
-            };  // total: 4080 bytes
+                float transform[8];                                // offset 16, size 32
+                ClipUniformBlock clip;                             // offset 48, size 96
+                GlyphInstanceUniform glyphs[kMaxGlyphsPerBatch];   // offset 144
+            };  // total: 4048 bytes
 
             struct PreparedGlyph {
                 GlyphInstanceUniform instance;
@@ -2703,6 +2793,7 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
 
             TextBatchUniformData batch_uniform{};
             write_viewport(batch_uniform.viewport);
+            write_transform(batch_uniform.transform, get_current_transform());
             fill_clip_uniform(batch_uniform.clip);
 
             std::vector<PreparedGlyph> prepared;
@@ -2938,6 +3029,7 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                     }
                     
                     SDL_PushGPUVertexUniformData(current_cmd_buf_, 0, &batch_uniform, sizeof(batch_uniform));
+                    SDL_PushGPUFragmentUniformData(current_cmd_buf_, 0, &batch_uniform, sizeof(batch_uniform));
                     SDL_DrawGPUPrimitives(pass, 4, static_cast<Uint32>(glyphs_in_batch), 0, 0);
                     glyphs_in_batch = 0;
                 };
