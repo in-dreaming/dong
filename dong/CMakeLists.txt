@@ -104,16 +104,26 @@ endif()
 add_library(dong SHARED
     src/api_bindings.cpp
     src/core/context.cpp
+    # DOM module (modular structure)
     src/dom/dom_manager.cpp
-    src/dom/dom_node.cpp
     src/dom/event_system.cpp
-    src/dom/parser.cpp
-    src/dom/style_engine.cpp
     src/dom/focus_manager.cpp
     src/dom/input_element.cpp
+    src/dom/css/css_value.cpp
+    src/dom/css/css_parser.cpp
+    src/dom/css/selector_matcher.cpp
+    src/dom/css/style_engine.cpp
+    src/dom/dom/dom_node.cpp
+    src/dom/dom/observer.cpp
+    src/dom/html/html_parser.cpp
+    # Animation
+    src/animation/animation_controller.cpp
+    # Layout
     src/layout/layout_engine.cpp
+    # Script
     src/script/script_engine.cpp
     src/script/js_bindings.cpp
+    # Render
     src/render/painter.cpp
     src/render/render_surface.cpp
     src/render/resource_manager.cpp
@@ -182,14 +192,26 @@ add_library(dong_legacy STATIC
     src/api_bindings_legacy.cpp
     src/core/context.cpp
     src/core/view.cpp
+    # DOM module (modular structure)
     src/dom/dom_manager.cpp
-    src/dom/dom_node.cpp
     src/dom/event_system.cpp
-    src/dom/parser.cpp
-    src/dom/style_engine.cpp
+    src/dom/focus_manager.cpp
+    src/dom/input_element.cpp
+    src/dom/css/css_value.cpp
+    src/dom/css/css_parser.cpp
+    src/dom/css/selector_matcher.cpp
+    src/dom/css/style_engine.cpp
+    src/dom/dom/dom_node.cpp
+    src/dom/dom/observer.cpp
+    src/dom/html/html_parser.cpp
+    # Animation
+    src/animation/animation_controller.cpp
+    # Layout
     src/layout/layout_engine.cpp
+    # Script
     src/script/script_engine.cpp
     src/script/js_bindings.cpp
+    # Render
     src/render/painter.cpp
     src/render/render_surface.cpp
     src/render/resource_manager.cpp
@@ -203,10 +225,9 @@ add_library(dong_legacy STATIC
     src/render/gpu_driver_sdl.cpp
     src/render/shader_manager.cpp
     src/render/glyph_atlas.cpp
+    # Platform
     src/platform/sdl3_window.cpp
     src/input/input_adapter_sdl3.cpp
-    src/dom/focus_manager.cpp
-    src/dom/input_element.cpp
     third_party/SDL_shadercross/src/SDL_shadercross.c
 )
 
@@ -359,6 +380,45 @@ if(BUILD_EXAMPLES)
             add_dong_example(${example} "examples/${example}.cpp")
         endif()
     endforeach()
+
+    # Feature test runner
+    if(EXISTS "${CMAKE_SOURCE_DIR}/examples/features/run_feature_tests.cpp")
+        add_executable(run_feature_tests
+            examples/features/run_feature_tests.cpp
+            examples/features/feature_test_framework.cpp
+        )
+        target_link_libraries(run_feature_tests PRIVATE dong_legacy)
+        target_include_directories(run_feature_tests PRIVATE "${SDL3_PREFIX}/include")
+        if(WIN32)
+            target_link_directories(run_feature_tests PRIVATE "${SDL3_PREFIX}/lib")
+            target_link_libraries(run_feature_tests PRIVATE SDL3)
+        else()
+            target_link_directories(run_feature_tests PRIVATE "${SDL3_PREFIX}/lib")
+            target_link_libraries(run_feature_tests PRIVATE SDL3)
+        endif()
+        if(VULKAN_SDK_PATH)
+            if(WIN32)
+                target_link_directories(run_feature_tests PRIVATE "${VULKAN_SDK_PATH}/Lib")
+            else()
+                target_link_directories(run_feature_tests PRIVATE "${VULKAN_SDK_PATH}/lib")
+            endif()
+        endif()
+        target_link_libraries(run_feature_tests PRIVATE spirv-cross-c-shared)
+        target_link_directories(run_feature_tests PRIVATE ${DXC_LIB_PATH})
+        target_link_libraries(run_feature_tests PRIVATE dxcompiler)
+        if(WIN32)
+            target_link_libraries(run_feature_tests PRIVATE user32 gdi32 ole32 shell32 advapi32)
+        elseif(APPLE)
+            target_link_libraries(run_feature_tests PRIVATE
+                "-framework CoreFoundation"
+                "-framework CoreGraphics"
+                "-framework CoreText"
+            )
+        endif()
+        
+        # Install run_feature_tests to bin directory
+        install(TARGETS run_feature_tests RUNTIME DESTINATION bin)
+    endif()
 
 endif()
 

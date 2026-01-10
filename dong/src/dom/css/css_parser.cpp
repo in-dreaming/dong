@@ -1,0 +1,2130 @@
+#include "css_parser.hpp"
+#include <algorithm>
+#include <sstream>
+#include <cctype>
+#include <cmath>
+
+namespace dong::dom {
+
+std::string CSSParser::removeComments(const std::string& css) {
+    std::string result;
+    result.reserve(css.length());
+    size_t i = 0;
+    while (i < css.length()) {
+        if (i + 1 < css.length() && css[i] == '/' && css[i + 1] == '*') {
+            size_t end = css.find("*/", i + 2);
+            if (end != std::string::npos) {
+                i = end + 2;
+            } else {
+                break;
+            }
+        } else {
+            result += css[i];
+            ++i;
+        }
+    }
+    return result;
+}
+
+std::string CSSParser::trimWhitespace(const std::string& str) {
+    size_t first = str.find_first_not_of(" \t\n\r");
+    if (first == std::string::npos) return "";
+    size_t last = str.find_last_not_of(" \t\n\r");
+    return str.substr(first, last - first + 1);
+}
+
+std::vector<std::string> CSSParser::splitDeclarations(const std::string& css) {
+    std::vector<std::string> result;
+    std::string current;
+    int paren_depth = 0;
+    
+    for (char c : css) {
+        if (c == '(') {
+            ++paren_depth;
+            current += c;
+        } else if (c == ')') {
+            --paren_depth;
+            current += c;
+        } else if (c == ';' && paren_depth == 0) {
+            std::string trimmed = trimWhitespace(current);
+            if (!trimmed.empty()) {
+                result.push_back(trimmed);
+            }
+            current.clear();
+        } else {
+            current += c;
+        }
+    }
+    
+    std::string trimmed = trimWhitespace(current);
+    if (!trimmed.empty()) {
+        result.push_back(trimmed);
+    }
+    
+    return result;
+}
+
+float CSSParser::parseFloat(const std::string& s) {
+    std::string v = s;
+    v.erase(0, v.find_first_not_of(" \t\n\r"));
+    size_t last = v.find_last_not_of(" \t\n\r");
+    if (last != std::string::npos && last + 1 < v.size()) {
+        v.erase(last + 1);
+    }
+    
+    size_t i = 0;
+    while (i < v.size() && (std::isdigit(static_cast<unsigned char>(v[i])) || 
+           v[i] == '-' || v[i] == '+' || v[i] == '.')) {
+        ++i;
+    }
+    if (i == 0) return 0.0f;
+    try {
+        return std::stof(v.substr(0, i));
+    } catch (...) {
+        return 0.0f;
+    }
+}
+
+CSSValue CSSParser::parseValue(const std::string& value) {
+    std::string v = value;
+    std::transform(v.begin(), v.end(), v.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    v.erase(0, v.find_first_not_of(" \t\n\r"));
+    size_t last = v.find_last_not_of(" \t\n\r");
+    if (last != std::string::npos) v = v.substr(0, last + 1);
+    
+    if (v == "auto") {
+        return CSSValue(0.0f, CSSValue::Unit::AUTO);
+    }
+    if (v == "inherit") {
+        return CSSValue(0.0f, CSSValue::Unit::INHERIT);
+    }
+    
+    // Check for calc()
+    if (v.find("calc(") == 0) {
+        size_t end = v.rfind(')');
+        if (end != std::string::npos) {
+            std::string expr = v.substr(5, end - 5);
+            auto calc_expr = parseCalc(expr);
+            if (calc_expr) {
+                CSSValue result;
+                result.unit = CSSValue::Unit::CALC;
+                result.calc_expr = calc_expr;
+                return result;
+            }
+        }
+    }
+    
+    // Check for min()
+    if (v.find("min(") == 0) {
+        size_t end = v.rfind(')');
+        if (end != std::string::npos) {
+            std::string args = v.substr(4, end - 4);
+            auto expr = parseMinMaxClamp("min", args);
+            if (expr) {
+                CSSValue result;
+                result.unit = CSSValue::Unit::CALC;
+                result.calc_expr = expr;
+                return result;
+            }
+        }
+    }
+    
+    // Check for max()
+    if (v.find("max(") == 0) {
+        size_t end = v.rfind(')');
+        if (end != std::string::npos) {
+            std::string args = v.substr(4, end - 4);
+            auto expr = parseMinMaxClamp("max", args);
+            if (expr) {
+                CSSValue result;
+                result.unit = CSSValue::Unit::CALC;
+                result.calc_expr = expr;
+                return result;
+            }
+        }
+    }
+    
+    // Check for clamp()
+    if (v.find("clamp(") == 0) {
+        size_t end = v.rfind(')');
+        if (end != std::string::npos) {
+            std::string args = v.substr(6, end - 6);
+            auto expr = parseMinMaxClamp("clamp", args);
+            if (expr) {
+                CSSValue result;
+                result.unit = CSSValue::Unit::CALC;
+                result.calc_expr = expr;
+                return result;
+            }
+        }
+    }
+    
+    float num = parseFloat(v);
+    
+    if (v.find('%') != std::string::npos) {
+        return CSSValue(num, CSSValue::Unit::PERCENT);
+    }
+    if (v.find("rem") != std::string::npos) {
+        return CSSValue(num, CSSValue::Unit::REM);
+    }
+    if (v.find("em") != std::string::npos) {
+        return CSSValue(num, CSSValue::Unit::EM);
+    }
+    if (v.find("vw") != std::string::npos) {
+        return CSSValue(num, CSSValue::Unit::VW);
+    }
+    if (v.find("vh") != std::string::npos) {
+        return CSSValue(num, CSSValue::Unit::VH);
+    }
+    if (v.find("vmin") != std::string::npos) {
+        return CSSValue(num, CSSValue::Unit::VMIN);
+    }
+    if (v.find("vmax") != std::string::npos) {
+        return CSSValue(num, CSSValue::Unit::VMAX);
+    }
+    if (v.find("ch") != std::string::npos) {
+        return CSSValue(num, CSSValue::Unit::CH);
+    }
+    
+    return CSSValue(num, CSSValue::Unit::PIXEL);
+}
+
+// Parse calc() expression
+std::shared_ptr<CSSCalcExpression> CSSParser::parseCalc(const std::string& expr) {
+    size_t pos = 0;
+    return parseCalcExpression(expr, pos);
+}
+
+// Parse min()/max()/clamp() expressions
+std::shared_ptr<CSSCalcExpression> CSSParser::parseMinMaxClamp(const std::string& func, const std::string& args) {
+    auto result = std::make_shared<CSSCalcExpression>();
+    
+    if (func == "min") {
+        result->op = CSSCalcExpression::Op::MIN;
+    } else if (func == "max") {
+        result->op = CSSCalcExpression::Op::MAX;
+    } else if (func == "clamp") {
+        result->op = CSSCalcExpression::Op::CLAMP;
+    } else {
+        return nullptr;
+    }
+    
+    // Split arguments by comma (respecting parentheses)
+    std::vector<std::string> parts;
+    std::string current;
+    int depth = 0;
+    
+    for (char c : args) {
+        if (c == '(') {
+            ++depth;
+            current += c;
+        } else if (c == ')') {
+            --depth;
+            current += c;
+        } else if (c == ',' && depth == 0) {
+            // Trim and add
+            size_t start = current.find_first_not_of(" \t\n\r");
+            size_t end = current.find_last_not_of(" \t\n\r");
+            if (start != std::string::npos) {
+                parts.push_back(current.substr(start, end - start + 1));
+            }
+            current.clear();
+        } else {
+            current += c;
+        }
+    }
+    
+    // Add last part
+    size_t start = current.find_first_not_of(" \t\n\r");
+    size_t end = current.find_last_not_of(" \t\n\r");
+    if (start != std::string::npos) {
+        parts.push_back(current.substr(start, end - start + 1));
+    }
+    
+    // Parse each argument
+    for (const auto& part : parts) {
+        // Check if it's a nested calc/min/max/clamp
+        CSSValue val = parseValue(part);
+        
+        auto child = std::make_shared<CSSCalcExpression>();
+        if (val.isCalc() && val.calc_expr) {
+            child = val.calc_expr;
+        } else {
+            child->op = CSSCalcExpression::Op::VALUE;
+            child->value = val;
+        }
+        result->children.push_back(child);
+    }
+    
+    return result;
+}
+
+// Parse calc expression (handles + and -)
+std::shared_ptr<CSSCalcExpression> CSSParser::parseCalcExpression(const std::string& expr, size_t& pos) {
+    auto left = parseCalcTerm(expr, pos);
+    if (!left) return nullptr;
+    
+    while (pos < expr.size()) {
+        // Skip whitespace
+        while (pos < expr.size() && std::isspace(static_cast<unsigned char>(expr[pos]))) ++pos;
+        
+        if (pos >= expr.size()) break;
+        
+        char op = expr[pos];
+        if (op != '+' && op != '-') break;
+        
+        // Check for whitespace around operator (required by CSS calc spec)
+        if (pos > 0 && !std::isspace(static_cast<unsigned char>(expr[pos - 1]))) break;
+        if (pos + 1 < expr.size() && !std::isspace(static_cast<unsigned char>(expr[pos + 1]))) break;
+        
+        ++pos;
+        
+        auto right = parseCalcTerm(expr, pos);
+        if (!right) break;
+        
+        auto combined = std::make_shared<CSSCalcExpression>();
+        combined->op = (op == '+') ? CSSCalcExpression::Op::ADD : CSSCalcExpression::Op::SUBTRACT;
+        combined->children.push_back(left);
+        combined->children.push_back(right);
+        left = combined;
+    }
+    
+    return left;
+}
+
+// Parse calc term (handles * and /)
+std::shared_ptr<CSSCalcExpression> CSSParser::parseCalcTerm(const std::string& expr, size_t& pos) {
+    auto left = parseCalcFactor(expr, pos);
+    if (!left) return nullptr;
+    
+    while (pos < expr.size()) {
+        // Skip whitespace
+        while (pos < expr.size() && std::isspace(static_cast<unsigned char>(expr[pos]))) ++pos;
+        
+        if (pos >= expr.size()) break;
+        
+        char op = expr[pos];
+        if (op != '*' && op != '/') break;
+        
+        ++pos;
+        
+        auto right = parseCalcFactor(expr, pos);
+        if (!right) break;
+        
+        auto combined = std::make_shared<CSSCalcExpression>();
+        combined->op = (op == '*') ? CSSCalcExpression::Op::MULTIPLY : CSSCalcExpression::Op::DIVIDE;
+        combined->children.push_back(left);
+        combined->children.push_back(right);
+        left = combined;
+    }
+    
+    return left;
+}
+
+// Parse calc factor (value or parenthesized expression)
+std::shared_ptr<CSSCalcExpression> CSSParser::parseCalcFactor(const std::string& expr, size_t& pos) {
+    // Skip whitespace
+    while (pos < expr.size() && std::isspace(static_cast<unsigned char>(expr[pos]))) ++pos;
+    
+    if (pos >= expr.size()) return nullptr;
+    
+    // Check for parenthesized expression
+    if (expr[pos] == '(') {
+        ++pos;
+        auto inner = parseCalcExpression(expr, pos);
+        // Skip closing paren
+        while (pos < expr.size() && expr[pos] != ')') ++pos;
+        if (pos < expr.size()) ++pos;
+        return inner;
+    }
+    
+    // Parse value with unit
+    size_t start = pos;
+    bool has_digit = false;
+    
+    // Handle negative sign
+    if (pos < expr.size() && expr[pos] == '-') ++pos;
+    
+    // Parse number
+    while (pos < expr.size() && (std::isdigit(static_cast<unsigned char>(expr[pos])) || expr[pos] == '.')) {
+        has_digit = true;
+        ++pos;
+    }
+    
+    if (!has_digit) return nullptr;
+    
+    // Parse unit
+    size_t unit_start = pos;
+    while (pos < expr.size() && std::isalpha(static_cast<unsigned char>(expr[pos]))) ++pos;
+    if (pos < expr.size() && expr[pos] == '%') ++pos;
+    
+    std::string value_str = expr.substr(start, pos - start);
+    CSSValue val = parseValue(value_str);
+    
+    auto result = std::make_shared<CSSCalcExpression>();
+    result->op = CSSCalcExpression::Op::VALUE;
+    result->value = val;
+    return result;
+}
+
+std::string CSSParser::parseColor(const std::string& value) {
+    std::string v = value;
+    std::transform(v.begin(), v.end(), v.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    v.erase(0, v.find_first_not_of(" \t\n\r"));
+    size_t last = v.find_last_not_of(" \t\n\r");
+    if (last != std::string::npos) v = v.substr(0, last + 1);
+    
+    // Already a valid color format
+    if (v[0] == '#' || v.find("rgb") == 0 || v.find("hsl") == 0) {
+        return v;
+    }
+    
+    // Named colors (common ones)
+    static const std::unordered_map<std::string, std::string> named_colors = {
+        {"transparent", "transparent"},
+        {"black", "#000000"},
+        {"white", "#ffffff"},
+        {"red", "#ff0000"},
+        {"green", "#008000"},
+        {"blue", "#0000ff"},
+        {"yellow", "#ffff00"},
+        {"cyan", "#00ffff"},
+        {"magenta", "#ff00ff"},
+        {"gray", "#808080"},
+        {"grey", "#808080"},
+        {"silver", "#c0c0c0"},
+        {"maroon", "#800000"},
+        {"olive", "#808000"},
+        {"lime", "#00ff00"},
+        {"aqua", "#00ffff"},
+        {"teal", "#008080"},
+        {"navy", "#000080"},
+        {"fuchsia", "#ff00ff"},
+        {"purple", "#800080"},
+        {"orange", "#ffa500"},
+        {"pink", "#ffc0cb"},
+        {"brown", "#a52a2a"},
+        {"coral", "#ff7f50"},
+        {"crimson", "#dc143c"},
+        {"gold", "#ffd700"},
+        {"indigo", "#4b0082"},
+        {"ivory", "#fffff0"},
+        {"khaki", "#f0e68c"},
+        {"lavender", "#e6e6fa"},
+        {"lightblue", "#add8e6"},
+        {"lightgray", "#d3d3d3"},
+        {"lightgreen", "#90ee90"},
+        {"lightyellow", "#ffffe0"},
+        {"darkblue", "#00008b"},
+        {"darkgray", "#a9a9a9"},
+        {"darkgreen", "#006400"},
+        {"darkred", "#8b0000"},
+    };
+    
+    auto it = named_colors.find(v);
+    if (it != named_colors.end()) {
+        return it->second;
+    }
+    
+    return value;
+}
+
+CSSGradient CSSParser::parseGradient(const std::string& value) {
+    CSSGradient gradient;
+    std::string v = value;
+    std::transform(v.begin(), v.end(), v.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    
+    if (v.find("repeating-linear-gradient") == 0) {
+        gradient.type = CSSGradient::Type::REPEATING_LINEAR;
+    } else if (v.find("repeating-radial-gradient") == 0) {
+        gradient.type = CSSGradient::Type::REPEATING_RADIAL;
+    } else if (v.find("linear-gradient") == 0) {
+        gradient.type = CSSGradient::Type::LINEAR;
+    } else if (v.find("radial-gradient") == 0) {
+        gradient.type = CSSGradient::Type::RADIAL;
+    } else if (v.find("conic-gradient") == 0) {
+        gradient.type = CSSGradient::Type::CONIC;
+    }
+    
+    // Extract content inside parentheses
+    size_t start = v.find('(');
+    size_t end = v.rfind(')');
+    if (start == std::string::npos || end == std::string::npos || end <= start) {
+        return gradient;
+    }
+    
+    std::string content = v.substr(start + 1, end - start - 1);
+    
+    // Parse gradient stops and direction
+    std::vector<std::string> parts;
+    std::string current;
+    int paren_depth = 0;
+    
+    for (char c : content) {
+        if (c == '(') {
+            ++paren_depth;
+            current += c;
+        } else if (c == ')') {
+            --paren_depth;
+            current += c;
+        } else if (c == ',' && paren_depth == 0) {
+            std::string trimmed = current;
+            trimmed.erase(0, trimmed.find_first_not_of(" \t\n\r"));
+            size_t last_pos = trimmed.find_last_not_of(" \t\n\r");
+            if (last_pos != std::string::npos) trimmed = trimmed.substr(0, last_pos + 1);
+            if (!trimmed.empty()) {
+                parts.push_back(trimmed);
+            }
+            current.clear();
+        } else {
+            current += c;
+        }
+    }
+    if (!current.empty()) {
+        std::string trimmed = current;
+        trimmed.erase(0, trimmed.find_first_not_of(" \t\n\r"));
+        size_t last_pos = trimmed.find_last_not_of(" \t\n\r");
+        if (last_pos != std::string::npos) trimmed = trimmed.substr(0, last_pos + 1);
+        if (!trimmed.empty()) {
+            parts.push_back(trimmed);
+        }
+    }
+    
+    // Parse direction/angle (first part if it's not a color)
+    size_t color_start = 0;
+    if (!parts.empty()) {
+        const std::string& first = parts[0];
+        if (first.find("deg") != std::string::npos) {
+            gradient.angle = parseFloat(first);
+            color_start = 1;
+        } else if (first.find("to ") == 0) {
+            // Parse direction keywords
+            if (first.find("right") != std::string::npos) gradient.angle = 90.0f;
+            else if (first.find("left") != std::string::npos) gradient.angle = 270.0f;
+            else if (first.find("bottom") != std::string::npos) gradient.angle = 180.0f;
+            else if (first.find("top") != std::string::npos) gradient.angle = 0.0f;
+            color_start = 1;
+        }
+    }
+    
+    // Parse color stops
+    float auto_position = 0.0f;
+    float auto_step = parts.size() > color_start + 1 ? 
+                      1.0f / (parts.size() - color_start - 1) : 1.0f;
+    
+    for (size_t i = color_start; i < parts.size(); ++i) {
+        GradientStop stop;
+        const std::string& part = parts[i];
+        
+        // Check for position
+        size_t percent_pos = part.rfind('%');
+        if (percent_pos != std::string::npos) {
+            // Find where position starts
+            size_t pos_start = part.rfind(' ', percent_pos);
+            if (pos_start != std::string::npos) {
+                stop.color = parseColor(part.substr(0, pos_start));
+                stop.position = parseFloat(part.substr(pos_start)) / 100.0f;
+            } else {
+                stop.position = parseFloat(part) / 100.0f;
+            }
+        } else {
+            stop.color = parseColor(part);
+            stop.position = auto_position;
+            auto_position += auto_step;
+        }
+        
+        if (stop.color.empty()) {
+            stop.color = part;
+        }
+        
+        gradient.stops.push_back(stop);
+    }
+    
+    return gradient;
+}
+
+std::vector<CSSFilter> CSSParser::parseFilter(const std::string& value) {
+    std::vector<CSSFilter> filters;
+    std::string v = value;
+    std::transform(v.begin(), v.end(), v.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    
+    if (v == "none") {
+        return filters;
+    }
+    
+    size_t pos = 0;
+    while (pos < v.size()) {
+        size_t lparen = v.find('(', pos);
+        if (lparen == std::string::npos) break;
+        size_t rparen = v.find(')', lparen + 1);
+        if (rparen == std::string::npos) break;
+        
+        std::string func_name = v.substr(pos, lparen - pos);
+        func_name.erase(0, func_name.find_first_not_of(" \t\n\r"));
+        size_t last = func_name.find_last_not_of(" \t\n\r");
+        if (last != std::string::npos) func_name = func_name.substr(0, last + 1);
+        
+        std::string args = v.substr(lparen + 1, rparen - lparen - 1);
+        
+        CSSFilter filter;
+        
+        if (func_name == "blur") {
+            filter.type = CSSFilter::Type::BLUR;
+            filter.value = parseFloat(args);
+        } else if (func_name == "brightness") {
+            filter.type = CSSFilter::Type::BRIGHTNESS;
+            filter.value = parseFloat(args);
+            if (args.find('%') != std::string::npos) {
+                filter.value /= 100.0f;
+            }
+        } else if (func_name == "contrast") {
+            filter.type = CSSFilter::Type::CONTRAST;
+            filter.value = parseFloat(args);
+            if (args.find('%') != std::string::npos) {
+                filter.value /= 100.0f;
+            }
+        } else if (func_name == "grayscale") {
+            filter.type = CSSFilter::Type::GRAYSCALE;
+            filter.value = parseFloat(args);
+            if (args.find('%') != std::string::npos) {
+                filter.value /= 100.0f;
+            }
+        } else if (func_name == "hue-rotate") {
+            filter.type = CSSFilter::Type::HUE_ROTATE;
+            filter.value = parseFloat(args);
+        } else if (func_name == "invert") {
+            filter.type = CSSFilter::Type::INVERT;
+            filter.value = parseFloat(args);
+            if (args.find('%') != std::string::npos) {
+                filter.value /= 100.0f;
+            }
+        } else if (func_name == "opacity") {
+            filter.type = CSSFilter::Type::OPACITY;
+            filter.value = parseFloat(args);
+            if (args.find('%') != std::string::npos) {
+                filter.value /= 100.0f;
+            }
+        } else if (func_name == "saturate") {
+            filter.type = CSSFilter::Type::SATURATE;
+            filter.value = parseFloat(args);
+            if (args.find('%') != std::string::npos) {
+                filter.value /= 100.0f;
+            }
+        } else if (func_name == "sepia") {
+            filter.type = CSSFilter::Type::SEPIA;
+            filter.value = parseFloat(args);
+            if (args.find('%') != std::string::npos) {
+                filter.value /= 100.0f;
+            }
+        } else if (func_name == "drop-shadow") {
+            filter.type = CSSFilter::Type::DROP_SHADOW;
+            // Parse drop-shadow arguments
+            std::istringstream iss(args);
+            std::string part;
+            std::vector<std::string> parts;
+            while (iss >> part) {
+                parts.push_back(part);
+            }
+            if (parts.size() >= 2) {
+                filter.offset_x = parseFloat(parts[0]);
+                filter.offset_y = parseFloat(parts[1]);
+            }
+            if (parts.size() >= 3) {
+                filter.blur = parseFloat(parts[2]);
+            }
+            if (parts.size() >= 4) {
+                filter.color = parseColor(parts[3]);
+            }
+        }
+        
+        filters.push_back(filter);
+        pos = rparen + 1;
+    }
+    
+    return filters;
+}
+
+std::vector<CSSTransition> CSSParser::parseTransition(const std::string& value) {
+    std::vector<CSSTransition> transitions;
+    
+    std::string v = value;
+    std::transform(v.begin(), v.end(), v.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    
+    if (v == "none") {
+        return transitions;
+    }
+    
+    // Split by comma (respecting parentheses)
+    std::vector<std::string> parts;
+    std::string current;
+    int paren_depth = 0;
+    
+    for (char c : v) {
+        if (c == '(') {
+            ++paren_depth;
+            current += c;
+        } else if (c == ')') {
+            --paren_depth;
+            current += c;
+        } else if (c == ',' && paren_depth == 0) {
+            std::string trimmed = current;
+            trimmed.erase(0, trimmed.find_first_not_of(" \t\n\r"));
+            size_t last = trimmed.find_last_not_of(" \t\n\r");
+            if (last != std::string::npos) trimmed = trimmed.substr(0, last + 1);
+            if (!trimmed.empty()) {
+                parts.push_back(trimmed);
+            }
+            current.clear();
+        } else {
+            current += c;
+        }
+    }
+    if (!current.empty()) {
+        std::string trimmed = current;
+        trimmed.erase(0, trimmed.find_first_not_of(" \t\n\r"));
+        size_t last = trimmed.find_last_not_of(" \t\n\r");
+        if (last != std::string::npos) trimmed = trimmed.substr(0, last + 1);
+        if (!trimmed.empty()) {
+            parts.push_back(trimmed);
+        }
+    }
+    
+    for (const auto& part : parts) {
+        CSSTransition transition;
+        
+        std::istringstream iss(part);
+        std::string token;
+        std::vector<std::string> tokens;
+        while (iss >> token) {
+            tokens.push_back(token);
+        }
+        
+        for (const auto& t : tokens) {
+            if (t.find('s') != std::string::npos && t.find("ease") == std::string::npos) {
+                float time = parseFloat(t);
+                if (t.find("ms") != std::string::npos) {
+                    time /= 1000.0f;
+                }
+                if (transition.duration == 0.0f) {
+                    transition.duration = time;
+                } else {
+                    transition.delay = time;
+                }
+            } else if (t == "ease" || t == "ease-in" || t == "ease-out" || 
+                       t == "ease-in-out" || t == "linear" || 
+                       t.find("cubic-bezier") == 0 || t.find("steps") == 0) {
+                transition.timing_function = t;
+            } else {
+                transition.property = t;
+            }
+        }
+        
+        transitions.push_back(transition);
+    }
+    
+    return transitions;
+}
+
+CSSAnimation CSSParser::parseAnimation(const std::string& value) {
+    CSSAnimation animation;
+    
+    std::string v = value;
+    std::transform(v.begin(), v.end(), v.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    
+    std::istringstream iss(v);
+    std::string token;
+    std::vector<std::string> tokens;
+    while (iss >> token) {
+        tokens.push_back(token);
+    }
+    
+    for (const auto& t : tokens) {
+        if (t.find('s') != std::string::npos && 
+            t.find("ease") == std::string::npos &&
+            t.find("forwards") == std::string::npos &&
+            t.find("backwards") == std::string::npos) {
+            float time = parseFloat(t);
+            if (t.find("ms") != std::string::npos) {
+                time /= 1000.0f;
+            }
+            if (animation.duration == 0.0f) {
+                animation.duration = time;
+            } else {
+                animation.delay = time;
+            }
+        } else if (t == "ease" || t == "ease-in" || t == "ease-out" || 
+                   t == "ease-in-out" || t == "linear" ||
+                   t.find("cubic-bezier") == 0 || t.find("steps") == 0) {
+            animation.timing_function = t;
+        } else if (t == "infinite") {
+            animation.iteration_count = -1;
+        } else if (t == "normal" || t == "reverse" || 
+                   t == "alternate" || t == "alternate-reverse") {
+            animation.direction = t;
+        } else if (t == "none" || t == "forwards" || 
+                   t == "backwards" || t == "both") {
+            animation.fill_mode = t;
+        } else if (t == "running" || t == "paused") {
+            animation.play_state = t;
+        } else if (std::isdigit(static_cast<unsigned char>(t[0]))) {
+            animation.iteration_count = static_cast<int>(parseFloat(t));
+        } else {
+            animation.name = t;
+        }
+    }
+    
+    return animation;
+}
+
+int CSSParser::calculateSpecificity(const std::string& selector) {
+    int id_count = 0;
+    int class_count = 0;
+    int element_count = 0;
+    
+    for (size_t i = 0; i < selector.length(); ++i) {
+        if (selector[i] == '#') {
+            if (i == 0 || !std::isdigit(selector[i - 1])) {
+                ++id_count;
+            }
+        } else if (selector[i] == '.') {
+            if (i == 0 || !std::isdigit(selector[i - 1])) {
+                ++class_count;
+            }
+        } else if (selector[i] == ':') {
+            ++class_count;  // Pseudo-classes count as classes
+        } else if (selector[i] == '[') {
+            ++class_count;  // Attribute selectors count as classes
+        }
+    }
+    
+    // Count element selectors
+    bool in_element = false;
+    for (size_t i = 0; i < selector.length(); ++i) {
+        char c = selector[i];
+        if (std::isalpha(c) && !in_element) {
+            if (i == 0 || selector[i - 1] == ' ' || selector[i - 1] == '>' || 
+                selector[i - 1] == '+' || selector[i - 1] == '~') {
+                ++element_count;
+                in_element = true;
+            }
+        } else if (!std::isalnum(c) && c != '-') {
+            in_element = false;
+        }
+    }
+    
+    return (id_count * 10000) + (class_count * 100) + element_count;
+}
+
+std::vector<CSSRule> CSSParser::parse(const std::string& css) {
+    std::vector<CSSRule> result;
+    std::string css_clean = removeComments(css);
+    
+    size_t pos = 0;
+    while (pos < css_clean.length()) {
+        // Skip @-rules for now (handled separately)
+        if (css_clean[pos] == '@') {
+            size_t brace = css_clean.find('{', pos);
+            if (brace != std::string::npos) {
+                // Find matching closing brace
+                int depth = 1;
+                size_t end = brace + 1;
+                while (end < css_clean.length() && depth > 0) {
+                    if (css_clean[end] == '{') ++depth;
+                    else if (css_clean[end] == '}') --depth;
+                    ++end;
+                }
+                pos = end;
+            } else {
+                break;
+            }
+            continue;
+        }
+        
+        // Find opening brace
+        size_t brace_open = css_clean.find('{', pos);
+        if (brace_open == std::string::npos) break;
+        
+        // Find closing brace
+        size_t brace_close = css_clean.find('}', brace_open);
+        if (brace_close == std::string::npos) break;
+        
+        std::string selector = css_clean.substr(pos, brace_open - pos);
+        std::string declarations = css_clean.substr(brace_open + 1, brace_close - brace_open - 1);
+        
+        selector = trimWhitespace(selector);
+        
+        // Handle multiple selectors separated by comma
+        std::vector<std::string> selectors;
+        size_t comma_pos = 0;
+        size_t comma_next = selector.find(',', comma_pos);
+        
+        while (true) {
+            std::string single_selector;
+            if (comma_next == std::string::npos) {
+                single_selector = trimWhitespace(selector.substr(comma_pos));
+            } else {
+                single_selector = trimWhitespace(selector.substr(comma_pos, comma_next - comma_pos));
+            }
+            
+            if (!single_selector.empty()) {
+                selectors.push_back(single_selector);
+            }
+            
+            if (comma_next == std::string::npos) break;
+            comma_pos = comma_next + 1;
+            comma_next = selector.find(',', comma_pos);
+        }
+        
+        // Parse declarations
+        auto decls = splitDeclarations(declarations);
+        ComputedStyle style;
+        style.display = "";
+        style.background_color = "";
+        style.color = "";
+        
+        for (const auto& decl : decls) {
+            size_t colon = decl.find(':');
+            if (colon != std::string::npos) {
+                std::string prop = trimWhitespace(decl.substr(0, colon));
+                std::string value = trimWhitespace(decl.substr(colon + 1));
+                applyProperty(prop, value, style);
+            }
+        }
+        
+        // Create rules for each selector
+        for (const auto& sel : selectors) {
+            int specificity = calculateSpecificity(sel);
+            CSSRule rule{sel, style, specificity, rule_order_counter_++};
+            result.push_back(rule);
+        }
+        
+        pos = brace_close + 1;
+    }
+    
+    return result;
+}
+
+std::vector<KeyframesRule> CSSParser::parseKeyframes(const std::string& css) {
+    std::vector<KeyframesRule> result;
+    std::string css_clean = removeComments(css);
+    
+    size_t pos = 0;
+    while ((pos = css_clean.find("@keyframes", pos)) != std::string::npos) {
+        size_t name_start = pos + 10;
+        while (name_start < css_clean.length() && 
+               std::isspace(static_cast<unsigned char>(css_clean[name_start]))) {
+            ++name_start;
+        }
+        
+        size_t brace_open = css_clean.find('{', name_start);
+        if (brace_open == std::string::npos) break;
+        
+        std::string name = trimWhitespace(css_clean.substr(name_start, brace_open - name_start));
+        
+        // Find matching closing brace
+        int depth = 1;
+        size_t end = brace_open + 1;
+        while (end < css_clean.length() && depth > 0) {
+            if (css_clean[end] == '{') ++depth;
+            else if (css_clean[end] == '}') --depth;
+            ++end;
+        }
+        
+        std::string content = css_clean.substr(brace_open + 1, end - brace_open - 2);
+        
+        KeyframesRule keyframes;
+        keyframes.name = name;
+        
+        // Parse keyframe blocks
+        size_t kf_pos = 0;
+        while (kf_pos < content.length()) {
+            size_t kf_brace = content.find('{', kf_pos);
+            if (kf_brace == std::string::npos) break;
+            
+            size_t kf_close = content.find('}', kf_brace);
+            if (kf_close == std::string::npos) break;
+            
+            std::string offset_str = trimWhitespace(content.substr(kf_pos, kf_brace - kf_pos));
+            std::string props_str = content.substr(kf_brace + 1, kf_close - kf_brace - 1);
+            
+            CSSKeyframe keyframe;
+            if (offset_str == "from") {
+                keyframe.offset = 0.0f;
+            } else if (offset_str == "to") {
+                keyframe.offset = 1.0f;
+            } else {
+                keyframe.offset = parseFloat(offset_str) / 100.0f;
+            }
+            
+            auto decls = splitDeclarations(props_str);
+            for (const auto& decl : decls) {
+                size_t colon = decl.find(':');
+                if (colon != std::string::npos) {
+                    std::string prop = trimWhitespace(decl.substr(0, colon));
+                    std::string value = trimWhitespace(decl.substr(colon + 1));
+                    keyframe.properties[prop] = value;
+                }
+            }
+            
+            keyframes.keyframes.push_back(keyframe);
+            kf_pos = kf_close + 1;
+        }
+        
+        result.push_back(keyframes);
+        keyframes_map_[name] = keyframes;
+        pos = end;
+    }
+    
+    return result;
+}
+
+std::vector<MediaRule> CSSParser::parseMediaRules(const std::string& css) {
+    std::vector<MediaRule> result;
+    std::string css_clean = removeComments(css);
+    
+    size_t pos = 0;
+    while ((pos = css_clean.find("@media", pos)) != std::string::npos) {
+        size_t brace_open = css_clean.find('{', pos);
+        if (brace_open == std::string::npos) break;
+        
+        std::string query = trimWhitespace(css_clean.substr(pos + 6, brace_open - pos - 6));
+        
+        // Find matching closing brace
+        int depth = 1;
+        size_t end = brace_open + 1;
+        while (end < css_clean.length() && depth > 0) {
+            if (css_clean[end] == '{') ++depth;
+            else if (css_clean[end] == '}') --depth;
+            ++end;
+        }
+        
+        std::string content = css_clean.substr(brace_open + 1, end - brace_open - 2);
+        
+        MediaRule media;
+        media.query = query;
+        
+        // Parse rules inside media block
+        CSSParser inner_parser;
+        media.rules = inner_parser.parse(content);
+        
+        result.push_back(media);
+        pos = end;
+    }
+    
+    return result;
+}
+
+std::vector<FontFaceRule> CSSParser::parseFontFaceRules(const std::string& css) {
+    std::vector<FontFaceRule> result;
+    std::string css_clean = removeComments(css);
+    
+    size_t pos = 0;
+    while ((pos = css_clean.find("@font-face", pos)) != std::string::npos) {
+        size_t brace_open = css_clean.find('{', pos);
+        if (brace_open == std::string::npos) break;
+        
+        size_t brace_close = css_clean.find('}', brace_open);
+        if (brace_close == std::string::npos) break;
+        
+        std::string content = css_clean.substr(brace_open + 1, brace_close - brace_open - 1);
+        
+        FontFaceRule font_face;
+        
+        auto decls = splitDeclarations(content);
+        for (const auto& decl : decls) {
+            size_t colon = decl.find(':');
+            if (colon != std::string::npos) {
+                std::string prop = trimWhitespace(decl.substr(0, colon));
+                std::string value = trimWhitespace(decl.substr(colon + 1));
+                
+                if (prop == "font-family") {
+                    // Remove quotes
+                    if ((value.front() == '"' && value.back() == '"') ||
+                        (value.front() == '\'' && value.back() == '\'')) {
+                        value = value.substr(1, value.length() - 2);
+                    }
+                    font_face.family = value;
+                } else if (prop == "src") {
+                    font_face.src = value;
+                } else if (prop == "font-style") {
+                    font_face.style = value;
+                } else if (prop == "font-weight") {
+                    font_face.weight = value;
+                }
+            }
+        }
+        
+        result.push_back(font_face);
+        pos = brace_close + 1;
+    }
+    
+    return result;
+}
+
+void CSSParser::parseInlineStyle(const std::string& style_str, ComputedStyle& style) {
+    size_t pos = 0;
+    while (pos < style_str.length()) {
+        size_t semicolon = style_str.find(';', pos);
+        if (semicolon == std::string::npos) semicolon = style_str.length();
+        
+        std::string declaration = style_str.substr(pos, semicolon - pos);
+        pos = semicolon + 1;
+        
+        size_t colon = declaration.find(':');
+        if (colon == std::string::npos) continue;
+        
+        std::string property = declaration.substr(0, colon);
+        std::string value = declaration.substr(colon + 1);
+        
+        // Trim whitespace
+        property.erase(0, property.find_first_not_of(" \t"));
+        property.erase(property.find_last_not_of(" \t") + 1);
+        value.erase(0, value.find_first_not_of(" \t"));
+        value.erase(value.find_last_not_of(" \t") + 1);
+        
+        applyProperty(property, value, style);
+    }
+}
+
+void CSSParser::applyProperty(const std::string& property, const std::string& value, 
+                               ComputedStyle& style) {
+    std::string prop = property;
+    std::transform(prop.begin(), prop.end(), prop.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    
+    std::string val = value;
+    // Remove trailing semicolon if present
+    if (!val.empty() && val.back() == ';') {
+        val.pop_back();
+    }
+    // Trim whitespace
+    val.erase(0, val.find_first_not_of(" \t\n\r"));
+    size_t last = val.find_last_not_of(" \t\n\r");
+    if (last != std::string::npos) val = val.substr(0, last + 1);
+
+    // Display
+    if (prop == "display") {
+        style.display = val;
+    }
+    // Position
+    else if (prop == "position") {
+        style.position = val;
+    }
+    // Box model
+    else if (prop == "width") {
+        style.width = parseValue(val);
+    }
+    else if (prop == "height") {
+        style.height = parseValue(val);
+    }
+    else if (prop == "min-width") {
+        style.min_width = parseValue(val);
+    }
+    else if (prop == "max-width") {
+        style.max_width = parseValue(val);
+    }
+    else if (prop == "min-height") {
+        style.min_height = parseValue(val);
+    }
+    else if (prop == "max-height") {
+        style.max_height = parseValue(val);
+    }
+    // Margin
+    else if (prop == "margin") {
+        parseMarginShorthand(val, style);
+    }
+    else if (prop == "margin-top") {
+        style.margin_top = parseValue(val);
+    }
+    else if (prop == "margin-right") {
+        style.margin_right = parseValue(val);
+    }
+    else if (prop == "margin-bottom") {
+        style.margin_bottom = parseValue(val);
+    }
+    else if (prop == "margin-left") {
+        style.margin_left = parseValue(val);
+    }
+    // Padding
+    else if (prop == "padding") {
+        parsePaddingShorthand(val, style);
+    }
+    else if (prop == "padding-top") {
+        style.padding_top = parseValue(val);
+    }
+    else if (prop == "padding-right") {
+        style.padding_right = parseValue(val);
+    }
+    else if (prop == "padding-bottom") {
+        style.padding_bottom = parseValue(val);
+    }
+    else if (prop == "padding-left") {
+        style.padding_left = parseValue(val);
+    }
+    // Position offsets
+    else if (prop == "top") {
+        style.top = parseValue(val);
+    }
+    else if (prop == "right") {
+        style.right = parseValue(val);
+    }
+    else if (prop == "bottom") {
+        style.bottom = parseValue(val);
+    }
+    else if (prop == "left") {
+        style.left = parseValue(val);
+    }
+    else if (prop == "inset") {
+        std::istringstream iss(val);
+        std::vector<std::string> parts;
+        std::string part;
+        while (iss >> part) parts.push_back(part);
+        
+        if (parts.size() == 1) {
+            auto v = parseValue(parts[0]);
+            style.top = style.right = style.bottom = style.left = v;
+        } else if (parts.size() == 2) {
+            style.top = style.bottom = parseValue(parts[0]);
+            style.left = style.right = parseValue(parts[1]);
+        } else if (parts.size() == 3) {
+            style.top = parseValue(parts[0]);
+            style.left = style.right = parseValue(parts[1]);
+            style.bottom = parseValue(parts[2]);
+        } else if (parts.size() >= 4) {
+            style.top = parseValue(parts[0]);
+            style.right = parseValue(parts[1]);
+            style.bottom = parseValue(parts[2]);
+            style.left = parseValue(parts[3]);
+        }
+    }
+    else if (prop == "z-index") {
+        try {
+            style.z_index = std::stoi(val);
+        } catch (...) {
+            style.z_index = 0;
+        }
+    }
+    // Visual
+    else if (prop == "color") {
+        style.color = parseColor(val);
+    }
+    else if (prop == "background-color") {
+        style.background_color = parseColor(val);
+    }
+    else if (prop == "background-image") {
+        if (val.find("gradient") != std::string::npos) {
+            style.background_gradients.push_back(parseGradient(val));
+        } else {
+            style.background_image = val;
+        }
+    }
+    else if (prop == "background") {
+        parseBackgroundShorthand(val, style);
+    }
+    else if (prop == "background-size") {
+        style.background_size = val;
+    }
+    else if (prop == "background-repeat") {
+        style.background_repeat = val;
+    }
+    else if (prop == "background-position") {
+        style.background_position = val;
+    }
+    else if (prop == "opacity") {
+        float v = parseFloat(val);
+        style.opacity = std::max(0.0f, std::min(1.0f, v));
+    }
+    // Border
+    else if (prop == "border") {
+        parseBorderShorthand(val, style);
+    }
+    else if (prop == "border-width") {
+        style.border_width = parseFloat(val);
+    }
+    else if (prop == "border-color") {
+        style.border_color = parseColor(val);
+    }
+    else if (prop == "border-style") {
+        style.border_style = val;
+    }
+    else if (prop == "border-radius") {
+        parseBorderRadiusShorthand(val, style);
+    }
+    else if (prop == "border-top-left-radius") {
+        style.border_top_left_radius = parseFloat(val);
+    }
+    else if (prop == "border-top-right-radius") {
+        style.border_top_right_radius = parseFloat(val);
+    }
+    else if (prop == "border-bottom-left-radius") {
+        style.border_bottom_left_radius = parseFloat(val);
+    }
+    else if (prop == "border-bottom-right-radius") {
+        style.border_bottom_right_radius = parseFloat(val);
+    }
+    // Outline
+    else if (prop == "outline") {
+        std::istringstream iss(val);
+        std::string part;
+        while (iss >> part) {
+            if (std::isdigit(static_cast<unsigned char>(part[0])) || part[0] == '.') {
+                style.outline_width = parseFloat(part);
+            } else if (part == "solid" || part == "dashed" || part == "dotted" || part == "none") {
+                style.outline_style = part;
+            } else {
+                style.outline_color = parseColor(part);
+            }
+        }
+    }
+    else if (prop == "outline-width") {
+        style.outline_width = parseFloat(val);
+    }
+    else if (prop == "outline-color") {
+        style.outline_color = parseColor(val);
+    }
+    else if (prop == "outline-style") {
+        style.outline_style = val;
+    }
+    else if (prop == "outline-offset") {
+        style.outline_offset = parseFloat(val);
+    }
+    // Overflow
+    else if (prop == "overflow") {
+        style.overflow = val;
+        style.overflow_x = val;
+        style.overflow_y = val;
+    }
+    else if (prop == "overflow-x") {
+        style.overflow_x = val;
+    }
+    else if (prop == "overflow-y") {
+        style.overflow_y = val;
+    }
+    else if (prop == "visibility") {
+        style.visibility = val;
+    }
+    else if (prop == "cursor") {
+        style.cursor = val;
+    }
+    else if (prop == "box-sizing") {
+        style.box_sizing = val;
+    }
+    // Box shadow
+    else if (prop == "box-shadow") {
+        parseBoxShadow(val, style);
+    }
+    // Filters
+    else if (prop == "filter") {
+        style.filters = parseFilter(val);
+    }
+    else if (prop == "backdrop-filter") {
+        style.backdrop_filters = parseFilter(val);
+    }
+    else if (prop == "mix-blend-mode") {
+        style.mix_blend_mode = val;
+    }
+    else if (prop == "background-blend-mode") {
+        style.background_blend_mode = val;
+    }
+    // Text
+    else if (prop == "font-family") {
+        style.font_family = val;
+    }
+    else if (prop == "font-size") {
+        style.font_size = parseFloat(val);
+    }
+    else if (prop == "font-weight") {
+        style.font_weight = val;
+    }
+    else if (prop == "font-style") {
+        style.font_style = val;
+    }
+    else if (prop == "font-variant") {
+        style.font_variant = val;
+    }
+    else if (prop == "font") {
+        parseFontShorthand(val, style);
+    }
+    else if (prop == "text-align") {
+        style.text_align = val;
+    }
+    else if (prop == "text-align-last") {
+        style.text_align_last = val;
+    }
+    else if (prop == "text-decoration" || prop == "text-decoration-line") {
+        style.text_decoration = val;
+    }
+    else if (prop == "text-decoration-color") {
+        style.text_decoration_color = parseColor(val);
+    }
+    else if (prop == "text-decoration-style") {
+        style.text_decoration_style = val;
+    }
+    else if (prop == "text-decoration-thickness") {
+        style.text_decoration_thickness = parseFloat(val);
+    }
+    else if (prop == "letter-spacing") {
+        if (val == "normal") {
+            style.letter_spacing_em = 0.0f;
+        } else {
+            float px = parseFloat(val);
+            if (val.find("em") != std::string::npos) {
+                style.letter_spacing_em = px;
+            } else {
+                float font_px = style.font_size > 0.0f ? style.font_size : 16.0f;
+                style.letter_spacing_em = px / font_px;
+            }
+        }
+    }
+    else if (prop == "word-spacing") {
+        if (val == "normal") {
+            style.word_spacing_px = 0.0f;
+        } else {
+            float px = parseFloat(val);
+            if (val.find("em") != std::string::npos) {
+                float font_px = style.font_size > 0.0f ? style.font_size : 16.0f;
+                style.word_spacing_px = px * font_px;
+            } else {
+                style.word_spacing_px = px;
+            }
+        }
+    }
+    else if (prop == "line-height") {
+        if (val == "normal") {
+            style.line_height = -1.0f;
+            style.line_height_is_unitless = true;
+        } else if (val.find("px") != std::string::npos) {
+            style.line_height = parseFloat(val);
+            style.line_height_is_unitless = false;
+        } else if (val.find('%') != std::string::npos) {
+            style.line_height = parseFloat(val) / 100.0f;
+            style.line_height_is_unitless = true;
+        } else {
+            style.line_height = parseFloat(val);
+            style.line_height_is_unitless = true;
+        }
+    }
+    else if (prop == "text-transform") {
+        style.text_transform = val;
+    }
+    else if (prop == "text-overflow") {
+        style.text_overflow = val;
+    }
+    else if (prop == "white-space") {
+        style.white_space = val;
+    }
+    else if (prop == "word-break") {
+        style.word_break = val;
+    }
+    else if (prop == "overflow-wrap" || prop == "word-wrap") {
+        style.overflow_wrap = val;
+    }
+    else if (prop == "vertical-align") {
+        style.vertical_align = val;
+    }
+    else if (prop == "direction") {
+        style.direction = val;
+    }
+    else if (prop == "unicode-bidi") {
+        style.unicode_bidi = val;
+    }
+    else if (prop == "text-indent") {
+        style.text_indent = parseFloat(val);
+    }
+    else if (prop == "-webkit-line-clamp") {
+        style.webkit_line_clamp = static_cast<int>(parseFloat(val));
+    }
+    // Text shadow
+    else if (prop == "text-shadow") {
+        parseTextShadow(val, style);
+    }
+    // Flexbox
+    else if (prop == "flex-direction") {
+        style.flex_direction = val;
+    }
+    else if (prop == "flex-wrap") {
+        style.flex_wrap = val;
+    }
+    else if (prop == "flex-flow") {
+        std::istringstream iss(val);
+        std::string part;
+        while (iss >> part) {
+            if (part == "row" || part == "column" || 
+                part == "row-reverse" || part == "column-reverse") {
+                style.flex_direction = part;
+            } else if (part == "wrap" || part == "nowrap" || part == "wrap-reverse") {
+                style.flex_wrap = part;
+            }
+        }
+    }
+    else if (prop == "justify-content") {
+        style.justify_content = val;
+    }
+    else if (prop == "align-items") {
+        style.align_items = val;
+    }
+    else if (prop == "align-content") {
+        style.align_content = val;
+    }
+    else if (prop == "align-self") {
+        style.align_self = val;
+    }
+    else if (prop == "flex") {
+        parseFlexShorthand(val, style);
+    }
+    else if (prop == "flex-grow") {
+        style.flex_grow = parseFloat(val);
+    }
+    else if (prop == "flex-shrink") {
+        style.flex_shrink = parseFloat(val);
+    }
+    else if (prop == "flex-basis") {
+        style.flex_basis = parseValue(val);
+    }
+    else if (prop == "order") {
+        style.order = static_cast<int>(parseFloat(val));
+    }
+    else if (prop == "gap") {
+        style.gap = parseFloat(val);
+        style.row_gap = style.gap;
+        style.column_gap = style.gap;
+    }
+    else if (prop == "row-gap") {
+        style.row_gap = parseFloat(val);
+    }
+    else if (prop == "column-gap") {
+        style.column_gap = parseFloat(val);
+    }
+    // Transform
+    else if (prop == "transform") {
+        parseTransform(val, style);
+    }
+    else if (prop == "transform-origin") {
+        std::istringstream iss(val);
+        std::vector<std::string> parts;
+        std::string part;
+        while (iss >> part) parts.push_back(part);
+        
+        auto parseOrigin = [](const std::string& v) -> float {
+            std::string lowered = v;
+            std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char c) {
+                return static_cast<char>(std::tolower(c));
+            });
+            if (lowered == "left" || lowered == "top") return 0.0f;
+            if (lowered == "center") return 50.0f;
+            if (lowered == "right" || lowered == "bottom") return 100.0f;
+            if (lowered.find('%') != std::string::npos) {
+                return parseFloat(lowered);
+            }
+            return parseFloat(lowered) * 0.5f;
+        };
+        
+        if (!parts.empty()) {
+            style.transform_origin_x = parseOrigin(parts[0]);
+            style.transform_origin_y = parts.size() > 1 ? parseOrigin(parts[1]) : style.transform_origin_x;
+        }
+    }
+    else if (prop == "transform-style") {
+        style.transform_style = val;
+    }
+    else if (prop == "perspective") {
+        style.perspective = parseFloat(val);
+    }
+    else if (prop == "perspective-origin") {
+        std::istringstream iss(val);
+        std::vector<std::string> parts;
+        std::string part;
+        while (iss >> part) parts.push_back(part);
+        
+        if (!parts.empty()) {
+            style.perspective_origin_x = parseFloat(parts[0]);
+            style.perspective_origin_y = parts.size() > 1 ? parseFloat(parts[1]) : style.perspective_origin_x;
+        }
+    }
+    else if (prop == "backface-visibility") {
+        style.backface_visibility = val;
+    }
+    // Transitions
+    else if (prop == "transition") {
+        style.transitions = parseTransition(val);
+    }
+    else if (prop == "transition-property") {
+        if (style.transitions.empty()) {
+            style.transitions.push_back(CSSTransition());
+        }
+        style.transitions[0].property = val;
+    }
+    else if (prop == "transition-duration") {
+        if (style.transitions.empty()) {
+            style.transitions.push_back(CSSTransition());
+        }
+        float time = parseFloat(val);
+        if (val.find("ms") != std::string::npos) time /= 1000.0f;
+        style.transitions[0].duration = time;
+    }
+    else if (prop == "transition-timing-function") {
+        if (style.transitions.empty()) {
+            style.transitions.push_back(CSSTransition());
+        }
+        style.transitions[0].timing_function = val;
+    }
+    else if (prop == "transition-delay") {
+        if (style.transitions.empty()) {
+            style.transitions.push_back(CSSTransition());
+        }
+        float time = parseFloat(val);
+        if (val.find("ms") != std::string::npos) time /= 1000.0f;
+        style.transitions[0].delay = time;
+    }
+    // Animations
+    else if (prop == "animation") {
+        style.animations.push_back(parseAnimation(val));
+    }
+    else if (prop == "animation-name") {
+        if (style.animations.empty()) {
+            style.animations.push_back(CSSAnimation());
+        }
+        style.animations[0].name = val;
+    }
+    else if (prop == "animation-duration") {
+        if (style.animations.empty()) {
+            style.animations.push_back(CSSAnimation());
+        }
+        float time = parseFloat(val);
+        if (val.find("ms") != std::string::npos) time /= 1000.0f;
+        style.animations[0].duration = time;
+    }
+    else if (prop == "animation-timing-function") {
+        if (style.animations.empty()) {
+            style.animations.push_back(CSSAnimation());
+        }
+        style.animations[0].timing_function = val;
+    }
+    else if (prop == "animation-delay") {
+        if (style.animations.empty()) {
+            style.animations.push_back(CSSAnimation());
+        }
+        float time = parseFloat(val);
+        if (val.find("ms") != std::string::npos) time /= 1000.0f;
+        style.animations[0].delay = time;
+    }
+    else if (prop == "animation-iteration-count") {
+        if (style.animations.empty()) {
+            style.animations.push_back(CSSAnimation());
+        }
+        if (val == "infinite") {
+            style.animations[0].iteration_count = -1;
+        } else {
+            style.animations[0].iteration_count = static_cast<int>(parseFloat(val));
+        }
+    }
+    else if (prop == "animation-direction") {
+        if (style.animations.empty()) {
+            style.animations.push_back(CSSAnimation());
+        }
+        style.animations[0].direction = val;
+    }
+    else if (prop == "animation-fill-mode") {
+        if (style.animations.empty()) {
+            style.animations.push_back(CSSAnimation());
+        }
+        style.animations[0].fill_mode = val;
+    }
+    else if (prop == "animation-play-state") {
+        if (style.animations.empty()) {
+            style.animations.push_back(CSSAnimation());
+        }
+        style.animations[0].play_state = val;
+    }
+    // Clip path
+    else if (prop == "clip-path") {
+        style.clip_path = val;
+    }
+    // Pointer events
+    else if (prop == "pointer-events") {
+        style.pointer_events = val;
+    }
+    else if (prop == "user-select") {
+        style.user_select = val;
+    }
+    else if (prop == "touch-action") {
+        style.touch_action = val;
+    }
+    else if (prop == "caret-color") {
+        style.caret_color = parseColor(val);
+    }
+    // Float/Clear
+    else if (prop == "float") {
+        style.float_value = val;
+    }
+    else if (prop == "clear") {
+        style.clear = val;
+    }
+    else if (prop == "isolation") {
+        style.isolation_isolate = (val == "isolate");
+    }
+    // Content (for ::before/::after pseudo-elements)
+    else if (prop == "content") {
+        if (val == "none" || val == "normal") {
+            style.content = "";
+        } else {
+            // Remove quotes if present
+            std::string content = val;
+            if (content.size() >= 2) {
+                if ((content.front() == '"' && content.back() == '"') ||
+                    (content.front() == '\'' && content.back() == '\'')) {
+                    content = content.substr(1, content.size() - 2);
+                }
+            }
+            // Handle escape sequences
+            std::string result;
+            for (size_t i = 0; i < content.size(); ++i) {
+                if (content[i] == '\\' && i + 1 < content.size()) {
+                    char next = content[i + 1];
+                    if (next == 'n') { result += '\n'; ++i; }
+                    else if (next == 't') { result += '\t'; ++i; }
+                    else if (next == '\\') { result += '\\'; ++i; }
+                    else if (next == '"') { result += '"'; ++i; }
+                    else if (next == '\'') { result += '\''; ++i; }
+                    else { result += content[i]; }
+                } else {
+                    result += content[i];
+                }
+            }
+            style.content = result;
+        }
+    }
+}
+
+void CSSParser::parseMarginShorthand(const std::string& value, ComputedStyle& style) {
+    std::istringstream iss(value);
+    std::vector<std::string> parts;
+    std::string part;
+    while (iss >> part) parts.push_back(part);
+    
+    if (parts.size() == 1) {
+        auto v = parseValue(parts[0]);
+        style.margin_top = style.margin_right = style.margin_bottom = style.margin_left = v;
+    } else if (parts.size() == 2) {
+        style.margin_top = style.margin_bottom = parseValue(parts[0]);
+        style.margin_left = style.margin_right = parseValue(parts[1]);
+    } else if (parts.size() == 3) {
+        style.margin_top = parseValue(parts[0]);
+        style.margin_left = style.margin_right = parseValue(parts[1]);
+        style.margin_bottom = parseValue(parts[2]);
+    } else if (parts.size() >= 4) {
+        style.margin_top = parseValue(parts[0]);
+        style.margin_right = parseValue(parts[1]);
+        style.margin_bottom = parseValue(parts[2]);
+        style.margin_left = parseValue(parts[3]);
+    }
+}
+
+void CSSParser::parsePaddingShorthand(const std::string& value, ComputedStyle& style) {
+    std::istringstream iss(value);
+    std::vector<std::string> parts;
+    std::string part;
+    while (iss >> part) parts.push_back(part);
+    
+    if (parts.size() == 1) {
+        auto v = parseValue(parts[0]);
+        style.padding_top = style.padding_right = style.padding_bottom = style.padding_left = v;
+    } else if (parts.size() == 2) {
+        style.padding_top = style.padding_bottom = parseValue(parts[0]);
+        style.padding_left = style.padding_right = parseValue(parts[1]);
+    } else if (parts.size() == 3) {
+        style.padding_top = parseValue(parts[0]);
+        style.padding_left = style.padding_right = parseValue(parts[1]);
+        style.padding_bottom = parseValue(parts[2]);
+    } else if (parts.size() >= 4) {
+        style.padding_top = parseValue(parts[0]);
+        style.padding_right = parseValue(parts[1]);
+        style.padding_bottom = parseValue(parts[2]);
+        style.padding_left = parseValue(parts[3]);
+    }
+}
+
+void CSSParser::parseBorderShorthand(const std::string& value, ComputedStyle& style) {
+    std::istringstream iss(value);
+    std::string part;
+    while (iss >> part) {
+        if (std::isdigit(static_cast<unsigned char>(part[0])) || part[0] == '.') {
+            style.border_width = parseFloat(part);
+        } else if (part == "solid" || part == "dashed" || part == "dotted" || 
+                   part == "double" || part == "none" || part == "hidden") {
+            style.border_style = part;
+        } else {
+            style.border_color = parseColor(part);
+        }
+    }
+}
+
+void CSSParser::parseBorderRadiusShorthand(const std::string& value, ComputedStyle& style) {
+    std::istringstream iss(value);
+    std::vector<std::string> parts;
+    std::string part;
+    while (iss >> part) parts.push_back(part);
+    
+    if (parts.size() == 1) {
+        float v = parseFloat(parts[0]);
+        style.border_radius = v;
+        style.border_top_left_radius = v;
+        style.border_top_right_radius = v;
+        style.border_bottom_left_radius = v;
+        style.border_bottom_right_radius = v;
+    } else if (parts.size() == 2) {
+        style.border_top_left_radius = style.border_bottom_right_radius = parseFloat(parts[0]);
+        style.border_top_right_radius = style.border_bottom_left_radius = parseFloat(parts[1]);
+    } else if (parts.size() == 3) {
+        style.border_top_left_radius = parseFloat(parts[0]);
+        style.border_top_right_radius = style.border_bottom_left_radius = parseFloat(parts[1]);
+        style.border_bottom_right_radius = parseFloat(parts[2]);
+    } else if (parts.size() >= 4) {
+        style.border_top_left_radius = parseFloat(parts[0]);
+        style.border_top_right_radius = parseFloat(parts[1]);
+        style.border_bottom_right_radius = parseFloat(parts[2]);
+        style.border_bottom_left_radius = parseFloat(parts[3]);
+    }
+}
+
+void CSSParser::parseFlexShorthand(const std::string& value, ComputedStyle& style) {
+    if (value == "none") {
+        style.flex_grow = 0.0f;
+        style.flex_shrink = 0.0f;
+        style.flex_basis = CSSValue(0.0f, CSSValue::Unit::AUTO);
+        return;
+    }
+    if (value == "auto") {
+        style.flex_grow = 1.0f;
+        style.flex_shrink = 1.0f;
+        style.flex_basis = CSSValue(0.0f, CSSValue::Unit::AUTO);
+        return;
+    }
+    
+    std::istringstream iss(value);
+    std::vector<std::string> parts;
+    std::string part;
+    while (iss >> part) parts.push_back(part);
+    
+    if (parts.size() == 1) {
+        style.flex_grow = parseFloat(parts[0]);
+        style.flex_shrink = 1.0f;
+        style.flex_basis = CSSValue(0.0f, CSSValue::Unit::PIXEL);
+    } else if (parts.size() == 2) {
+        style.flex_grow = parseFloat(parts[0]);
+        if (parts[1].find('%') != std::string::npos || parts[1].find("px") != std::string::npos) {
+            style.flex_basis = parseValue(parts[1]);
+        } else {
+            style.flex_shrink = parseFloat(parts[1]);
+        }
+    } else if (parts.size() >= 3) {
+        style.flex_grow = parseFloat(parts[0]);
+        style.flex_shrink = parseFloat(parts[1]);
+        style.flex_basis = parseValue(parts[2]);
+    }
+    
+    style.flex = style.flex_grow;
+}
+
+void CSSParser::parseBackgroundShorthand(const std::string& value, ComputedStyle& style) {
+    if (value.find("gradient") != std::string::npos) {
+        style.background_gradients.push_back(parseGradient(value));
+    } else if (value.find("url(") != std::string::npos) {
+        size_t url_start = value.find("url(");
+        size_t url_end = value.find(")", url_start);
+        if (url_end != std::string::npos) {
+            style.background_image = value.substr(url_start, url_end - url_start + 1);
+        }
+    } else {
+        style.background_color = parseColor(value);
+    }
+}
+
+void CSSParser::parseFontShorthand(const std::string& value, ComputedStyle& style) {
+    // Simplified font shorthand parsing
+    std::istringstream iss(value);
+    std::string part;
+    std::vector<std::string> parts;
+    while (iss >> part) parts.push_back(part);
+    
+    for (size_t i = 0; i < parts.size(); ++i) {
+        const std::string& p = parts[i];
+        if (p == "italic" || p == "oblique") {
+            style.font_style = p;
+        } else if (p == "bold" || p == "bolder" || p == "lighter" ||
+                   (std::isdigit(static_cast<unsigned char>(p[0])) && p.find("px") == std::string::npos)) {
+            style.font_weight = p;
+        } else if (p.find("px") != std::string::npos || p.find("em") != std::string::npos ||
+                   p.find("rem") != std::string::npos || p.find('%') != std::string::npos) {
+            // Check for line-height
+            size_t slash = p.find('/');
+            if (slash != std::string::npos) {
+                style.font_size = parseFloat(p.substr(0, slash));
+                std::string lh = p.substr(slash + 1);
+                if (lh.find("px") != std::string::npos) {
+                    style.line_height = parseFloat(lh);
+                    style.line_height_is_unitless = false;
+                } else {
+                    style.line_height = parseFloat(lh);
+                    style.line_height_is_unitless = true;
+                }
+            } else {
+                style.font_size = parseFloat(p);
+            }
+        } else {
+            // Assume it's font-family (rest of the string)
+            std::string family;
+            for (size_t j = i; j < parts.size(); ++j) {
+                if (!family.empty()) family += " ";
+                family += parts[j];
+            }
+            style.font_family = family;
+            break;
+        }
+    }
+}
+
+void CSSParser::parseBoxShadow(const std::string& value, ComputedStyle& style) {
+    style.box_shadows.clear();
+    
+    if (value == "none") {
+        return;
+    }
+    
+    // Split by comma (respecting parentheses for rgba, etc.)
+    std::vector<std::string> shadow_parts;
+    int paren_depth = 0;
+    std::string current;
+    for (char c : value) {
+        if (c == '(') {
+            ++paren_depth;
+            current.push_back(c);
+        } else if (c == ')') {
+            --paren_depth;
+            current.push_back(c);
+        } else if (c == ',' && paren_depth == 0) {
+            std::string trimmed = current;
+            trimmed.erase(0, trimmed.find_first_not_of(" \t\n\r"));
+            size_t last = trimmed.find_last_not_of(" \t\n\r");
+            if (last != std::string::npos) trimmed = trimmed.substr(0, last + 1);
+            if (!trimmed.empty()) {
+                shadow_parts.push_back(trimmed);
+            }
+            current.clear();
+        } else {
+            current.push_back(c);
+        }
+    }
+    if (!current.empty()) {
+        std::string trimmed = current;
+        trimmed.erase(0, trimmed.find_first_not_of(" \t\n\r"));
+        size_t last = trimmed.find_last_not_of(" \t\n\r");
+        if (last != std::string::npos) trimmed = trimmed.substr(0, last + 1);
+        if (!trimmed.empty()) {
+            shadow_parts.push_back(trimmed);
+        }
+    }
+    
+    for (const auto& part : shadow_parts) {
+        BoxShadow shadow;
+        
+        // Check for inset
+        std::string remaining = part;
+        if (remaining.find("inset") != std::string::npos) {
+            shadow.inset = true;
+            size_t inset_pos = remaining.find("inset");
+            remaining = remaining.substr(0, inset_pos) + remaining.substr(inset_pos + 5);
+        }
+        
+        // Parse lengths and color
+        std::vector<float> lengths;
+        std::string color;
+        
+        size_t i = 0;
+        while (i < remaining.size()) {
+            while (i < remaining.size() && std::isspace(static_cast<unsigned char>(remaining[i]))) ++i;
+            if (i >= remaining.size()) break;
+            
+            size_t token_start = i;
+            while (i < remaining.size() && !std::isspace(static_cast<unsigned char>(remaining[i]))) ++i;
+            std::string token = remaining.substr(token_start, i - token_start);
+            
+            if (!token.empty() && (token[0] == '#' || std::isalpha(static_cast<unsigned char>(token[0])))) {
+                // Color - rest of the string is color
+                color = remaining.substr(token_start);
+                color.erase(0, color.find_first_not_of(" \t\n\r"));
+                size_t last = color.find_last_not_of(" \t\n\r");
+                if (last != std::string::npos) color = color.substr(0, last + 1);
+                break;
+            }
+            lengths.push_back(parseFloat(token));
+        }
+        
+        if (lengths.size() >= 2) {
+            shadow.offset_x = lengths[0];
+            shadow.offset_y = lengths[1];
+        }
+        if (lengths.size() >= 3) {
+            shadow.blur_radius = lengths[2];
+        }
+        if (lengths.size() >= 4) {
+            shadow.spread_radius = lengths[3];
+        }
+        if (!color.empty()) {
+            shadow.color = parseColor(color);
+        }
+        
+        style.box_shadows.push_back(shadow);
+    }
+}
+
+void CSSParser::parseTextShadow(const std::string& value, ComputedStyle& style) {
+    if (value == "none") {
+        style.text_shadow_offset_x = 0.0f;
+        style.text_shadow_offset_y = 0.0f;
+        style.text_shadow_blur = 0.0f;
+        style.text_shadow_color.clear();
+        return;
+    }
+    
+    std::istringstream iss(value);
+    std::string part;
+    std::vector<std::string> parts;
+    while (iss >> part) parts.push_back(part);
+    
+    std::vector<float> lengths;
+    std::string color;
+    
+    for (const auto& p : parts) {
+        if (!p.empty() && (std::isdigit(static_cast<unsigned char>(p[0])) || p[0] == '-' || p[0] == '.')) {
+            lengths.push_back(parseFloat(p));
+        } else if (!p.empty() && (p[0] == '#' || std::isalpha(static_cast<unsigned char>(p[0])))) {
+            color = p;
+        }
+    }
+    
+    if (lengths.size() >= 2) {
+        style.text_shadow_offset_x = lengths[0];
+        style.text_shadow_offset_y = lengths[1];
+        if (lengths.size() >= 3) {
+            style.text_shadow_blur = lengths[2];
+        }
+    }
+    if (!color.empty()) {
+        style.text_shadow_color = parseColor(color);
+    }
+}
+
+void CSSParser::parseTransform(const std::string& value, ComputedStyle& style) {
+    std::string v = value;
+    std::transform(v.begin(), v.end(), v.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    
+    // Reset transform values
+    style.transform_translate_x = 0.0f;
+    style.transform_translate_y = 0.0f;
+    style.transform_scale_x = 1.0f;
+    style.transform_scale_y = 1.0f;
+    style.transform_rotate = 0.0f;
+    style.transform_skew_x = 0.0f;
+    style.transform_skew_y = 0.0f;
+    
+    if (v == "none") {
+        return;
+    }
+    
+    size_t pos = 0;
+    while (pos < v.size()) {
+        size_t lparen = v.find('(', pos);
+        if (lparen == std::string::npos) break;
+        size_t rparen = v.find(')', lparen + 1);
+        if (rparen == std::string::npos) break;
+        
+        std::string func_name = v.substr(pos, lparen - pos);
+        func_name.erase(0, func_name.find_first_not_of(" \t\n\r"));
+        size_t last = func_name.find_last_not_of(" \t\n\r");
+        if (last != std::string::npos) func_name = func_name.substr(0, last + 1);
+        
+        std::string args = v.substr(lparen + 1, rparen - lparen - 1);
+        
+        // Parse arguments
+        std::vector<std::string> arg_parts;
+        std::string current;
+        for (char c : args) {
+            if (c == ',' || std::isspace(static_cast<unsigned char>(c))) {
+                if (!current.empty()) {
+                    arg_parts.push_back(current);
+                    current.clear();
+                }
+            } else {
+                current.push_back(c);
+            }
+        }
+        if (!current.empty()) {
+            arg_parts.push_back(current);
+        }
+        
+        if (func_name == "translate" || func_name == "translate3d") {
+            if (!arg_parts.empty()) {
+                style.transform_translate_x = parseFloat(arg_parts[0]);
+                if (arg_parts.size() > 1) {
+                    style.transform_translate_y = parseFloat(arg_parts[1]);
+                }
+            }
+        } else if (func_name == "translatex") {
+            style.transform_translate_x = parseFloat(args);
+        } else if (func_name == "translatey") {
+            style.transform_translate_y = parseFloat(args);
+        } else if (func_name == "scale" || func_name == "scale3d") {
+            if (!arg_parts.empty()) {
+                float sx = parseFloat(arg_parts[0]);
+                float sy = arg_parts.size() > 1 ? parseFloat(arg_parts[1]) : sx;
+                if (sx != 0.0f) style.transform_scale_x = sx;
+                if (sy != 0.0f) style.transform_scale_y = sy;
+            }
+        } else if (func_name == "scalex") {
+            float sx = parseFloat(args);
+            if (sx != 0.0f) style.transform_scale_x = sx;
+        } else if (func_name == "scaley") {
+            float sy = parseFloat(args);
+            if (sy != 0.0f) style.transform_scale_y = sy;
+        } else if (func_name == "rotate" || func_name == "rotatez") {
+            float angle = parseFloat(args);
+            if (args.find("rad") != std::string::npos) {
+                angle = angle * 180.0f / 3.14159265358979f;
+            } else if (args.find("turn") != std::string::npos) {
+                angle = angle * 360.0f;
+            }
+            style.transform_rotate = angle;
+        } else if (func_name == "skew") {
+            if (!arg_parts.empty()) {
+                style.transform_skew_x = parseFloat(arg_parts[0]);
+                if (arg_parts.size() > 1) {
+                    style.transform_skew_y = parseFloat(arg_parts[1]);
+                }
+            }
+        } else if (func_name == "skewx") {
+            style.transform_skew_x = parseFloat(args);
+        } else if (func_name == "skewy") {
+            style.transform_skew_y = parseFloat(args);
+        }
+        
+        pos = rparen + 1;
+    }
+}
+
+} // namespace dong::dom

@@ -354,4 +354,12 @@ pub fn build(b: *std.Build) void {
     run_complete.step.dependOn(&cmake_install.step);
     const run_complete_step = b.step("run-complete", "Run complete demo");
     run_complete_step.dependOn(&run_complete.step);
+
+    // Feature tests
+    const run_feature_tests = b.addSystemCommand(&.{
+        if (is_windows) "zig-out\\bin\\run_feature_tests.exe" else "zig-out/bin/run_feature_tests",
+    });
+    run_feature_tests.step.dependOn(&cmake_install.step);
+    const run_feature_tests_step = b.step("run-feature-tests", "Run feature tests");
+    run_feature_tests_step.dependOn(&run_feature_tests.step);
 }

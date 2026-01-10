@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <sstream>
+#include <chrono>
 #include <SDL3/SDL_log.h>
 #include <SDL3/SDL_gpu.h>
 #include <SDL3/SDL_filesystem.h>
@@ -25,6 +26,7 @@
 #include "../script/script_engine.hpp"
 #include "../script/js_bindings.hpp"
 #include "../layout/layout_engine.hpp"
+#include "../animation/animation_controller.hpp"
 
 namespace dong {
 
@@ -308,6 +310,17 @@ void View::resize(uint32_t width, uint32_t height) {
 }
 
 void View::update() {
+    // Update animations
+    static auto start_time = std::chrono::steady_clock::now();
+    auto now = std::chrono::steady_clock::now();
+    double current_time = std::chrono::duration<double>(now - start_time).count();
+    
+    auto& anim_controller = animation::getAnimationController();
+    if (anim_controller.hasActiveAnimations()) {
+        anim_controller.update(current_time);
+        markNeedsRepaint();
+    }
+    
     if (script_engine) {
         script_engine->processPendingTasks();
     }

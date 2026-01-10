@@ -1213,7 +1213,15 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         }
     }
 
-    // 4. 递归子节点（�?z-index 排序�?
+    // 4. 渲染 ::before 伪元素
+    if (node->hasPseudoElements()) {
+        auto pseudo_before = node->getPseudoBefore();
+        if (pseudo_before) {
+            renderPseudoElement(pseudo_before, node_rect, builder);
+        }
+    }
+
+    // 5. 递归子节点（按 z-index 排序）
     const auto& children = node->getChildren();
     
     // 如果是滚动容器，应用滚动偏移到子元素
@@ -1276,7 +1284,15 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         builder.popTranslate();
     }
 
-    // 5. 滚动条渲染（在子节点之后绘制，确保滚动条在内容之上）
+    // 6. 渲染 ::after 伪元素
+    if (node->hasPseudoElements()) {
+        auto pseudo_after = node->getPseudoAfter();
+        if (pseudo_after) {
+            renderPseudoElement(pseudo_after, node_rect, builder);
+        }
+    }
+
+    // 7. 滚动条渲染（在子节点之后绘制，确保滚动条在内容之上）
     if (is_scroll_container && layout_node && node_rect.width > 0.0f && node_rect.height > 0.0f) {
         // 计算内容高度（所有子元素的最大底部位置）
         float content_bottom = node_rect.y;
@@ -1384,6 +1400,123 @@ bool Painter::isRectInDirtyRect(const Rect& rect) const {
     bool y_overlap = (node_y < dirty_y + dirty_h) && (node_y + node_h > dirty_y);
 
     return x_overlap && y_overlap;
+}
+
+void Painter::renderPseudoElement(const dom::DOMNodePtr& pseudo,
+                                   const Rect& parent_rect,
+                                   DisplayListBuilder& builder) {
+    if (!pseudo) return;
+    
+    const auto& style = pseudo->getComputedStyle();
+    if (style.display == "none" || style.content.empty()) return;
+    
+    // Calculate pseudo-element position (relative to parent)
+    Rect rect = parent_rect;
+    
+    // Apply width/height if specified
+    if (!style.width.isAuto() && style.width.value > 0.0f) {
+        rect.width = style.width.value;
+    }
+    if (!style.height.isAuto() && style.height.value > 0.0f) {
+        rect.height = style.height.value;
+    }
+    
+    // For ::before, position at the start; for ::after, at the end
+    // This is simplified - real implementation would integrate with layout
+    if (style.pseudo_type == "before") {
+        // Position at the start of parent content
+        rect.x = parent_rect.x + style.margin_left.value;
+        rect.y = parent_rect.y + style.margin_top.value;
+    } else if (style.pseudo_type == "after") {
+        // Position after parent content (simplified)
+        rect.x = parent_rect.x + parent_rect.width - rect.width - style.margin_right.value;
+        rect.y = parent_rect.y + style.margin_top.value;
+    }
+    
+    // Apply padding
+    float padding_left = style.padding_left.value;
+    float padding_right = style.padding_right.value;
+    float padding_top = style.padding_top.value;
+    float padding_bottom = style.padding_bottom.value;
+    
+    // Draw background
+    if (style.background_color != "transparent" && rect.width > 0.0f && rect.height > 0.0f) {
+        Color c = makeColorFromCss(style.background_color);
+        if (style.border_radius > 0.0f) {
+            builder.addRoundedRect(rect, c, style.border_radius);
+        } else {
+            builder.addRect(rect, c);
+        }
+    }
+    
+    // Draw border
+    if (style.border_width > 0.0f && style.border_style != "none") {
+        Color border_color = makeColorFromCss(style.border_color);
+        float bw = style.border_width;
+        
+        Rect top_border{rect.x, rect.y, rect.width, bw};
+        Rect bottom_border{rect.x, rect.y + rect.height - bw, rect.width, bw};
+        Rect left_border{rect.x, rect.y + bw, bw, rect.height - 2 * bw};
+        Rect right_border{rect.x + rect.width - bw, rect.y + bw, bw, rect.height - 2 * bw};
+        
+        builder.addRect(top_border, border_color);
+        builder.addRect(bottom_border, border_color);
+        builder.addRect(left_border, border_color);
+        builder.addRect(right_border, border_color);
+    }
+    
+    // Draw content text
+    if (!style.content.empty()) {
+        Color text_color = makeColorFromCss(style.color);
+        float font_size = style.font_size;
+        
+        // Position text inside the pseudo-element
+        float text_x = rect.x + padding_left + style.border_width;
+        float text_y = rect.y + padding_top + style.border_width;
+        
+        // Shape text using TextShapeRequest
+        TextShapeRequest request;
+        request.text = style.content;
+        request.font_family = style.font_family;
+        request.font_weight = style.font_weight;
+        request.font_size = font_size;
+        request.origin_x = text_x;
+        request.origin_y = text_y;
+        
+        ShapedText shaped;
+        if (text_shaper_.shape(request, shaped) && !shaped.glyphs.empty()) {
+            float scale = shaped.scale_to_pixels;
+            float ascent_px = shaped.ascent_units * scale;
+            float baseline_y = text_y + ascent_px;
+            float text_width_px = shaped.width_units * scale;
+            float text_height_px = shaped.line_height_units * scale;
+            
+            DrawGlyphRunData glyph_run{};
+            glyph_run.rect.x = text_x;
+            glyph_run.rect.y = text_y;
+            glyph_run.rect.width = text_width_px;
+            glyph_run.rect.height = text_height_px;
+            glyph_run.color = text_color;
+            glyph_run.font_size = font_size;
+            glyph_run.font_family = style.font_family;
+            glyph_run.font_weight = style.font_weight;
+            glyph_run.font_path = shaped.font_path;
+            glyph_run.baseline_x = text_x;
+            glyph_run.baseline_y = baseline_y;
+            
+            for (const auto& sg : shaped.glyphs) {
+                GlyphInstance inst{};
+                inst.glyph_id = sg.glyph_id;
+                inst.pen_x_units = sg.pen_x_units;
+                inst.pen_y_units = sg.pen_y_units;
+                inst.font_path = sg.font_path;
+                inst.units_per_em = sg.units_per_em;
+                glyph_run.glyphs.push_back(inst);
+            }
+            
+            builder.addGlyphRun(std::move(glyph_run));
+        }
+    }
 }
 
 } // namespace dong::render

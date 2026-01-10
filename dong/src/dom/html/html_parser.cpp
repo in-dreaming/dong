@@ -1,54 +1,54 @@
-﻿#include "parser.hpp"
-#include "../core/log.h"
-#include "style_engine.hpp"
+#include "html_parser.hpp"
+#include "../css/style_engine.hpp"
+#include "../../core/log.h"
 #include <lexbor/html/html.h>
 #include <lexbor/dom/dom.h>
 #include <lexbor/css/css.h>
 #include <iostream>
 #include <cctype>
 #include <algorithm>
+#include <unordered_set>
 
 namespace dong::dom {
 
-Parser::Parser() {
+HTMLParser::HTMLParser() {
 }
 
-Parser::~Parser() {
-    if (doc) {
-        lxb_html_document_destroy(doc);
-        doc = nullptr;
+HTMLParser::~HTMLParser() {
+    if (doc_) {
+        lxb_html_document_destroy(doc_);
+        doc_ = nullptr;
     }
 }
 
-DOMNodePtr Parser::parse(const std::string& html) {
-    DONG_LOG_INFO("[Parser::parse] Entry, html length=%zu", html.length());
+DOMNodePtr HTMLParser::parse(const std::string& html) {
+    DONG_LOG_INFO("[HTMLParser::parse] Entry, html length=%zu", html.length());
     
-    doc = lxb_html_document_create();
-    if (!doc) {
-        DONG_LOG_INFO("[Parser::parse] Failed to create Lexbor HTML document");
+    doc_ = lxb_html_document_create();
+    if (!doc_) {
+        DONG_LOG_INFO("[HTMLParser::parse] Failed to create Lexbor HTML document");
         std::cerr << "Failed to create Lexbor HTML document" << std::endl;
         return nullptr;
     }
-    DONG_LOG_INFO("[Parser::parse] Document created");
+    DONG_LOG_INFO("[HTMLParser::parse] Document created");
 
     lxb_status_t status = lxb_html_document_parse(
-        doc,
+        doc_,
         reinterpret_cast<const uint8_t*>(html.c_str()),
         html.length()
     );
-    DONG_LOG_INFO("[Parser::parse] lxb_html_document_parse returned status=%d", (int)status);
+    DONG_LOG_INFO("[HTMLParser::parse] lxb_html_document_parse returned status=%d", (int)status);
 
     if (status != LXB_STATUS_OK) {
         std::cerr << "Failed to parse HTML: status " << status << std::endl;
-        lxb_html_document_destroy(doc);
-        doc = nullptr;
+        lxb_html_document_destroy(doc_);
+        doc_ = nullptr;
         return nullptr;
     }
 
-
-    lxb_dom_node_t* root = lxb_dom_interface_node(doc);
+    lxb_dom_node_t* root = lxb_dom_interface_node(doc_);
     if (!root) {
-        DONG_LOG_INFO("[Parser::parse] Failed to get root node");
+        DONG_LOG_INFO("[HTMLParser::parse] Failed to get root node");
         std::cerr << "Failed to get root node from Lexbor document" << std::endl;
         return nullptr;
     }
@@ -58,24 +58,22 @@ DOMNodePtr Parser::parse(const std::string& html) {
     if (dom_root) {
         applyDefaultStyles(dom_root);
         
-        DONG_LOG_INFO("[Parser::parse] Creating StyleEngine...");
-        // Extract styles from <style> tags and compute CSS-based styles
+        DONG_LOG_INFO("[HTMLParser::parse] Creating StyleEngine...");
         auto style_engine = std::make_unique<StyleEngine>();
-        DONG_LOG_INFO("[Parser::parse] Extracting and applying styles...");
+        DONG_LOG_INFO("[HTMLParser::parse] Extracting and applying styles...");
         extractAndApplyStyles(dom_root, style_engine.get());
-        DONG_LOG_INFO("[Parser::parse] Computing styles...");
+        DONG_LOG_INFO("[HTMLParser::parse] Computing styles...");
         style_engine->computeStyles(dom_root);
         
-        DONG_LOG_INFO("[Parser::parse] Parsing inline styles...");
-        // Apply inline styles (override stylesheet rules)
+        DONG_LOG_INFO("[HTMLParser::parse] Parsing inline styles...");
         parseInlineStyles(dom_root);
-        DONG_LOG_INFO("[Parser::parse] Done");
+        DONG_LOG_INFO("[HTMLParser::parse] Done");
     }
 
     return dom_root;
 }
 
-DOMNodePtr Parser::parseWithCSS(const std::string& html, const std::string& css) {
+DOMNodePtr HTMLParser::parseWithCSS(const std::string& html, const std::string& css) {
     auto root = parse(html);
     if (root) {
         parseCSSAndApply(root, css);
@@ -83,7 +81,62 @@ DOMNodePtr Parser::parseWithCSS(const std::string& html, const std::string& css)
     return root;
 }
 
-DOMNodePtr Parser::lexborNodeToDOMNode(lxb_dom_node_t* lexbor_node) {
+DOMNodePtr HTMLParser::parseFragment(const std::string& html, DOMNodePtr context) {
+    // Create a temporary document to parse the fragment
+    lxb_html_document_t* temp_doc = lxb_html_document_create();
+    if (!temp_doc) {
+        return nullptr;
+    }
+    
+    // Wrap in body to ensure proper parsing
+    std::string wrapped = "<body>" + html + "</body>";
+    
+    lxb_status_t status = lxb_html_document_parse(
+        temp_doc,
+        reinterpret_cast<const uint8_t*>(wrapped.c_str()),
+        wrapped.length()
+    );
+    
+    if (status != LXB_STATUS_OK) {
+        lxb_html_document_destroy(temp_doc);
+        return nullptr;
+    }
+    
+    lxb_dom_node_t* root = lxb_dom_interface_node(temp_doc);
+    if (!root) {
+        lxb_html_document_destroy(temp_doc);
+        return nullptr;
+    }
+    
+    // Find body and extract its children
+    auto dom_root = lexborNodeToDOMNode(root);
+    
+    // Create a document fragment to hold the children
+    auto fragment = std::make_shared<DOMNode>(DOMNode::NodeType::DOCUMENT_FRAGMENT);
+    
+    // Find body element and move its children to fragment
+    std::function<void(DOMNodePtr)> findBody = [&](DOMNodePtr node) {
+        if (node->getTagName() == "body") {
+            for (const auto& child : node->getChildren()) {
+                fragment->appendChild(child->cloneNode(true));
+            }
+            return;
+        }
+        for (const auto& child : node->getChildren()) {
+            findBody(child);
+        }
+    };
+    
+    if (dom_root) {
+        findBody(dom_root);
+    }
+    
+    lxb_html_document_destroy(temp_doc);
+    
+    return fragment;
+}
+
+DOMNodePtr HTMLParser::lexborNodeToDOMNode(lxb_dom_node_t* lexbor_node) {
     if (!lexbor_node) return nullptr;
 
     lxb_dom_node_type_t node_type = lexbor_node->type;
@@ -136,7 +189,6 @@ DOMNodePtr Parser::lexborNodeToDOMNode(lxb_dom_node_t* lexbor_node) {
         }
     }
     else if (node_type == LXB_DOM_NODE_TYPE_TEXT) {
-        // Get text content from text node
         lxb_dom_text_t* text_node = lxb_dom_interface_text(lexbor_node);
         if (text_node) {
             size_t text_len = 0;
@@ -161,29 +213,35 @@ DOMNodePtr Parser::lexborNodeToDOMNode(lxb_dom_node_t* lexbor_node) {
     return dom_node;
 }
 
-void Parser::applyDefaultStyles(DOMNodePtr node) {
+void HTMLParser::applyDefaultStyles(DOMNodePtr node) {
     if (!node) return;
 
     auto& style = node->getComputedStyle();
     std::string tag = node->getTagName();
 
-    if (tag == "div" || tag == "p" || tag == "body" || tag == "html" || tag == "main" || 
-        tag == "section" || tag == "article" || tag == "nav" || tag == "header" || tag == "footer") {
+    // Block-level elements
+    static const std::unordered_set<std::string> block_elements = {
+        "div", "p", "body", "html", "main", "section", "article", "nav", 
+        "header", "footer", "aside", "address", "blockquote", "pre",
+        "figure", "figcaption", "ul", "ol", "li", "dl", "dt", "dd",
+        "table", "form", "fieldset", "hr"
+    };
+    
+    // Inline elements
+    static const std::unordered_set<std::string> inline_elements = {
+        "span", "a", "b", "i", "strong", "em", "code", "kbd", "samp", "var",
+        "small", "s", "cite", "q", "mark", "sub", "sup", "u", "abbr", 
+        "time", "data", "wbr"
+    };
+
+    if (block_elements.count(tag) > 0) {
         style.display = "block";
     }
-    else if (tag == "span" || tag == "a" || tag == "b" || tag == "i" || tag == "strong" || tag == "em" || tag == "code") {
+    else if (inline_elements.count(tag) > 0) {
         style.display = "inline";
-        // 绮椾綋鍜屾枩浣撴爣绛剧殑榛樿鏍峰紡
-        if (tag == "b" || tag == "strong") {
-            style.font_weight = "bold";
-        }
-        // <code> 鏍囩榛樿浣跨敤绛夊瀛椾綋
-        if (tag == "code") {
-            style.font_family = "Menlo, Consolas, monospace";
-        }
-        // TODO: 鏀寔 <i> 鍜?<em> 鐨勬枩浣撴牱寮?
     }
-    else if (tag == "h1" || tag == "h2" || tag == "h3" || tag == "h4" || tag == "h5" || tag == "h6") {
+    else if (tag == "h1" || tag == "h2" || tag == "h3" || 
+             tag == "h4" || tag == "h5" || tag == "h6") {
         style.display = "block";
         style.font_weight = "bold";
         if (tag == "h1") style.font_size = 32.0f;
@@ -193,20 +251,19 @@ void Parser::applyDefaultStyles(DOMNodePtr node) {
         else if (tag == "h5") style.font_size = 18.0f;
         else if (tag == "h6") style.font_size = 16.0f;
     }
-    else if (tag == "button" || tag == "input") {
+    else if (tag == "button" || tag == "input" || tag == "select" || 
+             tag == "textarea") {
         style.display = "inline-block";
     }
-    else if (tag == "img" || tag == "video") {
+    else if (tag == "img" || tag == "video" || tag == "canvas" || 
+             tag == "svg" || tag == "picture") {
         style.display = "inline-block";
     }
     else if (tag == "br") {
-        // <br> 是自闭合换行标签，使用 block 显示以强制换行
         style.display = "block";
-        // 设置为 0 高度，仅用于换行
         style.height = CSSValue(0.0f, CSSValue::Unit::PIXEL);
     }
     else if (tag == "hr") {
-        // <hr> 是水平线标签
         style.display = "block";
         style.height = CSSValue(1.0f, CSSValue::Unit::PIXEL);
         style.margin_top = CSSValue(8.0f, CSSValue::Unit::PIXEL);
@@ -214,8 +271,51 @@ void Parser::applyDefaultStyles(DOMNodePtr node) {
         style.border_width = 0.0f;
         style.background_color = "#cccccc";
     }
+    else if (tag == "table") {
+        style.display = "table";
+    }
+    else if (tag == "tr") {
+        style.display = "table-row";
+    }
+    else if (tag == "td" || tag == "th") {
+        style.display = "table-cell";
+    }
+    else if (tag == "thead" || tag == "tbody" || tag == "tfoot") {
+        style.display = "table-row-group";
+    }
     else {
         style.display = "block";
+    }
+    
+    // Text styling defaults
+    if (tag == "b" || tag == "strong") {
+        style.font_weight = "bold";
+    }
+    if (tag == "i" || tag == "em" || tag == "cite" || tag == "var") {
+        style.font_style = "italic";
+    }
+    if (tag == "code" || tag == "kbd" || tag == "samp" || tag == "pre") {
+        style.font_family = "Menlo, Consolas, monospace";
+    }
+    if (tag == "u") {
+        style.text_decoration = "underline";
+    }
+    if (tag == "s") {
+        style.text_decoration = "line-through";
+    }
+    if (tag == "mark") {
+        style.background_color = "#ffff00";
+    }
+    if (tag == "small") {
+        style.font_size = 12.0f;
+    }
+    if (tag == "sub") {
+        style.vertical_align = "sub";
+        style.font_size = 12.0f;
+    }
+    if (tag == "sup") {
+        style.vertical_align = "super";
+        style.font_size = 12.0f;
     }
 
     for (const auto& child : node->getChildren()) {
@@ -223,7 +323,7 @@ void Parser::applyDefaultStyles(DOMNodePtr node) {
     }
 }
 
-void Parser::parseInlineStyles(DOMNodePtr node) {
+void HTMLParser::parseInlineStyles(DOMNodePtr node) {
     if (!node) return;
 
     if (node->hasAttribute("style")) {
@@ -257,7 +357,7 @@ void Parser::parseInlineStyles(DOMNodePtr node) {
     }
 }
 
-void Parser::parseCSSAndApply(DOMNodePtr node, const std::string& css) {
+void HTMLParser::parseCSSAndApply(DOMNodePtr node, const std::string& css) {
     if (!node) return;
     
     auto style_engine = std::make_unique<StyleEngine>();
@@ -265,13 +365,12 @@ void Parser::parseCSSAndApply(DOMNodePtr node, const std::string& css) {
     style_engine->computeStyles(node);
 }
 
-void Parser::extractAndApplyStyles(DOMNodePtr node, StyleEngine* style_engine) {
+void HTMLParser::extractAndApplyStyles(DOMNodePtr node, StyleEngine* style_engine) {
     if (!node || !style_engine) return;
     
     // Look for <style> tags
     if (node->getTagName() == "style") {
         if (node->getChildren().size() > 0) {
-            // Get text content of style tag
             const auto& children = node->getChildren();
             std::string css_text;
             for (const auto& child : children) {
@@ -286,13 +385,23 @@ void Parser::extractAndApplyStyles(DOMNodePtr node, StyleEngine* style_engine) {
         }
     }
     
+    // Look for <link rel="stylesheet">
+    if (node->getTagName() == "link") {
+        std::string rel = node->getAttribute("rel");
+        if (rel == "stylesheet") {
+            // TODO: Load external stylesheet
+            std::string href = node->getAttribute("href");
+            DONG_LOG_INFO("[HTMLParser] External stylesheet: %s (not loaded)", href.c_str());
+        }
+    }
+    
     // Recursively search for style tags
     for (const auto& child : node->getChildren()) {
         extractAndApplyStyles(child, style_engine);
     }
 }
 
-CSSValue Parser::parseCSSValue(const std::string& value) {
+CSSValue HTMLParser::parseCSSValue(const std::string& value) {
     if (value == "auto") {
         return CSSValue(0, CSSValue::Unit::AUTO);
     }
@@ -315,7 +424,7 @@ CSSValue Parser::parseCSSValue(const std::string& value) {
     }
 }
 
-float Parser::parseLength(const std::string& value) {
+float HTMLParser::parseLength(const std::string& value) {
     try {
         size_t pos = 0;
         return std::stof(value, &pos);
@@ -324,7 +433,7 @@ float Parser::parseLength(const std::string& value) {
     }
 }
 
-void Parser::parseMarginShorthand(const std::string& value, ComputedStyle& style) {
+void HTMLParser::parseMarginShorthand(const std::string& value, ComputedStyle& style) {
     std::vector<CSSValue> values;
     size_t pos = 0;
     
@@ -352,7 +461,7 @@ void Parser::parseMarginShorthand(const std::string& value, ComputedStyle& style
     }
 }
 
-void Parser::parsePaddingShorthand(const std::string& value, ComputedStyle& style) {
+void HTMLParser::parsePaddingShorthand(const std::string& value, ComputedStyle& style) {
     std::vector<CSSValue> values;
     size_t pos = 0;
     
@@ -381,4 +490,3 @@ void Parser::parsePaddingShorthand(const std::string& value, ComputedStyle& styl
 }
 
 } // namespace dong::dom
-  

@@ -42,6 +42,11 @@ private:
                               const layout::LayoutNode* layout_node,
                               DisplayListBuilder& builder);
 
+    // 渲染伪元素 (::before/::after)
+    void renderPseudoElement(const dom::DOMNodePtr& pseudo,
+                             const Rect& parent_rect,
+                             DisplayListBuilder& builder);
+
     // 脏矩形优化
     bool isNodeInDirtyRect(const layout::LayoutNode* layout_node) const;
     bool isRectInDirtyRect(const Rect& rect) const;
