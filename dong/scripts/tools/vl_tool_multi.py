@@ -152,6 +152,7 @@ def main() -> int:
         return 2
 
     base_img = Image.open(args.base).convert("RGBA")
+    base_rgb = base_img.convert("RGB")
     w, h = base_img.size
 
     frames = []
@@ -162,13 +163,18 @@ def main() -> int:
         frames.append((p, img))
 
     # Build per-frame diff info + diff images.
+    # NOTE: For RGBA images, Pillow's ImageChops.difference often produces a diff image with alpha=0,
+    # and Image.getbbox() will then incorrectly return None even if RGB differs.
+    # So we compute bbox on RGB-only diff.
     diffs = []
     for p, img in frames:
-        d = ImageChops.difference(base_img, img)
-        bbox = d.getbbox()  # None if identical
+        img_rgb = img.convert("RGB")
+        d_rgb = ImageChops.difference(base_rgb, img_rgb)
+        bbox = d_rgb.getbbox()  # None if identical
         # enhance diff visibility
-        d_vis = ImageChops.multiply(d, Image.new("RGBA", (w, h), (4, 4, 4, 255)))
+        d_vis = ImageChops.multiply(d_rgb.convert("RGBA"), Image.new("RGBA", (w, h), (4, 4, 4, 255)))
         diffs.append((p, bbox, d_vis))
+
 
     # Compose: each row = BASE | FRAME_i | DIFF
     pad = 8

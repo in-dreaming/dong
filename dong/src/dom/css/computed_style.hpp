@@ -96,9 +96,15 @@ struct ComputedStyle {
     float text_decoration_thickness = 1.0f;
     float letter_spacing_em = 0.0f;
     float word_spacing_px = 0.0f;
+
+    // `line-height` is special: default/inherit behavior makes it hard to distinguish
+    // "unspecified" from an explicit `normal` value. Track whether it was explicitly set.
+    bool has_line_height = false;
     float line_height = -1.0f;
     bool line_height_is_unitless = true;
+
     std::string text_transform = "none";
+
     std::string text_overflow = "clip";
     std::string white_space = "normal";
     std::string word_break = "normal";

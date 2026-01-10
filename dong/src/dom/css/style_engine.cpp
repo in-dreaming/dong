@@ -171,12 +171,14 @@ void StyleEngine::applyMatchingRules(DOMNodePtr node) {
             computed.text_decoration_thickness = rs.text_decoration_thickness;
         if (rs.letter_spacing_em != 0.0f) computed.letter_spacing_em = rs.letter_spacing_em;
         if (rs.word_spacing_px != 0.0f) computed.word_spacing_px = rs.word_spacing_px;
-        if (rs.line_height > 0.0f || rs.line_height == -1.0f) {
+        if (rs.has_line_height) {
+            computed.has_line_height = true;
             computed.line_height = rs.line_height;
             computed.line_height_is_unitless = rs.line_height_is_unitless;
         }
         if (!rs.text_transform.empty() && rs.text_transform != "none") 
             computed.text_transform = rs.text_transform;
+
         if (!rs.text_overflow.empty() && rs.text_overflow != "clip") 
             computed.text_overflow = rs.text_overflow;
         if (!rs.white_space.empty() && rs.white_space != "normal") 
@@ -362,10 +364,11 @@ void StyleEngine::inheritFromParent(DOMNodePtr node) {
     if (computed.font_weight == "normal") computed.font_weight = parent_style.font_weight;
     if (computed.font_style == "normal") computed.font_style = parent_style.font_style;
     if (computed.text_align == "left") computed.text_align = parent_style.text_align;
-    if (computed.line_height == -1.0f) {
+    if (!computed.has_line_height) {
         computed.line_height = parent_style.line_height;
         computed.line_height_is_unitless = parent_style.line_height_is_unitless;
     }
+
     if (computed.letter_spacing_em == 0.0f) computed.letter_spacing_em = parent_style.letter_spacing_em;
     if (computed.word_spacing_px == 0.0f) computed.word_spacing_px = parent_style.word_spacing_px;
     if (computed.white_space == "normal") computed.white_space = parent_style.white_space;

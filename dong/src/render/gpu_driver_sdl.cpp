@@ -2921,17 +2921,25 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 // glyph_x = (字形左边屏幕位置) - (渲染矩形左边到字形左边的距离)
                 //         = (pen_x + bounds_left * glyph_pixel_scale) - range * render_scale
                 
-                const float range_px = atlas_range * render_scale;
-                const float bounds_left_px = entry->metrics.bounds_left * glyph_pixel_scale;
-                const float bounds_bottom_px = entry->metrics.bounds_bottom * glyph_pixel_scale;
+                // 关键：用 msdfgen 的投影参数（scale/translate）精确定位 glyph 的 MSDF tile。
+                // 我们保留完整的 msdf_size x msdf_size 纹理块作为渲染矩形（tile），
+                // 需要保证：design units 坐标中 baseline (y=0) 映射到 tile 内的正确位置。
+                //
+                // msdfgen 投影：msdf_px = msdf_scale * (design_units + msdf_translate)
+                // - 对于 pen position：design x=0, y=0
+                // - baseline 在纹理中的位置：
+                //     x0 = msdf_scale * translate_x
+                //     y0 = msdf_scale * translate_y   (msdfgen 坐标，y 向上，原点在底部)
+                // 我们输出的 MSDF bitmap 已经在生成阶段做过 Y 翻转（GPU 纹理 y 向下，原点在顶部），
+                // 所以 baseline 距离 tile 顶部的偏移为：
+                //     (msdf_size - y0)
+                // 映射到屏幕像素（msdf_px -> screen_px）的比例为 render_scale = glyph_pixel_scale / msdf_scale。
 
-                // 字形左边缘位置 - range 偏移
-                float glyph_x = pen_x_px + bounds_left_px - range_px;
-                
-                // 字形底部位置 - (msdf_size - range) 偏移
-                // 注意：这里使用 bounds_bottom 而不是 bounds_top
-                const float top_offset_px = (msdf_size - atlas_range) * render_scale;
-                float glyph_y = pen_y_px - bounds_bottom_px - top_offset_px;
+                const float tile_x = pen_x_px - entry->metrics.msdf_translate_x * glyph_pixel_scale;
+                const float tile_y = pen_y_px - msdf_size * render_scale + entry->metrics.msdf_translate_y * glyph_pixel_scale;
+
+                float glyph_x = tile_x;
+                float glyph_y = tile_y;
 
                 GlyphInstanceUniform inst{};
                 inst.rect[0] = glyph_x;

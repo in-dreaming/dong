@@ -345,54 +345,53 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         layer_node.opacity = clamped_opacity;
         layer_node.transform = LayerTransform::identity();
         
-        // 构建完整的 2D 变换矩阵：T * R * K * S
-        // 其中 T=translate, R=rotate, K=skew, S=scale
-        // 还需要考虑 transform-origin
+        // 构建完整的 2D 变换矩阵（与 CSS transform 语义对齐）：T * R * K * S
+        // - 右侧先作用：先 Scale，再 Skew，再 Rotate，最后 Translate
+        // - 坐标系：DisplayList/屏幕是 Y 向下，CSS 正角度在视觉上是顺时针
+        // - 需要考虑 transform-origin（也在“全局像素坐标系”里）
         
-        float sx = style.transform_scale_x;
-        float sy = style.transform_scale_y;
-        float tx = style.transform_translate_x;
-        float ty = style.transform_translate_y;
-        float angle_rad = style.transform_rotate * 3.14159265358979f / 180.0f;
-        float skew_x_rad = style.transform_skew_x * 3.14159265358979f / 180.0f;
-        float skew_y_rad = style.transform_skew_y * 3.14159265358979f / 180.0f;
-        
-        // Transform origin
-        // 注意：DisplayList 里的坐标是“全局像素坐标”（包含 layout position），
-        // 所以 transform-origin 也必须落在全局坐标系里，否则会绕 (0,0) 错误旋转/倾斜。
-        float origin_rel_x = layer_bounds.width * style.transform_origin_x / 100.0f;
-        float origin_rel_y = layer_bounds.height * style.transform_origin_y / 100.0f;
-        float origin_x = layer_bounds.x + origin_rel_x;
-        float origin_y = layer_bounds.y + origin_rel_y;
-        
-        float cos_r = cosf(angle_rad);
-        float sin_r = sinf(angle_rad);
-        float tan_kx = tanf(skew_x_rad);
-        float tan_ky = tanf(skew_y_rad);
-        
-        // 组合变换矩阵：先平移到原点，应用变换，再平移回来
-        // 最终矩阵 = T_final * T_transform * T_origin
-        // 其中：
-        // T_origin = translate(-origin_x, -origin_y)  // 平移到变换原点
-        // T_transform = S * K * R                     // 缩放、剪切、旋转
-        // T_final = translate(origin_x + tx, origin_y + ty)  // 平移回来并加上额外平移
-        
-        float m00 = sx * cos_r - sy * sin_r * tan_ky;
-        float m01 = sx * sin_r + sy * cos_r * tan_kx;
-        float m10 = -sx * sin_r * tan_ky;
-        float m11 = sy * cos_r;
-        
-        // 计算最终的平移分量（考虑 transform-origin）
-        float final_tx = origin_x + tx - (m00 * origin_x + m01 * origin_y);
-        float final_ty = origin_y + ty - (m10 * origin_x + m11 * origin_y);
+        const float sx = style.transform_scale_x;
+        const float sy = style.transform_scale_y;
+        const float tx = style.transform_translate_x;
+        const float ty = style.transform_translate_y;
+        const float angle_rad = style.transform_rotate * 3.14159265358979f / 180.0f;
+        const float skew_x_rad = style.transform_skew_x * 3.14159265358979f / 180.0f;
+        const float skew_y_rad = style.transform_skew_y * 3.14159265358979f / 180.0f;
 
-        
-        layer_node.transform.m[0] = m00;      // m00
-        layer_node.transform.m[1] = m01;      // m01
+        // Transform origin（必须落在全局坐标系里，否则会绕 (0,0) 错误旋转/倾斜）
+        const float origin_rel_x = layer_bounds.width * style.transform_origin_x / 100.0f;
+        const float origin_rel_y = layer_bounds.height * style.transform_origin_y / 100.0f;
+        const float origin_x = layer_bounds.x + origin_rel_x;
+        const float origin_y = layer_bounds.y + origin_rel_y;
+
+        const float cos_r = cosf(angle_rad);
+        const float sin_r = sinf(angle_rad);
+        const float tan_kx = tanf(skew_x_rad);
+        const float tan_ky = tanf(skew_y_rad);
+
+        // 2x2 部分：A = R * Ky * Kx * S
+        // 其中：
+        //   S  = [sx 0; 0 sy]
+        //   Kx = [1 tan(kx); 0 1]
+        //   Ky = [1 0; tan(ky) 1]
+        //   R  = [cos -sin; sin cos]
+        const float a00 = sx * (cos_r - sin_r * tan_ky);
+        const float a01 = sy * (cos_r * tan_kx - sin_r);
+        const float a10 = sx * (sin_r + cos_r * tan_ky);
+        const float a11 = sy * (sin_r * tan_kx + cos_r);
+
+
+        // 2x3 平移部分：M = T(origin+translate) * A * T(-origin)
+        const float final_tx = origin_x + tx - (a00 * origin_x + a01 * origin_y);
+        const float final_ty = origin_y + ty - (a10 * origin_x + a11 * origin_y);
+
+        layer_node.transform.m[0] = a00;      // m00
+        layer_node.transform.m[1] = a01;      // m01
         layer_node.transform.m[2] = final_tx; // m02 (translate_x)
-        layer_node.transform.m[3] = m10;      // m10
-        layer_node.transform.m[4] = m11;      // m11
+        layer_node.transform.m[3] = a10;      // m10
+        layer_node.transform.m[4] = a11;      // m11
         layer_node.transform.m[5] = final_ty; // m12 (translate_y)
+
         layer_node.scroll_x = node->getScrollX();
         layer_node.scroll_y = node->getScrollY();
         layer_node.is_surface = has_isolation;
@@ -841,9 +840,11 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
             }
         } else if (has_text_child && (tag_prefers_text || !has_inline_element_child)) {
             std::string debug_class = node->getAttribute("class");
+
             if (debug_class.find("abs-badge") != std::string::npos) {
                 DONG_LOG_INFO("[Painter] ABS badge text raw='%s'", raw_text.c_str());
             }
+
             if (debug_class.find("overlay-row") != std::string::npos) {
                 DONG_LOG_INFO("[Painter] overlay-row raw_text='%s' (len=%zu)", raw_text.c_str(), raw_text.size());
             }
@@ -1123,7 +1124,10 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                     float base_baseline = y + pad_top + baseline_offset;
                     float baseline_y = base_baseline + static_cast<float>(line_index) * effective_line_height;
 
+
+
                     DrawGlyphRunData glyph_run{};
+
                     glyph_run.rect.x = text_x;
                     glyph_run.rect.y = baseline_y - ascent_px;
                     glyph_run.rect.width = line_width_px;

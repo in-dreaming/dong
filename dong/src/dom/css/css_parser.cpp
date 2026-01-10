@@ -1403,6 +1403,7 @@ void CSSParser::applyProperty(const std::string& property, const std::string& va
         }
     }
     else if (prop == "line-height") {
+        style.has_line_height = true;
         if (val == "normal") {
             style.line_height = -1.0f;
             style.line_height_is_unitless = true;
@@ -1417,6 +1418,7 @@ void CSSParser::applyProperty(const std::string& property, const std::string& va
             style.line_height_is_unitless = true;
         }
     }
+
     else if (prop == "text-transform") {
         style.text_transform = val;
     }
@@ -1900,6 +1902,7 @@ void CSSParser::parseFontShorthand(const std::string& value, ComputedStyle& styl
             if (slash != std::string::npos) {
                 style.font_size = parseFloat(p.substr(0, slash));
                 std::string lh = p.substr(slash + 1);
+                style.has_line_height = true;
                 if (lh.find("px") != std::string::npos) {
                     style.line_height = parseFloat(lh);
                     style.line_height_is_unitless = false;
@@ -1907,6 +1910,7 @@ void CSSParser::parseFontShorthand(const std::string& value, ComputedStyle& styl
                     style.line_height = parseFloat(lh);
                     style.line_height_is_unitless = true;
                 }
+
             } else {
                 style.font_size = parseFloat(p);
             }
