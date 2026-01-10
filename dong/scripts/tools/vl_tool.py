@@ -1,4 +1,5 @@
 import base64
+import os
 import requests
 import sys
 import json
@@ -12,10 +13,13 @@ import re
 # MODEL_API_ENDPOINT = "YOUR_LLM_API_ENDPOINT" # e.g., "https://api.openai.com/v1/chat/completions"
 # MODEL_NAME = "gpt-4o" # Or "claude-3-opus-20240229", etc.
 
-# --- 示例配置 (使用 OpenAI API) ---
-API_KEY = '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'#os.environ.get("OPENAI_API_KEY")
-MODEL_API_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions"
-MODEL_NAME = "x-ai/grok-4.1-fast"
+# --- 示例配置 (OpenRouter / OpenAI 兼容) ---
+# 建议通过环境变量提供密钥：
+#   set OPENROUTER_API_KEY=...  (Windows)
+#   export OPENROUTER_API_KEY=... (bash)
+API_KEY = os.environ.get("OPENROUTER_API_KEY") or os.environ.get("OPENAI_API_KEY")
+MODEL_API_ENDPOINT = os.environ.get("OPENROUTER_ENDPOINT", "https://openrouter.ai/api/v1/chat/completions")
+MODEL_NAME = os.environ.get("OPENROUTER_MODEL", "x-ai/grok-4.1-fast")
 # --- 结束示例配置 ---
 
 

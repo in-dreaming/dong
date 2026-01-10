@@ -1824,7 +1824,7 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             color_target.resolve_texture = nullptr;
             color_target.resolve_mip_level = 0;
             color_target.resolve_layer = 0;
-            color_target.cycle = false;
+            color_target.cycle = true;  // 启用 cycle 以避免帧间数据竞争
             color_target.cycle_resolve_texture = false;
 
             pass = SDL_BeginGPURenderPass(
@@ -1871,8 +1871,11 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                     Uint32 sw = 0, sh = 0;
                     DONG_LOG_DEBUG("[GPUDriverSDL] EndPass acquiring swapchain (window mode) frame=%llu cmd_buf=%p win_size=%ux%u",
                             frame_index_, (void*)current_cmd_buf_, w, h);
-                    if (!SDL_AcquireGPUSwapchainTexture(current_cmd_buf_, window_, &real_swapchain_texture, &sw, &sh)) {
-                        SDL_Log("GPUDriverSDL::execute: failed to acquire swapchain texture at EndPass");
+                    // 这里必须确保拿到可用的 swapchain texture。
+                    // SDL_gpu 在非阻塞 Acquire 模式下可能出现：返回成功但 texture==NULL（通常意味着 frames-in-flight 未完成，应该跳帧）。
+                    // 这会导致“低频闪烁/画面大多停留在旧帧”。这里改用阻塞 WaitAndAcquire 来保证确定性。
+                    if (!SDL_WaitAndAcquireGPUSwapchainTexture(current_cmd_buf_, window_, &real_swapchain_texture, &sw, &sh)) {
+                        SDL_Log("GPUDriverSDL::execute: failed to wait+acquire swapchain texture at EndPass");
                         break;
                     }
                     if (!real_swapchain_texture) {
@@ -1922,7 +1925,7 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 
                 blit_info.load_op = SDL_GPU_LOADOP_DONT_CARE;
                 blit_info.filter = SDL_GPU_FILTER_NEAREST;
-                blit_info.cycle = false;
+                blit_info.cycle = true;  // 启用 cycle 以避免帧间数据竞争
                 
                 SDL_BlitGPUTexture(current_cmd_buf_, &blit_info);
             }
@@ -2470,6 +2473,10 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 break;
             }
 
+            DONG_LOG_DEBUG("[ROUND_RECT] DRAW: rect=(%.1f,%.1f,%.1f,%.1f) radius=%.1f color=(%.3f,%.3f,%.3f,%.3f)",
+                cmd.rect.x, cmd.rect.y, cmd.rect.width, cmd.rect.height, cmd.radius,
+                cmd.color.r, cmd.color.g, cmd.color.b, cmd.color.a);
+
             struct RoundRectUniformData {
                 float rect[4];
                 float radius[4];
@@ -2495,6 +2502,7 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             fill_clip_uniform(u.clip);
 
             SDL_PushGPUVertexUniformData(current_cmd_buf_, 0, &u, sizeof(u));
+            SDL_PushGPUFragmentUniformData(current_cmd_buf_, 0, &u, sizeof(u));
 
             if (pipeline_state.active != PipelineBindingState::ActivePipeline::RoundRect) {
                 SDL_BindGPUGraphicsPipeline(pass, round_rect_pipeline_);
@@ -2533,6 +2541,7 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             fill_clip_uniform(u.clip);
 
             SDL_PushGPUVertexUniformData(current_cmd_buf_, 0, &u, sizeof(u));
+            SDL_PushGPUFragmentUniformData(current_cmd_buf_, 0, &u, sizeof(u));
 
             if (pipeline_state.active != PipelineBindingState::ActivePipeline::Shadow) {
                 SDL_BindGPUGraphicsPipeline(pass, shadow_pipeline_);

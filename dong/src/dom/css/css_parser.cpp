@@ -1758,9 +1758,34 @@ void CSSParser::parsePaddingShorthand(const std::string& value, ComputedStyle& s
 }
 
 void CSSParser::parseBorderShorthand(const std::string& value, ComputedStyle& style) {
-    std::istringstream iss(value);
-    std::string part;
-    while (iss >> part) {
+    // Split by spaces but respect parentheses (for rgba, rgb, etc.)
+    std::vector<std::string> parts;
+    std::string current;
+    int paren_depth = 0;
+    
+    for (size_t i = 0; i < value.size(); ++i) {
+        char c = value[i];
+        if (c == '(') {
+            ++paren_depth;
+            current += c;
+        } else if (c == ')') {
+            --paren_depth;
+            current += c;
+        } else if (c == ' ' && paren_depth == 0) {
+            if (!current.empty()) {
+                parts.push_back(current);
+                current.clear();
+            }
+        } else {
+            current += c;
+        }
+    }
+    if (!current.empty()) {
+        parts.push_back(current);
+    }
+    
+    for (const auto& part : parts) {
+        if (part.empty()) continue;
         if (std::isdigit(static_cast<unsigned char>(part[0])) || part[0] == '.') {
             style.border_width = parseFloat(part);
         } else if (part == "solid" || part == "dashed" || part == "dotted" || 

@@ -364,7 +364,8 @@ pub fn build(b: *std.Build) void {
     run_feature_tests_step.dependOn(&run_feature_tests.step);
 
     // HTML render test - renders HTML to BMP for visual verification
-    // Usage: zig build run-html-test -- <html_file> [output.bmp] [width] [height]
+    // Usage: zig build run-html-test -- <html_file> [output.bmp] [width] [height] [frames]
+    //        zig build run-html-test -- <html_file> [output.bmp] [width] [height] --frames N [--frame-ms MS] [--no-update]
     const run_html_test = b.addSystemCommand(&.{
         if (is_windows) "zig-out\\bin\\html_render_test.exe" else "zig-out/bin/html_render_test",
     });

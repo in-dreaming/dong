@@ -399,13 +399,60 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
             }
         }
 
-        // 1.2 背景填充
-        if (style.background_color != "transparent" && rect.width > 0.0f && rect.height > 0.0f) {
-            Color c = makeColorFromCss(style.background_color);
-            if (style.border_radius > 0.0f) {
-                builder.addRoundedRect(rect, c, style.border_radius);
+        // 1.2 边框和背景填充
+        float bw = style.border_width;
+        float radius = style.border_radius;
+        bool has_border = bw > 0.0f && style.border_style != "none";
+        bool has_background = !style.background_color.empty() && style.background_color != "transparent";
+        
+        // DEBUG: 打印背景信息
+        if (radius > 0.0f || has_background || has_border) {
+            DONG_LOG_INFO("[PAINT_BG] bg_color='%s' has_bg=%d radius=%.1f has_border=%d rect=(%.0f,%.0f,%.0f,%.0f)",
+                style.background_color.c_str(), has_background, radius, has_border,
+                rect.x, rect.y, rect.width, rect.height);
+        }
+        
+        if (rect.width > 0.0f && rect.height > 0.0f) {
+            if (radius > 0.0f) {
+                // 圆角情况：先绘制边框圆角矩形，再绘制背景圆角矩形
+                if (has_border) {
+                    Color border_color = makeColorFromCss(style.border_color);
+                    builder.addRoundedRect(rect, border_color, radius);
+                }
+                if (has_background) {
+                    Color bg_color = makeColorFromCss(style.background_color);
+                    DONG_LOG_INFO("[PAINT_BG] Drawing rounded rect: color=(%f,%f,%f,%f)", bg_color.r, bg_color.g, bg_color.b, bg_color.a);
+                    // 内部背景矩形需要缩小 border_width
+                    Rect inner_rect = rect;
+                    if (has_border) {
+                        inner_rect.x += bw;
+                        inner_rect.y += bw;
+                        inner_rect.width -= 2 * bw;
+                        inner_rect.height -= 2 * bw;
+                    }
+                    float inner_radius = std::max(0.0f, radius - bw);
+                    if (inner_rect.width > 0.0f && inner_rect.height > 0.0f) {
+                        builder.addRoundedRect(inner_rect, bg_color, inner_radius);
+                    }
+                }
             } else {
-                builder.addRect(rect, c);
+                // 非圆角情况：先背景，后边框
+                if (has_background) {
+                    Color bg_color = makeColorFromCss(style.background_color);
+                    builder.addRect(rect, bg_color);
+                }
+                if (has_border) {
+                    Color border_color = makeColorFromCss(style.border_color);
+                    // 绘制四条边框
+                    Rect top_border{rect.x, rect.y, rect.width, bw};
+                    Rect bottom_border{rect.x, rect.y + rect.height - bw, rect.width, bw};
+                    Rect left_border{rect.x, rect.y + bw, bw, rect.height - 2 * bw};
+                    Rect right_border{rect.x + rect.width - bw, rect.y + bw, bw, rect.height - 2 * bw};
+                    builder.addRect(top_border, border_color);
+                    builder.addRect(bottom_border, border_color);
+                    builder.addRect(left_border, border_color);
+                    builder.addRect(right_border, border_color);
+                }
             }
         }
 
@@ -432,37 +479,6 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                 // TODO: 根据 background-size/repeat/position 计算实际绘制参数
                 // 目前简化为 cover 模式
                 builder.addImage(rect, image_url, 1.0f);
-            }
-        }
-
-        // 1.3 边框绘制
-        if (style.border_width > 0.0f && rect.width > 0.0f && rect.height > 0.0f) {
-            Color border_color = makeColorFromCss(style.border_color);
-            float bw = style.border_width;
-            float radius = style.border_radius;
-            if (radius < 0.0f) radius = 0.0f;
-
-            // 绘制四条边框（简化实现：使用四个矩形�?
-            // 上边�?
-            Rect top_border{rect.x, rect.y, rect.width, bw};
-            // 下边�?
-            Rect bottom_border{rect.x, rect.y + rect.height - bw, rect.width, bw};
-            // 左边�?
-            Rect left_border{rect.x, rect.y + bw, bw, rect.height - 2 * bw};
-            // 右边�?
-            Rect right_border{rect.x + rect.width - bw, rect.y + bw, bw, rect.height - 2 * bw};
-
-            if (radius > 0.0f) {
-                // 对于圆角边框，使用描边方式（目前简化为四个矩形，后续可改进�?
-                builder.addRect(top_border, border_color);
-                builder.addRect(bottom_border, border_color);
-                builder.addRect(left_border, border_color);
-                builder.addRect(right_border, border_color);
-            } else {
-                builder.addRect(top_border, border_color);
-                builder.addRect(bottom_border, border_color);
-                builder.addRect(left_border, border_color);
-                builder.addRect(right_border, border_color);
             }
         }
 

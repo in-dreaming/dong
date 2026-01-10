@@ -21,6 +21,9 @@ zig build run-feature-tests
 
 dong_app.exe
 
+html_render_test.exe data/tests/cursor_test.html zig-out/tmp/features/cursor_test.bmp 1024 1024 3
+.\dong_app.exe --html .\data\tests\cursor_test.html
+
 
 # 方式 2: 直接运行
 zig-out/bin/run_feature_tests.exe

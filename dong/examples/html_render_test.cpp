@@ -1,12 +1,13 @@
 /**
  * HTML Render Test - 渲染 HTML 文件到贴图并保存为 BMP
- * 
+ *
  * 用法:
- *   html_render_test <html_file> [output.bmp] [width] [height]
- * 
- * 示例:
- *   html_render_test data/tests/transform_test.html output.bmp 800 600
- *   html_render_test data/tests/cursor_test.html
+ *   html_render_test <html_file> [output.bmp] [width] [height] [frames]
+ *   html_render_test <html_file> [output.bmp] [width] [height] --frames N [--frame-ms MS] [--no-update]
+ *
+ * 说明:
+ * - html_file 既支持绝对路径，也支持相对路径；相对路径会优先按“可执行文件目录”解析（便于 zig build 直接运行）。
+ * - frames > 1 时会逐帧导出独立 BMP。
  */
 
 #include <cstdio>
@@ -18,6 +19,7 @@
 #include <fstream>
 #include <sstream>
 #include <filesystem>
+#include <algorithm>
 
 #include <dong.h>
 #include <SDL3/SDL.h>
@@ -106,20 +108,96 @@ std::vector<std::string> listTestFiles(const std::string& dir) {
     return files;
 }
 
+static uint32_t parseU32OrDefault(const char* s, uint32_t default_value) {
+    if (!s || !*s) return default_value;
+    char* end = nullptr;
+    unsigned long v = std::strtoul(s, &end, 10);
+    if (end == s) return default_value;
+    if (v > 0xFFFFFFFFu) return default_value;
+    return static_cast<uint32_t>(v);
+}
+
+static int frameIndexWidth(uint32_t frames) {
+    if (frames <= 1) return 1;
+    return static_cast<int>(std::to_string(frames - 1).size());
+}
+
+static fs::path getFrameOutputPath(const std::string& output_file, const std::string& html_stem,
+                                  uint32_t frame_index, uint32_t frames) {
+    fs::path out_path(output_file);
+    if (frames <= 1) return out_path;
+
+    const int pad = frameIndexWidth(frames);
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "%0*u", pad, static_cast<unsigned>(frame_index));
+    const std::string suffix = std::string("_f") + buf;
+
+    std::error_code ec;
+    bool treat_as_dir = false;
+    if (!output_file.empty()) {
+        char last = output_file.back();
+        if (last == '/' || last == '\\') {
+            treat_as_dir = true;
+        }
+    }
+    if (fs::exists(out_path, ec) && fs::is_directory(out_path, ec)) {
+        treat_as_dir = true;
+    }
+    if (!out_path.has_extension()) {
+        treat_as_dir = true;
+    }
+
+    const std::string ext = out_path.has_extension() ? out_path.extension().string() : ".bmp";
+
+    if (treat_as_dir) {
+        return out_path / fs::path(html_stem + suffix + ext);
+    }
+
+    fs::path parent = out_path.parent_path();
+    const std::string base = out_path.stem().string();
+    return parent / fs::path(base + suffix + ext);
+}
+
+static void ensureParentDir(const fs::path& p) {
+    std::error_code ec;
+    fs::path parent = p.parent_path();
+    if (!parent.empty()) {
+        fs::create_directories(parent, ec);
+    }
+}
+
 void printUsage(const char* prog) {
-    SDL_Log("Usage: %s <html_file> [output.bmp] [width] [height]", prog);
+    SDL_Log("Usage:");
+    SDL_Log("  %s <html_file> [output.bmp] [width] [height] [frames]", prog);
+    SDL_Log("  %s <html_file> [output.bmp] [width] [height] --frames N [--frame-ms MS] [--no-update]", prog);
     SDL_Log("");
     SDL_Log("Arguments:");
     SDL_Log("  html_file   - Path to HTML file (relative to exe or absolute)");
-    SDL_Log("  output.bmp  - Output BMP file (default: zig-out/tmp/render_test.bmp)");
+    SDL_Log("  output.bmp  - Output BMP file or output directory (default: zig-out/tmp/render_test.bmp)");
     SDL_Log("  width       - Render width (default: 800)");
     SDL_Log("  height      - Render height (default: 600)");
+    SDL_Log("  frames      - Number of frames (default: 1)");
+    SDL_Log("");
+    SDL_Log("Options:");
+    SDL_Log("  --frames N      - Render N frames (overrides positional frames)");
+    SDL_Log("  --frame-ms MS   - Sleep MS milliseconds between frames (default: 0)");
+    SDL_Log("  --no-update     - Do NOT call dong_view_update() between frames");
+    SDL_Log("");
+    SDL_Log("Output rule when frames > 1:");
+    SDL_Log("  - If output ends with .bmp, will write: <stem>_f000.bmp, <stem>_f001.bmp, ...");
+    SDL_Log("  - If output is a directory, will write: <html_stem>_f000.bmp, <html_stem>_f001.bmp, ...");
     SDL_Log("");
     SDL_Log("Available test files in data/tests/:");
-    
+
     auto files = listTestFiles("data/tests");
     if (files.empty()) {
         files = listTestFiles("zig-out/bin/data/tests");
+    }
+    if (files.empty()) {
+        if (const char* base = SDL_GetBasePath()) {
+            fs::path exe_dir(base);
+            files = listTestFiles((exe_dir / "data/tests").string());
+        }
     }
     for (const auto& f : files) {
         SDL_Log("  - data/tests/%s", f.c_str());
@@ -136,37 +214,142 @@ int main(int argc, char* argv[]) {
     }
 
     std::string html_file = argv[1];
-    std::string output_file = (argc > 2) ? argv[2] : "zig-out/tmp/render_test.bmp";
-    uint32_t width = (argc > 3) ? static_cast<uint32_t>(std::atoi(argv[3])) : 800;
-    uint32_t height = (argc > 4) ? static_cast<uint32_t>(std::atoi(argv[4])) : 600;
+
+    // Backward compatible positional args:
+    //   html_render_test <html_file> [output.bmp] [width] [height] [frames]
+    std::string output_file = "zig-out/tmp/render_test.bmp";
+    bool output_specified = false;
+    uint32_t width = 800;
+    uint32_t height = 600;
+    uint32_t frames = 1;
+    uint32_t frame_ms = 0;
+    bool do_update = true;
+
+    int positional_index = 0;
+    for (int i = 2; i < argc; ++i) {
+        std::string a = argv[i];
+
+        if (a == "-h" || a == "--help") {
+            printUsage(argv[0]);
+            return 0;
+        }
+
+        if (a == "--no-update") {
+            do_update = false;
+            continue;
+        }
+
+        if (a == "--frames") {
+            if (i + 1 >= argc) {
+                SDL_Log("ERROR: --frames requires a value");
+                return 1;
+            }
+            frames = parseU32OrDefault(argv[++i], frames);
+            continue;
+        }
+
+        if (a == "--frame-ms") {
+            if (i + 1 >= argc) {
+                SDL_Log("ERROR: --frame-ms requires a value");
+                return 1;
+            }
+            frame_ms = parseU32OrDefault(argv[++i], frame_ms);
+            continue;
+        }
+
+        // positional
+        switch (positional_index) {
+            case 0:
+                output_file = a;
+                output_specified = true;
+                break;
+            case 1:
+                width = parseU32OrDefault(argv[i], width);
+                break;
+            case 2:
+                height = parseU32OrDefault(argv[i], height);
+                break;
+            case 3:
+                frames = parseU32OrDefault(argv[i], frames);
+                break;
+            default:
+                SDL_Log("ERROR: Too many positional arguments: %s", a.c_str());
+                printUsage(argv[0]);
+                return 1;
+        }
+        positional_index++;
+    }
 
     if (width == 0 || height == 0) {
         SDL_Log("ERROR: Invalid dimensions");
         return 1;
     }
+    if (frames == 0) {
+        SDL_Log("ERROR: Invalid frames: 0");
+        return 1;
+    }
 
-    // 读取 HTML 文件
+    // 读取 HTML 文件（兼容 zig build：工作目录通常是仓库根目录，而测试文件在 zig-out/bin/data 下）
+    fs::path exe_dir;
+    if (const char* base = SDL_GetBasePath()) {
+        exe_dir = fs::path(base);
+    }
+
+    auto resolveExistingPath = [&](const fs::path& p) -> fs::path {
+        std::error_code ec;
+        if (fs::exists(p, ec)) return p;
+
+        if (!p.is_absolute()) {
+            if (!exe_dir.empty()) {
+                // 1) <exe_dir>/<relative>
+                fs::path c1 = exe_dir / p;
+                if (fs::exists(c1, ec)) return c1;
+
+                // 2) <exe_dir>/data/<relative>  (兼容传 tests/xxx.html 等情况)
+                fs::path c2 = exe_dir / "data" / p;
+                if (fs::exists(c2, ec)) return c2;
+            }
+
+            // 3) <repo_root>/zig-out/bin/<relative>
+            fs::path c3 = fs::path("zig-out/bin") / p;
+            if (fs::exists(c3, ec)) return c3;
+
+            // 4) <repo_root>/zig-out/bin/data/<relative>
+            fs::path c4 = fs::path("zig-out/bin/data") / p;
+            if (fs::exists(c4, ec)) return c4;
+        }
+
+        return p;
+    };
+
+    const fs::path html_path = resolveExistingPath(fs::path(html_file));
+    html_file = html_path.string();
+
+    // 如果用户没显式指定 output，并且当前 exe 在 zig-out/bin 下：
+    // 把默认输出落到 ../tmp，避免从 zig-out/bin 运行时出现 zig-out/bin/zig-out/tmp 的二次嵌套。
+    if (!output_specified && output_file == "zig-out/tmp/render_test.bmp" && !exe_dir.empty()) {
+        std::error_code ec;
+        if (fs::exists(exe_dir / "data", ec)) {
+            output_file = (exe_dir / ".." / "tmp" / "render_test.bmp").lexically_normal().string();
+        }
+    }
+
     std::string html_content = readFile(html_file);
-    if (html_content.empty()) {
-        // 尝试相对于 data 目录
-        html_content = readFile("data/" + html_file);
-    }
-    if (html_content.empty()) {
-        // 尝试 zig-out/bin/data
-        html_content = readFile("zig-out/bin/data/" + html_file);
-    }
     if (html_content.empty()) {
         SDL_Log("ERROR: Cannot read HTML file: %s", html_file.c_str());
         return 1;
     }
 
     SDL_Log("[Input]  HTML: %s (%zu bytes)", html_file.c_str(), html_content.size());
-    SDL_Log("[Output] BMP:  %s (%ux%u)", output_file.c_str(), width, height);
+    SDL_Log("[Render] Size: %ux%u frames=%u frame_ms=%u update=%s",
+            width, height, frames, frame_ms, do_update ? "true" : "false");
 
-    // 确保输出目录存在
-    fs::path output_path(output_file);
-    if (output_path.has_parent_path()) {
-        fs::create_directories(output_path.parent_path());
+    std::string html_stem = fs::path(html_file).stem().string();
+    fs::path first_output_path = getFrameOutputPath(output_file, html_stem, 0, frames);
+    SDL_Log("[Output] BMP:  %s", first_output_path.string().c_str());
+    if (frames > 1) {
+        fs::path last_output_path = getFrameOutputPath(output_file, html_stem, frames - 1, frames);
+        SDL_Log("[Output] ...  %s", last_output_path.string().c_str());
     }
 
     // 创建 SDL 窗口
@@ -216,45 +399,71 @@ int main(int argc, char* argv[]) {
     dong_view_load_html(view, html_content.c_str());
     SDL_Log("[Load] HTML loaded successfully");
 
-    // 渲染到像素缓冲区
+    // 渲染到像素缓冲区（逐帧导出）
     std::vector<uint8_t> pixels(width * height * 4);
+
+    auto logPixelStats = [&](uint32_t frame_index) {
+        int total = static_cast<int>(width * height);
+        int black = 0, colored = 0, white = 0;
+        for (int i = 0; i < total; ++i) {
+            int idx = i * 4;
+            int brightness = (pixels[idx] + pixels[idx + 1] + pixels[idx + 2]) / 3;
+            if (brightness < 50) black++;
+            else if (brightness > 200) white++;
+            else colored++;
+        }
+        SDL_Log("[Stats] Frame %u: black=%d(%.1f%%) colored=%d(%.1f%%) white=%d(%.1f%%)",
+                frame_index,
+                black, 100.0f * black / total,
+                colored, 100.0f * colored / total,
+                white, 100.0f * white / total);
+    };
+
     SDL_Log("[Render] Rendering offscreen...");
-    
-    if (!dong_view_render_offscreen(view, static_cast<void*>(device), width, height, pixels.data())) {
-        SDL_Log("ERROR: dong_view_render_offscreen failed");
-        dong_view_destroy(view);
-        dong_destroy_context(ctx);
-        return 1;
+    for (uint32_t fi = 0; fi < frames; ++fi) {
+        if (do_update) {
+            dong_view_update(view);
+        }
+
+        if (!dong_view_render_offscreen(view, static_cast<void*>(device), width, height, pixels.data())) {
+            SDL_Log("ERROR: dong_view_render_offscreen failed (frame=%u)", fi);
+            dong_view_destroy(view);
+            dong_destroy_context(ctx);
+            return 1;
+        }
+
+        fs::path out_path = getFrameOutputPath(output_file, html_stem, fi, frames);
+        ensureParentDir(out_path);
+        if (!writeBMP(out_path.string().c_str(), width, height, pixels.data())) {
+            SDL_Log("ERROR: Failed to save BMP (frame=%u): %s", fi, out_path.string().c_str());
+            dong_view_destroy(view);
+            dong_destroy_context(ctx);
+            return 1;
+        }
+
+        // 为了避免日志爆炸：只输出首帧/末帧统计
+        if (fi == 0 || fi + 1 == frames) {
+            logPixelStats(fi);
+        }
+
+        if (frame_ms > 0 && fi + 1 < frames) {
+            SDL_Delay(frame_ms);
+        }
     }
 
-    // 保存 BMP
-    if (writeBMP(output_file.c_str(), width, height, pixels.data())) {
-        SDL_Log("[Save] Saved to %s", output_file.c_str());
-    } else {
-        SDL_Log("ERROR: Failed to save BMP");
-        dong_view_destroy(view);
-        dong_destroy_context(ctx);
-        return 1;
-    }
+    SDL_Log("[Save] Saved %u frame(s)", frames);
 
-    // 像素统计
-    int total = static_cast<int>(width * height);
-    int black = 0, colored = 0, white = 0;
-    for (int i = 0; i < total; ++i) {
-        int idx = i * 4;
-        int brightness = (pixels[idx] + pixels[idx + 1] + pixels[idx + 2]) / 3;
-        if (brightness < 50) black++;
-        else if (brightness > 200) white++;
-        else colored++;
-    }
-    SDL_Log("[Stats] Pixels: black=%d(%.1f%%) colored=%d(%.1f%%) white=%d(%.1f%%)",
-            black, 100.0*black/total, colored, 100.0*colored/total, white, 100.0*white/total);
 
     // 清理
     SDL_Log("[Cleanup] Shutting down...");
     dong_view_destroy(view);
     dong_destroy_context(ctx);
 
-    SDL_Log("[Done] Output: %s", output_file.c_str());
+    fs::path out0 = getFrameOutputPath(output_file, html_stem, 0, frames);
+    SDL_Log("[Done] Output: %s", out0.string().c_str());
+    if (frames > 1) {
+        fs::path outN = getFrameOutputPath(output_file, html_stem, frames - 1, frames);
+        SDL_Log("[Done] Output: %s", outN.string().c_str());
+    }
     return 0;
 }
