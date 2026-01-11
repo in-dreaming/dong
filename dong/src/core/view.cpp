@@ -320,6 +320,8 @@ void View::resize(uint32_t width, uint32_t height) {
 }
 
 void View::update() {
+    DONG_PERF_SCOPE("View::update");
+    
     // Update animations
     static auto start_time = std::chrono::steady_clock::now();
     auto now = std::chrono::steady_clock::now();
@@ -332,13 +334,17 @@ void View::update() {
     }
     
     if (script_engine) {
+        DONG_PERF_START(script);
         script_engine->processPendingTasks();
+        DONG_PERF_END_LOG(script, "script_tasks");
     }
 
     if (layout_engine && dom_manager) {
         auto root = dom_manager->getRoot();
         if (root && root->isLayoutDirty()) {
+            DONG_PERF_START(layout);
             layout_engine->calculateLayout(root, static_cast<float>(width_), static_cast<float>(height_));
+            DONG_PERF_END_LOG(layout, "layout_calculate");
             markNeedsRepaint();
             
             // 输出布局调试信息
@@ -401,7 +407,9 @@ void View::update() {
         
         if (need_rebuild) {
             DONG_LOG_DEBUG("[View::update] Building DisplayList...");
+            DONG_PERF_START(display_list);
             const render::DisplayList& dl = painter->buildDisplayList(root, layout_engine.get());
+            DONG_PERF_END_LOG(display_list, "build_display_list");
             DONG_LOG_DEBUG("[View::update] DisplayList built with %zu items", dl.items.size());
             
             // 缓存编译后的命令列表
@@ -414,16 +422,18 @@ void View::update() {
             const render::LayerTree& layer_tree = painter->getLayerTree();
             
             // DEBUG: 强制打印LayerTree信息
-            DONG_LOG_INFO("[LayerTree] nodes=%zu, root=%d", layer_tree.nodes.size(), layer_tree.root_index);
+            DONG_LOG_DEBUG("[LayerTree] nodes=%zu, root=%d", layer_tree.nodes.size(), layer_tree.root_index);
             for (std::size_t i = 0; i < layer_tree.nodes.size(); ++i) {
                 const auto& node = layer_tree.nodes[i];
-                DONG_LOG_INFO("[LayerTree] node[%zu]: id=%llu bounds=(%.1f,%.1f,%.1f,%.1f) opacity=%.3f",
+                DONG_LOG_DEBUG("[LayerTree] node[%zu]: id=%llu bounds=(%.1f,%.1f,%.1f,%.1f) opacity=%.3f",
                     i, static_cast<unsigned long long>(node.id),
                     node.bounds.x, node.bounds.y, node.bounds.width, node.bounds.height, node.opacity);
             }
             
             debugLogLayerTreeIfEnabled(layer_tree);
+            DONG_PERF_START(compile);
             compiler.compile(dl, *cached_cmd_list_, &layer_tree);
+            DONG_PERF_END_LOG(compile, "compile_gpu_commands");
             DONG_LOG_DEBUG("[View::update] GPUCommandList compiled with %zu commands", cached_cmd_list_->commands.size());
             
             // 清除命令脏标记（下次只有在 markNeedsRepaint 时才会重建）
@@ -437,10 +447,15 @@ void View::update() {
         // 每帧都执行渲染（即使使用缓存的命令列表）
         // 关键：在 beginFrame() 之前预处理资源（如 glyph 纹理上传）
         // 这样可以避免在 render pass 中进行纹理上传导致的 GPU 状态冲突
+        DONG_PERF_START(prepare);
         gpu_driver_->prepareResources(*cached_cmd_list_);
+        DONG_PERF_END_LOG(prepare, "gpu_prepare_resources");
+        
+        DONG_PERF_START(gpu_frame);
         gpu_driver_->beginFrame();
         gpu_driver_->execute(*cached_cmd_list_);
         gpu_driver_->endFrame();
+        DONG_PERF_END_LOG(gpu_frame, "gpu_frame_total");
         DONG_LOG_VERBOSE("[View::update] GPU frame complete");
         
         return;

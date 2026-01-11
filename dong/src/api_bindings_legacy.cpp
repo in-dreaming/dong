@@ -40,9 +40,7 @@ void dong_view_resize(dong_view_t* view, uint32_t width, uint32_t height) {
 }
 
 void dong_view_update(dong_view_t* view) {
-    SDL_Log("[dong_view_update] Entry");
     reinterpret_cast<DongView*>(view)->update();
-    SDL_Log("[dong_view_update] Exit");
 }
 
 void* dong_view_get_pixel_buffer(dong_view_t* view) {

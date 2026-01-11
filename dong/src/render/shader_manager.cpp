@@ -2,10 +2,16 @@
 #include "gpu_device.hpp"
 #include <SDL3/SDL_log.h>
 #include <SDL3_shadercross/SDL_shadercross.h>
+#include <mutex>
 
 namespace dong::render {
 
 static bool g_shadercross_initialized = false;
+
+// 全局 shader 缓存：按 (device, shader_name) 缓存编译后的 shader
+// 这样多个 View 共享同一个 GPU device 时可以复用 shader
+static std::mutex g_shader_cache_mutex;
+static std::unordered_map<SDL_GPUDevice*, std::unordered_map<std::string, SDL_GPUShader*>> g_global_shader_cache;
 
 ShaderManager::ShaderManager(GPUDevice* gpu_device)
     : gpu_device_(gpu_device) {
@@ -67,14 +73,39 @@ SDL_GPUShader* ShaderManager::loadShaderFromHLSL(
         return nullptr;
     }
 
+    SDL_GPUDevice* dev = gpu_device_->getHandle();
+    
+    // 先检查全局缓存
+    {
+        std::lock_guard<std::mutex> lock(g_shader_cache_mutex);
+        auto dev_it = g_global_shader_cache.find(dev);
+        if (dev_it != g_global_shader_cache.end()) {
+            auto shader_it = dev_it->second.find(name);
+            if (shader_it != dev_it->second.end()) {
+                // 全局缓存命中，也更新本地缓存
+                shader_cache_[name] = shader_it->second;
+                return shader_it->second;
+            }
+        }
+    }
+
+    // 检查本地缓存
     auto it = shader_cache_.find(name);
     if (it != shader_cache_.end()) {
         return it->second;
     }
 
+    // 编译新 shader
     SDL_GPUShader* shader = createShaderFromHLSL(stage, hlsl_source, entry_point, name.c_str());
     if (shader) {
         shader_cache_[name] = shader;
+        
+        // 添加到全局缓存
+        {
+            std::lock_guard<std::mutex> lock(g_shader_cache_mutex);
+            g_global_shader_cache[dev][name] = shader;
+        }
+        
         SDL_Log("HLSL shader '%s' compiled successfully", name.c_str());
     } else {
         SDL_Log("Failed to compile HLSL shader '%s'", name.c_str());
@@ -102,47 +133,8 @@ void ShaderManager::releaseShader(const std::string& name) {
 }
 
 void ShaderManager::releaseAll() {
-    // 检查设备是否有效
-    if (!gpu_device_) {
-        shader_cache_.clear();
-        return;
-    }
-
-    // 检查设备是否已初始化
-    if (!gpu_device_->isInitialized()) {
-        // 设备未初始化，直接清空缓存
-        shader_cache_.clear();
-        return;
-    }
-
-    // 关键：如果设备是外部管理的（如 SDL3Window），当外部销毁设备时，
-    // SDL 会自动清理所有 shader。我们不应该尝试再次释放它们，否则会导致崩溃。
-    // 直接清空缓存即可。
-    if (!gpu_device_->ownsDevice()) {
-        // 外部管理的设备，不尝试释放 shader（SDL 会自动清理）
-        shader_cache_.clear();
-        return;
-    }
-
-    // 获取设备句柄并验证
-    SDL_GPUDevice* dev = gpu_device_->getHandle();
-    if (!dev) {
-        // 设备句柄无效，直接清空缓存
-        shader_cache_.clear();
-        return;
-    }
-
-    // 只有当我们拥有设备时，才尝试释放 shader
-    // 安全地释放所有 shader
-    for (auto& pair : shader_cache_) {
-        if (pair.second) {
-            // 检查 shader 指针是否看起来有效（不是明显无效的地址）
-            uintptr_t shader_addr = reinterpret_cast<uintptr_t>(pair.second);
-            if (shader_addr > 0x1000) {  // 基本有效性检查
-                SDL_ReleaseGPUShader(dev, pair.second);
-            }
-        }
-    }
+    // 只清空本地缓存引用，不释放 shader（由全局缓存管理）
+    // 全局缓存的 shader 会在设备销毁时由 SDL 自动清理
     shader_cache_.clear();
 }
 
