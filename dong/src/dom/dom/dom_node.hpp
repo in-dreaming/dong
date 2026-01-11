@@ -172,7 +172,7 @@ public:
     float getContentHeight() const { return content_height_; }
     float getScrollWidth() const { return content_width_; }
     float getScrollHeight() const { return content_height_; }
-    void setContentSize(float w, float h) { content_width_ = w; content_height_ = h; }
+    void setContentSize(float w, float h);
     
     // Client dimensions (set by layout)
     float getClientTop() const { return client_top_; }

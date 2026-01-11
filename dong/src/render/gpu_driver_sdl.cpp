@@ -3193,7 +3193,9 @@ std::unique_ptr<GPUDriver> CreateGPUDriver(
             }
         }
         if (const char* env_layer_cache = std::getenv("DONG_DEBUG_LAYER_CACHE")) {
-            if (env_layer_cache[0] == '0') {
+            if (env_layer_cache[0] == '1') {
+                driver->setDebugLogLayerCache(true);
+            } else if (env_layer_cache[0] == '0') {
                 driver->setDebugLogLayerCache(false);
             }
         }
@@ -3205,7 +3207,9 @@ std::unique_ptr<GPUDriver> CreateGPUDriver(
         // 可选启用图层缓存（默认关闭，避免影响渲染正确性）。
         // 通过环境变量 DONG_LAYER_CACHE=1 显式开启。
         if (const char* env_layer_cache_enable = std::getenv("DONG_LAYER_CACHE")) {
-            if (env_layer_cache_enable[0] == '0') {
+            if (env_layer_cache_enable[0] == '1') {
+                driver->setLayerCacheEnabled(true);
+            } else if (env_layer_cache_enable[0] == '0') {
                 driver->setLayerCacheEnabled(false);
             }
         }

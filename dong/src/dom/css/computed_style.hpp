@@ -15,6 +15,20 @@ enum class LayoutMode {
     None
 };
 
+// Helper to derive layout_mode from display value
+inline LayoutMode deriveLayoutModeFromDisplay(const std::string& display) {
+    if (display == "none") {
+        return LayoutMode::None;
+    }
+    if (display == "flex" || display == "inline-flex") {
+        return LayoutMode::Flex;
+    }
+    if (display == "inline" || display == "inline-block") {
+        return LayoutMode::Inline;
+    }
+    return LayoutMode::Block;
+}
+
 // Computed style properties
 struct ComputedStyle {
     // Box Model
@@ -186,6 +200,12 @@ struct ComputedStyle {
             css_variables = std::make_shared<CSSVariables>();
         }
         return *css_variables;
+    }
+    
+    // Helper method to set display and automatically update layout_mode
+    void setDisplay(const std::string& value) {
+        display = value;
+        layout_mode = deriveLayoutModeFromDisplay(value);
     }
 };
 

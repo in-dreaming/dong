@@ -69,7 +69,7 @@
 
 // 启用/禁用性能计时（设为 0 可完全禁用，无运行时开销）
 #ifndef DONG_PERF_ENABLED
-#define DONG_PERF_ENABLED 1
+#define DONG_PERF_ENABLED 0
 #endif
 
 // 性能计时阈值（毫秒），超过此值才输出警告

@@ -202,7 +202,10 @@ void StyleEngine::applyMatchingRules(DOMNodePtr node) {
             computed.text_shadow_color = rs.text_shadow_color;
         }
         
-        if (!rs.display.empty()) computed.display = rs.display;
+        if (!rs.display.empty()) {
+            computed.display = rs.display;
+            computed.layout_mode = deriveLayoutModeFromDisplay(rs.display);
+        }
         if (!rs.position.empty() && rs.position != "static") computed.position = rs.position;
         
         if (rs.border_radius != 0.0f) {
@@ -656,7 +659,10 @@ void StyleEngine::processPseudoElements(DOMNodePtr node) {
                         before_style.content = rs.content;
                     }
                     // Copy other properties
-                    if (!rs.display.empty()) before_style.display = rs.display;
+                    if (!rs.display.empty()) {
+                        before_style.display = rs.display;
+                        before_style.layout_mode = deriveLayoutModeFromDisplay(rs.display);
+                    }
                     if (!rs.color.empty()) before_style.color = rs.color;
                     if (!rs.background_color.empty()) before_style.background_color = rs.background_color;
                     if (rs.width.value != 0.0f || !rs.width.isAuto()) before_style.width = rs.width;
@@ -694,7 +700,10 @@ void StyleEngine::processPseudoElements(DOMNodePtr node) {
                     if (!rs.content.empty() || rs.content == "") {
                         after_style.content = rs.content;
                     }
-                    if (!rs.display.empty()) after_style.display = rs.display;
+                    if (!rs.display.empty()) {
+                        after_style.display = rs.display;
+                        after_style.layout_mode = deriveLayoutModeFromDisplay(rs.display);
+                    }
                     if (!rs.color.empty()) after_style.color = rs.color;
                     if (!rs.background_color.empty()) after_style.background_color = rs.background_color;
                     if (rs.width.value != 0.0f || !rs.width.isAuto()) after_style.width = rs.width;

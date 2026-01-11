@@ -85,6 +85,12 @@ public:
     
     // Calculate specificity of a selector
     static int calculateSpecificity(const std::string& selector);
+    
+    // Parse helpers (public for dispatch table access)
+    static float parseFloat(const std::string& s);
+    static void parseBoxShadow(const std::string& value, ComputedStyle& style);
+    static void parseTextShadow(const std::string& value, ComputedStyle& style);
+    static void parseTransform(const std::string& value, ComputedStyle& style);
 
 private:
     int rule_order_counter_ = 0;
@@ -95,8 +101,7 @@ private:
     std::string trimWhitespace(const std::string& str);
     std::vector<std::string> splitDeclarations(const std::string& css);
     
-    // Parse individual property types
-    static float parseFloat(const std::string& s);
+    // Parse individual property types (private - used internally or via helpers)
     static void parseMarginShorthand(const std::string& value, ComputedStyle& style);
     static void parsePaddingShorthand(const std::string& value, ComputedStyle& style);
     static void parseBorderShorthand(const std::string& value, ComputedStyle& style);
@@ -104,9 +109,6 @@ private:
     static void parseFlexShorthand(const std::string& value, ComputedStyle& style);
     static void parseBackgroundShorthand(const std::string& value, ComputedStyle& style);
     static void parseFontShorthand(const std::string& value, ComputedStyle& style);
-    static void parseBoxShadow(const std::string& value, ComputedStyle& style);
-    static void parseTextShadow(const std::string& value, ComputedStyle& style);
-    static void parseTransform(const std::string& value, ComputedStyle& style);
     
     // calc() parsing helpers
     static std::shared_ptr<CSSCalcExpression> parseCalcExpression(const std::string& expr, size_t& pos);

@@ -3,8 +3,629 @@
 #include <sstream>
 #include <cctype>
 #include <cmath>
+#include <functional>
+#include <string_view>
 
 namespace dong::dom {
+
+// ============================================================================
+// CSS Property Dispatch Table - O(1) lookup instead of O(n) if-else chain
+// ============================================================================
+
+namespace {
+
+// Forward declarations for helper functions used in handlers
+inline float parseFloatHelper(const std::string& s);
+inline void parseMarginShorthandHelper(const std::string& value, ComputedStyle& style);
+inline void parsePaddingShorthandHelper(const std::string& value, ComputedStyle& style);
+inline void parseBorderShorthandHelper(const std::string& value, ComputedStyle& style);
+inline void parseBorderRadiusShorthandHelper(const std::string& value, ComputedStyle& style);
+inline void parseFlexShorthandHelper(const std::string& value, ComputedStyle& style);
+inline void parseBackgroundShorthandHelper(const std::string& value, ComputedStyle& style);
+inline void parseFontShorthandHelper(const std::string& value, ComputedStyle& style);
+
+// Property handler function type
+using PropertyHandler = void(*)(const std::string& val, ComputedStyle& style);
+
+// Build the property dispatch table (called once, returns static reference)
+const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers() {
+    static const std::unordered_map<std::string_view, PropertyHandler> handlers = {
+        // Display & Position
+        {"display", [](const std::string& val, ComputedStyle& style) { 
+            style.display = val;
+            style.layout_mode = deriveLayoutModeFromDisplay(val);
+        }},
+        {"position", [](const std::string& val, ComputedStyle& style) { style.position = val; }},
+        
+        // Box model - dimensions
+        {"width", [](const std::string& val, ComputedStyle& style) { style.width = CSSParser::parseValue(val); }},
+        {"height", [](const std::string& val, ComputedStyle& style) { style.height = CSSParser::parseValue(val); }},
+        {"min-width", [](const std::string& val, ComputedStyle& style) { style.min_width = CSSParser::parseValue(val); }},
+        {"max-width", [](const std::string& val, ComputedStyle& style) { style.max_width = CSSParser::parseValue(val); }},
+        {"min-height", [](const std::string& val, ComputedStyle& style) { style.min_height = CSSParser::parseValue(val); }},
+        {"max-height", [](const std::string& val, ComputedStyle& style) { style.max_height = CSSParser::parseValue(val); }},
+        
+        // Margin
+        {"margin", [](const std::string& val, ComputedStyle& style) { parseMarginShorthandHelper(val, style); }},
+        {"margin-top", [](const std::string& val, ComputedStyle& style) { style.margin_top = CSSParser::parseValue(val); }},
+        {"margin-right", [](const std::string& val, ComputedStyle& style) { style.margin_right = CSSParser::parseValue(val); }},
+        {"margin-bottom", [](const std::string& val, ComputedStyle& style) { style.margin_bottom = CSSParser::parseValue(val); }},
+        {"margin-left", [](const std::string& val, ComputedStyle& style) { style.margin_left = CSSParser::parseValue(val); }},
+        
+        // Padding
+        {"padding", [](const std::string& val, ComputedStyle& style) { parsePaddingShorthandHelper(val, style); }},
+        {"padding-top", [](const std::string& val, ComputedStyle& style) { style.padding_top = CSSParser::parseValue(val); }},
+        {"padding-right", [](const std::string& val, ComputedStyle& style) { style.padding_right = CSSParser::parseValue(val); }},
+        {"padding-bottom", [](const std::string& val, ComputedStyle& style) { style.padding_bottom = CSSParser::parseValue(val); }},
+        {"padding-left", [](const std::string& val, ComputedStyle& style) { style.padding_left = CSSParser::parseValue(val); }},
+        
+        // Position offsets
+        {"top", [](const std::string& val, ComputedStyle& style) { style.top = CSSParser::parseValue(val); }},
+        {"right", [](const std::string& val, ComputedStyle& style) { style.right = CSSParser::parseValue(val); }},
+        {"bottom", [](const std::string& val, ComputedStyle& style) { style.bottom = CSSParser::parseValue(val); }},
+        {"left", [](const std::string& val, ComputedStyle& style) { style.left = CSSParser::parseValue(val); }},
+        {"inset", [](const std::string& val, ComputedStyle& style) {
+            std::istringstream iss(val);
+            std::vector<std::string> parts;
+            std::string part;
+            while (iss >> part) parts.push_back(part);
+            if (parts.size() == 1) {
+                auto v = CSSParser::parseValue(parts[0]);
+                style.top = style.right = style.bottom = style.left = v;
+            } else if (parts.size() == 2) {
+                style.top = style.bottom = CSSParser::parseValue(parts[0]);
+                style.left = style.right = CSSParser::parseValue(parts[1]);
+            } else if (parts.size() == 3) {
+                style.top = CSSParser::parseValue(parts[0]);
+                style.left = style.right = CSSParser::parseValue(parts[1]);
+                style.bottom = CSSParser::parseValue(parts[2]);
+            } else if (parts.size() >= 4) {
+                style.top = CSSParser::parseValue(parts[0]);
+                style.right = CSSParser::parseValue(parts[1]);
+                style.bottom = CSSParser::parseValue(parts[2]);
+                style.left = CSSParser::parseValue(parts[3]);
+            }
+        }},
+        {"z-index", [](const std::string& val, ComputedStyle& style) {
+            try { style.z_index = std::stoi(val); } catch (...) { style.z_index = 0; }
+        }},
+        
+        // Visual - colors & backgrounds
+        {"color", [](const std::string& val, ComputedStyle& style) { style.color = CSSParser::parseColor(val); }},
+        {"background-color", [](const std::string& val, ComputedStyle& style) { style.background_color = CSSParser::parseColor(val); }},
+        {"background-image", [](const std::string& val, ComputedStyle& style) {
+            if (val.find("gradient") != std::string::npos) {
+                style.background_gradients.push_back(CSSParser::parseGradient(val));
+            } else {
+                style.background_image = val;
+            }
+        }},
+        {"background", [](const std::string& val, ComputedStyle& style) { parseBackgroundShorthandHelper(val, style); }},
+        {"background-size", [](const std::string& val, ComputedStyle& style) { style.background_size = val; }},
+        {"background-repeat", [](const std::string& val, ComputedStyle& style) { style.background_repeat = val; }},
+        {"background-position", [](const std::string& val, ComputedStyle& style) { style.background_position = val; }},
+        {"opacity", [](const std::string& val, ComputedStyle& style) {
+            float v = parseFloatHelper(val);
+            style.opacity = std::max(0.0f, std::min(1.0f, v));
+        }},
+        
+        // Border
+        {"border", [](const std::string& val, ComputedStyle& style) { parseBorderShorthandHelper(val, style); }},
+        {"border-width", [](const std::string& val, ComputedStyle& style) { style.border_width = parseFloatHelper(val); }},
+        {"border-color", [](const std::string& val, ComputedStyle& style) { style.border_color = CSSParser::parseColor(val); }},
+        {"border-style", [](const std::string& val, ComputedStyle& style) { style.border_style = val; }},
+        {"border-radius", [](const std::string& val, ComputedStyle& style) { parseBorderRadiusShorthandHelper(val, style); }},
+        {"border-top-left-radius", [](const std::string& val, ComputedStyle& style) { style.border_top_left_radius = parseFloatHelper(val); }},
+        {"border-top-right-radius", [](const std::string& val, ComputedStyle& style) { style.border_top_right_radius = parseFloatHelper(val); }},
+        {"border-bottom-left-radius", [](const std::string& val, ComputedStyle& style) { style.border_bottom_left_radius = parseFloatHelper(val); }},
+        {"border-bottom-right-radius", [](const std::string& val, ComputedStyle& style) { style.border_bottom_right_radius = parseFloatHelper(val); }},
+        
+        // Outline
+        {"outline", [](const std::string& val, ComputedStyle& style) {
+            std::istringstream iss(val);
+            std::string part;
+            while (iss >> part) {
+                if (std::isdigit(static_cast<unsigned char>(part[0])) || part[0] == '.') {
+                    style.outline_width = parseFloatHelper(part);
+                } else if (part == "solid" || part == "dashed" || part == "dotted" || part == "none") {
+                    style.outline_style = part;
+                } else {
+                    style.outline_color = CSSParser::parseColor(part);
+                }
+            }
+        }},
+        {"outline-width", [](const std::string& val, ComputedStyle& style) { style.outline_width = parseFloatHelper(val); }},
+        {"outline-color", [](const std::string& val, ComputedStyle& style) { style.outline_color = CSSParser::parseColor(val); }},
+        {"outline-style", [](const std::string& val, ComputedStyle& style) { style.outline_style = val; }},
+        {"outline-offset", [](const std::string& val, ComputedStyle& style) { style.outline_offset = parseFloatHelper(val); }},
+        
+        // Overflow & visibility
+        {"overflow", [](const std::string& val, ComputedStyle& style) {
+            style.overflow = val;
+            style.overflow_x = val;
+            style.overflow_y = val;
+        }},
+        {"overflow-x", [](const std::string& val, ComputedStyle& style) { style.overflow_x = val; }},
+        {"overflow-y", [](const std::string& val, ComputedStyle& style) { style.overflow_y = val; }},
+        {"visibility", [](const std::string& val, ComputedStyle& style) { style.visibility = val; }},
+        {"cursor", [](const std::string& val, ComputedStyle& style) { style.cursor = val; }},
+        {"box-sizing", [](const std::string& val, ComputedStyle& style) { style.box_sizing = val; }},
+        
+        // Box shadow & filters
+        {"box-shadow", [](const std::string& val, ComputedStyle& style) { CSSParser::parseBoxShadow(val, style); }},
+        {"filter", [](const std::string& val, ComputedStyle& style) { style.filters = CSSParser::parseFilter(val); }},
+        {"backdrop-filter", [](const std::string& val, ComputedStyle& style) { style.backdrop_filters = CSSParser::parseFilter(val); }},
+        {"mix-blend-mode", [](const std::string& val, ComputedStyle& style) { style.mix_blend_mode = val; }},
+        {"background-blend-mode", [](const std::string& val, ComputedStyle& style) { style.background_blend_mode = val; }},
+        
+        // Text & font
+        {"font-family", [](const std::string& val, ComputedStyle& style) { style.font_family = val; }},
+        {"font-size", [](const std::string& val, ComputedStyle& style) { style.font_size = parseFloatHelper(val); }},
+        {"font-weight", [](const std::string& val, ComputedStyle& style) { style.font_weight = val; }},
+        {"font-style", [](const std::string& val, ComputedStyle& style) { style.font_style = val; }},
+        {"font-variant", [](const std::string& val, ComputedStyle& style) { style.font_variant = val; }},
+        {"font", [](const std::string& val, ComputedStyle& style) { parseFontShorthandHelper(val, style); }},
+        {"text-align", [](const std::string& val, ComputedStyle& style) { style.text_align = val; }},
+        {"text-align-last", [](const std::string& val, ComputedStyle& style) { style.text_align_last = val; }},
+        {"text-decoration", [](const std::string& val, ComputedStyle& style) { style.text_decoration = val; }},
+        {"text-decoration-line", [](const std::string& val, ComputedStyle& style) { style.text_decoration = val; }},
+        {"text-decoration-color", [](const std::string& val, ComputedStyle& style) { style.text_decoration_color = CSSParser::parseColor(val); }},
+        {"text-decoration-style", [](const std::string& val, ComputedStyle& style) { style.text_decoration_style = val; }},
+        {"text-decoration-thickness", [](const std::string& val, ComputedStyle& style) { style.text_decoration_thickness = parseFloatHelper(val); }},
+        {"letter-spacing", [](const std::string& val, ComputedStyle& style) {
+            if (val == "normal") {
+                style.letter_spacing_em = 0.0f;
+            } else {
+                float px = parseFloatHelper(val);
+                if (val.find("em") != std::string::npos) {
+                    style.letter_spacing_em = px;
+                } else {
+                    float font_px = style.font_size > 0.0f ? style.font_size : 16.0f;
+                    style.letter_spacing_em = px / font_px;
+                }
+            }
+        }},
+        {"word-spacing", [](const std::string& val, ComputedStyle& style) {
+            if (val == "normal") {
+                style.word_spacing_px = 0.0f;
+            } else {
+                float px = parseFloatHelper(val);
+                if (val.find("em") != std::string::npos) {
+                    float font_px = style.font_size > 0.0f ? style.font_size : 16.0f;
+                    style.word_spacing_px = px * font_px;
+                } else {
+                    style.word_spacing_px = px;
+                }
+            }
+        }},
+        {"line-height", [](const std::string& val, ComputedStyle& style) {
+            style.has_line_height = true;
+            if (val == "normal") {
+                style.line_height = -1.0f;
+                style.line_height_is_unitless = true;
+            } else if (val.find("px") != std::string::npos) {
+                style.line_height = parseFloatHelper(val);
+                style.line_height_is_unitless = false;
+            } else if (val.find('%') != std::string::npos) {
+                style.line_height = parseFloatHelper(val) / 100.0f;
+                style.line_height_is_unitless = true;
+            } else {
+                style.line_height = parseFloatHelper(val);
+                style.line_height_is_unitless = true;
+            }
+        }},
+        {"text-transform", [](const std::string& val, ComputedStyle& style) { style.text_transform = val; }},
+        {"text-overflow", [](const std::string& val, ComputedStyle& style) { style.text_overflow = val; }},
+        {"white-space", [](const std::string& val, ComputedStyle& style) { style.white_space = val; }},
+        {"word-break", [](const std::string& val, ComputedStyle& style) { style.word_break = val; }},
+        {"overflow-wrap", [](const std::string& val, ComputedStyle& style) { style.overflow_wrap = val; }},
+        {"word-wrap", [](const std::string& val, ComputedStyle& style) { style.overflow_wrap = val; }},
+        {"vertical-align", [](const std::string& val, ComputedStyle& style) { style.vertical_align = val; }},
+        {"direction", [](const std::string& val, ComputedStyle& style) { style.direction = val; }},
+        {"unicode-bidi", [](const std::string& val, ComputedStyle& style) { style.unicode_bidi = val; }},
+        {"text-indent", [](const std::string& val, ComputedStyle& style) { style.text_indent = parseFloatHelper(val); }},
+        {"-webkit-line-clamp", [](const std::string& val, ComputedStyle& style) { style.webkit_line_clamp = static_cast<int>(parseFloatHelper(val)); }},
+        {"text-shadow", [](const std::string& val, ComputedStyle& style) { CSSParser::parseTextShadow(val, style); }},
+        
+        // Flexbox
+        {"flex-direction", [](const std::string& val, ComputedStyle& style) { style.flex_direction = val; }},
+        {"flex-wrap", [](const std::string& val, ComputedStyle& style) { style.flex_wrap = val; }},
+        {"flex-flow", [](const std::string& val, ComputedStyle& style) {
+            std::istringstream iss(val);
+            std::string part;
+            while (iss >> part) {
+                if (part == "row" || part == "column" || part == "row-reverse" || part == "column-reverse") {
+                    style.flex_direction = part;
+                } else if (part == "wrap" || part == "nowrap" || part == "wrap-reverse") {
+                    style.flex_wrap = part;
+                }
+            }
+        }},
+        {"justify-content", [](const std::string& val, ComputedStyle& style) { style.justify_content = val; }},
+        {"align-items", [](const std::string& val, ComputedStyle& style) { style.align_items = val; }},
+        {"align-content", [](const std::string& val, ComputedStyle& style) { style.align_content = val; }},
+        {"align-self", [](const std::string& val, ComputedStyle& style) { style.align_self = val; }},
+        {"flex", [](const std::string& val, ComputedStyle& style) { parseFlexShorthandHelper(val, style); }},
+        {"flex-grow", [](const std::string& val, ComputedStyle& style) { style.flex_grow = parseFloatHelper(val); }},
+        {"flex-shrink", [](const std::string& val, ComputedStyle& style) { style.flex_shrink = parseFloatHelper(val); }},
+        {"flex-basis", [](const std::string& val, ComputedStyle& style) { style.flex_basis = CSSParser::parseValue(val); }},
+        {"order", [](const std::string& val, ComputedStyle& style) { style.order = static_cast<int>(parseFloatHelper(val)); }},
+        {"gap", [](const std::string& val, ComputedStyle& style) {
+            style.gap = parseFloatHelper(val);
+            style.row_gap = style.gap;
+            style.column_gap = style.gap;
+        }},
+        {"row-gap", [](const std::string& val, ComputedStyle& style) { style.row_gap = parseFloatHelper(val); }},
+        {"column-gap", [](const std::string& val, ComputedStyle& style) { style.column_gap = parseFloatHelper(val); }},
+        
+        // Transform
+        {"transform", [](const std::string& val, ComputedStyle& style) { CSSParser::parseTransform(val, style); }},
+        {"transform-origin", [](const std::string& val, ComputedStyle& style) {
+            std::istringstream iss(val);
+            std::vector<std::string> parts;
+            std::string part;
+            while (iss >> part) parts.push_back(part);
+            
+            auto parseOrigin = [](const std::string& v) -> float {
+                std::string lowered = v;
+                std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char c) {
+                    return static_cast<char>(std::tolower(c));
+                });
+                if (lowered == "left" || lowered == "top") return 0.0f;
+                if (lowered == "center") return 50.0f;
+                if (lowered == "right" || lowered == "bottom") return 100.0f;
+                if (lowered.find('%') != std::string::npos) return parseFloatHelper(lowered);
+                return parseFloatHelper(lowered) * 0.5f;
+            };
+            
+            if (!parts.empty()) {
+                style.transform_origin_x = parseOrigin(parts[0]);
+                style.transform_origin_y = parts.size() > 1 ? parseOrigin(parts[1]) : style.transform_origin_x;
+            }
+        }},
+        {"transform-style", [](const std::string& val, ComputedStyle& style) { style.transform_style = val; }},
+        {"perspective", [](const std::string& val, ComputedStyle& style) { style.perspective = parseFloatHelper(val); }},
+        {"perspective-origin", [](const std::string& val, ComputedStyle& style) {
+            std::istringstream iss(val);
+            std::vector<std::string> parts;
+            std::string part;
+            while (iss >> part) parts.push_back(part);
+            if (!parts.empty()) {
+                style.perspective_origin_x = parseFloatHelper(parts[0]);
+                style.perspective_origin_y = parts.size() > 1 ? parseFloatHelper(parts[1]) : style.perspective_origin_x;
+            }
+        }},
+        {"backface-visibility", [](const std::string& val, ComputedStyle& style) { style.backface_visibility = val; }},
+        
+        // Transitions
+        {"transition", [](const std::string& val, ComputedStyle& style) { style.transitions = CSSParser::parseTransition(val); }},
+        {"transition-property", [](const std::string& val, ComputedStyle& style) {
+            if (style.transitions.empty()) style.transitions.push_back(CSSTransition());
+            style.transitions[0].property = val;
+        }},
+        {"transition-duration", [](const std::string& val, ComputedStyle& style) {
+            if (style.transitions.empty()) style.transitions.push_back(CSSTransition());
+            float time = parseFloatHelper(val);
+            if (val.find("ms") != std::string::npos) time /= 1000.0f;
+            style.transitions[0].duration = time;
+        }},
+        {"transition-timing-function", [](const std::string& val, ComputedStyle& style) {
+            if (style.transitions.empty()) style.transitions.push_back(CSSTransition());
+            style.transitions[0].timing_function = val;
+        }},
+        {"transition-delay", [](const std::string& val, ComputedStyle& style) {
+            if (style.transitions.empty()) style.transitions.push_back(CSSTransition());
+            float time = parseFloatHelper(val);
+            if (val.find("ms") != std::string::npos) time /= 1000.0f;
+            style.transitions[0].delay = time;
+        }},
+        
+        // Animations
+        {"animation", [](const std::string& val, ComputedStyle& style) { style.animations.push_back(CSSParser::parseAnimation(val)); }},
+        {"animation-name", [](const std::string& val, ComputedStyle& style) {
+            if (style.animations.empty()) style.animations.push_back(CSSAnimation());
+            style.animations[0].name = val;
+        }},
+        {"animation-duration", [](const std::string& val, ComputedStyle& style) {
+            if (style.animations.empty()) style.animations.push_back(CSSAnimation());
+            float time = parseFloatHelper(val);
+            if (val.find("ms") != std::string::npos) time /= 1000.0f;
+            style.animations[0].duration = time;
+        }},
+        {"animation-timing-function", [](const std::string& val, ComputedStyle& style) {
+            if (style.animations.empty()) style.animations.push_back(CSSAnimation());
+            style.animations[0].timing_function = val;
+        }},
+        {"animation-delay", [](const std::string& val, ComputedStyle& style) {
+            if (style.animations.empty()) style.animations.push_back(CSSAnimation());
+            float time = parseFloatHelper(val);
+            if (val.find("ms") != std::string::npos) time /= 1000.0f;
+            style.animations[0].delay = time;
+        }},
+        {"animation-iteration-count", [](const std::string& val, ComputedStyle& style) {
+            if (style.animations.empty()) style.animations.push_back(CSSAnimation());
+            style.animations[0].iteration_count = (val == "infinite") ? -1 : static_cast<int>(parseFloatHelper(val));
+        }},
+        {"animation-direction", [](const std::string& val, ComputedStyle& style) {
+            if (style.animations.empty()) style.animations.push_back(CSSAnimation());
+            style.animations[0].direction = val;
+        }},
+        {"animation-fill-mode", [](const std::string& val, ComputedStyle& style) {
+            if (style.animations.empty()) style.animations.push_back(CSSAnimation());
+            style.animations[0].fill_mode = val;
+        }},
+        {"animation-play-state", [](const std::string& val, ComputedStyle& style) {
+            if (style.animations.empty()) style.animations.push_back(CSSAnimation());
+            style.animations[0].play_state = val;
+        }},
+        
+        // Misc
+        {"clip-path", [](const std::string& val, ComputedStyle& style) { style.clip_path = val; }},
+        {"pointer-events", [](const std::string& val, ComputedStyle& style) { style.pointer_events = val; }},
+        {"user-select", [](const std::string& val, ComputedStyle& style) { style.user_select = val; }},
+        {"touch-action", [](const std::string& val, ComputedStyle& style) { style.touch_action = val; }},
+        {"caret-color", [](const std::string& val, ComputedStyle& style) { style.caret_color = CSSParser::parseColor(val); }},
+        {"float", [](const std::string& val, ComputedStyle& style) { style.float_value = val; }},
+        {"clear", [](const std::string& val, ComputedStyle& style) { style.clear = val; }},
+        {"isolation", [](const std::string& val, ComputedStyle& style) { style.isolation_isolate = (val == "isolate"); }},
+        {"content", [](const std::string& val, ComputedStyle& style) {
+            if (val == "none" || val == "normal") {
+                style.content = "";
+            } else {
+                std::string content = val;
+                if (content.size() >= 2) {
+                    if ((content.front() == '"' && content.back() == '"') ||
+                        (content.front() == '\'' && content.back() == '\'')) {
+                        content = content.substr(1, content.size() - 2);
+                    }
+                }
+                std::string result;
+                for (size_t i = 0; i < content.size(); ++i) {
+                    if (content[i] == '\\' && i + 1 < content.size()) {
+                        char next = content[i + 1];
+                        if (next == 'n') { result += '\n'; ++i; }
+                        else if (next == 't') { result += '\t'; ++i; }
+                        else if (next == '\\') { result += '\\'; ++i; }
+                        else if (next == '"') { result += '"'; ++i; }
+                        else if (next == '\'') { result += '\''; ++i; }
+                        else { result += content[i]; }
+                    } else {
+                        result += content[i];
+                    }
+                }
+                style.content = result;
+            }
+        }},
+    };
+    return handlers;
+}
+
+// Helper: parseFloat wrapper for use in lambdas
+inline float parseFloatHelper(const std::string& s) {
+    return CSSParser::parseFloat(s);
+}
+
+// Helper wrappers that call CSSParser static methods (for use in dispatch table)
+inline void parseMarginShorthandHelper(const std::string& value, ComputedStyle& style) {
+    std::istringstream iss(value);
+    std::vector<std::string> parts;
+    std::string part;
+    while (iss >> part) parts.push_back(part);
+    
+    if (parts.size() == 1) {
+        auto v = CSSParser::parseValue(parts[0]);
+        style.margin_top = style.margin_right = style.margin_bottom = style.margin_left = v;
+    } else if (parts.size() == 2) {
+        style.margin_top = style.margin_bottom = CSSParser::parseValue(parts[0]);
+        style.margin_left = style.margin_right = CSSParser::parseValue(parts[1]);
+    } else if (parts.size() == 3) {
+        style.margin_top = CSSParser::parseValue(parts[0]);
+        style.margin_left = style.margin_right = CSSParser::parseValue(parts[1]);
+        style.margin_bottom = CSSParser::parseValue(parts[2]);
+    } else if (parts.size() >= 4) {
+        style.margin_top = CSSParser::parseValue(parts[0]);
+        style.margin_right = CSSParser::parseValue(parts[1]);
+        style.margin_bottom = CSSParser::parseValue(parts[2]);
+        style.margin_left = CSSParser::parseValue(parts[3]);
+    }
+}
+
+inline void parsePaddingShorthandHelper(const std::string& value, ComputedStyle& style) {
+    std::istringstream iss(value);
+    std::vector<std::string> parts;
+    std::string part;
+    while (iss >> part) parts.push_back(part);
+    
+    if (parts.size() == 1) {
+        auto v = CSSParser::parseValue(parts[0]);
+        style.padding_top = style.padding_right = style.padding_bottom = style.padding_left = v;
+    } else if (parts.size() == 2) {
+        style.padding_top = style.padding_bottom = CSSParser::parseValue(parts[0]);
+        style.padding_left = style.padding_right = CSSParser::parseValue(parts[1]);
+    } else if (parts.size() == 3) {
+        style.padding_top = CSSParser::parseValue(parts[0]);
+        style.padding_left = style.padding_right = CSSParser::parseValue(parts[1]);
+        style.padding_bottom = CSSParser::parseValue(parts[2]);
+    } else if (parts.size() >= 4) {
+        style.padding_top = CSSParser::parseValue(parts[0]);
+        style.padding_right = CSSParser::parseValue(parts[1]);
+        style.padding_bottom = CSSParser::parseValue(parts[2]);
+        style.padding_left = CSSParser::parseValue(parts[3]);
+    }
+}
+
+inline void parseBorderShorthandHelper(const std::string& value, ComputedStyle& style) {
+    std::vector<std::string> parts;
+    std::string current;
+    int paren_depth = 0;
+    
+    for (size_t i = 0; i < value.size(); ++i) {
+        char c = value[i];
+        if (c == '(') { ++paren_depth; current += c; }
+        else if (c == ')') { --paren_depth; current += c; }
+        else if (c == ' ' && paren_depth == 0) {
+            if (!current.empty()) { parts.push_back(current); current.clear(); }
+        } else { current += c; }
+    }
+    if (!current.empty()) parts.push_back(current);
+    
+    for (const auto& part : parts) {
+        if (part.empty()) continue;
+        if (std::isdigit(static_cast<unsigned char>(part[0])) || part[0] == '.') {
+            style.border_width = parseFloatHelper(part);
+        } else if (part == "solid" || part == "dashed" || part == "dotted" || 
+                   part == "double" || part == "none" || part == "hidden") {
+            style.border_style = part;
+        } else {
+            style.border_color = CSSParser::parseColor(part);
+        }
+    }
+}
+
+inline void parseBorderRadiusShorthandHelper(const std::string& value, ComputedStyle& style) {
+    std::istringstream iss(value);
+    std::vector<std::string> parts;
+    std::string part;
+    while (iss >> part) parts.push_back(part);
+    
+    if (parts.size() == 1) {
+        float v = parseFloatHelper(parts[0]);
+        style.border_radius = v;
+        style.border_top_left_radius = v;
+        style.border_top_right_radius = v;
+        style.border_bottom_left_radius = v;
+        style.border_bottom_right_radius = v;
+    } else if (parts.size() == 2) {
+        style.border_top_left_radius = style.border_bottom_right_radius = parseFloatHelper(parts[0]);
+        style.border_top_right_radius = style.border_bottom_left_radius = parseFloatHelper(parts[1]);
+    } else if (parts.size() == 3) {
+        style.border_top_left_radius = parseFloatHelper(parts[0]);
+        style.border_top_right_radius = style.border_bottom_left_radius = parseFloatHelper(parts[1]);
+        style.border_bottom_right_radius = parseFloatHelper(parts[2]);
+    } else if (parts.size() >= 4) {
+        style.border_top_left_radius = parseFloatHelper(parts[0]);
+        style.border_top_right_radius = parseFloatHelper(parts[1]);
+        style.border_bottom_right_radius = parseFloatHelper(parts[2]);
+        style.border_bottom_left_radius = parseFloatHelper(parts[3]);
+    }
+}
+
+inline void parseFlexShorthandHelper(const std::string& value, ComputedStyle& style) {
+    if (value == "none") {
+        style.flex_grow = 0.0f;
+        style.flex_shrink = 0.0f;
+        style.flex_basis = CSSValue(0.0f, CSSValue::Unit::AUTO);
+        return;
+    }
+    if (value == "auto") {
+        style.flex_grow = 1.0f;
+        style.flex_shrink = 1.0f;
+        style.flex_basis = CSSValue(0.0f, CSSValue::Unit::AUTO);
+        return;
+    }
+    
+    std::istringstream iss(value);
+    std::vector<std::string> parts;
+    std::string part;
+    while (iss >> part) parts.push_back(part);
+    
+    if (parts.size() == 1) {
+        style.flex_grow = parseFloatHelper(parts[0]);
+        style.flex_shrink = 1.0f;
+        style.flex_basis = CSSValue(0.0f, CSSValue::Unit::PIXEL);
+    } else if (parts.size() == 2) {
+        style.flex_grow = parseFloatHelper(parts[0]);
+        if (parts[1].find('%') != std::string::npos || parts[1].find("px") != std::string::npos) {
+            style.flex_basis = CSSParser::parseValue(parts[1]);
+        } else {
+            style.flex_shrink = parseFloatHelper(parts[1]);
+        }
+    } else if (parts.size() >= 3) {
+        style.flex_grow = parseFloatHelper(parts[0]);
+        style.flex_shrink = parseFloatHelper(parts[1]);
+        style.flex_basis = CSSParser::parseValue(parts[2]);
+    }
+}
+
+inline void parseBackgroundShorthandHelper(const std::string& value, ComputedStyle& style) {
+    // Handle gradients
+    if (value.find("gradient") != std::string::npos) {
+        style.background_gradients.push_back(CSSParser::parseGradient(value));
+        return;
+    }
+    
+    // Split by spaces but respect parentheses
+    std::vector<std::string> parts;
+    std::string current;
+    int paren_depth = 0;
+    
+    for (char c : value) {
+        if (c == '(') { ++paren_depth; current += c; }
+        else if (c == ')') { --paren_depth; current += c; }
+        else if (c == ' ' && paren_depth == 0) {
+            if (!current.empty()) { parts.push_back(current); current.clear(); }
+        } else { current += c; }
+    }
+    if (!current.empty()) parts.push_back(current);
+    
+    for (const auto& part : parts) {
+        if (part.empty()) continue;
+        if (part.find("url(") != std::string::npos) {
+            style.background_image = part;
+        } else if (part == "repeat" || part == "no-repeat" || part == "repeat-x" || part == "repeat-y") {
+            style.background_repeat = part;
+        } else if (part == "cover" || part == "contain" || part.find('%') != std::string::npos) {
+            style.background_size = part;
+        } else {
+            style.background_color = CSSParser::parseColor(part);
+        }
+    }
+}
+
+inline void parseFontShorthandHelper(const std::string& value, ComputedStyle& style) {
+    std::istringstream iss(value);
+    std::string part;
+    bool found_size = false;
+    
+    while (iss >> part) {
+        if (part == "italic" || part == "oblique") {
+            style.font_style = part;
+        } else if (part == "bold" || part == "bolder" || part == "lighter" ||
+                   part == "100" || part == "200" || part == "300" || part == "400" ||
+                   part == "500" || part == "600" || part == "700" || part == "800" || part == "900") {
+            style.font_weight = part;
+        } else if (part == "small-caps") {
+            style.font_variant = part;
+        } else if (!found_size && (std::isdigit(static_cast<unsigned char>(part[0])) || part[0] == '.')) {
+            // Check for line-height (e.g., "16px/1.5")
+            size_t slash = part.find('/');
+            if (slash != std::string::npos) {
+                style.font_size = parseFloatHelper(part.substr(0, slash));
+                std::string lh = part.substr(slash + 1);
+                style.line_height = parseFloatHelper(lh);
+                style.has_line_height = true;
+                style.line_height_is_unitless = (lh.find("px") == std::string::npos);
+            } else {
+                style.font_size = parseFloatHelper(part);
+            }
+            found_size = true;
+        } else if (found_size) {
+            // Everything after size is font-family
+            std::string family = part;
+            while (iss >> part) { family += " " + part; }
+            // Remove quotes
+            if (family.size() >= 2 && 
+                ((family.front() == '"' && family.back() == '"') ||
+                 (family.front() == '\'' && family.back() == '\''))) {
+                family = family.substr(1, family.size() - 2);
+            }
+            style.font_family = family;
+            break;
+        }
+    }
+}
+
+} // anonymous namespace
 
 std::string CSSParser::removeComments(const std::string& css) {
     std::string result;
@@ -1100,616 +1721,28 @@ void CSSParser::parseInlineStyle(const std::string& style_str, ComputedStyle& st
 
 void CSSParser::applyProperty(const std::string& property, const std::string& value, 
                                ComputedStyle& style) {
+    // Normalize property name to lowercase
     std::string prop = property;
     std::transform(prop.begin(), prop.end(), prop.begin(), [](unsigned char c) {
         return static_cast<char>(std::tolower(c));
     });
     
+    // Normalize value: remove trailing semicolon and trim whitespace
     std::string val = value;
-    // Remove trailing semicolon if present
     if (!val.empty() && val.back() == ';') {
         val.pop_back();
     }
-    // Trim whitespace
     val.erase(0, val.find_first_not_of(" \t\n\r"));
     size_t last = val.find_last_not_of(" \t\n\r");
     if (last != std::string::npos) val = val.substr(0, last + 1);
 
-    // Display
-    if (prop == "display") {
-        style.display = val;
-    }
-    // Position
-    else if (prop == "position") {
-        style.position = val;
-    }
-    // Box model
-    else if (prop == "width") {
-        style.width = parseValue(val);
-    }
-    else if (prop == "height") {
-        style.height = parseValue(val);
-    }
-    else if (prop == "min-width") {
-        style.min_width = parseValue(val);
-    }
-    else if (prop == "max-width") {
-        style.max_width = parseValue(val);
-    }
-    else if (prop == "min-height") {
-        style.min_height = parseValue(val);
-    }
-    else if (prop == "max-height") {
-        style.max_height = parseValue(val);
-    }
-    // Margin
-    else if (prop == "margin") {
-        parseMarginShorthand(val, style);
-    }
-    else if (prop == "margin-top") {
-        style.margin_top = parseValue(val);
-    }
-    else if (prop == "margin-right") {
-        style.margin_right = parseValue(val);
-    }
-    else if (prop == "margin-bottom") {
-        style.margin_bottom = parseValue(val);
-    }
-    else if (prop == "margin-left") {
-        style.margin_left = parseValue(val);
-    }
-    // Padding
-    else if (prop == "padding") {
-        parsePaddingShorthand(val, style);
-    }
-    else if (prop == "padding-top") {
-        style.padding_top = parseValue(val);
-    }
-    else if (prop == "padding-right") {
-        style.padding_right = parseValue(val);
-    }
-    else if (prop == "padding-bottom") {
-        style.padding_bottom = parseValue(val);
-    }
-    else if (prop == "padding-left") {
-        style.padding_left = parseValue(val);
-    }
-    // Position offsets
-    else if (prop == "top") {
-        style.top = parseValue(val);
-    }
-    else if (prop == "right") {
-        style.right = parseValue(val);
-    }
-    else if (prop == "bottom") {
-        style.bottom = parseValue(val);
-    }
-    else if (prop == "left") {
-        style.left = parseValue(val);
-    }
-    else if (prop == "inset") {
-        std::istringstream iss(val);
-        std::vector<std::string> parts;
-        std::string part;
-        while (iss >> part) parts.push_back(part);
-        
-        if (parts.size() == 1) {
-            auto v = parseValue(parts[0]);
-            style.top = style.right = style.bottom = style.left = v;
-        } else if (parts.size() == 2) {
-            style.top = style.bottom = parseValue(parts[0]);
-            style.left = style.right = parseValue(parts[1]);
-        } else if (parts.size() == 3) {
-            style.top = parseValue(parts[0]);
-            style.left = style.right = parseValue(parts[1]);
-            style.bottom = parseValue(parts[2]);
-        } else if (parts.size() >= 4) {
-            style.top = parseValue(parts[0]);
-            style.right = parseValue(parts[1]);
-            style.bottom = parseValue(parts[2]);
-            style.left = parseValue(parts[3]);
-        }
-    }
-    else if (prop == "z-index") {
-        try {
-            style.z_index = std::stoi(val);
-        } catch (...) {
-            style.z_index = 0;
-        }
-    }
-    // Visual
-    else if (prop == "color") {
-        style.color = parseColor(val);
-    }
-    else if (prop == "background-color") {
-        style.background_color = parseColor(val);
-    }
-    else if (prop == "background-image") {
-        if (val.find("gradient") != std::string::npos) {
-            style.background_gradients.push_back(parseGradient(val));
-        } else {
-            style.background_image = val;
-        }
-    }
-    else if (prop == "background") {
-        parseBackgroundShorthand(val, style);
-    }
-    else if (prop == "background-size") {
-        style.background_size = val;
-    }
-    else if (prop == "background-repeat") {
-        style.background_repeat = val;
-    }
-    else if (prop == "background-position") {
-        style.background_position = val;
-    }
-    else if (prop == "opacity") {
-        float v = parseFloat(val);
-        style.opacity = std::max(0.0f, std::min(1.0f, v));
-    }
-    // Border
-    else if (prop == "border") {
-        parseBorderShorthand(val, style);
-    }
-    else if (prop == "border-width") {
-        style.border_width = parseFloat(val);
-    }
-    else if (prop == "border-color") {
-        style.border_color = parseColor(val);
-    }
-    else if (prop == "border-style") {
-        style.border_style = val;
-    }
-    else if (prop == "border-radius") {
-        parseBorderRadiusShorthand(val, style);
-    }
-    else if (prop == "border-top-left-radius") {
-        style.border_top_left_radius = parseFloat(val);
-    }
-    else if (prop == "border-top-right-radius") {
-        style.border_top_right_radius = parseFloat(val);
-    }
-    else if (prop == "border-bottom-left-radius") {
-        style.border_bottom_left_radius = parseFloat(val);
-    }
-    else if (prop == "border-bottom-right-radius") {
-        style.border_bottom_right_radius = parseFloat(val);
-    }
-    // Outline
-    else if (prop == "outline") {
-        std::istringstream iss(val);
-        std::string part;
-        while (iss >> part) {
-            if (std::isdigit(static_cast<unsigned char>(part[0])) || part[0] == '.') {
-                style.outline_width = parseFloat(part);
-            } else if (part == "solid" || part == "dashed" || part == "dotted" || part == "none") {
-                style.outline_style = part;
-            } else {
-                style.outline_color = parseColor(part);
-            }
-        }
-    }
-    else if (prop == "outline-width") {
-        style.outline_width = parseFloat(val);
-    }
-    else if (prop == "outline-color") {
-        style.outline_color = parseColor(val);
-    }
-    else if (prop == "outline-style") {
-        style.outline_style = val;
-    }
-    else if (prop == "outline-offset") {
-        style.outline_offset = parseFloat(val);
-    }
-    // Overflow
-    else if (prop == "overflow") {
-        style.overflow = val;
-        style.overflow_x = val;
-        style.overflow_y = val;
-    }
-    else if (prop == "overflow-x") {
-        style.overflow_x = val;
-    }
-    else if (prop == "overflow-y") {
-        style.overflow_y = val;
-    }
-    else if (prop == "visibility") {
-        style.visibility = val;
-    }
-    else if (prop == "cursor") {
-        style.cursor = val;
-    }
-    else if (prop == "box-sizing") {
-        style.box_sizing = val;
-    }
-    // Box shadow
-    else if (prop == "box-shadow") {
-        parseBoxShadow(val, style);
-    }
-    // Filters
-    else if (prop == "filter") {
-        style.filters = parseFilter(val);
-    }
-    else if (prop == "backdrop-filter") {
-        style.backdrop_filters = parseFilter(val);
-    }
-    else if (prop == "mix-blend-mode") {
-        style.mix_blend_mode = val;
-    }
-    else if (prop == "background-blend-mode") {
-        style.background_blend_mode = val;
-    }
-    // Text
-    else if (prop == "font-family") {
-        style.font_family = val;
-    }
-    else if (prop == "font-size") {
-        style.font_size = parseFloat(val);
-    }
-    else if (prop == "font-weight") {
-        style.font_weight = val;
-    }
-    else if (prop == "font-style") {
-        style.font_style = val;
-    }
-    else if (prop == "font-variant") {
-        style.font_variant = val;
-    }
-    else if (prop == "font") {
-        parseFontShorthand(val, style);
-    }
-    else if (prop == "text-align") {
-        style.text_align = val;
-    }
-    else if (prop == "text-align-last") {
-        style.text_align_last = val;
-    }
-    else if (prop == "text-decoration" || prop == "text-decoration-line") {
-        style.text_decoration = val;
-    }
-    else if (prop == "text-decoration-color") {
-        style.text_decoration_color = parseColor(val);
-    }
-    else if (prop == "text-decoration-style") {
-        style.text_decoration_style = val;
-    }
-    else if (prop == "text-decoration-thickness") {
-        style.text_decoration_thickness = parseFloat(val);
-    }
-    else if (prop == "letter-spacing") {
-        if (val == "normal") {
-            style.letter_spacing_em = 0.0f;
-        } else {
-            float px = parseFloat(val);
-            if (val.find("em") != std::string::npos) {
-                style.letter_spacing_em = px;
-            } else {
-                float font_px = style.font_size > 0.0f ? style.font_size : 16.0f;
-                style.letter_spacing_em = px / font_px;
-            }
-        }
-    }
-    else if (prop == "word-spacing") {
-        if (val == "normal") {
-            style.word_spacing_px = 0.0f;
-        } else {
-            float px = parseFloat(val);
-            if (val.find("em") != std::string::npos) {
-                float font_px = style.font_size > 0.0f ? style.font_size : 16.0f;
-                style.word_spacing_px = px * font_px;
-            } else {
-                style.word_spacing_px = px;
-            }
-        }
-    }
-    else if (prop == "line-height") {
-        style.has_line_height = true;
-        if (val == "normal") {
-            style.line_height = -1.0f;
-            style.line_height_is_unitless = true;
-        } else if (val.find("px") != std::string::npos) {
-            style.line_height = parseFloat(val);
-            style.line_height_is_unitless = false;
-        } else if (val.find('%') != std::string::npos) {
-            style.line_height = parseFloat(val) / 100.0f;
-            style.line_height_is_unitless = true;
-        } else {
-            style.line_height = parseFloat(val);
-            style.line_height_is_unitless = true;
-        }
-    }
-
-    else if (prop == "text-transform") {
-        style.text_transform = val;
-    }
-    else if (prop == "text-overflow") {
-        style.text_overflow = val;
-    }
-    else if (prop == "white-space") {
-        style.white_space = val;
-    }
-    else if (prop == "word-break") {
-        style.word_break = val;
-    }
-    else if (prop == "overflow-wrap" || prop == "word-wrap") {
-        style.overflow_wrap = val;
-    }
-    else if (prop == "vertical-align") {
-        style.vertical_align = val;
-    }
-    else if (prop == "direction") {
-        style.direction = val;
-    }
-    else if (prop == "unicode-bidi") {
-        style.unicode_bidi = val;
-    }
-    else if (prop == "text-indent") {
-        style.text_indent = parseFloat(val);
-    }
-    else if (prop == "-webkit-line-clamp") {
-        style.webkit_line_clamp = static_cast<int>(parseFloat(val));
-    }
-    // Text shadow
-    else if (prop == "text-shadow") {
-        parseTextShadow(val, style);
-    }
-    // Flexbox
-    else if (prop == "flex-direction") {
-        style.flex_direction = val;
-    }
-    else if (prop == "flex-wrap") {
-        style.flex_wrap = val;
-    }
-    else if (prop == "flex-flow") {
-        std::istringstream iss(val);
-        std::string part;
-        while (iss >> part) {
-            if (part == "row" || part == "column" || 
-                part == "row-reverse" || part == "column-reverse") {
-                style.flex_direction = part;
-            } else if (part == "wrap" || part == "nowrap" || part == "wrap-reverse") {
-                style.flex_wrap = part;
-            }
-        }
-    }
-    else if (prop == "justify-content") {
-        style.justify_content = val;
-    }
-    else if (prop == "align-items") {
-        style.align_items = val;
-    }
-    else if (prop == "align-content") {
-        style.align_content = val;
-    }
-    else if (prop == "align-self") {
-        style.align_self = val;
-    }
-    else if (prop == "flex") {
-        parseFlexShorthand(val, style);
-    }
-    else if (prop == "flex-grow") {
-        style.flex_grow = parseFloat(val);
-    }
-    else if (prop == "flex-shrink") {
-        style.flex_shrink = parseFloat(val);
-    }
-    else if (prop == "flex-basis") {
-        style.flex_basis = parseValue(val);
-    }
-    else if (prop == "order") {
-        style.order = static_cast<int>(parseFloat(val));
-    }
-    else if (prop == "gap") {
-        style.gap = parseFloat(val);
-        style.row_gap = style.gap;
-        style.column_gap = style.gap;
-    }
-    else if (prop == "row-gap") {
-        style.row_gap = parseFloat(val);
-    }
-    else if (prop == "column-gap") {
-        style.column_gap = parseFloat(val);
-    }
-    // Transform
-    else if (prop == "transform") {
-        parseTransform(val, style);
-    }
-    else if (prop == "transform-origin") {
-        std::istringstream iss(val);
-        std::vector<std::string> parts;
-        std::string part;
-        while (iss >> part) parts.push_back(part);
-        
-        auto parseOrigin = [](const std::string& v) -> float {
-            std::string lowered = v;
-            std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char c) {
-                return static_cast<char>(std::tolower(c));
-            });
-            if (lowered == "left" || lowered == "top") return 0.0f;
-            if (lowered == "center") return 50.0f;
-            if (lowered == "right" || lowered == "bottom") return 100.0f;
-            if (lowered.find('%') != std::string::npos) {
-                return parseFloat(lowered);
-            }
-            return parseFloat(lowered) * 0.5f;
-        };
-        
-        if (!parts.empty()) {
-            style.transform_origin_x = parseOrigin(parts[0]);
-            style.transform_origin_y = parts.size() > 1 ? parseOrigin(parts[1]) : style.transform_origin_x;
-        }
-    }
-    else if (prop == "transform-style") {
-        style.transform_style = val;
-    }
-    else if (prop == "perspective") {
-        style.perspective = parseFloat(val);
-    }
-    else if (prop == "perspective-origin") {
-        std::istringstream iss(val);
-        std::vector<std::string> parts;
-        std::string part;
-        while (iss >> part) parts.push_back(part);
-        
-        if (!parts.empty()) {
-            style.perspective_origin_x = parseFloat(parts[0]);
-            style.perspective_origin_y = parts.size() > 1 ? parseFloat(parts[1]) : style.perspective_origin_x;
-        }
-    }
-    else if (prop == "backface-visibility") {
-        style.backface_visibility = val;
-    }
-    // Transitions
-    else if (prop == "transition") {
-        style.transitions = parseTransition(val);
-    }
-    else if (prop == "transition-property") {
-        if (style.transitions.empty()) {
-            style.transitions.push_back(CSSTransition());
-        }
-        style.transitions[0].property = val;
-    }
-    else if (prop == "transition-duration") {
-        if (style.transitions.empty()) {
-            style.transitions.push_back(CSSTransition());
-        }
-        float time = parseFloat(val);
-        if (val.find("ms") != std::string::npos) time /= 1000.0f;
-        style.transitions[0].duration = time;
-    }
-    else if (prop == "transition-timing-function") {
-        if (style.transitions.empty()) {
-            style.transitions.push_back(CSSTransition());
-        }
-        style.transitions[0].timing_function = val;
-    }
-    else if (prop == "transition-delay") {
-        if (style.transitions.empty()) {
-            style.transitions.push_back(CSSTransition());
-        }
-        float time = parseFloat(val);
-        if (val.find("ms") != std::string::npos) time /= 1000.0f;
-        style.transitions[0].delay = time;
-    }
-    // Animations
-    else if (prop == "animation") {
-        style.animations.push_back(parseAnimation(val));
-    }
-    else if (prop == "animation-name") {
-        if (style.animations.empty()) {
-            style.animations.push_back(CSSAnimation());
-        }
-        style.animations[0].name = val;
-    }
-    else if (prop == "animation-duration") {
-        if (style.animations.empty()) {
-            style.animations.push_back(CSSAnimation());
-        }
-        float time = parseFloat(val);
-        if (val.find("ms") != std::string::npos) time /= 1000.0f;
-        style.animations[0].duration = time;
-    }
-    else if (prop == "animation-timing-function") {
-        if (style.animations.empty()) {
-            style.animations.push_back(CSSAnimation());
-        }
-        style.animations[0].timing_function = val;
-    }
-    else if (prop == "animation-delay") {
-        if (style.animations.empty()) {
-            style.animations.push_back(CSSAnimation());
-        }
-        float time = parseFloat(val);
-        if (val.find("ms") != std::string::npos) time /= 1000.0f;
-        style.animations[0].delay = time;
-    }
-    else if (prop == "animation-iteration-count") {
-        if (style.animations.empty()) {
-            style.animations.push_back(CSSAnimation());
-        }
-        if (val == "infinite") {
-            style.animations[0].iteration_count = -1;
-        } else {
-            style.animations[0].iteration_count = static_cast<int>(parseFloat(val));
-        }
-    }
-    else if (prop == "animation-direction") {
-        if (style.animations.empty()) {
-            style.animations.push_back(CSSAnimation());
-        }
-        style.animations[0].direction = val;
-    }
-    else if (prop == "animation-fill-mode") {
-        if (style.animations.empty()) {
-            style.animations.push_back(CSSAnimation());
-        }
-        style.animations[0].fill_mode = val;
-    }
-    else if (prop == "animation-play-state") {
-        if (style.animations.empty()) {
-            style.animations.push_back(CSSAnimation());
-        }
-        style.animations[0].play_state = val;
-    }
-    // Clip path
-    else if (prop == "clip-path") {
-        style.clip_path = val;
-    }
-    // Pointer events
-    else if (prop == "pointer-events") {
-        style.pointer_events = val;
-    }
-    else if (prop == "user-select") {
-        style.user_select = val;
-    }
-    else if (prop == "touch-action") {
-        style.touch_action = val;
-    }
-    if (prop == "caret-color") {
-        style.caret_color = parseColor(val);
-    }
-
-    // Float/Clear
-    else if (prop == "float") {
-        style.float_value = val;
-    }
-    else if (prop == "clear") {
-        style.clear = val;
-    }
-    else if (prop == "isolation") {
-        style.isolation_isolate = (val == "isolate");
-    }
-    // Content (for ::before/::after pseudo-elements)
-    else if (prop == "content") {
-        if (val == "none" || val == "normal") {
-            style.content = "";
-        } else {
-            // Remove quotes if present
-            std::string content = val;
-            if (content.size() >= 2) {
-                if ((content.front() == '"' && content.back() == '"') ||
-                    (content.front() == '\'' && content.back() == '\'')) {
-                    content = content.substr(1, content.size() - 2);
-                }
-            }
-            // Handle escape sequences
-            std::string result;
-            for (size_t i = 0; i < content.size(); ++i) {
-                if (content[i] == '\\' && i + 1 < content.size()) {
-                    char next = content[i + 1];
-                    if (next == 'n') { result += '\n'; ++i; }
-                    else if (next == 't') { result += '\t'; ++i; }
-                    else if (next == '\\') { result += '\\'; ++i; }
-                    else if (next == '"') { result += '"'; ++i; }
-                    else if (next == '\'') { result += '\''; ++i; }
-                    else { result += content[i]; }
-                } else {
-                    result += content[i];
-                }
-            }
-            style.content = result;
-        }
-    }
+    // O(1) dispatch table lookup instead of O(n) if-else chain
+    static const auto& handlers = getPropertyHandlers();
+    auto it = handlers.find(prop);
+    if (it != handlers.end()) {
+        it->second(val, style);
+    }
+    // Unknown properties are silently ignored (standard CSS behavior)
 }
 
 void CSSParser::parseMarginShorthand(const std::string& value, ComputedStyle& style) {

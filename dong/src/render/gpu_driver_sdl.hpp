@@ -66,7 +66,7 @@ private:
     bool debug_log_draw_batches_ = false;
     bool debug_log_layer_cache_ = false;
     bool msdf_subpixel_enabled_ = false;
-    bool layer_cache_enabled_ = true; // 新增：控制是否复用隔离层缓存纹理
+    bool layer_cache_enabled_ = false; // 控制是否复用隔离层缓存纹理（默认关闭，确保正确性优先）
     bool split_cmd_buf_for_isolated_layers_ = true; // Workaround: 拆分 command buffer 以规避 LOADOP/多 pass 问题
     bool debug_rt_enabled_ = false;    // 调试：打印帧级 / RenderTarget / 图层合成日志
 

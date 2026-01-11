@@ -8,6 +8,8 @@
 #include <cctype>
 #include <algorithm>
 #include <unordered_set>
+#include <unordered_map>
+#include <string_view>
 
 namespace dong::dom {
 
@@ -217,107 +219,122 @@ void HTMLParser::applyDefaultStyles(DOMNodePtr node) {
     if (!node) return;
 
     auto& style = node->getComputedStyle();
-    std::string tag = node->getTagName();
+    const std::string& tag = node->getTagName();
 
-    // Block-level elements
-    static const std::unordered_set<std::string> block_elements = {
-        "div", "p", "body", "html", "main", "section", "article", "nav", 
-        "header", "footer", "aside", "address", "blockquote", "pre",
-        "figure", "figcaption", "ul", "ol", "li", "dl", "dt", "dd",
-        "table", "form", "fieldset", "hr"
-    };
+    // ========================================================================
+    // Tag-based default style dispatch table - O(1) lookup
+    // ========================================================================
+    using TagStyleHandler = void(*)(ComputedStyle&);
     
-    // Inline elements
-    static const std::unordered_set<std::string> inline_elements = {
-        "span", "a", "b", "i", "strong", "em", "code", "kbd", "samp", "var",
-        "small", "s", "cite", "q", "mark", "sub", "sup", "u", "abbr", 
-        "time", "data", "wbr"
+    static const std::unordered_map<std::string_view, TagStyleHandler> tag_handlers = {
+        // Block-level elements
+        {"div", [](ComputedStyle& s) { s.setDisplay("block"); }},
+        {"p", [](ComputedStyle& s) { s.setDisplay("block"); }},
+        {"body", [](ComputedStyle& s) { s.setDisplay("block"); }},
+        {"html", [](ComputedStyle& s) { s.setDisplay("block"); }},
+        {"main", [](ComputedStyle& s) { s.setDisplay("block"); }},
+        {"section", [](ComputedStyle& s) { s.setDisplay("block"); }},
+        {"article", [](ComputedStyle& s) { s.setDisplay("block"); }},
+        {"nav", [](ComputedStyle& s) { s.setDisplay("block"); }},
+        {"header", [](ComputedStyle& s) { s.setDisplay("block"); }},
+        {"footer", [](ComputedStyle& s) { s.setDisplay("block"); }},
+        {"aside", [](ComputedStyle& s) { s.setDisplay("block"); }},
+        {"address", [](ComputedStyle& s) { s.setDisplay("block"); }},
+        {"blockquote", [](ComputedStyle& s) { s.setDisplay("block"); }},
+        {"figure", [](ComputedStyle& s) { s.setDisplay("block"); }},
+        {"figcaption", [](ComputedStyle& s) { s.setDisplay("block"); }},
+        {"ul", [](ComputedStyle& s) { s.setDisplay("block"); }},
+        {"ol", [](ComputedStyle& s) { s.setDisplay("block"); }},
+        {"li", [](ComputedStyle& s) { s.setDisplay("block"); }},
+        {"dl", [](ComputedStyle& s) { s.setDisplay("block"); }},
+        {"dt", [](ComputedStyle& s) { s.setDisplay("block"); }},
+        {"dd", [](ComputedStyle& s) { s.setDisplay("block"); }},
+        {"form", [](ComputedStyle& s) { s.setDisplay("block"); }},
+        {"fieldset", [](ComputedStyle& s) { s.setDisplay("block"); }},
+        
+        // Inline elements
+        {"span", [](ComputedStyle& s) { s.setDisplay("inline"); }},
+        {"a", [](ComputedStyle& s) { s.setDisplay("inline"); }},
+        {"b", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_weight = "bold"; }},
+        {"i", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_style = "italic"; }},
+        {"strong", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_weight = "bold"; }},
+        {"em", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_style = "italic"; }},
+        {"code", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_family = "Menlo, Consolas, monospace"; }},
+        {"kbd", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_family = "Menlo, Consolas, monospace"; }},
+        {"samp", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_family = "Menlo, Consolas, monospace"; }},
+        {"var", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_style = "italic"; }},
+        {"small", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_size = 12.0f; }},
+        {"s", [](ComputedStyle& s) { s.setDisplay("inline"); s.text_decoration = "line-through"; }},
+        {"cite", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_style = "italic"; }},
+        {"q", [](ComputedStyle& s) { s.setDisplay("inline"); }},
+        {"mark", [](ComputedStyle& s) { s.setDisplay("inline"); s.background_color = "#ffff00"; }},
+        {"sub", [](ComputedStyle& s) { s.setDisplay("inline"); s.vertical_align = "sub"; s.font_size = 12.0f; }},
+        {"sup", [](ComputedStyle& s) { s.setDisplay("inline"); s.vertical_align = "super"; s.font_size = 12.0f; }},
+        {"u", [](ComputedStyle& s) { s.setDisplay("inline"); s.text_decoration = "underline"; }},
+        {"abbr", [](ComputedStyle& s) { s.setDisplay("inline"); }},
+        {"time", [](ComputedStyle& s) { s.setDisplay("inline"); }},
+        {"data", [](ComputedStyle& s) { s.setDisplay("inline"); }},
+        {"wbr", [](ComputedStyle& s) { s.setDisplay("inline"); }},
+        
+        // Headings
+        {"h1", [](ComputedStyle& s) { s.setDisplay("block"); s.font_weight = "bold"; s.font_size = 32.0f; }},
+        {"h2", [](ComputedStyle& s) { s.setDisplay("block"); s.font_weight = "bold"; s.font_size = 28.0f; }},
+        {"h3", [](ComputedStyle& s) { s.setDisplay("block"); s.font_weight = "bold"; s.font_size = 24.0f; }},
+        {"h4", [](ComputedStyle& s) { s.setDisplay("block"); s.font_weight = "bold"; s.font_size = 20.0f; }},
+        {"h5", [](ComputedStyle& s) { s.setDisplay("block"); s.font_weight = "bold"; s.font_size = 18.0f; }},
+        {"h6", [](ComputedStyle& s) { s.setDisplay("block"); s.font_weight = "bold"; s.font_size = 16.0f; }},
+        
+        // Form elements (inline-block)
+        {"button", [](ComputedStyle& s) { s.setDisplay("inline-block"); }},
+        {"input", [](ComputedStyle& s) { s.setDisplay("inline-block"); }},
+        {"select", [](ComputedStyle& s) { s.setDisplay("inline-block"); }},
+        {"textarea", [](ComputedStyle& s) { s.setDisplay("inline-block"); }},
+        
+        // Media elements (inline-block)
+        {"img", [](ComputedStyle& s) { s.setDisplay("inline-block"); }},
+        {"video", [](ComputedStyle& s) { s.setDisplay("inline-block"); }},
+        {"canvas", [](ComputedStyle& s) { s.setDisplay("inline-block"); }},
+        {"svg", [](ComputedStyle& s) { s.setDisplay("inline-block"); }},
+        {"picture", [](ComputedStyle& s) { s.setDisplay("inline-block"); }},
+        
+        // Special elements
+        {"br", [](ComputedStyle& s) { 
+            s.setDisplay("block"); 
+            s.height = CSSValue(0.0f, CSSValue::Unit::PIXEL); 
+        }},
+        {"hr", [](ComputedStyle& s) { 
+            s.setDisplay("block"); 
+            s.height = CSSValue(1.0f, CSSValue::Unit::PIXEL);
+            s.margin_top = CSSValue(8.0f, CSSValue::Unit::PIXEL);
+            s.margin_bottom = CSSValue(8.0f, CSSValue::Unit::PIXEL);
+            s.border_width = 0.0f;
+            s.background_color = "#cccccc";
+        }},
+        {"pre", [](ComputedStyle& s) { 
+            s.setDisplay("block"); 
+            s.font_family = "Menlo, Consolas, monospace"; 
+        }},
+        
+        // Table elements
+        {"table", [](ComputedStyle& s) { s.setDisplay("table"); }},
+        {"tr", [](ComputedStyle& s) { s.setDisplay("table-row"); }},
+        {"td", [](ComputedStyle& s) { s.setDisplay("table-cell"); }},
+        {"th", [](ComputedStyle& s) { s.setDisplay("table-cell"); }},
+        {"thead", [](ComputedStyle& s) { s.setDisplay("table-row-group"); }},
+        {"tbody", [](ComputedStyle& s) { s.setDisplay("table-row-group"); }},
+        {"tfoot", [](ComputedStyle& s) { s.setDisplay("table-row-group"); }},
     };
 
-    if (block_elements.count(tag) > 0) {
-        style.display = "block";
-    }
-    else if (inline_elements.count(tag) > 0) {
-        style.display = "inline";
-    }
-    else if (tag == "h1" || tag == "h2" || tag == "h3" || 
-             tag == "h4" || tag == "h5" || tag == "h6") {
-        style.display = "block";
-        style.font_weight = "bold";
-        if (tag == "h1") style.font_size = 32.0f;
-        else if (tag == "h2") style.font_size = 28.0f;
-        else if (tag == "h3") style.font_size = 24.0f;
-        else if (tag == "h4") style.font_size = 20.0f;
-        else if (tag == "h5") style.font_size = 18.0f;
-        else if (tag == "h6") style.font_size = 16.0f;
-    }
-    else if (tag == "button" || tag == "input" || tag == "select" || 
-             tag == "textarea") {
-        style.display = "inline-block";
-    }
-    else if (tag == "img" || tag == "video" || tag == "canvas" || 
-             tag == "svg" || tag == "picture") {
-        style.display = "inline-block";
-    }
-    else if (tag == "br") {
-        style.display = "block";
-        style.height = CSSValue(0.0f, CSSValue::Unit::PIXEL);
-    }
-    else if (tag == "hr") {
-        style.display = "block";
-        style.height = CSSValue(1.0f, CSSValue::Unit::PIXEL);
-        style.margin_top = CSSValue(8.0f, CSSValue::Unit::PIXEL);
-        style.margin_bottom = CSSValue(8.0f, CSSValue::Unit::PIXEL);
-        style.border_width = 0.0f;
-        style.background_color = "#cccccc";
-    }
-    else if (tag == "table") {
-        style.display = "table";
-    }
-    else if (tag == "tr") {
-        style.display = "table-row";
-    }
-    else if (tag == "td" || tag == "th") {
-        style.display = "table-cell";
-    }
-    else if (tag == "thead" || tag == "tbody" || tag == "tfoot") {
-        style.display = "table-row-group";
-    }
-    else {
-        style.display = "block";
-    }
-    
-    // Text styling defaults
-    if (tag == "b" || tag == "strong") {
-        style.font_weight = "bold";
-    }
-    if (tag == "i" || tag == "em" || tag == "cite" || tag == "var") {
-        style.font_style = "italic";
-    }
-    if (tag == "code" || tag == "kbd" || tag == "samp" || tag == "pre") {
-        style.font_family = "Menlo, Consolas, monospace";
-    }
-    if (tag == "u") {
-        style.text_decoration = "underline";
-    }
-    if (tag == "s") {
-        style.text_decoration = "line-through";
-    }
-    if (tag == "mark") {
-        style.background_color = "#ffff00";
-    }
-    if (tag == "small") {
-        style.font_size = 12.0f;
-    }
-    if (tag == "sub") {
-        style.vertical_align = "sub";
-        style.font_size = 12.0f;
-    }
-    if (tag == "sup") {
-        style.vertical_align = "super";
-        style.font_size = 12.0f;
+    // O(1) lookup in dispatch table
+    auto it = tag_handlers.find(tag);
+    if (it != tag_handlers.end()) {
+        it->second(style);
+    } else {
+        // Default: block display for unknown elements
+        style.setDisplay("block");
     }
 
+    // Recursively apply to children
     for (const auto& child : node->getChildren()) {
         applyDefaultStyles(child);
     }

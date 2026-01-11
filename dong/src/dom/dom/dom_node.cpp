@@ -468,6 +468,13 @@ ClassList& DOMNode::getClassList() {
 
 void DOMNode::setAttribute(const std::string& key, const std::string& value) {
     attributes_[key] = value;
+
+    // Internal attributes used by the renderer should not affect layout.
+    // (e.g. Painter's transient markers)
+    if (key.size() >= 2 && key[0] == '_' && key[1] == '_') {
+        return;
+    }
+
     markLayoutDirty();
 }
 
@@ -705,10 +712,12 @@ std::string DOMNode::getInlineStyleProperty(const std::string& property) const {
 }
 
 void DOMNode::markLayoutDirty() {
-    if (layout_dirty_) {
-        return;
+    // Always propagate to ancestors.
+    // If a descendant is already dirty but its ancestors were cleared (or never marked),
+    // we still need the root to become dirty so View can recompute layout/rebuild commands.
+    if (!layout_dirty_) {
+        layout_dirty_ = true;
     }
-    layout_dirty_ = true;
 
     if (auto p = parent_.lock()) {
         p->markLayoutDirty();
@@ -738,14 +747,20 @@ static bool isScrollOverflowValue(const std::string& v) {
     return lowered == "scroll" || lowered == "auto";
 }
 
+static float computeMaxScroll(float client, float content) {
+    if (client <= 0.0f || content <= client) {
+        return 0.0f;
+    }
+    return content - client;
+}
+
 } // namespace
 
 void DOMNode::scrollBy(float dx, float dy) {
     if (!isScrollContainer()) return;
 
-    const float inf = std::numeric_limits<float>::infinity();
-    const float max_x = (client_width_ > 0.0f && content_width_ > client_width_) ? (content_width_ - client_width_) : inf;
-    const float max_y = (client_height_ > 0.0f && content_height_ > client_height_) ? (content_height_ - client_height_) : inf;
+    const float max_x = computeMaxScroll(client_width_, content_width_);
+    const float max_y = computeMaxScroll(client_height_, content_height_);
 
     scroll_x_ = std::clamp(scroll_x_ + dx, 0.0f, max_x);
     scroll_y_ = std::clamp(scroll_y_ + dy, 0.0f, max_y);
@@ -754,9 +769,8 @@ void DOMNode::scrollBy(float dx, float dy) {
 void DOMNode::scrollTo(float x, float y) {
     if (!isScrollContainer()) return;
 
-    const float inf = std::numeric_limits<float>::infinity();
-    const float max_x = (client_width_ > 0.0f && content_width_ > client_width_) ? (content_width_ - client_width_) : inf;
-    const float max_y = (client_height_ > 0.0f && content_height_ > client_height_) ? (content_height_ - client_height_) : inf;
+    const float max_x = computeMaxScroll(client_width_, content_width_);
+    const float max_y = computeMaxScroll(client_height_, content_height_);
 
     scroll_x_ = std::clamp(x, 0.0f, max_x);
     scroll_y_ = std::clamp(y, 0.0f, max_y);
@@ -781,6 +795,26 @@ void DOMNode::setClientRect(float top, float left, float width, float height) {
     client_left_ = left;
     client_width_ = width;
     client_height_ = height;
+
+    // If content size was updated before client size (or vice versa), ensure scroll offsets remain valid.
+    if (isScrollContainer()) {
+        const float max_x = computeMaxScroll(client_width_, content_width_);
+        const float max_y = computeMaxScroll(client_height_, content_height_);
+        scroll_x_ = std::clamp(scroll_x_, 0.0f, max_x);
+        scroll_y_ = std::clamp(scroll_y_, 0.0f, max_y);
+    }
+}
+
+void DOMNode::setContentSize(float w, float h) {
+    content_width_ = w;
+    content_height_ = h;
+
+    if (isScrollContainer()) {
+        const float max_x = computeMaxScroll(client_width_, content_width_);
+        const float max_y = computeMaxScroll(client_height_, content_height_);
+        scroll_x_ = std::clamp(scroll_x_, 0.0f, max_x);
+        scroll_y_ = std::clamp(scroll_y_, 0.0f, max_y);
+    }
 }
 
 void DOMNode::setOffsetRect(float top, float left, float width, float height) {
