@@ -64,6 +64,8 @@ struct ComputedStyle {
     std::string background_size = "auto";
     std::string background_repeat = "repeat";
     std::string background_position = "0% 0%";
+    std::string object_fit = "fill";
+
     std::vector<CSSGradient> background_gradients;
     std::string color = "#000000";
     float border_radius = 0.0f;

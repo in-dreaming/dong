@@ -11,6 +11,8 @@
 #include <sstream>
 #include <string>
 #include <unordered_map>
+#include <filesystem>
+
 
 #if defined(_WIN32)
 #define WIN32_LEAN_AND_MEAN
@@ -307,8 +309,22 @@ int main(int argc, char** argv) {
     // Set external GPU device for rendering
     dong_view_set_external_gpu_device(view, native_device, native_window);
 
+    // Resolve relative resource paths against the HTML file directory.
+    // This makes url("../images/bg.png") stable regardless of current working directory.
+    if (html_file) {
+        namespace fs = std::filesystem;
+        std::error_code ec;
+        fs::path abs_html = fs::absolute(fs::path(html_file), ec);
+        if (!ec) {
+            std::string resource_root = abs_html.parent_path().string();
+            std::printf("[dong_app] Resource root: %s\n", resource_root.c_str());
+            dong_view_set_resource_root(view, resource_root.c_str());
+        }
+    }
+
     // Load HTML
     dong_view_load_html(view, html_content.c_str());
+
 
     std::printf("[dong_app] View created, entering main loop...\n");
 

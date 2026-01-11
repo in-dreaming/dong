@@ -394,12 +394,20 @@ int main(int argc, char* argv[]) {
                                       static_cast<void*>(device),
                                       static_cast<void*>(window.getHandle()));
 
+    // 资源根目录：让相对路径（../images/bg.png）按 HTML 文件所在目录解析
+    {
+        std::string resource_root = fs::absolute(fs::path(html_file)).parent_path().string();
+        SDL_Log("[Load] Resource root: %s", resource_root.c_str());
+        dong_view_set_resource_root(view, resource_root.c_str());
+    }
+
     // 加载 HTML
     SDL_Log("[Load] Loading HTML...");
     SDL_Log("[Debug] HTML content length: %zu", html_content.length());
     SDL_Log("[Debug] About to call dong_view_load_html...");
     dong_view_load_html(view, html_content.c_str());
     SDL_Log("[Load] HTML loaded successfully");
+
 
     SDL_Log("[Debug] About to create pixel buffer...");
     // 渲染到像素缓冲区（逐帧导出）

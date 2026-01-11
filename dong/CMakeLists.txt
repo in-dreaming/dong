@@ -253,7 +253,7 @@ if(VULKAN_SDK_PATH)
     endif()
 endif()
 
-target_compile_definitions(dong_legacy PRIVATE SDL_SHADERCROSS_DXC)
+target_compile_definitions(dong_legacy PRIVATE SDL_SHADERCROSS_DXC DONG_USE_SDL_IMAGE)
 
 target_link_libraries(dong_legacy PUBLIC quickjs lexbor yoga)
 
@@ -456,7 +456,11 @@ if(BUILD_EXAMPLES)
     if(EXISTS "${CMAKE_SOURCE_DIR}/examples/data")
         install(DIRECTORY "${CMAKE_SOURCE_DIR}/examples/data"
             DESTINATION bin
-            FILES_MATCHING PATTERN "*.html" PATTERN "*.js" PATTERN "*.css"
+            FILES_MATCHING
+                PATTERN "*.html"
+                PATTERN "*.js"
+                PATTERN "*.css"
+                PATTERN "*.png"
         )
     endif()
 endif()

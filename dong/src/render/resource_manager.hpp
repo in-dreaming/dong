@@ -32,8 +32,14 @@ class ResourceManager {
 public:
     ResourceManager();
     ~ResourceManager();
+
+    // Optional: set a base directory for resolving relative resource paths.
+    // Example: if base is ".../examples/data/tests", then "../images/bg.png" works.
+    void setResourceRoot(const std::string& root) { resource_root_ = root; }
+    const std::string& getResourceRoot() const { return resource_root_; }
     
     // Image loading and caching
+
     // Returns nullptr if file cannot be loaded or decoded
     ImageResource* loadImage(const std::string& file_path);
     
@@ -78,7 +84,10 @@ private:
     // Helper functions
     std::string readFileBytes(const std::string& path, std::vector<uint8_t>& out_data) const;
     std::string makeFontCacheKey(const std::string& family, float size) const;
+
+    std::string resource_root_;
 };
+
 
 using ResourceManagerPtr = std::unique_ptr<ResourceManager>;
 

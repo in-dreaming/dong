@@ -38,7 +38,8 @@ public:
     void endFrameOffscreen() override;
 
     // 供外部注入图片资源管理器（用于从 Skia/CPU 侧取得图片像素）
-    void setImageResourceManager(ResourceManager* manager) { image_resource_manager_ = manager; }
+    void setImageResourceManager(ResourceManager* manager) override { image_resource_manager_ = manager; }
+
 
     // Debug: 启用时在 execute 末尾按 draw_batches 做一次批次遍历并输出日志
     void setDebugLogDrawBatches(bool enable) { debug_log_draw_batches_ = enable; }

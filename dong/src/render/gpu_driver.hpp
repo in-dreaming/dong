@@ -10,6 +10,8 @@ namespace dong::render {
 
 class GPUDevice;
 class ShaderManager;
+class ResourceManager;
+
 
 // 支持多后端选择的枚举，目前仅实现 SDL_gpu 后端
 enum class GPUBackendType : uint8_t {
@@ -27,6 +29,9 @@ public:
     // 预处理命令列表中的资源（如 glyph 纹理上传）
     // 必须在 beginFrame() 之前调用，避免在 render pass 中进行纹理上传
     virtual void prepareResources(const GPUCommandList& commands) { (void)commands; }
+
+    // 可选：注入资源管理器（用于图片 decode / atlas 构建等）
+    virtual void setImageResourceManager(ResourceManager* manager) { (void)manager; }
 
     virtual void beginFrame() = 0;
     virtual void endFrame() = 0;

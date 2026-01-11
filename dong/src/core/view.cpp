@@ -19,7 +19,9 @@
 #include "../dom/input_element.hpp"
 #include "../render/render_surface.hpp"
 #include "../render/painter.hpp"
+#include "../render/resource_manager.hpp"
 #include "../render/gpu_device.hpp"
+
 #include "../render/gpu_surface.hpp"
 #include "../render/gpu_painter.hpp"
 #include "../render/shader_manager.hpp"
@@ -130,6 +132,7 @@ View::View(uint32_t width, uint32_t height)
       layout_engine(std::make_unique<layout::Engine>()),
       render_surface(std::make_unique<render::CPUBufferSurface>(width, height)),
       painter(nullptr),
+      resource_manager_(std::make_unique<render::ResourceManager>()),
       script_engine(std::make_unique<script::ScriptEngine>()),
       event_dispatcher(std::make_unique<dom::EventDispatcher>()),
       focus_manager(std::make_unique<dom::FocusManager>()),
@@ -172,7 +175,14 @@ View::~View() {
     // 其他资源通过 unique_ptr 自动清理
 }
 
+void View::setResourceRoot(const std::string& root) {
+    if (resource_manager_) {
+        resource_manager_->setResourceRoot(root);
+    }
+}
+
 void View::load_html(const char* html) {
+
     SDL_Log("[View::load_html] Entry");
     if (!html || !dom_manager) {
         SDL_Log("[View::load_html] Early return: html=%p, dom_manager=%p", html, dom_manager.get());
@@ -1240,11 +1250,11 @@ void View::setExternalGPUDevice(SDL_GPUDevice* device, SDL_Window* window) {
         shader_manager_.get()
     );
 
-    // TODO: 重新接入 ResourceManager（用于图片缓存）
-    // if (painter && gpu_driver_) {
-    //     auto* rm = painter->getResourceManager();
-    //     gpu_driver_->setImageResourceManager(rm);
-    // }
+    // 注入图片资源管理器：用于 <img> / background-image 的像素解码与 GPU atlas 构建
+    if (gpu_driver_) {
+        gpu_driver_->setImageResourceManager(resource_manager_.get());
+    }
+
 
     if (!gpu_driver_ || !gpu_driver_->initialize()) {
         gpu_driver_.reset();

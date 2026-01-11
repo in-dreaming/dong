@@ -57,11 +57,19 @@ struct DrawShadowData {
     float blur = 0.0f;   // 模糊半径
 };
 
+enum class ImageFitMode : uint8_t {
+    Fill,
+    Contain,
+    Cover,
+};
+
 struct DrawImageData {
     Rect rect;
     std::string src;   // 图片资源标识（路径或其它 key）
     float opacity = 1.0f;
+    ImageFitMode fit = ImageFitMode::Fill;
 };
+
 
 struct GlyphInstance {
     uint32_t glyph_id = 0;
@@ -261,14 +269,16 @@ public:
         list_.items.push_back(std::move(item));
     }
 
-    void addImage(const Rect& rect, const std::string& src, float opacity) {
+    void addImage(const Rect& rect, const std::string& src, float opacity, ImageFitMode fit = ImageFitMode::Fill) {
         DisplayItem item{};
         item.type = DisplayItemType::DrawImage;
         item.image.rect = applyTranslate(rect);
         item.image.src = src;
         item.image.opacity = opacity;
+        item.image.fit = fit;
         list_.items.push_back(std::move(item));
     }
+
 
     void addGlyphRun(DrawGlyphRunData data) {
         DisplayItem item{};

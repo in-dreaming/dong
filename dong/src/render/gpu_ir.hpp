@@ -56,7 +56,9 @@ struct GPUCommand {
 
     // 图片绘制专用字段（仅在 DrawImageQuad 时使用）
     std::string image_src; // 原始图片资源标识（路径）
+    ImageFitMode image_fit = ImageFitMode::Fill;
     float opacity = 1.0f;  // 图片整体透明度
+
     float layer_opacity = 1.0f; // 图层合成透明度（BeginIsolatedLayer）
     uint64_t layer_id = 0;      // 图层的稳定 ID，用于跨帧缓存
     bool layer_dirty = true;    // 本帧该图层是否需要重新栅格
@@ -329,11 +331,13 @@ public:
                 cmd.rect = item.image.rect;
                 cmd.opacity = item.image.opacity * current_opacity();
                 cmd.image_src = item.image.src;
+                cmd.image_fit = item.image.fit;
                 cmd.sort_key = make_sort_key(cmd.type, cmd);
                 out.commands.push_back(cmd);
                 image_count++;
                 break;
             }
+
             case DisplayItemType::DrawGlyphRun: {
                 GPUCommand cmd{};
                 cmd.type = GPUCommandType::DrawText;

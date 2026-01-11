@@ -1405,8 +1405,48 @@ bool GPUDriverSDL::ensureImageInAtlas(const std::string& src, ImageAtlasEntry& o
     }
 
     if (img_w > image_atlas_width_ || img_h > image_atlas_height_) {
-        SDL_Log("GPUDriverSDL::ensureImageInAtlas: image too large for atlas (%u x %u)", img_w, img_h);
-        return false;
+        // Fallback: downscale (nearest) to fit into atlas.
+        // This keeps the rendering path simple (single atlas) while ensuring correctness.
+        const uint32_t src_w = img_w;
+        const uint32_t src_h = img_h;
+
+        uint32_t new_w = img_w;
+        uint32_t new_h = img_h;
+
+        if (new_w > image_atlas_width_) {
+            new_h = static_cast<uint32_t>((static_cast<uint64_t>(new_h) * image_atlas_width_) / new_w);
+            new_w = image_atlas_width_;
+        }
+        if (new_h > image_atlas_height_) {
+            new_w = static_cast<uint32_t>((static_cast<uint64_t>(new_w) * image_atlas_height_) / new_h);
+            new_h = image_atlas_height_;
+        }
+
+        new_w = std::max(1u, new_w);
+        new_h = std::max(1u, new_h);
+
+        SDL_Log("GPUDriverSDL::ensureImageInAtlas: downscaling '%s' from %ux%u to %ux%u to fit atlas",
+                src.c_str(), src_w, src_h, new_w, new_h);
+
+        std::vector<uint8_t> scaled;
+        scaled.resize(static_cast<size_t>(new_w) * static_cast<size_t>(new_h) * 4);
+
+        for (uint32_t y = 0; y < new_h; ++y) {
+            const uint32_t sy = static_cast<uint32_t>((static_cast<uint64_t>(y) * src_h) / new_h);
+            for (uint32_t x = 0; x < new_w; ++x) {
+                const uint32_t sx = static_cast<uint32_t>((static_cast<uint64_t>(x) * src_w) / new_w);
+                const size_t src_idx = (static_cast<size_t>(sy) * src_w + sx) * 4;
+                const size_t dst_idx = (static_cast<size_t>(y) * new_w + x) * 4;
+                scaled[dst_idx + 0] = pixels[src_idx + 0];
+                scaled[dst_idx + 1] = pixels[src_idx + 1];
+                scaled[dst_idx + 2] = pixels[src_idx + 2];
+                scaled[dst_idx + 3] = pixels[src_idx + 3];
+            }
+        }
+
+        pixels = std::move(scaled);
+        img_w = new_w;
+        img_h = new_h;
     }
 
     // 简单行优先打包：从左到右填充，不够则换行
@@ -1462,6 +1502,8 @@ bool GPUDriverSDL::ensureImageInAtlas(const std::string& src, ImageAtlasEntry& o
     SDL_GPUTextureTransferInfo tex_transfer{};
     tex_transfer.transfer_buffer = transfer_buf;
     tex_transfer.offset = 0;
+    tex_transfer.pixels_per_row = img_w;
+    tex_transfer.rows_per_layer = img_h;
 
     SDL_GPUTextureRegion region{};
     region.texture = image_atlas_texture_;
@@ -1587,6 +1629,22 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
         if (debug_rt_enabled_) {
             SDL_Log("[GPUDriverSDL::execute] frame=%llu mode=window viewport=%ux%u swapchain=%p intermediate=%p use_intermediate=%d",
                     frame_index_, w, h, (void*)real_swapchain_texture, (void*)intermediate_texture_, use_intermediate ? 1 : 0);
+        }
+    }
+
+    // Pre-upload images into atlas before any render pass begins.
+    // SDL_gpu forbids beginning a copy pass while a render pass is active.
+    // If we lazily upload inside DrawImageQuad (which runs inside a render pass), SDL will assert.
+    {
+        for (const auto& cmd : commands.commands) {
+            if (cmd.type != GPUCommandType::DrawImageQuad) {
+                continue;
+            }
+            if (cmd.image_src.empty()) {
+                continue;
+            }
+            ImageAtlasEntry tmp{};
+            (void)ensureImageInAtlas(cmd.image_src, tmp);
         }
     }
 
@@ -2666,8 +2724,6 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
 
             ImageUniformData u{};
 
-            // 保持等比缩放（类似 object-fit: contain）：
-            // 在 cmd.rect 指定的盒子内，按图片原始宽高比缩放，并居中显示
             const float img_w = static_cast<float>(entry.width);
             const float img_h = static_cast<float>(entry.height);
             const float dst_w = cmd.rect.width;
@@ -2681,13 +2737,25 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             if (img_w > 0.0f && img_h > 0.0f && dst_w > 0.0f && dst_h > 0.0f) {
                 const float scale_x = dst_w / img_w;
                 const float scale_y = dst_h / img_h;
-                const float scale = (scale_x < scale_y) ? scale_x : scale_y;
-                draw_w = img_w * scale;
-                draw_h = img_h * scale;
-                const float offset_x = (dst_w - draw_w) * 0.5f;
-                const float offset_y = (dst_h - draw_h) * 0.5f;
-                draw_x = cmd.rect.x + offset_x;
-                draw_y = cmd.rect.y + offset_y;
+
+                if (cmd.image_fit == ImageFitMode::Contain) {
+                    const float scale = (scale_x < scale_y) ? scale_x : scale_y;
+                    draw_w = img_w * scale;
+                    draw_h = img_h * scale;
+                    const float offset_x = (dst_w - draw_w) * 0.5f;
+                    const float offset_y = (dst_h - draw_h) * 0.5f;
+                    draw_x = cmd.rect.x + offset_x;
+                    draw_y = cmd.rect.y + offset_y;
+                } else if (cmd.image_fit == ImageFitMode::Cover) {
+                    const float scale = (scale_x > scale_y) ? scale_x : scale_y;
+                    draw_w = img_w * scale;
+                    draw_h = img_h * scale;
+                    const float offset_x = (dst_w - draw_w) * 0.5f;
+                    const float offset_y = (dst_h - draw_h) * 0.5f;
+                    draw_x = cmd.rect.x + offset_x;
+                    draw_y = cmd.rect.y + offset_y;
+                }
+                // ImageFitMode::Fill: keep cmd.rect as-is.
             }
 
             u.rect[0] = draw_x;
@@ -2717,13 +2785,17 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 pipeline_state.active = PipelineBindingState::ActivePipeline::Image;
             }
 
-            if (!pipeline_state.image_sampler_bound) {
+            // Always bind the image atlas sampler+texture here.
+            // Note: slot 0 is also used by text/layer composite samplers; relying on a cached "already bound"
+            // flag is unsafe because other draws may have rebound slot 0 in between.
+            {
                 SDL_GPUTextureSamplerBinding binding{};
                 binding.texture = image_atlas_texture_;
                 binding.sampler = image_sampler_;
                 SDL_BindGPUFragmentSamplers(pass, 0, &binding, 1);
-                pipeline_state.image_sampler_bound = true;
             }
+            pipeline_state.image_sampler_bound = true;
+            pipeline_state.text_sampler_bound = false;
 
             SDL_DrawGPUPrimitives(pass, 4, 1, 0, 0);
             break;

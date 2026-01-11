@@ -153,7 +153,9 @@ void StyleEngine::applyMatchingRules(DOMNodePtr node) {
         if (!rs.background_repeat.empty() && rs.background_repeat != "repeat") 
             computed.background_repeat = rs.background_repeat;
         if (!rs.background_position.empty()) computed.background_position = rs.background_position;
+        if (!rs.object_fit.empty() && rs.object_fit != "fill") computed.object_fit = rs.object_fit;
         if (!rs.background_gradients.empty()) computed.background_gradients = rs.background_gradients;
+
         
         if (rs.font_size != 16.0f) computed.font_size = rs.font_size;
         if (!rs.font_weight.empty() && rs.font_weight != "normal") computed.font_weight = rs.font_weight;

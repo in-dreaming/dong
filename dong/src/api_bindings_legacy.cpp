@@ -35,6 +35,12 @@ void dong_view_load_html(dong_view_t* view, const char* html) {
     reinterpret_cast<DongView*>(view)->load_html(html);
 }
 
+void dong_view_set_resource_root(dong_view_t* view, const char* resource_root) {
+    if (!view || !resource_root) return;
+    reinterpret_cast<DongView*>(view)->setResourceRoot(std::string(resource_root));
+}
+
+
 void dong_view_resize(dong_view_t* view, uint32_t width, uint32_t height) {
     reinterpret_cast<DongView*>(view)->resize(width, height);
 }

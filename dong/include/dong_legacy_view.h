@@ -24,7 +24,12 @@ dong_view_t* dong_view_create(dong_context_t* ctx, uint32_t width, uint32_t heig
 void dong_view_destroy(dong_view_t* view);
 void dong_view_free(dong_view_t* view);
 void dong_view_load_html(dong_view_t* view, const char* html);
+
+// Optional: set a base directory for resolving relative resource paths (img/src, CSS url(...), script src, etc.)
+void dong_view_set_resource_root(dong_view_t* view, const char* resource_root);
+
 void dong_view_resize(dong_view_t* view, uint32_t width, uint32_t height);
+
 
 // 3. Update/Render Pipeline
 void dong_view_update(dong_view_t* view);

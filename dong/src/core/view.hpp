@@ -20,6 +20,7 @@ using DOMNodePtr = std::shared_ptr<DOMNode>;
 namespace dong::render {
 class Painter;
 class RenderSurface;
+class ResourceManager;
 class GPUDevice;
 class GPUTextureSurfaceImpl;
 class GPUPainter;
@@ -27,6 +28,7 @@ class ShaderManager;
 class GPUDriver;
 struct GPUCommandList;
 }
+
 
 namespace dong::script {
 class ScriptEngine;
@@ -47,6 +49,10 @@ public:
     void load_html(const char* html);
     void resize(uint32_t width, uint32_t height);
     void update();
+
+    // Optional: configure a base directory for resolving relative resource URLs.
+    void setResourceRoot(const std::string& root);
+
     void* get_pixel_buffer();
     render::RenderSurface* getRenderSurface() const { return render_surface.get(); }
 
@@ -91,8 +97,10 @@ private:
     std::unique_ptr<dom::EventDispatcher> event_dispatcher;
     std::unique_ptr<dom::FocusManager> focus_manager;
     std::unique_ptr<render::Painter> painter;
+    std::unique_ptr<render::ResourceManager> resource_manager_;
     std::unique_ptr<script::ScriptEngine> script_engine;
     std::unique_ptr<script::JSBindings> js_bindings;
+
 
     // GPU 渲染相关（可选）
     std::unique_ptr<render::GPUDevice> gpu_device_;
