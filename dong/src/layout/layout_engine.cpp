@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <functional>
 #include <cmath>
+#include <cstdlib>
 
 #include "../render/text_shaper.hpp"
 
@@ -1760,97 +1761,109 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
             dirty_rect_.expand(layout->x, layout->y, layout->width, layout->height);
         }
         
-        // 检查是否需要调整子元素的 Y 坐标
-        // 只有当容器包含 IFC 容器时才需要处理
-        bool has_ifc_child = false;
+        // 递归处理子元素（先修正子树内部的 IFC 高度/行布局，再回到本层做兄弟 Y 修正）
         for (const auto& child : node->getChildren()) {
             if (child && child->getType() == dom::DOMNode::NodeType::ELEMENT) {
-                if (isInlineFormattingContext(child)) {
-                    has_ifc_child = true;
-                    break;
+                const auto& child_style = child->getComputedStyle();
+                if (child_style.display != "none" &&
+                    child_style.position != "absolute" &&
+                    child_style.position != "fixed") {
+                    adjustSiblingPositions(child, 0.0f);
                 }
             }
         }
-        
-        if (has_ifc_child) {
-            // 遍历子元素，计算累积的 Y 偏移
+
+        if (style.display != "flex" && style.display != "inline-flex") {
+        // 检查是否需要调整子元素的 Y 坐标
+        // 背景：我们在第二遍/第三遍里可能会“补齐”某些容器（尤其是含 IFC 后代）的高度，
+        // 但 Yoga 已经给出了兄弟元素的 Y。如果不把后续兄弟整体下移，会出现
+        // “后一个 block 覆盖前一个（因为绘制顺序在后）”的现象。
+        //
+        // 策略：对当前容器的**正常流 block 子元素**做一次“最小下移修正”，确保：
+        // child.y >= prev.y + prev.height + margin-bottom(prev) + margin-top(child)
+        // 仅当 child 被放得过高时才下移（不做上移），减少对 Yoga/flex 结果的干扰。
+        {
+            std::function<void(const dom::DOMNodePtr&, float)> shiftSubtreeY;
+            shiftSubtreeY = [this, &shiftSubtreeY](const dom::DOMNodePtr& n, float dy) {
+                if (!n || n->getType() != dom::DOMNode::NodeType::ELEMENT) return;
+                auto itn = layout_cache.find(n.get());
+                if (itn != layout_cache.end() && itn->second) {
+                    LayoutNode* ln = itn->second.get();
+                    ln->y += dy;
+                    ln->layout.position[1] = ln->y;
+                    dirty_rect_.expand(ln->x, ln->y, ln->width, ln->height);
+                }
+                for (const auto& ch : n->getChildren()) {
+                    if (!ch || ch->getType() != dom::DOMNode::NodeType::ELEMENT) continue;
+                    const auto& cs = ch->getComputedStyle();
+                    if (cs.display == "none") continue;
+                    // 绝对/固定定位会在后续 layoutPositionedElements 阶段重新计算位置
+                    if (cs.position == "absolute" || cs.position == "fixed") continue;
+                    shiftSubtreeY(ch, dy);
+                }
+            };
+
             float cumulative_delta_y = 0.0f;
-            dom::DOMNodePtr prev_child = nullptr;
-            
+            dom::DOMNodePtr prev_flow_child = nullptr;
+
             for (const auto& child : node->getChildren()) {
                 if (!child || child->getType() != dom::DOMNode::NodeType::ELEMENT) {
                     continue;
                 }
-                
+
                 const auto& child_style = child->getComputedStyle();
-                if (child_style.display == "none" || 
-                    child_style.position == "absolute" || 
+                if (child_style.display == "none" ||
+                    child_style.position == "absolute" ||
                     child_style.position == "fixed" ||
-                    child_style.display == "inline" || 
+                    child_style.display == "inline" ||
                     child_style.display == "inline-block") {
                     continue;
                 }
-                
+
                 auto child_it = layout_cache.find(child.get());
                 if (child_it == layout_cache.end() || !child_it->second) {
                     continue;
                 }
                 LayoutNode* child_layout = child_it->second.get();
-                
-                // 如果前一个元素是 IFC 容器，检查它的高度是否增加了
-                if (prev_child && isInlineFormattingContext(prev_child)) {
-                    auto prev_it = layout_cache.find(prev_child.get());
+
+                if (prev_flow_child) {
+                    auto prev_it = layout_cache.find(prev_flow_child.get());
                     if (prev_it != layout_cache.end() && prev_it->second) {
                         LayoutNode* prev_layout = prev_it->second.get();
-                        float margin_bottom = prev_child->getComputedStyle().margin_bottom.isPixel() 
-                                             ? prev_child->getComputedStyle().margin_bottom.value : 0.0f;
-                        float margin_top = child_style.margin_top.isPixel() 
+                        const auto& prev_style = prev_flow_child->getComputedStyle();
+
+                        float margin_bottom = prev_style.margin_bottom.isPixel()
+                                             ? prev_style.margin_bottom.value : 0.0f;
+                        float margin_top = child_style.margin_top.isPixel()
                                           ? child_style.margin_top.value : 0.0f;
-                        
+
                         float expected_y = prev_layout->y + prev_layout->height + margin_bottom + margin_top;
                         float delta = expected_y - child_layout->y;
-                        
                         if (delta > 0.1f) {
+                            if (std::getenv("DONG_DEBUG_IFC_SHIFT")) {
+                                const std::string parent_cls = node->hasAttribute("class") ? node->getAttribute("class") : std::string();
+                                const std::string prev_cls = prev_flow_child->hasAttribute("class") ? prev_flow_child->getAttribute("class") : std::string();
+                                const std::string child_cls = child->hasAttribute("class") ? child->getAttribute("class") : std::string();
+                                DONG_LOG_INFO("[IFC_SHIFT] parent='%s' prev='%s' child='%s' prev_y=%.1f prev_h=%.1f child_y=%.1f expected_y=%.1f delta=%.1f",
+                                    parent_cls.c_str(), prev_cls.c_str(), child_cls.c_str(),
+                                    prev_layout->y, prev_layout->height, child_layout->y, expected_y, delta);
+                            }
                             cumulative_delta_y += delta;
                         }
                     }
                 }
-                
-                // 应用累积的偏移
+
                 if (std::abs(cumulative_delta_y) > 0.1f) {
-                    child_layout->y += cumulative_delta_y;
-                    child_layout->layout.position[1] = child_layout->y;
-                    dirty_rect_.expand(child_layout->x, child_layout->y, 
-                                     child_layout->width, child_layout->height);
-                    
-                    // 如果这个元素是 IFC 容器，移动其 inline-block 子元素
-                    if (isInlineFormattingContext(child)) {
-                        for (const auto& grandchild : child->getChildren()) {
-                            if (!grandchild || grandchild->getType() != dom::DOMNode::NodeType::ELEMENT) {
-                                continue;
-                            }
-                            const auto& grandchild_style = grandchild->getComputedStyle();
-                            if (grandchild_style.display != "inline" && grandchild_style.display != "inline-block") {
-                                continue;
-                            }
-                            auto gc_it = layout_cache.find(grandchild.get());
-                            if (gc_it != layout_cache.end() && gc_it->second) {
-                                gc_it->second->y += cumulative_delta_y;
-                                gc_it->second->layout.position[1] += cumulative_delta_y;
-                                dirty_rect_.expand(gc_it->second->x, gc_it->second->y,
-                                                 gc_it->second->width, gc_it->second->height);
-                            }
-                        }
-                    }
+                    shiftSubtreeY(child, cumulative_delta_y);
                 }
-                
-                prev_child = child;
+
+                prev_flow_child = child;
             }
-            
+
             // 如果有子元素移动了，更新容器高度
             if (std::abs(cumulative_delta_y) > 0.1f && !style.height.isPixel()) {
                 float pad_bottom = style.padding_bottom.isPixel() ? style.padding_bottom.value : 0.0f;
-                
+
                 // 找到最后一个可见子元素的底部
                 float max_bottom = layout->y;
                 for (const auto& child : node->getChildren()) {
@@ -1858,14 +1871,14 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
                         continue;
                     }
                     const auto& child_style = child->getComputedStyle();
-                    if (child_style.display == "none" || 
-                        child_style.position == "absolute" || 
+                    if (child_style.display == "none" ||
+                        child_style.position == "absolute" ||
                         child_style.position == "fixed") {
                         continue;
                     }
                     auto child_it = layout_cache.find(child.get());
                     if (child_it != layout_cache.end() && child_it->second) {
-                        float margin_bottom = child_style.margin_bottom.isPixel() 
+                        float margin_bottom = child_style.margin_bottom.isPixel()
                                              ? child_style.margin_bottom.value : 0.0f;
                         float child_bottom = child_it->second->y + child_it->second->height + margin_bottom;
                         if (child_bottom > max_bottom) {
@@ -1873,7 +1886,7 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
                         }
                     }
                 }
-                
+
                 float new_height = max_bottom - layout->y + pad_bottom;
                 if (new_height > layout->height) {
                     layout->height = new_height;
@@ -1882,17 +1895,6 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
                 }
             }
         }
-        
-        // 递归处理子元素
-        for (const auto& child : node->getChildren()) {
-            if (child && child->getType() == dom::DOMNode::NodeType::ELEMENT) {
-                const auto& child_style = child->getComputedStyle();
-                if (child_style.display != "none" && 
-                    child_style.position != "absolute" && 
-                    child_style.position != "fixed") {
-                    adjustSiblingPositions(child, 0.0f);
-                }
-            }
         }
     };
     

@@ -7,8 +7,10 @@
 #include <sstream>
 #include <cctype>
 #include <cmath>
+#include <cstdlib>
 #include "../core/log.h"
 namespace dong::render {
+
 
 namespace {
 
@@ -462,6 +464,26 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                 style.background_color.c_str(), has_background, radius, has_border,
                 rect.x, rect.y, rect.width, rect.height);
         }
+
+        // DEBUG（可选）：定位 section 的最终布局位置，避免“后一个 section 覆盖前一个”的错位问题
+        // 用法：在运行前设置环境变量 DONG_DEBUG_SECTION=1
+        if (std::getenv("DONG_DEBUG_SECTION")) {
+            const std::string cls = node->hasAttribute("class") ? node->getAttribute("class") : std::string();
+            if (!cls.empty() && cls.find("section") != std::string::npos && radius > 0.0f) {
+                std::string title;
+                for (const auto& ch : node->getChildren()) {
+                    if (!ch || ch->getType() != dom::DOMNode::NodeType::ELEMENT) continue;
+                    const std::string ch_cls = ch->hasAttribute("class") ? ch->getAttribute("class") : std::string();
+                    if (ch_cls.find("section-title") != std::string::npos) {
+                        title = ch->getTextContent();
+                        break;
+                    }
+                }
+                DONG_LOG_INFO("[PAINT_SECTION] class='%s' title='%s' rect=(%.0f,%.0f,%.0f,%.0f)",
+                    cls.c_str(), title.c_str(), rect.x, rect.y, rect.width, rect.height);
+            }
+        }
+
         
         if (rect.width > 0.0f && rect.height > 0.0f) {
             if (radius > 0.0f) {
