@@ -2089,7 +2089,7 @@ void Engine::layoutPositionedElements(dom::DOMNodePtr root) {
                             float box_h_intrinsic = metrics.line_height_px + pad_t + pad_b + border_w * 2.0f;
 
                             if (debug_is_abs_badge) {
-                                DONG_LOG_INFO("[LayoutEngine] ABS badge intrinsic: content_w=%.2f total_w=%.2f line_h=%.2f pad_l=%.1f pad_r=%.1f pad_t=%.1f pad_b=%.1f border=%.1f -> box_w=%.2f box_h=%.2f (width_auto=%d height_auto=%d before: w=%.2f h=%.2f)",
+                                DONG_LOG_DEBUG("[LayoutEngine] ABS badge intrinsic: content_w=%.2f total_w=%.2f line_h=%.2f pad_l=%.1f pad_r=%.1f pad_t=%.1f pad_b=%.1f border=%.1f -> box_w=%.2f box_h=%.2f (width_auto=%d height_auto=%d before: w=%.2f h=%.2f)",
                                         metrics.content_width_px, metrics.total_width_px, metrics.line_height_px,
                                         metrics.padding_left_px, metrics.padding_right_px, pad_t, pad_b, border_w,
                                         box_w_intrinsic, box_h_intrinsic,
@@ -2108,16 +2108,16 @@ void Engine::layoutPositionedElements(dom::DOMNodePtr root) {
                                 layout->layout.dimensions[1] = layout->height;
 
                                 if (debug_is_abs_badge) {
-                                    DONG_LOG_INFO("[LayoutEngine] ABS badge final size: w=%.2f h=%.2f",
+                                    DONG_LOG_DEBUG("[LayoutEngine] ABS badge final size: w=%.2f h=%.2f",
                                             layout->width, layout->height);
                                 }
                             }
                         } else if (debug_is_abs_badge) {
-                            DONG_LOG_INFO("[LayoutEngine] ABS badge intrinsic metrics FAILED (font_size=%.1f)",
+                            DONG_LOG_DEBUG("[LayoutEngine] ABS badge intrinsic metrics FAILED (font_size=%.1f)",
                                     abs_style.font_size);
                         }
                     } else if (debug_is_abs_badge) {
-                        DONG_LOG_INFO("[LayoutEngine] ABS badge intrinsic sizing skipped (width_auto=%d height_auto=%d layout_w=%.2f layout_h=%.2f)",
+                        DONG_LOG_DEBUG("[LayoutEngine] ABS badge intrinsic sizing skipped (width_auto=%d height_auto=%d layout_w=%.2f layout_h=%.2f)",
                                 abs_width_auto ? 1 : 0, abs_height_auto ? 1 : 0,
                                 layout->width, layout->height);
                     }
@@ -2144,7 +2144,7 @@ void Engine::layoutPositionedElements(dom::DOMNodePtr root) {
                     float bottom_px = has_bottom ? computeOffsetPx(style.bottom, cb_h) : 0.0f;
 
                     if (debug_is_abs_badge) {
-                        DONG_LOG_INFO("[LayoutEngine] ABS badge offsets: has_left=%d has_right=%d has_top=%d has_bottom=%d left_px=%.1f right_px=%.1f top_px=%.1f bottom_px=%.1f cb=(%.1f,%.1f,%.1f,%.1f) box=(%.1f,%.1f)",
+                        DONG_LOG_DEBUG("[LayoutEngine] ABS badge offsets: has_left=%d has_right=%d has_top=%d has_bottom=%d left_px=%.1f right_px=%.1f top_px=%.1f bottom_px=%.1f cb=(%.1f,%.1f,%.1f,%.1f) box=(%.1f,%.1f)",
                                 has_left ? 1 : 0, has_right ? 1 : 0,
                                 has_top ? 1 : 0, has_bottom ? 1 : 0,
                                 left_px, right_px, top_px, bottom_px,

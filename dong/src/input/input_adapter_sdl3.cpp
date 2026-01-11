@@ -1,4 +1,5 @@
 ﻿#include "input_adapter_sdl3.hpp"
+#include "../core/log.h"
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_keyboard.h>
@@ -48,7 +49,7 @@ bool SDL3InputAdapter::pollEvents() {
     while (SDL_PollEvent(&ev)) {
         switch (ev.type) {
             case SDL_EVENT_QUIT:
-                SDL_Log("[SDL3InputAdapter] SDL_EVENT_QUIT received");
+                DONG_LOG_DEBUG("[SDL3InputAdapter] SDL_EVENT_QUIT received");
                 // 发送窗口关闭事件
                 if (callback_) {
                     InputEvent e;
@@ -59,7 +60,7 @@ bool SDL3InputAdapter::pollEvents() {
                 }
                 return false;
             case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
-                SDL_Log("[SDL3InputAdapter] SDL_EVENT_WINDOW_CLOSE_REQUESTED received");
+                DONG_LOG_DEBUG("[SDL3InputAdapter] SDL_EVENT_WINDOW_CLOSE_REQUESTED received");
                 // 发送窗口关闭事件
                 if (callback_) {
                     InputEvent e;
@@ -174,7 +175,7 @@ bool SDL3InputAdapter::pollEvents() {
                 break;
 
             case SDL_EVENT_TEXT_INPUT:
-                SDL_Log("[SDL3InputAdapter] SDL_EVENT_TEXT_INPUT: text='%s'", ev.text.text);
+                DONG_LOG_DEBUG("[SDL3InputAdapter] SDL_EVENT_TEXT_INPUT: text='%s'", ev.text.text);
                 if (callback_) {
                     InputEvent e;
                     e.type = InputEventType::TextInput;

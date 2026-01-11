@@ -1,8 +1,8 @@
 /**
- * Dong Engine 3D Screen Script Demo
+ * Dong Engine 3D Multi-Screen Script Demo
  * 
- * 演示 <script> 标签支持（inline + 外部脚本）
- * 基于 3d_screen_html.cpp，但移除 C++ 硬编码 JS，改用 HTML 中的 <script> 标签
+ * 演示多个 HTML 屏幕的自动排列和交互
+ * 支持 n 个 HTML 文件，用数组声明文件路径和窗口大小，自动排列屏幕
  * 
  * 控制说明：
  * - 右键按住 + 鼠标移动：控制视角
@@ -31,6 +31,15 @@
 
 using namespace dong::utils;
 
+// HTML 屏幕配置
+struct ScreenConfig {
+    const char* htmlFile;
+    uint32_t rtWidth;
+    uint32_t rtHeight;
+    float width;   // 3D 世界中的宽度
+    float height;  // 3D 世界中的高度
+};
+
 // 屏幕信息（扩展 HtmlScreen3D）
 struct Screen3D {
     HtmlScreen3D html;
@@ -56,10 +65,54 @@ Quad3D getScreenQuad(const Screen3D& screen) {
     return Quad3D(screen.position, right, up, screen.width, screen.height);
 }
 
+// 自动排列屏幕位置
+void arrangeScreens(Screen3D* screens, int numScreens, float spacing = 4.0f) {
+    if (numScreens <= 0) return;
+    
+    // 计算排列方式：优先横向排列，超过一定数量时分行
+    int maxPerRow = 4;  // 每行最多4个屏幕
+    int rows = (numScreens + maxPerRow - 1) / maxPerRow;
+    
+    for (int i = 0; i < numScreens; i++) {
+        int row = i / maxPerRow;
+        int col = i % maxPerRow;
+        int screensInThisRow = std::min(maxPerRow, numScreens - row * maxPerRow);
+        
+        // 计算该行的起始X位置（居中对齐）
+        float rowWidth = (screensInThisRow - 1) * spacing;
+        float startX = -rowWidth * 0.5f;
+        
+        // 设置位置
+        screens[i].position.x = startX + col * spacing;
+        screens[i].position.y = 2.5f - row * 3.0f;  // 每行间距3.0f
+        screens[i].position.z = -2.0f;
+        
+        // 设置朝向（稍微向内倾斜）
+        float centerX = 0.0f;
+        float deltaX = screens[i].position.x - centerX;
+        screens[i].yaw = -deltaX * 0.1f;  // 向中心倾斜
+        
+        // 限制倾斜角度
+        screens[i].yaw = std::max(-0.5f, std::min(0.5f, screens[i].yaw));
+    }
+}
+
 int main() {
-    SDL_Log("=== Dong 3D Screen Script Demo ===");
-    SDL_Log("This demo uses <script> tags (inline + external) instead of C++ hardcoded JS");
+    SDL_Log("=== Dong 3D Multi-Screen Script Demo ===");
+    SDL_Log("This demo supports multiple HTML screens with automatic arrangement");
     SDL_Log("Controls: RMB+Mouse=Look, WASD=Move, Q/E=Up/Down, Shift=Sprint, LMB=Interact, ESC=Exit");
+
+    // 配置要显示的 HTML 屏幕
+    ScreenConfig screenConfigs[] = {
+        {"screen1_script.html", 800, 1280, 3.0f, 4.8f},
+        {"screen2_script.html", 800, 1280, 3.0f, 4.8f},
+        {"feature_test.html", 960, 540, 4.0f, 2.25f},
+        {"cursor_test.html", 800, 600, 3.5f, 2.625f},
+        // 可以继续添加更多屏幕...
+    };
+    
+    const int numScreens = sizeof(screenConfigs) / sizeof(screenConfigs[0]);
+    SDL_Log("Configured %d screens", numScreens);
 
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         SDL_Log("SDL_Init failed: %s", SDL_GetError());
@@ -72,7 +125,7 @@ int main() {
     }
 
     const int WIN_W = 1280, WIN_H = 720;
-    SDL_Window* window = SDL_CreateWindow("Dong 3D Screen Script Demo", WIN_W, WIN_H, SDL_WINDOW_RESIZABLE);
+    SDL_Window* window = SDL_CreateWindow("Dong 3D Multi-Screen Script Demo", WIN_W, WIN_H, SDL_WINDOW_RESIZABLE);
     if (!window) {
         SDL_Log("Failed to create window: %s", SDL_GetError());
         return 1;
@@ -211,46 +264,43 @@ int main() {
     vbInfo.size = (Uint32)(gridVerts.size() * sizeof(Vertex3D));
     SDL_GPUBuffer* gridVB = SDL_CreateGPUBuffer(device, &vbInfo);
 
-    // 读取使用 <script> 标签的 HTML 文件
-    // 这些 HTML 文件包含 inline 和 external <script> 标签
-    std::string html1 = readFile(getDataPath("screen1_script.html").c_str());
-    std::string html2 = readFile(getDataPath("screen2_script.html").c_str());
+    // 读取 HTML 文件并创建屏幕
+    std::vector<std::string> htmlContents(numScreens);
+    std::vector<Screen3D> screens(numScreens);
     
-    if (html1.empty() || html2.empty()) {
-        SDL_Log("Failed to load HTML files");
-        return 1;
+    for (int i = 0; i < numScreens; i++) {
+        htmlContents[i] = readFile(getDataPath(screenConfigs[i].htmlFile).c_str());
+        if (htmlContents[i].empty()) {
+            SDL_Log("Warning: Failed to load %s, using fallback HTML", screenConfigs[i].htmlFile);
+            htmlContents[i] = "<html><body><h1>File not found: " + std::string(screenConfigs[i].htmlFile) + "</h1></body></html>";
+        } else {
+            SDL_Log("Loaded %s (%zu bytes)", screenConfigs[i].htmlFile, htmlContents[i].size());
+        }
+        
+        // 设置屏幕属性
+        screens[i].width = screenConfigs[i].width;
+        screens[i].height = screenConfigs[i].height;
+        screens[i].rtWidth = screenConfigs[i].rtWidth;
+        screens[i].rtHeight = screenConfigs[i].rtHeight;
     }
     
-    SDL_Log("Loaded screen1_script.html (%zu bytes)", html1.size());
-    SDL_Log("Loaded screen2_script.html (%zu bytes)", html2.size());
-
-    // 创建两个屏幕
-    Screen3D screens[2];
+    // 自动排列屏幕
+    arrangeScreens(screens.data(), numScreens);
     
-    // 屏幕1：左侧 - screen1_script.html
-    screens[0].position = Vec3{-3.5f, 2.5f, -2.0f};
-    screens[0].yaw = 0.3f;
-    screens[0].width = 3.0f;
-    screens[0].height = 4.8f;
-    screens[0].rtWidth = 800;
-    screens[0].rtHeight = 1280;
-    
-    // 屏幕2：右侧 - screen2_script.html
-    screens[1].position = Vec3{3.5f, 2.5f, -2.0f};
-    screens[1].yaw = -0.3f;
-    screens[1].width = 3.0f;
-    screens[1].height = 4.8f;
-    screens[1].rtWidth = 800;
-    screens[1].rtHeight = 1280;
+    SDL_Log("Screen arrangement:");
+    for (int i = 0; i < numScreens; i++) {
+        SDL_Log("  Screen %d: pos=(%.1f,%.1f,%.1f) yaw=%.2f size=%.1fx%.1f rt=%dx%d", 
+                i, screens[i].position.x, screens[i].position.y, screens[i].position.z,
+                screens[i].yaw, screens[i].width, screens[i].height,
+                screens[i].rtWidth, screens[i].rtHeight);
+    }
 
     // 初始化 HTML 屏幕
     // 注意：JS 代码现在通过 HTML 中的 <script> 标签自动执行，无需手动 eval
-    const char* htmlContents[2] = { html1.c_str(), html2.c_str() };
-    
-    for (int i = 0; i < 2; i++) {
-        if (!screens[i].html.init(dongCtx, device, window, htmlContents[i], 
+    for (int i = 0; i < numScreens; i++) {
+        if (!screens[i].html.init(dongCtx, device, window, htmlContents[i].c_str(), 
                                    screens[i].rtWidth, screens[i].rtHeight)) {
-            SDL_Log("Failed to init HTML screen %d", i);
+            SDL_Log("Failed to init HTML screen %d (%s)", i, screenConfigs[i].htmlFile);
             return 1;
         }
         
@@ -341,7 +391,7 @@ int main() {
         int hoveredScreen = -1;
         Vec2 hoveredUV{-1, -1};
         
-        for (int i = 0; i < 2; i++) {
+        for (int i = 0; i < numScreens; i++) {
             Quad3D quad = getScreenQuad(screens[i]);
             Vec2 uv = quad.intersect(hoverRay);
             screens[i].hovered = (uv.x >= 0);
@@ -368,7 +418,7 @@ int main() {
                 // 点击屏幕，设置焦点
                 focusedScreen = hoveredScreen;
                 
-                for (int i = 0; i < 2; i++) {
+                for (int i = 0; i < numScreens; i++) {
                     screens[i].focused = (i == focusedScreen);
                 }
                 
@@ -377,7 +427,7 @@ int main() {
             } else {
                 // 点击屏幕外，取消焦点
                 focusedScreen = -1;
-                for (int i = 0; i < 2; i++) {
+                for (int i = 0; i < numScreens; i++) {
                     screens[i].focused = false;
                 }
             }
@@ -398,7 +448,7 @@ int main() {
         }
 
         // 更新 HTML 屏幕（离屏渲染）
-        for (int i = 0; i < 2; i++) {
+        for (int i = 0; i < numScreens; i++) {
             screens[i].html.update(device);
         }
         
@@ -418,7 +468,7 @@ int main() {
         uploadVertices(device, copyPass, gridVB, gridVerts);
         
         // 上传屏幕四边形顶点
-        for (int i = 0; i < 2; i++) {
+        for (int i = 0; i < numScreens; i++) {
             auto quadVerts = generateQuad(screens[i].width, screens[i].height);
             uploadVertices(device, copyPass, screens[i].html.quadVB, quadVerts);
         }
@@ -497,7 +547,7 @@ int main() {
         // 绘制 HTML 屏幕
         SDL_BindGPUGraphicsPipeline(pass, screenPipeline);
         
-        for (int i = 0; i < 2; i++) {
+        for (int i = 0; i < numScreens; i++) {
             if (!screens[i].html.renderTexture) continue;
             
             SDL_GPUBufferBinding screenBinding{screens[i].html.quadVB, 0};
@@ -534,7 +584,7 @@ int main() {
     // 清理
     if (depthTexture) SDL_ReleaseGPUTexture(device, depthTexture);
     
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < numScreens; i++) {
         screens[i].html.cleanup(device);
     }
     

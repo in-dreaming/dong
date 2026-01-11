@@ -1660,12 +1660,12 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
     auto get_current_transform = [&isolated_layer_stack]() -> const float* {
         if (!isolated_layer_stack.empty()) {
             const float* transform = isolated_layer_stack.back().draw_transform;
-            SDL_Log("[GET_TRANSFORM] Using draw transform: [%.3f %.3f %.1f; %.3f %.3f %.1f]",
+            DONG_LOG_DEBUG("[GET_TRANSFORM] Using draw transform: [%.3f %.3f %.1f; %.3f %.3f %.1f]",
                 transform[0], transform[1], transform[2], transform[3], transform[4], transform[5]);
             return transform;
         }
         // 返回单位矩阵
-        SDL_Log("[GET_TRANSFORM] Using identity matrix (no isolated layers)");
+        DONG_LOG_DEBUG("[GET_TRANSFORM] Using identity matrix (no isolated layers)");
         static const float identity[6] = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f};
         return identity;
     };
@@ -1686,10 +1686,10 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
         bool is_identity = (transform[0] == 1.0f && transform[1] == 0.0f && transform[2] == 0.0f &&
                            transform[3] == 0.0f && transform[4] == 1.0f && transform[5] == 0.0f);
         if (!is_identity) {
-            SDL_Log("[GPU_TRANSFORM] matrix=[%.3f %.3f %.1f; %.3f %.3f %.1f]",
+            DONG_LOG_DEBUG("[GPU_TRANSFORM] matrix=[%.3f %.3f %.1f; %.3f %.3f %.1f]",
                 transform[0], transform[1], transform[2], transform[3], transform[4], transform[5]);
         } else {
-            SDL_Log("[GPU_TRANSFORM] identity matrix");
+            DONG_LOG_DEBUG("[GPU_TRANSFORM] identity matrix");
         }
     };
 
@@ -2553,7 +2553,7 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             break;
         }
         case GPUCommandType::DrawRoundedRectQuad: {
-            SDL_Log("[GPU_CMD] DrawRoundedRectQuad: rect=(%.1f,%.1f,%.1f,%.1f)",
+            DONG_LOG_DEBUG("[GPU_CMD] DrawRoundedRectQuad: rect=(%.1f,%.1f,%.1f,%.1f)",
                 cmd.rect.x, cmd.rect.y, cmd.rect.width, cmd.rect.height);
             
             if (!pass || !round_rect_pipeline_) {

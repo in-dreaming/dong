@@ -491,7 +491,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         
         // DEBUG: 打印背景信息
         if (radius > 0.0f || has_background || has_border) {
-            DONG_LOG_INFO("[PAINT_BG] bg_color='%s' has_bg=%d radius=%.1f has_border=%d rect=(%.0f,%.0f,%.0f,%.0f)",
+            DONG_LOG_DEBUG("[PAINT_BG] bg_color='%s' has_bg=%d radius=%.1f has_border=%d rect=(%.0f,%.0f,%.0f,%.0f)",
                 style.background_color.c_str(), has_background, radius, has_border,
                 rect.x, rect.y, rect.width, rect.height);
         }
@@ -525,7 +525,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                 }
                 if (has_background) {
                     Color bg_color = makeColorFromCss(style.background_color);
-                    DONG_LOG_INFO("[PAINT_BG] Drawing rounded rect: color=(%f,%f,%f,%f)", bg_color.r, bg_color.g, bg_color.b, bg_color.a);
+                    DONG_LOG_DEBUG("[PAINT_BG] Drawing rounded rect: color=(%f,%f,%f,%f)", bg_color.r, bg_color.g, bg_color.b, bg_color.a);
                     // 内部背景矩形需要缩小 border_width
                     Rect inner_rect = rect;
                     if (has_border) {

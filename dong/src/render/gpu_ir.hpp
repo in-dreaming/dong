@@ -293,7 +293,7 @@ public:
                 break;
             }
             case DisplayItemType::DrawRoundedRect: {
-                DONG_LOG_INFO("[DISPLAY_LIST] DrawRoundedRect: rect=(%.1f,%.1f,%.1f,%.1f) radius=%.1f",
+                DONG_LOG_DEBUG("[DISPLAY_LIST] DrawRoundedRect: rect=(%.1f,%.1f,%.1f,%.1f) radius=%.1f",
                     item.rounded_rect.rect.x, item.rounded_rect.rect.y, 
                     item.rounded_rect.rect.width, item.rounded_rect.rect.height,
                     item.rounded_rect.radius);

@@ -50,7 +50,7 @@ DOMNodePtr hitTestRecursive(const DOMNodePtr& node, dong::layout::Engine* layout
 
     // 调试：打印 input 元素的布局信息
     if (node->getTagName() == "input") {
-        DONG_LOG_INFO("[hitTest] input id=%s bounds=(%.1f,%.1f,%.1f,%.1f) test=(%.1f,%.1f)",
+        DONG_LOG_DEBUG("[hitTest] input id=%s bounds=(%.1f,%.1f,%.1f,%.1f) test=(%.1f,%.1f)",
                       node->getAttribute("id").c_str(), lx, ly, w, h, x, y);
     }
 
@@ -397,7 +397,7 @@ void View::update() {
         
         // 只在内容变化时重新构建 DisplayList 和 GPUCommandList
         bool need_rebuild = commands_dirty_;
-        DONG_LOG_INFO("[View::update] need_rebuild=%d commands_dirty_=%d", need_rebuild ? 1 : 0, commands_dirty_ ? 1 : 0);
+        DONG_LOG_DEBUG("[View::update] need_rebuild=%d commands_dirty_=%d", need_rebuild ? 1 : 0, commands_dirty_ ? 1 : 0);
         
         if (need_rebuild) {
             DONG_LOG_DEBUG("[View::update] Building DisplayList...");
@@ -424,10 +424,10 @@ void View::update() {
             
             debugLogLayerTreeIfEnabled(layer_tree);
             compiler.compile(dl, *cached_cmd_list_, &layer_tree);
-            DONG_LOG_INFO("[View::update] GPUCommandList compiled with %zu commands", cached_cmd_list_->commands.size());
+            DONG_LOG_DEBUG("[View::update] GPUCommandList compiled with %zu commands", cached_cmd_list_->commands.size());
             
             // 清除命令脏标记（下次只有在 markNeedsRepaint 时才会重建）
-            DONG_LOG_INFO("[View::update] Setting commands_dirty_ = false");
+            DONG_LOG_DEBUG("[View::update] Setting commands_dirty_ = false");
             commands_dirty_ = false;
 
             // 清除 layout dirty 标记
@@ -666,7 +666,7 @@ std::string View::eval_script_with_return(const char* code) {
 }
 
 void View::markNeedsRepaint() {
-    DONG_LOG_INFO("[View::markNeedsRepaint] Setting commands_dirty_ = true");
+    DONG_LOG_DEBUG("[View::markNeedsRepaint] Setting commands_dirty_ = true");
     commands_dirty_ = true;
     if (render_surface) {
         render_surface->markDirty();
