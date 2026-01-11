@@ -225,6 +225,10 @@ public:
         }
     }
 
+    float getTranslateX() const { return translate_x_; }
+    float getTranslateY() const { return translate_y_; }
+
+
     void addRect(const Rect& rect, const Color& color) {
         DisplayItem item{};
         item.type = DisplayItemType::DrawRect;
@@ -307,7 +311,7 @@ public:
         }
         DisplayItem item{};
         item.type = DisplayItemType::PushClipRect;
-        item.clip.rect = rect;
+        item.clip.rect = applyTranslate(rect);
         item.clip.radius = 0.0f;
         item.clip.is_rounded = false;
         list_.items.push_back(item);
@@ -321,13 +325,14 @@ public:
         }
         DisplayItem item{};
         item.type = DisplayItemType::PushClipRoundedRect;
-        item.clip.rect = rect;
+        item.clip.rect = applyTranslate(rect);
         item.clip.radius = std::max(0.0f, radius);
         item.clip.is_rounded = true;
         list_.items.push_back(item);
         ++clip_depth_;
         return ScopedClip(this, true);
     }
+
 
     const DisplayList& get() const { return list_; }
     DisplayList&& take() { return std::move(list_); }

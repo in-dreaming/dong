@@ -426,13 +426,45 @@ int main(int argc, char* argv[]) {
     SDL_Log("[Render] Rendering offscreen...");
     for (uint32_t fi = 0; fi < frames; ++fi) {
         SDL_Log("[Render] Frame %u: do_update=%d", fi, do_update ? 1 : 0);
+
+        // Optional: inject a synthetic click for tab switching, etc.
+        // Env format: DONG_TEST_CLICK="x,y" or "x,y,button" (SDL button code; left=1)
+        if (fi == 0) {
+            if (const char* s = std::getenv("DONG_TEST_CLICK")) {
+                int x = 0, y = 0, button = 1;
+                int n = std::sscanf(s, "%d,%d,%d", &x, &y, &button);
+                if (n >= 2) {
+                    dong_view_send_mouse_move(view, x, y);
+                    dong_view_send_mouse_down(view, button);
+                    dong_view_send_mouse_up(view, button);
+                }
+            }
+        }
+
+        // Optional: inject a synthetic mouse wheel between frames for scroll testing.
+        // Env format: DONG_TEST_WHEEL="x,y,dy" (dy uses dong convention: positive = scroll down)
+        if (fi > 0) {
+            if (const char* s = std::getenv("DONG_TEST_WHEEL")) {
+                int x = 0, y = 0;
+                float dy = 0.0f;
+                if (std::sscanf(s, "%d,%d,%f", &x, &y, &dy) == 3) {
+                    dong_view_send_mouse_move(view, x, y);
+                    dong_view_send_mouse_wheel(view, 0.0f, dy);
+                }
+            }
+        }
+
         if (do_update) {
             SDL_Log("[Render] Calling dong_view_update...");
             dong_view_update(view);
             SDL_Log("[Render] dong_view_update completed");
         }
 
+
+
+
         if (!dong_view_render_offscreen(view, static_cast<void*>(device), width, height, pixels.data())) {
+
             SDL_Log("ERROR: dong_view_render_offscreen failed (frame=%u)", fi);
             dong_view_destroy(view);
             dong_destroy_context(ctx);

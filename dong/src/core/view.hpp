@@ -110,7 +110,18 @@ private:
     bool js_bindings_initialized_ = false;
     int32_t last_mouse_x_ = 0;
     int32_t last_mouse_y_ = 0;
+
+    // Scrollbar dragging state (for overflow: auto/scroll)
+    bool scroll_dragging_ = false;
+    dom::DOMNodePtr scroll_drag_container_;
+    float scroll_drag_offset_y_ = 0.0f;     // mouse_y - thumb_y
+    float scroll_drag_track_y_ = 0.0f;
+    float scroll_drag_track_h_ = 0.0f;
+    float scroll_drag_thumb_h_ = 0.0f;
+    float scroll_drag_max_scroll_ = 0.0f;
+
     // Cached cursor style for getCursorAt
+
     std::string cached_cursor_style_ = "auto";
     // 【缺口3】缓存最后的 eval 返回值
     std::string last_eval_return_value_;

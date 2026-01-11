@@ -6,6 +6,8 @@
 #include <cctype>
 #include <sstream>
 #include <unordered_set>
+#include <limits>
+
 
 namespace dong::dom {
 
@@ -722,17 +724,44 @@ void DOMNode::clearLayoutDirtyRecursive() {
     }
 }
 
+namespace {
+
+static std::string toLowerCopy(std::string s) {
+    std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    return s;
+}
+
+static bool isScrollOverflowValue(const std::string& v) {
+    const std::string lowered = toLowerCopy(v);
+    return lowered == "scroll" || lowered == "auto";
+}
+
+} // namespace
+
 void DOMNode::scrollBy(float dx, float dy) {
     if (!isScrollContainer()) return;
-    scroll_x_ = std::max(0.0f, scroll_x_ + dx);
-    scroll_y_ = std::max(0.0f, scroll_y_ + dy);
+
+    const float inf = std::numeric_limits<float>::infinity();
+    const float max_x = (client_width_ > 0.0f && content_width_ > client_width_) ? (content_width_ - client_width_) : inf;
+    const float max_y = (client_height_ > 0.0f && content_height_ > client_height_) ? (content_height_ - client_height_) : inf;
+
+    scroll_x_ = std::clamp(scroll_x_ + dx, 0.0f, max_x);
+    scroll_y_ = std::clamp(scroll_y_ + dy, 0.0f, max_y);
 }
 
 void DOMNode::scrollTo(float x, float y) {
     if (!isScrollContainer()) return;
-    scroll_x_ = std::max(0.0f, x);
-    scroll_y_ = std::max(0.0f, y);
+
+    const float inf = std::numeric_limits<float>::infinity();
+    const float max_x = (client_width_ > 0.0f && content_width_ > client_width_) ? (content_width_ - client_width_) : inf;
+    const float max_y = (client_height_ > 0.0f && content_height_ > client_height_) ? (content_height_ - client_height_) : inf;
+
+    scroll_x_ = std::clamp(x, 0.0f, max_x);
+    scroll_y_ = std::clamp(y, 0.0f, max_y);
 }
+
 
 void DOMNode::scrollIntoView(bool alignToTop) {
     // TODO: Implement scroll into view
@@ -740,9 +769,12 @@ void DOMNode::scrollIntoView(bool alignToTop) {
 }
 
 bool DOMNode::isScrollContainer() const {
-    const auto& overflow = computed_style_.overflow;
-    return overflow == "scroll" || overflow == "auto" || overflow == "hidden";
+    // CSS: overflow-x / overflow-y can differ; treat any axis with scroll/auto as scrollable.
+    return isScrollOverflowValue(computed_style_.overflow) ||
+           isScrollOverflowValue(computed_style_.overflow_x) ||
+           isScrollOverflowValue(computed_style_.overflow_y);
 }
+
 
 void DOMNode::setClientRect(float top, float left, float width, float height) {
     client_top_ = top;

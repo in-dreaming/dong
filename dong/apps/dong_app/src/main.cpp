@@ -281,7 +281,20 @@ int main(int argc, char** argv) {
     }
 
     // Create legacy View for rendering
-    dong_view_t* view = dong_view_create(nullptr, width, height);
+    // IMPORTANT: use drawable(pixel) size so layout/render match swapchain on high-DPI displays.
+    uint32_t view_w = width;
+    uint32_t view_h = height;
+    {
+        SDL_Window* sdl_win = reinterpret_cast<SDL_Window*>(native_window);
+        int pix_w = 0;
+        int pix_h = 0;
+        if (sdl_win && SDL_GetWindowSizeInPixels(sdl_win, &pix_w, &pix_h) && pix_w > 0 && pix_h > 0) {
+            view_w = (uint32_t)pix_w;
+            view_h = (uint32_t)pix_h;
+        }
+    }
+    dong_view_t* view = dong_view_create(nullptr, view_w, view_h);
+
     if (!view) {
         print_err("Failed to create dong_view");
         plugin->renderer_shutdown(nullptr, gpu_device);

@@ -1955,8 +1955,9 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             // 如果使用了中间纹理，将其 blit 到真正的 swapchain
             if (use_intermediate && intermediate_texture_) {
                 // window 模式：此时才 acquire swapchain texture（必须用当前 command buffer）
+                Uint32 sw = w;
+                Uint32 sh = h;
                 if (!offscreen_target_) {
-                    Uint32 sw = 0, sh = 0;
                     DONG_LOG_DEBUG("[GPUDriverSDL] EndPass acquiring swapchain (window mode) frame=%llu cmd_buf=%p win_size=%ux%u",
                             frame_index_, (void*)current_cmd_buf_, w, h);
                     // 这里必须确保拿到可用的 swapchain texture。
@@ -1972,17 +1973,9 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                     }
                     DONG_LOG_DEBUG("[GPUDriverSDL] EndPass acquired swapchain (window mode) frame=%llu swapchain_tex=%p swapchain_size=%ux%u",
                             frame_index_, (void*)real_swapchain_texture, sw, sh);
-                    // 如果尺寸不一致，取交集尺寸，避免越界
-                    if (sw != w || sh != h) {
-                        const Uint32 new_w = (sw < w) ? sw : w;
-                        const Uint32 new_h = (sh < h) ? sh : h;
-                        if (debug_rt_enabled_) {
-                            SDL_Log("[GPUDriverSDL::execute] EndPass: swapchain size mismatch win=%ux%u swapchain=%ux%u using=%ux%u",
-                                    w, h, sw, sh, new_w, new_h);
-                        }
-                        w = new_w;
-                        h = new_h;
-                    }
+                    // 注意：swapchain 的真实像素尺寸以 wait+acquire 返回的 sw/sh 为准。
+                    // 不要在这里把 w/h clamp 成交集，否则会造成“只更新左上角一部分，其余黑屏”的现象。
+                    // 这里在 blit 阶段做缩放/拉伸，确保整个 swapchain 都被填满。
                 }
 
                 if (!real_swapchain_texture) {
@@ -1994,27 +1987,40 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 }
                 
                 // 使用 blit 将中间纹理复制到 swapchain
+                // src 使用中间纹理尺寸（w/h），dst 使用真实 swapchain 尺寸（sw/sh）
+                const Uint32 src_w = w;
+                const Uint32 src_h = h;
+                const Uint32 dst_w = sw;
+                const Uint32 dst_h = sh;
+                if (src_w == 0 || src_h == 0 || dst_w == 0 || dst_h == 0) {
+                    break;
+                }
+                if (debug_rt_enabled_ && (src_w != dst_w || src_h != dst_h)) {
+                    SDL_Log("[GPUDriverSDL::execute] EndPass: blit scale src=%ux%u dst=%ux%u",
+                            src_w, src_h, dst_w, dst_h);
+                }
+
                 SDL_GPUBlitInfo blit_info{};
                 blit_info.source.texture = intermediate_texture_;
                 blit_info.source.mip_level = 0;
                 blit_info.source.layer_or_depth_plane = 0;
                 blit_info.source.x = 0;
                 blit_info.source.y = 0;
-                blit_info.source.w = w;
-                blit_info.source.h = h;
-                
+                blit_info.source.w = src_w;
+                blit_info.source.h = src_h;
+
                 blit_info.destination.texture = real_swapchain_texture;
                 blit_info.destination.mip_level = 0;
                 blit_info.destination.layer_or_depth_plane = 0;
                 blit_info.destination.x = 0;
                 blit_info.destination.y = 0;
-                blit_info.destination.w = w;
-                blit_info.destination.h = h;
-                
+                blit_info.destination.w = dst_w;
+                blit_info.destination.h = dst_h;
+
                 blit_info.load_op = SDL_GPU_LOADOP_DONT_CARE;
-                blit_info.filter = SDL_GPU_FILTER_NEAREST;
+                blit_info.filter = (src_w != dst_w || src_h != dst_h) ? SDL_GPU_FILTER_LINEAR : SDL_GPU_FILTER_NEAREST;
                 blit_info.cycle = true;  // 启用 cycle 以避免帧间数据竞争
-                
+
                 SDL_BlitGPUTexture(current_cmd_buf_, &blit_info);
             }
             break;

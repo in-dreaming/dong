@@ -233,6 +233,15 @@ static bool shouldClipOverflow(const std::string& overflow_value) {
     return lowered == "hidden" || lowered == "scroll" || lowered == "auto";
 }
 
+static bool isScrollOverflow(const std::string& overflow_value) {
+    std::string lowered = overflow_value;
+    std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    return lowered == "scroll" || lowered == "auto";
+}
+
+
 } // anonymous namespace
 
 Painter::Painter(RenderSurface* surface)
@@ -285,6 +294,8 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
     }
 
 
+
+
     Rect node_rect{};;
     bool has_layout_rect = false;
     if (layout_node) {
@@ -295,11 +306,18 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         has_layout_rect = node_rect.width > 0.0f && node_rect.height > 0.0f;
     }
 
-    const bool should_apply_clip = has_layout_rect && shouldClipOverflow(style.overflow);
+    const float builder_tx = builder.getTranslateX();
+    const float builder_ty = builder.getTranslateY();
+
+    const bool should_apply_clip = has_layout_rect &&
+        (shouldClipOverflow(style.overflow) || shouldClipOverflow(style.overflow_x) || shouldClipOverflow(style.overflow_y));
+
 
     DisplayListBuilder::ScopedLayer opacity_scope;
     float clamped_opacity = std::clamp(style.opacity, 0.0f, 1.0f);
 
+    // layer bounds 用于 isolated layer 的采样与合成，需要落在“最终屏幕坐标系”中。
+    // 注意：滚动是通过 DisplayListBuilder 的 translate 实现的，因此这里必须把 translate 计入 bounds。
     Rect layer_bounds = node_rect;
     if (!has_layout_rect && surface_) {
         layer_bounds.x = 0.0f;
@@ -307,10 +325,14 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         layer_bounds.width = static_cast<float>(surface_->getWidth());
         layer_bounds.height = static_cast<float>(surface_->getHeight());
     }
+    layer_bounds.x += builder_tx;
+    layer_bounds.y += builder_ty;
+
 
     const bool is_scroll_container =
         should_apply_clip &&
-        (style.overflow == "scroll" || style.overflow == "auto");
+        (isScrollOverflow(style.overflow) || isScrollOverflow(style.overflow_x) || isScrollOverflow(style.overflow_y));
+
 
     const bool has_transform =
         (style.transform_translate_x != 0.0f || style.transform_translate_y != 0.0f ||
@@ -331,13 +353,22 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
     if (needs_layer) {
         uint64_t layer_id = reinterpret_cast<uint64_t>(node.get());
         bool layer_dirty = node->isLayoutDirty();
+
         // 滚动容器始终标记为脏，因为滚动内容会随着滚动位置改变
         if (is_scroll_container) {
             layer_dirty = true;
         }
+
+        // 如果该 layer 处在 scroll translate 之下（例如：滚动容器内部的 transform 元素），
+        // 它的栅格结果依赖当前滚动偏移；否则缓存会导致“控件固定不动”。
+        if (!layer_dirty && (builder_tx != 0.0f || builder_ty != 0.0f)) {
+            layer_dirty = true;
+        }
+
         if (!layer_dirty && use_dirty_rect_ && !current_dirty_rect_.isEmpty()) {
             layer_dirty = isRectInDirtyRect(layer_bounds);
         }
+
 
         // �?LayerTree 中记录这一�?
         LayerNode layer_node;
@@ -1318,6 +1349,28 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
     // 5. 递归子节点（按 z-index 排序）
     const auto& children = node->getChildren();
     
+    // 维护滚动容器的 client/content 尺寸（用于 scrollTo/scrollBy clamp 与滚动条绘制）
+    if (is_scroll_container && has_layout_rect) {
+        float content_bottom = node_rect.y;
+        for (const auto& child : children) {
+            if (!child || child->getType() != dom::DOMNode::NodeType::ELEMENT) {
+                continue;
+            }
+            const layout::LayoutNode* child_layout = layout_engine_ ? layout_engine_->getLayout(child) : nullptr;
+            if (child_layout) {
+                float child_bottom = child_layout->layout.position[1] + child_layout->layout.dimensions[1];
+                if (child_bottom > content_bottom) {
+                    content_bottom = child_bottom;
+                }
+            }
+        }
+        float content_height = content_bottom - node_rect.y;
+        if (content_height < 0.0f) content_height = 0.0f;
+
+        node->setClientRect(node_rect.y, node_rect.x, node_rect.width, node_rect.height);
+        node->setContentSize(node_rect.width, content_height);
+    }
+
     // 如果是滚动容器，应用滚动偏移到子元素
     bool applied_scroll_translate = false;
     if (is_scroll_container) {
@@ -1328,6 +1381,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
             applied_scroll_translate = true;
         }
     }
+
     
     // 收集需要绘制的子元素及�?z-index
     struct ChildWithZIndex {

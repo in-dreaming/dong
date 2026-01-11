@@ -7,7 +7,9 @@
 #include <fstream>
 #include <sstream>
 #include <chrono>
+#include <algorithm>
 #include <SDL3/SDL_log.h>
+
 #include <SDL3/SDL_gpu.h>
 #include <SDL3/SDL_filesystem.h>
 #include "log.h"
@@ -35,41 +37,48 @@ namespace {
 using dong::dom::DOMNodePtr;
 
 DOMNodePtr hitTestRecursive(const DOMNodePtr& node, dong::layout::Engine* layout_engine,
-                            int32_t x, int32_t y, int depth = 0) {
+                            float x, float y, int depth = 0) {
     if (!node || !layout_engine) return nullptr;
 
     const auto* layout = layout_engine->getLayout(node);
     if (!layout) return nullptr;
-    
+
     float lx = layout->x;
     float ly = layout->y;
     float w = layout->width;
     float h = layout->height;
-    
+
     // 调试：打印 input 元素的布局信息
     if (node->getTagName() == "input") {
-        DONG_LOG_INFO("[hitTest] input id=%s bounds=(%.1f,%.1f,%.1f,%.1f) test=(%d,%d)",
+        DONG_LOG_INFO("[hitTest] input id=%s bounds=(%.1f,%.1f,%.1f,%.1f) test=(%.1f,%.1f)",
                       node->getAttribute("id").c_str(), lx, ly, w, h, x, y);
     }
-    
+
     // 检查点是否在当前节点范围内
     bool in_bounds = (x >= lx && x <= lx + w && y >= ly && y <= ly + h);
-    
-    
+
     if (!in_bounds) {
         return nullptr;  // 不在范围内，直接返回
     }
-    
+
+    // 滚动容器的子树 hit-test 需要在“内容坐标系”里：screen_point + scroll_offset
+    float child_x = x;
+    float child_y = y;
+    if (node->isScrollContainer()) {
+        child_x += node->getScrollX();
+        child_y += node->getScrollY();
+    }
+
     // 在范围内，先检查子节点（深度优先，返回最深的命中元素）
     // 按 z-index 逆序遍历，优先返回 z-index 高的元素
     const auto& children = node->getChildren();
     for (auto it = children.rbegin(); it != children.rend(); ++it) {
-        auto child_hit = hitTestRecursive(*it, layout_engine, x, y, depth + 1);
+        auto child_hit = hitTestRecursive(*it, layout_engine, child_x, child_y, depth + 1);
         if (child_hit) {
             return child_hit;  // 找到子节点命中，立即返回
         }
     }
-    
+
     // 没有子节点命中，返回当前节点
     return node;
 }
@@ -79,8 +88,9 @@ DOMNodePtr hitTestElementAt(dong::dom::Manager* dom_mgr, dong::layout::Engine* l
     if (!dom_mgr || !layout_engine) return nullptr;
     auto root = dom_mgr->getRoot();
     if (!root) return nullptr;
-    return hitTestRecursive(root, layout_engine, x, y);
+    return hitTestRecursive(root, layout_engine, static_cast<float>(x), static_cast<float>(y));
 }
+
 
 void debugLogLayerTreeIfEnabled(const dong::render::LayerTree& tree) {
     const char* env = std::getenv("DONG_DEBUG_LAYER_TREE");
@@ -685,8 +695,23 @@ void View::ensureJSBindingsInitialized() {
 void View::handle_mouse_move(int32_t x, int32_t y) {
     last_mouse_x_ = x;
     last_mouse_y_ = y;
+
+    // If user is dragging a scrollbar thumb, update scroll position.
+    if (scroll_dragging_ && scroll_drag_container_) {
+        const float my = static_cast<float>(last_mouse_y_);
+        const float track_range = scroll_drag_track_h_ - scroll_drag_thumb_h_;
+        if (track_range > 1.0f && scroll_drag_max_scroll_ > 0.0f) {
+            float thumb_y = my - scroll_drag_offset_y_;
+            thumb_y = std::clamp(thumb_y, scroll_drag_track_y_, scroll_drag_track_y_ + track_range);
+            float ratio = (thumb_y - scroll_drag_track_y_) / track_range;
+            scroll_drag_container_->scrollTo(scroll_drag_container_->getScrollX(), ratio * scroll_drag_max_scroll_);
+            markNeedsRepaint();
+        }
+    }
+
     dispatchMouseEventToJS("mousemove", last_mouse_x_, last_mouse_y_, 0);
 }
+
 
 const std::string& View::getCursorAt(int32_t x, int32_t y) {
     static const std::string default_cursor = "auto";
@@ -718,14 +743,85 @@ const std::string& View::getCursorAt(int32_t x, int32_t y) {
 }
 
 void View::handle_mouse_down(int32_t button) {
+    // Start scrollbar thumb drag (left button only).
+    // Note: dong_app uses SDL button codes; SDL_BUTTON_LEFT is 1.
+    if (button == 1 && dom_manager && layout_engine) {
+        auto container = findScrollContainerAt(last_mouse_x_, last_mouse_y_);
+        if (container) {
+            const auto* layout = layout_engine->getLayout(container);
+            if (layout && layout->width > 0.0f && layout->height > 0.0f) {
+                // Compute content height (max bottom of children)
+                float content_bottom = layout->y;
+                for (const auto& child : container->getChildren()) {
+                    if (!child || child->getType() != dom::DOMNode::NodeType::ELEMENT) {
+                        continue;
+                    }
+                    const auto* cl = layout_engine->getLayout(child);
+                    if (!cl) continue;
+                    float bottom = cl->y + cl->height;
+                    if (bottom > content_bottom) content_bottom = bottom;
+                }
+                const float content_height = content_bottom - layout->y;
+                const float visible_height = layout->height;
+
+                if (content_height > visible_height + 1.0f) {
+                    constexpr float kScrollbarWidth = 8.0f;
+                    constexpr float kScrollbarMinThumbHeight = 20.0f;
+                    constexpr float kScrollbarPadding = 2.0f;
+
+                    const float track_x = layout->x + layout->width - kScrollbarWidth - kScrollbarPadding;
+                    const float track_y = layout->y + kScrollbarPadding;
+                    const float track_w = kScrollbarWidth;
+                    const float track_h = layout->height - kScrollbarPadding * 2.0f;
+
+                    const float max_scroll = content_height - visible_height;
+                    const float thumb_height_ratio = visible_height / content_height;
+                    const float thumb_h = std::max(kScrollbarMinThumbHeight, track_h * thumb_height_ratio);
+
+                    float scroll_ratio = (max_scroll > 0.0f) ? (container->getScrollY() / max_scroll) : 0.0f;
+                    scroll_ratio = std::clamp(scroll_ratio, 0.0f, 1.0f);
+
+                    const float thumb_y = track_y + (track_h - thumb_h) * scroll_ratio;
+
+                    const float mx = static_cast<float>(last_mouse_x_);
+                    const float my = static_cast<float>(last_mouse_y_);
+                    const bool in_track = (mx >= track_x && mx <= track_x + track_w && my >= track_y && my <= track_y + track_h);
+                    const bool in_thumb = (mx >= track_x && mx <= track_x + track_w && my >= thumb_y && my <= thumb_y + thumb_h);
+                    if (in_track && in_thumb) {
+                        scroll_dragging_ = true;
+                        scroll_drag_container_ = container;
+                        scroll_drag_offset_y_ = my - thumb_y;
+                        scroll_drag_track_y_ = track_y;
+                        scroll_drag_track_h_ = track_h;
+                        scroll_drag_thumb_h_ = thumb_h;
+                        scroll_drag_max_scroll_ = max_scroll;
+                    }
+                }
+            }
+        }
+    }
+
     dispatchMouseEventToJS("mousedown", last_mouse_x_, last_mouse_y_, button);
 }
 
+
 void View::handle_mouse_up(int32_t button) {
+    // Stop scrollbar drag (left button).
+    if (button == 1 && scroll_dragging_) {
+        scroll_dragging_ = false;
+        scroll_drag_container_.reset();
+        scroll_drag_offset_y_ = 0.0f;
+        scroll_drag_track_y_ = 0.0f;
+        scroll_drag_track_h_ = 0.0f;
+        scroll_drag_thumb_h_ = 0.0f;
+        scroll_drag_max_scroll_ = 0.0f;
+    }
+
     dispatchMouseEventToJS("mouseup", last_mouse_x_, last_mouse_y_, button);
     dispatchMouseEventToJS("click", last_mouse_x_, last_mouse_y_, button);
     
     // 处理焦点：点击时尝试聚焦被点击的元素
+
     if (focus_manager && dom_manager && layout_engine) {
         auto clicked = hitTestElementAt(dom_manager.get(), layout_engine.get(), 
                                         last_mouse_x_, last_mouse_y_);
@@ -864,46 +960,64 @@ void View::dispatchKeyEventToJS(const char* type, uint32_t key_code) {
 }
 
 void View::handle_mouse_wheel(float delta_x, float delta_y) {
-    DONG_LOG_INFO("[View::handle_mouse_wheel] delta=(%.2f, %.2f) at (%d,%d)", 
-                  delta_x, delta_y, last_mouse_x_, last_mouse_y_);
-    
-    // 先检查 hitTest 是否能找到元素
-    auto hit_element = hitTestElementAt(dom_manager.get(), layout_engine.get(), 
-                                        last_mouse_x_, last_mouse_y_);
-    DONG_LOG_INFO("[View::handle_mouse_wheel] hitTestElementAt returned %p tag=%s",
-                  hit_element.get(),
-                  hit_element ? hit_element->getTagName().c_str() : "null");
-    
+    if (!dom_manager || !layout_engine) {
+        return;
+    }
+
+    const bool debug_wheel = (std::getenv("DONG_DEBUG_WHEEL") != nullptr);
+
     // 查找鼠标位置下的滚动容器
     auto scroll_container = findScrollContainerAt(last_mouse_x_, last_mouse_y_);
-    DONG_LOG_INFO("[View::handle_mouse_wheel] scroll_container=%p tag=%s",
-                  scroll_container.get(),
-                  scroll_container ? scroll_container->getTagName().c_str() : "null");
-    
-    if (scroll_container) {
-        // 滚动速度系数
-        constexpr float kScrollSpeed = 20.0f;
-        float old_scroll_y = scroll_container->getScrollY();
-        
-        // 调试：检查 isScrollContainer 状态
-        DONG_LOG_INFO("[View::handle_mouse_wheel] container id=%s overflow=%s isScrollContainer=%d",
-                      scroll_container->getAttribute("id").c_str(),
-                      scroll_container->getComputedStyle().overflow.c_str(),
-                      scroll_container->isScrollContainer() ? 1 : 0);
-        
-        // dong 约定：delta_y 正值=向下滚动（内容向上移动，scroll_y 增加）
-        // 调用方（如 SDL3InputAdapter）负责将平台值转换为此语义
-        scroll_container->scrollBy(delta_x * kScrollSpeed, delta_y * kScrollSpeed);
-        DONG_LOG_INFO("[View::handle_mouse_wheel] scrollBy: old_y=%.1f new_y=%.1f",
-                      old_scroll_y, scroll_container->getScrollY());
-        
-        // 标记需要重新渲染
-        markNeedsRepaint();
-        
-        // 触发 wheel 事件到 JS
-        dispatchWheelEventToJS(delta_x, delta_y);
+    if (debug_wheel) {
+        DONG_LOG_INFO("[View::handle_mouse_wheel] delta=(%.2f, %.2f) at (%d,%d) container=%p tag=%s",
+                      delta_x, delta_y, last_mouse_x_, last_mouse_y_,
+                      scroll_container.get(),
+                      scroll_container ? scroll_container->getTagName().c_str() : "null");
     }
+
+    if (scroll_container) {
+        constexpr float kScrollSpeed = 20.0f;
+
+        // 计算可滚动的最大范围（和 Painter 的滚动条逻辑保持一致）
+        float max_scroll_y = 0.0f;
+        if (const auto* layout = layout_engine->getLayout(scroll_container)) {
+            if (layout->height > 0.0f) {
+                float content_bottom = layout->y;
+                for (const auto& child : scroll_container->getChildren()) {
+                    if (!child || child->getType() != dom::DOMNode::NodeType::ELEMENT) {
+                        continue;
+                    }
+                    const auto* cl = layout_engine->getLayout(child);
+                    if (!cl) continue;
+                    float bottom = cl->y + cl->height;
+                    if (bottom > content_bottom) content_bottom = bottom;
+                }
+                float content_height = content_bottom - layout->y;
+                max_scroll_y = std::max(0.0f, content_height - layout->height);
+            }
+        }
+
+        float old_x = scroll_container->getScrollX();
+        float old_y = scroll_container->getScrollY();
+
+        float new_x = std::max(0.0f, old_x + delta_x * kScrollSpeed);
+        float new_y = std::clamp(old_y + delta_y * kScrollSpeed, 0.0f, max_scroll_y);
+
+        if (debug_wheel) {
+            DONG_LOG_INFO("[View::handle_mouse_wheel] scroll: old=(%.1f,%.1f) new=(%.1f,%.1f) max_y=%.1f",
+                          old_x, old_y, new_x, new_y, max_scroll_y);
+        }
+
+        if (new_x != old_x || new_y != old_y) {
+            scroll_container->scrollTo(new_x, new_y);
+            markNeedsRepaint();
+        }
+    }
+
+    // wheel 事件仍然派发到 JS（即使没有找到滚动容器）
+    dispatchWheelEventToJS(delta_x, delta_y);
 }
+
 
 void View::handle_text_input(const char* text) {
     if (!text || !text[0]) return;

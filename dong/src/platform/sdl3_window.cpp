@@ -58,10 +58,18 @@ bool SDL3Window::processEvents() {
                 return false;
 
             case SDL_EVENT_WINDOW_RESIZED: {
-                SDL_GetWindowSize(window_, (int*)&width_, (int*)&height_);
+                int pix_w = 0;
+                int pix_h = 0;
+                if (SDL_GetWindowSizeInPixels(window_, &pix_w, &pix_h) && pix_w > 0 && pix_h > 0) {
+                    width_ = (uint32_t)pix_w;
+                    height_ = (uint32_t)pix_h;
+                } else {
+                    SDL_GetWindowSize(window_, (int*)&width_, (int*)&height_);
+                }
                 SDL_Log("Window resized to %u x %u", width_, height_);
                 break;
             }
+
 
             default:
                 break;
@@ -90,10 +98,11 @@ bool SDL3Window::initializeSDL() {
 }
 
 bool SDL3Window::createWindow(const CreateInfo& info) {
-    SDL_WindowFlags flags = SDL_WINDOW_HIDDEN;
+    SDL_WindowFlags flags = SDL_WINDOW_HIDDEN | SDL_WINDOW_HIGH_PIXEL_DENSITY;
 
     // GPU 渲染目前不需要特殊的窗口 flag，SDL 会在 ClaimWindowForGPUDevice 时建立 swapchain
     window_ = SDL_CreateWindow(info.title, (int)info.width, (int)info.height, flags);
+
     if (!window_) {
         SDL_Log("Failed to create window: %s", SDL_GetError());
         return false;

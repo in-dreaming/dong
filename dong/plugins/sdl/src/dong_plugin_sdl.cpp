@@ -55,7 +55,8 @@ static dong_window_t* sdl_window_create(void* /*user*/, const dong_window_desc_t
     if (w <= 0) w = 960;
     if (h <= 0) h = 540;
 
-    SDL_Window* window = SDL_CreateWindow(title, w, h, SDL_WINDOW_RESIZABLE);
+    SDL_Window* window = SDL_CreateWindow(title, w, h, SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
+
     if (!window) {
         SDL_Log("[dong_plugin_sdl] SDL_CreateWindow failed: %s", SDL_GetError());
         return nullptr;
@@ -101,32 +102,78 @@ static int sdl_poll_event(void* /*user*/, dong_input_event_t* out_event) {
             out_event->type = DONG_INPUT_EVENT_QUIT;
             return 1;
 
-        case SDL_EVENT_WINDOW_RESIZED:
+        case SDL_EVENT_WINDOW_RESIZED: {
             out_event->type = DONG_INPUT_EVENT_WINDOW_RESIZE;
-            out_event->a = (uint32_t)e.window.data1; // width
-            out_event->b = (uint32_t)e.window.data2; // height
+            SDL_Window* win = SDL_GetWindowFromID(e.window.windowID);
+            int drawable_w = 0;
+            int drawable_h = 0;
+            if (win) {
+                SDL_GetWindowSizeInPixels(win, &drawable_w, &drawable_h);
+            }
+            // 优先使用像素尺寸（drawable），避免高 DPI 下 View 与 swapchain 尺寸不一致
+            if (drawable_w > 0 && drawable_h > 0) {
+                out_event->a = (uint32_t)drawable_w;
+                out_event->b = (uint32_t)drawable_h;
+            } else {
+                out_event->a = (uint32_t)e.window.data1; // width (logical)
+                out_event->b = (uint32_t)e.window.data2; // height (logical)
+            }
             return 1;
+        }
 
-        case SDL_EVENT_MOUSE_MOTION:
+
+        case SDL_EVENT_MOUSE_MOTION: {
             out_event->type = DONG_INPUT_EVENT_MOUSE_MOVE;
-            out_event->x = (float) e.motion.x;
-            out_event->y = (float) e.motion.y;
+            SDL_Window* win = SDL_GetWindowFromID(e.motion.windowID);
+            float dpr = 1.0f;
+            if (win) {
+                int logical_w = 0, logical_h = 0;
+                int drawable_w = 0, drawable_h = 0;
+                SDL_GetWindowSize(win, &logical_w, &logical_h);
+                SDL_GetWindowSizeInPixels(win, &drawable_w, &drawable_h);
+                if (logical_w > 0 && drawable_w > 0) {
+                    dpr = (float)drawable_w / (float)logical_w;
+                }
+            }
+            out_event->x = (float)e.motion.x * dpr;
+            out_event->y = (float)e.motion.y * dpr;
             return 1;
+        }
+
 
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
-        case SDL_EVENT_MOUSE_BUTTON_UP:
+        case SDL_EVENT_MOUSE_BUTTON_UP: {
             out_event->type = DONG_INPUT_EVENT_MOUSE_BUTTON;
-            out_event->a = (uint32_t) e.button.button; // button
-            out_event->b = (uint32_t) (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN ? 1u : 0u); // down?
-            out_event->x = (float) e.button.x;
-            out_event->y = (float) e.button.y;
-            return 1;
+            out_event->a = (uint32_t)e.button.button; // button
+            out_event->b = (uint32_t)(e.type == SDL_EVENT_MOUSE_BUTTON_DOWN ? 1u : 0u); // down?
 
-        case SDL_EVENT_MOUSE_WHEEL:
-            out_event->type = DONG_INPUT_EVENT_MOUSE_WHEEL;
-            out_event->dx = (float) e.wheel.x;
-            out_event->dy = (float) e.wheel.y;
+            SDL_Window* win = SDL_GetWindowFromID(e.button.windowID);
+            float dpr = 1.0f;
+            if (win) {
+                int logical_w = 0, logical_h = 0;
+                int drawable_w = 0, drawable_h = 0;
+                SDL_GetWindowSize(win, &logical_w, &logical_h);
+                SDL_GetWindowSizeInPixels(win, &drawable_w, &drawable_h);
+                if (logical_w > 0 && drawable_w > 0) {
+                    dpr = (float)drawable_w / (float)logical_w;
+                }
+            }
+            out_event->x = (float)e.button.x * dpr;
+            out_event->y = (float)e.button.y * dpr;
             return 1;
+        }
+
+
+        case SDL_EVENT_MOUSE_WHEEL: {
+            out_event->type = DONG_INPUT_EVENT_MOUSE_WHEEL;
+            // SDL: wheel.y 正值通常表示“向上”；dong 约定 delta_y 正值=向下（内容向上移动，scroll_y 增加）
+            // 注意：wheel delta 不是像素坐标，不应按 DPR 缩放。
+            out_event->dx = (float)e.wheel.x;
+            out_event->dy = (float)(-e.wheel.y);
+            return 1;
+        }
+
+
 
         case SDL_EVENT_KEY_DOWN:
         case SDL_EVENT_KEY_UP:
