@@ -543,6 +543,7 @@ static JSValue elem_setTextContent(JSContext* ctx, JSValueConst this_val, int ar
     
     if (node && text) {
         node->setTextContent(text);
+        node->markLayoutDirty();  // 触发重新渲染
     }
     
     if (text) JS_FreeCString(ctx, text);
@@ -1167,7 +1168,13 @@ JSValue JSBindings::createJSElement(JSContext* ctx, const dom::DOMNodePtr& node)
         JS_PROP_ENUMERABLE | JS_PROP_CONFIGURABLE);
     JS_FreeAtom(ctx, className_atom);
     
-    JS_SetPropertyStr(ctx, elem, "textContent", JS_NewString(ctx, node->getTextContent().c_str()));
+    // textContent - use getter/setter for dynamic access
+    JSAtom textContent_atom = JS_NewAtom(ctx, "textContent");
+    JSValue tc_getter = JS_NewCFunction(ctx, elem_getTextContent, "get textContent", 0);
+    JSValue tc_setter = JS_NewCFunction(ctx, elem_setTextContent, "set textContent", 1);
+    JS_DefinePropertyGetSet(ctx, elem, textContent_atom, tc_getter, tc_setter,
+        JS_PROP_ENUMERABLE | JS_PROP_CONFIGURABLE);
+    JS_FreeAtom(ctx, textContent_atom);
     
     // Methods
     JS_SetPropertyStr(ctx, elem, "getAttribute",

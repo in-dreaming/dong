@@ -206,6 +206,72 @@ float4 main(PSInput input) : SV_Target0 {
 )";
 
 // ============================================================================
+// 2D HUD 着色器（屏幕空间，正交投影）
+// ============================================================================
+
+// 2D HUD Uniform（仅颜色/透明度）
+struct UniformsHUD {
+    float color[4];  // RGBA
+};
+
+// 2D HUD 顶点着色器（直接使用屏幕坐标 0-1）
+inline const char* kVertexShaderHUD = R"(
+struct VSInput {
+    float2 position : TEXCOORD0;
+    float2 uv : TEXCOORD1;
+};
+
+struct VSOutput {
+    float4 position : SV_Position;
+    float2 uv : TEXCOORD0;
+};
+
+VSOutput main(VSInput input) {
+    VSOutput output;
+    // 将 0-1 坐标转换为 NDC (-1 到 1)，Y 轴翻转
+    output.position = float4(input.position.x * 2.0 - 1.0, 
+                             1.0 - input.position.y * 2.0, 
+                             0.0, 1.0);
+    output.uv = input.uv;
+    return output;
+}
+)";
+
+// 2D HUD 片段着色器
+inline const char* kFragmentShaderHUD = R"(
+Texture2D tex : register(t0, space2);
+SamplerState texSampler : register(s0, space2);
+
+cbuffer Uniforms : register(b0, space3) {
+    float4 uColor;
+};
+
+struct PSInput {
+    float4 position : SV_Position;
+    float2 uv : TEXCOORD0;
+};
+
+float4 main(PSInput input) : SV_Target0 {
+    float4 texColor = tex.Sample(texSampler, input.uv);
+    return texColor * uColor;
+}
+)";
+
+// 2D HUD 顶点结构
+struct VertexHUD {
+    float x, y;   // 屏幕坐标 (0-1)
+    float u, v;   // UV
+};
+
+// 生成全屏 HUD 四边形
+inline std::vector<VertexHUD> generateHUDQuad() {
+    return {
+        {0, 0, 0, 0}, {1, 0, 1, 0}, {1, 1, 1, 1},
+        {0, 0, 0, 0}, {1, 1, 1, 1}, {0, 1, 0, 1},
+    };
+}
+
+// ============================================================================
 // 着色器编译
 // ============================================================================
 

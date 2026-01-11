@@ -1900,10 +1900,10 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             color_target.layer_or_depth_plane = 0;
             
             // 统一使用 LOADOP_CLEAR，避免 LOADOP_LOAD 在某些驱动上的兼容性问题
-            // 离屏渲染：白色背景
+            // 离屏渲染：透明背景（支持 HUD 等叠加层）
             // 窗口渲染：黑色背景（通过中间纹理）
             if (offscreen_target_) {
-                color_target.clear_color = SDL_FColor{1.0f, 1.0f, 1.0f, 1.0f};  // 离屏：白色
+                color_target.clear_color = SDL_FColor{0.0f, 0.0f, 0.0f, 0.0f};  // 离屏：透明
             } else {
                 color_target.clear_color = SDL_FColor{0.0f, 0.0f, 0.0f, 1.0f};  // 窗口：黑色
             }

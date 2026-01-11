@@ -31,6 +31,143 @@
 
 using namespace dong::utils;
 
+// ============================================================================
+// HUD 系统
+// ============================================================================
+
+struct HUD {
+    HtmlScreen3D html;
+    SDL_GPUBuffer* quadVB = nullptr;
+    SDL_GPUGraphicsPipeline* pipeline = nullptr;
+    
+    bool showHelp = false;
+    float fps = 0.0f;
+    float fpsAccum = 0.0f;
+    int frameCount = 0;
+    float fpsUpdateTimer = 0.0f;
+    
+    bool init(dong_context_t* ctx, SDL_GPUDevice* device, SDL_Window* window,
+              const char* htmlContent, uint32_t w, uint32_t h,
+              SDL_GPUShader* vsHUD, SDL_GPUShader* fsHUD) {
+        // 初始化 HTML 渲染
+        if (!html.init(ctx, device, window, htmlContent, w, h)) {
+            return false;
+        }
+        
+        // 创建 HUD 顶点缓冲区
+        SDL_GPUBufferCreateInfo vbInfo{};
+        vbInfo.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
+        vbInfo.size = sizeof(VertexHUD) * 6;
+        quadVB = SDL_CreateGPUBuffer(device, &vbInfo);
+        if (!quadVB) return false;
+        
+        // 创建 HUD 管线
+        SDL_GPUVertexBufferDescription vbDesc{};
+        vbDesc.slot = 0;
+        vbDesc.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
+        vbDesc.pitch = sizeof(VertexHUD);
+        
+        SDL_GPUVertexAttribute attrs[2] = {};
+        attrs[0].buffer_slot = 0;
+        attrs[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2;
+        attrs[0].location = 0;
+        attrs[0].offset = 0;
+        attrs[1].buffer_slot = 0;
+        attrs[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2;
+        attrs[1].location = 1;
+        attrs[1].offset = sizeof(float) * 2;
+        
+        SDL_GPUColorTargetDescription colorDesc{};
+        colorDesc.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+        colorDesc.blend_state.enable_blend = true;
+        colorDesc.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+        colorDesc.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+        colorDesc.blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
+        colorDesc.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+        colorDesc.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+        colorDesc.blend_state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
+        
+        SDL_GPUGraphicsPipelineCreateInfo pipeInfo{};
+        pipeInfo.vertex_shader = vsHUD;
+        pipeInfo.fragment_shader = fsHUD;
+        pipeInfo.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+        pipeInfo.target_info.num_color_targets = 1;
+        pipeInfo.target_info.color_target_descriptions = &colorDesc;
+        pipeInfo.target_info.has_depth_stencil_target = false;
+        pipeInfo.vertex_input_state.num_vertex_buffers = 1;
+        pipeInfo.vertex_input_state.vertex_buffer_descriptions = &vbDesc;
+        pipeInfo.vertex_input_state.num_vertex_attributes = 2;
+        pipeInfo.vertex_input_state.vertex_attributes = attrs;
+        pipeInfo.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
+        pipeInfo.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
+        
+        pipeline = SDL_CreateGPUGraphicsPipeline(device, &pipeInfo);
+        return pipeline != nullptr;
+    }
+    
+    void update(SDL_GPUDevice* device, float dt) {
+        // 更新 FPS
+        frameCount++;
+        fpsAccum += dt;
+        fpsUpdateTimer += dt;
+        
+        // 每 0.5 秒更新一次 FPS 显示
+        if (fpsUpdateTimer >= 0.5f) {
+            fps = frameCount / fpsAccum;
+            fpsAccum = 0;
+            frameCount = 0;
+            fpsUpdateTimer = 0;
+            
+            // 更新 HTML 中的 FPS 显示
+            char js[64];
+            snprintf(js, sizeof(js), "updateFPS(%.1f)", fps);
+            html.eval(js);
+        }
+        
+        // 渲染 HTML 到纹理
+        html.update(device);
+    }
+    
+    void toggleHelp() {
+        showHelp = !showHelp;
+        html.eval("toggleHelp()");
+    }
+    
+    void render(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                SDL_GPUSampler* sampler) {
+        if (!html.renderTexture || !pipeline) return;
+        
+        SDL_BindGPUGraphicsPipeline(pass, pipeline);
+        
+        SDL_GPUBufferBinding binding{quadVB, 0};
+        SDL_BindGPUVertexBuffers(pass, 0, &binding, 1);
+        
+        SDL_GPUTextureSamplerBinding texBinding{html.renderTexture, sampler};
+        SDL_BindGPUFragmentSamplers(pass, 0, &texBinding, 1);
+        
+        UniformsHUD uniforms{};
+        uniforms.color[0] = 1.0f;
+        uniforms.color[1] = 1.0f;
+        uniforms.color[2] = 1.0f;
+        uniforms.color[3] = 1.0f;
+        
+        SDL_PushGPUFragmentUniformData(cmd, 0, &uniforms, sizeof(uniforms));
+        SDL_DrawGPUPrimitives(pass, 6, 1, 0, 0);
+    }
+    
+    void cleanup(SDL_GPUDevice* device) {
+        if (pipeline) {
+            SDL_ReleaseGPUGraphicsPipeline(device, pipeline);
+            pipeline = nullptr;
+        }
+        if (quadVB) {
+            SDL_ReleaseGPUBuffer(device, quadVB);
+            quadVB = nullptr;
+        }
+        html.cleanup(device);
+    }
+};
+
 // HTML 屏幕配置
 struct ScreenConfig {
     const char* htmlFile;
@@ -157,8 +294,10 @@ int main() {
     SDL_GPUShader* fsGrid = compileShader(device, SDL_GPU_SHADERSTAGE_FRAGMENT, kFragmentShaderGrid, "main");
     SDL_GPUShader* vsTextured = compileShader(device, SDL_GPU_SHADERSTAGE_VERTEX, kVertexShaderTextured, "main");
     SDL_GPUShader* fsTextured = compileShader(device, SDL_GPU_SHADERSTAGE_FRAGMENT, kFragmentShaderTextured, "main", 1);
+    SDL_GPUShader* vsHUD = compileShader(device, SDL_GPU_SHADERSTAGE_VERTEX, kVertexShaderHUD, "main", 0, 0);
+    SDL_GPUShader* fsHUD = compileShader(device, SDL_GPU_SHADERSTAGE_FRAGMENT, kFragmentShaderHUD, "main", 1);
     
-    if (!vs3d || !fsCube || !fsGrid || !vsTextured || !fsTextured) {
+    if (!vs3d || !fsCube || !fsGrid || !vsTextured || !fsTextured || !vsHUD || !fsHUD) {
         SDL_Log("Failed to compile shaders");
         return 1;
     }
@@ -316,6 +455,19 @@ int main() {
     // 无需手动执行 JS - <script> 标签会在 load_html 时自动执行
     SDL_Log("HTML screens initialized - <script> tags executed automatically");
 
+    // 初始化 HUD
+    HUD hud;
+    std::string hudHtml = readFile(getDataPath("hud.html").c_str());
+    if (hudHtml.empty()) {
+        SDL_Log("Warning: Failed to load hud.html");
+        hudHtml = "<html><body style='background:transparent'><div style='color:white;position:absolute;top:10px;left:10px'>FPS: --</div></body></html>";
+    }
+    if (!hud.init(dongCtx, device, window, hudHtml.c_str(), WIN_W, WIN_H, vsHUD, fsHUD)) {
+        SDL_Log("Failed to init HUD");
+        return 1;
+    }
+    SDL_Log("HUD initialized");
+
     // 相机
     FPSCamera camera;
     camera.position = Vec3{0.0f, 2.5f, 8.0f};
@@ -354,6 +506,10 @@ int main() {
                 running = false;
             } else if (event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == SDL_SCANCODE_ESCAPE) {
                 running = false;
+            } else if (event.type == SDL_EVENT_KEY_DOWN && 
+                       (event.key.scancode == SDL_SCANCODE_F1 || event.key.scancode == SDL_SCANCODE_H)) {
+                // F1 或 H 键切换帮助面板
+                hud.toggleHelp();
             } else if (event.type == SDL_EVENT_WINDOW_RESIZED) {
                 SDL_GetWindowSize(window, &winW, &winH);
             } else if (event.type == SDL_EVENT_TEXT_INPUT) {
@@ -452,6 +608,9 @@ int main() {
             screens[i].html.update(device);
         }
         
+        // 更新 HUD
+        hud.update(device, dt);
+        
         // 等待所有离屏渲染完成后再开始主场景渲染
         // 这样可以避免离屏渲染和 swapchain 渲染之间的竞争
         SDL_WaitForGPUIdle(device);
@@ -472,6 +631,11 @@ int main() {
             auto quadVerts = generateQuad(screens[i].width, screens[i].height);
             uploadVertices(device, copyPass, screens[i].html.quadVB, quadVerts);
         }
+        
+        // 上传 HUD 四边形顶点
+        auto hudQuadVerts = generateHUDQuad();
+        uploadVertices(device, copyPass, hud.quadVB, hudQuadVerts);
+        
         SDL_EndGPUCopyPass(copyPass);
 
         // ========== 渲染主场景 ==========
@@ -573,6 +737,17 @@ int main() {
         }
 
         SDL_EndGPURenderPass(pass);
+        
+        // ========== 渲染 HUD（2D 覆盖层，无深度测试）==========
+        SDL_GPUColorTargetInfo hudColorTarget{};
+        hudColorTarget.texture = swapchain;
+        hudColorTarget.load_op = SDL_GPU_LOADOP_LOAD;  // 保留 3D 场景
+        hudColorTarget.store_op = SDL_GPU_STOREOP_STORE;
+        
+        SDL_GPURenderPass* hudPass = SDL_BeginGPURenderPass(cmd, &hudColorTarget, 1, nullptr);
+        hud.render(hudPass, cmd, sampler);
+        SDL_EndGPURenderPass(hudPass);
+        
         SDL_SubmitGPUCommandBuffer(cmd);
         
         SDL_Delay(16);
@@ -583,6 +758,8 @@ int main() {
 
     // 清理
     if (depthTexture) SDL_ReleaseGPUTexture(device, depthTexture);
+    
+    hud.cleanup(device);
     
     for (int i = 0; i < numScreens; i++) {
         screens[i].html.cleanup(device);
@@ -599,6 +776,8 @@ int main() {
     SDL_ReleaseGPUShader(device, fsGrid);
     SDL_ReleaseGPUShader(device, vsTextured);
     SDL_ReleaseGPUShader(device, fsTextured);
+    SDL_ReleaseGPUShader(device, vsHUD);
+    SDL_ReleaseGPUShader(device, fsHUD);
     
     dong_destroy_context(dongCtx);
     
