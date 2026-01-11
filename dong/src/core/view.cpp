@@ -7,8 +7,12 @@
 #include <fstream>
 #include <sstream>
 #include <chrono>
+#include <cctype>
+
 #include <algorithm>
+#include <filesystem>
 #include <SDL3/SDL_log.h>
+
 
 #include <SDL3/SDL_gpu.h>
 #include <SDL3/SDL_filesystem.h>
@@ -241,17 +245,60 @@ void View::load_html(const char* html) {
                     if (!src.empty()) {
                         SDL_Log("[View::load_html] Loading external script: %s", src.c_str());
                         
-                        // 尝试直接打开文件
-                        std::ifstream file(src);
+                        auto isAbsolutePath = [](const std::string& p) -> bool {
+                            if (p.size() >= 2 && std::isalpha(static_cast<unsigned char>(p[0])) && p[1] == ':') {
+                                return true; // Windows drive path
+                            }
+                            if (!p.empty() && (p[0] == '/' || p[0] == '\\')) {
+                                return true; // Unix absolute or UNC-like
+                            }
+
+                            return false;
+                        };
+
+                        // Basic URL handling: support file://, reject http(s)/data.
+                        std::string script_path = src;
+                        if (script_path.rfind("http://", 0) == 0 || script_path.rfind("https://", 0) == 0 || script_path.rfind("data:", 0) == 0) {
+                            SDL_Log("[View::load_html] Unsupported external script URL: %s", src.c_str());
+                        }
+                        if (script_path.rfind("file://", 0) == 0) {
+                            script_path = script_path.substr(std::string("file://").size());
+                            // Windows file URL often looks like "/d:/xxx"; strip the leading '/' if it precedes a drive letter.
+                            if (script_path.size() >= 3 && script_path[0] == '/' && std::isalpha(static_cast<unsigned char>(script_path[1])) && script_path[2] == ':') {
+                                script_path.erase(script_path.begin());
+                            }
+                        }
+
+                        // 解析顺序：
+                        // 1) 直接当作路径打开
+                        // 2) 相对路径：以 View 的 resource_root（通常是 HTML 文件所在目录）为基准拼接
+                        // 3) 回退：SDL_GetBasePath()
+                        std::ifstream file(script_path, std::ios::binary);
+                        if (!file.is_open() && resource_manager_ && !isAbsolutePath(script_path)) {
+                            const std::string& root = resource_manager_->getResourceRoot();
+                            if (!root.empty()) {
+                                try {
+                                    namespace fs = std::filesystem;
+                                    fs::path resolved = fs::path(root) / fs::path(script_path);
+                                    const std::string fullPath = resolved.lexically_normal().string();
+                                    SDL_Log("[View::load_html] Trying with resource root: %s", fullPath.c_str());
+                                    file.open(fullPath, std::ios::binary);
+                                } catch (...) {
+                                    // ignore
+                                }
+                            }
+                        }
+
                         if (!file.is_open()) {
                             // 如果失败，尝试使用 SDL 基础路径
                             const char* basePath = SDL_GetBasePath();
                             if (basePath) {
-                                std::string fullPath = std::string(basePath) + src;
+                                std::string fullPath = std::string(basePath) + script_path;
                                 SDL_Log("[View::load_html] Trying with base path: %s", fullPath.c_str());
-                                file.open(fullPath);
+                                file.open(fullPath, std::ios::binary);
                             }
                         }
+
                         
                         if (file.is_open()) {
                             std::stringstream buffer;
@@ -699,10 +746,10 @@ void View::markNeedsRepaint() {
 }
 
 void View::ensureJSBindingsInitialized() {
-    SDL_Log("[View::ensureJSBindingsInitialized] this=%p, initialized=%d, js_bindings=%p, script_engine=%p",
+    DONG_LOG_DEBUG("[View::ensureJSBindingsInitialized] this=%p, initialized=%d, js_bindings=%p, script_engine=%p",
             (void*)this, js_bindings_initialized_ ? 1 : 0, (void*)js_bindings.get(), (void*)script_engine.get());
     if (js_bindings_initialized_ || !js_bindings || !script_engine) {
-        SDL_Log("[View::ensureJSBindingsInitialized] this=%p Early return (already initialized)", (void*)this);
+        DONG_LOG_DEBUG("[View::ensureJSBindingsInitialized] this=%p Early return (already initialized)", (void*)this);
         return;
     }
     JSContext* ctx = script_engine->getContext();

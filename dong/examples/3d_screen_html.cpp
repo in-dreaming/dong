@@ -210,8 +210,21 @@ int main() {
     SDL_GPUBuffer* gridVB = SDL_CreateGPUBuffer(device, &vbInfo);
 
     // 读取 HTML 文件
-    std::string html1 = readFile(getDataPath("interative1.html").c_str());
-    std::string html2 = readFile(getDataPath("interative2.html").c_str());
+    const std::string html1Path = getDataPath("interative1.html");
+    const std::string html2Path = getDataPath("interative2.html");
+    std::string html1 = readFile(html1Path.c_str());
+    std::string html2 = readFile(html2Path.c_str());
+
+    std::string root1;
+    std::string root2;
+    try {
+        root1 = std::filesystem::path(html1Path).parent_path().string();
+        root2 = std::filesystem::path(html2Path).parent_path().string();
+    } catch (...) {
+        root1 = getDataPath("");
+        root2 = getDataPath("");
+    }
+
     
     if (html1.empty() || html2.empty()) {
         SDL_Log("Failed to load HTML files");
@@ -241,8 +254,11 @@ int main() {
     const char* htmlContents[2] = { html1.c_str(), html2.c_str() };
     
     for (int i = 0; i < 2; i++) {
-        if (!screens[i].html.init(dongCtx, device, window, htmlContents[i], 
-                                   screens[i].rtWidth, screens[i].rtHeight)) {
+        const char* root = (i == 0) ? root1.c_str() : root2.c_str();
+        if (!screens[i].html.init(dongCtx, device, window, htmlContents[i],
+                                   screens[i].rtWidth, screens[i].rtHeight,
+                                   root)) {
+
             SDL_Log("Failed to init HTML screen %d", i);
             return 1;
         }

@@ -48,11 +48,13 @@ struct HUD {
     
     bool init(dong_context_t* ctx, SDL_GPUDevice* device, SDL_Window* window,
               const char* htmlContent, uint32_t w, uint32_t h,
-              SDL_GPUShader* vsHUD, SDL_GPUShader* fsHUD) {
+              SDL_GPUShader* vsHUD, SDL_GPUShader* fsHUD,
+              const char* resourceRoot = nullptr) {
         // 初始化 HTML 渲染
-        if (!html.init(ctx, device, window, htmlContent, w, h)) {
+        if (!html.init(ctx, device, window, htmlContent, w, h, resourceRoot)) {
             return false;
         }
+
         
         // 创建 HUD 顶点缓冲区
         SDL_GPUBufferCreateInfo vbInfo{};
@@ -406,23 +408,33 @@ int main() {
 
     // 读取 HTML 文件并创建屏幕
     std::vector<std::string> htmlContents(numScreens);
+    std::vector<std::string> htmlPaths(numScreens);
+    std::vector<std::string> htmlRoots(numScreens);
     std::vector<Screen3D> screens(numScreens);
-    
+
     for (int i = 0; i < numScreens; i++) {
-        htmlContents[i] = readFile(getDataPath(screenConfigs[i].htmlFile).c_str());
+        htmlPaths[i] = getDataPath(screenConfigs[i].htmlFile);
+        htmlContents[i] = readFile(htmlPaths[i].c_str());
         if (htmlContents[i].empty()) {
             SDL_Log("Warning: Failed to load %s, using fallback HTML", screenConfigs[i].htmlFile);
             htmlContents[i] = "<html><body><h1>File not found: " + std::string(screenConfigs[i].htmlFile) + "</h1></body></html>";
+            htmlRoots[i] = getDataPath("");
         } else {
             SDL_Log("Loaded %s (%zu bytes)", screenConfigs[i].htmlFile, htmlContents[i].size());
+            try {
+                htmlRoots[i] = std::filesystem::path(htmlPaths[i]).parent_path().string();
+            } catch (...) {
+                htmlRoots[i] = getDataPath("");
+            }
         }
-        
+
         // 设置屏幕属性
         screens[i].width = screenConfigs[i].width;
         screens[i].height = screenConfigs[i].height;
         screens[i].rtWidth = screenConfigs[i].rtWidth;
         screens[i].rtHeight = screenConfigs[i].rtHeight;
     }
+
     
     // 自动排列屏幕
     arrangeScreens(screens.data(), numScreens);
@@ -438,8 +450,10 @@ int main() {
     // 初始化 HTML 屏幕
     // 注意：JS 代码现在通过 HTML 中的 <script> 标签自动执行，无需手动 eval
     for (int i = 0; i < numScreens; i++) {
-        if (!screens[i].html.init(dongCtx, device, window, htmlContents[i].c_str(), 
-                                   screens[i].rtWidth, screens[i].rtHeight)) {
+        if (!screens[i].html.init(dongCtx, device, window, htmlContents[i].c_str(),
+                                   screens[i].rtWidth, screens[i].rtHeight,
+                                   htmlRoots[i].c_str())) {
+
             SDL_Log("Failed to init HTML screen %d (%s)", i, screenConfigs[i].htmlFile);
             return 1;
         }
@@ -458,12 +472,21 @@ int main() {
 
     // 初始化 HUD
     HUD hud;
-    std::string hudHtml = readFile(getDataPath("hud.html").c_str());
+    const std::string hudPath = getDataPath("hud.html");
+    std::string hudHtml = readFile(hudPath.c_str());
+    std::string hudRoot;
+    try {
+        hudRoot = std::filesystem::path(hudPath).parent_path().string();
+    } catch (...) {
+        hudRoot = getDataPath("");
+    }
+
     if (hudHtml.empty()) {
         SDL_Log("Warning: Failed to load hud.html");
         hudHtml = "<html><body style='background:transparent'><div style='color:white;position:absolute;top:10px;left:10px'>FPS: --</div></body></html>";
     }
-    if (!hud.init(dongCtx, device, window, hudHtml.c_str(), WIN_W, WIN_H, vsHUD, fsHUD)) {
+    if (!hud.init(dongCtx, device, window, hudHtml.c_str(), WIN_W, WIN_H, vsHUD, fsHUD, hudRoot.c_str())) {
+
         SDL_Log("Failed to init HUD");
         return 1;
     }

@@ -6,6 +6,8 @@
 #include <string>
 #include <fstream>
 #include <sstream>
+#include <filesystem>
+
 
 namespace dong::utils {
 
@@ -65,7 +67,8 @@ struct HtmlScreen3D {
     
     // 初始化 HTML 屏幕
     bool init(dong_context_t* ctx, SDL_GPUDevice* device, SDL_Window* window,
-              const char* htmlContent, uint32_t w, uint32_t h) {
+              const char* htmlContent, uint32_t w, uint32_t h,
+              const char* resourceRoot = nullptr) {
         rtWidth = w;
         rtHeight = h;
         
@@ -78,9 +81,21 @@ struct HtmlScreen3D {
         
         // 设置 GPU 渲染模式
         dong_view_set_external_gpu_device(view, device, window);
+
+        // 资源解析规则：相对 URL 以 resourceRoot（通常是 HTML 文件所在目录）为基准。
+        // 这能让 HTML 内的 "../images/bg.png"、"screen1.js" 等相对路径行为接近浏览器。
+        if (resourceRoot && resourceRoot[0]) {
+            dong_view_set_resource_root(view, resourceRoot);
+        } else {
+            // 兜底：示例程序默认把资源根设为 <exe>/data/
+            // 这样在只提供 HTML 字符串时，也能加载 data 下的资源。
+            const std::string defaultRoot = getExeDir() + "data/";
+            dong_view_set_resource_root(view, defaultRoot.c_str());
+        }
         
         // 加载 HTML
         dong_view_load_html(view, htmlContent);
+
         // 注意：不调用 dong_view_update()，因为它会渲染到 swapchain
         // dong_view_render_to_gpu_texture() 内部会处理布局计算
         
