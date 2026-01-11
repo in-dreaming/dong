@@ -71,6 +71,11 @@ private:
     std::unordered_map<void*, std::unique_ptr<LayoutNode>> layout_cache;
     DirtyRect dirty_rect_;  // Accumulates all regions that changed this frame
 
+    // Viewport size for resolving vw/vh units during Yoga style mapping
+    float viewport_width_ = 0.0f;
+    float viewport_height_ = 0.0f;
+    float root_font_size_ = 16.0f;
+
     // Yoga node creation and style mapping
     YGNode* createYogaNode(dom::DOMNodePtr dom_node);
     void applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node);
