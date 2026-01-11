@@ -429,7 +429,8 @@ int main(int argc, char* argv[]) {
 
         // Optional: inject a synthetic click for tab switching, etc.
         // Env format: DONG_TEST_CLICK="x,y" or "x,y,button" (SDL button code; left=1)
-        if (fi == 0) {
+        // Note: We inject on frame 1 so the initial script execution can attach event listeners on frame 0.
+        if (fi == 1) {
             if (const char* s = std::getenv("DONG_TEST_CLICK")) {
                 int x = 0, y = 0, button = 1;
                 int n = std::sscanf(s, "%d,%d,%d", &x, &y, &button);
@@ -440,6 +441,7 @@ int main(int argc, char* argv[]) {
                 }
             }
         }
+
 
         // Optional: inject a synthetic mouse wheel between frames for scroll testing.
         // Env format: DONG_TEST_WHEEL="x,y,dy" (dy uses dong convention: positive = scroll down)

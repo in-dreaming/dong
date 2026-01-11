@@ -929,6 +929,8 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                 float pad_left = style.padding_left.isPixel() ? style.padding_left.value : 0.0f;
                 float pad_right = style.padding_right.isPixel() ? style.padding_right.value : 0.0f;
                 float pad_top = style.padding_top.isPixel() ? style.padding_top.value : 0.0f;
+                float pad_bottom = style.padding_bottom.isPixel() ? style.padding_bottom.value : 0.0f;
+
 
                 float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
 
@@ -1110,9 +1112,68 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                 };
 
                 const float max_line_width_px = inner_width;
+
+                // Flex 容器的纯文本子节点：用 justify-content/align-items 做一次简化对齐。
+                // 说明：我们当前不会把 TEXT 节点作为 Yoga flex item，因此需要在绘制阶段补齐常见对齐语义。
+                const bool is_flex_container = (style.display == "flex" || style.display == "inline-flex");
+                const bool flex_dir_is_row = (style.flex_direction.empty() || style.flex_direction == "row" || style.flex_direction == "row-reverse");
+
+                std::string effective_text_align = style.text_align;
+                float flex_baseline_adjust = 0.0f;
+
+                if (is_flex_container) {
+                    const std::string& main_align = style.justify_content;
+                    const std::string& cross_align = style.align_items;
+
+                    // main axis -> text horizontal align (row) or vertical align (column)
+                    if (flex_dir_is_row) {
+                        if (main_align == "center") {
+                            effective_text_align = "center";
+                        } else if (main_align == "flex-end" || main_align == "end") {
+                            effective_text_align = "right";
+                        } else if (main_align == "flex-start" || main_align == "start") {
+                            effective_text_align = "left";
+                        }
+                    } else {
+                        // column: cross axis controls horizontal align
+                        if (cross_align == "center") {
+                            effective_text_align = "center";
+                        } else if (cross_align == "flex-end" || cross_align == "end") {
+                            effective_text_align = "right";
+                        } else if (cross_align == "flex-start" || cross_align == "start") {
+                            effective_text_align = "left";
+                        }
+                    }
+
+                    // 仅在“单行文本”情况下做垂直对齐（避免影响复杂换行场景）。
+                    const float full_line_w_px = measure_range_units(0, text.size()) * scale;
+                    const bool is_single_line = full_line_w_px <= max_line_width_px + 0.1f;
+                    if (height > 0.0f && is_single_line) {
+                        float inner_h = height - pad_top - pad_bottom;
+                        if (inner_h < 0.0f) inner_h = 0.0f;
+
+                        // 当前 line box 顶部（baseline_y - ascent_px）= y + pad_top + top_leading_px
+                        const float top_leading_px = top_leading_units * scale;
+                        const float current_top = y + pad_top + top_leading_px;
+
+                        float desired_top = y + pad_top;
+
+                        // row: cross axis = vertical align; column: main axis = vertical align
+                        const std::string& v_align = flex_dir_is_row ? cross_align : main_align;
+                        if (v_align == "center") {
+                            desired_top += std::max(0.0f, (inner_h - effective_line_height) * 0.5f);
+                        } else if (v_align == "flex-end" || v_align == "end") {
+                            desired_top += std::max(0.0f, (inner_h - effective_line_height));
+                        }
+
+                        flex_baseline_adjust = desired_top - current_top;
+                    }
+                }
+
                 size_t text_len = text.size();
                 size_t line_start = 0;
                 int line_index = 0;
+
 
                 while (line_start < text_len) {
                     // 跳过行首空格
@@ -1168,13 +1229,14 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                     float line_width_px = best_width_units * scale;
 
                     float text_x = x + pad_left;
-                    if (style.text_align == "center") {
+                    if (effective_text_align == "center") {
                         text_x = x + pad_left + std::max(0.0f, (inner_width - line_width_px) * 0.5f);
-                    } else if (style.text_align == "right") {
+                    } else if (effective_text_align == "right") {
                         text_x = x + pad_left + std::max(0.0f, inner_width - line_width_px);
                     }
 
-                    float base_baseline = y + pad_top + baseline_offset;
+                    float base_baseline = y + pad_top + baseline_offset + flex_baseline_adjust;
+
                     float baseline_y = base_baseline + static_cast<float>(line_index) * effective_line_height;
 
 
