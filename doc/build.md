@@ -13,9 +13,11 @@ mac
 zig build examples   -Doptimize=ReleaseSmall
 ```
 
-zig build examples   -Doptimize=Debug
+zig build examples
+- -Doptimize=Debug
+- -Doptimize=ReleaseSmall
 
-zig build examples -Doptimize=ReleaseSmall
+zig build
 zig build run-feature-tests
 
 

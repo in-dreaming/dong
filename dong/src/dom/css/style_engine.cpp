@@ -44,7 +44,29 @@ void Stylesheet::addFontFace(const FontFaceRule& font_face) {
     font_faces_.push_back(font_face);
 }
 
-StyleEngine::StyleEngine() = default;
+StyleEngine::StyleEngine() {
+    // Minimal UA stylesheet so that form controls (e.g. <button>) look/behave closer to browsers.
+    // Author CSS will override these due to later source order.
+    static const char* kUserAgentCSS = R"CSS(
+button {
+  border-width: 2px;
+  border-style: outset;
+  border-color: #000000;
+  cursor: pointer;
+}
+button:active {
+  border-style: inset;
+}
+input, select, textarea {
+  border-width: 2px;
+  border-style: inset;
+  border-color: #000000;
+}
+)CSS";
+
+    addStylesheet(std::string(kUserAgentCSS));
+}
+
 
 void StyleEngine::addStylesheet(const std::string& css) {
     Stylesheet sheet;

@@ -537,9 +537,58 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
             if (radius > 0.0f) {
                 // 圆角情况：先绘制边框圆角矩形，再绘制背景圆角矩形
                 if (has_border) {
-                    Color border_color = makeColorFromCss(style.border_color);
-                    builder.addRoundedRect(rect, border_color, radius);
+                    auto toLowerCopy = [](std::string s) {
+                        std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
+                            return static_cast<char>(std::tolower(c));
+                        });
+                        return s;
+                    };
+
+                    const std::string bstyle = toLowerCopy(collapseWhitespace(style.border_style));
+                    const bool bevel = (bstyle == "outset" || bstyle == "inset");
+
+                    if (!bevel) {
+                        Color border_color = makeColorFromCss(style.border_color);
+                        builder.addRoundedRect(rect, border_color, radius);
+                    } else {
+                        auto clamp01 = [](float v) {
+                            return std::clamp(v, 0.0f, 1.0f);
+                        };
+                        auto lighten = [&](Color c, float a) {
+                            c.r = clamp01(c.r + (1.0f - c.r) * a);
+                            c.g = clamp01(c.g + (1.0f - c.g) * a);
+                            c.b = clamp01(c.b + (1.0f - c.b) * a);
+                            return c;
+                        };
+                        auto darken = [&](Color c, float a) {
+                            c.r = clamp01(c.r * (1.0f - a));
+                            c.g = clamp01(c.g * (1.0f - a));
+                            c.b = clamp01(c.b * (1.0f - a));
+                            return c;
+                        };
+
+                        const bool is_outset = (bstyle == "outset");
+
+                        // Prefer using the element background as the base for bevel shading;
+                        // this matches browsers better when author sets background-color but not border.
+                        Color base = has_background ? makeColorFromCss(style.background_color)
+                                                    : makeColorFromCss(style.border_color);
+
+                        Color c_tl = is_outset ? lighten(base, 0.25f) : darken(base, 0.25f);
+                        Color c_br = is_outset ? darken(base, 0.25f) : lighten(base, 0.25f);
+
+                        DisplayListBuilder::ScopedClip border_clip = builder.pushRoundedClip(rect, radius);
+                        Rect top_border{rect.x, rect.y, rect.width, bw};
+                        Rect bottom_border{rect.x, rect.y + rect.height - bw, rect.width, bw};
+                        Rect left_border{rect.x, rect.y + bw, bw, rect.height - 2 * bw};
+                        Rect right_border{rect.x + rect.width - bw, rect.y + bw, bw, rect.height - 2 * bw};
+                        builder.addRect(top_border, c_tl);
+                        builder.addRect(left_border, c_tl);
+                        builder.addRect(bottom_border, c_br);
+                        builder.addRect(right_border, c_br);
+                    }
                 }
+
                 if (has_background) {
                     Color bg_color = makeColorFromCss(style.background_color);
                     DONG_LOG_DEBUG("[PAINT_BG] Drawing rounded rect: color=(%f,%f,%f,%f)", bg_color.r, bg_color.g, bg_color.b, bg_color.a);
@@ -563,17 +612,57 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                     builder.addRect(rect, bg_color);
                 }
                 if (has_border) {
-                    Color border_color = makeColorFromCss(style.border_color);
-                    // 绘制四条边框
+                    auto toLowerCopy = [](std::string s) {
+                        std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
+                            return static_cast<char>(std::tolower(c));
+                        });
+                        return s;
+                    };
+
+                    const std::string bstyle = toLowerCopy(collapseWhitespace(style.border_style));
+                    const bool bevel = (bstyle == "outset" || bstyle == "inset");
+
                     Rect top_border{rect.x, rect.y, rect.width, bw};
                     Rect bottom_border{rect.x, rect.y + rect.height - bw, rect.width, bw};
                     Rect left_border{rect.x, rect.y + bw, bw, rect.height - 2 * bw};
                     Rect right_border{rect.x + rect.width - bw, rect.y + bw, bw, rect.height - 2 * bw};
-                    builder.addRect(top_border, border_color);
-                    builder.addRect(bottom_border, border_color);
-                    builder.addRect(left_border, border_color);
-                    builder.addRect(right_border, border_color);
+
+                    if (!bevel) {
+                        Color border_color = makeColorFromCss(style.border_color);
+                        builder.addRect(top_border, border_color);
+                        builder.addRect(bottom_border, border_color);
+                        builder.addRect(left_border, border_color);
+                        builder.addRect(right_border, border_color);
+                    } else {
+                        auto clamp01 = [](float v) {
+                            return std::clamp(v, 0.0f, 1.0f);
+                        };
+                        auto lighten = [&](Color c, float a) {
+                            c.r = clamp01(c.r + (1.0f - c.r) * a);
+                            c.g = clamp01(c.g + (1.0f - c.g) * a);
+                            c.b = clamp01(c.b + (1.0f - c.b) * a);
+                            return c;
+                        };
+                        auto darken = [&](Color c, float a) {
+                            c.r = clamp01(c.r * (1.0f - a));
+                            c.g = clamp01(c.g * (1.0f - a));
+                            c.b = clamp01(c.b * (1.0f - a));
+                            return c;
+                        };
+
+                        const bool is_outset = (bstyle == "outset");
+                        Color base = has_background ? makeColorFromCss(style.background_color)
+                                                    : makeColorFromCss(style.border_color);
+                        Color c_tl = is_outset ? lighten(base, 0.25f) : darken(base, 0.25f);
+                        Color c_br = is_outset ? darken(base, 0.25f) : lighten(base, 0.25f);
+
+                        builder.addRect(top_border, c_tl);
+                        builder.addRect(left_border, c_tl);
+                        builder.addRect(bottom_border, c_br);
+                        builder.addRect(right_border, c_br);
+                    }
                 }
+
             }
         }
 

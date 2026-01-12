@@ -119,6 +119,12 @@ private:
     int32_t last_mouse_x_ = 0;
     int32_t last_mouse_y_ = 0;
 
+    // Runtime interaction states for pseudo-classes
+    dom::DOMNodePtr hovered_element_;
+    dom::DOMNodePtr active_element_;
+    bool left_mouse_down_ = false;
+
+
     // Scrollbar dragging state (for overflow: auto/scroll)
     bool scroll_dragging_ = false;
     dom::DOMNodePtr scroll_drag_container_;

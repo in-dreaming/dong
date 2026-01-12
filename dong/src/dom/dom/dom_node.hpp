@@ -212,6 +212,16 @@ public:
     void blur();
     void click();
 
+    // Runtime interaction states for pseudo-classes (:hover/:active/:focus)
+    bool isHovered() const { return hovered_; }
+    bool isActive() const { return active_; }
+    bool isFocused() const { return focused_; }
+
+    void setHovered(bool v) { hovered_ = v; }
+    void setActive(bool v) { active_ = v; }
+    void setFocused(bool v) { focused_ = v; }
+
+
     // Debug
     void print(int depth = 0) const;
 
@@ -223,6 +233,12 @@ protected:
     std::unordered_map<std::string, std::string> inline_styles_;
     ComputedStyle computed_style_;
     bool layout_dirty_ = true;
+
+    // Interaction states (used by selector matcher for :hover/:active/:focus)
+    bool hovered_ = false;
+    bool active_ = false;
+    bool focused_ = false;
+
     
     // Scroll state
     float scroll_x_ = 0.0f;

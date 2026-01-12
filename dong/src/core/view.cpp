@@ -18,9 +18,11 @@
 #include <SDL3/SDL_filesystem.h>
 #include "log.h"
 #include "../dom/dom_manager.hpp"
+#include "../dom/style_engine.hpp"
 #include "../dom/event_system.hpp"
 #include "../dom/focus_manager.hpp"
 #include "../dom/input_element.hpp"
+
 #include "../render/render_surface.hpp"
 #include "../render/painter.hpp"
 #include "../render/resource_manager.hpp"
@@ -398,7 +400,14 @@ void View::update() {
 
     if (layout_engine && dom_manager) {
         auto root = dom_manager->getRoot();
+        if (root && commands_dirty_) {
+            // Styles may depend on runtime state (:hover/:active) or JS-driven attribute changes.
+            if (auto* se = dom_manager->getStyleEngine()) {
+                se->computeStyles(root);
+            }
+        }
         if (root && root->isLayoutDirty()) {
+
             DONG_PERF_START(layout);
             layout_engine->calculateLayout(root, static_cast<float>(width_), static_cast<float>(height_));
             DONG_PERF_END_LOG(layout, "layout_calculate");
@@ -781,8 +790,28 @@ void View::handle_mouse_move(int32_t x, int32_t y) {
         }
     }
 
+    // Hover state for :hover
+    if (dom_manager && layout_engine) {
+        auto hit = hitTestElementAt(dom_manager.get(), layout_engine.get(), last_mouse_x_, last_mouse_y_);
+        while (hit && hit->getType() != dom::DOMNode::NodeType::ELEMENT) {
+            hit = hit->getParent();
+        }
+
+        if (hit != hovered_element_) {
+            if (hovered_element_) {
+                hovered_element_->setHovered(false);
+            }
+            hovered_element_ = hit;
+            if (hovered_element_) {
+                hovered_element_->setHovered(true);
+            }
+            markNeedsRepaint();
+        }
+    }
+
     dispatchMouseEventToJS("mousemove", last_mouse_x_, last_mouse_y_, 0);
 }
+
 
 
 const std::string& View::getCursorAt(int32_t x, int32_t y) {
@@ -873,8 +902,27 @@ void View::handle_mouse_down(int32_t button) {
         }
     }
 
+    // Active state for :active (left button only)
+    if (button == 1 && dom_manager && layout_engine) {
+        left_mouse_down_ = true;
+        auto hit = hitTestElementAt(dom_manager.get(), layout_engine.get(), last_mouse_x_, last_mouse_y_);
+        while (hit && hit->getType() != dom::DOMNode::NodeType::ELEMENT) {
+            hit = hit->getParent();
+        }
+        if (active_element_ && active_element_ != hit) {
+            active_element_->setActive(false);
+            active_element_.reset();
+        }
+        active_element_ = hit;
+        if (active_element_) {
+            active_element_->setActive(true);
+            markNeedsRepaint();
+        }
+    }
+
     dispatchMouseEventToJS("mousedown", last_mouse_x_, last_mouse_y_, button);
 }
+
 
 
 void View::handle_mouse_up(int32_t button) {
@@ -887,6 +935,16 @@ void View::handle_mouse_up(int32_t button) {
         scroll_drag_track_h_ = 0.0f;
         scroll_drag_thumb_h_ = 0.0f;
         scroll_drag_max_scroll_ = 0.0f;
+    }
+
+    // Clear :active state
+    if (button == 1) {
+        left_mouse_down_ = false;
+        if (active_element_) {
+            active_element_->setActive(false);
+            active_element_.reset();
+            markNeedsRepaint();
+        }
     }
 
     dispatchMouseEventToJS("mouseup", last_mouse_x_, last_mouse_y_, button);
@@ -909,6 +967,7 @@ void View::handle_mouse_up(int32_t button) {
         }
     }
 }
+
 
 void View::handle_key_down(uint32_t key_code) {
     // SDL3 键码定义

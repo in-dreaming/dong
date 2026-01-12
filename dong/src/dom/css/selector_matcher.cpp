@@ -437,12 +437,18 @@ bool SelectorMatcher::matchesPseudoClass(const std::string& pseudo, DOMNodePtr n
     else if (name == "link") {
         return node->getTagName() == "a" && node->hasAttribute("href");
     }
-    // Focus pseudo-classes (need runtime state - return false by default)
-    else if (name == "hover" || name == "active" || name == "focus" || 
-             name == "focus-visible" || name == "focus-within") {
-        // These require runtime state tracking
+    // Focus/interaction pseudo-classes (runtime state)
+    else if (name == "hover") {
+        return node->isHovered();
+    } else if (name == "active") {
+        return node->isActive();
+    } else if (name == "focus") {
+        return node->isFocused();
+    } else if (name == "focus-visible" || name == "focus-within") {
+        // Not implemented yet (would require focus-ring heuristics / subtree traversal).
         return false;
     }
+
     // Valid/invalid (simplified)
     else if (name == "valid") {
         // Simplified: check if required fields have values
