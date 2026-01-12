@@ -195,6 +195,23 @@ static Color makeColorFromCss(const std::string& css) {
     return c;
 }
 
+// 辅助函数：根据 ComputedStyle 填充 DrawGlyphRunData 的 text-shadow 属性
+static void fillTextShadow(DrawGlyphRunData& glyph_run, const dong::dom::ComputedStyle& style) {
+    if (style.text_shadow_offset_x != 0.0f || style.text_shadow_offset_y != 0.0f ||
+        style.text_shadow_blur != 0.0f || !style.text_shadow_color.empty()) {
+        glyph_run.has_text_shadow = true;
+        glyph_run.text_shadow_offset_x = style.text_shadow_offset_x;
+        glyph_run.text_shadow_offset_y = style.text_shadow_offset_y;
+        glyph_run.text_shadow_blur = style.text_shadow_blur;
+        if (!style.text_shadow_color.empty()) {
+            glyph_run.text_shadow_color = makeColorFromCss(style.text_shadow_color);
+        } else {
+            // 默认阴影颜色为黑色
+            glyph_run.text_shadow_color = Color{0.0f, 0.0f, 0.0f, 1.0f};
+        }
+    }
+}
+
 static std::string collapseWhitespace(const std::string& input) {
     if (input.empty()) return "";
 
@@ -916,6 +933,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                                 glyph_run.baseline_y = baseline_y;
                                 glyph_run.units_per_em = shaped.units_per_em;
                                 glyph_run.scale_to_pixels = shaped.scale_to_pixels;
+                                fillTextShadow(glyph_run, child_style);
                                 
                                 for (const auto& sg : shaped.glyphs) {
                                     GlyphInstance inst{};
@@ -973,6 +991,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                     glyph_run.baseline_y = baseline_y;
                     glyph_run.units_per_em = shaped.units_per_em;
                     glyph_run.scale_to_pixels = shaped.scale_to_pixels;
+                    fillTextShadow(glyph_run, style);
 
                     for (const auto& sg : shaped.glyphs) {
                         GlyphInstance inst{};
@@ -1334,6 +1353,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
 
                     float base_baseline = y + pad_top + baseline_offset + flex_baseline_adjust;
 
+
                     float baseline_y = base_baseline + static_cast<float>(line_index) * effective_line_height;
 
 
@@ -1353,6 +1373,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                     glyph_run.baseline_y = baseline_y;
                     glyph_run.units_per_em = shaped_full.units_per_em;
                     glyph_run.scale_to_pixels = shaped_full.scale_to_pixels;
+                    fillTextShadow(glyph_run, style);
 
                     const auto& glyphs = shaped_full.glyphs;
                     glyph_run.glyphs.reserve(static_cast<size_t>(last_glyph - first_glyph + 1));
@@ -1481,6 +1502,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                 glyph_run.baseline_y = baseline_y;
                 glyph_run.units_per_em = shaped.units_per_em;
                 glyph_run.scale_to_pixels = shaped.scale_to_pixels;
+                fillTextShadow(glyph_run, style);
                 
                 for (const auto& sg : shaped.glyphs) {
                     GlyphInstance inst{};
@@ -1810,6 +1832,7 @@ void Painter::renderPseudoElement(const dom::DOMNodePtr& pseudo,
             glyph_run.font_path = shaped.font_path;
             glyph_run.baseline_x = text_x;
             glyph_run.baseline_y = baseline_y;
+            fillTextShadow(glyph_run, style);
             
             for (const auto& sg : shaped.glyphs) {
                 GlyphInstance inst{};

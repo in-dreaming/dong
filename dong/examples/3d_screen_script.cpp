@@ -247,7 +247,7 @@ int main() {
         {"screen2_script.html", 800, 1280, 3.0f, 4.8f},
         {"feature_test.html", 960, 540, 4.0f, 2.25f},
         {"tests/cursor_test.html", 800, 600, 3.5f, 2.625f},
-        {"tests/image_test.html", 960, 640, 3.0f, 4.8f},
+        {"tests/image_test.html", 960, 640, 3.0f, 1.5f},
         // 可以继续添加更多屏幕...
     };
     

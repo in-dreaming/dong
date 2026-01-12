@@ -1036,7 +1036,7 @@ bool discardByClip(float2 px) {
 }
 
 // 使用 fwidth 动态计算 screenPxRange，实现更精确的抗锯齿
-// params.x = 预计算的 screenPxRange（作为备用）
+// params.x = 预计算的 screenPxRange（如果 < 2.0 表示需要模糊效果）
 // params.y = distance_range / msdf_texture_size（用于 fwidth 计算）
 float calcScreenPxRange(float2 uv, float precomputed, float unitRange) {
     // 使用 fwidth 计算 UV 在屏幕空间的变化率
@@ -1047,7 +1047,15 @@ float calcScreenPxRange(float2 uv, float precomputed, float unitRange) {
     // screenPxRange = unitRange * screenTexSize（取平均）
     float dynamicRange = 0.5 * (unitRange * screenTexSize.x + unitRange * screenTexSize.y);
     
-    // 确保 screenPxRange 至少为 2.0，以获得良好的抗锯齿效果
+    // 如果 precomputed < 2.0，这是一个模糊/发光效果的信号
+    // 在这种情况下，使用较小的 screenPxRange 来产生柔和边缘
+    if (precomputed < 2.0) {
+        // 对于模糊效果，使用 precomputed 值（可能很小）与动态计算值的混合
+        // 但限制最大值，以确保边缘足够柔和
+        return min(max(dynamicRange * precomputed, 0.5), 2.0);
+    }
+    
+    // 正常文本渲染：确保 screenPxRange 至少为 2.0，以获得良好的抗锯齿效果
     // msdfgen 官方建议 screenPxRange >= 2
     return max(max(dynamicRange, precomputed), 2.0);
 }
@@ -2807,8 +2815,8 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 break;
             }
 
-            DONG_LOG_DEBUG("[DrawText] frame=%llu glyphs_count=%zu baseline=(%.2f,%.2f) font_size=%.1f",
-                    frame_index_, cmd.glyphs.size(), cmd.baseline_x, cmd.baseline_y, cmd.font_size);
+            DONG_LOG_DEBUG("[DrawText] frame=%llu glyphs_count=%zu baseline=(%.2f,%.2f) font_size=%.1f has_shadow=%d",
+                    frame_index_, cmd.glyphs.size(), cmd.baseline_x, cmd.baseline_y, cmd.font_size, cmd.has_text_shadow ? 1 : 0);
 
             // 默认字体路径（用于没有指定 font_path 的 glyph）
             std::string default_font_path = !cmd.font_path.empty()
@@ -2874,8 +2882,15 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             write_transform(batch_uniform.transform, get_current_transform());
             fill_clip_uniform(batch_uniform.clip);
 
-            std::vector<PreparedGlyph> prepared;
-            prepared.reserve(cmd.glyphs.size());
+            // text-shadow 支持：如果有阴影，先准备阴影 glyph，再准备主文本 glyph
+            // 阴影在前，主文本在后，这样阴影会先绘制
+            std::vector<PreparedGlyph> prepared_shadow;
+            std::vector<PreparedGlyph> prepared_main;
+            
+            if (cmd.has_text_shadow) {
+                prepared_shadow.reserve(cmd.glyphs.size());
+            }
+            prepared_main.reserve(cmd.glyphs.size());
 
             // 第一步：遍历所有 glyph，确保它们被放入 atlas，并记录每个 glyph 属于哪一页
             for (size_t glyph_idx = 0; glyph_idx < cmd.glyphs.size(); ++glyph_idx) {
@@ -2915,26 +2930,10 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                     ? entry->metrics.msdf_scale
                     : 1.0f;
                 
-                // ========== MSDF 纹理渲染方案 ==========
-                //
-                // MSDF 纹理结构：
-                // - 完整尺寸：msdf_size x msdf_size（如 32x32）
-                // - 字形位置：从 (range, range) 开始（通过 translate 实现）
-                // - 字形尺寸：bounds_width * msdf_scale x bounds_height * msdf_scale
-                //
-                // 渲染策略：
-                // - 渲染矩形尺寸 = msdf_size * (glyph_pixel_scale / msdf_scale)
-                // - 这样可以保证 MSDF 纹理中的每个像素都正确映射到屏幕
-                // - 字形在渲染矩形中的位置由 range * (glyph_pixel_scale / msdf_scale) 确定
-                //
-                // 注意：这种方案会导致渲染矩形比实际字形大（包含 padding 和可能的空白区域）
-                // 但这是正确的，因为 MSDF 需要 padding 来实现抗锯齿
-                
                 // 获取 MSDF 纹理的实际尺寸（从 tier 配置获取）
                 const float msdf_size = static_cast<float>(glyph_tier->bitmap_px);
                 
                 // 渲染矩形尺寸 = msdf_size * (glyph_pixel_scale / msdf_scale)
-                // 这是 MSDF 纹理在屏幕上应该占用的像素数
                 const float render_scale = glyph_pixel_scale / msdf_scale;
                 const float glyph_w = msdf_size * render_scale;
                 const float glyph_h = msdf_size * render_scale;
@@ -2949,76 +2948,96 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 const float pen_x_px = glyph.pen_x_units * glyph_pixel_scale + cmd.baseline_x;
                 const float pen_y_px = glyph.pen_y_units * glyph_pixel_scale + cmd.baseline_y;
 
-                // ========== 字形位置计算（考虑 UV 翻转）==========
-                //
-                // 坐标系统：
-                // - msdfgen：Y 向上，y=0 是底部
-                // - GPU 纹理：Y 向下，y=0 是顶部
-                // - 屏幕：Y 向下，y=0 是顶部
-                //
-                // MSDF 纹理结构（msdfgen 坐标）：
-                // - 纹理范围：(0,0) 到 (msdf_size, msdf_size)
-                // - 字形底部在 y = range（通过 translate 实现）
-                // - 字形顶部在 y = range + glyph_h_msdf
-                //
-                // GPU 纹理：
-                // - 直接复制 msdfgen 输出，所以 GPU y=0 对应 msdfgen y=0
-                // - 但 GPU y=0 是顶部，msdfgen y=0 是底部
-                //
-                // UV 翻转：
-                // - 交换 v0 和 v1，使渲染矩形顶部对应 msdfgen 纹理顶部
-                // - 渲染矩形顶部 → GPU 纹理底部 → msdfgen 纹理顶部
-                // - 渲染矩形底部 → GPU 纹理顶部 → msdfgen 纹理底部
-                //
-                // 位置计算：
-                // - 渲染矩形覆盖整个 msdf_size x msdf_size 纹理
-                // - 渲染矩形顶部对应 msdfgen 纹理顶部（y = msdf_size）
-                // - 字形顶部在 msdfgen y = range + glyph_h_msdf
-                // - 从 msdfgen 纹理顶部到字形顶部的距离 = msdf_size - (range + glyph_h_msdf)
-                // - 在屏幕上，这个距离 = (msdf_size - range - glyph_h_msdf) * render_scale
-                //
-                // glyph_y = (字形顶部屏幕位置) - (渲染矩形顶部到字形顶部的距离)
-                //         = (pen_y - bounds_top * glyph_pixel_scale) - (msdf_size - range - glyph_h_msdf) * render_scale
-                //
-                // 其中 glyph_h_msdf = bounds_height * msdf_scale
-                //      bounds_height = bounds_top - bounds_bottom
-                //
-                // 展开：
-                // glyph_y = pen_y - bounds_top * glyph_pixel_scale - (msdf_size - range) * render_scale + bounds_height * msdf_scale * render_scale
-                //         = pen_y - bounds_top * glyph_pixel_scale - (msdf_size - range) * render_scale + bounds_height * glyph_pixel_scale
-                //         = pen_y - bounds_top * glyph_pixel_scale + bounds_height * glyph_pixel_scale - (msdf_size - range) * render_scale
-                //         = pen_y + (bounds_height - bounds_top) * glyph_pixel_scale - (msdf_size - range) * render_scale
-                //         = pen_y - bounds_bottom * glyph_pixel_scale - (msdf_size - range) * render_scale
-                //
-                // 类似地，对于 glyph_x：
-                // - 渲染矩形左边对应 msdfgen 纹理左边（x = 0）
-                // - 字形左边在 msdfgen x = range
-                // - 从 msdfgen 纹理左边到字形左边的距离 = range
-                // - 在屏幕上，这个距离 = range * render_scale
-                //
-                // glyph_x = (字形左边屏幕位置) - (渲染矩形左边到字形左边的距离)
-                //         = (pen_x + bounds_left * glyph_pixel_scale) - range * render_scale
-                
-                // 关键：用 msdfgen 的投影参数（scale/translate）精确定位 glyph 的 MSDF tile。
-                // 我们保留完整的 msdf_size x msdf_size 纹理块作为渲染矩形（tile），
-                // 需要保证：design units 坐标中 baseline (y=0) 映射到 tile 内的正确位置。
-                //
-                // msdfgen 投影：msdf_px = msdf_scale * (design_units + msdf_translate)
-                // - 对于 pen position：design x=0, y=0
-                // - baseline 在纹理中的位置：
-                //     x0 = msdf_scale * translate_x
-                //     y0 = msdf_scale * translate_y   (msdfgen 坐标，y 向上，原点在底部)
-                // 我们输出的 MSDF bitmap 已经在生成阶段做过 Y 翻转（GPU 纹理 y 向下，原点在顶部），
-                // 所以 baseline 距离 tile 顶部的偏移为：
-                //     (msdf_size - y0)
-                // 映射到屏幕像素（msdf_px -> screen_px）的比例为 render_scale = glyph_pixel_scale / msdf_scale。
-
                 const float tile_x = pen_x_px - entry->metrics.msdf_translate_x * glyph_pixel_scale;
                 const float tile_y = pen_y_px - msdf_size * render_scale + entry->metrics.msdf_translate_y * glyph_pixel_scale;
 
                 float glyph_x = tile_x;
                 float glyph_y = tile_y;
 
+                // 计算 screenPxRange
+                const float px_range_screen = atlas_range * (glyph_pixel_scale / msdf_scale);
+                const float unit_range = atlas_range / msdf_size;
+
+                // 如果有 text-shadow，先准备阴影 glyph
+                // 关键：shadow 的 uvRect 必须严格落在该 glyph 的 atlas 子区域内，不能做 uv 扩展。
+                // 否则会采样到相邻 glyph，出现你截图里的“字符污染/乱码/重影”。
+                if (cmd.has_text_shadow) {
+                    const float blur = cmd.text_shadow_blur;
+                    const float base_off_x = cmd.text_shadow_offset_x;
+                    const float base_off_y = cmd.text_shadow_offset_y;
+
+                    auto push_shadow = [&](float off_x, float off_y, float alpha_scale, float precomputed_px_range) {
+                        GlyphInstanceUniform shadow_inst{};
+                        shadow_inst.rect[0] = glyph_x + off_x;
+                        shadow_inst.rect[1] = glyph_y + off_y;
+                        shadow_inst.rect[2] = glyph_w;
+                        shadow_inst.rect[3] = glyph_h;
+
+                        shadow_inst.uv_rect[0] = entry->u0;
+                        shadow_inst.uv_rect[1] = entry->v0;
+                        shadow_inst.uv_rect[2] = entry->u1;
+                        shadow_inst.uv_rect[3] = entry->v1;
+
+                        shadow_inst.color[0] = cmd.text_shadow_color.r;
+                        shadow_inst.color[1] = cmd.text_shadow_color.g;
+                        shadow_inst.color[2] = cmd.text_shadow_color.b;
+                        shadow_inst.color[3] = cmd.text_shadow_color.a * alpha_scale;
+
+                        shadow_inst.params[0] = precomputed_px_range;
+                        shadow_inst.params[1] = unit_range;
+                        shadow_inst.params[2] = msdf_subpixel_enabled_ ? 1.0f : 0.0f;
+                        shadow_inst.params[3] = gamma_correction;
+
+                        PreparedGlyph pg_shadow{};
+                        pg_shadow.instance = shadow_inst;
+                        pg_shadow.atlas_page = entry->atlas_page;
+                        prepared_shadow.push_back(pg_shadow);
+                    };
+
+                    if (blur <= 0.0f) {
+                        // 非模糊阴影：单次绘制，保持清晰
+                        push_shadow(base_off_x, base_off_y, 1.0f, px_range_screen);
+                    } else {
+                        // 模糊/发光：用多次小偏移叠加近似（不扩 uv，不缩放 rect）
+                        // 层数不要太多，避免实例数爆炸；8-direction * 3~4 layers 已足够。
+                        const int num_layers = std::min(4, std::max(2, static_cast<int>(std::ceil(blur / 3.0f))));
+                        const bool use_8_dirs = (blur >= 3.0f);
+
+                        static constexpr float kDirs8[8][2] = {
+                            { 1.0f, 0.0f }, { -1.0f, 0.0f }, { 0.0f, 1.0f }, { 0.0f, -1.0f },
+                            { 0.7071f, 0.7071f }, { -0.7071f, 0.7071f }, { 0.7071f, -0.7071f }, { -0.7071f, -0.7071f },
+                        };
+                        static constexpr float kDirs4[4][2] = {
+                            { 1.0f, 0.0f }, { -1.0f, 0.0f }, { 0.0f, 1.0f }, { 0.0f, -1.0f },
+                        };
+
+                        const int dir_count = use_8_dirs ? 8 : 4;
+                        const float (*dirs)[2] = use_8_dirs ? kDirs8 : kDirs4;
+
+                        // 用 precomputedRange < 2.0 触发 shader 里的“柔边”分支
+                        const float soft_px_range = std::min(1.5f, std::max(0.5f, px_range_screen / (1.0f + blur * 0.7f)));
+
+                        for (int layer = 0; layer < num_layers; ++layer) {
+                            const float t = static_cast<float>(layer + 1) / static_cast<float>(num_layers);
+                            const float radius = blur * t;
+
+                            // 越外层越淡；再按方向数均摊，避免整体过曝
+                            const float layer_alpha = (1.0f - t) * 0.55f + 0.10f;
+                            const float per_sample_alpha = layer_alpha / static_cast<float>(dir_count);
+
+                            for (int i = 0; i < dir_count; ++i) {
+                                const float dx = dirs[i][0] * radius;
+                                const float dy = dirs[i][1] * radius;
+                                push_shadow(base_off_x + dx, base_off_y + dy, per_sample_alpha, soft_px_range);
+                            }
+                        }
+
+                        // 额外叠加一次中心阴影，让 glow 更“实”一些（同样不扩 uv）
+                        push_shadow(base_off_x, base_off_y, 0.20f, soft_px_range);
+                    }
+                }
+
+                // 准备主文本 glyph
                 GlyphInstanceUniform inst{};
                 inst.rect[0] = glyph_x;
                 inst.rect[1] = glyph_y;
@@ -3026,7 +3045,6 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 inst.rect[3] = glyph_h;
 
                 inst.uv_rect[0] = entry->u0;
-                // Y 轴已经在 MSDF 生成时翻转，UV 不需要再翻转
                 inst.uv_rect[1] = entry->v0;
                 inst.uv_rect[2] = entry->u1;
                 inst.uv_rect[3] = entry->v1;
@@ -3050,27 +3068,10 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
 
                 writeLinearColor(cmd.color, inst.color);
 
-                // 计算 screenPxRange：MSDF 距离场范围在屏幕空间的像素数
-                // 公式：screenPxRange = atlas_range * (glyph_pixel_scale / msdf_scale)
-                // 
-                // 验证：
-                // - atlas_range = MSDF 纹理中的 range（像素），例如 8.0
-                // - msdf_scale = design units → MSDF 像素的缩放因子
-                // - glyph_pixel_scale = design units → 屏幕像素的缩放因子
-                // - glyph_pixel_scale / msdf_scale = 屏幕像素 / MSDF 像素 的比例
-                // - 所以 atlas_range * (glyph_pixel_scale / msdf_scale) = MSDF 中的 range 在屏幕上对应多少像素
-                //
-                // msdfgen 官方要求：screenPxRange >= 1，最好 >= 2
-                const float px_range_screen = atlas_range * (glyph_pixel_scale / msdf_scale);
-                
-                // unitRange = distance_range / msdf_texture_size
-                // 用于着色器中 fwidth 动态计算 screenPxRange
-                const float unit_range = atlas_range / msdf_size;
-
                 inst.params[0] = px_range_screen;
-                inst.params[1] = unit_range;  // 传递 unitRange 给着色器用于 fwidth 计算
+                inst.params[1] = unit_range;
                 inst.params[2] = msdf_subpixel_enabled_ ? 1.0f : 0.0f;
-                inst.params[3] = gamma_correction;  // 正常模式
+                inst.params[3] = gamma_correction;
 
                 DONG_LOG_VERBOSE("[TEXT] glyph=%u screenPxRange=%.2f unitRange=%.4f params=(%.2f,%.4f,%.1f,%.2f) uv=(%.4f,%.4f,%.4f,%.4f)",
                         glyph.glyph_id, px_range_screen, unit_range,
@@ -3080,67 +3081,76 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                 PreparedGlyph pg{};
                 pg.instance = inst;
                 pg.atlas_page = entry->atlas_page;
-                prepared.push_back(pg);
+                prepared_main.push_back(pg);
             }
 
-            DONG_LOG_DEBUG("[DrawText] frame=%llu prepared=%zu glyphs for rendering", frame_index_, prepared.size());
+            DONG_LOG_DEBUG("[DrawText] frame=%llu prepared shadow=%zu main=%zu glyphs for rendering", 
+                    frame_index_, prepared_shadow.size(), prepared_main.size());
             
-            if (prepared.empty()) {
+            if (prepared_main.empty()) {
                 DONG_LOG_WARN("[DrawText] frame=%llu ABORT: no glyphs prepared!", frame_index_);
                 break;
             }
 
-            // 第二步：按 atlas_page 分批绘制，每个批次绑定对应页纹理
-            uint32_t page_count = glyph_atlas->getPageCount();
-            DONG_LOG_DEBUG("[DrawText] frame=%llu rendering %zu glyphs across %u pages", frame_index_, prepared.size(), page_count);
-            
-            for (uint32_t page_index = 0; page_index < page_count; ++page_index) {
-                SDL_GPUTexture* atlas_texture = glyph_atlas->getAtlasTextureForPage(page_index);
-                if (!atlas_texture) {
-                    continue;
-                }
-
-                SDL_GPUTextureSamplerBinding binding{};
-                binding.texture = atlas_texture;
-                binding.sampler = text_sampler_;
-                SDL_BindGPUFragmentSamplers(pass, 0, &binding, 1);
-                pipeline_state.text_sampler_bound = true;
-
-                int glyphs_in_batch = 0;
-
-
-                auto flush_batch = [&]() {
-                    if (glyphs_in_batch <= 0) {
-                        return;
-                    }
-                    
-                    SDL_PushGPUVertexUniformData(current_cmd_buf_, 0, &batch_uniform, sizeof(batch_uniform));
-                    SDL_PushGPUFragmentUniformData(current_cmd_buf_, 0, &batch_uniform, sizeof(batch_uniform));
-                    SDL_DrawGPUPrimitives(pass, 4, static_cast<Uint32>(glyphs_in_batch), 0, 0);
-                    glyphs_in_batch = 0;
-                };
-
-                for (const auto& pg : prepared) {
-                    if (pg.atlas_page != page_index) {
+            // 辅助 lambda：绘制一组 prepared glyphs
+            auto render_glyphs = [&](const std::vector<PreparedGlyph>& prepared) {
+                uint32_t page_count = glyph_atlas->getPageCount();
+                
+                for (uint32_t page_index = 0; page_index < page_count; ++page_index) {
+                    SDL_GPUTexture* atlas_texture = glyph_atlas->getAtlasTextureForPage(page_index);
+                    if (!atlas_texture) {
                         continue;
                     }
 
-                    if (glyphs_in_batch == 0) {
-                        // 首个 glyph 时刷新 viewport/clip，确保在多次 flush 时仍保持正确
-                        write_viewport(batch_uniform.viewport);
-                        fill_clip_uniform(batch_uniform.clip);
+                    SDL_GPUTextureSamplerBinding binding{};
+                    binding.texture = atlas_texture;
+                    binding.sampler = text_sampler_;
+                    SDL_BindGPUFragmentSamplers(pass, 0, &binding, 1);
+                    pipeline_state.text_sampler_bound = true;
+
+                    int glyphs_in_batch = 0;
+
+                    auto flush_batch = [&]() {
+                        if (glyphs_in_batch <= 0) {
+                            return;
+                        }
+                        
+                        SDL_PushGPUVertexUniformData(current_cmd_buf_, 0, &batch_uniform, sizeof(batch_uniform));
+                        SDL_PushGPUFragmentUniformData(current_cmd_buf_, 0, &batch_uniform, sizeof(batch_uniform));
+                        SDL_DrawGPUPrimitives(pass, 4, static_cast<Uint32>(glyphs_in_batch), 0, 0);
+                        glyphs_in_batch = 0;
+                    };
+
+                    for (const auto& pg : prepared) {
+                        if (pg.atlas_page != page_index) {
+                            continue;
+                        }
+
+                        if (glyphs_in_batch == 0) {
+                            write_viewport(batch_uniform.viewport);
+                            fill_clip_uniform(batch_uniform.clip);
+                        }
+
+                        batch_uniform.glyphs[glyphs_in_batch] = pg.instance;
+                        ++glyphs_in_batch;
+
+                        if (glyphs_in_batch == kMaxGlyphsPerBatch) {
+                            flush_batch();
+                        }
                     }
 
-                    batch_uniform.glyphs[glyphs_in_batch] = pg.instance;
-                    ++glyphs_in_batch;
-
-                    if (glyphs_in_batch == kMaxGlyphsPerBatch) {
-                        flush_batch();
-                    }
+                    flush_batch();
                 }
+            };
 
-                flush_batch();
+            // 第二步：先绘制阴影，再绘制主文本
+            if (!prepared_shadow.empty()) {
+                DONG_LOG_DEBUG("[DrawText] rendering shadow glyphs");
+                render_glyphs(prepared_shadow);
             }
+            
+            DONG_LOG_DEBUG("[DrawText] rendering main glyphs");
+            render_glyphs(prepared_main);
 
             break;
         }

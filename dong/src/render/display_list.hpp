@@ -93,6 +93,13 @@ struct DrawGlyphRunData {
     // 新增：design units 元数据
     uint32_t units_per_em = 0;
     float scale_to_pixels = 1.0f;  // font_size / units_per_em
+
+    // text-shadow 支持
+    float text_shadow_offset_x = 0.0f;
+    float text_shadow_offset_y = 0.0f;
+    float text_shadow_blur = 0.0f;
+    Color text_shadow_color;
+    bool has_text_shadow = false;
 };
 
 struct ClipData {

@@ -80,6 +80,13 @@ struct GPUCommand {
     // design units 元数据（文本布局与渲染共享）
     uint32_t units_per_em = 0;
     float scale_to_pixels = 1.0f;
+
+    // text-shadow 支持
+    float text_shadow_offset_x = 0.0f;
+    float text_shadow_offset_y = 0.0f;
+    float text_shadow_blur = 0.0f;
+    Color text_shadow_color;
+    bool has_text_shadow = false;
 };
 
 struct DrawBatchRange {
@@ -353,6 +360,12 @@ public:
                 cmd.glyphs = item.glyph_run.glyphs;
                 cmd.units_per_em = item.glyph_run.units_per_em;
                 cmd.scale_to_pixels = item.glyph_run.scale_to_pixels;
+                // text-shadow 传递
+                cmd.has_text_shadow = item.glyph_run.has_text_shadow;
+                cmd.text_shadow_offset_x = item.glyph_run.text_shadow_offset_x;
+                cmd.text_shadow_offset_y = item.glyph_run.text_shadow_offset_y;
+                cmd.text_shadow_blur = item.glyph_run.text_shadow_blur;
+                cmd.text_shadow_color = apply_opacity(item.glyph_run.text_shadow_color, current_opacity());
                 cmd.sort_key = make_sort_key(cmd.type, cmd);
                 out.commands.push_back(cmd);
                 text_count++;
