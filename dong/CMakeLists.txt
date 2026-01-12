@@ -223,6 +223,10 @@ add_library(dong_legacy STATIC
     src/render/font_metrics.cpp
     src/render/gpu_painter.cpp
     src/render/gpu_driver_sdl.cpp
+    src/render/sdl_render/gpu_driver_sdl_init.cpp
+    src/render/sdl_render/gpu_driver_sdl_resources.cpp
+    src/render/sdl_render/gpu_driver_sdl_fonts.cpp
+    src/render/sdl_render/gpu_driver_factory.cpp
     src/render/shader_manager.cpp
     src/render/glyph_atlas.cpp
     # Platform

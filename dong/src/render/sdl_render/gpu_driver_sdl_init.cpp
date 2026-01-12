@@ -1,0 +1,417 @@
+#include "../gpu_driver_sdl.hpp"
+
+
+#include "../gpu_device.hpp"
+#include "../shader_manager.hpp"
+#include "../glyph_atlas.hpp"
+#include "../font_resolver.hpp"
+#include "../../core/log.h"
+
+#include <SDL3/SDL_log.h>
+#include <SDL3/SDL_video.h>
+
+#include <vector>
+#include <algorithm>
+#include <cstring>
+#include <cmath>
+#include <utility>
+
+#include "sdl_shaders_hlsl.hpp"
+
+namespace dong::render {
+
+bool GPUDriverSDL::initialize() {
+    if (!gpu_device_ || !gpu_device_->isInitialized() || !window_ || !shader_manager_) {
+        SDL_Log("GPUDriverSDL::initialize: invalid device, window, or shader manager");
+        return false;
+    }
+
+    SDL_GPUDevice* dev = gpu_device_->getHandle();
+
+    // 获取 swapchain 的实际格式，用于创建兼容的 pipeline
+    // Windows D3D12/Vulkan 通常使用 B8G8R8A8，macOS Metal 使用 BGRA8 或 RGBA8
+    SDL_GPUTextureFormat swapchain_format = SDL_GetGPUSwapchainTextureFormat(dev, window_);
+    SDL_Log("GPUDriverSDL::initialize: swapchain format = %d", swapchain_format);
+
+    // 对于离屏渲染，我们使用 R8G8B8A8_UNORM，因为它是最通用的格式
+    // 但对于 swapchain 渲染，需要使用 swapchain 的实际格式
+    // 为了简化，我们统一使用 R8G8B8A8_UNORM，因为：
+    // 1. 离屏渲染纹理使用 R8G8B8A8_UNORM
+    // 2. 中间纹理使用 R8G8B8A8_UNORM
+    // 3. 最终 blit 到 swapchain 时会自动转换
+    SDL_GPUTextureFormat pipeline_format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    (void)pipeline_format;
+
+    // Shader sources moved to sdl_render/sdl_shaders_hlsl.hpp
+    const char* kRectVS = sdl_render::shaders::kRectVS;
+    const char* kRectFS = sdl_render::shaders::kRectFS;
+    const char* kRoundRectVS = sdl_render::shaders::kRoundRectVS;
+    const char* kRoundRectFS = sdl_render::shaders::kRoundRectFS;
+    const char* kShadowVS = sdl_render::shaders::kShadowVS;
+    const char* kShadowFS = sdl_render::shaders::kShadowFS;
+    const char* kImageVS = sdl_render::shaders::kImageVS;
+    const char* kImageFS = sdl_render::shaders::kImageFS;
+    const char* kTextVS = sdl_render::shaders::kTextVS;
+    const char* kTextFS = sdl_render::shaders::kTextFS;
+
+    rect_vs_ = shader_manager_->loadShaderFromHLSL(
+        "dong_rect_vs",
+        SDL_GPU_SHADERSTAGE_VERTEX,
+        kRectVS,
+        "main"
+    );
+    rect_fs_ = shader_manager_->loadShaderFromHLSL(
+        "dong_rect_fs",
+        SDL_GPU_SHADERSTAGE_FRAGMENT,
+        kRectFS,
+        "main"
+    );
+
+    if (!rect_vs_ || !rect_fs_) {
+        SDL_Log("GPUDriverSDL::initialize: failed to compile rect shaders");
+        return false;
+    }
+
+    SDL_GPUGraphicsPipelineCreateInfo pci{};
+    SDL_GPUColorTargetDescription color_desc{};
+    color_desc.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    // 启用 alpha 混合，支持半透明背景
+    color_desc.blend_state.enable_blend = true;
+    color_desc.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+    color_desc.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    color_desc.blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
+    color_desc.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+    color_desc.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    color_desc.blend_state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
+
+    pci.target_info.num_color_targets = 1;
+    pci.target_info.color_target_descriptions = &color_desc;
+    pci.target_info.has_depth_stencil_target = false;
+
+    pci.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLESTRIP;
+    pci.vertex_shader = rect_vs_;
+    pci.fragment_shader = rect_fs_;
+
+    pci.vertex_input_state.num_vertex_buffers = 0;
+    pci.vertex_input_state.vertex_buffer_descriptions = nullptr;
+    pci.vertex_input_state.num_vertex_attributes = 0;
+    pci.vertex_input_state.vertex_attributes = nullptr;
+
+    rect_pipeline_ = SDL_CreateGPUGraphicsPipeline(dev, &pci);
+    if (!rect_pipeline_) {
+        SDL_Log("GPUDriverSDL::initialize: failed to create rect pipeline: %s", SDL_GetError());
+        return false;
+    }
+
+    // 圆角矩形绘制：analytic SDF，在 fragment 阶段做抗锯齿边缘
+    round_rect_vs_ = shader_manager_->loadShaderFromHLSL(
+        "dong_round_rect_vs",
+        SDL_GPU_SHADERSTAGE_VERTEX,
+        kRoundRectVS,
+        "main"
+    );
+    round_rect_fs_ = shader_manager_->loadShaderFromHLSL(
+        "dong_round_rect_fs",
+        SDL_GPU_SHADERSTAGE_FRAGMENT,
+        kRoundRectFS,
+        "main"
+    );
+
+    if (!round_rect_vs_ || !round_rect_fs_) {
+        SDL_Log("GPUDriverSDL::initialize: failed to compile round-rect shaders");
+        return false;
+    }
+
+    SDL_GPUGraphicsPipelineCreateInfo rrci{};
+    SDL_GPUColorTargetDescription color_desc_rr{};
+    color_desc_rr.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    // 启用 alpha 混合，支持半透明背景和抗锯齿边缘
+    color_desc_rr.blend_state.enable_blend = true;
+    color_desc_rr.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+    color_desc_rr.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    color_desc_rr.blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
+    color_desc_rr.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+    color_desc_rr.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    color_desc_rr.blend_state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
+
+    rrci.target_info.num_color_targets = 1;
+    rrci.target_info.color_target_descriptions = &color_desc_rr;
+    rrci.target_info.has_depth_stencil_target = false;
+
+    rrci.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLESTRIP;
+    rrci.vertex_shader = round_rect_vs_;
+    rrci.fragment_shader = round_rect_fs_;
+
+    rrci.vertex_input_state.num_vertex_buffers = 0;
+    rrci.vertex_input_state.vertex_buffer_descriptions = nullptr;
+    rrci.vertex_input_state.num_vertex_attributes = 0;
+    rrci.vertex_input_state.vertex_attributes = nullptr;
+
+    round_rect_pipeline_ = SDL_CreateGPUGraphicsPipeline(dev, &rrci);
+    if (!round_rect_pipeline_) {
+        SDL_Log("GPUDriverSDL::initialize: failed to create round-rect pipeline: %s", SDL_GetError());
+        return false;
+    }
+
+    // 阴影绘制着色器：使用 SDF + 模糊半径实现柔和阴影边缘
+    shadow_vs_ = shader_manager_->loadShaderFromHLSL(
+        "dong_shadow_vs",
+        SDL_GPU_SHADERSTAGE_VERTEX,
+        kShadowVS,
+        "main"
+    );
+    shadow_fs_ = shader_manager_->loadShaderFromHLSL(
+        "dong_shadow_fs",
+        SDL_GPU_SHADERSTAGE_FRAGMENT,
+        kShadowFS,
+        "main"
+    );
+
+    if (!shadow_vs_ || !shadow_fs_) {
+        SDL_Log("GPUDriverSDL::initialize: failed to compile shadow shaders");
+        return false;
+    }
+
+    SDL_GPUGraphicsPipelineCreateInfo shadow_ci{};
+    SDL_GPUColorTargetDescription color_desc_shadow{};
+    color_desc_shadow.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    // 启用 alpha 混合，支持半透明阴影
+    color_desc_shadow.blend_state.enable_blend = true;
+    color_desc_shadow.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+    color_desc_shadow.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    color_desc_shadow.blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
+    color_desc_shadow.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+    color_desc_shadow.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    color_desc_shadow.blend_state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
+
+    shadow_ci.target_info.num_color_targets = 1;
+    shadow_ci.target_info.color_target_descriptions = &color_desc_shadow;
+    shadow_ci.target_info.has_depth_stencil_target = false;
+
+    shadow_ci.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLESTRIP;
+    shadow_ci.vertex_shader = shadow_vs_;
+    shadow_ci.fragment_shader = shadow_fs_;
+
+    shadow_ci.vertex_input_state.num_vertex_buffers = 0;
+    shadow_ci.vertex_input_state.vertex_buffer_descriptions = nullptr;
+    shadow_ci.vertex_input_state.num_vertex_attributes = 0;
+    shadow_ci.vertex_input_state.vertex_attributes = nullptr;
+
+    shadow_pipeline_ = SDL_CreateGPUGraphicsPipeline(dev, &shadow_ci);
+    if (!shadow_pipeline_) {
+        SDL_Log("GPUDriverSDL::initialize: failed to create shadow pipeline: %s", SDL_GetError());
+        return false;
+    }
+
+    // 图片绘制着色器：使用 SV_VertexID 生成矩形，并根据 atlas UV 采样
+    image_vs_ = shader_manager_->loadShaderFromHLSL(
+        "dong_image_vs",
+        SDL_GPU_SHADERSTAGE_VERTEX,
+        kImageVS,
+        "main"
+    );
+    image_fs_ = shader_manager_->loadShaderFromHLSL(
+        "dong_image_fs",
+        SDL_GPU_SHADERSTAGE_FRAGMENT,
+        kImageFS,
+        "main"
+    );
+
+    if (!image_vs_ || !image_fs_) {
+        SDL_Log("GPUDriverSDL::initialize: failed to compile image shaders");
+        return false;
+    }
+
+    SDL_GPUGraphicsPipelineCreateInfo ipci{};
+    SDL_GPUColorTargetDescription color_desc2{};
+    color_desc2.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    // 启用 alpha 混合，支持半透明图片
+    color_desc2.blend_state.enable_blend = true;
+    color_desc2.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+    color_desc2.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    color_desc2.blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
+    color_desc2.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+    color_desc2.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    color_desc2.blend_state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
+
+    ipci.target_info.num_color_targets = 1;
+    ipci.target_info.color_target_descriptions = &color_desc2;
+    ipci.target_info.has_depth_stencil_target = false;
+
+    ipci.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLESTRIP;
+    ipci.vertex_shader = image_vs_;
+    ipci.fragment_shader = image_fs_;
+
+    ipci.vertex_input_state.num_vertex_buffers = 0;
+    ipci.vertex_input_state.vertex_buffer_descriptions = nullptr;
+    ipci.vertex_input_state.num_vertex_attributes = 0;
+    ipci.vertex_input_state.vertex_attributes = nullptr;
+
+    image_pipeline_ = SDL_CreateGPUGraphicsPipeline(dev, &ipci);
+    if (!image_pipeline_) {
+        SDL_Log("GPUDriverSDL::initialize: failed to create image pipeline: %s", SDL_GetError());
+        return false;
+    }
+
+    // 创建一张固定大小的 atlas 纹理与采样器
+    image_atlas_width_ = 2048;
+    image_atlas_height_ = 2048;
+    atlas_cursor_x_ = 0;
+    atlas_cursor_y_ = 0;
+    atlas_row_height_ = 0;
+
+    SDL_GPUTextureCreateInfo tex_info{};
+    tex_info.type = SDL_GPU_TEXTURETYPE_2D;
+    tex_info.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    tex_info.width = image_atlas_width_;
+    tex_info.height = image_atlas_height_;
+    tex_info.layer_count_or_depth = 1;
+    tex_info.num_levels = 1;
+    tex_info.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+
+    image_atlas_texture_ = SDL_CreateGPUTexture(dev, &tex_info);
+    if (!image_atlas_texture_) {
+        SDL_Log("GPUDriverSDL::initialize: failed to create image atlas texture: %s", SDL_GetError());
+        return false;
+    }
+
+    SDL_GPUSamplerCreateInfo sampler_info{};
+    sampler_info.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    sampler_info.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    sampler_info.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    sampler_info.mag_filter = SDL_GPU_FILTER_LINEAR;
+    sampler_info.min_filter = SDL_GPU_FILTER_LINEAR;
+    sampler_info.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_LINEAR;
+
+    image_sampler_ = SDL_CreateGPUSampler(dev, &sampler_info);
+    if (!image_sampler_) {
+        SDL_Log("GPUDriverSDL::initialize: failed to create image sampler: %s", SDL_GetError());
+        SDL_ReleaseGPUTexture(dev, image_atlas_texture_);
+        image_atlas_texture_ = nullptr;
+        return false;
+    }
+
+    // MSDF 文字渲染着色器和管线
+    text_vs_ = shader_manager_->loadShaderFromHLSL(
+        "dong_text_vs",
+        SDL_GPU_SHADERSTAGE_VERTEX,
+        kTextVS,
+        "main"
+    );
+    text_fs_ = shader_manager_->loadShaderFromHLSL(
+        "dong_text_fs",
+        SDL_GPU_SHADERSTAGE_FRAGMENT,
+        kTextFS,
+        "main"
+    );
+
+    if (!text_vs_ || !text_fs_) {
+        SDL_Log("GPUDriverSDL::initialize: failed to compile text shaders");
+        return false;
+    }
+
+    SDL_GPUGraphicsPipelineCreateInfo tpci{};
+    SDL_GPUColorTargetDescription color_desc_text{};
+    color_desc_text.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    color_desc_text.blend_state.enable_blend = true;
+    color_desc_text.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+    color_desc_text.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    color_desc_text.blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
+    color_desc_text.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+    color_desc_text.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    color_desc_text.blend_state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
+
+    tpci.target_info.num_color_targets = 1;
+    tpci.target_info.color_target_descriptions = &color_desc_text;
+    tpci.target_info.has_depth_stencil_target = false;
+
+    tpci.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLESTRIP;
+    tpci.vertex_shader = text_vs_;
+    tpci.fragment_shader = text_fs_;
+
+    tpci.vertex_input_state.num_vertex_buffers = 0;
+    tpci.vertex_input_state.vertex_buffer_descriptions = nullptr;
+    tpci.vertex_input_state.num_vertex_attributes = 0;
+    tpci.vertex_input_state.vertex_attributes = nullptr;
+
+    text_pipeline_ = SDL_CreateGPUGraphicsPipeline(dev, &tpci);
+    if (!text_pipeline_) {
+        SDL_Log("GPUDriverSDL::initialize: failed to create text pipeline: %s", SDL_GetError());
+        return false;
+    }
+
+    SDL_GPUSamplerCreateInfo text_sampler_info{};
+    text_sampler_info.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    text_sampler_info.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    text_sampler_info.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    text_sampler_info.mag_filter = SDL_GPU_FILTER_LINEAR;
+    text_sampler_info.min_filter = SDL_GPU_FILTER_LINEAR;
+    text_sampler_info.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_LINEAR;
+
+    text_sampler_ = SDL_CreateGPUSampler(dev, &text_sampler_info);
+    if (!text_sampler_) {
+        SDL_Log("GPUDriverSDL::initialize: failed to create text sampler: %s", SDL_GetError());
+        return false;
+    }
+
+    // 初始化多级字形 Atlas（根据字号挑选）。
+    // bitmap_px 表示单个 glyph 的 MSDF 纹理分辨率，
+    // 这里采用 (32, 48, 72, 96) 四档，覆盖从小字号到标题字号的主流范围。
+    // 未来如果需要支持更大字号，只需在此新增配置项即可。
+    glyph_atlas_tiers_.clear();
+    struct GlyphTierConfig {
+        uint32_t bitmap_px;
+        float distance_range;
+    };
+
+    // Atlas 分级只区分 bitmap 尺寸，distance_range 根据 bitmap 尺寸调整
+    //
+    // 关键：screenPxRange = distance_range * (pixel_scale / msdf_scale)
+    // msdfgen 官方要求 screenPxRange >= 1，最好 >= 2
+    //
+    // 对于小字号（如 12px），pixel_scale 很小，所以需要更大的 distance_range
+    // 来保证 screenPxRange >= 2
+    //
+    // 计算示例（Arial, units_per_em=2048, glyph_width≈1000）：
+    // - 32px bitmap: msdf_scale ≈ (32 - 2*range) / 1000
+    // - 12px 字号: pixel_scale = 12/2048 = 0.00586
+    // - 要使 screenPxRange >= 2: range * (0.00586 / msdf_scale) >= 2
+    // - 如果 range=8, msdf_scale=(32-16)/1000=0.016, screenPxRange=8*(0.00586/0.016)=2.93 ✓
+    //
+    // 增加 distance_range 会减少字形在 MSDF 纹理中的可用空间，
+    // 但可以显著改善小字号的抗锯齿效果
+    const GlyphTierConfig tier_configs[] = {
+        {32u, 8.0f},    // 正文/小号文本：增大 range 以改善小字抗锯齿
+        {48u, 8.0f},    // 中号/UI 控件文本
+        {72u, 8.0f},    // 大号标题
+        {96u, 10.0f},   // 特大号标题或放大预览
+    };
+
+    for (const auto& cfg : tier_configs) {
+        auto atlas = std::make_unique<GlyphAtlas>(gpu_device_);
+        if (!atlas->initialize(2048, 2048, cfg.bitmap_px, cfg.distance_range)) {
+            SDL_Log("GPUDriverSDL::initialize: failed to initialize glyph atlas tier %u", cfg.bitmap_px);
+            return false;
+        }
+        GlyphAtlasTier tier{};
+        tier.bitmap_px = cfg.bitmap_px;
+        tier.distance_range = cfg.distance_range;
+        tier.atlas = std::move(atlas);
+        glyph_atlas_tiers_.push_back(std::move(tier));
+    }
+
+    if (FT_Init_FreeType(&ft_library_) != 0) {
+        SDL_Log("GPUDriverSDL::initialize: failed to initialize FreeType library for caching");
+        ft_library_ = nullptr;
+        return false;
+    }
+    ft_face_cache_.clear();
+
+    // RenderTarget/图层合成调试日志默认关闭，可通过环境变量 DONG_DEBUG_RT=1 开启
+    debug_rt_enabled_ = false;
+
+    SDL_Log("GPUDriverSDL initialized successfully");
+    return true;
+}
+
+} // namespace dong::render

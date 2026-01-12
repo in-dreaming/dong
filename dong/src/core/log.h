@@ -7,7 +7,9 @@
  */
 
 #include <cstdio>
+#include <cstdlib>
 #include <chrono>
+
 
 // 日志级别定义
 #define DONG_LOG_LEVEL_NONE    0
@@ -26,12 +28,26 @@
 #define DONG_LOG_STDERR stderr
 #endif
 
+// 默认写到 stderr（更适合错误日志），但在 Windows/PowerShell 下，管道通常只捕获 stdout。
+// 设环境变量 DONG_LOG_TO_STDOUT=1 可将 DONG_LOG_* 输出切到 stdout，方便 | Select-String/findstr。
+static inline FILE* dongLogStream() {
+    const char* v = std::getenv("DONG_LOG_TO_STDOUT");
+    if (v && (v[0] == '1' || v[0] == 'y' || v[0] == 'Y' || v[0] == 't' || v[0] == 'T')) {
+        return stdout;
+    }
+    return DONG_LOG_STDERR;
+}
+
 #define DONG_LOG__PRINTF(prefix, fmt, ...) \
     do { \
-        std::fprintf(DONG_LOG_STDERR, "%s", prefix); \
-        std::fprintf(DONG_LOG_STDERR, fmt, ##__VA_ARGS__); \
-        std::fprintf(DONG_LOG_STDERR, "\n"); \
+        FILE* __dong_fp = dongLogStream(); \
+        std::fprintf(__dong_fp, "%s", prefix); \
+        std::fprintf(__dong_fp, fmt, ##__VA_ARGS__); \
+        std::fprintf(__dong_fp, "\n"); \
+        std::fflush(__dong_fp); \
     } while (0)
+
+
 
 #if DONG_LOG_LEVEL >= DONG_LOG_LEVEL_ERROR
     #define DONG_LOG_ERROR(fmt, ...) DONG_LOG__PRINTF("[ERROR] ", fmt, ##__VA_ARGS__)

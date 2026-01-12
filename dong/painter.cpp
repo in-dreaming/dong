@@ -976,9 +976,16 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                         w += letter_spacing_units * static_cast<float>(glyph_count - 1);
                     }
                     // 应用 word-spacing
+                    // 注意：当前实现的 glyph placement 是“把空格之后的 glyph 整体右移”，
+                    // 因此行尾的空格不会带来额外宽度；测量时也要扣掉这部分，避免提前换行。
                     if (space_count > 0 && word_spacing_units != 0.0f) {
-                        w += word_spacing_units * static_cast<float>(space_count);
+                        int effective_spaces = space_count;
+                        if (g_last.cluster < text.size() && text[g_last.cluster] == ' ') {
+                            effective_spaces = std::max(0, effective_spaces - 1);
+                        }
+                        w += word_spacing_units * static_cast<float>(effective_spaces);
                     }
+
                     return w > 0.0f ? w : 0.0f;
                 };
 

@@ -155,6 +155,7 @@ GPUDriverSDL::~GPUDriverSDL() {
     shader_manager_ = nullptr;
 }
 
+#if 0 // moved to src/render/sdl_render/gpu_driver_sdl_init.cpp
 bool GPUDriverSDL::initialize() {
     if (!gpu_device_ || !gpu_device_->isInitialized() || !window_ || !shader_manager_) {
         SDL_Log("GPUDriverSDL::initialize: invalid device, window, or shader manager");
@@ -1217,7 +1218,9 @@ float4 main(PSInput input) : SV_Target0 {
     SDL_Log("GPUDriverSDL initialized successfully");
     return true;
 }
+#endif
 
+#if 0 // moved to src/render/sdl_render/gpu_driver_sdl_resources.cpp
 void GPUDriverSDL::prepareResources(const GPUCommandList& commands) {
     if (!gpu_device_ || !gpu_device_->isInitialized()) {
         SDL_Log("[prepareResources] SKIP: gpu_device not ready");
@@ -1282,6 +1285,7 @@ void GPUDriverSDL::prepareResources(const GPUCommandList& commands) {
     }
     DONG_LOG_DEBUG("[prepareResources] END frame=%llu", frame_index_ + 1);
 }
+#endif
 
 void GPUDriverSDL::beginFrame() {
     DONG_LOG_DEBUG("[GPUDriverSDL::beginFrame] START frame=%llu in_frame=%d", frame_index_ + 1, in_frame_ ? 1 : 0);
@@ -1381,6 +1385,7 @@ void GPUDriverSDL::endFrameOffscreen() {
     in_frame_ = false;
 }
 
+#if 0 // moved to src/render/sdl_render/gpu_driver_sdl_resources.cpp
 bool GPUDriverSDL::ensureImageInAtlas(const std::string& src, ImageAtlasEntry& out_entry) {
     if (!gpu_device_ || !gpu_device_->isInitialized() || !image_atlas_texture_ || !current_cmd_buf_) {
         return false;
@@ -1541,6 +1546,7 @@ bool GPUDriverSDL::ensureImageInAtlas(const std::string& src, ImageAtlasEntry& o
     out_entry = entry;
     return true;
 }
+#endif
 
 void GPUDriverSDL::execute(const GPUCommandList& commands) {
     if (!in_frame_ || !current_cmd_buf_ || !gpu_device_) {
@@ -2944,9 +2950,11 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
                     continue;
                 }
 
-                // pen position 是 baseline 上的当前绘制位置
-                const float pen_x_px = glyph.pen_x_units * glyph_pixel_scale + cmd.baseline_x;
-                const float pen_y_px = glyph.pen_y_units * glyph_pixel_scale + cmd.baseline_y;
+                // pen position 是 baseline 上的当前绘制位置。
+                // 注意：TextShaper 会把 fallback 字体的 advance/offset 缩放到“主字体 units”坐标系里，
+                // 所以 pen_x/pen_y 必须用 cmd.scale_to_pixels（主字体 scale）转换到像素，不能用 glyph 自己的 units_per_em。
+                const float pen_x_px = glyph.pen_x_units * cmd.scale_to_pixels + cmd.baseline_x;
+                const float pen_y_px = glyph.pen_y_units * cmd.scale_to_pixels + cmd.baseline_y;
 
                 const float tile_x = pen_x_px - entry->metrics.msdf_translate_x * glyph_pixel_scale;
                 const float tile_y = pen_y_px - msdf_size * render_scale + entry->metrics.msdf_translate_y * glyph_pixel_scale;
@@ -3186,6 +3194,7 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
     }
 }
 
+#if 0 // moved to src/render/sdl_render/gpu_driver_sdl_fonts.cpp and src/render/sdl_render/gpu_driver_factory.cpp
 GPUDriverSDL::GlyphAtlasTier* GPUDriverSDL::selectGlyphAtlasTier(float font_size) {
     if (glyph_atlas_tiers_.empty()) {
         return nullptr;
@@ -3300,5 +3309,6 @@ std::unique_ptr<GPUDriver> CreateGPUDriver(
     }
     return nullptr;
 }
+#endif
 
 } // namespace dong::render

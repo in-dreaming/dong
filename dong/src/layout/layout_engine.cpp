@@ -108,8 +108,42 @@ float computeIntrinsicTextWidth(const dom::DOMNodePtr& node) {
         return 0.0f;
     }
 
-    float content_width = shaped.width_units * scale;
+    // 注意：这里的“intrinsic width”必须与 Painter 的换行测量口径一致。
+    // 否则 inline-block 盒子会被算得偏窄，Painter 再按 inner_width 做换行时就会在空格处断行。
+    float min_x_units = shaped.glyphs.front().pen_x_units;
+    float max_x_units = shaped.glyphs.front().pen_x_units + shaped.glyphs.front().advance_x_units;
+    for (const auto& g : shaped.glyphs) {
+        min_x_units = std::min(min_x_units, g.pen_x_units);
+        max_x_units = std::max(max_x_units, g.pen_x_units + g.advance_x_units);
+    }
+
+    float content_width = (max_x_units - min_x_units) * scale;
+    if (content_width < 0.0f || !std::isfinite(content_width)) {
+        content_width = shaped.width_units * scale;
+    }
     if (content_width < 0.0f) content_width = 0.0f;
+
+    // letter-spacing：Painter 以 glyph 数量近似（glyph_count - 1）段间距
+    if (style.letter_spacing_em != 0.0f) {
+        const float letter_spacing_px = style.letter_spacing_em * font_size;
+        const int glyph_count = static_cast<int>(shaped.glyphs.size());
+        if (glyph_count > 1) {
+            content_width += letter_spacing_px * static_cast<float>(glyph_count - 1);
+        }
+    }
+
+    // word-spacing：对 cluster 落在空格字符的 glyph 计数
+    if (style.word_spacing_px != 0.0f) {
+        int space_count = 0;
+        for (const auto& g : shaped.glyphs) {
+            if (g.cluster < text.size() && text[g.cluster] == ' ') {
+                ++space_count;
+            }
+        }
+        if (space_count > 0) {
+            content_width += style.word_spacing_px * static_cast<float>(space_count);
+        }
+    }
 
     // 鍔犱笂 padding 鍜?border
     float pad_left = style.padding_left.isPixel() ? style.padding_left.value : 0.0f;
@@ -332,18 +366,51 @@ static bool computeInlineMetricsForNode(const dom::DOMNodePtr& node,
 
     const float scale = shaped.scale_to_pixels;
 
-    // 瀹藉害锛氭暣娈垫枃鏈殑 glyph 鑼冨洿
-    float content_width_units = shaped.width_units;
-    if (content_width_units < 0.0f) {
-        content_width_units = 0.0f;
+    // 宽度：用 glyph 的 min/max pen_x 来测量（更接近 Painter 的 measure_range_units 口径）
+    float min_x_units = shaped.glyphs.front().pen_x_units;
+    float max_x_units = shaped.glyphs.front().pen_x_units + shaped.glyphs.front().advance_x_units;
+    for (const auto& g : shaped.glyphs) {
+        min_x_units = std::min(min_x_units, g.pen_x_units);
+        max_x_units = std::max(max_x_units, g.pen_x_units + g.advance_x_units);
     }
-    out_metrics.content_width_px = content_width_units * scale;
 
-    // 绗﹀悎 CSS 鐩掓ā鍨嬫爣鍑嗭細璁＄畻鍖呭惈 padding 鐨勫畬鏁村搴?
+    float content_width_px = (max_x_units - min_x_units) * scale;
+    if (content_width_px < 0.0f || !std::isfinite(content_width_px)) {
+        content_width_px = shaped.width_units * scale;
+    }
+    if (content_width_px < 0.0f) {
+        content_width_px = 0.0f;
+    }
+
+    // letter-spacing：Painter 以 glyph 数量近似（glyph_count - 1）
+    if (style.letter_spacing_em != 0.0f) {
+        const float letter_spacing_px = style.letter_spacing_em * font_size_px;
+        const int glyph_count = static_cast<int>(shaped.glyphs.size());
+        if (glyph_count > 1) {
+            content_width_px += letter_spacing_px * static_cast<float>(glyph_count - 1);
+        }
+    }
+
+    // word-spacing：对 cluster 落在空格字符的 glyph 计数
+    if (style.word_spacing_px != 0.0f) {
+        int space_count = 0;
+        for (const auto& g : shaped.glyphs) {
+            if (g.cluster < text.size() && text[g.cluster] == ' ') {
+                ++space_count;
+            }
+        }
+        if (space_count > 0) {
+            content_width_px += style.word_spacing_px * static_cast<float>(space_count);
+        }
+    }
+
+    out_metrics.content_width_px = content_width_px;
+
+    // 符合 CSS 盒模型标准：计算包含 padding 的完整宽度
     out_metrics.padding_left_px = style.padding_left.isPixel() ? style.padding_left.value : 0.0f;
     out_metrics.padding_right_px = style.padding_right.isPixel() ? style.padding_right.value : 0.0f;
-    out_metrics.total_width_px = out_metrics.content_width_px + 
-                                  out_metrics.padding_left_px + 
+    out_metrics.total_width_px = out_metrics.content_width_px +
+                                  out_metrics.padding_left_px +
                                   out_metrics.padding_right_px;
 
     // 琛岄珮涓?baseline锛氬鐢?Painter 涓殑搴﹂噺閫昏緫锛屼繚璇佷竴鑷?
