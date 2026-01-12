@@ -224,6 +224,7 @@ add_library(dong_legacy STATIC
     src/render/gpu_painter.cpp
     src/render/gpu_driver_sdl.cpp
     src/render/sdl_render/gpu_driver_sdl_init.cpp
+    src/render/sdl_render/gpu_driver_sdl_execute.cpp
     src/render/sdl_render/gpu_driver_sdl_resources.cpp
     src/render/sdl_render/gpu_driver_sdl_fonts.cpp
     src/render/sdl_render/gpu_driver_factory.cpp
@@ -257,7 +258,7 @@ if(VULKAN_SDK_PATH)
     endif()
 endif()
 
-target_compile_definitions(dong_legacy PRIVATE SDL_SHADERCROSS_DXC DONG_USE_SDL_IMAGE)
+target_compile_definitions(dong_legacy PRIVATE SDL_SHADERCROSS_DXC DONG_USE_SDL_IMAGE DONG_SDL_SHADER_DIR=\"${CMAKE_SOURCE_DIR}/src/render/sdl_render/shaders\")
 
 target_link_libraries(dong_legacy PUBLIC quickjs lexbor yoga)
 

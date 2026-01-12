@@ -15,8 +15,8 @@
 #include <cstring>
 #include <cmath>
 #include <utility>
+#include <string>
 
-#include "sdl_shaders_hlsl.hpp"
 
 namespace dong::render {
 
@@ -42,30 +42,32 @@ bool GPUDriverSDL::initialize() {
     SDL_GPUTextureFormat pipeline_format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
     (void)pipeline_format;
 
-    // Shader sources moved to sdl_render/sdl_shaders_hlsl.hpp
-    const char* kRectVS = sdl_render::shaders::kRectVS;
-    const char* kRectFS = sdl_render::shaders::kRectFS;
-    const char* kRoundRectVS = sdl_render::shaders::kRoundRectVS;
-    const char* kRoundRectFS = sdl_render::shaders::kRoundRectFS;
-    const char* kShadowVS = sdl_render::shaders::kShadowVS;
-    const char* kShadowFS = sdl_render::shaders::kShadowFS;
-    const char* kImageVS = sdl_render::shaders::kImageVS;
-    const char* kImageFS = sdl_render::shaders::kImageFS;
-    const char* kTextVS = sdl_render::shaders::kTextVS;
-    const char* kTextFS = sdl_render::shaders::kTextFS;
+#ifndef DONG_SDL_SHADER_DIR
+#define DONG_SDL_SHADER_DIR "src/render/sdl_render/shaders"
+#endif
 
-    rect_vs_ = shader_manager_->loadShaderFromHLSL(
+    auto shader_path = [](const char* filename) -> std::string {
+        std::string base = DONG_SDL_SHADER_DIR;
+        if (!base.empty() && (base.back() == '/' || base.back() == '\\')) {
+            return base + filename;
+        }
+        return base + "/" + filename;
+    };
+
+
+    rect_vs_ = shader_manager_->loadShaderFromHLSLFile(
         "dong_rect_vs",
         SDL_GPU_SHADERSTAGE_VERTEX,
-        kRectVS,
+        shader_path("rect_vs.hlsl").c_str(),
         "main"
     );
-    rect_fs_ = shader_manager_->loadShaderFromHLSL(
+    rect_fs_ = shader_manager_->loadShaderFromHLSLFile(
         "dong_rect_fs",
         SDL_GPU_SHADERSTAGE_FRAGMENT,
-        kRectFS,
+        shader_path("rect_fs.hlsl").c_str(),
         "main"
     );
+
 
     if (!rect_vs_ || !rect_fs_) {
         SDL_Log("GPUDriverSDL::initialize: failed to compile rect shaders");
@@ -104,18 +106,19 @@ bool GPUDriverSDL::initialize() {
     }
 
     // 圆角矩形绘制：analytic SDF，在 fragment 阶段做抗锯齿边缘
-    round_rect_vs_ = shader_manager_->loadShaderFromHLSL(
+    round_rect_vs_ = shader_manager_->loadShaderFromHLSLFile(
         "dong_round_rect_vs",
         SDL_GPU_SHADERSTAGE_VERTEX,
-        kRoundRectVS,
+        shader_path("round_rect_vs.hlsl").c_str(),
         "main"
     );
-    round_rect_fs_ = shader_manager_->loadShaderFromHLSL(
+    round_rect_fs_ = shader_manager_->loadShaderFromHLSLFile(
         "dong_round_rect_fs",
         SDL_GPU_SHADERSTAGE_FRAGMENT,
-        kRoundRectFS,
+        shader_path("round_rect_fs.hlsl").c_str(),
         "main"
     );
+
 
     if (!round_rect_vs_ || !round_rect_fs_) {
         SDL_Log("GPUDriverSDL::initialize: failed to compile round-rect shaders");
@@ -154,18 +157,19 @@ bool GPUDriverSDL::initialize() {
     }
 
     // 阴影绘制着色器：使用 SDF + 模糊半径实现柔和阴影边缘
-    shadow_vs_ = shader_manager_->loadShaderFromHLSL(
+    shadow_vs_ = shader_manager_->loadShaderFromHLSLFile(
         "dong_shadow_vs",
         SDL_GPU_SHADERSTAGE_VERTEX,
-        kShadowVS,
+        shader_path("shadow_vs.hlsl").c_str(),
         "main"
     );
-    shadow_fs_ = shader_manager_->loadShaderFromHLSL(
+    shadow_fs_ = shader_manager_->loadShaderFromHLSLFile(
         "dong_shadow_fs",
         SDL_GPU_SHADERSTAGE_FRAGMENT,
-        kShadowFS,
+        shader_path("shadow_fs.hlsl").c_str(),
         "main"
     );
+
 
     if (!shadow_vs_ || !shadow_fs_) {
         SDL_Log("GPUDriverSDL::initialize: failed to compile shadow shaders");
@@ -204,18 +208,19 @@ bool GPUDriverSDL::initialize() {
     }
 
     // 图片绘制着色器：使用 SV_VertexID 生成矩形，并根据 atlas UV 采样
-    image_vs_ = shader_manager_->loadShaderFromHLSL(
+    image_vs_ = shader_manager_->loadShaderFromHLSLFile(
         "dong_image_vs",
         SDL_GPU_SHADERSTAGE_VERTEX,
-        kImageVS,
+        shader_path("image_vs.hlsl").c_str(),
         "main"
     );
-    image_fs_ = shader_manager_->loadShaderFromHLSL(
+    image_fs_ = shader_manager_->loadShaderFromHLSLFile(
         "dong_image_fs",
         SDL_GPU_SHADERSTAGE_FRAGMENT,
-        kImageFS,
+        shader_path("image_fs.hlsl").c_str(),
         "main"
     );
+
 
     if (!image_vs_ || !image_fs_) {
         SDL_Log("GPUDriverSDL::initialize: failed to compile image shaders");
@@ -292,18 +297,19 @@ bool GPUDriverSDL::initialize() {
     }
 
     // MSDF 文字渲染着色器和管线
-    text_vs_ = shader_manager_->loadShaderFromHLSL(
+    text_vs_ = shader_manager_->loadShaderFromHLSLFile(
         "dong_text_vs",
         SDL_GPU_SHADERSTAGE_VERTEX,
-        kTextVS,
+        shader_path("text_vs.hlsl").c_str(),
         "main"
     );
-    text_fs_ = shader_manager_->loadShaderFromHLSL(
+    text_fs_ = shader_manager_->loadShaderFromHLSLFile(
         "dong_text_fs",
         SDL_GPU_SHADERSTAGE_FRAGMENT,
-        kTextFS,
+        shader_path("text_fs.hlsl").c_str(),
         "main"
     );
+
 
     if (!text_vs_ || !text_fs_) {
         SDL_Log("GPUDriverSDL::initialize: failed to compile text shaders");

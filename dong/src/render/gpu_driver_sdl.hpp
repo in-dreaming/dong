@@ -155,6 +155,28 @@ private:
 
     GlyphAtlasTier* selectGlyphAtlasTier(float font_size);
     FT_Face getOrCreateFace(const std::string& font_path, uint32_t pixel_size);
+
+    // --- execute() 重构：把巨石函数拆成可读的小步骤 ---
+    struct ExecuteContext;
+    bool executeSetupMainTarget(ExecuteContext& ctx);
+    void executePreuploadImages(const GPUCommandList& commands);
+    void executeDispatchCommand(const GPUCommand& cmd, ExecuteContext& ctx);
+
+    void executeBeginPass(ExecuteContext& ctx);
+    void executeEndPass(ExecuteContext& ctx);
+
+    void executePushClipRect(ExecuteContext& ctx, const GPUCommand& cmd);
+    void executePopClip(ExecuteContext& ctx);
+
+    void executeBeginIsolatedLayer(ExecuteContext& ctx, const GPUCommand& cmd);
+    void executeEndIsolatedLayer(ExecuteContext& ctx, const GPUCommand& cmd);
+
+    void executeDrawRect(ExecuteContext& ctx, const GPUCommand& cmd);
+    void executeDrawRoundedRect(ExecuteContext& ctx, const GPUCommand& cmd);
+    void executeDrawShadow(ExecuteContext& ctx, const GPUCommand& cmd);
+    void executeDrawImage(ExecuteContext& ctx, const GPUCommand& cmd);
+    void executeDrawText(ExecuteContext& ctx, const GPUCommand& cmd);
 };
+
 
 } // namespace dong::render

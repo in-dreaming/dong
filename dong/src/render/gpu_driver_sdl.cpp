@@ -1548,6 +1548,7 @@ bool GPUDriverSDL::ensureImageInAtlas(const std::string& src, ImageAtlasEntry& o
 }
 #endif
 
+#if 0 // moved to src/render/sdl_render/gpu_driver_sdl_execute.cpp
 void GPUDriverSDL::execute(const GPUCommandList& commands) {
     if (!in_frame_ || !current_cmd_buf_ || !gpu_device_) {
         SDL_Log("GPUDriverSDL::execute: invalid state");
@@ -3193,6 +3194,7 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
         pass = nullptr;
     }
 }
+#endif
 
 #if 0 // moved to src/render/sdl_render/gpu_driver_sdl_fonts.cpp and src/render/sdl_render/gpu_driver_factory.cpp
 GPUDriverSDL::GlyphAtlasTier* GPUDriverSDL::selectGlyphAtlasTier(float font_size) {

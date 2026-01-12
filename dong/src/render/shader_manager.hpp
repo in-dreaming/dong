@@ -37,6 +37,15 @@ public:
         const char* entry_point = "main"
     );
 
+    // 从 HLSL 文件加载并编译着色器（读取文本 -> HLSL -> SPIR-V -> 目标后端）
+    SDL_GPUShader* loadShaderFromHLSLFile(
+        const std::string& name,
+        SDL_GPUShaderStage stage,
+        const char* hlsl_file_path,
+        const char* entry_point = "main"
+    );
+
+
     // 获取已缓存的着色器
     SDL_GPUShader* getShader(const std::string& name) const;
 

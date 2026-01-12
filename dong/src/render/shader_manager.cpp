@@ -3,6 +3,9 @@
 #include <SDL3/SDL_log.h>
 #include <SDL3_shadercross/SDL_shadercross.h>
 #include <mutex>
+#include <fstream>
+#include <sstream>
+
 
 namespace dong::render {
 
@@ -114,7 +117,37 @@ SDL_GPUShader* ShaderManager::loadShaderFromHLSL(
     return shader;
 }
 
+SDL_GPUShader* ShaderManager::loadShaderFromHLSLFile(
+    const std::string& name,
+    SDL_GPUShaderStage stage,
+    const char* hlsl_file_path,
+    const char* entry_point) {
+
+    if (!hlsl_file_path || hlsl_file_path[0] == '\0') {
+        SDL_Log("HLSL file path is empty for shader '%s'", name.c_str());
+        return nullptr;
+    }
+
+    std::ifstream in(hlsl_file_path, std::ios::in | std::ios::binary);
+    if (!in) {
+        SDL_Log("Failed to open HLSL file '%s' for shader '%s'", hlsl_file_path, name.c_str());
+        return nullptr;
+    }
+
+    std::ostringstream ss;
+    ss << in.rdbuf();
+    std::string source = ss.str();
+    if (source.empty()) {
+        SDL_Log("HLSL file '%s' is empty for shader '%s'", hlsl_file_path, name.c_str());
+        return nullptr;
+    }
+
+    // 直接复用现有的 HLSL 编译路径（包含全局缓存）
+    return loadShaderFromHLSL(name, stage, source.c_str(), entry_point);
+}
+
 SDL_GPUShader* ShaderManager::getShader(const std::string& name) const {
+
     auto it = shader_cache_.find(name);
     if (it != shader_cache_.end()) {
         return it->second;
