@@ -413,6 +413,110 @@ std::string resolveFontPath(const std::string& requested_family,
     return findExistingFont(candidate_paths);
 }
 
+namespace {
+
+bool wantsItalicOrOblique(const std::string& font_style) {
+    std::string style = trimWhitespace(font_style);
+    style = toLowerAscii(style);
+    if (style.empty() || style == "normal") {
+        return false;
+    }
+    // oblique 目前按 italic 处理（优先选 italic face；没有再回退到 normal）
+    return style == "italic" || style == "oblique";
+}
+
+void appendCandidatesForFamilyWeightStyle(const std::string& canonical_family,
+                                         int numeric_weight,
+                                         bool italic_or_oblique,
+                                         std::vector<std::string>& out) {
+    const bool is_bold = numeric_weight >= 600;
+
+    if (!italic_or_oblique) {
+        // 仍然优先按“真实家族名”的常见文件名补充（避免被 Inter 等替代字体抢先匹配）
+        if (canonical_family == "arial") {
+            out.push_back(is_bold ? "C:/Windows/Fonts/arialbd.ttf" : "C:/Windows/Fonts/arial.ttf");
+        } else if (canonical_family == "segoe ui") {
+            out.push_back(is_bold ? "C:/Windows/Fonts/segoeuib.ttf" : "C:/Windows/Fonts/segoeui.ttf");
+        }
+
+        appendCandidatesForFamilyAndWeight(canonical_family, numeric_weight, out);
+        return;
+    }
+
+    // italic / oblique
+    if (canonical_family == "arial") {
+        out.push_back(is_bold ? "C:/Windows/Fonts/arialbi.ttf" : "C:/Windows/Fonts/ariali.ttf");
+        // fallback: 如果系统没有 italic 文件，至少保证能选到 regular/bold
+        out.push_back(is_bold ? "C:/Windows/Fonts/arialbd.ttf" : "C:/Windows/Fonts/arial.ttf");
+    } else if (canonical_family == "segoe ui") {
+        out.push_back(is_bold ? "C:/Windows/Fonts/segoeuiz.ttf" : "C:/Windows/Fonts/segoeuii.ttf");
+        out.push_back(is_bold ? "C:/Windows/Fonts/segoeuib.ttf" : "C:/Windows/Fonts/segoeui.ttf");
+    } else if (canonical_family == "sans-serif" || canonical_family == "-apple-system") {
+        // 常见 sans-serif 的倾斜版本优先级（Windows 优先 Segoe/Arial）
+        out.push_back(is_bold ? "C:/Windows/Fonts/segoeuiz.ttf" : "C:/Windows/Fonts/segoeuii.ttf");
+        out.push_back(is_bold ? "C:/Windows/Fonts/arialbi.ttf" : "C:/Windows/Fonts/ariali.ttf");
+        out.push_back(is_bold ? "C:/Windows/Fonts/arialbd.ttf" : "C:/Windows/Fonts/arial.ttf");
+    }
+
+    // Linux: DejaVu 常见倾斜文件名
+    out.push_back(is_bold ? "/usr/share/fonts/truetype/dejavu/DejaVuSans-BoldOblique.ttf" : "/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf");
+    out.push_back(is_bold ? "/usr/share/fonts/truetype/dejavu/DejaVuSerif-BoldItalic.ttf" : "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Italic.ttf");
+
+    // macOS: Arial/Times 常见文件名（补充，找不到会自动忽略）
+    out.push_back(is_bold ? "/System/Library/Fonts/Supplemental/Arial Bold Italic.ttf" : "/System/Library/Fonts/Supplemental/Arial Italic.ttf");
+    out.push_back(is_bold ? "/System/Library/Fonts/Supplemental/Times New Roman Bold Italic.ttf" : "/System/Library/Fonts/Supplemental/Times New Roman Italic.ttf");
+
+    // 最后再把 weight-only 的候选加进来，保证可用
+    appendCandidatesForFamilyAndWeight(canonical_family, numeric_weight, out);
+}
+
+} // namespace
+
+std::string resolveFontPath(const std::string& requested_family,
+                            const std::string& font_weight,
+                            const std::string& font_style) {
+    // 先走系统查找/自定义字体路径（如果未来实现 DirectWrite/Fontconfig，可以在这里进一步按 style 过滤）
+    // 当前 Windows/Linux 的 system lookup 是 stub，主要靠路径候选。
+
+    const bool italic_or_oblique = wantsItalicOrOblique(font_style);
+
+    // 对 normal 样式，保持原有行为，减少对现有用例的影响
+    if (!italic_or_oblique) {
+        return resolveFontPath(requested_family, font_weight);
+    }
+
+    // Ensure font finder is initialized
+    ensureFontFinderInitialized();
+
+    auto families = splitFontFamilies(requested_family);
+    if (families.empty()) {
+        families.push_back("sans-serif");
+    }
+
+    const int numeric_weight = normalizeFontWeight(font_weight);
+
+    // 由于 system lookup 目前无法按 italic 过滤，这里直接走候选路径策略
+    std::vector<std::string> candidate_paths;
+    candidate_paths.reserve(families.size() * 6);
+
+    for (const auto& family : families) {
+        std::string canonical = canonicalFontFamily(family);
+        appendCandidatesForFamilyWeightStyle(canonical, numeric_weight, true, candidate_paths);
+
+        // exact key candidates
+        auto exact = kFontCandidates.find(toLowerAscii(family));
+        if (exact != kFontCandidates.end()) {
+            candidate_paths.insert(candidate_paths.end(), exact->second.begin(), exact->second.end());
+        }
+    }
+
+    if (candidate_paths.empty()) {
+        appendCandidatesForFamilyWeightStyle("sans-serif", numeric_weight, true, candidate_paths);
+    }
+
+    return findExistingFont(candidate_paths);
+}
+
 std::string resolveFontPath(const std::string& requested_family) {
     // Compatibility: no weight equals normal/400
     return resolveFontPath(requested_family, "normal");

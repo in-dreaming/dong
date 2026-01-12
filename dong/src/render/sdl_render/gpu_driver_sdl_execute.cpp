@@ -1264,7 +1264,8 @@ void GPUDriverSDL::executeDrawText(ExecuteContext& ctx, const GPUCommand& cmd) {
 
     std::string default_font_path = !cmd.font_path.empty()
                                         ? cmd.font_path
-                                        : resolveFontPath(cmd.font_family, cmd.font_weight);
+                                        : resolveFontPath(cmd.font_family, cmd.font_weight, cmd.font_style);
+
     if (default_font_path.empty()) {
         DONG_LOG_WARN("GPUDriverSDL: no valid font found for family '%s'", cmd.font_family.c_str());
         return;

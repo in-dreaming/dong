@@ -10,7 +10,9 @@ struct TextShapeRequest {
     std::string text;
     std::string font_family;
     std::string font_weight;
+    std::string font_style;        // CSS font-style: normal/italic/oblique
     float font_size = 16.0f;       // 目标像素字号
+
     float origin_x = 0.0f;
     float origin_y = 0.0f;
 };

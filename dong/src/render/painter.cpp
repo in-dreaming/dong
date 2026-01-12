@@ -827,7 +827,9 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                 req.text = "X";  // 使用 X 作为基准字符
                 req.font_family = style.font_family;
                 req.font_weight = style.font_weight;
+                req.font_style = style.font_style;
                 req.font_size = container_font_size;
+
                 ShapedText shaped{};
                 if (text_shaper_.shape(req, shaped)) {
                     float scale = shaped.scale_to_pixels;
@@ -882,13 +884,16 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                             float child_font_size = child_style.font_size > 0.0f ? child_style.font_size : container_font_size;
                             std::string child_font_family = !child_style.font_family.empty() ? child_style.font_family : style.font_family;
                             std::string child_font_weight = !child_style.font_weight.empty() ? child_style.font_weight : style.font_weight;
+                            std::string child_font_style = !child_style.font_style.empty() ? child_style.font_style : style.font_style;
                             Color child_color = makeColorFromCss(!child_style.color.empty() ? child_style.color : style.color);
                             
                             TextShapeRequest req{};
                             req.text = child_text;
                             req.font_family = child_font_family;
                             req.font_weight = child_font_weight;
+                            req.font_style = child_font_style;
                             req.font_size = child_font_size;
+
                             
                             ShapedText shaped{};
                             if (text_shaper_.shape(req, shaped) && !shaped.glyphs.empty()) {
@@ -928,7 +933,9 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                                 glyph_run.font_size = child_font_size;
                                 glyph_run.font_family = child_font_family;
                                 glyph_run.font_weight = child_font_weight;
+                                glyph_run.font_style = child_font_style;
                                 glyph_run.font_path = shaped.font_path;
+
                                 glyph_run.baseline_x = text_x;
                                 glyph_run.baseline_y = baseline_y;
                                 glyph_run.units_per_em = shaped.units_per_em;
@@ -963,7 +970,9 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                     req.text = text;
                     req.font_family = style.font_family;
                     req.font_weight = style.font_weight;
+                    req.font_style = style.font_style;
                     req.font_size = container_font_size;
+
 
                     ShapedText shaped{};
                     if (!text_shaper_.shape(req, shaped) || shaped.glyphs.empty()) {
@@ -986,7 +995,9 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                     glyph_run.font_size = container_font_size;
                     glyph_run.font_family = style.font_family;
                     glyph_run.font_weight = style.font_weight;
+                    glyph_run.font_style = style.font_style;
                     glyph_run.font_path = shaped.font_path;
+
                     glyph_run.baseline_x = text_x;
                     glyph_run.baseline_y = baseline_y;
                     glyph_run.units_per_em = shaped.units_per_em;
@@ -1060,7 +1071,9 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                 full_req.text = text;
                 full_req.font_family = style.font_family;
                 full_req.font_weight = style.font_weight;
+                full_req.font_style = style.font_style;
                 full_req.font_size = font_size;
+
 
                 ShapedText shaped_full{};
                 if (!text_shaper_.shape(full_req, shaped_full) || shaped_full.glyphs.empty()) {
@@ -1375,7 +1388,9 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                     glyph_run.font_size = font_size;
                     glyph_run.font_family = style.font_family;
                     glyph_run.font_weight = style.font_weight;
+                    glyph_run.font_style = style.font_style;
                     glyph_run.font_path = shaped_full.font_path;
+
                     glyph_run.baseline_x = text_x;
                     glyph_run.baseline_y = baseline_y;
                     glyph_run.units_per_em = shaped_full.units_per_em;
@@ -1471,7 +1486,9 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
             req.text = display_text;
             req.font_family = style.font_family;
             req.font_weight = style.font_weight;
+            req.font_style = style.font_style;
             req.font_size = font_size;
+
             
             ShapedText shaped{};
             if (text_shaper_.shape(req, shaped) && !shaped.glyphs.empty()) {
@@ -1504,7 +1521,9 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                 glyph_run.font_size = font_size;
                 glyph_run.font_family = style.font_family;
                 glyph_run.font_weight = style.font_weight;
+                glyph_run.font_style = style.font_style;
                 glyph_run.font_path = shaped.font_path;
+
                 glyph_run.baseline_x = text_x;
                 glyph_run.baseline_y = baseline_y;
                 glyph_run.units_per_em = shaped.units_per_em;
@@ -1815,7 +1834,9 @@ void Painter::renderPseudoElement(const dom::DOMNodePtr& pseudo,
         request.text = style.content;
         request.font_family = style.font_family;
         request.font_weight = style.font_weight;
+        request.font_style = style.font_style;
         request.font_size = font_size;
+
         request.origin_x = text_x;
         request.origin_y = text_y;
         
@@ -1836,10 +1857,14 @@ void Painter::renderPseudoElement(const dom::DOMNodePtr& pseudo,
             glyph_run.font_size = font_size;
             glyph_run.font_family = style.font_family;
             glyph_run.font_weight = style.font_weight;
+            glyph_run.font_style = style.font_style;
             glyph_run.font_path = shaped.font_path;
             glyph_run.baseline_x = text_x;
             glyph_run.baseline_y = baseline_y;
+            glyph_run.units_per_em = shaped.units_per_em;
+            glyph_run.scale_to_pixels = shaped.scale_to_pixels;
             fillTextShadow(glyph_run, style);
+
             
             for (const auto& sg : shaped.glyphs) {
                 GlyphInstance inst{};

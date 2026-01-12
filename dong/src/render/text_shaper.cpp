@@ -174,8 +174,8 @@ bool TextShaper::shape(const TextShapeRequest& request, ShapedText& out_text) {
         return false;
     }
 
-    // 瑙ｆ瀽涓诲瓧浣?
-    std::string primary_font_path = resolveFontPath(request.font_family, request.font_weight);
+    // 解析主字体（需要考虑 font-style：italic/oblique）
+    std::string primary_font_path = resolveFontPath(request.font_family, request.font_weight, request.font_style);
     if (primary_font_path.empty()) {
         DONG_LOG_INFO("TextShaper: failed to resolve font family '%s'", request.font_family.c_str());
         return false;

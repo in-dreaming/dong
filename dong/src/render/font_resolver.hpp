@@ -20,6 +20,13 @@ std::string resolveFontPath(const std::string& requested_family);
 std::string resolveFontPath(const std::string& requested_family,
                             const std::string& font_weight);
 
+// 根据 font-family + font-weight + font-style 返回本地可用的字体文件路径
+// font_style 支持 "normal"/"italic"/"oblique"（oblique 目前按 italic 处理）
+std::string resolveFontPath(const std::string& requested_family,
+                            const std::string& font_weight,
+                            const std::string& font_style);
+
+
 // 获取 CJK（中日韩）字体回退列表
 // 返回系统中存在的 CJK 字体路径列表，按优先级排序
 std::vector<std::string> getCJKFallbackFonts();

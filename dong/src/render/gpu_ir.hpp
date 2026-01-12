@@ -72,7 +72,9 @@ struct GPUCommand {
     float font_size = 16.0f;
     std::string font_family;
     std::string font_weight; // CSS font-weight（"normal"/"bold"/数值）
+    std::string font_style;  // CSS font-style（normal/italic/oblique）
     std::string font_path;
+
     float baseline_x = 0.0f;
     float baseline_y = 0.0f;
     std::vector<GlyphInstance> glyphs;
@@ -354,7 +356,9 @@ public:
                 cmd.font_size = item.glyph_run.font_size;
                 cmd.font_family = item.glyph_run.font_family;
                 cmd.font_weight = item.glyph_run.font_weight;
+                cmd.font_style = item.glyph_run.font_style;
                 cmd.font_path = item.glyph_run.font_path;
+
                 cmd.baseline_x = item.glyph_run.baseline_x;
                 cmd.baseline_y = item.glyph_run.baseline_y;
                 cmd.glyphs = item.glyph_run.glyphs;

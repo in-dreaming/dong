@@ -96,6 +96,7 @@ float computeIntrinsicTextWidth(const dom::DOMNodePtr& node) {
     req.text = text;
     req.font_family = style.font_family;
     req.font_weight = style.font_weight;
+    req.font_style = style.font_style;
     req.font_size = font_size;
 
     ShapedText shaped{};
@@ -194,6 +195,7 @@ float computeIntrinsicTextHeight(const dom::DOMNodePtr& node) {
     req.text = text;
     req.font_family = style.font_family;
     req.font_weight = style.font_weight;
+    req.font_style = style.font_style;
     req.font_size = font_size;
 
     ShapedText shaped{};
@@ -357,6 +359,7 @@ static bool computeInlineMetricsForNode(const dom::DOMNodePtr& node,
     req.text = text;
     req.font_family = style.font_family;
     req.font_weight = style.font_weight;
+    req.font_style = style.font_style;
     req.font_size = font_size_px;
 
     ShapedText shaped{};

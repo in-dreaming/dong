@@ -85,7 +85,9 @@ struct DrawGlyphRunData {
     float font_size = 16.0f;
     std::string font_family;
     std::string font_weight;
+    std::string font_style; // CSS font-style: normal/italic/oblique
     std::string font_path;
+
     float baseline_x = 0.0f;
     float baseline_y = 0.0f;
     std::vector<GlyphInstance> glyphs;

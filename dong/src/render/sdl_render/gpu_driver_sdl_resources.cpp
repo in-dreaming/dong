@@ -44,7 +44,8 @@ void GPUDriverSDL::prepareResources(const GPUCommandList& commands) {
         // 确定字体路径
         std::string font_path = !cmd.font_path.empty()
             ? cmd.font_path
-            : resolveFontPath(cmd.font_family, cmd.font_weight);
+            : resolveFontPath(cmd.font_family, cmd.font_weight, cmd.font_style);
+
         if (font_path.empty()) {
             continue;
         }

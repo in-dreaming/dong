@@ -1249,7 +1249,7 @@ void GPUDriverSDL::prepareResources(const GPUCommandList& commands) {
         // 确定字体路径
         std::string font_path = !cmd.font_path.empty()
             ? cmd.font_path
-            : resolveFontPath(cmd.font_family, cmd.font_weight);
+            : resolveFontPath(cmd.font_family, cmd.font_weight, cmd.font_style);
         if (font_path.empty()) {
             continue;
         }
@@ -2828,7 +2828,7 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             // 默认字体路径（用于没有指定 font_path 的 glyph）
             std::string default_font_path = !cmd.font_path.empty()
                 ? cmd.font_path
-                : resolveFontPath(cmd.font_family, cmd.font_weight);
+                : resolveFontPath(cmd.font_family, cmd.font_weight, cmd.font_style);
             if (default_font_path.empty()) {
                 DONG_LOG_WARN("GPUDriverSDL: no valid font found for family '%s'", cmd.font_family.c_str());
                 break;
