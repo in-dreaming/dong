@@ -580,8 +580,17 @@ SDL_GPUTexture* View::renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, 
         SDL_ReleaseGPUTexture(device, offscreen_texture);
         return nullptr;
     }
+
+    // Offscreen renders are often used by embeddings (e.g. 3D screens).
+    // Styles may depend on runtime state (:hover/:active) and JS mutations.
+    if (dom_manager) {
+        if (auto* se = dom_manager->getStyleEngine()) {
+            se->computeStyles(root);
+        }
+    }
     
     DONG_LOG_DEBUG("[View::renderToGPUTexture] root->isLayoutDirty() = %s", root->isLayoutDirty() ? "TRUE" : "FALSE");
+
     
     // 为离屏渲染强制执行一次完整布局，以确保 absolute / inline 等最新逻辑
     // 始终生效，而不是依赖增量 dirty 标记（截图对齐场景更看重正确性而非微观性能）。

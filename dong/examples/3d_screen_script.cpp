@@ -505,8 +505,23 @@ int main() {
     
     float mainCubeRotation = 0.0f;
     int focusedScreen = -1;  // 当前聚焦的屏幕 (-1 表示无)
-    
+
+    // Track press target so mouse-up goes to the same screen even if cursor moves away.
+    int pressedScreen = -1;
+    int32_t pressedX = 0;
+    int32_t pressedY = 0;
+
+    // If press+release happen in the same frame, delay mouse-up by 1 frame so :active is visible.
+    bool pendingMouseUp = false;
+    int pendingMouseUpScreen = -1;
+    int32_t pendingMouseUpX = 0;
+    int32_t pendingMouseUpY = 0;
+
+    // Track last hovered screen so we can clear :hover when cursor leaves all screens.
+    int lastHoveredScreen = -1;
+
     auto lastTime = std::chrono::high_resolution_clock::now();
+
     bool running = true;
     int winW = WIN_W, winH = WIN_H;
 
@@ -571,6 +586,9 @@ int main() {
         int hoveredScreen = -1;
         Vec2 hoveredUV{-1, -1};
         
+        int32_t hoveredScreenX = 0;
+        int32_t hoveredScreenY = 0;
+
         for (int i = 0; i < numScreens; i++) {
             Quad3D quad = getScreenQuad(screens[i]);
             Vec2 uv = quad.intersect(hoverRay);
@@ -584,15 +602,31 @@ int main() {
                 // 注意：UV 的 v 是从下到上（0=底部，1=顶部）
                 // 但 HTML 坐标系 Y 是从上到下（0=顶部）
                 // 所以需要翻转 Y 坐标
-                int32_t screenX = (int32_t)(uv.x * screens[i].rtWidth);
-                int32_t screenY = (int32_t)((1.0f - uv.y) * screens[i].rtHeight);
+                hoveredScreenX = (int32_t)(uv.x * screens[i].rtWidth);
+                hoveredScreenY = (int32_t)((1.0f - uv.y) * screens[i].rtHeight);
                 
                 // 发送鼠标移动到 HTML 屏幕
-                screens[i].html.sendMouseMove(screenX, screenY);
+                screens[i].html.sendMouseMove(hoveredScreenX, hoveredScreenY);
             }
         }
 
-        // 处理鼠标点击
+        // 当鼠标离开所有屏幕时，给上一块屏幕发一次“屏幕外”的 move 以清除 :hover。
+        if (hoveredScreen < 0 && lastHoveredScreen >= 0) {
+            screens[lastHoveredScreen].html.sendMouseMove(-1, -1);
+            lastHoveredScreen = -1;
+        } else if (hoveredScreen >= 0) {
+            lastHoveredScreen = hoveredScreen;
+        }
+
+        // If we delayed mouse-up from last frame, deliver it now (after a frame rendered with :active).
+        if (pendingMouseUp && pendingMouseUpScreen >= 0) {
+            screens[pendingMouseUpScreen].html.sendMouseMove(pendingMouseUpX, pendingMouseUpY);
+            screens[pendingMouseUpScreen].html.sendMouseUp(1);
+            pendingMouseUp = false;
+            pendingMouseUpScreen = -1;
+        }
+
+        // 处理鼠标按下
         if (input.left_mouse_pressed) {
             if (hoveredScreen >= 0) {
                 // 点击屏幕，设置焦点
@@ -601,6 +635,11 @@ int main() {
                 for (int i = 0; i < numScreens; i++) {
                     screens[i].focused = (i == focusedScreen);
                 }
+
+                // Capture press target so release goes to the same screen.
+                pressedScreen = hoveredScreen;
+                pressedX = hoveredScreenX;
+                pressedY = hoveredScreenY;
                 
                 // 发送鼠标按下事件
                 screens[hoveredScreen].html.sendMouseDown(1);
@@ -610,13 +649,32 @@ int main() {
                 for (int i = 0; i < numScreens; i++) {
                     screens[i].focused = false;
                 }
+                pressedScreen = -1;
             }
         }
-        
-        // 鼠标释放时发送给悬停的屏幕（而不是聚焦的屏幕）
-        if (input.left_mouse_released && hoveredScreen >= 0) {
-            screens[hoveredScreen].html.sendMouseUp(1);
+
+        // 处理鼠标释放：始终发送给按下时命中的屏幕（否则会导致 :active 不稳定/卡住）。
+        if (input.left_mouse_released) {
+            const int targetScreen = (pressedScreen >= 0) ? pressedScreen : hoveredScreen;
+            const int32_t upX = (pressedScreen >= 0) ? pressedX : hoveredScreenX;
+            const int32_t upY = (pressedScreen >= 0) ? pressedY : hoveredScreenY;
+
+            if (targetScreen >= 0) {
+                if (input.left_mouse_pressed) {
+                    // press+release in same frame: delay mouse-up by 1 frame for visible :active.
+                    pendingMouseUp = true;
+                    pendingMouseUpScreen = targetScreen;
+                    pendingMouseUpX = upX;
+                    pendingMouseUpY = upY;
+                } else {
+                    screens[targetScreen].html.sendMouseMove(upX, upY);
+                    screens[targetScreen].html.sendMouseUp(1);
+                }
+            }
+
+            pressedScreen = -1;
         }
+
 
         // 处理滚轮 - SDL 滚轮值通常是 -1 或 1
         // view.cpp 中已经有 kScrollSpeed = 20.0f，这里只需要小幅放大
