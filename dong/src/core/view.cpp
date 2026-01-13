@@ -598,8 +598,10 @@ SDL_GPUTexture* View::renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, 
     }
 
     // 优化策略1：只在 dirty 时重新计算样式/布局/构建命令列表
-    // 检查是否需要重建：commands_dirty_ 或 offscreen_commands_dirty_ 或 layout dirty
-    bool needs_rebuild = offscreen_commands_dirty_ || commands_dirty_ || root->isLayoutDirty();
+    // Offscreen 路径只看 offscreen_commands_dirty_ / layout dirty。
+    // 注意：3D demo 只走 renderToGPUTexture()，不会走 View::update() 去清除 commands_dirty_；
+    // 若这里也依赖 commands_dirty_，会导致每帧都 rebuild（DisplayList/GPUCommandList）并成为主要热点。
+    bool needs_rebuild = offscreen_commands_dirty_ || root->isLayoutDirty();
     
     // 环境变量强制全量重建（用于调试/正确性验证）
     static bool force_full_layout = (std::getenv("DONG_OFFSCREEN_FORCE_FULL_LAYOUT") != nullptr);
@@ -810,6 +812,12 @@ std::string View::eval_script_with_return(const char* code) {
 void View::markNeedsRepaint() {
     DONG_LOG_DEBUG("[View::markNeedsRepaint] Setting commands_dirty_ = true");
     commands_dirty_ = true;
+
+    // Offscreen 渲染路径（renderToGPUTexture）有独立的命令缓存，需要同步置脏。
+    // 否则 offscreen 只能依赖 commands_dirty_，但它在 offscreen 路径并不会被清除，
+    // 容易造成每帧 rebuild。
+    offscreen_commands_dirty_ = true;
+
     if (render_surface) {
         render_surface->markDirty();
     }
