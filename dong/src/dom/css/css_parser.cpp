@@ -1,4 +1,5 @@
 #include "css_parser.hpp"
+#include "../../core/profiler.h"
 #include <algorithm>
 #include <sstream>
 #include <cctype>
@@ -1451,6 +1452,7 @@ int CSSParser::calculateSpecificity(const std::string& selector) {
 }
 
 std::vector<CSSRule> CSSParser::parse(const std::string& css) {
+    DONG_PROFILE_SCOPE_CAT("CSSParser::parse", "parse");
     std::vector<CSSRule> result;
     std::string css_clean = removeComments(css);
     

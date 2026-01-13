@@ -104,6 +104,7 @@ endif()
 add_library(dong SHARED
     src/api_bindings.cpp
     src/core/context.cpp
+    src/core/profiler.cpp
     # DOM module (modular structure)
     src/dom/dom_manager.cpp
     src/dom/event_system.cpp
@@ -191,6 +192,7 @@ endif()
 add_library(dong_legacy STATIC
     src/api_bindings_legacy.cpp
     src/core/context.cpp
+    src/core/profiler.cpp
     src/core/view.cpp
     # DOM module (modular structure)
     src/dom/dom_manager.cpp

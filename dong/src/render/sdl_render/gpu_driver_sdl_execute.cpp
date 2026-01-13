@@ -5,6 +5,7 @@
 #include "../glyph_atlas.hpp"
 #include "../font_resolver.hpp"
 #include "../../core/log.h"
+#include "../../core/profiler.h"
 
 #include <SDL3/SDL_log.h>
 #include <SDL3/SDL_video.h>
@@ -1614,6 +1615,8 @@ void GPUDriverSDL::executeDispatchCommand(const GPUCommand& cmd, ExecuteContext&
 }
 
 void GPUDriverSDL::execute(const GPUCommandList& commands) {
+    DONG_PROFILE_SCOPE_CAT("GPU::execute", "gpu");
+    
     if (!in_frame_ || !current_cmd_buf_ || !gpu_device_) {
         SDL_Log("GPUDriverSDL::execute: invalid state");
         return;

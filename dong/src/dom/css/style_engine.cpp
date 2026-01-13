@@ -1,6 +1,7 @@
 #include "style_engine.hpp"
 #include "../dom/dom_node.hpp"
 #include "../../core/log.h"
+#include "../../core/profiler.h"
 #include <algorithm>
 #include <sstream>
 #include <cctype>
@@ -88,10 +89,12 @@ void StyleEngine::addStylesheet(const std::string& css) {
     }
     
     stylesheets_.push_back(sheet);
+    index_dirty_ = true;  // 标记索引需要重建
 }
 
 void StyleEngine::addStylesheet(const Stylesheet& sheet) {
     stylesheets_.push_back(sheet);
+    index_dirty_ = true;  // 标记索引需要重建
 }
 
 std::vector<CSSRule> StyleEngine::parseCSS(const std::string& css) {
@@ -105,6 +108,8 @@ void StyleEngine::applyInlineStyleProperty(const std::string& property,
 }
 
 void StyleEngine::computeStyles(DOMNodePtr node) {
+    DONG_PROFILE_FUNCTION();
+    
     if (!node) return;
 
     // Apply matching rules
@@ -788,6 +793,462 @@ DOMNodePtr StyleEngine::createPseudoElement(DOMNodePtr parent, const std::string
     inheritFromParent(pseudo);
     
     return pseudo;
+}
+
+// 优化策略3：重建规则索引
+void StyleEngine::rebuildRuleIndex() {
+    DONG_PROFILE_SCOPE_CAT("StyleEngine::rebuildRuleIndex", "style");
+    
+    rule_index_.clear();
+    all_rules_.clear();
+    
+    // 收集所有规则到扁平列表
+    for (const auto& sheet : stylesheets_) {
+        for (const auto& rule : sheet.getRules()) {
+            size_t idx = all_rules_.size();
+            all_rules_.push_back(rule);
+            
+            // 从选择器中提取索引键
+            std::string tag;
+            std::vector<std::string> classes;
+            std::string id;
+            extractIndexKeys(rule.selector, tag, classes, id);
+            
+            // 添加到索引
+            bool indexed = false;
+            
+            if (!id.empty()) {
+                rule_index_.by_id[id].push_back(idx);
+                indexed = true;
+            }
+            
+            for (const auto& cls : classes) {
+                rule_index_.by_class[cls].push_back(idx);
+                indexed = true;
+            }
+            
+            if (!tag.empty() && tag != "*") {
+                rule_index_.by_tag[tag].push_back(idx);
+                indexed = true;
+            }
+            
+            // 如果没有被任何索引收录，放入通用列表
+            if (!indexed || tag == "*") {
+                rule_index_.universal.push_back(idx);
+            }
+        }
+    }
+    
+    index_dirty_ = false;
+}
+
+// 优化策略3：从选择器中提取索引键
+void StyleEngine::extractIndexKeys(const std::string& selector, 
+                                    std::string& out_tag, 
+                                    std::vector<std::string>& out_classes,
+                                    std::string& out_id) {
+    out_tag.clear();
+    out_classes.clear();
+    out_id.clear();
+    
+    // 只提取选择器最右边的简单选择器（最具体的部分）
+    // 例如 "div .container button" -> 只看 "button"
+    // 例如 ".header .nav-item" -> 只看 ".nav-item"
+    
+    // 找到最后一个组合符（空格、>、+、~）
+    size_t last_combinator = selector.find_last_of(" >+~");
+    std::string simple_selector = (last_combinator != std::string::npos) 
+        ? selector.substr(last_combinator + 1) 
+        : selector;
+    
+    // 去除前导空格
+    size_t start = simple_selector.find_first_not_of(" \t");
+    if (start != std::string::npos) {
+        simple_selector = simple_selector.substr(start);
+    }
+    
+    // 解析简单选择器
+    size_t pos = 0;
+    while (pos < simple_selector.length()) {
+        char c = simple_selector[pos];
+        
+        if (c == '#') {
+            // ID 选择器
+            ++pos;
+            size_t id_start = pos;
+            while (pos < simple_selector.length() && 
+                   (std::isalnum(simple_selector[pos]) || simple_selector[pos] == '-' || simple_selector[pos] == '_')) {
+                ++pos;
+            }
+            out_id = simple_selector.substr(id_start, pos - id_start);
+        } else if (c == '.') {
+            // Class 选择器
+            ++pos;
+            size_t class_start = pos;
+            while (pos < simple_selector.length() && 
+                   (std::isalnum(simple_selector[pos]) || simple_selector[pos] == '-' || simple_selector[pos] == '_')) {
+                ++pos;
+            }
+            out_classes.push_back(simple_selector.substr(class_start, pos - class_start));
+        } else if (c == '[' || c == ':') {
+            // 属性选择器或伪类，跳过
+            if (c == '[') {
+                size_t end = simple_selector.find(']', pos);
+                pos = (end != std::string::npos) ? end + 1 : simple_selector.length();
+            } else {
+                // 伪类
+                ++pos;
+                while (pos < simple_selector.length() && 
+                       (std::isalpha(simple_selector[pos]) || simple_selector[pos] == '-')) {
+                    ++pos;
+                }
+                // 处理 :not(), :has() 等函数式伪类
+                if (pos < simple_selector.length() && simple_selector[pos] == '(') {
+                    int paren_depth = 1;
+                    ++pos;
+                    while (pos < simple_selector.length() && paren_depth > 0) {
+                        if (simple_selector[pos] == '(') ++paren_depth;
+                        else if (simple_selector[pos] == ')') --paren_depth;
+                        ++pos;
+                    }
+                }
+            }
+        } else if (std::isalpha(c) || c == '*') {
+            // 标签选择器
+            size_t tag_start = pos;
+            // 处理 * 通配符
+            if (c == '*') {
+                ++pos;
+            }
+            while (pos < simple_selector.length() && 
+                   (std::isalnum(simple_selector[pos]) || simple_selector[pos] == '-')) {
+                ++pos;
+            }
+            out_tag = simple_selector.substr(tag_start, pos - tag_start);
+        } else {
+            ++pos;
+        }
+    }
+}
+
+// 优化策略3：使用索引快速查找匹配规则
+void StyleEngine::applyMatchingRulesIndexed(DOMNodePtr node) {
+    if (index_dirty_) {
+        rebuildRuleIndex();
+    }
+    
+    // 收集候选规则索引
+    std::unordered_set<size_t> candidate_indices;
+    
+    // 1. 通用规则总是候选
+    for (size_t idx : rule_index_.universal) {
+        candidate_indices.insert(idx);
+    }
+    
+    // 2. 按 tag 查找
+    const std::string& tag = node->getTagName();
+    auto tag_it = rule_index_.by_tag.find(tag);
+    if (tag_it != rule_index_.by_tag.end()) {
+        for (size_t idx : tag_it->second) {
+            candidate_indices.insert(idx);
+        }
+    }
+    
+    // 3. 按 class 查找
+    if (node->hasAttribute("class")) {
+        const std::string& class_attr = node->getAttribute("class");
+        // 分割 class 属性
+        std::istringstream iss(class_attr);
+        std::string cls;
+        while (iss >> cls) {
+            auto class_it = rule_index_.by_class.find(cls);
+            if (class_it != rule_index_.by_class.end()) {
+                for (size_t idx : class_it->second) {
+                    candidate_indices.insert(idx);
+                }
+            }
+        }
+    }
+    
+    // 4. 按 id 查找
+    if (node->hasAttribute("id")) {
+        const std::string& id = node->getAttribute("id");
+        auto id_it = rule_index_.by_id.find(id);
+        if (id_it != rule_index_.by_id.end()) {
+            for (size_t idx : id_it->second) {
+                candidate_indices.insert(idx);
+            }
+        }
+    }
+    
+    // 收集实际匹配的规则
+    std::vector<CSSRule> matching_rules;
+    matching_rules.reserve(candidate_indices.size());
+    
+    for (size_t idx : candidate_indices) {
+        const CSSRule& rule = all_rules_[idx];
+        if (matcher_.matches(rule.selector, node)) {
+            matching_rules.push_back(rule);
+        }
+    }
+    
+    // 按 specificity 和 source order 排序
+    std::sort(matching_rules.begin(), matching_rules.end(),
+        [](const CSSRule& a, const CSSRule& b) {
+            if (a.specificity != b.specificity) {
+                return a.specificity < b.specificity;
+            }
+            return a.source_order < b.source_order;
+        });
+    
+    // 应用规则（与原 applyMatchingRules 相同的属性应用逻辑）
+    auto& computed = node->getComputedStyle();
+    
+    for (const auto& rule : matching_rules) {
+        const auto& rs = rule.style;
+        
+        // Apply non-default values (与原实现相同)
+        if (!rs.color.empty() && rs.color != "#000000") computed.color = rs.color;
+        if (!rs.background_color.empty() && rs.background_color != "transparent") 
+            computed.background_color = rs.background_color;
+        if (!rs.background_image.empty()) computed.background_image = rs.background_image;
+        if (!rs.background_size.empty() && rs.background_size != "auto") 
+            computed.background_size = rs.background_size;
+        if (!rs.background_repeat.empty() && rs.background_repeat != "repeat") 
+            computed.background_repeat = rs.background_repeat;
+        if (!rs.background_position.empty()) computed.background_position = rs.background_position;
+        if (!rs.object_fit.empty() && rs.object_fit != "fill") computed.object_fit = rs.object_fit;
+        if (!rs.background_gradients.empty()) computed.background_gradients = rs.background_gradients;
+
+        
+        if (rs.font_size != 16.0f) computed.font_size = rs.font_size;
+        if (!rs.font_weight.empty() && rs.font_weight != "normal") computed.font_weight = rs.font_weight;
+        if (!rs.font_style.empty() && rs.font_style != "normal") computed.font_style = rs.font_style;
+        if (!rs.font_family.empty() && rs.font_family != "Arial") computed.font_family = rs.font_family;
+        if (!rs.font_variant.empty() && rs.font_variant != "normal") computed.font_variant = rs.font_variant;
+        
+        if (!rs.text_align.empty() && rs.text_align != "left") computed.text_align = rs.text_align;
+        if (!rs.text_decoration.empty() && rs.text_decoration != "none") 
+            computed.text_decoration = rs.text_decoration;
+        if (!rs.text_decoration_color.empty()) computed.text_decoration_color = rs.text_decoration_color;
+        if (!rs.text_decoration_style.empty() && rs.text_decoration_style != "solid")
+            computed.text_decoration_style = rs.text_decoration_style;
+        if (rs.text_decoration_thickness != 1.0f) 
+            computed.text_decoration_thickness = rs.text_decoration_thickness;
+        if (rs.letter_spacing_em != 0.0f) computed.letter_spacing_em = rs.letter_spacing_em;
+        if (rs.word_spacing_px != 0.0f) computed.word_spacing_px = rs.word_spacing_px;
+        if (rs.has_line_height) {
+            computed.has_line_height = true;
+            computed.line_height = rs.line_height;
+            computed.line_height_is_unitless = rs.line_height_is_unitless;
+        }
+        if (!rs.text_transform.empty() && rs.text_transform != "none") 
+            computed.text_transform = rs.text_transform;
+
+        if (!rs.text_overflow.empty() && rs.text_overflow != "clip") 
+            computed.text_overflow = rs.text_overflow;
+        if (!rs.white_space.empty() && rs.white_space != "normal") 
+            computed.white_space = rs.white_space;
+        if (!rs.word_break.empty() && rs.word_break != "normal") 
+            computed.word_break = rs.word_break;
+        if (!rs.overflow_wrap.empty() && rs.overflow_wrap != "normal") 
+            computed.overflow_wrap = rs.overflow_wrap;
+        if (!rs.vertical_align.empty() && rs.vertical_align != "baseline") 
+            computed.vertical_align = rs.vertical_align;
+        if (!rs.direction.empty() && rs.direction != "ltr") computed.direction = rs.direction;
+        if (rs.text_indent != 0.0f) computed.text_indent = rs.text_indent;
+        if (rs.webkit_line_clamp != 0) computed.webkit_line_clamp = rs.webkit_line_clamp;
+        
+        // Text shadow
+        if (rs.text_shadow_offset_x != 0.0f || rs.text_shadow_offset_y != 0.0f || 
+            rs.text_shadow_blur != 0.0f || !rs.text_shadow_color.empty()) {
+            computed.text_shadow_offset_x = rs.text_shadow_offset_x;
+            computed.text_shadow_offset_y = rs.text_shadow_offset_y;
+            computed.text_shadow_blur = rs.text_shadow_blur;
+            computed.text_shadow_color = rs.text_shadow_color;
+        }
+        
+        if (!rs.display.empty()) {
+            computed.display = rs.display;
+            computed.layout_mode = deriveLayoutModeFromDisplay(rs.display);
+        }
+        if (!rs.position.empty() && rs.position != "static") computed.position = rs.position;
+        
+        if (rs.border_radius != 0.0f) {
+            computed.border_radius = rs.border_radius;
+            computed.border_top_left_radius = rs.border_radius;
+            computed.border_top_right_radius = rs.border_radius;
+            computed.border_bottom_left_radius = rs.border_radius;
+            computed.border_bottom_right_radius = rs.border_radius;
+        }
+        if (rs.border_top_left_radius != 0.0f) 
+            computed.border_top_left_radius = rs.border_top_left_radius;
+        if (rs.border_top_right_radius != 0.0f) 
+            computed.border_top_right_radius = rs.border_top_right_radius;
+        if (rs.border_bottom_left_radius != 0.0f) 
+            computed.border_bottom_left_radius = rs.border_bottom_left_radius;
+        if (rs.border_bottom_right_radius != 0.0f) 
+            computed.border_bottom_right_radius = rs.border_bottom_right_radius;
+        
+        if (rs.border_width != 0.0f) computed.border_width = rs.border_width;
+        if (!rs.border_color.empty() && rs.border_color != "#000000") 
+            computed.border_color = rs.border_color;
+        if (!rs.border_style.empty() && rs.border_style != "none") 
+            computed.border_style = rs.border_style;
+        
+        if (!rs.overflow.empty() && rs.overflow != "visible") {
+            computed.overflow = rs.overflow;
+            computed.overflow_x = rs.overflow;
+            computed.overflow_y = rs.overflow;
+        }
+        if (!rs.overflow_x.empty() && rs.overflow_x != "visible") computed.overflow_x = rs.overflow_x;
+        if (!rs.overflow_y.empty() && rs.overflow_y != "visible") computed.overflow_y = rs.overflow_y;
+        if (!rs.visibility.empty() && rs.visibility != "visible") computed.visibility = rs.visibility;
+        if (!rs.cursor.empty() && rs.cursor != "auto") computed.cursor = rs.cursor;
+        
+        if (rs.outline_width != 0.0f) computed.outline_width = rs.outline_width;
+        if (!rs.outline_color.empty() && rs.outline_color != "#000000") 
+            computed.outline_color = rs.outline_color;
+        if (!rs.outline_style.empty() && rs.outline_style != "none") 
+            computed.outline_style = rs.outline_style;
+        if (rs.outline_offset != 0.0f) computed.outline_offset = rs.outline_offset;
+        
+        if (!rs.box_sizing.empty() && rs.box_sizing != "content-box") 
+            computed.box_sizing = rs.box_sizing;
+        if (rs.opacity != 1.0f) computed.opacity = rs.opacity;
+        if (rs.isolation_isolate) computed.isolation_isolate = true;
+        if (!rs.box_shadows.empty()) computed.box_shadows = rs.box_shadows;
+        
+        // Filters
+        if (!rs.filters.empty()) computed.filters = rs.filters;
+        if (!rs.backdrop_filters.empty()) computed.backdrop_filters = rs.backdrop_filters;
+        if (!rs.mix_blend_mode.empty() && rs.mix_blend_mode != "normal") 
+            computed.mix_blend_mode = rs.mix_blend_mode;
+        if (!rs.background_blend_mode.empty() && rs.background_blend_mode != "normal")
+            computed.background_blend_mode = rs.background_blend_mode;
+        
+        // Box model
+        if (rs.width.unit != CSSValue::Unit::AUTO) computed.width = rs.width;
+        if (rs.height.unit != CSSValue::Unit::AUTO) computed.height = rs.height;
+        if (rs.min_width.unit != CSSValue::Unit::AUTO) computed.min_width = rs.min_width;
+        if (rs.max_width.unit != CSSValue::Unit::AUTO) computed.max_width = rs.max_width;
+        if (rs.min_height.unit != CSSValue::Unit::AUTO) computed.min_height = rs.min_height;
+        if (rs.max_height.unit != CSSValue::Unit::AUTO) computed.max_height = rs.max_height;
+        
+        if (rs.margin_top.unit != CSSValue::Unit::AUTO || rs.margin_top.value != 0.0f) 
+            computed.margin_top = rs.margin_top;
+        if (rs.margin_right.unit != CSSValue::Unit::AUTO || rs.margin_right.value != 0.0f) 
+            computed.margin_right = rs.margin_right;
+        if (rs.margin_bottom.unit != CSSValue::Unit::AUTO || rs.margin_bottom.value != 0.0f) 
+            computed.margin_bottom = rs.margin_bottom;
+        if (rs.margin_left.unit != CSSValue::Unit::AUTO || rs.margin_left.value != 0.0f) 
+            computed.margin_left = rs.margin_left;
+        
+        if (rs.padding_top.value != 0.0f) computed.padding_top = rs.padding_top;
+        if (rs.padding_right.value != 0.0f) computed.padding_right = rs.padding_right;
+        if (rs.padding_bottom.value != 0.0f) computed.padding_bottom = rs.padding_bottom;
+        if (rs.padding_left.value != 0.0f) computed.padding_left = rs.padding_left;
+        
+        if (rs.top.unit != CSSValue::Unit::AUTO) computed.top = rs.top;
+        if (rs.right.unit != CSSValue::Unit::AUTO) computed.right = rs.right;
+        if (rs.bottom.unit != CSSValue::Unit::AUTO) computed.bottom = rs.bottom;
+        if (rs.left.unit != CSSValue::Unit::AUTO) computed.left = rs.left;
+        if (rs.z_index != 0) computed.z_index = rs.z_index;
+        
+        // Flexbox
+        if (!rs.flex_direction.empty() && rs.flex_direction != "row") 
+            computed.flex_direction = rs.flex_direction;
+        if (!rs.flex_wrap.empty() && rs.flex_wrap != "nowrap") computed.flex_wrap = rs.flex_wrap;
+        if (!rs.justify_content.empty() && rs.justify_content != "flex-start") 
+            computed.justify_content = rs.justify_content;
+        if (!rs.align_items.empty() && rs.align_items != "stretch") 
+            computed.align_items = rs.align_items;
+        if (!rs.align_content.empty() && rs.align_content != "stretch") 
+            computed.align_content = rs.align_content;
+        if (!rs.align_self.empty() && rs.align_self != "auto") computed.align_self = rs.align_self;
+        if (rs.flex != 0.0f) computed.flex = rs.flex;
+        if (rs.flex_grow != 0.0f) computed.flex_grow = rs.flex_grow;
+        if (rs.flex_shrink != 1.0f) computed.flex_shrink = rs.flex_shrink;
+        if (rs.flex_basis.unit != CSSValue::Unit::AUTO) computed.flex_basis = rs.flex_basis;
+        if (rs.order != 0) computed.order = rs.order;
+        if (rs.gap > 0.0f) {
+            computed.gap = rs.gap;
+            computed.row_gap = rs.gap;
+            computed.column_gap = rs.gap;
+        }
+        if (rs.row_gap > 0.0f) computed.row_gap = rs.row_gap;
+        if (rs.column_gap > 0.0f) computed.column_gap = rs.column_gap;
+        
+        // Transform
+        if (rs.transform_translate_x != 0.0f) computed.transform_translate_x = rs.transform_translate_x;
+        if (rs.transform_translate_y != 0.0f) computed.transform_translate_y = rs.transform_translate_y;
+        if (rs.transform_scale_x != 1.0f) computed.transform_scale_x = rs.transform_scale_x;
+        if (rs.transform_scale_y != 1.0f) computed.transform_scale_y = rs.transform_scale_y;
+        if (rs.transform_rotate != 0.0f) computed.transform_rotate = rs.transform_rotate;
+        if (rs.transform_skew_x != 0.0f) computed.transform_skew_x = rs.transform_skew_x;
+        if (rs.transform_skew_y != 0.0f) computed.transform_skew_y = rs.transform_skew_y;
+        if (rs.transform_origin_x != 50.0f) computed.transform_origin_x = rs.transform_origin_x;
+        if (rs.transform_origin_y != 50.0f) computed.transform_origin_y = rs.transform_origin_y;
+        if (!rs.transform_style.empty() && rs.transform_style != "flat") 
+            computed.transform_style = rs.transform_style;
+        if (rs.perspective != 0.0f) computed.perspective = rs.perspective;
+        if (!rs.backface_visibility.empty() && rs.backface_visibility != "visible")
+            computed.backface_visibility = rs.backface_visibility;
+        
+        // Transitions and animations
+        if (!rs.transitions.empty()) computed.transitions = rs.transitions;
+        if (!rs.animations.empty()) computed.animations = rs.animations;
+        
+        // Clip path
+        if (!rs.clip_path.empty()) computed.clip_path = rs.clip_path;
+        
+        // Pointer events
+        if (!rs.pointer_events.empty() && rs.pointer_events != "auto") 
+            computed.pointer_events = rs.pointer_events;
+        if (!rs.user_select.empty() && rs.user_select != "auto") 
+            computed.user_select = rs.user_select;
+        if (!rs.touch_action.empty() && rs.touch_action != "auto") 
+            computed.touch_action = rs.touch_action;
+        if (!rs.caret_color.empty() && rs.caret_color != "auto") 
+            computed.caret_color = rs.caret_color;
+        
+        // Float/Clear
+        if (!rs.float_value.empty() && rs.float_value != "none") 
+            computed.float_value = rs.float_value;
+        if (!rs.clear.empty() && rs.clear != "none") computed.clear = rs.clear;
+    }
+}
+
+// 优化策略3：增量样式计算
+void StyleEngine::computeStylesIncremental(DOMNodePtr node) {
+    DONG_PROFILE_FUNCTION();
+    
+    if (!node) return;
+
+    // 使用索引加速的规则匹配
+    applyMatchingRulesIndexed(node);
+    
+    // Inherit from parent
+    inheritFromParent(node);
+    
+    // Hide certain elements
+    static const std::unordered_set<std::string> kAlwaysHiddenTags = {
+        "head", "style", "script", "meta", "title", "link"
+    };
+    if (kAlwaysHiddenTags.count(node->getTagName()) > 0) {
+        node->getComputedStyle().display = "none";
+    }
+
+    // Derive layout mode
+    node->getComputedStyle().layout_mode = deriveLayoutModeFromDisplay(node->getComputedStyle());
+
+    // Process pseudo-elements (::before/::after)
+    processPseudoElements(node);
+
+    // Recursively compute styles for children
+    for (const auto& child : node->getChildren()) {
+        computeStylesIncremental(child);
+    }
 }
 
 } // namespace dong::dom

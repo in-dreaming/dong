@@ -111,6 +111,15 @@ private:
 
     // 缓存的 GPU 命令列表（用于 swapchain 渲染时避免每帧重新编译）
     std::unique_ptr<render::GPUCommandList> cached_cmd_list_;
+    
+    // 离屏渲染缓存（优化策略1：避免每帧重建 DisplayList/GPUCommandList）
+    std::unique_ptr<render::GPUCommandList> offscreen_cmd_list_cache_;
+    uint32_t offscreen_cache_width_ = 0;
+    uint32_t offscreen_cache_height_ = 0;
+    bool offscreen_commands_dirty_ = true;
+    
+    // 优化策略2：SDL_WaitForGPUIdle 仅首帧执行
+    bool offscreen_first_frame_done_ = false;
 
     bool use_gpu_;
     // 标记当前 DisplayList / GPUCommandList 是否需要重建
@@ -142,6 +151,8 @@ private:
 
     // 标记当前视图需要重新构建 DisplayList / GPUCommandList
     void markNeedsRepaint();
+    // 标记离屏渲染缓存需要重建
+    void markOffscreenDirty() { offscreen_commands_dirty_ = true; }
     void ensureJSBindingsInitialized();
     void dispatchMouseEventToJS(const char* type, int32_t x, int32_t y, int32_t button);
     void dispatchKeyEventToJS(const char* type, uint32_t key_code);

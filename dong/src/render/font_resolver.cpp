@@ -523,18 +523,26 @@ std::string resolveFontPath(const std::string& requested_family) {
 }
 
 std::vector<std::string> getCJKFallbackFonts() {
-    std::vector<std::string> result;
-    result.reserve(kCJKFallbackFonts.size());
+    // Cache the result to avoid repeated filesystem checks
+    static std::vector<std::string> cached_result;
+    static bool cached = false;
+    
+    if (cached) {
+        return cached_result;
+    }
+    
+    cached_result.reserve(kCJKFallbackFonts.size());
     
     namespace fs = std::filesystem;
     for (const auto& path : kCJKFallbackFonts) {
         std::error_code ec;
         if (fs::exists(path, ec) && !ec) {
-            result.push_back(path);
+            cached_result.push_back(path);
         }
     }
     
-    return result;
+    cached = true;
+    return cached_result;
 }
 
 // FreeType library instance (for checking character support)

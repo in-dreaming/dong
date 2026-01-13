@@ -1,5 +1,6 @@
-﻿#include "layout_engine.hpp"
+#include "layout_engine.hpp"
 #include "../core/log.h"
+#include "../core/profiler.h"
 #include <yoga/YGNode.h>
 #include <yoga/YGConfig.h>
 #include <yoga/Yoga.h>
@@ -46,6 +47,9 @@ namespace {
 using dong::render::TextShaper;
 using dong::render::TextShapeRequest;
 using dong::render::ShapedText;
+using dong::render::TextMeasureCacheKey;
+using dong::render::TextMeasureResult;
+using dong::render::TextMeasureCache;
 
 static std::string collapseWhitespace(const std::string& input) {
     if (input.empty()) return "";
@@ -76,7 +80,7 @@ float computeIntrinsicTextWidth(const dom::DOMNodePtr& node) {
     const auto& style = node->getComputedStyle();
     float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
 
-    // 鏀堕泦绾枃鏈瓙鑺傜偣
+    // 收集纯文本子节点
     bool has_text_child = false;
     std::string raw_text;
     for (const auto& child : node->getChildren()) {
@@ -91,62 +95,97 @@ float computeIntrinsicTextWidth(const dom::DOMNodePtr& node) {
     std::string text = collapseWhitespace(raw_text);
     if (text.empty()) return 0.0f;
 
-    TextShaper shaper;
-    TextShapeRequest req{};
-    req.text = text;
-    req.font_family = style.font_family;
-    req.font_weight = style.font_weight;
-    req.font_style = style.font_style;
-    req.font_size = font_size;
+    // 优化策略4：先查缓存
+    TextMeasureCacheKey cache_key{
+        text,
+        style.font_family,
+        style.font_weight,
+        style.font_style,
+        font_size,
+        style.letter_spacing_em,
+        style.word_spacing_px
+    };
+    
+    TextMeasureResult cached_result;
+    auto& cache = TextMeasureCache::instance();
+    
+    float content_width = 0.0f;
+    
+    if (cache.lookup(cache_key, cached_result) && cached_result.valid) {
+        // 缓存命中，直接使用缓存的宽度
+        content_width = cached_result.content_width_px;
+    } else {
+        // 缓存未命中，执行 shaping
+        TextShaper shaper;
+        TextShapeRequest req{};
+        req.text = text;
+        req.font_family = style.font_family;
+        req.font_weight = style.font_weight;
+        req.font_style = style.font_style;
+        req.font_size = font_size;
 
-    ShapedText shaped{};
-    if (!shaper.shape(req, shaped) || shaped.glyphs.empty()) {
-        return 0.0f;
-    }
-
-    const float scale = shaped.scale_to_pixels;
-    if (scale <= 0.0f || !std::isfinite(scale)) {
-        return 0.0f;
-    }
-
-    // 注意：这里的“intrinsic width”必须与 Painter 的换行测量口径一致。
-    // 否则 inline-block 盒子会被算得偏窄，Painter 再按 inner_width 做换行时就会在空格处断行。
-    float min_x_units = shaped.glyphs.front().pen_x_units;
-    float max_x_units = shaped.glyphs.front().pen_x_units + shaped.glyphs.front().advance_x_units;
-    for (const auto& g : shaped.glyphs) {
-        min_x_units = std::min(min_x_units, g.pen_x_units);
-        max_x_units = std::max(max_x_units, g.pen_x_units + g.advance_x_units);
-    }
-
-    float content_width = (max_x_units - min_x_units) * scale;
-    if (content_width < 0.0f || !std::isfinite(content_width)) {
-        content_width = shaped.width_units * scale;
-    }
-    if (content_width < 0.0f) content_width = 0.0f;
-
-    // letter-spacing：Painter 以 glyph 数量近似（glyph_count - 1）段间距
-    if (style.letter_spacing_em != 0.0f) {
-        const float letter_spacing_px = style.letter_spacing_em * font_size;
-        const int glyph_count = static_cast<int>(shaped.glyphs.size());
-        if (glyph_count > 1) {
-            content_width += letter_spacing_px * static_cast<float>(glyph_count - 1);
+        ShapedText shaped{};
+        if (!shaper.shape(req, shaped) || shaped.glyphs.empty()) {
+            return 0.0f;
         }
-    }
 
-    // word-spacing：对 cluster 落在空格字符的 glyph 计数
-    if (style.word_spacing_px != 0.0f) {
-        int space_count = 0;
+    
+        const float scale = shaped.scale_to_pixels;
+        if (scale <= 0.0f || !std::isfinite(scale)) {
+            return 0.0f;
+        }
+
+        // 注意：这里的"intrinsic width"必须与 Painter 的换行测量口径一致。
+        float min_x_units = shaped.glyphs.front().pen_x_units;
+        float max_x_units = shaped.glyphs.front().pen_x_units + shaped.glyphs.front().advance_x_units;
         for (const auto& g : shaped.glyphs) {
-            if (g.cluster < text.size() && text[g.cluster] == ' ') {
-                ++space_count;
+            min_x_units = std::min(min_x_units, g.pen_x_units);
+            max_x_units = std::max(max_x_units, g.pen_x_units + g.advance_x_units);
+        }
+
+        content_width = (max_x_units - min_x_units) * scale;
+        if (content_width < 0.0f || !std::isfinite(content_width)) {
+            content_width = shaped.width_units * scale;
+        }
+        if (content_width < 0.0f) content_width = 0.0f;
+
+        // letter-spacing
+        if (style.letter_spacing_em != 0.0f) {
+            const float letter_spacing_px = style.letter_spacing_em * font_size;
+            const int glyph_count = static_cast<int>(shaped.glyphs.size());
+            if (glyph_count > 1) {
+                content_width += letter_spacing_px * static_cast<float>(glyph_count - 1);
             }
         }
-        if (space_count > 0) {
-            content_width += style.word_spacing_px * static_cast<float>(space_count);
+
+        // word-spacing
+        int space_count = 0;
+        if (style.word_spacing_px != 0.0f) {
+            for (const auto& g : shaped.glyphs) {
+                if (g.cluster < text.size() && text[g.cluster] == ' ') {
+                    ++space_count;
+                }
+            }
+            if (space_count > 0) {
+                content_width += style.word_spacing_px * static_cast<float>(space_count);
+            }
         }
+        
+        // 缓存结果
+        TextMeasureResult result;
+        result.content_width_px = content_width;
+        result.line_height_px = shaped.line_height_units * scale;
+        result.scale_to_pixels = scale;
+        result.ascent_units = shaped.ascent_units;
+        result.descent_units = shaped.descent_units;
+        result.line_height_units = shaped.line_height_units;
+        result.glyph_count = shaped.glyphs.size();
+        result.space_count = space_count;
+        result.valid = true;
+        cache.insert(cache_key, result);
     }
 
-    // 鍔犱笂 padding 鍜?border
+    // 加上 padding 和 border
     float pad_left = style.padding_left.isPixel() ? style.padding_left.value : 0.0f;
     float pad_right = style.padding_right.isPixel() ? style.padding_right.value : 0.0f;
     float border_w = style.border_width > 0.0f ? style.border_width : 0.0f;
@@ -190,40 +229,120 @@ float computeIntrinsicTextHeight(const dom::DOMNodePtr& node) {
     std::string text = collapseWhitespace(raw_text);
     if (text.empty()) return 0.0f;
 
-    TextShaper shaper;
-    TextShapeRequest req{};
-    req.text = text;
-    req.font_family = style.font_family;
-    req.font_weight = style.font_weight;
-    req.font_style = style.font_style;
-    req.font_size = font_size;
+    // 优化策略4：先查缓存
+    TextMeasureCacheKey cache_key{
+        text,
+        style.font_family,
+        style.font_weight,
+        style.font_style,
+        font_size,
+        style.letter_spacing_em,
+        style.word_spacing_px
+    };
+    
+    TextMeasureResult cached_result;
+    auto& cache = TextMeasureCache::instance();
+    
+    float effective_line_height = 0.0f;
+    
+    if (cache.lookup(cache_key, cached_result) && cached_result.valid && cached_result.line_height_px > 0.0f) {
+        // Cache hit
+        effective_line_height = cached_result.line_height_px;
+    } else {
+        // Cache miss - perform shaping
+        TextShaper shaper;
+        TextShapeRequest req{};
+        req.text = text;
+        req.font_family = style.font_family;
+        req.font_weight = style.font_weight;
+        req.font_style = style.font_style;
+        req.font_size = font_size;
 
-    ShapedText shaped{};
-    if (!shaper.shape(req, shaped) || shaped.glyphs.empty()) {
-        DONG_LOG_INFO("[computeIntrinsicTextHeight] shaping failed for text='%s' font_size=%.1f", 
-                text.c_str(), font_size);
-        return 0.0f;
-    }
 
-    const float scale = shaped.scale_to_pixels;
+        ShapedText shaped{};
+        if (!shaper.shape(req, shaped) || shaped.glyphs.empty()) {
+            DONG_LOG_INFO("[computeIntrinsicTextHeight] shaping failed for text='%s' font_size=%.1f",
+                    text.c_str(), font_size);
+            return 0.0f;
+        }
+
+
+
+        const float scale = shaped.scale_to_pixels;
     
-    // Validate scale
-    if (scale <= 0.0f || scale > 1.0f || !std::isfinite(scale)) {
-        DONG_LOG_INFO("[computeIntrinsicTextHeight] INVALID scale=%.6f for text='%s'", scale, text.substr(0, 20).c_str());
-        return font_size * 1.2f;  // fallback
+        // Validate scale
+        if (scale <= 0.0f || scale > 1.0f || !std::isfinite(scale)) {
+            DONG_LOG_INFO("[computeIntrinsicTextHeight] INVALID scale=%.6f for text='%s'", scale, text.substr(0, 20).c_str());
+            return font_size * 1.2f;  // fallback
+        }
+    
+        effective_line_height = shaped.line_height_units * scale;
+    
+        // Validate line_height_units
+        if (shaped.line_height_units <= 0.0f || shaped.line_height_units > 100000.0f || !std::isfinite(shaped.line_height_units)) {
+            DONG_LOG_INFO("[computeIntrinsicTextHeight] INVALID line_height_units=%.1f for text='%s'", 
+                    shaped.line_height_units, text.substr(0, 20).c_str());
+            return font_size * 1.2f;  // fallback
+        }
+
+        // IMPORTANT:
+        // Do NOT insert a partial TextMeasureResult here. applyDOMStylesToYoga() may call
+        // computeIntrinsicTextHeight() before computeIntrinsicTextWidth(), and a partial cache
+        // entry (content_width_px==0) will poison intrinsic width (e.g. buttons shrink to padding).
+        float content_width_px = 0.0f;
+        {
+            float min_x_units = shaped.glyphs.front().pen_x_units;
+            float max_x_units = shaped.glyphs.front().pen_x_units + shaped.glyphs.front().advance_x_units;
+            for (const auto& g : shaped.glyphs) {
+                min_x_units = std::min(min_x_units, g.pen_x_units);
+                max_x_units = std::max(max_x_units, g.pen_x_units + g.advance_x_units);
+            }
+
+            content_width_px = (max_x_units - min_x_units) * scale;
+            if (content_width_px < 0.0f || !std::isfinite(content_width_px)) {
+                content_width_px = shaped.width_units * scale;
+            }
+            if (content_width_px < 0.0f) {
+                content_width_px = 0.0f;
+            }
+
+            // letter-spacing
+            if (style.letter_spacing_em != 0.0f) {
+                const float letter_spacing_px = style.letter_spacing_em * font_size;
+                const int glyph_count = static_cast<int>(shaped.glyphs.size());
+                if (glyph_count > 1) {
+                    content_width_px += letter_spacing_px * static_cast<float>(glyph_count - 1);
+                }
+            }
+        }
+
+        // word-spacing
+        int space_count = 0;
+        if (style.word_spacing_px != 0.0f) {
+            for (const auto& g : shaped.glyphs) {
+                if (g.cluster < text.size() && text[g.cluster] == ' ') {
+                    ++space_count;
+                }
+            }
+            if (space_count > 0) {
+                content_width_px += style.word_spacing_px * static_cast<float>(space_count);
+            }
+        }
+
+        TextMeasureResult result_to_cache;
+        result_to_cache.content_width_px = content_width_px;
+        result_to_cache.line_height_px = effective_line_height;
+        result_to_cache.scale_to_pixels = scale;
+        result_to_cache.ascent_units = shaped.ascent_units;
+        result_to_cache.descent_units = shaped.descent_units;
+        result_to_cache.line_height_units = shaped.line_height_units;
+        result_to_cache.glyph_count = shaped.glyphs.size();
+        result_to_cache.space_count = space_count;
+        result_to_cache.valid = true;
+        cache.insert(cache_key, result_to_cache);
     }
     
-    float effective_line_height = shaped.line_height_units * scale;
-    
-    // Validate line_height_units
-    if (shaped.line_height_units <= 0.0f || shaped.line_height_units > 100000.0f || !std::isfinite(shaped.line_height_units)) {
-        DONG_LOG_INFO("[computeIntrinsicTextHeight] INVALID line_height_units=%.1f for text='%s'", 
-                shaped.line_height_units, text.substr(0, 20).c_str());
-        return font_size * 1.2f;  // fallback
-    }
-    
-    // 瀵规爣娴忚鍣ㄥ `line-height: normal` 鐨勮繎浼硷細涓嶅皯浜?~1.2 * font-size锛?
-    // 閬垮厤澶у瓧鍙锋枃鏈殑琛岀洅杩囧皬锛屽鑷村悗缁潡绾у厓绱?椤朵笂鏉?瑕嗙洊鏂囧瓧銆?
+    // Apply minimum line height (approximating browser's line-height: normal)
     const float min_line_height = font_size * 1.2f;
     if (effective_line_height < min_line_height) {
         effective_line_height = min_line_height;
@@ -236,8 +355,8 @@ float computeIntrinsicTextHeight(const dom::DOMNodePtr& node) {
     
     // Final validation
     if (result > 10000.0f || result < 0.0f || !std::isfinite(result)) {
-        DONG_LOG_INFO("[computeIntrinsicTextHeight] INVALID result=%.1f for text='%s' (effective_line_height=%.1f scale=%.6f line_height_units=%.1f)",
-                result, text.substr(0, 20).c_str(), effective_line_height, scale, shaped.line_height_units);
+        DONG_LOG_INFO("[computeIntrinsicTextHeight] INVALID result=%.1f for text='%s' (effective_line_height=%.1f)",
+                result, text.substr(0, 20).c_str(), effective_line_height);
         return font_size * 1.2f;  // fallback
     }
     
@@ -367,7 +486,8 @@ static bool computeInlineMetricsForNode(const dom::DOMNodePtr& node,
         return false;
     }
 
-    const float scale = shaped.scale_to_pixels;
+
+        const float scale = shaped.scale_to_pixels;
 
     // 宽度：用 glyph 的 min/max pen_x 来测量（更接近 Painter 的 measure_range_units 口径）
     float min_x_units = shaped.glyphs.front().pen_x_units;
@@ -528,6 +648,8 @@ Engine::~Engine() {
 }
 
 void Engine::calculateLayout(dom::DOMNodePtr root, float width, float height) {
+    DONG_PROFILE_FUNCTION();
+    
     if (!root || !yoga_config) return;
 
     // Cache viewport size for resolving vw/vh units in style mapping.

@@ -32,3 +32,7 @@ zig-out/bin/run_feature_tests.exe
 
 # 查看报告
 start zig-out/tmp/features/report.html
+
+# profiler
+
+ .\3d_screen_script.exe --profile trace.json

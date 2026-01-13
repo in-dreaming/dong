@@ -15,9 +15,12 @@
 
 #include <cstdio>
 #include <cstdint>
+#include <cstdlib>
 #include <vector>
 #include <chrono>
 #include <cstring>
+#include <string>
+#include <csignal>
 
 #include <dong.h>
 #include <SDL3/SDL.h>
@@ -28,8 +31,29 @@
 #include "utils/camera.hpp"
 #include "utils/gpu_utils.hpp"
 #include "utils/dong_utils.hpp"
+#include "core/profiler.h"
 
 using namespace dong::utils;
+
+// Global for signal handler and atexit
+static std::string g_profile_output;
+
+static void dumpProfilerAtExit() {
+    if (!g_profile_output.empty()) {
+        printf("[Profile] atexit: dumping profiler trace...\n");
+        fflush(stdout);
+        int result = dong_profiler_dump(g_profile_output.c_str());
+        printf("[Profile] atexit: dump result=%d, file=%s\n", result, g_profile_output.c_str());
+        fflush(stdout);
+    }
+}
+
+static void signalHandler(int signum) {
+    printf("[Profile] Signal %d received\n", signum);
+    fflush(stdout);
+    dumpProfilerAtExit();
+    std::_Exit(signum);  // Use _Exit to avoid calling atexit handlers twice
+}
 
 // ============================================================================
 // HUD 系统
@@ -236,7 +260,36 @@ void arrangeScreens(Screen3D* screens, int numScreens, float spacing = 4.0f) {
     }
 }
 
-int main() {
+int main(int argc, char* argv[]) {
+    // 解析命令行参数
+    std::string profile_output;
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+        if (arg == "--profile" && i + 1 < argc) {
+            profile_output = argv[++i];
+        } else if (arg == "-h" || arg == "--help") {
+            printf("Usage: %s [--profile <trace.json>]\n", argv[0]);
+            printf("Options:\n");
+            printf("  --profile <file.json>  Dump profiler trace to file (Chrome Trace format)\n");
+            return 0;
+        }
+    }
+
+    // 初始化 profiler (before SDL_Init, use printf)
+    if (!profile_output.empty()) {
+        printf("[Profile] Profiler enabled, output: %s\n", profile_output.c_str());
+        fflush(stdout);
+        g_profile_output = profile_output;  // Save for atexit/signal handler
+        dong_profiler_init();
+        
+        // Register atexit handler - will be called on any normal exit
+        std::atexit(dumpProfilerAtExit);
+        
+        // Install signal handlers for Ctrl+C etc
+        std::signal(SIGINT, signalHandler);
+        std::signal(SIGTERM, signalHandler);
+    }
+
     SDL_Log("=== Dong 3D Multi-Screen Script Demo ===");
     SDL_Log("This demo supports multiple HTML screens with automatic arrangement");
     SDL_Log("Controls: RMB+Mouse=Look, WASD=Move, Q/E=Up/Down, Shift=Sprint, LMB=Interact, ESC=Exit");
@@ -529,6 +582,8 @@ int main() {
     SDL_StartTextInput(window);
 
     while (running) {
+        DONG_PROFILE_SCOPE_CAT("Frame", "frame");
+        
         auto now = std::chrono::high_resolution_clock::now();
         float dt = std::chrono::duration<float>(now - lastTime).count();
         lastTime = now;
@@ -542,8 +597,10 @@ int main() {
             input.handleEvent(event);
             
             if (event.type == SDL_EVENT_QUIT || event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED) {
+                SDL_Log("=== Quit event received (type=%d) ===", event.type);
                 running = false;
             } else if (event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == SDL_SCANCODE_ESCAPE) {
+                SDL_Log("=== ESC pressed, exiting ===");
                 running = false;
             } else if (event.type == SDL_EVENT_KEY_DOWN && 
                        (event.key.scancode == SDL_SCANCODE_F1 || event.key.scancode == SDL_SCANCODE_H)) {
@@ -835,24 +892,35 @@ int main() {
         SDL_Delay(16);
     }
 
+    SDL_Log("=== Exiting main loop ===");
+    fflush(stdout);
+
     // 停止文本输入
+    SDL_Log("[Cleanup] Stopping text input...");
     SDL_StopTextInput(window);
 
     // 清理
+    SDL_Log("[Cleanup] Releasing depth texture...");
     if (depthTexture) SDL_ReleaseGPUTexture(device, depthTexture);
     
+    SDL_Log("[Cleanup] Cleaning up HUD...");
     hud.cleanup(device);
     
+    SDL_Log("[Cleanup] Cleaning up %d screens...", numScreens);
     for (int i = 0; i < numScreens; i++) {
+        SDL_Log("[Cleanup] Screen %d...", i);
         screens[i].html.cleanup(device);
     }
     
+    SDL_Log("[Cleanup] Releasing GPU buffers...");
     SDL_ReleaseGPUBuffer(device, cubeVB);
     SDL_ReleaseGPUBuffer(device, gridVB);
     SDL_ReleaseGPUSampler(device, sampler);
+    SDL_Log("[Cleanup] Releasing pipelines...");
     SDL_ReleaseGPUGraphicsPipeline(device, cubePipeline);
     SDL_ReleaseGPUGraphicsPipeline(device, gridPipeline);
     SDL_ReleaseGPUGraphicsPipeline(device, screenPipeline);
+    SDL_Log("[Cleanup] Releasing shaders...");
     SDL_ReleaseGPUShader(device, vs3d);
     SDL_ReleaseGPUShader(device, fsCube);
     SDL_ReleaseGPUShader(device, fsGrid);
@@ -861,13 +929,29 @@ int main() {
     SDL_ReleaseGPUShader(device, vsHUD);
     SDL_ReleaseGPUShader(device, fsHUD);
     
+    SDL_Log("[Cleanup] Destroying dong context...");
     dong_destroy_context(dongCtx);
     
+    // Dump profiler BEFORE destroying GPU device (in case it crashes)
+    if (!g_profile_output.empty()) {
+        SDL_Log("[Profile] Dumping profiler trace before GPU cleanup...");
+        int result = dong_profiler_dump(g_profile_output.c_str());
+        SDL_Log("[Profile] Dump result=%d, file=%s", result, g_profile_output.c_str());
+        g_profile_output.clear();  // Prevent atexit from dumping again
+    }
+    
+    SDL_Log("[Cleanup] Destroying GPU device...");
     SDL_DestroyGPUDevice(device);
+    SDL_Log("[Cleanup] Destroying window...");
     SDL_DestroyWindow(window);
+    SDL_Log("[Cleanup] ShaderCross quit...");
     SDL_ShaderCross_Quit();
-    SDL_Quit();
+
+    SDL_Log("[Profile] Normal exit path complete");
 
     SDL_Log("=== Demo Complete ===");
+    SDL_Quit();
+
+    // atexit(dumpProfilerAtExit) will be called after this
     return 0;
 }

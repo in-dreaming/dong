@@ -3,6 +3,7 @@
 
 #include "core/context.hpp"
 #include "core/log.h"
+#include "core/profiler.h"
 #include "dom/dom_manager.hpp"
 #include "dom/event_system.hpp"
 #include "dom/focus_manager.hpp"
@@ -255,8 +256,11 @@ struct EngineImpl {
     }
     
     dong_result_t tick() {
+        DONG_PROFILE_SCOPE_CAT("Engine::tick", "frame");
+        
         // Process pending JS tasks
         if (script_engine) {
+            DONG_PROFILE_SCOPE_CAT("Script::processTasks", "script");
             script_engine->processPendingTasks();
         }
         
@@ -264,6 +268,7 @@ struct EngineImpl {
         if (layout_engine && dom_manager) {
             auto root = dom_manager->getRoot();
             if (root && root->isLayoutDirty()) {
+                DONG_PROFILE_SCOPE_CAT("Layout::calculate", "layout");
                 layout_engine->calculateLayout(root, static_cast<float>(width), static_cast<float>(height));
                 markNeedsRepaint();
             }

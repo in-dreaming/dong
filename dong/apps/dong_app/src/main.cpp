@@ -1,6 +1,7 @@
 #include "dong.h"
 #include "dong_plugin_api.h"
 #include "dong_legacy_view.h"
+#include "../../../src/core/profiler.h"
 
 #include <SDL3/SDL.h>
 
@@ -328,8 +329,11 @@ int main(int argc, char** argv) {
 
     std::printf("[dong_app] View created, entering main loop...\n");
 
+    dong_profiler_init();
+    
     bool running = true;
     while (running) {
+        DONG_PROFILE_FRAME();
         dong_input_event_t ev = {};
         while (plugin->poll_event && plugin->poll_event(nullptr, &ev)) {
             switch (ev.type) {
@@ -380,6 +384,10 @@ int main(int argc, char** argv) {
 
     std::printf("[dong_app] Shutting down...\n");
 
+    // Dump profiler trace
+    dong_profiler_dump("dong_trace.json");
+    dong_profiler_shutdown();
+    
     cleanupCursors();
     dong_view_destroy(view);
     plugin->renderer_shutdown(nullptr, gpu_device);

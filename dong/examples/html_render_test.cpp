@@ -26,6 +26,7 @@
 #include <SDL3/SDL_gpu.h>
 
 #include "platform/sdl3_window.hpp"
+#include "core/profiler.h"
 
 using dong::platform::SDL3Window;
 namespace fs = std::filesystem;
@@ -169,7 +170,7 @@ static void ensureParentDir(const fs::path& p) {
 void printUsage(const char* prog) {
     SDL_Log("Usage:");
     SDL_Log("  %s <html_file> [output.bmp] [width] [height] [frames]", prog);
-    SDL_Log("  %s <html_file> [output.bmp] [width] [height] --frames N [--frame-ms MS] [--no-update]", prog);
+    SDL_Log("  %s <html_file> [output.bmp] [width] [height] --frames N [--frame-ms MS] [--no-update] [--profile <trace.json>]", prog);
     SDL_Log("");
     SDL_Log("Arguments:");
     SDL_Log("  html_file   - Path to HTML file (relative to exe or absolute)");
@@ -179,9 +180,10 @@ void printUsage(const char* prog) {
     SDL_Log("  frames      - Number of frames (default: 1)");
     SDL_Log("");
     SDL_Log("Options:");
-    SDL_Log("  --frames N      - Render N frames (overrides positional frames)");
-    SDL_Log("  --frame-ms MS   - Sleep MS milliseconds between frames (default: 0)");
-    SDL_Log("  --no-update     - Do NOT call dong_view_update() between frames");
+    SDL_Log("  --frames N           - Render N frames (overrides positional frames)");
+    SDL_Log("  --frame-ms MS        - Sleep MS milliseconds between frames (default: 0)");
+    SDL_Log("  --no-update          - Do NOT call dong_view_update() between frames");
+    SDL_Log("  --profile <file.json>- Dump profiler trace to file (Chrome Trace format)");
     SDL_Log("");
     SDL_Log("Output rule when frames > 1:");
     SDL_Log("  - If output ends with .bmp, will write: <stem>_f000.bmp, <stem>_f001.bmp, ...");
@@ -224,6 +226,7 @@ int main(int argc, char* argv[]) {
     uint32_t frames = 1;
     uint32_t frame_ms = 0;
     bool do_update = true;
+    std::string profile_output;  // profiler trace output file
 
     int positional_index = 0;
     for (int i = 2; i < argc; ++i) {
@@ -254,6 +257,15 @@ int main(int argc, char* argv[]) {
                 return 1;
             }
             frame_ms = parseU32OrDefault(argv[++i], frame_ms);
+            continue;
+        }
+
+        if (a == "--profile") {
+            if (i + 1 >= argc) {
+                SDL_Log("ERROR: --profile requires a file path");
+                return 1;
+            }
+            profile_output = argv[++i];
             continue;
         }
 
@@ -343,6 +355,10 @@ int main(int argc, char* argv[]) {
     SDL_Log("[Input]  HTML: %s (%zu bytes)", html_file.c_str(), html_content.size());
     SDL_Log("[Render] Size: %ux%u frames=%u frame_ms=%u update=%s",
             width, height, frames, frame_ms, do_update ? "true" : "false");
+    if (!profile_output.empty()) {
+        SDL_Log("[Profile] Output: %s", profile_output.c_str());
+        dong_profiler_init();
+    }
 
     std::string html_stem = fs::path(html_file).stem().string();
     fs::path first_output_path = getFrameOutputPath(output_file, html_stem, 0, frames);
@@ -433,6 +449,7 @@ int main(int argc, char* argv[]) {
 
     SDL_Log("[Render] Rendering offscreen...");
     for (uint32_t fi = 0; fi < frames; ++fi) {
+        DONG_PROFILE_SCOPE_CAT("RenderFrame", "frame");
         SDL_Log("[Render] Frame %u: do_update=%d", fi, do_update ? 1 : 0);
 
         // Optional: inject a synthetic click for tab switching, etc.
@@ -502,6 +519,15 @@ int main(int argc, char* argv[]) {
 
     SDL_Log("[Save] Saved %u frame(s)", frames);
 
+    // Dump profiler trace if requested
+    if (!profile_output.empty()) {
+        ensureParentDir(fs::path(profile_output));
+        if (dong_profiler_dump(profile_output.c_str()) == 0) {
+            SDL_Log("[Profile] Trace saved to: %s", profile_output.c_str());
+        } else {
+            SDL_Log("[Profile] ERROR: Failed to save trace to: %s", profile_output.c_str());
+        }
+    }
 
     // 清理
     SDL_Log("[Cleanup] Shutting down...");

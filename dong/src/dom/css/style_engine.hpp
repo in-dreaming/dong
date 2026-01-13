@@ -4,6 +4,7 @@
 #include "selector_matcher.hpp"
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 #include <memory>
 
 namespace dong::dom {
@@ -30,6 +31,25 @@ private:
     std::vector<FontFaceRule> font_faces_;
 };
 
+// 优化策略3：规则索引结构，用于快速查找匹配规则
+struct RuleIndex {
+    // 按 tag 名索引的规则（如 "div", "button"）
+    std::unordered_map<std::string, std::vector<size_t>> by_tag;
+    // 按 class 名索引的规则（如 ".container", ".btn"）
+    std::unordered_map<std::string, std::vector<size_t>> by_class;
+    // 按 id 索引的规则（如 "#header"）
+    std::unordered_map<std::string, std::vector<size_t>> by_id;
+    // 通用规则（如 "*", 复杂选择器）
+    std::vector<size_t> universal;
+    
+    void clear() {
+        by_tag.clear();
+        by_class.clear();
+        by_id.clear();
+        universal.clear();
+    }
+};
+
 // Style engine for CSS matching and cascading
 class StyleEngine {
 public:
@@ -52,6 +72,9 @@ public:
     // Calculate computed styles for a node (considering cascade)
     void computeStyles(DOMNodePtr node);
     
+    // 优化策略3：增量样式计算 - 只计算 dirty 节点
+    void computeStylesIncremental(DOMNodePtr node);
+    
     // Recompute styles for a single node (for dynamic updates)
     void recomputeNodeStyle(DOMNodePtr node);
 
@@ -64,6 +87,9 @@ public:
     // Media query support
     void setViewportSize(float width, float height);
     bool evaluateMediaQuery(const std::string& query) const;
+    
+    // 优化策略3：重建规则索引（在添加样式表后调用）
+    void rebuildRuleIndex();
 
 private:
     std::vector<Stylesheet> stylesheets_;
@@ -71,12 +97,20 @@ private:
     SelectorMatcher matcher_;
     int rule_order_counter_ = 0;
     
+    // 优化策略3：规则索引
+    RuleIndex rule_index_;
+    std::vector<CSSRule> all_rules_;  // 所有规则的扁平列表
+    bool index_dirty_ = true;
+    
     // Viewport for media queries
     float viewport_width_ = 800.0f;
     float viewport_height_ = 600.0f;
     
     // Apply matching rules to node
     void applyMatchingRules(DOMNodePtr node);
+    
+    // 优化策略3：使用索引快速查找匹配规则
+    void applyMatchingRulesIndexed(DOMNodePtr node);
     
     // Inherit properties from parent
     void inheritFromParent(DOMNodePtr node);
@@ -109,6 +143,12 @@ private:
     // Selector parsing
     std::vector<SelectorPart> parseSelector(const std::string& selector);
     std::string extractSelectorComponent(const std::string& selector, size_t& pos);
+    
+    // 优化策略3：从选择器中提取索引键
+    void extractIndexKeys(const std::string& selector, 
+                          std::string& out_tag, 
+                          std::vector<std::string>& out_classes,
+                          std::string& out_id);
 };
 
 } // namespace dong::dom

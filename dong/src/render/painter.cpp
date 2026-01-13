@@ -1,4 +1,4 @@
-﻿#include "painter.hpp"
+#include "painter.hpp"
 #include <cstring>
 #include <iostream>
 #include <cstdint>
@@ -9,6 +9,7 @@
 #include <cmath>
 #include <cstdlib>
 #include "../core/log.h"
+#include "../core/profiler.h"
 namespace dong::render {
 
 
@@ -269,6 +270,8 @@ Painter::~Painter() {
 }
 
 const DisplayList& Painter::buildDisplayList(const dom::DOMNodePtr& root, layout::Engine* layout_engine) {
+    DONG_PROFILE_FUNCTION();
+    
     layout_engine_ = layout_engine;
 
     display_list_builder_.clear();
@@ -1147,8 +1150,18 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                 float pad_top = style.padding_top.isPixel() ? style.padding_top.value : 0.0f;
                 float pad_bottom = style.padding_bottom.isPixel() ? style.padding_bottom.value : 0.0f;
 
+                const bool debug_button = (std::getenv("DONG_DEBUG_BUTTON") != nullptr);
 
                 float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
+                if (debug_button && tag == "button") {
+                    DONG_LOG_INFO("[BTN] rect=(%.1f,%.1f %.1fx%.1f) pad=(%.1f %.1f %.1f %.1f) border_w=%.1f bg='%s' font=%.1f text='%s'",
+                        x, y, width, height,
+                        pad_top, pad_right, pad_bottom, pad_left,
+                        style.border_width,
+                        style.background_color.c_str(),
+                        font_size,
+                        text.c_str());
+                }
 
                 Color text_color = makeColorFromCss(style.color);
 

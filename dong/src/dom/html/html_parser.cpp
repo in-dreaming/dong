@@ -1,6 +1,7 @@
 #include "html_parser.hpp"
 #include "../css/style_engine.hpp"
 #include "../../core/log.h"
+#include "../../core/profiler.h"
 #include <lexbor/html/html.h>
 #include <lexbor/dom/dom.h>
 #include <lexbor/css/css.h>
@@ -24,6 +25,7 @@ HTMLParser::~HTMLParser() {
 }
 
 DOMNodePtr HTMLParser::parse(const std::string& html) {
+    DONG_PROFILE_SCOPE_CAT("HTMLParser::parse", "parse");
     DONG_LOG_INFO("[HTMLParser::parse] Entry, html length=%zu", html.length());
     
     doc_ = lxb_html_document_create();
@@ -76,6 +78,7 @@ DOMNodePtr HTMLParser::parse(const std::string& html) {
 }
 
 DOMNodePtr HTMLParser::parseWithCSS(const std::string& html, const std::string& css) {
+    DONG_PROFILE_SCOPE_CAT("HTMLParser::parseWithCSS", "parse");
     auto root = parse(html);
     if (root) {
         parseCSSAndApply(root, css);
@@ -84,6 +87,7 @@ DOMNodePtr HTMLParser::parseWithCSS(const std::string& html, const std::string& 
 }
 
 DOMNodePtr HTMLParser::parseFragment(const std::string& html, DOMNodePtr context) {
+    DONG_PROFILE_SCOPE_CAT("HTMLParser::parseFragment", "parse");
     // Create a temporary document to parse the fragment
     lxb_html_document_t* temp_doc = lxb_html_document_create();
     if (!temp_doc) {

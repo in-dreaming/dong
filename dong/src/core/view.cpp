@@ -1,4 +1,4 @@
-﻿#include "view.hpp"
+#include "view.hpp"
 #include <cstdio>
 #include <string>
 #include <cstring>
@@ -17,6 +17,7 @@
 #include <SDL3/SDL_gpu.h>
 #include <SDL3/SDL_filesystem.h>
 #include "log.h"
+#include "profiler.h"
 #include "../dom/dom_manager.hpp"
 #include "../dom/style_engine.hpp"
 #include "../dom/event_system.hpp"
@@ -379,7 +380,7 @@ void View::resize(uint32_t width, uint32_t height) {
 }
 
 void View::update() {
-    DONG_PERF_SCOPE("View::update");
+    DONG_PROFILE_SCOPE_CAT("View::update", "frame");
     
     // Update animations
     static auto start_time = std::chrono::steady_clock::now();
@@ -388,29 +389,31 @@ void View::update() {
     
     auto& anim_controller = animation::getAnimationController();
     if (anim_controller.hasActiveAnimations()) {
+        DONG_PROFILE_SCOPE_CAT("Animation::update", "animation");
         anim_controller.update(current_time);
         markNeedsRepaint();
     }
     
     if (script_engine) {
-        DONG_PERF_START(script);
+        DONG_PROFILE_SCOPE_CAT("Script::processTasks", "script");
         script_engine->processPendingTasks();
-        DONG_PERF_END_LOG(script, "script_tasks");
     }
 
     if (layout_engine && dom_manager) {
         auto root = dom_manager->getRoot();
         if (root && commands_dirty_) {
             // Styles may depend on runtime state (:hover/:active) or JS-driven attribute changes.
+            // 优化策略3：使用索引加速的增量样式计算
             if (auto* se = dom_manager->getStyleEngine()) {
-                se->computeStyles(root);
+                DONG_PROFILE_SCOPE_CAT("Style::compute", "style");
+                se->computeStylesIncremental(root);
             }
         }
         if (root && root->isLayoutDirty()) {
-
-            DONG_PERF_START(layout);
-            layout_engine->calculateLayout(root, static_cast<float>(width_), static_cast<float>(height_));
-            DONG_PERF_END_LOG(layout, "layout_calculate");
+            {
+                DONG_PROFILE_SCOPE_CAT("Layout::calculate", "layout");
+                layout_engine->calculateLayout(root, static_cast<float>(width_), static_cast<float>(height_));
+            }
             markNeedsRepaint();
             
             // 输出布局调试信息
@@ -473,9 +476,10 @@ void View::update() {
         
         if (need_rebuild) {
             DONG_LOG_DEBUG("[View::update] Building DisplayList...");
-            DONG_PERF_START(display_list);
-            const render::DisplayList& dl = painter->buildDisplayList(root, layout_engine.get());
-            DONG_PERF_END_LOG(display_list, "build_display_list");
+            const render::DisplayList& dl = [&]() {
+                DONG_PROFILE_SCOPE_CAT("Painter::buildDisplayList", "render");
+                return painter->buildDisplayList(root, layout_engine.get());
+            }();
             DONG_LOG_DEBUG("[View::update] DisplayList built with %zu items", dl.items.size());
             
             // 缓存编译后的命令列表
@@ -497,9 +501,10 @@ void View::update() {
             }
             
             debugLogLayerTreeIfEnabled(layer_tree);
-            DONG_PERF_START(compile);
-            compiler.compile(dl, *cached_cmd_list_, &layer_tree);
-            DONG_PERF_END_LOG(compile, "compile_gpu_commands");
+            {
+                DONG_PROFILE_SCOPE_CAT("GPUCompiler::compile", "render");
+                compiler.compile(dl, *cached_cmd_list_, &layer_tree);
+            }
             DONG_LOG_DEBUG("[View::update] GPUCommandList compiled with %zu commands", cached_cmd_list_->commands.size());
             
             // 清除命令脏标记（下次只有在 markNeedsRepaint 时才会重建）
@@ -513,15 +518,17 @@ void View::update() {
         // 每帧都执行渲染（即使使用缓存的命令列表）
         // 关键：在 beginFrame() 之前预处理资源（如 glyph 纹理上传）
         // 这样可以避免在 render pass 中进行纹理上传导致的 GPU 状态冲突
-        DONG_PERF_START(prepare);
-        gpu_driver_->prepareResources(*cached_cmd_list_);
-        DONG_PERF_END_LOG(prepare, "gpu_prepare_resources");
+        {
+            DONG_PROFILE_SCOPE_CAT("GPU::prepareResources", "gpu");
+            gpu_driver_->prepareResources(*cached_cmd_list_);
+        }
         
-        DONG_PERF_START(gpu_frame);
-        gpu_driver_->beginFrame();
-        gpu_driver_->execute(*cached_cmd_list_);
-        gpu_driver_->endFrame();
-        DONG_PERF_END_LOG(gpu_frame, "gpu_frame_total");
+        {
+            DONG_PROFILE_SCOPE_CAT("GPU::frame", "gpu");
+            gpu_driver_->beginFrame();
+            gpu_driver_->execute(*cached_cmd_list_);
+            gpu_driver_->endFrame();
+        }
         DONG_LOG_VERBOSE("[View::update] GPU frame complete");
         
         return;
@@ -540,6 +547,8 @@ void* View::get_pixel_buffer() {
 }
 
 SDL_GPUTexture* View::renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, uint32_t height) {
+    DONG_PROFILE_SCOPE_CAT("View::renderToGPUTexture", "render");
+    
     if (!device) {
         SDL_Log("[View::renderToGPUTexture] Invalid device");
         return nullptr;
@@ -581,53 +590,96 @@ SDL_GPUTexture* View::renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, 
         return nullptr;
     }
 
-    // Offscreen renders are often used by embeddings (e.g. 3D screens).
-    // Styles may depend on runtime state (:hover/:active) and JS mutations.
-    if (dom_manager) {
-        if (auto* se = dom_manager->getStyleEngine()) {
-            se->computeStyles(root);
-        }
+    // 检查尺寸是否变化，如果变化则标记 dirty
+    if (width != offscreen_cache_width_ || height != offscreen_cache_height_) {
+        offscreen_commands_dirty_ = true;
+        offscreen_cache_width_ = width;
+        offscreen_cache_height_ = height;
     }
-    
-    DONG_LOG_DEBUG("[View::renderToGPUTexture] root->isLayoutDirty() = %s", root->isLayoutDirty() ? "TRUE" : "FALSE");
 
+    // 优化策略1：只在 dirty 时重新计算样式/布局/构建命令列表
+    // 检查是否需要重建：commands_dirty_ 或 offscreen_commands_dirty_ 或 layout dirty
+    bool needs_rebuild = offscreen_commands_dirty_ || commands_dirty_ || root->isLayoutDirty();
     
-    // 为离屏渲染强制执行一次完整布局，以确保 absolute / inline 等最新逻辑
-    // 始终生效，而不是依赖增量 dirty 标记（截图对齐场景更看重正确性而非微观性能）。
-    if (layout_engine) {
-        DONG_LOG_DEBUG("[View::renderToGPUTexture] Calculating layout (offscreen pass, forced)...");
-        root->markLayoutDirty();
-        layout_engine->calculateLayout(root, static_cast<float>(width), static_cast<float>(height));
-        root->clearLayoutDirtyRecursive();
-        DONG_LOG_DEBUG("[View::renderToGPUTexture] Layout calculated");
+    // 环境变量强制全量重建（用于调试/正确性验证）
+    static bool force_full_layout = (std::getenv("DONG_OFFSCREEN_FORCE_FULL_LAYOUT") != nullptr);
+    if (force_full_layout) {
+        needs_rebuild = true;
     }
-    
-    // 3. 构建 DisplayList 并编译为 GPUCommandList
-    DONG_LOG_DEBUG("[View::renderToGPUTexture] Building DisplayList...");
-    const render::DisplayList& dl = painter->buildDisplayList(root, layout_engine.get());
-    DONG_LOG_DEBUG("[View::renderToGPUTexture] DisplayList has %zu items", dl.items.size());
-    
-    render::GPUCompiler compiler;
-    render::GPUCommandList cmd_list;
-    const render::LayerTree& layer_tree = painter->getLayerTree();
-    debugLogLayerTreeIfEnabled(layer_tree);
-    compiler.compile(dl, cmd_list, &layer_tree);
-    DONG_LOG_DEBUG("[View::renderToGPUTexture] GPUCommandList has %zu commands", cmd_list.commands.size());
+
+    if (needs_rebuild) {
+        DONG_PROFILE_SCOPE_CAT("offscreen_rebuild", "render");
+        
+        // 计算样式（使用索引加速的增量计算）
+        if (dom_manager) {
+            if (auto* se = dom_manager->getStyleEngine()) {
+                DONG_PROFILE_SCOPE_CAT("offscreen_computeStyles", "style");
+                // 优化策略3：使用 computeStylesIncremental 替代 computeStyles
+                // 内部使用规则索引加速匹配，减少每节点的规则扫描量
+                se->computeStylesIncremental(root);
+            }
+        }
+        
+        DONG_LOG_DEBUG("[View::renderToGPUTexture] root->isLayoutDirty() = %s", root->isLayoutDirty() ? "TRUE" : "FALSE");
+
+        // 计算布局（只在 dirty 时）
+        if (layout_engine && (root->isLayoutDirty() || force_full_layout)) {
+            DONG_PROFILE_SCOPE_CAT("offscreen_calculateLayout", "layout");
+            DONG_LOG_DEBUG("[View::renderToGPUTexture] Calculating layout (offscreen pass)...");
+            if (force_full_layout) {
+                root->markLayoutDirty();
+            }
+            layout_engine->calculateLayout(root, static_cast<float>(width), static_cast<float>(height));
+            root->clearLayoutDirtyRecursive();
+            DONG_LOG_DEBUG("[View::renderToGPUTexture] Layout calculated");
+        }
+        
+        // 3. 构建 DisplayList 并编译为 GPUCommandList
+        {
+            DONG_PROFILE_SCOPE_CAT("offscreen_buildDisplayList", "render");
+            DONG_LOG_DEBUG("[View::renderToGPUTexture] Building DisplayList...");
+            const render::DisplayList& dl = painter->buildDisplayList(root, layout_engine.get());
+            DONG_LOG_DEBUG("[View::renderToGPUTexture] DisplayList has %zu items", dl.items.size());
+            
+            // 创建或重用缓存的命令列表
+            if (!offscreen_cmd_list_cache_) {
+                offscreen_cmd_list_cache_ = std::make_unique<render::GPUCommandList>();
+            }
+            offscreen_cmd_list_cache_->commands.clear();
+            
+            render::GPUCompiler compiler;
+            const render::LayerTree& layer_tree = painter->getLayerTree();
+            debugLogLayerTreeIfEnabled(layer_tree);
+            compiler.compile(dl, *offscreen_cmd_list_cache_, &layer_tree);
+            DONG_LOG_DEBUG("[View::renderToGPUTexture] GPUCommandList has %zu commands", offscreen_cmd_list_cache_->commands.size());
+        }
+        
+        offscreen_commands_dirty_ = false;
+        // 不清除 commands_dirty_，让主渲染路径自己管理
+    }
     
     // 4. 执行离屏渲染
     // 关键：在 beginFrame() 之前预处理资源（如 glyph 纹理上传）
-    // 这样可以避免在 render pass 中进行纹理上传导致的 GPU 状态冲突
     // 
+    // 优化策略2：SDL_WaitForGPUIdle 仅首帧执行
     // 首帧修复：在 prepareResources 之前等待 GPU 空闲，确保 atlas 纹理初始化完成。
-    // GlyphAtlas::initialize() 会创建初始页面并填充全黑，这个操作使用独立的 command buffer。
-    // 虽然内部使用了 fence 等待，但在某些驱动下可能存在缓存一致性问题。
-    if (gpu_device_ && gpu_device_->isInitialized()) {
+    if (!offscreen_first_frame_done_ && gpu_device_ && gpu_device_->isInitialized()) {
+        DONG_PROFILE_SCOPE_CAT("offscreen_WaitForGPUIdle", "gpu");
         SDL_WaitForGPUIdle(gpu_device_->getHandle());
+        offscreen_first_frame_done_ = true;
     }
-    gpu_driver_->prepareResources(cmd_list);
-    gpu_driver_->beginFrameOffscreen(offscreen_texture, width, height);
-    gpu_driver_->execute(cmd_list);
-    gpu_driver_->endFrameOffscreen();
+    
+    {
+        DONG_PROFILE_SCOPE_CAT("offscreen_prepareResources", "gpu");
+        gpu_driver_->prepareResources(*offscreen_cmd_list_cache_);
+    }
+    
+    {
+        DONG_PROFILE_SCOPE_CAT("offscreen_execute", "gpu");
+        gpu_driver_->beginFrameOffscreen(offscreen_texture, width, height);
+        gpu_driver_->execute(*offscreen_cmd_list_cache_);
+        gpu_driver_->endFrameOffscreen();
+    }
     
     DONG_LOG_DEBUG("[View::renderToGPUTexture] Successfully rendered to GPU texture %u x %u", width, height);
     
