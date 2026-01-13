@@ -675,7 +675,18 @@ int main(int argc, char* argv[]) {
             lastHoveredScreen = hoveredScreen;
         }
 
+        // CSS cursor：由宿主读取 hit-test 位置的 computed cursor 并设置系统光标。
+        // 注意：右键相机控制时启用 relative mouse mode，避免在此期间反复 Show/Set cursor。
+        if (!input.right_mouse_down) {
+            const char* css_cursor = "auto";
+            if (hoveredScreen >= 0) {
+                css_cursor = dong_view_get_cursor_at(screens[hoveredScreen].html.view, hoveredScreenX, hoveredScreenY);
+            }
+            applyCSSCursor(css_cursor);
+        }
+
         // If we delayed mouse-up from last frame, deliver it now (after a frame rendered with :active).
+
         if (pendingMouseUp && pendingMouseUpScreen >= 0) {
             screens[pendingMouseUpScreen].html.sendMouseMove(pendingMouseUpX, pendingMouseUpY);
             screens[pendingMouseUpScreen].html.sendMouseUp(1);

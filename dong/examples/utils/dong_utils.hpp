@@ -190,4 +190,77 @@ struct HtmlScreen3D {
     }
 };
 
+// ============================================================================
+// Cursor helpers (host-side)
+//
+// Dong 内部只计算 CSS cursor；真正设置“系统鼠标形状”需要宿主程序来做。
+// 这些 helper 提供一个轻量的 CSS cursor -> SDL system cursor 映射，并做静态缓存避免泄漏。
+// ============================================================================
+
+inline SDL_SystemCursor mapCSSCursorToSDLSystemCursor(const std::string& cursor_name) {
+    SDL_SystemCursor sdl_cursor = SDL_SYSTEM_CURSOR_DEFAULT;
+
+    if (cursor_name == "pointer" || cursor_name == "hand") {
+        sdl_cursor = SDL_SYSTEM_CURSOR_POINTER;
+    } else if (cursor_name == "text" || cursor_name == "ibeam") {
+        sdl_cursor = SDL_SYSTEM_CURSOR_TEXT;
+    } else if (cursor_name == "move" || cursor_name == "all-scroll") {
+        sdl_cursor = SDL_SYSTEM_CURSOR_MOVE;
+    } else if (cursor_name == "wait") {
+        sdl_cursor = SDL_SYSTEM_CURSOR_WAIT;
+    } else if (cursor_name == "progress") {
+        sdl_cursor = SDL_SYSTEM_CURSOR_PROGRESS;
+    } else if (cursor_name == "crosshair") {
+        sdl_cursor = SDL_SYSTEM_CURSOR_CROSSHAIR;
+    } else if (cursor_name == "not-allowed" || cursor_name == "no-drop") {
+        sdl_cursor = SDL_SYSTEM_CURSOR_NOT_ALLOWED;
+    } else if (cursor_name == "n-resize" || cursor_name == "s-resize" || cursor_name == "ns-resize") {
+        sdl_cursor = SDL_SYSTEM_CURSOR_NS_RESIZE;
+    } else if (cursor_name == "e-resize" || cursor_name == "w-resize" || cursor_name == "ew-resize") {
+        sdl_cursor = SDL_SYSTEM_CURSOR_EW_RESIZE;
+    } else if (cursor_name == "ne-resize" || cursor_name == "sw-resize" || cursor_name == "nesw-resize") {
+        sdl_cursor = SDL_SYSTEM_CURSOR_NESW_RESIZE;
+    } else if (cursor_name == "nw-resize" || cursor_name == "se-resize" || cursor_name == "nwse-resize") {
+        sdl_cursor = SDL_SYSTEM_CURSOR_NWSE_RESIZE;
+    } else if (cursor_name == "grab" || cursor_name == "grabbing") {
+        // SDL3 没有 grab/grabbing 光标，使用 move 代替
+        sdl_cursor = SDL_SYSTEM_CURSOR_MOVE;
+    } else {
+        // auto/default 或其他未知值
+        sdl_cursor = SDL_SYSTEM_CURSOR_DEFAULT;
+    }
+
+    return sdl_cursor;
+}
+
+inline void applyCSSCursor(const char* cursor_name_cstr) {
+    const std::string cursor_name = (cursor_name_cstr && cursor_name_cstr[0]) ? cursor_name_cstr : "auto";
+
+    // Avoid churn if unchanged
+    static std::string s_last;
+    if (cursor_name == s_last) {
+        return;
+    }
+    s_last = cursor_name;
+
+    if (cursor_name == "none") {
+        SDL_HideCursor();
+        return;
+    }
+
+    SDL_ShowCursor();
+
+    const SDL_SystemCursor sys = mapCSSCursorToSDLSystemCursor(cursor_name);
+
+    // Cache system cursors to avoid leaks; SDL_CreateSystemCursor returns a new cursor.
+    static SDL_Cursor* s_cache[SDL_SYSTEM_CURSOR_COUNT] = {};
+    if (!s_cache[sys]) {
+        s_cache[sys] = SDL_CreateSystemCursor(sys);
+    }
+    if (s_cache[sys]) {
+        SDL_SetCursor(s_cache[sys]);
+    }
+}
+
 } // namespace dong::utils
+

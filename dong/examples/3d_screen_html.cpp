@@ -468,6 +468,19 @@ int main() {
             }
         }
 
+        // CSS cursor：由宿主读取 hit-test 位置的 computed cursor 并设置系统光标。
+        if (!input.right_mouse_down) {
+            const char* css_cursor = "auto";
+            if (hoveredScreen >= 0) {
+                // 注意：这里复用 hoveredScreen 的 UV 转换结果，避免多做一次射线检测。
+                int32_t screenX = (int32_t)(hoveredUV.x * screens[hoveredScreen].rtWidth);
+                int32_t screenY = (int32_t)((1.0f - hoveredUV.y) * screens[hoveredScreen].rtHeight);
+                css_cursor = dong_view_get_cursor_at(screens[hoveredScreen].html.view, screenX, screenY);
+            }
+            applyCSSCursor(css_cursor);
+        }
+
+
         // 处理鼠标点击
         if (input.left_mouse_pressed) {
             if (hoveredScreen >= 0) {
