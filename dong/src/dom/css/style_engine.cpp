@@ -25,7 +25,18 @@ LayoutMode deriveLayoutModeFromDisplay(const ComputedStyle& style) {
     return LayoutMode::Block;
 }
 
+void applyInlineStyleAttributeIfAny(DOMNodePtr node) {
+    if (!node) return;
+    if (!node->hasAttribute("style")) return;
+    const std::string style_str = node->getAttribute("style");
+    if (style_str.empty()) return;
+
+    // Inline style has the highest precedence in author styles.
+    CSSParser::parseInlineStyle(style_str, node->getComputedStyle());
+}
+
 } // anonymous namespace
+
 
 void Stylesheet::addRule(const std::string& selector, const ComputedStyle& style, 
                          int specificity, int order) {
@@ -141,8 +152,12 @@ void StyleEngine::computeStyles(DOMNodePtr node) {
     
     // Inherit from parent
     inheritFromParent(node);
+
+    // Inline style overrides author rules
+    applyInlineStyleAttributeIfAny(node);
     
     // Hide certain elements
+
     static const std::unordered_set<std::string> kAlwaysHiddenTags = {
         "head", "style", "script", "meta", "title", "link"
     };
@@ -166,8 +181,10 @@ void StyleEngine::recomputeNodeStyle(DOMNodePtr node) {
     if (!node) return;
     applyMatchingRules(node);
     inheritFromParent(node);
+    applyInlineStyleAttributeIfAny(node);
     node->getComputedStyle().layout_mode = deriveLayoutModeFromDisplay(node->getComputedStyle());
 }
+
 
 void StyleEngine::applyMatchingRules(DOMNodePtr node) {
     std::vector<CSSRule> matching_rules;
@@ -1268,8 +1285,12 @@ void StyleEngine::computeStylesIncremental(DOMNodePtr node) {
     
     // Inherit from parent
     inheritFromParent(node);
+
+    // Inline style overrides author rules
+    applyInlineStyleAttributeIfAny(node);
     
     // Hide certain elements
+
     static const std::unordered_set<std::string> kAlwaysHiddenTags = {
         "head", "style", "script", "meta", "title", "link"
     };

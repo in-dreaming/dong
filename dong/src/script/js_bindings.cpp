@@ -1,5 +1,6 @@
 ﻿#include "js_bindings.hpp"
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <iostream>
 #include <cctype>
@@ -490,6 +491,9 @@ JSValue style_proxy_set(JSContext* ctx, JSValueConst this_val, int argc, JSValue
     std::string css_prop = camelToCss(prop_str);
     std::string value_str = jsValueToString(ctx, value);
     node->setInlineStyleProperty(css_prop, value_str);
+    if (std::getenv("DONG_DEBUG_QUERYSELECTOR")) {
+        DONG_LOG_INFO("[style.set] %s=%s", css_prop.c_str(), value_str.c_str());
+    }
 
     JSValue target_dup = JS_DupValue(ctx, target);
     JSAtom atom = JS_ValueToAtom(ctx, prop);
@@ -636,6 +640,9 @@ static JSValue doc_querySelectorAll(JSContext* ctx, JSValueConst this_val, int a
         auto root = dom_mgr->getRoot();
         if (root) {
             auto nodes = root->querySelectorAll(selector);
+            if (std::getenv("DONG_DEBUG_QUERYSELECTOR")) {
+                DONG_LOG_INFO("[querySelectorAll] selector='%s' -> %zu", selector, nodes.size());
+            }
             for (size_t i = 0; i < nodes.size(); ++i) {
                 JSValue elem = bindings->createJSElement(ctx, nodes[i]);
                 JS_SetPropertyUint32(ctx, arr, static_cast<uint32_t>(i), elem);

@@ -298,9 +298,24 @@ pub fn build(b: *std.Build) void {
     // ==========================================================================
     
     // Install step (cmake --install)
-    const cmake_install = b.addSystemCommand(&.{ "cmake", "--install", cmake_build_dir, "--prefix", "zig-out" });
+    // On Windows, the destination exe can be locked if it's currently running.
+    // Treat that specific case as a non-fatal install skip (build artifacts still exist in build-cmake).
+    const cmake_install = if (is_windows)
+        b.addSystemCommand(&.{
+            "powershell",
+            "-NoProfile",
+            "-Command",
+            b.fmt(
+                "& {{ $out = & cmake --install {s} --prefix zig-out 2>&1; $ec = $LASTEXITCODE; if ($ec -eq 0) {{ $out }} else {{ if ($out -match 'file INSTALL cannot copy file' -and ($out -match 'Permission' -and $out -match 'denied')) {{ Write-Host 'NOTE: cmake install skipped because a target file is locked (close running exe and re-run to refresh zig-out/bin).'; exit 0 }} else {{ $out; exit $ec }} }} }}",
+
+                .{cmake_build_dir},
+            ),
+        })
+    else
+        b.addSystemCommand(&.{ "cmake", "--install", cmake_build_dir, "--prefix", "zig-out" });
     cmake_install.step.dependOn(&cmake_build.step);
     b.getInstallStep().dependOn(&cmake_install.step);
+
     
     // examples step now also installs to zig-out/bin
     const examples_step = b.step("examples", "Build all examples and install to zig-out/bin");

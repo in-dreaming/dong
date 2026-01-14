@@ -229,12 +229,17 @@ Quad3D getScreenQuad(const Screen3D& screen) {
 }
 
 // 自动排列屏幕位置
-void arrangeScreens(Screen3D* screens, int numScreens, float spacing = 4.0f) {
+// 从左下角往右上角分布，避免叠加
+void arrangeScreens(Screen3D* screens, int numScreens, float spacingX = 4.0f, float spacingY = 2.8f) {
     if (numScreens <= 0) return;
     
     // 计算排列方式：优先横向排列，超过一定数量时分行
-    int maxPerRow = 4;  // 每行最多4个屏幕
-    int rows = (numScreens + maxPerRow - 1) / maxPerRow;
+    int maxPerRow = 5;  // 每行最多5个屏幕
+    int totalRows = (numScreens + maxPerRow - 1) / maxPerRow;
+    
+    // 基准 Y：让整个阵列垂直居中于相机高度附近
+    // 相机初始高度 2.5f，让阵列中心大约在 2.5f
+    float baseY = 2.5f + 3.0f - (totalRows - 1) * spacingY * 0.5f;
     
     for (int i = 0; i < numScreens; i++) {
         int row = i / maxPerRow;
@@ -242,21 +247,21 @@ void arrangeScreens(Screen3D* screens, int numScreens, float spacing = 4.0f) {
         int screensInThisRow = std::min(maxPerRow, numScreens - row * maxPerRow);
         
         // 计算该行的起始X位置（居中对齐）
-        float rowWidth = (screensInThisRow - 1) * spacing;
+        float rowWidth = (screensInThisRow - 1) * spacingX;
         float startX = -rowWidth * 0.5f;
         
-        // 设置位置
-        screens[i].position.x = startX + col * spacing;
-        screens[i].position.y = 2.5f - row * 3.0f;  // 每行间距3.0f
-        screens[i].position.z = -2.0f;
+        // 设置位置：row 增加时 Y 增加（从下往上排）
+        screens[i].position.x = startX + col * spacingX;
+        screens[i].position.y = baseY + row * spacingY;
+        screens[i].position.z = -3.0f;  // 稍微远一点，避免太近
         
         // 设置朝向（稍微向内倾斜）
         float centerX = 0.0f;
         float deltaX = screens[i].position.x - centerX;
-        screens[i].yaw = -deltaX * 0.1f;  // 向中心倾斜
+        screens[i].yaw = -deltaX * 0.08f;  // 向中心倾斜
         
         // 限制倾斜角度
-        screens[i].yaw = std::max(-0.5f, std::min(0.5f, screens[i].yaw));
+        screens[i].yaw = std::max(-0.4f, std::min(0.4f, screens[i].yaw));
     }
 }
 
@@ -296,11 +301,27 @@ int main(int argc, char* argv[]) {
 
     // 配置要显示的 HTML 屏幕
     ScreenConfig screenConfigs[] = {
-        {"screen1_script.html", 800, 1280, 3.0f, 4.8f},
-        {"screen2_script.html", 800, 1280, 3.0f, 4.8f},
-        {"feature_test.html", 960, 540, 4.0f, 2.25f},
-        {"tests/cursor_test.html", 800, 600, 3.5f, 2.625f},
-        {"tests/image_test.html", 960, 640, 3.0f, 1.5f},
+        {"screen1_script.html", 960, 640, 3.0f, 2.0f},
+        {"screen2_script.html", 960, 640, 3.0f, 2.0f},
+        {"feature_test.html", 960, 640, 3.0f, 2.0f},
+        {"tests/cursor_test.html", 960, 640, 3.0f, 2.0f},
+        {"tests/image_test.html", 960, 640, 3.0f, 2.0f},
+
+        {"tests/background_attachment_fixed_test.html", 960, 640, 3.0f, 2.0f},
+        {"tests/background_clip_test.html",960, 640, 3.0f, 2.0f},
+        {"tests/background_origin_test.html", 960, 640, 3.0f, 2.0f},
+        {"tests/cursor_test.html",960, 640, 3.0f, 2.0f},
+        {"tests/font_style_test.html",960, 640, 3.0f, 2.0f},
+        {"tests/getcomputedstyle_smoke_test.html",960, 640, 3.0f, 2.0f},
+        {"tests/image_test.html",960, 640, 3.0f, 2.0f},
+        {"tests/outline_test.html",960, 640, 3.0f, 2.0f},
+        {"tests/queryselector_complex_test.html",960, 640, 3.0f, 2.0f},
+        {"tests/stylesheets_deleterule_test.html",960, 640, 3.0f, 2.0f},
+        {"tests/stylesheets_insertrule_test.html",960, 640, 3.0f, 2.0f},
+        {"tests/text_decoration_test.html",960, 640, 3.0f, 2.0f},
+        {"tests/text_shadow_test.html",960, 640, 3.0f, 2.0f},
+        {"tests/text_wrap_test.html",960, 640, 3.0f, 2.0f},
+        {"tests/transform_test.html",960, 640, 3.0f, 2.0f},
         // 可以继续添加更多屏幕...
     };
     
@@ -317,7 +338,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    const int WIN_W = 1280, WIN_H = 720;
+    const int WIN_W = 2560, WIN_H = 1440;
     SDL_Window* window = SDL_CreateWindow("Dong 3D Multi-Screen Script Demo", WIN_W, WIN_H, SDL_WINDOW_RESIZABLE);
     if (!window) {
         SDL_Log("Failed to create window: %s", SDL_GetError());
