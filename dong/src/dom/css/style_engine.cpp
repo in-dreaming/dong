@@ -32,6 +32,19 @@ void Stylesheet::addRule(const std::string& selector, const ComputedStyle& style
     rules_.push_back({selector, style, specificity, order});
 }
 
+bool Stylesheet::insertRuleAt(size_t index, const CSSRule& rule) {
+    if (index > rules_.size()) return false;
+    rules_.insert(rules_.begin() + static_cast<std::ptrdiff_t>(index), rule);
+    return true;
+}
+
+bool Stylesheet::deleteRuleAt(size_t index) {
+    if (index >= rules_.size()) return false;
+    rules_.erase(rules_.begin() + static_cast<std::ptrdiff_t>(index));
+    return true;
+}
+
+
 void Stylesheet::addKeyframes(const KeyframesRule& keyframes) {
     keyframes_[keyframes.name] = keyframes;
 }
@@ -96,6 +109,17 @@ void StyleEngine::addStylesheet(const Stylesheet& sheet) {
     stylesheets_.push_back(sheet);
     index_dirty_ = true;  // 标记索引需要重建
 }
+
+Stylesheet* StyleEngine::stylesheetAt(size_t index) {
+    if (index >= stylesheets_.size()) return nullptr;
+    return &stylesheets_[index];
+}
+
+const Stylesheet* StyleEngine::stylesheetAt(size_t index) const {
+    if (index >= stylesheets_.size()) return nullptr;
+    return &stylesheets_[index];
+}
+
 
 std::vector<CSSRule> StyleEngine::parseCSS(const std::string& css) {
     return parser_.parse(css);
@@ -179,9 +203,13 @@ void StyleEngine::applyMatchingRules(DOMNodePtr node) {
             computed.background_size = rs.background_size;
         if (!rs.background_repeat.empty() && rs.background_repeat != "repeat") 
             computed.background_repeat = rs.background_repeat;
-        if (!rs.background_position.empty()) computed.background_position = rs.background_position;
+        if (!rs.background_position.empty() && rs.background_position != "0% 0%") computed.background_position = rs.background_position;
+        if (!rs.background_attachment.empty() && rs.background_attachment != "scroll") computed.background_attachment = rs.background_attachment;
+        if (!rs.background_clip.empty() && rs.background_clip != "border-box") computed.background_clip = rs.background_clip;
+        if (!rs.background_origin.empty() && rs.background_origin != "padding-box") computed.background_origin = rs.background_origin;
         if (!rs.object_fit.empty() && rs.object_fit != "fill") computed.object_fit = rs.object_fit;
         if (!rs.background_gradients.empty()) computed.background_gradients = rs.background_gradients;
+
 
         
         if (rs.font_size != 16.0f) computed.font_size = rs.font_size;
@@ -802,17 +830,23 @@ void StyleEngine::rebuildRuleIndex() {
     rule_index_.clear();
     all_rules_.clear();
     
-    // 收集所有规则到扁平列表
+    int normalized_source_order = 0;
+
+    // 收集所有规则到扁平列表（并按“样式表顺序 + 规则顺序”重排 source_order）
     for (const auto& sheet : stylesheets_) {
         for (const auto& rule : sheet.getRules()) {
+            CSSRule normalized = rule;
+            normalized.source_order = normalized_source_order++;
+
             size_t idx = all_rules_.size();
-            all_rules_.push_back(rule);
+            all_rules_.push_back(normalized);
             
             // 从选择器中提取索引键
             std::string tag;
             std::vector<std::string> classes;
             std::string id;
-            extractIndexKeys(rule.selector, tag, classes, id);
+            extractIndexKeys(normalized.selector, tag, classes, id);
+
             
             // 添加到索引
             bool indexed = false;
@@ -1016,9 +1050,13 @@ void StyleEngine::applyMatchingRulesIndexed(DOMNodePtr node) {
             computed.background_size = rs.background_size;
         if (!rs.background_repeat.empty() && rs.background_repeat != "repeat") 
             computed.background_repeat = rs.background_repeat;
-        if (!rs.background_position.empty()) computed.background_position = rs.background_position;
+        if (!rs.background_position.empty() && rs.background_position != "0% 0%") computed.background_position = rs.background_position;
+        if (!rs.background_attachment.empty() && rs.background_attachment != "scroll") computed.background_attachment = rs.background_attachment;
+        if (!rs.background_clip.empty() && rs.background_clip != "border-box") computed.background_clip = rs.background_clip;
+        if (!rs.background_origin.empty() && rs.background_origin != "padding-box") computed.background_origin = rs.background_origin;
         if (!rs.object_fit.empty() && rs.object_fit != "fill") computed.object_fit = rs.object_fit;
         if (!rs.background_gradients.empty()) computed.background_gradients = rs.background_gradients;
+
 
         
         if (rs.font_size != 16.0f) computed.font_size = rs.font_size;

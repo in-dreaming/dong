@@ -472,7 +472,62 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
             rect.height = static_cast<float>(surface_->getHeight());
         }
 
-        // 1.1 box-shadow（先画在背景之下�?
+        // 1.1 background box helpers (clip/origin/attachment)
+        const float bw = style.border_width;
+        const float radius = style.border_radius;
+        const float viewport_w = surface_ ? static_cast<float>(surface_->getWidth()) : 800.0f;
+        const float viewport_h = surface_ ? static_cast<float>(surface_->getHeight()) : 600.0f;
+
+        auto toLowerCopy = [](std::string s) {
+            std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
+                return static_cast<char>(std::tolower(c));
+            });
+            return s;
+        };
+
+        auto resolvePx = [&](const dong::dom::CSSValue& v, float parent_size) -> float {
+            return v.resolvePixels(parent_size, 16.0f, viewport_w, viewport_h);
+        };
+
+        const float pad_l = resolvePx(style.padding_left, rect.width);
+        const float pad_r = resolvePx(style.padding_right, rect.width);
+        const float pad_t = resolvePx(style.padding_top, rect.height);
+        const float pad_b = resolvePx(style.padding_bottom, rect.height);
+        const float min_pad = std::min(std::min(pad_l, pad_r), std::min(pad_t, pad_b));
+
+
+        Rect bg_border_box = rect;
+        Rect bg_padding_box = rect;
+        bg_padding_box.x += bw;
+        bg_padding_box.y += bw;
+        bg_padding_box.width = std::max(0.0f, bg_padding_box.width - 2.0f * bw);
+        bg_padding_box.height = std::max(0.0f, bg_padding_box.height - 2.0f * bw);
+
+        Rect bg_content_box = bg_padding_box;
+        bg_content_box.x += pad_l;
+        bg_content_box.y += pad_t;
+        bg_content_box.width = std::max(0.0f, bg_content_box.width - pad_l - pad_r);
+        bg_content_box.height = std::max(0.0f, bg_content_box.height - pad_t - pad_b);
+
+        auto pickBox = [&](const std::string& keyword) -> Rect {
+            if (keyword == "padding-box") return bg_padding_box;
+            if (keyword == "content-box") return bg_content_box;
+            return bg_border_box;
+        };
+
+        const std::string bg_clip_kw = toLowerCopy(collapseWhitespace(style.background_clip));
+        const std::string bg_origin_kw = toLowerCopy(collapseWhitespace(style.background_origin));
+        const std::string bg_attach_kw = toLowerCopy(collapseWhitespace(style.background_attachment));
+
+        Rect bg_clip_rect = pickBox(bg_clip_kw);
+        Rect bg_origin_rect = pickBox(bg_origin_kw);
+        if (bg_attach_kw == "fixed") {
+            bg_origin_rect = Rect{0.0f, 0.0f, viewport_w, viewport_h};
+        }
+
+        // 1.2 box-shadow（先画在背景之下�?
+
+
         if (!style.box_shadows.empty() && rect.width > 0.0f && rect.height > 0.0f) {
             for (const auto& shadow : style.box_shadows) {
                 if (shadow.color.empty()) continue;
@@ -504,10 +559,9 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         }
 
         // 1.2 边框和背景填充
-        float bw = style.border_width;
-        float radius = style.border_radius;
         bool has_border = bw > 0.0f && style.border_style != "none";
         bool has_background = !style.background_color.empty() && style.background_color != "transparent";
+
         
         // DEBUG: 打印背景信息
         if (radius > 0.0f || has_background || has_border) {
@@ -538,7 +592,27 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         
         if (rect.width > 0.0f && rect.height > 0.0f) {
             if (radius > 0.0f) {
-                // 圆角情况：先绘制边框圆角矩形，再绘制背景圆角矩形
+                // 圆角情况：遵循浏览器绘制顺序：先背景，后边框。
+                // 另外：圆角边框不能用 "填充整块圆角矩形" 来近似，否则会把整个内容区域都染上边框颜色。
+
+                if (has_background) {
+                    Color bg_color = makeColorFromCss(style.background_color);
+                    DONG_LOG_DEBUG("[PAINT_BG] Drawing rounded rect: color=(%f,%f,%f,%f)", bg_color.r, bg_color.g, bg_color.b, bg_color.a);
+
+                    Rect inner_rect = bg_clip_rect;
+                    float inset_for_radius = 0.0f;
+                    if (bg_clip_kw == "padding-box") {
+                        inset_for_radius = bw;
+                    } else if (bg_clip_kw == "content-box") {
+                        inset_for_radius = bw + min_pad;
+                    }
+                    float inner_radius = std::max(0.0f, radius - inset_for_radius);
+
+                    if (inner_rect.width > 0.0f && inner_rect.height > 0.0f) {
+                        builder.addRoundedRect(inner_rect, bg_color, inner_radius);
+                    }
+                }
+
                 if (has_border) {
                     auto toLowerCopy = [](std::string s) {
                         std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
@@ -551,8 +625,20 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                     const bool bevel = (bstyle == "outset" || bstyle == "inset");
 
                     if (!bevel) {
+                        // Draw a 4-rect border ring, clipped by the outer rounded rect.
+                        // This keeps the content/background area untouched.
                         Color border_color = makeColorFromCss(style.border_color);
-                        builder.addRoundedRect(rect, border_color, radius);
+                        DisplayListBuilder::ScopedClip border_clip = builder.pushRoundedClip(rect, radius);
+
+                        Rect top_border{rect.x, rect.y, rect.width, bw};
+                        Rect bottom_border{rect.x, rect.y + rect.height - bw, rect.width, bw};
+                        Rect left_border{rect.x, rect.y + bw, bw, rect.height - 2 * bw};
+                        Rect right_border{rect.x + rect.width - bw, rect.y + bw, bw, rect.height - 2 * bw};
+
+                        builder.addRect(top_border, border_color);
+                        builder.addRect(bottom_border, border_color);
+                        builder.addRect(left_border, border_color);
+                        builder.addRect(right_border, border_color);
                     } else {
                         auto clamp01 = [](float v) {
                             return std::clamp(v, 0.0f, 1.0f);
@@ -592,28 +678,14 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                     }
                 }
 
-                if (has_background) {
-                    Color bg_color = makeColorFromCss(style.background_color);
-                    DONG_LOG_DEBUG("[PAINT_BG] Drawing rounded rect: color=(%f,%f,%f,%f)", bg_color.r, bg_color.g, bg_color.b, bg_color.a);
-                    // 内部背景矩形需要缩小 border_width
-                    Rect inner_rect = rect;
-                    if (has_border) {
-                        inner_rect.x += bw;
-                        inner_rect.y += bw;
-                        inner_rect.width -= 2 * bw;
-                        inner_rect.height -= 2 * bw;
-                    }
-                    float inner_radius = std::max(0.0f, radius - bw);
-                    if (inner_rect.width > 0.0f && inner_rect.height > 0.0f) {
-                        builder.addRoundedRect(inner_rect, bg_color, inner_radius);
-                    }
-                }
             } else {
+
                 // 非圆角情况：先背景，后边框
                 if (has_background) {
                     Color bg_color = makeColorFromCss(style.background_color);
-                    builder.addRect(rect, bg_color);
+                    builder.addRect(bg_clip_rect, bg_color);
                 }
+
                 if (has_border) {
                     auto toLowerCopy = [](std::string s) {
                         std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
@@ -700,19 +772,28 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                 const std::string bg_repeat = toLowerCopy(collapseWhitespace(style.background_repeat));
                 const std::string bg_pos = toLowerCopy(collapseWhitespace(style.background_position));
 
-                // Backgrounds are always clipped to the element's border box.
-                DisplayListBuilder::ScopedClip bg_clip;
-                if (radius > 0.0f) {
-                    bg_clip = builder.pushRoundedClip(rect, radius);
-                } else {
-                    bg_clip = builder.pushClipRect(rect);
+                // Backgrounds are clipped to background-clip.
+                float bg_clip_radius = radius;
+                if (bg_clip_kw == "padding-box") {
+                    bg_clip_radius = std::max(0.0f, radius - bw);
+                } else if (bg_clip_kw == "content-box") {
+                    bg_clip_radius = std::max(0.0f, radius - bw - min_pad);
                 }
 
-                if (bg_size.find("cover") != std::string::npos) {
-                    builder.addImage(rect, image_url, 1.0f, ImageFitMode::Cover);
-                } else if (bg_size.find("contain") != std::string::npos) {
-                    builder.addImage(rect, image_url, 1.0f, ImageFitMode::Contain);
+                DisplayListBuilder::ScopedClip bg_clip;
+                if (bg_clip_radius > 0.0f) {
+                    bg_clip = builder.pushRoundedClip(bg_clip_rect, bg_clip_radius);
                 } else {
+                    bg_clip = builder.pushClipRect(bg_clip_rect);
+                }
+
+
+                if (bg_size.find("cover") != std::string::npos) {
+                    builder.addImage(bg_clip_rect, image_url, 1.0f, ImageFitMode::Cover);
+                } else if (bg_size.find("contain") != std::string::npos) {
+                    builder.addImage(bg_clip_rect, image_url, 1.0f, ImageFitMode::Contain);
+                } else {
+
                     // Handle explicit background-size like "96px 96px" (used by the tile test).
                     float tile_w = 0.0f;
                     float tile_h = 0.0f;
@@ -751,10 +832,17 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                     (void)bg_pos;
 
                     if (repeat && tile_w > 0.0f && tile_h > 0.0f) {
-                        const float x0 = rect.x;
-                        const float y0 = rect.y;
-                        const float x1 = rect.x + rect.width;
-                        const float y1 = rect.y + rect.height;
+                        auto alignStart = [](float clip_start, float origin_start, float step) -> float {
+                            if (step <= 0.0f) return clip_start;
+                            const float n = std::floor((clip_start - origin_start) / step);
+                            return origin_start + n * step;
+                        };
+
+                        const float x0 = alignStart(bg_clip_rect.x, bg_origin_rect.x, tile_w);
+                        const float y0 = alignStart(bg_clip_rect.y, bg_origin_rect.y, tile_h);
+                        const float x1 = bg_clip_rect.x + bg_clip_rect.width;
+                        const float y1 = bg_clip_rect.y + bg_clip_rect.height;
+
                         for (float y = y0; y < y1; y += tile_h) {
                             for (float x = x0; x < x1; x += tile_w) {
                                 Rect tile{ x, y, tile_w, tile_h };
@@ -762,9 +850,10 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                             }
                         }
                     } else {
-                        // Fallback: stretch to the border box.
-                        builder.addImage(rect, image_url, 1.0f, ImageFitMode::Fill);
+                        // Fallback: stretch to the clip rect.
+                        builder.addImage(bg_clip_rect, image_url, 1.0f, ImageFitMode::Fill);
                     }
+
                 }
             }
 

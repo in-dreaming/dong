@@ -5,7 +5,9 @@
 #include <SDL3/SDL_log.h>
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
+
 
 namespace dong::render {
 

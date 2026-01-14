@@ -18,7 +18,10 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Batch-run dong html_render_test in multi-frame mode and check intra-run determinism.")
     ap.add_argument("--bin-dir", default="zig-out/bin", help="Directory containing html_render_test.exe (default: zig-out/bin)")
     ap.add_argument("--tests-dir", default="zig-out/bin/data/tests", help="Directory containing test HTML files")
+    ap.add_argument("--case", action="append",
+                    help="Only run specific test case stem(s) (without .html). Can be repeated.")
     ap.add_argument("--out-dir", default="zig-out/tmp/multiframe", help="Output directory")
+
     ap.add_argument("--width", type=int, default=800)
     ap.add_argument("--height", type=int, default=600)
     ap.add_argument("--frames", type=int, default=60)
@@ -43,6 +46,14 @@ def main() -> int:
     if not html_files:
         print(f"ERROR: no html tests found in {tests_dir}", file=sys.stderr)
         return 3
+
+    if args.case:
+        wanted = set(args.case)
+        html_files = [p for p in html_files if p.stem in wanted]
+        if not html_files:
+            print(f"ERROR: no matching cases in {tests_dir}: {sorted(wanted)}", file=sys.stderr)
+            return 4
+
 
     summary = []
 

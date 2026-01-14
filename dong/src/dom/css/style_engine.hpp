@@ -18,6 +18,11 @@ public:
     void addRule(const std::string& selector, const ComputedStyle& style, 
                  int specificity, int order);
     const std::vector<CSSRule>& getRules() const { return rules_; }
+    std::vector<CSSRule>& getRulesMutable() { return rules_; }
+    size_t ruleCount() const { return rules_.size(); }
+
+    bool insertRuleAt(size_t index, const CSSRule& rule);
+    bool deleteRuleAt(size_t index);
     
     void addKeyframes(const KeyframesRule& keyframes);
     const KeyframesRule* getKeyframes(const std::string& name) const;
@@ -30,6 +35,7 @@ private:
     std::unordered_map<std::string, KeyframesRule> keyframes_;
     std::vector<FontFaceRule> font_faces_;
 };
+
 
 // 优化策略3：规则索引结构，用于快速查找匹配规则
 struct RuleIndex {
@@ -61,8 +67,13 @@ public:
     // Add stylesheet object
     void addStylesheet(const Stylesheet& sheet);
 
+    size_t stylesheetCount() const { return stylesheets_.size(); }
+    Stylesheet* stylesheetAt(size_t index);
+    const Stylesheet* stylesheetAt(size_t index) const;
+
     // Parse CSS and extract rules
     std::vector<CSSRule> parseCSS(const std::string& css);
+
 
     // Apply inline style property (static for use without engine instance)
     static void applyInlineStyleProperty(const std::string& property,

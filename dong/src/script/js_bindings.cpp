@@ -5,6 +5,7 @@
 #include <cctype>
 #include <algorithm>
 #include "../core/log.h"
+#include "../dom/css/style_engine.hpp"
 extern "C" {
 #include "quickjs.h"
 }
@@ -121,16 +122,266 @@ std::string jsValueToString(JSContext* ctx, JSValueConst value) {
 std::string getComputedStyleValue(const dom::ComputedStyle& style, const std::string& css_prop) {
     if (css_prop == "display") return style.display;
     if (css_prop == "color") return style.color;
+
+    // Backgrounds
     if (css_prop == "background-color") return style.background_color;
+    if (css_prop == "background-image") return style.background_image;
+    if (css_prop == "background-size") return style.background_size;
+    if (css_prop == "background-repeat") return style.background_repeat;
+    if (css_prop == "background-position") return style.background_position;
+    if (css_prop == "background-attachment") return style.background_attachment;
+    if (css_prop == "background-clip") return style.background_clip;
+    if (css_prop == "background-origin") return style.background_origin;
+
+    // Typography
     if (css_prop == "font-size") return std::to_string(style.font_size);
     if (css_prop == "font-weight") return style.font_weight;
     if (css_prop == "text-align") return style.text_align;
+
+    // Visual
     if (css_prop == "position") return style.position;
     if (css_prop == "opacity") return std::to_string(style.opacity);
+
+    // Border
     if (css_prop == "border-radius") return std::to_string(style.border_radius);
     if (css_prop == "border-width") return std::to_string(style.border_width);
     if (css_prop == "border-color") return style.border_color;
+
     return "";
+}
+
+// ============================================================
+// CSSOM (minimal): document.styleSheets + insertRule/deleteRule
+// ============================================================
+
+bool getSheetEngineIndex(JSContext* ctx, JSValueConst sheet_obj, int32_t& out_index) {
+    JSValue v = JS_GetPropertyStr(ctx, sheet_obj, "__sheet_engine_index__");
+    if (JS_IsUndefined(v) || JS_IsNull(v)) {
+        JS_FreeValue(ctx, v);
+        return false;
+    }
+    int32_t idx = -1;
+    JS_ToInt32(ctx, &idx, v);
+    JS_FreeValue(ctx, v);
+    if (idx < 0) return false;
+    out_index = idx;
+    return true;
+}
+
+JSValue buildCssRulesArray(JSContext* ctx, const dom::Stylesheet* sheet) {
+    JSValue arr = JS_NewArray(ctx);
+    if (!sheet) return arr;
+
+    const auto& rules = sheet->getRules();
+    for (size_t i = 0; i < rules.size(); ++i) {
+        JSValue rule_obj = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, rule_obj, "selectorText", JS_NewString(ctx, rules[i].selector.c_str()));
+        // Best-effort: we don't currently preserve original declarations text.
+        JS_SetPropertyStr(ctx, rule_obj, "cssText", JS_NewString(ctx, rules[i].selector.c_str()));
+        JS_SetPropertyUint32(ctx, arr, static_cast<uint32_t>(i), rule_obj);
+    }
+
+    return arr;
+}
+
+void syncCssRulesProperty(JSContext* ctx, JSValueConst sheet_obj, const dom::Stylesheet* sheet) {
+    JSValue arr = buildCssRulesArray(ctx, sheet);
+    JSValue sheet_dup = JS_DupValue(ctx, sheet_obj);
+    JS_SetPropertyStr(ctx, sheet_dup, "cssRules", arr);
+    JS_FreeValue(ctx, sheet_dup);
+}
+
+JSValue createJSCSSStyleSheet(JSContext* ctx, size_t sheet_engine_index) {
+    JSValue obj = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, obj, "__sheet_engine_index__", JS_NewInt32(ctx, static_cast<int32_t>(sheet_engine_index)));
+
+    // Methods
+    JS_SetPropertyStr(ctx, obj, "insertRule", JS_NewCFunction(ctx, [](JSContext* c, JSValueConst this_val, int argc, JSValueConst* argv) {
+        auto bindings = getBindingsFromContext(c);
+        if (!bindings || !bindings->dom_manager_) return JS_EXCEPTION;
+        auto* se = bindings->dom_manager_->getStyleEngine();
+        auto root = bindings->dom_manager_->getRoot();
+        if (!se || !root) return JS_EXCEPTION;
+
+        int32_t sheet_index = -1;
+        if (!getSheetEngineIndex(c, this_val, sheet_index)) {
+            return JS_ThrowTypeError(c, "Invalid CSSStyleSheet object");
+        }
+
+        if (argc < 1) {
+            return JS_ThrowTypeError(c, "insertRule(ruleText, index?) requires ruleText");
+        }
+
+        const char* rule_text = JS_ToCString(c, argv[0]);
+        if (!rule_text) {
+            return JS_ThrowTypeError(c, "insertRule: ruleText must be string");
+        }
+
+        dom::Stylesheet* sheet = se->stylesheetAt(static_cast<size_t>(sheet_index));
+        if (!sheet) {
+            JS_FreeCString(c, rule_text);
+            return JS_ThrowTypeError(c, "insertRule: sheet index out of range");
+        }
+
+        int32_t insert_index = static_cast<int32_t>(sheet->ruleCount());
+        if (argc >= 2 && !JS_IsUndefined(argv[1])) {
+            JS_ToInt32(c, &insert_index, argv[1]);
+        }
+        if (insert_index < 0) insert_index = 0;
+
+        auto rules = se->parseCSS(rule_text);
+        JS_FreeCString(c, rule_text);
+        if (rules.empty()) {
+            return JS_ThrowTypeError(c, "insertRule: failed to parse rule");
+        }
+
+        bool ok = sheet->insertRuleAt(static_cast<size_t>(insert_index), rules[0]);
+        if (!ok) {
+            return JS_ThrowTypeError(c, "insertRule: index out of range");
+        }
+
+        se->rebuildRuleIndex();
+        se->computeStylesIncremental(root);
+        root->markLayoutDirty();
+        syncCssRulesProperty(c, this_val, sheet);
+
+        return JS_NewInt32(c, insert_index);
+    }, "insertRule", 2));
+
+    JS_SetPropertyStr(ctx, obj, "deleteRule", JS_NewCFunction(ctx, [](JSContext* c, JSValueConst this_val, int argc, JSValueConst* argv) {
+        auto bindings = getBindingsFromContext(c);
+        if (!bindings || !bindings->dom_manager_) return JS_EXCEPTION;
+        auto* se = bindings->dom_manager_->getStyleEngine();
+        auto root = bindings->dom_manager_->getRoot();
+        if (!se || !root) return JS_EXCEPTION;
+
+        int32_t sheet_index = -1;
+        if (!getSheetEngineIndex(c, this_val, sheet_index)) {
+            return JS_ThrowTypeError(c, "Invalid CSSStyleSheet object");
+        }
+
+        if (argc < 1) {
+            return JS_ThrowTypeError(c, "deleteRule(index) requires index");
+        }
+
+        int32_t del_index = -1;
+        JS_ToInt32(c, &del_index, argv[0]);
+        if (del_index < 0) {
+            return JS_ThrowTypeError(c, "deleteRule: index out of range");
+        }
+
+        dom::Stylesheet* sheet = se->stylesheetAt(static_cast<size_t>(sheet_index));
+        if (!sheet) {
+            return JS_ThrowTypeError(c, "deleteRule: sheet index out of range");
+        }
+
+        bool ok = sheet->deleteRuleAt(static_cast<size_t>(del_index));
+        if (!ok) {
+            return JS_ThrowTypeError(c, "deleteRule: index out of range");
+        }
+
+        se->rebuildRuleIndex();
+        se->computeStylesIncremental(root);
+        root->markLayoutDirty();
+        syncCssRulesProperty(c, this_val, sheet);
+
+        return JS_UNDEFINED;
+    }, "deleteRule", 1));
+
+    // Properties
+    if (auto bindings = getBindingsFromContext(ctx); bindings && bindings->dom_manager_) {
+        if (auto* se = bindings->dom_manager_->getStyleEngine()) {
+            const dom::Stylesheet* sheet = se->stylesheetAt(sheet_engine_index);
+            syncCssRulesProperty(ctx, obj, sheet);
+        }
+    }
+
+    return obj;
+}
+
+JSValue doc_getStyleSheets(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val;
+    (void)argc;
+    (void)argv;
+
+    JSValue arr = JS_NewArray(ctx);
+
+    auto bindings = getBindingsFromContext(ctx);
+    if (!bindings || !bindings->dom_manager_) {
+        return arr;
+    }
+
+    auto* se = bindings->dom_manager_->getStyleEngine();
+    if (!se) {
+        return arr;
+    }
+
+    const size_t count = se->stylesheetCount();
+    uint32_t out_i = 0;
+
+    // Skip UA stylesheet at index 0.
+    for (size_t i = 1; i < count; ++i) {
+        JSValue sheet_obj = createJSCSSStyleSheet(ctx, i);
+        JS_SetPropertyUint32(ctx, arr, out_i++, sheet_obj);
+    }
+
+    return arr;
+}
+
+JSValue computed_style_getPropertyValue(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    if (argc < 1) {
+        return JS_NewString(ctx, "");
+    }
+
+    JSValue element = JS_GetPropertyStr(ctx, this_val, "__element__");
+    auto node = JSBindings::getNodeOpaque(ctx, element);
+    JS_FreeValue(ctx, element);
+    if (!node) {
+        return JS_NewString(ctx, "");
+    }
+
+    const char* prop = JS_ToCString(ctx, argv[0]);
+    if (!prop) {
+        return JS_NewString(ctx, "");
+    }
+
+    std::string css_prop(prop);
+    JS_FreeCString(ctx, prop);
+
+    // Normalize to lowercase (CSS property names are case-insensitive)
+    std::transform(css_prop.begin(), css_prop.end(), css_prop.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+
+    std::string val = getComputedStyleValue(node->getComputedStyle(), css_prop);
+    return JS_NewString(ctx, val.c_str());
+}
+
+JSValue window_getComputedStyle(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val;
+
+    if (argc < 1) {
+        return JS_NULL;
+    }
+
+    JSValue element = JS_DupValue(ctx, argv[0]);
+    auto node = JSBindings::getNodeOpaque(ctx, element);
+    if (!node) {
+        JS_FreeValue(ctx, element);
+        return JS_NULL;
+    }
+
+    JSValue obj = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, obj, "__element__", element);
+    JS_SetPropertyStr(ctx, obj, "getPropertyValue",
+        JS_NewCFunction(ctx, computed_style_getPropertyValue, "getPropertyValue", 1));
+
+    // Seed a few common properties for easier inspection.
+    JS_SetPropertyStr(ctx, obj, "display", JS_NewString(ctx, node->getComputedStyle().display.c_str()));
+    JS_SetPropertyStr(ctx, obj, "color", JS_NewString(ctx, node->getComputedStyle().color.c_str()));
+    JS_SetPropertyStr(ctx, obj, "backgroundColor", JS_NewString(ctx, node->getComputedStyle().background_color.c_str()));
+
+    return obj;
 }
 
 JSValue style_proxy_get(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
@@ -350,36 +601,23 @@ static JSValue doc_getElementsByClassName(JSContext* ctx, JSValueConst this_val,
 static JSValue doc_querySelector(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     auto bindings = getBindingsFromContext(ctx);
     if (!bindings || argc < 1) return JS_NULL;
-    
+
     const char* selector = JS_ToCString(ctx, argv[0]);
     if (!selector) return JS_NULL;
-    
-    // For now, simple implementation - could use style engine for selector parsing
+
     auto dom_mgr = bindings->dom_manager_;
     JSValue result = JS_NULL;
-    
+
     if (dom_mgr) {
-        // Try parsing as ID selector
-        if (selector[0] == '#') {
-            auto node = dom_mgr->getElementById(selector + 1);
-            if (node) result = bindings->createJSElement(ctx, node);
-        }
-        // Try parsing as tag selector
-        else if (selector[0] != '.' && selector[0] != '[') {
-            auto nodes = dom_mgr->getElementsByTagName(selector);
-            if (!nodes.empty()) {
-                result = bindings->createJSElement(ctx, nodes[0]);
-            }
-        }
-        // Try parsing as class selector
-        else if (selector[0] == '.') {
-            auto nodes = dom_mgr->getElementsByClassName(selector + 1);
-            if (!nodes.empty()) {
-                result = bindings->createJSElement(ctx, nodes[0]);
+        auto root = dom_mgr->getRoot();
+        if (root) {
+            auto node = root->querySelector(selector);
+            if (node) {
+                result = bindings->createJSElement(ctx, node);
             }
         }
     }
-    
+
     JS_FreeCString(ctx, selector);
     return result;
 }
@@ -387,34 +625,24 @@ static JSValue doc_querySelector(JSContext* ctx, JSValueConst this_val, int argc
 static JSValue doc_querySelectorAll(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     auto bindings = getBindingsFromContext(ctx);
     if (!bindings || argc < 1) return JS_NewArray(ctx);
-    
+
     const char* selector = JS_ToCString(ctx, argv[0]);
     if (!selector) return JS_NewArray(ctx);
-    
+
     auto dom_mgr = bindings->dom_manager_;
     JSValue arr = JS_NewArray(ctx);
-    
+
     if (dom_mgr) {
-        std::vector<dom::DOMNodePtr> nodes;
-        
-        // Parse selector
-        if (selector[0] == '#') {
-            auto node = dom_mgr->getElementById(selector + 1);
-            if (node) nodes.push_back(node);
-        }
-        else if (selector[0] != '.' && selector[0] != '[') {
-            nodes = dom_mgr->getElementsByTagName(selector);
-        }
-        else if (selector[0] == '.') {
-            nodes = dom_mgr->getElementsByClassName(selector + 1);
-        }
-        
-        for (size_t i = 0; i < nodes.size(); ++i) {
-            JSValue elem = bindings->createJSElement(ctx, nodes[i]);
-            JS_SetPropertyUint32(ctx, arr, i, elem);
+        auto root = dom_mgr->getRoot();
+        if (root) {
+            auto nodes = root->querySelectorAll(selector);
+            for (size_t i = 0; i < nodes.size(); ++i) {
+                JSValue elem = bindings->createJSElement(ctx, nodes[i]);
+                JS_SetPropertyUint32(ctx, arr, static_cast<uint32_t>(i), elem);
+            }
         }
     }
-    
+
     JS_FreeCString(ctx, selector);
     return arr;
 }
@@ -1075,6 +1303,10 @@ void JSBindings::initializeDocumentAPI() {
     JSValue global = JS_GetGlobalObject(ctx);
     JSValue document = JS_NewObject(ctx);
 
+    // window.getComputedStyle
+    JS_SetPropertyStr(ctx, global, "getComputedStyle",
+        JS_NewCFunction(ctx, window_getComputedStyle, "getComputedStyle", 1));
+
     // Document methods
     JS_SetPropertyStr(ctx, document, "getElementById",
         JS_NewCFunction(ctx, doc_getElementById, "getElementById", 1));
@@ -1114,6 +1346,9 @@ void JSBindings::initializeDocumentAPI() {
         }
     }
     JS_SetPropertyStr(ctx, document, "documentElement", html);
+
+    // CSSOM: document.styleSheets
+    JS_SetPropertyStr(ctx, document, "styleSheets", doc_getStyleSheets(ctx, document, 0, nullptr));
 
     // JS_SetPropertyStr takes ownership of 'document'
     JS_SetPropertyStr(ctx, global, "document", document);

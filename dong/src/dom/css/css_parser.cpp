@@ -105,7 +105,11 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
         {"background-size", [](const std::string& val, ComputedStyle& style) { style.background_size = val; }},
         {"background-repeat", [](const std::string& val, ComputedStyle& style) { style.background_repeat = val; }},
         {"background-position", [](const std::string& val, ComputedStyle& style) { style.background_position = val; }},
+        {"background-attachment", [](const std::string& val, ComputedStyle& style) { style.background_attachment = val; }},
+        {"background-clip", [](const std::string& val, ComputedStyle& style) { style.background_clip = val; }},
+        {"background-origin", [](const std::string& val, ComputedStyle& style) { style.background_origin = val; }},
         {"object-fit", [](const std::string& val, ComputedStyle& style) { style.object_fit = val; }},
+
         {"opacity", [](const std::string& val, ComputedStyle& style) {
             float v = parseFloatHelper(val);
             style.opacity = std::max(0.0f, std::min(1.0f, v));

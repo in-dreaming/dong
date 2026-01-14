@@ -958,7 +958,82 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
     const auto& style = dom_node->getComputedStyle();
     const std::string& tag = dom_node->getTagName();
 
-    mapComputedStylesToYoga(style, yoga_node);
+    float parent_content_w = 0.0f;
+    float parent_content_h = 0.0f;
+    if (auto parent = dom_node->getParent()) {
+        if (parent->getType() == dom::DOMNode::NodeType::ELEMENT) {
+            const auto& ps = parent->getComputedStyle();
+
+            auto resolve_padding_border_content_w = [&](const dom::ComputedStyle& s) -> float {
+                // Percent widths for children resolve against the parent's content box.
+                // If the parent has an explicit width, derive its content width from box-sizing.
+                float pad_h = 0.0f;
+                if (s.padding_left.isPixel()) pad_h += s.padding_left.value;
+                if (s.padding_right.isPixel()) pad_h += s.padding_right.value;
+                const float border_h = (s.border_width > 0.0f ? s.border_width : 0.0f) * 2.0f;
+
+                if (s.width.isPixel()) {
+                    float content_w = s.width.value;
+                    if (s.box_sizing == "border-box") {
+                        content_w -= (pad_h + border_h);
+                    }
+                    return std::max(content_w, 0.0f);
+                }
+
+                // Best-effort: resolve viewport units to pixels. Percent/calc with percent is unknown here.
+                auto is_viewport_unit = [](dom::CSSValue::Unit u) {
+                    using Unit = dom::CSSValue::Unit;
+                    return u == Unit::VW || u == Unit::VH || u == Unit::VMIN || u == Unit::VMAX;
+                };
+                if (is_viewport_unit(s.width.unit)) {
+                    float border_box_w = s.width.resolvePixels(0.0f, root_font_size_, viewport_width_, viewport_height_);
+                    float content_w = border_box_w;
+                    if (s.box_sizing == "border-box") {
+                        content_w -= (pad_h + border_h);
+                    }
+                    return std::max(content_w, 0.0f);
+                }
+
+                return 0.0f;
+            };
+
+            auto resolve_padding_border_content_h = [&](const dom::ComputedStyle& s) -> float {
+                float pad_v = 0.0f;
+                if (s.padding_top.isPixel()) pad_v += s.padding_top.value;
+                if (s.padding_bottom.isPixel()) pad_v += s.padding_bottom.value;
+                const float border_v = (s.border_width > 0.0f ? s.border_width : 0.0f) * 2.0f;
+
+                if (s.height.isPixel()) {
+                    float content_h = s.height.value;
+                    if (s.box_sizing == "border-box") {
+                        content_h -= (pad_v + border_v);
+                    }
+                    return std::max(content_h, 0.0f);
+                }
+
+                auto is_viewport_unit = [](dom::CSSValue::Unit u) {
+                    using Unit = dom::CSSValue::Unit;
+                    return u == Unit::VW || u == Unit::VH || u == Unit::VMIN || u == Unit::VMAX;
+                };
+                if (is_viewport_unit(s.height.unit)) {
+                    float border_box_h = s.height.resolvePixels(0.0f, root_font_size_, viewport_width_, viewport_height_);
+                    float content_h = border_box_h;
+                    if (s.box_sizing == "border-box") {
+                        content_h -= (pad_v + border_v);
+                    }
+                    return std::max(content_h, 0.0f);
+                }
+
+                return 0.0f;
+            };
+
+            parent_content_w = resolve_padding_border_content_w(ps);
+            parent_content_h = resolve_padding_border_content_h(ps);
+        }
+    }
+
+    mapComputedStylesToYoga(style, yoga_node, parent_content_w, parent_content_h);
+
 
     // 濡傛灉褰撳墠鑺傜偣鏄唴鑱旀牸寮忓寲涓婁笅鏂囷紙鍖呭惈 inline/inline-block 瀛愬厓绱狅級锛?
     // 璁剧疆涓?flex-direction: row锛岃 Yoga 鑳芥纭绠楀鍣ㄩ珮搴?
@@ -1055,8 +1130,10 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
     }
 }
 
-void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yoga_node) {
+void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yoga_node,
+                                     float parent_content_width_px, float parent_content_height_px) {
     if (!yoga_node) return;
+
 
     // Set display based on layout mode
     switch (style.layout_mode) {
@@ -1187,6 +1264,18 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
         return v.resolvePixels(0.0f, root_font_size_, viewport_width_, viewport_height_);
     };
 
+    auto resolve_length_px_for_layout = [&](const dom::CSSValue& v, float percent_base_px) -> float {
+        using Unit = dom::CSSValue::Unit;
+        if (v.unit == Unit::PIXEL) return v.value;
+        if (v.unit == Unit::PERCENT) return percent_base_px * v.value / 100.0f;
+        if (is_viewport_unit(v.unit)) return resolve_viewport_px(v);
+        if (v.unit == Unit::CALC) {
+            // Best-effort: treat parent_size as the percent base (works for calc(% +/- px)).
+            return v.resolvePixels(percent_base_px, root_font_size_, viewport_width_, viewport_height_);
+        }
+        return 0.0f;
+    };
+
     if (style.width.isPixel()) {
         float width_for_yoga = style.width.value;
         if (style.box_sizing == "content-box") {
@@ -1207,7 +1296,18 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
             YGNodeStyleSetWidth(yoga_node, width_for_yoga);
             has_explicit_width = true;
         }
+    } else if (style.width.isCalc()) {
+        float width_px = resolve_length_px_for_layout(style.width, parent_content_width_px);
+        if (style.box_sizing == "content-box") {
+            width_px += pad_h + border_h;
+        }
+        if (width_px < 0.0f) width_px = 0.0f;
+        if (width_px > 0.0f && std::isfinite(width_px)) {
+            YGNodeStyleSetWidth(yoga_node, width_px);
+            has_explicit_width = true;
+        }
     }
+
 
     if (style.height.isPixel()) {
         float height_for_yoga = style.height.value;
@@ -1235,7 +1335,18 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
             YGNodeStyleSetHeight(yoga_node, height_for_yoga);
             has_explicit_height = true;
         }
+    } else if (style.height.isCalc()) {
+        float height_px = resolve_length_px_for_layout(style.height, parent_content_height_px);
+        if (style.box_sizing == "content-box") {
+            height_px += pad_v + border_v;
+        }
+        if (height_px < 0.0f) height_px = 0.0f;
+        if (height_px > 0.0f && std::isfinite(height_px)) {
+            YGNodeStyleSetHeight(yoga_node, height_px);
+            has_explicit_height = true;
+        }
     }
+
 
     // Fallback: for block-level elements without an explicit width,
     // stretch to full available width. This approximates HTML block layout

@@ -79,7 +79,9 @@ private:
     // Yoga node creation and style mapping
     YGNode* createYogaNode(dom::DOMNodePtr dom_node);
     void applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node);
-    void mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yoga_node);
+    void mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yoga_node,
+                                float parent_content_width_px, float parent_content_height_px);
+
 
     // CSS unit conversion
     float parsePixelValue(const dom::CSSValue& value, float parent_size = 0);

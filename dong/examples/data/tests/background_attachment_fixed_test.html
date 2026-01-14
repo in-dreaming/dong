@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 26px;
+      background: radial-gradient(1200px 700px at 20% 10%, #0b2447, #030712);
+      color: #e5e7eb;
+      font-family: Arial, sans-serif;
+    }
+    .title {
+      font-size: 18px;
+      font-weight: 700;
+      margin: 0 0 14px 0;
+      color: #fbbf24;
+    }
+    .hint {
+      font-size: 12px;
+      opacity: 0.85;
+      margin: 0 0 18px 0;
+    }
+    .row {
+      display: flex;
+      gap: 18px;
+      flex-wrap: wrap;
+      align-items: flex-start;
+    }
+    .card {
+      width: 290px;
+      height: 170px;
+      border-radius: 18px;
+      padding: 18px;
+      border: 1px solid rgba(255,255,255,0.14);
+      box-shadow: 0 14px 30px rgba(0,0,0,0.55);
+
+      background-image: url('../images/bg.png');
+      background-size: 72px 72px;
+      background-repeat: repeat;
+      background-position: 0 0;
+      background-origin: border-box;
+      background-clip: border-box;
+    }
+    .label {
+      font-size: 12px;
+      color: rgba(255,255,255,0.92);
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      text-shadow: 0 1px 0 rgba(0,0,0,0.25);
+      margin-bottom: 8px;
+    }
+    .sub {
+      font-size: 12px;
+      opacity: 0.85;
+    }
+
+    .scroll { background-attachment: scroll; }
+    .fixed { background-attachment: fixed; }
+
+    /* Place cards at different x so fixed attachment alignment is visible */
+    .offset-a { margin-left: 12px; }
+    .offset-b { margin-left: 88px; }
+  </style>
+</head>
+<body>
+  <div class="title">CSS background-attachment: scroll vs fixed</div>
+  <div class="hint">在浏览器里，fixed 会按 viewport 对齐背景纹理；scroll 会按元素自身对齐。</div>
+  <div class="row">
+    <div class="card scroll offset-a">
+      <div class="label">background-attachment: scroll</div>
+      <div class="sub">Pattern anchors to the element.</div>
+    </div>
+    <div class="card fixed offset-b">
+      <div class="label">background-attachment: fixed</div>
+      <div class="sub">Pattern anchors to the viewport.</div>
+    </div>
+  </div>
+</body>
+</html>
