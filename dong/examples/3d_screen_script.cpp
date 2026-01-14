@@ -301,7 +301,7 @@ int main(int argc, char* argv[]) {
 
     // 配置要显示的 HTML 屏幕
     ScreenConfig screenConfigs[] = {
-        {"screen1_script.html", 960, 640, 3.0f, 2.0f},
+        {"screen1_script.html", 800, 1280, 3.0f, 4.8f},
         {"screen2_script.html", 960, 640, 3.0f, 2.0f},
         {"feature_test.html", 960, 640, 3.0f, 2.0f},
         {"tests/cursor_test.html", 960, 640, 3.0f, 2.0f},

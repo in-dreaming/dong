@@ -159,6 +159,8 @@ float computeIntrinsicTextWidth(const dom::DOMNodePtr& node) {
         }
 
         // word-spacing
+        // NOTE: Painter 的 glyph placement 是“空格之后的 glyph 整体右移”，
+        // 因此行尾空格不会带来额外宽度；测量时要扣掉这部分，避免提前换行/宽度估计偏大。
         int space_count = 0;
         if (style.word_spacing_px != 0.0f) {
             for (const auto& g : shaped.glyphs) {
@@ -166,10 +168,18 @@ float computeIntrinsicTextWidth(const dom::DOMNodePtr& node) {
                     ++space_count;
                 }
             }
-            if (space_count > 0) {
-                content_width += style.word_spacing_px * static_cast<float>(space_count);
+            int effective_spaces = space_count;
+            if (!shaped.glyphs.empty()) {
+                const auto& g_last = shaped.glyphs.back();
+                if (g_last.cluster < text.size() && text[g_last.cluster] == ' ') {
+                    effective_spaces = std::max(0, effective_spaces - 1);
+                }
+            }
+            if (effective_spaces > 0) {
+                content_width += style.word_spacing_px * static_cast<float>(effective_spaces);
             }
         }
+
         
         // 缓存结果
         TextMeasureResult result;
@@ -363,7 +373,228 @@ float computeIntrinsicTextHeight(const dom::DOMNodePtr& node) {
     return result;
 }
 
+// Overload: estimate multi-line height using an available content width.
+// This fixes cases where Yoga has no TEXT nodes (so container height won't include wrapped lines),
+// but Painter still draws wrapped text.
+float computeIntrinsicTextHeight(const dom::DOMNodePtr& node, float parent_content_width_px) {
+    if (!node) return 0.0f;
+
+    const auto& style = node->getComputedStyle();
+    float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
+
+    bool has_text_child = false;
+    bool has_element_child = false;
+    std::string raw_text;
+    for (const auto& child : node->getChildren()) {
+        if (!child) continue;
+        if (child->getType() == dom::DOMNode::NodeType::TEXT) {
+            raw_text += child->getTextContent();
+            has_text_child = true;
+        } else if (child->getType() == dom::DOMNode::NodeType::ELEMENT) {
+            has_element_child = true;
+        }
+    }
+
+    const std::string tag = node->getTagName();
+    const bool tag_prefers_text =
+        tag == "h1" || tag == "h2" || tag == "h3" || tag == "h4" ||
+        tag == "h5" || tag == "h6" || tag == "p" || tag == "span" ||
+        tag == "button" || tag == "code" || tag == "div" || tag == "footer";
+
+    if (!has_text_child || (!tag_prefers_text && has_element_child)) {
+        return 0.0f;
+    }
+
+    std::string text = collapseWhitespace(raw_text);
+    if (text.empty()) return 0.0f;
+
+    float wrap_width_px = 0.0f;
+    {
+        const float pad_h = (style.padding_left.isPixel() ? style.padding_left.value : 0.0f) +
+                            (style.padding_right.isPixel() ? style.padding_right.value : 0.0f);
+        const float border_h = (style.border_width > 0.0f ? style.border_width : 0.0f) * 2.0f;
+
+        if (style.width.isPixel()) {
+            wrap_width_px = style.width.value;
+            if (style.box_sizing == "border-box") {
+                wrap_width_px -= (pad_h + border_h);
+            }
+        } else if (style.width.isPercent() && parent_content_width_px > 0.0f) {
+            wrap_width_px = parent_content_width_px * style.width.value / 100.0f;
+        } else if (style.width.isAuto() && parent_content_width_px > 0.0f) {
+            // width:auto 的 block 元素会填满 containing block 的内容宽度
+            wrap_width_px = parent_content_width_px;
+        }
+
+        if (wrap_width_px < 0.0f || !std::isfinite(wrap_width_px)) {
+            wrap_width_px = 0.0f;
+        }
+    }
+
+    // 没有宽度约束时，退回单行高度逻辑
+    if (wrap_width_px <= 0.0f) {
+        return computeIntrinsicTextHeight(node);
+    }
+
+    TextShaper shaper;
+    TextShapeRequest req{};
+    req.text = text;
+    req.font_family = style.font_family;
+    req.font_weight = style.font_weight;
+    req.font_style = style.font_style;
+    req.font_size = font_size;
+
+    ShapedText shaped{};
+    if (!shaper.shape(req, shaped) || shaped.glyphs.empty()) {
+        return 0.0f;
+    }
+
+    const float scale = shaped.scale_to_pixels;
+    if (scale <= 0.0f || !std::isfinite(scale)) {
+        return font_size * 1.2f;
+    }
+
+    float effective_line_height = shaped.line_height_units * scale;
+    const float min_line_height = font_size * 1.2f;
+    if (effective_line_height < min_line_height) {
+        effective_line_height = min_line_height;
+    }
+
+    const float letter_spacing_px = (style.letter_spacing_em != 0.0f) ? (style.letter_spacing_em * font_size) : 0.0f;
+    const float letter_spacing_units = (letter_spacing_px != 0.0f && scale > 0.0f) ? (letter_spacing_px / scale) : 0.0f;
+    const float word_spacing_units = (style.word_spacing_px != 0.0f && scale > 0.0f) ? (style.word_spacing_px / scale) : 0.0f;
+
+    // break points：空格后 + 非 ASCII 字符后
+    std::vector<size_t> break_points;
+    break_points.reserve(text.size() + 1);
+    auto push_break = [&](size_t byte_index) {
+        if (!break_points.empty() && break_points.back() == byte_index) return;
+        break_points.push_back(byte_index);
+    };
+
+    size_t i_byte = 0;
+    while (i_byte < text.size()) {
+        unsigned char c = static_cast<unsigned char>(text[i_byte]);
+        size_t char_len = 1;
+        if ((c & 0b10000000) == 0) {
+            i_byte += 1;
+            if (c == ' ') {
+                push_break(i_byte);
+            }
+            continue;
+        } else if ((c & 0b11100000) == 0b11000000) {
+            char_len = 2;
+        } else if ((c & 0b11110000) == 0b11100000) {
+            char_len = 3;
+        } else if ((c & 0b11111000) == 0b11110000) {
+            char_len = 4;
+        }
+        i_byte += char_len;
+        push_break(i_byte);
+    }
+    if (break_points.empty() || break_points.back() != text.size()) {
+        break_points.push_back(text.size());
+    }
+
+    const auto& glyphs = shaped.glyphs;
+    auto measure_range_units = [&](size_t byte_start, size_t byte_end) -> float {
+        int first = -1;
+        int last = -1;
+        int glyph_count = 0;
+        int space_count = 0;
+
+        for (size_t gi = 0; gi < glyphs.size(); ++gi) {
+            uint32_t cluster = glyphs[gi].cluster;
+            if (cluster < byte_start) continue;
+            if (cluster >= byte_end) break;
+            if (first == -1) first = static_cast<int>(gi);
+            last = static_cast<int>(gi);
+            ++glyph_count;
+            if (cluster < text.size() && text[cluster] == ' ') {
+                ++space_count;
+            }
+        }
+
+        if (first == -1 || last == -1 || glyph_count == 0) return 0.0f;
+
+        const auto& g_first = glyphs[static_cast<size_t>(first)];
+        const auto& g_last = glyphs[static_cast<size_t>(last)];
+
+        float left = g_first.pen_x_units;
+        float right = g_last.pen_x_units + g_last.advance_x_units;
+        float w = right - left;
+
+        if (glyph_count > 1 && letter_spacing_units != 0.0f) {
+            w += letter_spacing_units * static_cast<float>(glyph_count - 1);
+        }
+
+        if (space_count > 0 && word_spacing_units != 0.0f) {
+            int effective_spaces = space_count;
+            // 行尾空格不应增加宽度
+            if (g_last.cluster < text.size() && text[g_last.cluster] == ' ') {
+                effective_spaces = std::max(0, effective_spaces - 1);
+            }
+            w += word_spacing_units * static_cast<float>(effective_spaces);
+        }
+
+        return w > 0.0f ? w : 0.0f;
+    };
+
+    int line_count = 0;
+    size_t line_start = 0;
+    while (line_start < text.size()) {
+        while (line_start < text.size() && text[line_start] == ' ') {
+            ++line_start;
+        }
+        if (line_start >= text.size()) break;
+
+        size_t best_break = text.size();
+        bool found_any = false;
+
+        for (size_t bp : break_points) {
+            if (bp <= line_start) continue;
+            float w_px = measure_range_units(line_start, bp) * scale;
+            if (w_px <= wrap_width_px + 0.1f) {
+                found_any = true;
+                best_break = bp;
+            } else {
+                break;
+            }
+        }
+
+        if (!found_any) {
+            for (size_t bp : break_points) {
+                if (bp > line_start) {
+                    best_break = bp;
+                    break;
+                }
+            }
+        }
+
+        if (best_break <= line_start) {
+            best_break = std::min(line_start + 1, text.size());
+        }
+
+        ++line_count;
+        line_start = best_break;
+    }
+
+    if (line_count <= 0) line_count = 1;
+
+    float pad_top = style.padding_top.isPixel() ? style.padding_top.value : 0.0f;
+    float pad_bottom = style.padding_bottom.isPixel() ? style.padding_bottom.value : 0.0f;
+
+    float result = effective_line_height * static_cast<float>(line_count) + pad_top + pad_bottom;
+
+    if (result > 10000.0f || result < 0.0f || !std::isfinite(result)) {
+        return font_size * 1.2f;
+    }
+
+    return result;
+}
+
 // Collapse vertical margins between two sibling block-like elements so that
+
 // the gap between them is closer to CSS's max(margin-bottom, margin-top)
 // instead of a simple sum. This is a simplified approximation that focuses
 // on pixel margins and common block layouts.
@@ -515,6 +746,7 @@ static bool computeInlineMetricsForNode(const dom::DOMNodePtr& node,
     }
 
     // word-spacing：对 cluster 落在空格字符的 glyph 计数
+    // 注意：与 Painter 的测量/placement 口径保持一致，行尾空格不应增加宽度。
     if (style.word_spacing_px != 0.0f) {
         int space_count = 0;
         for (const auto& g : shaped.glyphs) {
@@ -522,10 +754,18 @@ static bool computeInlineMetricsForNode(const dom::DOMNodePtr& node,
                 ++space_count;
             }
         }
-        if (space_count > 0) {
-            content_width_px += style.word_spacing_px * static_cast<float>(space_count);
+        int effective_spaces = space_count;
+        if (!shaped.glyphs.empty()) {
+            const auto& g_last = shaped.glyphs.back();
+            if (g_last.cluster < text.size() && text[g_last.cluster] == ' ') {
+                effective_spaces = std::max(0, effective_spaces - 1);
+            }
+        }
+        if (effective_spaces > 0) {
+            content_width_px += style.word_spacing_px * static_cast<float>(effective_spaces);
         }
     }
+
 
     out_metrics.content_width_px = content_width_px;
 
@@ -1091,7 +1331,8 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
          tag == "h5" || tag == "h6" || tag == "p" || tag == "button" ||
          tag == "div") &&
         style.height.isAuto()) {
-        float intrinsic_h = computeIntrinsicTextHeight(dom_node);
+        float intrinsic_h = computeIntrinsicTextHeight(dom_node, parent_content_w);
+
         
         if (intrinsic_h > 0.0f && intrinsic_h < 10000.0f) {
             YGNodeStyleSetMinHeight(yoga_node, intrinsic_h);
