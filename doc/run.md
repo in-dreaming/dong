@@ -1,6 +1,0 @@
-
-
-
-
-DONG_DEBUG_LAYER_CACHE=1 DONG_DEBUG_DRAW_BATCHES=1 ./your_app_binary
-
