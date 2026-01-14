@@ -51,8 +51,10 @@ struct GPUCommand {
     // 通用几何/颜色参数：不同命令按需读取
     Rect rect;      // 目标矩形（像素坐标）
     Color color;    // 颜色或调制色（用于纯色/圆角矩形、后续也可用于调制图片）
-    float radius = 0.0f; // 圆角矩形半径（仅在 DrawRoundedRectQuad/DrawShadowQuad 时使用）
-    float blur = 0.0f;   // 模糊半径（仅在 DrawShadowQuad 时使用）
+    float radius = 0.0f;        // 圆角矩形半径（仅在 DrawRoundedRectQuad/DrawShadowQuad 时使用）
+    float stroke_width = 0.0f;  // 圆角描边宽度（仅在 DrawRoundedRectQuad 时使用；0=fill）
+    float blur = 0.0f;          // 模糊半径（仅在 DrawShadowQuad 时使用）
+
 
     // 图片绘制专用字段（仅在 DrawImageQuad 时使用）
     std::string image_src; // 原始图片资源标识（路径）
@@ -315,7 +317,9 @@ public:
                 cmd.rect = item.rounded_rect.rect;
                 cmd.color = apply_opacity(item.rounded_rect.color, current_opacity());
                 cmd.radius = item.rounded_rect.radius;
+                cmd.stroke_width = item.rounded_rect.stroke_width;
                 cmd.sort_key = make_sort_key(cmd.type, cmd);
+
                 out.commands.push_back(cmd);
                 round_rect_count++;
                 break;

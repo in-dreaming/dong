@@ -3,9 +3,11 @@ struct PSInput {
     float2 local : TEXCOORD0;
     nointerpolation float2 size : TEXCOORD1;
     nointerpolation float radius : TEXCOORD2;
+    nointerpolation float stroke : TEXCOORD4;
     float4 color : COLOR0;
     float2 pixel : TEXCOORD3;
 };
+
 
 // Fragment shader 的 uniform buffer 必须使用 space3
 cbuffer RoundRectUniforms : register(b0, space3) {
@@ -57,12 +59,38 @@ float4 main(PSInput input) : SV_Target0 {
     float2 size = input.size;
     float2 p = (input.local - 0.5) * size;
     float r = input.radius;
+    float stroke = input.stroke;
     float2 halfSize = size * 0.5;
-    float dist = sdRoundRect(p, halfSize, r);
-    const float aa = 1.0;
-    float alpha = saturate(0.5 - dist / aa);
+
+
+
+
+    float distOuter = sdRoundRect(p, halfSize, r);
+    float aa = max(fwidth(distOuter), 1e-4);
+
+    float alpha = saturate(0.5 - distOuter / aa);
+
+
+    // Stroke ring: SDF intersection of (inside outer) AND (outside inner)
+    if (stroke > 0.0) {
+        float2 innerHalf = halfSize - stroke;
+        if (innerHalf.x > 0.0 && innerHalf.y > 0.0) {
+            float innerR = max(r - stroke, 0.0);
+            innerR = min(innerR, min(innerHalf.x, innerHalf.y) - 0.5);
+            innerR = max(innerR, 0.0);
+
+            float distInner = sdRoundRect(p, innerHalf, innerR);
+            float distRing = max(distOuter, -distInner);
+            aa = max(fwidth(distRing), 1e-4);
+            alpha = saturate(0.5 - distRing / aa);
+
+        }
+    }
+
+
     float4 base = input.color;
     base.a *= alpha;
     // 直接输出 sRGB 颜色，不做 gamma 转换
     return base;
+
 }

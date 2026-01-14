@@ -625,21 +625,13 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                     const bool bevel = (bstyle == "outset" || bstyle == "inset");
 
                     if (!bevel) {
-                        // Draw a 4-rect border ring, clipped by the outer rounded rect.
-                        // This keeps the content/background area untouched.
+                        // Rounded border ring: draw analytically as a stroked rounded-rect.
+                        // This avoids the "square inner corner" artifact from "clip + 4 rects".
                         Color border_color = makeColorFromCss(style.border_color);
-                        DisplayListBuilder::ScopedClip border_clip = builder.pushRoundedClip(rect, radius);
-
-                        Rect top_border{rect.x, rect.y, rect.width, bw};
-                        Rect bottom_border{rect.x, rect.y + rect.height - bw, rect.width, bw};
-                        Rect left_border{rect.x, rect.y + bw, bw, rect.height - 2 * bw};
-                        Rect right_border{rect.x + rect.width - bw, rect.y + bw, bw, rect.height - 2 * bw};
-
-                        builder.addRect(top_border, border_color);
-                        builder.addRect(bottom_border, border_color);
-                        builder.addRect(left_border, border_color);
-                        builder.addRect(right_border, border_color);
+                        builder.addRoundedRect(rect, border_color, radius, bw);
                     } else {
+
+
                         auto clamp01 = [](float v) {
                             return std::clamp(v, 0.0f, 1.0f);
                         };

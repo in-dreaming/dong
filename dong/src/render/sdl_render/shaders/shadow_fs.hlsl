@@ -66,7 +66,10 @@ float4 main(PSInput input) : SV_Target0 {
     
     // 使用 smoothstep 实现模糊效果
     // blur 为 0 时退化为硬边缘
-    float sigma = max(blur, 0.5);
+    // CSS box-shadow blur-radius is closer to ~3*sigma; use sigma=blur/3.
+    float sigma = max(blur * 0.33333334, 0.5);
+
+
     float alpha = 1.0 - smoothstep(-sigma, sigma, dist);
     
     float4 base = input.color;

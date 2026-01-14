@@ -48,7 +48,9 @@ struct DrawRoundedRectData {
     Rect rect;
     Color color;
     float radius = 0.0f;
+    float stroke_width = 0.0f; // 0 = filled, >0 = stroke (border ring)
 };
+
 
 struct DrawShadowData {
     Rect rect;           // 阴影的目标矩形（已包含 offset 和 spread）
@@ -254,7 +256,7 @@ public:
         list_.items.push_back(std::move(item));
     }
 
-    void addRoundedRect(const Rect& rect, const Color& color, float radius) {
+    void addRoundedRect(const Rect& rect, const Color& color, float radius, float stroke_width = 0.0f) {
         DisplayItem item{};
         item.type = DisplayItemType::DrawRoundedRect;
         Rect translated = applyTranslate(rect);
@@ -265,8 +267,10 @@ public:
         item.rounded_rect.rect = translated;
         item.rounded_rect.color = color;
         item.rounded_rect.radius = radius;
+        item.rounded_rect.stroke_width = stroke_width;
         list_.items.push_back(std::move(item));
     }
+
 
     void addShadow(const Rect& rect, const Color& color, float radius, float blur) {
         DisplayItem item{};

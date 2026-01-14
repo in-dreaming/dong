@@ -3,9 +3,11 @@ struct VSOutput {
     float2 local : TEXCOORD0;
     nointerpolation float2 size : TEXCOORD1;
     nointerpolation float radius : TEXCOORD2;
+    nointerpolation float stroke : TEXCOORD4;
     float4 color : COLOR0;
     float2 pixel : TEXCOORD3;
 };
+
 
 cbuffer RoundRectUniforms : register(b0, space1) {
     float4 uRect;
@@ -41,12 +43,20 @@ VSOutput main(uint vertexID : SV_VertexID) {
     float radius = uRadius.x;
     radius = min(radius, min(uRect.z, uRect.w) * 0.5 - 0.5);
     radius = max(radius, 0.0);
+
+    float stroke = uRadius.y;
+    stroke = max(stroke, 0.0);
+    stroke = min(stroke, min(uRect.z, uRect.w) * 0.5 - 0.5);
+
     VSOutput o;
+
     o.position = float4(ndc, 0.0, 1.0);
     o.local = local;
     o.size = uRect.zw;
     o.radius = radius;
+    o.stroke = stroke;
     o.color = uColor;
     o.pixel = transformed;  // 使用变换后的坐标
+
     return o;
 }

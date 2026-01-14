@@ -1088,9 +1088,10 @@ void GPUDriverSDL::executeDrawRoundedRect(ExecuteContext& ctx, const GPUCommand&
     u.rect[3] = cmd.rect.height;
 
     u.radius[0] = cmd.radius;
-    u.radius[1] = cmd.radius;
-    u.radius[2] = cmd.radius;
-    u.radius[3] = cmd.radius;
+    u.radius[1] = cmd.stroke_width;
+    u.radius[2] = 0.0f;
+    u.radius[3] = 0.0f;
+
 
     ctx.writeViewport(u.viewport);
     writeTransform(u.transform, ctx.getCurrentTransform());
