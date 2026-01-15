@@ -1361,15 +1361,130 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
     }
     
     // 绗﹀悎 CSS 鏍囧噯锛氫负 button 鍏冪礌璁剧疆鍩轰簬鏂囨湰鍐呭鐨勬渶灏忓搴?
-    // 鎸夐挳榛樿鏄?inline-block锛屽搴﹀簲鑷€傚簲鍐呭 + padding
-    // 杩欑‘淇濇寜閽笉浼氬洜涓?flex 瀹瑰櫒鍘嬬缉鑰屾埅鏂枃瀛?
+    // 鎸夐挳榛樿鏄?inline-block锛屽搴﹀簲鑷€傖應鍐呭 + padding
+    // 杩欑‘淇濇寜閽笉浼氥?因?flex 瀹瑰櫒鍘嬬缉鑰屾埅鏂枃瀛?
     if (tag == "button" && style.width.isAuto()) {
         float intrinsic_w = computeIntrinsicTextWidth(dom_node);
         if (intrinsic_w > 0.0f && intrinsic_w < 10000.0f) {
             YGNodeStyleSetMinWidth(yoga_node, intrinsic_w);
         }
     }
+
+    // Flex items that are inline/inline-block often contain text, but Yoga tree excludes TEXT nodes.
+    // Without a best-effort intrinsic min-size, these items collapse to padding/border only, and
+    // their painted text will overlap siblings.
+    bool parent_is_flex = false;
+    if (auto parent = dom_node->getParent()) {
+        if (parent->getType() == dom::DOMNode::NodeType::ELEMENT) {
+            parent_is_flex = (parent->getComputedStyle().layout_mode == dom::LayoutMode::Flex);
+        }
+    }
+
+    const bool is_inline_level = (style.display == "inline" || style.display == "inline-block");
+    if (parent_is_flex && is_inline_level && (style.width.isAuto() || style.height.isAuto())) {
+        std::string text = collapseWhitespace(dom_node->getTextContent());
+        if (!text.empty()) {
+            float font_size_px = style.font_size > 0.0f ? style.font_size : 16.0f;
+            if (!std::isfinite(font_size_px) || font_size_px <= 0.0f) {
+                font_size_px = 16.0f;
+            }
+
+            TextShaper shaper;
+            TextShapeRequest req{};
+            req.text = text;
+            req.font_family = style.font_family;
+            req.font_weight = style.font_weight;
+            req.font_style = style.font_style;
+            req.font_size = font_size_px;
+
+            ShapedText shaped{};
+            if (shaper.shape(req, shaped) && !shaped.glyphs.empty() &&
+                std::isfinite(shaped.scale_to_pixels) && shaped.scale_to_pixels > 0.0f) {
+
+                const float scale = shaped.scale_to_pixels;
+
+                float min_x_units = shaped.glyphs.front().pen_x_units;
+                float max_x_units = shaped.glyphs.front().pen_x_units + shaped.glyphs.front().advance_x_units;
+                for (const auto& g : shaped.glyphs) {
+                    min_x_units = std::min(min_x_units, g.pen_x_units);
+                    max_x_units = std::max(max_x_units, g.pen_x_units + g.advance_x_units);
+                }
+
+                float content_width_px = (max_x_units - min_x_units) * scale;
+                if (content_width_px < 0.0f || !std::isfinite(content_width_px)) {
+                    content_width_px = shaped.width_units * scale;
+                }
+                if (content_width_px < 0.0f) content_width_px = 0.0f;
+
+                if (style.letter_spacing_em != 0.0f) {
+                    const float letter_spacing_px = style.letter_spacing_em * font_size_px;
+                    const int glyph_count = static_cast<int>(shaped.glyphs.size());
+                    if (glyph_count > 1) {
+                        content_width_px += letter_spacing_px * static_cast<float>(glyph_count - 1);
+                    }
+                }
+
+                if (style.word_spacing_px != 0.0f) {
+                    int space_count = 0;
+                    for (const auto& g : shaped.glyphs) {
+                        if (g.cluster < text.size() && text[g.cluster] == ' ') {
+                            ++space_count;
+                        }
+                    }
+                    int effective_spaces = space_count;
+                    if (!shaped.glyphs.empty()) {
+                        const auto& g_last = shaped.glyphs.back();
+                        if (g_last.cluster < text.size() && text[g_last.cluster] == ' ') {
+                            effective_spaces = std::max(0, effective_spaces - 1);
+                        }
+                    }
+                    if (effective_spaces > 0) {
+                        content_width_px += style.word_spacing_px * static_cast<float>(effective_spaces);
+                    }
+                }
+
+                const float pad_l = style.padding_left.isPixel() ? style.padding_left.value : 0.0f;
+                const float pad_r = style.padding_right.isPixel() ? style.padding_right.value : 0.0f;
+                const float pad_t = style.padding_top.isPixel() ? style.padding_top.value : 0.0f;
+                const float pad_b = style.padding_bottom.isPixel() ? style.padding_bottom.value : 0.0f;
+                const float border_w = style.border_width > 0.0f ? style.border_width : 0.0f;
+
+                if (style.width.isAuto()) {
+                    const float min_w = content_width_px + pad_l + pad_r + border_w * 2.0f;
+                    if (min_w > 0.0f && min_w < 100000.0f && std::isfinite(min_w)) {
+                        YGNodeStyleSetMinWidth(yoga_node, min_w);
+                    }
+                }
+
+                if (style.height.isAuto()) {
+                    float line_height_units = shaped.line_height_units;
+                    if (style.line_height > 0.0f) {
+                        if (style.line_height_is_unitless) {
+                            float css_line_height_px = style.line_height * font_size_px;
+                            line_height_units = css_line_height_px / std::max(scale, 1e-3f);
+                        } else {
+                            line_height_units = style.line_height / std::max(scale, 1e-3f);
+                        }
+                    }
+                    if (line_height_units <= 0.0f || !std::isfinite(line_height_units)) {
+                        line_height_units = font_size_px / std::max(scale, 1e-3f);
+                    }
+                    const float min_line_height_px = font_size_px * 1.2f;
+                    float line_height_px = line_height_units * scale;
+                    if (line_height_px < min_line_height_px) {
+                        line_height_px = min_line_height_px;
+                    }
+
+                    const float min_h = line_height_px + pad_t + pad_b + border_w * 2.0f;
+                    if (min_h > 0.0f && min_h < 100000.0f && std::isfinite(min_h)) {
+                        YGNodeStyleSetMinHeight(yoga_node, min_h);
+                    }
+                }
+            }
+        }
+    }
 }
+
 
 void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yoga_node,
                                      float parent_content_width_px, float parent_content_height_px) {
@@ -1401,7 +1516,17 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
         } else {
             YGNodeStyleSetFlexDirection(yoga_node, YGFlexDirectionRow);
         }
+
+        // Flex wrap
+        if (style.flex_wrap == "wrap") {
+            YGNodeStyleSetFlexWrap(yoga_node, YGWrapWrap);
+        } else if (style.flex_wrap == "wrap-reverse") {
+            YGNodeStyleSetFlexWrap(yoga_node, YGWrapWrapReverse);
+        } else {
+            YGNodeStyleSetFlexWrap(yoga_node, YGWrapNoWrap);
+        }
     } else {
+
         // Approximate block/inline layout as a vertical stack
         YGNodeStyleSetFlexDirection(yoga_node, YGFlexDirectionColumn);
         
