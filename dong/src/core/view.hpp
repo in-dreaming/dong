@@ -81,12 +81,15 @@ public:
     void setExternalGPUDevice(SDL_GPUDevice* device, SDL_Window* window);
     
     // Offscreen rendering API
-    // 底层接口：渲染到GPU纹理（调用者负责释放返回的纹理）
+    // 底层接口：渲染到 GPU 纹理。
+    // B: 纹理由 View 内部缓存并复用（避免每帧 Create/Release 造成的驱动开销）。
+    // 返回的纹理指针在 view 生命周期内有效；调用方不要释放（也不应长期持有跨设备切换）。
     SDL_GPUTexture* renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, uint32_t height);
-    
+
     // 上层接口：渲染到GPU纹理并回读到内存（基于 renderToGPUTexture 实现）
-    bool renderOffscreen(SDL_GPUDevice* device, uint32_t width, uint32_t height, 
+    bool renderOffscreen(SDL_GPUDevice* device, uint32_t width, uint32_t height,
                         uint8_t* out_pixels);
+
 
 private:
     uint32_t width_;
@@ -117,9 +120,23 @@ private:
     uint32_t offscreen_cache_width_ = 0;
     uint32_t offscreen_cache_height_ = 0;
     bool offscreen_commands_dirty_ = true;
-    
+    bool offscreen_resources_dirty_ = true;
+
+
+    // B：离屏纹理缓存（避免每次 renderToGPUTexture 都 Create/Release）
+    SDL_GPUDevice* offscreen_texture_cache_device_ = nullptr; // non-owning
+    SDL_GPUTexture* offscreen_texture_cache_ = nullptr;       // owned by View (released when possible)
+    uint32_t offscreen_texture_cache_width_ = 0;
+    uint32_t offscreen_texture_cache_height_ = 0;
+
+    // 3D demo 友好：只有在内容变更（invalidate / update / 输入事件等）后才会重新执行离屏渲染。
+    // 否则 renderToGPUTexture() 直接返回上一帧的纹理，避免每帧重复渲染。
+    bool offscreen_texture_dirty_ = true;
+
     // 优化策略2：SDL_WaitForGPUIdle 仅首帧执行
     bool offscreen_first_frame_done_ = false;
+
+
 
     bool use_gpu_;
     // 标记当前 DisplayList / GPUCommandList 是否需要重建

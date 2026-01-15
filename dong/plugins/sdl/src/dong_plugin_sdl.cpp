@@ -5,6 +5,8 @@
 #include <SDL3/SDL_log.h>
 
 #include <cstring>
+#include <cstdlib>
+
 
 namespace {
 
@@ -227,11 +229,43 @@ static dong_gpu_device_t* sdl_renderer_init(void* /*user*/, dong_window_t* windo
         return nullptr;
     }
 
+    // 允许通过环境变量控制 swapchain present mode / frames-in-flight（性能排查常用）。
+    // - DONG_GPU_PRESENT_MODE=mailbox|vsync|immediate
+    // - DONG_GPU_FRAMES_IN_FLIGHT=1|2|3
+    if (const char* v = std::getenv("DONG_GPU_FRAMES_IN_FLIGHT")) {
+        const int n = std::atoi(v);
+        if (n >= 1 && n <= 3) {
+            SDL_SetGPUAllowedFramesInFlight(device, (Uint32)n);
+            SDL_Log("[dong_plugin_sdl] AllowedFramesInFlight=%d", n);
+        } else {
+            SDL_Log("[dong_plugin_sdl] Invalid DONG_GPU_FRAMES_IN_FLIGHT=%s (expected 1..3)", v);
+        }
+    }
+
+    if (const char* pm = std::getenv("DONG_GPU_PRESENT_MODE")) {
+        SDL_GPUPresentMode mode = SDL_GPU_PRESENTMODE_MAILBOX;
+        if (std::strcmp(pm, "mailbox") == 0) {
+            mode = SDL_GPU_PRESENTMODE_MAILBOX;
+        } else if (std::strcmp(pm, "vsync") == 0) {
+            mode = SDL_GPU_PRESENTMODE_VSYNC;
+        } else if (std::strcmp(pm, "immediate") == 0) {
+            mode = SDL_GPU_PRESENTMODE_IMMEDIATE;
+        } else {
+            SDL_Log("[dong_plugin_sdl] Invalid DONG_GPU_PRESENT_MODE=%s (use mailbox|vsync|immediate)", pm);
+            mode = SDL_GPU_PRESENTMODE_MAILBOX;
+        }
+        if (!SDL_SetGPUSwapchainParameters(device, sdl_window, SDL_GPU_SWAPCHAINCOMPOSITION_SDR, mode)) {
+            SDL_Log("[dong_plugin_sdl] PresentMode request failed, falling back to VSYNC");
+            SDL_SetGPUSwapchainParameters(device, sdl_window, SDL_GPU_SWAPCHAINCOMPOSITION_SDR, SDL_GPU_PRESENTMODE_VSYNC);
+        }
+    }
+
     auto* ctx = new SDLGPUDevice();
     ctx->device = device;
     ctx->window = sdl_window;
 
     SDL_Log("[dong_plugin_sdl] GPU device created successfully");
+
     return reinterpret_cast<dong_gpu_device_t*>(ctx);
 }
 

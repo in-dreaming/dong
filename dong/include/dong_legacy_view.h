@@ -72,9 +72,10 @@ const char* dong_view_eval_return(dong_view_t* view, const char* script);
 // Offscreen rendering support (底层接口)
 // Render to a GPU texture (SDL_GPUTexture*)
 // Returns the GPU texture on success, NULL on failure
-// Caller is responsible for releasing the texture with SDL_ReleaseGPUTexture()
+// NOTE: 纹理由 view 内部缓存并复用，调用方不要释放该纹理。
 void* dong_view_render_to_gpu_texture(dong_view_t* view, void* gpu_device,
                                       uint32_t width, uint32_t height);
+
 
 // Offscreen rendering support (上层接口)
 // Render to an offscreen texture and read back pixels

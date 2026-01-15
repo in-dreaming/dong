@@ -488,12 +488,25 @@ void GPUDriverSDL::executeEndPass(ExecuteContext& ctx) {
             DONG_LOG_DEBUG("[GPUDriverSDL] EndPass acquiring swapchain (window mode) frame=%llu cmd_buf=%p win_size=%ux%u",
                            ctx.frame_index, (void*)ctx.cmd_buf, ctx.w, ctx.h);
 
-            // SDL_gpu 在非阻塞 Acquire 模式下可能出现：返回成功但 texture==NULL（通常意味着 frames-in-flight 未完成，应该跳帧）。
-            // 这里改用阻塞 WaitAndAcquire 来保证确定性。
-            if (!SDL_WaitAndAcquireGPUSwapchainTexture(ctx.cmd_buf, window_, &ctx.real_swapchain_texture, &sw, &sh)) {
-                SDL_Log("GPUDriverSDL::execute: failed to wait+acquire swapchain texture at EndPass");
-                return;
+            // swapchain acquire：默认阻塞（确定性更强），但可通过环境变量切到非阻塞以减少卡顿：
+            // - DONG_GPU_SWAPCHAIN_NOWAIT=1  => 使用 SDL_AcquireGPUSwapchainTexture；texture==NULL 时跳帧
+            // - 未设置                 => 使用 SDL_WaitAndAcquireGPUSwapchainTexture
+            static const bool kSwapchainNowait = (std::getenv("DONG_GPU_SWAPCHAIN_NOWAIT") != nullptr);
+            if (!kSwapchainNowait) {
+                DONG_PROFILE_SCOPE_CAT("SDL_WaitAndAcquireGPUSwapchainTexture", "gpu");
+                if (!SDL_WaitAndAcquireGPUSwapchainTexture(ctx.cmd_buf, window_, &ctx.real_swapchain_texture, &sw, &sh)) {
+                    SDL_Log("GPUDriverSDL::execute: failed to wait+acquire swapchain texture at EndPass");
+                    return;
+                }
+            } else {
+                DONG_PROFILE_SCOPE_CAT("SDL_AcquireGPUSwapchainTexture", "gpu");
+                if (!SDL_AcquireGPUSwapchainTexture(ctx.cmd_buf, window_, &ctx.real_swapchain_texture, &sw, &sh)) {
+                    SDL_Log("GPUDriverSDL::execute: failed to acquire swapchain texture at EndPass");
+                    return;
+                }
             }
+
+
             if (!ctx.real_swapchain_texture) {
                 // Swapchain 不可用（窗口最小化或未准备好），静默跳过此帧
                 return;

@@ -3,9 +3,11 @@
 #include <algorithm>
 #include <vector>
 #include <cstdint>
+#include <cstdlib>
 #include <string>
 #include <functional>
 #include "display_list.hpp"
+
 #include "layer_tree.hpp"
 #include "../core/log.h"
 
@@ -155,7 +157,16 @@ public:
             return draw_opacity_stack.back();
         };
 
-        auto make_sort_key = [](GPUCommandType type, const GPUCommand& cmd) {
+        // draw batch / sort view 目前只用于 debug 打印（执行阶段仍按原始顺序渲染）。
+        // 默认关闭以降低 compile 的 CPU 开销；需要调试批次时设置：DONG_GPU_BUILD_DRAW_BATCHES=1
+        static const bool kBuildDrawBatches = (std::getenv("DONG_GPU_BUILD_DRAW_BATCHES") != nullptr);
+        const bool build_draw_batches = kBuildDrawBatches;
+
+        auto make_sort_key = [build_draw_batches](GPUCommandType type, const GPUCommand& cmd) -> uint64_t {
+            if (!build_draw_batches) {
+                return 0;
+            }
+
             uint64_t pipeline_id = 0;
             switch (type) {
             case GPUCommandType::DrawInstancedQuads:
@@ -397,56 +408,59 @@ public:
         out.sorted_draw_indices.clear();
         out.draw_batches.clear();
 
-        // 收集所有绘制类命令的索引。
-        for (uint32_t i = 0; i < out.commands.size(); ++i) {
-            const GPUCommandType t = out.commands[i].type;
-            switch (t) {
-            case GPUCommandType::DrawInstancedQuads:
-            case GPUCommandType::DrawRoundedRectQuad:
-            case GPUCommandType::DrawShadowQuad:
-            case GPUCommandType::DrawImageQuad:
-            case GPUCommandType::DrawText:
-                out.sorted_draw_indices.push_back(i);
-                break;
-            default:
-                break;
-            }
-        }
-
-        // 按 sort_key 升序稳定排序（同 key 时保留原始顺序，用索引比较保证稳定性）。
-        std::sort(out.sorted_draw_indices.begin(), out.sorted_draw_indices.end(),
-                  [&out](uint32_t a, uint32_t b) {
-                      const GPUCommand& ca = out.commands[a];
-                      const GPUCommand& cb = out.commands[b];
-                      if (ca.sort_key < cb.sort_key) return true;
-                      if (ca.sort_key > cb.sort_key) return false;
-                      return a < b;
-                  });
-
-        // 将排序后的绘制命令按 sort_key/type 聚合成批次。
-        if (!out.sorted_draw_indices.empty()) {
-            DrawBatchRange current{};
-            const uint32_t first_index = out.sorted_draw_indices[0];
-            current.start = 0;
-            current.count = 1;
-            current.sort_key = out.commands[first_index].sort_key;
-            current.type = out.commands[first_index].type;
-
-            for (uint32_t i = 1; i < out.sorted_draw_indices.size(); ++i) {
-                const uint32_t cmd_index = out.sorted_draw_indices[i];
-                const GPUCommand& cmd = out.commands[cmd_index];
-                if (cmd.sort_key == current.sort_key && cmd.type == current.type) {
-                    ++current.count;
-                } else {
-                    out.draw_batches.push_back(current);
-                    current.start = i;
-                    current.count = 1;
-                    current.sort_key = cmd.sort_key;
-                    current.type = cmd.type;
+        if (build_draw_batches) {
+            // 收集所有绘制类命令的索引。
+            for (uint32_t i = 0; i < out.commands.size(); ++i) {
+                const GPUCommandType t = out.commands[i].type;
+                switch (t) {
+                case GPUCommandType::DrawInstancedQuads:
+                case GPUCommandType::DrawRoundedRectQuad:
+                case GPUCommandType::DrawShadowQuad:
+                case GPUCommandType::DrawImageQuad:
+                case GPUCommandType::DrawText:
+                    out.sorted_draw_indices.push_back(i);
+                    break;
+                default:
+                    break;
                 }
             }
-            out.draw_batches.push_back(current);
+
+            // 按 sort_key 升序稳定排序（同 key 时保留原始顺序，用索引比较保证稳定性）。
+            std::sort(out.sorted_draw_indices.begin(), out.sorted_draw_indices.end(),
+                      [&out](uint32_t a, uint32_t b) {
+                          const GPUCommand& ca = out.commands[a];
+                          const GPUCommand& cb = out.commands[b];
+                          if (ca.sort_key < cb.sort_key) return true;
+                          if (ca.sort_key > cb.sort_key) return false;
+                          return a < b;
+                      });
+
+            // 将排序后的绘制命令按 sort_key/type 聚合成批次。
+            if (!out.sorted_draw_indices.empty()) {
+                DrawBatchRange current{};
+                const uint32_t first_index = out.sorted_draw_indices[0];
+                current.start = 0;
+                current.count = 1;
+                current.sort_key = out.commands[first_index].sort_key;
+                current.type = out.commands[first_index].type;
+
+                for (uint32_t i = 1; i < out.sorted_draw_indices.size(); ++i) {
+                    const uint32_t cmd_index = out.sorted_draw_indices[i];
+                    const GPUCommand& cmd = out.commands[cmd_index];
+                    if (cmd.sort_key == current.sort_key && cmd.type == current.type) {
+                        ++current.count;
+                    } else {
+                        out.draw_batches.push_back(current);
+                        current.start = i;
+                        current.count = 1;
+                        current.sort_key = cmd.sort_key;
+                        current.type = cmd.type;
+                    }
+                }
+                out.draw_batches.push_back(current);
+            }
         }
+
 
         // 输出统计信息
         DONG_LOG_DEBUG("GPU Compiler: %d rects, %d round_rects, %d images, %d texts -> %zu GPU commands, %zu draw batches",

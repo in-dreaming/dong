@@ -2,8 +2,10 @@
 #include "gpu_device.hpp"
 #include "font_metrics.hpp"
 #include "../core/log.h"
+#include "../core/profiler.h"
 #include <SDL3/SDL_log.h>
 #include <cstring>
+
 #include <cstdio>
 #include <algorithm>
 
@@ -130,16 +132,23 @@ bool GlyphAtlas::createPage() {
 
                     // 使用 fence 精确等待该 command buffer 完成，避免某些后端 copy/transfer 队列
                     // 在 WaitForGPUIdle 下仍存在时序差异，导致首帧采样到未完成上传的 atlas。
-                    SDL_GPUFence* fence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd_buf);
+                    SDL_GPUFence* fence = nullptr;
+                    {
+                        DONG_PROFILE_SCOPE_CAT("SDL_SubmitGPUCommandBufferAndAcquireFence", "gpu");
+                        fence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd_buf);
+                    }
                     if (fence) {
                         SDL_GPUFence* fences[] = { fence };
-                        if (!SDL_WaitForGPUFences(dev, true, fences, 1)) {
-                            SDL_Log("GlyphAtlas::evictAndRecyclePage: SDL_WaitForGPUFences failed: %s", SDL_GetError());
-
-                            gpu_device_->waitForGPU();
+                        {
+                            DONG_PROFILE_SCOPE_CAT("SDL_WaitForGPUFences", "gpu");
+                            if (!SDL_WaitForGPUFences(dev, true, fences, 1)) {
+                                SDL_Log("GlyphAtlas::evictAndRecyclePage: SDL_WaitForGPUFences failed: %s", SDL_GetError());
+                                gpu_device_->waitForGPU();
+                            }
                         }
                         SDL_ReleaseGPUFence(dev, fence);
                     } else {
+
                         SDL_Log("GlyphAtlas::evictAndRecyclePage: SDL_SubmitGPUCommandBufferAndAcquireFence failed: %s", SDL_GetError());
 
                         gpu_device_->submitCommandBuffer(cmd_buf);
@@ -266,16 +275,23 @@ GlyphAtlas::AtlasPage* GlyphAtlas::evictAndRecyclePage() {
                         SDL_EndGPUCopyPass(copy_pass);
                     }
 
-                    SDL_GPUFence* fence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd_buf);
+                    SDL_GPUFence* fence = nullptr;
+                    {
+                        DONG_PROFILE_SCOPE_CAT("SDL_SubmitGPUCommandBufferAndAcquireFence", "gpu");
+                        fence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd_buf);
+                    }
                     if (fence) {
                         SDL_GPUFence* fences[] = { fence };
-                        if (!SDL_WaitForGPUFences(dev, true, fences, 1)) {
-                            SDL_Log("GlyphAtlas::evictAndRecyclePage: SDL_WaitForGPUFences failed: %s", SDL_GetError());
-
-                            gpu_device_->waitForGPU();
+                        {
+                            DONG_PROFILE_SCOPE_CAT("SDL_WaitForGPUFences", "gpu");
+                            if (!SDL_WaitForGPUFences(dev, true, fences, 1)) {
+                                SDL_Log("GlyphAtlas::evictAndRecyclePage: SDL_WaitForGPUFences failed: %s", SDL_GetError());
+                                gpu_device_->waitForGPU();
+                            }
                         }
                         SDL_ReleaseGPUFence(dev, fence);
                     } else {
+
                         SDL_Log("GlyphAtlas::evictAndRecyclePage: SDL_SubmitGPUCommandBufferAndAcquireFence failed: %s", SDL_GetError());
 
                         gpu_device_->submitCommandBuffer(cmd_buf);
@@ -523,15 +539,23 @@ const AtlasEntry* GlyphAtlas::addGlyph(uint32_t glyph_id, const std::string& fon
     SDL_UploadToGPUTexture(copy_pass, &tex_transfer, &region, false);
     SDL_EndGPUCopyPass(copy_pass);
 
-    SDL_GPUFence* fence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd_buf);
+    SDL_GPUFence* fence = nullptr;
+    {
+        DONG_PROFILE_SCOPE_CAT("SDL_SubmitGPUCommandBufferAndAcquireFence", "gpu");
+        fence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd_buf);
+    }
     if (fence) {
         SDL_GPUFence* fences[] = { fence };
-        if (!SDL_WaitForGPUFences(dev, true, fences, 1)) {
-            SDL_Log("GlyphAtlas::addGlyph: SDL_WaitForGPUFences failed: %s", SDL_GetError());
-            gpu_device_->waitForGPU();
+        {
+            DONG_PROFILE_SCOPE_CAT("SDL_WaitForGPUFences", "gpu");
+            if (!SDL_WaitForGPUFences(dev, true, fences, 1)) {
+                SDL_Log("GlyphAtlas::addGlyph: SDL_WaitForGPUFences failed: %s", SDL_GetError());
+                gpu_device_->waitForGPU();
+            }
         }
         SDL_ReleaseGPUFence(dev, fence);
     } else {
+
         SDL_Log("GlyphAtlas::addGlyph: SDL_SubmitGPUCommandBufferAndAcquireFence failed: %s", SDL_GetError());
         gpu_device_->submitCommandBuffer(cmd_buf);
         gpu_device_->waitForGPU();

@@ -1,6 +1,8 @@
 ﻿#include "gpu_device.hpp"
 #include <SDL3/SDL_log.h>
 #include <cstring>
+#include "../core/profiler.h"
+
 
 namespace dong::render {
 
@@ -69,9 +71,11 @@ void GPUDevice::submitCommandBuffer(SDL_GPUCommandBuffer* cmd_buf) const {
         return;
     }
     if (cmd_buf) {
+        DONG_PROFILE_SCOPE_CAT("SDL_SubmitGPUCommandBuffer", "gpu");
         SDL_SubmitGPUCommandBuffer(cmd_buf);
     }
 }
+
 
 void GPUDevice::waitForGPU() const {
     if (device_) {

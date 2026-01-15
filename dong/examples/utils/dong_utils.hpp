@@ -120,17 +120,14 @@ struct HtmlScreen3D {
         // 注意：不调用 dong_view_update()，因为它会渲染到 swapchain
         // dong_view_render_to_gpu_texture() 内部会处理布局计算和渲染
         
-        // 渲染到新纹理
+        // 渲染到纹理（由 View 内部缓存并复用；这里仅持有指针用于采样）
         SDL_GPUTexture* newTexture = (SDL_GPUTexture*)dong_view_render_to_gpu_texture(
             view, device, rtWidth, rtHeight);
-        
-        // 只有新纹理创建成功后才释放旧纹理
+
         if (newTexture) {
-            if (renderTexture) {
-                SDL_ReleaseGPUTexture(device, renderTexture);
-            }
             renderTexture = newTexture;
         }
+
     }
     
     // 发送鼠标移动事件
@@ -175,10 +172,9 @@ struct HtmlScreen3D {
     
     // 清理资源
     void cleanup(SDL_GPUDevice* device) {
-        if (renderTexture) {
-            SDL_ReleaseGPUTexture(device, renderTexture);
-            renderTexture = nullptr;
-        }
+        // renderTexture 由 View 内部管理，这里只清空引用
+        renderTexture = nullptr;
+
         if (quadVB) {
             SDL_ReleaseGPUBuffer(device, quadVB);
             quadVB = nullptr;

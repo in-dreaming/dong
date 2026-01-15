@@ -244,8 +244,11 @@ void GPUDriverSDL::endFrameOffscreen() {
 
     DONG_LOG_DEBUG("[GPUDriverSDL::endFrameOffscreen] Submitting command buffer %p", (void*)current_cmd_buf_);
     gpu_device_->submitCommandBuffer(current_cmd_buf_);
-    SDL_WaitForGPUIdle(gpu_device_->getHandle());  // 等待离屏渲染完成
-    DONG_LOG_DEBUG("[GPUDriverSDL::endFrameOffscreen] GPU idle, rendering complete");
+
+    // A1: 不在每次离屏渲染后强制等待 GPU idle。
+    // 依赖同一 SDL_GPUDevice 上 command buffer 的提交顺序来保证后续采样/拷贝的正确性。
+    // 若需要 CPU 侧立刻读回，请在读回路径使用 fence 精确等待（见 View::renderOffscreen）。
+
     current_cmd_buf_ = nullptr;
     offscreen_target_ = nullptr;
     offscreen_width_ = 0;

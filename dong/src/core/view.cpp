@@ -173,11 +173,27 @@ View::~View() {
     // 清理其他 GPU 相关资源
     gpu_painter_.reset();
     gpu_surface_.reset();
-    
+
+    // B: 释放离屏纹理缓存（如果设备仍然有效）
+    if (offscreen_texture_cache_) {
+        SDL_GPUDevice* dev = offscreen_texture_cache_device_;
+        if (!dev && gpu_device_ && gpu_device_->isInitialized()) {
+            dev = gpu_device_->getHandle();
+        }
+        if (dev) {
+            SDL_ReleaseGPUTexture(dev, offscreen_texture_cache_);
+        }
+        offscreen_texture_cache_ = nullptr;
+        offscreen_texture_cache_device_ = nullptr;
+        offscreen_texture_cache_width_ = 0;
+        offscreen_texture_cache_height_ = 0;
+    }
+
     // gpu_device_ 如果是 adoptExternal 的，由外部管理生命周期
     // 我们只需要重置指针，避免在析构时访问已销毁的设备
     // unique_ptr 会自动处理，但我们需要确保顺序正确
     gpu_device_.reset();
+
     
     // 其他资源通过 unique_ptr 自动清理
 }
@@ -548,51 +564,77 @@ void* View::get_pixel_buffer() {
 
 SDL_GPUTexture* View::renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, uint32_t height) {
     DONG_PROFILE_SCOPE_CAT("View::renderToGPUTexture", "render");
-    
+
     if (!device) {
         SDL_Log("[View::renderToGPUTexture] Invalid device");
         return nullptr;
     }
-    
+
     if (!gpu_driver_) {
         SDL_Log("[View::renderToGPUTexture] GPU driver not initialized");
         return nullptr;
     }
-    
+
     if (!painter) {
         SDL_Log("[View::renderToGPUTexture] Painter not initialized");
         return nullptr;
     }
-    
-    // 1. 创建离屏渲染目标纹理（使用UNORM格式，shader手动处理gamma）
-    SDL_GPUTextureCreateInfo tex_info{};
-    tex_info.type = SDL_GPU_TEXTURETYPE_2D;
-    tex_info.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;  // UNORM格式，不自动gamma校正
-    tex_info.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
-    tex_info.width = width;
-    tex_info.height = height;
-    tex_info.layer_count_or_depth = 1;
-    tex_info.num_levels = 1;
-    tex_info.sample_count = SDL_GPU_SAMPLECOUNT_1;
-    
-    SDL_GPUTexture* offscreen_texture = SDL_CreateGPUTexture(device, &tex_info);
-    if (!offscreen_texture) {
-        SDL_Log("[View::renderToGPUTexture] Failed to create offscreen texture: %s", SDL_GetError());
-        return nullptr;
+
+    // 1. 获取/创建离屏渲染目标纹理（使用UNORM格式，shader手动处理gamma）
+    // B: 复用同一张纹理，避免每帧 Create/Release。
+    SDL_GPUTexture* offscreen_texture = offscreen_texture_cache_;
+
+    const bool need_new_texture = (!offscreen_texture_cache_ ||
+                                  offscreen_texture_cache_device_ != device ||
+                                  offscreen_texture_cache_width_ != width ||
+                                  offscreen_texture_cache_height_ != height);
+
+    if (need_new_texture) {
+        if (offscreen_texture_cache_ && offscreen_texture_cache_device_) {
+            SDL_ReleaseGPUTexture(offscreen_texture_cache_device_, offscreen_texture_cache_);
+        }
+
+        SDL_GPUTextureCreateInfo tex_info{};
+        tex_info.type = SDL_GPU_TEXTURETYPE_2D;
+        tex_info.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;  // UNORM格式，不自动gamma校正
+        tex_info.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
+        tex_info.width = width;
+        tex_info.height = height;
+        tex_info.layer_count_or_depth = 1;
+        tex_info.num_levels = 1;
+        tex_info.sample_count = SDL_GPU_SAMPLECOUNT_1;
+
+        offscreen_texture_cache_device_ = device;
+        offscreen_texture_cache_width_ = width;
+        offscreen_texture_cache_height_ = height;
+
+        offscreen_texture_cache_ = SDL_CreateGPUTexture(device, &tex_info);
+        if (!offscreen_texture_cache_) {
+            SDL_Log("[View::renderToGPUTexture] Failed to create offscreen texture: %s", SDL_GetError());
+            offscreen_texture_cache_device_ = nullptr;
+            offscreen_texture_cache_width_ = 0;
+            offscreen_texture_cache_height_ = 0;
+            return nullptr;
+        }
+        DONG_LOG_DEBUG("[View::renderToGPUTexture] Created offscreen texture %p size=%ux%u", (void*)offscreen_texture_cache_, width, height);
+
+        offscreen_texture = offscreen_texture_cache_;
+        offscreen_texture_dirty_ = true;
     }
-    DONG_LOG_DEBUG("[View::renderToGPUTexture] Created offscreen texture %p size=%ux%u", (void*)offscreen_texture, width, height);
-    
+
     // 2. 确保布局已计算
     auto root = dom_manager ? dom_manager->getRoot() : nullptr;
     if (!root) {
         SDL_Log("[View::renderToGPUTexture] No DOM root");
-        SDL_ReleaseGPUTexture(device, offscreen_texture);
-        return nullptr;
+        // 不要在这里释放缓存纹理：它由 View 生命周期管理。
+        // 若之前已有有效内容，继续返回旧纹理以避免 3D demo 采样闪烁。
+        return offscreen_texture_cache_;
     }
 
     // 检查尺寸是否变化，如果变化则标记 dirty
     if (width != offscreen_cache_width_ || height != offscreen_cache_height_) {
         offscreen_commands_dirty_ = true;
+        offscreen_texture_dirty_ = true;
         offscreen_cache_width_ = width;
         offscreen_cache_height_ = height;
     }
@@ -601,17 +643,22 @@ SDL_GPUTexture* View::renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, 
     // Offscreen 路径只看 offscreen_commands_dirty_ / layout dirty。
     // 注意：3D demo 只走 renderToGPUTexture()，不会走 View::update() 去清除 commands_dirty_；
     // 若这里也依赖 commands_dirty_，会导致每帧都 rebuild（DisplayList/GPUCommandList）并成为主要热点。
-    bool needs_rebuild = offscreen_commands_dirty_ || root->isLayoutDirty();
-    
+    bool needs_rebuild = offscreen_commands_dirty_ || root->isLayoutDirty() || !offscreen_cmd_list_cache_;
+
     // 环境变量强制全量重建（用于调试/正确性验证）
     static bool force_full_layout = (std::getenv("DONG_OFFSCREEN_FORCE_FULL_LAYOUT") != nullptr);
     if (force_full_layout) {
         needs_rebuild = true;
     }
 
+    // 3D demo 友好：内容未变时直接复用上一帧纹理，避免每帧重复离屏渲染。
+    if (!needs_rebuild && !offscreen_texture_dirty_) {
+        return offscreen_texture_cache_;
+    }
+
     if (needs_rebuild) {
         DONG_PROFILE_SCOPE_CAT("offscreen_rebuild", "render");
-        
+
         // 计算样式（使用索引加速的增量计算）
         if (dom_manager) {
             if (auto* se = dom_manager->getStyleEngine()) {
@@ -621,7 +668,7 @@ SDL_GPUTexture* View::renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, 
                 se->computeStylesIncremental(root);
             }
         }
-        
+
         DONG_LOG_DEBUG("[View::renderToGPUTexture] root->isLayoutDirty() = %s", root->isLayoutDirty() ? "TRUE" : "FALSE");
 
         // 计算布局（只在 dirty 时）
@@ -632,62 +679,92 @@ SDL_GPUTexture* View::renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, 
                 root->markLayoutDirty();
             }
             layout_engine->calculateLayout(root, static_cast<float>(width), static_cast<float>(height));
-            root->clearLayoutDirtyRecursive();
+            // 注意：不要在这里清 layout dirty。
+            // LayerTree/layer_dirty 等增量策略可能依赖 isLayoutDirty() 判断本帧哪些 layer 需要重栅格。
             DONG_LOG_DEBUG("[View::renderToGPUTexture] Layout calculated");
+
         }
-        
+
         // 3. 构建 DisplayList 并编译为 GPUCommandList
+        const render::DisplayList* dl_ptr = nullptr;
         {
             DONG_PROFILE_SCOPE_CAT("offscreen_buildDisplayList", "render");
             DONG_LOG_DEBUG("[View::renderToGPUTexture] Building DisplayList...");
-            const render::DisplayList& dl = painter->buildDisplayList(root, layout_engine.get());
-            DONG_LOG_DEBUG("[View::renderToGPUTexture] DisplayList has %zu items", dl.items.size());
-            
-            // 创建或重用缓存的命令列表
-            if (!offscreen_cmd_list_cache_) {
-                offscreen_cmd_list_cache_ = std::make_unique<render::GPUCommandList>();
-            }
-            offscreen_cmd_list_cache_->commands.clear();
-            
+            dl_ptr = &painter->buildDisplayList(root, layout_engine.get());
+            DONG_LOG_DEBUG("[View::renderToGPUTexture] DisplayList has %zu items", dl_ptr->items.size());
+        }
+
+        // 创建或重用缓存的命令列表
+        if (!offscreen_cmd_list_cache_) {
+            offscreen_cmd_list_cache_ = std::make_unique<render::GPUCommandList>();
+        }
+        offscreen_cmd_list_cache_->commands.clear();
+
+        {
+            DONG_PROFILE_SCOPE_CAT("offscreen_compile", "render");
             render::GPUCompiler compiler;
             const render::LayerTree& layer_tree = painter->getLayerTree();
             debugLogLayerTreeIfEnabled(layer_tree);
-            compiler.compile(dl, *offscreen_cmd_list_cache_, &layer_tree);
-            DONG_LOG_DEBUG("[View::renderToGPUTexture] GPUCommandList has %zu commands", offscreen_cmd_list_cache_->commands.size());
+            compiler.compile(*dl_ptr, *offscreen_cmd_list_cache_, &layer_tree);
         }
-        
+
+        // build+compile 完成后再清 layout dirty，避免影响 LayerTree/layer_dirty 的增量判断。
+        root->clearLayoutDirtyRecursive();
+
+        DONG_LOG_DEBUG("[View::renderToGPUTexture] GPUCommandList has %zu commands", offscreen_cmd_list_cache_->commands.size());
+
         offscreen_commands_dirty_ = false;
+        offscreen_resources_dirty_ = true;
+        offscreen_texture_dirty_ = true;
         // 不清除 commands_dirty_，让主渲染路径自己管理
+
     }
-    
+
+    if (!offscreen_cmd_list_cache_) {
+        SDL_Log("[View::renderToGPUTexture] No cached command list");
+        return offscreen_texture_cache_;
+    }
+
     // 4. 执行离屏渲染
     // 关键：在 beginFrame() 之前预处理资源（如 glyph 纹理上传）
-    // 
+    //
     // 优化策略2：SDL_WaitForGPUIdle 仅首帧执行
     // 首帧修复：在 prepareResources 之前等待 GPU 空闲，确保 atlas 纹理初始化完成。
     if (!offscreen_first_frame_done_ && gpu_device_ && gpu_device_->isInitialized()) {
-        DONG_PROFILE_SCOPE_CAT("offscreen_WaitForGPUIdle", "gpu");
-        SDL_WaitForGPUIdle(gpu_device_->getHandle());
+        // 性能：每个 View 首帧都全局 WaitForGPUIdle 会造成严重卡顿（多屏场景会被放大）。
+        // 默认关闭；如需验证同步相关问题，可设置 DONG_DEBUG_OFFSCREEN_WAIT_GPU_IDLE_FIRST_FRAME=1。
+        static const bool kWaitGpuIdleFirstFrame = (std::getenv("DONG_DEBUG_OFFSCREEN_WAIT_GPU_IDLE_FIRST_FRAME") != nullptr);
+        if (kWaitGpuIdleFirstFrame) {
+            DONG_PROFILE_SCOPE_CAT("offscreen_WaitForGPUIdle", "gpu");
+            SDL_WaitForGPUIdle(gpu_device_->getHandle());
+        }
         offscreen_first_frame_done_ = true;
     }
-    
-    {
+
+
+    if (offscreen_resources_dirty_) {
         DONG_PROFILE_SCOPE_CAT("offscreen_prepareResources", "gpu");
         gpu_driver_->prepareResources(*offscreen_cmd_list_cache_);
+        offscreen_resources_dirty_ = false;
     }
-    
+
+
     {
         DONG_PROFILE_SCOPE_CAT("offscreen_execute", "gpu");
         gpu_driver_->beginFrameOffscreen(offscreen_texture, width, height);
         gpu_driver_->execute(*offscreen_cmd_list_cache_);
         gpu_driver_->endFrameOffscreen();
     }
-    
+
+    offscreen_texture_dirty_ = false;
+
     DONG_LOG_DEBUG("[View::renderToGPUTexture] Successfully rendered to GPU texture %u x %u", width, height);
-    
-    // 返回纹理，调用者负责释放
+
+    // 返回纹理（View 内部缓存并复用；调用方不要释放）
     return offscreen_texture;
+
 }
+
 
 bool View::renderOffscreen(SDL_GPUDevice* device, uint32_t width, uint32_t height, 
                            uint8_t* out_pixels) {
@@ -712,18 +789,18 @@ bool View::renderOffscreen(SDL_GPUDevice* device, uint32_t width, uint32_t heigh
     SDL_GPUTransferBuffer* download_buffer = SDL_CreateGPUTransferBuffer(device, &transfer_info);
     if (!download_buffer) {
         SDL_Log("[View::renderOffscreen] Failed to create download buffer: %s", SDL_GetError());
-        SDL_ReleaseGPUTexture(device, offscreen_texture);
         return false;
     }
+
     
     // 3. 执行纹理到传输缓冲区的拷贝
     SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(device);
     if (!cmd) {
         SDL_Log("[View::renderOffscreen] Failed to acquire command buffer: %s", SDL_GetError());
         SDL_ReleaseGPUTransferBuffer(device, download_buffer);
-        SDL_ReleaseGPUTexture(device, offscreen_texture);
         return false;
     }
+
     
     SDL_GPUCopyPass* copy_pass = SDL_BeginGPUCopyPass(cmd);
     
@@ -771,9 +848,9 @@ bool View::renderOffscreen(SDL_GPUDevice* device, uint32_t width, uint32_t heigh
     if (!mapped) {
         SDL_Log("[View::renderOffscreen] Failed to map download buffer: %s", SDL_GetError());
         SDL_ReleaseGPUTransferBuffer(device, download_buffer);
-        SDL_ReleaseGPUTexture(device, offscreen_texture);
         return false;
     }
+
 
     std::memcpy(out_pixels, mapped, width * height * 4);
     
@@ -782,9 +859,9 @@ bool View::renderOffscreen(SDL_GPUDevice* device, uint32_t width, uint32_t heigh
     
     // 5. 清理资源
     SDL_ReleaseGPUTransferBuffer(device, download_buffer);
-    SDL_ReleaseGPUTexture(device, offscreen_texture);
-    
+
     return true;
+
 }
 
 bool View::eval_script(const char* code) {
@@ -817,11 +894,13 @@ void View::markNeedsRepaint() {
     // 否则 offscreen 只能依赖 commands_dirty_，但它在 offscreen 路径并不会被清除，
     // 容易造成每帧 rebuild。
     offscreen_commands_dirty_ = true;
+    offscreen_texture_dirty_ = true;
 
     if (render_surface) {
         render_surface->markDirty();
     }
 }
+
 
 void View::ensureJSBindingsInitialized() {
     DONG_LOG_DEBUG("[View::ensureJSBindingsInitialized] this=%p, initialized=%d, js_bindings=%p, script_engine=%p",
@@ -1390,9 +1469,26 @@ void View::setExternalGPUDevice(SDL_GPUDevice* device, SDL_Window* window) {
     SDL_GPUShaderFormat format = SDL_GPU_SHADERFORMAT_SPIRV;
 #endif
 
+    // B: 切换外部 device 时清理离屏纹理缓存（避免在新 device 上误用旧纹理）
+    if (offscreen_texture_cache_) {
+        SDL_GPUDevice* old_dev = offscreen_texture_cache_device_;
+        if (old_dev) {
+            SDL_ReleaseGPUTexture(old_dev, offscreen_texture_cache_);
+        }
+        offscreen_texture_cache_ = nullptr;
+        offscreen_texture_cache_device_ = nullptr;
+        offscreen_texture_cache_width_ = 0;
+        offscreen_texture_cache_height_ = 0;
+    }
+
+    // Offscreen 的 GPU idle 首帧等待只对“同一 device 生命周期”成立；切换 device 后重置
+    offscreen_first_frame_done_ = false;
+    offscreen_commands_dirty_ = true;
+
     if (!gpu_device_) {
         gpu_device_ = std::make_unique<render::GPUDevice>();
     }
+
     gpu_device_->adoptExternal(device, format);
 
     // 释放旧的 CPU/GPU 表面和 Painter，避免悬空引用

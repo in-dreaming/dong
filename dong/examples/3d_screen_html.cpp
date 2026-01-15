@@ -17,6 +17,8 @@
 #include <vector>
 #include <chrono>
 #include <cstring>
+#include <limits>
+
 
 #include <dong.h>
 #include <SDL3/SDL.h>
@@ -385,16 +387,32 @@ int main() {
     
     float mainCubeRotation = 0.0f;
     int focusedScreen = -1;  // 当前聚焦的屏幕 (-1 表示无)
+
+    // 只有鼠标坐标真的变化时才把 move 转发给 HTML（否则会导致不必要的 repaint/重建）。
+    int lastHoveredScreen = -1;
+    int lastSentMouseScreen = -1;
+    int32_t lastSentMouseX = std::numeric_limits<int32_t>::min();
+    int32_t lastSentMouseY = std::numeric_limits<int32_t>::min();
     
     auto lastTime = std::chrono::high_resolution_clock::now();
+
     bool running = true;
     int winW = WIN_W, winH = WIN_H;
 
     // 启用文本输入
     SDL_StartTextInput(window);
 
+    // 帧率/卡顿排查：默认不再强制每帧 SDL_Delay(16)；需要手动限帧时设置 DONG_FRAME_SLEEP_MS=N。
+    const int frame_sleep_ms = []() -> int {
+        const char* v = std::getenv("DONG_FRAME_SLEEP_MS");
+        if (!v || !*v) return 0;
+        const int ms = std::atoi(v);
+        return ms < 0 ? 0 : ms;
+    }();
+
     while (running) {
         auto now = std::chrono::high_resolution_clock::now();
+
         float dt = std::chrono::duration<float>(now - lastTime).count();
         lastTime = now;
         
@@ -455,18 +473,35 @@ int main() {
             if (screens[i].hovered) {
                 hoveredScreen = i;
                 hoveredUV = uv;
-                
+
                 // 转换 UV 到屏幕像素坐标
                 // 注意：UV 的 v 是从下到上（0=底部，1=顶部）
                 // 但 HTML 坐标系 Y 是从上到下（0=顶部）
                 // 所以需要翻转 Y 坐标
                 int32_t screenX = (int32_t)(uv.x * screens[i].rtWidth);
                 int32_t screenY = (int32_t)((1.0f - uv.y) * screens[i].rtHeight);
-                
-                // 发送鼠标移动到 HTML 屏幕
-                screens[i].html.sendMouseMove(screenX, screenY);
+
+                if (hoveredScreen != lastSentMouseScreen || screenX != lastSentMouseX || screenY != lastSentMouseY) {
+                    // 只有坐标变化时才转发 move；否则会导致 HTML 侧每帧都置脏并触发昂贵的 rebuild。
+                    screens[i].html.sendMouseMove(screenX, screenY);
+                    lastSentMouseScreen = hoveredScreen;
+                    lastSentMouseX = screenX;
+                    lastSentMouseY = screenY;
+                }
             }
         }
+
+        // 离开所有屏幕时，给上一块屏幕发一次“屏幕外”的 move 以清除 :hover。
+        if (hoveredScreen < 0 && lastHoveredScreen >= 0) {
+            screens[lastHoveredScreen].html.sendMouseMove(-1, -1);
+            lastHoveredScreen = -1;
+            lastSentMouseScreen = -1;
+            lastSentMouseX = std::numeric_limits<int32_t>::min();
+            lastSentMouseY = std::numeric_limits<int32_t>::min();
+        } else if (hoveredScreen >= 0) {
+            lastHoveredScreen = hoveredScreen;
+        }
+
 
         // CSS cursor：由宿主读取 hit-test 位置的 computed cursor 并设置系统光标。
         if (!input.right_mouse_down) {
@@ -521,15 +556,22 @@ int main() {
             screens[i].html.update(device);
         }
         
-        // 等待所有离屏渲染完成后再开始主场景渲染
-        // 这样可以避免离屏渲染和 swapchain 渲染之间的竞争
-        SDL_WaitForGPUIdle(device);
+        // 注意：不要每帧全局等待 GPU idle。
+        // 提交顺序已经能保证后续对 HTML 纹理的采样依赖；每帧 WaitForGPUIdle 会把性能直接锁死。
+        // 如需排查同步/资源竞争问题，可设置环境变量 DONG_DEBUG_WAIT_GPU_IDLE_EVERY_FRAME=1。
+        static const bool kWaitGpuIdleEveryFrame = (std::getenv("DONG_DEBUG_WAIT_GPU_IDLE_EVERY_FRAME") != nullptr);
+        if (kWaitGpuIdleEveryFrame) {
+            SDL_WaitForGPUIdle(device);
+        }
+
 
         SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(device);
         if (!cmd) {
-            SDL_Delay(16);
+            const int sleep_ms = (frame_sleep_ms > 0) ? frame_sleep_ms : 1;
+            SDL_Delay(sleep_ms);
             continue;
         }
+
 
         // Copy pass - 上传顶点数据
         SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(cmd);
@@ -548,9 +590,11 @@ int main() {
         Uint32 sw, sh;
         if (!SDL_WaitAndAcquireGPUSwapchainTexture(cmd, window, &swapchain, &sw, &sh) || !swapchain) {
             SDL_SubmitGPUCommandBuffer(cmd);
-            SDL_Delay(16);
+            const int sleep_ms = (frame_sleep_ms > 0) ? frame_sleep_ms : 1;
+            SDL_Delay(sleep_ms);
             continue;
         }
+
 
         // 深度纹理
         if (!depthTexture || depthW != sw || depthH != sh) {
@@ -643,8 +687,11 @@ int main() {
 
         SDL_EndGPURenderPass(pass);
         SDL_SubmitGPUCommandBuffer(cmd);
-        
-        SDL_Delay(16);
+
+        if (frame_sleep_ms > 0) {
+            SDL_Delay(frame_sleep_ms);
+        }
+
     }
 
     // 停止文本输入

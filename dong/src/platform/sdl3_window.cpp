@@ -1,6 +1,10 @@
 ﻿#include "sdl3_window.hpp"
 #include <SDL3/SDL_log.h>
 
+#include <cstdlib>
+#include <cstring>
+
+
 namespace dong::platform {
 
 SDL3Window::~SDL3Window() {
@@ -141,25 +145,73 @@ bool SDL3Window::createGPUDevice(bool debug_mode) {
         return false;
     }
 
-    // 设置 swapchain 参数：使用 MAILBOX 模式
-    // MAILBOX 模式会在有新帧时丢弃旧帧，避免 swapchain 纹理为 null 的问题
-    // 如果 MAILBOX 不支持，回退到 VSYNC
-    if (!SDL_SetGPUSwapchainParameters(
-        gpu_device_,
-        window_,
-        SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
-        SDL_GPU_PRESENTMODE_MAILBOX
-    )) {
-        SDL_Log("MAILBOX present mode not supported, falling back to VSYNC");
-        SDL_SetGPUSwapchainParameters(
-            gpu_device_,
-            window_,
-            SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
-            SDL_GPU_PRESENTMODE_VSYNC
-        );
+    // 允许通过环境变量控制 swapchain present mode / frames-in-flight（性能排查常用）。
+    // - DONG_GPU_PRESENT_MODE=mailbox|vsync|immediate
+    // - DONG_GPU_FRAMES_IN_FLIGHT=1|2|3
+    {
+        if (const char* v = std::getenv("DONG_GPU_FRAMES_IN_FLIGHT")) {
+            const int n = std::atoi(v);
+            if (n >= 1 && n <= 3) {
+                SDL_SetGPUAllowedFramesInFlight(gpu_device_, (Uint32)n);
+                SDL_Log("[GPU] AllowedFramesInFlight=%d", n);
+            } else {
+                SDL_Log("[GPU] Invalid DONG_GPU_FRAMES_IN_FLIGHT=%s (expected 1..3)", v);
+            }
+        }
+
+        SDL_GPUPresentMode mode = SDL_GPU_PRESENTMODE_MAILBOX;
+        bool mode_from_env = false;
+        if (const char* pm = std::getenv("DONG_GPU_PRESENT_MODE")) {
+            mode_from_env = true;
+            if (std::strcmp(pm, "mailbox") == 0) {
+                mode = SDL_GPU_PRESENTMODE_MAILBOX;
+            } else if (std::strcmp(pm, "vsync") == 0) {
+                mode = SDL_GPU_PRESENTMODE_VSYNC;
+            } else if (std::strcmp(pm, "immediate") == 0) {
+                mode = SDL_GPU_PRESENTMODE_IMMEDIATE;
+            } else {
+                SDL_Log("[GPU] Invalid DONG_GPU_PRESENT_MODE=%s (use mailbox|vsync|immediate)", pm);
+                mode_from_env = false;
+                mode = SDL_GPU_PRESENTMODE_MAILBOX;
+            }
+        }
+
+        if (mode_from_env) {
+            if (!SDL_SetGPUSwapchainParameters(
+                gpu_device_,
+                window_,
+                SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
+                mode
+            )) {
+                SDL_Log("[GPU] PresentMode request failed, falling back to VSYNC");
+                SDL_SetGPUSwapchainParameters(
+                    gpu_device_,
+                    window_,
+                    SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
+                    SDL_GPU_PRESENTMODE_VSYNC
+                );
+            }
+        } else {
+            // 默认策略：优先 MAILBOX，不支持则回退 VSYNC。
+            if (!SDL_SetGPUSwapchainParameters(
+                gpu_device_,
+                window_,
+                SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
+                SDL_GPU_PRESENTMODE_MAILBOX
+            )) {
+                SDL_Log("MAILBOX present mode not supported, falling back to VSYNC");
+                SDL_SetGPUSwapchainParameters(
+                    gpu_device_,
+                    window_,
+                    SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
+                    SDL_GPU_PRESENTMODE_VSYNC
+                );
+            }
+        }
     }
 
     SDL_Log("GPU device created and claimed for window");
+
     return true;
 }
 

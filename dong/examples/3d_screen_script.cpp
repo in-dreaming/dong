@@ -21,6 +21,8 @@
 #include <cstring>
 #include <string>
 #include <csignal>
+#include <limits>
+
 
 #include <dong.h>
 #include <SDL3/SDL.h>
@@ -594,6 +596,12 @@ int main(int argc, char* argv[]) {
     // Track last hovered screen so we can clear :hover when cursor leaves all screens.
     int lastHoveredScreen = -1;
 
+    // 只有鼠标坐标真的变化时才把 move 转发给 HTML（否则会导致不必要的 repaint/重建）。
+    int lastSentMouseScreen = -1;
+    int32_t lastSentMouseX = std::numeric_limits<int32_t>::min();
+    int32_t lastSentMouseY = std::numeric_limits<int32_t>::min();
+
+
     auto lastTime = std::chrono::high_resolution_clock::now();
 
     bool running = true;
@@ -602,10 +610,73 @@ int main(int argc, char* argv[]) {
     // 启用文本输入
     SDL_StartTextInput(window);
 
+    // 帧率/卡顿排查：不要再强制每帧 SDL_Delay(16) 双重限速。
+    // - 默认不 sleep（让 swapchain/vsync 自己决定节奏）
+    // - 如需手动限帧：设置环境变量 DONG_FRAME_SLEEP_MS=N
+    const int frame_sleep_ms = []() -> int {
+        const char* v = std::getenv("DONG_FRAME_SLEEP_MS");
+        if (!v || !*v) return 0;
+        const int ms = std::atoi(v);
+        return ms < 0 ? 0 : ms;
+    }();
+
+    // 自动化性能采样：预热后清空 profiler，只采样固定时长后自动退出。
+    // - 默认仅在传了 --profile 时启用（避免影响日常交互使用）
+    // - 可用环境变量覆盖：
+    //   - DONG_BENCH_AUTOSTOP=0  关闭自动退出
+    //   - DONG_BENCH_WARMUP_MS=N 预热 N ms（默认 2000）
+    //   - DONG_BENCH_RUN_MS=N    采样 N ms（默认 5000）
+    const bool bench_has_profile = !g_profile_output.empty();
+    const bool bench_autostop = bench_has_profile && ([]() {
+        const char* v = std::getenv("DONG_BENCH_AUTOSTOP");
+        return !(v && std::strcmp(v, "0") == 0);
+    })();
+    const uint64_t bench_warmup_ms = []() -> uint64_t {
+        const char* v = std::getenv("DONG_BENCH_WARMUP_MS");
+        if (!v || !*v) return 2000;
+        const long long ms = std::atoll(v);
+        return ms <= 0 ? 0ull : static_cast<uint64_t>(ms);
+    }();
+    const uint64_t bench_run_ms = []() -> uint64_t {
+        const char* v = std::getenv("DONG_BENCH_RUN_MS");
+        if (!v || !*v) return 5000;
+        const long long ms = std::atoll(v);
+        return ms <= 0 ? 0ull : static_cast<uint64_t>(ms);
+    }();
+
+    const auto bench_t0 = std::chrono::steady_clock::now();
+    bool bench_measuring = false;
+    auto bench_t_measure = bench_t0;
+
     while (running) {
+        // 先处理自动采样窗口（保证开始采样的那一帧也能被记录到）
+        if (bench_autostop) {
+            const auto tnow = std::chrono::steady_clock::now();
+            const uint64_t elapsed_ms = (uint64_t)std::chrono::duration_cast<std::chrono::milliseconds>(tnow - bench_t0).count();
+
+            if (!bench_measuring && elapsed_ms >= bench_warmup_ms) {
+                bench_measuring = true;
+                bench_t_measure = tnow;
+
+                // 清空并重置时间戳：把启动/预热阶段的长耗时从 trace 里剔除。
+                dong_profiler_init();
+                SDL_Log("[Bench] measuring started (warmup_ms=%llu run_ms=%llu)",
+                        (unsigned long long)bench_warmup_ms, (unsigned long long)bench_run_ms);
+            }
+
+            if (bench_measuring) {
+                const uint64_t measure_ms = (uint64_t)std::chrono::duration_cast<std::chrono::milliseconds>(tnow - bench_t_measure).count();
+                if (bench_run_ms > 0 && measure_ms >= bench_run_ms) {
+                    SDL_Log("[Bench] measuring finished (%llu ms), exiting...", (unsigned long long)measure_ms);
+                    running = false;
+                }
+            }
+        }
+
         DONG_PROFILE_SCOPE_CAT("Frame", "frame");
-        
+
         auto now = std::chrono::high_resolution_clock::now();
+
         float dt = std::chrono::duration<float>(now - lastTime).count();
         lastTime = now;
         
@@ -675,16 +746,23 @@ int main(int argc, char* argv[]) {
             if (screens[i].hovered) {
                 hoveredScreen = i;
                 hoveredUV = uv;
-                
+
                 // 转换 UV 到屏幕像素坐标
                 // 注意：UV 的 v 是从下到上（0=底部，1=顶部）
                 // 但 HTML 坐标系 Y 是从上到下（0=顶部）
                 // 所以需要翻转 Y 坐标
                 hoveredScreenX = (int32_t)(uv.x * screens[i].rtWidth);
                 hoveredScreenY = (int32_t)((1.0f - uv.y) * screens[i].rtHeight);
-                
-                // 发送鼠标移动到 HTML 屏幕
-                screens[i].html.sendMouseMove(hoveredScreenX, hoveredScreenY);
+            }
+        }
+
+        // 只在坐标变化时才转发 move；否则会导致 HTML 侧每帧都置脏并触发昂贵的 rebuild。
+        if (hoveredScreen >= 0) {
+            if (hoveredScreen != lastSentMouseScreen || hoveredScreenX != lastSentMouseX || hoveredScreenY != lastSentMouseY) {
+                screens[hoveredScreen].html.sendMouseMove(hoveredScreenX, hoveredScreenY);
+                lastSentMouseScreen = hoveredScreen;
+                lastSentMouseX = hoveredScreenX;
+                lastSentMouseY = hoveredScreenY;
             }
         }
 
@@ -692,9 +770,13 @@ int main(int argc, char* argv[]) {
         if (hoveredScreen < 0 && lastHoveredScreen >= 0) {
             screens[lastHoveredScreen].html.sendMouseMove(-1, -1);
             lastHoveredScreen = -1;
+            lastSentMouseScreen = -1;
+            lastSentMouseX = std::numeric_limits<int32_t>::min();
+            lastSentMouseY = std::numeric_limits<int32_t>::min();
         } else if (hoveredScreen >= 0) {
             lastHoveredScreen = hoveredScreen;
         }
+
 
         // CSS cursor：由宿主读取 hit-test 位置的 computed cursor 并设置系统光标。
         // 注意：右键相机控制时启用 relative mouse mode，避免在此期间反复 Show/Set cursor。
@@ -782,41 +864,88 @@ int main(int argc, char* argv[]) {
         // 更新 HUD
         hud.update(device, dt);
         
-        // 等待所有离屏渲染完成后再开始主场景渲染
-        // 这样可以避免离屏渲染和 swapchain 渲染之间的竞争
-        SDL_WaitForGPUIdle(device);
+        // 注意：不要每帧全局等待 GPU idle。
+        // 提交顺序已经能保证后续对 HTML 纹理的采样依赖；每帧 WaitForGPUIdle 会把性能直接锁死。
+        // 如需排查同步/资源竞争问题，可设置环境变量 DONG_DEBUG_WAIT_GPU_IDLE_EVERY_FRAME=1。
+        static const bool kWaitGpuIdleEveryFrame = (std::getenv("DONG_DEBUG_WAIT_GPU_IDLE_EVERY_FRAME") != nullptr);
+        if (kWaitGpuIdleEveryFrame) {
+            SDL_WaitForGPUIdle(device);
+        }
 
-        SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(device);
+
+        SDL_GPUCommandBuffer* cmd = nullptr;
+        {
+            DONG_PROFILE_SCOPE_CAT("SDL_AcquireGPUCommandBuffer", "gpu");
+            cmd = SDL_AcquireGPUCommandBuffer(device);
+        }
         if (!cmd) {
-            SDL_Delay(16);
+            // cmd_buf 不可用时避免 busy-spin
+            const int sleep_ms = (frame_sleep_ms > 0) ? frame_sleep_ms : 1;
+            {
+                DONG_PROFILE_SCOPE_CAT("SDL_Delay", "frame");
+                SDL_Delay(sleep_ms);
+            }
             continue;
         }
 
+
+
         // Copy pass - 上传顶点数据
-        SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(cmd);
-        uploadVertices(device, copyPass, cubeVB, cubeVerts);
-        uploadVertices(device, copyPass, gridVB, gridVerts);
-        
-        // 上传屏幕四边形顶点
-        for (int i = 0; i < numScreens; i++) {
-            auto quadVerts = generateQuad(screens[i].width, screens[i].height);
-            uploadVertices(device, copyPass, screens[i].html.quadVB, quadVerts);
+        // 这些几何体顶点在 demo 中是静态的：只需要上传一次即可，避免每帧 copy/upload 造成不必要的 GPU submit 开销。
+        static bool kUploadedStaticVBs = false;
+        if (!kUploadedStaticVBs) {
+            SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(cmd);
+            uploadVertices(device, copyPass, cubeVB, cubeVerts);
+            uploadVertices(device, copyPass, gridVB, gridVerts);
+
+            // 上传屏幕四边形顶点（静态）
+            for (int i = 0; i < numScreens; i++) {
+                auto quadVerts = generateQuad(screens[i].width, screens[i].height);
+                uploadVertices(device, copyPass, screens[i].html.quadVB, quadVerts);
+            }
+
+            // 上传 HUD 四边形顶点（静态）
+            auto hudQuadVerts = generateHUDQuad();
+            uploadVertices(device, copyPass, hud.quadVB, hudQuadVerts);
+
+            SDL_EndGPUCopyPass(copyPass);
+            kUploadedStaticVBs = true;
         }
-        
-        // 上传 HUD 四边形顶点
-        auto hudQuadVerts = generateHUDQuad();
-        uploadVertices(device, copyPass, hud.quadVB, hudQuadVerts);
-        
-        SDL_EndGPUCopyPass(copyPass);
+
 
         // ========== 渲染主场景 ==========
         SDL_GPUTexture* swapchain = nullptr;
-        Uint32 sw, sh;
-        if (!SDL_WaitAndAcquireGPUSwapchainTexture(cmd, window, &swapchain, &sw, &sh) || !swapchain) {
-            SDL_SubmitGPUCommandBuffer(cmd);
-            SDL_Delay(16);
-            continue;
+        Uint32 sw = 0, sh = 0;
+        {
+            // swapchain acquire：默认阻塞（稳定、接近 vsync 行为）。
+            // 如需减少卡顿/等待，可用 NOWAIT（可能跳帧/撕裂）：DONG_GPU_SWAPCHAIN_NOWAIT=1
+            static const bool kSwapchainNowait = (std::getenv("DONG_GPU_SWAPCHAIN_NOWAIT") != nullptr);
+            bool ok = false;
+            if (!kSwapchainNowait) {
+                DONG_PROFILE_SCOPE_CAT("SDL_WaitAndAcquireGPUSwapchainTexture", "gpu");
+                ok = SDL_WaitAndAcquireGPUSwapchainTexture(cmd, window, &swapchain, &sw, &sh);
+            } else {
+                DONG_PROFILE_SCOPE_CAT("SDL_AcquireGPUSwapchainTexture", "gpu");
+                ok = SDL_AcquireGPUSwapchainTexture(cmd, window, &swapchain, &sw, &sh);
+            }
+
+            if (!ok || !swapchain) {
+                {
+                    DONG_PROFILE_SCOPE_CAT("SDL_SubmitGPUCommandBuffer", "gpu");
+                    SDL_SubmitGPUCommandBuffer(cmd);
+                }
+                // swapchain 不可用时避免 busy-spin
+                {
+                    const int sleep_ms = (frame_sleep_ms > 0) ? frame_sleep_ms : 1;
+                    DONG_PROFILE_SCOPE_CAT("SDL_Delay", "frame");
+                    SDL_Delay(sleep_ms);
+                }
+                continue;
+            }
+
         }
+
+
 
         // 深度纹理
         if (!depthTexture || depthW != sw || depthH != sh) {
@@ -919,9 +1048,17 @@ int main(int argc, char* argv[]) {
         hud.render(hudPass, cmd, sampler);
         SDL_EndGPURenderPass(hudPass);
         
-        SDL_SubmitGPUCommandBuffer(cmd);
-        
-        SDL_Delay(16);
+        {
+            DONG_PROFILE_SCOPE_CAT("SDL_SubmitGPUCommandBuffer", "gpu");
+            SDL_SubmitGPUCommandBuffer(cmd);
+        }
+
+        if (frame_sleep_ms > 0) {
+            DONG_PROFILE_SCOPE_CAT("SDL_Delay", "frame");
+            SDL_Delay(frame_sleep_ms);
+        }
+
+
     }
 
     SDL_Log("=== Exiting main loop ===");
