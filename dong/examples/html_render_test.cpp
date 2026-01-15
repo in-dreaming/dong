@@ -25,8 +25,14 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_gpu.h>
 
+#if defined(_WIN32)
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
+
 #include "platform/sdl3_window.hpp"
 #include "core/profiler.h"
+
 
 using dong::platform::SDL3Window;
 namespace fs = std::filesystem;
@@ -404,11 +410,59 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    // Optional: load platform plugin (enables video backend, etc.)
+#if defined(_WIN32)
+    struct PluginModuleGuard {
+        HMODULE mod = nullptr;
+        ~PluginModuleGuard() {
+            if (mod) {
+                FreeLibrary(mod);
+                mod = nullptr;
+            }
+        }
+    } plugin_guard;
+
+    const dong_plugin_vtable_t* plugin = nullptr;
+    const char* plugin_names[] = {
+        "dong_plugin_sdl.dll",
+        "libdong_plugin_sdl.dll",
+    };
+
+    for (const char* name : plugin_names) {
+        HMODULE m = LoadLibraryA(name);
+        if (!m) continue;
+
+        auto get_api = (dong_plugin_get_api_fn)GetProcAddress(m, "dong_plugin_get_api");
+        if (!get_api) {
+            FreeLibrary(m);
+            continue;
+        }
+
+        const dong_plugin_vtable_t* api = get_api();
+        if (!api || api->info.plugin_api_version != DONG_PLUGIN_API_VERSION) {
+            FreeLibrary(m);
+            continue;
+        }
+
+        plugin = api;
+        plugin_guard.mod = m;
+        SDL_Log("[Init] Loaded plugin: %s (caps=0x%llx)", name, (unsigned long long)api->info.capabilities);
+        break;
+    }
+
+    if (plugin) {
+        dong_view_set_plugin_api(view, plugin, nullptr);
+    } else {
+        SDL_Log("[Init] Plugin not loaded (video features disabled)");
+    }
+#endif
+
     // 设置 GPU 渲染模式
     SDL_Log("[Init] Enabling GPU render mode...");
     dong_view_set_external_gpu_device(view,
                                       static_cast<void*>(device),
                                       static_cast<void*>(window.getHandle()));
+
 
     // 资源根目录：让相对路径（../images/bg.png）按 HTML 文件所在目录解析
     {

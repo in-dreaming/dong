@@ -100,6 +100,15 @@ GPUDriverSDL::~GPUDriverSDL() {
             image_atlas_texture_ = nullptr;
         }
 
+        // Release external textures (e.g. video frames)
+        for (auto& kv : external_images_) {
+            if (kv.second.texture) {
+                SDL_ReleaseGPUTexture(dev, kv.second.texture);
+                kv.second.texture = nullptr;
+            }
+        }
+        external_images_.clear();
+
         // 释放 MSDF 文字渲染资源
         if (text_pipeline_) {
             SDL_ReleaseGPUGraphicsPipeline(dev, text_pipeline_);
@@ -195,6 +204,118 @@ void GPUDriverSDL::endFrame() {
     DONG_LOG_DEBUG("[GPUDriverSDL::endFrame] command buffer submitted");
     current_cmd_buf_ = nullptr;
     in_frame_ = false;
+}
+
+bool GPUDriverSDL::updateExternalImageRGBA(const std::string& key,
+                                          const uint8_t* rgba,
+                                          uint32_t width,
+                                          uint32_t height,
+                                          uint32_t stride_bytes) {
+    if (key.empty() || !rgba || width == 0 || height == 0) {
+        return false;
+    }
+    if (!gpu_device_ || !gpu_device_->isInitialized() || !current_cmd_buf_) {
+        return false;
+    }
+
+    SDL_GPUDevice* dev = gpu_device_->getHandle();
+    if (!dev) {
+        return false;
+    }
+
+    ExternalImage& ex = external_images_[key];
+    if (!ex.texture || ex.width != width || ex.height != height) {
+        if (ex.texture) {
+            SDL_ReleaseGPUTexture(dev, ex.texture);
+            ex.texture = nullptr;
+        }
+
+        SDL_GPUTextureCreateInfo tex_info{};
+        tex_info.type = SDL_GPU_TEXTURETYPE_2D;
+        tex_info.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+        tex_info.width = width;
+        tex_info.height = height;
+        tex_info.layer_count_or_depth = 1;
+        tex_info.num_levels = 1;
+        tex_info.sample_count = SDL_GPU_SAMPLECOUNT_1;
+        tex_info.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+
+        ex.texture = SDL_CreateGPUTexture(dev, &tex_info);
+        if (!ex.texture) {
+            SDL_Log("GPUDriverSDL::updateExternalImageRGBA: failed to create texture: %s", SDL_GetError());
+            external_images_.erase(key);
+            return false;
+        }
+        ex.width = width;
+        ex.height = height;
+    }
+
+    const uint32_t dst_stride = width * 4;
+    const uint32_t upload_size = dst_stride * height;
+
+    SDL_GPUTransferBufferCreateInfo transfer_info{};
+    transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+    transfer_info.size = upload_size;
+
+    SDL_GPUTransferBuffer* transfer_buf = SDL_CreateGPUTransferBuffer(dev, &transfer_info);
+    if (!transfer_buf) {
+        SDL_Log("GPUDriverSDL::updateExternalImageRGBA: failed to create transfer buffer: %s", SDL_GetError());
+        return false;
+    }
+
+    void* mapped = SDL_MapGPUTransferBuffer(dev, transfer_buf, false);
+    if (!mapped) {
+        SDL_Log("GPUDriverSDL::updateExternalImageRGBA: failed to map transfer buffer: %s", SDL_GetError());
+        SDL_ReleaseGPUTransferBuffer(dev, transfer_buf);
+        return false;
+    }
+
+    uint8_t* dst = static_cast<uint8_t*>(mapped);
+    if (stride_bytes == 0) {
+        stride_bytes = dst_stride;
+    }
+
+    if (stride_bytes == dst_stride) {
+        std::memcpy(dst, rgba, upload_size);
+    } else {
+        for (uint32_t y = 0; y < height; ++y) {
+            const uint8_t* src_row = rgba + static_cast<size_t>(y) * stride_bytes;
+            uint8_t* dst_row = dst + static_cast<size_t>(y) * dst_stride;
+            std::memcpy(dst_row, src_row, dst_stride);
+        }
+    }
+
+    SDL_UnmapGPUTransferBuffer(dev, transfer_buf);
+
+    SDL_GPUCopyPass* copy_pass = SDL_BeginGPUCopyPass(current_cmd_buf_);
+    if (!copy_pass) {
+        SDL_Log("GPUDriverSDL::updateExternalImageRGBA: failed to begin copy pass: %s", SDL_GetError());
+        SDL_ReleaseGPUTransferBuffer(dev, transfer_buf);
+        return false;
+    }
+
+    SDL_GPUTextureTransferInfo tex_transfer{};
+    tex_transfer.transfer_buffer = transfer_buf;
+    tex_transfer.offset = 0;
+    tex_transfer.pixels_per_row = width;
+    tex_transfer.rows_per_layer = height;
+
+    SDL_GPUTextureRegion region{};
+    region.texture = ex.texture;
+    region.mip_level = 0;
+    region.layer = 0;
+    region.x = 0;
+    region.y = 0;
+    region.z = 0;
+    region.w = width;
+    region.h = height;
+    region.d = 1;
+
+    SDL_UploadToGPUTexture(copy_pass, &tex_transfer, &region, false);
+    SDL_EndGPUCopyPass(copy_pass);
+
+    SDL_ReleaseGPUTransferBuffer(dev, transfer_buf);
+    return true;
 }
 
 void GPUDriverSDL::beginFrameOffscreen(SDL_GPUTexture* target, uint32_t width, uint32_t height) {

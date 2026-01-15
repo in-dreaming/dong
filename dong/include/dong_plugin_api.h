@@ -14,7 +14,7 @@ extern "C" {
 // - Loaded by dong_app, then injected into dong.dll.
 // =============================================================================
 
-#define DONG_PLUGIN_API_VERSION 2u
+#define DONG_PLUGIN_API_VERSION 3u
 
 // Capability bitmask for optional subsystems.
 typedef uint64_t dong_plugin_caps_t;
@@ -26,7 +26,9 @@ enum {
     DONG_PLUGIN_CAP_WINDOW = 1ull << 3,
     DONG_PLUGIN_CAP_INPUT = 1ull << 4,
     DONG_PLUGIN_CAP_RENDERER = 1ull << 5,
+    DONG_PLUGIN_CAP_VIDEO = 1ull << 6,
 };
+
 
 typedef enum dong_log_level_t {
     DONG_LOG_TRACE = 0,
@@ -84,8 +86,36 @@ typedef struct dong_renderer_cmd_stream_t {
     size_t size;
 } dong_renderer_cmd_stream_t;
 
+// =============================================================================
+// Video (optional)
+// =============================================================================
+
+typedef struct dong_video_player_t dong_video_player_t;
+
+typedef enum dong_video_pixel_format_t {
+    DONG_VIDEO_PIXEL_FORMAT_RGBA8 = 1,
+} dong_video_pixel_format_t;
+
+typedef struct dong_video_metadata_t {
+    uint32_t video_width;
+    uint32_t video_height;
+    double duration_seconds;
+    uint32_t has_video;
+    uint32_t has_audio;
+} dong_video_metadata_t;
+
+typedef struct dong_video_frame_t {
+    dong_video_pixel_format_t format;
+    uint32_t width;
+    uint32_t height;
+    uint32_t stride_bytes;
+    const uint8_t* data;       // RGBA8 pointer, lifetime: valid until next read/close
+    double pts_seconds;
+} dong_video_frame_t;
+
 typedef struct dong_plugin_vtable_t {
     dong_plugin_info_t info;
+
 
     // log
     void (*log)(void* user, dong_log_level_t level, const char* msg);
@@ -112,7 +142,15 @@ typedef struct dong_plugin_vtable_t {
     // Get raw platform handles (for advanced integration)
     void* (*get_native_window_handle)(void* user, dong_window_t* window);
     void* (*get_native_gpu_device)(void* user, dong_gpu_device_t* device);
+
+    // video (optional, requires DONG_PLUGIN_CAP_VIDEO)
+    dong_video_player_t* (*video_open)(void* user, const char* url);
+    void (*video_close)(void* user, dong_video_player_t* player);
+    int (*video_get_metadata)(void* user, dong_video_player_t* player, dong_video_metadata_t* out);
+    int (*video_read_frame)(void* user, dong_video_player_t* player, dong_video_frame_t* out_frame);
+    int (*video_seek)(void* user, dong_video_player_t* player, double time_seconds);
 } dong_plugin_vtable_t;
+
 
 // The exported symbol type from plugin DLL.
 // dong_app will LoadLibrary/dlsym this to obtain the vtable.

@@ -1619,6 +1619,100 @@ void JSBindings::dispatchKeyEvent(uint64_t node_id, const char* type, uint32_t k
     }
 }
 
+void JSBindings::dispatchSimpleEvent(uint64_t node_id, const char* type) {
+    if (!engine_) return;
+    if (!type || !type[0]) return;
+
+    JSContext* ctx = engine_->getContext();
+    if (!ctx) return;
+
+    auto node_it = listeners_.find(node_id);
+    if (node_it == listeners_.end()) return;
+    auto& type_map = node_it->second;
+    auto type_it = type_map.find(type);
+    if (type_it == type_map.end()) return;
+
+    auto& funcs = type_it->second;
+    for (auto& fn : funcs) {
+        if (!JS_IsFunction(ctx, fn)) continue;
+
+        JSValue ev = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, ev, "type", JS_NewString(ctx, type));
+        JS_SetPropertyStr(ctx, ev, "bubbles", JS_TRUE);
+        JS_SetPropertyStr(ctx, ev, "cancelable", JS_TRUE);
+
+        auto dom_it = id_to_node_.find(node_id);
+        if (dom_it != id_to_node_.end()) {
+            JSValue target = createJSElement(ctx, dom_it->second);
+            JS_SetPropertyStr(ctx, ev, "target", target);
+            JS_SetPropertyStr(ctx, ev, "currentTarget", JS_DupValue(ctx, target));
+        }
+
+        JSValue ret = JS_Call(ctx, fn, JS_UNDEFINED, 1, &ev);
+        if (JS_IsException(ret)) {
+            JSValue exc = JS_GetException(ctx);
+            const char* err = JS_ToCString(ctx, exc);
+            if (err) {
+                std::fprintf(stderr, "[JSBindings] event(%s) error: %s\\n", type, err);
+                JS_FreeCString(ctx, err);
+            }
+            JS_FreeValue(ctx, exc);
+        }
+        JS_FreeValue(ctx, ret);
+        JS_FreeValue(ctx, ev);
+    }
+}
+
+void JSBindings::dispatchMediaEvent(uint64_t node_id, const char* type, double current_time, double duration, const char* message) {
+    if (!engine_) return;
+    if (!type || !type[0]) return;
+
+    JSContext* ctx = engine_->getContext();
+    if (!ctx) return;
+
+    auto node_it = listeners_.find(node_id);
+    if (node_it == listeners_.end()) return;
+    auto& type_map = node_it->second;
+    auto type_it = type_map.find(type);
+    if (type_it == type_map.end()) return;
+
+    auto& funcs = type_it->second;
+    for (auto& fn : funcs) {
+        if (!JS_IsFunction(ctx, fn)) continue;
+
+        JSValue ev = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, ev, "type", JS_NewString(ctx, type));
+        JS_SetPropertyStr(ctx, ev, "bubbles", JS_TRUE);
+        JS_SetPropertyStr(ctx, ev, "cancelable", JS_TRUE);
+        JS_SetPropertyStr(ctx, ev, "currentTime", JS_NewFloat64(ctx, current_time));
+        JS_SetPropertyStr(ctx, ev, "duration", JS_NewFloat64(ctx, duration));
+        if (message && message[0]) {
+            JS_SetPropertyStr(ctx, ev, "message", JS_NewString(ctx, message));
+            JS_SetPropertyStr(ctx, ev, "error", JS_NewString(ctx, message));
+        }
+
+        auto dom_it = id_to_node_.find(node_id);
+        if (dom_it != id_to_node_.end()) {
+            JSValue target = createJSElement(ctx, dom_it->second);
+            JS_SetPropertyStr(ctx, ev, "target", target);
+            JS_SetPropertyStr(ctx, ev, "currentTarget", JS_DupValue(ctx, target));
+        }
+
+        JSValue ret = JS_Call(ctx, fn, JS_UNDEFINED, 1, &ev);
+        if (JS_IsException(ret)) {
+            JSValue exc = JS_GetException(ctx);
+            const char* err = JS_ToCString(ctx, exc);
+            if (err) {
+                std::fprintf(stderr, "[JSBindings] media event(%s) error: %s\\n", type, err);
+                JS_FreeCString(ctx, err);
+            }
+            JS_FreeValue(ctx, exc);
+        }
+        JS_FreeValue(ctx, ret);
+        JS_FreeValue(ctx, ev);
+    }
+}
+
 bool JSBindings::hasEventListeners(uint64_t node_id, const char* type) const {
     auto node_it = listeners_.find(node_id);
     if (node_it == listeners_.end()) return false;

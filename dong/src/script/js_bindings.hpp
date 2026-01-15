@@ -61,6 +61,11 @@ public:
     void removeEventListener(uint64_t node_id, const std::string& type, JSValueConst handler);
     void dispatchMouseEvent(uint64_t node_id, const char* type, int32_t x, int32_t y, int32_t button);
     void dispatchKeyEvent(uint64_t node_id, const char* type, uint32_t key_code);
+
+    // Generic event dispatch for non-input events (e.g. media events).
+    void dispatchSimpleEvent(uint64_t node_id, const char* type);
+    void dispatchMediaEvent(uint64_t node_id, const char* type, double current_time, double duration, const char* message = nullptr);
+
     bool hasEventListeners(uint64_t node_id, const char* type) const;
 
     // Bridge between JS listeners and C++ DOM EventDispatcher

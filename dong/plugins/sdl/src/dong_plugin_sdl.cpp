@@ -1,6 +1,8 @@
 #include "dong_plugin_api.h"
+#include "video_ffmpeg.h"
 
 #include <SDL3/SDL.h>
+
 #include <SDL3/SDL_gpu.h>
 #include <SDL3/SDL_log.h>
 
@@ -343,12 +345,22 @@ static void* sdl_get_native_gpu_device(void* /*user*/, dong_gpu_device_t* device
 // =============================================================================
 // vtable
 // =============================================================================
+
+static constexpr dong_plugin_caps_t k_caps =
+    (dong_plugin_caps_t)(DONG_PLUGIN_CAP_LOG |
+                         DONG_PLUGIN_CAP_TIME |
+                         DONG_PLUGIN_CAP_WINDOW |
+                         DONG_PLUGIN_CAP_INPUT |
+                         DONG_PLUGIN_CAP_RENDERER
+#if defined(DONG_PLUGIN_SDL_HAS_FFMPEG) && DONG_PLUGIN_SDL_HAS_FFMPEG
+                         | DONG_PLUGIN_CAP_VIDEO
+#endif
+    );
+
 static const dong_plugin_vtable_t g_vtable = {
     /*info*/ {
         DONG_PLUGIN_API_VERSION,
-        (dong_plugin_caps_t)(DONG_PLUGIN_CAP_LOG | DONG_PLUGIN_CAP_TIME | 
-                            DONG_PLUGIN_CAP_WINDOW | DONG_PLUGIN_CAP_INPUT | 
-                            DONG_PLUGIN_CAP_RENDERER)
+        k_caps
     },
 
     /*log*/ sdl_log,
@@ -368,7 +380,22 @@ static const dong_plugin_vtable_t g_vtable = {
 
     /*get_native_window_handle*/ sdl_get_native_window_handle,
     /*get_native_gpu_device*/ sdl_get_native_gpu_device,
+
+#if defined(DONG_PLUGIN_SDL_HAS_FFMPEG) && DONG_PLUGIN_SDL_HAS_FFMPEG
+    /*video_open*/ sdl_video_open,
+    /*video_close*/ sdl_video_close,
+    /*video_get_metadata*/ sdl_video_get_metadata,
+    /*video_read_frame*/ sdl_video_read_frame,
+    /*video_seek*/ sdl_video_seek,
+#else
+    /*video_open*/ nullptr,
+    /*video_close*/ nullptr,
+    /*video_get_metadata*/ nullptr,
+    /*video_read_frame*/ nullptr,
+    /*video_seek*/ nullptr,
+#endif
 };
+
 
 } // namespace
 

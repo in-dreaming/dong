@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    body {
+      margin: 0;
+      padding: 22px;
+      background: #0b0f14;
+      color: #e6eefc;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    }
+    .card {
+      width: 860px;
+      padding: 14px;
+      border-radius: 14px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.12);
+    }
+    .title {
+      font-size: 14px;
+      opacity: 0.9;
+      margin-bottom: 10px;
+    }
+    video {
+      width: 640px;
+      height: 360px;
+      object-fit: cover;
+      background: #0f1115;
+      border-radius: 10px;
+    }
+    .row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+    .pill {
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(0,0,0,0.22);
+      opacity: 0.9;
+    }
+    .log {
+      margin-top: 10px;
+      padding: 10px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(0,0,0,0.18);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      min-height: 120px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="title">video events test (counters should update across frames)</div>
+
+    <video id="v" controls autoplay loop src="../video/snow.mp4" poster="../images/bg.png"></video>
+
+    <div class="row">
+      <span class="pill">loadedmetadata=<b id="c_loadedmetadata">0</b></span>
+      <span class="pill">loadeddata=<b id="c_loadeddata">0</b></span>
+      <span class="pill">canplay=<b id="c_canplay">0</b></span>
+      <span class="pill">play=<b id="c_play">0</b></span>
+      <span class="pill">playing=<b id="c_playing">0</b></span>
+      <span class="pill">pause=<b id="c_pause">0</b></span>
+      <span class="pill">timeupdate=<b id="c_timeupdate">0</b></span>
+      <span class="pill">ended=<b id="c_ended">0</b></span>
+      <span class="pill">error=<b id="c_error">0</b></span>
+    </div>
+
+    <div id="log" class="log">(waiting)</div>
+  </div>
+
+  <script>
+    (function () {
+      const v = document.getElementById('v');
+      const log = document.getElementById('log');
+
+      function inc(name) {
+        const el = document.getElementById('c_' + name);
+        if (!el) return;
+        const n = (parseInt(el.textContent || '0', 10) || 0) + 1;
+        el.textContent = String(n);
+      }
+
+      function line(s) {
+        const old = log.textContent || '';
+        const next = (old === '(waiting)') ? '' : old;
+        log.textContent = next + (next ? '\n' : '') + s;
+      }
+
+      const watched = [
+        'loadedmetadata', 'loadeddata', 'canplay',
+        'play', 'playing', 'pause',
+        'timeupdate', 'ended', 'error',
+      ];
+
+      watched.forEach((t) => {
+        v.addEventListener(t, (e) => {
+          inc(t);
+          const ct = (e && typeof e.currentTime === 'number') ? e.currentTime.toFixed(3) : 'n/a';
+          const dur = (e && typeof e.duration === 'number') ? e.duration.toFixed(3) : 'n/a';
+          const msg = (e && (e.message || e.error)) ? (e.message || e.error) : '';
+          line(t + ' ct=' + ct + ' dur=' + dur + (msg ? (' msg=' + msg) : ''));
+        });
+      });
+
+      line('listeners installed');
+    })();
+  </script>
+</body>
+</html>

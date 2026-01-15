@@ -209,12 +209,24 @@ int main(int argc, char** argv) {
     SDL_Quit();
     return 2;
 #else
-    HMODULE mod = LoadLibraryA("dong_plugin_sdl.dll");
+    // CMake+MinGW typically produces `libdong_plugin_sdl.dll`, while MSVC builds may produce
+    // `dong_plugin_sdl.dll`. Try both so the app works across toolchains.
+    HMODULE mod = nullptr;
+    const char* plugin_names[] = {
+        "libdong_plugin_sdl.dll",
+        "dong_plugin_sdl.dll",
+    };
+    for (const char* name : plugin_names) {
+        mod = LoadLibraryA(name);
+        if (mod) break;
+    }
+
     if (!mod) {
-        print_err("LoadLibraryA(dong_plugin_sdl.dll) failed. Make sure the DLL is next to dong_app.exe");
+        print_err("LoadLibraryA failed. Make sure dong_plugin_sdl DLL is next to dong_app.exe (tried libdong_plugin_sdl.dll, dong_plugin_sdl.dll)");
         SDL_Quit();
         return 2;
     }
+
 
     auto get_api = reinterpret_cast<dong_plugin_get_api_fn>(GetProcAddress(mod, "dong_plugin_get_api"));
     if (!get_api) {
@@ -306,6 +318,9 @@ int main(int argc, char** argv) {
         SDL_Quit();
         return 2;
     }
+
+    // Inject plugin API (enables optional subsystems like video)
+    dong_view_set_plugin_api(view, plugin, nullptr);
 
     // Set external GPU device for rendering
     dong_view_set_external_gpu_device(view, native_device, native_window);

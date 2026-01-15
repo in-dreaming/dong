@@ -407,10 +407,17 @@ void GPUDriverSDL::executePreuploadImages(const GPUCommandList& commands) {
         if (cmd.image_src.empty()) {
             continue;
         }
+
+        // Dynamic textures (e.g. video://...) are updated externally and should not enter the atlas.
+        if (cmd.image_src.rfind("video://", 0) == 0) {
+            continue;
+        }
+
         ImageAtlasEntry tmp{};
         (void)ensureImageInAtlas(cmd.image_src, tmp);
     }
 }
+
 
 void GPUDriverSDL::executeBeginPass(ExecuteContext& ctx) {
     if (ctx.pass) {
@@ -1164,16 +1171,39 @@ void GPUDriverSDL::executeDrawShadow(ExecuteContext& ctx, const GPUCommand& cmd)
 }
 
 void GPUDriverSDL::executeDrawImage(ExecuteContext& ctx, const GPUCommand& cmd) {
-    if (!ctx.pass || !image_pipeline_ || !image_atlas_texture_ || !image_sampler_) {
+    if (!ctx.pass || !image_pipeline_ || !image_sampler_) {
         return;
     }
     if (cmd.image_src.empty()) {
         return;
     }
 
+    // Resolve texture source:
+    // - "video://..." : external dynamic texture uploaded by View
+    // - otherwise      : static image in atlas
+    SDL_GPUTexture* src_texture = nullptr;
     ImageAtlasEntry entry{};
-    if (!ensureImageInAtlas(cmd.image_src, entry)) {
-        return;
+
+    if (cmd.image_src.rfind("video://", 0) == 0) {
+        auto it = external_images_.find(cmd.image_src);
+        if (it == external_images_.end() || !it->second.texture) {
+            return;
+        }
+        src_texture = it->second.texture;
+        entry.u0 = 0.0f;
+        entry.v0 = 0.0f;
+        entry.u1 = 1.0f;
+        entry.v1 = 1.0f;
+        entry.width = it->second.width;
+        entry.height = it->second.height;
+    } else {
+        if (!image_atlas_texture_) {
+            return;
+        }
+        if (!ensureImageInAtlas(cmd.image_src, entry)) {
+            return;
+        }
+        src_texture = image_atlas_texture_;
     }
 
     struct ImageUniformData {
@@ -1248,9 +1278,8 @@ void GPUDriverSDL::executeDrawImage(ExecuteContext& ctx, const GPUCommand& cmd) 
         ctx.pipeline_state.active = PipelineBindingState::ActivePipeline::Image;
     }
 
-    // Always bind the atlas sampler+texture for slot 0 (shared with other draws).
     SDL_GPUTextureSamplerBinding binding{};
-    binding.texture = image_atlas_texture_;
+    binding.texture = src_texture;
     binding.sampler = image_sampler_;
     SDL_BindGPUFragmentSamplers(ctx.pass, 0, &binding, 1);
     ctx.pipeline_state.image_sampler_bound = true;
@@ -1258,6 +1287,7 @@ void GPUDriverSDL::executeDrawImage(ExecuteContext& ctx, const GPUCommand& cmd) 
 
     SDL_DrawGPUPrimitives(ctx.pass, 4, 1, 0, 0);
 }
+
 
 void GPUDriverSDL::executeDrawText(ExecuteContext& ctx, const GPUCommand& cmd) {
     if (!ctx.pass || !text_pipeline_ || glyph_atlas_tiers_.empty() || cmd.glyphs.empty()) {

@@ -4,6 +4,9 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+// Legacy view API is still able to consume the plugin vtable for optional subsystems (e.g. video).
+#include "dong_plugin_api.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -21,6 +24,10 @@ void dong_destroy_context(dong_context_t* ctx);
 
 // 2. View Management
 dong_view_t* dong_view_create(dong_context_t* ctx, uint32_t width, uint32_t height);
+
+// Optional: inject platform plugin vtable (enables optional subsystems like video).
+void dong_view_set_plugin_api(dong_view_t* view, const dong_plugin_vtable_t* plugin, void* plugin_user);
+
 void dong_view_destroy(dong_view_t* view);
 void dong_view_free(dong_view_t* view);
 void dong_view_load_html(dong_view_t* view, const char* html);

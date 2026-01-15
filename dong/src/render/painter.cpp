@@ -927,8 +927,77 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         }
     }
 
+    // 2.1 Video (poster or placeholder)
+    if (layout_node && tag == "video" && !is_hidden) {
+        Rect rect{};
+        rect.x = layout_node->layout.position[0];
+        rect.y = layout_node->layout.position[1];
+        rect.width = layout_node->layout.dimensions[0];
+        rect.height = layout_node->layout.dimensions[1];
+
+        if (rect.width > 0.0f && rect.height > 0.0f) {
+            // If video decoder has produced a frame, View will set an internal attribute
+            // ("__dong_video_frame") with a special src key ("video://...").
+            std::string frame_src = node->getAttribute("__dong_video_frame");
+
+            auto toLowerCopy = [](std::string s) {
+                std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
+                    return static_cast<char>(std::tolower(c));
+                });
+                return s;
+            };
+
+            const std::string object_fit = toLowerCopy(collapseWhitespace(style.object_fit));
+            ImageFitMode fit = ImageFitMode::Fill;
+            if (object_fit == "contain") {
+                fit = ImageFitMode::Contain;
+            } else if (object_fit == "cover") {
+                fit = ImageFitMode::Cover;
+            }
+
+            if (!frame_src.empty()) {
+                DisplayListBuilder::ScopedClip frame_clip;
+                if (fit == ImageFitMode::Cover) {
+                    frame_clip = builder.pushClipRect(rect);
+                }
+                builder.addImage(rect, frame_src, 1.0f, fit);
+            } else {
+                std::string poster = node->getAttribute("poster");
+                if (!poster.empty()) {
+                    DisplayListBuilder::ScopedClip poster_clip;
+                    if (fit == ImageFitMode::Cover) {
+                        poster_clip = builder.pushClipRect(rect);
+                    }
+
+                    builder.addImage(rect, poster, 1.0f, fit);
+                } else {
+                    // Minimal placeholder: black-ish background + subtle border + optional controls bar.
+                    Color bg = makeColorFromCss("#0f1115");
+                    builder.addRect(rect, bg);
+
+                    Color border = makeColorFromCss("#3a3f4b");
+                    const float bw = 1.0f;
+                    builder.addRect(Rect{rect.x, rect.y, rect.width, bw}, border);
+                    builder.addRect(Rect{rect.x, rect.y + rect.height - bw, rect.width, bw}, border);
+                    builder.addRect(Rect{rect.x, rect.y, bw, rect.height}, border);
+                    builder.addRect(Rect{rect.x + rect.width - bw, rect.y, bw, rect.height}, border);
+                }
+            }
+
+            // Controls overlay (still minimal, but clickable behavior is handled by View input).
+            if (node->hasAttribute("controls")) {
+                Color bar = makeColorFromCss("#000000");
+                bar.a = 0.35f;
+                const float bar_h = std::min(28.0f, rect.height);
+                builder.addRect(Rect{rect.x, rect.y + rect.height - bar_h, rect.width, bar_h}, bar);
+            }
+
+        }
+    }
+
     // 3. 文本内容 (visibility: hidden 时跳过)
-    if (layout_node && tag != "script" && tag != "style" && tag != "head" && tag != "img" && !is_hidden) {
+    if (layout_node && tag != "script" && tag != "style" && tag != "head" && tag != "img" && tag != "video" && !is_hidden) {
+
         std::string debug_class = node->getAttribute("class");
         if (debug_class.find("overlay-row") != std::string::npos) {
             DONG_LOG_INFO("[Painter] overlay-row: checking children, count=%zu", node->getChildren().size());

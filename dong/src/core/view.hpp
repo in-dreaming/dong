@@ -3,6 +3,10 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <unordered_map>
+#include <vector>
+
+#include "dong_plugin_api.h"
 
 // Forward declare SDL types
 struct SDL_GPUDevice;
@@ -52,6 +56,9 @@ public:
 
     // Optional: configure a base directory for resolving relative resource URLs.
     void setResourceRoot(const std::string& root);
+
+    // Optional: inject platform plugin vtable (enables optional subsystems like video).
+    void setPlugin(const dong_plugin_vtable_t* plugin, void* plugin_user);
 
     void* get_pixel_buffer();
     render::RenderSurface* getRenderSurface() const { return render_surface.get(); }
@@ -104,6 +111,58 @@ private:
     std::unique_ptr<script::ScriptEngine> script_engine;
     std::unique_ptr<script::JSBindings> js_bindings;
 
+    // Optional: platform plugin vtable (non-owning)
+    const dong_plugin_vtable_t* plugin_ = nullptr;
+    void* plugin_user_ = nullptr;
+
+    // =============================================================================
+    // Video (optional, provided by plugin)
+    // =============================================================================
+    struct VideoState {
+        dong::dom::DOMNodePtr node;
+        dong_video_player_t* player = nullptr;
+
+        std::string src;
+        std::string frame_key; // e.g. "video://<node_ptr>"
+
+        dong_video_metadata_t meta{};
+        bool meta_ready = false;
+        bool loadeddata_sent = false;
+
+
+        bool preload = true;   // preload != none
+        bool autoplay = false;
+        bool loop = false;
+        bool controls = false;
+
+        bool playing = false;
+        bool ended = false;
+        bool errored = false;
+
+        double wall_clock_start = 0.0;
+        double video_time_start = 0.0;
+        double current_pts = 0.0;
+
+        // Upload staging
+        std::vector<uint8_t> rgba;
+        uint32_t frame_w = 0;
+        uint32_t frame_h = 0;
+        uint32_t frame_stride = 0;
+        bool has_frame = false;
+        bool needs_upload = false;
+
+        double last_timeupdate_wall = 0.0;
+    };
+
+    std::unordered_map<void*, VideoState> video_states_;
+
+    void syncVideoElements(double wall_time_sec);
+    void updateVideoPlayback(VideoState& vs, double wall_time_sec);
+    void closeVideo(VideoState& vs);
+    void dispatchMediaEvent(VideoState& vs, const char* type_name);
+    void dispatchMediaError(VideoState& vs, const char* message);
+    void toggleVideoPlayPause(VideoState& vs, double wall_time_sec);
+    void uploadPendingVideoFrames();
 
     // GPU 渲染相关（可选）
     std::unique_ptr<render::GPUDevice> gpu_device_;
@@ -144,6 +203,7 @@ private:
     bool js_bindings_initialized_ = false;
     int32_t last_mouse_x_ = 0;
     int32_t last_mouse_y_ = 0;
+    double last_wall_time_sec_ = 0.0;
 
     // Runtime interaction states for pseudo-classes
     dom::DOMNodePtr hovered_element_;

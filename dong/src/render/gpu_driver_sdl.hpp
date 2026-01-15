@@ -40,6 +40,12 @@ public:
     // 供外部注入图片资源管理器（用于从 Skia/CPU 侧取得图片像素）
     void setImageResourceManager(ResourceManager* manager) override { image_resource_manager_ = manager; }
 
+    // Dynamic RGBA textures (e.g. video frames)
+    bool updateExternalImageRGBA(const std::string& key,
+                                 const uint8_t* rgba,
+                                 uint32_t width,
+                                 uint32_t height,
+                                 uint32_t stride_bytes) override;
 
     // Debug: 启用时在 execute 末尾按 draw_batches 做一次批次遍历并输出日志
     void setDebugLogDrawBatches(bool enable) { debug_log_draw_batches_ = enable; }
@@ -134,6 +140,14 @@ private:
         uint32_t height;
     };
     std::unordered_map<std::string, ImageAtlasEntry> image_atlas_entries_;
+
+    // External textures keyed by string (used for video://...)
+    struct ExternalImage {
+        SDL_GPUTexture* texture = nullptr;
+        uint32_t width = 0;
+        uint32_t height = 0;
+    };
+    std::unordered_map<std::string, ExternalImage> external_images_;
 
     bool ensureImageInAtlas(const std::string& src, ImageAtlasEntry& out_entry);
 

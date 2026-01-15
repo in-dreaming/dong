@@ -468,6 +468,7 @@ if(BUILD_EXAMPLES)
                 PATTERN "*.js"
                 PATTERN "*.css"
                 PATTERN "*.png"
+                PATTERN "*.mp4"
         )
     endif()
 endif()

@@ -10,6 +10,7 @@
 #include <cctype>
 
 #include <algorithm>
+#include <unordered_set>
 #include <filesystem>
 #include <SDL3/SDL_log.h>
 
@@ -201,6 +202,20 @@ View::~View() {
 void View::setResourceRoot(const std::string& root) {
     if (resource_manager_) {
         resource_manager_->setResourceRoot(root);
+    }
+}
+
+void View::setPlugin(const dong_plugin_vtable_t* plugin, void* plugin_user) {
+    plugin_ = plugin;
+    plugin_user_ = plugin_user;
+
+    // If video capability is missing, close any existing players (best effort).
+    const bool video_ok = (plugin_ && (plugin_->info.capabilities & DONG_PLUGIN_CAP_VIDEO) && plugin_->video_open && plugin_->video_close);
+    if (!video_ok) {
+        for (auto& kv : video_states_) {
+            closeVideo(kv.second);
+        }
+        video_states_.clear();
     }
 }
 
@@ -402,6 +417,10 @@ void View::update() {
     static auto start_time = std::chrono::steady_clock::now();
     auto now = std::chrono::steady_clock::now();
     double current_time = std::chrono::duration<double>(now - start_time).count();
+    last_wall_time_sec_ = current_time;
+
+    // Tick media elements (e.g. <video>) before building command lists.
+    syncVideoElements(current_time);
     
     auto& anim_controller = animation::getAnimationController();
     if (anim_controller.hasActiveAnimations()) {
@@ -542,6 +561,7 @@ void View::update() {
         {
             DONG_PROFILE_SCOPE_CAT("GPU::frame", "gpu");
             gpu_driver_->beginFrame();
+            uploadPendingVideoFrames();
             gpu_driver_->execute(*cached_cmd_list_);
             gpu_driver_->endFrame();
         }
@@ -1107,6 +1127,23 @@ void View::handle_mouse_up(int32_t button) {
                        last_mouse_x_, last_mouse_y_,
                        clicked.get(),
                        clicked ? clicked->getTagName().c_str() : "null");
+
+        // Minimal <video controls> interaction: clicking the bottom controls bar toggles play/pause.
+        if (clicked && clicked->getTagName() == "video" && clicked->hasAttribute("controls")) {
+            auto it = video_states_.find(clicked.get());
+            if (it != video_states_.end()) {
+                const auto* layout = layout_engine->getLayout(clicked);
+                if (layout && layout->height > 0.0f) {
+                    const float bar_h = std::min(28.0f, layout->height);
+                    const float my = static_cast<float>(last_mouse_y_);
+                    const float bar_top = layout->y + layout->height - bar_h;
+                    if (my >= bar_top && my <= layout->y + layout->height) {
+                        toggleVideoPlayPause(it->second, last_wall_time_sec_);
+                    }
+                }
+            }
+        }
+
         if (clicked) {
             bool changed = focus_manager->focusOnClick(clicked);
             DONG_LOG_INFO("[View::handle_mouse_up] focusOnClick returned %d, focused=%p",
@@ -1537,6 +1574,419 @@ void View::setExternalGPUDevice(SDL_GPUDevice* device, SDL_Window* window) {
 
     use_gpu_ = true;
     markNeedsRepaint();
+}
+
+// =============================================================================
+// Video support (plugin-provided)
+// =============================================================================
+
+namespace {
+
+static bool isAbsolutePathLike(const std::string& p) {
+    if (p.size() >= 2 && std::isalpha(static_cast<unsigned char>(p[0])) && p[1] == ':') {
+        return true; // Windows drive path
+    }
+    if (!p.empty() && (p[0] == '/' || p[0] == '\\')) {
+        return true; // Unix abs / UNC-like
+    }
+    return false;
+}
+
+static std::string resolveVideoUrlForPlugin(const std::string& src, const std::string& resource_root) {
+    if (src.empty()) return {};
+
+    // Basic URL handling: support file://, reject http(s)/data for now.
+    if (src.rfind("http://", 0) == 0 || src.rfind("https://", 0) == 0 || src.rfind("data:", 0) == 0) {
+        return {};
+    }
+
+    std::string path = src;
+    if (path.rfind("file://", 0) == 0) {
+        path = path.substr(std::string("file://").size());
+        // Windows file URL often looks like "/d:/xxx"; strip the leading '/' if it precedes a drive letter.
+        if (path.size() >= 3 && path[0] == '/' && std::isalpha(static_cast<unsigned char>(path[1])) && path[2] == ':') {
+            path.erase(path.begin());
+        }
+    }
+
+    if (isAbsolutePathLike(path)) {
+        return path;
+    }
+
+    if (!resource_root.empty()) {
+        try {
+            namespace fs = std::filesystem;
+            fs::path resolved = fs::path(resource_root) / fs::path(path);
+            return resolved.lexically_normal().string();
+        } catch (...) {
+            // ignore
+        }
+    }
+
+    // Fallback: relative to current working directory.
+    return path;
+}
+
+} // anonymous namespace
+
+void View::closeVideo(VideoState& vs) {
+    if (vs.player && plugin_ && plugin_->video_close) {
+        plugin_->video_close(plugin_user_, vs.player);
+    }
+    vs.player = nullptr;
+
+    vs.meta_ready = false;
+    vs.loadeddata_sent = false;
+    vs.playing = false;
+
+    vs.ended = false;
+    vs.errored = false;
+    vs.current_pts = 0.0;
+
+    vs.has_frame = false;
+    vs.needs_upload = false;
+    vs.rgba.clear();
+    vs.frame_w = 0;
+    vs.frame_h = 0;
+    vs.frame_stride = 0;
+
+    if (vs.node) {
+        // Internal attribute (won't affect layout). Clearing requires a rebuild to remove DrawImage from cached command lists.
+        vs.node->setAttribute("__dong_video_frame", "");
+        markNeedsRepaint();
+    }
+}
+
+void View::dispatchMediaEvent(VideoState& vs, const char* type_name) {
+    if (!type_name || !type_name[0]) return;
+    if (!js_bindings || !script_engine || !vs.node) return;
+
+    ensureJSBindingsInitialized();
+
+    uint64_t node_id = js_bindings->getNodeIdFor(vs.node);
+    if (!node_id) {
+        // If JS never touched this node, it can't have listeners.
+        return;
+    }
+    if (!js_bindings->hasEventListeners(node_id, type_name)) {
+        return;
+    }
+
+    const double duration = vs.meta_ready ? vs.meta.duration_seconds : 0.0;
+    js_bindings->dispatchMediaEvent(node_id, type_name, vs.current_pts, duration, nullptr);
+}
+
+void View::dispatchMediaError(VideoState& vs, const char* message) {
+    if (!js_bindings || !script_engine || !vs.node) return;
+
+    ensureJSBindingsInitialized();
+
+    uint64_t node_id = js_bindings->getNodeIdFor(vs.node);
+    if (!node_id) {
+        return;
+    }
+    if (!js_bindings->hasEventListeners(node_id, "error")) {
+        return;
+    }
+
+    const double duration = vs.meta_ready ? vs.meta.duration_seconds : 0.0;
+    js_bindings->dispatchMediaEvent(node_id, "error", vs.current_pts, duration, message ? message : "");
+}
+
+void View::toggleVideoPlayPause(VideoState& vs, double wall_time_sec) {
+    if (!vs.player) return;
+
+    if (!vs.playing) {
+        // Start / resume.
+        if (vs.ended && plugin_ && plugin_->video_seek) {
+            plugin_->video_seek(plugin_user_, vs.player, 0.0);
+            vs.current_pts = 0.0;
+        }
+
+        vs.playing = true;
+        vs.ended = false;
+        vs.wall_clock_start = wall_time_sec;
+        vs.video_time_start = vs.current_pts;
+        dispatchMediaEvent(vs, "play");
+        dispatchMediaEvent(vs, "playing");
+    } else {
+        // Pause.
+        vs.playing = false;
+        dispatchMediaEvent(vs, "pause");
+    }
+}
+
+
+void View::updateVideoPlayback(VideoState& vs, double wall_time_sec) {
+    if (!vs.player || !plugin_ || !plugin_->video_read_frame) {
+        return;
+    }
+    if (!vs.playing) {
+        return;
+    }
+
+    // Target playback time in seconds.
+    const double target_time = vs.video_time_start + (wall_time_sec - vs.wall_clock_start);
+
+    // Pull a few frames at most per tick to avoid long stalls on slow videos.
+    constexpr int kMaxFramePullPerTick = 8;
+    int pulled = 0;
+
+    while (pulled < kMaxFramePullPerTick) {
+        dong_video_frame_t frame{};
+        int r = plugin_->video_read_frame(plugin_user_, vs.player, &frame);
+        if (r == 0) {
+            // EOF
+            if (vs.loop && plugin_->video_seek) {
+                plugin_->video_seek(plugin_user_, vs.player, 0.0);
+                vs.wall_clock_start = wall_time_sec;
+                vs.video_time_start = 0.0;
+                vs.current_pts = 0.0;
+                continue;
+            }
+            if (!vs.ended) {
+                vs.ended = true;
+                vs.playing = false;
+                // Keep event order close to browser behavior: pause first, then ended.
+                dispatchMediaEvent(vs, "pause");
+                dispatchMediaEvent(vs, "ended");
+            }
+            return;
+        }
+
+        if (r < 0) {
+            vs.errored = true;
+            vs.playing = false;
+            dispatchMediaError(vs, "video_read_frame failed");
+            return;
+        }
+
+        // We got a frame. If it's still behind target_time, keep pulling.
+        const double pts = frame.pts_seconds;
+
+        const size_t sz = static_cast<size_t>(frame.stride_bytes) * static_cast<size_t>(frame.height);
+        if (sz > 0 && frame.data) {
+            vs.rgba.resize(sz);
+            std::memcpy(vs.rgba.data(), frame.data, sz);
+            vs.frame_w = frame.width;
+            vs.frame_h = frame.height;
+            vs.frame_stride = frame.stride_bytes;
+            vs.current_pts = pts;
+            vs.has_frame = true;
+            vs.needs_upload = true;
+            offscreen_texture_dirty_ = true;
+        }
+
+        ++pulled;
+
+        // Ensure the renderer starts drawing video once we have the first frame.
+        if (vs.node && vs.node->getAttribute("__dong_video_frame").empty()) {
+            vs.node->setAttribute("__dong_video_frame", vs.frame_key);
+            markNeedsRepaint();
+        }
+
+        // Fire ready events once we have decoded first frame (best-effort semantics).
+        if (!vs.loadeddata_sent) {
+            vs.loadeddata_sent = true;
+            dispatchMediaEvent(vs, "loadeddata");
+            dispatchMediaEvent(vs, "canplay");
+        }
+
+
+        // Dispatch timeupdate at ~4Hz (best effort).
+        if (wall_time_sec - vs.last_timeupdate_wall >= 0.25) {
+            vs.last_timeupdate_wall = wall_time_sec;
+            dispatchMediaEvent(vs, "timeupdate");
+        }
+
+        if (pts + 1e-6 >= target_time) {
+            break;
+        }
+    }
+}
+
+void View::uploadPendingVideoFrames() {
+    if (!use_gpu_ || !gpu_driver_) {
+        return;
+    }
+
+    for (auto& kv : video_states_) {
+        VideoState& vs = kv.second;
+        if (!vs.needs_upload || !vs.has_frame || vs.frame_key.empty()) {
+            continue;
+        }
+        if (vs.rgba.empty() || vs.frame_w == 0 || vs.frame_h == 0) {
+            vs.needs_upload = false;
+            continue;
+        }
+
+        const bool ok = gpu_driver_->updateExternalImageRGBA(
+            vs.frame_key,
+            vs.rgba.data(),
+            vs.frame_w,
+            vs.frame_h,
+            vs.frame_stride
+        );
+
+        if (ok) {
+            vs.needs_upload = false;
+        }
+    }
+}
+
+void View::syncVideoElements(double wall_time_sec) {
+    const bool video_ok = (plugin_ && (plugin_->info.capabilities & DONG_PLUGIN_CAP_VIDEO) &&
+                           plugin_->video_open && plugin_->video_close && plugin_->video_read_frame);
+    if (!video_ok || !dom_manager) {
+        if (!video_states_.empty()) {
+            for (auto& kv : video_states_) {
+                closeVideo(kv.second);
+            }
+            video_states_.clear();
+        }
+        return;
+    }
+
+    auto nodes = dom_manager->getElementsByTagName("video");
+    std::unordered_set<void*> live;
+    live.reserve(nodes.size());
+
+    const std::string resource_root = resource_manager_ ? resource_manager_->getResourceRoot() : std::string();
+
+    for (auto& n : nodes) {
+        if (!n) continue;
+        live.insert(n.get());
+
+        VideoState& vs = video_states_[n.get()];
+        vs.node = n;
+        if (vs.frame_key.empty()) {
+            vs.frame_key = "video://" + std::to_string((uintptr_t)n.get());
+        }
+
+        const std::string src = n->getAttribute("src");
+        const bool autoplay = n->hasAttribute("autoplay");
+        const bool loop = n->hasAttribute("loop");
+        const bool controls = n->hasAttribute("controls");
+        bool preload = true;
+        {
+            std::string p = n->getAttribute("preload");
+            std::transform(p.begin(), p.end(), p.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+            if (p == "none") preload = false;
+        }
+
+        // If src removed, close.
+        if (src.empty()) {
+            if (vs.player) {
+                closeVideo(vs);
+            }
+            vs.src.clear();
+            continue;
+        }
+
+        const bool need_reopen = (!vs.player || vs.src != src);
+        vs.autoplay = autoplay;
+        vs.loop = loop;
+        vs.controls = controls;
+        vs.preload = preload;
+
+        if (need_reopen) {
+            if (vs.player) {
+                closeVideo(vs);
+            }
+
+            vs.src = src;
+            vs.errored = false;
+            vs.ended = false;
+            vs.current_pts = 0.0;
+            vs.loadeddata_sent = false;
+            vs.last_timeupdate_wall = 0.0;
+
+
+            const std::string resolved = resolveVideoUrlForPlugin(src, resource_root);
+            if (resolved.empty()) {
+                vs.errored = true;
+                dispatchMediaError(vs, "unsupported/invalid video src");
+                continue;
+            }
+
+            vs.player = plugin_->video_open(plugin_user_, resolved.c_str());
+            if (!vs.player) {
+                vs.errored = true;
+                dispatchMediaError(vs, "video_open failed");
+                continue;
+            }
+
+            // Metadata.
+            if (plugin_->video_get_metadata) {
+                dong_video_metadata_t md{};
+                if (plugin_->video_get_metadata(plugin_user_, vs.player, &md) != 0) {
+                    vs.meta = md;
+                    vs.meta_ready = true;
+                    dispatchMediaEvent(vs, "loadedmetadata");
+                }
+            }
+
+            // Preload first frame (best effort) so poster-less videos show something.
+            if (vs.preload && plugin_->video_seek) {
+                plugin_->video_seek(plugin_user_, vs.player, 0.0);
+            }
+            if (vs.preload) {
+                dong_video_frame_t f{};
+                int rr = plugin_->video_read_frame(plugin_user_, vs.player, &f);
+                if (rr == 1 && f.data && f.width > 0 && f.height > 0) {
+                    const size_t sz = static_cast<size_t>(f.stride_bytes) * static_cast<size_t>(f.height);
+                    vs.rgba.resize(sz);
+                    std::memcpy(vs.rgba.data(), f.data, sz);
+                    vs.frame_w = f.width;
+                    vs.frame_h = f.height;
+                    vs.frame_stride = f.stride_bytes;
+                    vs.current_pts = f.pts_seconds;
+                    vs.has_frame = true;
+                    vs.needs_upload = true;
+                    offscreen_texture_dirty_ = true;
+
+                    // Enable video rendering in Painter.
+                    if (vs.node) {
+                        vs.node->setAttribute("__dong_video_frame", vs.frame_key);
+                        markNeedsRepaint();
+                    }
+
+                    // Preload counts as ready-to-play for our minimal model.
+                    if (!vs.loadeddata_sent) {
+                        vs.loadeddata_sent = true;
+                        dispatchMediaEvent(vs, "loadeddata");
+                        dispatchMediaEvent(vs, "canplay");
+                    }
+
+                }
+            }
+
+            // Autoplay.
+            if (vs.autoplay) {
+                vs.playing = true;
+                vs.wall_clock_start = wall_time_sec;
+                vs.video_time_start = vs.current_pts;
+                dispatchMediaEvent(vs, "play");
+                dispatchMediaEvent(vs, "playing");
+            } else {
+                vs.playing = false;
+            }
+
+        }
+
+        // Drive playback.
+        updateVideoPlayback(vs, wall_time_sec);
+    }
+
+    // Cleanup removed nodes.
+    for (auto it = video_states_.begin(); it != video_states_.end();) {
+        if (live.find(it->first) == live.end()) {
+            closeVideo(it->second);
+            it = video_states_.erase(it);
+        } else {
+            ++it;
+        }
+    }
 }
 
 } // namespace dong

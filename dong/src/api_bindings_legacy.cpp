@@ -21,6 +21,11 @@ dong_view_t* dong_view_create(dong_context_t* ctx, uint32_t width, uint32_t heig
     return reinterpret_cast<dong_view_t*>(new DongView(width, height));
 }
 
+void dong_view_set_plugin_api(dong_view_t* view, const dong_plugin_vtable_t* plugin, void* plugin_user) {
+    if (!view) return;
+    reinterpret_cast<DongView*>(view)->setPlugin(plugin, plugin_user);
+}
+
 void dong_view_destroy(dong_view_t* view) {
     // Alias to dong_view_free for backward compatibility
     dong_view_free(view);

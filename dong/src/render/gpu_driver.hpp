@@ -1,6 +1,8 @@
 ﻿#pragma once
 
 #include <memory>
+#include <string>
+#include <cstdint>
 #include "gpu_ir.hpp"
 #include <SDL3/SDL_gpu.h>
 
@@ -32,6 +34,21 @@ public:
 
     // 可选：注入资源管理器（用于图片 decode / atlas 构建等）
     virtual void setImageResourceManager(ResourceManager* manager) { (void)manager; }
+
+    // Optional: update a dynamic RGBA texture (e.g. video frames) identified by a stable string key.
+    // The backend may ignore this if unsupported.
+    virtual bool updateExternalImageRGBA(const std::string& key,
+                                         const uint8_t* rgba,
+                                         uint32_t width,
+                                         uint32_t height,
+                                         uint32_t stride_bytes) {
+        (void)key;
+        (void)rgba;
+        (void)width;
+        (void)height;
+        (void)stride_bytes;
+        return false;
+    }
 
     virtual void beginFrame() = 0;
     virtual void endFrame() = 0;
