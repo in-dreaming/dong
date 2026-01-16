@@ -98,10 +98,10 @@
   <div class="grid">
     <div class="card">
       <div class="title">autoplay + loop (frames &amp; timeupdate should advance)</div>
-      <video id="v" controls autoplay loop src="snow.mp4" poster="../images/bg.png"></video>
+      <video id="v" autoplay loop muted src="snow.mp4" poster="../images/bg.png"></video>
 
       <div class="row">
-        <span class="pill"><b>Expected</b>: controls bar visible (click bottom bar toggles play/pause)</span>
+        <span class="pill"><b>Expected</b>: click video toggles play/pause</span>
         <span class="pill"><b>Expected</b>: poster shown before first frame (best effort)</span>
       </div>
 
@@ -160,6 +160,12 @@
           const msg = (e && (e.message || e.error)) ? (e.message || e.error) : '';
           appendLine(t + '  currentTime=' + ct + '  duration=' + dur + (msg ? ('  msg=' + msg) : ''));
         });
+      });
+
+      // Click video to toggle play/pause (avoid UA controls differences across renderers).
+      v.addEventListener('click', () => {
+        if (v.paused) v.play();
+        else v.pause();
       });
 
       // Show basic state derived from events only.

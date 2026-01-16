@@ -324,6 +324,10 @@ int main(int argc, char* argv[]) {
         {"tests/text_shadow_test.html",960, 640, 3.0f, 2.0f},
         {"tests/text_wrap_test.html",960, 640, 3.0f, 2.0f},
         {"tests/transform_test.html",960, 640, 3.0f, 2.0f},
+        {"video/video_play_test.html",960, 640, 3.0f, 2.0f},
+        {"video/video_test.html",960, 640, 3.0f, 2.0f},
+        {"video/video_events_test.html",960, 640, 3.0f, 2.0f},
+        {"video/video_acceptance.html",960, 640, 3.0f, 2.0f},
         // 可以继续添加更多屏幕...
     };
     

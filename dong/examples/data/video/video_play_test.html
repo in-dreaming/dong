@@ -47,7 +47,7 @@
   <div class="row">
     <div class="card">
       <div class="title">autoplay + loop (expect frames change across renders)</div>
-      <video controls autoplay loop src="../video/snow.mp4" poster="../images/bg.png"></video>
+      <video autoplay loop muted src="snow.mp4" poster="../images/bg.png"></video>
       <div class="hint">
         Notes: this test is meant for multi-frame rendering tools. If video backend is working,
         exported frames should differ.
@@ -56,9 +56,20 @@
 
     <div class="card">
       <div class="title">paused by default (expect stable first frame if preload works)</div>
-      <video controls src="../video/snow.mp4" poster="../images/bg.png"></video>
-      <div class="hint">Click the bottom bar to toggle play/pause (controls overlay is minimal).</div>
+      <video id="v_pause" muted src="snow.mp4" poster="../images/bg.png"></video>
+      <div class="hint">Click the video to toggle play/pause.</div>
     </div>
   </div>
+
+  <script>
+    (function () {
+      const v = document.getElementById('v_pause');
+      if (!v) return;
+      v.addEventListener('click', () => {
+        if (v.paused) v.play();
+        else v.pause();
+      });
+    })();
+  </script>
 </body>
 </html>
