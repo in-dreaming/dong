@@ -955,6 +955,14 @@ static JSValue video_getEnded(JSContext* ctx, JSValueConst this_val, int argc, J
     return JS_NewBool(ctx, node->getAttribute("__dong_video_ended") == "1");
 }
 
+static JSValue video_getSeeking(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc;
+    (void)argv;
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_FALSE;
+    return JS_NewBool(ctx, node->getAttribute("__dong_video_seeking") == "1");
+}
+
 static JSValue video_getCurrentTime(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     (void)argc;
     (void)argv;
@@ -980,6 +988,8 @@ static JSValue video_setCurrentTime(JSContext* ctx, JSValueConst this_val, int a
     if (t < 0.0) t = 0.0;
 
     node->setAttribute("__dong_video_seek", std::to_string(t));
+    node->setAttribute("__dong_video_seeking", "1");
+    node->setAttribute("__dong_video_ended", "0");
     return JS_UNDEFINED;
 }
 
@@ -1521,6 +1531,12 @@ JSValue JSBindings::createJSElement(JSContext* ctx, const dom::DOMNodePtr& node)
         JS_DefinePropertyGetSet(ctx, elem, ended_atom, ended_getter, JS_UNDEFINED,
             JS_PROP_ENUMERABLE | JS_PROP_CONFIGURABLE);
         JS_FreeAtom(ctx, ended_atom);
+
+        JSAtom seeking_atom = JS_NewAtom(ctx, "seeking");
+        JSValue seeking_getter = JS_NewCFunction(ctx, video_getSeeking, "get seeking", 0);
+        JS_DefinePropertyGetSet(ctx, elem, seeking_atom, seeking_getter, JS_UNDEFINED,
+            JS_PROP_ENUMERABLE | JS_PROP_CONFIGURABLE);
+        JS_FreeAtom(ctx, seeking_atom);
 
         JSAtom ct_atom = JS_NewAtom(ctx, "currentTime");
         JSValue ct_getter = JS_NewCFunction(ctx, video_getCurrentTime, "get currentTime", 0);

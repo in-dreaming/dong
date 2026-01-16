@@ -1,6 +1,6 @@
 ﻿#pragma once
 
-#include "dom_node.hpp"
+#include "dom/dom_node.hpp"
 #include "event_system.hpp"
 #include <functional>
 

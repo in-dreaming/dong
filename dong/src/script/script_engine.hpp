@@ -3,7 +3,7 @@
 #include <functional>
 #include <memory>
 #include <string>
-#include "../dom/dom_node.hpp"
+#include "../dom/dom/dom_node.hpp"
 #include "../dom/event_system.hpp"
 
 

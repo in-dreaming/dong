@@ -600,7 +600,18 @@ SDL_GPUTexture* View::renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, 
         return nullptr;
     }
 
+    // Tick media elements (e.g. <video>) for offscreen rendering too.
+    // Otherwise autoplay videos won't advance when the embedder only calls renderToGPUTexture().
+    {
+        static auto start_time = std::chrono::steady_clock::now();
+        auto now = std::chrono::steady_clock::now();
+        double current_time = std::chrono::duration<double>(now - start_time).count();
+        last_wall_time_sec_ = current_time;
+        syncVideoElements(current_time);
+    }
+
     // 1. 获取/创建离屏渲染目标纹理（使用UNORM格式，shader手动处理gamma）
+
     // B: 复用同一张纹理，避免每帧 Create/Release。
     SDL_GPUTexture* offscreen_texture = offscreen_texture_cache_;
 
@@ -772,9 +783,11 @@ SDL_GPUTexture* View::renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, 
     {
         DONG_PROFILE_SCOPE_CAT("offscreen_execute", "gpu");
         gpu_driver_->beginFrameOffscreen(offscreen_texture, width, height);
+        uploadPendingVideoFrames();
         gpu_driver_->execute(*offscreen_cmd_list_cache_);
         gpu_driver_->endFrameOffscreen();
     }
+
 
     offscreen_texture_dirty_ = false;
 
@@ -1711,7 +1724,10 @@ void View::toggleVideoPlayPause(VideoState& vs, double wall_time_sec) {
         if (vs.node) {
             vs.node->setAttribute("__dong_video_playing", "1");
             vs.node->setAttribute("__dong_video_ended", "0");
+            vs.node->setAttribute("__dong_video_seeking", "0");
+            vs.node->setAttribute("__dong_video_currentTime", std::to_string(vs.current_pts));
         }
+
 
         dispatchMediaEvent(vs, "play");
         dispatchMediaEvent(vs, "playing");
@@ -1720,7 +1736,10 @@ void View::toggleVideoPlayPause(VideoState& vs, double wall_time_sec) {
         vs.playing = false;
         if (vs.node) {
             vs.node->setAttribute("__dong_video_playing", "0");
+            vs.node->setAttribute("__dong_video_seeking", "0");
+            vs.node->setAttribute("__dong_video_currentTime", std::to_string(vs.current_pts));
         }
+
         dispatchMediaEvent(vs, "pause");
     }
 }
@@ -1752,8 +1771,14 @@ void View::updateVideoPlayback(VideoState& vs, double wall_time_sec) {
                 vs.wall_clock_start = wall_time_sec;
                 vs.video_time_start = 0.0;
                 vs.current_pts = 0.0;
+                if (vs.node) {
+                    vs.node->setAttribute("__dong_video_currentTime", "0");
+                    vs.node->setAttribute("__dong_video_ended", "0");
+                    vs.node->setAttribute("__dong_video_seeking", "0");
+                }
                 continue;
             }
+
             if (!vs.ended) {
                 vs.ended = true;
                 vs.playing = false;
@@ -1791,7 +1816,13 @@ void View::updateVideoPlayback(VideoState& vs, double wall_time_sec) {
             vs.has_frame = true;
             vs.needs_upload = true;
             offscreen_texture_dirty_ = true;
+
+            // Keep JS-visible currentTime reasonably up-to-date even between timeupdate events.
+            if (vs.node) {
+                vs.node->setAttribute("__dong_video_currentTime", std::to_string(vs.current_pts));
+            }
         }
+
 
         ++pulled;
 
@@ -1969,6 +2000,13 @@ void View::syncVideoElements(double wall_time_sec) {
                     vs.needs_upload = true;
                     offscreen_texture_dirty_ = true;
 
+                    if (vs.node) {
+                        vs.node->setAttribute("__dong_video_currentTime", std::to_string(vs.current_pts));
+                        vs.node->setAttribute("__dong_video_seeking", "0");
+                        vs.node->setAttribute("__dong_video_ended", "0");
+                    }
+
+
                     // Enable video rendering in Painter.
                     if (vs.node) {
                         vs.node->setAttribute("__dong_video_frame", vs.frame_key);
@@ -2011,11 +2049,19 @@ void View::syncVideoElements(double wall_time_sec) {
                         t = std::min(t, vs.meta.duration_seconds);
                     }
 
+                    if (vs.node) {
+                        vs.node->setAttribute("__dong_video_seeking", "1");
+                        vs.node->setAttribute("__dong_video_ended", "0");
+                        vs.node->setAttribute("__dong_video_currentTime", std::to_string(t));
+                    }
+
                     plugin_->video_seek(plugin_user_, vs.player, t);
                     vs.current_pts = t;
                     vs.video_time_start = vs.current_pts;
                     vs.wall_clock_start = wall_time_sec;
                     vs.ended = false;
+
+                    dispatchMediaEvent(vs, "seeking");
 
                     // Best effort: decode one frame after seek so paused videos update.
                     dong_video_frame_t f{};
@@ -2032,11 +2078,25 @@ void View::syncVideoElements(double wall_time_sec) {
                         vs.needs_upload = true;
                         offscreen_texture_dirty_ = true;
 
+                        if (vs.node) {
+                            vs.node->setAttribute("__dong_video_currentTime", std::to_string(vs.current_pts));
+                        }
+
                         if (vs.node && vs.node->getAttribute("__dong_video_frame").empty()) {
                             vs.node->setAttribute("__dong_video_frame", vs.frame_key);
                             markNeedsRepaint();
                         }
                     }
+
+                    if (vs.node) {
+                        vs.node->setAttribute("__dong_video_seeking", "0");
+                        vs.node->setAttribute("__dong_video_ended", "0");
+                        vs.node->setAttribute("__dong_video_currentTime", std::to_string(vs.current_pts));
+                    }
+                    vs.last_timeupdate_wall = wall_time_sec;
+                    dispatchMediaEvent(vs, "seeked");
+                    dispatchMediaEvent(vs, "timeupdate");
+
                 }
 
                 // Clear request (avoid removeAttribute() which would dirty layout).

@@ -3,7 +3,7 @@
 #include <memory>
 #include <string>
 #include <vector>
-#include "../dom/dom_node.hpp"
+#include "../dom/dom/dom_node.hpp"
 
 
 #include "../layout/layout_engine.hpp"
