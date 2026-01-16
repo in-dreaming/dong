@@ -1,5 +1,7 @@
 #include "style_engine.hpp"
 #include "../dom/dom_node.hpp"
+
+
 #include "../../core/log.h"
 #include "../../core/profiler.h"
 #include <algorithm>

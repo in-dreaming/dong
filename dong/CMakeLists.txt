@@ -126,6 +126,9 @@ add_library(dong SHARED
     src/script/js_bindings.cpp
     # Render
     src/render/painter.cpp
+    src/render/painter/painter_media.cpp
+    src/render/painter/painter_text.cpp
+    src/render/painter/painter_children.cpp
     src/render/render_surface.cpp
     src/render/resource_manager.cpp
     src/render/font_resolver.cpp
@@ -215,6 +218,9 @@ add_library(dong_legacy STATIC
     src/script/js_bindings.cpp
     # Render
     src/render/painter.cpp
+    src/render/painter/painter_media.cpp
+    src/render/painter/painter_text.cpp
+    src/render/painter/painter_children.cpp
     src/render/render_surface.cpp
     src/render/resource_manager.cpp
     src/render/gpu_device.cpp

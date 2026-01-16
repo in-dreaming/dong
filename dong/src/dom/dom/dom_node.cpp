@@ -870,7 +870,7 @@ DOMNodePtr DOMNode::getElementById(const std::string& id) {
 std::vector<DOMNodePtr> DOMNode::getElementsByTagName(const std::string& tag) {
     std::vector<DOMNodePtr> result;
     std::string lower_tag = tag;
-    std::transform(lower_tag.begin(), lower_tag.end(), lower_tag.begin(), 
+    std::transform(lower_tag.begin(), lower_tag.end(), lower_tag.begin(),
                    [](unsigned char c) { return std::tolower(c); });
 
     if (tag == "*" || tag_name_ == lower_tag) {

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "../css/computed_style.hpp"
 #include <string>
@@ -221,7 +221,6 @@ public:
     void setActive(bool v) { active_ = v; }
     void setFocused(bool v) { focused_ = v; }
 
-
     // Debug
     void print(int depth = 0) const;
 
@@ -239,19 +238,18 @@ protected:
     bool active_ = false;
     bool focused_ = false;
 
-    
     // Scroll state
     float scroll_x_ = 0.0f;
     float scroll_y_ = 0.0f;
     float content_width_ = 0.0f;
     float content_height_ = 0.0f;
-    
+
     // Client rect
     float client_top_ = 0.0f;
     float client_left_ = 0.0f;
     float client_width_ = 0.0f;
     float client_height_ = 0.0f;
-    
+
     // Offset rect
     float offset_top_ = 0.0f;
     float offset_left_ = 0.0f;
@@ -260,11 +258,11 @@ protected:
 
     DOMNodeWeakPtr parent_;
     std::vector<DOMNodePtr> children_;
-    
+
     // Pseudo-elements
     DOMNodePtr pseudo_before_;
     DOMNodePtr pseudo_after_;
-    
+
     std::unique_ptr<ClassList> class_list_;
 };
 

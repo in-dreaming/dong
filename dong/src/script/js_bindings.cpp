@@ -910,6 +910,93 @@ static JSValue elem_getChildren(JSContext* ctx, JSValueConst this_val, int argc,
 }
 
 // ============================================================
+// HTMLMediaElement (minimal): <video> play/pause/paused/currentTime
+// ============================================================
+
+static bool video_isPlayingAttr(const dong::dom::DOMNodePtr& node) {
+    if (!node) return false;
+    const std::string v = node->getAttribute("__dong_video_playing");
+    return v == "1" || v == "true";
+}
+
+static JSValue video_play(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc;
+    (void)argv;
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_UNDEFINED;
+    node->setAttribute("__dong_video_playing", "1");
+    return JS_UNDEFINED;
+}
+
+static JSValue video_pause(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc;
+    (void)argv;
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_UNDEFINED;
+    node->setAttribute("__dong_video_playing", "0");
+    return JS_UNDEFINED;
+}
+
+static JSValue video_getPaused(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc;
+    (void)argv;
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_TRUE;
+    const bool playing = video_isPlayingAttr(node);
+    const bool ended = (node->getAttribute("__dong_video_ended") == "1");
+    return JS_NewBool(ctx, (!playing) || ended);
+}
+
+static JSValue video_getEnded(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc;
+    (void)argv;
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_FALSE;
+    return JS_NewBool(ctx, node->getAttribute("__dong_video_ended") == "1");
+}
+
+static JSValue video_getCurrentTime(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc;
+    (void)argv;
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_NewFloat64(ctx, 0.0);
+    const std::string s = node->getAttribute("__dong_video_currentTime");
+    if (s.empty()) return JS_NewFloat64(ctx, 0.0);
+    char* end = nullptr;
+    const double v = std::strtod(s.c_str(), &end);
+    if (!end || end == s.c_str()) return JS_NewFloat64(ctx, 0.0);
+    return JS_NewFloat64(ctx, v);
+}
+
+static JSValue video_setCurrentTime(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_UNDEFINED;
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_UNDEFINED;
+
+    double t = 0.0;
+    if (JS_ToFloat64(ctx, &t, argv[0]) != 0) {
+        return JS_UNDEFINED;
+    }
+    if (t < 0.0) t = 0.0;
+
+    node->setAttribute("__dong_video_seek", std::to_string(t));
+    return JS_UNDEFINED;
+}
+
+static JSValue video_getDuration(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc;
+    (void)argv;
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_NewFloat64(ctx, 0.0);
+    const std::string s = node->getAttribute("__dong_video_duration");
+    if (s.empty()) return JS_NewFloat64(ctx, 0.0);
+    char* end = nullptr;
+    const double v = std::strtod(s.c_str(), &end);
+    if (!end || end == s.c_str()) return JS_NewFloat64(ctx, 0.0);
+    return JS_NewFloat64(ctx, v);
+}
+
+// ============================================================
 // 样式修改 API - element.style.*
 // ============================================================
 
@@ -1417,6 +1504,37 @@ JSValue JSBindings::createJSElement(JSContext* ctx, const dom::DOMNodePtr& node)
     JS_DefinePropertyGetSet(ctx, elem, textContent_atom, tc_getter, tc_setter,
         JS_PROP_ENUMERABLE | JS_PROP_CONFIGURABLE);
     JS_FreeAtom(ctx, textContent_atom);
+
+    // <video> minimal media API
+    if (node->getTagName() == "video") {
+        JS_SetPropertyStr(ctx, elem, "play", JS_NewCFunction(ctx, video_play, "play", 0));
+        JS_SetPropertyStr(ctx, elem, "pause", JS_NewCFunction(ctx, video_pause, "pause", 0));
+
+        JSAtom paused_atom = JS_NewAtom(ctx, "paused");
+        JSValue paused_getter = JS_NewCFunction(ctx, video_getPaused, "get paused", 0);
+        JS_DefinePropertyGetSet(ctx, elem, paused_atom, paused_getter, JS_UNDEFINED,
+            JS_PROP_ENUMERABLE | JS_PROP_CONFIGURABLE);
+        JS_FreeAtom(ctx, paused_atom);
+
+        JSAtom ended_atom = JS_NewAtom(ctx, "ended");
+        JSValue ended_getter = JS_NewCFunction(ctx, video_getEnded, "get ended", 0);
+        JS_DefinePropertyGetSet(ctx, elem, ended_atom, ended_getter, JS_UNDEFINED,
+            JS_PROP_ENUMERABLE | JS_PROP_CONFIGURABLE);
+        JS_FreeAtom(ctx, ended_atom);
+
+        JSAtom ct_atom = JS_NewAtom(ctx, "currentTime");
+        JSValue ct_getter = JS_NewCFunction(ctx, video_getCurrentTime, "get currentTime", 0);
+        JSValue ct_setter = JS_NewCFunction(ctx, video_setCurrentTime, "set currentTime", 1);
+        JS_DefinePropertyGetSet(ctx, elem, ct_atom, ct_getter, ct_setter,
+            JS_PROP_ENUMERABLE | JS_PROP_CONFIGURABLE);
+        JS_FreeAtom(ctx, ct_atom);
+
+        JSAtom dur_atom = JS_NewAtom(ctx, "duration");
+        JSValue dur_getter = JS_NewCFunction(ctx, video_getDuration, "get duration", 0);
+        JS_DefinePropertyGetSet(ctx, elem, dur_atom, dur_getter, JS_UNDEFINED,
+            JS_PROP_ENUMERABLE | JS_PROP_CONFIGURABLE);
+        JS_FreeAtom(ctx, dur_atom);
+    }
     
     // Methods
     JS_SetPropertyStr(ctx, elem, "getAttribute",

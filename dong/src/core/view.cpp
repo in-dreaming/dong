@@ -1707,14 +1707,24 @@ void View::toggleVideoPlayPause(VideoState& vs, double wall_time_sec) {
         vs.ended = false;
         vs.wall_clock_start = wall_time_sec;
         vs.video_time_start = vs.current_pts;
+
+        if (vs.node) {
+            vs.node->setAttribute("__dong_video_playing", "1");
+            vs.node->setAttribute("__dong_video_ended", "0");
+        }
+
         dispatchMediaEvent(vs, "play");
         dispatchMediaEvent(vs, "playing");
     } else {
         // Pause.
         vs.playing = false;
+        if (vs.node) {
+            vs.node->setAttribute("__dong_video_playing", "0");
+        }
         dispatchMediaEvent(vs, "pause");
     }
 }
+
 
 
 void View::updateVideoPlayback(VideoState& vs, double wall_time_sec) {
@@ -1747,11 +1757,17 @@ void View::updateVideoPlayback(VideoState& vs, double wall_time_sec) {
             if (!vs.ended) {
                 vs.ended = true;
                 vs.playing = false;
+                if (vs.node) {
+                    vs.node->setAttribute("__dong_video_playing", "0");
+                    vs.node->setAttribute("__dong_video_ended", "1");
+                    vs.node->setAttribute("__dong_video_currentTime", std::to_string(vs.current_pts));
+                }
                 // Keep event order close to browser behavior: pause first, then ended.
                 dispatchMediaEvent(vs, "pause");
                 dispatchMediaEvent(vs, "ended");
             }
             return;
+
         }
 
         if (r < 0) {
@@ -1796,8 +1812,12 @@ void View::updateVideoPlayback(VideoState& vs, double wall_time_sec) {
         // Dispatch timeupdate at ~4Hz (best effort).
         if (wall_time_sec - vs.last_timeupdate_wall >= 0.25) {
             vs.last_timeupdate_wall = wall_time_sec;
+            if (vs.node) {
+                vs.node->setAttribute("__dong_video_currentTime", std::to_string(vs.current_pts));
+            }
             dispatchMediaEvent(vs, "timeupdate");
         }
+
 
         if (pts + 1e-6 >= target_time) {
             break;
@@ -1922,9 +1942,13 @@ void View::syncVideoElements(double wall_time_sec) {
                 if (plugin_->video_get_metadata(plugin_user_, vs.player, &md) != 0) {
                     vs.meta = md;
                     vs.meta_ready = true;
+                    if (vs.node) {
+                        vs.node->setAttribute("__dong_video_duration", std::to_string(vs.meta.duration_seconds));
+                    }
                     dispatchMediaEvent(vs, "loadedmetadata");
                 }
             }
+
 
             // Preload first frame (best effort) so poster-less videos show something.
             if (vs.preload && plugin_->video_seek) {
@@ -1974,9 +1998,73 @@ void View::syncVideoElements(double wall_time_sec) {
 
         }
 
+        // JS-driven seek/play/pause (via internal __dong_video_* attributes).
+        // These attributes are "internal" ("__"-prefixed) and won't dirty layout.
+        {
+            const std::string seek_req = n->getAttribute("__dong_video_seek");
+            if (!seek_req.empty() && plugin_ && plugin_->video_seek) {
+                char* end = nullptr;
+                double t = std::strtod(seek_req.c_str(), &end);
+                if (end && end != seek_req.c_str()) {
+                    if (t < 0.0) t = 0.0;
+                    if (vs.meta_ready && vs.meta.duration_seconds > 0.0) {
+                        t = std::min(t, vs.meta.duration_seconds);
+                    }
+
+                    plugin_->video_seek(plugin_user_, vs.player, t);
+                    vs.current_pts = t;
+                    vs.video_time_start = vs.current_pts;
+                    vs.wall_clock_start = wall_time_sec;
+                    vs.ended = false;
+
+                    // Best effort: decode one frame after seek so paused videos update.
+                    dong_video_frame_t f{};
+                    int rr = plugin_->video_read_frame(plugin_user_, vs.player, &f);
+                    if (rr == 1 && f.data && f.width > 0 && f.height > 0) {
+                        const size_t sz = static_cast<size_t>(f.stride_bytes) * static_cast<size_t>(f.height);
+                        vs.rgba.resize(sz);
+                        std::memcpy(vs.rgba.data(), f.data, sz);
+                        vs.frame_w = f.width;
+                        vs.frame_h = f.height;
+                        vs.frame_stride = f.stride_bytes;
+                        vs.current_pts = f.pts_seconds;
+                        vs.has_frame = true;
+                        vs.needs_upload = true;
+                        offscreen_texture_dirty_ = true;
+
+                        if (vs.node && vs.node->getAttribute("__dong_video_frame").empty()) {
+                            vs.node->setAttribute("__dong_video_frame", vs.frame_key);
+                            markNeedsRepaint();
+                        }
+                    }
+                }
+
+                // Clear request (avoid removeAttribute() which would dirty layout).
+                n->setAttribute("__dong_video_seek", "");
+            }
+
+            // Desired playing state; default to current vs.playing.
+            const std::string desired_play = n->getAttribute("__dong_video_playing");
+            if (!desired_play.empty()) {
+                const bool want_playing = (desired_play == "1" || desired_play == "true");
+                if (want_playing != vs.playing) {
+                    toggleVideoPlayPause(vs, wall_time_sec);
+                }
+            } else {
+                // Ensure JS-visible state is initialized.
+                n->setAttribute("__dong_video_playing", vs.playing ? "1" : "0");
+            }
+
+            // Publish duration once metadata is known.
+            if (vs.meta_ready && n->getAttribute("__dong_video_duration").empty()) {
+                n->setAttribute("__dong_video_duration", std::to_string(vs.meta.duration_seconds));
+            }
+        }
+
         // Drive playback.
         updateVideoPlayback(vs, wall_time_sec);
     }
+
 
     // Cleanup removed nodes.
     for (auto it = video_states_.begin(); it != video_states_.end();) {

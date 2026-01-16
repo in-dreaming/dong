@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 #include "../dom/dom_node.hpp"
+
+
 #include "../layout/layout_engine.hpp"
 #include "render_surface.hpp"
 #include "display_list.hpp"
@@ -42,10 +44,33 @@ private:
                               const layout::LayoutNode* layout_node,
                               DisplayListBuilder& builder);
 
+    // --- buildDisplayListNode helpers (split to keep this function manageable) ---
+    void paintMediaElements(const dom::DOMNodePtr& node,
+                            const layout::LayoutNode* layout_node,
+                            const std::string& tag,
+                            const dom::ComputedStyle& style,
+                            bool is_hidden,
+                            DisplayListBuilder& builder);
+
+    void paintTextAndInput(const dom::DOMNodePtr& node,
+                           const layout::LayoutNode* layout_node,
+                           const std::string& tag,
+                           const dom::ComputedStyle& style,
+                           bool is_hidden,
+                           DisplayListBuilder& builder);
+
+    void paintChildrenAndOverlays(const dom::DOMNodePtr& node,
+                                 const layout::LayoutNode* layout_node,
+                                 const Rect& node_rect,
+                                 bool has_layout_rect,
+                                 bool is_scroll_container,
+                                 DisplayListBuilder& builder);
+
     // 渲染伪元素 (::before/::after)
     void renderPseudoElement(const dom::DOMNodePtr& pseudo,
                              const Rect& parent_rect,
                              DisplayListBuilder& builder);
+
 
     // 脏矩形优化
     bool isNodeInDirtyRect(const layout::LayoutNode* layout_node) const;
