@@ -140,11 +140,20 @@
         el.textContent = String(n);
       }
 
+      const lines = [];
       function appendLine(s) {
         const old = log.textContent || '';
-        const next = (old === '(waiting for events...)') ? '' : old;
-        log.textContent = (next + (next ? '\n' : '') + s);
+        if (old && old !== '(waiting for events...)' && lines.length === 0) {
+          lines.push(...old.split('\n'));
+        }
+        lines.push(s);
+        const kMaxLines = 40;
+        if (lines.length > kMaxLines) {
+          lines.splice(0, lines.length - kMaxLines);
+        }
+        log.textContent = lines.join('\n');
       }
+
 
       const watched = [
         'loadedmetadata', 'loadeddata', 'canplay',

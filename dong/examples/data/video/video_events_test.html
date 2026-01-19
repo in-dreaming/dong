@@ -61,7 +61,7 @@
   <div class="card">
     <div class="title">video events test (counters should update across frames)</div>
 
-    <video id="v" controls autoplay loop src="../video/snow.mp4" poster="../images/bg.png"></video>
+    <video id="v" autoplay loop muted src="snow.mp4" poster="../images/bg.png"></video>
 
     <div class="row">
       <span class="pill">loadedmetadata=<b id="c_loadedmetadata">0</b></span>
@@ -90,11 +90,20 @@
         el.textContent = String(n);
       }
 
+      const lines = [];
       function line(s) {
         const old = log.textContent || '';
-        const next = (old === '(waiting)') ? '' : old;
-        log.textContent = next + (next ? '\n' : '') + s;
+        if (old && old !== '(waiting)' && lines.length === 0) {
+          lines.push(...old.split('\n'));
+        }
+        lines.push(s);
+        const kMaxLines = 40;
+        if (lines.length > kMaxLines) {
+          lines.splice(0, lines.length - kMaxLines);
+        }
+        log.textContent = lines.join('\n');
       }
+
 
       const watched = [
         'loadedmetadata', 'loadeddata', 'canplay',
@@ -110,6 +119,12 @@
           const msg = (e && (e.message || e.error)) ? (e.message || e.error) : '';
           line(t + ' ct=' + ct + ' dur=' + dur + (msg ? (' msg=' + msg) : ''));
         });
+      });
+
+      // Click video to toggle play/pause (avoid UA controls differences across renderers).
+      v.addEventListener('click', () => {
+        if (v.paused) v.play();
+        else v.pause();
       });
 
       line('listeners installed');

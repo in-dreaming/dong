@@ -5,6 +5,7 @@
 #include "glyph_atlas.hpp"
 #include "font_resolver.hpp"
 #include "../core/log.h"
+#include "../core/profiler.h"
 #include <SDL3/SDL_log.h>
 #include <SDL3/SDL_video.h>
 #include <vector>
@@ -79,9 +80,26 @@ GPUDriverSDL::~GPUDriverSDL() {
             round_rect_fs_ = nullptr;
         }
 
+        if (shadow_pipeline_) {
+            SDL_ReleaseGPUGraphicsPipeline(dev, shadow_pipeline_);
+            shadow_pipeline_ = nullptr;
+        }
+        if (shadow_vs_) {
+            SDL_ReleaseGPUShader(dev, shadow_vs_);
+            shadow_vs_ = nullptr;
+        }
+        if (shadow_fs_) {
+            SDL_ReleaseGPUShader(dev, shadow_fs_);
+            shadow_fs_ = nullptr;
+        }
+
         if (image_pipeline_) {
             SDL_ReleaseGPUGraphicsPipeline(dev, image_pipeline_);
             image_pipeline_ = nullptr;
+        }
+        if (image_copy_pipeline_) {
+            SDL_ReleaseGPUGraphicsPipeline(dev, image_copy_pipeline_);
+            image_copy_pipeline_ = nullptr;
         }
         if (image_vs_) {
             SDL_ReleaseGPUShader(dev, image_vs_);
@@ -108,6 +126,33 @@ GPUDriverSDL::~GPUDriverSDL() {
             }
         }
         external_images_.clear();
+
+        // Release upload transfer buffers/fences used for dynamic textures.
+        for (auto& p : pending_upload_buffers_) {
+            for (auto& b : p.buffers) {
+                if (b.buf) {
+                    SDL_ReleaseGPUTransferBuffer(dev, b.buf);
+                }
+            }
+            if (p.fence) {
+                SDL_ReleaseGPUFence(dev, p.fence);
+            }
+        }
+        pending_upload_buffers_.clear();
+
+        for (auto& b : frame_upload_buffers_) {
+            if (b.buf) {
+                SDL_ReleaseGPUTransferBuffer(dev, b.buf);
+            }
+        }
+        frame_upload_buffers_.clear();
+
+        for (auto& b : free_upload_buffers_) {
+            if (b.buf) {
+                SDL_ReleaseGPUTransferBuffer(dev, b.buf);
+            }
+        }
+        free_upload_buffers_.clear();
 
         // 释放 MSDF 文字渲染资源
         if (text_pipeline_) {
@@ -175,6 +220,11 @@ void GPUDriverSDL::beginFrame() {
         return;
     }
 
+    SDL_GPUDevice* dev = gpu_device_->getHandle();
+    if (dev) {
+        reapUploadBuffers(dev);
+    }
+
     current_cmd_buf_ = gpu_device_->acquireCommandBuffer();
     if (!current_cmd_buf_) {
         SDL_Log("GPUDriverSDL::beginFrame: failed to acquire command buffer");
@@ -200,10 +250,98 @@ void GPUDriverSDL::endFrame() {
         return;
     }
 
-    gpu_device_->submitCommandBuffer(current_cmd_buf_);
+    // If we used upload transfer buffers this frame (e.g. for video), keep them alive until the GPU is done.
+    SDL_GPUDevice* dev = gpu_device_->getHandle();
+    if (dev && !frame_upload_buffers_.empty()) {
+        SDL_GPUFence* fence = nullptr;
+        {
+            DONG_PROFILE_SCOPE_CAT("SDL_SubmitGPUCommandBufferAndAcquireFence", "gpu");
+            fence = SDL_SubmitGPUCommandBufferAndAcquireFence(current_cmd_buf_);
+        }
+        if (fence) {
+            PendingUploadBuffers pending;
+            pending.fence = fence;
+            pending.buffers = std::move(frame_upload_buffers_);
+            pending_upload_buffers_.push_back(std::move(pending));
+            frame_upload_buffers_.clear();
+        } else {
+            // Fallback: no fence available. Revert to old behavior (release buffers immediately).
+            gpu_device_->submitCommandBuffer(current_cmd_buf_);
+            for (auto& b : frame_upload_buffers_) {
+                if (b.buf) {
+                    SDL_ReleaseGPUTransferBuffer(dev, b.buf);
+                }
+            }
+            frame_upload_buffers_.clear();
+        }
+    } else {
+        gpu_device_->submitCommandBuffer(current_cmd_buf_);
+    }
+
     DONG_LOG_DEBUG("[GPUDriverSDL::endFrame] command buffer submitted");
     current_cmd_buf_ = nullptr;
     in_frame_ = false;
+}
+
+void GPUDriverSDL::reapUploadBuffers(SDL_GPUDevice* dev) {
+    if (!dev) return;
+
+    // Move any finished frame upload buffers back to the free list.
+    // Keep this small and O(k) where k is number of in-flight frames using uploads.
+    for (size_t i = 0; i < pending_upload_buffers_.size();) {
+        PendingUploadBuffers& p = pending_upload_buffers_[i];
+        if (!p.fence) {
+            // Shouldn't happen, but be tolerant.
+            for (auto& b : p.buffers) {
+                if (b.buf) free_upload_buffers_.push_back(b);
+            }
+            pending_upload_buffers_.erase(pending_upload_buffers_.begin() + (ptrdiff_t)i);
+            continue;
+        }
+
+        if (SDL_QueryGPUFence(dev, p.fence)) {
+            for (auto& b : p.buffers) {
+                if (b.buf) free_upload_buffers_.push_back(b);
+            }
+            SDL_ReleaseGPUFence(dev, p.fence);
+            pending_upload_buffers_.erase(pending_upload_buffers_.begin() + (ptrdiff_t)i);
+            continue;
+        }
+
+        ++i;
+    }
+}
+
+GPUDriverSDL::UploadBuffer GPUDriverSDL::acquireUploadBuffer(SDL_GPUDevice* dev, uint32_t size) {
+    UploadBuffer out;
+    if (!dev || size == 0) return out;
+
+    // Best-fit from free list.
+    size_t best = (size_t)-1;
+    uint32_t best_size = 0;
+    for (size_t i = 0; i < free_upload_buffers_.size(); ++i) {
+        const UploadBuffer& b = free_upload_buffers_[i];
+        if (!b.buf || b.size < size) continue;
+        if (best == (size_t)-1 || b.size < best_size) {
+            best = i;
+            best_size = b.size;
+            if (best_size == size) break;
+        }
+    }
+
+    if (best != (size_t)-1) {
+        out = free_upload_buffers_[best];
+        free_upload_buffers_.erase(free_upload_buffers_.begin() + (ptrdiff_t)best);
+        return out;
+    }
+
+    SDL_GPUTransferBufferCreateInfo transfer_info{};
+    transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+    transfer_info.size = size;
+
+    out.buf = SDL_CreateGPUTransferBuffer(dev, &transfer_info);
+    out.size = out.buf ? size : 0;
+    return out;
 }
 
 bool GPUDriverSDL::updateExternalImageRGBA(const std::string& key,
@@ -253,20 +391,16 @@ bool GPUDriverSDL::updateExternalImageRGBA(const std::string& key,
     const uint32_t dst_stride = width * 4;
     const uint32_t upload_size = dst_stride * height;
 
-    SDL_GPUTransferBufferCreateInfo transfer_info{};
-    transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-    transfer_info.size = upload_size;
-
-    SDL_GPUTransferBuffer* transfer_buf = SDL_CreateGPUTransferBuffer(dev, &transfer_info);
-    if (!transfer_buf) {
-        SDL_Log("GPUDriverSDL::updateExternalImageRGBA: failed to create transfer buffer: %s", SDL_GetError());
+    UploadBuffer upload = acquireUploadBuffer(dev, upload_size);
+    if (!upload.buf) {
+        SDL_Log("GPUDriverSDL::updateExternalImageRGBA: failed to acquire transfer buffer: %s", SDL_GetError());
         return false;
     }
 
-    void* mapped = SDL_MapGPUTransferBuffer(dev, transfer_buf, false);
+    void* mapped = SDL_MapGPUTransferBuffer(dev, upload.buf, false);
     if (!mapped) {
         SDL_Log("GPUDriverSDL::updateExternalImageRGBA: failed to map transfer buffer: %s", SDL_GetError());
-        SDL_ReleaseGPUTransferBuffer(dev, transfer_buf);
+        SDL_ReleaseGPUTransferBuffer(dev, upload.buf);
         return false;
     }
 
@@ -285,17 +419,18 @@ bool GPUDriverSDL::updateExternalImageRGBA(const std::string& key,
         }
     }
 
-    SDL_UnmapGPUTransferBuffer(dev, transfer_buf);
+    SDL_UnmapGPUTransferBuffer(dev, upload.buf);
 
     SDL_GPUCopyPass* copy_pass = SDL_BeginGPUCopyPass(current_cmd_buf_);
     if (!copy_pass) {
         SDL_Log("GPUDriverSDL::updateExternalImageRGBA: failed to begin copy pass: %s", SDL_GetError());
-        SDL_ReleaseGPUTransferBuffer(dev, transfer_buf);
+        // No GPU work queued; safe to reuse this buffer.
+        free_upload_buffers_.push_back(upload);
         return false;
     }
 
     SDL_GPUTextureTransferInfo tex_transfer{};
-    tex_transfer.transfer_buffer = transfer_buf;
+    tex_transfer.transfer_buffer = upload.buf;
     tex_transfer.offset = 0;
     tex_transfer.pixels_per_row = width;
     tex_transfer.rows_per_layer = height;
@@ -314,7 +449,8 @@ bool GPUDriverSDL::updateExternalImageRGBA(const std::string& key,
     SDL_UploadToGPUTexture(copy_pass, &tex_transfer, &region, false);
     SDL_EndGPUCopyPass(copy_pass);
 
-    SDL_ReleaseGPUTransferBuffer(dev, transfer_buf);
+    // Keep the transfer buffer alive until this command buffer finishes on GPU.
+    frame_upload_buffers_.push_back(upload);
     return true;
 }
 

@@ -2,9 +2,11 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
 #include <string>
 
 #include "painter_style_utils.hpp"
+
 
 namespace dong::render {
 
@@ -87,7 +89,12 @@ void Painter::paintMediaElements(const dom::DOMNodePtr& node,
             fit = ImageFitMode::Cover;
         }
 
+        static const bool kDebugVideoPaint = (std::getenv("DONG_DEBUG_VIDEO_PAINT") != nullptr);
+
         if (!frame_src.empty()) {
+            if (kDebugVideoPaint) {
+                DONG_LOG_INFO("[Painter::paintMediaElements][video] frame src=%s rect=(%.1f,%.1f,%.1f,%.1f) fit=%d", frame_src.c_str(), rect.x, rect.y, rect.width, rect.height, (int)fit);
+            }
             DisplayListBuilder::ScopedClip frame_clip;
             if (fit == ImageFitMode::Cover) {
                 frame_clip = builder.pushClipRect(rect);
@@ -96,6 +103,9 @@ void Painter::paintMediaElements(const dom::DOMNodePtr& node,
         } else {
             std::string poster = node->getAttribute("poster");
             if (!poster.empty()) {
+                if (kDebugVideoPaint) {
+                    DONG_LOG_INFO("[Painter::paintMediaElements][video] poster=%s rect=(%.1f,%.1f,%.1f,%.1f) fit=%d", poster.c_str(), rect.x, rect.y, rect.width, rect.height, (int)fit);
+                }
                 DisplayListBuilder::ScopedClip poster_clip;
                 if (fit == ImageFitMode::Cover) {
                     poster_clip = builder.pushClipRect(rect);
@@ -103,6 +113,9 @@ void Painter::paintMediaElements(const dom::DOMNodePtr& node,
 
                 builder.addImage(rect, poster, 1.0f, fit);
             } else {
+                if (kDebugVideoPaint) {
+                    DONG_LOG_INFO("[Painter::paintMediaElements][video] placeholder rect=(%.1f,%.1f,%.1f,%.1f)", rect.x, rect.y, rect.width, rect.height);
+                }
                 // Minimal placeholder: black-ish background + subtle border + optional controls bar.
                 Color bg = makeColorFromCss("#0f1115");
                 builder.addRect(rect, bg);
@@ -115,6 +128,7 @@ void Painter::paintMediaElements(const dom::DOMNodePtr& node,
                 builder.addRect(Rect{rect.x + rect.width - bw, rect.y, bw, rect.height}, border);
             }
         }
+
 
         // Controls overlay (still minimal, but clickable behavior is handled by View input).
         if (node->hasAttribute("controls")) {

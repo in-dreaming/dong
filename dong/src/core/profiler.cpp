@@ -29,13 +29,14 @@ enum class EventType : uint8_t {
 
 // 单个事件记录
 struct ProfileEvent {
-    const char* name;        // 事件名（必须是静态字符串）
-    const char* category;    // 分类
+    const char* name;        // 事件名（会被 profiler 内部做字符串驻留，保证指针长期有效）
+    const char* category;    // 分类（同上）
     int64_t timestamp_us;    // 微秒时间戳（相对于 profiler 启动）
     uint32_t thread_id;      // 线程 ID
     EventType type;          // 事件类型
     uint8_t padding[3];
 };
+
 
 // 每线程缓冲区
 struct ThreadBuffer {
@@ -118,6 +119,41 @@ ThreadBuffer* getThreadBuffer() {
     return ProfilerState::tls_buffer;
 }
 
+// String interning: profiler 事件会在 dump 时访问 name/category，因此必须保证指针长期有效。
+// 这里做一个轻量的驻留池，允许调用方传入临时字符串（便于按 view/用例打点）。
+const char* internString(const char* s) {
+    if (!s) return nullptr;
+
+    struct Pool {
+        std::mutex m;
+        std::unordered_map<std::string, const char*> map;
+        std::vector<const char*> owned;
+
+        ~Pool() {
+            for (const char* p : owned) {
+                delete[] p;
+            }
+        }
+    };
+
+    static Pool pool;
+
+    std::lock_guard<std::mutex> lock(pool.m);
+    auto it = pool.map.find(s);
+    if (it != pool.map.end()) {
+        return it->second;
+    }
+
+    const size_t n = std::strlen(s);
+    char* mem = new char[n + 1];
+    std::memcpy(mem, s, n);
+    mem[n] = '\0';
+
+    pool.owned.push_back(mem);
+    pool.map.emplace(std::string(mem), mem);
+    return mem;
+}
+
 // 记录事件
 void recordEvent(const char* name, const char* category, EventType type) {
     auto& state = getState();
@@ -134,14 +170,15 @@ void recordEvent(const char* name, const char* category, EventType type) {
     ThreadBuffer* buf = getThreadBuffer();
     
     ProfileEvent event;
-    event.name = name;
-    event.category = category;
+    event.name = internString(name);
+    event.category = internString(category);
     event.timestamp_us = getTimestampUs();
     event.thread_id = buf->thread_id;
     event.type = type;
     
     buf->events.push_back(event);
 }
+
 
 // 转义 JSON 字符串
 void writeJsonString(FILE* fp, const char* str) {

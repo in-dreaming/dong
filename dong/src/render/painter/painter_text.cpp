@@ -452,70 +452,76 @@ void Painter::paintTextAndInput(const dom::DOMNodePtr& node,
                     break_points.push_back(text.size());
                 }
 
-                const auto measure_range_units = [&](size_t byte_start, size_t byte_end) -> float {
-                    const auto& glyphs = shaped_full.glyphs;
-                    int first = -1;
-                    int last = -1;
-                    int glyph_count = 0;
-                    int space_count = 0;
-                    for (size_t gi = 0; gi < glyphs.size(); ++gi) {
-                        uint32_t cluster = glyphs[gi].cluster;
-                        if (cluster < byte_start) {
-                            continue;
-                        }
-                        if (cluster >= byte_end) {
-                            break;
-                        }
-                        if (first == -1) {
-                            first = static_cast<int>(gi);
-                        }
-                        last = static_cast<int>(gi);
-                        ++glyph_count;
-                        if (cluster < text.size() && text[cluster] == ' ') {
-                            ++space_count;
-                        }
-                    }
-                    if (first == -1 || last == -1 || glyph_count == 0) {
-                        return 0.0f;
-                    }
-                    const ShapedGlyph& g_first = shaped_full.glyphs[static_cast<size_t>(first)];
-                    const ShapedGlyph& g_last = shaped_full.glyphs[static_cast<size_t>(last)];
-                    float left = g_first.pen_x_units;
-                    float right = g_last.pen_x_units + g_last.advance_x_units;
-                    float w = right - left;
-                    if (glyph_count > 1 && letter_spacing_units != 0.0f) {
-                        w += letter_spacing_units * static_cast<float>(glyph_count - 1);
-                    }
-                    if (space_count > 0 && word_spacing_units != 0.0f) {
-                        int effective_spaces = space_count;
-                        if (g_last.cluster < text.size() && text[g_last.cluster] == ' ') {
-                            effective_spaces = std::max(0, effective_spaces - 1);
-                        }
-                        w += word_spacing_units * static_cast<float>(effective_spaces);
-                    }
-
-                    return w > 0.0f ? w : 0.0f;
-                };
+                // 预构建 cluster->glyph 索引，避免每次测量都 O(n) 扫整段 glyph。
+                // 这在长文本（例如 log）+ 多次换行试探时能显著降低 buildDisplayList 时间。
+                const auto& glyphs = shaped_full.glyphs;
+                std::vector<uint32_t> glyph_clusters;
+                glyph_clusters.reserve(glyphs.size());
+                std::vector<int> space_prefix(glyphs.size() + 1, 0);
+                for (size_t gi = 0; gi < glyphs.size(); ++gi) {
+                    glyph_clusters.push_back(glyphs[gi].cluster);
+                    const bool is_space = (glyphs[gi].cluster < text.size() && text[glyphs[gi].cluster] == ' ');
+                    space_prefix[gi + 1] = space_prefix[gi] + (is_space ? 1 : 0);
+                }
 
                 const auto glyph_range_for_bytes = [&](size_t byte_start, size_t byte_end,
                                                        int& out_first, int& out_last) {
                     out_first = -1;
                     out_last = -1;
-                    const auto& glyphs = shaped_full.glyphs;
-                    for (size_t gi = 0; gi < glyphs.size(); ++gi) {
-                        uint32_t cluster = glyphs[gi].cluster;
-                        if (cluster < byte_start) {
-                            continue;
-                        }
-                        if (cluster >= byte_end) {
-                            break;
-                        }
-                        if (out_first == -1) {
-                            out_first = static_cast<int>(gi);
-                        }
-                        out_last = static_cast<int>(gi);
+                    if (glyphs.empty() || byte_end <= byte_start) {
+                        return;
                     }
+
+                    // clusters 是非递减序列（ligature 可能导致重复 cluster），lower_bound 仍然可用。
+                    auto it_first = std::lower_bound(glyph_clusters.begin(), glyph_clusters.end(), static_cast<uint32_t>(byte_start));
+                    auto it_end = std::lower_bound(glyph_clusters.begin(), glyph_clusters.end(), static_cast<uint32_t>(byte_end));
+
+                    const size_t first_idx = static_cast<size_t>(it_first - glyph_clusters.begin());
+                    const size_t end_idx = static_cast<size_t>(it_end - glyph_clusters.begin());
+                    if (first_idx >= end_idx) {
+                        return;
+                    }
+                    out_first = static_cast<int>(first_idx);
+                    out_last = static_cast<int>(end_idx - 1);
                 };
+
+                const auto measure_range_units = [&](size_t byte_start, size_t byte_end) -> float {
+                    int first = -1;
+                    int last = -1;
+                    glyph_range_for_bytes(byte_start, byte_end, first, last);
+                    if (first < 0 || last < 0) {
+                        return 0.0f;
+                    }
+
+                    const size_t first_u = static_cast<size_t>(first);
+                    const size_t last_u = static_cast<size_t>(last);
+
+                    const ShapedGlyph& g_first = glyphs[first_u];
+                    const ShapedGlyph& g_last = glyphs[last_u];
+
+                    float left = g_first.pen_x_units;
+                    float right = g_last.pen_x_units + g_last.advance_x_units;
+                    float w = right - left;
+
+                    const int glyph_count = static_cast<int>(last_u - first_u + 1);
+                    if (glyph_count > 1 && letter_spacing_units != 0.0f) {
+                        w += letter_spacing_units * static_cast<float>(glyph_count - 1);
+                    }
+
+                    if (word_spacing_units != 0.0f) {
+                        const int space_count = space_prefix[last_u + 1] - space_prefix[first_u];
+                        if (space_count > 0) {
+                            int effective_spaces = space_count;
+                            if (g_last.cluster < text.size() && text[g_last.cluster] == ' ') {
+                                effective_spaces = std::max(0, effective_spaces - 1);
+                            }
+                            w += word_spacing_units * static_cast<float>(effective_spaces);
+                        }
+                    }
+
+                    return w > 0.0f ? w : 0.0f;
+                };
+
 
                 const float max_line_width_px = inner_width;
 

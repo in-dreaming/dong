@@ -394,11 +394,22 @@ dong_video_player_t* sdl_video_open(void* /*user*/, const char* url) {
 
     const int w = p->vdec->width;
     const int h = p->vdec->height;
+    // Video scale/convert is a hot path. Prefer a fast scaler by default.
+    // Set DONG_VIDEO_SWS_QUALITY=1 to force higher quality (slower) scaling.
+    const int sws_flags = ([]() {
+        const char* v = std::getenv("DONG_VIDEO_SWS_QUALITY");
+        if (v && (v[0] == '1' || v[0] == 't' || v[0] == 'T' || v[0] == 'y' || v[0] == 'Y')) {
+            return SWS_BILINEAR;
+        }
+        return SWS_FAST_BILINEAR;
+    })();
+
     p->sws = g_ff.p_sws_getContext(
         w, h, p->vdec->pix_fmt,
         w, h, AV_PIX_FMT_RGBA,
-        SWS_BILINEAR, nullptr, nullptr, nullptr
+        sws_flags, nullptr, nullptr, nullptr
     );
+
     if (!p->sws) {
         SDL_Log("[dong_plugin_sdl][video] sws_getContext failed");
         player_close(p);

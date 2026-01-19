@@ -60,6 +60,12 @@ struct RenderTargetState {
     Uint32 width = 0;
     Uint32 height = 0;
     bool is_swapchain = false;
+
+    // 当前 render target 在“屏幕坐标系”中的原点（左上角）。
+    // swapchain / intermediate: (0,0)
+    // isolated layer texture:   (layer_bounds.x, layer_bounds.y)
+    float origin_x = 0.0f;
+    float origin_y = 0.0f;
 };
 
 struct IsolatedLayerState {
@@ -70,12 +76,22 @@ struct IsolatedLayerState {
     float opacity = 1.0f;
     uint64_t id = 0;
     bool dirty = true;
+    bool cache_composited = false; // 非脏图层复用缓存时，是否已在 BeginIsolatedLayer 提前合成
+
+    // 处理“外层复用缓存 + 内层脏图层需要重栅格”的组合：
+    // 外层会把 ctx.skip_draw_depth++，导致内层图层内部的绘制命令也被跳过。
+    // 进入脏图层时暂存并清零，退出时恢复。
+    int saved_skip_draw_depth = 0;
+    bool restore_skip_draw_depth = false;
+
     float draw_transform[6] = {1.0f, 0.0f, 0.0f,
                                0.0f, 1.0f, 0.0f};
     float composite_transform[6] = {1.0f, 0.0f, 0.0f,
                                     0.0f, 1.0f, 0.0f};
     float scroll[2] = {0.0f, 0.0f};
 };
+
+
 
 constexpr int kMaxRoundedClipUniforms = 4;
 
@@ -225,26 +241,48 @@ struct GPUDriverSDL::ExecuteContext {
         if (!target_pass) {
             return;
         }
-        if (clip_stack.empty()) {
-            auto [cw, ch] = currentTargetDimensions();
-            SDL_Rect full_scissor{};
-            full_scissor.x = 0;
-            full_scissor.y = 0;
-            full_scissor.w = static_cast<int>(cw);
-            full_scissor.h = static_cast<int>(ch);
-            if (debug_rt_enabled) {
-                SDL_Log("[apply_scissor] full_scissor: x=%d y=%d w=%d h=%d",
-                        full_scissor.x, full_scissor.y, full_scissor.w, full_scissor.h);
-            }
-            SDL_SetGPUScissor(target_pass, &full_scissor);
-        } else {
-            if (debug_rt_enabled) {
-                SDL_Log("[apply_scissor] clip_stack scissor: x=%d y=%d w=%d h=%d",
-                        clip_stack.back().scissor.x, clip_stack.back().scissor.y,
-                        clip_stack.back().scissor.w, clip_stack.back().scissor.h);
-            }
-            SDL_SetGPUScissor(target_pass, &clip_stack.back().scissor);
+
+        auto [cw, ch] = currentTargetDimensions();
+        const int target_w = static_cast<int>(cw);
+        const int target_h = static_cast<int>(ch);
+
+        // clip_stack 中的 scissor 统一使用“屏幕坐标系”。
+        // 当渲染到 isolated layer 的紧凑纹理时，需要把 scissor 平移到 render target 的局部坐标系。
+        float ox_f = 0.0f;
+        float oy_f = 0.0f;
+        if (!render_target_stack.empty()) {
+            ox_f = render_target_stack.back().origin_x;
+            oy_f = render_target_stack.back().origin_y;
         }
+        const int ox = static_cast<int>(std::floor(ox_f));
+        const int oy = static_cast<int>(std::floor(oy_f));
+
+        SDL_Rect scissor{};
+        if (clip_stack.empty()) {
+            scissor.x = 0;
+            scissor.y = 0;
+            scissor.w = target_w;
+            scissor.h = target_h;
+        } else {
+            scissor = clip_stack.back().scissor;
+            scissor.x -= ox;
+            scissor.y -= oy;
+        }
+
+        // Clamp to target bounds to avoid negative sizes.
+        SDL_Rect target_bounds{};
+        target_bounds.x = 0;
+        target_bounds.y = 0;
+        target_bounds.w = std::max(0, target_w);
+        target_bounds.h = std::max(0, target_h);
+        scissor = intersect_rect(scissor, target_bounds);
+
+        if (debug_rt_enabled) {
+            SDL_Log("[apply_scissor] origin=(%.1f,%.1f) scissor: x=%d y=%d w=%d h=%d",
+                    ox_f, oy_f, scissor.x, scissor.y, scissor.w, scissor.h);
+        }
+
+        SDL_SetGPUScissor(target_pass, &scissor);
     }
 
     void fillClipUniform(ClipUniformBlock& block) const {
@@ -260,15 +298,29 @@ struct GPUDriverSDL::ExecuteContext {
         block.clip_meta[2] = 0.0f;
         block.clip_meta[3] = 0.0f;
 
+        float ox = 0.0f;
+        float oy = 0.0f;
+        if (!render_target_stack.empty()) {
+            ox = render_target_stack.back().origin_x;
+            oy = render_target_stack.back().origin_y;
+        }
+
         int clip_index = 0;
         for (const auto& entry : clip_stack) {
             if (!entry.has_rounded) {
                 continue;
             }
-            block.clip_rects[clip_index][0] = entry.rounded_rect.x;
-            block.clip_rects[clip_index][1] = entry.rounded_rect.y;
-            block.clip_rects[clip_index][2] = entry.rounded_rect.x + entry.rounded_rect.width;
-            block.clip_rects[clip_index][3] = entry.rounded_rect.y + entry.rounded_rect.height;
+
+            // Rounded clip 需要和当前 render target 的局部坐标系对齐。
+            const float x0 = entry.rounded_rect.x - ox;
+            const float y0 = entry.rounded_rect.y - oy;
+            const float x1 = entry.rounded_rect.x + entry.rounded_rect.width - ox;
+            const float y1 = entry.rounded_rect.y + entry.rounded_rect.height - oy;
+
+            block.clip_rects[clip_index][0] = x0;
+            block.clip_rects[clip_index][1] = y0;
+            block.clip_rects[clip_index][2] = x1;
+            block.clip_rects[clip_index][3] = y1;
             block.clip_radii[clip_index] = entry.rounded_radius;
             ++clip_index;
             if (clip_index >= kMaxRoundedClipUniforms) {
@@ -346,6 +398,8 @@ bool GPUDriverSDL::executeSetupMainTarget(ExecuteContext& ctx) {
             SDL_ReleaseGPUTexture(ctx.dev, intermediate_texture_);
             intermediate_texture_ = nullptr;
         }
+        intermediate_valid_ = false;
+
 
         SDL_GPUTextureCreateInfo tex_info{};
         tex_info.type = SDL_GPU_TEXTURETYPE_2D;
@@ -429,7 +483,7 @@ void GPUDriverSDL::executeBeginPass(ExecuteContext& ctx) {
     ctx.isolated_layer_stack.clear();
     ctx.clip_stack.clear();
 
-    ctx.render_target_stack.push_back(RenderTargetState{ctx.swapchain_texture, ctx.w, ctx.h, offscreen_target_ == nullptr});
+    ctx.render_target_stack.push_back(RenderTargetState{ctx.swapchain_texture, ctx.w, ctx.h, offscreen_target_ == nullptr, 0.0f, 0.0f});
 
     if (ctx.debug_rt_enabled) {
         SDL_Log("[GPUDriverSDL::execute] BeginPass frame=%llu swapchain_texture=%p offscreen_target_=%p is_offscreen=%d viewport=%ux%u",
@@ -532,6 +586,10 @@ void GPUDriverSDL::executeEndPass(ExecuteContext& ctx) {
                     ctx.frame_index, (void*)intermediate_texture_, (void*)ctx.real_swapchain_texture);
         }
 
+        // 只要成功走到 EndPass 并准备 blit，就认为 intermediate 有了可复用的有效内容。
+        intermediate_valid_ = true;
+
+
         const Uint32 src_w = ctx.w;
         const Uint32 src_h = ctx.h;
         const Uint32 dst_w = sw;
@@ -621,11 +679,10 @@ void GPUDriverSDL::executeBeginIsolatedLayer(ExecuteContext& ctx, const GPUComma
     const uint64_t layer_id = cmd.layer_id;
     const bool layer_dirty = cmd.layer_dirty;
 
-    auto parent_state = ctx.render_target_stack.back();
-    Uint32 target_w = parent_state.width > 0 ? parent_state.width : ctx.w;
-    Uint32 target_h = parent_state.height > 0 ? parent_state.height : ctx.h;
-    if (target_w == 0) target_w = 1;
-    if (target_h == 0) target_h = 1;
+    // 重要：隔离图层纹理尺寸应当尽可能紧贴 layer bounds。
+    // 旧实现使用父 render target 尺寸（通常是整屏）会导致每个 transform 元素都创建/渲染整屏离屏纹理，切到 Transform 页面会瞬间爆卡。
+    Uint32 target_w = static_cast<Uint32>(std::max(1.0f, std::ceil(cmd.rect.width)));
+    Uint32 target_h = static_cast<Uint32>(std::max(1.0f, std::ceil(cmd.rect.height)));
 
     // 优先检查是否有有效的缓存可以复用（无论 layer_dirty 标志如何）
     LayerRenderTarget* cache_entry = nullptr;
@@ -650,6 +707,12 @@ void GPUDriverSDL::executeBeginIsolatedLayer(ExecuteContext& ctx, const GPUComma
     }
     layer_state.draw_transform[0] = 1.0f;
     layer_state.draw_transform[4] = 1.0f;
+
+    // 把“屏幕坐标系”的绘制命令平移到离屏纹理的局部坐标系（0,0）。
+    // 这样可以让 layer 纹理只覆盖自身 bounds，而不是整屏。
+    layer_state.draw_transform[2] = -layer_state.bounds.x;
+    layer_state.draw_transform[5] = -layer_state.bounds.y;
+
     layer_state.scroll[0] = cmd.layer_scroll[0];
     layer_state.scroll[1] = cmd.layer_scroll[1];
 
@@ -671,16 +734,75 @@ void GPUDriverSDL::executeBeginIsolatedLayer(ExecuteContext& ctx, const GPUComma
         layer_state.width = cache_entry->width;
         layer_state.height = cache_entry->height;
         layer_state.dirty = false;
+
+        // 关键修复：非脏图层复用缓存时，把缓存内容提前在 Begin 处合成到当前 render target。
+        // 否则若该图层内部存在“子隔离图层”（例如 video layer 每帧重栅格），
+        // 原本在 EndIsolatedLayer 再合成缓存会把子层的新内容覆盖掉，表现为视频冻结。
+        if (ctx.pass && image_pipeline_ && image_sampler_ && layer_state.bounds.width > 0.0f && layer_state.bounds.height > 0.0f) {
+            struct LayerCompositeUniforms {
+                float rect[4];
+                float uv_rect[4];
+                float viewport[4];
+                float transform[8];
+                float tint[4];
+                ClipUniformBlock clip;
+            };
+
+            LayerCompositeUniforms u{};
+            u.rect[0] = layer_state.bounds.x;
+            u.rect[1] = layer_state.bounds.y;
+            u.rect[2] = layer_state.bounds.width;
+            u.rect[3] = layer_state.bounds.height;
+
+            u.uv_rect[0] = 0.0f;
+            u.uv_rect[1] = 0.0f;
+            u.uv_rect[2] = 1.0f;
+            u.uv_rect[3] = 1.0f;
+
+            ctx.writeViewport(u.viewport);
+            writeTransform(u.transform, layer_state.composite_transform);
+
+            u.tint[0] = 1.0f;
+            u.tint[1] = 1.0f;
+            u.tint[2] = 1.0f;
+            u.tint[3] = layer_state.opacity;
+            ctx.fillClipUniform(u.clip);
+
+            SDL_PushGPUVertexUniformData(ctx.cmd_buf, 0, &u, sizeof(u));
+            SDL_PushGPUFragmentUniformData(ctx.cmd_buf, 0, &u, sizeof(u));
+
+            SDL_BindGPUGraphicsPipeline(ctx.pass, image_pipeline_);
+
+            SDL_GPUTextureSamplerBinding binding{};
+            binding.texture = layer_state.texture;
+            binding.sampler = image_sampler_;
+            SDL_BindGPUFragmentSamplers(ctx.pass, 0, &binding, 1);
+
+            SDL_DrawGPUPrimitives(ctx.pass, 4, 1, 0, 0);
+            layer_state.cache_composited = true;
+        }
+
         ctx.isolated_layer_stack.push_back(layer_state);
         ++ctx.skip_draw_depth;
         return;
     }
 
+
     // 脏图层：需要重新栅格，切换到离屏纹理
+    // 注意：外层若是“非脏复用缓存”的隔离图层，会把 skip_draw_depth>0。
+    // 但我们仍然需要在该脏图层内部执行绘制（尤其是嵌套的 video layer）。
+    // 因此进入脏图层时暂存并清零 skip_draw_depth，等离开该脏图层时再恢复。
+    if (ctx.skip_draw_depth > 0) {
+        layer_state.saved_skip_draw_depth = ctx.skip_draw_depth;
+        layer_state.restore_skip_draw_depth = true;
+        ctx.skip_draw_depth = 0;
+    }
+
     if (ctx.pass) {
         SDL_EndGPURenderPass(ctx.pass);
         ctx.pass = nullptr;
     }
+
 
     if (ctx.split_cmd_buf_for_isolated_layers) {
         DONG_LOG_DEBUG("[GPUDriverSDL] Split command buffer for isolated layer frame=%llu where=BeginIsolatedLayer(before_layer_pass) offscreen=%d cmd_buf_old=%p",
@@ -797,7 +919,7 @@ void GPUDriverSDL::executeBeginIsolatedLayer(ExecuteContext& ctx, const GPUComma
                 layer_state.bounds.height);
     }
 
-    ctx.render_target_stack.push_back(RenderTargetState{layer_texture, target_w, target_h, false});
+    ctx.render_target_stack.push_back(RenderTargetState{layer_texture, target_w, target_h, false, cmd.rect.x, cmd.rect.y});
 
     SDL_GPUColorTargetInfo layer_target{};
     layer_target.texture = layer_texture;
@@ -849,10 +971,21 @@ void GPUDriverSDL::executeEndIsolatedLayer(ExecuteContext& ctx, const GPUCommand
     IsolatedLayerState layer_info = ctx.isolated_layer_stack.back();
     ctx.isolated_layer_stack.pop_back();
 
+    if (layer_info.restore_skip_draw_depth) {
+        ctx.skip_draw_depth = layer_info.saved_skip_draw_depth;
+    }
+
     // 非脏图层：复用缓存，之前没有切换 render target
     if (!layer_info.dirty) {
+
         if (ctx.skip_draw_depth > 0) {
             --ctx.skip_draw_depth;
+        }
+
+        // 如果在 BeginIsolatedLayer 已经提前把缓存内容合成过，这里无需再合成。
+        // 这样可以保证该图层内部的子隔离图层（例如视频）后绘制的内容不会被父缓存覆盖。
+        if (layer_info.cache_composited) {
+            return;
         }
 
         SDL_GPUTexture* layer_texture = layer_info.texture;
@@ -862,6 +995,7 @@ void GPUDriverSDL::executeEndIsolatedLayer(ExecuteContext& ctx, const GPUCommand
         if (layer_info.bounds.width <= 0.0f || layer_info.bounds.height <= 0.0f) {
             return;
         }
+
 
         struct LayerCompositeUniforms {
             float rect[4];
@@ -878,14 +1012,11 @@ void GPUDriverSDL::executeEndIsolatedLayer(ExecuteContext& ctx, const GPUCommand
         u.rect[2] = layer_info.bounds.width;
         u.rect[3] = layer_info.bounds.height;
 
-        float tex_w = static_cast<float>(layer_info.width);
-        float tex_h = static_cast<float>(layer_info.height);
-        if (tex_w <= 0.0f) tex_w = 1.0f;
-        if (tex_h <= 0.0f) tex_h = 1.0f;
-        u.uv_rect[0] = layer_info.bounds.x / tex_w;
-        u.uv_rect[1] = layer_info.bounds.y / tex_h;
-        u.uv_rect[2] = (layer_info.bounds.x + layer_info.bounds.width) / tex_w;
-        u.uv_rect[3] = (layer_info.bounds.y + layer_info.bounds.height) / tex_h;
+        // 紧凑纹理：整张 texture 就是 layer 的内容，因此直接采样全域。
+        u.uv_rect[0] = 0.0f;
+        u.uv_rect[1] = 0.0f;
+        u.uv_rect[2] = 1.0f;
+        u.uv_rect[3] = 1.0f;
 
         ctx.writeViewport(u.viewport);
         writeTransform(u.transform, layer_info.composite_transform);
@@ -1001,14 +1132,11 @@ void GPUDriverSDL::executeEndIsolatedLayer(ExecuteContext& ctx, const GPUCommand
     u.rect[2] = layer_info.bounds.width;
     u.rect[3] = layer_info.bounds.height;
 
-    float tex_w = static_cast<float>(child_target.width);
-    float tex_h = static_cast<float>(child_target.height);
-    if (tex_w <= 0.0f) tex_w = 1.0f;
-    if (tex_h <= 0.0f) tex_h = 1.0f;
-    u.uv_rect[0] = layer_info.bounds.x / tex_w;
-    u.uv_rect[1] = layer_info.bounds.y / tex_h;
-    u.uv_rect[2] = (layer_info.bounds.x + layer_info.bounds.width) / tex_w;
-    u.uv_rect[3] = (layer_info.bounds.y + layer_info.bounds.height) / tex_h;
+    // 紧凑纹理：整张 texture 就是 layer 的内容，因此直接采样全域。
+    u.uv_rect[0] = 0.0f;
+    u.uv_rect[1] = 0.0f;
+    u.uv_rect[2] = 1.0f;
+    u.uv_rect[3] = 1.0f;
 
     ctx.writeViewport(u.viewport);
     writeTransform(u.transform, layer_info.composite_transform);
@@ -1696,34 +1824,58 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
     }
     ctx.inv_device_pixel_ratio = ctx.device_pixel_ratio > 0.0f ? (1.0f / ctx.device_pixel_ratio) : 1.0f;
 
+    const bool present_only = (!offscreen_target_ && ctx.use_intermediate && intermediate_texture_ && commands.commands.empty());
+
+    // Present-only 快路径：当上层判断“内容没有变化”时，可以传入空 command list。
+    // 我们直接把上一帧的 intermediate blit 到 swapchain，避免每帧重复遍历巨大的 command list。
+    if (present_only) {
+        DONG_PROFILE_SCOPE_CAT("GPU::presentOnly", "gpu");
+        if (!intermediate_valid_) {
+            // 首帧/尺寸变化后 intermediate 还没内容：至少 clear 一次，保证 deterministic。
+            executeBeginPass(ctx);
+            if (ctx.aborted) {
+                return;
+            }
+        }
+        executeEndPass(ctx);
+        return;
+    }
+
     // 注意：glyph 预处理已移到 prepareResources()，必须在 beginFrame() 之前调用
     executePreuploadImages(commands);
 
-    int cmd_index = 0;
-    for (const auto& cmd : commands.commands) {
-        if (cmd.type == GPUCommandType::PushClipRect) {
-            DONG_LOG_DEBUG("[GPU Execute] cmd[%d] PushClipRect: y=%.1f h=%.1f skip_depth=%d",
-                           cmd_index,
-                           cmd.rect.y,
-                           cmd.rect.height,
-                           ctx.skip_draw_depth);
-        } else if (cmd.type == GPUCommandType::PopClip) {
-            DONG_LOG_DEBUG("[GPU Execute] cmd[%d] PopClip skip_depth=%d", cmd_index, ctx.skip_draw_depth);
-        }
-        cmd_index++;
 
-        if (ctx.debug_rt_enabled && offscreen_target_) {
-            SDL_Log("[GPUDriverSDL::execute] frame=%llu processing cmd type=%d skip_depth=%d",
-                    ctx.frame_index,
-                    static_cast<int>(cmd.type),
-                    ctx.skip_draw_depth);
-        }
 
-        executeDispatchCommand(cmd, ctx);
-        if (ctx.aborted) {
-            break;
+    {
+        DONG_PROFILE_SCOPE_CAT("GPU::executeCommands", "gpu");
+
+        int cmd_index = 0;
+        for (const auto& cmd : commands.commands) {
+            if (cmd.type == GPUCommandType::PushClipRect) {
+                DONG_LOG_DEBUG("[GPU Execute] cmd[%d] PushClipRect: y=%.1f h=%.1f skip_depth=%d",
+                               cmd_index,
+                               cmd.rect.y,
+                               cmd.rect.height,
+                               ctx.skip_draw_depth);
+            } else if (cmd.type == GPUCommandType::PopClip) {
+                DONG_LOG_DEBUG("[GPU Execute] cmd[%d] PopClip skip_depth=%d", cmd_index, ctx.skip_draw_depth);
+            }
+            cmd_index++;
+
+            if (ctx.debug_rt_enabled && offscreen_target_) {
+                SDL_Log("[GPUDriverSDL::execute] frame=%llu processing cmd type=%d skip_depth=%d",
+                        ctx.frame_index,
+                        static_cast<int>(cmd.type),
+                        ctx.skip_draw_depth);
+            }
+
+            executeDispatchCommand(cmd, ctx);
+            if (ctx.aborted) {
+                break;
+            }
         }
     }
+
 
     if (ctx.debug_log_layer_cache && (ctx.debug_layer_cache_rasterized > 0 || ctx.debug_layer_cache_reused > 0)) {
         SDL_Log("[GPUDriverSDL layer-cache] frame=%llu summary: rasterize=%u, reuse=%u",

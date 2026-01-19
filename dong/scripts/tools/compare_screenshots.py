@@ -121,8 +121,9 @@ def compare_bmps(ref_path: str, test_path: str) -> None:
     print(f"Δ>2  : {diff_gt_2:8d} pixels ({pct(diff_gt_2):6.3f}%)")
 
     print("\nNote:")
-    print("- align2.md 的颜色验收标准是：每通道误差 ≤ 1–2。")
+    print("- 颜色验收标准通常是：每通道误差 ≤ 1–2。")
     print("- 你可以主要关注 Δ>1 / Δ>2 的像素比例是否在可接受范围内。")
+
 
 
 if __name__ == "__main__":

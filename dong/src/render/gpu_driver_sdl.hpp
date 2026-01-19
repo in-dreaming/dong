@@ -89,6 +89,8 @@ private:
     SDL_GPUTexture* intermediate_texture_ = nullptr;
     uint32_t intermediate_width_ = 0;
     uint32_t intermediate_height_ = 0;
+    bool intermediate_valid_ = false; // 是否已经有一帧把 intermediate 渲染出有效内容
+
 
     // 纯色矩形绘制管线
     SDL_GPUShader* rect_vs_ = nullptr;
@@ -149,7 +151,26 @@ private:
     };
     std::unordered_map<std::string, ExternalImage> external_images_;
 
+    // Reuse upload transfer buffers for dynamic textures (e.g. video frames).
+    // Creating/releasing a transfer buffer every frame is extremely expensive on some backends.
+    struct UploadBuffer {
+        SDL_GPUTransferBuffer* buf = nullptr;
+        uint32_t size = 0;
+    };
+    std::vector<UploadBuffer> free_upload_buffers_;
+    std::vector<UploadBuffer> frame_upload_buffers_;
+
+    struct PendingUploadBuffers {
+        SDL_GPUFence* fence = nullptr;
+        std::vector<UploadBuffer> buffers;
+    };
+    std::vector<PendingUploadBuffers> pending_upload_buffers_;
+
+    void reapUploadBuffers(SDL_GPUDevice* dev);
+    UploadBuffer acquireUploadBuffer(SDL_GPUDevice* dev, uint32_t size);
+
     bool ensureImageInAtlas(const std::string& src, ImageAtlasEntry& out_entry);
+
 
     // MSDF 文字渲染
     SDL_GPUShader* text_vs_ = nullptr;

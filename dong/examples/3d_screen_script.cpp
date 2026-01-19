@@ -328,6 +328,7 @@ int main(int argc, char* argv[]) {
         {"video/video_test.html",960, 640, 3.0f, 2.0f},
         {"video/video_events_test.html",960, 640, 3.0f, 2.0f},
         {"video/video_acceptance.html",960, 640, 3.0f, 2.0f},
+        {"video/video_js_api_smoke_test.html",960, 640, 3.0f, 2.0f},
         // 可以继续添加更多屏幕...
     };
     
@@ -538,9 +539,13 @@ int main(int argc, char* argv[]) {
             return 1;
         }
         
+        // 给每个 View 打上可读的 profile 名（只用于性能分析/日志，不影响功能）
+        dong_view_set_debug_name(screens[i].html.view, screenConfigs[i].htmlFile);
+
         // 设置 3D 属性
         screens[i].html.width = screens[i].width;
         screens[i].html.height = screens[i].height;
+
         
         // 创建顶点缓冲区
         vbInfo.size = sizeof(VertexUV) * 6;
@@ -570,7 +575,9 @@ int main(int argc, char* argv[]) {
         SDL_Log("Failed to init HUD");
         return 1;
     }
+    dong_view_set_debug_name(hud.html.view, "hud");
     SDL_Log("HUD initialized");
+
 
     // 相机
     FPSCamera camera;

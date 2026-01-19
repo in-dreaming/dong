@@ -43,6 +43,57 @@ inline std::string getDataPath(const char* filename) {
 // 3D HTML 屏幕结构
 // ============================================================================
 
+inline const dong_plugin_vtable_t* tryLoadSDLPluginVTable() {
+    static const dong_plugin_vtable_t* s_vtable = nullptr;
+    static SDL_SharedObject* s_module = nullptr;
+    static bool s_tried = false;
+
+    if (s_tried) {
+        return s_vtable;
+    }
+    s_tried = true;
+
+    const char* filename =
+#if defined(_WIN32)
+        "dong_plugin_sdl.dll";
+#elif defined(__APPLE__)
+        "libdong_plugin_sdl.dylib";
+#else
+        "libdong_plugin_sdl.so";
+#endif
+
+    const std::string path = getExeDir() + filename;
+    s_module = SDL_LoadObject(path.c_str());
+    if (!s_module) {
+        SDL_Log("[HtmlScreen3D] Plugin not loaded (%s): %s", path.c_str(), SDL_GetError());
+        return nullptr;
+    }
+
+    auto fp = SDL_LoadFunction(s_module, "dong_plugin_get_api");
+    auto* fn = reinterpret_cast<dong_plugin_get_api_fn>(fp);
+    if (!fn) {
+        SDL_Log("[HtmlScreen3D] Plugin missing symbol dong_plugin_get_api (%s): %s", path.c_str(), SDL_GetError());
+        return nullptr;
+    }
+
+    const dong_plugin_vtable_t* api = fn();
+    if (!api) {
+        SDL_Log("[HtmlScreen3D] Plugin returned null API (%s)", path.c_str());
+        return nullptr;
+    }
+    if (api->info.plugin_api_version != DONG_PLUGIN_API_VERSION) {
+        SDL_Log("[HtmlScreen3D] Plugin API version mismatch: got=%u want=%u (%s)",
+                (unsigned)api->info.plugin_api_version,
+                (unsigned)DONG_PLUGIN_API_VERSION,
+                path.c_str());
+        return nullptr;
+    }
+
+    s_vtable = api;
+    SDL_Log("[HtmlScreen3D] Loaded plugin: %s (caps=0x%llx)", path.c_str(), (unsigned long long)api->info.capabilities);
+    return s_vtable;
+}
+
 // 用于在 3D 空间中显示 HTML 内容的屏幕
 struct HtmlScreen3D {
     // Dong 引擎资源
@@ -77,6 +128,11 @@ struct HtmlScreen3D {
         if (!view) {
             SDL_Log("Failed to create dong view");
             return false;
+        }
+
+        // Inject platform plugin vtable (enables optional subsystems like video).
+        if (const dong_plugin_vtable_t* plugin = tryLoadSDLPluginVTable()) {
+            dong_view_set_plugin_api(view, plugin, nullptr);
         }
         
         // 设置 GPU 渲染模式

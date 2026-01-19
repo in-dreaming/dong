@@ -57,6 +57,10 @@ public:
     // Optional: configure a base directory for resolving relative resource URLs.
     void setResourceRoot(const std::string& root);
 
+    // Optional: debugging label (used for profiling/logging; no functional impact)
+    void setDebugName(const std::string& name) { debug_name_ = name; }
+
+
     // Optional: inject platform plugin vtable (enables optional subsystems like video).
     void setPlugin(const dong_plugin_vtable_t* plugin, void* plugin_user);
 
@@ -108,7 +112,9 @@ private:
     std::unique_ptr<dom::FocusManager> focus_manager;
     std::unique_ptr<render::Painter> painter;
     std::unique_ptr<render::ResourceManager> resource_manager_;
+    std::string debug_name_;
     std::unique_ptr<script::ScriptEngine> script_engine;
+
     std::unique_ptr<script::JSBindings> js_bindings;
 
     // Optional: platform plugin vtable (non-owning)
@@ -144,25 +150,41 @@ private:
         double current_pts = 0.0;
 
         // Upload staging
-        std::vector<uint8_t> rgba;
+        // NOTE: For the SDL+FFmpeg plugin, `frame_data` points into the player's internal RGBA buffer.
+        // It stays valid until the next `video_read_frame()` call.
+        const uint8_t* frame_data = nullptr;
+        std::vector<uint8_t> rgba; // optional owned copy (fallback)
         uint32_t frame_w = 0;
         uint32_t frame_h = 0;
         uint32_t frame_stride = 0;
         bool has_frame = false;
         bool needs_upload = false;
 
-        double last_timeupdate_wall = 0.0;
+
+        // Throttle `timeupdate` based on media time (pts), not wall-clock time.
+        // Using wall-clock can create a feedback loop under low FPS: slow frames -> timeupdate every tick -> DOM dirtied every tick -> rebuild every frame.
+        double last_timeupdate_pts = 0.0;
+
+
+        // Playback resync (avoid decode spiral when render thread can't keep up)
+        double last_resync_wall = 0.0;
     };
 
     std::unordered_map<void*, VideoState> video_states_;
 
-    void syncVideoElements(double wall_time_sec);
+    // Avoid scanning the whole DOM every frame when there are no <video> elements.
+    bool video_dom_scanned_ = false;
+    bool video_dom_has_any_ = false;
+
+    void syncVideoElements(double wall_time_sec, bool dom_tree_dirty);
     void updateVideoPlayback(VideoState& vs, double wall_time_sec);
+
     void closeVideo(VideoState& vs);
     void dispatchMediaEvent(VideoState& vs, const char* type_name);
     void dispatchMediaError(VideoState& vs, const char* message);
     void toggleVideoPlayPause(VideoState& vs, double wall_time_sec);
-    void uploadPendingVideoFrames();
+    bool uploadPendingVideoFrames();
+
 
     // GPU 渲染相关（可选）
     std::unique_ptr<render::GPUDevice> gpu_device_;

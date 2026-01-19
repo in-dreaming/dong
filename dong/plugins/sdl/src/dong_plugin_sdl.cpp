@@ -244,8 +244,10 @@ static dong_gpu_device_t* sdl_renderer_init(void* /*user*/, dong_window_t* windo
         }
     }
 
+    SDL_GPUPresentMode mode = SDL_GPU_PRESENTMODE_MAILBOX;
+    bool mode_from_env = false;
     if (const char* pm = std::getenv("DONG_GPU_PRESENT_MODE")) {
-        SDL_GPUPresentMode mode = SDL_GPU_PRESENTMODE_MAILBOX;
+        mode_from_env = true;
         if (std::strcmp(pm, "mailbox") == 0) {
             mode = SDL_GPU_PRESENTMODE_MAILBOX;
         } else if (std::strcmp(pm, "vsync") == 0) {
@@ -254,13 +256,24 @@ static dong_gpu_device_t* sdl_renderer_init(void* /*user*/, dong_window_t* windo
             mode = SDL_GPU_PRESENTMODE_IMMEDIATE;
         } else {
             SDL_Log("[dong_plugin_sdl] Invalid DONG_GPU_PRESENT_MODE=%s (use mailbox|vsync|immediate)", pm);
+            mode_from_env = false;
             mode = SDL_GPU_PRESENTMODE_MAILBOX;
         }
+    }
+
+    if (mode_from_env) {
         if (!SDL_SetGPUSwapchainParameters(device, sdl_window, SDL_GPU_SWAPCHAINCOMPOSITION_SDR, mode)) {
             SDL_Log("[dong_plugin_sdl] PresentMode request failed, falling back to VSYNC");
             SDL_SetGPUSwapchainParameters(device, sdl_window, SDL_GPU_SWAPCHAINCOMPOSITION_SDR, SDL_GPU_PRESENTMODE_VSYNC);
         }
+    } else {
+        // 默认策略：优先 MAILBOX（避免某些平台/windowed vsync 被节流到 30Hz），不支持则回退 VSYNC。
+        if (!SDL_SetGPUSwapchainParameters(device, sdl_window, SDL_GPU_SWAPCHAINCOMPOSITION_SDR, SDL_GPU_PRESENTMODE_MAILBOX)) {
+            SDL_Log("[dong_plugin_sdl] MAILBOX present mode not supported, falling back to VSYNC");
+            SDL_SetGPUSwapchainParameters(device, sdl_window, SDL_GPU_SWAPCHAINCOMPOSITION_SDR, SDL_GPU_PRESENTMODE_VSYNC);
+        }
     }
+
 
     auto* ctx = new SDLGPUDevice();
     ctx->device = device;

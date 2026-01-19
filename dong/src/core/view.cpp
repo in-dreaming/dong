@@ -132,7 +132,32 @@ void debugLogLayerTreeIfEnabled(const dong::render::LayerTree& tree) {
     }
 }
 
+// GPUCommandList 的 layer_dirty 是在 compile 时根据当帧的 LayoutDirty/scroll 等状态生成的，
+// 如果后续复用缓存的 command list，需要在“首帧栅格完成后”把它清为 false，
+// 否则隔离图层会被认为永远 dirty，导致每帧都离屏重栅格/拆分 command buffer。
+void clearIsolatedLayerDirtyFlags(dong::render::GPUCommandList& list) {
+    for (auto& cmd : list.commands) {
+        if (cmd.type == dong::render::GPUCommandType::BeginIsolatedLayer ||
+            cmd.type == dong::render::GPUCommandType::EndIsolatedLayer) {
+            cmd.layer_dirty = false;
+        }
+    }
+}
+
+void markIsolatedLayerDirtyFlags(dong::render::GPUCommandList& list, uint64_t layer_id) {
+    if (layer_id == 0) return;
+    for (auto& cmd : list.commands) {
+        if ((cmd.type == dong::render::GPUCommandType::BeginIsolatedLayer ||
+             cmd.type == dong::render::GPUCommandType::EndIsolatedLayer) &&
+            cmd.layer_id == layer_id) {
+            cmd.layer_dirty = true;
+        }
+    }
+}
+
+
 } // anonymous namespace
+
 
 View::View(uint32_t width, uint32_t height)
     : width_(width), height_(height), use_gpu_(false),
@@ -237,8 +262,20 @@ void View::load_html(const char* html) {
             js_bindings->resetForNewDOM();
             SDL_Log("[View::load_html] resetForNewDOM done");
         }
+
+        // DOM 树整体替换后，旧的 video node/player 全部失效，必须关闭并重置缓存。
+        if (!video_states_.empty()) {
+            for (auto& kv : video_states_) {
+                closeVideo(kv.second);
+            }
+            video_states_.clear();
+        }
+        video_dom_scanned_ = false;
+        video_dom_has_any_ = false;
+
         // 标记需要重新渲染
         markNeedsRepaint();
+
         // 新的 DOM 树需要重新布局
         auto root = dom_manager->getRoot();
         if (root) {
@@ -419,8 +456,15 @@ void View::update() {
     double current_time = std::chrono::duration<double>(now - start_time).count();
     last_wall_time_sec_ = current_time;
 
+    bool dom_tree_dirty = false;
+    if (dom_manager) {
+        auto root_for_media = dom_manager->getRoot();
+        dom_tree_dirty = (root_for_media && root_for_media->isLayoutDirty());
+    }
+
     // Tick media elements (e.g. <video>) before building command lists.
-    syncVideoElements(current_time);
+    syncVideoElements(current_time, dom_tree_dirty);
+
     
     auto& anim_controller = animation::getAnimationController();
     if (anim_controller.hasActiveAnimations()) {
@@ -507,7 +551,9 @@ void View::update() {
         
         // 只在内容变化时重新构建 DisplayList 和 GPUCommandList
         bool need_rebuild = commands_dirty_;
+        const bool rebuilt_this_frame = need_rebuild;
         DONG_LOG_DEBUG("[View::update] need_rebuild=%d commands_dirty_=%d", need_rebuild ? 1 : 0, commands_dirty_ ? 1 : 0);
+
         
         if (need_rebuild) {
             DONG_LOG_DEBUG("[View::update] Building DisplayList...");
@@ -550,10 +596,11 @@ void View::update() {
             root->clearLayoutDirtyRecursive();
         }
 
-        // 每帧都执行渲染（即使使用缓存的命令列表）
-        // 关键：在 beginFrame() 之前预处理资源（如 glyph 纹理上传）
-        // 这样可以避免在 render pass 中进行纹理上传导致的 GPU 状态冲突
-        {
+        // Swapchain 模式每帧都要画（否则 swapchain 会轮转导致闪烁），
+        // 但资源预处理（glyph/image atlas 等）只在 command list 变化时需要扫描一遍。
+        // 否则 prepareResources() 会对超大的 command list 做 O(n) 扫描，成为常驻热点。
+        const bool prepare_every_frame = (std::getenv("DONG_GPU_PREPARE_EVERY_FRAME") != nullptr);
+        if (rebuilt_this_frame || prepare_every_frame) {
             DONG_PROFILE_SCOPE_CAT("GPU::prepareResources", "gpu");
             gpu_driver_->prepareResources(*cached_cmd_list_);
         }
@@ -561,13 +608,33 @@ void View::update() {
         {
             DONG_PROFILE_SCOPE_CAT("GPU::frame", "gpu");
             gpu_driver_->beginFrame();
-            uploadPendingVideoFrames();
-            gpu_driver_->execute(*cached_cmd_list_);
+
+            const bool did_video_upload = uploadPendingVideoFrames();
+
+            // Present-only 快路径：当本帧没有重建命令、且没有发生动态纹理更新（例如视频帧上传）时，
+            // 直接复用上一帧 intermediate 的内容并 blit 到 swapchain，避免每帧遍历巨大的 command list。
+            render::GPUCommandList empty;
+            const render::GPUCommandList* to_execute = cached_cmd_list_.get();
+            if (!rebuilt_this_frame && !did_video_upload) {
+                to_execute = &empty;
+            }
+
+            gpu_driver_->execute(*to_execute);
             gpu_driver_->endFrame();
         }
+
+
+
+        // compile 时的 dirty 状态只对“本次重建”这一帧成立；渲染完成后清掉，
+        // 让隔离图层缓存能在后续帧生效。
+        if (rebuilt_this_frame) {
+            clearIsolatedLayerDirtyFlags(*cached_cmd_list_);
+        }
+
         DONG_LOG_VERBOSE("[View::update] GPU frame complete");
         
         return;
+
     }
 
     // CPU 路径已经不再支持（原有的 Skia 后端已移除）
@@ -582,8 +649,25 @@ void* View::get_pixel_buffer() {
     return nullptr;
 }
 
+namespace {
+struct ScopedProfilerEvent {
+    ScopedProfilerEvent(const char* name, const char* category) {
+        dong_profiler_begin(name, category);
+    }
+    ~ScopedProfilerEvent() {
+        dong_profiler_end();
+    }
+};
+}
+
 SDL_GPUTexture* View::renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, uint32_t height) {
-    DONG_PROFILE_SCOPE_CAT("View::renderToGPUTexture", "render");
+    std::string profile_name = "View::renderToGPUTexture";
+    if (!debug_name_.empty()) {
+        profile_name += ":";
+        profile_name += debug_name_;
+    }
+    ScopedProfilerEvent __scope(profile_name.c_str(), "render");
+
 
     if (!device) {
         SDL_Log("[View::renderToGPUTexture] Invalid device");
@@ -607,7 +691,14 @@ SDL_GPUTexture* View::renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, 
         auto now = std::chrono::steady_clock::now();
         double current_time = std::chrono::duration<double>(now - start_time).count();
         last_wall_time_sec_ = current_time;
-        syncVideoElements(current_time);
+
+        bool dom_tree_dirty = false;
+        if (dom_manager) {
+            auto root_for_media = dom_manager->getRoot();
+            dom_tree_dirty = (root_for_media && root_for_media->isLayoutDirty());
+        }
+        syncVideoElements(current_time, dom_tree_dirty);
+
     }
 
     // 1. 获取/创建离屏渲染目标纹理（使用UNORM格式，shader手动处理gamma）
@@ -674,7 +765,11 @@ SDL_GPUTexture* View::renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, 
     // Offscreen 路径只看 offscreen_commands_dirty_ / layout dirty。
     // 注意：3D demo 只走 renderToGPUTexture()，不会走 View::update() 去清除 commands_dirty_；
     // 若这里也依赖 commands_dirty_，会导致每帧都 rebuild（DisplayList/GPUCommandList）并成为主要热点。
-    bool needs_rebuild = offscreen_commands_dirty_ || root->isLayoutDirty() || !offscreen_cmd_list_cache_;
+    const bool layout_dirty = root->isLayoutDirty();
+    const bool no_cache = !offscreen_cmd_list_cache_;
+    const bool cmd_dirty = offscreen_commands_dirty_;
+    bool needs_rebuild = cmd_dirty || layout_dirty || no_cache;
+
 
     // 环境变量强制全量重建（用于调试/正确性验证）
     static bool force_full_layout = (std::getenv("DONG_OFFSCREEN_FORCE_FULL_LAYOUT") != nullptr);
@@ -682,13 +777,51 @@ SDL_GPUTexture* View::renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, 
         needs_rebuild = true;
     }
 
+    const bool rebuilt_this_call = needs_rebuild;
+
+    // Debug: expose why we decided to rebuild.
+    static const bool kDebugOffscreenRebuildReason = (std::getenv("DONG_DEBUG_OFFSCREEN_REBUILD_REASON") != nullptr);
+    if (kDebugOffscreenRebuildReason && needs_rebuild) {
+        if (cmd_dirty) {
+            std::string n = "offscreen_needs_rebuild:cmd_dirty";
+            if (!debug_name_.empty()) {
+                n += ":";
+                n += debug_name_;
+            }
+            dong_profiler_instant(n.c_str(), "render");
+        }
+        if (layout_dirty) {
+            std::string n = "offscreen_needs_rebuild:layout_dirty";
+            if (!debug_name_.empty()) {
+                n += ":";
+                n += debug_name_;
+            }
+            dong_profiler_instant(n.c_str(), "render");
+        }
+        if (no_cache) {
+            std::string n = "offscreen_needs_rebuild:no_cache";
+            if (!debug_name_.empty()) {
+                n += ":";
+                n += debug_name_;
+            }
+            dong_profiler_instant(n.c_str(), "render");
+        }
+    }
+
     // 3D demo 友好：内容未变时直接复用上一帧纹理，避免每帧重复离屏渲染。
     if (!needs_rebuild && !offscreen_texture_dirty_) {
         return offscreen_texture_cache_;
     }
 
+
     if (needs_rebuild) {
-        DONG_PROFILE_SCOPE_CAT("offscreen_rebuild", "render");
+        std::string profile_name = "offscreen_rebuild";
+        if (!debug_name_.empty()) {
+            profile_name += ":";
+            profile_name += debug_name_;
+        }
+        ScopedProfilerEvent __scope_rebuild(profile_name.c_str(), "render");
+
 
         // 计算样式（使用索引加速的增量计算）
         if (dom_manager) {
@@ -783,13 +916,18 @@ SDL_GPUTexture* View::renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, 
     {
         DONG_PROFILE_SCOPE_CAT("offscreen_execute", "gpu");
         gpu_driver_->beginFrameOffscreen(offscreen_texture, width, height);
-        uploadPendingVideoFrames();
+        (void)uploadPendingVideoFrames();
         gpu_driver_->execute(*offscreen_cmd_list_cache_);
         gpu_driver_->endFrameOffscreen();
+
     }
 
+    if (rebuilt_this_call && offscreen_cmd_list_cache_) {
+        clearIsolatedLayerDirtyFlags(*offscreen_cmd_list_cache_);
+    }
 
     offscreen_texture_dirty_ = false;
+
 
     DONG_LOG_DEBUG("[View::renderToGPUTexture] Successfully rendered to GPU texture %u x %u", width, height);
 
@@ -929,10 +1067,23 @@ void View::markNeedsRepaint() {
     offscreen_commands_dirty_ = true;
     offscreen_texture_dirty_ = true;
 
+    // Debug: emit a trace instant when View invalidates.
+    // This helps identify unexpected per-frame rebuild triggers.
+    static const bool kDebugMarkNeedsRepaint = (std::getenv("DONG_DEBUG_MARK_NEEDS_REPAINT") != nullptr);
+    if (kDebugMarkNeedsRepaint) {
+        std::string n = "markNeedsRepaint";
+        if (!debug_name_.empty()) {
+            n += ":";
+            n += debug_name_;
+        }
+        dong_profiler_instant(n.c_str(), "render");
+    }
+
     if (render_surface) {
         render_surface->markDirty();
     }
 }
+
 
 
 void View::ensureJSBindingsInitialized() {
@@ -1655,11 +1806,17 @@ void View::closeVideo(VideoState& vs) {
     vs.ended = false;
     vs.errored = false;
     vs.current_pts = 0.0;
+    vs.last_timeupdate_pts = 0.0;
+    vs.last_resync_wall = 0.0;
+
 
     vs.has_frame = false;
     vs.needs_upload = false;
+    vs.frame_data = nullptr;
     vs.rgba.clear();
     vs.frame_w = 0;
+
+
     vs.frame_h = 0;
     vs.frame_stride = 0;
 
@@ -1757,11 +1914,42 @@ void View::updateVideoPlayback(VideoState& vs, double wall_time_sec) {
     // Target playback time in seconds.
     const double target_time = vs.video_time_start + (wall_time_sec - vs.wall_clock_start);
 
+    // If we're lagging badly, prefer a controlled resync instead of decoding many frames in one tick.
+    // This avoids the spiral: low FPS -> decode many frames -> even lower FPS.
+    static const double kResyncLagSec = ([]() {
+        const char* v = std::getenv("DONG_VIDEO_RESYNC_LAG_SEC");
+        if (!v || !*v) return 0.50;
+        const double x = std::atof(v);
+        return (x <= 0.0) ? 0.50 : x;
+    })();
+    static const double kResyncCooldownSec = ([]() {
+        const char* v = std::getenv("DONG_VIDEO_RESYNC_COOLDOWN_SEC");
+        if (!v || !*v) return 0.75;
+        const double x = std::atof(v);
+        return (x <= 0.0) ? 0.75 : x;
+    })();
+
+    const double lag = target_time - vs.current_pts;
+    const bool can_seek = (plugin_ && plugin_->video_seek);
+    if (can_seek && lag > kResyncLagSec && (wall_time_sec - vs.last_resync_wall) >= kResyncCooldownSec) {
+        // Seek close to target to drop frames cheaply.
+        plugin_->video_seek(plugin_user_, vs.player, target_time);
+        vs.wall_clock_start = wall_time_sec;
+        vs.video_time_start = target_time;
+        vs.last_resync_wall = wall_time_sec;
+    }
+
     // Pull a few frames at most per tick to avoid long stalls on slow videos.
-    constexpr int kMaxFramePullPerTick = 8;
+    static const int kMaxFramePullPerTick = ([]() {
+        const char* v = std::getenv("DONG_VIDEO_MAX_PULL_PER_TICK");
+        if (!v || !*v) return 3;
+        const int x = std::atoi(v);
+        return (x <= 0) ? 3 : x;
+    })();
     int pulled = 0;
 
     while (pulled < kMaxFramePullPerTick) {
+
         dong_video_frame_t frame{};
         int r = plugin_->video_read_frame(plugin_user_, vs.player, &frame);
         if (r == 0) {
@@ -1805,10 +1993,24 @@ void View::updateVideoPlayback(VideoState& vs, double wall_time_sec) {
         // We got a frame. If it's still behind target_time, keep pulling.
         const double pts = frame.pts_seconds;
 
+        static const bool kCopyVideoFrames = ([]() {
+            const char* v = std::getenv("DONG_VIDEO_FRAME_COPY");
+            return v && (std::strcmp(v, "1") == 0 || std::strcmp(v, "true") == 0);
+        })();
+
         const size_t sz = static_cast<size_t>(frame.stride_bytes) * static_cast<size_t>(frame.height);
         if (sz > 0 && frame.data) {
-            vs.rgba.resize(sz);
-            std::memcpy(vs.rgba.data(), frame.data, sz);
+            vs.frame_data = frame.data;
+            if (kCopyVideoFrames) {
+                // Fallback/debug: keep an owned copy.
+                vs.rgba.resize(sz);
+                std::memcpy(vs.rgba.data(), frame.data, sz);
+                vs.frame_data = vs.rgba.data();
+            } else {
+                // Zero-copy: keep a pointer into the player's internal RGBA buffer.
+                vs.rgba.clear();
+            }
+
             vs.frame_w = frame.width;
             vs.frame_h = frame.height;
             vs.frame_stride = frame.stride_bytes;
@@ -1824,13 +2026,10 @@ void View::updateVideoPlayback(VideoState& vs, double wall_time_sec) {
         }
 
 
+
         ++pulled;
 
-        // Ensure the renderer starts drawing video once we have the first frame.
-        if (vs.node && vs.node->getAttribute("__dong_video_frame").empty()) {
-            vs.node->setAttribute("__dong_video_frame", vs.frame_key);
-            markNeedsRepaint();
-        }
+
 
         // Fire ready events once we have decoded first frame (best-effort semantics).
         if (!vs.loadeddata_sent) {
@@ -1840,14 +2039,20 @@ void View::updateVideoPlayback(VideoState& vs, double wall_time_sec) {
         }
 
 
-        // Dispatch timeupdate at ~4Hz (best effort).
-        if (wall_time_sec - vs.last_timeupdate_wall >= 0.25) {
-            vs.last_timeupdate_wall = wall_time_sec;
+        // Dispatch timeupdate at ~4Hz (best effort), based on media time.
+        // If rendering stalls, wall-time based throttling can over-fire and cause a rebuild feedback loop.
+        if (vs.current_pts + 1e-9 < vs.last_timeupdate_pts) {
+            // Handle seek/loop backwards.
+            vs.last_timeupdate_pts = vs.current_pts;
+        }
+        if (vs.current_pts - vs.last_timeupdate_pts >= 0.25) {
+            vs.last_timeupdate_pts = vs.current_pts;
             if (vs.node) {
                 vs.node->setAttribute("__dong_video_currentTime", std::to_string(vs.current_pts));
             }
             dispatchMediaEvent(vs, "timeupdate");
         }
+
 
 
         if (pts + 1e-6 >= target_time) {
@@ -1856,37 +2061,89 @@ void View::updateVideoPlayback(VideoState& vs, double wall_time_sec) {
     }
 }
 
-void View::uploadPendingVideoFrames() {
+bool View::uploadPendingVideoFrames() {
     if (!use_gpu_ || !gpu_driver_) {
-        return;
+        return false;
     }
 
+    bool did_upload = false;
+    static const bool kDebugVideoUpload = (std::getenv("DONG_DEBUG_VIDEO_UPLOAD") != nullptr);
+
     for (auto& kv : video_states_) {
+
         VideoState& vs = kv.second;
         if (!vs.needs_upload || !vs.has_frame || vs.frame_key.empty()) {
             continue;
         }
-        if (vs.rgba.empty() || vs.frame_w == 0 || vs.frame_h == 0) {
+        const uint8_t* src = vs.frame_data;
+        if (!src && !vs.rgba.empty()) {
+            src = vs.rgba.data();
+        }
+        if (!src || vs.frame_w == 0 || vs.frame_h == 0) {
             vs.needs_upload = false;
             continue;
         }
 
+        did_upload = true;
+
         const bool ok = gpu_driver_->updateExternalImageRGBA(
             vs.frame_key,
-            vs.rgba.data(),
+            src,
             vs.frame_w,
             vs.frame_h,
             vs.frame_stride
         );
 
+
         if (ok) {
+            if (kDebugVideoUpload) {
+                DONG_LOG_INFO("[Video::upload] key=%s size=%ux%u stride=%u needs_upload=%d", vs.frame_key.c_str(), vs.frame_w, vs.frame_h, vs.frame_stride, (int)vs.needs_upload);
+            }
             vs.needs_upload = false;
+
+            // Bind the video texture to the DOM node only after the first successful upload.
+            // This avoids drawing an empty video:// texture before it's ready and keeps poster/placeholder visible.
+            if (vs.node && vs.node->getAttribute("__dong_video_frame").empty()) {
+                vs.node->setAttribute("__dong_video_frame", vs.frame_key);
+                markNeedsRepaint();
+            }
+
+            // External textures (video) change without rebuilding command lists.
+            // Mark the corresponding isolated layer dirty so the layer-cache path will re-rasterize
+            // and sample the updated video texture.
+            if (vs.node) {
+                const uint64_t layer_id = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(vs.node.get()));
+                if (cached_cmd_list_) {
+                    markIsolatedLayerDirtyFlags(*cached_cmd_list_, layer_id);
+                }
+                if (offscreen_cmd_list_cache_) {
+                    markIsolatedLayerDirtyFlags(*offscreen_cmd_list_cache_, layer_id);
+                }
+            }
+        } else if (kDebugVideoUpload) {
+            DONG_LOG_INFO("[Video::upload] FAILED key=%s size=%ux%u stride=%u src=%p", vs.frame_key.c_str(), vs.frame_w, vs.frame_h, vs.frame_stride, (const void*)src);
         }
+
+
+
     }
+
+    return did_upload;
 }
 
-void View::syncVideoElements(double wall_time_sec) {
+
+void View::syncVideoElements(double wall_time_sec, bool dom_tree_dirty) {
+    std::string profile_name = "Video::tick";
+    if (!debug_name_.empty()) {
+        profile_name += ":";
+        profile_name += debug_name_;
+    }
+    ScopedProfilerEvent __scope(profile_name.c_str(), "video");
+
+    static const bool kDebugVideoUpload = (std::getenv("DONG_DEBUG_VIDEO_UPLOAD") != nullptr);
+
     const bool video_ok = (plugin_ && (plugin_->info.capabilities & DONG_PLUGIN_CAP_VIDEO) &&
+
                            plugin_->video_open && plugin_->video_close && plugin_->video_read_frame);
     if (!video_ok || !dom_manager) {
         if (!video_states_.empty()) {
@@ -1895,24 +2152,70 @@ void View::syncVideoElements(double wall_time_sec) {
             }
             video_states_.clear();
         }
+        video_dom_scanned_ = false;
+        video_dom_has_any_ = false;
         return;
     }
 
-    auto nodes = dom_manager->getElementsByTagName("video");
+    const bool need_dom_scan = (!video_dom_scanned_) || dom_tree_dirty;
+
+    std::vector<dong::dom::DOMNodePtr> nodes;
     std::unordered_set<void*> live;
-    live.reserve(nodes.size());
+
+    if (need_dom_scan) {
+        DONG_PROFILE_SCOPE_CAT("Video::scanDOM", "video");
+        nodes = dom_manager->getElementsByTagName("video");
+        video_dom_scanned_ = true;
+        video_dom_has_any_ = !nodes.empty();
+
+        live.reserve(nodes.size());
+        for (auto& n : nodes) {
+            if (n) live.insert(n.get());
+        }
+    } else {
+        // No DOM changes detected: avoid scanning the whole tree.
+        if (!video_dom_has_any_ && video_states_.empty()) {
+            return;
+        }
+
+        nodes.reserve(video_states_.size());
+        live.reserve(video_states_.size());
+        for (auto& kv : video_states_) {
+            live.insert(kv.first);
+            if (kv.second.node) {
+                nodes.push_back(kv.second.node);
+            }
+        }
+    }
 
     const std::string resource_root = resource_manager_ ? resource_manager_->getResourceRoot() : std::string();
 
     for (auto& n : nodes) {
         if (!n) continue;
-        live.insert(n.get());
 
         VideoState& vs = video_states_[n.get()];
         vs.node = n;
         if (vs.frame_key.empty()) {
             vs.frame_key = "video://" + std::to_string((uintptr_t)n.get());
         }
+
+        // Hint the renderer to isolate video and its container into cached layers.
+        // This lets us reuse static UI layers while re-rasterizing only the video layer per frame.
+        bool isolate_changed = false;
+        if (n->getAttribute("__dong_isolate").empty()) {
+            n->setAttribute("__dong_isolate", "1");
+            isolate_changed = true;
+        }
+        if (auto parent = n->getParentElement()) {
+            if (parent->getAttribute("__dong_isolate").empty()) {
+                parent->setAttribute("__dong_isolate", "1");
+                isolate_changed = true;
+            }
+        }
+        if (isolate_changed) {
+            markNeedsRepaint();
+        }
+
 
         const std::string src = n->getAttribute("src");
         const bool autoplay = n->hasAttribute("autoplay");
@@ -1950,7 +2253,7 @@ void View::syncVideoElements(double wall_time_sec) {
             vs.ended = false;
             vs.current_pts = 0.0;
             vs.loadeddata_sent = false;
-            vs.last_timeupdate_wall = 0.0;
+            vs.last_timeupdate_pts = 0.0;
 
 
             const std::string resolved = resolveVideoUrlForPlugin(src, resource_root);
@@ -1960,7 +2263,10 @@ void View::syncVideoElements(double wall_time_sec) {
                 continue;
             }
 
-            vs.player = plugin_->video_open(plugin_user_, resolved.c_str());
+            {
+                DONG_PROFILE_SCOPE_CAT("Video::open", "video");
+                vs.player = plugin_->video_open(plugin_user_, resolved.c_str());
+            }
             if (!vs.player) {
                 vs.errored = true;
                 dispatchMediaError(vs, "video_open failed");
@@ -1970,28 +2276,51 @@ void View::syncVideoElements(double wall_time_sec) {
             // Metadata.
             if (plugin_->video_get_metadata) {
                 dong_video_metadata_t md{};
-                if (plugin_->video_get_metadata(plugin_user_, vs.player, &md) != 0) {
-                    vs.meta = md;
-                    vs.meta_ready = true;
-                    if (vs.node) {
-                        vs.node->setAttribute("__dong_video_duration", std::to_string(vs.meta.duration_seconds));
+                {
+                    DONG_PROFILE_SCOPE_CAT("Video::getMetadata", "video");
+                    if (plugin_->video_get_metadata(plugin_user_, vs.player, &md) != 0) {
+                        vs.meta = md;
+                        vs.meta_ready = true;
+                        if (vs.node) {
+                            vs.node->setAttribute("__dong_video_duration", std::to_string(vs.meta.duration_seconds));
+                        }
+                        dispatchMediaEvent(vs, "loadedmetadata");
                     }
-                    dispatchMediaEvent(vs, "loadedmetadata");
                 }
             }
 
-
             // Preload first frame (best effort) so poster-less videos show something.
             if (vs.preload && plugin_->video_seek) {
+                DONG_PROFILE_SCOPE_CAT("Video::seek(0)", "video");
                 plugin_->video_seek(plugin_user_, vs.player, 0.0);
             }
             if (vs.preload) {
                 dong_video_frame_t f{};
-                int rr = plugin_->video_read_frame(plugin_user_, vs.player, &f);
+                int rr = 0;
+                {
+                    DONG_PROFILE_SCOPE_CAT("Video::readFrame(preload)", "video");
+                    rr = plugin_->video_read_frame(plugin_user_, vs.player, &f);
+                }
                 if (rr == 1 && f.data && f.width > 0 && f.height > 0) {
+                    if (kDebugVideoUpload) {
+                        DONG_LOG_INFO("[Video::preload] key=%s size=%ux%u stride=%u", vs.frame_key.c_str(), f.width, f.height, f.stride_bytes);
+                    }
+
+                    static const bool kCopyVideoFrames = ([]() {
+                        const char* v = std::getenv("DONG_VIDEO_FRAME_COPY");
+                        return v && (std::strcmp(v, "1") == 0 || std::strcmp(v, "true") == 0);
+                    })();
+
                     const size_t sz = static_cast<size_t>(f.stride_bytes) * static_cast<size_t>(f.height);
-                    vs.rgba.resize(sz);
-                    std::memcpy(vs.rgba.data(), f.data, sz);
+                    vs.frame_data = f.data;
+                    if (kCopyVideoFrames) {
+                        vs.rgba.resize(sz);
+                        std::memcpy(vs.rgba.data(), f.data, sz);
+                        vs.frame_data = vs.rgba.data();
+                    } else {
+                        vs.rgba.clear();
+                    }
+
                     vs.frame_w = f.width;
                     vs.frame_h = f.height;
                     vs.frame_stride = f.stride_bytes;
@@ -2000,6 +2329,7 @@ void View::syncVideoElements(double wall_time_sec) {
                     vs.needs_upload = true;
                     offscreen_texture_dirty_ = true;
 
+
                     if (vs.node) {
                         vs.node->setAttribute("__dong_video_currentTime", std::to_string(vs.current_pts));
                         vs.node->setAttribute("__dong_video_seeking", "0");
@@ -2007,11 +2337,6 @@ void View::syncVideoElements(double wall_time_sec) {
                     }
 
 
-                    // Enable video rendering in Painter.
-                    if (vs.node) {
-                        vs.node->setAttribute("__dong_video_frame", vs.frame_key);
-                        markNeedsRepaint();
-                    }
 
                     // Preload counts as ready-to-play for our minimal model.
                     if (!vs.loadeddata_sent) {
@@ -2019,11 +2344,13 @@ void View::syncVideoElements(double wall_time_sec) {
                         dispatchMediaEvent(vs, "loadeddata");
                         dispatchMediaEvent(vs, "canplay");
                     }
-
+                } else if (kDebugVideoUpload) {
+                    DONG_LOG_INFO("[Video::preload] NOFRAME key=%s rr=%d w=%u h=%u data=%p", vs.frame_key.c_str(), rr, (unsigned)f.width, (unsigned)f.height, (const void*)f.data);
                 }
             }
 
             // Autoplay.
+
             if (vs.autoplay) {
                 vs.playing = true;
                 vs.wall_clock_start = wall_time_sec;
@@ -2033,7 +2360,6 @@ void View::syncVideoElements(double wall_time_sec) {
             } else {
                 vs.playing = false;
             }
-
         }
 
         // JS-driven seek/play/pause (via internal __dong_video_* attributes).
@@ -2055,7 +2381,10 @@ void View::syncVideoElements(double wall_time_sec) {
                         vs.node->setAttribute("__dong_video_currentTime", std::to_string(t));
                     }
 
-                    plugin_->video_seek(plugin_user_, vs.player, t);
+                    {
+                        DONG_PROFILE_SCOPE_CAT("Video::seek", "video");
+                        plugin_->video_seek(plugin_user_, vs.player, t);
+                    }
                     vs.current_pts = t;
                     vs.video_time_start = vs.current_pts;
                     vs.wall_clock_start = wall_time_sec;
@@ -2065,11 +2394,27 @@ void View::syncVideoElements(double wall_time_sec) {
 
                     // Best effort: decode one frame after seek so paused videos update.
                     dong_video_frame_t f{};
-                    int rr = plugin_->video_read_frame(plugin_user_, vs.player, &f);
+                    int rr = 0;
+                    {
+                        DONG_PROFILE_SCOPE_CAT("Video::readFrame(seek)", "video");
+                        rr = plugin_->video_read_frame(plugin_user_, vs.player, &f);
+                    }
                     if (rr == 1 && f.data && f.width > 0 && f.height > 0) {
+                        static const bool kCopyVideoFrames = ([]() {
+                            const char* v = std::getenv("DONG_VIDEO_FRAME_COPY");
+                            return v && (std::strcmp(v, "1") == 0 || std::strcmp(v, "true") == 0);
+                        })();
+
                         const size_t sz = static_cast<size_t>(f.stride_bytes) * static_cast<size_t>(f.height);
-                        vs.rgba.resize(sz);
-                        std::memcpy(vs.rgba.data(), f.data, sz);
+                        vs.frame_data = f.data;
+                        if (kCopyVideoFrames) {
+                            vs.rgba.resize(sz);
+                            std::memcpy(vs.rgba.data(), f.data, sz);
+                            vs.frame_data = vs.rgba.data();
+                        } else {
+                            vs.rgba.clear();
+                        }
+
                         vs.frame_w = f.width;
                         vs.frame_h = f.height;
                         vs.frame_stride = f.stride_bytes;
@@ -2078,14 +2423,12 @@ void View::syncVideoElements(double wall_time_sec) {
                         vs.needs_upload = true;
                         offscreen_texture_dirty_ = true;
 
+
                         if (vs.node) {
                             vs.node->setAttribute("__dong_video_currentTime", std::to_string(vs.current_pts));
                         }
 
-                        if (vs.node && vs.node->getAttribute("__dong_video_frame").empty()) {
-                            vs.node->setAttribute("__dong_video_frame", vs.frame_key);
-                            markNeedsRepaint();
-                        }
+
                     }
 
                     if (vs.node) {
@@ -2093,10 +2436,10 @@ void View::syncVideoElements(double wall_time_sec) {
                         vs.node->setAttribute("__dong_video_ended", "0");
                         vs.node->setAttribute("__dong_video_currentTime", std::to_string(vs.current_pts));
                     }
-                    vs.last_timeupdate_wall = wall_time_sec;
+                    vs.last_timeupdate_pts = vs.current_pts;
+
                     dispatchMediaEvent(vs, "seeked");
                     dispatchMediaEvent(vs, "timeupdate");
-
                 }
 
                 // Clear request (avoid removeAttribute() which would dirty layout).
@@ -2121,20 +2464,52 @@ void View::syncVideoElements(double wall_time_sec) {
             }
         }
 
-        // Drive playback.
-        updateVideoPlayback(vs, wall_time_sec);
+        if (!vs.has_frame && vs.node && !vs.node->getAttribute("__dong_video_frame").empty()) {
+            // No decoded frame available; ensure we fall back to poster/placeholder instead of a stale video:// key.
+            vs.node->setAttribute("__dong_video_frame", "");
+            markNeedsRepaint();
+        }
+
+        if (kDebugVideoUpload) {
+            const std::string attr_frame = n->getAttribute("__dong_video_frame");
+            DONG_LOG_INFO(
+                "[Video::state] key=%s src=%s playing=%d preload=%d has_frame=%d needs_upload=%d attr_frame=%s",
+                vs.frame_key.c_str(),
+                vs.src.c_str(),
+                (int)vs.playing,
+                (int)vs.preload,
+                (int)vs.has_frame,
+                (int)vs.needs_upload,
+                attr_frame.c_str()
+            );
+        }
+
+        {
+
+            std::string profile_name = "Video::playback";
+            if (!debug_name_.empty()) {
+                profile_name += ":";
+                profile_name += debug_name_;
+            }
+            ScopedProfilerEvent __scope_playback(profile_name.c_str(), "video");
+            updateVideoPlayback(vs, wall_time_sec);
+        }
+
     }
 
 
-    // Cleanup removed nodes.
-    for (auto it = video_states_.begin(); it != video_states_.end();) {
-        if (live.find(it->first) == live.end()) {
-            closeVideo(it->second);
-            it = video_states_.erase(it);
-        } else {
-            ++it;
+    if (need_dom_scan) {
+        // Cleanup removed nodes.
+        for (auto it = video_states_.begin(); it != video_states_.end();) {
+            if (live.find(it->first) == live.end()) {
+                closeVideo(it->second);
+                it = video_states_.erase(it);
+            } else {
+                ++it;
+            }
         }
     }
 }
+
 
 } // namespace dong

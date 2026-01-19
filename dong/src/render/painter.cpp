@@ -359,9 +359,12 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
          style.transform_scale_x != 1.0f || style.transform_scale_y != 1.0f ||
          style.transform_rotate != 0.0f || style.transform_skew_x != 0.0f || style.transform_skew_y != 0.0f);
 
-    bool has_isolation = (style.isolation_isolate || is_scroll_container || has_transform) &&
+    const bool force_isolation = (node->getAttribute("__dong_isolate") == "1" || node->getAttribute("__dong_isolate") == "true");
+
+    bool has_isolation = (style.isolation_isolate || is_scroll_container || has_transform || force_isolation) &&
                          (layer_bounds.width > 0.0f && layer_bounds.height > 0.0f);
     bool needs_layer = has_isolation || clamped_opacity < 0.999f;
+
     
     // 强制为有transform的元素创建layer，确保transform能被应用
     if (has_transform) {
@@ -940,50 +943,76 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         }
     }
 
-    
-    // 收集需要绘制的子元素及�?z-index
-    struct ChildWithZIndex {
-        dom::DOMNodePtr child;
-        int z_index;
-        size_t original_order;
-    };
-    std::vector<ChildWithZIndex> sorted_children;
-    sorted_children.reserve(children.size());
-    
-    size_t order = 0;
+    // 大多数子节点的 z-index 都是 0：避免每节点都分配 + sort（O(n log n)），直接按 DOM 顺序遍历。
+    bool need_z_sort = false;
     for (const auto& child : children) {
         if (!child || child->getType() != dom::DOMNode::NodeType::ELEMENT) {
             continue;
         }
         const auto& child_style = child->getComputedStyle();
-        ChildWithZIndex item{};
-        item.child = child;
-        item.z_index = child_style.z_index;
-        item.original_order = order++;
-        sorted_children.push_back(item);
-    }
-    
-    // �?z-index 升序排序，相�?z-index 保持 DOM 顺序
-    std::sort(sorted_children.begin(), sorted_children.end(),
-              [](const ChildWithZIndex& a, const ChildWithZIndex& b) {
-                  if (a.z_index != b.z_index) {
-                      return a.z_index < b.z_index;
-                  }
-                  return a.original_order < b.original_order;
-              });
-    
-    for (const auto& item : sorted_children) {
-        // 跳过已经在容器层绘制过的 inline 元素
-        if (item.child->getAttribute("__inline_rendered__") == "1") {
-            item.child->setAttribute("__inline_rendered__", "");  // 清除标记
-            continue;
+        if (child_style.z_index != 0) {
+            need_z_sort = true;
+            break;
         }
-        const layout::LayoutNode* child_layout = nullptr;
-        if (layout_engine_) {
-            child_layout = layout_engine_->getLayout(item.child);
-        }
-        buildDisplayListNode(item.child, child_layout, builder);
     }
+
+    if (!need_z_sort) {
+        for (const auto& child : children) {
+            if (!child || child->getType() != dom::DOMNode::NodeType::ELEMENT) {
+                continue;
+            }
+            // 跳过已经在容器层绘制过的 inline 元素
+            if (child->getAttribute("__inline_rendered__") == "1") {
+                child->setAttribute("__inline_rendered__", "");  // 清除标记
+                continue;
+            }
+
+            const layout::LayoutNode* child_layout = layout_engine_ ? layout_engine_->getLayout(child) : nullptr;
+            buildDisplayListNode(child, child_layout, builder);
+        }
+    } else {
+        // 收集需要绘制的子元素及�?z-index
+        struct ChildWithZIndex {
+            dom::DOMNodePtr child;
+            int z_index;
+            size_t original_order;
+        };
+        std::vector<ChildWithZIndex> sorted_children;
+        sorted_children.reserve(children.size());
+        
+        size_t order = 0;
+        for (const auto& child : children) {
+            if (!child || child->getType() != dom::DOMNode::NodeType::ELEMENT) {
+                continue;
+            }
+            const auto& child_style = child->getComputedStyle();
+            ChildWithZIndex item{};
+            item.child = child;
+            item.z_index = child_style.z_index;
+            item.original_order = order++;
+            sorted_children.push_back(item);
+        }
+        
+        // �?z-index 升序排序，相�?z-index 保持 DOM 顺序
+        std::sort(sorted_children.begin(), sorted_children.end(),
+                  [](const ChildWithZIndex& a, const ChildWithZIndex& b) {
+                      if (a.z_index != b.z_index) {
+                          return a.z_index < b.z_index;
+                      }
+                      return a.original_order < b.original_order;
+                  });
+        
+        for (const auto& item : sorted_children) {
+            // 跳过已经在容器层绘制过的 inline 元素
+            if (item.child->getAttribute("__inline_rendered__") == "1") {
+                item.child->setAttribute("__inline_rendered__", "");  // 清除标记
+                continue;
+            }
+            const layout::LayoutNode* child_layout = layout_engine_ ? layout_engine_->getLayout(item.child) : nullptr;
+            buildDisplayListNode(item.child, child_layout, builder);
+        }
+    }
+
     
     // 恢复滚动偏移
     if (applied_scroll_translate) {

@@ -35,6 +35,10 @@ void dong_view_load_html(dong_view_t* view, const char* html);
 // Optional: set a base directory for resolving relative resource paths (img/src, CSS url(...), script src, etc.)
 void dong_view_set_resource_root(dong_view_t* view, const char* resource_root);
 
+// Optional: debugging label (used for profiling/logging; no functional impact)
+void dong_view_set_debug_name(dong_view_t* view, const char* name);
+
+
 void dong_view_resize(dong_view_t* view, uint32_t width, uint32_t height);
 
 
