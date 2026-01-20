@@ -50,6 +50,29 @@ public:
         return false;
     }
 
+    // Dynamic YUV420P textures (e.g. video frames).
+    // Implementations should upload planes to GPU textures and perform YUV->RGB in shader.
+    virtual bool updateExternalImageYUV420P(const std::string& key,
+                                            const uint8_t* plane_y,
+                                            uint32_t stride_y,
+                                            const uint8_t* plane_u,
+                                            uint32_t stride_u,
+                                            const uint8_t* plane_v,
+                                            uint32_t stride_v,
+                                            uint32_t width,
+                                            uint32_t height) {
+        (void)key;
+        (void)plane_y;
+        (void)stride_y;
+        (void)plane_u;
+        (void)stride_u;
+        (void)plane_v;
+        (void)stride_v;
+        (void)width;
+        (void)height;
+        return false;
+    }
+
     virtual void beginFrame() = 0;
     virtual void endFrame() = 0;
 

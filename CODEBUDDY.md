@@ -227,6 +227,8 @@ Located in `scripts/tools/`:
 
 ### Windows
 - Uses `clang-cl` + Ninja for CMake builds
+- Uses `zig build` for builds
+- If using WSL bash, use windows command `cmd.exe /c zig build` to avoid zig missing.
 - Always builds in Release mode to avoid `_ITERATOR_DEBUG_LEVEL` mismatches
 - DXC libraries expected in `third_party/dxc_2025_07_14/lib/x64`
 

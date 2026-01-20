@@ -227,6 +227,18 @@ bool GPUDriverSDL::initialize() {
         return false;
     }
 
+    // Video YUV420P fragment shader (same quad vertex shader)
+    video_yuv_fs_ = shader_manager_->loadShaderFromHLSLFile(
+        "dong_video_yuv_fs",
+        SDL_GPU_SHADERSTAGE_FRAGMENT,
+        shader_path("video_yuv_fs.hlsl").c_str(),
+        "main"
+    );
+    if (!video_yuv_fs_) {
+        SDL_Log("GPUDriverSDL::initialize: failed to compile video_yuv_fs shader");
+        return false;
+    }
+
     SDL_GPUGraphicsPipelineCreateInfo ipci{};
     SDL_GPUColorTargetDescription color_desc2{};
     color_desc2.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
@@ -255,6 +267,15 @@ bool GPUDriverSDL::initialize() {
     image_pipeline_ = SDL_CreateGPUGraphicsPipeline(dev, &ipci);
     if (!image_pipeline_) {
         SDL_Log("GPUDriverSDL::initialize: failed to create image pipeline: %s", SDL_GetError());
+        return false;
+    }
+
+    // YUV pipeline: identical to image pipeline except fragment shader.
+    SDL_GPUGraphicsPipelineCreateInfo yuv_pci = ipci;
+    yuv_pci.fragment_shader = video_yuv_fs_;
+    video_yuv_pipeline_ = SDL_CreateGPUGraphicsPipeline(dev, &yuv_pci);
+    if (!video_yuv_pipeline_) {
+        SDL_Log("GPUDriverSDL::initialize: failed to create video_yuv pipeline: %s", SDL_GetError());
         return false;
     }
 

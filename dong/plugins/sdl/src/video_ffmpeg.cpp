@@ -8,6 +8,11 @@
 #include <cstdlib>
 #include <cstring>
 #include <mutex>
+#include <thread>
+#include <atomic>
+#include <condition_variable>
+#include <deque>
+#include <chrono>
 #include <string>
 #include <vector>
 #include <filesystem>
@@ -25,9 +30,41 @@ extern "C" {
 #include <libswscale/swscale.h>
 }
 
+namespace {
+
+constexpr std::size_t kFrameQueueCapacity = 6; // ~200ms buffering at 30fps
+
+struct DecodedFrame {
+    dong_video_pixel_format_t format = DONG_VIDEO_PIXEL_FORMAT_RGBA8;
+    std::vector<uint8_t> storage;
+
+    uint32_t width = 0;
+    uint32_t height = 0;
+
+    // For RGBA8: stride0 = width*4, plane_stride_bytes[0]=stride0, plane_offset[0]=0
+    // For YUV420P: stride0 = width, plane_stride_bytes[0]=width, [1]=cw, [2]=cw,
+    //              plane_offset points into packed storage.
+    uint32_t stride0 = 0;
+    uint32_t plane_stride_bytes[3] = {0, 0, 0};
+    size_t plane_offset[3] = {0, 0, 0};
+
+    double pts_seconds = 0.0;
+
+    const uint8_t* planePtr(int plane) const {
+        if (plane < 0 || plane > 2) return nullptr;
+        if (plane_stride_bytes[plane] == 0) return nullptr;
+        if (storage.empty()) return nullptr;
+        if (plane_offset[plane] >= storage.size()) return nullptr;
+        return storage.data() + plane_offset[plane];
+    }
+};
+
+} // namespace
+
 // This type is part of the plugin C ABI (forward-declared in dong_plugin_api.h).
 // Keep it in the global namespace so `dong_video_player_t*` matches across TUs.
 struct dong_video_player_t {
+    // FFmpeg contexts (owned by player; accessed by decode thread)
     AVFormatContext* fmt = nullptr;
     AVCodecContext* vdec = nullptr;
     int video_stream = -1;
@@ -37,10 +74,32 @@ struct dong_video_player_t {
     AVFrame* frame = nullptr;
 
     SwsContext* sws = nullptr;
+    AVPixelFormat src_pix_fmt = AV_PIX_FMT_NONE;
+    int sws_flags = SWS_FAST_BILINEAR; // used when sws conversion is needed
+    dong_video_pixel_format_t out_format = DONG_VIDEO_PIXEL_FORMAT_YUV420P;
 
-    std::vector<uint8_t> rgba;
-    uint8_t* rgba_data[4] = {nullptr, nullptr, nullptr, nullptr};
-    int rgba_linesize[4] = {0, 0, 0, 0};
+    // Async decode state
+    std::thread decode_thread;
+    std::atomic<bool> stop_decode{false};
+    std::atomic<bool> eof{false};
+
+    // Frame queue implemented as slot pools:
+    // - decode thread writes into a free slot, then pushes the index to ready_slots.
+    // - main thread pops a ready slot and holds it until the next read_frame() call.
+    std::mutex queue_mutex;
+    std::condition_variable queue_cv;
+    std::vector<DecodedFrame> slots;
+    std::deque<std::size_t> free_slots;
+    std::deque<std::size_t> ready_slots;
+    std::size_t held_slot = (std::size_t)-1; // slot index currently exposed via out_frame
+
+    // Seek coordination
+    std::mutex seek_mutex;
+    std::condition_variable seek_cv;
+    uint64_t seek_gen = 0;
+    uint64_t seek_done_gen = 0;
+    double seek_target_seconds = 0.0;
+    bool seek_pending = false;
 
     dong_video_metadata_t meta = {};
 };
@@ -264,10 +323,317 @@ static std::string ff_err(int err) {
 }
 
 
+static void clear_ready_frames_locked(dong_video_player_t* p) {
+    if (!p) return;
+
+    // Return ready frames to free list.
+    while (!p->ready_slots.empty()) {
+        p->free_slots.push_back(p->ready_slots.front());
+        p->ready_slots.pop_front();
+    }
+}
+
+static bool decode_one_video_frame(dong_video_player_t* p, DecodedFrame& out) {
+    // Decode until we get a video frame or hit EOF/error.
+    while (!p->stop_decode.load(std::memory_order_acquire)) {
+        int ret = g_ff.p_av_read_frame(p->fmt, p->pkt);
+        if (ret < 0) {
+            p->eof.store(true, std::memory_order_release);
+            return false;
+        }
+
+        if (p->pkt->stream_index != p->video_stream) {
+            g_ff.p_av_packet_unref(p->pkt);
+            continue;
+        }
+
+        ret = g_ff.p_avcodec_send_packet(p->vdec, p->pkt);
+        g_ff.p_av_packet_unref(p->pkt);
+        if (ret < 0) {
+            SDL_Log("[dong_plugin_sdl][video] avcodec_send_packet failed: %s", ff_err(ret).c_str());
+            // Treat as fatal for this decode iteration; try to continue.
+            continue;
+        }
+
+        // Drain all available frames produced from this packet.
+        while (!p->stop_decode.load(std::memory_order_acquire)) {
+            ret = g_ff.p_avcodec_receive_frame(p->vdec, p->frame);
+            if (ret == AVERROR(EAGAIN)) {
+                break;
+            }
+            if (ret < 0) {
+                SDL_Log("[dong_plugin_sdl][video] avcodec_receive_frame failed: %s", ff_err(ret).c_str());
+                return false;
+            }
+
+            const int w = p->frame->width;
+            const int h = p->frame->height;
+            if (w <= 0 || h <= 0) {
+                g_ff.p_av_frame_unref(p->frame);
+                continue;
+            }
+
+            const AVPixelFormat src_fmt = (AVPixelFormat)p->frame->format;
+            const AVPixelFormat dst_fmt = (p->out_format == DONG_VIDEO_PIXEL_FORMAT_RGBA8) ? AV_PIX_FMT_RGBA : AV_PIX_FMT_YUV420P;
+            const bool need_sws = (src_fmt != dst_fmt);
+            if (need_sws) {
+                if (!p->sws || p->src_pix_fmt != src_fmt) {
+                    if (p->sws && g_ff.p_sws_freeContext) {
+                        g_ff.p_sws_freeContext(p->sws);
+                        p->sws = nullptr;
+                    }
+
+                    p->sws = g_ff.p_sws_getContext(
+                        w, h, src_fmt,
+                        w, h, dst_fmt,
+                        p->sws_flags, nullptr, nullptr, nullptr
+                    );
+                    p->src_pix_fmt = src_fmt;
+
+                    if (!p->sws) {
+                        SDL_Log("[dong_plugin_sdl][video] sws_getContext failed (src=%d dst=%d)", (int)src_fmt, (int)dst_fmt);
+                        p->eof.store(true, std::memory_order_release);
+                        g_ff.p_av_frame_unref(p->frame);
+                        return false;
+                    }
+                }
+            } else {
+                // If we previously needed sws but now don't, drop the cached context to avoid mismatches.
+                if (p->sws && g_ff.p_sws_freeContext) {
+                    g_ff.p_sws_freeContext(p->sws);
+                    p->sws = nullptr;
+                }
+                p->src_pix_fmt = src_fmt;
+            }
+
+            // PTS.
+            double pts_sec = 0.0;
+            int64_t pts = p->frame->best_effort_timestamp;
+            if (pts != AV_NOPTS_VALUE) {
+                pts_sec = (double)pts * av_q2d(p->video_time_base);
+            }
+
+            out.width = static_cast<uint32_t>(w);
+            out.height = static_cast<uint32_t>(h);
+            out.pts_seconds = pts_sec;
+
+            if (p->out_format == DONG_VIDEO_PIXEL_FORMAT_RGBA8) {
+                out.format = DONG_VIDEO_PIXEL_FORMAT_RGBA8;
+                out.stride0 = static_cast<uint32_t>(w * 4);
+                out.plane_stride_bytes[0] = out.stride0;
+                out.plane_stride_bytes[1] = 0;
+                out.plane_stride_bytes[2] = 0;
+                out.plane_offset[0] = 0;
+                out.plane_offset[1] = 0;
+                out.plane_offset[2] = 0;
+
+                const size_t need = static_cast<size_t>(out.stride0) * static_cast<size_t>(h);
+                if (out.storage.size() != need) {
+                    out.storage.resize(need);
+                }
+
+                uint8_t* dst_data[4] = { out.storage.data(), nullptr, nullptr, nullptr };
+                int dst_linesize[4] = { static_cast<int>(out.stride0), 0, 0, 0 };
+
+                if (p->sws) {
+                    g_ff.p_sws_scale(p->sws,
+                                     p->frame->data,
+                                     p->frame->linesize,
+                                     0,
+                                     h,
+                                     dst_data,
+                                     dst_linesize);
+                } else {
+                    // No conversion needed; copy from an RGBA frame (handle linesize).
+                    for (int y = 0; y < h; ++y) {
+                        std::memcpy(out.storage.data() + static_cast<size_t>(y) * out.stride0,
+                                    p->frame->data[0] + static_cast<size_t>(y) * static_cast<size_t>(p->frame->linesize[0]),
+                                    out.stride0);
+                    }
+                }
+            } else {
+                // YUV420P (preferred path)
+                out.format = DONG_VIDEO_PIXEL_FORMAT_YUV420P;
+
+                const uint32_t cw = (static_cast<uint32_t>(w) + 1u) / 2u;
+                const uint32_t ch = (static_cast<uint32_t>(h) + 1u) / 2u;
+
+                const size_t y_size = static_cast<size_t>(w) * static_cast<size_t>(h);
+                const size_t u_size = static_cast<size_t>(cw) * static_cast<size_t>(ch);
+                const size_t v_size = u_size;
+                const size_t need = y_size + u_size + v_size;
+
+                out.stride0 = static_cast<uint32_t>(w);
+                out.plane_stride_bytes[0] = static_cast<uint32_t>(w);
+                out.plane_stride_bytes[1] = cw;
+                out.plane_stride_bytes[2] = cw;
+                out.plane_offset[0] = 0;
+                out.plane_offset[1] = y_size;
+                out.plane_offset[2] = y_size + u_size;
+
+                if (out.storage.size() != need) {
+                    out.storage.resize(need);
+                }
+
+                uint8_t* dst_y = out.storage.data() + out.plane_offset[0];
+                uint8_t* dst_u = out.storage.data() + out.plane_offset[1];
+                uint8_t* dst_v = out.storage.data() + out.plane_offset[2];
+
+                const AVPixelFormat src_fmt = (AVPixelFormat)p->frame->format;
+                if (src_fmt == AV_PIX_FMT_YUV420P && !p->sws) {
+                    // Copy planes with stride handling.
+                    for (int y = 0; y < h; ++y) {
+                        std::memcpy(dst_y + static_cast<size_t>(y) * static_cast<size_t>(w),
+                                    p->frame->data[0] + static_cast<size_t>(y) * static_cast<size_t>(p->frame->linesize[0]),
+                                    static_cast<size_t>(w));
+                    }
+                    for (uint32_t y = 0; y < ch; ++y) {
+                        std::memcpy(dst_u + static_cast<size_t>(y) * static_cast<size_t>(cw),
+                                    p->frame->data[1] + static_cast<size_t>(y) * static_cast<size_t>(p->frame->linesize[1]),
+                                    static_cast<size_t>(cw));
+                        std::memcpy(dst_v + static_cast<size_t>(y) * static_cast<size_t>(cw),
+                                    p->frame->data[2] + static_cast<size_t>(y) * static_cast<size_t>(p->frame->linesize[2]),
+                                    static_cast<size_t>(cw));
+                    }
+                } else {
+                    // Convert to YUV420P using swscale.
+                    if (!p->sws) {
+                        SDL_Log("[dong_plugin_sdl][video] YUV420P requested but no sws context available (src=%d)", (int)src_fmt);
+                        p->eof.store(true, std::memory_order_release);
+                        g_ff.p_av_frame_unref(p->frame);
+                        return false;
+                    }
+                    uint8_t* dst_data[4] = { dst_y, dst_u, dst_v, nullptr };
+                    int dst_linesize[4] = { (int)out.plane_stride_bytes[0], (int)out.plane_stride_bytes[1], (int)out.plane_stride_bytes[2], 0 };
+                    g_ff.p_sws_scale(p->sws,
+                                     p->frame->data,
+                                     p->frame->linesize,
+                                     0,
+                                     h,
+                                     dst_data,
+                                     dst_linesize);
+                }
+            }
+
+            g_ff.p_av_frame_unref(p->frame);
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static void decode_thread_main(dong_video_player_t* p) {
+    if (!p) return;
+    ff_init_once();
+    if (!g_ff.ok) return;
+
+    while (!p->stop_decode.load(std::memory_order_acquire)) {
+        // Handle pending seek.
+        uint64_t do_seek_gen = 0;
+        double do_seek_target = 0.0;
+        {
+            std::lock_guard<std::mutex> lk(p->seek_mutex);
+            if (p->seek_pending) {
+                do_seek_gen = p->seek_gen;
+                do_seek_target = p->seek_target_seconds;
+                p->seek_pending = false;
+            }
+        }
+
+        if (do_seek_gen != 0) {
+            AVStream* st = p->fmt ? p->fmt->streams[p->video_stream] : nullptr;
+            if (st && g_ff.p_av_seek_frame) {
+                const int64_t target_ts = (int64_t)(do_seek_target / av_q2d(st->time_base));
+                const int ret = g_ff.p_av_seek_frame(p->fmt, p->video_stream, target_ts, AVSEEK_FLAG_BACKWARD);
+                if (ret < 0) {
+                    SDL_Log("[dong_plugin_sdl][video] av_seek_frame failed (async): %s", ff_err(ret).c_str());
+                }
+            }
+
+            // Flush decoder after seek.
+            if (g_ff.p_avcodec_flush_buffers) {
+                g_ff.p_avcodec_flush_buffers(p->vdec);
+            }
+            if (p->pkt) {
+                g_ff.p_av_packet_unref(p->pkt);
+            }
+            if (p->frame) {
+                g_ff.p_av_frame_unref(p->frame);
+            }
+
+            p->eof.store(false, std::memory_order_release);
+
+            // Clear queued frames.
+            {
+                std::lock_guard<std::mutex> qlk(p->queue_mutex);
+                clear_ready_frames_locked(p);
+            }
+            p->queue_cv.notify_all();
+
+            {
+                std::lock_guard<std::mutex> lk(p->seek_mutex);
+                p->seek_done_gen = do_seek_gen;
+            }
+            p->seek_cv.notify_all();
+        }
+
+        // Acquire a free slot to decode into.
+        std::size_t slot_index = (std::size_t)-1;
+        {
+            std::unique_lock<std::mutex> lk(p->queue_mutex);
+            p->queue_cv.wait(lk, [&]() {
+                return p->stop_decode.load(std::memory_order_acquire) || !p->free_slots.empty();
+            });
+            if (p->stop_decode.load(std::memory_order_acquire)) {
+                return;
+            }
+            slot_index = p->free_slots.front();
+            p->free_slots.pop_front();
+        }
+
+        if (slot_index == (std::size_t)-1 || slot_index >= p->slots.size()) {
+            continue;
+        }
+
+        DecodedFrame& slot = p->slots[slot_index];
+        const bool ok = decode_one_video_frame(p, slot);
+        if (!ok) {
+            // Return slot to free list.
+            {
+                std::lock_guard<std::mutex> lk(p->queue_mutex);
+                p->free_slots.push_back(slot_index);
+            }
+            p->queue_cv.notify_all();
+
+            // If EOF, avoid busy-loop.
+            if (p->eof.load(std::memory_order_acquire)) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            }
+            continue;
+        }
+
+        // Publish slot to consumers.
+        {
+            std::lock_guard<std::mutex> lk(p->queue_mutex);
+            p->ready_slots.push_back(slot_index);
+        }
+        p->queue_cv.notify_all();
+    }
+}
+
 
 static void player_close(dong_video_player_t* p) {
     ff_init_once();
     if (!p) return;
+
+    // Stop decode thread first.
+    if (p->decode_thread.joinable()) {
+        p->stop_decode.store(true, std::memory_order_release);
+        p->queue_cv.notify_all();
+        p->seek_cv.notify_all();
+        p->decode_thread.join();
+    }
 
     if (p->sws && g_ff.p_sws_freeContext) {
         g_ff.p_sws_freeContext(p->sws);
@@ -394,30 +760,6 @@ dong_video_player_t* sdl_video_open(void* /*user*/, const char* url) {
 
     const int w = p->vdec->width;
     const int h = p->vdec->height;
-    // Video scale/convert is a hot path. Prefer a fast scaler by default.
-    // Set DONG_VIDEO_SWS_QUALITY=1 to force higher quality (slower) scaling.
-    const int sws_flags = ([]() {
-        const char* v = std::getenv("DONG_VIDEO_SWS_QUALITY");
-        if (v && (v[0] == '1' || v[0] == 't' || v[0] == 'T' || v[0] == 'y' || v[0] == 'Y')) {
-            return SWS_BILINEAR;
-        }
-        return SWS_FAST_BILINEAR;
-    })();
-
-    p->sws = g_ff.p_sws_getContext(
-        w, h, p->vdec->pix_fmt,
-        w, h, AV_PIX_FMT_RGBA,
-        sws_flags, nullptr, nullptr, nullptr
-    );
-
-    if (!p->sws) {
-        SDL_Log("[dong_plugin_sdl][video] sws_getContext failed");
-        player_close(p);
-        delete p;
-        return nullptr;
-    }
-
-    // Allocate an RGBA buffer without calling into FFmpeg (we don't link FFmpeg; we load DLLs at runtime).
     if (w <= 0 || h <= 0) {
         SDL_Log("[dong_plugin_sdl][video] invalid video size: %dx%d", w, h);
         player_close(p);
@@ -425,17 +767,50 @@ dong_video_player_t* sdl_video_open(void* /*user*/, const char* url) {
         return nullptr;
     }
 
-    p->rgba_linesize[0] = w * 4;
-    p->rgba.resize((size_t)p->rgba_linesize[0] * (size_t)h);
+    // Initialize conversion state. The actual decoded frame format may not be known until the first frame.
+    // We therefore create/refresh the swscale context lazily on the decode thread based on AVFrame::format.
+    p->src_pix_fmt = AV_PIX_FMT_NONE;
+    p->sws = nullptr;
 
-    p->rgba_data[0] = p->rgba.data();
-    p->rgba_data[1] = nullptr;
-    p->rgba_data[2] = nullptr;
-    p->rgba_data[3] = nullptr;
-    p->rgba_linesize[1] = 0;
-    p->rgba_linesize[2] = 0;
-    p->rgba_linesize[3] = 0;
+    // Prefer GPU YUV path by default; allow opt-out for compatibility/debug.
+    const bool force_rgba = ([]() {
+        const char* v = std::getenv("DONG_VIDEO_FORCE_RGBA");
+        return v && (v[0] == '1' || v[0] == 't' || v[0] == 'T' || v[0] == 'y' || v[0] == 'Y');
+    })();
 
+    p->out_format = force_rgba ? DONG_VIDEO_PIXEL_FORMAT_RGBA8 : DONG_VIDEO_PIXEL_FORMAT_YUV420P;
+
+    // Video scale/convert is a hot path. Prefer a fast scaler by default.
+    // Set DONG_VIDEO_SWS_QUALITY=1 to force higher quality (slower) scaling.
+    p->sws_flags = ([]() {
+        const char* v = std::getenv("DONG_VIDEO_SWS_QUALITY");
+        if (v && (v[0] == '1' || v[0] == 't' || v[0] == 'T' || v[0] == 'y' || v[0] == 'Y')) {
+            return SWS_BILINEAR;
+        }
+        return SWS_FAST_BILINEAR;
+    })();
+
+    // Initialize async frame slots.
+    p->slots.resize(kFrameQueueCapacity);
+    p->free_slots.clear();
+    p->ready_slots.clear();
+    for (std::size_t i = 0; i < kFrameQueueCapacity; ++i) {
+        p->free_slots.push_back(i);
+    }
+    p->held_slot = (std::size_t)-1;
+
+    // Start decode thread.
+    p->stop_decode.store(false, std::memory_order_release);
+    p->eof.store(false, std::memory_order_release);
+    p->decode_thread = std::thread(decode_thread_main, p);
+
+    // Best-effort: wait a short time for first frame so callers don't treat temporary "no frame" as an error.
+    {
+        std::unique_lock<std::mutex> lk(p->queue_mutex);
+        p->queue_cv.wait_for(lk, std::chrono::milliseconds(250), [&]() {
+            return !p->ready_slots.empty() || p->eof.load(std::memory_order_acquire);
+        });
+    }
 
     return p;
 }
@@ -458,62 +833,84 @@ int sdl_video_read_frame(void* /*user*/, dong_video_player_t* player, dong_video
     if (!player || !out_frame) return -1;
 
     std::memset(out_frame, 0, sizeof(*out_frame));
-    out_frame->format = DONG_VIDEO_PIXEL_FORMAT_RGBA8;
 
-    while (true) {
-        int ret = g_ff.p_av_read_frame(player->fmt, player->pkt);
-        if (ret < 0) {
-            // EOF or error.
+    std::size_t new_slot = (std::size_t)-1;
+
+    {
+        std::unique_lock<std::mutex> lk(player->queue_mutex);
+
+        if (!player->ready_slots.empty()) {
+            // Swap in the newest queued frame.
+            if (player->held_slot != (std::size_t)-1) {
+                player->free_slots.push_back(player->held_slot);
+                player->held_slot = (std::size_t)-1;
+            }
+
+            new_slot = player->ready_slots.front();
+            player->ready_slots.pop_front();
+            player->held_slot = new_slot;
+        }
+
+        // If we hit EOF and there's no *new* frame available, signal EOF.
+        // We still want to allow consumers to present the final decoded frame first.
+        if (new_slot == (std::size_t)-1 && player->eof.load(std::memory_order_acquire) && player->ready_slots.empty()) {
             return 0;
         }
 
-        if (player->pkt->stream_index != player->video_stream) {
-            g_ff.p_av_packet_unref(player->pkt);
-            continue;
+        // If we still don't have any frame to show, wait briefly for the very first frame.
+        if (player->held_slot == (std::size_t)-1 && !player->eof.load(std::memory_order_acquire)) {
+            player->queue_cv.wait_for(lk, std::chrono::milliseconds(200), [&]() {
+                return !player->ready_slots.empty() || player->eof.load(std::memory_order_acquire);
+            });
+
+            if (!player->ready_slots.empty()) {
+                new_slot = player->ready_slots.front();
+                player->ready_slots.pop_front();
+                player->held_slot = new_slot;
+            }
+
+            if (player->eof.load(std::memory_order_acquire) && player->held_slot == (std::size_t)-1) {
+                return 0;
+            }
         }
-
-        ret = g_ff.p_avcodec_send_packet(player->vdec, player->pkt);
-        g_ff.p_av_packet_unref(player->pkt);
-        if (ret < 0) {
-            SDL_Log("[dong_plugin_sdl][video] avcodec_send_packet failed: %s", ff_err(ret).c_str());
-            return -1;
-        }
-
-        ret = g_ff.p_avcodec_receive_frame(player->vdec, player->frame);
-        if (ret == AVERROR(EAGAIN)) {
-            continue;
-        }
-        if (ret < 0) {
-            SDL_Log("[dong_plugin_sdl][video] avcodec_receive_frame failed: %s", ff_err(ret).c_str());
-            return -1;
-        }
-
-        // Convert to RGBA.
-        const int h = player->frame->height;
-        g_ff.p_sws_scale(player->sws,
-                         player->frame->data,
-                         player->frame->linesize,
-                         0,
-                         h,
-                         player->rgba_data,
-                         player->rgba_linesize);
-
-        // PTS.
-        double pts_sec = 0.0;
-        int64_t pts = player->frame->best_effort_timestamp;
-        if (pts != AV_NOPTS_VALUE) {
-            pts_sec = (double)pts * av_q2d(player->video_time_base);
-        }
-
-        out_frame->width = (uint32_t)player->vdec->width;
-        out_frame->height = (uint32_t)player->vdec->height;
-        out_frame->stride_bytes = (uint32_t)player->rgba_linesize[0];
-        out_frame->data = player->rgba_data[0];
-        out_frame->pts_seconds = pts_sec;
-
-        g_ff.p_av_frame_unref(player->frame);
-        return 1;
     }
+
+    if (new_slot != (std::size_t)-1) {
+        // Wake decode thread if it was waiting for a free slot.
+        player->queue_cv.notify_all();
+    }
+
+    if (player->held_slot == (std::size_t)-1) {
+        // No frame available yet.
+        return -1;
+    }
+
+    const DecodedFrame& f = player->slots[player->held_slot];
+    if (f.storage.empty() || f.width == 0 || f.height == 0 || f.stride0 == 0) {
+        return -1;
+    }
+
+    out_frame->format = f.format;
+    out_frame->width = f.width;
+    out_frame->height = f.height;
+    out_frame->pts_seconds = f.pts_seconds;
+
+    out_frame->data = f.planePtr(0);
+    out_frame->stride_bytes = f.plane_stride_bytes[0];
+
+    out_frame->plane_data[0] = f.planePtr(0);
+    out_frame->plane_stride_bytes[0] = f.plane_stride_bytes[0];
+    out_frame->plane_data[1] = f.planePtr(1);
+    out_frame->plane_stride_bytes[1] = f.plane_stride_bytes[1];
+    out_frame->plane_data[2] = f.planePtr(2);
+    out_frame->plane_stride_bytes[2] = f.plane_stride_bytes[2];
+
+    // For RGBA8, keep plane0 consistent with data.
+    if (f.format == DONG_VIDEO_PIXEL_FORMAT_RGBA8) {
+        out_frame->plane_data[0] = out_frame->data;
+    }
+
+    return 1;
 }
 
 int sdl_video_seek(void* /*user*/, dong_video_player_t* player, double time_seconds) {
@@ -521,28 +918,42 @@ int sdl_video_seek(void* /*user*/, dong_video_player_t* player, double time_seco
     if (!g_ff.ok) return -1;
     if (!player) return -1;
 
-    AVStream* st = player->fmt->streams[player->video_stream];
-    if (!st) return -1;
+    // Clear any queued/held frames so the next read_frame returns post-seek content.
+    {
+        std::lock_guard<std::mutex> lk(player->queue_mutex);
+        clear_ready_frames_locked(player);
+        if (player->held_slot != (std::size_t)-1) {
+            player->free_slots.push_back(player->held_slot);
+            player->held_slot = (std::size_t)-1;
+        }
+    }
+    player->queue_cv.notify_all();
 
-    const int64_t target_ts = (int64_t)(time_seconds / av_q2d(st->time_base));
-    int ret = g_ff.p_av_seek_frame(player->fmt, player->video_stream, target_ts, AVSEEK_FLAG_BACKWARD);
-    if (ret < 0) {
-        SDL_Log("[dong_plugin_sdl][video] av_seek_frame failed: %s", ff_err(ret).c_str());
-        return -1;
+    // Signal decode thread to perform seek.
+    uint64_t gen = 0;
+    {
+        std::lock_guard<std::mutex> lk(player->seek_mutex);
+        gen = ++player->seek_gen;
+        player->seek_target_seconds = time_seconds;
+        player->seek_pending = true;
+    }
+    player->seek_cv.notify_all();
+
+    // Best-effort: wait briefly for seek to apply.
+    {
+        std::unique_lock<std::mutex> lk(player->seek_mutex);
+        player->seek_cv.wait_for(lk, std::chrono::milliseconds(200), [&]() {
+            return player->seek_done_gen >= gen || player->stop_decode.load(std::memory_order_acquire);
+        });
     }
 
-    // Flush decoder after seek.
-    // NOTE: Do NOT use avcodec_send_packet(NULL) here; that puts the decoder into draining state.
-    if (g_ff.p_avcodec_flush_buffers) {
-        g_ff.p_avcodec_flush_buffers(player->vdec);
+    // Best-effort: wait briefly for at least one decoded frame after seek.
+    {
+        std::unique_lock<std::mutex> lk(player->queue_mutex);
+        player->queue_cv.wait_for(lk, std::chrono::milliseconds(200), [&]() {
+            return !player->ready_slots.empty() || player->eof.load(std::memory_order_acquire);
+        });
     }
-    if (player->pkt) {
-        g_ff.p_av_packet_unref(player->pkt);
-    }
-    if (player->frame) {
-        g_ff.p_av_frame_unref(player->frame);
-    }
-
 
     return 1;
 }

@@ -78,7 +78,16 @@ public:
     const AtlasEntry* getGlyph(uint32_t glyph_id, const std::string& font_path);
 
     // 添加字形到 Atlas（生成 MSDF 并上传）
+    // 注意：此方法同步等待 GPU 完成，不适合批量添加
     const AtlasEntry* addGlyph(uint32_t glyph_id, const std::string& font_path);
+
+    // 批量添加字形到 Atlas（单次 GPU 同步）
+    // 这是首选的批量添加方法，可显著减少 GPU 同步开销
+    struct GlyphRequest {
+        uint32_t glyph_id;
+        std::string font_path;
+    };
+    void addGlyphsBatched(const std::vector<GlyphRequest>& requests);
 
     // 获取 Atlas GPU 纹理（用于绑定到 shader）
     // 为了兼容旧代码，此接口返回第 0 页的纹理；

@@ -47,6 +47,17 @@ public:
                                  uint32_t height,
                                  uint32_t stride_bytes) override;
 
+    // Dynamic YUV420P textures (e.g. video frames)
+    bool updateExternalImageYUV420P(const std::string& key,
+                                    const uint8_t* plane_y,
+                                    uint32_t stride_y,
+                                    const uint8_t* plane_u,
+                                    uint32_t stride_u,
+                                    const uint8_t* plane_v,
+                                    uint32_t stride_v,
+                                    uint32_t width,
+                                    uint32_t height) override;
+
     // Debug: 启用时在 execute 末尾按 draw_batches 做一次批次遍历并输出日志
     void setDebugLogDrawBatches(bool enable) { debug_log_draw_batches_ = enable; }
 
@@ -111,6 +122,10 @@ private:
     SDL_GPUShader* image_vs_ = nullptr;
     SDL_GPUShader* image_fs_ = nullptr;
     SDL_GPUGraphicsPipeline* image_pipeline_ = nullptr;
+
+    // Video YUV420P path (same vertex shader, different fragment)
+    SDL_GPUShader* video_yuv_fs_ = nullptr;
+    SDL_GPUGraphicsPipeline* video_yuv_pipeline_ = nullptr;
     // 专用于“备份/恢复父 render target”的 copy 管线：关闭 blending，避免把颜色再乘一次 alpha
     SDL_GPUGraphicsPipeline* image_copy_pipeline_ = nullptr;
     SDL_GPUTexture* image_atlas_texture_ = nullptr;
@@ -144,8 +159,22 @@ private:
     std::unordered_map<std::string, ImageAtlasEntry> image_atlas_entries_;
 
     // External textures keyed by string (used for video://...)
+    enum class ExternalImageFormat : uint8_t {
+        RGBA8 = 0,
+        YUV420P = 1,
+    };
+
     struct ExternalImage {
+        ExternalImageFormat format = ExternalImageFormat::RGBA8;
+
+        // RGBA8: texture
+        // YUV420P: texture_y
         SDL_GPUTexture* texture = nullptr;
+
+        // YUV420P only
+        SDL_GPUTexture* texture_u = nullptr;
+        SDL_GPUTexture* texture_v = nullptr;
+
         uint32_t width = 0;
         uint32_t height = 0;
     };

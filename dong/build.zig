@@ -66,6 +66,7 @@ pub fn build(b: *std.Build) void {
 
     const is_windows = target.result.os.tag == .windows;
     const is_macos = target.result.os.tag == .macos;
+    const is_linux = target.result.os.tag == .linux;
 
     // Determine build type string for CMake
     // On Windows, always use Release to avoid _ITERATOR_DEBUG_LEVEL mismatch
@@ -111,6 +112,12 @@ pub fn build(b: *std.Build) void {
             "-DCMAKE_C_COMPILER=clang-cl",
             "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL",
         }) catch unreachable;
+    } else if (is_linux) {
+        quickjs_cmake_args.appendSlice(&.{
+            "-G", "Ninja",
+            "-DCMAKE_C_COMPILER=zig",
+            "-DCMAKE_C_COMPILER_ARG1=cc",
+        }) catch unreachable;
     }
 
     const quickjs_cmake_config = b.addSystemCommand(quickjs_cmake_args.items);
@@ -140,6 +147,14 @@ pub fn build(b: *std.Build) void {
             "-DCMAKE_C_COMPILER=clang-cl",
             "-DCMAKE_CXX_COMPILER=clang-cl",
             "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL",
+        }) catch unreachable;
+    } else if (is_linux) {
+        freetype_cmake_args.appendSlice(&.{
+            "-G", "Ninja",
+            "-DCMAKE_C_COMPILER=zig",
+            "-DCMAKE_C_COMPILER_ARG1=cc",
+            "-DCMAKE_CXX_COMPILER=zig",
+            "-DCMAKE_CXX_COMPILER_ARG1=c++",
         }) catch unreachable;
     }
 
@@ -172,6 +187,14 @@ pub fn build(b: *std.Build) void {
             "-DCMAKE_C_COMPILER=clang-cl",
             "-DCMAKE_CXX_COMPILER=clang-cl",
             "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL",
+        }) catch unreachable;
+    } else if (is_linux) {
+        harfbuzz_cmake_args.appendSlice(&.{
+            "-G", "Ninja",
+            "-DCMAKE_C_COMPILER=zig",
+            "-DCMAKE_C_COMPILER_ARG1=cc",
+            "-DCMAKE_CXX_COMPILER=zig",
+            "-DCMAKE_CXX_COMPILER_ARG1=c++",
         }) catch unreachable;
     }
 
@@ -209,6 +232,14 @@ pub fn build(b: *std.Build) void {
             "-DCMAKE_CXX_COMPILER=clang-cl",
             "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL",
         }) catch unreachable;
+    } else if (is_linux) {
+        msdfgen_cmake_args.appendSlice(&.{
+            "-G", "Ninja",
+            "-DCMAKE_C_COMPILER=zig",
+            "-DCMAKE_C_COMPILER_ARG1=cc",
+            "-DCMAKE_CXX_COMPILER=zig",
+            "-DCMAKE_CXX_COMPILER_ARG1=c++",
+        }) catch unreachable;
     }
 
     const msdfgen_cmake_config = b.addSystemCommand(msdfgen_cmake_args.items);
@@ -238,6 +269,15 @@ pub fn build(b: *std.Build) void {
             "-DCMAKE_C_COMPILER=clang-cl",
             "-DCMAKE_CXX_COMPILER=clang-cl",
             "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL",
+        }) catch unreachable;
+    } else if (is_linux) {
+        sdl3_cmake_args.appendSlice(&.{
+            "-G", "Ninja",
+            "-DCMAKE_C_COMPILER=zig",
+            "-DCMAKE_C_COMPILER_ARG1=cc",
+            "-DCMAKE_CXX_COMPILER=zig",
+            "-DCMAKE_CXX_COMPILER_ARG1=c++",
+            "-DSDL_UNIX_CONSOLE_BUILD=ON",
         }) catch unreachable;
     }
 
@@ -280,6 +320,17 @@ pub fn build(b: *std.Build) void {
             "-DCMAKE_C_COMPILER=clang-cl",
             "-DCMAKE_CXX_COMPILER=clang-cl",
             "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL",
+        }) catch unreachable;
+    } else if (is_linux) {
+        dong_cmake_args.appendSlice(&.{
+            "-G", "Ninja",
+            "-DCMAKE_C_COMPILER=zig",
+            "-DCMAKE_C_COMPILER_ARG1=cc",
+            "-DCMAKE_CXX_COMPILER=zig",
+            "-DCMAKE_CXX_COMPILER_ARG1=c++",
+            // WSL/devcontainers commonly lack system 'make'. Avoid building FFmpeg-from-source.
+            // The plugin can still load system FFmpeg libs at runtime if present.
+            "-DDONG_PLUGIN_SDL_ENABLE_FFMPEG=OFF",
         }) catch unreachable;
     }
 

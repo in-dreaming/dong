@@ -6,6 +6,7 @@
 #include "../glyph_atlas.hpp"
 #include "../font_resolver.hpp"
 #include "../../core/log.h"
+#include "../../core/profiler.h"
 
 #include <SDL3/SDL_log.h>
 
@@ -13,6 +14,8 @@
 #include <algorithm>
 #include <cstring>
 #include <utility>
+#include <unordered_map>
+#include <unordered_set>
 
 namespace dong::render {
 
@@ -24,15 +27,20 @@ void GPUDriverSDL::prepareResources(const GPUCommandList& commands) {
 
     DONG_LOG_VERBOSE("[prepareResources] START frame=%llu commands=%zu", frame_index_ + 1, commands.commands.size());
 
-    // ========== 关键修复：在 beginFrame() 之前预处理所有 glyph ==========
+    // ========== 优化：批量收集所有 glyph，按 atlas tier 分组后一次性上传 ==========
     //
-    // 问题：在 Vulkan 中，当 render pass 正在进行时，不能上传纹理数据。
-    // 纹理上传需要 copy pass，而 copy pass 和 render pass 不能同时进行。
+    // 之前的实现为每个 glyph 单独调用 addGlyph()，导致每个 glyph 都有一次 GPU sync。
+    // 新实现：
+    // 1. 遍历所有 DrawText 命令，收集需要添加的 glyph 请求
+    // 2. 按 atlas tier 分组
+    // 3. 每个 tier 调用 addGlyphsBatched() 一次性处理
     //
-    // 解决方案：在 beginFrame() 之前预先遍历所有 DrawText 命令，
-    // 确保所有需要的 glyph 都已经上传到 atlas。这样纹理上传的 command buffer
-    // 会在主渲染 command buffer 之前完成。
-    //
+
+    // 按 tier (bitmap_px) -> glyph requests 分组
+    std::unordered_map<uint32_t, std::vector<GlyphAtlas::GlyphRequest>> tier_requests;
+    // 用于去重
+    std::unordered_set<std::string> seen_keys;
+
     for (const auto& cmd : commands.commands) {
         if (cmd.type != GPUCommandType::DrawText) {
             continue;
@@ -56,29 +64,54 @@ void GPUDriverSDL::prepareResources(const GPUCommandList& commands) {
         if (!glyph_tier || !glyph_tier->atlas) {
             continue;
         }
-        GlyphAtlas* glyph_atlas = glyph_tier->atlas.get();
-        if (!glyph_atlas) {
-            continue;
-        }
 
-        // 预先添加所有 glyph 到 atlas（这会触发 MSDF 生成和纹理上传）
-        int glyph_count = 0;
+        uint32_t tier_key = glyph_tier->bitmap_px;
+
+        // 收集 glyph 请求
         for (const auto& glyph : cmd.glyphs) {
             if (glyph.glyph_id == 0) {
                 continue;
             }
             // 使用 glyph 自己的 font_path（支持字体回退），如果为空则使用默认字体
-            // 这与 execute() 中的逻辑保持一致
             std::string glyph_font_path = !glyph.font_path.empty()
                 ? glyph.font_path
                 : font_path;
-            // addGlyph 会检查缓存，如果已存在则直接返回
-            glyph_atlas->addGlyph(glyph.glyph_id, glyph_font_path);
-            glyph_count++;
+
+            // 去重：同一个 glyph+font 组合只请求一次
+            std::string dedup_key = glyph_font_path + "#" + std::to_string(glyph.glyph_id) + "#" + std::to_string(tier_key);
+            if (seen_keys.find(dedup_key) != seen_keys.end()) {
+                continue;
+            }
+            seen_keys.insert(dedup_key);
+
+            GlyphAtlas::GlyphRequest req;
+            req.glyph_id = glyph.glyph_id;
+            req.font_path = glyph_font_path;
+            tier_requests[tier_key].push_back(std::move(req));
         }
-        DONG_LOG_DEBUG("[prepareResources] DrawText: font='%s' size=%.1f glyphs=%d tier=%upx",
-                font_path.c_str(), font_size, glyph_count, glyph_tier->bitmap_px);
     }
+
+    // 批量添加每个 tier 的 glyphs
+    for (auto& [tier_key, requests] : tier_requests) {
+        if (requests.empty()) continue;
+
+        // 找到对应的 tier
+        GlyphAtlasTier* tier = nullptr;
+        for (auto& t : glyph_atlas_tiers_) {
+            if (t.bitmap_px == tier_key) {
+                tier = &t;
+                break;
+            }
+        }
+
+        if (!tier || !tier->atlas) continue;
+
+        DONG_LOG_DEBUG("[prepareResources] tier %upx: batching %zu glyph requests", tier_key, requests.size());
+
+        // 使用批量接口添加
+        tier->atlas->addGlyphsBatched(requests);
+    }
+
     DONG_LOG_DEBUG("[prepareResources] END frame=%llu", frame_index_ + 1);
 }
 

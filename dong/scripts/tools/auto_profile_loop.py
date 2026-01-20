@@ -116,11 +116,11 @@ def scope_stats(summary, key: str):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--build-dir", default=r"d:/mix/agents/game/indr/dong/build-cmake")
-    ap.add_argument("--config", default="Release")
+    ap.add_argument("--build-dir", default=r"./build-cmake")
+    ap.add_argument("--config", default="")
     ap.add_argument("--target", default="3d_screen_script")
     ap.add_argument("--iters", type=int, default=1, help="iterations per config")
-    ap.add_argument("--out-dir", default=r"d:/mix/agents/game/indr/dong/tmp/traces")
+    ap.add_argument("--out-dir", default=r"./tmp/traces")
     ap.add_argument("--warmup-ms", type=int, default=2000)
     ap.add_argument("--run-ms", type=int, default=5000)
 
@@ -142,11 +142,20 @@ def main():
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    exe = build_dir / args.config / f"{args.target}.exe"
+    # Handle both Release subdir (MSVC) and flat (Ninja) layouts
+    if args.config:
+        exe = build_dir / args.config / f"{args.target}.exe"
+    else:
+        exe = build_dir / f"{args.target}.exe"
     if not exe.exists():
         alt = build_dir / f"{args.target}.exe"
         if alt.exists():
             exe = alt
+    if not exe.exists():
+        # Try Release subdir as fallback
+        alt2 = build_dir / "Release" / f"{args.target}.exe"
+        if alt2.exists():
+            exe = alt2
 
     if not exe.exists():
         print(f"ERROR: cannot find exe: {exe}")

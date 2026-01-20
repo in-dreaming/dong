@@ -115,6 +115,7 @@ struct PipelineBindingState {
         RoundRect,
         Shadow,
         Image,
+        ImageYUV,
         Text,
     } active = ActivePipeline::None;
 
@@ -1310,20 +1311,39 @@ void GPUDriverSDL::executeDrawImage(ExecuteContext& ctx, const GPUCommand& cmd) 
     // - "video://..." : external dynamic texture uploaded by View
     // - otherwise      : static image in atlas
     SDL_GPUTexture* src_texture = nullptr;
+    SDL_GPUTexture* video_tex_u = nullptr;
+    SDL_GPUTexture* video_tex_v = nullptr;
+    bool is_video_yuv = false;
     ImageAtlasEntry entry{};
 
     if (cmd.image_src.rfind("video://", 0) == 0) {
         auto it = external_images_.find(cmd.image_src);
-        if (it == external_images_.end() || !it->second.texture) {
+        if (it == external_images_.end()) {
             return;
         }
-        src_texture = it->second.texture;
+        const ExternalImage& ex = it->second;
+        if (ex.format == ExternalImageFormat::YUV420P) {
+            if (!ex.texture || !ex.texture_u || !ex.texture_v || !video_yuv_pipeline_) {
+                return;
+            }
+            // For YUV, src_texture holds Y for convenience; U/V stored separately.
+            src_texture = ex.texture;
+            video_tex_u = ex.texture_u;
+            video_tex_v = ex.texture_v;
+            is_video_yuv = true;
+        } else {
+            if (!ex.texture) {
+                return;
+            }
+            src_texture = ex.texture;
+        }
+
         entry.u0 = 0.0f;
         entry.v0 = 0.0f;
         entry.u1 = 1.0f;
         entry.v1 = 1.0f;
-        entry.width = it->second.width;
-        entry.height = it->second.height;
+        entry.width = ex.width;
+        entry.height = ex.height;
     } else {
         if (!image_atlas_texture_) {
             return;
@@ -1401,15 +1421,34 @@ void GPUDriverSDL::executeDrawImage(ExecuteContext& ctx, const GPUCommand& cmd) 
     SDL_PushGPUVertexUniformData(ctx.cmd_buf, 0, &u, sizeof(u));
     SDL_PushGPUFragmentUniformData(ctx.cmd_buf, 0, &u, sizeof(u));
 
-    if (ctx.pipeline_state.active != PipelineBindingState::ActivePipeline::Image) {
-        SDL_BindGPUGraphicsPipeline(ctx.pass, image_pipeline_);
-        ctx.pipeline_state.active = PipelineBindingState::ActivePipeline::Image;
+    SDL_GPUGraphicsPipeline* pipeline = image_pipeline_;
+    PipelineBindingState::ActivePipeline desired = PipelineBindingState::ActivePipeline::Image;
+    if (is_video_yuv) {
+        pipeline = video_yuv_pipeline_;
+        desired = PipelineBindingState::ActivePipeline::ImageYUV;
     }
 
-    SDL_GPUTextureSamplerBinding binding{};
-    binding.texture = src_texture;
-    binding.sampler = image_sampler_;
-    SDL_BindGPUFragmentSamplers(ctx.pass, 0, &binding, 1);
+    if (ctx.pipeline_state.active != desired) {
+        SDL_BindGPUGraphicsPipeline(ctx.pass, pipeline);
+        ctx.pipeline_state.active = desired;
+    }
+
+    if (is_video_yuv) {
+        SDL_GPUTextureSamplerBinding bindings[3] = {};
+        bindings[0].texture = src_texture; // Y
+        bindings[0].sampler = image_sampler_;
+        bindings[1].texture = video_tex_u;
+        bindings[1].sampler = image_sampler_;
+        bindings[2].texture = video_tex_v;
+        bindings[2].sampler = image_sampler_;
+        SDL_BindGPUFragmentSamplers(ctx.pass, 0, bindings, 3);
+    } else {
+        SDL_GPUTextureSamplerBinding binding{};
+        binding.texture = src_texture;
+        binding.sampler = image_sampler_;
+        SDL_BindGPUFragmentSamplers(ctx.pass, 0, &binding, 1);
+    }
+
     ctx.pipeline_state.image_sampler_bound = true;
     ctx.pipeline_state.text_sampler_bound = false;
 

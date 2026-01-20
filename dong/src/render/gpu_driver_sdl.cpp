@@ -97,6 +97,10 @@ GPUDriverSDL::~GPUDriverSDL() {
             SDL_ReleaseGPUGraphicsPipeline(dev, image_pipeline_);
             image_pipeline_ = nullptr;
         }
+        if (video_yuv_pipeline_) {
+            SDL_ReleaseGPUGraphicsPipeline(dev, video_yuv_pipeline_);
+            video_yuv_pipeline_ = nullptr;
+        }
         if (image_copy_pipeline_) {
             SDL_ReleaseGPUGraphicsPipeline(dev, image_copy_pipeline_);
             image_copy_pipeline_ = nullptr;
@@ -108,6 +112,10 @@ GPUDriverSDL::~GPUDriverSDL() {
         if (image_fs_) {
             SDL_ReleaseGPUShader(dev, image_fs_);
             image_fs_ = nullptr;
+        }
+        if (video_yuv_fs_) {
+            SDL_ReleaseGPUShader(dev, video_yuv_fs_);
+            video_yuv_fs_ = nullptr;
         }
         if (image_sampler_) {
             SDL_ReleaseGPUSampler(dev, image_sampler_);
@@ -123,6 +131,14 @@ GPUDriverSDL::~GPUDriverSDL() {
             if (kv.second.texture) {
                 SDL_ReleaseGPUTexture(dev, kv.second.texture);
                 kv.second.texture = nullptr;
+            }
+            if (kv.second.texture_u) {
+                SDL_ReleaseGPUTexture(dev, kv.second.texture_u);
+                kv.second.texture_u = nullptr;
+            }
+            if (kv.second.texture_v) {
+                SDL_ReleaseGPUTexture(dev, kv.second.texture_v);
+                kv.second.texture_v = nullptr;
             }
         }
         external_images_.clear();
@@ -362,6 +378,20 @@ bool GPUDriverSDL::updateExternalImageRGBA(const std::string& key,
     }
 
     ExternalImage& ex = external_images_[key];
+    if (ex.format != ExternalImageFormat::RGBA8) {
+        if (ex.texture) {
+            SDL_ReleaseGPUTexture(dev, ex.texture);
+        }
+        if (ex.texture_u) {
+            SDL_ReleaseGPUTexture(dev, ex.texture_u);
+        }
+        if (ex.texture_v) {
+            SDL_ReleaseGPUTexture(dev, ex.texture_v);
+        }
+        ex = ExternalImage{};
+        ex.format = ExternalImageFormat::RGBA8;
+    }
+
     if (!ex.texture || ex.width != width || ex.height != height) {
         if (ex.texture) {
             SDL_ReleaseGPUTexture(dev, ex.texture);
@@ -450,6 +480,173 @@ bool GPUDriverSDL::updateExternalImageRGBA(const std::string& key,
     SDL_EndGPUCopyPass(copy_pass);
 
     // Keep the transfer buffer alive until this command buffer finishes on GPU.
+    frame_upload_buffers_.push_back(upload);
+    return true;
+}
+
+bool GPUDriverSDL::updateExternalImageYUV420P(const std::string& key,
+                                             const uint8_t* plane_y,
+                                             uint32_t stride_y,
+                                             const uint8_t* plane_u,
+                                             uint32_t stride_u,
+                                             const uint8_t* plane_v,
+                                             uint32_t stride_v,
+                                             uint32_t width,
+                                             uint32_t height) {
+    if (key.empty() || !plane_y || !plane_u || !plane_v || width == 0 || height == 0) {
+        return false;
+    }
+    if (!gpu_device_ || !gpu_device_->isInitialized() || !current_cmd_buf_) {
+        return false;
+    }
+
+    SDL_GPUDevice* dev = gpu_device_->getHandle();
+    if (!dev) {
+        return false;
+    }
+
+    if (stride_y == 0) stride_y = width;
+
+    const uint32_t cw = (width + 1) / 2;
+    const uint32_t ch = (height + 1) / 2;
+    if (stride_u == 0) stride_u = cw;
+    if (stride_v == 0) stride_v = cw;
+
+    ExternalImage& ex = external_images_[key];
+    if (ex.format != ExternalImageFormat::YUV420P) {
+        if (ex.texture) {
+            SDL_ReleaseGPUTexture(dev, ex.texture);
+        }
+        if (ex.texture_u) {
+            SDL_ReleaseGPUTexture(dev, ex.texture_u);
+        }
+        if (ex.texture_v) {
+            SDL_ReleaseGPUTexture(dev, ex.texture_v);
+        }
+        ex = ExternalImage{};
+        ex.format = ExternalImageFormat::YUV420P;
+    }
+
+    auto ensure_plane_tex = [&](SDL_GPUTexture*& tex, uint32_t w, uint32_t h) -> bool {
+        if (tex) {
+            return true;
+        }
+        SDL_GPUTextureCreateInfo tex_info{};
+        tex_info.type = SDL_GPU_TEXTURETYPE_2D;
+        tex_info.format = SDL_GPU_TEXTUREFORMAT_R8_UNORM;
+        tex_info.width = w;
+        tex_info.height = h;
+        tex_info.layer_count_or_depth = 1;
+        tex_info.num_levels = 1;
+        tex_info.sample_count = SDL_GPU_SAMPLECOUNT_1;
+        tex_info.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+
+        tex = SDL_CreateGPUTexture(dev, &tex_info);
+        if (!tex) {
+            SDL_Log("GPUDriverSDL::updateExternalImageYUV420P: failed to create plane texture: %s", SDL_GetError());
+            return false;
+        }
+        return true;
+    };
+
+    const bool need_recreate = (!ex.texture || !ex.texture_u || !ex.texture_v || ex.width != width || ex.height != height);
+    if (need_recreate) {
+        if (ex.texture) SDL_ReleaseGPUTexture(dev, ex.texture);
+        if (ex.texture_u) SDL_ReleaseGPUTexture(dev, ex.texture_u);
+        if (ex.texture_v) SDL_ReleaseGPUTexture(dev, ex.texture_v);
+        ex.texture = nullptr;
+        ex.texture_u = nullptr;
+        ex.texture_v = nullptr;
+
+        if (!ensure_plane_tex(ex.texture, width, height)) {
+            external_images_.erase(key);
+            return false;
+        }
+        if (!ensure_plane_tex(ex.texture_u, cw, ch)) {
+            external_images_.erase(key);
+            return false;
+        }
+        if (!ensure_plane_tex(ex.texture_v, cw, ch)) {
+            external_images_.erase(key);
+            return false;
+        }
+
+        ex.width = width;
+        ex.height = height;
+    }
+
+    const uint32_t y_size = width * height;
+    const uint32_t u_size = cw * ch;
+    const uint32_t v_size = cw * ch;
+    const uint32_t upload_size = y_size + u_size + v_size;
+
+    UploadBuffer upload = acquireUploadBuffer(dev, upload_size);
+    if (!upload.buf) {
+        SDL_Log("GPUDriverSDL::updateExternalImageYUV420P: failed to acquire transfer buffer: %s", SDL_GetError());
+        return false;
+    }
+
+    void* mapped = SDL_MapGPUTransferBuffer(dev, upload.buf, false);
+    if (!mapped) {
+        SDL_Log("GPUDriverSDL::updateExternalImageYUV420P: failed to map transfer buffer: %s", SDL_GetError());
+        SDL_ReleaseGPUTransferBuffer(dev, upload.buf);
+        return false;
+    }
+
+    uint8_t* dst = static_cast<uint8_t*>(mapped);
+
+    auto copy_plane = [&](uint8_t* dst_plane, const uint8_t* src_plane, uint32_t src_stride, uint32_t w, uint32_t h) {
+        for (uint32_t y = 0; y < h; ++y) {
+            const uint8_t* src_row = src_plane + static_cast<size_t>(y) * src_stride;
+            uint8_t* dst_row = dst_plane + static_cast<size_t>(y) * w;
+            std::memcpy(dst_row, src_row, w);
+        }
+    };
+
+    uint8_t* dst_y = dst;
+    uint8_t* dst_u = dst_y + y_size;
+    uint8_t* dst_v = dst_u + u_size;
+
+    copy_plane(dst_y, plane_y, stride_y, width, height);
+    copy_plane(dst_u, plane_u, stride_u, cw, ch);
+    copy_plane(dst_v, plane_v, stride_v, cw, ch);
+
+    SDL_UnmapGPUTransferBuffer(dev, upload.buf);
+
+    SDL_GPUCopyPass* copy_pass = SDL_BeginGPUCopyPass(current_cmd_buf_);
+    if (!copy_pass) {
+        SDL_Log("GPUDriverSDL::updateExternalImageYUV420P: failed to begin copy pass: %s", SDL_GetError());
+        free_upload_buffers_.push_back(upload);
+        return false;
+    }
+
+    auto upload_plane = [&](SDL_GPUTexture* tex, uint32_t w, uint32_t h, uint32_t offset) {
+        SDL_GPUTextureTransferInfo tex_transfer{};
+        tex_transfer.transfer_buffer = upload.buf;
+        tex_transfer.offset = offset;
+        tex_transfer.pixels_per_row = w;
+        tex_transfer.rows_per_layer = h;
+
+        SDL_GPUTextureRegion region{};
+        region.texture = tex;
+        region.mip_level = 0;
+        region.layer = 0;
+        region.x = 0;
+        region.y = 0;
+        region.z = 0;
+        region.w = w;
+        region.h = h;
+        region.d = 1;
+
+        SDL_UploadToGPUTexture(copy_pass, &tex_transfer, &region, false);
+    };
+
+    upload_plane(ex.texture, width, height, 0);
+    upload_plane(ex.texture_u, cw, ch, y_size);
+    upload_plane(ex.texture_v, cw, ch, y_size + u_size);
+
+    SDL_EndGPUCopyPass(copy_pass);
+
     frame_upload_buffers_.push_back(upload);
     return true;
 }

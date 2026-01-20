@@ -1812,11 +1812,16 @@ void View::closeVideo(VideoState& vs) {
 
     vs.has_frame = false;
     vs.needs_upload = false;
-    vs.frame_data = nullptr;
-    vs.rgba.clear();
+    vs.frame_format = DONG_VIDEO_PIXEL_FORMAT_RGBA8;
+    vs.plane_data[0] = nullptr;
+    vs.plane_data[1] = nullptr;
+    vs.plane_data[2] = nullptr;
+    vs.plane_stride[0] = 0;
+    vs.plane_stride[1] = 0;
+    vs.plane_stride[2] = 0;
+    vs.owned_frame.clear();
+
     vs.frame_w = 0;
-
-
     vs.frame_h = 0;
     vs.frame_stride = 0;
 
@@ -1939,15 +1944,24 @@ void View::updateVideoPlayback(VideoState& vs, double wall_time_sec) {
         vs.last_resync_wall = wall_time_sec;
     }
 
-    // Pull a few frames at most per tick to avoid long stalls on slow videos.
+    // Pull a few frames at most per tick.
+    // With async decoding, pulling multiple frames is cheap and is used for catch-up.
     static const int kMaxFramePullPerTick = ([]() {
         const char* v = std::getenv("DONG_VIDEO_MAX_PULL_PER_TICK");
-        if (!v || !*v) return 3;
+        if (!v || !*v) return 8;
         const int x = std::atoi(v);
-        return (x <= 0) ? 3 : x;
+        return (x <= 0) ? 8 : x;
     })();
-    int pulled = 0;
 
+    // Frame skip threshold for catch-up (drop frames that are too old).
+    static const double kMaxLagSec = ([]() {
+        const char* v = std::getenv("DONG_VIDEO_MAX_LAG_SEC");
+        if (!v || !*v) return 0.15;
+        const double x = std::atof(v);
+        return (x <= 0.0) ? 0.15 : x;
+    })();
+
+    int pulled = 0;
     while (pulled < kMaxFramePullPerTick) {
 
         dong_video_frame_t frame{};
@@ -1984,36 +1998,103 @@ void View::updateVideoPlayback(VideoState& vs, double wall_time_sec) {
         }
 
         if (r < 0) {
-            vs.errored = true;
-            vs.playing = false;
-            dispatchMediaError(vs, "video_read_frame failed");
+            // Async decoder may temporarily have no new frames available.
+            // Treat as a soft miss (repeat last frame) instead of a hard error.
             return;
         }
 
         // We got a frame. If it's still behind target_time, keep pulling.
         const double pts = frame.pts_seconds;
 
+        // Catch-up: drop frames that are too far behind real-time.
+        // This prevents buffering lag under load spikes.
+        if (pts + 1e-6 < target_time - kMaxLagSec) {
+            vs.current_pts = pts;
+            if (vs.node) {
+                vs.node->setAttribute("__dong_video_currentTime", std::to_string(vs.current_pts));
+            }
+            ++pulled;
+            continue;
+        }
+
         static const bool kCopyVideoFrames = ([]() {
             const char* v = std::getenv("DONG_VIDEO_FRAME_COPY");
             return v && (std::strcmp(v, "1") == 0 || std::strcmp(v, "true") == 0);
         })();
 
-        const size_t sz = static_cast<size_t>(frame.stride_bytes) * static_cast<size_t>(frame.height);
-        if (sz > 0 && frame.data) {
-            vs.frame_data = frame.data;
-            if (kCopyVideoFrames) {
-                // Fallback/debug: keep an owned copy.
-                vs.rgba.resize(sz);
-                std::memcpy(vs.rgba.data(), frame.data, sz);
-                vs.frame_data = vs.rgba.data();
-            } else {
-                // Zero-copy: keep a pointer into the player's internal RGBA buffer.
-                vs.rgba.clear();
-            }
-
+        // Accept both RGBA and YUV from plugin.
+        const bool has_plane0 = (frame.plane_data[0] != nullptr);
+        if (has_plane0 && frame.width > 0 && frame.height > 0) {
+            vs.frame_format = frame.format;
             vs.frame_w = frame.width;
             vs.frame_h = frame.height;
+
+            // Default: zero-copy (pointers into plugin's held frame).
+            vs.plane_data[0] = frame.plane_data[0];
+            vs.plane_data[1] = frame.plane_data[1];
+            vs.plane_data[2] = frame.plane_data[2];
+            vs.plane_stride[0] = frame.plane_stride_bytes[0];
+            vs.plane_stride[1] = frame.plane_stride_bytes[1];
+            vs.plane_stride[2] = frame.plane_stride_bytes[2];
             vs.frame_stride = frame.stride_bytes;
+
+            if (kCopyVideoFrames) {
+                // Fallback/debug: keep an owned copy.
+                vs.owned_frame.clear();
+
+                if (frame.format == DONG_VIDEO_PIXEL_FORMAT_RGBA8) {
+                    const size_t sz = static_cast<size_t>(frame.stride_bytes) * static_cast<size_t>(frame.height);
+                    if (sz > 0 && frame.data) {
+                        vs.owned_frame.resize(sz);
+                        std::memcpy(vs.owned_frame.data(), frame.data, sz);
+                        vs.plane_data[0] = vs.owned_frame.data();
+                        vs.plane_stride[0] = frame.stride_bytes;
+                        vs.plane_data[1] = nullptr;
+                        vs.plane_data[2] = nullptr;
+                        vs.plane_stride[1] = 0;
+                        vs.plane_stride[2] = 0;
+                        vs.frame_stride = frame.stride_bytes;
+                    }
+                } else if (frame.format == DONG_VIDEO_PIXEL_FORMAT_YUV420P) {
+                    const uint32_t w = frame.width;
+                    const uint32_t h = frame.height;
+                    const uint32_t cw = (w + 1u) / 2u;
+                    const uint32_t ch = (h + 1u) / 2u;
+                    const size_t y_size = static_cast<size_t>(w) * static_cast<size_t>(h);
+                    const size_t u_size = static_cast<size_t>(cw) * static_cast<size_t>(ch);
+                    const size_t v_size = u_size;
+                    vs.owned_frame.resize(y_size + u_size + v_size);
+
+                    uint8_t* dst_y = vs.owned_frame.data();
+                    uint8_t* dst_u = dst_y + y_size;
+                    uint8_t* dst_v = dst_u + u_size;
+
+                    for (uint32_t y = 0; y < h; ++y) {
+                        std::memcpy(dst_y + static_cast<size_t>(y) * w,
+                                    frame.plane_data[0] + static_cast<size_t>(y) * frame.plane_stride_bytes[0],
+                                    w);
+                    }
+                    for (uint32_t y = 0; y < ch; ++y) {
+                        std::memcpy(dst_u + static_cast<size_t>(y) * cw,
+                                    frame.plane_data[1] + static_cast<size_t>(y) * frame.plane_stride_bytes[1],
+                                    cw);
+                        std::memcpy(dst_v + static_cast<size_t>(y) * cw,
+                                    frame.plane_data[2] + static_cast<size_t>(y) * frame.plane_stride_bytes[2],
+                                    cw);
+                    }
+
+                    vs.plane_data[0] = dst_y;
+                    vs.plane_data[1] = dst_u;
+                    vs.plane_data[2] = dst_v;
+                    vs.plane_stride[0] = w;
+                    vs.plane_stride[1] = cw;
+                    vs.plane_stride[2] = cw;
+                    vs.frame_stride = w;
+                }
+            } else {
+                vs.owned_frame.clear();
+            }
+
             vs.current_pts = pts;
             vs.has_frame = true;
             vs.needs_upload = true;
@@ -2075,24 +2156,55 @@ bool View::uploadPendingVideoFrames() {
         if (!vs.needs_upload || !vs.has_frame || vs.frame_key.empty()) {
             continue;
         }
-        const uint8_t* src = vs.frame_data;
-        if (!src && !vs.rgba.empty()) {
-            src = vs.rgba.data();
-        }
-        if (!src || vs.frame_w == 0 || vs.frame_h == 0) {
+        if (vs.frame_w == 0 || vs.frame_h == 0) {
             vs.needs_upload = false;
             continue;
         }
 
-        did_upload = true;
+        bool ok = false;
+        if (vs.frame_format == DONG_VIDEO_PIXEL_FORMAT_RGBA8) {
+            const uint8_t* src = vs.plane_data[0];
+            if (!src && !vs.owned_frame.empty()) {
+                src = vs.owned_frame.data();
+            }
+            if (!src) {
+                vs.needs_upload = false;
+                continue;
+            }
 
-        const bool ok = gpu_driver_->updateExternalImageRGBA(
-            vs.frame_key,
-            src,
-            vs.frame_w,
-            vs.frame_h,
-            vs.frame_stride
-        );
+            did_upload = true;
+            ok = gpu_driver_->updateExternalImageRGBA(
+                vs.frame_key,
+                src,
+                vs.frame_w,
+                vs.frame_h,
+                vs.frame_stride
+            );
+        } else if (vs.frame_format == DONG_VIDEO_PIXEL_FORMAT_YUV420P) {
+            const uint8_t* y = vs.plane_data[0];
+            const uint8_t* u = vs.plane_data[1];
+            const uint8_t* v = vs.plane_data[2];
+            if (!y || !u || !v) {
+                vs.needs_upload = false;
+                continue;
+            }
+
+            did_upload = true;
+            ok = gpu_driver_->updateExternalImageYUV420P(
+                vs.frame_key,
+                y,
+                vs.plane_stride[0],
+                u,
+                vs.plane_stride[1],
+                v,
+                vs.plane_stride[2],
+                vs.frame_w,
+                vs.frame_h
+            );
+        } else {
+            vs.needs_upload = false;
+            continue;
+        }
 
 
         if (ok) {
@@ -2121,7 +2233,7 @@ bool View::uploadPendingVideoFrames() {
                 }
             }
         } else if (kDebugVideoUpload) {
-            DONG_LOG_INFO("[Video::upload] FAILED key=%s size=%ux%u stride=%u src=%p", vs.frame_key.c_str(), vs.frame_w, vs.frame_h, vs.frame_stride, (const void*)src);
+            DONG_LOG_INFO("[Video::upload] FAILED key=%s fmt=%d size=%ux%u stride=%u plane0=%p", vs.frame_key.c_str(), (int)vs.frame_format, vs.frame_w, vs.frame_h, vs.frame_stride, (const void*)vs.plane_data[0]);
         }
 
 
@@ -2301,9 +2413,9 @@ void View::syncVideoElements(double wall_time_sec, bool dom_tree_dirty) {
                     DONG_PROFILE_SCOPE_CAT("Video::readFrame(preload)", "video");
                     rr = plugin_->video_read_frame(plugin_user_, vs.player, &f);
                 }
-                if (rr == 1 && f.data && f.width > 0 && f.height > 0) {
+                if (rr == 1 && f.plane_data[0] && f.width > 0 && f.height > 0) {
                     if (kDebugVideoUpload) {
-                        DONG_LOG_INFO("[Video::preload] key=%s size=%ux%u stride=%u", vs.frame_key.c_str(), f.width, f.height, f.stride_bytes);
+                        DONG_LOG_INFO("[Video::preload] key=%s fmt=%d size=%ux%u stride=%u", vs.frame_key.c_str(), (int)f.format, f.width, f.height, f.stride_bytes);
                     }
 
                     static const bool kCopyVideoFrames = ([]() {
@@ -2311,24 +2423,75 @@ void View::syncVideoElements(double wall_time_sec, bool dom_tree_dirty) {
                         return v && (std::strcmp(v, "1") == 0 || std::strcmp(v, "true") == 0);
                     })();
 
-                    const size_t sz = static_cast<size_t>(f.stride_bytes) * static_cast<size_t>(f.height);
-                    vs.frame_data = f.data;
-                    if (kCopyVideoFrames) {
-                        vs.rgba.resize(sz);
-                        std::memcpy(vs.rgba.data(), f.data, sz);
-                        vs.frame_data = vs.rgba.data();
-                    } else {
-                        vs.rgba.clear();
-                    }
-
+                    vs.frame_format = f.format;
                     vs.frame_w = f.width;
                     vs.frame_h = f.height;
                     vs.frame_stride = f.stride_bytes;
+                    vs.plane_data[0] = f.plane_data[0];
+                    vs.plane_data[1] = f.plane_data[1];
+                    vs.plane_data[2] = f.plane_data[2];
+                    vs.plane_stride[0] = f.plane_stride_bytes[0];
+                    vs.plane_stride[1] = f.plane_stride_bytes[1];
+                    vs.plane_stride[2] = f.plane_stride_bytes[2];
+
+                    if (kCopyVideoFrames) {
+                        vs.owned_frame.clear();
+                        if (f.format == DONG_VIDEO_PIXEL_FORMAT_RGBA8) {
+                            const size_t sz = static_cast<size_t>(f.stride_bytes) * static_cast<size_t>(f.height);
+                            if (sz > 0 && f.data) {
+                                vs.owned_frame.resize(sz);
+                                std::memcpy(vs.owned_frame.data(), f.data, sz);
+                                vs.plane_data[0] = vs.owned_frame.data();
+                                vs.plane_stride[0] = f.stride_bytes;
+                                vs.plane_data[1] = nullptr;
+                                vs.plane_data[2] = nullptr;
+                                vs.plane_stride[1] = 0;
+                                vs.plane_stride[2] = 0;
+                            }
+                        } else if (f.format == DONG_VIDEO_PIXEL_FORMAT_YUV420P) {
+                            const uint32_t w = f.width;
+                            const uint32_t h = f.height;
+                            const uint32_t cw = (w + 1u) / 2u;
+                            const uint32_t ch = (h + 1u) / 2u;
+                            const size_t y_size = static_cast<size_t>(w) * static_cast<size_t>(h);
+                            const size_t u_size = static_cast<size_t>(cw) * static_cast<size_t>(ch);
+                            const size_t v_size = u_size;
+                            vs.owned_frame.resize(y_size + u_size + v_size);
+
+                            uint8_t* dst_y = vs.owned_frame.data();
+                            uint8_t* dst_u = dst_y + y_size;
+                            uint8_t* dst_v = dst_u + u_size;
+
+                            for (uint32_t y = 0; y < h; ++y) {
+                                std::memcpy(dst_y + static_cast<size_t>(y) * w,
+                                            f.plane_data[0] + static_cast<size_t>(y) * f.plane_stride_bytes[0],
+                                            w);
+                            }
+                            for (uint32_t y = 0; y < ch; ++y) {
+                                std::memcpy(dst_u + static_cast<size_t>(y) * cw,
+                                            f.plane_data[1] + static_cast<size_t>(y) * f.plane_stride_bytes[1],
+                                            cw);
+                                std::memcpy(dst_v + static_cast<size_t>(y) * cw,
+                                            f.plane_data[2] + static_cast<size_t>(y) * f.plane_stride_bytes[2],
+                                            cw);
+                            }
+
+                            vs.plane_data[0] = dst_y;
+                            vs.plane_data[1] = dst_u;
+                            vs.plane_data[2] = dst_v;
+                            vs.plane_stride[0] = w;
+                            vs.plane_stride[1] = cw;
+                            vs.plane_stride[2] = cw;
+                            vs.frame_stride = w;
+                        }
+                    } else {
+                        vs.owned_frame.clear();
+                    }
+
                     vs.current_pts = f.pts_seconds;
                     vs.has_frame = true;
                     vs.needs_upload = true;
                     offscreen_texture_dirty_ = true;
-
 
                     if (vs.node) {
                         vs.node->setAttribute("__dong_video_currentTime", std::to_string(vs.current_pts));
@@ -2345,7 +2508,7 @@ void View::syncVideoElements(double wall_time_sec, bool dom_tree_dirty) {
                         dispatchMediaEvent(vs, "canplay");
                     }
                 } else if (kDebugVideoUpload) {
-                    DONG_LOG_INFO("[Video::preload] NOFRAME key=%s rr=%d w=%u h=%u data=%p", vs.frame_key.c_str(), rr, (unsigned)f.width, (unsigned)f.height, (const void*)f.data);
+                    DONG_LOG_INFO("[Video::preload] NOFRAME key=%s rr=%d w=%u h=%u plane0=%p", vs.frame_key.c_str(), rr, (unsigned)f.width, (unsigned)f.height, (const void*)f.plane_data[0]);
                 }
             }
 
@@ -2399,30 +2562,81 @@ void View::syncVideoElements(double wall_time_sec, bool dom_tree_dirty) {
                         DONG_PROFILE_SCOPE_CAT("Video::readFrame(seek)", "video");
                         rr = plugin_->video_read_frame(plugin_user_, vs.player, &f);
                     }
-                    if (rr == 1 && f.data && f.width > 0 && f.height > 0) {
+                    if (rr == 1 && f.plane_data[0] && f.width > 0 && f.height > 0) {
                         static const bool kCopyVideoFrames = ([]() {
                             const char* v = std::getenv("DONG_VIDEO_FRAME_COPY");
                             return v && (std::strcmp(v, "1") == 0 || std::strcmp(v, "true") == 0);
                         })();
 
-                        const size_t sz = static_cast<size_t>(f.stride_bytes) * static_cast<size_t>(f.height);
-                        vs.frame_data = f.data;
-                        if (kCopyVideoFrames) {
-                            vs.rgba.resize(sz);
-                            std::memcpy(vs.rgba.data(), f.data, sz);
-                            vs.frame_data = vs.rgba.data();
-                        } else {
-                            vs.rgba.clear();
-                        }
-
+                        vs.frame_format = f.format;
                         vs.frame_w = f.width;
                         vs.frame_h = f.height;
                         vs.frame_stride = f.stride_bytes;
+                        vs.plane_data[0] = f.plane_data[0];
+                        vs.plane_data[1] = f.plane_data[1];
+                        vs.plane_data[2] = f.plane_data[2];
+                        vs.plane_stride[0] = f.plane_stride_bytes[0];
+                        vs.plane_stride[1] = f.plane_stride_bytes[1];
+                        vs.plane_stride[2] = f.plane_stride_bytes[2];
+
+                        if (kCopyVideoFrames) {
+                            vs.owned_frame.clear();
+                            if (f.format == DONG_VIDEO_PIXEL_FORMAT_RGBA8) {
+                                const size_t sz = static_cast<size_t>(f.stride_bytes) * static_cast<size_t>(f.height);
+                                if (sz > 0 && f.data) {
+                                    vs.owned_frame.resize(sz);
+                                    std::memcpy(vs.owned_frame.data(), f.data, sz);
+                                    vs.plane_data[0] = vs.owned_frame.data();
+                                    vs.plane_stride[0] = f.stride_bytes;
+                                    vs.plane_data[1] = nullptr;
+                                    vs.plane_data[2] = nullptr;
+                                    vs.plane_stride[1] = 0;
+                                    vs.plane_stride[2] = 0;
+                                }
+                            } else if (f.format == DONG_VIDEO_PIXEL_FORMAT_YUV420P) {
+                                const uint32_t w = f.width;
+                                const uint32_t h = f.height;
+                                const uint32_t cw = (w + 1u) / 2u;
+                                const uint32_t ch = (h + 1u) / 2u;
+                                const size_t y_size = static_cast<size_t>(w) * static_cast<size_t>(h);
+                                const size_t u_size = static_cast<size_t>(cw) * static_cast<size_t>(ch);
+                                const size_t v_size = u_size;
+                                vs.owned_frame.resize(y_size + u_size + v_size);
+
+                                uint8_t* dst_y = vs.owned_frame.data();
+                                uint8_t* dst_u = dst_y + y_size;
+                                uint8_t* dst_v = dst_u + u_size;
+
+                                for (uint32_t y = 0; y < h; ++y) {
+                                    std::memcpy(dst_y + static_cast<size_t>(y) * w,
+                                                f.plane_data[0] + static_cast<size_t>(y) * f.plane_stride_bytes[0],
+                                                w);
+                                }
+                                for (uint32_t y = 0; y < ch; ++y) {
+                                    std::memcpy(dst_u + static_cast<size_t>(y) * cw,
+                                                f.plane_data[1] + static_cast<size_t>(y) * f.plane_stride_bytes[1],
+                                                cw);
+                                    std::memcpy(dst_v + static_cast<size_t>(y) * cw,
+                                                f.plane_data[2] + static_cast<size_t>(y) * f.plane_stride_bytes[2],
+                                                cw);
+                                }
+
+                                vs.plane_data[0] = dst_y;
+                                vs.plane_data[1] = dst_u;
+                                vs.plane_data[2] = dst_v;
+                                vs.plane_stride[0] = w;
+                                vs.plane_stride[1] = cw;
+                                vs.plane_stride[2] = cw;
+                                vs.frame_stride = w;
+                            }
+                        } else {
+                            vs.owned_frame.clear();
+                        }
+
                         vs.current_pts = f.pts_seconds;
                         vs.has_frame = true;
                         vs.needs_upload = true;
                         offscreen_texture_dirty_ = true;
-
 
                         if (vs.node) {
                             vs.node->setAttribute("__dong_video_currentTime", std::to_string(vs.current_pts));

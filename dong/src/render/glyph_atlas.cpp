@@ -585,6 +585,216 @@ const AtlasEntry* GlyphAtlas::addGlyph(uint32_t glyph_id, const std::string& fon
     return &cache_[key];
 }
 
+// ============================================================================
+// 批量字形添加：减少 GPU 同步开销
+// ============================================================================
+
+void GlyphAtlas::addGlyphsBatched(const std::vector<GlyphRequest>& requests) {
+    DONG_PROFILE_SCOPE_CAT("addGlyphsBatched", "glyph_atlas");
+
+    if (requests.empty() || !gpu_device_ || !gpu_device_->isInitialized()) {
+        return;
+    }
+
+    // 阶段1：收集需要添加的字形（过滤已缓存的）
+    struct PendingGlyph {
+        std::string key;
+        uint32_t glyph_id;
+        std::string font_path;
+        std::vector<uint8_t> bitmap;
+        uint32_t width = 0;
+        uint32_t height = 0;
+        GlyphMetrics metrics;
+        AtlasPage* page = nullptr;
+        uint32_t dst_x = 0;
+        uint32_t dst_y = 0;
+    };
+
+    std::vector<PendingGlyph> pending;
+    pending.reserve(requests.size());
+
+    {
+        DONG_PROFILE_SCOPE_CAT("addGlyphsBatched:generateMSDF", "glyph_atlas");
+        for (const auto& req : requests) {
+            if (req.font_path.empty()) continue;
+
+            std::string key = makeGlyphKey(req.glyph_id, req.font_path);
+            if (cache_.find(key) != cache_.end()) {
+                // 已缓存，跳过
+                continue;
+            }
+
+            PendingGlyph pg;
+            pg.key = std::move(key);
+            pg.glyph_id = req.glyph_id;
+            pg.font_path = req.font_path;
+
+            // 生成 MSDF（CPU-bound）
+            if (!generateMSDF(req.glyph_id, req.font_path, pg.bitmap, pg.width, pg.height, pg.metrics)) {
+                DONG_LOG_DEBUG("addGlyphsBatched: failed to generate MSDF for glyph %u", req.glyph_id);
+                continue;
+            }
+
+            // 空字形（如空格）直接缓存
+            if (pg.width == 0 || pg.height == 0 || pg.bitmap.empty()) {
+                AtlasEntry entry{};
+                entry.metrics = pg.metrics;
+                entry.atlas_page = 0;
+                cache_[pg.key] = entry;
+                continue;
+            }
+
+            // 分配 atlas 位置
+            constexpr uint32_t kAtlasPadding = 2;
+            pg.page = selectPageForGlyph(pg.width, pg.height);
+            if (!pg.page || !pg.page->texture) {
+                DONG_LOG_DEBUG("addGlyphsBatched: no available atlas page for glyph %u", req.glyph_id);
+                continue;
+            }
+
+            if (pg.page->cursor_x + pg.width + kAtlasPadding > pg.page->width) {
+                pg.page->cursor_x = 0;
+                pg.page->cursor_y += pg.page->row_height + kAtlasPadding;
+                pg.page->row_height = 0;
+            }
+
+            if (pg.page->cursor_y + pg.height > pg.page->height) {
+                DONG_LOG_DEBUG("addGlyphsBatched: selected page overflows for glyph %u", req.glyph_id);
+                continue;
+            }
+
+            pg.dst_x = pg.page->cursor_x;
+            pg.dst_y = pg.page->cursor_y;
+            pg.page->cursor_x += pg.width + kAtlasPadding;
+            pg.page->row_height = std::max(pg.page->row_height, pg.height);
+
+            pending.push_back(std::move(pg));
+        }
+    }
+
+    if (pending.empty()) {
+        return;
+    }
+
+    DONG_LOG_DEBUG("addGlyphsBatched: processing %zu glyphs in single batch", pending.size());
+
+    // 阶段2：批量上传到 GPU（单个命令缓冲区 + 单次 fence 等待）
+    SDL_GPUDevice* dev = gpu_device_->getHandle();
+    SDL_GPUCommandBuffer* cmd_buf = gpu_device_->acquireCommandBuffer();
+    if (!cmd_buf) {
+        SDL_Log("addGlyphsBatched: failed to acquire command buffer");
+        return;
+    }
+
+    // 存储需要释放的 transfer buffers
+    std::vector<SDL_GPUTransferBuffer*> transfer_buffers;
+    transfer_buffers.reserve(pending.size());
+
+    {
+        DONG_PROFILE_SCOPE_CAT("addGlyphsBatched:upload", "gpu");
+
+        SDL_GPUCopyPass* copy_pass = SDL_BeginGPUCopyPass(cmd_buf);
+        if (!copy_pass) {
+            SDL_Log("addGlyphsBatched: failed to begin copy pass");
+            gpu_device_->submitCommandBuffer(cmd_buf);
+            return;
+        }
+
+        for (auto& pg : pending) {
+            uint32_t stride = pg.width * 4;
+            uint32_t buffer_size = stride * pg.height;
+
+            SDL_GPUTransferBufferCreateInfo transfer_info{};
+            transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+            transfer_info.size = buffer_size;
+
+            SDL_GPUTransferBuffer* transfer_buf = SDL_CreateGPUTransferBuffer(dev, &transfer_info);
+            if (!transfer_buf) {
+                DONG_LOG_DEBUG("addGlyphsBatched: failed to create transfer buffer for glyph %u", pg.glyph_id);
+                continue;
+            }
+            transfer_buffers.push_back(transfer_buf);
+
+            void* mapped = SDL_MapGPUTransferBuffer(dev, transfer_buf, false);
+            if (!mapped) {
+                DONG_LOG_DEBUG("addGlyphsBatched: failed to map transfer buffer for glyph %u", pg.glyph_id);
+                continue;
+            }
+
+            std::memcpy(mapped, pg.bitmap.data(), pg.bitmap.size());
+            SDL_UnmapGPUTransferBuffer(dev, transfer_buf);
+
+            SDL_GPUTextureTransferInfo tex_transfer{};
+            tex_transfer.transfer_buffer = transfer_buf;
+            tex_transfer.offset = 0;
+            tex_transfer.pixels_per_row = pg.width;
+            tex_transfer.rows_per_layer = pg.height;
+
+            SDL_GPUTextureRegion region{};
+            region.texture = pg.page->texture;
+            region.mip_level = 0;
+            region.layer = 0;
+            region.x = pg.dst_x;
+            region.y = pg.dst_y;
+            region.z = 0;
+            region.w = pg.width;
+            region.h = pg.height;
+            region.d = 1;
+
+            SDL_UploadToGPUTexture(copy_pass, &tex_transfer, &region, false);
+        }
+
+        SDL_EndGPUCopyPass(copy_pass);
+    }
+
+    // 单次 fence 等待所有上传完成
+    SDL_GPUFence* fence = nullptr;
+    {
+        DONG_PROFILE_SCOPE_CAT("SDL_SubmitGPUCommandBufferAndAcquireFence", "gpu");
+        fence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd_buf);
+    }
+
+    if (fence) {
+        SDL_GPUFence* fences[] = { fence };
+        {
+            DONG_PROFILE_SCOPE_CAT("SDL_WaitForGPUFences", "gpu");
+            if (!SDL_WaitForGPUFences(dev, true, fences, 1)) {
+                SDL_Log("addGlyphsBatched: SDL_WaitForGPUFences failed: %s", SDL_GetError());
+                gpu_device_->waitForGPU();
+            }
+        }
+        SDL_ReleaseGPUFence(dev, fence);
+    } else {
+        SDL_Log("addGlyphsBatched: SDL_SubmitGPUCommandBufferAndAcquireFence failed: %s", SDL_GetError());
+        gpu_device_->waitForGPU();
+    }
+
+    // 释放 transfer buffers
+    for (auto* tb : transfer_buffers) {
+        SDL_ReleaseGPUTransferBuffer(dev, tb);
+    }
+
+    // 阶段3：更新缓存
+    for (const auto& pg : pending) {
+        if (!pg.page) continue;
+
+        AtlasEntry entry{};
+        entry.atlas_page = pg.page->page_index;
+        entry.u0 = static_cast<float>(pg.dst_x) / static_cast<float>(pg.page->width);
+        entry.v0 = static_cast<float>(pg.dst_y) / static_cast<float>(pg.page->height);
+        entry.u1 = static_cast<float>(pg.dst_x + pg.width) / static_cast<float>(pg.page->width);
+        entry.v1 = static_cast<float>(pg.dst_y + pg.height) / static_cast<float>(pg.page->height);
+        entry.metrics = pg.metrics;
+
+        cache_[pg.key] = entry;
+        page_to_keys_[pg.page->page_index].push_back(pg.key);
+        pg.page->glyph_count += 1;
+        pg.page->last_used = ++usage_counter_;
+    }
+
+    DONG_LOG_DEBUG("addGlyphsBatched: completed batch of %zu glyphs", pending.size());
+}
+
 bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
                                std::vector<uint8_t>& out_bitmap,
                                uint32_t& out_width, uint32_t& out_height,

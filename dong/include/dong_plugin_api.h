@@ -14,7 +14,7 @@ extern "C" {
 // - Loaded by dong_app, then injected into dong.dll.
 // =============================================================================
 
-#define DONG_PLUGIN_API_VERSION 3u
+#define DONG_PLUGIN_API_VERSION 4u
 
 // Capability bitmask for optional subsystems.
 typedef uint64_t dong_plugin_caps_t;
@@ -94,6 +94,7 @@ typedef struct dong_video_player_t dong_video_player_t;
 
 typedef enum dong_video_pixel_format_t {
     DONG_VIDEO_PIXEL_FORMAT_RGBA8 = 1,
+    DONG_VIDEO_PIXEL_FORMAT_YUV420P = 2,
 } dong_video_pixel_format_t;
 
 typedef struct dong_video_metadata_t {
@@ -108,8 +109,19 @@ typedef struct dong_video_frame_t {
     dong_video_pixel_format_t format;
     uint32_t width;
     uint32_t height;
+
+    // Convenience/compat for single-plane formats:
+    // - RGBA8: stride_bytes = bytes per row, data = RGBA pointer
+    // - YUV420P: stride_bytes = Y plane bytes per row, data = Y plane pointer
     uint32_t stride_bytes;
-    const uint8_t* data;       // RGBA8 pointer, lifetime: valid until next read/close
+    const uint8_t* data;
+
+    // Multi-plane data for YUV formats.
+    // - YUV420P: plane_data[0]=Y, [1]=U, [2]=V
+    // - RGBA8: plane_data[0]=data, others null
+    const uint8_t* plane_data[3];
+    uint32_t plane_stride_bytes[3];
+
     double pts_seconds;
 } dong_video_frame_t;
 

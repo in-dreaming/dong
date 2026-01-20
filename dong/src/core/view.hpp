@@ -150,13 +150,16 @@ private:
         double current_pts = 0.0;
 
         // Upload staging
-        // NOTE: For the SDL+FFmpeg plugin, `frame_data` points into the player's internal RGBA buffer.
-        // It stays valid until the next `video_read_frame()` call.
-        const uint8_t* frame_data = nullptr;
-        std::vector<uint8_t> rgba; // optional owned copy (fallback)
+        // NOTE: For the SDL+FFmpeg plugin, plane pointers stay valid until the next `video_read_frame()` call.
+        dong_video_pixel_format_t frame_format = DONG_VIDEO_PIXEL_FORMAT_RGBA8;
+        const uint8_t* plane_data[3] = {nullptr, nullptr, nullptr};
+        uint32_t plane_stride[3] = {0, 0, 0};
+
+        std::vector<uint8_t> owned_frame; // optional owned copy (fallback/debug)
+
         uint32_t frame_w = 0;
         uint32_t frame_h = 0;
-        uint32_t frame_stride = 0;
+        uint32_t frame_stride = 0; // convenience (RGBA stride or Y plane stride)
         bool has_frame = false;
         bool needs_upload = false;
 
