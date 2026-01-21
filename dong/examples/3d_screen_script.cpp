@@ -216,7 +216,9 @@ struct Screen3D {
     uint32_t rtHeight = 1280;
     bool hovered = false;
     bool focused = false;
+    bool isVideo = false;
 };
+
 
 // 获取屏幕的世界变换矩阵
 Mat4 getScreenTransform(const Screen3D& screen) {
@@ -270,17 +272,71 @@ void arrangeScreens(Screen3D* screens, int numScreens, float spacingX = 4.0f, fl
 int main(int argc, char* argv[]) {
     // 解析命令行参数
     std::string profile_output;
+    std::string present_mode_cli;      // mailbox|vsync|immediate
+    int frames_in_flight_cli = 0;      // 1..3
+
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
-        if (arg == "--profile" && i + 1 < argc) {
+        if ((arg == "--profile" || arg == "--profiler") && i + 1 < argc) {
             profile_output = argv[++i];
+
+        } else if (arg == "--present-mode" && i + 1 < argc) {
+            present_mode_cli = argv[++i];
+        } else if (arg == "--frames-in-flight" && i + 1 < argc) {
+            frames_in_flight_cli = std::atoi(argv[++i]);
         } else if (arg == "-h" || arg == "--help") {
-            printf("Usage: %s [--profile <trace.json>]\n", argv[0]);
+            printf("Usage: %s [--profile <trace.json>] [--present-mode mailbox|vsync|immediate] [--frames-in-flight 1..3]\n", argv[0]);
             printf("Options:\n");
-            printf("  --profile <file.json>  Dump profiler trace to file (Chrome Trace format)\n");
+            printf("  --profile <file.json>           Dump profiler trace to file (Chrome Trace format)\n");
+            printf("  --present-mode <mode>           Swapchain present mode (default: immediate)\n");
+            printf("  --frames-in-flight <1..3>       Allowed frames in flight (default: 2)\n");
+            printf("Env overrides (same as plugin):\n");
+            printf("  DONG_GPU_PRESENT_MODE=mailbox|vsync|immediate\n");
+            printf("  DONG_GPU_FRAMES_IN_FLIGHT=1|2|3\n");
             return 0;
         }
     }
+
+    // Env -> defaults -> CLI override
+    std::string present_mode_str = "immediate";
+    if (const char* v = std::getenv("DONG_GPU_PRESENT_MODE")) {
+        if (v && *v) {
+            present_mode_str = v;
+        }
+    }
+    if (!present_mode_cli.empty()) {
+        present_mode_str = present_mode_cli;
+    }
+
+    int frames_in_flight = 2;
+    if (const char* v = std::getenv("DONG_GPU_FRAMES_IN_FLIGHT")) {
+        if (v && *v) {
+            frames_in_flight = std::atoi(v);
+        }
+    }
+    if (frames_in_flight_cli != 0) {
+        frames_in_flight = frames_in_flight_cli;
+    }
+    if (frames_in_flight < 1) frames_in_flight = 1;
+    if (frames_in_flight > 3) frames_in_flight = 3;
+
+    auto parse_present_mode = [](const std::string& s, bool* out_valid) -> SDL_GPUPresentMode {
+        if (out_valid) *out_valid = true;
+        if (s == "mailbox") return SDL_GPU_PRESENTMODE_MAILBOX;
+        if (s == "vsync") return SDL_GPU_PRESENTMODE_VSYNC;
+        if (s == "immediate") return SDL_GPU_PRESENTMODE_IMMEDIATE;
+        if (out_valid) *out_valid = false;
+        return SDL_GPU_PRESENTMODE_IMMEDIATE;
+    };
+
+    bool present_mode_valid = true;
+    const SDL_GPUPresentMode requested_present_mode = parse_present_mode(present_mode_str, &present_mode_valid);
+    if (!present_mode_valid) {
+        // 注意：这里发生在 SDL_Init 之前，用 printf。
+        printf("[Swapchain] invalid present-mode '%s' (use mailbox|vsync|immediate), falling back to immediate\n", present_mode_str.c_str());
+    }
+
+
 
     // 初始化 profiler (before SDL_Init, use printf)
     if (!profile_output.empty()) {
@@ -365,7 +421,42 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    // Swapchain tuning (demo side): present mode + frames-in-flight.
+    // 目的：避免 profiler 被 VSYNC/acquire wait 掩盖真实热点。
+    {
+        SDL_SetGPUAllowedFramesInFlight(device, (Uint32)frames_in_flight);
+
+        auto presentModeName = [](SDL_GPUPresentMode m) -> const char* {
+            switch (m) {
+                case SDL_GPU_PRESENTMODE_IMMEDIATE: return "immediate";
+                case SDL_GPU_PRESENTMODE_MAILBOX:   return "mailbox";
+                case SDL_GPU_PRESENTMODE_VSYNC:     return "vsync";
+                default:                            return "unknown";
+            }
+        };
+
+        auto trySetPresentMode = [&](SDL_GPUPresentMode mode) -> bool {
+            return SDL_SetGPUSwapchainParameters(device, window, SDL_GPU_SWAPCHAINCOMPOSITION_SDR, mode);
+        };
+
+        SDL_GPUPresentMode final_mode = requested_present_mode;
+        if (!trySetPresentMode(final_mode)) {
+            SDL_Log("[Swapchain] request present-mode=%s failed (%s)", presentModeName(final_mode), SDL_GetError());
+
+            // 优先回退 MAILBOX（通常比 VSYNC 更不容易被节流），最后回退 VSYNC。
+            if (final_mode != SDL_GPU_PRESENTMODE_MAILBOX && trySetPresentMode(SDL_GPU_PRESENTMODE_MAILBOX)) {
+                final_mode = SDL_GPU_PRESENTMODE_MAILBOX;
+            } else {
+                (void)trySetPresentMode(SDL_GPU_PRESENTMODE_VSYNC);
+                final_mode = SDL_GPU_PRESENTMODE_VSYNC;
+            }
+        }
+
+        SDL_Log("[Swapchain] present-mode=%s frames-in-flight=%d", presentModeName(final_mode), frames_in_flight);
+    }
+
     // 创建 Dong 上下文
+
     dong_context_t* dongCtx = dong_create_context();
     if (!dongCtx) {
         SDL_Log("Failed to create dong context");
@@ -514,7 +605,11 @@ int main(int argc, char* argv[]) {
         screens[i].height = screenConfigs[i].height;
         screens[i].rtWidth = screenConfigs[i].rtWidth;
         screens[i].rtHeight = screenConfigs[i].rtHeight;
+
+        // 粗分类：video/ 目录下认为是视频用例（用于更新调度）。
+        screens[i].isVideo = (std::strncmp(screenConfigs[i].htmlFile, "video/", 6) == 0);
     }
+
 
     
     // 自动排列屏幕
@@ -631,6 +726,11 @@ int main(int argc, char* argv[]) {
         return ms < 0 ? 0 : ms;
     }();
 
+    // swapchain acquire：默认阻塞（稳定、接近 vsync 行为）。
+    // 如需减少 acquire 等待：DONG_GPU_SWAPCHAIN_NOWAIT=1（可能跳帧/撕裂）。
+    const bool swapchain_nowait = (std::getenv("DONG_GPU_SWAPCHAIN_NOWAIT") != nullptr);
+
+
     // 自动化性能采样：预热后清空 profiler，只采样固定时长后自动退出。
     // - 默认仅在传了 --profile 时启用（避免影响日常交互使用）
     // - 可用环境变量覆盖：
@@ -659,7 +759,32 @@ int main(int argc, char* argv[]) {
     bool bench_measuring = false;
     auto bench_t_measure = bench_t0;
 
+    // 多屏更新调度：把 20+ 屏的离屏更新摊到多帧里。
+    // - hovered/focused：每帧更新（交互优先）
+    // - video：按上限帧率更新（默认 30fps）
+    // - background/static：每帧轮询少量（默认 2 个）
+    const int bg_updates_per_frame = []() -> int {
+        const char* v = std::getenv("DONG_BG_UPDATES_PER_FRAME");
+        if (!v || !*v) return 2;
+        const int n = std::atoi(v);
+        return n < 0 ? 0 : n;
+    }();
+    const int video_max_fps = []() -> int {
+        const char* v = std::getenv("DONG_VIDEO_MAX_FPS");
+        if (!v || !*v) return 30;
+        const int n = std::atoi(v);
+        return n < 0 ? 0 : n;
+    }();
+
+    const auto scheduler_t0 = std::chrono::steady_clock::now();
+    std::vector<double> next_video_update_sec(numScreens, 0.0);
+    std::vector<uint64_t> updated_stamp(numScreens, 0);
+    uint64_t stamp = 1;
+    int bg_rr_cursor = 0;
+    bool initial_full_update_done = false;
+
     while (running) {
+
         // 先处理自动采样窗口（保证开始采样的那一帧也能被记录到）
         if (bench_autostop) {
             const auto tnow = std::chrono::steady_clock::now();
@@ -868,12 +993,85 @@ int main(int argc, char* argv[]) {
         }
 
         // 更新 HTML 屏幕（离屏渲染）
-        for (int i = 0; i < numScreens; i++) {
-            screens[i].html.update(device);
+        // 注意：屏幕纹理会被主场景采样；不更新则复用上一帧纹理，仍保持“可见”。
+        {
+            DONG_PROFILE_SCOPE_CAT("OffscreenUpdates", "render");
+
+            const double now_sec = std::chrono::duration<double>(std::chrono::steady_clock::now() - scheduler_t0).count();
+            const double video_interval = (video_max_fps > 0) ? (1.0 / (double)video_max_fps) : 0.0;
+            const uint64_t cur_stamp = stamp++;
+
+            auto markUpdated = [&](int idx) {
+                if (idx < 0 || idx >= numScreens) return;
+                if (updated_stamp[idx] == cur_stamp) return;
+
+                if (bench_has_profile) {
+                    char name[256];
+                    std::snprintf(name, sizeof(name), "ScreenUpdate:%d:%s", idx, screenConfigs[idx].htmlFile);
+                    ::dong::ProfilerScope __scope(name, screens[idx].isVideo ? "video" : "render");
+
+                    screens[idx].html.update(device);
+                } else {
+                    screens[idx].html.update(device);
+                }
+
+                updated_stamp[idx] = cur_stamp;
+            };
+
+
+            if (!initial_full_update_done) {
+                // 首帧先把所有屏幕都渲一次，避免大面积“空纹理”。
+                for (int i = 0; i < numScreens; ++i) {
+                    markUpdated(i);
+                }
+                initial_full_update_done = true;
+            } else {
+                // 交互屏：每帧
+                if (hoveredScreen >= 0) {
+                    markUpdated(hoveredScreen);
+                }
+                if (focusedScreen >= 0) {
+                    markUpdated(focusedScreen);
+                }
+
+                // 视频屏：限频
+                if (video_max_fps <= 0) {
+                    // <=0 表示不限频（每帧更新）
+                    for (int i = 0; i < numScreens; ++i) {
+                        if (screens[i].isVideo) {
+                            markUpdated(i);
+                        }
+                    }
+                } else {
+                    for (int i = 0; i < numScreens; ++i) {
+                        if (!screens[i].isVideo) continue;
+                        if (now_sec >= next_video_update_sec[i]) {
+                            markUpdated(i);
+                            next_video_update_sec[i] = now_sec + video_interval;
+                        }
+                    }
+                }
+
+                // 背景/静态：轮询摊到多帧
+                int bg_updated = 0;
+                const int bg_budget = bg_updates_per_frame;
+                for (int attempts = 0; attempts < numScreens && bg_updated < bg_budget; ++attempts) {
+                    const int idx = (bg_rr_cursor++) % numScreens;
+                    if (idx == hoveredScreen || idx == focusedScreen) continue;
+                    if (screens[idx].isVideo) continue;
+                    markUpdated(idx);
+                    bg_updated++;
+                }
+            }
         }
-        
-        // 更新 HUD
-        hud.update(device, dt);
+
+        // 更新 HUD（轻量，默认每帧）
+        {
+            DONG_PROFILE_SCOPE_CAT("HUDUpdate", "render");
+            hud.update(device, dt);
+        }
+
+
         
         // 注意：不要每帧全局等待 GPU idle。
         // 提交顺序已经能保证后续对 HTML 纹理的采样依赖；每帧 WaitForGPUIdle 会把性能直接锁死。
@@ -928,17 +1126,17 @@ int main(int argc, char* argv[]) {
         SDL_GPUTexture* swapchain = nullptr;
         Uint32 sw = 0, sh = 0;
         {
-            // swapchain acquire：默认阻塞（稳定、接近 vsync 行为）。
+            // swapchain acquire：默认阻塞（稳定）。
             // 如需减少卡顿/等待，可用 NOWAIT（可能跳帧/撕裂）：DONG_GPU_SWAPCHAIN_NOWAIT=1
-            static const bool kSwapchainNowait = (std::getenv("DONG_GPU_SWAPCHAIN_NOWAIT") != nullptr);
             bool ok = false;
-            if (!kSwapchainNowait) {
+            if (!swapchain_nowait) {
                 DONG_PROFILE_SCOPE_CAT("SDL_WaitAndAcquireGPUSwapchainTexture", "gpu");
                 ok = SDL_WaitAndAcquireGPUSwapchainTexture(cmd, window, &swapchain, &sw, &sh);
             } else {
                 DONG_PROFILE_SCOPE_CAT("SDL_AcquireGPUSwapchainTexture", "gpu");
                 ok = SDL_AcquireGPUSwapchainTexture(cmd, window, &swapchain, &sw, &sh);
             }
+
 
             if (!ok || !swapchain) {
                 {
@@ -947,9 +1145,10 @@ int main(int argc, char* argv[]) {
                 }
                 // swapchain 不可用时避免 busy-spin
                 {
-                    const int sleep_ms = (frame_sleep_ms > 0) ? frame_sleep_ms : 1;
+                    const int sleep_ms = swapchain_nowait ? 1 : ((frame_sleep_ms > 0) ? frame_sleep_ms : 1);
                     DONG_PROFILE_SCOPE_CAT("SDL_Delay", "frame");
                     SDL_Delay(sleep_ms);
+
                 }
                 continue;
             }

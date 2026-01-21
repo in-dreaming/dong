@@ -482,12 +482,16 @@ void View::update() {
         auto root = dom_manager->getRoot();
         if (root && commands_dirty_) {
             // Styles may depend on runtime state (:hover/:active) or JS-driven attribute changes.
-            // 优化策略3：使用索引加速的增量样式计算
-            if (auto* se = dom_manager->getStyleEngine()) {
-                DONG_PROFILE_SCOPE_CAT("Style::compute", "style");
-                se->computeStylesIncremental(root);
+            // 但对于纯 layout/text 变化，重算全树 style 代价很高且通常没必要。
+            if (root->isStyleDirty()) {
+                if (auto* se = dom_manager->getStyleEngine()) {
+                    DONG_PROFILE_SCOPE_CAT("Style::compute", "style");
+                    se->computeStylesIncremental(root);
+                }
+                root->clearStyleDirtyRecursive();
             }
         }
+
         if (root && root->isLayoutDirty()) {
             {
                 DONG_PROFILE_SCOPE_CAT("Layout::calculate", "layout");
@@ -823,15 +827,16 @@ SDL_GPUTexture* View::renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, 
         ScopedProfilerEvent __scope_rebuild(profile_name.c_str(), "render");
 
 
-        // 计算样式（使用索引加速的增量计算）
-        if (dom_manager) {
+        // 计算样式（仅在 style dirty 时；纯 layout/text 变化不需要每次都重算全树 style）
+        if (dom_manager && root->isStyleDirty()) {
             if (auto* se = dom_manager->getStyleEngine()) {
                 DONG_PROFILE_SCOPE_CAT("offscreen_computeStyles", "style");
-                // 优化策略3：使用 computeStylesIncremental 替代 computeStyles
-                // 内部使用规则索引加速匹配，减少每节点的规则扫描量
+                // 目前 computeStylesIncremental 仍会遍历整棵树，因此要尽量减少触发频率。
                 se->computeStylesIncremental(root);
             }
+            root->clearStyleDirtyRecursive();
         }
+
 
         DONG_LOG_DEBUG("[View::renderToGPUTexture] root->isLayoutDirty() = %s", root->isLayoutDirty() ? "TRUE" : "FALSE");
 

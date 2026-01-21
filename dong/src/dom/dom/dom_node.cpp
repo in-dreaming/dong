@@ -199,8 +199,15 @@ void DOMNode::appendChild(DOMNodePtr child) {
     
     children_.push_back(child);
     child->parent_ = std::static_pointer_cast<DOMNode>(shared_from_this());
+
+    // Adding/removing element children can affect selector matching and computed styles.
+    if (child->type_ == NodeType::ELEMENT) {
+        markStyleDirty();
+    }
+
     markLayoutDirty();
 }
+
 
 void DOMNode::insertBefore(DOMNodePtr newChild, DOMNodePtr refChild) {
     if (!newChild) return;
@@ -219,18 +226,32 @@ void DOMNode::insertBefore(DOMNodePtr newChild, DOMNodePtr refChild) {
     if (it != children_.end()) {
         children_.insert(it, newChild);
         newChild->parent_ = std::static_pointer_cast<DOMNode>(shared_from_this());
+
+        if (newChild->type_ == NodeType::ELEMENT) {
+            markStyleDirty();
+        }
+
         markLayoutDirty();
     }
 }
 
+
 void DOMNode::removeChild(DOMNodePtr child) {
     auto it = std::find(children_.begin(), children_.end(), child);
     if (it != children_.end()) {
+        const bool removed_element = (child && child->type_ == NodeType::ELEMENT);
+
         children_.erase(it);
         child->parent_.reset();
+
+        if (removed_element) {
+            markStyleDirty();
+        }
+
         markLayoutDirty();
     }
 }
+
 
 void DOMNode::replaceChild(DOMNodePtr newChild, DOMNodePtr oldChild) {
     if (!newChild || !oldChild) return;
@@ -245,9 +266,16 @@ void DOMNode::replaceChild(DOMNodePtr newChild, DOMNodePtr oldChild) {
         *it = newChild;
         oldChild->parent_.reset();
         newChild->parent_ = std::static_pointer_cast<DOMNode>(shared_from_this());
+
+        // Replacing element children can affect selector matching.
+        if (newChild->type_ == NodeType::ELEMENT || oldChild->type_ == NodeType::ELEMENT) {
+            markStyleDirty();
+        }
+
         markLayoutDirty();
     }
 }
+
 
 DOMNodePtr DOMNode::cloneNode(bool deep) const {
     auto clone = std::make_shared<DOMNode>(type_, tag_name_);
@@ -469,14 +497,16 @@ ClassList& DOMNode::getClassList() {
 void DOMNode::setAttribute(const std::string& key, const std::string& value) {
     attributes_[key] = value;
 
-    // Internal attributes used by the renderer should not affect layout.
+    // Internal attributes used by the renderer should not affect style/layout.
     // (e.g. Painter's transient markers)
     if (key.size() >= 2 && key[0] == '_' && key[1] == '_') {
         return;
     }
 
+    markStyleDirty();
     markLayoutDirty();
 }
+
 
 std::string DOMNode::getAttribute(const std::string& key) const {
     auto it = attributes_.find(key);
@@ -489,8 +519,16 @@ bool DOMNode::hasAttribute(const std::string& key) const {
 
 void DOMNode::removeAttribute(const std::string& key) {
     attributes_.erase(key);
+
+    // Internal attributes used by the renderer should not affect style/layout.
+    if (key.size() >= 2 && key[0] == '_' && key[1] == '_') {
+        return;
+    }
+
+    markStyleDirty();
     markLayoutDirty();
 }
+
 
 bool DOMNode::toggleAttribute(const std::string& name) {
     if (hasAttribute(name)) {
@@ -699,8 +737,10 @@ void DOMNode::setInlineStyleProperty(const std::string& property, const std::str
     }
 
     StyleEngine::applyInlineStyleProperty(key, value, computed_style_);
+    markStyleDirty();
     markLayoutDirty();
 }
+
 
 std::string DOMNode::getInlineStyleProperty(const std::string& property) const {
     const std::string key = normalizePropertyKey(property);
@@ -732,6 +772,26 @@ void DOMNode::clearLayoutDirtyRecursive() {
         }
     }
 }
+
+void DOMNode::markStyleDirty() {
+    if (!style_dirty_) {
+        style_dirty_ = true;
+    }
+
+    if (auto p = parent_.lock()) {
+        p->markStyleDirty();
+    }
+}
+
+void DOMNode::clearStyleDirtyRecursive() {
+    style_dirty_ = false;
+    for (auto& child : children_) {
+        if (child) {
+            child->clearStyleDirtyRecursive();
+        }
+    }
+}
+
 
 namespace {
 

@@ -212,8 +212,14 @@ bool TextShaper::shape(const TextShapeRequest& request, ShapedText& out_text) {
             return {primary_font_path, primary_font};
         }
 
+        // Fast path: ASCII should always be present in the primary font.
+        // Avoid calling FT_Get_Char_Index per character for large ASCII logs.
+        if (codepoint <= 127) {
+            return {primary_font_path, primary_font};
+        }
+
         FT_UInt glyph_index = FT_Get_Char_Index(primary_font->face, codepoint);
-        if (glyph_index != 0 || codepoint <= 127) {
+        if (glyph_index != 0) {
             return {primary_font_path, primary_font};
         }
 

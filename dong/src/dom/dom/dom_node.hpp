@@ -153,7 +153,13 @@ public:
     void clearLayoutDirtyRecursive();
     bool isLayoutDirty() const { return layout_dirty_; }
 
+    // Style dirty (used to skip full style recompute when only layout/text changed)
+    void markStyleDirty();
+    void clearStyleDirtyRecursive();
+    bool isStyleDirty() const { return style_dirty_; }
+
     // Scroll
+
     float getScrollX() const { return scroll_x_; }
     float getScrollY() const { return scroll_y_; }
     float getScrollTop() const { return scroll_y_; }
@@ -217,9 +223,22 @@ public:
     bool isActive() const { return active_; }
     bool isFocused() const { return focused_; }
 
-    void setHovered(bool v) { hovered_ = v; }
-    void setActive(bool v) { active_ = v; }
-    void setFocused(bool v) { focused_ = v; }
+    void setHovered(bool v) {
+        if (hovered_ == v) return;
+        hovered_ = v;
+        markStyleDirty();
+    }
+    void setActive(bool v) {
+        if (active_ == v) return;
+        active_ = v;
+        markStyleDirty();
+    }
+    void setFocused(bool v) {
+        if (focused_ == v) return;
+        focused_ = v;
+        markStyleDirty();
+    }
+
 
     // Debug
     void print(int depth = 0) const;
@@ -232,6 +251,8 @@ protected:
     std::unordered_map<std::string, std::string> inline_styles_;
     ComputedStyle computed_style_;
     bool layout_dirty_ = true;
+    bool style_dirty_ = true;
+
 
     // Interaction states (used by selector matcher for :hover/:active/:focus)
     bool hovered_ = false;
