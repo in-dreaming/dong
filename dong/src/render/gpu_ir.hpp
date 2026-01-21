@@ -77,7 +77,13 @@ struct GPUCommand {
     std::string font_family;
     std::string font_weight; // CSS font-weight（"normal"/"bold"/数值）
     std::string font_style;  // CSS font-style（normal/italic/oblique）
+
+    // 字体路径表：索引 0 为主字体；后续为回退字体。
+    std::vector<std::string> font_paths;
+
+    // 为了兼容旧代码：主字体路径（等价于 font_paths[0]）。
     std::string font_path;
+
 
     float baseline_x = 0.0f;
     float baseline_y = 0.0f;
@@ -195,9 +201,16 @@ public:
                     resource_hash = static_cast<uint64_t>(std::hash<std::string>{}(cmd.image_src));
                 }
             } else if (type == GPUCommandType::DrawText) {
-                const std::string& key = !cmd.font_path.empty() ? cmd.font_path : cmd.font_family;
-                if (!key.empty()) {
-                    resource_hash = static_cast<uint64_t>(std::hash<std::string>{}(key));
+                const std::string* key = nullptr;
+                if (!cmd.font_paths.empty()) {
+                    key = &cmd.font_paths[0];
+                } else if (!cmd.font_path.empty()) {
+                    key = &cmd.font_path;
+                } else {
+                    key = &cmd.font_family;
+                }
+                if (key && !key->empty()) {
+                    resource_hash = static_cast<uint64_t>(std::hash<std::string>{}(*key));
                 }
             }
 
@@ -372,7 +385,9 @@ public:
                 cmd.font_family = item.glyph_run.font_family;
                 cmd.font_weight = item.glyph_run.font_weight;
                 cmd.font_style = item.glyph_run.font_style;
+                cmd.font_paths = item.glyph_run.font_paths;
                 cmd.font_path = item.glyph_run.font_path;
+
 
                 cmd.baseline_x = item.glyph_run.baseline_x;
                 cmd.baseline_y = item.glyph_run.baseline_y;

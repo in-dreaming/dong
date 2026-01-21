@@ -29,7 +29,7 @@ std::string resolveFontPath(const std::string& requested_family,
 
 // 获取 CJK（中日韩）字体回退列表
 // 返回系统中存在的 CJK 字体路径列表，按优先级排序
-std::vector<std::string> getCJKFallbackFonts();
+const std::vector<std::string>& getCJKFallbackFonts();
 
 // 查找支持指定 Unicode 码点的字体
 // 首先检查 primary_font，如果不支持则尝试 CJK 回退字体

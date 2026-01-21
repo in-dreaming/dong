@@ -24,6 +24,10 @@ void Painter::paintChildrenAndOverlays(const dom::DOMNodePtr& node,
     // 5. 递归子节点（按 z-index 排序）
     const auto& children = node->getChildren();
 
+    // 滚动容器内容高度：同一帧内会被多处使用（content_size + scrollbar），这里计算一次复用。
+    float scroll_content_height = 0.0f;
+    bool have_scroll_content_height = false;
+
     // 维护滚动容器的 client/content 尺寸（用于 scrollTo/scrollBy clamp 与滚动条绘制）
     if (is_scroll_container && has_layout_rect) {
         float content_bottom = node_rect.y;
@@ -42,6 +46,9 @@ void Painter::paintChildrenAndOverlays(const dom::DOMNodePtr& node,
         float content_height = content_bottom - node_rect.y;
         if (content_height < 0.0f) content_height = 0.0f;
 
+        scroll_content_height = content_height;
+        have_scroll_content_height = true;
+
         node->setClientRect(node_rect.y, node_rect.x, node_rect.width, node_rect.height);
         node->setContentSize(node_rect.width, content_height);
     }
@@ -57,48 +64,74 @@ void Painter::paintChildrenAndOverlays(const dom::DOMNodePtr& node,
         }
     }
 
-    // 收集需要绘制的子元素及其 z-index
-    struct ChildWithZIndex {
-        dom::DOMNodePtr child;
-        int z_index;
-        size_t original_order;
-    };
-    std::vector<ChildWithZIndex> sorted_children;
-    sorted_children.reserve(children.size());
-
-    size_t order = 0;
+    // 大多数子节点的 z-index 都是 0：避免每节点都分配 + sort（O(n log n)），直接按 DOM 顺序遍历。
+    bool need_z_sort = false;
     for (const auto& child : children) {
         if (!child || child->getType() != dom::DOMNode::NodeType::ELEMENT) {
             continue;
         }
         const auto& child_style = child->getComputedStyle();
-        ChildWithZIndex item{};
-        item.child = child;
-        item.z_index = child_style.z_index;
-        item.original_order = order++;
-        sorted_children.push_back(item);
+        if (child_style.z_index != 0) {
+            need_z_sort = true;
+            break;
+        }
     }
 
-    // 按 z-index 升序排序，相同 z-index 保持 DOM 顺序
-    std::sort(sorted_children.begin(), sorted_children.end(),
-              [](const ChildWithZIndex& a, const ChildWithZIndex& b) {
-                  if (a.z_index != b.z_index) {
-                      return a.z_index < b.z_index;
-                  }
-                  return a.original_order < b.original_order;
-              });
+    if (!need_z_sort) {
+        for (const auto& child : children) {
+            if (!child || child->getType() != dom::DOMNode::NodeType::ELEMENT) {
+                continue;
+            }
+            // 跳过已经在容器层绘制过的 inline 元素
+            if (child->getAttribute("__inline_rendered__") == "1") {
+                child->setAttribute("__inline_rendered__", "");  // 清除标记
+                continue;
+            }
 
-    for (const auto& item : sorted_children) {
-        // 跳过已经在容器层绘制过的 inline 元素
-        if (item.child->getAttribute("__inline_rendered__") == "1") {
-            item.child->setAttribute("__inline_rendered__", "");
-            continue;
+            const layout::LayoutNode* child_layout = layout_engine_ ? layout_engine_->getLayout(child) : nullptr;
+            buildDisplayListNode(child, child_layout, builder);
         }
-        const layout::LayoutNode* child_layout = nullptr;
-        if (layout_engine_) {
-            child_layout = layout_engine_->getLayout(item.child);
+    } else {
+        // 收集需要绘制的子元素及其 z-index
+        struct ChildWithZIndex {
+            dom::DOMNodePtr child;
+            int z_index;
+            size_t original_order;
+        };
+        std::vector<ChildWithZIndex> sorted_children;
+        sorted_children.reserve(children.size());
+
+        size_t order = 0;
+        for (const auto& child : children) {
+            if (!child || child->getType() != dom::DOMNode::NodeType::ELEMENT) {
+                continue;
+            }
+            const auto& child_style = child->getComputedStyle();
+            ChildWithZIndex item{};
+            item.child = child;
+            item.z_index = child_style.z_index;
+            item.original_order = order++;
+            sorted_children.push_back(item);
         }
-        buildDisplayListNode(item.child, child_layout, builder);
+
+        // 按 z-index 升序排序，相同 z-index 保持 DOM 顺序
+        std::sort(sorted_children.begin(), sorted_children.end(),
+                  [](const ChildWithZIndex& a, const ChildWithZIndex& b) {
+                      if (a.z_index != b.z_index) {
+                          return a.z_index < b.z_index;
+                      }
+                      return a.original_order < b.original_order;
+                  });
+
+        for (const auto& item : sorted_children) {
+            // 跳过已经在容器层绘制过的 inline 元素
+            if (item.child->getAttribute("__inline_rendered__") == "1") {
+                item.child->setAttribute("__inline_rendered__", "");  // 清除标记
+                continue;
+            }
+            const layout::LayoutNode* child_layout = layout_engine_ ? layout_engine_->getLayout(item.child) : nullptr;
+            buildDisplayListNode(item.child, child_layout, builder);
+        }
     }
 
     // 恢复滚动偏移
@@ -116,22 +149,27 @@ void Painter::paintChildrenAndOverlays(const dom::DOMNodePtr& node,
 
     // 7. 滚动条渲染（在子节点之后绘制，确保滚动条在内容之上）
     if (is_scroll_container && layout_node && node_rect.width > 0.0f && node_rect.height > 0.0f) {
-        // 计算内容高度（所有子元素的最大底部位置）
-        float content_bottom = node_rect.y;
-        for (const auto& child : node->getChildren()) {
-            if (!child || child->getType() != dom::DOMNode::NodeType::ELEMENT) {
-                continue;
-            }
-            const layout::LayoutNode* child_layout = layout_engine_ ? layout_engine_->getLayout(child) : nullptr;
-            if (child_layout) {
-                float child_bottom = child_layout->layout.position[1] + child_layout->layout.dimensions[1];
-                if (child_bottom > content_bottom) {
-                    content_bottom = child_bottom;
+        // 内容高度：优先复用上面计算过的值，避免重复遍历 children。
+        float content_height = scroll_content_height;
+        if (!have_scroll_content_height) {
+            float content_bottom = node_rect.y;
+            for (const auto& child : children) {
+                if (!child || child->getType() != dom::DOMNode::NodeType::ELEMENT) {
+                    continue;
+                }
+                const layout::LayoutNode* child_layout = layout_engine_ ? layout_engine_->getLayout(child) : nullptr;
+                if (child_layout) {
+                    float child_bottom = child_layout->layout.position[1] + child_layout->layout.dimensions[1];
+                    if (child_bottom > content_bottom) {
+                        content_bottom = child_bottom;
+                    }
                 }
             }
+
+            content_height = content_bottom - node_rect.y;
+            if (content_height < 0.0f) content_height = 0.0f;
         }
 
-        float content_height = content_bottom - node_rect.y;
         float visible_height = node_rect.height;
 
         // 只有当内容高度大于可视高度时才显示滚动条

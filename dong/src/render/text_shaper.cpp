@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cmath>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <utility>
 #include "../core/log.h"
@@ -97,7 +98,7 @@ bool shapeSpan(const std::string& text,
                size_t byte_start,
                size_t byte_end,
                CachedFontInfo* font_info,
-               const std::string& font_path,
+               uint16_t font_path_index,
                uint32_t primary_units_per_em,
                float& pen_x_units,
                float& pen_y_units,
@@ -109,7 +110,23 @@ bool shapeSpan(const std::string& text,
         return true;
     }
 
-    hb_buffer_t* buffer = hb_buffer_create();
+    struct HbBufferHolder {
+        hb_buffer_t* buffer = nullptr;
+        HbBufferHolder() {
+            buffer = hb_buffer_create();
+        }
+        ~HbBufferHolder() {
+            if (buffer) {
+                hb_buffer_destroy(buffer);
+                buffer = nullptr;
+            }
+        }
+    };
+
+    thread_local HbBufferHolder tl_buffer;
+    hb_buffer_t* buffer = tl_buffer.buffer;
+    hb_buffer_reset(buffer);
+
     hb_buffer_add_utf8(buffer,
                        text.c_str() + byte_start,
                        static_cast<int>(byte_end - byte_start),
@@ -122,6 +139,10 @@ bool shapeSpan(const std::string& text,
     unsigned glyph_count = 0;
     hb_glyph_info_t* infos = hb_buffer_get_glyph_infos(buffer, &glyph_count);
     hb_glyph_position_t* positions = hb_buffer_get_glyph_positions(buffer, &glyph_count);
+
+    if (glyph_count > 0) {
+        out_glyphs.reserve(out_glyphs.size() + static_cast<size_t>(glyph_count));
+    }
 
     // HarfBuzz position 已是该字体的 design units（因为 hb_font_set_scale = units_per_em）。
     // 当使用回退字体时，将 advance 从回退字体 units 映射到主字体 units。
@@ -150,7 +171,7 @@ bool shapeSpan(const std::string& text,
         glyph.pen_y_units = pen_y_units - y_offset_units;
         glyph.advance_x_units = x_advance_units;
         glyph.cluster = static_cast<uint32_t>(byte_start + info.cluster);
-        glyph.font_path = font_path;
+        glyph.font_path_index = font_path_index;
         glyph.units_per_em = font_info->units_per_em;
         out_glyphs.push_back(glyph);
 
@@ -158,7 +179,6 @@ bool shapeSpan(const std::string& text,
         pen_y_units -= y_advance_units;
     }
 
-    hb_buffer_destroy(buffer);
     return true;
 }
 
@@ -193,7 +213,10 @@ bool TextShaper::shape(const TextShapeRequest& request, ShapedText& out_text) {
         return false;
     }
 
+    out_text.font_paths.clear();
     out_text.font_path = primary_font_path;
+    out_text.font_paths.push_back(primary_font_path);
+
     out_text.units_per_em = primary_font->units_per_em;
     out_text.scale_to_pixels = request.font_size / static_cast<float>(primary_font->units_per_em);
     out_text.glyphs.clear();
@@ -203,24 +226,24 @@ bool TextShaper::shape(const TextShapeRequest& request, ShapedText& out_text) {
 
     const std::string& text = request.text;
 
-    // 预加载 CJK 回退字体列表
-    std::vector<std::string> cjk_fallbacks = getCJKFallbackFonts();
+    // 预加载 CJK 回退字体列表（font_resolver 内部静态缓存；这里拿引用避免拷贝）
+    const std::vector<std::string>& cjk_fallbacks = getCJKFallbackFonts();
 
-    auto chooseFontForCodepoint = [&](uint32_t codepoint) -> std::pair<std::string, CachedFontInfo*> {
+    auto chooseFontForCodepoint = [&](uint32_t codepoint) -> std::pair<std::string_view, CachedFontInfo*> {
         // 默认使用主字体
         if (!primary_font || !primary_font->face) {
-            return {primary_font_path, primary_font};
+            return {std::string_view(primary_font_path), primary_font};
         }
 
         // Fast path: ASCII should always be present in the primary font.
         // Avoid calling FT_Get_Char_Index per character for large ASCII logs.
         if (codepoint <= 127) {
-            return {primary_font_path, primary_font};
+            return {std::string_view(primary_font_path), primary_font};
         }
 
         FT_UInt glyph_index = FT_Get_Char_Index(primary_font->face, codepoint);
         if (glyph_index != 0) {
-            return {primary_font_path, primary_font};
+            return {std::string_view(primary_font_path), primary_font};
         }
 
         // 主字体不支持，尝试回退字体
@@ -236,18 +259,30 @@ bool TextShaper::shape(const TextShapeRequest& request, ShapedText& out_text) {
                                fallback_path.c_str(),
                                fallback_font->units_per_em,
                                primary_font->units_per_em);
-                return {fallback_path, fallback_font};
+                return {std::string_view(fallback_path), fallback_font};
             }
         }
 
         // 找不到回退字体，仍用主字体（可能渲染 tofu）
-        return {primary_font_path, primary_font};
+        return {std::string_view(primary_font_path), primary_font};
+    };
+
+    auto get_font_path_index = [&](std::string_view path) -> uint16_t {
+        // 预期 font_paths 很短（主字体 + 少量回退），线性查找足够快。
+        for (uint16_t idx = 0; idx < static_cast<uint16_t>(out_text.font_paths.size()); ++idx) {
+            if (out_text.font_paths[idx] == path) {
+                return idx;
+            }
+        }
+        out_text.font_paths.push_back(std::string(path));
+        return static_cast<uint16_t>(out_text.font_paths.size() - 1);
     };
 
     // 关键优化：按“连续相同字体段”进行 shaping，避免每字符 hb_shape。
     size_t seg_start = 0;
     size_t i = 0;
-    std::string seg_font_path = primary_font_path;
+    std::string_view seg_font_path = primary_font_path;
+    uint16_t seg_font_index = 0;
     CachedFontInfo* seg_font = primary_font;
 
     while (i < text.size()) {
@@ -260,11 +295,12 @@ bool TextShaper::shape(const TextShapeRequest& request, ShapedText& out_text) {
         if (font_path != seg_font_path) {
             // Flush previous segment [seg_start, i)
             if (i > seg_start) {
-                shapeSpan(text, seg_start, i, seg_font, seg_font_path, primary_font->units_per_em,
+                shapeSpan(text, seg_start, i, seg_font, seg_font_index, primary_font->units_per_em,
                           pen_x_units, pen_y_units, out_text.glyphs);
             }
             seg_start = i;
             seg_font_path = font_path;
+            seg_font_index = get_font_path_index(font_path);
             seg_font = font_info;
         }
 
@@ -273,7 +309,7 @@ bool TextShaper::shape(const TextShapeRequest& request, ShapedText& out_text) {
 
     // Flush last segment
     if (i > seg_start) {
-        shapeSpan(text, seg_start, i, seg_font, seg_font_path, primary_font->units_per_em,
+        shapeSpan(text, seg_start, i, seg_font, seg_font_index, primary_font->units_per_em,
                   pen_x_units, pen_y_units, out_text.glyphs);
     }
 

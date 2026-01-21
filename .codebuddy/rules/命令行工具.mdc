@@ -1,0 +1,11 @@
+---
+description: 
+globs:
+alwaysApply: true
+---
+
+- 当前系统是 Windows
+- 默认 shell 是 PowerShell（不是 cmd，不是 bash）
+- 所有命令必须能在 PowerShell 直接运行
+- 不允许使用 \" 这种 bash 风格转义
+- 含 ::、|、: 的参数必须作为普通字符串传递

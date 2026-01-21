@@ -49,14 +49,22 @@ void GPUDriverSDL::prepareResources(const GPUCommandList& commands) {
             continue;
         }
 
-        // 确定字体路径
-        std::string font_path = !cmd.font_path.empty()
-            ? cmd.font_path
-            : resolveFontPath(cmd.font_family, cmd.font_weight, cmd.font_style);
+        std::string resolved_primary_font_path;
+        const std::string* font_path = nullptr;
 
-        if (font_path.empty()) {
+        if (!cmd.font_paths.empty()) {
+            font_path = &cmd.font_paths[0];
+        } else if (!cmd.font_path.empty()) {
+            font_path = &cmd.font_path;
+        } else {
+            resolved_primary_font_path = resolveFontPath(cmd.font_family, cmd.font_weight, cmd.font_style);
+            font_path = &resolved_primary_font_path;
+        }
+
+        if (!font_path || font_path->empty()) {
             continue;
         }
+
 
         // 选择合适的 glyph atlas tier
         float font_size = cmd.font_size > 0.0f ? cmd.font_size : 16.0f;
@@ -72,10 +80,14 @@ void GPUDriverSDL::prepareResources(const GPUCommandList& commands) {
             if (glyph.glyph_id == 0) {
                 continue;
             }
-            // 使用 glyph 自己的 font_path（支持字体回退），如果为空则使用默认字体
-            std::string glyph_font_path = !glyph.font_path.empty()
-                ? glyph.font_path
-                : font_path;
+            const std::string* glyph_font_path_ptr = font_path;
+            if (!cmd.font_paths.empty()) {
+                const uint16_t idx = glyph.font_path_index;
+                if (idx < cmd.font_paths.size()) {
+                    glyph_font_path_ptr = &cmd.font_paths[idx];
+                }
+            }
+            const std::string& glyph_font_path = glyph_font_path_ptr ? *glyph_font_path_ptr : *font_path;
 
             // 去重：同一个 glyph+font 组合只请求一次
             std::string dedup_key = glyph_font_path + "#" + std::to_string(glyph.glyph_id) + "#" + std::to_string(tier_key);
@@ -87,6 +99,7 @@ void GPUDriverSDL::prepareResources(const GPUCommandList& commands) {
             GlyphAtlas::GlyphRequest req;
             req.glyph_id = glyph.glyph_id;
             req.font_path = glyph_font_path;
+
             tier_requests[tier_key].push_back(std::move(req));
         }
     }

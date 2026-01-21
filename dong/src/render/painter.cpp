@@ -461,9 +461,30 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         pushed_layer_node = true;
 
         opacity_scope = builder.pushLayer(clamped_opacity, has_isolation, layer_bounds, layer_id, layer_dirty);
+
+        // 重要优化（可选）：当启用图层缓存时，隔离图层在“非脏”情况下会复用上一帧栅格结果。
+        // 这时可以选择跳过子树 DisplayList 构建来降低 buildDisplayList 的 CPU。
+        // 注意：该优化必须显式开启，避免在未启用缓存时导致隔离图层内容为空。
+        static const bool kLayerCacheEnabled = ([]() {
+            const char* v = std::getenv("DONG_LAYER_CACHE");
+            return v && v[0] == '1';
+        })();
+        static const bool kSkipBuildForCachedLayers = ([]() {
+            const char* v = std::getenv("DONG_LAYER_CACHE_SKIP_BUILD");
+            return v && v[0] == '1';
+        })();
+
+        if (kLayerCacheEnabled && kSkipBuildForCachedLayers && has_isolation && !layer_dirty) {
+            if (pushed_layer_node && !layer_stack_.empty()) {
+                layer_stack_.pop_back();
+            }
+            return;
+        }
+
     }
 
     // 1. ��������Ӱ (visibility: hidden ʱ��������)
+
     if (layout_node && !is_hidden) {
         Rect rect = node_rect;
 
@@ -897,205 +918,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
     paintTextAndInput(node, layout_node, tag, style, is_hidden, builder);
 
     paintChildrenAndOverlays(node, layout_node, node_rect, has_layout_rect, is_scroll_container, builder);
-    // 4. 渲染 ::before 伪元素
 
-
-    if (node->hasPseudoElements()) {
-        auto pseudo_before = node->getPseudoBefore();
-        if (pseudo_before) {
-            renderPseudoElement(pseudo_before, node_rect, builder);
-        }
-    }
-
-    // 5. 递归子节点（按 z-index 排序）
-    const auto& children = node->getChildren();
-    
-    // 维护滚动容器的 client/content 尺寸（用于 scrollTo/scrollBy clamp 与滚动条绘制）
-    if (is_scroll_container && has_layout_rect) {
-        float content_bottom = node_rect.y;
-        for (const auto& child : children) {
-            if (!child || child->getType() != dom::DOMNode::NodeType::ELEMENT) {
-                continue;
-            }
-            const layout::LayoutNode* child_layout = layout_engine_ ? layout_engine_->getLayout(child) : nullptr;
-            if (child_layout) {
-                float child_bottom = child_layout->layout.position[1] + child_layout->layout.dimensions[1];
-                if (child_bottom > content_bottom) {
-                    content_bottom = child_bottom;
-                }
-            }
-        }
-        float content_height = content_bottom - node_rect.y;
-        if (content_height < 0.0f) content_height = 0.0f;
-
-        node->setClientRect(node_rect.y, node_rect.x, node_rect.width, node_rect.height);
-        node->setContentSize(node_rect.width, content_height);
-    }
-
-    // 如果是滚动容器，应用滚动偏移到子元素
-    bool applied_scroll_translate = false;
-    if (is_scroll_container) {
-        float scroll_x = node->getScrollX();
-        float scroll_y = node->getScrollY();
-        if (scroll_x != 0.0f || scroll_y != 0.0f) {
-            builder.pushTranslate(-scroll_x, -scroll_y);
-            applied_scroll_translate = true;
-        }
-    }
-
-    // 大多数子节点的 z-index 都是 0：避免每节点都分配 + sort（O(n log n)），直接按 DOM 顺序遍历。
-    bool need_z_sort = false;
-    for (const auto& child : children) {
-        if (!child || child->getType() != dom::DOMNode::NodeType::ELEMENT) {
-            continue;
-        }
-        const auto& child_style = child->getComputedStyle();
-        if (child_style.z_index != 0) {
-            need_z_sort = true;
-            break;
-        }
-    }
-
-    if (!need_z_sort) {
-        for (const auto& child : children) {
-            if (!child || child->getType() != dom::DOMNode::NodeType::ELEMENT) {
-                continue;
-            }
-            // 跳过已经在容器层绘制过的 inline 元素
-            if (child->getAttribute("__inline_rendered__") == "1") {
-                child->setAttribute("__inline_rendered__", "");  // 清除标记
-                continue;
-            }
-
-            const layout::LayoutNode* child_layout = layout_engine_ ? layout_engine_->getLayout(child) : nullptr;
-            buildDisplayListNode(child, child_layout, builder);
-        }
-    } else {
-        // 收集需要绘制的子元素及�?z-index
-        struct ChildWithZIndex {
-            dom::DOMNodePtr child;
-            int z_index;
-            size_t original_order;
-        };
-        std::vector<ChildWithZIndex> sorted_children;
-        sorted_children.reserve(children.size());
-        
-        size_t order = 0;
-        for (const auto& child : children) {
-            if (!child || child->getType() != dom::DOMNode::NodeType::ELEMENT) {
-                continue;
-            }
-            const auto& child_style = child->getComputedStyle();
-            ChildWithZIndex item{};
-            item.child = child;
-            item.z_index = child_style.z_index;
-            item.original_order = order++;
-            sorted_children.push_back(item);
-        }
-        
-        // �?z-index 升序排序，相�?z-index 保持 DOM 顺序
-        std::sort(sorted_children.begin(), sorted_children.end(),
-                  [](const ChildWithZIndex& a, const ChildWithZIndex& b) {
-                      if (a.z_index != b.z_index) {
-                          return a.z_index < b.z_index;
-                      }
-                      return a.original_order < b.original_order;
-                  });
-        
-        for (const auto& item : sorted_children) {
-            // 跳过已经在容器层绘制过的 inline 元素
-            if (item.child->getAttribute("__inline_rendered__") == "1") {
-                item.child->setAttribute("__inline_rendered__", "");  // 清除标记
-                continue;
-            }
-            const layout::LayoutNode* child_layout = layout_engine_ ? layout_engine_->getLayout(item.child) : nullptr;
-            buildDisplayListNode(item.child, child_layout, builder);
-        }
-    }
-
-    
-    // 恢复滚动偏移
-    if (applied_scroll_translate) {
-        builder.popTranslate();
-    }
-
-    // 6. 渲染 ::after 伪元素
-    if (node->hasPseudoElements()) {
-        auto pseudo_after = node->getPseudoAfter();
-        if (pseudo_after) {
-            renderPseudoElement(pseudo_after, node_rect, builder);
-        }
-    }
-
-    // 7. 滚动条渲染（在子节点之后绘制，确保滚动条在内容之上）
-    if (is_scroll_container && layout_node && node_rect.width > 0.0f && node_rect.height > 0.0f) {
-        // 计算内容高度（所有子元素的最大底部位置）
-        float content_bottom = node_rect.y;
-        for (const auto& child : node->getChildren()) {
-            if (!child || child->getType() != dom::DOMNode::NodeType::ELEMENT) {
-                continue;
-            }
-            const layout::LayoutNode* child_layout = layout_engine_ ? layout_engine_->getLayout(child) : nullptr;
-            if (child_layout) {
-                float child_bottom = child_layout->layout.position[1] + child_layout->layout.dimensions[1];
-                if (child_bottom > content_bottom) {
-                    content_bottom = child_bottom;
-                }
-            }
-        }
-        
-        float content_height = content_bottom - node_rect.y;
-        float visible_height = node_rect.height;
-        
-        // 只有当内容高度大于可视高度时才显示滚动条
-        if (content_height > visible_height + 1.0f) {
-            // 滚动条参�?
-            constexpr float kScrollbarWidth = 8.0f;
-            constexpr float kScrollbarMinThumbHeight = 20.0f;
-            constexpr float kScrollbarPadding = 2.0f;
-            
-            // 滚动条轨道位置（在容器右侧）
-            Rect track_rect{};
-            track_rect.x = node_rect.x + node_rect.width - kScrollbarWidth - kScrollbarPadding;
-            track_rect.y = node_rect.y + kScrollbarPadding;
-            track_rect.width = kScrollbarWidth;
-            track_rect.height = node_rect.height - kScrollbarPadding * 2.0f;
-            
-            // 绘制滚动条轨道（半透明灰色背景�?
-            Color track_color{};
-            track_color.r = 0.0f;
-            track_color.g = 0.0f;
-            track_color.b = 0.0f;
-            track_color.a = 0.1f;
-            builder.addRoundedRect(track_rect, track_color, kScrollbarWidth * 0.5f);
-            
-            // 计算滑块高度和位�?
-            float thumb_height_ratio = visible_height / content_height;
-            float thumb_height = std::max(kScrollbarMinThumbHeight, track_rect.height * thumb_height_ratio);
-            
-            // 从节点获取当前滚动位�?
-            float scroll_position = node->getScrollY();
-            float max_scroll = content_height - visible_height;
-            float scroll_ratio = (max_scroll > 0.0f) ? (scroll_position / max_scroll) : 0.0f;
-            scroll_ratio = std::clamp(scroll_ratio, 0.0f, 1.0f);
-            
-            float thumb_y = track_rect.y + (track_rect.height - thumb_height) * scroll_ratio;
-            
-            Rect thumb_rect{};
-            thumb_rect.x = track_rect.x;
-            thumb_rect.y = thumb_y;
-            thumb_rect.width = kScrollbarWidth;
-            thumb_rect.height = thumb_height;
-            
-            // 绘制滑块（半透明深灰色）
-            Color thumb_color{};
-            thumb_color.r = 0.4f;
-            thumb_color.g = 0.4f;
-            thumb_color.b = 0.4f;
-            thumb_color.a = 0.5f;
-            builder.addRoundedRect(thumb_rect, thumb_color, kScrollbarWidth * 0.5f);
-        }
-    }
 
 
 
@@ -1243,6 +1066,7 @@ void Painter::renderPseudoElement(const dom::DOMNodePtr& pseudo,
             glyph_run.font_family = style.font_family;
             glyph_run.font_weight = style.font_weight;
             glyph_run.font_style = style.font_style;
+            glyph_run.font_paths = shaped.font_paths;
             glyph_run.font_path = shaped.font_path;
             glyph_run.baseline_x = text_x;
             glyph_run.baseline_y = baseline_y;
@@ -1256,7 +1080,7 @@ void Painter::renderPseudoElement(const dom::DOMNodePtr& pseudo,
                 inst.glyph_id = sg.glyph_id;
                 inst.pen_x_units = sg.pen_x_units;
                 inst.pen_y_units = sg.pen_y_units;
-                inst.font_path = sg.font_path;
+                inst.font_path_index = sg.font_path_index;
                 inst.units_per_em = sg.units_per_em;
                 glyph_run.glyphs.push_back(inst);
             }

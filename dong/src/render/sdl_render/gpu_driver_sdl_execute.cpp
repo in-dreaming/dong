@@ -1474,14 +1474,23 @@ void GPUDriverSDL::executeDrawText(ExecuteContext& ctx, const GPUCommand& cmd) {
                    cmd.font_size,
                    cmd.has_text_shadow ? 1 : 0);
 
-    std::string default_font_path = !cmd.font_path.empty()
-                                        ? cmd.font_path
-                                        : resolveFontPath(cmd.font_family, cmd.font_weight, cmd.font_style);
+    std::string resolved_primary_font_path;
+    const std::string* default_font_path = nullptr;
 
-    if (default_font_path.empty()) {
+    if (!cmd.font_paths.empty()) {
+        default_font_path = &cmd.font_paths[0];
+    } else if (!cmd.font_path.empty()) {
+        default_font_path = &cmd.font_path;
+    } else {
+        resolved_primary_font_path = resolveFontPath(cmd.font_family, cmd.font_weight, cmd.font_style);
+        default_font_path = &resolved_primary_font_path;
+    }
+
+    if (!default_font_path || default_font_path->empty()) {
         DONG_LOG_WARN("GPUDriverSDL: no valid font found for family '%s'", cmd.font_family.c_str());
         return;
     }
+
 
     float font_size = cmd.font_size > 0.0f ? cmd.font_size : 16.0f;
 
@@ -1499,7 +1508,8 @@ void GPUDriverSDL::executeDrawText(ExecuteContext& ctx, const GPUCommand& cmd) {
     DONG_LOG_DEBUG("[DrawText] using tier=%upx atlas=%p font=%s",
                    glyph_tier->bitmap_px,
                    (void*)glyph_atlas,
-                   default_font_path.c_str());
+                   default_font_path->c_str());
+
 
     const float atlas_range = glyph_tier->distance_range;
     const float gamma_correction = -2.2f;
@@ -1550,7 +1560,15 @@ void GPUDriverSDL::executeDrawText(ExecuteContext& ctx, const GPUCommand& cmd) {
             continue;
         }
 
-        std::string glyph_font_path = !glyph.font_path.empty() ? glyph.font_path : default_font_path;
+        const std::string* glyph_font_path_ptr = default_font_path;
+        if (!cmd.font_paths.empty()) {
+            const uint16_t idx = glyph.font_path_index;
+            if (idx < cmd.font_paths.size()) {
+                glyph_font_path_ptr = &cmd.font_paths[idx];
+            }
+        }
+        const std::string& glyph_font_path = glyph_font_path_ptr ? *glyph_font_path_ptr : *default_font_path;
+
 
         float glyph_pixel_scale = pixel_scale;
         if (glyph.units_per_em > 0 && glyph.units_per_em != cmd.units_per_em) {

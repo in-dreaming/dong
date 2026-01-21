@@ -522,26 +522,25 @@ std::string resolveFontPath(const std::string& requested_family) {
     return resolveFontPath(requested_family, "normal");
 }
 
-std::vector<std::string> getCJKFallbackFonts() {
+const std::vector<std::string>& getCJKFallbackFonts() {
     // Cache the result to avoid repeated filesystem checks
     static std::vector<std::string> cached_result;
     static bool cached = false;
-    
-    if (cached) {
-        return cached_result;
-    }
-    
-    cached_result.reserve(kCJKFallbackFonts.size());
-    
-    namespace fs = std::filesystem;
-    for (const auto& path : kCJKFallbackFonts) {
-        std::error_code ec;
-        if (fs::exists(path, ec) && !ec) {
-            cached_result.push_back(path);
+
+    if (!cached) {
+        cached_result.reserve(kCJKFallbackFonts.size());
+
+        namespace fs = std::filesystem;
+        for (const auto& path : kCJKFallbackFonts) {
+            std::error_code ec;
+            if (fs::exists(path, ec) && !ec) {
+                cached_result.push_back(path);
+            }
         }
+
+        cached = true;
     }
-    
-    cached = true;
+
     return cached_result;
 }
 

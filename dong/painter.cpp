@@ -709,6 +709,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                                 glyph_run.font_size = child_font_size;
                                 glyph_run.font_family = child_font_family;
                                 glyph_run.font_weight = child_font_weight;
+                                glyph_run.font_paths = shaped.font_paths;
                                 glyph_run.font_path = shaped.font_path;
                                 glyph_run.baseline_x = text_x;
                                 glyph_run.baseline_y = baseline_y;
@@ -720,7 +721,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                                     inst.glyph_id = sg.glyph_id;
                                     inst.pen_x_units = sg.pen_x_units;
                                     inst.pen_y_units = sg.pen_y_units;
-                                    inst.font_path = sg.font_path;
+                                    inst.font_path_index = sg.font_path_index;
                                     inst.units_per_em = sg.units_per_em;
                                     glyph_run.glyphs.push_back(inst);
                                 }
@@ -766,6 +767,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                     glyph_run.font_size = container_font_size;
                     glyph_run.font_family = style.font_family;
                     glyph_run.font_weight = style.font_weight;
+                    glyph_run.font_paths = shaped.font_paths;
                     glyph_run.font_path = shaped.font_path;
                     glyph_run.baseline_x = text_x;
                     glyph_run.baseline_y = baseline_y;
@@ -777,7 +779,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                         inst.glyph_id = sg.glyph_id;
                         inst.pen_x_units = sg.pen_x_units;
                         inst.pen_y_units = sg.pen_y_units;
-                        inst.font_path = sg.font_path;
+                        inst.font_path_index = sg.font_path_index;
                         inst.units_per_em = sg.units_per_em;
                         glyph_run.glyphs.push_back(inst);
                     }
@@ -1113,9 +1115,10 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                         }
                         inst.pen_x_units = base_x_units;
                         inst.pen_y_units = sg.pen_y_units;
-                        inst.font_path = sg.font_path;
+                        inst.font_path_index = sg.font_path_index;
                         inst.units_per_em = sg.units_per_em;
                         glyph_run.glyphs.push_back(inst);
+
                         ++glyph_index_in_run;
                         // 检查当�?glyph 是否对应空格字符
                         if (sg.cluster < text.size() && text[sg.cluster] == ' ') {
@@ -1214,6 +1217,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                 glyph_run.font_size = font_size;
                 glyph_run.font_family = style.font_family;
                 glyph_run.font_weight = style.font_weight;
+                glyph_run.font_paths = shaped.font_paths;
                 glyph_run.font_path = shaped.font_path;
                 glyph_run.baseline_x = text_x;
                 glyph_run.baseline_y = baseline_y;
@@ -1225,10 +1229,11 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                     inst.glyph_id = sg.glyph_id;
                     inst.pen_x_units = sg.pen_x_units;
                     inst.pen_y_units = sg.pen_y_units;
-                    inst.font_path = sg.font_path;
+                    inst.font_path_index = sg.font_path_index;
                     inst.units_per_em = sg.units_per_em;
                     glyph_run.glyphs.push_back(inst);
                 }
+
                 
                 builder.addGlyphRun(std::move(glyph_run));
             }

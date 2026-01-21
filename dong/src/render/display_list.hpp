@@ -77,7 +77,7 @@ struct GlyphInstance {
     uint32_t glyph_id = 0;
     float pen_x_units = 0.0f;      // design units（相对于文本起点）
     float pen_y_units = 0.0f;      // design units
-    std::string font_path;         // 该 glyph 使用的字体路径（支持字体回退）
+    uint16_t font_path_index = 0;  // 指向 DrawGlyphRunData::font_paths 的索引
     uint32_t units_per_em = 0;     // 该字体的 units_per_em
 };
 
@@ -88,6 +88,11 @@ struct DrawGlyphRunData {
     std::string font_family;
     std::string font_weight;
     std::string font_style; // CSS font-style: normal/italic/oblique
+
+    // 字体路径表：索引 0 为主字体；后续为回退字体。
+    std::vector<std::string> font_paths;
+
+    // 为了兼容旧代码：主字体路径（等价于 font_paths[0]）。
     std::string font_path;
 
     float baseline_x = 0.0f;
@@ -97,6 +102,7 @@ struct DrawGlyphRunData {
     // 新增：design units 元数据
     uint32_t units_per_em = 0;
     float scale_to_pixels = 1.0f;  // font_size / units_per_em
+
 
     // text-shadow 支持
     float text_shadow_offset_x = 0.0f;
