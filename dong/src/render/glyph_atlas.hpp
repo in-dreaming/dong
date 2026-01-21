@@ -120,6 +120,12 @@ private:
         uint64_t last_used = 0;
     };
 
+    // 异步上传：transfer buffer 需要在 GPU 完成后再释放。
+    struct PendingUpload {
+        SDL_GPUFence* fence = nullptr;
+        std::vector<SDL_GPUTransferBuffer*> buffers;
+    };
+
     GPUDevice* gpu_device_ = nullptr;
 
     uint32_t atlas_width_ = 2048;
@@ -139,7 +145,13 @@ private:
     // 反向索引：page_index -> 该页上承载的 glyph key 列表
     std::unordered_map<uint32_t, std::vector<std::string> > page_to_keys_;
 
+    // 未完成的异步上传（在后续帧/下一次 addGlyphsBatched 时回收）。
+    std::vector<PendingUpload> pending_uploads_;
+
     std::string makeGlyphKey(uint32_t codepoint, const std::string& font_path) const;
+
+    void reapPendingUploads(SDL_GPUDevice* dev);
+    void waitAllPendingUploads(SDL_GPUDevice* dev);
 
     // 页管理
     bool createPage();
@@ -152,5 +164,6 @@ private:
                      uint32_t& out_width, uint32_t& out_height,
                      GlyphMetrics& out_metrics);
 };
+
 
 } // namespace dong::render

@@ -31,6 +31,11 @@ GlyphAtlas::~GlyphAtlas() {
     }
 
     SDL_GPUDevice* dev = gpu_device_->getHandle();
+
+    // 尽量确保所有异步上传完成后再释放 transfer buffer。
+    // 这里选择等待是因为 GlyphAtlas 生命周期结束后，我们无法再安全地延后释放。
+    waitAllPendingUploads(dev);
+
     for (auto& page : pages_) {
         if (page.texture) {
             SDL_ReleaseGPUTexture(dev, page.texture);
@@ -39,6 +44,7 @@ GlyphAtlas::~GlyphAtlas() {
     }
     pages_.clear();
 }
+
 
 SDL_GPUTexture* GlyphAtlas::getAtlasTexture() const {
     if (pages_.empty()) {
@@ -596,6 +602,9 @@ void GlyphAtlas::addGlyphsBatched(const std::vector<GlyphRequest>& requests) {
         return;
     }
 
+    SDL_GPUDevice* dev = gpu_device_->getHandle();
+    reapPendingUploads(dev);
+
     // 阶段1：收集需要添加的字形（过滤已缓存的）
     struct PendingGlyph {
         std::string key;
@@ -612,6 +621,7 @@ void GlyphAtlas::addGlyphsBatched(const std::vector<GlyphRequest>& requests) {
 
     std::vector<PendingGlyph> pending;
     pending.reserve(requests.size());
+
 
     {
         DONG_PROFILE_SCOPE_CAT("addGlyphsBatched:generateMSDF", "glyph_atlas");
@@ -678,13 +688,14 @@ void GlyphAtlas::addGlyphsBatched(const std::vector<GlyphRequest>& requests) {
 
     DONG_LOG_DEBUG("addGlyphsBatched: processing %zu glyphs in single batch", pending.size());
 
-    // 阶段2：批量上传到 GPU（单个命令缓冲区 + 单次 fence 等待）
-    SDL_GPUDevice* dev = gpu_device_->getHandle();
+    // 阶段2：批量上传到 GPU（单个命令缓冲区）。
+    // 关键优化：不再在 CPU 侧等待 fence；依赖 command buffer 的提交顺序保证 upload 先于后续 draw。
     SDL_GPUCommandBuffer* cmd_buf = gpu_device_->acquireCommandBuffer();
     if (!cmd_buf) {
         SDL_Log("addGlyphsBatched: failed to acquire command buffer");
         return;
     }
+
 
     // 存储需要释放的 transfer buffers
     std::vector<SDL_GPUTransferBuffer*> transfer_buffers;
@@ -747,7 +758,7 @@ void GlyphAtlas::addGlyphsBatched(const std::vector<GlyphRequest>& requests) {
         SDL_EndGPUCopyPass(copy_pass);
     }
 
-    // 单次 fence 等待所有上传完成
+    // 提交 upload command buffer：优先拿 fence 做异步回收；若拿不到 fence，则退化为同步等待。
     SDL_GPUFence* fence = nullptr;
     {
         DONG_PROFILE_SCOPE_CAT("SDL_SubmitGPUCommandBufferAndAcquireFence", "gpu");
@@ -755,24 +766,22 @@ void GlyphAtlas::addGlyphsBatched(const std::vector<GlyphRequest>& requests) {
     }
 
     if (fence) {
-        SDL_GPUFence* fences[] = { fence };
-        {
-            DONG_PROFILE_SCOPE_CAT("SDL_WaitForGPUFences", "gpu");
-            if (!SDL_WaitForGPUFences(dev, true, fences, 1)) {
-                SDL_Log("addGlyphsBatched: SDL_WaitForGPUFences failed: %s", SDL_GetError());
-                gpu_device_->waitForGPU();
-            }
-        }
-        SDL_ReleaseGPUFence(dev, fence);
+        PendingUpload pu;
+        pu.fence = fence;
+        pu.buffers = std::move(transfer_buffers);
+        pending_uploads_.push_back(std::move(pu));
     } else {
         SDL_Log("addGlyphsBatched: SDL_SubmitGPUCommandBufferAndAcquireFence failed: %s", SDL_GetError());
+        gpu_device_->submitCommandBuffer(cmd_buf);
         gpu_device_->waitForGPU();
+
+        // 退化路径：GPU 已 idle，立即释放 transfer buffers。
+        for (auto* tb : transfer_buffers) {
+            SDL_ReleaseGPUTransferBuffer(dev, tb);
+        }
+        transfer_buffers.clear();
     }
 
-    // 释放 transfer buffers
-    for (auto* tb : transfer_buffers) {
-        SDL_ReleaseGPUTransferBuffer(dev, tb);
-    }
 
     // 阶段3：更新缓存
     for (const auto& pg : pending) {
@@ -794,6 +803,60 @@ void GlyphAtlas::addGlyphsBatched(const std::vector<GlyphRequest>& requests) {
 
     DONG_LOG_DEBUG("addGlyphsBatched: completed batch of %zu glyphs", pending.size());
 }
+
+void GlyphAtlas::reapPendingUploads(SDL_GPUDevice* dev) {
+    if (!dev) return;
+
+    for (size_t i = 0; i < pending_uploads_.size();) {
+        PendingUpload& p = pending_uploads_[i];
+        if (!p.fence) {
+            // 容错：无 fence 直接释放。
+            for (auto* tb : p.buffers) {
+                if (tb) SDL_ReleaseGPUTransferBuffer(dev, tb);
+            }
+            pending_uploads_.erase(pending_uploads_.begin() + (ptrdiff_t)i);
+            continue;
+        }
+
+        if (SDL_QueryGPUFence(dev, p.fence)) {
+            for (auto* tb : p.buffers) {
+                if (tb) SDL_ReleaseGPUTransferBuffer(dev, tb);
+            }
+            SDL_ReleaseGPUFence(dev, p.fence);
+            pending_uploads_.erase(pending_uploads_.begin() + (ptrdiff_t)i);
+            continue;
+        }
+
+        ++i;
+    }
+}
+
+void GlyphAtlas::waitAllPendingUploads(SDL_GPUDevice* dev) {
+    if (!dev) return;
+    if (pending_uploads_.empty()) return;
+
+    // 更稳妥的 shutdown 路径：直接等待 device idle，然后释放所有 fence/transfer buffers。
+    // 相比逐 fence SDL_WaitForGPUFences，这个路径在某些后端/销毁阶段更不容易触发崩溃。
+    if (gpu_device_) {
+        gpu_device_->waitForGPU();
+    }
+
+    for (auto& p : pending_uploads_) {
+        for (auto* tb : p.buffers) {
+            if (tb) SDL_ReleaseGPUTransferBuffer(dev, tb);
+        }
+        p.buffers.clear();
+
+        if (p.fence) {
+            SDL_ReleaseGPUFence(dev, p.fence);
+            p.fence = nullptr;
+        }
+    }
+
+    pending_uploads_.clear();
+}
+
+
 
 bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
                                std::vector<uint8_t>& out_bitmap,
