@@ -1,0 +1,6 @@
+---
+description: 
+globs:
+alwaysApply: true
+---
+- 1. 不要写长函数，要拆分成多个小函数。一般一个函数不超过70行。
