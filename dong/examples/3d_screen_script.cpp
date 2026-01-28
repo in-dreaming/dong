@@ -836,17 +836,19 @@ struct HUD {
             fps = frameCount / fpsAccum;
             
             // 更新 HTML 中的 FPS 显示
-            char js[128];
+            char js[256];
             int fps_int = (int)fps;
+            
+            // 使用 try-catch 来捕获 JavaScript 错误
             snprintf(js, sizeof(js), 
-                "var e=document.getElementById('fps-value');if(e){e.textContent='%d';}",
+                "try{var e=document.getElementById('fps-value');if(e){e.textContent='%d';e.style.color='#ffff00';'OK';}else{'NOT_FOUND';}}catch(err){err.message;}",
                 fps_int);
             
-            bool eval_result = html.eval(js);
+            // 使用 evalWithReturn 来获取执行结果
+            std::string result = html.evalWithReturn(js);
             
             // Debug: 打印 FPS 更新
-            SDL_Log("[HUD] FPS updated: %d (eval=%d, frameCount=%d, timer=%.2f)", 
-                    fps_int, eval_result ? 1 : 0, frameCount, fpsUpdateTimer);
+            SDL_Log("[HUD] FPS updated: %d, result='%s'", fps_int, result.c_str());
             
             fpsAccum = 0;
             frameCount = 0;
@@ -864,6 +866,10 @@ struct HUD {
     
     bool eval(const char* js_code) {
         return html.eval(js_code);
+    }
+    
+    std::string evalWithReturn(const char* js_code) {
+        return html.evalWithReturn(js_code);
     }
     
     void render(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,

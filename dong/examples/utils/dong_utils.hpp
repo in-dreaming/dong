@@ -251,6 +251,15 @@ struct HtmlScreen3D {
         return false;
     }
     
+    // 执行 JavaScript 代码并返回结果
+    std::string evalWithReturn(const char* js_code) {
+        if (view) {
+            const char* result = dong_view_eval_return(view, js_code);
+            return result ? result : "";
+        }
+        return "";
+    }
+    
     // 清理资源
     void cleanup(SDL_GPUDevice* device) {
         // renderTexture 由 View 内部管理，这里只清空引用
