@@ -7,6 +7,7 @@
 #include <fstream>
 #include <sstream>
 #include <filesystem>
+#include <chrono>
 
 
 namespace dong::utils {
@@ -180,10 +181,34 @@ struct HtmlScreen3D {
         SDL_GPUTexture* newTexture = (SDL_GPUTexture*)dong_view_render_to_gpu_texture(
             view, device, rtWidth, rtHeight);
 
-        if (newTexture) {
-            renderTexture = newTexture;
+        // #region agent log
+        static int update_count = 0;
+        if (update_count < 5) {
+            std::ofstream log_file(R"(d:\mix\agents\game\indr\dong\.cursor\debug.log)", std::ios::app);
+            if (log_file.is_open()) {
+                std::stringstream ss;
+                ss << "{\"timestamp\":" << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+                ss << ",\"location\":\"dong_utils.hpp:180\",\"message\":\"HtmlScreen3D::update texture result\",\"hypothesisId\":\"H4\",\"sessionId\":\"debug-session\",\"runId\":\"run1\"";
+                ss << ",\"data\":{\"newTexture\":" << (void*)newTexture << ",\"oldTexture\":" << (void*)renderTexture << ",\"rtWidth\":" << rtWidth << ",\"rtHeight\":" << rtHeight << "}}\n";
+                log_file << ss.str();
+                log_file.close();
+            }
+            update_count++;
         }
+        // #endregion
 
+        static int null_count = 0;
+        if (!newTexture) {
+            null_count++;
+            if (null_count <= 3) {
+                SDL_Log("[HtmlScreen3D::update] dong_view_render_to_gpu_texture returned nullptr! (count=%d)", null_count);
+            }
+            // 如果纹理更新失败，保持旧纹理（如果有的话）
+            return;
+        }
+        
+        // 成功获取新纹理，更新引用
+        renderTexture = newTexture;
     }
     
     // 发送鼠标移动事件

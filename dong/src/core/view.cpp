@@ -690,7 +690,10 @@ SDL_GPUTexture* View::renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, 
 
     // Tick media elements (e.g. <video>) for offscreen rendering too.
     // Otherwise autoplay videos won't advance when the embedder only calls renderToGPUTexture().
-    {
+    // Note: multiframe determinism tools may disable this via DONG_OFFSCREEN_TICK_MEDIA=0.
+    const char* tick_media_env = std::getenv("DONG_OFFSCREEN_TICK_MEDIA");
+    const bool tick_media = !(tick_media_env && tick_media_env[0] == '0');
+    if (tick_media) {
         static auto start_time = std::chrono::steady_clock::now();
         auto now = std::chrono::steady_clock::now();
         double current_time = std::chrono::duration<double>(now - start_time).count();
@@ -704,6 +707,7 @@ SDL_GPUTexture* View::renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, 
         syncVideoElements(current_time, dom_tree_dirty);
 
     }
+
 
     // 1. 获取/创建离屏渲染目标纹理（使用UNORM格式，shader手动处理gamma）
 
@@ -743,6 +747,24 @@ SDL_GPUTexture* View::renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, 
             return nullptr;
         }
         DONG_LOG_DEBUG("[View::renderToGPUTexture] Created offscreen texture %p size=%ux%u", (void*)offscreen_texture_cache_, width, height);
+
+        // 关键修复：新创建的纹理必须初始化为透明黑色，否则透明区域会显示垃圾数据（白色）
+        // 这会导致 HUD 背景覆盖 3D 场景
+        SDL_GPUCommandBuffer* clear_cmd = SDL_AcquireGPUCommandBuffer(device);
+        if (clear_cmd) {
+            SDL_GPUColorTargetInfo clear_target{};
+            clear_target.texture = offscreen_texture_cache_;
+            clear_target.clear_color = SDL_FColor{0.0f, 0.0f, 0.0f, 0.0f};  // 透明黑色
+            clear_target.load_op = SDL_GPU_LOADOP_CLEAR;
+            clear_target.store_op = SDL_GPU_STOREOP_STORE;
+            
+            SDL_GPURenderPass* clear_pass = SDL_BeginGPURenderPass(clear_cmd, &clear_target, 1, nullptr);
+            if (clear_pass) {
+                SDL_EndGPURenderPass(clear_pass);
+            }
+            SDL_SubmitGPUCommandBuffer(clear_cmd);
+            DONG_LOG_DEBUG("[View::renderToGPUTexture] Cleared new offscreen texture to transparent black");
+        }
 
         offscreen_texture = offscreen_texture_cache_;
         offscreen_texture_dirty_ = true;
@@ -851,6 +873,63 @@ SDL_GPUTexture* View::renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, 
             // 注意：不要在这里清 layout dirty。
             // LayerTree/layer_dirty 等增量策略可能依赖 isLayoutDirty() 判断本帧哪些 layer 需要重栅格。
             DONG_LOG_DEBUG("[View::renderToGPUTexture] Layout calculated");
+
+            // Debug helper for complex flex layouts (e.g. data/tests/complex.html)
+            static const bool kDebugComplexLayout = (std::getenv("DONG_DEBUG_COMPLEX_LAYOUT") != nullptr);
+            if (kDebugComplexLayout && dom_manager) {
+                auto layouts = dom_manager->getElementsByClassName("layout");
+                if (!layouts.empty()) {
+                    auto layout_node = layouts[0];
+
+                    auto has_class = [](const dom::DOMNodePtr& n, const char* cls) -> bool {
+                        if (!n || !n->hasAttribute("class")) return false;
+                        std::istringstream iss(n->getAttribute("class"));
+                        std::string c;
+                        while (iss >> c) {
+                            if (c == cls) return true;
+                        }
+                        return false;
+                    };
+
+                    auto fmt_css_value = [](const dom::CSSValue& v) -> std::string {
+                        if (v.isAuto()) return "auto";
+                        if (v.isPixel()) return std::to_string(v.value) + "px";
+                        if (v.isPercent()) return std::to_string(v.value) + "%";
+                        return std::to_string(v.value);
+                    };
+
+                    const auto* l_layout = layout_engine->getLayout(layout_node);
+                    if (l_layout) {
+                        SDL_Log("[Debug][complex] .layout: (%.1f,%.1f) %.1fx%.1f", l_layout->x, l_layout->y, l_layout->width, l_layout->height);
+                    }
+
+                    int panel_idx = 0;
+                    for (const auto& child : layout_node->getChildren()) {
+                        if (!child || child->getType() != dom::DOMNode::NodeType::ELEMENT) continue;
+                        if (!has_class(child, "panel")) continue;
+
+                        const auto& st = child->getComputedStyle();
+                        const auto* l = layout_engine->getLayout(child);
+                        if (l) {
+                            SDL_Log("[Debug][complex] panel[%d]: (%.1f,%.1f) %.1fx%.1f flex-grow=%.3f flex-shrink=%.3f flex-basis=%s min-width=%s", 
+                                    panel_idx,
+                                    l->x, l->y, l->width, l->height,
+                                    st.flex_grow, st.flex_shrink,
+                                    fmt_css_value(st.flex_basis).c_str(),
+                                    fmt_css_value(st.min_width).c_str());
+                        } else {
+                            SDL_Log("[Debug][complex] panel[%d]: <no layout> flex-grow=%.3f flex-shrink=%.3f flex-basis=%s min-width=%s",
+                                    panel_idx,
+                                    st.flex_grow, st.flex_shrink,
+                                    fmt_css_value(st.flex_basis).c_str(),
+                                    fmt_css_value(st.min_width).c_str());
+                        }
+                        ++panel_idx;
+                    }
+                } else {
+                    SDL_Log("[Debug][complex] No .layout node found");
+                }
+            }
 
         }
 
@@ -1284,23 +1363,32 @@ void View::handle_mouse_up(int32_t button) {
         }
     }
 
+    // mouseup 事件先派发（和浏览器更接近）。
     dispatchMouseEventToJS("mouseup", last_mouse_x_, last_mouse_y_, button);
-    dispatchMouseEventToJS("click", last_mouse_x_, last_mouse_y_, button);
-    
-    // 处理焦点：点击时尝试聚焦被点击的元素
 
-    if (focus_manager && dom_manager && layout_engine) {
-        auto clicked = hitTestElementAt(dom_manager.get(), layout_engine.get(), 
-                                        last_mouse_x_, last_mouse_y_);
+    // 计算点击元素（用于焦点/默认控件行为）。
+    dom::DOMNodePtr clicked;
+    if (dom_manager && layout_engine) {
+        clicked = hitTestElementAt(dom_manager.get(), layout_engine.get(),
+                                  last_mouse_x_, last_mouse_y_);
+        while (clicked && clicked->getType() != dom::DOMNode::NodeType::ELEMENT) {
+            clicked = clicked->getParent();
+        }
+    }
+
+    if (clicked) {
         DONG_LOG_INFO("[View::handle_mouse_up] clicked at (%d,%d), element=%p tag=%s",
-                       last_mouse_x_, last_mouse_y_,
-                       clicked.get(),
-                       clicked ? clicked->getTagName().c_str() : "null");
+                      last_mouse_x_, last_mouse_y_,
+                      clicked.get(),
+                      clicked ? clicked->getTagName().c_str() : "null");
+    }
 
+    // 默认交互（左键）：视频 controls、焦点、checkbox/radio 状态切换。
+    if (button == 1 && clicked) {
         // Minimal <video controls> interaction: clicking the bottom controls bar toggles play/pause.
-        if (clicked && clicked->getTagName() == "video" && clicked->hasAttribute("controls")) {
+        if (clicked->getTagName() == "video" && clicked->hasAttribute("controls")) {
             auto it = video_states_.find(clicked.get());
-            if (it != video_states_.end()) {
+            if (it != video_states_.end() && layout_engine) {
                 const auto* layout = layout_engine->getLayout(clicked);
                 if (layout && layout->height > 0.0f) {
                     const float bar_h = std::min(28.0f, layout->height);
@@ -1313,14 +1401,85 @@ void View::handle_mouse_up(int32_t button) {
             }
         }
 
-        if (clicked) {
+        // Focus: clicking should focus editable/input elements.
+        if (focus_manager) {
             bool changed = focus_manager->focusOnClick(clicked);
             DONG_LOG_INFO("[View::handle_mouse_up] focusOnClick returned %d, focused=%p",
-                           changed ? 1 : 0,
-                           focus_manager->getFocusedElement().get());
+                          changed ? 1 : 0,
+                          focus_manager->getFocusedElement().get());
+        }
+
+        // Minimal form controls: toggle checkbox / select radio.
+        if (clicked->getTagName() == "input" && clicked->hasAttribute("type")) {
+            auto toLower = [](std::string s) {
+                std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
+                    return static_cast<char>(std::tolower(c));
+                });
+                return s;
+            };
+
+            const std::string t = toLower(clicked->getAttribute("type"));
+            if (t == "checkbox") {
+                const bool now_checked = clicked->toggleAttribute("checked");
+
+                if (event_dispatcher) {
+                    dom::Event input_ev = event_dispatcher->createEvent(dom::EventType::INPUT);
+                    input_ev.target = clicked;
+                    input_ev.current_target = clicked;
+                    input_ev.data["checked"] = now_checked ? "1" : "0";
+                    event_dispatcher->dispatch(input_ev);
+
+                    dom::Event change_ev = event_dispatcher->createEvent(dom::EventType::CHANGE);
+                    change_ev.target = clicked;
+                    change_ev.current_target = clicked;
+                    change_ev.data["checked"] = now_checked ? "1" : "0";
+                    event_dispatcher->dispatch(change_ev);
+                }
+
+                markNeedsRepaint();
+
+            } else if (t == "radio") {
+                const bool was_checked = clicked->hasAttribute("checked");
+                if (!was_checked) {
+                    // Uncheck other radios in the same group (same name).
+                    const std::string group = clicked->getAttribute("name");
+                    if (!group.empty() && dom_manager) {
+                        auto inputs = dom_manager->getElementsByTagName("input");
+                        for (auto& n : inputs) {
+                            if (!n || n.get() == clicked.get()) continue;
+                            if (!n->hasAttribute("type")) continue;
+                            if (toLower(n->getAttribute("type")) != "radio") continue;
+                            if (n->getAttribute("name") != group) continue;
+                            n->removeAttribute("checked");
+                        }
+                    }
+
+                    clicked->setAttribute("checked", "");
+
+                    if (event_dispatcher) {
+                        dom::Event input_ev = event_dispatcher->createEvent(dom::EventType::INPUT);
+                        input_ev.target = clicked;
+                        input_ev.current_target = clicked;
+                        input_ev.data["checked"] = "1";
+                        event_dispatcher->dispatch(input_ev);
+
+                        dom::Event change_ev = event_dispatcher->createEvent(dom::EventType::CHANGE);
+                        change_ev.target = clicked;
+                        change_ev.current_target = clicked;
+                        change_ev.data["checked"] = "1";
+                        event_dispatcher->dispatch(change_ev);
+                    }
+
+                    markNeedsRepaint();
+                }
+            }
         }
     }
+
+    // click 事件后派发：让 checkbox/radio 默认行为先生效，JS click handler 读到的是新状态。
+    dispatchMouseEventToJS("click", last_mouse_x_, last_mouse_y_, button);
 }
+
 
 
 void View::handle_key_down(uint32_t key_code) {
@@ -1565,31 +1724,34 @@ void View::dispatchWheelEventToJS(float delta_x, float delta_y) {
 void View::dispatchTextInputEventToJS(const char* text) {
     if (!script_engine || !js_bindings || !event_dispatcher) return;
     if (!text) return;
-    
-    // TODO: 获取当前焦点元素作为目标
-    // 暂时使用 body 或第一个 input 元素
+
+    // 优先把文本输入派发给当前焦点元素（尤其是 <input>/<textarea>）。
     dom::DOMNodePtr target;
-    if (dom_manager) {
-        auto inputs = dom_manager->getElementsByTagName("input");
-        if (!inputs.empty()) {
-            target = inputs[0];
+    if (focus_manager) {
+        target = focus_manager->getFocusedElement();
+    }
+
+    // 兜底：没有焦点时，回落到 body。
+    if (!target && dom_manager) {
+        auto bodies = dom_manager->getElementsByTagName("body");
+        if (!bodies.empty()) {
+            target = bodies[0];
         } else {
-            auto bodies = dom_manager->getElementsByTagName("body");
-            if (!bodies.empty()) {
-                target = bodies[0];
-            }
+            target = dom_manager->getRoot();
         }
     }
+
     if (!target) return;
-    
+
     // 创建 input 事件
     dom::Event event = event_dispatcher->createEvent(dom::EventType::INPUT);
     event.target = target;
     event.current_target = target;
     event.data["inputText"] = text;
-    
+
     event_dispatcher->dispatch(event);
 }
+
 
 dom::DOMNodePtr View::findScrollContainerAt(int32_t x, int32_t y) {
     if (!dom_manager || !layout_engine) return nullptr;

@@ -77,10 +77,28 @@ struct ComputedStyle {
     float border_top_right_radius = 0.0f;
     float border_bottom_left_radius = 0.0f;
     float border_bottom_right_radius = 0.0f;
+
+    // Border (shorthand / all-sides)
     std::string border_color = "#000000";
     float border_width = 0.0f;
     std::string border_style = "none";
+
+    // Border per-side overrides (unset = fallback to shorthand)
+    float border_top_width = -1.0f;
+    float border_right_width = -1.0f;
+    float border_bottom_width = -1.0f;
+    float border_left_width = -1.0f;
+    std::string border_top_color;
+    std::string border_right_color;
+    std::string border_bottom_color;
+    std::string border_left_color;
+    std::string border_top_style;
+    std::string border_right_style;
+    std::string border_bottom_style;
+    std::string border_left_style;
+
     std::string overflow = "visible";
+
     std::string overflow_x = "visible";
     std::string overflow_y = "visible";
     std::string visibility = "visible";

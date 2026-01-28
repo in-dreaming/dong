@@ -22,11 +22,14 @@
 #include <string>
 #include <csignal>
 #include <limits>
+#include <fstream>
+#include <sstream>
 
 
 #include <dong.h>
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_gpu.h>
+#include <SDL3/SDL_loadso.h>
 #include <SDL3_shadercross/SDL_shadercross.h>
 
 #include "utils/math3d.hpp"
@@ -35,10 +38,695 @@
 #include "utils/dong_utils.hpp"
 #include "core/profiler.h"
 
+// #region agent log debug-triangle shaders
+// Minimal pipeline to prove "we can draw to swapchain at all" independent of:
+// - vertex buffer content for 3D meshes
+// - MVP matrices / clip-space conventions
+// - depth/culling states
+// If this doesn't show up in the screenshot, the issue is below our scene code.
+static const char* kVertexShaderDebugTriangle = R"(
+struct VSInput {
+    float2 pos : TEXCOORD0;
+};
+struct VSOutput {
+    float4 position : SV_Position;
+};
+VSOutput main(VSInput input) {
+    VSOutput o;
+    o.position = float4(input.pos.xy, 0.0, 1.0);
+    return o;
+}
+)";
+
+static const char* kFragmentShaderDebugTriangle = R"(
+float4 main() : SV_Target0 {
+    return float4(1.0, 0.0, 0.0, 1.0); // solid red
+}
+)";
+
+// Debug mesh pipeline: use Vertex3D position directly (no uniforms).
+// This helps distinguish "MVP/uniforms wrong" vs "VB upload/binding wrong".
+static const char* kVertexShaderDebugMeshNoMVP = R"(
+struct VSInput {
+    float3 position : TEXCOORD0;
+};
+struct VSOutput {
+    float4 position : SV_Position;
+};
+VSOutput main(VSInput input) {
+    VSOutput o;
+    // Put the shape in the bottom-right corner so it won't cover the scene.
+    // (Also helps confirm VB upload/bind works without drowning out the real render.)
+    float2 p = input.position.xy * 0.18 + float2(0.65, -0.65);
+    o.position = float4(p, 0.5, 1.0);
+    return o;
+}
+)";
+
+static const char* kFragmentShaderDebugMeshNoMVP = R"(
+float4 main() : SV_Target0 {
+    return float4(0.0, 1.0, 0.0, 1.0); // solid green
+}
+)";
+// #endregion
+
+// Debug logging helper
+static void debug_log(const char* location, const char* message, const char* hypothesis_id, const char* data_json = nullptr) {
+    try {
+        // Use raw string to avoid accidental escape sequences like \m, \a, etc.
+        std::ofstream log_file(R"(d:\mix\agents\game\indr\dong\.cursor\debug.log)", std::ios::app);
+        if (log_file.is_open()) {
+            std::stringstream ss;
+            ss << "{\"timestamp\":" << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+            ss << ",\"location\":\"" << location << "\"";
+            ss << ",\"message\":\"" << message << "\"";
+            ss << ",\"hypothesisId\":\"" << hypothesis_id << "\"";
+            ss << ",\"sessionId\":\"debug-session\"";
+            ss << ",\"runId\":\"run1\"";
+            if (data_json) {
+                ss << ",\"data\":" << data_json;
+            }
+            ss << "}\n";
+            log_file << ss.str();
+            log_file.close();
+        } else {
+            // Fallback: also try to log to stderr
+            fprintf(stderr, "[DEBUG] Failed to open log file: %s\n", location);
+        }
+    } catch (...) {
+        // Ignore logging errors
+    }
+}
+
+// #region agent log viewport/scissor compat
+// Some environments in this repo end up loading an SDL3.dll that does not export
+// SDL_SetGPUViewport / SDL_SetGPUScissor, causing STATUS_ENTRYPOINT_NOT_FOUND at launch
+// if we link to them directly. However, when these are missing, SDL_GPU's default
+// viewport/scissor can be unset on some backends and clip all draws (clear still works).
+// We therefore resolve the symbols dynamically and call them when available.
+typedef void (SDLCALL *PFN_SDL_SetGPUViewport)(SDL_GPURenderPass* pass, const SDL_GPUViewport* viewport);
+typedef void (SDLCALL *PFN_SDL_SetGPUScissor)(SDL_GPURenderPass* pass, const SDL_Rect* rect);
+
+static PFN_SDL_SetGPUViewport g_pfnSetGPUViewport = nullptr;
+static PFN_SDL_SetGPUScissor  g_pfnSetGPUScissor  = nullptr;
+static bool g_tried_load_viewport_scissor = false;
+static bool g_logged_viewport_scissor_status = false;
+
+static void ensureViewportScissorFnsLoaded() {
+    if (g_tried_load_viewport_scissor) return;
+    g_tried_load_viewport_scissor = true;
+
+    const char* lib =
+#if defined(_WIN32)
+        "SDL3.dll";
+#elif defined(__APPLE__)
+        "libSDL3.dylib";
+#else
+        "libSDL3.so";
+#endif
+
+    SDL_SharedObject* sdlobj = SDL_LoadObject(lib);
+    if (!sdlobj) {
+        if (!g_logged_viewport_scissor_status) {
+            std::stringstream ss;
+            ss << "{\"lib\":\"" << lib << "\",\"loadObjectOk\":false,\"err\":\"" << SDL_GetError() << "\"}";
+            debug_log("3d_screen_script.cpp:viewport", "Failed to load SDL3 shared object for viewport/scissor", "H13", ss.str().c_str());
+            g_logged_viewport_scissor_status = true;
+        }
+        return;
+    }
+
+    g_pfnSetGPUViewport = (PFN_SDL_SetGPUViewport)SDL_LoadFunction(sdlobj, "SDL_SetGPUViewport");
+    g_pfnSetGPUScissor  = (PFN_SDL_SetGPUScissor)SDL_LoadFunction(sdlobj, "SDL_SetGPUScissor");
+
+    if (!g_logged_viewport_scissor_status) {
+        std::stringstream ss;
+        ss << "{\"lib\":\"" << lib << "\",\"loadObjectOk\":true";
+        ss << ",\"hasSetGPUViewport\":" << (g_pfnSetGPUViewport ? 1 : 0);
+        ss << ",\"hasSetGPUScissor\":" << (g_pfnSetGPUScissor ? 1 : 0);
+        ss << "}";
+        debug_log("3d_screen_script.cpp:viewport", "Viewport/scissor symbol probe", "H13", ss.str().c_str());
+        g_logged_viewport_scissor_status = true;
+    }
+}
+
+static void setFullscreenViewportScissor(SDL_GPURenderPass* pass, uint32_t sw, uint32_t sh) {
+    ensureViewportScissorFnsLoaded();
+    if (!pass) return;
+
+    if (g_pfnSetGPUViewport) {
+        SDL_GPUViewport vp{};
+        vp.x = 0.0f;
+        vp.y = 0.0f;
+        vp.w = (float)sw;
+        vp.h = (float)sh;
+        vp.min_depth = 0.0f;
+        vp.max_depth = 1.0f;
+        g_pfnSetGPUViewport(pass, &vp);
+    }
+
+    if (g_pfnSetGPUScissor) {
+        SDL_Rect sc{};
+        sc.x = 0;
+        sc.y = 0;
+        sc.w = (int)sw;
+        sc.h = (int)sh;
+        g_pfnSetGPUScissor(pass, &sc);
+    }
+
+    static int logged_calls = 0;
+    if (logged_calls < 3) {
+        std::stringstream ss;
+        ss << "{\"sw\":" << sw << ",\"sh\":" << sh;
+        ss << ",\"calledViewport\":" << (g_pfnSetGPUViewport ? 1 : 0);
+        ss << ",\"calledScissor\":" << (g_pfnSetGPUScissor ? 1 : 0);
+        ss << ",\"pass\":" << (void*)pass << "}";
+        debug_log("3d_screen_script.cpp:viewport", "Applied fullscreen viewport/scissor (if available)", "H13", ss.str().c_str());
+        logged_calls++;
+    }
+}
+// #endregion
+
+// Simple BMP writer (kept for fallback)
+static bool writeBMP(const char* filename, uint32_t width, uint32_t height, const uint8_t* rgba_data) {
+    SDL_Log("[writeBMP] Opening file: %s (w=%u h=%u)", filename, width, height);
+    fflush(stdout);
+    FILE* f = fopen(filename, "wb");
+    if (!f) {
+        SDL_Log("[writeBMP] ERROR: Failed to open file: %s (errno=%d)", filename, errno);
+        fflush(stdout);
+        return false;
+    }
+    SDL_Log("[writeBMP] File opened successfully");
+    fflush(stdout);
+
+    uint32_t filesize = 54 + width * height * 3;
+    uint8_t bmpfileheader[14] = {
+        'B','M', 0,0,0,0, 0,0, 0,0, 54,0,0,0
+    };
+    bmpfileheader[2] = (uint8_t)(filesize);
+    bmpfileheader[3] = (uint8_t)(filesize >> 8);
+    bmpfileheader[4] = (uint8_t)(filesize >> 16);
+    bmpfileheader[5] = (uint8_t)(filesize >> 24);
+
+    uint8_t bmpinfoheader[40] = {
+        40,0,0,0, 0,0,0,0, 0,0,0,0, 1,0, 24,0
+    };
+    bmpinfoheader[4]  = (uint8_t)(width);
+    bmpinfoheader[5]  = (uint8_t)(width >> 8);
+    bmpinfoheader[6]  = (uint8_t)(width >> 16);
+    bmpinfoheader[7]  = (uint8_t)(width >> 24);
+    bmpinfoheader[8]  = (uint8_t)(height);
+    bmpinfoheader[9]  = (uint8_t)(height >> 8);
+    bmpinfoheader[10] = (uint8_t)(height >> 16);
+    bmpinfoheader[11] = (uint8_t)(height >> 24);
+
+    fwrite(bmpfileheader, 1, 14, f);
+    fwrite(bmpinfoheader, 1, 40, f);
+
+    for (int y = static_cast<int>(height) - 1; y >= 0; --y) {
+        for (uint32_t x = 0; x < width; ++x) {
+            uint32_t idx = (y * width + x) * 4;
+            uint8_t rgb[3] = {
+                rgba_data[idx + 2],
+                rgba_data[idx + 1],
+                rgba_data[idx + 0],
+            };
+            fwrite(rgb, 3, 1, f);
+        }
+    }
+
+    fclose(f);
+    SDL_Log("[writeBMP] File written and closed successfully");
+    fflush(stdout);
+    return true;
+}
+
+#if defined(_WIN32)
+#include <wincodec.h>
+#pragma comment(lib, "windowscodecs.lib")
+
+static bool writePNG_WIC(const char* filename, uint32_t width, uint32_t height, const uint8_t* rgba_data) {
+    SDL_Log("[writePNG] Using WIC: %s (w=%u h=%u)", filename, width, height);
+
+    // Convert UTF-8 (or ANSI) path to wide; filename here is ASCII path in our demo.
+    wchar_t wpath[MAX_PATH];
+    int wlen = MultiByteToWideChar(CP_UTF8, 0, filename, -1, wpath, MAX_PATH);
+    if (wlen <= 0) {
+        // Fallback to ANSI
+        wlen = MultiByteToWideChar(CP_ACP, 0, filename, -1, wpath, MAX_PATH);
+        if (wlen <= 0) {
+            SDL_Log("[writePNG] MultiByteToWideChar failed");
+            return false;
+        }
+    }
+
+    HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    const bool did_init = SUCCEEDED(hr);
+    if (hr == RPC_E_CHANGED_MODE) {
+        // Someone initialized COM with different mode; continue.
+        hr = S_OK;
+    }
+    if (FAILED(hr)) {
+        SDL_Log("[writePNG] CoInitializeEx failed (0x%08X)", (unsigned)hr);
+        return false;
+    }
+
+    IWICImagingFactory* factory = nullptr;
+    hr = CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&factory));
+    if (FAILED(hr) || !factory) {
+        SDL_Log("[writePNG] CoCreateInstance(WICImagingFactory) failed (0x%08X)", (unsigned)hr);
+        if (did_init) CoUninitialize();
+        return false;
+    }
+
+    IWICStream* stream = nullptr;
+    hr = factory->CreateStream(&stream);
+    if (SUCCEEDED(hr)) {
+        hr = stream->InitializeFromFilename(wpath, GENERIC_WRITE);
+    }
+    if (FAILED(hr) || !stream) {
+        SDL_Log("[writePNG] Create/Init stream failed (0x%08X)", (unsigned)hr);
+        if (stream) stream->Release();
+        factory->Release();
+        if (did_init) CoUninitialize();
+        return false;
+    }
+
+    IWICBitmapEncoder* encoder = nullptr;
+    hr = factory->CreateEncoder(GUID_ContainerFormatPng, nullptr, &encoder);
+    if (SUCCEEDED(hr)) {
+        hr = encoder->Initialize(stream, WICBitmapEncoderNoCache);
+    }
+    if (FAILED(hr) || !encoder) {
+        SDL_Log("[writePNG] Create/Init encoder failed (0x%08X)", (unsigned)hr);
+        if (encoder) encoder->Release();
+        stream->Release();
+        factory->Release();
+        if (did_init) CoUninitialize();
+        return false;
+    }
+
+    IWICBitmapFrameEncode* frame = nullptr;
+    IPropertyBag2* props = nullptr;
+    hr = encoder->CreateNewFrame(&frame, &props);
+    if (SUCCEEDED(hr)) {
+        hr = frame->Initialize(props);
+    }
+    if (props) props->Release();
+    if (FAILED(hr) || !frame) {
+        SDL_Log("[writePNG] Create/Init frame failed (0x%08X)", (unsigned)hr);
+        if (frame) frame->Release();
+        encoder->Release();
+        stream->Release();
+        factory->Release();
+        if (did_init) CoUninitialize();
+        return false;
+    }
+
+    hr = frame->SetSize(width, height);
+    if (FAILED(hr)) {
+        SDL_Log("[writePNG] SetSize failed (0x%08X)", (unsigned)hr);
+    }
+
+    // Our pixels are RGBA8; write as 32bpp BGRA to WIC.
+    // Convert line-by-line with a temp buffer to avoid large extra allocation.
+    WICPixelFormatGUID fmt = GUID_WICPixelFormat32bppBGRA;
+    hr = frame->SetPixelFormat(&fmt);
+    if (FAILED(hr)) {
+        SDL_Log("[writePNG] SetPixelFormat failed (0x%08X)", (unsigned)hr);
+    }
+
+    if (FAILED(hr)) {
+        frame->Release();
+        encoder->Release();
+        stream->Release();
+        factory->Release();
+        if (did_init) CoUninitialize();
+        return false;
+    }
+
+    std::vector<uint8_t> bgra(width * 4);
+    const UINT stride = (UINT)(width * 4);
+
+    for (uint32_t y = 0; y < height; ++y) {
+        const uint8_t* src = rgba_data + (size_t)y * (size_t)width * 4;
+        uint8_t* dst = bgra.data();
+        for (uint32_t x = 0; x < width; ++x) {
+            const uint8_t r = src[x * 4 + 0];
+            const uint8_t g = src[x * 4 + 1];
+            const uint8_t b = src[x * 4 + 2];
+            const uint8_t a = src[x * 4 + 3];
+            dst[x * 4 + 0] = b;
+            dst[x * 4 + 1] = g;
+            dst[x * 4 + 2] = r;
+            dst[x * 4 + 3] = a;
+        }
+        hr = frame->WritePixels(1, stride, stride, bgra.data());
+        if (FAILED(hr)) {
+            SDL_Log("[writePNG] WritePixels failed at y=%u (0x%08X)", y, (unsigned)hr);
+            break;
+        }
+    }
+
+    if (SUCCEEDED(hr)) {
+        hr = frame->Commit();
+    }
+    if (SUCCEEDED(hr)) {
+        hr = encoder->Commit();
+    }
+
+    frame->Release();
+    encoder->Release();
+    stream->Release();
+    factory->Release();
+
+    if (did_init) {
+        CoUninitialize();
+    }
+
+    if (FAILED(hr)) {
+        SDL_Log("[writePNG] Commit failed (0x%08X)", (unsigned)hr);
+        return false;
+    }
+
+    SDL_Log("[writePNG] Wrote PNG successfully: %s", filename);
+    return true;
+}
+#endif
+
+static bool writeImageAuto(const char* filename, uint32_t width, uint32_t height, const uint8_t* rgba_data) {
+    if (!filename) return false;
+    const char* ext = std::strrchr(filename, '.');
+    if (ext) {
+        if (SDL_strcasecmp(ext, ".png") == 0) {
+#if defined(_WIN32)
+            return writePNG_WIC(filename, width, height, rgba_data);
+#else
+            SDL_Log("[writePNG] PNG requested but no writer available on this platform; falling back to BMP");
+            return writeBMP(filename, width, height, rgba_data);
+#endif
+        }
+    }
+    return writeBMP(filename, width, height, rgba_data);
+}
+
+// 保存 swapchain 纹理到图片
+static bool saveSwapchainToImage(SDL_GPUDevice* device, SDL_GPUTexture* swapchain, 
+                                  uint32_t width, uint32_t height, const char* filename) {
+    SDL_Log("[saveSwapchainToImage] Entry: device=%p swapchain=%p w=%u h=%u filename=%s", 
+            (void*)device, (void*)swapchain, width, height, filename ? filename : "null");
+    fflush(stdout);
+    if (!device || !swapchain) {
+        SDL_Log("[saveSwapchainToImage] ERROR: Invalid parameters");
+        fflush(stdout);
+        return false;
+    }
+    
+    // 创建下载缓冲区
+    SDL_GPUTransferBufferCreateInfo transfer_info{};
+    transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_DOWNLOAD;
+    transfer_info.size = width * height * 4;
+    
+    SDL_GPUTransferBuffer* download_buffer = SDL_CreateGPUTransferBuffer(device, &transfer_info);
+    if (!download_buffer) {
+        SDL_Log("Failed to create download buffer: %s", SDL_GetError());
+        return false;
+    }
+    
+    // 获取命令缓冲区
+    SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(device);
+    if (!cmd) {
+        SDL_Log("Failed to acquire command buffer: %s", SDL_GetError());
+        SDL_ReleaseGPUTransferBuffer(device, download_buffer);
+        return false;
+    }
+    
+    // 开始拷贝 pass
+    SDL_GPUCopyPass* copy_pass = SDL_BeginGPUCopyPass(cmd);
+    
+    SDL_GPUTextureRegion src_region{};
+    src_region.texture = swapchain;
+    src_region.mip_level = 0;
+    src_region.layer = 0;
+    src_region.x = 0;
+    src_region.y = 0;
+    src_region.z = 0;
+    src_region.w = width;
+    src_region.h = height;
+    src_region.d = 1;
+    
+    SDL_GPUTextureTransferInfo dst_transfer{};
+    dst_transfer.transfer_buffer = download_buffer;
+    dst_transfer.offset = 0;
+    dst_transfer.pixels_per_row = 0;
+    dst_transfer.rows_per_layer = 0;
+    
+    SDL_DownloadFromGPUTexture(copy_pass, &src_region, &dst_transfer);
+    SDL_EndGPUCopyPass(copy_pass);
+    
+    // Wait for completion.
+    // NOTE: Avoid fence APIs for compatibility with older SDL3.dll builds.
+    SDL_SubmitGPUCommandBuffer(cmd);
+    SDL_WaitForGPUIdle(device);
+    
+    // 映射并读取数据
+    void* mapped = SDL_MapGPUTransferBuffer(device, download_buffer, false);
+    if (!mapped) {
+        SDL_Log("Failed to map download buffer: %s", SDL_GetError());
+        SDL_ReleaseGPUTransferBuffer(device, download_buffer);
+        return false;
+    }
+    
+    std::vector<uint8_t> pixels(width * height * 4);
+    std::memcpy(pixels.data(), mapped, width * height * 4);
+
+    // Diagnostic: Check first few pixels to verify readback works
+    {
+        SDL_Log("[Screenshot] First 4 pixels RGBA: [%u,%u,%u,%u] [%u,%u,%u,%u] [%u,%u,%u,%u] [%u,%u,%u,%u]",
+                pixels[0], pixels[1], pixels[2], pixels[3],
+                pixels[4], pixels[5], pixels[6], pixels[7],
+                pixels[8], pixels[9], pixels[10], pixels[11],
+                pixels[12], pixels[13], pixels[14], pixels[15]);
+    }
+    
+    SDL_UnmapGPUTransferBuffer(device, download_buffer);
+    SDL_ReleaseGPUTransferBuffer(device, download_buffer);
+    
+    // Save image (PNG preferred if filename ends with .png)
+    SDL_Log("[saveSwapchainToImage] Writing image file: %s", filename);
+    fflush(stdout);
+    bool result = writeImageAuto(filename, width, height, pixels.data());
+    SDL_Log("[saveSwapchainToImage] writeImageAuto returned: %s", result ? "true" : "false");
+    fflush(stdout);
+    
+    if (result) {
+        // 像素统计
+        int total = static_cast<int>(width * height);
+        int black = 0, gray = 0, white = 0, colored = 0;
+        for (int i = 0; i < total; ++i) {
+            int idx = i * 4;
+            int r = pixels[idx];
+            int g = pixels[idx + 1];
+            int b = pixels[idx + 2];
+            int brightness = (r + g + b) / 3;
+            if (brightness < 50) black++;
+            else if (brightness > 200) white++;
+            else gray++;
+            // 检查是否有非灰色像素（说明有内容）
+            if (std::abs(r - g) > 10 || std::abs(g - b) > 10 || std::abs(r - b) > 10) {
+                colored++;
+            }
+        }
+        SDL_Log("[Screenshot] Saved to %s", filename);
+        SDL_Log("[Screenshot] Pixels: black=%d(%.1f%%) gray=%d(%.1f%%) white=%d(%.1f%%) colored=%d(%.1f%%)",
+                black, 100.0*black/total, gray, 100.0*gray/total, white, 100.0*white/total, 
+                colored, 100.0*colored/total);
+    }
+    
+    return result;
+}
+
+// Capture the current swapchain texture *within the same command buffer*.
+// This avoids relying on swapchain texture validity after submit/present.
+struct PendingCapture {
+    SDL_GPUTransferBuffer* download_buffer = nullptr;
+    uint32_t width = 0;
+    uint32_t height = 0;
+    std::string filename;
+};
+
+// Enqueue a GPU texture -> transfer buffer download *into the current command buffer*.
+// IMPORTANT: This must happen before the command buffer is submitted.
+// We deliberately do NOT submit/wait/map here.
+static bool enqueueSwapchainCapture(
+    SDL_GPUDevice* device,
+    SDL_GPUCommandBuffer* cmd,
+    SDL_GPUTexture* swapchain,
+    uint32_t width,
+    uint32_t height,
+    const char* filename,
+    PendingCapture* out
+) {
+    if (!out) return false;
+
+    // #region agent log
+    {
+        std::stringstream ss;
+        ss << "{\"device\":" << (void*)device
+           << ",\"cmd\":" << (void*)cmd
+           << ",\"swapchain\":" << (void*)swapchain
+           << ",\"w\":" << width
+           << ",\"h\":" << height
+           << ",\"filename\":\"" << (filename ? filename : "null") << "\"}";
+        debug_log("3d_screen_script.cpp:enqueueSwapchainCapture", "Capture enqueue start", "H12", ss.str().c_str());
+    }
+    // #endregion
+
+    if (!device || !cmd || !swapchain || width == 0 || height == 0 || !filename || !filename[0]) {
+        debug_log("3d_screen_script.cpp:enqueueSwapchainCapture", "Capture invalid params", "H12", "{}");
+        return false;
+    }
+
+    SDL_GPUTransferBufferCreateInfo transfer_info{};
+    transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_DOWNLOAD;
+    transfer_info.size = width * height * 4;
+
+    SDL_GPUTransferBuffer* download_buffer = SDL_CreateGPUTransferBuffer(device, &transfer_info);
+    if (!download_buffer) {
+        debug_log("3d_screen_script.cpp:enqueueSwapchainCapture", "Create download buffer failed", "H12", "{}");
+        return false;
+    }
+
+    SDL_GPUCopyPass* copy_pass = SDL_BeginGPUCopyPass(cmd);
+    SDL_GPUTextureRegion src_region{};
+    src_region.texture = swapchain;
+    src_region.mip_level = 0;
+    src_region.layer = 0;
+    src_region.x = 0;
+    src_region.y = 0;
+    src_region.z = 0;
+    src_region.w = width;
+    src_region.h = height;
+    src_region.d = 1;
+
+    SDL_GPUTextureTransferInfo dst_transfer{};
+    dst_transfer.transfer_buffer = download_buffer;
+    dst_transfer.offset = 0;
+    dst_transfer.pixels_per_row = 0;
+    dst_transfer.rows_per_layer = 0;
+
+    SDL_DownloadFromGPUTexture(copy_pass, &src_region, &dst_transfer);
+    SDL_EndGPUCopyPass(copy_pass);
+
+    out->download_buffer = download_buffer;
+    out->width = width;
+    out->height = height;
+    out->filename = filename;
+
+    debug_log("3d_screen_script.cpp:enqueueSwapchainCapture", "Capture enqueued", "H12", "{}");
+    return true;
+}
+
+// After the command buffer is submitted and GPU work is complete, call this to write the image.
+static bool finalizeSwapchainCapture(SDL_GPUDevice* device, PendingCapture* cap) {
+    if (!cap || !cap->download_buffer || cap->width == 0 || cap->height == 0 || cap->filename.empty()) return false;
+
+    void* mapped = SDL_MapGPUTransferBuffer(device, cap->download_buffer, false);
+    if (!mapped) {
+        SDL_ReleaseGPUTransferBuffer(device, cap->download_buffer);
+        cap->download_buffer = nullptr;
+        debug_log("3d_screen_script.cpp:finalizeSwapchainCapture", "Map download buffer failed", "H12", "{}");
+        return false;
+    }
+
+    std::vector<uint8_t> pixels(cap->width * cap->height * 4);
+    std::memcpy(pixels.data(), mapped, pixels.size());
+    SDL_UnmapGPUTransferBuffer(device, cap->download_buffer);
+    SDL_ReleaseGPUTransferBuffer(device, cap->download_buffer);
+    cap->download_buffer = nullptr;
+
+    // Compute diagnostics BEFORE we mutate pixels with the stamp.
+    int total = (int)(cap->width * cap->height);
+    int white = 0;
+    int black = 0;
+    for (int i = 0; i < total; ++i) {
+        const int idx = i * 4;
+        const int b = (pixels[idx + 0] + pixels[idx + 1] + pixels[idx + 2]) / 3;
+        if (b > 240) white++;
+        if (b < 15) black++;
+    }
+
+    const int first_r = (int)pixels[0];
+    const int first_g = (int)pixels[1];
+    const int first_b = (int)pixels[2];
+    const int first_a = (int)pixels[3];
+
+    const uint32_t cx = cap->width / 2;
+    const uint32_t cy = cap->height / 2;
+    const uint32_t cidx = (cy * cap->width + cx) * 4;
+    const int center_r = (int)pixels[cidx + 0];
+    const int center_g = (int)pixels[cidx + 1];
+    const int center_b = (int)pixels[cidx + 2];
+    const int center_a = (int)pixels[cidx + 3];
+
+    const uint32_t sx = (cap->width > 80) ? 80 : (cap->width - 1);
+    const uint32_t sy = (cap->height > 80) ? 80 : (cap->height - 1);
+    const uint32_t sidx = (sy * cap->width + sx) * 4;
+    const int sample_r = (int)pixels[sidx + 0];
+    const int sample_g = (int)pixels[sidx + 1];
+    const int sample_b = (int)pixels[sidx + 2];
+    const int sample_a = (int)pixels[sidx + 3];
+
+    // Deterministic stamp (top-left 32x32 magenta) to verify screenshot pipeline.
+    {
+        const uint32_t stamp_w = (cap->width < 32) ? cap->width : 32;
+        const uint32_t stamp_h = (cap->height < 32) ? cap->height : 32;
+        for (uint32_t y = 0; y < stamp_h; ++y) {
+            for (uint32_t x = 0; x < stamp_w; ++x) {
+                const uint32_t idx = (y * cap->width + x) * 4;
+                pixels[idx + 0] = 255;
+                pixels[idx + 1] = 0;
+                pixels[idx + 2] = 255;
+                pixels[idx + 3] = 255;
+            }
+        }
+    }
+
+    const bool ok = writeImageAuto(cap->filename.c_str(), cap->width, cap->height, pixels.data());
+
+    // #region agent log
+    {
+        std::stringstream ss;
+        ss << "{\"ok\":" << (ok ? 1 : 0)
+           << ",\"whitePct\":" << (total ? (100.0 * (double)white / (double)total) : 0.0)
+           << ",\"blackPct\":" << (total ? (100.0 * (double)black / (double)total) : 0.0)
+           << ",\"firstPixel\":[" << first_r << "," << first_g << "," << first_b << "," << first_a << "]"
+           << ",\"centerPixel\":[" << center_r << "," << center_g << "," << center_b << "," << center_a << "]"
+           << ",\"samplePixel\":[" << sample_r << "," << sample_g << "," << sample_b << "," << sample_a << "]"
+           << ",\"filename\":\"" << cap->filename << "\"}";
+        debug_log("3d_screen_script.cpp:finalizeSwapchainCapture", "Capture done", "H12", ss.str().c_str());
+    }
+    // #endregion
+
+    return ok;
+}
+
 using namespace dong::utils;
 
 // Global for signal handler and atexit
 static std::string g_profile_output;
+
+// SDL_Log 默认写到 stderr；PowerShell 会把 native stderr 当成 error record。
+// 这里把 SDL_Log 重定向到 stdout，避免运行 demo 时误报“异常”。
+static void SDLCALL logToStdout(void* userdata, int category, SDL_LogPriority priority, const char* message) {
+    (void)userdata;
+    (void)category;
+    (void)priority;
+    if (!message) return;
+    std::fprintf(stdout, "%s\n", message);
+    std::fflush(stdout);
+}
 
 static void dumpProfilerAtExit() {
     if (!g_profile_output.empty()) {
@@ -75,6 +763,7 @@ struct HUD {
     bool init(dong_context_t* ctx, SDL_GPUDevice* device, SDL_Window* window,
               const char* htmlContent, uint32_t w, uint32_t h,
               SDL_GPUShader* vsHUD, SDL_GPUShader* fsHUD,
+              SDL_GPUTextureFormat swapchainFormat,
               const char* resourceRoot = nullptr) {
         // 初始化 HTML 渲染
         if (!html.init(ctx, device, window, htmlContent, w, h, resourceRoot)) {
@@ -106,7 +795,10 @@ struct HUD {
         attrs[1].offset = sizeof(float) * 2;
         
         SDL_GPUColorTargetDescription colorDesc{};
-        colorDesc.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+        colorDesc.format = swapchainFormat;  // 使用实际 swapchain 格式
+        // HUD blending: use standard straight-alpha blending.
+        // Most paths in this repo assume straight alpha (see other examples and engine-side pipelines).
+        // The HUD fragment shader already clamps RGB when alpha is near 0 to avoid "white RGB" washing the scene.
         colorDesc.blend_state.enable_blend = true;
         colorDesc.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
         colorDesc.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
@@ -139,17 +831,26 @@ struct HUD {
         fpsAccum += dt;
         fpsUpdateTimer += dt;
         
-        // 每 0.5 秒更新一次 FPS 显示
-        if (fpsUpdateTimer >= 0.5f) {
+        // 每 1.0 秒更新一次 FPS 显示（降低频率，更容易观察）
+        if (fpsUpdateTimer >= 1.0f) {
             fps = frameCount / fpsAccum;
+            
+            // 更新 HTML 中的 FPS 显示
+            char js[128];
+            int fps_int = (int)fps;
+            snprintf(js, sizeof(js), 
+                "var e=document.getElementById('fps-value');if(e){e.textContent='%d';}",
+                fps_int);
+            
+            bool eval_result = html.eval(js);
+            
+            // Debug: 打印 FPS 更新
+            SDL_Log("[HUD] FPS updated: %d (eval=%d, frameCount=%d, timer=%.2f)", 
+                    fps_int, eval_result ? 1 : 0, frameCount, fpsUpdateTimer);
+            
             fpsAccum = 0;
             frameCount = 0;
             fpsUpdateTimer = 0;
-            
-            // 更新 HTML 中的 FPS 显示
-            char js[64];
-            snprintf(js, sizeof(js), "updateFPS(%.1f)", fps);
-            html.eval(js);
         }
         
         // 渲染 HTML 到纹理
@@ -161,25 +862,64 @@ struct HUD {
         html.eval("toggleHelp()");
     }
     
+    bool eval(const char* js_code) {
+        return html.eval(js_code);
+    }
+    
     void render(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
                 SDL_GPUSampler* sampler) {
+        // #region agent log
+        static int hud_render_count = 0;
+        if (hud_render_count < 3) {
+            std::ofstream log_file("d:\\mix\\agents\\game\\indr\\dong\\.cursor\\debug.log", std::ios::app);
+            if (log_file.is_open()) {
+                std::stringstream ss;
+                ss << "{\"timestamp\":" << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+                ss << ",\"location\":\"3d_screen_script.cpp:376\",\"message\":\"HUD render entry\",\"hypothesisId\":\"H8\",\"sessionId\":\"debug-session\",\"runId\":\"run1\"";
+                ss << ",\"data\":{\"hasTexture\":" << (html.renderTexture != nullptr) << ",\"hasPipeline\":" << (pipeline != nullptr) << ",\"texture\":" << (void*)html.renderTexture << "}}\n";
+                log_file << ss.str();
+                log_file.close();
+            }
+            hud_render_count++;
+        }
+        // #endregion
+
         if (!html.renderTexture || !pipeline) return;
-        
+
         SDL_BindGPUGraphicsPipeline(pass, pipeline);
-        
+
         SDL_GPUBufferBinding binding{quadVB, 0};
         SDL_BindGPUVertexBuffers(pass, 0, &binding, 1);
-        
+
         SDL_GPUTextureSamplerBinding texBinding{html.renderTexture, sampler};
         SDL_BindGPUFragmentSamplers(pass, 0, &texBinding, 1);
-        
+
+        // Diagnostic: if HUD is overwriting the whole scene due to missing alpha/blend issues,
+        // forcing a low alpha should make the 3D scene visible behind it.
+        const bool force_hud_half_alpha = (std::getenv("DONG_DEBUG_HUD_HALF_ALPHA") != nullptr);
+
         UniformsHUD uniforms{};
         uniforms.color[0] = 1.0f;
         uniforms.color[1] = 1.0f;
         uniforms.color[2] = 1.0f;
-        uniforms.color[3] = 1.0f;
-        
+        uniforms.color[3] = force_hud_half_alpha ? 0.25f : 1.0f;
+        // Workaround switch: if HUD background becomes accidentally opaque-white and overwrites the whole scene,
+        // enable keying via DONG_HUD_KEY_WHITE_BG=1. Keep it OFF by default to avoid hiding legitimate HUD content.
+        const char* keyEnv = std::getenv("DONG_HUD_KEY_WHITE_BG");
+        const bool keyWhite = (keyEnv && std::strcmp(keyEnv, "0") != 0);
+        uniforms.keyWhiteBg = keyWhite ? 1.0f : 0.0f;
+
         SDL_PushGPUFragmentUniformData(cmd, 0, &uniforms, sizeof(uniforms));
+
+        // Debug: log uniform data
+        static int uniform_log_count = 0;
+        if (uniform_log_count < 3) {
+            SDL_Log("[HUD] Pushing fragment uniform buffer: color=(%.2f,%.2f,%.2f,%.2f) keyWhiteBg=%.2f",
+                    uniforms.color[0], uniforms.color[1], uniforms.color[2], uniforms.color[3],
+                    uniforms.keyWhiteBg);
+            uniform_log_count++;
+        }
+
         SDL_DrawGPUPrimitives(pass, 6, 1, 0, 0);
     }
     
@@ -248,7 +988,7 @@ void arrangeScreens(Screen3D* screens, int numScreens, float spacingX = 4.0f, fl
     for (int i = 0; i < numScreens; i++) {
         int row = i / maxPerRow;
         int col = i % maxPerRow;
-        int screensInThisRow = std::min(maxPerRow, numScreens - row * maxPerRow);
+        int screensInThisRow = (std::min)(maxPerRow, numScreens - row * maxPerRow);
         
         // 计算该行的起始X位置（居中对齐）
         float rowWidth = (screensInThisRow - 1) * spacingX;
@@ -265,7 +1005,7 @@ void arrangeScreens(Screen3D* screens, int numScreens, float spacingX = 4.0f, fl
         screens[i].yaw = -deltaX * 0.08f;  // 向中心倾斜
         
         // 限制倾斜角度
-        screens[i].yaw = std::max(-0.4f, std::min(0.4f, screens[i].yaw));
+        screens[i].yaw = (std::max)(-0.4f, (std::min)(0.4f, screens[i].yaw));
     }
 }
 
@@ -353,9 +1093,16 @@ int main(int argc, char* argv[]) {
         std::signal(SIGTERM, signalHandler);
     }
 
-    SDL_Log("=== Dong 3D Multi-Screen Script Demo ===");
-    SDL_Log("This demo supports multiple HTML screens with automatic arrangement");
-    SDL_Log("Controls: RMB+Mouse=Look, WASD=Move, Q/E=Up/Down, Shift=Sprint, LMB=Interact, ESC=Exit");
+    // 注意：SDL_Init 之前不要用 SDL_Log（默认会走 stderr）。
+    printf("=== Dong 3D Multi-Screen Script Demo ===\n");
+    printf("This demo supports multiple HTML screens with automatic arrangement\n");
+    printf("Controls: RMB+Mouse=Look, WASD=Move, Q/E=Up/Down, Shift=Sprint, LMB=Interact, ESC=Exit\n");
+    fflush(stdout);
+    
+    // #region agent log
+    debug_log("3d_screen_script.cpp:558", "Program starting", "H11", "{}");
+    debug_log("3d_screen_script.cpp:558", "Build marker", "H17", "{\"marker\":\"H17-20260127-2347\"}");
+    // #endregion
 
     // 配置要显示的 HTML 屏幕
     ScreenConfig screenConfigs[] = {
@@ -389,19 +1136,24 @@ int main(int argc, char* argv[]) {
     };
     
     const int numScreens = sizeof(screenConfigs) / sizeof(screenConfigs[0]);
-    SDL_Log("Configured %d screens", numScreens);
+    printf("Configured %d screens\n", numScreens);
+    fflush(stdout);
 
     if (!SDL_Init(SDL_INIT_VIDEO)) {
-        SDL_Log("SDL_Init failed: %s", SDL_GetError());
+        printf("SDL_Init failed: %s\n", SDL_GetError());
         return 1;
     }
+
+    // 把 SDL_Log 输出从 stderr 重定向到 stdout。
+    SDL_SetLogOutputFunction(logToStdout, nullptr);
     
     if (!SDL_ShaderCross_Init()) {
         SDL_Log("SDL_ShaderCross_Init failed: %s", SDL_GetError());
         return 1;
     }
 
-    const int WIN_W = 2560, WIN_H = 1440;
+    //const int WIN_W = 2560, WIN_H = 1440;
+    const int WIN_W = 2000, WIN_H = 1000;
     SDL_Window* window = SDL_CreateWindow("Dong 3D Multi-Screen Script Demo", WIN_W, WIN_H, SDL_WINDOW_RESIZABLE);
     if (!window) {
         SDL_Log("Failed to create window: %s", SDL_GetError());
@@ -468,14 +1220,25 @@ int main(int argc, char* argv[]) {
     SDL_GPUShader* fsCube = compileShader(device, SDL_GPU_SHADERSTAGE_FRAGMENT, kFragmentShader3D, "main");
     SDL_GPUShader* fsGrid = compileShader(device, SDL_GPU_SHADERSTAGE_FRAGMENT, kFragmentShaderGrid, "main");
     SDL_GPUShader* vsTextured = compileShader(device, SDL_GPU_SHADERSTAGE_VERTEX, kVertexShaderTextured, "main");
-    SDL_GPUShader* fsTextured = compileShader(device, SDL_GPU_SHADERSTAGE_FRAGMENT, kFragmentShaderTextured, "main", 1);
+    SDL_GPUShader* fsTextured = compileShader(device, SDL_GPU_SHADERSTAGE_FRAGMENT, kFragmentShaderTextured, "main", 1, 1);
     SDL_GPUShader* vsHUD = compileShader(device, SDL_GPU_SHADERSTAGE_VERTEX, kVertexShaderHUD, "main", 0, 0);
-    SDL_GPUShader* fsHUD = compileShader(device, SDL_GPU_SHADERSTAGE_FRAGMENT, kFragmentShaderHUD, "main", 1);
+    SDL_GPUShader* fsHUD = compileShader(device, SDL_GPU_SHADERSTAGE_FRAGMENT, kFragmentShaderHUD, "main", 1, 1);
+    SDL_GPUShader* vsDbgTri = compileShader(device, SDL_GPU_SHADERSTAGE_VERTEX, kVertexShaderDebugTriangle, "main");
+    SDL_GPUShader* fsDbgTri = compileShader(device, SDL_GPU_SHADERSTAGE_FRAGMENT, kFragmentShaderDebugTriangle, "main");
+    SDL_GPUShader* vsDbgMesh = compileShader(device, SDL_GPU_SHADERSTAGE_VERTEX, kVertexShaderDebugMeshNoMVP, "main");
+    SDL_GPUShader* fsDbgMesh = compileShader(device, SDL_GPU_SHADERSTAGE_FRAGMENT, kFragmentShaderDebugMeshNoMVP, "main");
     
-    if (!vs3d || !fsCube || !fsGrid || !vsTextured || !fsTextured || !vsHUD || !fsHUD) {
+    if (!vs3d || !fsCube || !fsGrid || !vsTextured || !fsTextured || !vsHUD || !fsHUD || !vsDbgTri || !fsDbgTri || !vsDbgMesh || !fsDbgMesh) {
         SDL_Log("Failed to compile shaders");
+        // #region agent log
+        debug_log("3d_screen_script.cpp:710", "Shader compilation failed", "H11", "{}");
+        // #endregion
         return 1;
     }
+    
+    // #region agent log
+    debug_log("3d_screen_script.cpp:715", "Shaders compiled successfully", "H11", "{}");
+    // #endregion
 
     // 3D 顶点布局
     SDL_GPUVertexBufferDescription vbDesc3D{};
@@ -498,9 +1261,13 @@ int main(int argc, char* argv[]) {
     attrsUV[0].buffer_slot = 0; attrsUV[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3; attrsUV[0].location = 0; attrsUV[0].offset = 0;
     attrsUV[1].buffer_slot = 0; attrsUV[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2; attrsUV[1].location = 1; attrsUV[1].offset = sizeof(float) * 3;
 
+    // 获取 swapchain 实际格式（可能是 BGRA 或 RGBA，取决于平台/驱动）
+    const SDL_GPUTextureFormat swapchainFormat = SDL_GetGPUSwapchainTextureFormat(device, window);
+    SDL_Log("[Pipeline] Swapchain format: %d", (int)swapchainFormat);
+
     // 立方体管线
     SDL_GPUColorTargetDescription colorDesc{};
-    colorDesc.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    colorDesc.format = swapchainFormat;  // 使用 swapchain 实际格式，而非硬编码
     colorDesc.blend_state.enable_blend = false;
 
     SDL_GPUGraphicsPipelineCreateInfo pipeInfo{};
@@ -548,10 +1315,87 @@ int main(int argc, char* argv[]) {
     pipeInfo.vertex_input_state.num_vertex_attributes = 2;
     pipeInfo.vertex_input_state.vertex_attributes = attrsUV;
     pipeInfo.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
+    // 屏幕需要深度测试（避免被其他物体遮挡），但不需要深度写入（避免遮挡后续物体）
+    pipeInfo.depth_stencil_state.enable_depth_test = true;
+    pipeInfo.depth_stencil_state.enable_depth_write = false;  // 不写入深度，避免遮挡后续渲染
+    pipeInfo.depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_LESS;
     
     SDL_GPUGraphicsPipeline* screenPipeline = SDL_CreateGPUGraphicsPipeline(device, &pipeInfo);
 
-    if (!cubePipeline || !gridPipeline || !screenPipeline) {
+    // Debug triangle pipeline (draws in NDC without uniforms)
+    struct DebugTriVertex { float x, y; };
+    SDL_GPUVertexBufferDescription vbDescDbg{};
+    vbDescDbg.slot = 0;
+    vbDescDbg.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
+    vbDescDbg.pitch = sizeof(DebugTriVertex);
+    SDL_GPUVertexAttribute attrsDbg[1] = {};
+    attrsDbg[0].buffer_slot = 0;
+    attrsDbg[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2;
+    attrsDbg[0].location = 0;
+    attrsDbg[0].offset = 0;
+
+    SDL_GPUGraphicsPipelineCreateInfo dbgPipeInfo{};
+    dbgPipeInfo.vertex_shader = vsDbgTri;
+    dbgPipeInfo.fragment_shader = fsDbgTri;
+    dbgPipeInfo.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+    dbgPipeInfo.target_info.num_color_targets = 1;
+    // Important: don't inherit blending from other pipelines.
+    SDL_GPUColorTargetDescription dbgColorDesc = colorDesc;
+    dbgColorDesc.blend_state.enable_blend = false;
+    dbgPipeInfo.target_info.color_target_descriptions = &dbgColorDesc;
+    // Important: match the render pass' depth target but DO NOT write depth,
+    // otherwise this triangle can occlude the entire 3D scene.
+    dbgPipeInfo.target_info.has_depth_stencil_target = true;
+    dbgPipeInfo.target_info.depth_stencil_format = SDL_GPU_TEXTUREFORMAT_D24_UNORM;
+    dbgPipeInfo.depth_stencil_state.enable_depth_test = false;
+    dbgPipeInfo.depth_stencil_state.enable_depth_write = false;
+    dbgPipeInfo.vertex_input_state.num_vertex_buffers = 1;
+    dbgPipeInfo.vertex_input_state.vertex_buffer_descriptions = &vbDescDbg;
+    dbgPipeInfo.vertex_input_state.num_vertex_attributes = 1;
+    dbgPipeInfo.vertex_input_state.vertex_attributes = attrsDbg;
+    dbgPipeInfo.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
+    dbgPipeInfo.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
+    dbgPipeInfo.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
+
+    SDL_GPUGraphicsPipeline* dbgTriPipeline = SDL_CreateGPUGraphicsPipeline(device, &dbgPipeInfo);
+
+    // Debug mesh pipeline: Vertex3D position -> clip (no MVP)
+    SDL_GPUVertexBufferDescription vbDescDbgMesh{};
+    vbDescDbgMesh.slot = 0;
+    vbDescDbgMesh.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
+    vbDescDbgMesh.pitch = sizeof(Vertex3D);
+    SDL_GPUVertexAttribute attrsDbgMesh[1] = {};
+    attrsDbgMesh[0].buffer_slot = 0;
+    attrsDbgMesh[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
+    attrsDbgMesh[0].location = 0;
+    attrsDbgMesh[0].offset = 0;
+
+    SDL_GPUGraphicsPipelineCreateInfo dbgMeshPipeInfo{};
+    dbgMeshPipeInfo.vertex_shader = vsDbgMesh;
+    dbgMeshPipeInfo.fragment_shader = fsDbgMesh;
+    dbgMeshPipeInfo.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+    dbgMeshPipeInfo.target_info.num_color_targets = 1;
+    dbgMeshPipeInfo.target_info.color_target_descriptions = &dbgColorDesc;
+    dbgMeshPipeInfo.target_info.has_depth_stencil_target = true;
+    dbgMeshPipeInfo.target_info.depth_stencil_format = SDL_GPU_TEXTUREFORMAT_D24_UNORM;
+    dbgMeshPipeInfo.depth_stencil_state.enable_depth_test = false;
+    dbgMeshPipeInfo.depth_stencil_state.enable_depth_write = false;
+    dbgMeshPipeInfo.vertex_input_state.num_vertex_buffers = 1;
+    dbgMeshPipeInfo.vertex_input_state.vertex_buffer_descriptions = &vbDescDbgMesh;
+    dbgMeshPipeInfo.vertex_input_state.num_vertex_attributes = 1;
+    dbgMeshPipeInfo.vertex_input_state.vertex_attributes = attrsDbgMesh;
+    dbgMeshPipeInfo.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
+    dbgMeshPipeInfo.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
+    dbgMeshPipeInfo.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
+
+    SDL_GPUGraphicsPipeline* dbgMeshPipeline = SDL_CreateGPUGraphicsPipeline(device, &dbgMeshPipeInfo);
+
+    SDL_GPUBufferCreateInfo dbgVBInfo{};
+    dbgVBInfo.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
+    dbgVBInfo.size = (Uint32)(3 * sizeof(DebugTriVertex));
+    SDL_GPUBuffer* dbgTriVB = SDL_CreateGPUBuffer(device, &dbgVBInfo);
+
+    if (!cubePipeline || !gridPipeline || !screenPipeline || !dbgTriPipeline || !dbgTriVB || !dbgMeshPipeline) {
         SDL_Log("Failed to create pipelines");
         return 1;
     }
@@ -665,13 +1509,27 @@ int main(int argc, char* argv[]) {
         SDL_Log("Warning: Failed to load hud.html");
         hudHtml = "<html><body style='background:transparent'><div style='color:white;position:absolute;top:10px;left:10px'>FPS: --</div></body></html>";
     }
-    if (!hud.init(dongCtx, device, window, hudHtml.c_str(), WIN_W, WIN_H, vsHUD, fsHUD, hudRoot.c_str())) {
-
+    if (!hud.init(dongCtx, device, window, hudHtml.c_str(), WIN_W, WIN_H, vsHUD, fsHUD, swapchainFormat, hudRoot.c_str())) {
         SDL_Log("Failed to init HUD");
+        // #region agent log
+        debug_log("3d_screen_script.cpp:910", "HUD init failed", "H11", "{}");
+        // #endregion
         return 1;
     }
     dong_view_set_debug_name(hud.html.view, "hud");
     SDL_Log("HUD initialized");
+    
+    // 设置初始 FPS 值 - 使用直接的 JavaScript
+    bool init_result = hud.eval("var e=document.getElementById('fps-value');if(e){e.textContent='INIT';e.style.color='#ffff00';e.style.background='rgba(0,0,0,0.7)';}");
+    SDL_Log("HUD initial FPS set, result=%d", init_result ? 1 : 0);
+    
+    // 强制更新一次 HUD 纹理
+    hud.update(device, 0.0f);
+    SDL_Log("HUD initial update done");
+    
+    // #region agent log
+    debug_log("3d_screen_script.cpp:916", "HUD initialized successfully", "H11", "{}");
+    // #endregion
 
 
     // 相机
@@ -704,17 +1562,33 @@ int main(int argc, char* argv[]) {
 
     // 只有鼠标坐标真的变化时才把 move 转发给 HTML（否则会导致不必要的 repaint/重建）。
     int lastSentMouseScreen = -1;
-    int32_t lastSentMouseX = std::numeric_limits<int32_t>::min();
-    int32_t lastSentMouseY = std::numeric_limits<int32_t>::min();
+    int32_t lastSentMouseX = (std::numeric_limits<int32_t>::min)();
+    int32_t lastSentMouseY = (std::numeric_limits<int32_t>::min)();
 
 
     auto lastTime = std::chrono::high_resolution_clock::now();
+    auto startTime = std::chrono::high_resolution_clock::now();
+    bool screenshot_taken = false;
 
     bool running = true;
     int winW = WIN_W, winH = WIN_H;
 
     // 启用文本输入
     SDL_StartTextInput(window);
+    
+    // #region agent log
+    {
+        std::ofstream log_file("d:\\mix\\agents\\game\\indr\\dong\\.cursor\\debug.log", std::ios::app);
+        if (log_file.is_open()) {
+            std::stringstream ss;
+            ss << "{\"timestamp\":" << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+            ss << ",\"location\":\"3d_screen_script.cpp:950\",\"message\":\"Before main loop\",\"hypothesisId\":\"H11\",\"sessionId\":\"debug-session\",\"runId\":\"run1\"";
+            ss << ",\"data\":{\"numScreens\":" << numScreens << ",\"running\":" << (running ? 1 : 0) << "}}\n";
+            log_file << ss.str();
+            log_file.close();
+        }
+    }
+    // #endregion
 
     // 帧率/卡顿排查：不要再强制每帧 SDL_Delay(16) 双重限速。
     // - 默认不 sleep（让 swapchain/vsync 自己决定节奏）
@@ -783,8 +1657,84 @@ int main(int argc, char* argv[]) {
     int bg_rr_cursor = 0;
     bool initial_full_update_done = false;
 
+    // #region agent log
+    {
+        std::ofstream log_file("d:\\mix\\agents\\game\\indr\\dong\\.cursor\\debug.log", std::ios::app);
+        if (log_file.is_open()) {
+            std::stringstream ss;
+            ss << "{\"timestamp\":" << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+            ss << ",\"location\":\"3d_screen_script.cpp:1029\",\"message\":\"Entering main loop\",\"hypothesisId\":\"H11\",\"sessionId\":\"debug-session\",\"runId\":\"run1\"";
+            ss << ",\"data\":{\"running\":" << (running ? 1 : 0) << "}}\n";
+            log_file << ss.str();
+            log_file.close();
+        }
+    }
+
+    // Print SDL_GPU_LOADOP enum values (diagnostic for HUD pass LOAD semantics)
+    // NOTE: We also log it during the first few frames inside the loop to ensure it lands in debug.log.
+    {
+        const int v_load = (int)SDL_GPU_LOADOP_LOAD;
+        const int v_clear = (int)SDL_GPU_LOADOP_CLEAR;
+        const int v_dontcare = (int)SDL_GPU_LOADOP_DONT_CARE;
+
+        const int v_store = (int)SDL_GPU_STOREOP_STORE;
+        const int v_store_dontcare = (int)SDL_GPU_STOREOP_DONT_CARE;
+
+        SDL_Log("[Diag] SDL_GPU_LOADOP values: LOAD=%d CLEAR=%d DONT_CARE=%d", v_load, v_clear, v_dontcare);
+        SDL_Log("[Diag] SDL_GPU_STOREOP values: STORE=%d DONT_CARE=%d", v_store, v_store_dontcare);
+
+        {
+            std::stringstream ss;
+            ss << "{\"loadop_load\":" << v_load
+               << ",\"loadop_clear\":" << v_clear
+               << ",\"loadop_dontcare\":" << v_dontcare
+               << "}";
+            debug_log("3d_screen_script.cpp:loadop", "SDL_GPU_LOADOP enum values", "H16", ss.str().c_str());
+        }
+
+        {
+            std::stringstream ss;
+            ss << "{\"storeop_store\":" << v_store
+               << ",\"storeop_dontcare\":" << v_store_dontcare
+               << "}";
+            debug_log("3d_screen_script.cpp:storeop", "SDL_GPU_STOREOP enum values", "H16", ss.str().c_str());
+        }
+    }
+    // #endregion
+
     while (running) {
 
+        // #region agent log
+        static int loop_iteration = 0;
+        if (loop_iteration < 5) {
+            std::ofstream log_file("d:\\mix\\agents\\game\\indr\\dong\\.cursor\\debug.log", std::ios::app);
+            if (log_file.is_open()) {
+                {
+                    std::stringstream ss;
+                    ss << "{\"timestamp\":" << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+                    ss << ",\"location\":\"3d_screen_script.cpp:1032\",\"message\":\"Loop iteration\",\"hypothesisId\":\"H11\",\"sessionId\":\"debug-session\",\"runId\":\"run1\"";
+                    ss << ",\"data\":{\"iteration\":" << loop_iteration << ",\"running\":" << (running ? 1 : 0) << "}}\n";
+                    log_file << ss.str();
+                }
+
+                // Also print LOADOP enum values early to guarantee they appear in debug.log.
+                if (loop_iteration < 3) {
+                    const int v_load = (int)SDL_GPU_LOADOP_LOAD;
+                    const int v_clear = (int)SDL_GPU_LOADOP_CLEAR;
+                    const int v_dontcare = (int)SDL_GPU_LOADOP_DONT_CARE;
+
+                    std::stringstream ss;
+                    ss << "{\"timestamp\":" << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+                    ss << ",\"location\":\"3d_screen_script.cpp:1032\",\"message\":\"SDL_GPU_LOADOP enum values\",\"hypothesisId\":\"H16\",\"sessionId\":\"debug-session\",\"runId\":\"run1\"";
+                    ss << ",\"data\":{\"loadop_load\":" << v_load << ",\"loadop_clear\":" << v_clear << ",\"loadop_dontcare\":" << v_dontcare << "}}\n";
+                    log_file << ss.str();
+                }
+
+                log_file.close();
+            }
+        }
+        loop_iteration++;
+        // #endregion
         // 先处理自动采样窗口（保证开始采样的那一帧也能被记录到）
         if (bench_autostop) {
             const auto tnow = std::chrono::steady_clock::now();
@@ -826,9 +1776,15 @@ int main(int argc, char* argv[]) {
             
             if (event.type == SDL_EVENT_QUIT || event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED) {
                 SDL_Log("=== Quit event received (type=%d) ===", event.type);
+                // #region agent log
+                debug_log("3d_screen_script.cpp:1071", "Quit event received", "H11", "{}");
+                // #endregion
                 running = false;
             } else if (event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == SDL_SCANCODE_ESCAPE) {
                 SDL_Log("=== ESC pressed, exiting ===");
+                // #region agent log
+                debug_log("3d_screen_script.cpp:1074", "ESC pressed", "H11", "{}");
+                // #endregion
                 running = false;
             } else if (event.type == SDL_EVENT_KEY_DOWN && 
                        (event.key.scancode == SDL_SCANCODE_F1 || event.key.scancode == SDL_SCANCODE_H)) {
@@ -907,8 +1863,8 @@ int main(int argc, char* argv[]) {
             screens[lastHoveredScreen].html.sendMouseMove(-1, -1);
             lastHoveredScreen = -1;
             lastSentMouseScreen = -1;
-            lastSentMouseX = std::numeric_limits<int32_t>::min();
-            lastSentMouseY = std::numeric_limits<int32_t>::min();
+            lastSentMouseX = (std::numeric_limits<int32_t>::min)();
+            lastSentMouseY = (std::numeric_limits<int32_t>::min)();
         } else if (hoveredScreen >= 0) {
             lastHoveredScreen = hoveredScreen;
         }
@@ -1087,6 +2043,23 @@ int main(int argc, char* argv[]) {
             DONG_PROFILE_SCOPE_CAT("SDL_AcquireGPUCommandBuffer", "gpu");
             cmd = SDL_AcquireGPUCommandBuffer(device);
         }
+        
+        // #region agent log
+        static int cmd_acquire_count = 0;
+        if (cmd_acquire_count < 5) {
+            std::ofstream log_file("d:\\mix\\agents\\game\\indr\\dong\\.cursor\\debug.log", std::ios::app);
+            if (log_file.is_open()) {
+                std::stringstream ss;
+                ss << "{\"timestamp\":" << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+                ss << ",\"location\":\"3d_screen_script.cpp:1331\",\"message\":\"Command buffer acquire\",\"hypothesisId\":\"H11\",\"sessionId\":\"debug-session\",\"runId\":\"run1\"";
+                ss << ",\"data\":{\"cmd\":" << (void*)cmd << ",\"count\":" << cmd_acquire_count << "}}\n";
+                log_file << ss.str();
+                log_file.close();
+            }
+            cmd_acquire_count++;
+        }
+        // #endregion
+        
         if (!cmd) {
             // cmd_buf 不可用时避免 busy-spin
             const int sleep_ms = (frame_sleep_ms > 0) ? frame_sleep_ms : 1;
@@ -1106,6 +2079,27 @@ int main(int argc, char* argv[]) {
             SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(cmd);
             uploadVertices(device, copyPass, cubeVB, cubeVerts);
             uploadVertices(device, copyPass, gridVB, gridVerts);
+
+            // Upload debug triangle vertices (NDC)
+            {
+                std::vector<DebugTriVertex> dbgVerts;
+                dbgVerts.reserve(3);
+
+                // Default: small corner triangle (non-invasive).
+                // Optional: fullscreen triangle to prove swapchain write path.
+                const bool fullscreen_dbg_tri = (std::getenv("DONG_DEBUG_FULLSCREEN_TRI") != nullptr);
+                if (fullscreen_dbg_tri) {
+                    dbgVerts.push_back(DebugTriVertex{-1.0f, -1.0f});
+                    dbgVerts.push_back(DebugTriVertex{ 3.0f, -1.0f});
+                    dbgVerts.push_back(DebugTriVertex{-1.0f,  3.0f});
+                } else {
+                    dbgVerts.push_back(DebugTriVertex{-0.98f,  0.98f});
+                    dbgVerts.push_back(DebugTriVertex{-0.70f,  0.98f});
+                    dbgVerts.push_back(DebugTriVertex{-0.98f,  0.70f});
+                }
+
+                uploadVertices(device, copyPass, dbgTriVB, dbgVerts);
+            }
 
             // 上传屏幕四边形顶点（静态）
             for (int i = 0; i < numScreens; i++) {
@@ -1139,6 +2133,22 @@ int main(int argc, char* argv[]) {
 
 
             if (!ok || !swapchain) {
+                // #region agent log
+                static int swapchain_fail_count = 0;
+                if (swapchain_fail_count < 3) {
+                    std::ofstream log_file("d:\\mix\\agents\\game\\indr\\dong\\.cursor\\debug.log", std::ios::app);
+                    if (log_file.is_open()) {
+                        std::stringstream ss;
+                        ss << "{\"timestamp\":" << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+                        ss << ",\"location\":\"3d_screen_script.cpp:1375\",\"message\":\"Swapchain acquire failed\",\"hypothesisId\":\"H11\",\"sessionId\":\"debug-session\",\"runId\":\"run1\"";
+                        ss << ",\"data\":{\"ok\":" << (ok ? 1 : 0) << ",\"swapchain\":" << (void*)swapchain << ",\"count\":" << swapchain_fail_count << "}}\n";
+                        log_file << ss.str();
+                        log_file.close();
+                    }
+                    swapchain_fail_count++;
+                }
+                // #endregion
+                
                 {
                     DONG_PROFILE_SCOPE_CAT("SDL_SubmitGPUCommandBuffer", "gpu");
                     SDL_SubmitGPUCommandBuffer(cmd);
@@ -1157,19 +2167,26 @@ int main(int argc, char* argv[]) {
 
 
 
+
+
         // 深度纹理
         if (!depthTexture || depthW != sw || depthH != sh) {
             if (depthTexture) SDL_ReleaseGPUTexture(device, depthTexture);
             depthTexture = createDepthTexture(device, sw, sh);
             depthW = sw;
             depthH = sh;
+            static bool logged_depth_once = false;
+            if (!logged_depth_once) {
+                SDL_Log("[Render] Created depth texture: %p (size: %ux%u)", (void*)depthTexture, sw, sh);
+                logged_depth_once = true;
+            }
         }
 
         SDL_GPUColorTargetInfo colorTarget{};
         colorTarget.texture = swapchain;
-        colorTarget.clear_color = SDL_FColor{0.1f, 0.1f, 0.15f, 1.0f};
+        colorTarget.clear_color = SDL_FColor{0.1f, 0.1f, 0.15f, 1.0f};  // Restore normal dark background
         colorTarget.load_op = SDL_GPU_LOADOP_CLEAR;
-        colorTarget.store_op = SDL_GPU_STOREOP_STORE;
+        colorTarget.store_op = SDL_GPU_STOREOP_STORE; // MUST store swapchain
 
         SDL_GPUDepthStencilTargetInfo depthTarget{};
         depthTarget.texture = depthTexture;
@@ -1177,12 +2194,100 @@ int main(int argc, char* argv[]) {
         depthTarget.load_op = SDL_GPU_LOADOP_CLEAR;
         depthTarget.store_op = SDL_GPU_STOREOP_DONT_CARE;
 
+        // #region agent log
+        static int frame_debug = 0;
+        if (frame_debug < 3) {
+            std::stringstream ss;
+            ss << "{\"clearColor\":{\"r\":" << colorTarget.clear_color.r << ",\"g\":" << colorTarget.clear_color.g << ",\"b\":" << colorTarget.clear_color.b << "},\"swapchain\":" << (void*)swapchain << ",\"sw\":" << sw << ",\"sh\":" << sh << ",\"colorStoreOp\":" << (int)colorTarget.store_op << "}";
+            debug_log("3d_screen_script.cpp:1350", "Before BeginGPURenderPass", "H1", ss.str().c_str());
+            frame_debug++;
+        }
+        // #endregion
+
         SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cmd, &colorTarget, 1, &depthTarget);
+        
+        if (!pass) {
+            SDL_Log("[Render ERROR] SDL_BeginGPURenderPass returned null! swapchain=%p depthTexture=%p", (void*)swapchain, (void*)depthTexture);
+        }
+        // Viewport/scissor: SDL3 GPU backends typically default to full-target viewport.
+        // Some older experiments attempted to set viewport/scissor via dynamically loaded symbols,
+        // but the signature/owner object can differ across SDL builds and may result in undefined behavior.
+        // For 3D pass, rely on default full-target viewport unless explicitly enabled.
+        const bool enable_pass_viewport_scissor = (std::getenv("DONG_ENABLE_PASS_VIEWPORT_SCISSOR") != nullptr);
+        if (pass && enable_pass_viewport_scissor) {
+            setFullscreenViewportScissor(pass, sw, sh);
+        }
+
+
+        // 首帧调试：打印关键渲染状态
+        static bool logged_first_frame = false;
+        if (!logged_first_frame && pass) {
+            SDL_Log("[Render] First frame: pass=%p swapchain=%p(%ux%u) depth=%p", 
+                    (void*)pass, (void*)swapchain, sw, sh, (void*)depthTexture);
+            SDL_Log("[Render] Camera: pos=(%.2f,%.2f,%.2f) yaw=%.2f pitch=%.2f",
+                    camera.position.x, camera.position.y, camera.position.z, camera.yaw, camera.pitch);
+            logged_first_frame = true;
+        }
 
         float aspect = (float)sw / (float)sh;
         Mat4 view = camera.getViewMatrix();
         Mat4 proj = camera.getProjectionMatrix(aspect);
         Mat4 vp = proj * view;
+
+        // Debug draw: NDC triangle (proves swapchain write path). Default OFF.
+        static const bool kDrawDbgTri = (std::getenv("DONG_DEBUG_DRAW_TRI") != nullptr);
+        if (kDrawDbgTri && pass) {
+            SDL_BindGPUGraphicsPipeline(pass, dbgTriPipeline);
+            SDL_GPUBufferBinding dbgBinding{dbgTriVB, 0};
+            SDL_BindGPUVertexBuffers(pass, 0, &dbgBinding, 1);
+
+            // #region agent log
+            static int dbg_tri_logged = 0;
+            if (dbg_tri_logged < 3) {
+                std::stringstream ss;
+                ss << "{\"pipeline\":" << (void*)dbgTriPipeline
+                   << ",\"vb\":" << (void*)dbgTriVB
+                   << ",\"pass\":" << (void*)pass
+                   << ",\"sw\":" << sw << ",\"sh\":" << sh << "}";
+                debug_log("3d_screen_script.cpp:dbgtri", "Drawing debug NDC triangle", "H14", ss.str().c_str());
+                dbg_tri_logged++;
+            }
+            // #endregion
+
+            SDL_DrawGPUPrimitives(pass, 3, 1, 0, 0);
+        }
+
+        // Debug draw: draw cubeVB without MVP/uniforms (should appear as green shape near center).
+        // Default OFF. Enable with DONG_DEBUG_DRAW_MESH=1
+        static const bool kDrawDbgMesh = (std::getenv("DONG_DEBUG_DRAW_MESH") != nullptr);
+        if (kDrawDbgMesh && pass) {
+            SDL_BindGPUGraphicsPipeline(pass, dbgMeshPipeline);
+            SDL_GPUBufferBinding vb{cubeVB, 0};
+            SDL_BindGPUVertexBuffers(pass, 0, &vb, 1);
+
+            // #region agent log
+            static int dbg_mesh_logged = 0;
+            if (dbg_mesh_logged < 3) {
+                std::stringstream ss;
+                ss << "{\"pipeline\":" << (void*)dbgMeshPipeline
+                   << ",\"vb\":" << (void*)cubeVB
+                   << ",\"verts\":" << cubeVerts.size()
+                   << ",\"pass\":" << (void*)pass << "}";
+                debug_log("3d_screen_script.cpp:dbgmesh", "Drawing debug mesh (no MVP) using cubeVB", "H15", ss.str().c_str());
+                dbg_mesh_logged++;
+            }
+            // #endregion
+
+            SDL_DrawGPUPrimitives(pass, (Uint32)cubeVerts.size(), 1, 0, 0);
+        }
+
+        // #region agent log
+        if (frame_debug < 3) {
+            std::stringstream ss;
+            ss << "{\"aspect\":" << aspect << ",\"cameraPos\":{\"x\":" << camera.position.x << ",\"y\":" << camera.position.y << ",\"z\":" << camera.position.z << "},\"pass\":" << (void*)pass << "}";
+            debug_log("3d_screen_script.cpp:1378", "After computing VP matrix", "H2", ss.str().c_str());
+        }
+        // #endregion
 
         // 绘制网格
         SDL_BindGPUGraphicsPipeline(pass, gridPipeline);
@@ -1198,6 +2303,27 @@ int main(int argc, char* argv[]) {
         
         SDL_PushGPUVertexUniformData(cmd, 0, &gridUniforms, sizeof(gridUniforms));
         SDL_PushGPUFragmentUniformData(cmd, 0, &gridUniforms, sizeof(gridUniforms));
+        
+        static bool logged_draw_calls = false;
+        if (!logged_draw_calls) {
+            SDL_Log("[Render] Draw: grid=%zu verts, cube=%zu verts", gridVerts.size(), cubeVerts.size());
+            logged_draw_calls = true;
+        }
+        
+        // #region agent log
+        if (frame_debug < 3) {
+            std::stringstream ss;
+            ss << "{\"gridVerts\":" << gridVerts.size() << ",\"pipeline\":" << (void*)gridPipeline << ",\"vb\":" << (void*)gridVB;
+            ss << ",\"mvp\":[";
+            for (int i = 0; i < 16; i++) {
+                if (i > 0) ss << ",";
+                ss << vp.m[i];
+            }
+            ss << "]}";
+            debug_log("3d_screen_script.cpp:1404", "Before DrawGPUPrimitives grid", "H3", ss.str().c_str());
+        }
+        // #endregion
+
         SDL_DrawGPUPrimitives(pass, (Uint32)gridVerts.size(), 1, 0, 0);
 
         // 绘制主立方体
@@ -1216,13 +2342,52 @@ int main(int argc, char* argv[]) {
         
         SDL_PushGPUVertexUniformData(cmd, 0, &mainCubeUniforms, sizeof(mainCubeUniforms));
         SDL_PushGPUFragmentUniformData(cmd, 0, &mainCubeUniforms, sizeof(mainCubeUniforms));
+        // #region agent log
+        if (frame_debug < 3) {
+            std::stringstream ss;
+            ss << "{\"cubeVerts\":" << cubeVerts.size() << ",\"pipeline\":" << (void*)cubePipeline << "}";
+            debug_log("3d_screen_script.cpp:1420", "Before DrawGPUPrimitives cube", "H3", ss.str().c_str());
+        }
+        // #endregion
+
         SDL_DrawGPUPrimitives(pass, (Uint32)cubeVerts.size(), 1, 0, 0);
 
         // 绘制 HTML 屏幕
         SDL_BindGPUGraphicsPipeline(pass, screenPipeline);
         
+        static bool logged_screen_status = false;
+        if (!logged_screen_status) {
+            int valid_count = 0;
+            for (int i = 0; i < numScreens; i++) {
+                if (screens[i].html.renderTexture) valid_count++;
+            }
+            SDL_Log("[Render] Screen textures: %d/%d valid", valid_count, numScreens);
+            // 打印前几个屏幕的位置和纹理状态
+            for (int i = 0; i < (std::min)(5, numScreens); i++) {
+                SDL_Log("[Render] Screen %d: pos=(%.2f,%.2f,%.2f) texture=%p", 
+                        i, screens[i].position.x, screens[i].position.y, screens[i].position.z,
+                        (void*)screens[i].html.renderTexture);
+            }
+            logged_screen_status = true;
+        }
+        
         for (int i = 0; i < numScreens; i++) {
-            if (!screens[i].html.renderTexture) continue;
+            // #region agent log
+            if (frame_debug < 3 && i < 3) {
+                std::stringstream ss;
+                ss << "{\"screenIndex\":" << i << ",\"hasTexture\":" << (screens[i].html.renderTexture != nullptr) << ",\"texture\":" << (void*)screens[i].html.renderTexture << ",\"pos\":{\"x\":" << screens[i].position.x << ",\"y\":" << screens[i].position.y << ",\"z\":" << screens[i].position.z << "}}";
+                debug_log("3d_screen_script.cpp:1443", "Rendering screen", "H4", ss.str().c_str());
+            }
+            // #endregion
+
+            if (!screens[i].html.renderTexture) {
+                static int missing_count = 0;
+                if (missing_count < 3) {
+                    SDL_Log("[Render] Screen %d has no renderTexture!", i);
+                    missing_count++;
+                }
+                continue;
+            }
             
             SDL_GPUBufferBinding screenBinding{screens[i].html.quadVB, 0};
             SDL_BindGPUVertexBuffers(pass, 0, &screenBinding, 1);
@@ -1232,6 +2397,19 @@ int main(int argc, char* argv[]) {
             
             Mat4 screenModel = getScreenTransform(screens[i]);
             Mat4 screenMVP = vp * screenModel;
+            
+            // #region agent log
+            if (frame_debug < 3 && i < 3) {
+                std::stringstream ss;
+                ss << "{\"screenIndex\":" << i << ",\"mvp\":[";
+                for (int j = 0; j < 16; j++) {
+                    if (j > 0) ss << ",";
+                    ss << screenMVP.m[j];
+                }
+                ss << "],\"screenPos\":{\"x\":" << screens[i].position.x << ",\"y\":" << screens[i].position.y << ",\"z\":" << screens[i].position.z << "}}";
+                debug_log("3d_screen_script.cpp:1460", "Screen MVP computed", "H5", ss.str().c_str());
+            }
+            // #endregion
             
             UniformsTextured screenUniforms{};
             memcpy(screenUniforms.mvp, screenMVP.m, sizeof(float) * 16);
@@ -1243,21 +2421,148 @@ int main(int argc, char* argv[]) {
             
             SDL_PushGPUVertexUniformData(cmd, 0, &screenUniforms, sizeof(screenUniforms));
             SDL_PushGPUFragmentUniformData(cmd, 0, &screenUniforms, sizeof(screenUniforms));
+            
+            // #region agent log
+            if (frame_debug < 3 && i < 3) {
+                std::stringstream ss;
+                ss << "{\"screenIndex\":" << i << ",\"pipeline\":" << (void*)screenPipeline << ",\"vb\":" << (void*)screens[i].html.quadVB << "}";
+                debug_log("3d_screen_script.cpp:1472", "Before DrawGPUPrimitives screen", "H6", ss.str().c_str());
+            }
+            // #endregion
+
+            SDL_DrawGPUPrimitives(pass, 6, 1, 0, 0);
+        }
+
+        // Debug: optional fullscreen tint using the *HUD pipeline* (known-good) while still in the 3D pass.
+        // NOTE: This MUST NOT be enabled by default, otherwise it can overwrite the 3D scene depending on HUD texture content.
+        static const bool kEnable3DPassTint = (std::getenv("DONG_DEBUG_3D_PASS_TINT") != nullptr);
+        if (kEnable3DPassTint && pass) {
+            SDL_BindGPUGraphicsPipeline(pass, hud.pipeline);
+            SDL_GPUBufferBinding binding{hud.quadVB, 0};
+            SDL_BindGPUVertexBuffers(pass, 0, &binding, 1);
+
+            // Use a known-valid sampled texture to satisfy the shader's sampler binding.
+            SDL_GPUTextureSamplerBinding texBinding{hud.html.renderTexture, sampler};
+            SDL_BindGPUFragmentSamplers(pass, 0, &texBinding, 1);
+
+            UniformsHUD u{};
+            u.color[0] = 1.0f; u.color[1] = 0.0f; u.color[2] = 1.0f; u.color[3] = 0.35f; // translucent tint
+            SDL_PushGPUFragmentUniformData(cmd, 0, &u, sizeof(u));
             SDL_DrawGPUPrimitives(pass, 6, 1, 0, 0);
         }
 
         SDL_EndGPURenderPass(pass);
         
+        // #region agent log
+        if (frame_debug < 3) {
+            std::stringstream ss;
+            ss << "{\"passEnded\":true,\"swapchain\":" << (void*)swapchain << "}";
+            debug_log("3d_screen_script.cpp:1604", "After EndGPURenderPass (3D scene)", "H7", ss.str().c_str());
+        }
+        // #endregion
+
         // ========== 渲染 HUD（2D 覆盖层，无深度测试）==========
-        SDL_GPUColorTargetInfo hudColorTarget{};
-        hudColorTarget.texture = swapchain;
-        hudColorTarget.load_op = SDL_GPU_LOADOP_LOAD;  // 保留 3D 场景
-        hudColorTarget.store_op = SDL_GPU_STOREOP_STORE;
-        
+        // Debug: allow disabling HUD pass entirely to isolate white-screen cause.
+        const bool disable_hud_for_test = (std::getenv("DONG_DEBUG_DISABLE_HUD") != nullptr);
+        if (!disable_hud_for_test) {
+            SDL_GPUColorTargetInfo hudColorTarget{};
+            hudColorTarget.texture = swapchain;
+            hudColorTarget.load_op = SDL_GPU_LOADOP_LOAD;  // Preserve 3D scene
+            hudColorTarget.store_op = SDL_GPU_STOREOP_STORE; // MUST store, otherwise swapchain contents become undefined
+
+            // Diagnostic switches (default OFF):
+            // - DONG_DEBUG_HUD_FORCE_LOAD=1 : force LOAD (no clear)
+            // - DONG_DEBUG_HUD_FORCE_CLEAR=1: force CLEAR to transparent black
+            if (std::getenv("DONG_DEBUG_HUD_FORCE_LOAD")) {
+                hudColorTarget.load_op = SDL_GPU_LOADOP_LOAD;
+            }
+            if (std::getenv("DONG_DEBUG_HUD_FORCE_CLEAR")) {
+                hudColorTarget.load_op = SDL_GPU_LOADOP_CLEAR;
+                hudColorTarget.clear_color = SDL_FColor{0.0f, 0.0f, 0.0f, 0.0f};
+            }
+            
+            // #region agent log
+            if (frame_debug < 3) {
+                std::stringstream ss;
+                ss << "{\"hudLoadOp\":" << (int)hudColorTarget.load_op
+                   << ",\"hudStoreOp\":" << (int)hudColorTarget.store_op
+                   << ",\"hudClearColor\":{\"r\":" << hudColorTarget.clear_color.r
+                   << ",\"g\":" << hudColorTarget.clear_color.g
+                   << ",\"b\":" << hudColorTarget.clear_color.b
+                   << ",\"a\":" << hudColorTarget.clear_color.a
+                   << "}"
+                   << ",\"swapchain\":" << (void*)swapchain
+                   << ",\"sw\":" << sw << ",\"sh\":" << sh
+                   << "}";
+                debug_log("3d_screen_script.cpp:1611", "Before HUD render pass", "H8", ss.str().c_str());
+            }
+            // #endregion
+            
         SDL_GPURenderPass* hudPass = SDL_BeginGPURenderPass(cmd, &hudColorTarget, 1, nullptr);
-        hud.render(hudPass, cmd, sampler);
-        SDL_EndGPURenderPass(hudPass);
-        
+        if (hudPass) {
+            const bool enable_pass_viewport_scissor = (std::getenv("DONG_ENABLE_PASS_VIEWPORT_SCISSOR") != nullptr);
+            if (enable_pass_viewport_scissor) {
+                setFullscreenViewportScissor(hudPass, sw, sh);
+            }
+
+                // #region agent log
+                if (frame_debug < 3) {
+                    std::stringstream ss;
+                    ss << "{\"hudPass\":" << (void*)hudPass << ",\"hudTexture\":" << (void*)hud.html.renderTexture << "}";
+                    debug_log("3d_screen_script.cpp:1629", "Before HUD render", "H8", ss.str().c_str());
+                }
+                // #endregion
+                
+                // Diagnostic: restrict HUD to a small scissor rect to verify whether HUD is covering the whole screen.
+                // If 3D becomes visible outside the scissor, it proves the white screen is caused by HUD full-screen draw.
+                if (std::getenv("DONG_DEBUG_HUD_SCISSOR_256")) {
+                    SDL_Rect sc{0, 0, 256, 256};
+                    ensureViewportScissorFnsLoaded();
+                    if (g_pfnSetGPUScissor) {
+                        g_pfnSetGPUScissor(hudPass, &sc);
+                    }
+                }
+
+                hud.render(hudPass, cmd, sampler);
+                
+                // #region agent log
+                if (frame_debug < 3) {
+                    debug_log("3d_screen_script.cpp:1630", "After HUD render", "H8", "{}");
+                }
+                // #endregion
+                
+                SDL_EndGPURenderPass(hudPass);
+            } else {
+                SDL_Log("[Render ERROR] SDL_BeginGPURenderPass (HUD) returned null! swapchain=%p(%ux%u)", (void*)swapchain, sw, sh);
+            }
+        } else {
+            // When HUD is disabled, still run a minimal 2D pass that LOADs the swapchain and ends immediately.
+            // On some backends, having a second pass (or at least touching the swapchain in a predictable way)
+            // avoids presenting an uninitialized/cleared surface that looks like a white screen.
+            SDL_GPUColorTargetInfo hudColorTarget{};
+            hudColorTarget.texture = swapchain;
+            hudColorTarget.load_op = SDL_GPU_LOADOP_LOAD;
+            hudColorTarget.store_op = SDL_GPU_STOREOP_STORE; // MUST store
+
+            SDL_GPURenderPass* hudPass = SDL_BeginGPURenderPass(cmd, &hudColorTarget, 1, nullptr);
+            if (hudPass) {
+                const bool enable_pass_viewport_scissor = (std::getenv("DONG_ENABLE_PASS_VIEWPORT_SCISSOR") != nullptr);
+                if (enable_pass_viewport_scissor) {
+                    setFullscreenViewportScissor(hudPass, sw, sh);
+                }
+                SDL_EndGPURenderPass(hudPass);
+            } else {
+                SDL_Log("[Render ERROR] SDL_BeginGPURenderPass (HUD noop) returned null! swapchain=%p(%ux%u)", (void*)swapchain, sw, sh);
+            }
+
+            // #region agent log
+            if (frame_debug < 3) {
+                debug_log("3d_screen_script.cpp:1640", "HUD disabled for testing (noop pass)", "H8", "{}");
+            }
+            // #endregion
+        }
+
+
         {
             DONG_PROFILE_SCOPE_CAT("SDL_SubmitGPUCommandBuffer", "gpu");
             SDL_SubmitGPUCommandBuffer(cmd);
@@ -1273,6 +2578,9 @@ int main(int argc, char* argv[]) {
 
     SDL_Log("=== Exiting main loop ===");
     fflush(stdout);
+
+    // NOTE: Do not attempt extra swapchain capture during shutdown.
+    // It is unreliable and makes debugging ambiguous. We capture deterministically in-frame.
 
     // 停止文本输入
     SDL_Log("[Cleanup] Stopping text input...");

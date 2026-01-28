@@ -25,46 +25,87 @@ bool SelectorMatcher::matchesComplexSelector(const std::string& selector, DOMNod
     
     std::string trimmed = trimWhitespace(selector);
     
-    // Check for combinators
-    size_t space_pos = trimmed.rfind(' ');
-    size_t gt_pos = trimmed.rfind('>');
-    size_t plus_pos = trimmed.rfind('+');
-    size_t tilde_pos = trimmed.rfind('~');
-    
-    // Find the last combinator
+    // Find the last combinator in a way that ignores whitespace around explicit combinators.
+    // Example: `.a > .b` should split on `>` (not on the trailing space after `>`).
     size_t last_combinator = std::string::npos;
     std::string combinator;
-    
-    if (gt_pos != std::string::npos) {
-        last_combinator = gt_pos;
-        combinator = ">";
-    }
-    if (plus_pos != std::string::npos && (last_combinator == std::string::npos || plus_pos > last_combinator)) {
-        last_combinator = plus_pos;
-        combinator = "+";
-    }
-    if (tilde_pos != std::string::npos && (last_combinator == std::string::npos || tilde_pos > last_combinator)) {
-        last_combinator = tilde_pos;
-        combinator = "~";
-    }
-    if (space_pos != std::string::npos && (last_combinator == std::string::npos || space_pos > last_combinator)) {
-        if (space_pos > 0 && space_pos < trimmed.length() - 1) {
-            last_combinator = space_pos;
-            combinator = " ";
+
+    auto is_space = [](char c) {
+        return std::isspace(static_cast<unsigned char>(c)) != 0;
+    };
+
+    int paren_depth = 0;
+    int bracket_depth = 0;
+
+    size_t i = trimmed.size();
+    while (i > 0) {
+        char c = trimmed[i - 1];
+
+        // Skip anything inside (...) or [...].
+        if (c == ')') { ++paren_depth; --i; continue; }
+        if (c == '(') { if (paren_depth > 0) --paren_depth; --i; continue; }
+        if (c == ']') { ++bracket_depth; --i; continue; }
+        if (c == '[') { if (bracket_depth > 0) --bracket_depth; --i; continue; }
+        if (paren_depth > 0 || bracket_depth > 0) { --i; continue; }
+
+        // Explicit combinators
+        if (c == '>' || c == '+' || c == '~') {
+            last_combinator = i - 1;
+            combinator = std::string(1, c);
+            break;
         }
+
+        // Descendant combinator (whitespace), but ignore whitespace that is merely around an explicit combinator.
+        if (is_space(c)) {
+            const size_t run_end = i - 1;
+            size_t run_start = run_end;
+            while (run_start > 0 && is_space(trimmed[run_start - 1])) {
+                --run_start;
+            }
+
+            // Find nearest non-space neighbors around this whitespace run.
+            char prev = '\0';
+            if (run_start > 0) {
+                prev = trimmed[run_start - 1];
+            }
+
+            size_t next_pos = run_end + 1;
+            while (next_pos < trimmed.size() && is_space(trimmed[next_pos])) {
+                ++next_pos;
+            }
+            char next = '\0';
+            if (next_pos < trimmed.size()) {
+                next = trimmed[next_pos];
+            }
+
+            const bool adjacent_to_explicit =
+                (prev == '>' || prev == '+' || prev == '~' || next == '>' || next == '+' || next == '~');
+
+            if (!adjacent_to_explicit) {
+                last_combinator = run_start;
+                combinator = " ";
+                break;
+            }
+
+            // Skip over this whitespace run and continue scanning left.
+            i = run_start;
+            continue;
+        }
+
+        --i;
     }
-    
+
     if (last_combinator != std::string::npos) {
         std::string right_selector = trimWhitespace(trimmed.substr(last_combinator + 1));
         std::string left_selector = trimWhitespace(trimmed.substr(0, last_combinator));
-        
+
         if (!matchesSimpleSelector(right_selector, node)) {
             return false;
         }
-        
+
         auto parent = node->getParent();
         if (!parent) return false;
-        
+
         if (combinator == " ") {
             return matchesDescendant(left_selector, parent);
         } else if (combinator == ">") {

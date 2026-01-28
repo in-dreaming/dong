@@ -116,16 +116,63 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
         }},
 
         
-        // Border
+        // Border (shorthand)
         {"border", [](const std::string& val, ComputedStyle& style) { parseBorderShorthandHelper(val, style); }},
         {"border-width", [](const std::string& val, ComputedStyle& style) { style.border_width = parseFloatHelper(val); }},
         {"border-color", [](const std::string& val, ComputedStyle& style) { style.border_color = CSSParser::parseColor(val); }},
         {"border-style", [](const std::string& val, ComputedStyle& style) { style.border_style = val; }},
+
+        // Border (per-side shorthands)
+        {"border-top", [](const std::string& val, ComputedStyle& style) {
+            ComputedStyle tmp;
+            parseBorderShorthandHelper(val, tmp);
+            style.border_top_width = tmp.border_width;
+            style.border_top_color = tmp.border_color;
+            style.border_top_style = tmp.border_style;
+        }},
+        {"border-right", [](const std::string& val, ComputedStyle& style) {
+            ComputedStyle tmp;
+            parseBorderShorthandHelper(val, tmp);
+            style.border_right_width = tmp.border_width;
+            style.border_right_color = tmp.border_color;
+            style.border_right_style = tmp.border_style;
+        }},
+        {"border-bottom", [](const std::string& val, ComputedStyle& style) {
+            ComputedStyle tmp;
+            parseBorderShorthandHelper(val, tmp);
+            style.border_bottom_width = tmp.border_width;
+            style.border_bottom_color = tmp.border_color;
+            style.border_bottom_style = tmp.border_style;
+        }},
+        {"border-left", [](const std::string& val, ComputedStyle& style) {
+            ComputedStyle tmp;
+            parseBorderShorthandHelper(val, tmp);
+            style.border_left_width = tmp.border_width;
+            style.border_left_color = tmp.border_color;
+            style.border_left_style = tmp.border_style;
+        }},
+
+        // Border per-side components
+        {"border-top-width", [](const std::string& val, ComputedStyle& style) { style.border_top_width = parseFloatHelper(val); }},
+        {"border-right-width", [](const std::string& val, ComputedStyle& style) { style.border_right_width = parseFloatHelper(val); }},
+        {"border-bottom-width", [](const std::string& val, ComputedStyle& style) { style.border_bottom_width = parseFloatHelper(val); }},
+        {"border-left-width", [](const std::string& val, ComputedStyle& style) { style.border_left_width = parseFloatHelper(val); }},
+        {"border-top-color", [](const std::string& val, ComputedStyle& style) { style.border_top_color = CSSParser::parseColor(val); }},
+        {"border-right-color", [](const std::string& val, ComputedStyle& style) { style.border_right_color = CSSParser::parseColor(val); }},
+        {"border-bottom-color", [](const std::string& val, ComputedStyle& style) { style.border_bottom_color = CSSParser::parseColor(val); }},
+        {"border-left-color", [](const std::string& val, ComputedStyle& style) { style.border_left_color = CSSParser::parseColor(val); }},
+        {"border-top-style", [](const std::string& val, ComputedStyle& style) { style.border_top_style = val; }},
+        {"border-right-style", [](const std::string& val, ComputedStyle& style) { style.border_right_style = val; }},
+        {"border-bottom-style", [](const std::string& val, ComputedStyle& style) { style.border_bottom_style = val; }},
+        {"border-left-style", [](const std::string& val, ComputedStyle& style) { style.border_left_style = val; }},
+
+        // Border radius
         {"border-radius", [](const std::string& val, ComputedStyle& style) { parseBorderRadiusShorthandHelper(val, style); }},
         {"border-top-left-radius", [](const std::string& val, ComputedStyle& style) { style.border_top_left_radius = parseFloatHelper(val); }},
         {"border-top-right-radius", [](const std::string& val, ComputedStyle& style) { style.border_top_right_radius = parseFloatHelper(val); }},
         {"border-bottom-left-radius", [](const std::string& val, ComputedStyle& style) { style.border_bottom_left_radius = parseFloatHelper(val); }},
         {"border-bottom-right-radius", [](const std::string& val, ComputedStyle& style) { style.border_bottom_right_radius = parseFloatHelper(val); }},
+
         
         // Outline
         {"outline", [](const std::string& val, ComputedStyle& style) {
@@ -487,7 +534,22 @@ inline void parseBorderShorthandHelper(const std::string& value, ComputedStyle& 
             style.border_color = CSSParser::parseColor(part);
         }
     }
+
+    // Shorthand `border` sets all sides.
+    style.border_top_width = style.border_width;
+    style.border_right_width = style.border_width;
+    style.border_bottom_width = style.border_width;
+    style.border_left_width = style.border_width;
+    style.border_top_color = style.border_color;
+    style.border_right_color = style.border_color;
+    style.border_bottom_color = style.border_color;
+    style.border_left_color = style.border_color;
+    style.border_top_style = style.border_style;
+    style.border_right_style = style.border_style;
+    style.border_bottom_style = style.border_style;
+    style.border_left_style = style.border_style;
 }
+
 
 inline void parseBorderRadiusShorthandHelper(const std::string& value, ComputedStyle& style) {
     std::istringstream iss(value);
@@ -1519,9 +1581,14 @@ std::vector<CSSRule> CSSParser::parse(const std::string& css) {
         // Parse declarations
         auto decls = splitDeclarations(declarations);
         ComputedStyle style;
+        // Use empty/negative sentinels for "unspecified" so StyleEngine can cascade correctly.
         style.display = "";
         style.background_color = "";
         style.color = "";
+        style.border_style = "";
+        style.border_color = "";
+        style.border_width = -1.0f;
+
         
         for (const auto& decl : decls) {
             size_t colon = decl.find(':');

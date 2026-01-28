@@ -33,7 +33,11 @@ body {
 
 #fps-value {
     font-size: 24px;
-    color: #ffffff;
+    color: #ffff00;  /* 黄色，更醒目 */
+    font-weight: bold;
+    background: rgba(0, 0, 0, 0.5);  /* 半透明黑色背景 */
+    padding: 2px 6px;
+    border-radius: 3px;
 }
 
 /* 操作说明面板 */
@@ -118,7 +122,7 @@ body {
 
 <!-- FPS 显示 -->
 <div id="fps">
-    FPS: <span id="fps-value">--</span>
+    FPS: <span id="fps-value" style="color: #ffff00; font-weight: bold; background: rgba(0,0,0,0.7); padding: 2px 6px; border-radius: 3px;">0</span>
 </div>
 
 <!-- 操作说明面板 -->
@@ -186,8 +190,10 @@ var hudState = {
 
 // 更新 FPS 显示
 function updateFPS(fps) {
-    hudState.fps = fps;
-    document.getElementById('fps-value').textContent = Math.round(fps);
+    var elem = document.getElementById('fps-value');
+    if (elem) {
+        elem.textContent = Math.round(fps);
+    }
 }
 
 // 切换帮助面板

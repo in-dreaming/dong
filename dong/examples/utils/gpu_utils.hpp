@@ -64,6 +64,9 @@ struct VSOutput {
     float3 color : TEXCOORD2;
 };
 
+// NOTE: SDL_GPU convention (matches SDL3 demo code):
+// - vertex uniform buffers are bound in space1
+// - fragment uniform buffers are bound in space3
 cbuffer Uniforms : register(b0, space1) {
     float4x4 uMVP;
     float4x4 uModel;
@@ -212,6 +215,8 @@ float4 main(PSInput input) : SV_Target0 {
 // 2D HUD Uniform（仅颜色/透明度）
 struct UniformsHUD {
     float color[4];  // RGBA
+    float keyWhiteBg; // 1.0 = key near-white opaque pixels to transparent (HUD background workaround)
+    float _pad[3];    // keep 16-byte alignment
 };
 
 // 2D HUD 顶点着色器（直接使用屏幕坐标 0-1）
@@ -244,6 +249,8 @@ SamplerState texSampler : register(s0, space2);
 
 cbuffer Uniforms : register(b0, space3) {
     float4 uColor;
+    float  uKeyWhiteBg;
+    float3 _pad;
 };
 
 struct PSInput {
@@ -253,7 +260,44 @@ struct PSInput {
 
 float4 main(PSInput input) : SV_Target0 {
     float4 texColor = tex.Sample(texSampler, input.uv);
-    return texColor * uColor;
+
+    // Aggressive fix for "white screen" issue:
+    // The HTML renderer may output white (RGB=1,1,1) for transparent background areas.
+    // With alpha blending, this white background covers the entire 3D scene.
+    // We must detect and discard these white/bright pixels.
+    
+    const float rgbEnergy = dot(texColor.rgb, float3(0.3333, 0.3333, 0.3333));
+    
+    // Case 1: Low alpha + bright RGB = transparent background (most common case)
+    // This catches the case where HTML renderer outputs white with alpha=0 or low alpha
+    if (texColor.a < 0.1 && rgbEnergy > 0.7) {
+        texColor = float4(0.0, 0.0, 0.0, 0.0);
+    }
+    // Case 2: Near-white with high alpha but no saturation (gray/white background)
+    // This catches cases where alpha is incorrectly set to 1
+    else if (texColor.a > 0.9 && rgbEnergy > 0.95 && 
+             abs(texColor.r - texColor.g) < 0.05 && abs(texColor.g - texColor.b) < 0.05) {
+        texColor = float4(0.0, 0.0, 0.0, 0.0);
+    }
+    // Case 3: Only promote alpha for actual colored content (not grayscale background)
+    else if (texColor.a <= 0.001 && rgbEnergy > 0.01 && rgbEnergy <= 0.7) {
+        texColor.a = 1.0;
+    }
+
+    // Optional workaround: explicit white background keying via environment variable.
+    // Enable by setting DONG_HUD_KEY_WHITE_BG=1.
+    if (uKeyWhiteBg > 0.5 && texColor.a > 0.5 && all(texColor.rgb > float3(0.95, 0.95, 0.95))) {
+        texColor = float4(0.0, 0.0, 0.0, 0.0);
+    }
+
+    float4 outc = texColor * uColor;
+
+    // Final safety: clamp RGB to 0 for fully transparent pixels to avoid color bleeding
+    if (outc.a <= 0.001) {
+        outc.rgb = float3(0.0, 0.0, 0.0);
+    }
+
+    return outc;
 }
 )";
 

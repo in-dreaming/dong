@@ -64,9 +64,20 @@ struct Mat4 {
         
         result.m[0] = 1.0f / (aspect * tan_half_fov);
         result.m[5] = 1.0f / tan_half_fov;
-        result.m[10] = -(far + near) / (far - near);
+        // IMPORTANT: SDL_GPU uses HLSL-style clip space (D3D/Vulkan conventions):
+        // - z range is [0, 1] after perspective divide (not [-1, 1] like OpenGL).
+        // Using an OpenGL-style projection matrix here will clip everything in the 3D pass
+        // on D3D/Vulkan backends, leaving only the HUD visible.
+        //
+        // This is the right-handed (camera looks down -Z) 0..1 depth projection.
+        // Standard form (column-major, HLSL mul(M, v)):
+        //   m22 = far / (near - far)
+        //   m32 = (near * far) / (near - far)
+        //   z_ndc = z_eye * m22 + w_eye * m32, w_clip = -z_eye
+        // so near maps to 0 and far maps to 1.
+        result.m[10] = far / (near - far);
         result.m[11] = -1.0f;
-        result.m[14] = -(2.0f * far * near) / (far - near);
+        result.m[14] = (near * far) / (near - far);
         result.m[15] = 0.0f;
         
         return result;

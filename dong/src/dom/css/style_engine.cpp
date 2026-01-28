@@ -21,7 +21,7 @@ LayoutMode deriveLayoutModeFromDisplay(const ComputedStyle& style) {
     if (d == "flex" || d == "inline-flex") {
         return LayoutMode::Flex;
     }
-    if (d == "inline") {
+    if (d == "inline" || d == "inline-block") {
         return LayoutMode::Inline;
     }
     return LayoutMode::Block;
@@ -72,24 +72,62 @@ void Stylesheet::addFontFace(const FontFaceRule& font_face) {
 }
 
 StyleEngine::StyleEngine() {
-    // Minimal UA stylesheet so that form controls (e.g. <button>) look/behave closer to browsers.
+    // Minimal UA stylesheet so that common defaults match browsers closer.
+    // NOTE: This is not full UA behavior; it's a pragmatic baseline for common controls.
     // Author CSS will override these due to later source order.
     static const char* kUserAgentCSS = R"CSS(
+html, body {
+  background-color: #ffffff;
+}
+
+/* Controls default to inline-block in browsers; our ComputedStyle defaults to block. */
+button, input, select, textarea {
+  display: inline-block;
+  box-sizing: border-box;
+}
+
 button {
+  padding: 2px 6px;
+  background-color: #f3f3f3;
+
   border-width: 2px;
   border-style: outset;
-  border-color: #000000;
+  border-color: #767676;
+  border-radius: 2px;
   cursor: pointer;
 }
 button:active {
   border-style: inset;
 }
+
 input, select, textarea {
+  padding: 2px 4px;
+  background-color: #ffffff;
   border-width: 2px;
   border-style: inset;
-  border-color: #000000;
+  border-color: #767676;
+  border-radius: 2px;
+}
+
+/* Override author "input { width:100% }" for checkbox/radio-like controls. */
+input[type="checkbox"], input[type="radio"] {
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+  padding: 0;
+  margin-top: 0;
+  margin-right: 4px;
+  margin-bottom: 0;
+  margin-left: 0;
+  border-width: 1px;
+  border-style: solid;
+  border-color: #767676;
+  background-color: #ffffff;
+  border-radius: 2px;
+  box-sizing: border-box;
 }
 )CSS";
+
 
     addStylesheet(std::string(kUserAgentCSS));
 }
@@ -299,12 +337,39 @@ void StyleEngine::applyMatchingRules(DOMNodePtr node) {
             computed.border_bottom_left_radius = rs.border_bottom_left_radius;
         if (rs.border_bottom_right_radius != 0.0f) 
             computed.border_bottom_right_radius = rs.border_bottom_right_radius;
+
+        // `border-radius` 支持 2/3/4 值时，解析结果会落到四个 corner 字段，
+        // 但现阶段渲染管线只支持统一半径（单一 float）。这里做一个保守兜底：
+        // 只要任意 corner 有值，就用最大值作为统一半径，至少恢复“圆角矩形”的外观。
+        if (computed.border_radius == 0.0f) {
+            const float max_corner = std::max(
+                std::max(computed.border_top_left_radius, computed.border_top_right_radius),
+                std::max(computed.border_bottom_left_radius, computed.border_bottom_right_radius)
+            );
+            if (max_corner > 0.0f) {
+                computed.border_radius = max_corner;
+            }
+        }
         
-        if (rs.border_width != 0.0f) computed.border_width = rs.border_width;
-        if (!rs.border_color.empty() && rs.border_color != "#000000") 
-            computed.border_color = rs.border_color;
-        if (!rs.border_style.empty() && rs.border_style != "none") 
-            computed.border_style = rs.border_style;
+        // Border shorthand + per-side overrides
+
+        if (rs.border_width >= 0.0f) computed.border_width = rs.border_width;
+        if (!rs.border_color.empty()) computed.border_color = rs.border_color;
+        if (!rs.border_style.empty()) computed.border_style = rs.border_style;
+
+        if (rs.border_top_width >= 0.0f) computed.border_top_width = rs.border_top_width;
+        if (rs.border_right_width >= 0.0f) computed.border_right_width = rs.border_right_width;
+        if (rs.border_bottom_width >= 0.0f) computed.border_bottom_width = rs.border_bottom_width;
+        if (rs.border_left_width >= 0.0f) computed.border_left_width = rs.border_left_width;
+        if (!rs.border_top_color.empty()) computed.border_top_color = rs.border_top_color;
+        if (!rs.border_right_color.empty()) computed.border_right_color = rs.border_right_color;
+        if (!rs.border_bottom_color.empty()) computed.border_bottom_color = rs.border_bottom_color;
+        if (!rs.border_left_color.empty()) computed.border_left_color = rs.border_left_color;
+        if (!rs.border_top_style.empty()) computed.border_top_style = rs.border_top_style;
+        if (!rs.border_right_style.empty()) computed.border_right_style = rs.border_right_style;
+        if (!rs.border_bottom_style.empty()) computed.border_bottom_style = rs.border_bottom_style;
+        if (!rs.border_left_style.empty()) computed.border_left_style = rs.border_left_style;
+
         
         if (!rs.overflow.empty() && rs.overflow != "visible") {
             computed.overflow = rs.overflow;
@@ -1146,12 +1211,39 @@ void StyleEngine::applyMatchingRulesIndexed(DOMNodePtr node) {
             computed.border_bottom_left_radius = rs.border_bottom_left_radius;
         if (rs.border_bottom_right_radius != 0.0f) 
             computed.border_bottom_right_radius = rs.border_bottom_right_radius;
+
+        // `border-radius` 支持 2/3/4 值时，解析结果会落到四个 corner 字段，
+        // 但现阶段渲染管线只支持统一半径（单一 float）。这里做一个保守兜底：
+        // 只要任意 corner 有值，就用最大值作为统一半径，至少恢复“圆角矩形”的外观。
+        if (computed.border_radius == 0.0f) {
+            const float max_corner = std::max(
+                std::max(computed.border_top_left_radius, computed.border_top_right_radius),
+                std::max(computed.border_bottom_left_radius, computed.border_bottom_right_radius)
+            );
+            if (max_corner > 0.0f) {
+                computed.border_radius = max_corner;
+            }
+        }
         
-        if (rs.border_width != 0.0f) computed.border_width = rs.border_width;
-        if (!rs.border_color.empty() && rs.border_color != "#000000") 
-            computed.border_color = rs.border_color;
-        if (!rs.border_style.empty() && rs.border_style != "none") 
-            computed.border_style = rs.border_style;
+        // Border shorthand + per-side overrides
+
+        if (rs.border_width >= 0.0f) computed.border_width = rs.border_width;
+        if (!rs.border_color.empty()) computed.border_color = rs.border_color;
+        if (!rs.border_style.empty()) computed.border_style = rs.border_style;
+
+        if (rs.border_top_width >= 0.0f) computed.border_top_width = rs.border_top_width;
+        if (rs.border_right_width >= 0.0f) computed.border_right_width = rs.border_right_width;
+        if (rs.border_bottom_width >= 0.0f) computed.border_bottom_width = rs.border_bottom_width;
+        if (rs.border_left_width >= 0.0f) computed.border_left_width = rs.border_left_width;
+        if (!rs.border_top_color.empty()) computed.border_top_color = rs.border_top_color;
+        if (!rs.border_right_color.empty()) computed.border_right_color = rs.border_right_color;
+        if (!rs.border_bottom_color.empty()) computed.border_bottom_color = rs.border_bottom_color;
+        if (!rs.border_left_color.empty()) computed.border_left_color = rs.border_left_color;
+        if (!rs.border_top_style.empty()) computed.border_top_style = rs.border_top_style;
+        if (!rs.border_right_style.empty()) computed.border_right_style = rs.border_right_style;
+        if (!rs.border_bottom_style.empty()) computed.border_bottom_style = rs.border_bottom_style;
+        if (!rs.border_left_style.empty()) computed.border_left_style = rs.border_left_style;
+
         
         if (!rs.overflow.empty() && rs.overflow != "visible") {
             computed.overflow = rs.overflow;

@@ -1,0 +1,8 @@
+/.zig-cache/
+/build-cmake/
+.tools/
+/zig-out/
+/tmp/
+/third_party/
+.mypy_cache/
+.tools/

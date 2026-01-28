@@ -1,17 +1,19 @@
 import argparse
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
 
 
-def run(cmd, cwd=None):
-    p = subprocess.run(cmd, cwd=cwd, shell=False, capture_output=True, text=True)
+def run(cmd, cwd=None, env=None):
+    p = subprocess.run(cmd, cwd=cwd, env=env, shell=False, capture_output=True, text=True)
     if p.returncode != 0:
         sys.stderr.write(p.stdout)
         sys.stderr.write(p.stderr)
         raise RuntimeError(f"Command failed ({p.returncode}): {' '.join(cmd)}")
     return p.stdout
+
 
 
 def main() -> int:
@@ -62,8 +64,22 @@ def main() -> int:
         case_dir = out_dir / stem
         case_dir.mkdir(parents=True, exist_ok=True)
 
+        # Clean old outputs in case_dir to avoid stale frames (e.g. different zero-pad width) polluting the glob.
+        for p in case_dir.glob(f"{stem}_f*.bmp"):
+            try:
+                p.unlink()
+            except OSError:
+                pass
+        for p in [case_dir / f"{stem}_nondet.json", case_dir / f"{stem}_nondet.png"]:
+            try:
+                if p.exists():
+                    p.unlink()
+            except OSError:
+                pass
+
         # Place frames under case_dir
         out_base = str(case_dir / f"{stem}.bmp")
+
 
         cmd = [
             str(exe),
@@ -78,8 +94,15 @@ def main() -> int:
         if not args.update:
             cmd.append("--no-update")
 
+
+        env = os.environ.copy()
+        if not args.update:
+            # Freeze offscreen media ticking so determinism checks focus on render pipeline, not time-based video.
+            env["DONG_OFFSCREEN_TICK_MEDIA"] = "0"
+
         print(f"[RUN] {stem} frames={args.frames} update={args.update}")
-        run(cmd, cwd=str(bin_dir))
+        run(cmd, cwd=str(bin_dir), env=env)
+
 
         base = case_dir / f"{stem}_f{str(0).zfill(len(str(args.frames - 1)))}.bmp"
         glob_pat = str(case_dir / f"{stem}_f*.bmp")

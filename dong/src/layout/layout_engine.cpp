@@ -1550,16 +1550,21 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
     }
 
     // Set align items
-    if (style.align_items == "flex-end") {
+    // CSS initial value is `stretch`.
+    // Use `stretch` as fallback for empty/unknown values so block layout (column) also fills width.
+    if (style.align_items == "flex-start" || style.align_items == "start") {
+        YGNodeStyleSetAlignItems(yoga_node, YGAlignFlexStart);
+    } else if (style.align_items == "flex-end" || style.align_items == "end") {
         YGNodeStyleSetAlignItems(yoga_node, YGAlignFlexEnd);
     } else if (style.align_items == "center") {
         YGNodeStyleSetAlignItems(yoga_node, YGAlignCenter);
-    } else if (style.align_items == "stretch") {
-        YGNodeStyleSetAlignItems(yoga_node, YGAlignStretch);
+    } else if (style.align_items == "baseline") {
+        YGNodeStyleSetAlignItems(yoga_node, YGAlignBaseline);
     } else {
-        // Default to flex-start, not stretch
-        YGNodeStyleSetAlignItems(yoga_node, YGAlignFlexStart);
+        // stretch / normal / empty / unknown
+        YGNodeStyleSetAlignItems(yoga_node, YGAlignStretch);
     }
+
 
     // Set gap for flex containers
     if (style.gap > 0.0f) {
@@ -1611,14 +1616,28 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
     float border_h = 0.0f; // horizontal border (left + right)
     float border_v = 0.0f; // vertical border (top + bottom)
     
+    auto effective_border_width = [&](float side_width, const std::string& side_style) -> float {
+        float w = (side_width >= 0.0f) ? side_width : style.border_width;
+        if (w < 0.0f) w = 0.0f;
+        const std::string& st = !side_style.empty() ? side_style : style.border_style;
+        if (st == "none" || st == "hidden") return 0.0f;
+        return w;
+    };
+
     if (style.box_sizing == "content-box") {
         if (style.padding_left.isPixel()) pad_h += style.padding_left.value;
         if (style.padding_right.isPixel()) pad_h += style.padding_right.value;
         if (style.padding_top.isPixel()) pad_v += style.padding_top.value;
         if (style.padding_bottom.isPixel()) pad_v += style.padding_bottom.value;
-        border_h = style.border_width * 2.0f;
-        border_v = style.border_width * 2.0f;
+
+        const float bl = effective_border_width(style.border_left_width, style.border_left_style);
+        const float br = effective_border_width(style.border_right_width, style.border_right_style);
+        const float bt = effective_border_width(style.border_top_width, style.border_top_style);
+        const float bb = effective_border_width(style.border_bottom_width, style.border_bottom_style);
+        border_h = bl + br;
+        border_v = bt + bb;
     }
+
 
     auto is_viewport_unit = [](dom::CSSValue::Unit u) {
         using Unit = dom::CSSValue::Unit;
@@ -1842,12 +1861,18 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
     }
 
     // Map border width into Yoga so that border participates in box model sizing
-    if (style.border_width > 0.0f) {
-        YGNodeStyleSetBorder(yoga_node, YGEdgeLeft, style.border_width);
-        YGNodeStyleSetBorder(yoga_node, YGEdgeTop, style.border_width);
-        YGNodeStyleSetBorder(yoga_node, YGEdgeRight, style.border_width);
-        YGNodeStyleSetBorder(yoga_node, YGEdgeBottom, style.border_width);
+    {
+        const float bl = effective_border_width(style.border_left_width, style.border_left_style);
+        const float br = effective_border_width(style.border_right_width, style.border_right_style);
+        const float bt = effective_border_width(style.border_top_width, style.border_top_style);
+        const float bb = effective_border_width(style.border_bottom_width, style.border_bottom_style);
+
+        if (bl > 0.0f) YGNodeStyleSetBorder(yoga_node, YGEdgeLeft, bl);
+        if (bt > 0.0f) YGNodeStyleSetBorder(yoga_node, YGEdgeTop, bt);
+        if (br > 0.0f) YGNodeStyleSetBorder(yoga_node, YGEdgeRight, br);
+        if (bb > 0.0f) YGNodeStyleSetBorder(yoga_node, YGEdgeBottom, bb);
     }
+
 
     // Set min/max width and height
     // Note: min/max constraints also need box-sizing adjustment for content-box

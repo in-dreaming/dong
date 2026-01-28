@@ -26,7 +26,27 @@ void Painter::paintTextAndInput(const dom::DOMNodePtr& node,
         return;
     }
 
+    auto normalizeBorderStyle = [&](const std::string& s) -> std::string {
+        return painter_detail::toLowerCopy(collapseWhitespace(s));
+    };
+    auto effectiveBorderStyle = [&](const std::string& side_style) -> std::string {
+        return normalizeBorderStyle(!side_style.empty() ? side_style : style.border_style);
+    };
+    auto effectiveBorderWidth = [&](float side_width, const std::string& side_style) -> float {
+        float w = (side_width >= 0.0f) ? side_width : style.border_width;
+        if (w < 0.0f) w = 0.0f;
+        const std::string st = effectiveBorderStyle(side_style);
+        if (st == "none" || st == "hidden") return 0.0f;
+        return w;
+    };
+
+    const float bt = effectiveBorderWidth(style.border_top_width, style.border_top_style);
+    const float br = effectiveBorderWidth(style.border_right_width, style.border_right_style);
+    const float bb = effectiveBorderWidth(style.border_bottom_width, style.border_bottom_style);
+    const float bl = effectiveBorderWidth(style.border_left_width, style.border_left_style);
+
     // 3. 文本内容
+
     if (tag != "script" && tag != "style" && tag != "head" && tag != "img" && tag != "video") {
         std::string debug_class = node->getAttribute("class");
         if (debug_class.find("overlay-row") != std::string::npos) {
@@ -108,7 +128,13 @@ void Painter::paintTextAndInput(const dom::DOMNodePtr& node,
             float pad_right = style.padding_right.isPixel() ? style.padding_right.value : 0.0f;
             float pad_top = style.padding_top.isPixel() ? style.padding_top.value : 0.0f;
 
+            // Text painting coordinates should start at the padding box (border excluded).
+            x += bl;
+            y += bt;
+            width = std::max(0.0f, width - bl - br);
+
             float container_font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
+
             Color container_text_color = makeColorFromCss(style.color);
 
             float inner_width = width - pad_left - pad_right;
@@ -379,7 +405,14 @@ void Painter::paintTextAndInput(const dom::DOMNodePtr& node,
                 float pad_top = style.padding_top.isPixel() ? style.padding_top.value : 0.0f;
                 float pad_bottom = style.padding_bottom.isPixel() ? style.padding_bottom.value : 0.0f;
 
+                // Text painting coordinates should start at the padding box (border excluded).
+                x += bl;
+                y += bt;
+                width = std::max(0.0f, width - bl - br);
+                height = std::max(0.0f, height - bt - bb);
+
                 const bool debug_button = (std::getenv("DONG_DEBUG_BUTTON") != nullptr);
+
 
                 float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
                 if (debug_button && tag == "button") {
@@ -1174,7 +1207,14 @@ void Painter::paintTextAndInput(const dom::DOMNodePtr& node,
         float width = layout_node->layout.dimensions[0];
         float height = layout_node->layout.dimensions[1];
 
+        // Text painting coordinates should start at the padding box (border excluded).
+        x += bl;
+        y += bt;
+        width = std::max(0.0f, width - bl - br);
+        height = std::max(0.0f, height - bt - bb);
+
         float pad_left = style.padding_left.isPixel() ? style.padding_left.value : 0.0f;
+
 
         float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
 

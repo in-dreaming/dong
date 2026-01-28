@@ -82,10 +82,11 @@ bool GPUDriverSDL::initialize() {
     color_desc.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
     color_desc.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
     color_desc.blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
+    // IMPORTANT: alpha channel must blend with SRC_ALPHA, otherwise offscreen targets
+    // will quickly become fully opaque (alpha forced towards 1) and break transparent HTML.
     color_desc.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
     color_desc.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
     color_desc.blend_state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
-
     pci.target_info.num_color_targets = 1;
     pci.target_info.color_target_descriptions = &color_desc;
     pci.target_info.has_depth_stencil_target = false;

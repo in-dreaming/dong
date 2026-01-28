@@ -266,7 +266,8 @@ void GPUDriverSDL::endFrame() {
         return;
     }
 
-    // If we used upload transfer buffers this frame (e.g. for video), keep them alive until the GPU is done.
+    // If we used upload transfer buffers this frame (e.g. for video or atlas uploads), keep them alive
+    // until the GPU is done. Otherwise backends may read from freed transfer buffers (low-frequency flicker).
     SDL_GPUDevice* dev = gpu_device_->getHandle();
     if (dev && !frame_upload_buffers_.empty()) {
         SDL_GPUFence* fence = nullptr;
@@ -281,11 +282,13 @@ void GPUDriverSDL::endFrame() {
             pending_upload_buffers_.push_back(std::move(pending));
             frame_upload_buffers_.clear();
         } else {
-            // Fallback: no fence available. Revert to old behavior (release buffers immediately).
+            // Fallback: fence not available. Submit and wait for GPU idle, then safely recycle buffers.
+            SDL_Log("GPUDriverSDL::endFrame: SDL_SubmitGPUCommandBufferAndAcquireFence failed: %s", SDL_GetError());
             gpu_device_->submitCommandBuffer(current_cmd_buf_);
+            gpu_device_->waitForGPU();
             for (auto& b : frame_upload_buffers_) {
                 if (b.buf) {
-                    SDL_ReleaseGPUTransferBuffer(dev, b.buf);
+                    free_upload_buffers_.push_back(b);
                 }
             }
             frame_upload_buffers_.clear();

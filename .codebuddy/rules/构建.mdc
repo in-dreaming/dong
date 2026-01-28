@@ -1,9 +1,5 @@
 ---
-description: 
+# Please note: Do not modify the header of this document. If modified, CodeBuddy (Internal Edition) will apply the default logic settings.
 alwaysApply: true
-enabled: true
-updatedAt: 2026-01-15T11:12:18.926Z
-provider: 
 ---
-
 我一般使用zig build进行构建

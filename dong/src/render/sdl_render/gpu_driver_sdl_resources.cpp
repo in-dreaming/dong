@@ -223,39 +223,36 @@ bool GPUDriverSDL::ensureImageInAtlas(const std::string& src, ImageAtlasEntry& o
 
     SDL_GPUDevice* dev = gpu_device_->getHandle();
 
-    // 创建上传缓冲
+    // Upload via reusable transfer buffer. IMPORTANT: the buffer must stay alive until the GPU finishes
+    // executing this command buffer, otherwise some backends may sample garbage (nondeterministic frames).
     uint32_t stride = img_w * 4;
     uint32_t buffer_size = stride * img_h;
 
-    SDL_GPUTransferBufferCreateInfo transfer_info{};
-    transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-    transfer_info.size = buffer_size;
-
-    SDL_GPUTransferBuffer* transfer_buf = SDL_CreateGPUTransferBuffer(dev, &transfer_info);
-    if (!transfer_buf) {
-        SDL_Log("GPUDriverSDL::ensureImageInAtlas: failed to create transfer buffer: %s", SDL_GetError());
+    UploadBuffer upload = acquireUploadBuffer(dev, buffer_size);
+    if (!upload.buf) {
+        SDL_Log("GPUDriverSDL::ensureImageInAtlas: failed to acquire transfer buffer: %s", SDL_GetError());
         return false;
     }
 
-    void* mapped = SDL_MapGPUTransferBuffer(dev, transfer_buf, false);
+    void* mapped = SDL_MapGPUTransferBuffer(dev, upload.buf, false);
     if (!mapped) {
         SDL_Log("GPUDriverSDL::ensureImageInAtlas: failed to map transfer buffer: %s", SDL_GetError());
-        SDL_ReleaseGPUTransferBuffer(dev, transfer_buf);
+        free_upload_buffers_.push_back(upload);
         return false;
     }
 
     std::memcpy(mapped, pixels.data(), buffer_size);
-    SDL_UnmapGPUTransferBuffer(dev, transfer_buf);
+    SDL_UnmapGPUTransferBuffer(dev, upload.buf);
 
     SDL_GPUCopyPass* copy_pass = SDL_BeginGPUCopyPass(current_cmd_buf_);
     if (!copy_pass) {
         SDL_Log("GPUDriverSDL::ensureImageInAtlas: failed to begin copy pass: %s", SDL_GetError());
-        SDL_ReleaseGPUTransferBuffer(dev, transfer_buf);
+        free_upload_buffers_.push_back(upload);
         return false;
     }
 
     SDL_GPUTextureTransferInfo tex_transfer{};
-    tex_transfer.transfer_buffer = transfer_buf;
+    tex_transfer.transfer_buffer = upload.buf;
     tex_transfer.offset = 0;
     tex_transfer.pixels_per_row = img_w;
     tex_transfer.rows_per_layer = img_h;
@@ -274,7 +271,9 @@ bool GPUDriverSDL::ensureImageInAtlas(const std::string& src, ImageAtlasEntry& o
     SDL_UploadToGPUTexture(copy_pass, &tex_transfer, &region, false);
     SDL_EndGPUCopyPass(copy_pass);
 
-    SDL_ReleaseGPUTransferBuffer(dev, transfer_buf);
+    // Keep this buffer alive until endFrame() fences the command buffer.
+    frame_upload_buffers_.push_back(upload);
+
 
     ImageAtlasEntry entry{};
     entry.width = img_w;

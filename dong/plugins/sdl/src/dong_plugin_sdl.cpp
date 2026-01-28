@@ -66,14 +66,21 @@ static dong_window_t* sdl_window_create(void* /*user*/, const dong_window_desc_t
         return nullptr;
     }
 
+    // NOTE: SDL 只有在启用 TextInput 后才会产生 SDL_EVENT_TEXT_INPUT（IME/字符输入）。
+    // dong 目前没有把“DOM 焦点变化”回传到插件层，因此先默认全程开启，确保 <input> 可输入。
+    SDL_StartTextInput(window);
+
     return reinterpret_cast<dong_window_t*>(window);
 }
 
 static void sdl_window_destroy(void* /*user*/, dong_window_t* window) {
     if (window) {
-        SDL_DestroyWindow(reinterpret_cast<SDL_Window*>(window));
+        SDL_Window* w = reinterpret_cast<SDL_Window*>(window);
+        SDL_StopTextInput(w);
+        SDL_DestroyWindow(w);
     }
 }
+
 
 static void sdl_window_get_size(void* /*user*/, dong_window_t* window, uint32_t* out_w, uint32_t* out_h) {
     if (!window) {

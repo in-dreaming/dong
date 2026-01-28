@@ -1,7 +1,9 @@
 ---
-# Please note: Do not modify the header of this document. If modified, CodeBuddy (Internal Edition) will apply the default logic settings.
-alwaysApply: true
+description: 
+globs:
+alwaysApply: false
 ---
+
 ## 多帧渲染不一致/闪烁排查工具链
 
 这套工具用于把“低频闪烁 / 大多数帧错误、偶尔帧正确”的现象**稳定采样为多帧图片**，并用“浏览器基线渲染”作为对照，最后把所有帧合成一张大图交给多模态模型分析每帧差异。

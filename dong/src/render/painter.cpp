@@ -497,7 +497,6 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         }
 
         // 1.1 background box helpers (clip/origin/attachment)
-        const float bw = style.border_width;
         const float radius = style.border_radius;
         const float viewport_w = surface_ ? static_cast<float>(surface_->getWidth()) : 800.0f;
         const float viewport_h = surface_ ? static_cast<float>(surface_->getHeight()) : 600.0f;
@@ -513,6 +512,32 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
             return v.resolvePixels(parent_size, 16.0f, viewport_w, viewport_h);
         };
 
+        // Border helpers: support per-side overrides, matching layout_engine.cpp semantics.
+        auto normalizeBorderStyle = [&](std::string s) -> std::string {
+            return toLowerCopy(collapseWhitespace(s));
+        };
+        auto effectiveBorderStyle = [&](const std::string& side_style) -> std::string {
+            const std::string& st = !side_style.empty() ? side_style : style.border_style;
+            return normalizeBorderStyle(st);
+        };
+        auto effectiveBorderWidth = [&](float side_width, const std::string& side_style) -> float {
+            float w = (side_width >= 0.0f) ? side_width : style.border_width;
+            if (w < 0.0f) w = 0.0f;
+            const std::string st = effectiveBorderStyle(side_style);
+            if (st == "none" || st == "hidden") return 0.0f;
+            return w;
+        };
+        auto effectiveBorderColor = [&](const std::string& side_color) -> std::string {
+            if (!side_color.empty()) return side_color;
+            return style.border_color;
+        };
+
+        const float bt = effectiveBorderWidth(style.border_top_width, style.border_top_style);
+        const float br = effectiveBorderWidth(style.border_right_width, style.border_right_style);
+        const float bb = effectiveBorderWidth(style.border_bottom_width, style.border_bottom_style);
+        const float bl = effectiveBorderWidth(style.border_left_width, style.border_left_style);
+        const float bmax = std::max(std::max(bt, bb), std::max(bl, br));
+
         const float pad_l = resolvePx(style.padding_left, rect.width);
         const float pad_r = resolvePx(style.padding_right, rect.width);
         const float pad_t = resolvePx(style.padding_top, rect.height);
@@ -522,10 +547,10 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
 
         Rect bg_border_box = rect;
         Rect bg_padding_box = rect;
-        bg_padding_box.x += bw;
-        bg_padding_box.y += bw;
-        bg_padding_box.width = std::max(0.0f, bg_padding_box.width - 2.0f * bw);
-        bg_padding_box.height = std::max(0.0f, bg_padding_box.height - 2.0f * bw);
+        bg_padding_box.x += bl;
+        bg_padding_box.y += bt;
+        bg_padding_box.width = std::max(0.0f, bg_padding_box.width - (bl + br));
+        bg_padding_box.height = std::max(0.0f, bg_padding_box.height - (bt + bb));
 
         Rect bg_content_box = bg_padding_box;
         bg_content_box.x += pad_l;
@@ -583,8 +608,8 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         }
 
         // 1.2 边框和背景填充
-        bool has_border = bw > 0.0f && style.border_style != "none";
-        bool has_background = !style.background_color.empty() && style.background_color != "transparent";
+        const bool has_border = (bt > 0.0f || br > 0.0f || bb > 0.0f || bl > 0.0f);
+        const bool has_background = !style.background_color.empty() && style.background_color != "transparent";
 
         
         // DEBUG: 打印背景信息
@@ -626,9 +651,9 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                     Rect inner_rect = bg_clip_rect;
                     float inset_for_radius = 0.0f;
                     if (bg_clip_kw == "padding-box") {
-                        inset_for_radius = bw;
+                        inset_for_radius = bmax;
                     } else if (bg_clip_kw == "content-box") {
-                        inset_for_radius = bw + min_pad;
+                        inset_for_radius = bmax + min_pad;
                     }
                     float inner_radius = std::max(0.0f, radius - inset_for_radius);
 
@@ -638,24 +663,46 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                 }
 
                 if (has_border) {
-                    auto toLowerCopy = [](std::string s) {
-                        std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
-                            return static_cast<char>(std::tolower(c));
-                        });
-                        return s;
-                    };
+                    const std::string st_t = effectiveBorderStyle(style.border_top_style);
+                    const std::string st_r = effectiveBorderStyle(style.border_right_style);
+                    const std::string st_b = effectiveBorderStyle(style.border_bottom_style);
+                    const std::string st_l = effectiveBorderStyle(style.border_left_style);
 
-                    const std::string bstyle = toLowerCopy(collapseWhitespace(style.border_style));
-                    const bool bevel = (bstyle == "outset" || bstyle == "inset");
+                    const bool bevel = (st_t == "outset" || st_t == "inset" ||
+                                       st_r == "outset" || st_r == "inset" ||
+                                       st_b == "outset" || st_b == "inset" ||
+                                       st_l == "outset" || st_l == "inset");
 
                     if (!bevel) {
-                        // Rounded border ring: draw analytically as a stroked rounded-rect.
-                        // This avoids the "square inner corner" artifact from "clip + 4 rects".
-                        Color border_color = makeColorFromCss(style.border_color);
-                        builder.addRoundedRect(rect, border_color, radius, bw);
+                        auto nearlyEqual = [](float a, float b) {
+                            return std::fabs(a - b) < 0.01f;
+                        };
+
+                        const std::string c_t = effectiveBorderColor(style.border_top_color);
+                        const std::string c_r = effectiveBorderColor(style.border_right_color);
+                        const std::string c_b = effectiveBorderColor(style.border_bottom_color);
+                        const std::string c_l = effectiveBorderColor(style.border_left_color);
+
+                        const bool uniform_width = nearlyEqual(bt, br) && nearlyEqual(bt, bb) && nearlyEqual(bt, bl);
+                        const bool uniform_color = (c_t == c_r && c_t == c_b && c_t == c_l);
+                        const bool uniform_style = (st_t == st_r && st_t == st_b && st_t == st_l);
+
+                        if (uniform_width && uniform_color && uniform_style) {
+                            // Fast path: uniform rounded border ring.
+                            Color border_color = makeColorFromCss(c_t);
+                            builder.addRoundedRect(rect, border_color, radius, bt);
+                        } else {
+                            // Fallback: clip + 4 rects (supports per-side overrides).
+                            DisplayListBuilder::ScopedClip border_clip = builder.pushRoundedClip(rect, radius);
+
+                            const float inner_h = std::max(0.0f, rect.height - bt - bb);
+
+                            if (bt > 0.0f) builder.addRect(Rect{rect.x, rect.y, rect.width, bt}, makeColorFromCss(c_t));
+                            if (bb > 0.0f) builder.addRect(Rect{rect.x, rect.y + rect.height - bb, rect.width, bb}, makeColorFromCss(c_b));
+                            if (bl > 0.0f) builder.addRect(Rect{rect.x, rect.y + bt, bl, inner_h}, makeColorFromCss(c_l));
+                            if (br > 0.0f) builder.addRect(Rect{rect.x + rect.width - br, rect.y + bt, br, inner_h}, makeColorFromCss(c_r));
+                        }
                     } else {
-
-
                         auto clamp01 = [](float v) {
                             return std::clamp(v, 0.0f, 1.0f);
                         };
@@ -672,6 +719,8 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                             return c;
                         };
 
+                        // Use shorthand direction as a stable reference.
+                        const std::string bstyle = normalizeBorderStyle(style.border_style);
                         const bool is_outset = (bstyle == "outset");
 
                         // Prefer using the element background as the base for bevel shading;
@@ -683,14 +732,12 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                         Color c_br = is_outset ? darken(base, 0.25f) : lighten(base, 0.25f);
 
                         DisplayListBuilder::ScopedClip border_clip = builder.pushRoundedClip(rect, radius);
-                        Rect top_border{rect.x, rect.y, rect.width, bw};
-                        Rect bottom_border{rect.x, rect.y + rect.height - bw, rect.width, bw};
-                        Rect left_border{rect.x, rect.y + bw, bw, rect.height - 2 * bw};
-                        Rect right_border{rect.x + rect.width - bw, rect.y + bw, bw, rect.height - 2 * bw};
-                        builder.addRect(top_border, c_tl);
-                        builder.addRect(left_border, c_tl);
-                        builder.addRect(bottom_border, c_br);
-                        builder.addRect(right_border, c_br);
+                        const float inner_h = std::max(0.0f, rect.height - bt - bb);
+
+                        if (bt > 0.0f) builder.addRect(Rect{rect.x, rect.y, rect.width, bt}, c_tl);
+                        if (bl > 0.0f) builder.addRect(Rect{rect.x, rect.y + bt, bl, inner_h}, c_tl);
+                        if (bb > 0.0f) builder.addRect(Rect{rect.x, rect.y + rect.height - bb, rect.width, bb}, c_br);
+                        if (br > 0.0f) builder.addRect(Rect{rect.x + rect.width - br, rect.y + bt, br, inner_h}, c_br);
                     }
                 }
 
@@ -703,27 +750,33 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                 }
 
                 if (has_border) {
-                    auto toLowerCopy = [](std::string s) {
-                        std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
-                            return static_cast<char>(std::tolower(c));
-                        });
-                        return s;
-                    };
+                    const std::string st_t = effectiveBorderStyle(style.border_top_style);
+                    const std::string st_r = effectiveBorderStyle(style.border_right_style);
+                    const std::string st_b = effectiveBorderStyle(style.border_bottom_style);
+                    const std::string st_l = effectiveBorderStyle(style.border_left_style);
 
-                    const std::string bstyle = toLowerCopy(collapseWhitespace(style.border_style));
-                    const bool bevel = (bstyle == "outset" || bstyle == "inset");
+                    const bool bevel = (st_t == "outset" || st_t == "inset" ||
+                                       st_r == "outset" || st_r == "inset" ||
+                                       st_b == "outset" || st_b == "inset" ||
+                                       st_l == "outset" || st_l == "inset");
 
-                    Rect top_border{rect.x, rect.y, rect.width, bw};
-                    Rect bottom_border{rect.x, rect.y + rect.height - bw, rect.width, bw};
-                    Rect left_border{rect.x, rect.y + bw, bw, rect.height - 2 * bw};
-                    Rect right_border{rect.x + rect.width - bw, rect.y + bw, bw, rect.height - 2 * bw};
+                    const float inner_h = std::max(0.0f, rect.height - bt - bb);
+
+                    Rect top_border{rect.x, rect.y, rect.width, bt};
+                    Rect bottom_border{rect.x, rect.y + rect.height - bb, rect.width, bb};
+                    Rect left_border{rect.x, rect.y + bt, bl, inner_h};
+                    Rect right_border{rect.x + rect.width - br, rect.y + bt, br, inner_h};
 
                     if (!bevel) {
-                        Color border_color = makeColorFromCss(style.border_color);
-                        builder.addRect(top_border, border_color);
-                        builder.addRect(bottom_border, border_color);
-                        builder.addRect(left_border, border_color);
-                        builder.addRect(right_border, border_color);
+                        const Color c_top = makeColorFromCss(effectiveBorderColor(style.border_top_color));
+                        const Color c_right = makeColorFromCss(effectiveBorderColor(style.border_right_color));
+                        const Color c_bottom = makeColorFromCss(effectiveBorderColor(style.border_bottom_color));
+                        const Color c_left = makeColorFromCss(effectiveBorderColor(style.border_left_color));
+
+                        if (bt > 0.0f) builder.addRect(top_border, c_top);
+                        if (bb > 0.0f) builder.addRect(bottom_border, c_bottom);
+                        if (bl > 0.0f) builder.addRect(left_border, c_left);
+                        if (br > 0.0f) builder.addRect(right_border, c_right);
                     } else {
                         auto clamp01 = [](float v) {
                             return std::clamp(v, 0.0f, 1.0f);
@@ -741,24 +794,56 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                             return c;
                         };
 
+                        const std::string bstyle = normalizeBorderStyle(style.border_style);
                         const bool is_outset = (bstyle == "outset");
                         Color base = has_background ? makeColorFromCss(style.background_color)
                                                     : makeColorFromCss(style.border_color);
                         Color c_tl = is_outset ? lighten(base, 0.25f) : darken(base, 0.25f);
                         Color c_br = is_outset ? darken(base, 0.25f) : lighten(base, 0.25f);
 
-                        builder.addRect(top_border, c_tl);
-                        builder.addRect(left_border, c_tl);
-                        builder.addRect(bottom_border, c_br);
-                        builder.addRect(right_border, c_br);
+                        if (bt > 0.0f) builder.addRect(top_border, c_tl);
+                        if (bl > 0.0f) builder.addRect(left_border, c_tl);
+                        if (bb > 0.0f) builder.addRect(bottom_border, c_br);
+                        if (br > 0.0f) builder.addRect(right_border, c_br);
                     }
                 }
 
             }
         }
 
+        // 1.2.3 Form controls (very minimal): checkbox/radio checked mark.
+        // Our engine doesn't have native OS widgets; emulate a simple mark so baseline diffs shrink.
+        if (tag == "input" && rect.width > 0.0f && rect.height > 0.0f && node->hasAttribute("type")) {
+            std::string t = node->getAttribute("type");
+            std::transform(t.begin(), t.end(), t.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+            if ((t == "checkbox" || t == "radio") && node->hasAttribute("checked")) {
+                Rect inner = rect;
+                inner.x += bl;
+                inner.y += bt;
+                inner.width = std::max(0.0f, inner.width - (bl + br));
+                inner.height = std::max(0.0f, inner.height - (bt + bb));
+
+                const float side = std::min(inner.width, inner.height);
+                const float margin = std::max(1.0f, side * 0.25f);
+                Rect mark{inner.x + margin, inner.y + margin,
+                          std::max(0.0f, inner.width - 2.0f * margin),
+                          std::max(0.0f, inner.height - 2.0f * margin)};
+
+                if (mark.width > 0.0f && mark.height > 0.0f) {
+                    Color mark_color = makeColorFromCss("#111111");
+                    if (t == "radio") {
+                        builder.addRoundedRect(mark, mark_color, std::min(mark.width, mark.height) * 0.5f);
+                    } else {
+                        builder.addRect(mark, mark_color);
+                    }
+                }
+            }
+        }
+
         // 1.2.5 背景图片
         if (!style.background_image.empty() && rect.width > 0.0f && rect.height > 0.0f) {
+
             // 解析 url(...) 格式
             std::string image_url = style.background_image;
             if (image_url.find("url(") == 0) {
@@ -791,10 +876,11 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                 // Backgrounds are clipped to background-clip.
                 float bg_clip_radius = radius;
                 if (bg_clip_kw == "padding-box") {
-                    bg_clip_radius = std::max(0.0f, radius - bw);
+                    bg_clip_radius = std::max(0.0f, radius - bmax);
                 } else if (bg_clip_kw == "content-box") {
-                    bg_clip_radius = std::max(0.0f, radius - bw - min_pad);
+                    bg_clip_radius = std::max(0.0f, radius - bmax - min_pad);
                 }
+
 
                 DisplayListBuilder::ScopedClip bg_clip;
                 if (bg_clip_radius > 0.0f) {
