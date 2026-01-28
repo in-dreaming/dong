@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Chinese Font Size Test - 中文字体尺寸测试</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+            color: #333;
+            font-family: "Microsoft YaHei", "SimHei", "Arial", sans-serif;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+        .header h1 {
+            margin: 0 0 8px 0;
+            font-size: 28px;
+        }
+        .header p {
+            margin: 0;
+            font-size: 14px;
+            opacity: 0.9;
+        }
+        .section {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        .section-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        .font-row {
+            display: flex;
+            align-items: baseline;
+            padding: 10px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .font-row:last-child {
+            border-bottom: none;
+        }
+        .size-label {
+            min-width: 80px;
+            font-size: 12px;
+            color: #666;
+            font-family: monospace;
+        }
+        .size-sample {
+            flex: 1;
+            padding-left: 20px;
+        }
+        /* 超小字体 */
+        .size-9px { font-size: 9px; }
+        .size-10px { font-size: 10px; }
+        .size-11px { font-size: 11px; }
+        .size-12px { font-size: 12px; }
+        /* 小字体 */
+        .size-13px { font-size: 13px; }
+        .size-14px { font-size: 14px; }
+        .size-15px { font-size: 15px; }
+        .size-16px { font-size: 16px; }
+        /* 中等字体 */
+        .size-18px { font-size: 18px; }
+        .size-20px { font-size: 20px; }
+        .size-22px { font-size: 22px; }
+        .size-24px { font-size: 24px; }
+        /* 大字体 */
+        .size-28px { font-size: 28px; }
+        .size-32px { font-size: 32px; }
+        .size-36px { font-size: 36px; }
+        .size-40px { font-size: 40px; }
+        /* 超大字体 */
+        .size-48px { font-size: 48px; }
+        .size-56px { font-size: 56px; }
+        .size-64px { font-size: 64px; }
+        .size-72px { font-size: 72px; }
+
+        /* UI 场景模拟 */
+        .ui-scene {
+            background: #fafafa;
+            border-radius: 8px;
+            padding: 16px;
+            margin-top: 12px;
+        }
+        .badge {
+            display: inline-block;
+            font-size: 10px;
+            background: #ff6b6b;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin-right: 8px;
+        }
+        .tag {
+            display: inline-block;
+            font-size: 11px;
+            background: #e3f2fd;
+            color: #1976d2;
+            padding: 3px 8px;
+            border-radius: 4px;
+            margin-right: 6px;
+        }
+        .caption {
+            font-size: 12px;
+            color: #666;
+            margin-top: 4px;
+        }
+        .body-text {
+            font-size: 14px;
+            line-height: 1.6;
+            color: #333;
+        }
+        .subheading {
+            font-size: 16px;
+            font-weight: bold;
+            color: #444;
+        }
+        .heading {
+            font-size: 20px;
+            font-weight: bold;
+            color: #222;
+        }
+        .title {
+            font-size: 24px;
+            font-weight: bold;
+            color: #111;
+        }
+        .hero {
+            font-size: 32px;
+            font-weight: bold;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: #667eea;
+        }
+
+        /* 对比区域 */
+        .compare-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+        }
+        .compare-item {
+            background: #f8f9fa;
+            padding: 12px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+        .compare-label {
+            font-size: 11px;
+            color: #888;
+            margin-bottom: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>中文字体尺寸渲染测试</h1>
+        <p>Chinese Font Size Rendering Test - 测试不同尺寸中文渲染效果，特别是小字体</p>
+    </div>
+
+    <!-- 超小字体区域 -->
+    <div class="section">
+        <div class="section-title">超小字体 Extra Small (9px-12px)</div>
+        <div class="font-row">
+            <div class="size-label">9px</div>
+            <div class="size-sample size-9px">中文测试 Chinese Text · 这是9px小字</div>
+        </div>
+        <div class="font-row">
+            <div class="size-label">10px</div>
+            <div class="size-sample size-10px">中文测试 Chinese Text · 这是10px标签文字</div>
+        </div>
+        <div class="font-row">
+            <div class="size-label">11px</div>
+            <div class="size-sample size-11px">中文测试 Chinese Text · 这是11px辅助说明</div>
+        </div>
+        <div class="font-row">
+            <div class="size-label">12px</div>
+            <div class="size-sample size-12px">中文测试 Chinese Text · 这是12px小字说明文字</div>
+        </div>
+    </div>
+
+    <!-- 小字体区域 -->
+    <div class="section">
+        <div class="section-title">小字体 Small (13px-16px)</div>
+        <div class="font-row">
+            <div class="size-label">13px</div>
+            <div class="size-sample size-13px">中文测试 Chinese Text · 这是13px正文小字</div>
+        </div>
+        <div class="font-row">
+            <div class="size-label">14px</div>
+            <div class="size-sample size-14px">中文测试 Chinese Text · 这是14px标准正文</div>
+        </div>
+        <div class="font-row">
+            <div class="size-label">15px</div>
+            <div class="size-sample size-15px">中文测试 Chinese Text · 这是15px稍大正文</div>
+        </div>
+        <div class="font-row">
+            <div class="size-label">16px</div>
+            <div class="size-sample size-16px">中文测试 Chinese Text · 这是16px默认正文</div>
+        </div>
+    </div>
+
+    <!-- 中等字体区域 -->
+    <div class="section">
+        <div class="section-title">中等字体 Medium (18px-24px)</div>
+        <div class="font-row">
+            <div class="size-label">18px</div>
+            <div class="size-sample size-18px">中文测试 Chinese Text · 小标题</div>
+        </div>
+        <div class="font-row">
+            <div class="size-label">20px</div>
+            <div class="size-sample size-20px">中文测试 Chinese Text · 副标题</div>
+        </div>
+        <div class="font-row">
+            <div class="size-label">22px</div>
+            <div class="size-sample size-22px">中文测试 Chinese Text · 二级标题</div>
+        </div>
+        <div class="font-row">
+            <div class="size-label">24px</div>
+            <div class="size-sample size-24px">中文测试 Chinese Text · 一级标题</div>
+        </div>
+    </div>
+
+    <!-- 大字体区域 -->
+    <div class="section">
+        <div class="section-title">大字体 Large (28px-40px)</div>
+        <div class="font-row">
+            <div class="size-label">28px</div>
+            <div class="size-sample size-28px">中文大标题 Chinese Large</div>
+        </div>
+        <div class="font-row">
+            <div class="size-label">32px</div>
+            <div class="size-sample size-32px">中文大标题 Chinese Large</div>
+        </div>
+        <div class="font-row">
+            <div class="size-label">36px</div>
+            <div class="size-sample size-36px">中文大标题 Chinese Large</div>
+        </div>
+        <div class="font-row">
+            <div class="size-label">40px</div>
+            <div class="size-sample size-40px">中文大标题 Chinese Large</div>
+        </div>
+    </div>
+
+    <!-- 超大字体区域 -->
+    <div class="section">
+        <div class="section-title">超大字体 Extra Large (48px-72px)</div>
+        <div class="font-row">
+            <div class="size-label">48px</div>
+            <div class="size-sample size-48px">中文特大字</div>
+        </div>
+        <div class="font-row">
+            <div class="size-label">56px</div>
+            <div class="size-sample size-56px">中文特大字</div>
+        </div>
+        <div class="font-row">
+            <div class="size-label">64px</div>
+            <div class="size-sample size-64px">中文特大字</div>
+        </div>
+        <div class="font-row">
+            <div class="size-label">72px</div>
+            <div class="size-sample size-72px">中文特大字</div>
+        </div>
+    </div>
+
+    <!-- UI 场景模拟 -->
+    <div class="section">
+        <div class="section-title">UI 场景模拟 UI Scene Simulation</div>
+        
+        <div class="ui-scene">
+            <div style="margin-bottom: 12px;">
+                <span class="badge">NEW</span>
+                <span class="tag">热门</span>
+                <span class="tag">推荐</span>
+            </div>
+            <div class="hero">欢迎使用 Dong 渲染引擎</div>
+            <div class="caption">Welcome to Dong Rendering Engine · v1.0.0</div>
+        </div>
+
+        <div class="ui-scene" style="margin-top: 16px;">
+            <div class="title">系统设置</div>
+            <div class="heading">显示设置</div>
+            <div class="body-text">
+                您可以在这里调整显示相关的各项参数。中文字体渲染是我们的重点关注领域，
+                特别是在小字体（9px-12px）情况下的清晰度和可读性。
+            </div>
+            <div class="subheading">字体设置</div>
+            <div class="caption">当前字体：Microsoft YaHei · 字号：14px</div>
+        </div>
+    </div>
+
+    <!-- 中英文对比 -->
+    <div class="section">
+        <div class="section-title">中英文混合 Mixed Chinese & English</div>
+        <div class="compare-grid">
+            <div class="compare-item">
+                <div class="compare-label">10px - 最小标签</div>
+                <div style="font-size: 10px;">Hello世界 · API接口 · v2.0版本</div>
+            </div>
+            <div class="compare-item">
+                <div class="compare-label">12px - 辅助文字</div>
+                <div style="font-size: 12px;">Welcome欢迎 · Settings设置 · Help帮助</div>
+            </div>
+            <div class="compare-item">
+                <div class="compare-label">14px - 正文</div>
+                <div style="font-size: 14px;">Hello World你好世界 · Quick Start快速开始</div>
+            </div>
+            <div class="compare-item">
+                <div class="compare-label">16px - 大正文</div>
+                <div style="font-size: 16px;">Documentation文档 · Download下载</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 渲染质量测试 -->
+    <div class="section">
+        <div class="section-title">渲染质量测试 Rendering Quality Test</div>
+        <div class="font-row">
+            <div class="size-label">9px</div>
+            <div class="size-sample size-9px">中文渲染测试 · 笔画清晰度 · 宋体黑体对比</div>
+        </div>
+        <div class="font-row">
+            <div class="size-label">10px</div>
+            <div class="size-sample size-10px">中文渲染测试 · 笔画清晰度 · 宋体黑体对比</div>
+        </div>
+        <div class="font-row">
+            <div class="size-label">11px</div>
+            <div class="size-sample size-11px">中文渲染测试 · 笔画清晰度 · 宋体黑体对比</div>
+        </div>
+        <div class="font-row">
+            <div class="size-label">12px</div>
+            <div class="size-sample size-12px">中文渲染测试 · 笔画清晰度 · 宋体黑体对比</div>
+        </div>
+        <div class="font-row" style="background: #333; color: white; margin: 0 -20px; padding: 10px 20px;">
+            <div class="size-label" style="color: #ccc;">12px</div>
+            <div class="size-sample size-12px">深色背景测试 · Dark Background Test · 对比度检查</div>
+        </div>
+    </div>
+
+</body>
+</html>

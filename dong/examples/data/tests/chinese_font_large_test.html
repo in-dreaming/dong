@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Chinese Large Fonts - 大字体测试</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: "Microsoft YaHei", sans-serif;
+            background: #f5f5f5;
+        }
+        .header {
+            background: #ef4444;
+            color: white;
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+        }
+        .header h1 { margin: 0; font-size: 20px; }
+        .header p { margin: 4px 0 0 0; font-size: 12px; opacity: 0.9; }
+        
+        .row {
+            display: flex;
+            align-items: center;
+            background: white;
+            margin-bottom: 12px;
+            padding: 16px;
+            border-radius: 6px;
+            border-left: 3px solid #ef4444;
+        }
+        .label {
+            width: 80px;
+            font-size: 13px;
+            color: #666;
+        }
+        .text { flex: 1; }
+        
+        .size-28px { font-size: 28px; }
+        .size-32px { font-size: 32px; }
+        .size-36px { font-size: 36px; }
+        .size-40px { font-size: 40px; }
+        .size-48px { font-size: 48px; }
+        .size-72px { font-size: 72px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>大字体测试 Large Fonts (28px-72px)</h1>
+        <p>超大标题和展示文字</p>
+    </div>
+    
+    <div class="row">
+        <div class="label">28px</div>
+        <div class="text size-28px">中文测试 28px</div>
+    </div>
+    <div class="row">
+        <div class="label">32px</div>
+        <div class="text size-32px">中文测试 32px</div>
+    </div>
+    <div class="row">
+        <div class="label">36px</div>
+        <div class="text size-36px">中文测试 36px</div>
+    </div>
+    <div class="row">
+        <div class="label">40px</div>
+        <div class="text size-40px">中文测试 40px</div>
+    </div>
+    <div class="row">
+        <div class="label">48px</div>
+        <div class="text size-48px">中文 48px</div>
+    </div>
+    <div class="row">
+        <div class="label">72px</div>
+        <div class="text size-72px">中文72</div>
+    </div>
+</body>
+</html>

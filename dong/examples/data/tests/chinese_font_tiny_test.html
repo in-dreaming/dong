@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Chinese Tiny Fonts - 超小字体测试</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: "Microsoft YaHei", sans-serif;
+            background: #f5f5f5;
+        }
+        .header {
+            background: #667eea;
+            color: white;
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+        }
+        .header h1 { margin: 0; font-size: 20px; }
+        .header p { margin: 4px 0 0 0; font-size: 12px; opacity: 0.9; }
+        
+        .row {
+            display: flex;
+            align-items: center;
+            background: white;
+            margin-bottom: 8px;
+            padding: 12px 16px;
+            border-radius: 6px;
+            border-left: 3px solid #667eea;
+        }
+        .label {
+            width: 60px;
+            font-size: 11px;
+            color: #666;
+        }
+        .text { flex: 1; }
+        
+        .size-9px { font-size: 9px; }
+        .size-10px { font-size: 10px; }
+        .size-11px { font-size: 11px; }
+        .size-12px { font-size: 12px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>超小字体测试 Tiny Fonts (9px-12px)</h1>
+        <p>测试最小可读中文渲染效果</p>
+    </div>
+    
+    <div class="row">
+        <div class="label">9px</div>
+        <div class="text size-9px">中文测试 Chinese 9px小字 · 标签文字</div>
+    </div>
+    <div class="row">
+        <div class="label">10px</div>
+        <div class="text size-10px">中文测试 Chinese 10px标签 · 角标文字</div>
+    </div>
+    <div class="row">
+        <div class="label">11px</div>
+        <div class="text size-11px">中文测试 Chinese 11px辅助 · 提示说明</div>
+    </div>
+    <div class="row">
+        <div class="label">12px</div>
+        <div class="text size-12px">中文测试 Chinese 12px小字 · 注释文字</div>
+    </div>
+</body>
+</html>
