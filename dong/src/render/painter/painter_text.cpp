@@ -82,7 +82,8 @@ void Painter::paintTextAndInput(const dom::DOMNodePtr& node,
         const bool tag_prefers_text =
             tag == "h1" || tag == "h2" || tag == "h3" || tag == "h4" ||
             tag == "h5" || tag == "h6" || tag == "p" || tag == "span" ||
-            tag == "button" || tag == "code" || tag == "div" || tag == "footer";
+            tag == "button" || tag == "code" || tag == "div" || tag == "footer" ||
+            tag == "label";
 
         // 注意：混合内容路径会对 TEXT 节点逐个 shape，不需要提前拼出整段 raw_text。
         // 我们只在“整段文本路径”或调试日志需要时才构造 raw_text。
@@ -291,13 +292,36 @@ void Painter::paintTextAndInput(const dom::DOMNodePtr& node,
                             // 标记该 inline 元素已经在容器层绘制
                             child->setAttribute("__inline_rendered__", "1");
                         }
+                    } else if (child_style.display == "inline-block") {
+                        // inline-block 元素：从 layout 获取尺寸并调整偏移，让正常递归渲染使用正确位置
+                        const layout::LayoutNode* child_layout = layout_engine_ ? layout_engine_->getLayout(child) : nullptr;
+                        if (child_layout) {
+                            // 使用 layout 计算的宽度（包含 margin）
+                            float child_margin_left = child_style.margin_left.isPixel() ? child_style.margin_left.value : 0.0f;
+                            float child_margin_right = child_style.margin_right.isPixel() ? child_style.margin_right.value : 0.0f;
+                            cumulative_x_offset += child_margin_left + child_layout->layout.dimensions[0] + child_margin_right;
+                        } else {
+                            // 如果没有 layout，使用近似尺寸
+                            float child_width = child_style.width.isPixel() ? child_style.width.value : 13.0f;
+                            float child_margin_left = child_style.margin_left.isPixel() ? child_style.margin_left.value : 0.0f;
+                            float child_margin_right = child_style.margin_right.isPixel() ? child_style.margin_right.value : 0.0f;
+                            cumulative_x_offset += child_margin_left + child_width + child_margin_right;
+                        }
                     }
-                    // inline-block 元素不在这里处理，让它们通过正常递归渲染
+                    // 其他 display 类型（如 block）不处理
                 } else if (child->getType() == dom::DOMNode::NodeType::TEXT) {
                     const std::string& text_content = child->getRawTextContent();
                     std::string text = collapseWhitespace(text_content);
                     if (text.empty()) continue;
 
+                    // 检查是否需要换行：计算文本宽度，如果超过剩余宽度则换行
+                    float available_width = inner_width - cumulative_x_offset;
+                    if (available_width < 20.0f) {
+                        // 剩余空间不足，强制换行
+                        cumulative_x_offset = 0.0f;
+                        baseline_y += container_line_height_px;
+                        available_width = inner_width;
+                    }
 
                     TextShapeRequest req{};
                     req.text = text;
@@ -315,6 +339,25 @@ void Painter::paintTextAndInput(const dom::DOMNodePtr& node,
                     float text_width_px = shaped.width_units * scale;
                     float ascent_units = shaped.ascent_units > 0.0f ? shaped.ascent_units : container_font_size / scale;
                     float ascent_px = ascent_units * scale;
+
+                    // 如果文本宽度超过可用宽度，需要截断或换行
+                    if (text_width_px > available_width && available_width > 0.0f) {
+                        // 简单处理：按比例截断文本（更准确的实现需要字符级断行）
+                        float ratio = available_width / text_width_px;
+                        size_t trunc_len = static_cast<size_t>(text.length() * ratio);
+                        if (trunc_len > 0) {
+                            // 尝试在单词边界截断
+                            size_t word_break = text.find_last_of(" \t\n\r", trunc_len);
+                            if (word_break != std::string::npos && word_break > 0) {
+                                trunc_len = word_break;
+                            }
+                            std::string trunc_text = text.substr(0, trunc_len);
+                            req.text = trunc_text;
+                            if (text_shaper_.shape(req, shaped) && !shaped.glyphs.empty()) {
+                                text_width_px = shaped.width_units * scale;
+                            }
+                        }
+                    }
 
                     float text_x = x + pad_left + cumulative_x_offset;
 

@@ -159,7 +159,7 @@ float computeIntrinsicTextWidth(const dom::DOMNodePtr& node) {
         }
 
         // word-spacing
-        // NOTE: Painter 的 glyph placement 是“空格之后的 glyph 整体右移”，
+        // NOTE: Painter 的 glyph placement 是"空格之后的 glyph 整体右移"，
         // 因此行尾空格不会带来额外宽度；测量时要扣掉这部分，避免提前换行/宽度估计偏大。
         int space_count = 0;
         if (style.word_spacing_px != 0.0f) {
@@ -1344,25 +1344,40 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
     // input 鍏冪礌鏄?replaced element锛岄渶瑕佽缃粯璁ょ殑鍐呭湪灏哄
     // CSS 鏍囧噯锛歩nput 鍏冪礌鏈夐粯璁ょ殑瀹藉害鍜岄珮搴?
     if (tag == "input") {
-        // 璁＄畻 input 鐨勯珮搴︼細font-size + padding
-        float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
-        float pad_top = style.padding_top.isPixel() ? style.padding_top.value : 0.0f;
-        float pad_bottom = style.padding_bottom.isPixel() ? style.padding_bottom.value : 0.0f;
-        float input_height = font_size * 1.2f + pad_top + pad_bottom;
+        // \u68c0\u67e5 input \u7c7b\u578b\uff0ccheckbox/radio \u6709\u56fa\u5b9a\u7684 UA \u6837\u5f0f\u5c3a\u5bf8
+        bool is_checkbox_or_radio = false;
+        if (dom_node->hasAttribute("type")) {
+            std::string input_type = dom_node->getAttribute("type");
+            std::transform(input_type.begin(), input_type.end(), input_type.begin(),
+                          [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            is_checkbox_or_radio = (input_type == "checkbox" || input_type == "radio");
+        }
         
-        // 寮哄埗璁剧疆 input 楂樺害锛屼笉绠?style.height 鏄粈涔?
-        YGNodeStyleSetHeight(yoga_node, input_height);
-        
-        // input 榛樿鏄?block 绾у埆锛屽搴?100%锛堢敱 CSS 璁剧疆锛?
-        // 浣嗗鏋滄病鏈夋樉寮忓搴︼紝缁欎竴涓粯璁ゆ渶灏忓搴?
-        if (style.width.isAuto()) {
-            YGNodeStyleSetMinWidth(yoga_node, 150.0f);  // 榛樿鏈€灏忓搴?
+        if (is_checkbox_or_radio) {
+            // checkbox/radio \u663e\u5f0f\u8bbe\u7f6e\u4e3a UA CSS \u5c3a\u5bf8 (13x13px)\uff0c\u786e\u4fdd Yoga \u6b63\u786e\u5e03\u5c40
+            YGNodeStyleSetWidth(yoga_node, 13.0f);
+            YGNodeStyleSetHeight(yoga_node, 13.0f);
+        } else {
+            // \u8ba1\u7b97 input \u7684\u9ad8\u5ea6\uff1afont-size + padding
+            float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
+            float pad_top = style.padding_top.isPixel() ? style.padding_top.value : 0.0f;
+            float pad_bottom = style.padding_bottom.isPixel() ? style.padding_bottom.value : 0.0f;
+            float input_height = font_size * 1.2f + pad_top + pad_bottom;
+            
+            // \u5f3a\u5236\u8bbe\u7f6e input \u9ad8\u5ea6\uff0c\u4e0d\u7ba1 style.height \u662f\u4ec0\u4e48
+            YGNodeStyleSetHeight(yoga_node, input_height);
+            
+            // input \u9ed8\u8ba4\u662f block \u7ea7\u522b\uff0c\u5bbd\u5ea6 100%\uff08\u7531 CSS \u8bbe\u7f6e\uff09
+            // \u4f46\u5982\u679c\u6ca1\u6709\u663e\u793a\u5bbd\u5ea6\uff0c\u7ed9\u4e00\u4e2a\u9ed8\u8ba4\u6700\u5c0f\u5bbd\u5ea6
+            if (style.width.isAuto()) {
+                YGNodeStyleSetMinWidth(yoga_node, 150.0f);  // \u9ed8\u8ba4\u6700\u5c0f\u5bbd\u5ea6
+            }
         }
     }
     
     // 绗﹀悎 CSS 鏍囧噯锛氫负 button 鍏冪礌璁剧疆鍩轰簬鏂囨湰鍐呭鐨勬渶灏忓搴?
     // 鎸夐挳榛樿鏄?inline-block锛屽搴﹀簲鑷€傖應鍐呭 + padding
-    // 杩欑‘淇濇寜閽笉浼氥?因?flex 瀹瑰櫒鍘嬬缉鑰屾埅鏂枃瀛?
+    // 杩欑'淇濇寜閽笉浼氥?因?flex 瀹瑰櫒鍘嬬缉鑰屾埅鏂枃瀛?
     if (tag == "button" && style.width.isAuto()) {
         float intrinsic_w = computeIntrinsicTextWidth(dom_node);
         if (intrinsic_w > 0.0f && intrinsic_w < 10000.0f) {
@@ -1381,7 +1396,8 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
     }
 
     const bool is_inline_level = (style.display == "inline" || style.display == "inline-block");
-    if (parent_is_flex && is_inline_level && (style.width.isAuto() || style.height.isAuto())) {
+    // 为所有包含文本的 inline 元素设置最小宽度，防止被压缩导致文本截断
+    if (is_inline_level && (style.width.isAuto() || style.height.isAuto())) {
         std::string text = collapseWhitespace(dom_node->getTextContent());
         if (!text.empty()) {
             float font_size_px = style.font_size > 0.0f ? style.font_size : 16.0f;
@@ -2511,11 +2527,11 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
 
         if (style.display != "flex" && style.display != "inline-flex") {
         // 检查是否需要调整子元素的 Y 坐标
-        // 背景：我们在第二遍/第三遍里可能会“补齐”某些容器（尤其是含 IFC 后代）的高度，
+        // 背景：我们在第二遍/第三遍里可能会"补齐"某些容器（尤其是含 IFC 后代）的高度，
         // 但 Yoga 已经给出了兄弟元素的 Y。如果不把后续兄弟整体下移，会出现
-        // “后一个 block 覆盖前一个（因为绘制顺序在后）”的现象。
+        // "后一个 block 覆盖前一个（因为绘制顺序在后）"的现象。
         //
-        // 策略：对当前容器的**正常流 block 子元素**做一次“最小下移修正”，确保：
+        // 策略：对当前容器的**正常流 block 子元素**做一次"最小下移修正"，确保：
         // child.y >= prev.y + prev.height + margin-bottom(prev) + margin-top(child)
         // 仅当 child 被放得过高时才下移（不做上移），减少对 Yoga/flex 结果的干扰。
         {
