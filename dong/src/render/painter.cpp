@@ -1176,4 +1176,288 @@ void Painter::renderPseudoElement(const dom::DOMNodePtr& pseudo,
     }
 }
 
+// ============ buildDisplayListNode 重构辅助方法实现 ============
+
+// 注意：这些方法使用 painter_detail 命名空间中的工具函数
+// 它们定义在 painter_style_utils.hpp 中
+
+bool Painter::shouldSkipNode(const dom::DOMNodePtr& node, const dom::ComputedStyle& style) const {
+    if (!node) return true;
+    if (style.display == "none") return true;
+    if (node->getType() == dom::DOMNode::NodeType::TEXT) return true;
+    return false;
+}
+
+Painter::LayerDecision Painter::decideLayerNeeds(const dom::DOMNodePtr& node,
+                                                  const layout::LayoutNode* layout_node,
+                                                  const dom::ComputedStyle& style,
+                                                  const Rect& node_rect,
+                                                  bool has_layout_rect,
+                                                  DisplayListBuilder& builder) {
+    LayerDecision decision;
+    decision.clamped_opacity = std::clamp(style.opacity, 0.0f, 1.0f);
+
+    bool should_apply_clip = has_layout_rect &&
+        (shouldClipOverflow(style.overflow) || shouldClipOverflow(style.overflow_x) ||
+         shouldClipOverflow(style.overflow_y));
+
+    decision.is_scroll_container = should_apply_clip &&
+        (isScrollOverflow(style.overflow) || isScrollOverflow(style.overflow_x) ||
+         isScrollOverflow(style.overflow_y));
+
+    bool has_transform = (style.transform_translate_x != 0.0f || style.transform_translate_y != 0.0f ||
+                          style.transform_scale_x != 1.0f || style.transform_scale_y != 1.0f ||
+                          style.transform_rotate != 0.0f || style.transform_skew_x != 0.0f ||
+                          style.transform_skew_y != 0.0f);
+
+    bool force_isolation = (node->getAttribute("__dong_isolate") == "1" ||
+                            node->getAttribute("__dong_isolate") == "true");
+
+    float builder_tx = builder.getTranslateX();
+    float builder_ty = builder.getTranslateY();
+
+    Rect layer_bounds = computeLayerBounds(node_rect, has_layout_rect, builder_tx, builder_ty);
+
+    decision.has_isolation = (style.isolation_isolate || decision.is_scroll_container ||
+                             has_transform || force_isolation) &&
+                             layer_bounds.width > 0.0f && layer_bounds.height > 0.0f;
+
+    decision.needs_layer = decision.has_isolation || decision.clamped_opacity < 0.999f || has_transform;
+
+    if (decision.needs_layer) {
+        decision.content_dirty = node->isLayoutDirty() || decision.is_scroll_container;
+        if (!decision.content_dirty && (builder_tx != 0.0f || builder_ty != 0.0f)) {
+            decision.content_dirty = true;
+        }
+        if (!decision.content_dirty && use_dirty_rect_ && !current_dirty_rect_.isEmpty()) {
+            decision.content_dirty = isRectInDirtyRect(layer_bounds);
+        }
+    }
+
+    return decision;
+}
+
+Rect Painter::computeLayerBounds(const Rect& node_rect, bool has_layout_rect,
+                                 float builder_tx, float builder_ty) const {
+    Rect bounds = node_rect;
+    if (!has_layout_rect && surface_) {
+        bounds.x = 0.0f;
+        bounds.y = 0.0f;
+        bounds.width = static_cast<float>(surface_->getWidth());
+        bounds.height = static_cast<float>(surface_->getHeight());
+    }
+    bounds.x += builder_tx;
+    bounds.y += builder_ty;
+    return bounds;
+}
+
+LayerTransform Painter::computeLayerTransform(const dom::ComputedStyle& style,
+                                              const Rect& layer_bounds) const {
+    LayerTransform transform = LayerTransform::identity();
+
+    float sx = style.transform_scale_x;
+    float sy = style.transform_scale_y;
+    float tx = style.transform_translate_x;
+    float ty = style.transform_translate_y;
+    float angle_rad = style.transform_rotate * 3.14159265358979f / 180.0f;
+    float skew_x_rad = style.transform_skew_x * 3.14159265358979f / 180.0f;
+    float skew_y_rad = style.transform_skew_y * 3.14159265358979f / 180.0f;
+
+    float origin_x = layer_bounds.x + layer_bounds.width * style.transform_origin_x / 100.0f;
+    float origin_y = layer_bounds.y + layer_bounds.height * style.transform_origin_y / 100.0f;
+
+    float cos_r = cosf(angle_rad);
+    float sin_r = sinf(angle_rad);
+    float tan_kx = tanf(skew_x_rad);
+    float tan_ky = tanf(skew_y_rad);
+
+    float a00 = sx * (cos_r - sin_r * tan_ky);
+    float a01 = sy * (cos_r * tan_kx - sin_r);
+    float a10 = sx * (sin_r + cos_r * tan_ky);
+    float a11 = sy * (sin_r * tan_kx + cos_r);
+
+    transform.m[0] = a00;
+    transform.m[1] = a01;
+    transform.m[2] = origin_x + tx - (a00 * origin_x + a01 * origin_y);
+    transform.m[3] = a10;
+    transform.m[4] = a11;
+    transform.m[5] = origin_y + ty - (a10 * origin_x + a11 * origin_y);
+
+    return transform;
+}
+
+bool Painter::shouldSkipCachedLayer(const LayerDecision& decision) const {
+    static const bool kLayerCacheEnabled = ([]() {
+        const char* v = std::getenv("DONG_LAYER_CACHE");
+        return v && v[0] == '1';
+    })();
+    static const bool kSkipBuildForCachedLayers = ([]() {
+        const char* v = std::getenv("DONG_LAYER_CACHE_SKIP_BUILD");
+        return v && v[0] == '1';
+    })();
+    return kLayerCacheEnabled && kSkipBuildForCachedLayers &&
+           decision.has_isolation && !decision.content_dirty;
+}
+
+Painter::BorderWidths Painter::computeBorderWidths(const dom::ComputedStyle& style) const {
+    BorderWidths bw;
+
+    auto normalizeBorderStyle = [](std::string s) -> std::string {
+        std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
+            return static_cast<char>(std::tolower(c));
+        });
+        return s;
+    };
+    auto effectiveBorderStyle = [&](const std::string& side_style) -> std::string {
+        const std::string& st = !side_style.empty() ? side_style : style.border_style;
+        return normalizeBorderStyle(st);
+    };
+    auto effectiveBorderWidth = [&](float side_width, const std::string& side_style) -> float {
+        float w = (side_width >= 0.0f) ? side_width : style.border_width;
+        if (w < 0.0f) w = 0.0f;
+        const std::string st = effectiveBorderStyle(side_style);
+        return (st == "none" || st == "hidden") ? 0.0f : w;
+    };
+
+    bw.top = effectiveBorderWidth(style.border_top_width, style.border_top_style);
+    bw.right = effectiveBorderWidth(style.border_right_width, style.border_right_style);
+    bw.bottom = effectiveBorderWidth(style.border_bottom_width, style.border_bottom_style);
+    bw.left = effectiveBorderWidth(style.border_left_width, style.border_left_style);
+    bw.max = std::max(std::max(bw.top, bw.bottom), std::max(bw.left, bw.right));
+
+    return bw;
+}
+
+void Painter::paintBoxShadow(const Rect& rect, const dom::ComputedStyle& style,
+                             DisplayListBuilder& builder) const {
+    if (style.box_shadows.empty() || rect.width <= 0.0f || rect.height <= 0.0f) return;
+
+    for (const auto& shadow : style.box_shadows) {
+        if (shadow.color.empty()) continue;
+
+        Color sc = makeColorFromCss(shadow.color);
+        Rect shadow_rect = rect;
+        shadow_rect.x += shadow.offset_x;
+        shadow_rect.y += shadow.offset_y;
+        shadow_rect.x -= shadow.spread_radius;
+        shadow_rect.y -= shadow.spread_radius;
+        shadow_rect.width += shadow.spread_radius * 2.0f;
+        shadow_rect.height += shadow.spread_radius * 2.0f;
+
+        if (shadow_rect.width <= 0.0f || shadow_rect.height <= 0.0f) continue;
+
+        float radius = std::max(0.0f, style.border_radius);
+        if (shadow.blur_radius > 0.0f) {
+            builder.addShadow(shadow_rect, sc, radius, shadow.blur_radius);
+        } else {
+            builder.addRoundedRect(shadow_rect, sc, radius);
+        }
+    }
+}
+
+void Painter::paintBackgroundAndBorder(const Rect& rect,
+                                       const BorderWidths& bw,
+                                       const dom::ComputedStyle& style,
+                                       DisplayListBuilder& builder) {
+    bool has_background = !style.background_color.empty() && style.background_color != "transparent";
+    bool has_border = (bw.top > 0.0f || bw.right > 0.0f || bw.bottom > 0.0f || bw.left > 0.0f);
+    float radius = style.border_radius;
+
+    if (rect.width <= 0.0f || rect.height <= 0.0f) return;
+
+    // 计算背景盒
+    Rect padding_box = rect;
+    padding_box.x += bw.left;
+    padding_box.y += bw.top;
+    padding_box.width = std::max(0.0f, padding_box.width - (bw.left + bw.right));
+    padding_box.height = std::max(0.0f, padding_box.height - (bw.top + bw.bottom));
+
+    if (radius > 0.0f) {
+        // 圆角路径
+        if (has_background) {
+            Color bg_color = makeColorFromCss(style.background_color);
+            std::string bg_clip = style.background_clip;
+            std::transform(bg_clip.begin(), bg_clip.end(), bg_clip.begin(), [](unsigned char c) {
+                return static_cast<char>(std::tolower(c));
+            });
+            float inset = 0.0f;
+            if (bg_clip == "padding-box") inset = bw.max;
+            float inner_radius = std::max(0.0f, radius - inset);
+            if (padding_box.width > 0.0f && padding_box.height > 0.0f) {
+                builder.addRoundedRect(padding_box, bg_color, inner_radius);
+            }
+        }
+        if (has_border) {
+            // 简化的圆角边框实现：使用填充方式
+            Color border_color = makeColorFromCss(style.border_color);
+            // 绘制外圆角矩形
+            builder.addRoundedRect(rect, border_color, radius);
+            // 如果边框较窄，可以绘制内圆角矩形减去中间部分
+            // 这里简化处理，实际应该使用专门的边框绘制方法
+        }
+    } else {
+        // 矩形路径
+        if (has_background) {
+            builder.addRect(padding_box, makeColorFromCss(style.background_color));
+        }
+        if (has_border) {
+            auto effectiveColor = [&](const std::string& side_color) -> Color {
+                return makeColorFromCss(!side_color.empty() ? side_color : style.border_color);
+            };
+            if (bw.top > 0.0f) {
+                builder.addRect(Rect{rect.x, rect.y, rect.width, bw.top},
+                               effectiveColor(style.border_top_color));
+            }
+            if (bw.right > 0.0f) {
+                builder.addRect(Rect{rect.x + rect.width - bw.right, rect.y + bw.top,
+                                    bw.right, rect.height - bw.top - bw.bottom},
+                               effectiveColor(style.border_right_color));
+            }
+            if (bw.bottom > 0.0f) {
+                builder.addRect(Rect{rect.x, rect.y + rect.height - bw.bottom, rect.width, bw.bottom},
+                               effectiveColor(style.border_bottom_color));
+            }
+            if (bw.left > 0.0f) {
+                builder.addRect(Rect{rect.x, rect.y + bw.top, bw.left,
+                                    rect.height - bw.top - bw.bottom},
+                               effectiveColor(style.border_left_color));
+            }
+        }
+    }
+}
+
+void Painter::paintCheckboxMark(const dom::DOMNodePtr& node,
+                                const Rect& rect,
+                                const BorderWidths& bw,
+                                DisplayListBuilder& builder) const {
+    if (!node->hasAttribute("type")) return;
+
+    std::string t = node->getAttribute("type");
+    std::transform(t.begin(), t.end(), t.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+    if ((t != "checkbox" && t != "radio") || !node->hasAttribute("checked")) return;
+
+    Rect inner = rect;
+    inner.x += bw.left;
+    inner.y += bw.top;
+    inner.width = std::max(0.0f, inner.width - (bw.left + bw.right));
+    inner.height = std::max(0.0f, inner.height - (bw.top + bw.bottom));
+
+    float side = std::min(inner.width, inner.height);
+    float margin = std::max(1.0f, side * 0.25f);
+    Rect mark{inner.x + margin, inner.y + margin,
+              std::max(0.0f, inner.width - 2.0f * margin),
+              std::max(0.0f, inner.height - 2.0f * margin)};
+
+    if (mark.width <= 0.0f || mark.height <= 0.0f) return;
+
+    Color mark_color = makeColorFromCss("#111111");
+    if (t == "radio") {
+        builder.addRoundedRect(mark, mark_color, std::min(mark.width, mark.height) * 0.5f);
+    } else {
+        builder.addRect(mark, mark_color);
+    }
+}
+
 } // namespace dong::render

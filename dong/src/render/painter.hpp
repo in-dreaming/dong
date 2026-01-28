@@ -75,6 +75,57 @@ private:
     // 脏矩形优化
     bool isNodeInDirtyRect(const layout::LayoutNode* layout_node) const;
     bool isRectInDirtyRect(const Rect& rect) const;
+
+    // --- buildDisplayListNode 重构辅助方法 ---
+    struct LayerDecision {
+        bool needs_layer = false;
+        bool has_isolation = false;
+        bool is_scroll_container = false;
+        bool pushed_layer = false;
+        bool content_dirty = false;
+        float clamped_opacity = 1.0f;
+    };
+
+    // 阶段 1: 检查是否需要跳过此节点
+    bool shouldSkipNode(const dom::DOMNodePtr& node, const dom::ComputedStyle& style) const;
+
+    // 阶段 2: Layer 相关决策和设置
+    LayerDecision decideLayerNeeds(const dom::DOMNodePtr& node,
+                                   const layout::LayoutNode* layout_node,
+                                   const dom::ComputedStyle& style,
+                                   const Rect& node_rect,
+                                   bool has_layout_rect,
+                                   DisplayListBuilder& builder);
+
+    Rect computeLayerBounds(const Rect& node_rect, bool has_layout_rect,
+                            float builder_tx, float builder_ty) const;
+
+    LayerTransform computeLayerTransform(const dom::ComputedStyle& style,
+                                         const Rect& layer_bounds) const;
+
+    bool shouldSkipCachedLayer(const LayerDecision& decision) const;
+
+    // 阶段 3: 边框计算
+    struct BorderWidths {
+        float top = 0, right = 0, bottom = 0, left = 0, max = 0;
+    };
+    BorderWidths computeBorderWidths(const dom::ComputedStyle& style) const;
+
+    // 阶段 4: 阴影绘制
+    void paintBoxShadow(const Rect& rect, const dom::ComputedStyle& style,
+                        DisplayListBuilder& builder) const;
+
+    // 阶段 5: 背景和边框绘制
+    void paintBackgroundAndBorder(const Rect& rect,
+                                  const BorderWidths& bw,
+                                  const dom::ComputedStyle& style,
+                                  DisplayListBuilder& builder);
+
+    // 阶段 6: Checkbox/Radio 标记
+    void paintCheckboxMark(const dom::DOMNodePtr& node,
+                           const Rect& rect,
+                           const BorderWidths& bw,
+                           DisplayListBuilder& builder) const;
 };
 
 using PainterPtr = std::unique_ptr<Painter>;
