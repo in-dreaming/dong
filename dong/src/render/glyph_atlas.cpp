@@ -1005,54 +1005,34 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
     double width = bounds.r - bounds.l;
     double height = bounds.t - bounds.b;
     
-    // ========== 关键修复：使用统一的 scale ==========
+    // ========== MSDF Scale 计算 ==========
     //
-    // 问题：之前的逻辑让每个字形填满 MSDF 纹理，导致小字形（如冒号、句号）
-    // 的 msdf_scale 非常大，渲染时 screenPxRange 太小（< 1），导致模糊。
+    // 策略：让每个字形在 MSDF 纹理中占据最大可用空间
+    // 同时确保留出足够的 range padding 用于抗锯齿
     //
-    // 解决方案：使用基于 units_per_em 的统一 scale，而不是基于字形大小。
-    // 这样所有字形使用相同的 msdf_scale，确保 screenPxRange 一致。
-    //
-    // 计算方式：
-    // - 假设典型字形高度约为 units_per_em（实际上大多数字形高度在 0.7~1.0 em）
-    // - scale = (msdf_size - 2*range) / units_per_em
-    // - 这样 1 em 高度的字形正好填满 MSDF 纹理的可用区域
-    //
-    // 优点：
-    // 1. 所有字形使用相同的 msdf_scale，screenPxRange 一致
-    // 2. 小字形（如冒号）在 MSDF 纹理中占用较少空间，但抗锯齿效果正常
-    // 3. 大字形（如 "國"）可能超出 MSDF 纹理，需要裁剪或使用更大的 tier
-    //
-    // 缺点：
-    // - 小字形的 MSDF 纹理利用率较低
-    // - 大字形可能需要更大的 tier
-    //
-    // 为了处理超大字形，我们仍然检查字形是否能放入纹理，
-    // 如果不能，则回退到基于字形大小的 scale（但设置最小值）
+    // 计算：
+    // - 可用空间 = msdf_size - 2*range - 4 (额外4px安全边距)
+    // - scale = 可用空间 / max(字形宽度, 字形高度, units_per_em*0.8)
     
     const double units_per_em = static_cast<double>(out_metrics.units_per_em);
-    const double available_size = msdf_size - range * 2;
+    const double safety_margin = 4.0;  // 额外安全边距
+    const double available_size = msdf_size - range * 2.0 - safety_margin;
     
-    // 基于 units_per_em 的统一 scale
-    double uniform_scale = available_size / units_per_em;
+    // 计算能让字形填满可用空间的最大 scale
+    // 使用 max(width, height) 确保字形不会超出纹理
+    double max_glyph_dim = std::max({width, height, units_per_em * 0.7});
+    double fit_scale = available_size / std::max(max_glyph_dim, 1.0);
     
-    // 检查字形是否能放入纹理
-    double glyph_width_msdf = width * uniform_scale;
-    double glyph_height_msdf = height * uniform_scale;
+    // 限制最小 scale 避免质量过低
+    double min_scale = (msdf_size * 0.5) / units_per_em;
+    double scale = std::max(fit_scale, min_scale);
     
-    double scale;
-    if (glyph_width_msdf <= available_size && glyph_height_msdf <= available_size) {
-        // 字形能放入纹理，使用统一 scale
-        scale = uniform_scale;
-    } else {
-        // 字形太大，需要缩小以适应纹理
-        // 但设置最小 scale 为 uniform_scale 的一半，避免 screenPxRange 过大
-        double fit_scale = std::min(available_size / std::max(width, 1.0),
-                                    available_size / std::max(height, 1.0));
-        scale = std::max(fit_scale, uniform_scale * 0.5);
-        
-        DONG_LOG_DEBUG("[MSDF] glyph=%u WARNING: glyph too large (%.1fx%.1f), using fit_scale=%.4f",
-                glyph_id, width, height, scale);
+    // 检查是否溢出
+    double glyph_w_scaled = width * scale;
+    double glyph_h_scaled = height * scale;
+    if (glyph_w_scaled > available_size || glyph_h_scaled > available_size) {
+        DONG_LOG_DEBUG("[MSDF] glyph=%u overflow w=%.1f h=%.1f avail=%.1f",
+                glyph_id, glyph_w_scaled, glyph_h_scaled, available_size);
     }
 
     DONG_LOG_DEBUG("[MSDF] glyph=%u msdf_size=%d range=%.2f width=%.2f height=%.2f scale=%.4f (uniform=%.4f)",

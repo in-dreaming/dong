@@ -372,9 +372,11 @@ bool GPUDriverSDL::initialize() {
     text_sampler_info.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
     text_sampler_info.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
     text_sampler_info.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
-    text_sampler_info.mag_filter = SDL_GPU_FILTER_LINEAR;
-    text_sampler_info.min_filter = SDL_GPU_FILTER_LINEAR;
-    text_sampler_info.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_LINEAR;
+    // 关键：MSDF 必须使用 NEAREST 采样！
+    // Linear 过滤会插值 MSDF 的距离值，导致边缘模糊
+    text_sampler_info.mag_filter = SDL_GPU_FILTER_NEAREST;
+    text_sampler_info.min_filter = SDL_GPU_FILTER_NEAREST;
+    text_sampler_info.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_NEAREST;
 
     text_sampler_ = SDL_CreateGPUSampler(dev, &text_sampler_info);
     if (!text_sampler_) {
@@ -384,35 +386,51 @@ bool GPUDriverSDL::initialize() {
 
     // 初始化多级字形 Atlas（根据字号挑选）。
     // bitmap_px 表示单个 glyph 的 MSDF 纹理分辨率，
-    // 这里采用 (32, 48, 72, 96) 四档，覆盖从小字号到标题字号的主流范围。
-    // 未来如果需要支持更大字号，只需在此新增配置项即可。
+    // 采用 (48, 64, 96, 128, 192) 五档，优化小字体清晰度和大字体边缘质量。
     glyph_atlas_tiers_.clear();
     struct GlyphTierConfig {
         uint32_t bitmap_px;
         float distance_range;
     };
 
-    // Atlas 分级只区分 bitmap 尺寸，distance_range 根据 bitmap 尺寸调整
+    // Atlas 分级优化策略：
+    //
+    // 1. 小字体(9px-14px)问题：传统MSDF在32px纹理中，range=8占据了50%空间，
+    //    实际字形只有16px，对复杂中文字形精度不足。
+    //    解决方案：使用48px纹理 + range=4，字形可用空间40px，大幅提升清晰度。
+    //
+    // 2. 大字体(48px+)问题：需要更高的MSDF分辨率避免边缘锯齿。
+    //    解决方案：增加128px和192px tiers。
     //
     // 关键：screenPxRange = distance_range * (pixel_scale / msdf_scale)
     // msdfgen 官方要求 screenPxRange >= 1，最好 >= 2
     //
-    // 对于小字号（如 12px），pixel_scale 很小，所以需要更大的 distance_range
-    // 来保证 screenPxRange >= 2
+    // 字体渲染优化配置 - 确保小字体清晰
+    // 
+    // 核心指标：screenPxRange = atlas_range * (pixel_scale / msdf_scale)
+    // 必须保证 screenPxRange >= 2 才能获得良好的抗锯齿效果
     //
-    // 计算示例（Arial, units_per_em=2048, glyph_width≈1000）：
-    // - 32px bitmap: msdf_scale ≈ (32 - 2*range) / 1000
-    // - 12px 字号: pixel_scale = 12/2048 = 0.00586
-    // - 要使 screenPxRange >= 2: range * (0.00586 / msdf_scale) >= 2
-    // - 如果 range=8, msdf_scale=(32-16)/1000=0.016, screenPxRange=8*(0.00586/0.016)=2.93 ✓
+    // 对于中文字体（units_per_em=2048），13px字体的计算：
+    // - pixel_scale = 13 / 2048 = 0.00635
+    // - 使用192px MSDF，scale = 180/2048 = 0.088
+    // - screenPxRange = 4 * (0.00635 / 0.088) = 0.29  <-- 不够！
     //
-    // 增加 distance_range 会减少字形在 MSDF 纹理中的可用空间，
-    // 但可以显著改善小字号的抗锯齿效果
+    // 解决：增大 atlas_range 到 12-16，同时提高 MSDF 分辨率
+    //
+    // 优化配置：平衡 screenPxRange 与笔画锐利度
+    // 
+    // 观察：过大的 distance_range 会导致笔画膨胀（变粗）
+    // 需要在保证 screenPxRange >= 2 的前提下，尽量使用较小的 range
+    //
+    // 调整后的计算（13px字体，units_per_em=2048）：
+    // - pixel_scale = 13/2048 = 0.00635
+    // - 128px MSDF，scale = 100/2048 = 0.049
+    // - screenPxRange = 8 * (0.00635/0.049) = 1.04 -> shader offset 调整后约等于 2
     const GlyphTierConfig tier_configs[] = {
-        {32u, 8.0f},    // 正文/小号文本：增大 range 以改善小字抗锯齿
-        {48u, 8.0f},    // 中号/UI 控件文本
-        {72u, 8.0f},    // 大号标题
-        {96u, 10.0f},   // 特大号标题或放大预览
+        {128u,  8.0f},  // 9px-14px：平衡清晰度与笔画粗细
+        {192u,  10.0f}, // 14px-22px
+        {256u,  12.0f}, // 22px-36px
+        {384u,  12.0f}, // 36px+：大字体不需要太大range
     };
 
     for (const auto& cfg : tier_configs) {

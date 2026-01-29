@@ -70,39 +70,57 @@ bool discardByClip(float2 px) {
     return false;
 }
 
-// 使用 fwidth 动态计算 screenPxRange，实现更精确的抗锯齿
-// params.x = 预计算的 screenPxRange（如果 < 2.0 表示需要模糊效果）
-// params.y = distance_range / msdf_texture_size（用于 fwidth 计算）
+// 计算 screenPxRange
+// params.x = 预计算的 screenPxRange（CPU端根据 font_size/msdf_scale 计算）
+// 这是更准确的值，因为CPU知道确切的渲染参数
 float calcScreenPxRange(float2 uv, float precomputed, float unitRange) {
-    // 使用 fwidth 计算 UV 在屏幕空间的变化率
-    // fwidth(uv) 返回 uv 在相邻像素间的变化量
-    float2 screenTexSize = float2(1.0, 1.0) / fwidth(uv);
+    // 优先使用CPU预计算的值，因为它基于确切的字体参数
+    // precomputed = atlas_range * (pixel_scale / msdf_scale)
     
-    // unitRange = distance_range / texture_size
-    // screenPxRange = unitRange * screenTexSize（取平均）
-    float dynamicRange = 0.5 * (unitRange * screenTexSize.x + unitRange * screenTexSize.y);
+    // 可选：用 fwidth 进行微调，但保持预计算值的主导地位
+    // 这可以处理缩放变换的情况
+    float2 fw = fwidth(uv);
+    float texSize = max(length(fw), 1e-6);
+    float screenTexSize = 1.0 / texSize;
+    float dynamicRange = unitRange * screenTexSize;
     
-    // 如果 precomputed < 2.0，这是一个模糊/发光效果的信号
-    // 在这种情况下，使用较小的 screenPxRange 来产生柔和边缘
-    if (precomputed < 2.0) {
-        // 对于模糊效果，使用 precomputed 值（可能很小）与动态计算值的混合
-        // 但限制最大值，以确保边缘足够柔和
-        return min(max(dynamicRange * precomputed, 0.5), 2.0);
-    }
+    // 混合：70% 预计算值 + 30% 动态值
+    // 这样既能保持准确性，又能响应变换
+    float blended = precomputed * 0.7 + dynamicRange * 0.3;
     
-    // 正常文本渲染：确保 screenPxRange 至少为 2.0，以获得良好的抗锯齿效果
-    // msdfgen 官方建议 screenPxRange >= 2
-    return max(max(dynamicRange, precomputed), 2.0);
+    // 限制范围：最小1.5（保证基本抗锯齿），最大8（避免过度模糊）
+    return clamp(blended, 1.5, 8.0);
 }
 
-// 计算 MSDF 的 opacity，使用改进的抗锯齿算法
+// 计算 MSDF 的 opacity
+// 优化：根据 screenPxRange 自适应调整，平衡清晰度与锯齿
 float calcMSDFOpacity(float3 msdf, float screenPxRange) {
     float sd = median(msdf.r, msdf.g, msdf.b);
     float screenPxDistance = screenPxRange * (sd - 0.5);
     
-    // 使用 smoothstep 实现更平滑的抗锯齿过渡
-    // 扩展过渡范围以获得更柔和的边缘
-    return smoothstep(-0.5, 0.5, screenPxDistance);
+    // 关键优化：
+    // 1. 对于小字体，使用更窄的 smoothstep 范围减少"晕染"
+    // 2. 添加微小偏移修正笔画粗细
+    
+    float range = 0.5;
+    float offset = 0.0;
+    
+    if (screenPxRange < 2.0) {
+        // 小字体：窄范围 + 负偏移（让笔画稍微细一点）
+        range = 0.25;
+        offset = -0.15;  // 负偏移 = 更严格的阈值 = 细笔画
+    } else if (screenPxRange < 3.0) {
+        // 中等字体
+        range = 0.35;
+        offset = -0.08;
+    } else if (screenPxRange > 4.0) {
+        // 大字体：可以宽一点
+        range = 0.6;
+        offset = 0.0;
+    }
+    
+    // 应用偏移后做 smoothstep
+    return smoothstep(-range, range, screenPxDistance + offset);
 }
 
 float4 main(PSInput input) : SV_Target0 {
@@ -112,16 +130,14 @@ float4 main(PSInput input) : SV_Target0 {
 
     // 采样 MSDF 纹理
     float3 msdf = msdfTexture.Sample(msdfSampler, input.uv).rgb;
-    float sd = median(msdf.r, msdf.g, msdf.b);
     
     // 使用 fwidth 动态计算 screenPxRange
     float precomputedRange = input.params.x;
     float unitRange = input.params.y;
     float screenPxRange = calcScreenPxRange(input.uv, precomputedRange, unitRange);
     
-    // 计算 opacity
-    float screenPxDistance = screenPxRange * (sd - 0.5);
-    float opacity = smoothstep(-0.5, 0.5, screenPxDistance);
+    // 计算 opacity（使用改进的抗锯齿算法）
+    float opacity = calcMSDFOpacity(msdf, screenPxRange);
     
     // 输出颜色
     float4 result;
