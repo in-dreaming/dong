@@ -2,6 +2,9 @@
 #include "../core/log.h"
 
 #include <cmath>
+#include <ft2build.h>
+#include FT_FREETYPE_H
+#include FT_LCD_FILTER_H
 #include FT_TRUETYPE_TABLES_H
 
 namespace dong::render {
@@ -43,6 +46,12 @@ bool ensureLibraryInitialized() {
         g_ft_initialized = true;
         return false;
     }
+
+    // 设置 LCD filter，优化子像素渲染质量
+    // FT_LCD_FILTER_DEFAULT: 默认滤波，平衡清晰度和颜色边缘
+    // FT_LCD_FILTER_LIGHT: 轻度滤波，更锐利
+    // FT_LCD_FILTER_LEGACY: 传统滤波，最锐利但可能有颜色边缘
+    FT_Library_SetLcdFilter(g_ft_library, FT_LCD_FILTER_LIGHT);
 
     g_ft_initialized = true;
     return true;

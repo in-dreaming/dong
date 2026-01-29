@@ -880,7 +880,9 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
     }
 
     // 加载字形：FT_LOAD_NO_SCALE 获取原始 design units 轮廓
-    if (FT_Load_Glyph(face, glyph_id, FT_LOAD_NO_SCALE) != 0) {
+    // 添加 FT_LOAD_TARGET_LIGHT 启用轻量级 hinting，改善小字体清晰度
+    FT_Int32 load_flags = FT_LOAD_NO_SCALE | FT_LOAD_TARGET_LIGHT;
+    if (FT_Load_Glyph(face, glyph_id, load_flags) != 0) {
         SDL_Log("GlyphAtlas::generateMSDF: failed to load glyph index %u", glyph_id);
         return false;
     }
