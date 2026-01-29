@@ -1,5 +1,8 @@
 ﻿#define DONG_DISABLE_LEGACY_VIEW_API
 #include "dong.h"
+#include "dong_platform.h"
+#include "dong_gpu_driver.h"
+#include "dong_surface.h"
 
 #include "core/context.hpp"
 #include "core/log.h"
@@ -246,38 +249,72 @@ struct EngineImpl {
         if (!device || !window) {
             return false;
         }
-        
+
         external_gpu_device = device;
         external_window = window;
         use_gpu = true;
         markNeedsRepaint();
-        
+
+        // Notify Platform of GPU device (if not already set by backend)
+        DongPlatform* platform = dong_platform_get();
+        if (platform && !dong_platform_get_gpu_driver(platform)) {
+            // Platform will be configured by the backend/app
+            // This is just a notification that GPU is available
+        }
+
         return true;
     }
     
     dong_result_t tick() {
         DONG_PROFILE_SCOPE_CAT("Engine::tick", "frame");
-        
+
         // Process pending JS tasks
         if (script_engine) {
             DONG_PROFILE_SCOPE_CAT("Script::processTasks", "script");
             script_engine->processPendingTasks();
         }
-        
+
         // Update layout if needed
+        bool layout_changed = false;
         if (layout_engine && dom_manager) {
             auto root = dom_manager->getRoot();
             if (root && root->isLayoutDirty()) {
                 DONG_PROFILE_SCOPE_CAT("Layout::calculate", "layout");
                 layout_engine->calculateLayout(root, static_cast<float>(width), static_cast<float>(height));
                 markNeedsRepaint();
+                layout_changed = true;
             }
         }
-        
-        // For now, tick just updates DOM/layout
-        // GPU rendering is handled by dong_legacy/View or external code
-        // TODO: In future, generate GPUCommandList here and pass to plugin
-        
+
+        // Generate GPU commands if dirty and GPU is enabled
+        if (use_gpu && commands_dirty && dom_manager && layout_engine && painter) {
+            DONG_PROFILE_SCOPE_CAT("Render::generateCommands", "render");
+
+            // Build display list
+            auto root = dom_manager->getRoot();
+            if (root) {
+                // Use Painter to build display list
+                painter->buildDisplayList(root, layout_engine.get());
+
+                // Generate GPU command list
+                if (!cached_cmd_list) {
+                    cached_cmd_list = std::make_unique<dong::render::GPUCommandList>();
+                }
+                dong::render::GPUCompiler compiler;
+                compiler.compile(painter->getDisplayList(), *cached_cmd_list, &painter->getLayerTree());
+                commands_dirty = false;
+            }
+        }
+
+        // Execute GPU commands through Platform if driver is registered
+        if (use_gpu && cached_cmd_list && !commands_dirty) {
+            DongGPUDriver* driver = dong_platform_get_gpu_driver(dong_platform_get());
+            if (driver) {
+                DONG_PROFILE_SCOPE_CAT("GPU::execute", "render");
+                dong_gpu_execute(driver, cached_cmd_list.get());
+            }
+        }
+
         return DONG_OK;
     }
     
@@ -648,6 +685,22 @@ dong_result_t dong_engine_eval_script(dong_engine_t* engine, const char* code) {
         return DONG_OK;
     }
     return DONG_ERR_INTERNAL;
+}
+
+const void* dong_engine_get_command_list(dong_engine_t* engine) {
+    auto* impl = reinterpret_cast<EngineImpl*>(engine);
+    if (!impl) {
+        return nullptr;
+    }
+    return impl->cached_cmd_list.get();
+}
+
+void dong_engine_invalidate_commands(dong_engine_t* engine) {
+    auto* impl = reinterpret_cast<EngineImpl*>(engine);
+    if (!impl) {
+        return;
+    }
+    impl->markNeedsRepaint();
 }
 
 uint32_t dong_get_api_version(void) {

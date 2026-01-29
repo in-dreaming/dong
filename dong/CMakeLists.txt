@@ -104,6 +104,7 @@ endif()
 add_library(dong SHARED
     src/api_bindings.cpp
     src/core/context.cpp
+    src/core/platform.c
     src/core/profiler.cpp
     # DOM module (modular structure)
     src/dom/dom_manager.cpp
@@ -195,6 +196,7 @@ endif()
 add_library(dong_legacy STATIC
     src/api_bindings_legacy.cpp
     src/core/context.cpp
+    src/core/platform.c
     src/core/profiler.cpp
     src/core/view.cpp
     # DOM module (modular structure)
@@ -291,6 +293,22 @@ else()
 endif()
 
 # =============================================================================
+# Backends
+# =============================================================================
+option(BUILD_BACKENDS "Build dong backends" ON)
+if(BUILD_BACKENDS)
+    add_subdirectory(backends/sdl)
+endif()
+
+# =============================================================================
+# AppCore
+# =============================================================================
+option(BUILD_APPCORE "Build dong appcore library" ON)
+if(BUILD_APPCORE)
+    add_subdirectory(appcore)
+endif()
+
+# =============================================================================
 # Plugins
 # =============================================================================
 option(BUILD_PLUGINS "Build dong plugins" ON)
@@ -364,27 +382,10 @@ if(BUILD_EXAMPLES)
         endif()
     endfunction()
 
-    # C examples
-    add_dong_example(simple_demo examples/simple_demo.c)
-    add_dong_example(basic_demo examples/basic_demo.c)
-
-    # C++ examples
+    # C++ examples (legacy - using dong_legacy API)
     set(CPP_EXAMPLES
-        # Minimal set + must-keep demos
-        integration_demo
-        sdl_gpu_demo
-
-        gpu_screenshot_demo
-        gpu_screenshot_demo_fontonly
-        gpu_screenshot_demo_basic_layout
-        gpu_screenshot_demo_glyph_stress
-        gpu_screenshot_analysis
-
+        # Interactive demos
         interactive_demo
-
-        3d_cube
-        3d_screen
-        3d_screen_html
         3d_screen_script
 
         # HTML render test tool
@@ -396,6 +397,56 @@ if(BUILD_EXAMPLES)
             add_dong_example(${example} "examples/${example}.cpp")
         endif()
     endforeach()
+
+    # ==========================================================================
+    # New AppCore-based examples (simplified API)
+    # ==========================================================================
+    if(BUILD_APPCORE)
+        # Helper function for AppCore examples
+        function(add_appcore_example name source)
+            add_executable(${name} ${source})
+
+            # SDL3 link directory (AppCore depends on SDL3)
+            target_link_directories(${name} PRIVATE "${SDL3_PREFIX}/lib")
+
+            target_link_libraries(${name} PRIVATE dong_appcore)
+
+            # Vulkan SDK for SPIRV cross (needed by dong_legacy via SDL_shadercross)
+            if(VULKAN_SDK_PATH)
+                if(WIN32)
+                    target_link_directories(${name} PRIVATE "${VULKAN_SDK_PATH}/Lib")
+                else()
+                    target_link_directories(${name} PRIVATE "${VULKAN_SDK_PATH}/lib")
+                endif()
+                target_link_libraries(${name} PRIVATE spirv-cross-c-shared)
+            endif()
+
+            # DXC library (needed by dong_legacy via SDL_shadercross)
+            target_link_directories(${name} PRIVATE ${DXC_LIB_PATH})
+            target_link_libraries(${name} PRIVATE dxcompiler)
+
+            # Platform libraries
+            if(WIN32)
+                target_link_libraries(${name} PRIVATE user32 gdi32 ole32 shell32 advapi32)
+            elseif(APPLE)
+                target_link_libraries(${name} PRIVATE
+                    "-framework CoreFoundation"
+                    "-framework CoreGraphics"
+                    "-framework CoreText"
+                )
+            endif()
+        endfunction()
+
+        # Minimal demo (~50 lines)
+        if(EXISTS "${CMAKE_SOURCE_DIR}/examples/minimal/main.c")
+            add_appcore_example(minimal_dong_demo "examples/minimal/main.c")
+        endif()
+
+        # 3D screens simple demo (~100 lines) - disabled until scene3d is implemented
+        # if(EXISTS "${CMAKE_SOURCE_DIR}/examples/3d_screens_simple/main.c")
+        #     add_appcore_example(3d_screens_simple "examples/3d_screens_simple/main.c")
+        # endif()
+    endif()
 
     # Feature test runner
     if(EXISTS "${CMAKE_SOURCE_DIR}/examples/features/run_feature_tests.cpp")
@@ -451,7 +502,7 @@ install(DIRECTORY include/ DESTINATION include)
 # Install examples
 if(BUILD_EXAMPLES)
     # Get all example targets
-    set(EXAMPLE_TARGETS simple_demo basic_demo)
+    set(EXAMPLE_TARGETS)
     foreach(example ${CPP_EXAMPLES})
         if(TARGET ${example})
             list(APPEND EXAMPLE_TARGETS ${example})
@@ -460,7 +511,7 @@ if(BUILD_EXAMPLES)
     if(TARGET msdf_cpu_test)
         list(APPEND EXAMPLE_TARGETS msdf_cpu_test)
     endif()
-    
+
     install(TARGETS ${EXAMPLE_TARGETS}
         RUNTIME DESTINATION bin
     )

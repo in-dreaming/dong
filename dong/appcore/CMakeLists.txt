@@ -1,0 +1,63 @@
+cmake_minimum_required(VERSION 3.16)
+project(dong_appcore LANGUAGES C CXX)
+
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_CXX_STANDARD 20)
+
+# =============================================================================
+# AppCore Library
+# =============================================================================
+# This library provides high-level application framework APIs.
+# Uses dong_legacy for full GPU rendering support.
+
+add_library(dong_appcore SHARED
+    src/app.c
+)
+
+target_include_directories(dong_appcore PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+# Define build macro for DLL exports
+target_compile_definitions(dong_appcore PRIVATE DONG_APPCORE_BUILDING_DLL)
+
+# SDL3 dependency
+set(SDL3_PREFIX "${CMAKE_SOURCE_DIR}/zig-out/sdl3" CACHE PATH "SDL3 install prefix")
+target_include_directories(dong_appcore PRIVATE "${SDL3_PREFIX}/include")
+target_link_directories(dong_appcore PRIVATE "${SDL3_PREFIX}/lib")
+target_link_libraries(dong_appcore PUBLIC SDL3)
+
+# SDL_ShaderCross for HLSL compilation
+target_include_directories(dong_appcore PRIVATE "${CMAKE_SOURCE_DIR}/third_party/SDL_shadercross/include")
+
+# DXC library path for shader compilation
+set(DXC_LIB_PATH "${CMAKE_SOURCE_DIR}/third_party/dxc_2025_07_14/lib/x64" CACHE PATH "DXC library path")
+target_link_directories(dong_appcore PRIVATE ${DXC_LIB_PATH})
+target_link_libraries(dong_appcore PRIVATE dxcompiler)
+
+# Vulkan SDK for SPIRV cross
+set(VULKAN_SDK_PATH "$ENV{VULKAN_SDK}" CACHE PATH "Vulkan SDK path")
+if(VULKAN_SDK_PATH)
+    if(WIN32)
+        target_link_directories(dong_appcore PRIVATE "${VULKAN_SDK_PATH}/Lib")
+    else()
+        target_link_directories(dong_appcore PRIVATE "${VULKAN_SDK_PATH}/lib")
+    endif()
+    target_link_libraries(dong_appcore PRIVATE spirv-cross-c-shared)
+endif()
+
+# Link to dong_legacy (for GPU rendering support via dong_view API)
+target_link_libraries(dong_appcore PUBLIC dong_legacy)
+
+# Install
+install(TARGETS dong_appcore
+    ARCHIVE DESTINATION lib
+    LIBRARY DESTINATION lib
+    RUNTIME DESTINATION bin
+)
+
+install(DIRECTORY include/
+    DESTINATION include/dong/appcore
+    FILES_MATCHING PATTERN "*.h"
+)

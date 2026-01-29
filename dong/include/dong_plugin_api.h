@@ -14,7 +14,7 @@ extern "C" {
 // - Loaded by dong_app, then injected into dong.dll.
 // =============================================================================
 
-#define DONG_PLUGIN_API_VERSION 4u
+#define DONG_PLUGIN_API_VERSION 5u
 
 // Capability bitmask for optional subsystems.
 typedef uint64_t dong_plugin_caps_t;

@@ -27,7 +27,7 @@ extern "C" {
 // =============================================================================
 
 // Increment this when making a breaking ABI change.
-#define DONG_API_VERSION 1u
+#define DONG_API_VERSION 2u
 
 typedef struct dong_engine_t dong_engine_t;
 
@@ -86,6 +86,19 @@ DONG_API dong_result_t dong_engine_send_text(dong_engine_t* engine, const char* 
 
 // Script evaluation
 DONG_API dong_result_t dong_engine_eval_script(dong_engine_t* engine, const char* code);
+
+// =============================================================================
+// Rendering (GPU command list access)
+// =============================================================================
+
+// Get the current GPU command list (opaque pointer).
+// Returns NULL if no commands have been generated.
+// The pointer is valid until the next dong_engine_tick() call.
+// External renderers can cast this to GPUCommandList* and execute it.
+DONG_API const void* dong_engine_get_command_list(dong_engine_t* engine);
+
+// Force regeneration of GPU commands on next tick.
+DONG_API void dong_engine_invalidate_commands(dong_engine_t* engine);
 
 // =============================================================================
 // Legacy API (transition)

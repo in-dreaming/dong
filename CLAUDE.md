@@ -19,10 +19,15 @@ zig build examples           # Build all examples to zig-out/bin
 zig build deps               # Build only third-party dependencies
 
 # Run examples
-zig build run                # Run interactive demo
-zig build run-simple         # Run simple demo
-zig build run-complete       # Run complete demo
+zig build run                # Run interactive demo (legacy)
+zig build run-simple         # Run simple demo (legacy)
+zig build run-complete       # Run complete demo (legacy)
 zig build run-feature-tests  # Run feature tests
+
+# New simplified examples (AppCore-based)
+# After build, run from zig-out/bin:
+# ./minimal_dong_demo        # ~50 line demo
+# ./3d_screens_simple        # ~100 line 3D demo
 
 # HTML rendering test tool
 zig build run-html-test -- <html_file> [output.bmp] [width] [height]
@@ -42,13 +47,69 @@ Copy `build.env.example` to `build.env` and configure paths (VULKAN_SDK_PATH, DX
 
 ## Architecture
 
-### Three-Library Architecture
+### Library Architecture (Refactored)
 
 | Library | Purpose | Dependencies |
 |---------|---------|--------------|
-| **dong.dll** | Platform-agnostic core DOM/CSS/Layout/Script engine | QuickJS, Lexbor, Yoga |
-| **dong_legacy.lib** | SDL-coupled GPU rendering (transition library) | SDL3, FreeType, HarfBuzz |
-| **dong_plugin_sdl.dll** | Platform plugin for window/input/GPU abstraction | SDL3, FFmpeg |
+| **dong.dll** | Platform-agnostic core (DOM/CSS/Layout/Script) | QuickJS, Lexbor, Yoga, FreeType, HarfBuzz |
+| **dong_sdl_backend.dll** | SDL-based Platform implementation | SDL3, dong.dll |
+| **dong_appcore.dll** | High-level application framework | dong.dll, dong_sdl_backend.dll, SDL3 |
+| **dong_legacy.lib** | Legacy SDL-coupled code (transition) | SDL3, FreeType, HarfBuzz |
+| **dong_plugin_sdl.dll** | Platform plugin for advanced integration | SDL3, FFmpeg |
+
+### Platform Abstraction Layer
+
+The core `dong.dll` uses dependency injection through the Platform singleton:
+
+```c
+// Platform singleton (dong_platform.h)
+DongPlatform* dong_platform_get(void);
+void dong_platform_set_gpu_driver(DongPlatform*, DongGPUDriver*);
+void dong_platform_set_surface_factory(DongPlatform*, DongSurfaceFactory*);
+
+// Convenience macros (C++)
+DONG_GPU()       // Get registered GPU driver
+DONG_SURFACES()  // Get registered Surface factory
+```
+
+**GPUDriver Interface** (`dong_gpu_driver.h`):
+```c
+typedef struct DongGPUDriverVTable {
+    int (*initialize)(DongGPUDriver* driver);
+    void (*shutdown)(DongGPUDriver* driver);
+    DongGPUTexture (*create_texture)(DongGPUDriver*, const DongGPUTextureDesc*);
+    int (*execute)(DongGPUDriver*, const void* command_list);
+    // ... more methods
+} DongGPUDriverVTable;
+```
+
+**Surface Interface** (`dong_surface.h`):
+```c
+typedef struct DongSurfaceVTable {
+    uint32_t (*get_width)(DongSurface*);
+    uint32_t (*get_height)(DongSurface*);
+    DongGPUTexture (*get_texture)(DongSurface*);
+    void (*mark_dirty)(DongSurface*);
+    // ... more methods
+} DongSurfaceVTable;
+```
+
+### AppCore Framework
+
+The `dong_appcore` library provides high-level APIs for rapid application development:
+
+```c
+// Create a Dong application (~50 lines total)
+dong_app_config_t cfg = { .title = "Demo", .width = 800, .height = 600, .enable_dong = 1 };
+dong_app_t* app = dong_app_create(&cfg);
+dong_app_run(app, NULL, NULL);  // Blocking main loop
+dong_app_destroy(app);
+
+// 3D scene with HTML screens (~100 lines total)
+dong_scene3d_t* scene = dong_scene3d_create(app);
+dong_scene3d_add_screen_simple(scene, "ui.html", 800, 600, 0, 2, -5);
+dong_scene3d_add_overlay(scene, "<div>HUD</div>", 200, 50);
+```
 
 ### Rendering Pipeline
 
@@ -68,7 +129,7 @@ Copy `build.env.example` to `build.env` and configure paths (VULKAN_SDK_PATH, DX
 ### Public C API (`include/dong.h`)
 
 ```c
-// Engine lifecycle
+// Engine lifecycle (API version: 2)
 dong_engine_create(const dong_engine_desc_t* desc, dong_engine_t** out_engine);
 dong_engine_destroy(dong_engine_t* engine);
 dong_engine_tick(dong_engine_t* engine);
@@ -76,14 +137,21 @@ dong_engine_tick(dong_engine_t* engine);
 // Content loading
 dong_engine_load_html(dong_engine_t* engine, const char* html);
 dong_engine_resize(dong_engine_t* engine, uint32_t width, uint32_t height);
+dong_engine_set_gpu(dong_engine_t* engine, void* device, void* window);
 
 // Input events
 dong_engine_send_mouse_move(dong_engine_t* engine, int32_t x, int32_t y);
+dong_engine_send_mouse_button(dong_engine_t* engine, int32_t button, int pressed);
+dong_engine_send_mouse_wheel(dong_engine_t* engine, float delta_x, float delta_y);
 dong_engine_send_key(dong_engine_t* engine, uint32_t key_code, int pressed);
 dong_engine_send_text(dong_engine_t* engine, const char* text);
 
 // JavaScript
 dong_engine_eval_script(dong_engine_t* engine, const char* code);
+
+// GPU command list access
+const void* dong_engine_get_command_list(dong_engine_t* engine);
+void dong_engine_invalidate_commands(dong_engine_t* engine);
 ```
 
 ## Key Conventions
