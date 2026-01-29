@@ -419,18 +419,12 @@ bool GPUDriverSDL::initialize() {
     //
     // 优化配置：平衡 screenPxRange 与笔画锐利度
     // 
-    // 观察：过大的 distance_range 会导致笔画膨胀（变粗）
-    // 需要在保证 screenPxRange >= 2 的前提下，尽量使用较小的 range
-    //
-    // 调整后的计算（13px字体，units_per_em=2048）：
-    // - pixel_scale = 13/2048 = 0.00635
-    // - 128px MSDF，scale = 100/2048 = 0.049
-    // - screenPxRange = 8 * (0.00635/0.049) = 1.04 -> shader offset 调整后约等于 2
+    // 微调：稍微降低 range，配合 shader 的 stem darkening 达到更自然效果
     const GlyphTierConfig tier_configs[] = {
-        {128u,  8.0f},  // 9px-14px：平衡清晰度与笔画粗细
-        {192u,  10.0f}, // 14px-22px
-        {256u,  12.0f}, // 22px-36px
-        {384u,  12.0f}, // 36px+：大字体不需要太大range
+        {128u,  7.0f},  // 9px-14px：从 8 降到 7，更锐利
+        {192u,  9.0f},  // 14px-22px：从 10 降到 9
+        {256u,  11.0f}, // 22px-36px：从 12 降到 11
+        {384u,  12.0f}, // 36px+：保持
     };
 
     for (const auto& cfg : tier_configs) {

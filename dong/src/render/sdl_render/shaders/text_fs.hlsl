@@ -93,32 +93,29 @@ float calcScreenPxRange(float2 uv, float precomputed, float unitRange) {
 }
 
 // 计算 MSDF 的 opacity
-// 综合优化：Stem Darkening + Gamma 校正 + 自适应抗锯齿
+// 微调版本：更自然的笔画粗细和对比度
 float calcMSDFOpacity(float3 msdf, float screenPxRange) {
     float sd = median(msdf.r, msdf.g, msdf.b);
     float screenPxDistance = screenPxRange * (sd - 0.5);
     
-    // === Stem Darkening (笔画加深) ===
-    // 小字体需要加粗笔画以提高可读性
-    // 通过添加正偏移，让更多像素被视为"在字形内"
+    // === Stem Darkening (笔画加深) - 微调 ===
+    // 稍微降低，避免过度加粗
     float stemDarkening = 0.0;
     if (screenPxRange < 2.5) {
-        // 小字体：显著加粗
-        stemDarkening = 0.25;
+        stemDarkening = 0.18;  // 从 0.25 降到 0.18，更自然的加粗
     } else if (screenPxRange < 4.0) {
-        // 中等字体：轻微加粗
-        stemDarkening = 0.15;
+        stemDarkening = 0.10;  // 从 0.15 降到 0.10
     }
-    // 大字体不需要加粗
     
-    // === 自适应 smoothstep 范围 ===
+    // === 自适应 smoothstep 范围 - 优化 ===
+    // 使用更平滑的过渡，减少硬边感
     float range = 0.5;
     if (screenPxRange < 2.0) {
-        range = 0.3;   // 小字体：较窄范围保持锐利
+        range = 0.35;   // 从 0.3 增加到 0.35，稍微柔和一点
     } else if (screenPxRange < 3.0) {
-        range = 0.4;   // 中等字体
+        range = 0.45;   // 从 0.4 增加到 0.45
     } else if (screenPxRange > 4.0) {
-        range = 0.6;   // 大字体：较宽范围更平滑
+        range = 0.6;
     }
     
     // 应用 stem darkening 偏移
@@ -127,10 +124,9 @@ float calcMSDFOpacity(float3 msdf, float screenPxRange) {
     // 计算基础 opacity
     float opacity = smoothstep(-range, range, adjustedDistance);
     
-    // === Gamma 校正 ===
-    // 在 sRGB 空间进行 gamma 调整，使小字体更清晰
-    // 参考：浏览器通常使用 gamma 1.8-2.2
-    const float gamma = 1.6;  // 较小的 gamma 值会增加对比度
+    // === Gamma 校正 - 微调 ===
+    // 提高到 1.75，降低对比度，更自然
+    const float gamma = 1.75;  // 从 1.6 提高到 1.75
     opacity = pow(opacity, 1.0 / gamma);
     
     return opacity;
