@@ -101,12 +101,12 @@ DONG_API const void* dong_engine_get_command_list(dong_engine_t* engine);
 DONG_API void dong_engine_invalidate_commands(dong_engine_t* engine);
 
 // =============================================================================
-// Legacy API (transition)
+// View API
 // =============================================================================
-// Existing demos/tests still include dong.h today.
-// Keep legacy view-based API available until refactor completes.
-#ifndef DONG_DISABLE_LEGACY_VIEW_API
-#include "dong_legacy_view.h"
+// Low-level view API for advanced integrations.
+// Most users should use dong_appcore instead.
+#ifndef DONG_DISABLE_VIEW_API
+#include "dong_view.h"
 #endif
 
 #ifdef __cplusplus

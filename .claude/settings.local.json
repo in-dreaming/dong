@@ -1,7 +1,28 @@
 {
   "permissions": {
     "allow": [
-      "Bash(zig build:*)"
+      "Bash(zig build:*)",
+      "WebFetch(domain:docs.ultralig.ht)",
+      "Bash(find:*)",
+      "Bash(tree:*)",
+      "Bash(ls:*)",
+      "Bash(cmd.exe:*)",
+      "Bash(taskkill:*)",
+      "Bash(timeout:*)",
+      "Bash(for f in data/tests/text_shadow_test.html data/tests/font_style_test.html data/hud.html)",
+      "Bash(do echo \"Rendering $f...\")",
+      "Bash(done)",
+      "Bash(echo:*)",
+      "Bash(./html_render_test.exe:*)",
+      "Bash(cmake --build:*)",
+      "Bash(ninja:*)",
+      "Bash(cmake:*)",
+      "Bash(powershell:*)",
+      "Bash(dir:*)",
+      "Bash(cmd:*)",
+      "Bash(powershell.exe -Command:*)",
+      "Bash(python -c:*)",
+      "Bash(chcp:*)"
     ]
   }
 }

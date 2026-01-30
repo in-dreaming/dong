@@ -192,8 +192,9 @@ else()
     )
 endif()
 
-# dong_legacy: temporary compatibility library (still SDL-coupled)
-add_library(dong_legacy STATIC
+# dong_render: Core rendering library with SDL GPU backend
+# Contains: DOM/CSS/Layout engine + SDL_GPU rendering pipeline
+add_library(dong_render STATIC
     src/api_bindings_legacy.cpp
     src/core/context.cpp
     src/core/platform.c
@@ -246,7 +247,7 @@ add_library(dong_legacy STATIC
     third_party/SDL_shadercross/src/SDL_shadercross.c
 )
 
-target_include_directories(dong_legacy PUBLIC
+target_include_directories(dong_render PUBLIC
     include
     src
     ${QUICKJS_PREFIX}/include
@@ -262,18 +263,18 @@ target_include_directories(dong_legacy PUBLIC
 
 if(VULKAN_SDK_PATH)
     if(WIN32)
-        target_include_directories(dong_legacy PUBLIC "${VULKAN_SDK_PATH}/Include/spirv_cross")
+        target_include_directories(dong_render PUBLIC "${VULKAN_SDK_PATH}/Include/spirv_cross")
     else()
-        target_include_directories(dong_legacy PUBLIC "${VULKAN_SDK_PATH}/include/spirv_cross")
+        target_include_directories(dong_render PUBLIC "${VULKAN_SDK_PATH}/include/spirv_cross")
     endif()
 endif()
 
-target_compile_definitions(dong_legacy PRIVATE SDL_SHADERCROSS_DXC DONG_USE_SDL_IMAGE DONG_SDL_SHADER_DIR=\"${CMAKE_SOURCE_DIR}/src/render/sdl_render/shaders\")
+target_compile_definitions(dong_render PRIVATE SDL_SHADERCROSS_DXC DONG_USE_SDL_IMAGE DONG_SDL_SHADER_DIR=\"${CMAKE_SOURCE_DIR}/src/render/sdl_render/shaders\")
 
-target_link_libraries(dong_legacy PUBLIC quickjs lexbor yoga)
+target_link_libraries(dong_render PUBLIC quickjs lexbor yoga)
 
 if(WIN32)
-    target_link_libraries(dong_legacy PUBLIC
+    target_link_libraries(dong_render PUBLIC
         "${FREETYPE_PREFIX}/lib/freetype.lib"
         "${HARFBUZZ_PREFIX}/lib/harfbuzz.lib"
         "${MSDFGEN_PREFIX}/lib/msdfgen-core.lib"
@@ -281,10 +282,10 @@ if(WIN32)
     )
     # Link clang compiler-rt builtins for __udivti3 etc (used by QuickJS BigInt)
     if(CLANG_RT_BUILTIN)
-        target_link_libraries(dong_legacy PUBLIC "${CLANG_RT_BUILTIN}")
+        target_link_libraries(dong_render PUBLIC "${CLANG_RT_BUILTIN}")
     endif()
 else()
-    target_link_libraries(dong_legacy PUBLIC
+    target_link_libraries(dong_render PUBLIC
         "${FREETYPE_PREFIX}/lib/libfreetype.a"
         "${HARFBUZZ_PREFIX}/lib/libharfbuzz.a"
         "${MSDFGEN_PREFIX}/lib/libmsdfgen-core.a"
@@ -341,7 +342,7 @@ if(BUILD_EXAMPLES)
     # Common function to configure examples
     function(add_dong_example name source)
         add_executable(${name} ${source})
-        target_link_libraries(${name} PRIVATE dong_legacy)
+        target_link_libraries(${name} PRIVATE dong_render)
         
         # SDL3
         target_include_directories(${name} PRIVATE "${SDL3_PREFIX}/include")
@@ -382,13 +383,16 @@ if(BUILD_EXAMPLES)
         endif()
     endfunction()
 
-    # C++ examples (legacy - using dong_legacy API)
+    # C++ examples (legacy - using dong_render API)
+    # NOTE: These are kept for reference but replaced by AppCore-based equivalents:
+    #   - interactive_demo -> interactive_demo_new (C, ~200 lines vs 450)
+    #   - 3d_screen_script -> 3d_screens_simple (C, ~130 lines vs 1500+)
     set(CPP_EXAMPLES
-        # Interactive demos
-        interactive_demo
-        3d_screen_script
+        # Legacy demos - kept for reference, uncomment to build
+        # interactive_demo
+        # 3d_screen_script
 
-        # HTML render test tool
+        # HTML render test tool (still useful for development)
         html_render_test
     )
 
@@ -411,7 +415,7 @@ if(BUILD_EXAMPLES)
 
             target_link_libraries(${name} PRIVATE dong_appcore)
 
-            # Vulkan SDK for SPIRV cross (needed by dong_legacy via SDL_shadercross)
+            # Vulkan SDK for SPIRV cross (needed by dong_render via SDL_shadercross)
             if(VULKAN_SDK_PATH)
                 if(WIN32)
                     target_link_directories(${name} PRIVATE "${VULKAN_SDK_PATH}/Lib")
@@ -421,7 +425,7 @@ if(BUILD_EXAMPLES)
                 target_link_libraries(${name} PRIVATE spirv-cross-c-shared)
             endif()
 
-            # DXC library (needed by dong_legacy via SDL_shadercross)
+            # DXC library (needed by dong_render via SDL_shadercross)
             target_link_directories(${name} PRIVATE ${DXC_LIB_PATH})
             target_link_libraries(${name} PRIVATE dxcompiler)
 
@@ -442,10 +446,15 @@ if(BUILD_EXAMPLES)
             add_appcore_example(minimal_dong_demo "examples/minimal/main.c")
         endif()
 
-        # 3D screens simple demo (~100 lines) - disabled until scene3d is implemented
-        # if(EXISTS "${CMAKE_SOURCE_DIR}/examples/3d_screens_simple/main.c")
-        #     add_appcore_example(3d_screens_simple "examples/3d_screens_simple/main.c")
-        # endif()
+        # Interactive demo (simplified AppCore version)
+        if(EXISTS "${CMAKE_SOURCE_DIR}/examples/interactive_demo_new.c")
+            add_appcore_example(interactive_demo_new "examples/interactive_demo_new.c")
+        endif()
+
+        # 3D screens simple demo (~100 lines)
+        if(EXISTS "${CMAKE_SOURCE_DIR}/examples/3d_screens_simple/main.c")
+            add_appcore_example(3d_screens_simple "examples/3d_screens_simple/main.c")
+        endif()
     endif()
 
     # Feature test runner
@@ -454,7 +463,7 @@ if(BUILD_EXAMPLES)
             examples/features/run_feature_tests.cpp
             examples/features/feature_test_framework.cpp
         )
-        target_link_libraries(run_feature_tests PRIVATE dong_legacy)
+        target_link_libraries(run_feature_tests PRIVATE dong_render)
         target_include_directories(run_feature_tests PRIVATE "${SDL3_PREFIX}/include")
         if(WIN32)
             target_link_directories(run_feature_tests PRIVATE "${SDL3_PREFIX}/lib")
@@ -510,6 +519,19 @@ if(BUILD_EXAMPLES)
     endforeach()
     if(TARGET msdf_cpu_test)
         list(APPEND EXAMPLE_TARGETS msdf_cpu_test)
+    endif()
+
+    # Add AppCore examples
+    if(BUILD_APPCORE)
+        if(TARGET minimal_dong_demo)
+            list(APPEND EXAMPLE_TARGETS minimal_dong_demo)
+        endif()
+        if(TARGET interactive_demo_new)
+            list(APPEND EXAMPLE_TARGETS interactive_demo_new)
+        endif()
+        if(TARGET 3d_screens_simple)
+            list(APPEND EXAMPLE_TARGETS 3d_screens_simple)
+        endif()
     endif()
 
     install(TARGETS ${EXAMPLE_TARGETS}

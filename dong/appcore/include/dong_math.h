@@ -127,6 +127,14 @@ static inline dong_mat4_t dong_mat4_rotate_y(float angle) {
     return m;
 }
 
+static inline dong_mat4_t dong_mat4_scale(float sx, float sy, float sz) {
+    dong_mat4_t m = dong_mat4_identity();
+    m.m[0] = sx;
+    m.m[5] = sy;
+    m.m[10] = sz;
+    return m;
+}
+
 static inline dong_mat4_t dong_mat4_multiply(dong_mat4_t a, dong_mat4_t b) {
     dong_mat4_t result = {{0}};
     for (int col = 0; col < 4; col++) {

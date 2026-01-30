@@ -30,6 +30,7 @@ typedef struct dong_screen3d_t dong_screen3d_t;
 typedef struct dong_screen3d_config_t {
     const char* html_file;      // Path to HTML file (NULL to use html_content)
     const char* html_content;   // Direct HTML content (used if html_file is NULL)
+    const char* resource_root;  // Base directory for resolving relative paths (NULL for auto)
     uint32_t width;             // Render texture width (default 800)
     uint32_t height;            // Render texture height (default 600)
     float pos_x, pos_y, pos_z;  // Position in 3D space
@@ -102,6 +103,19 @@ DONG_APPCORE_API dong_overlay_t* dong_scene3d_add_overlay(
     uint32_t width, uint32_t height
 );
 
+// Add an overlay from a file (resolves path relative to resource root).
+DONG_APPCORE_API dong_overlay_t* dong_scene3d_add_overlay_file(
+    dong_scene3d_t* scene,
+    const char* html_file,
+    uint32_t width, uint32_t height
+);
+
+// Get overlay by index.
+DONG_APPCORE_API dong_overlay_t* dong_scene3d_get_overlay(dong_scene3d_t* scene, int index);
+
+// Get overlay count.
+DONG_APPCORE_API int dong_scene3d_get_overlay_count(dong_scene3d_t* scene);
+
 // =============================================================================
 // Update and Render
 // =============================================================================
@@ -146,6 +160,19 @@ DONG_APPCORE_API void dong_scene3d_set_background_color(dong_scene3d_t* scene, f
 
 // Enable/disable depth testing (default enabled).
 DONG_APPCORE_API void dong_scene3d_set_depth_test_enabled(dong_scene3d_t* scene, int enabled);
+
+// Set resource root for all screens (base directory for resolving relative paths).
+DONG_APPCORE_API void dong_scene3d_set_resource_root(dong_scene3d_t* scene, const char* root);
+
+// =============================================================================
+// Automatic Screen Arrangement
+// =============================================================================
+
+// Automatically arrange all screens in a grid pattern.
+// spacing_x: horizontal spacing between screens (default 4.0)
+// spacing_y: vertical spacing between screens (default 2.8)
+// max_per_row: maximum screens per row (default 5)
+DONG_APPCORE_API void dong_scene3d_arrange_screens(dong_scene3d_t* scene, float spacing_x, float spacing_y, int max_per_row);
 
 #ifdef __cplusplus
 }

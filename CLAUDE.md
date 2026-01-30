@@ -18,20 +18,19 @@ zig build                    # Build everything (deps + dong + examples)
 zig build examples           # Build all examples to zig-out/bin
 zig build deps               # Build only third-party dependencies
 
-# Run examples
-zig build run                # Run interactive demo (legacy)
-zig build run-simple         # Run simple demo (legacy)
-zig build run-complete       # Run complete demo (legacy)
-zig build run-feature-tests  # Run feature tests
-
-# New simplified examples (AppCore-based)
+# Run examples (AppCore-based, recommended)
 # After build, run from zig-out/bin:
-# ./minimal_dong_demo        # ~50 line demo
-# ./3d_screens_simple        # ~100 line 3D demo
+./minimal_dong_demo          # Minimal demo (~50 lines)
+./interactive_demo_new       # Interactive demo (~200 lines)
+./3d_screens_simple          # 3D HTML screens demo (~130 lines)
 
-# HTML rendering test tool
+# Legacy examples (for reference only, not built by default)
+# ./interactive_demo         # Legacy version (450+ lines)
+# ./3d_screen_script         # Legacy version (1500+ lines)
+
+# Development tools
 zig build run-html-test -- <html_file> [output.bmp] [width] [height]
-zig build run-html-test -- <html_file> [output.bmp] [width] [height] --frames N [--frame-ms MS] [--no-update]
+zig build run-feature-tests  # Run feature tests
 zig build render-all-tests   # Renders all HTML files in examples/data/tests/
 ```
 
@@ -47,68 +46,66 @@ Copy `build.env.example` to `build.env` and configure paths (VULKAN_SDK_PATH, DX
 
 ## Architecture
 
-### Library Architecture (Refactored)
+### Library Architecture
 
 | Library | Purpose | Dependencies |
 |---------|---------|--------------|
 | **dong.dll** | Platform-agnostic core (DOM/CSS/Layout/Script) | QuickJS, Lexbor, Yoga, FreeType, HarfBuzz |
-| **dong_sdl_backend.dll** | SDL-based Platform implementation | SDL3, dong.dll |
-| **dong_appcore.dll** | High-level application framework | dong.dll, dong_sdl_backend.dll, SDL3 |
-| **dong_legacy.lib** | Legacy SDL-coupled code (transition) | SDL3, FreeType, HarfBuzz |
+| **dong_render.lib** | SDL-coupled rendering backend (static) | SDL3, SDL_ShaderCross, DXC |
+| **dong_appcore.dll** | High-level application framework (recommended API) | dong_render, SDL3 |
 | **dong_plugin_sdl.dll** | Platform plugin for advanced integration | SDL3, FFmpeg |
 
-### Platform Abstraction Layer
+### AppCore Framework (Recommended API)
 
-The core `dong.dll` uses dependency injection through the Platform singleton:
+The `dong_appcore` library provides high-level C APIs for rapid application development:
 
+**Simple Application** (`dong_app.h`):
 ```c
-// Platform singleton (dong_platform.h)
-DongPlatform* dong_platform_get(void);
-void dong_platform_set_gpu_driver(DongPlatform*, DongGPUDriver*);
-void dong_platform_set_surface_factory(DongPlatform*, DongSurfaceFactory*);
+// ~50 lines for a complete application
+dong_app_config_t cfg = {0};
+cfg.title = "Demo";
+cfg.width = 800;
+cfg.height = 600;
+cfg.enable_dong = 1;
 
-// Convenience macros (C++)
-DONG_GPU()       // Get registered GPU driver
-DONG_SURFACES()  // Get registered Surface factory
-```
-
-**GPUDriver Interface** (`dong_gpu_driver.h`):
-```c
-typedef struct DongGPUDriverVTable {
-    int (*initialize)(DongGPUDriver* driver);
-    void (*shutdown)(DongGPUDriver* driver);
-    DongGPUTexture (*create_texture)(DongGPUDriver*, const DongGPUTextureDesc*);
-    int (*execute)(DongGPUDriver*, const void* command_list);
-    // ... more methods
-} DongGPUDriverVTable;
-```
-
-**Surface Interface** (`dong_surface.h`):
-```c
-typedef struct DongSurfaceVTable {
-    uint32_t (*get_width)(DongSurface*);
-    uint32_t (*get_height)(DongSurface*);
-    DongGPUTexture (*get_texture)(DongSurface*);
-    void (*mark_dirty)(DongSurface*);
-    // ... more methods
-} DongSurfaceVTable;
-```
-
-### AppCore Framework
-
-The `dong_appcore` library provides high-level APIs for rapid application development:
-
-```c
-// Create a Dong application (~50 lines total)
-dong_app_config_t cfg = { .title = "Demo", .width = 800, .height = 600, .enable_dong = 1 };
 dong_app_t* app = dong_app_create(&cfg);
+dong_app_load_html(app, "<html><body><h1>Hello!</h1></body></html>");
 dong_app_run(app, NULL, NULL);  // Blocking main loop
 dong_app_destroy(app);
+```
 
-// 3D scene with HTML screens (~100 lines total)
+**3D Scene with HTML Screens** (`dong_scene3d.h`):
+```c
+// ~130 lines for a 3D demo with multiple HTML screens
 dong_scene3d_t* scene = dong_scene3d_create(app);
-dong_scene3d_add_screen_simple(scene, "ui.html", 800, 600, 0, 2, -5);
-dong_scene3d_add_overlay(scene, "<div>HUD</div>", 200, 50);
+
+// Add HTML screens at 3D positions
+dong_screen3d_config_t scfg = {0};
+scfg.html_content = "<html>...</html>";
+scfg.width = 800; scfg.height = 600;
+scfg.pos_x = 0; scfg.pos_y = 2; scfg.pos_z = -5;
+dong_scene3d_add_screen(scene, &scfg);
+
+// Main loop with built-in camera controls (WASD + mouse)
+while (dong_app_is_running(app)) {
+    dong_app_poll_events(app);
+    dong_scene3d_update(scene, dong_app_get_delta_time(app));
+    dong_scene3d_render(scene);
+    dong_app_present(app);
+}
+```
+
+### View API
+
+For advanced use cases, the low-level `dong_view_*` API is available (header: `dong_view.h`):
+```c
+// Low-level API (used internally by AppCore)
+dong_context_t* ctx = dong_create_context();
+dong_view_t* view = dong_view_create(ctx, 800, 600);
+dong_view_load_html(view, html);
+dong_view_set_external_gpu_device(view, device, window);
+// ... render to GPU texture
+dong_view_free(view);
 ```
 
 ### Rendering Pipeline

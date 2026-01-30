@@ -1,6 +1,6 @@
 # dong_app - Simple HTML Viewer using AppCore
 #
-# This app uses the new AppCore architecture instead of dong_legacy
+# This app uses the new AppCore architecture
 
 add_executable(dong_app
     src/main.c
@@ -15,10 +15,10 @@ target_include_directories(dong_app PRIVATE
 set(SDL3_PREFIX "${CMAKE_SOURCE_DIR}/zig-out/sdl3" CACHE PATH "SDL3 install prefix")
 target_link_directories(dong_app PRIVATE "${SDL3_PREFIX}/lib")
 
-# Link to AppCore (which links to dong_legacy and SDL3)
+# Link to AppCore (which links to dong_render and SDL3)
 target_link_libraries(dong_app PRIVATE dong_appcore)
 
-# Vulkan SDK for SPIRV cross (needed by dong_legacy via SDL_shadercross)
+# Vulkan SDK for SPIRV cross (needed by dong_render via SDL_shadercross)
 set(VULKAN_SDK_PATH "$ENV{VULKAN_SDK}" CACHE PATH "Vulkan SDK path")
 if(VULKAN_SDK_PATH)
     if(WIN32)
@@ -29,7 +29,7 @@ if(VULKAN_SDK_PATH)
     target_link_libraries(dong_app PRIVATE spirv-cross-c-shared)
 endif()
 
-# DXC library (needed by dong_legacy via SDL_shadercross)
+# DXC library (needed by dong_render via SDL_shadercross)
 set(DXC_LIB_PATH "${CMAKE_SOURCE_DIR}/third_party/dxc_2025_07_14/lib/x64" CACHE PATH "DXC library path")
 target_link_directories(dong_app PRIVATE ${DXC_LIB_PATH})
 target_link_libraries(dong_app PRIVATE dxcompiler)

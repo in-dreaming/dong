@@ -36,7 +36,7 @@ typedef struct dong_app_impl_t {
     int32_t mouse_y;
     uint32_t mouse_buttons;
 
-    // Dong context and view (legacy API for rendering)
+    // Dong context and view (core View API for rendering)
     dong_context_t* dong_ctx;
     dong_view_t* dong_view;
 
@@ -138,7 +138,7 @@ DONG_APPCORE_API dong_app_t* dong_app_create(const dong_app_config_t* config) {
         return NULL;
     }
 
-    // Initialize Dong using legacy view API (which has full GPU rendering support)
+    // Initialize Dong using View API (which has full GPU rendering support)
     if (config->enable_dong) {
         app->dong_ctx = dong_create_context();
         if (!app->dong_ctx) {
@@ -423,7 +423,7 @@ DONG_APPCORE_API void* dong_app_get_window(dong_app_t* app_handle) {
 }
 
 DONG_APPCORE_API void* dong_app_get_dong_engine(dong_app_t* app_handle) {
-    // Return dong_view for compatibility (it's actually the legacy view)
+    // Return dong_view for compatibility (internal View API)
     dong_app_impl_t* app = (dong_app_impl_t*)app_handle;
     return app ? app->dong_view : NULL;
 }

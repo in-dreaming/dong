@@ -8,10 +8,12 @@ set(CMAKE_CXX_STANDARD 20)
 # AppCore Library
 # =============================================================================
 # This library provides high-level application framework APIs.
-# Uses dong_legacy for full GPU rendering support.
+# Uses dong_render for full GPU rendering support.
 
 add_library(dong_appcore SHARED
     src/app.c
+    src/scene3d.c
+    src/overlay.c
 )
 
 target_include_directories(dong_appcore PUBLIC
@@ -47,8 +49,8 @@ if(VULKAN_SDK_PATH)
     target_link_libraries(dong_appcore PRIVATE spirv-cross-c-shared)
 endif()
 
-# Link to dong_legacy (for GPU rendering support via dong_view API)
-target_link_libraries(dong_appcore PUBLIC dong_legacy)
+# Link to dong_render (for GPU rendering support via dong_view API)
+target_link_libraries(dong_appcore PUBLIC dong_render)
 
 # Install
 install(TARGETS dong_appcore

@@ -1,10 +1,10 @@
-#ifndef DONG_LEGACY_VIEW_H
-#define DONG_LEGACY_VIEW_H
+#ifndef DONG_VIEW_H
+#define DONG_VIEW_H
 
 #include <stdint.h>
 #include <stdbool.h>
 
-// Legacy view API is still able to consume the plugin vtable for optional subsystems (e.g. video).
+// View API is still able to consume the plugin vtable for optional subsystems (e.g. video).
 #include "dong_plugin_api.h"
 
 #ifdef __cplusplus
@@ -14,8 +14,8 @@ extern "C" {
 typedef struct dong_context_t dong_context_t;
 typedef struct dong_view_t dong_view_t;
 
-// NOTE: This is the legacy C API kept for transition.
-// It is expected to be removed or moved behind build options after pluginization.
+// NOTE: Core view API for HTML rendering.
+// Used internally by AppCore and advanced integrations.
 
 // 1. Initialization
 // (Legacy) Context is currently not used by views.
@@ -100,4 +100,4 @@ bool dong_view_render_offscreen(dong_view_t* view, void* gpu_device,
 }
 #endif
 
-#endif // DONG_LEGACY_VIEW_H
+#endif // DONG_VIEW_H

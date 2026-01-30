@@ -1,4 +1,4 @@
-﻿#define DONG_DISABLE_LEGACY_VIEW_API
+﻿#define DONG_DISABLE_VIEW_API
 #include "dong.h"
 #include "dong_platform.h"
 #include "dong_gpu_driver.h"
