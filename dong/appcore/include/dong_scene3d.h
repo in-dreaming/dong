@@ -120,9 +120,13 @@ DONG_APPCORE_API int dong_scene3d_get_overlay_count(dong_scene3d_t* scene);
 // Update and Render
 // =============================================================================
 
-// Handle input (camera movement, ray casting to screens).
+// Handle input (deprecated; use dong_scene3d_process_event).
 // Returns the screen that received input, or NULL.
 DONG_APPCORE_API dong_screen3d_t* dong_scene3d_handle_input(dong_scene3d_t* scene);
+
+// Process a single SDL_Event for 3D screen input routing.
+// Intended to be called from dong_app_set_event_callback().
+DONG_APPCORE_API void dong_scene3d_process_event(dong_scene3d_t* scene, const void* sdl_event);
 
 // Update all screens and animations.
 DONG_APPCORE_API void dong_scene3d_update(dong_scene3d_t* scene, float dt);

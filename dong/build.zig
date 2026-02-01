@@ -451,4 +451,12 @@ pub fn build(b: *std.Build) void {
     render_all_tests.step.dependOn(&cmake_install.step);
     const render_all_step = b.step("render-all-tests", "Render all test HTML files to BMP");
     render_all_step.dependOn(&render_all_tests.step);
+
+    // 3D screens simple demo
+    const run_3d_simple = b.addSystemCommand(&.{
+        if (is_windows) "zig-out\\bin\\3d_screens_simple.exe" else "zig-out/bin/3d_screens_simple",
+    });
+    run_3d_simple.step.dependOn(&cmake_install.step);
+    const run_3d_simple_step = b.step("run-3d-simple", "Run 3D screens simple demo");
+    run_3d_simple_step.dependOn(&run_3d_simple.step);
 }

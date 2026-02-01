@@ -65,14 +65,14 @@ GPUDriverSDL::GlyphAtlasTier* GPUDriverSDL::selectGlyphAtlasTier(float font_size
     }
 
     // DEBUG: 每100帧输出一次tier选择统计
-    static int frame_count = 0;
-    static bool first_log = true;
-    if (first_log || frame_count % 100 == 0) {
-        SDL_Log("[TIER SELECT] font_size=%.1fpx -> tier=%upx (target=%upx)",
-                font_size, best->bitmap_px, target_tier_px);
-        first_log = false;
-    }
-    ++frame_count;
+    //static int frame_count = 0;
+    //static bool first_log = true;
+    // if (first_log || frame_count % 100 == 0) {
+    //     SDL_Log("[TIER SELECT] font_size=%.1fpx -> tier=%upx (target=%upx)",
+    //             font_size, best->bitmap_px, target_tier_px);
+    //     first_log = false;
+    // }
+    //++frame_count;
 
     return best;
 }

@@ -28,6 +28,15 @@
 #include <string.h>
 #include <stdlib.h>
 
+static dong_scene3d_t* g_scene = NULL;
+
+static void on_app_event(void* user_data, const void* sdl_event) {
+    (void)user_data;
+    if (g_scene) {
+        dong_scene3d_process_event(g_scene, sdl_event);
+    }
+}
+
 // Screen configuration structure (mirrors ScreenConfig from legacy)
 typedef struct {
     const char* html_file;
@@ -134,6 +143,13 @@ int main(int argc, char* argv[]) {
         dong_app_destroy(app);
         return 1;
     }
+    g_scene = scene;
+
+    // Forward SDL input events to Scene3D (mouse/keyboard/text)
+    dong_app_set_event_callback(app, on_app_event, NULL);
+
+    // Enable SDL text input so input fields can receive SDL_EVENT_TEXT_INPUT
+    dong_app_enable_text_input(app, 1);
 
     // Set resource root for HTML file resolution
     const char* data_path = get_data_path();

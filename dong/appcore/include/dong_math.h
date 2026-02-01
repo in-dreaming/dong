@@ -29,6 +29,11 @@ static inline dong_vec3_t dong_vec3(float x, float y, float z) {
     return v;
 }
 
+static inline dong_vec4_t dong_vec4(float x, float y, float z, float w) {
+    dong_vec4_t v = {x, y, z, w};
+    return v;
+}
+
 static inline dong_vec3_t dong_vec3_add(dong_vec3_t a, dong_vec3_t b) {
     return dong_vec3(a.x + b.x, a.y + b.y, a.z + b.z);
 }
@@ -156,6 +161,57 @@ static inline dong_vec4_t dong_mat4_transform(dong_mat4_t m, dong_vec4_t v) {
     result.z = m.m[2] * v.x + m.m[6] * v.y + m.m[10] * v.z + m.m[14] * v.w;
     result.w = m.m[3] * v.x + m.m[7] * v.y + m.m[11] * v.z + m.m[15] * v.w;
     return result;
+}
+
+// Matrix inverse (Gauss-Jordan elimination)
+static inline dong_mat4_t dong_mat4_inverse(dong_mat4_t m) {
+    dong_mat4_t inv = dong_mat4_identity();
+    float a[16], b[16];
+    for (int i = 0; i < 16; i++) a[i] = m.m[i];
+    for (int i = 0; i < 16; i++) b[i] = (i % 5 == 0) ? 1.0f : 0.0f;
+
+    for (int col = 0; col < 4; col++) {
+        // Partial pivoting
+        int pivot = col;
+        float max_val = fabsf(a[col * 4 + col]);
+        for (int row = col + 1; row < 4; row++) {
+            float val = fabsf(a[col * 4 + row]);
+            if (val > max_val) {
+                max_val = val;
+                pivot = row;
+            }
+        }
+        // Swap rows
+        if (pivot != col) {
+            for (int k = 0; k < 4; k++) {
+                float tmp = a[k * 4 + col]; a[k * 4 + col] = a[k * 4 + pivot]; a[k * 4 + pivot] = tmp;
+                tmp = b[k * 4 + col]; b[k * 4 + col] = b[k * 4 + pivot]; b[k * 4 + pivot] = tmp;
+            }
+        }
+
+        float diag = a[col * 4 + col];
+        if (fabsf(diag) < 0.0001f) return dong_mat4_identity();  // Singular
+
+        // Normalize row
+        for (int k = 0; k < 4; k++) {
+            a[k * 4 + col] /= diag;
+            b[k * 4 + col] /= diag;
+        }
+
+        // Eliminate column
+        for (int row = 0; row < 4; row++) {
+            if (row != col) {
+                float factor = a[col * 4 + row];
+                for (int k = 0; k < 4; k++) {
+                    a[k * 4 + row] -= factor * a[k * 4 + col];
+                    b[k * 4 + row] -= factor * b[k * 4 + col];
+                }
+            }
+        }
+    }
+
+    for (int i = 0; i < 16; i++) inv.m[i] = b[i];
+    return inv;
 }
 
 // Constants

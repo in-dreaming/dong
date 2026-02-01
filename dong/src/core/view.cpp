@@ -688,8 +688,8 @@ SDL_GPUTexture* View::renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, 
         return nullptr;
     }
 
-    // Tick media elements (e.g. <video>) for offscreen rendering too.
-    // Otherwise autoplay videos won't advance when the embedder only calls renderToGPUTexture().
+    // Tick media elements (e.g. <video>) and animations for offscreen rendering too.
+    // Otherwise autoplay videos and CSS animations won't advance when the embedder only calls renderToGPUTexture().
     // Note: multiframe determinism tools may disable this via DONG_OFFSCREEN_TICK_MEDIA=0.
     const char* tick_media_env = std::getenv("DONG_OFFSCREEN_TICK_MEDIA");
     const bool tick_media = !(tick_media_env && tick_media_env[0] == '0');
@@ -699,13 +699,26 @@ SDL_GPUTexture* View::renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, 
         double current_time = std::chrono::duration<double>(now - start_time).count();
         last_wall_time_sec_ = current_time;
 
+        // Update CSS animations (same as View::update)
+        auto& anim_controller = animation::getAnimationController();
+        if (anim_controller.hasActiveAnimations()) {
+            DONG_PROFILE_SCOPE_CAT("Animation::update", "animation");
+            anim_controller.update(current_time);
+            markNeedsRepaint();
+        }
+
+        // Process script tasks
+        if (script_engine) {
+            DONG_PROFILE_SCOPE_CAT("Script::processTasks", "script");
+            script_engine->processPendingTasks();
+        }
+
         bool dom_tree_dirty = false;
         if (dom_manager) {
             auto root_for_media = dom_manager->getRoot();
             dom_tree_dirty = (root_for_media && root_for_media->isLayoutDirty());
         }
         syncVideoElements(current_time, dom_tree_dirty);
-
     }
 
 
@@ -2808,6 +2821,8 @@ void View::syncVideoElements(double wall_time_sec, bool dom_tree_dirty) {
                         if (vs.node) {
                             vs.node->setAttribute("__dong_video_currentTime", std::to_string(vs.current_pts));
                         }
+
+
 
 
                     }

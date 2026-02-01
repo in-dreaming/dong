@@ -4,12 +4,59 @@
 #include "dong_app.h"
 #include "dong.h"
 #include "dong_platform.h"
+#include "dong_plugin_api.h"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_gpu.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+
+// Plugin loading for video support
+static const dong_plugin_vtable_t* s_plugin_vtable = NULL;
+static void* s_plugin_module = NULL;
+
+static const dong_plugin_vtable_t* try_load_plugin(void) {
+    if (s_plugin_vtable) return s_plugin_vtable;
+    if (s_plugin_module) return NULL;
+    
+    const char* filename =
+#if defined(_WIN32)
+        "dong_plugin_sdl.dll";
+#elif defined(__APPLE__)
+        "libdong_plugin_sdl.dylib";
+#else
+        "libdong_plugin_sdl.so";
+#endif
+
+    const char* base_path = SDL_GetBasePath();
+    if (!base_path) return NULL;
+    
+    char path[1024];
+    snprintf(path, sizeof(path), "%s%s", base_path, filename);
+    
+    s_plugin_module = SDL_LoadObject(path);
+    if (!s_plugin_module) {
+        printf("[DongApp] Plugin not found: %s\n", path);
+        s_plugin_module = (void*)1;
+        return NULL;
+    }
+    
+    typedef const dong_plugin_vtable_t* (*get_api_fn)(void);
+    get_api_fn fn = (get_api_fn)SDL_LoadFunction((SDL_SharedObject*)s_plugin_module, "dong_plugin_get_api");
+    if (!fn) {
+        printf("[DongApp] Plugin missing symbol\n");
+        SDL_UnloadObject((SDL_SharedObject*)s_plugin_module);
+        s_plugin_module = (void*)1;
+        return NULL;
+    }
+    
+    s_plugin_vtable = fn();
+    if (s_plugin_vtable) {
+        printf("[DongApp] Plugin loaded: %s\n", path);
+    }
+    return s_plugin_vtable;
+}
 
 // =============================================================================
 // Internal Structures
@@ -43,6 +90,10 @@ typedef struct dong_app_impl_t {
     // Blit pipeline (for rendering texture to swapchain)
     SDL_GPUGraphicsPipeline* blit_pipeline;
     SDL_GPUSampler* blit_sampler;
+    
+    // Event callback for external input handling
+    dong_app_event_callback_t event_callback;
+    void* event_callback_user_data;
 } dong_app_impl_t;
 
 // =============================================================================
@@ -138,6 +189,11 @@ DONG_APPCORE_API dong_app_t* dong_app_create(const dong_app_config_t* config) {
         return NULL;
     }
 
+    // Disable VSync for uncapped framerate
+    SDL_SetGPUSwapchainParameters(app->gpu_device, app->window,
+                                  SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
+                                  SDL_GPU_PRESENTMODE_IMMEDIATE);
+
     // Initialize Dong using View API (which has full GPU rendering support)
     if (config->enable_dong) {
         app->dong_ctx = dong_create_context();
@@ -148,6 +204,11 @@ DONG_APPCORE_API dong_app_t* dong_app_create(const dong_app_config_t* config) {
             if (!app->dong_view) {
                 fprintf(stderr, "[DongApp] dong_view_create failed\n");
             } else {
+                // Load plugin for video support
+                const dong_plugin_vtable_t* plugin = try_load_plugin();
+                if (plugin) {
+                    dong_view_set_plugin_api(app->dong_view, plugin, NULL);
+                }
                 // Enable GPU rendering
                 dong_view_set_external_gpu_device(app->dong_view, app->gpu_device, app->window);
                 printf("[DongApp] Dong view created with GPU rendering\n");
@@ -254,23 +315,6 @@ DONG_APPCORE_API int dong_app_poll_events(dong_app_t* app_handle) {
                 app->running = 0;
                 return 0;
 
-            case SDL_EVENT_KEY_DOWN:
-                // ESC to quit
-                if (event.key.key == SDLK_ESCAPE) {
-                    app->running = 0;
-                    return 0;
-                }
-                if (app->dong_view) {
-                    dong_view_send_key_down(app->dong_view, event.key.key);
-                }
-                break;
-
-            case SDL_EVENT_KEY_UP:
-                if (app->dong_view) {
-                    dong_view_send_key_up(app->dong_view, event.key.key);
-                }
-                break;
-
             case SDL_EVENT_WINDOW_RESIZED:
                 app->width = event.window.data1;
                 app->height = event.window.data2;
@@ -285,11 +329,18 @@ DONG_APPCORE_API int dong_app_poll_events(dong_app_t* app_handle) {
                 if (app->dong_view) {
                     dong_view_send_mouse_move(app->dong_view, app->mouse_x, app->mouse_y);
                 }
+                // Forward to callback for 3D screen handling
+                if (app->event_callback) {
+                    app->event_callback(app->event_callback_user_data, &event);
+                }
                 break;
 
             case SDL_EVENT_MOUSE_BUTTON_DOWN:
                 if (app->dong_view) {
                     dong_view_send_mouse_down(app->dong_view, event.button.button);
+                }
+                if (app->event_callback) {
+                    app->event_callback(app->event_callback_user_data, &event);
                 }
                 break;
 
@@ -297,18 +348,18 @@ DONG_APPCORE_API int dong_app_poll_events(dong_app_t* app_handle) {
                 if (app->dong_view) {
                     dong_view_send_mouse_up(app->dong_view, event.button.button);
                 }
-                break;
-
-            case SDL_EVENT_MOUSE_WHEEL:
-                if (app->dong_view) {
-                    // SDL wheel y positive = scroll up, dong expects positive = scroll down
-                    dong_view_send_mouse_wheel(app->dong_view, event.wheel.x, -event.wheel.y);
+                if (app->event_callback) {
+                    app->event_callback(app->event_callback_user_data, &event);
                 }
                 break;
 
+            case SDL_EVENT_MOUSE_WHEEL:
+            case SDL_EVENT_KEY_DOWN:
+            case SDL_EVENT_KEY_UP:
             case SDL_EVENT_TEXT_INPUT:
-                if (app->dong_view) {
-                    dong_view_send_text_input(app->dong_view, event.text.text);
+                // Forward input events to callback for 3D screen handling
+                if (app->event_callback) {
+                    app->event_callback(app->event_callback_user_data, &event);
                 }
                 break;
         }
@@ -462,9 +513,42 @@ DONG_APPCORE_API int dong_app_load_html_file(dong_app_t* app_handle, const char*
     content[read] = '\0';
     fclose(f);
 
+    // Extract directory from path for resource root
+    char* path_copy = strdup(path);
+    char* last_sep = strrchr(path_copy, '/');
+    if (!last_sep) last_sep = strrchr(path_copy, '\\');
+    if (last_sep) {
+        *last_sep = '\0';
+        // Set resource root to the directory containing the HTML file
+        dong_app_impl_t* app = (dong_app_impl_t*)app_handle;
+        if (app && app->dong_view) {
+            dong_view_set_resource_root(app->dong_view, path_copy);
+            printf("[DongApp] Resource root set to: %s\n", path_copy);
+        }
+    }
+    free(path_copy);
+
     int result = dong_app_load_html(app_handle, content);
     free(content);
     return result;
+}
+
+DONG_APPCORE_API void dong_app_enable_text_input(dong_app_t* app_handle, int enable) {
+    dong_app_impl_t* app = (dong_app_impl_t*)app_handle;
+    if (!app || !app->window) return;
+    
+    if (enable) {
+        SDL_StartTextInput(app->window);
+    } else {
+        SDL_StopTextInput(app->window);
+    }
+}
+
+DONG_APPCORE_API void dong_app_set_event_callback(dong_app_t* app_handle, dong_app_event_callback_t callback, void* user_data) {
+    dong_app_impl_t* app = (dong_app_impl_t*)app_handle;
+    if (!app) return;
+    app->event_callback = callback;
+    app->event_callback_user_data = user_data;
 }
 
 // =============================================================================

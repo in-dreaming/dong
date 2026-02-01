@@ -37,6 +37,9 @@ extern "C" {
 typedef struct dong_app_t dong_app_t;
 typedef struct dong_renderer_t dong_renderer_t;
 
+// Event callback for input handling (allows 3D scene to receive input events)
+typedef void (*dong_app_event_callback_t)(void* user_data, const void* sdl_event);
+
 // =============================================================================
 // Application Configuration
 // =============================================================================
@@ -132,6 +135,18 @@ DONG_APPCORE_API int dong_app_load_html(dong_app_t* app, const char* html);
 
 // Load HTML from a file path.
 DONG_APPCORE_API int dong_app_load_html_file(dong_app_t* app, const char* path);
+
+// =============================================================================
+// Input Management
+// =============================================================================
+
+// Enable or disable text input mode.
+// Required for receiving SDL_EVENT_TEXT_INPUT events (for input fields).
+DONG_APPCORE_API void dong_app_enable_text_input(dong_app_t* app, int enable);
+
+// Set event callback for input handling.
+// This allows external code (e.g., 3D scene) to receive SDL input events.
+DONG_APPCORE_API void dong_app_set_event_callback(dong_app_t* app, dong_app_event_callback_t callback, void* user_data);
 
 #ifdef __cplusplus
 }

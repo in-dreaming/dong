@@ -5,6 +5,7 @@
 #include "dong_scene3d.h"
 #include "dong_math.h"
 #include "dong.h"
+#include "dong_plugin_api.h"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_gpu.h>
@@ -17,6 +18,50 @@
 #define MAX_SCREENS 64
 #define MAX_OVERLAYS 8
 #define MAX_PATH_LEN 1024
+
+// Plugin loading for video support
+static const dong_plugin_vtable_t* s_plugin_vtable = NULL;
+static void* s_plugin_module = NULL;
+
+static const dong_plugin_vtable_t* try_load_plugin(void) {
+    if (s_plugin_vtable) return s_plugin_vtable;
+    if (s_plugin_module) return NULL;
+
+    const char* filename =
+#if defined(_WIN32)
+        "dong_plugin_sdl.dll";
+#elif defined(__APPLE__)
+        "libdong_plugin_sdl.dylib";
+#else
+        "libdong_plugin_sdl.so";
+#endif
+
+    const char* base_path = SDL_GetBasePath();
+    if (!base_path) {
+        s_plugin_module = (void*)1;
+        return NULL;
+    }
+
+    char path[MAX_PATH_LEN];
+    SDL_snprintf(path, sizeof(path), "%s%s", base_path, filename);
+
+    s_plugin_module = SDL_LoadObject(path);
+    if (!s_plugin_module) {
+        s_plugin_module = (void*)1;
+        return NULL;
+    }
+
+    typedef const dong_plugin_vtable_t* (*get_api_fn)(void);
+    get_api_fn fn = (get_api_fn)SDL_LoadFunction((SDL_SharedObject*)s_plugin_module, "dong_plugin_get_api");
+    if (!fn) {
+        SDL_UnloadObject((SDL_SharedObject*)s_plugin_module);
+        s_plugin_module = (void*)1;
+        return NULL;
+    }
+
+    s_plugin_vtable = fn();
+    return s_plugin_vtable;
+}
 
 // Uniform structures (must match shader)
 typedef struct {
@@ -34,7 +79,17 @@ struct dong_screen3d_t {
     float yaw;
     float screen_width, screen_height;
     uint32_t tex_width, tex_height;
-    int hovered, focused;
+
+    int hovered;
+    int focused;
+
+    // Cached mouse position in this screen's pixel space (for cursor queries, click routing)
+    int32_t mouse_x;
+    int32_t mouse_y;
+
+    int is_video;
+    double next_update_time;
+
     char debug_name[256];
 };
 
@@ -75,6 +130,23 @@ struct dong_scene3d_t {
     // GPU resources for HUD overlay
     SDL_GPUGraphicsPipeline* hud_pipeline;
     SDL_GPUBuffer* hud_quad_vb;
+
+    // Scheduler state for offscreen updates
+    double scheduler_start_time;
+    int bg_rr_cursor;
+    int initial_full_update_done;
+
+    // Input routing state
+    int hovered_idx;
+    int focused_idx;
+    int pressed_idx;
+    int32_t pressed_x;
+    int32_t pressed_y;
+    int right_mouse_down;
+    int last_sent_mouse_screen;
+
+    int32_t last_sent_mouse_x;
+    int32_t last_sent_mouse_y;
 };
 
 // Forward declarations
@@ -175,6 +247,15 @@ DONG_APPCORE_API dong_scene3d_t* dong_scene3d_create(dong_app_t* app) {
     scene->bg_r = 0.1f; scene->bg_g = 0.1f; scene->bg_b = 0.15f; scene->bg_a = 1;
     scene->depth_test_enabled = 1;
 
+    // Input defaults
+    scene->hovered_idx = -1;
+    scene->focused_idx = -1;
+    scene->pressed_idx = -1;
+    scene->last_sent_mouse_screen = -1;
+    scene->last_sent_mouse_x = (int32_t)0x80000000;
+    scene->last_sent_mouse_y = (int32_t)0x80000000;
+
+
     if (!create_pipelines(scene)) {
         dong_destroy_context(scene->ctx);
         free(scene);
@@ -222,7 +303,14 @@ DONG_APPCORE_API dong_screen3d_t* dong_scene3d_add_screen(dong_scene3d_t* scene,
     screen->view = dong_view_create(scene->ctx, screen->tex_width, screen->tex_height);
     if (!screen->view) { free(screen); return NULL; }
 
+    // Enable optional plugin subsystems (e.g. video)
+    const dong_plugin_vtable_t* plugin = try_load_plugin();
+    if (plugin) {
+        dong_view_set_plugin_api(screen->view, plugin, NULL);
+    }
+
     dong_view_set_external_gpu_device(screen->view, scene->device, scene->window);
+
 
     // Determine resource root
     const char* res_root = config->resource_root;
@@ -240,9 +328,13 @@ DONG_APPCORE_API dong_screen3d_t* dong_scene3d_add_screen(dong_scene3d_t* scene,
             full_path[sizeof(full_path) - 1] = 0;
         }
 
+        // Detect video screens by path prefix
+        screen->is_video = (strncmp(config->html_file, "video/", 6) == 0);
+
         // Set debug name
         strncpy(screen->debug_name, config->html_file, sizeof(screen->debug_name) - 1);
         dong_view_set_debug_name(screen->view, config->html_file);
+
 
         // Extract directory from full_path for resource root
         char file_dir[MAX_PATH_LEN];
@@ -475,58 +567,481 @@ DONG_APPCORE_API int dong_scene3d_get_overlay_count(dong_scene3d_t* scene) {
     return scene ? scene->overlay_count : 0;
 }
 
-// Input handling
+// =============================================================================
+// Input routing (ray cast)
+// =============================================================================
+
+typedef struct {
+    dong_vec3_t origin;
+    dong_vec3_t dir;
+} dong_ray_t;
+
+static dong_ray_t make_mouse_ray(const dong_scene3d_t* scene, int32_t mx, int32_t my, uint32_t w, uint32_t h) {
+    dong_ray_t ray;
+    ray.origin = dong_vec3(scene->cam_x, scene->cam_y, scene->cam_z);
+
+    float ndc_x = (2.0f * (float)mx / (float)w) - 1.0f;
+    float ndc_y = 1.0f - (2.0f * (float)my / (float)h);
+
+    const float aspect = (float)w / (float)h;
+
+    dong_vec3_t eye = ray.origin;
+    dong_vec3_t fwd = dong_vec3(
+        cosf(scene->cam_pitch) * sinf(scene->cam_yaw),
+        sinf(scene->cam_pitch),
+        cosf(scene->cam_pitch) * cosf(scene->cam_yaw)
+    );
+    dong_vec3_t target = dong_vec3_add(eye, fwd);
+
+    dong_mat4_t view = dong_mat4_look_at(eye, target, dong_vec3(0, 1, 0));
+    dong_mat4_t proj = dong_mat4_perspective(DONG_DEG_TO_RAD(60.0f), aspect, 0.1f, 1000.0f);
+    dong_mat4_t vp = dong_mat4_multiply(proj, view);
+    dong_mat4_t inv_vp = dong_mat4_inverse(vp);
+
+    // Our perspective matrix maps to NDC z in [-1, 1]. Use far plane at z=1.
+    dong_vec4_t clip_far = dong_vec4(ndc_x, ndc_y, 1.0f, 1.0f);
+    dong_vec4_t far4 = dong_mat4_transform(inv_vp, clip_far);
+
+    dong_vec3_t far_p = eye;
+    if (fabsf(far4.w) > 1e-5f) {
+        far_p = dong_vec3(far4.x / far4.w, far4.y / far4.w, far4.z / far4.w);
+    }
+
+    ray.dir = dong_vec3_normalize(dong_vec3_sub(far_p, eye));
+    return ray;
+}
+
+// Return uv where u=0..1 (left->right), v=0..1 (bottom->top)
+static int ray_hit_screen(const dong_ray_t* ray, const dong_screen3d_t* scr, float* out_t, float* out_u, float* out_v) {
+    const float hw = scr->screen_width * 0.5f;
+    const float hh = scr->screen_height * 0.5f;
+
+    const float c = cosf(scr->yaw);
+    const float s = sinf(scr->yaw);
+
+    dong_vec3_t o = dong_vec3_sub(ray->origin, dong_vec3(scr->pos_x, scr->pos_y, scr->pos_z));
+
+    // Transform into screen-local space using inverse rotation (-yaw)
+    dong_vec3_t d_local;
+    d_local.x = c * ray->dir.x - s * ray->dir.z;
+    d_local.y = ray->dir.y;
+    d_local.z = s * ray->dir.x + c * ray->dir.z;
+
+    dong_vec3_t o_local;
+    o_local.x = c * o.x - s * o.z;
+    o_local.y = o.y;
+    o_local.z = s * o.x + c * o.z;
+
+
+    if (fabsf(d_local.z) < 1e-5f) return 0;
+
+    const float t = -o_local.z / d_local.z;
+    if (t < 0.0f) return 0;
+
+    const float ix = o_local.x + t * d_local.x;
+    const float iy = o_local.y + t * d_local.y;
+
+    if (ix < -hw || ix > hw || iy < -hh || iy > hh) return 0;
+
+    *out_t = t;
+    *out_u = (ix + hw) / scr->screen_width;
+    *out_v = (iy + hh) / scr->screen_height;
+    return 1;
+}
+
+static SDL_SystemCursor map_css_cursor_to_sdl(const char* cursor_name_cstr) {
+    const char* n = (cursor_name_cstr && cursor_name_cstr[0]) ? cursor_name_cstr : "auto";
+
+    if (strcmp(n, "text") == 0) {
+        return SDL_SYSTEM_CURSOR_TEXT;
+    }
+    if (strcmp(n, "pointer") == 0) {
+        return SDL_SYSTEM_CURSOR_POINTER;
+    }
+    if (strcmp(n, "move") == 0) {
+        return SDL_SYSTEM_CURSOR_MOVE;
+    }
+    if (strcmp(n, "wait") == 0 || strcmp(n, "progress") == 0) {
+        return SDL_SYSTEM_CURSOR_WAIT;
+    }
+    if (strcmp(n, "crosshair") == 0) {
+        return SDL_SYSTEM_CURSOR_CROSSHAIR;
+    }
+    if (strcmp(n, "not-allowed") == 0) {
+        return SDL_SYSTEM_CURSOR_NOT_ALLOWED;
+    }
+    if (strcmp(n, "n-resize") == 0 || strcmp(n, "s-resize") == 0 || strcmp(n, "ns-resize") == 0) {
+        return SDL_SYSTEM_CURSOR_NS_RESIZE;
+    }
+    if (strcmp(n, "e-resize") == 0 || strcmp(n, "w-resize") == 0 || strcmp(n, "ew-resize") == 0) {
+        return SDL_SYSTEM_CURSOR_EW_RESIZE;
+    }
+    if (strcmp(n, "ne-resize") == 0 || strcmp(n, "sw-resize") == 0 || strcmp(n, "nesw-resize") == 0) {
+        return SDL_SYSTEM_CURSOR_NESW_RESIZE;
+    }
+    if (strcmp(n, "nw-resize") == 0 || strcmp(n, "se-resize") == 0 || strcmp(n, "nwse-resize") == 0) {
+        return SDL_SYSTEM_CURSOR_NWSE_RESIZE;
+    }
+    if (strcmp(n, "grab") == 0 || strcmp(n, "grabbing") == 0) {
+        // SDL3 没有 grab/grabbing，使用 move 代替
+        return SDL_SYSTEM_CURSOR_MOVE;
+    }
+
+    return SDL_SYSTEM_CURSOR_DEFAULT;
+}
+
+static void apply_css_cursor(const char* cursor_name_cstr) {
+    const char* n = (cursor_name_cstr && cursor_name_cstr[0]) ? cursor_name_cstr : "auto";
+
+    // Avoid churn if unchanged
+    static char s_last[64] = {0};
+    if (strncmp(s_last, n, sizeof(s_last) - 1) == 0) {
+        return;
+    }
+    strncpy(s_last, n, sizeof(s_last) - 1);
+    s_last[sizeof(s_last) - 1] = 0;
+
+    if (strcmp(n, "none") == 0) {
+        SDL_HideCursor();
+        return;
+    }
+
+    SDL_ShowCursor();
+
+    SDL_SystemCursor sys = map_css_cursor_to_sdl(n);
+    static SDL_Cursor* s_cache[SDL_SYSTEM_CURSOR_COUNT];
+    if (!s_cache[sys]) {
+        s_cache[sys] = SDL_CreateSystemCursor(sys);
+    }
+    if (s_cache[sys]) {
+        SDL_SetCursor(s_cache[sys]);
+    }
+}
+
+static void clear_hovered_flags(dong_scene3d_t* scene) {
+    for (int i = 0; i < scene->screen_count; i++) {
+        if (scene->screens[i]) {
+            scene->screens[i]->hovered = 0;
+        }
+    }
+}
+
+static int pick_hovered_screen(const dong_scene3d_t* scene, const dong_ray_t* ray, float* out_u, float* out_v) {
+    float best_t = 1e30f;
+    int best_idx = -1;
+    float best_u = 0.0f;
+    float best_v = 0.0f;
+
+    for (int i = 0; i < scene->screen_count; i++) {
+        dong_screen3d_t* scr = scene->screens[i];
+        if (!scr) continue;
+
+        float t, u, v;
+        if (ray_hit_screen(ray, scr, &t, &u, &v) && t < best_t) {
+            best_t = t;
+            best_idx = i;
+            best_u = u;
+            best_v = v;
+        }
+    }
+
+    if (best_idx >= 0) {
+        *out_u = best_u;
+        *out_v = best_v;
+    }
+    return best_idx;
+}
+
+static void send_mouse_move_to_screen(dong_scene3d_t* scene, int idx, int32_t x, int32_t y) {
+    if (idx < 0 || idx >= scene->screen_count) return;
+    dong_screen3d_t* scr = scene->screens[idx];
+    if (!scr || !scr->view) return;
+
+    scr->mouse_x = x;
+    scr->mouse_y = y;
+
+    if (scene->last_sent_mouse_screen != idx ||
+        scene->last_sent_mouse_x != x ||
+        scene->last_sent_mouse_y != y) {
+        dong_view_send_mouse_move(scr->view, x, y);
+        scene->last_sent_mouse_screen = idx;
+        scene->last_sent_mouse_x = x;
+        scene->last_sent_mouse_y = y;
+    }
+}
+
+static void update_hover_from_mouse(dong_scene3d_t* scene, int32_t mx, int32_t my, uint32_t w, uint32_t h) {
+    if (!scene || w == 0 || h == 0) return;
+
+    dong_ray_t ray = make_mouse_ray(scene, mx, my, w, h);
+    float u = 0.0f, v = 0.0f;
+    const int hovered = pick_hovered_screen(scene, &ray, &u, &v);
+
+    clear_hovered_flags(scene);
+
+    if (hovered < 0) {
+        if (scene->hovered_idx >= 0 && scene->hovered_idx < scene->screen_count) {
+            send_mouse_move_to_screen(scene, scene->hovered_idx, -1, -1);
+        }
+        scene->hovered_idx = -1;
+
+        if (!scene->right_mouse_down) {
+            apply_css_cursor("auto");
+        }
+        return;
+    }
+
+    dong_screen3d_t* scr = scene->screens[hovered];
+    scr->hovered = 1;
+
+    const int32_t sx = (int32_t)(u * (float)scr->tex_width);
+    const int32_t sy = (int32_t)((1.0f - v) * (float)scr->tex_height);
+    send_mouse_move_to_screen(scene, hovered, sx, sy);
+
+    if (!scene->right_mouse_down) {
+        const char* css_cursor = dong_view_get_cursor_at(scr->view, sx, sy);
+        apply_css_cursor(css_cursor);
+    }
+
+    scene->hovered_idx = hovered;
+}
+
+static void set_focused_screen(dong_scene3d_t* scene, int idx) {
+    scene->focused_idx = idx;
+    for (int i = 0; i < scene->screen_count; i++) {
+        if (scene->screens[i]) {
+            scene->screens[i]->focused = (i == idx);
+        }
+    }
+}
+
+static void handle_left_down(dong_scene3d_t* scene) {
+    if (!scene) return;
+
+    if (scene->hovered_idx >= 0 && scene->hovered_idx < scene->screen_count) {
+        dong_screen3d_t* scr = scene->screens[scene->hovered_idx];
+        set_focused_screen(scene, scene->hovered_idx);
+
+        scene->pressed_idx = scene->hovered_idx;
+        scene->pressed_x = scr->mouse_x;
+        scene->pressed_y = scr->mouse_y;
+
+        send_mouse_move_to_screen(scene, scene->pressed_idx, scene->pressed_x, scene->pressed_y);
+        dong_view_send_mouse_down(scr->view, SDL_BUTTON_LEFT);
+        return;
+    }
+
+    set_focused_screen(scene, -1);
+    scene->pressed_idx = -1;
+}
+
+static void handle_left_up(dong_scene3d_t* scene) {
+    if (!scene) return;
+
+    int target = (scene->pressed_idx >= 0) ? scene->pressed_idx : scene->hovered_idx;
+    if (target >= 0 && target < scene->screen_count) {
+        dong_screen3d_t* scr = scene->screens[target];
+        const int32_t upx = (scene->pressed_idx >= 0) ? scene->pressed_x : scr->mouse_x;
+        const int32_t upy = (scene->pressed_idx >= 0) ? scene->pressed_y : scr->mouse_y;
+
+        send_mouse_move_to_screen(scene, target, upx, upy);
+        dong_view_send_mouse_up(scr->view, SDL_BUTTON_LEFT);
+    }
+
+    scene->pressed_idx = -1;
+}
+
+static void handle_wheel(dong_scene3d_t* scene, float dx, float dy) {
+    if (!scene) return;
+    if (scene->hovered_idx < 0 || scene->hovered_idx >= scene->screen_count) return;
+
+    dong_screen3d_t* scr = scene->screens[scene->hovered_idx];
+    if (!scr || !scr->view) return;
+
+    const float kWheelMultiplier = 3.0f;
+    // SDL wheel direction is opposite of our DOM scroll convention; flip Y for intuitive scrolling.
+    dong_view_send_mouse_wheel(scr->view, dx * kWheelMultiplier, -dy * kWheelMultiplier);
+}
+
+static void handle_key(dong_scene3d_t* scene, uint32_t key, int down) {
+    if (!scene) return;
+    if (scene->focused_idx < 0 || scene->focused_idx >= scene->screen_count) return;
+
+    dong_screen3d_t* scr = scene->screens[scene->focused_idx];
+    if (!scr || !scr->view) return;
+
+    if (down) dong_view_send_key_down(scr->view, key);
+    else dong_view_send_key_up(scr->view, key);
+}
+
+static void handle_text(dong_scene3d_t* scene, const char* text) {
+    if (!scene || !text) return;
+    if (scene->focused_idx < 0 || scene->focused_idx >= scene->screen_count) return;
+
+    dong_screen3d_t* scr = scene->screens[scene->focused_idx];
+    if (!scr || !scr->view) return;
+
+    dong_view_send_text_input(scr->view, text);
+}
+
+DONG_APPCORE_API void dong_scene3d_process_event(dong_scene3d_t* scene, const void* sdl_event) {
+    if (!scene || !sdl_event) return;
+
+    const SDL_Event* e = (const SDL_Event*)sdl_event;
+
+    uint32_t w = 0, h = 0;
+    dong_app_get_size(scene->app, &w, &h);
+
+    switch (e->type) {
+        case SDL_EVENT_MOUSE_MOTION:
+            update_hover_from_mouse(scene, (int32_t)e->motion.x, (int32_t)e->motion.y, w, h);
+            break;
+        case SDL_EVENT_MOUSE_BUTTON_DOWN:
+            if (e->button.button == SDL_BUTTON_RIGHT) {
+                scene->right_mouse_down = 1;
+                SDL_SetWindowRelativeMouseMode(scene->window, true);
+            }
+            if (e->button.button == SDL_BUTTON_LEFT) {
+                update_hover_from_mouse(scene, (int32_t)e->button.x, (int32_t)e->button.y, w, h);
+                handle_left_down(scene);
+            }
+            break;
+        case SDL_EVENT_MOUSE_BUTTON_UP:
+            if (e->button.button == SDL_BUTTON_RIGHT) {
+                scene->right_mouse_down = 0;
+                SDL_SetWindowRelativeMouseMode(scene->window, false);
+            }
+            if (e->button.button == SDL_BUTTON_LEFT) {
+                update_hover_from_mouse(scene, (int32_t)e->button.x, (int32_t)e->button.y, w, h);
+                handle_left_up(scene);
+            }
+            break;
+        case SDL_EVENT_MOUSE_WHEEL:
+            handle_wheel(scene, e->wheel.x, e->wheel.y);
+            break;
+        case SDL_EVENT_KEY_DOWN:
+            handle_key(scene, e->key.key, 1);
+            break;
+        case SDL_EVENT_KEY_UP:
+            handle_key(scene, e->key.key, 0);
+            break;
+        case SDL_EVENT_TEXT_INPUT:
+            handle_text(scene, e->text.text);
+            break;
+    }
+}
+
+// Input handling (deprecated)
 DONG_APPCORE_API dong_screen3d_t* dong_scene3d_handle_input(dong_scene3d_t* scene) {
-    (void)scene; return NULL; // TODO: ray casting
+    (void)scene;
+    return NULL;
+}
+
+static void update_screen_texture(dong_scene3d_t* scene, int idx) {
+    dong_screen3d_t* scr = (scene && idx >= 0 && idx < scene->screen_count) ? scene->screens[idx] : NULL;
+    if (!scr || !scr->view) return;
+
+    SDL_GPUTexture* new_tex = (SDL_GPUTexture*)dong_view_render_to_gpu_texture(
+        scr->view, scene->device, scr->tex_width, scr->tex_height);
+    if (new_tex) {
+        scr->texture = new_tex;
+    }
+}
+
+static double get_scene_time_sec(dong_scene3d_t* scene) {
+    if (!scene) return 0.0;
+    if (scene->scheduler_start_time == 0.0) {
+        scene->scheduler_start_time = (double)SDL_GetTicks() / 1000.0;
+    }
+    return (double)SDL_GetTicks() / 1000.0 - scene->scheduler_start_time;
+}
+
+static void update_camera_controls(dong_scene3d_t* scene, float dt) {
+    if (!scene || !scene->cam_controls_enabled) return;
+
+    const Uint8* keys = SDL_GetKeyboardState(NULL);
+    Uint32 mouse = SDL_GetMouseState(NULL, NULL);
+    if (mouse & SDL_BUTTON_RMASK) {
+        float dx, dy;
+        SDL_GetRelativeMouseState(&dx, &dy);
+        scene->cam_yaw -= dx * scene->cam_sensitivity;
+        scene->cam_pitch -= dy * scene->cam_sensitivity;
+        if (scene->cam_pitch > 1.5f) scene->cam_pitch = 1.5f;
+        if (scene->cam_pitch < -1.5f) scene->cam_pitch = -1.5f;
+    }
+
+    float spd = scene->cam_speed * dt;
+    if (keys[SDL_SCANCODE_LSHIFT]) spd *= 2;
+
+    float fx = sinf(scene->cam_yaw), fz = cosf(scene->cam_yaw);
+    float rx = -cosf(scene->cam_yaw), rz = sinf(scene->cam_yaw);
+
+    if (keys[SDL_SCANCODE_W]) { scene->cam_x += fx * spd; scene->cam_z += fz * spd; }
+    if (keys[SDL_SCANCODE_S]) { scene->cam_x -= fx * spd; scene->cam_z -= fz * spd; }
+    if (keys[SDL_SCANCODE_D]) { scene->cam_x += rx * spd; scene->cam_z += rz * spd; }
+    if (keys[SDL_SCANCODE_A]) { scene->cam_x -= rx * spd; scene->cam_z -= rz * spd; }
+    if (keys[SDL_SCANCODE_SPACE] || keys[SDL_SCANCODE_E]) scene->cam_y += spd;
+    if (keys[SDL_SCANCODE_LCTRL] || keys[SDL_SCANCODE_Q]) scene->cam_y -= spd;
+}
+
+static void update_screens_scheduled(dong_scene3d_t* scene) {
+    if (!scene) return;
+
+    const double now_sec = get_scene_time_sec(scene);
+    const int video_max_fps = 30;
+    const double video_interval = 1.0 / (double)video_max_fps;
+    const int bg_updates_per_frame = 2;
+
+    if (!scene->initial_full_update_done) {
+        for (int i = 0; i < scene->screen_count; i++) {
+            update_screen_texture(scene, i);
+            dong_screen3d_t* scr = scene->screens[i];
+            if (scr && scr->is_video) {
+                scr->next_update_time = now_sec + video_interval;
+            }
+        }
+        scene->initial_full_update_done = 1;
+        return;
+    }
+
+    if (scene->hovered_idx >= 0) {
+        update_screen_texture(scene, scene->hovered_idx);
+    }
+    if (scene->focused_idx >= 0 && scene->focused_idx != scene->hovered_idx) {
+        update_screen_texture(scene, scene->focused_idx);
+    }
+
+    for (int i = 0; i < scene->screen_count; i++) {
+        dong_screen3d_t* scr = scene->screens[i];
+        if (!scr || !scr->is_video) continue;
+        if (i == scene->hovered_idx || i == scene->focused_idx) continue;
+
+        if (now_sec >= scr->next_update_time) {
+            update_screen_texture(scene, i);
+            scr->next_update_time = now_sec + video_interval;
+        }
+    }
+
+    int bg_updated = 0;
+    for (int attempts = 0; attempts < scene->screen_count && bg_updated < bg_updates_per_frame; ++attempts) {
+        int idx = (scene->bg_rr_cursor++) % scene->screen_count;
+        if (idx == scene->hovered_idx || idx == scene->focused_idx) continue;
+
+        dong_screen3d_t* scr = scene->screens[idx];
+        if (!scr || scr->is_video) continue;
+
+        update_screen_texture(scene, idx);
+        bg_updated++;
+    }
 }
 
 // Update
 DONG_APPCORE_API void dong_scene3d_update(dong_scene3d_t* scene, float dt) {
     if (!scene) return;
 
-    // Camera controls
-    if (scene->cam_controls_enabled) {
-        const Uint8* keys = SDL_GetKeyboardState(NULL);
-        Uint32 mouse = SDL_GetMouseState(NULL, NULL);
-        if (mouse & SDL_BUTTON_RMASK) {
-            float dx, dy;
-            SDL_GetRelativeMouseState(&dx, &dy);
-            scene->cam_yaw -= dx * scene->cam_sensitivity;
-            scene->cam_pitch -= dy * scene->cam_sensitivity;
-            if (scene->cam_pitch > 1.5f) scene->cam_pitch = 1.5f;
-            if (scene->cam_pitch < -1.5f) scene->cam_pitch = -1.5f;
-        }
-        float spd = scene->cam_speed * dt;
-        if (keys[SDL_SCANCODE_LSHIFT]) spd *= 2;
-        float fx = sinf(scene->cam_yaw), fz = cosf(scene->cam_yaw);
-        float rx = -cosf(scene->cam_yaw), rz = sinf(scene->cam_yaw);
-        if (keys[SDL_SCANCODE_W]) { scene->cam_x += fx * spd; scene->cam_z += fz * spd; }
-        if (keys[SDL_SCANCODE_S]) { scene->cam_x -= fx * spd; scene->cam_z -= fz * spd; }
-        if (keys[SDL_SCANCODE_D]) { scene->cam_x += rx * spd; scene->cam_z += rz * spd; }
-        if (keys[SDL_SCANCODE_A]) { scene->cam_x -= rx * spd; scene->cam_z -= rz * spd; }
-        if (keys[SDL_SCANCODE_SPACE] || keys[SDL_SCANCODE_E]) scene->cam_y += spd;
-        if (keys[SDL_SCANCODE_LCTRL] || keys[SDL_SCANCODE_Q]) scene->cam_y -= spd;
-    }
+    update_camera_controls(scene, dt);
+    update_screens_scheduled(scene);
 
-    // Update screen textures
-    for (int i = 0; i < scene->screen_count; i++) {
-        dong_screen3d_t* scr = scene->screens[i];
-        if (scr && scr->view) {
-            // NOTE: Do NOT call dong_view_update() here! It renders to swapchain.
-            // dong_view_render_to_gpu_texture() handles layout calculation internally.
-
-            // Render to GPU texture (texture is managed internally by View)
-            SDL_GPUTexture* new_tex = (SDL_GPUTexture*)dong_view_render_to_gpu_texture(
-                scr->view, scene->device, scr->tex_width, scr->tex_height);
-
-            // Only update texture if we got a valid one (keep old texture if render fails)
-            if (new_tex) {
-                scr->texture = new_tex;
-            }
-        }
-    }
-
-    // Update overlays (use overlay API functions)
     for (int i = 0; i < scene->overlay_count; i++) {
         dong_overlay_t* ov = scene->overlays[i];
         if (ov) {
@@ -534,6 +1049,7 @@ DONG_APPCORE_API void dong_scene3d_update(dong_scene3d_t* scene, float dt) {
         }
     }
 }
+
 
 // Render
 DONG_APPCORE_API void dong_scene3d_render(dong_scene3d_t* scene) {
