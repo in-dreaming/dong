@@ -25,8 +25,16 @@
 #include <string>
 #include <sstream>
 #include <functional>
+#include <vector>
+
 #include <filesystem>
 #include <cctype>
+#include <algorithm>
+#include <unordered_map>
+#include <unordered_set>
+
+
+
 
 
 
@@ -137,9 +145,57 @@ bool readTextFileFromPlatformFS(const std::string& path,
 }
 
 
+static bool isAbsolutePathLike(const std::string& p) {
+    if (p.size() >= 2 && std::isalpha(static_cast<unsigned char>(p[0])) && p[1] == ':') {
+        return true;
+    }
+    if (!p.empty() && (p[0] == '/' || p[0] == '\\')) {
+        return true;
+    }
+    return false;
+}
+
+static std::string resolveVideoUrlForPlugin(const std::string& src, const std::string& resource_root) {
+    if (src.empty()) return {};
+    if (src.rfind("http://", 0) == 0 || src.rfind("https://", 0) == 0 || src.rfind("data:", 0) == 0) {
+        return {};
+    }
+    std::string path = src;
+    if (path.rfind("file://", 0) == 0) {
+        path = path.substr(std::string("file://").size());
+        if (path.size() >= 3 && path[0] == '/' && std::isalpha(static_cast<unsigned char>(path[1])) && path[2] == ':') {
+            path.erase(path.begin());
+        }
+    }
+    if (isAbsolutePathLike(path)) {
+        return path;
+    }
+    if (!resource_root.empty()) {
+        try {
+            namespace fs = std::filesystem;
+            fs::path resolved = fs::path(resource_root) / fs::path(path);
+            return resolved.lexically_normal().string();
+        } catch (...) {
+        }
+    }
+    return path;
+}
+
+static void markIsolatedLayerDirtyFlags(dong::render::GPUCommandList& list, uint64_t layer_id) {
+    if (layer_id == 0) return;
+    for (auto& cmd : list.commands) {
+        if ((cmd.type == dong::render::GPUCommandType::BeginIsolatedLayer ||
+             cmd.type == dong::render::GPUCommandType::EndIsolatedLayer) &&
+            cmd.layer_id == layer_id) {
+            cmd.layer_dirty = true;
+        }
+    }
+}
+
 } // namespace
 
 struct EngineView::Impl {
+
     dong::Context ctx;
 
     uint32_t width = 960;
@@ -159,7 +215,52 @@ struct EngineView::Impl {
     std::unique_ptr<dong::script::ScriptEngine> script_engine;
     std::unique_ptr<dong::script::JSBindings> js_bindings;
 
+    const dong_plugin_vtable_t* plugin = nullptr;
+    void* plugin_user = nullptr;
+
+    struct VideoState {
+        dong::dom::DOMNodePtr node;
+        dong_video_player_t* player = nullptr;
+
+        std::string src;
+        std::string frame_key;
+
+        dong_video_metadata_t meta{};
+        bool meta_ready = false;
+        bool loadeddata_sent = false;
+
+        bool preload = true;
+        bool autoplay = false;
+        bool loop = false;
+        bool controls = false;
+
+        bool playing = false;
+        bool ended = false;
+        bool errored = false;
+
+        double wall_clock_start = 0.0;
+        double video_time_start = 0.0;
+        double current_pts = 0.0;
+
+        dong_video_pixel_format_t frame_format = DONG_VIDEO_PIXEL_FORMAT_RGBA8;
+        const uint8_t* plane_data[3] = {nullptr, nullptr, nullptr};
+        uint32_t plane_stride[3] = {0, 0, 0};
+        std::vector<uint8_t> owned_frame;
+
+        uint32_t frame_w = 0;
+        uint32_t frame_h = 0;
+        uint32_t frame_stride = 0;
+        bool has_frame = false;
+        bool needs_upload = false;
+
+        double last_timeupdate_pts = 0.0;
+        double last_resync_wall = 0.0;
+    };
+
+    std::unordered_map<void*, VideoState> video_states;
+
     std::unique_ptr<dong::render::GPUCommandList> cached_cmd_list;
+
 
     void* external_gpu_device = nullptr;
     void* external_window = nullptr;
@@ -167,6 +268,11 @@ struct EngineView::Impl {
     bool use_gpu = false;
     bool commands_dirty = true;
     bool js_bindings_initialized = false;
+
+    bool video_dom_scanned = false;
+    bool video_dom_has_any = false;
+    double last_wall_time_sec = 0.0;
+
 
     int32_t last_mouse_x = 0;
     int32_t last_mouse_y = 0;
@@ -215,7 +321,528 @@ struct EngineView::Impl {
         }
     }
 
+    void setPlugin(const dong_plugin_vtable_t* new_plugin, void* new_plugin_user) {
+        plugin = new_plugin;
+        plugin_user = new_plugin_user;
+        if (!videoCapable()) {
+            clearVideoStates();
+        }
+    }
+
+    bool videoCapable() const {
+        return plugin &&
+            (plugin->info.capabilities & DONG_PLUGIN_CAP_VIDEO) &&
+            plugin->video_open && plugin->video_close && plugin->video_read_frame;
+    }
+
+    void clearVideoStates() {
+        for (auto& kv : video_states) {
+            closeVideo(kv.second);
+        }
+        video_states.clear();
+        video_dom_scanned = false;
+        video_dom_has_any = false;
+    }
+
+    void closeVideo(VideoState& vs) {
+        if (vs.player && plugin && plugin->video_close) {
+            plugin->video_close(plugin_user, vs.player);
+        }
+        vs.player = nullptr;
+        vs.meta_ready = false;
+        vs.loadeddata_sent = false;
+        vs.playing = false;
+        vs.ended = false;
+        vs.errored = false;
+        vs.current_pts = 0.0;
+        vs.last_timeupdate_pts = 0.0;
+        vs.last_resync_wall = 0.0;
+        vs.has_frame = false;
+        vs.needs_upload = false;
+        vs.frame_format = DONG_VIDEO_PIXEL_FORMAT_RGBA8;
+        vs.plane_data[0] = nullptr;
+        vs.plane_data[1] = nullptr;
+        vs.plane_data[2] = nullptr;
+        vs.plane_stride[0] = 0;
+        vs.plane_stride[1] = 0;
+        vs.plane_stride[2] = 0;
+        vs.owned_frame.clear();
+        vs.frame_w = 0;
+        vs.frame_h = 0;
+        vs.frame_stride = 0;
+        if (vs.node && !vs.node->getAttribute("__dong_video_frame").empty()) {
+            vs.node->setAttribute("__dong_video_frame", "");
+            markNeedsRepaint();
+        }
+    }
+
+    void dispatchMediaEvent(VideoState& vs, const char* type_name) {
+        if (!type_name || !type_name[0] || !js_bindings || !script_engine || !vs.node) return;
+        ensureJSBindingsInitialized();
+        uint64_t node_id = js_bindings->getNodeIdFor(vs.node);
+        if (!node_id) return;
+        if (!js_bindings->hasEventListeners(node_id, type_name)) return;
+        const double duration = vs.meta_ready ? vs.meta.duration_seconds : 0.0;
+        js_bindings->dispatchMediaEvent(node_id, type_name, vs.current_pts, duration, nullptr);
+    }
+
+    void dispatchMediaError(VideoState& vs, const char* message) {
+        if (!js_bindings || !script_engine || !vs.node) return;
+        ensureJSBindingsInitialized();
+        uint64_t node_id = js_bindings->getNodeIdFor(vs.node);
+        if (!node_id) return;
+        if (!js_bindings->hasEventListeners(node_id, "error")) return;
+        const double duration = vs.meta_ready ? vs.meta.duration_seconds : 0.0;
+        js_bindings->dispatchMediaEvent(node_id, "error", vs.current_pts, duration, message ? message : "");
+    }
+
+    void toggleVideoPlayPause(VideoState& vs, double wall_time_sec) {
+        if (!vs.player) return;
+        if (!vs.playing) {
+            if (vs.ended && plugin && plugin->video_seek) {
+                plugin->video_seek(plugin_user, vs.player, 0.0);
+                vs.current_pts = 0.0;
+            }
+            vs.playing = true;
+            vs.ended = false;
+            vs.wall_clock_start = wall_time_sec;
+            vs.video_time_start = vs.current_pts;
+            if (vs.node) {
+                vs.node->setAttribute("__dong_video_playing", "1");
+                vs.node->setAttribute("__dong_video_ended", "0");
+                vs.node->setAttribute("__dong_video_seeking", "0");
+                vs.node->setAttribute("__dong_video_currentTime", std::to_string(vs.current_pts));
+            }
+            dispatchMediaEvent(vs, "play");
+            dispatchMediaEvent(vs, "playing");
+        } else {
+            vs.playing = false;
+            if (vs.node) {
+                vs.node->setAttribute("__dong_video_playing", "0");
+                vs.node->setAttribute("__dong_video_seeking", "0");
+                vs.node->setAttribute("__dong_video_currentTime", std::to_string(vs.current_pts));
+            }
+            dispatchMediaEvent(vs, "pause");
+        }
+    }
+
+    void updateVideoFrameFromDecoded(VideoState& vs, const dong_video_frame_t& f, bool copy_frame) {
+        vs.frame_format = f.format;
+        vs.frame_w = f.width;
+        vs.frame_h = f.height;
+        vs.frame_stride = f.stride_bytes;
+        vs.plane_data[0] = f.plane_data[0];
+        vs.plane_data[1] = f.plane_data[1];
+        vs.plane_data[2] = f.plane_data[2];
+        vs.plane_stride[0] = f.plane_stride_bytes[0];
+        vs.plane_stride[1] = f.plane_stride_bytes[1];
+        vs.plane_stride[2] = f.plane_stride_bytes[2];
+
+        if (!copy_frame) {
+            vs.owned_frame.clear();
+            return;
+        }
+
+        vs.owned_frame.clear();
+        if (f.format == DONG_VIDEO_PIXEL_FORMAT_RGBA8) {
+            const size_t sz = static_cast<size_t>(f.stride_bytes) * static_cast<size_t>(f.height);
+            if (sz > 0 && f.data) {
+                vs.owned_frame.resize(sz);
+                std::memcpy(vs.owned_frame.data(), f.data, sz);
+                vs.plane_data[0] = vs.owned_frame.data();
+                vs.plane_stride[0] = f.stride_bytes;
+                vs.plane_data[1] = nullptr;
+                vs.plane_data[2] = nullptr;
+                vs.plane_stride[1] = 0;
+                vs.plane_stride[2] = 0;
+            }
+        } else if (f.format == DONG_VIDEO_PIXEL_FORMAT_YUV420P) {
+            const uint32_t w = f.width;
+            const uint32_t h = f.height;
+            const uint32_t cw = (w + 1u) / 2u;
+            const uint32_t ch = (h + 1u) / 2u;
+            const size_t y_size = static_cast<size_t>(w) * static_cast<size_t>(h);
+            const size_t u_size = static_cast<size_t>(cw) * static_cast<size_t>(ch);
+            const size_t v_size = u_size;
+            vs.owned_frame.resize(y_size + u_size + v_size);
+
+            uint8_t* dst_y = vs.owned_frame.data();
+            uint8_t* dst_u = dst_y + y_size;
+            uint8_t* dst_v = dst_u + u_size;
+
+            for (uint32_t y = 0; y < h; ++y) {
+                std::memcpy(dst_y + static_cast<size_t>(y) * w,
+                            f.plane_data[0] + static_cast<size_t>(y) * f.plane_stride_bytes[0],
+                            w);
+            }
+            for (uint32_t y = 0; y < ch; ++y) {
+                std::memcpy(dst_u + static_cast<size_t>(y) * cw,
+                            f.plane_data[1] + static_cast<size_t>(y) * f.plane_stride_bytes[1],
+                            cw);
+                std::memcpy(dst_v + static_cast<size_t>(y) * cw,
+                            f.plane_data[2] + static_cast<size_t>(y) * f.plane_stride_bytes[2],
+                            cw);
+            }
+
+            vs.plane_data[0] = dst_y;
+            vs.plane_data[1] = dst_u;
+            vs.plane_data[2] = dst_v;
+            vs.plane_stride[0] = w;
+            vs.plane_stride[1] = cw;
+            vs.plane_stride[2] = cw;
+            vs.frame_stride = w;
+        }
+    }
+
+    void updateVideoPlayback(VideoState& vs, double wall_time_sec) {
+        if (!vs.player || !plugin || !plugin->video_read_frame) {
+            return;
+        }
+
+        const double target_time = vs.video_time_start + (wall_time_sec - vs.wall_clock_start);
+        static const double kResyncLagSec = ([]() {
+            const char* v = std::getenv("DONG_VIDEO_RESYNC_LAG_SEC");
+            if (!v || !*v) return 0.50;
+            return std::atof(v);
+        })();
+        static const double kResyncCooldownSec = ([]() {
+            const char* v = std::getenv("DONG_VIDEO_RESYNC_COOLDOWN_SEC");
+            if (!v || !*v) return 0.75;
+            return std::atof(v);
+        })();
+
+        const double lag = target_time - vs.current_pts;
+        if (plugin->video_seek && lag > kResyncLagSec && (wall_time_sec - vs.last_resync_wall) >= kResyncCooldownSec) {
+            plugin->video_seek(plugin_user, vs.player, target_time);
+            vs.wall_clock_start = wall_time_sec;
+            vs.video_time_start = target_time;
+            vs.last_resync_wall = wall_time_sec;
+        }
+
+        static const int kMaxFramePullPerTick = ([]() {
+            const char* v = std::getenv("DONG_VIDEO_MAX_PULL_PER_TICK");
+            if (!v || !*v) return 8;
+            return std::atoi(v);
+        })();
+
+        static const bool kCopyVideoFrames = ([]() {
+            const char* v = std::getenv("DONG_VIDEO_FRAME_COPY");
+            return v && (std::strcmp(v, "1") == 0 || std::strcmp(v, "true") == 0);
+        })();
+
+        int pulled = 0;
+        while (pulled < kMaxFramePullPerTick) {
+            dong_video_frame_t frame{};
+            int r = plugin->video_read_frame(plugin_user, vs.player, &frame);
+            if (r == 0) {
+                if (vs.loop && plugin->video_seek) {
+                    plugin->video_seek(plugin_user, vs.player, 0.0);
+                    vs.wall_clock_start = wall_time_sec;
+                    vs.video_time_start = 0.0;
+                    vs.current_pts = 0.0;
+                    vs.ended = false;
+                } else {
+                    vs.playing = false;
+                    vs.ended = true;
+                    if (vs.node) {
+                        vs.node->setAttribute("__dong_video_playing", "0");
+                        vs.node->setAttribute("__dong_video_ended", "1");
+                        vs.node->setAttribute("__dong_video_currentTime", std::to_string(vs.current_pts));
+                    }
+                    dispatchMediaEvent(vs, "ended");
+                }
+                return;
+            }
+            if (r < 0) {
+                return;
+            }
+
+            if (frame.plane_data[0] && frame.width > 0 && frame.height > 0) {
+                updateVideoFrameFromDecoded(vs, frame, kCopyVideoFrames);
+                vs.current_pts = frame.pts_seconds;
+                vs.has_frame = true;
+                vs.needs_upload = true;
+                if (vs.node) {
+                    vs.node->setAttribute("__dong_video_currentTime", std::to_string(vs.current_pts));
+                }
+            }
+
+            if (frame.pts_seconds + 1e-6 >= target_time) {
+                break;
+            }
+            ++pulled;
+        }
+
+        if (vs.current_pts - vs.last_timeupdate_pts >= 0.25) {
+            vs.last_timeupdate_pts = vs.current_pts;
+            dispatchMediaEvent(vs, "timeupdate");
+        }
+    }
+
+    bool uploadPendingVideoFrames() {
+        if (!use_gpu) {
+            return false;
+        }
+        DongGPUDriver* driver = dong_platform_get_gpu_driver(dong_platform_get());
+        if (!driver) {
+            return false;
+        }
+
+        bool did_upload = false;
+        for (auto& kv : video_states) {
+            VideoState& vs = kv.second;
+            if (!vs.needs_upload || !vs.has_frame || vs.frame_key.empty()) {
+                continue;
+            }
+            if (vs.frame_w == 0 || vs.frame_h == 0) {
+                vs.needs_upload = false;
+                continue;
+            }
+
+            bool ok = false;
+            if (vs.frame_format == DONG_VIDEO_PIXEL_FORMAT_RGBA8) {
+                const uint8_t* src = vs.plane_data[0];
+                if (!src && !vs.owned_frame.empty()) {
+                    src = vs.owned_frame.data();
+                }
+                if (!src) {
+                    vs.needs_upload = false;
+                    continue;
+                }
+                ok = dong_gpu_update_external_image_rgba(driver, vs.frame_key.c_str(), src, vs.frame_w, vs.frame_h, vs.frame_stride) != 0;
+                did_upload = did_upload || ok;
+            } else if (vs.frame_format == DONG_VIDEO_PIXEL_FORMAT_YUV420P) {
+                const uint8_t* y = vs.plane_data[0];
+                const uint8_t* u = vs.plane_data[1];
+                const uint8_t* v = vs.plane_data[2];
+                if (!y || !u || !v) {
+                    vs.needs_upload = false;
+                    continue;
+                }
+                ok = dong_gpu_update_external_image_yuv420p(
+                    driver,
+                    vs.frame_key.c_str(),
+                    y,
+                    vs.plane_stride[0],
+                    u,
+                    vs.plane_stride[1],
+                    v,
+                    vs.plane_stride[2],
+                    vs.frame_w,
+                    vs.frame_h
+                ) != 0;
+                did_upload = did_upload || ok;
+            } else {
+                vs.needs_upload = false;
+                continue;
+            }
+
+            if (ok) {
+                vs.needs_upload = false;
+                if (vs.node && vs.node->getAttribute("__dong_video_frame").empty()) {
+                    vs.node->setAttribute("__dong_video_frame", vs.frame_key);
+                    markNeedsRepaint();
+                }
+                if (vs.node && cached_cmd_list) {
+                    const uint64_t layer_id = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(vs.node.get()));
+                    markIsolatedLayerDirtyFlags(*cached_cmd_list, layer_id);
+                }
+            }
+        }
+        return did_upload;
+    }
+
+    void syncVideoElements(double wall_time_sec, bool dom_tree_dirty) {
+        if (!videoCapable() || !dom_manager) {
+            clearVideoStates();
+            return;
+        }
+
+        std::vector<DOMNodePtr> nodes;
+        bool need_dom_scan = dom_tree_dirty || !video_dom_scanned;
+        if (need_dom_scan) {
+            nodes = dom_manager->getElementsByTagName("video");
+            video_dom_scanned = true;
+            video_dom_has_any = !nodes.empty();
+        } else if (!video_dom_has_any && video_states.empty()) {
+            return;
+        } else {
+            nodes.reserve(video_states.size());
+            for (auto& kv : video_states) {
+                if (kv.second.node) {
+                    nodes.push_back(kv.second.node);
+                }
+            }
+        }
+
+        std::unordered_set<void*> live;
+        for (auto& n : nodes) {
+            if (!n) continue;
+            live.insert(n.get());
+
+            VideoState& vs = video_states[n.get()];
+            vs.node = n;
+            if (vs.frame_key.empty()) {
+                vs.frame_key = "video://" + std::to_string(reinterpret_cast<uintptr_t>(n.get()));
+            }
+
+            const std::string src = n->getAttribute("src");
+            const bool autoplay = n->hasAttribute("autoplay");
+            const bool loop = n->hasAttribute("loop");
+            const bool controls = n->hasAttribute("controls");
+            bool preload = true;
+            {
+                std::string p = n->getAttribute("preload");
+                std::transform(p.begin(), p.end(), p.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+                if (p == "none") preload = false;
+            }
+
+            if (src.empty()) {
+                if (vs.player) {
+                    closeVideo(vs);
+                }
+                vs.src.clear();
+                continue;
+            }
+
+            const bool need_reopen = (!vs.player || vs.src != src);
+            vs.autoplay = autoplay;
+            vs.loop = loop;
+            vs.controls = controls;
+            vs.preload = preload;
+
+            if (need_reopen) {
+                if (vs.player) {
+                    closeVideo(vs);
+                }
+                vs.src = src;
+                vs.errored = false;
+                vs.ended = false;
+                vs.current_pts = 0.0;
+                vs.loadeddata_sent = false;
+                vs.last_timeupdate_pts = 0.0;
+
+                const std::string resolved = resolveVideoUrlForPlugin(src, resource_root);
+                if (resolved.empty()) {
+                    vs.errored = true;
+                    dispatchMediaError(vs, "unsupported/invalid video src");
+                    continue;
+                }
+                vs.player = plugin->video_open(plugin_user, resolved.c_str());
+                if (!vs.player) {
+                    vs.errored = true;
+                    dispatchMediaError(vs, "video_open failed");
+                    continue;
+                }
+
+                if (plugin->video_get_metadata) {
+                    dong_video_metadata_t md{};
+                    if (plugin->video_get_metadata(plugin_user, vs.player, &md) != 0) {
+                        vs.meta = md;
+                        vs.meta_ready = true;
+                        if (vs.node) {
+                            vs.node->setAttribute("__dong_video_duration", std::to_string(vs.meta.duration_seconds));
+                        }
+                        dispatchMediaEvent(vs, "loadedmetadata");
+                    }
+                }
+
+                if (vs.preload && plugin->video_seek) {
+                    plugin->video_seek(plugin_user, vs.player, 0.0);
+                }
+                if (vs.preload) {
+                    dong_video_frame_t f{};
+                    int rr = plugin->video_read_frame(plugin_user, vs.player, &f);
+                    if (rr == 1 && f.plane_data[0] && f.width > 0 && f.height > 0) {
+                        static const bool kCopyVideoFrames = ([]() {
+                            const char* v = std::getenv("DONG_VIDEO_FRAME_COPY");
+                            return v && (std::strcmp(v, "1") == 0 || std::strcmp(v, "true") == 0);
+                        })();
+                        updateVideoFrameFromDecoded(vs, f, kCopyVideoFrames);
+                        vs.current_pts = f.pts_seconds;
+                        vs.has_frame = true;
+                        vs.needs_upload = true;
+                        if (vs.node) {
+                            vs.node->setAttribute("__dong_video_currentTime", std::to_string(vs.current_pts));
+                            vs.node->setAttribute("__dong_video_seeking", "0");
+                            vs.node->setAttribute("__dong_video_ended", "0");
+                        }
+                        if (!vs.loadeddata_sent) {
+                            vs.loadeddata_sent = true;
+                            dispatchMediaEvent(vs, "loadeddata");
+                            dispatchMediaEvent(vs, "canplay");
+                        }
+                    }
+                }
+
+                if (vs.autoplay) {
+                    vs.playing = true;
+                    vs.wall_clock_start = wall_time_sec;
+                    vs.video_time_start = vs.current_pts;
+                    dispatchMediaEvent(vs, "play");
+                    dispatchMediaEvent(vs, "playing");
+                } else {
+                    vs.playing = false;
+                }
+            }
+
+            const std::string seek_req = n->getAttribute("__dong_video_seek");
+            if (!seek_req.empty() && plugin->video_seek) {
+                char* end = nullptr;
+                double t = std::strtod(seek_req.c_str(), &end);
+                if (end && end != seek_req.c_str()) {
+                    if (t < 0.0) t = 0.0;
+                    if (vs.meta_ready && vs.meta.duration_seconds > 0.0) {
+                        t = std::min(t, vs.meta.duration_seconds);
+                    }
+                    if (vs.node) {
+                        vs.node->setAttribute("__dong_video_seeking", "1");
+                        vs.node->setAttribute("__dong_video_ended", "0");
+                        vs.node->setAttribute("__dong_video_currentTime", std::to_string(t));
+                    }
+                    plugin->video_seek(plugin_user, vs.player, t);
+                    vs.current_pts = t;
+                    vs.video_time_start = vs.current_pts;
+                    vs.wall_clock_start = wall_time_sec;
+                    vs.ended = false;
+                    dispatchMediaEvent(vs, "seeking");
+                }
+            }
+
+            const std::string desired_play = n->getAttribute("__dong_video_playing");
+            if (!desired_play.empty()) {
+                const bool want_playing = (desired_play == "1" || desired_play == "true");
+                if (want_playing != vs.playing) {
+                    toggleVideoPlayPause(vs, wall_time_sec);
+                }
+            } else {
+                n->setAttribute("__dong_video_playing", vs.playing ? "1" : "0");
+            }
+
+            if (vs.playing && !vs.ended) {
+                updateVideoPlayback(vs, wall_time_sec);
+            }
+
+            if (!vs.has_frame && vs.node && !vs.node->getAttribute("__dong_video_frame").empty()) {
+                vs.node->setAttribute("__dong_video_frame", "");
+                markNeedsRepaint();
+            }
+        }
+
+        if (need_dom_scan) {
+            for (auto it = video_states.begin(); it != video_states.end();) {
+                if (live.find(it->first) == live.end()) {
+                    closeVideo(it->second);
+                    it = video_states.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+        }
+    }
+
     DOMNodePtr hitElementAt(int32_t x, int32_t y) {
+
         if (!dom_manager || !layout_engine) return nullptr;
         auto hit = hitTestElementAt(dom_manager.get(), layout_engine.get(), x, y);
         while (hit && hit->getType() != dong::dom::DOMNode::NodeType::ELEMENT) {
@@ -349,10 +976,23 @@ struct EngineView::Impl {
     bool tick() {
         DONG_PROFILE_SCOPE_CAT("EngineView::tick", "frame");
 
+        static auto start_time = std::chrono::steady_clock::now();
+        auto now = std::chrono::steady_clock::now();
+        double current_time = std::chrono::duration<double>(now - start_time).count();
+        last_wall_time_sec = current_time;
+
+        bool dom_tree_dirty = false;
+        if (dom_manager) {
+            auto root_for_media = dom_manager->getRoot();
+            dom_tree_dirty = (root_for_media && root_for_media->isLayoutDirty());
+        }
+        syncVideoElements(current_time, dom_tree_dirty);
+
         if (script_engine) {
             DONG_PROFILE_SCOPE_CAT("Script::processTasks", "script");
             script_engine->processPendingTasks();
         }
+
 
         if (dom_manager) {
             auto root = dom_manager->getRoot();
@@ -391,6 +1031,10 @@ struct EngineView::Impl {
             }
         }
 
+        if (use_gpu) {
+            (void)uploadPendingVideoFrames();
+        }
+
         if (use_gpu && cached_cmd_list && !commands_dirty) {
             DongGPUDriver* driver = dong_platform_get_gpu_driver(dong_platform_get());
             if (driver) {
@@ -398,6 +1042,7 @@ struct EngineView::Impl {
                 (void)dong_gpu_execute(driver, cached_cmd_list.get());
             }
         }
+
 
         return true;
     }
@@ -600,7 +1245,14 @@ void EngineView::setResourceRoot(const char* root) {
     }
 }
 
+void EngineView::setPlugin(const dong_plugin_vtable_t* plugin, void* plugin_user) {
+    if (impl_) {
+        impl_->setPlugin(plugin, plugin_user);
+    }
+}
+
 const char* EngineView::getCursorAt(int32_t x, int32_t y) {
+
     if (!impl_ || !impl_->dom_manager || !impl_->layout_engine) {
         impl_->cached_cursor = "auto";
         return impl_->cached_cursor.c_str();

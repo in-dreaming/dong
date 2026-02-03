@@ -3,6 +3,9 @@
 #include <cstdint>
 #include <memory>
 
+#include "dong_plugin_api.h"
+
+
 namespace dong {
 
 // Platform-agnostic "View" used by dong_engine_*.
@@ -24,8 +27,12 @@ public:
     // Resource root for resolving relative assets/scripts.
     void setResourceRoot(const char* root);
 
+    // Optional: inject platform plugin vtable (video, etc.).
+    void setPlugin(const dong_plugin_vtable_t* plugin, void* plugin_user);
+
     // Drive one frame: update script/layout and (if needed) rebuild GPUCommandList.
     bool tick();
+
 
     bool isInitialized() const;
 

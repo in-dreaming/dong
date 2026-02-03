@@ -1005,8 +1005,9 @@ static void handle_wheel(dong_scene3d_t* scene, float dx, float dy) {
     if (!scr || !scr->engine) return;
 
     const float kWheelMultiplier = 3.0f;
-    // SDL wheel direction is opposite of our DOM scroll convention; flip Y for intuitive scrolling.
-    dong_engine_send_mouse_wheel(scr->engine, dx * kWheelMultiplier, -dy * kWheelMultiplier);
+    // dong_app 已经对 SDL wheel 做了方向校正，这里保持一致即可。
+    dong_engine_send_mouse_wheel(scr->engine, dx * kWheelMultiplier, dy * kWheelMultiplier);
+
 }
 
 

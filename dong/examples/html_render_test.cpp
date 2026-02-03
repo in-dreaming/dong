@@ -24,7 +24,9 @@
 #include <dong.h>
 #include <dong_platform.h>
 #include <dong_gpu_driver.h>
+#include <dong_plugin_api.h>
 #include "dong_sdl_platform.h"
+
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_gpu.h>
@@ -36,8 +38,53 @@
 
 namespace fs = std::filesystem;
 
+// Optional: load SDL plugin for video support.
+static const dong_plugin_vtable_t* try_load_plugin() {
+    static const dong_plugin_vtable_t* s_plugin_vtable = NULL;
+    static void* s_plugin_module = NULL;
+    if (s_plugin_vtable) return s_plugin_vtable;
+    if (s_plugin_module) return NULL;
+
+    const char* filename =
+#if defined(_WIN32)
+        "dong_plugin_sdl.dll";
+#elif defined(__APPLE__)
+        "libdong_plugin_sdl.dylib";
+#else
+        "libdong_plugin_sdl.so";
+#endif
+
+    const char* base_path = SDL_GetBasePath();
+    if (!base_path) return NULL;
+
+    char path[1024];
+    SDL_snprintf(path, sizeof(path), "%s%s", base_path, filename);
+
+    s_plugin_module = SDL_LoadObject(path);
+    if (!s_plugin_module) {
+        SDL_Log("[html_render_test] plugin not found: %s", path);
+        s_plugin_module = (void*)1;
+        return NULL;
+    }
+
+    typedef const dong_plugin_vtable_t* (*get_api_fn)(void);
+    get_api_fn fn = (get_api_fn)SDL_LoadFunction((SDL_SharedObject*)s_plugin_module, "dong_plugin_get_api");
+    if (!fn) {
+        SDL_Log("[html_render_test] plugin missing symbol: dong_plugin_get_api");
+        SDL_UnloadObject((SDL_SharedObject*)s_plugin_module);
+        s_plugin_module = (void*)1;
+        return NULL;
+    }
+
+    s_plugin_vtable = fn();
+    if (s_plugin_vtable) {
+        SDL_Log("[html_render_test] plugin loaded: %s", path);
+    }
+    return s_plugin_vtable;
+}
 
 // BMP 写入函数
+
 bool writeBMP(const char* filename, uint32_t width, uint32_t height, const uint8_t* rgba_data) {
     FILE* f = fopen(filename, "wb");
     if (!f) {
@@ -560,6 +607,9 @@ int main(int argc, char* argv[]) {
 
     dong_engine_desc_t desc{};
     desc.api_version = DONG_API_VERSION;
+    desc.plugin_api_version = DONG_PLUGIN_API_VERSION;
+    desc.plugin = try_load_plugin();
+    desc.plugin_user = NULL;
     desc.width = width;
     desc.height = height;
 
@@ -570,6 +620,10 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    if (!resource_root.empty()) {
+        (void)dong_engine_set_resource_root(engine, resource_root.c_str());
+    }
+
     if (dong_engine_set_gpu(engine, static_cast<void*>(device), static_cast<void*>(window)) != DONG_OK) {
 
         SDL_Log("ERROR: Failed to set GPU device for engine");
@@ -577,6 +631,7 @@ int main(int argc, char* argv[]) {
         dong_sdl_platform_shutdown();
         return 1;
     }
+
 
     if (dong_engine_load_html(engine, html_content.c_str()) != DONG_OK) {
         SDL_Log("ERROR: Failed to load HTML");

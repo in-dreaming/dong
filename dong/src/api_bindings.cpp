@@ -77,9 +77,14 @@ dong_result_t dong_engine_create(const dong_engine_desc_t* desc, dong_engine_t**
             return DONG_ERR_INTERNAL;
         }
 
+        if (engine->plugin) {
+            engine->view->setPlugin(engine->plugin, engine->plugin_user);
+        }
+
         if (desc->html) {
             (void)engine->view->loadHTML(desc->html);
         }
+
 
         if (pluginCanLog(engine->plugin)) {
             char msg[256];

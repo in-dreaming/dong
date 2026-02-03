@@ -89,6 +89,7 @@ button, input, select, textarea {
 button {
   padding: 2px 6px;
   background-color: #f3f3f3;
+  white-space: nowrap;
 
   border-width: 2px;
   border-style: outset;
@@ -97,6 +98,7 @@ button {
   cursor: pointer;
 }
 button:active {
+
   border-style: inset;
 }
 

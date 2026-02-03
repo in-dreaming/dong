@@ -14,8 +14,11 @@
 #include <string.h>
 #include <stdio.h>
 
+#define MAX_PATH_LEN 1024
+
 // Plugin loading (optional: video, etc.)
 static const dong_plugin_vtable_t* s_plugin_vtable = NULL;
+
 static void* s_plugin_module = NULL;
 
 static const dong_plugin_vtable_t* try_load_plugin(void) {
@@ -32,26 +35,32 @@ static const dong_plugin_vtable_t* try_load_plugin(void) {
 #endif
 
     const char* base_path = SDL_GetBasePath();
-    if (!base_path) return NULL;
+    if (!base_path) {
+        printf("[DongApp] SDL_GetBasePath failed: %s\n", SDL_GetError());
+        return NULL;
+    }
+
 
     char path[1024];
     SDL_snprintf(path, sizeof(path), "%s%s", base_path, filename);
 
     s_plugin_module = SDL_LoadObject(path);
     if (!s_plugin_module) {
-        printf("[DongApp] Plugin not found: %s\n", path);
+        printf("[DongApp] Plugin not found: %s (%s)\n", path, SDL_GetError());
         s_plugin_module = (void*)1;
         return NULL;
     }
 
+
     typedef const dong_plugin_vtable_t* (*get_api_fn)(void);
     get_api_fn fn = (get_api_fn)SDL_LoadFunction((SDL_SharedObject*)s_plugin_module, "dong_plugin_get_api");
     if (!fn) {
-        printf("[DongApp] Plugin missing symbol\n");
+        printf("[DongApp] Plugin missing symbol: %s\n", SDL_GetError());
         SDL_UnloadObject((SDL_SharedObject*)s_plugin_module);
         s_plugin_module = (void*)1;
         return NULL;
     }
+
 
     s_plugin_vtable = fn();
     if (s_plugin_vtable) {
@@ -60,9 +69,29 @@ static const dong_plugin_vtable_t* try_load_plugin(void) {
     return s_plugin_vtable;
 }
 
+static void extract_dir_from_path(const char* path, char* out_dir, size_t out_size) {
+    if (!out_dir || out_size == 0) return;
+    out_dir[0] = 0;
+    if (!path) return;
+
+    const char* last_slash = strrchr(path, '/');
+    const char* last_backslash = strrchr(path, '\\');
+    const char* last_sep = last_slash;
+    if (!last_sep || (last_backslash && last_backslash > last_sep)) {
+        last_sep = last_backslash;
+    }
+    if (!last_sep) return;
+
+    size_t len = (size_t)(last_sep - path);
+    if (len >= out_size) len = out_size - 1;
+    memcpy(out_dir, path, len);
+    out_dir[len] = 0;
+}
+
 // =============================================================================
 // Internal Structures
 // =============================================================================
+
 
 typedef struct dong_app_impl_t {
     SDL_Window* window;
@@ -542,7 +571,17 @@ DONG_APPCORE_API int dong_app_load_html(dong_app_t* app_handle, const char* html
 DONG_APPCORE_API int dong_app_load_html_file(dong_app_t* app_handle, const char* path) {
     if (!app_handle || !path) return 0;
 
+    dong_app_impl_t* app = (dong_app_impl_t*)app_handle;
+    if (!app || !app->engine) return 0;
+
+    char dir[MAX_PATH_LEN];
+    extract_dir_from_path(path, dir, sizeof(dir));
+    if (dir[0]) {
+        (void)dong_engine_set_resource_root(app->engine, dir);
+    }
+
     FILE* f = fopen(path, "rb");
+
     if (!f) {
         fprintf(stderr, "[DongApp] Failed to open file: %s\n", path);
         return 0;

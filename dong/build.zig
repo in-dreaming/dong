@@ -367,8 +367,23 @@ pub fn build(b: *std.Build) void {
     cmake_install.step.dependOn(&cmake_build.step);
     b.getInstallStep().dependOn(&cmake_install.step);
 
-    
+    if (is_windows) {
+        const copy_runtime = b.addSystemCommand(&.{
+            "powershell",
+            "-NoProfile",
+            "-Command",
+            b.fmt(
+                "& {{ $build = '{s}'; $bin = 'zig-out/bin'; $ff = Join-Path $build 'plugins/sdl/ffmpeg_install/bin'; if (Test-Path $ff) {{ cmake -E copy_directory $ff $bin | Out-Null }}; $plugin = Join-Path $build 'plugins/sdl/dong_plugin_sdl.dll'; if (Test-Path $plugin) {{ cmake -E copy_if_different $plugin $bin | Out-Null }} }}",
+                .{cmake_build_dir},
+            ),
+        });
+        copy_runtime.step.dependOn(&cmake_build.step);
+        b.getInstallStep().dependOn(&copy_runtime.step);
+    }
+
     // examples step now also installs to zig-out/bin
+
+
     const examples_step = b.step("examples", "Build all examples and install to zig-out/bin");
     examples_step.dependOn(&cmake_install.step);
 
