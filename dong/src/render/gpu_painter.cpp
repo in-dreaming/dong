@@ -1,8 +1,8 @@
-﻿#include "gpu_painter.hpp"
+#include "gpu_painter.hpp"
 #include "gpu_device.hpp"
 #include "shader_manager.hpp"
 #include "gpu_surface.hpp"
-#include <SDL3/SDL_log.h>
+#include "../core/log.h"
 #include <cstring>
 
 namespace dong::render {
@@ -28,12 +28,12 @@ GPUPainter::~GPUPainter() {
 
 bool GPUPainter::initialize() {
     if (!gpu_device_ || !gpu_device_->isInitialized()) {
-        SDL_Log("GPU device not initialized");
+        DONG_LOG_ERROR("GPU device not initialized");
         return false;
     }
 
     if (!gpu_surface_) {
-        SDL_Log("GPU surface not initialized");
+        DONG_LOG_ERROR("GPU surface not initialized");
         return false;
     }
 
@@ -46,7 +46,7 @@ bool GPUPainter::initialize() {
     }
 
     setupPipelines();
-    SDL_Log("GPU painter initialized");
+    DONG_LOG_INFO("GPU painter initialized");
     return true;
 }
 
@@ -54,7 +54,7 @@ void GPUPainter::renderDisplayList(const DisplayList& display_list) {
     (void)display_list;
     
     if (!gpu_surface_ || !gpu_device_ || !gpu_device_->isInitialized()) {
-        SDL_Log("GPUPainter::renderDisplayList: invalid GPU surface or device");
+        DONG_LOG_WARN("GPUPainter::renderDisplayList: invalid GPU surface or device");
         return;
     }
 
@@ -71,12 +71,12 @@ void GPUPainter::renderDisplayList(const DisplayList& display_list) {
 void GPUPainter::renderDisplayListInternal(const DisplayList& display_list) {
     (void)display_list;
     // TODO: 实际渲染 DisplayList
-    SDL_Log("GPUPainter::renderDisplayListInternal: stub");
+    DONG_LOG_DEBUG("GPUPainter::renderDisplayListInternal: stub");
 }
 
 void GPUPainter::beginFrame() {
     if (is_rendering_) {
-        SDL_Log("GPUPainter::beginFrame: already in frame");
+        DONG_LOG_WARN("GPUPainter::beginFrame: already in frame");
         return;
     }
 
@@ -86,7 +86,7 @@ void GPUPainter::beginFrame() {
 
     current_cmd_buf_ = gpu_device_->acquireCommandBuffer();
     if (!current_cmd_buf_) {
-        SDL_Log("Failed to acquire command buffer");
+        DONG_LOG_ERROR("Failed to acquire command buffer");
         return;
     }
 

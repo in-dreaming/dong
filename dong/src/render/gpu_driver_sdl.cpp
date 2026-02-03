@@ -1,4 +1,4 @@
-﻿#include "gpu_driver_sdl.hpp"
+#include "gpu_driver_sdl.hpp"
 #include "gpu_device.hpp"
 #include "shader_manager.hpp"
 #include "resource_manager.hpp"
@@ -19,6 +19,9 @@
 
 #include <ft2build.h>
 #include FT_FREETYPE_H
+
+// ImageAtlas
+#include "dong_image_atlas.h"
 
 namespace dong::render {
 
@@ -121,9 +124,10 @@ GPUDriverSDL::~GPUDriverSDL() {
             SDL_ReleaseGPUSampler(dev, image_sampler_);
             image_sampler_ = nullptr;
         }
-        if (image_atlas_texture_) {
-            SDL_ReleaseGPUTexture(dev, image_atlas_texture_);
-            image_atlas_texture_ = nullptr;
+        // 释放 ImageAtlas（内部会释放 GPU 纹理）
+        if (image_atlas_) {
+            dong_atlas_destroy(image_atlas_);
+            image_atlas_ = nullptr;
         }
 
         // Release external textures (e.g. video frames)

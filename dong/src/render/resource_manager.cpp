@@ -1,39 +1,24 @@
-﻿#include "resource_manager.hpp"
+#include "resource_manager.hpp"
 #include "../core/log.h"
-#include <fstream>
+#include "dong_platform.h"
+#include "dong_file_system.h"
+#include "dong_image_decoder.h"
 
 #include <sstream>
-#include <iostream>
 #include <cstring>
-#include <memory>
 #include <algorithm>
 #include <cctype>
-#include <filesystem>
-#include <cstdlib>
-
-
-
-// Optional: use SDL's built-in PNG loader in the legacy (SDL-coupled) build.
-#if defined(DONG_USE_SDL_IMAGE)
-#include <SDL3/SDL.h>
-#include <SDL3/SDL_surface.h>
-#endif
-
-
-
-// TODO: 使用 FreeType + GlyphAtlas 替代字体管理
-
 
 namespace dong::render {
 
 // ImageResource destructor
 ImageResource::~ImageResource() {
-    // TODO: 清理图片资源
+    // Pixel data is managed separately (usually by atlas or caller)
 }
 
 // FontResource destructor
 FontResource::~FontResource() {
-    // TODO: 清理字体资源
+    // Font resources are managed by FreeType/HarfBuzz
 }
 
 ResourceManager::ResourceManager() = default;
@@ -41,6 +26,62 @@ ResourceManager::ResourceManager() = default;
 ResourceManager::~ResourceManager() {
     clear();
 }
+
+// =============================================================================
+// Path Utilities
+// =============================================================================
+
+static std::string trimString(const std::string& s) {
+    auto not_space = [](unsigned char c) { return !std::isspace(c); };
+    auto begin = std::find_if(s.begin(), s.end(), not_space);
+    auto end = std::find_if(s.rbegin(), s.rend(), not_space).base();
+    return (begin < end) ? std::string(begin, end) : std::string();
+}
+
+static bool isAbsolutePath(const std::string& p) {
+    if (p.size() >= 2 && std::isalpha(static_cast<unsigned char>(p[0])) && p[1] == ':') {
+        return true; // Windows drive path
+    }
+    if (!p.empty() && (p[0] == '/' || p[0] == '\\')) {
+        return true; // Unix absolute or UNC-like
+    }
+    return false;
+}
+
+static std::string normalizeUrl(const std::string& url) {
+    std::string path = url;
+
+    // Handle file:// URLs
+    if (path.rfind("file://", 0) == 0) {
+        path = path.substr(7);
+        // Windows file URL: file:///C:/... -> C:/...
+        if (path.size() >= 3 && path[0] == '/' &&
+            std::isalpha(static_cast<unsigned char>(path[1])) && path[2] == ':') {
+            path.erase(path.begin());
+        }
+    }
+
+    return path;
+}
+
+static std::string resolvePath(const std::string& base, const std::string& relative) {
+    if (base.empty() || isAbsolutePath(relative)) {
+        return relative;
+    }
+
+    // Simple path joining
+    std::string result = base;
+    if (!result.empty() && result.back() != '/' && result.back() != '\\') {
+        result += '/';
+    }
+    result += relative;
+
+    return result;
+}
+
+// =============================================================================
+// Image Loading via Platform IImageDecoder
+// =============================================================================
 
 bool ResourceManager::getImagePixelsRGBA(const std::string& file_path,
                                          std::vector<uint8_t>& out_pixels,
@@ -50,131 +91,82 @@ bool ResourceManager::getImagePixelsRGBA(const std::string& file_path,
     out_width = 0;
     out_height = 0;
 
-    auto trimCopy = [](std::string s) -> std::string {
-        auto not_space = [](unsigned char c) { return !std::isspace(c); };
-        s.erase(s.begin(), std::find_if(s.begin(), s.end(), not_space));
-        s.erase(std::find_if(s.rbegin(), s.rend(), not_space).base(), s.end());
-        return s;
-    };
-
-    std::string path = trimCopy(file_path);
+    std::string path = trimString(file_path);
     if (path.empty()) {
         return false;
     }
 
-    auto isAbsolutePath = [](const std::string& p) -> bool {
-        if (p.size() >= 2 && std::isalpha(static_cast<unsigned char>(p[0])) && p[1] == ':') {
-            return true; // Windows drive path
-        }
-        if (!p.empty() && (p[0] == '/' || p[0] == '\\')) {
-            return true; // Unix absolute or UNC-like
-        }
-        return false;
-    };
-
-
-    // Basic URL handling: support file://, reject http(s)/data.
+    // Reject unsupported URL schemes
     if (path.rfind("http://", 0) == 0 || path.rfind("https://", 0) == 0 || path.rfind("data:", 0) == 0) {
         DONG_LOG_WARN("[ResourceManager] unsupported image URL: %s", path.c_str());
-
         return false;
     }
-    if (path.rfind("file://", 0) == 0) {
-        path = path.substr(std::string("file://").size());
-        // Windows file URL often looks like "/d:/xxx"; strip the leading '/' if it precedes a drive letter.
-        if (path.size() >= 3 && path[0] == '/' && std::isalpha(static_cast<unsigned char>(path[1])) && path[2] == ':') {
-            path.erase(path.begin());
-        }
-    }
 
-    // Resolve relative paths against optional resource root.
+    // Normalize file:// URLs
+    path = normalizeUrl(path);
+
+    // Resolve relative paths
     if (!resource_root_.empty() && !isAbsolutePath(path)) {
-        const std::string orig = path;
-        try {
-            namespace fs = std::filesystem;
-            fs::path resolved = fs::path(resource_root_) / fs::path(path);
-            path = resolved.lexically_normal().string();
-        } catch (...) {
-            // Best-effort; fall back to the original path.
+        std::string resolved = resolvePath(resource_root_, path);
+        const char* env = std::getenv("DONG_DEBUG_RESOURCE_PATHS");
+        if (env && env[0] == '1') {
+            DONG_LOG_INFO("[ResourceManager] resolve: root=%s path=%s -> %s",
+                          resource_root_.c_str(), path.c_str(), resolved.c_str());
         }
-        if (orig != path) {
-            const char* env = std::getenv("DONG_DEBUG_RESOURCE_PATHS");
-            if (env && env[0] == '1') {
-                DONG_LOG_INFO("[ResourceManager] resolve: root=%s path=%s -> %s", resource_root_.c_str(), orig.c_str(), path.c_str());
-
-            }
-        }
-
+        path = resolved;
     }
 
+    // Get platform services
+    DongPlatform* platform = dong_platform_get();
+    DongFileSystem* fs = dong_platform_get_file_system(platform);
+    DongImageDecoder* decoder = dong_platform_get_image_decoder(platform);
 
+    // Read file via FileSystem
+    DongFileData file_data = {nullptr, 0};
+    DongFileSystemResult fs_result = dong_fs_read_all(fs, path.c_str(), &file_data);
 
-#if defined(DONG_USE_SDL_IMAGE)
-    SDL_Surface* surface = SDL_LoadPNG(path.c_str());
-    if (!surface) {
-        DONG_LOG_ERROR("[ResourceManager] SDL_LoadPNG failed: %s (%s)", path.c_str(), SDL_GetError());
-
+    if (fs_result != DONG_FS_OK || !file_data.data || file_data.size == 0) {
+        DONG_LOG_ERROR("[ResourceManager] failed to read file: %s (error=%d)", path.c_str(), (int)fs_result);
         return false;
     }
 
-    SDL_Surface* rgba = surface;
-    if (surface->format != SDL_PIXELFORMAT_RGBA32) {
-        rgba = SDL_ConvertSurface(surface, SDL_PIXELFORMAT_RGBA32);
-        SDL_DestroySurface(surface);
-        surface = nullptr;
-        if (!rgba) {
-            DONG_LOG_ERROR("[ResourceManager] SDL_ConvertSurface(RGBA32) failed: %s (%s)", path.c_str(), SDL_GetError());
-
-            return false;
-        }
-    }
-
-    if (SDL_MUSTLOCK(rgba)) {
-        if (!SDL_LockSurface(rgba)) {
-            DONG_LOG_ERROR("[ResourceManager] SDL_LockSurface failed: %s (%s)", path.c_str(), SDL_GetError());
-
-            SDL_DestroySurface(rgba);
-            return false;
-        }
-    }
-
-    const int w = rgba->w;
-    const int h = rgba->h;
-    if (!rgba->pixels || w <= 0 || h <= 0) {
-        if (SDL_MUSTLOCK(rgba)) {
-            SDL_UnlockSurface(rgba);
-        }
-        SDL_DestroySurface(rgba);
+    // Check if we have an image decoder
+    if (!decoder) {
+        DONG_LOG_WARN("[ResourceManager] no image decoder registered, cannot decode: %s", path.c_str());
+        dong_fs_free_data(fs, &file_data);
         return false;
     }
 
-    out_width = static_cast<uint32_t>(w);
-    out_height = static_cast<uint32_t>(h);
-    out_pixels.resize(static_cast<size_t>(w) * static_cast<size_t>(h) * 4);
+    // Decode image
+    DongDecodedImage image = {};
+    DongImageDecoderResult decode_result = dong_image_decode(decoder, file_data.data, file_data.size, &image);
 
-    const uint8_t* src = static_cast<const uint8_t*>(rgba->pixels);
-    const int src_pitch = rgba->pitch;
-    const size_t dst_pitch = static_cast<size_t>(w) * 4;
+    // Free file data (no longer needed)
+    dong_fs_free_data(fs, &file_data);
 
-    for (int y = 0; y < h; ++y) {
-        std::memcpy(out_pixels.data() + static_cast<size_t>(y) * dst_pitch,
-                    src + static_cast<size_t>(y) * static_cast<size_t>(src_pitch),
-                    dst_pitch);
+    if (decode_result != DONG_IMAGE_OK) {
+        DONG_LOG_ERROR("[ResourceManager] failed to decode image: %s (error=%d)", path.c_str(), (int)decode_result);
+        return false;
     }
 
-    if (SDL_MUSTLOCK(rgba)) {
-        SDL_UnlockSurface(rgba);
+    // Verify format is RGBA8
+    if (image.format != DONG_IMAGE_FORMAT_RGBA8) {
+        DONG_LOG_WARN("[ResourceManager] unexpected image format %s, expected RGBA8: %s",
+                      dong_image_format_name(image.format), path.c_str());
+        dong_image_free(decoder, &image);
+        return false;
     }
-    SDL_DestroySurface(rgba);
+
+    // Copy pixels to output vector
+    out_width = image.width;
+    out_height = image.height;
+    out_pixels.resize(image.data_size);
+    std::memcpy(out_pixels.data(), image.data, image.data_size);
+
+    // Free decoded image
+    dong_image_free(decoder, &image);
+
     return true;
-#else
-    // dong core build intentionally avoids SDL linkage. Image decoding is not available here.
-    DONG_LOG_WARN("[ResourceManager] image decoding disabled (build without DONG_USE_SDL_IMAGE): %s", path.c_str());
-
-    return false;
-#endif
-
-
 }
 
 ImageResource* ResourceManager::loadImage(const std::string& file_path) {
@@ -183,11 +175,26 @@ ImageResource* ResourceManager::loadImage(const std::string& file_path) {
     if (it != image_cache_.end()) {
         return it->second.get();
     }
-    
-    // TODO: 使用 stb_image 加载图片
-    DONG_LOG_WARN("[ResourceManager] loadImage not implemented: %s", file_path.c_str());
 
-    return nullptr;
+    // Load via getImagePixelsRGBA
+    std::vector<uint8_t> pixels;
+    uint32_t width = 0, height = 0;
+
+    if (!getImagePixelsRGBA(file_path, pixels, width, height)) {
+        return nullptr;
+    }
+
+    // Create ImageResource
+    auto resource = std::make_unique<ImageResource>();
+    resource->path = file_path;
+    resource->width = width;
+    resource->height = height;
+    // Note: pixels are not stored in ImageResource; caller should use getImagePixelsRGBA
+
+    ImageResource* ptr = resource.get();
+    image_cache_[file_path] = std::move(resource);
+
+    return ptr;
 }
 
 ImageResource* ResourceManager::loadImageFromMemory(const std::string& name,
@@ -196,17 +203,44 @@ ImageResource* ResourceManager::loadImageFromMemory(const std::string& name,
     if (!data || data_size == 0) {
         return nullptr;
     }
-    
+
     // Check cache first
     auto it = image_cache_.find(name);
     if (it != image_cache_.end()) {
         return it->second.get();
     }
-    
-    // TODO: 使用 stb_image 解码
-    DONG_LOG_WARN("[ResourceManager] loadImageFromMemory not implemented: %s", name.c_str());
 
-    return nullptr;
+    // Get decoder from platform
+    DongPlatform* platform = dong_platform_get();
+    DongImageDecoder* decoder = dong_platform_get_image_decoder(platform);
+
+    if (!decoder) {
+        DONG_LOG_WARN("[ResourceManager] no image decoder registered");
+        return nullptr;
+    }
+
+    // Decode image
+    DongDecodedImage image = {};
+    DongImageDecoderResult result = dong_image_decode(decoder, data, data_size, &image);
+
+    if (result != DONG_IMAGE_OK) {
+        DONG_LOG_ERROR("[ResourceManager] failed to decode image from memory: %s", name.c_str());
+        return nullptr;
+    }
+
+    // Create ImageResource
+    auto resource = std::make_unique<ImageResource>();
+    resource->path = name;
+    resource->width = image.width;
+    resource->height = image.height;
+
+    // Free decoded image (we only needed dimensions)
+    dong_image_free(decoder, &image);
+
+    ImageResource* ptr = resource.get();
+    image_cache_[name] = std::move(resource);
+
+    return ptr;
 }
 
 ImageResource* ResourceManager::getImage(const std::string& file_path) const {
@@ -221,16 +255,15 @@ FontResource* ResourceManager::loadFont(const std::string& font_name,
                                         const std::string& file_path,
                                         float size) {
     std::string cache_key = makeFontCacheKey(font_name, size);
-    
+
     // Check cache
     auto it = font_cache_.find(cache_key);
     if (it != font_cache_.end()) {
         return it->second.get();
     }
-    
-    // TODO: 使用 FreeType 加载字体
-    DONG_LOG_WARN("[ResourceManager] loadFont not implemented: %s", font_name.c_str());
 
+    // TODO: Use FreeType to load font (requires IFontLoader abstraction)
+    DONG_LOG_WARN("[ResourceManager] loadFont not implemented: %s", font_name.c_str());
     return nullptr;
 }
 
@@ -244,9 +277,8 @@ FontResource* ResourceManager::getFont(const std::string& font_name, float size)
 }
 
 FontResource* ResourceManager::getSystemFont(const std::string& font_family, float size) {
-    // TODO: 使用 FreeType + 系统字体查找
+    // TODO: Use FontFinder + FreeType
     DONG_LOG_WARN("[ResourceManager] getSystemFont not implemented: %s", font_family.c_str());
-
     return nullptr;
 }
 
@@ -264,24 +296,30 @@ void ResourceManager::clear() {
 }
 
 std::string ResourceManager::readFileBytes(const std::string& path, std::vector<uint8_t>& out_data) const {
-    std::ifstream file(path, std::ios::binary | std::ios::ate);
-    if (!file.is_open()) {
-        return "Failed to open file";
+    out_data.clear();
+
+    // Use platform FileSystem
+    DongPlatform* platform = dong_platform_get();
+    DongFileSystem* fs = dong_platform_get_file_system(platform);
+
+    DongFileData file_data = {nullptr, 0};
+    DongFileSystemResult result = dong_fs_read_all(fs, path.c_str(), &file_data);
+
+    if (result != DONG_FS_OK) {
+        switch (result) {
+            case DONG_FS_ERR_NOT_FOUND: return "File not found";
+            case DONG_FS_ERR_IO: return "IO error";
+            case DONG_FS_ERR_INVALID_ARG: return "Invalid argument";
+            default: return "Unknown error";
+        }
     }
-    
-    auto size = file.tellg();
-    if (size <= 0) {
-        return "File is empty or invalid";
+
+    if (file_data.data && file_data.size > 0) {
+        out_data.resize(file_data.size);
+        std::memcpy(out_data.data(), file_data.data, file_data.size);
     }
-    
-    file.seekg(0, std::ios::beg);
-    out_data.resize(static_cast<size_t>(size));
-    
-    if (!file.read(reinterpret_cast<char*>(out_data.data()), size)) {
-        out_data.clear();
-        return "Failed to read file";
-    }
-    
+
+    dong_fs_free_data(fs, &file_data);
     return ""; // Success
 }
 

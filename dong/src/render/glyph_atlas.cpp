@@ -1,9 +1,8 @@
-﻿#include "glyph_atlas.hpp"
+#include "glyph_atlas.hpp"
 #include "gpu_device.hpp"
 #include "font_metrics.hpp"
 #include "../core/log.h"
 #include "../core/profiler.h"
-#include <SDL3/SDL_log.h>
 #include <cstring>
 
 #include <cstdio>
@@ -69,7 +68,7 @@ std::string GlyphAtlas::makeGlyphKey(uint32_t glyph_id, const std::string& font_
 
 bool GlyphAtlas::createPage() {
     if (!gpu_device_ || !gpu_device_->isInitialized()) {
-        SDL_Log("GlyphAtlas::createPage: GPU device not initialized");
+        DONG_LOG_ERROR("GlyphAtlas::createPage: GPU device not initialized");
         return false;
     }
 
@@ -90,7 +89,7 @@ bool GlyphAtlas::createPage() {
 
     SDL_GPUTexture* texture = SDL_CreateGPUTexture(dev, &tex_info);
     if (!texture) {
-        SDL_Log("GlyphAtlas::createPage: failed to create atlas texture: %s", SDL_GetError());
+        DONG_LOG_ERROR("GlyphAtlas::createPage: failed to create atlas texture: %s", SDL_GetError());
         return false;
     }
 
@@ -148,14 +147,14 @@ bool GlyphAtlas::createPage() {
                         {
                             DONG_PROFILE_SCOPE_CAT("SDL_WaitForGPUFences", "gpu");
                             if (!SDL_WaitForGPUFences(dev, true, fences, 1)) {
-                                SDL_Log("GlyphAtlas::evictAndRecyclePage: SDL_WaitForGPUFences failed: %s", SDL_GetError());
+                                DONG_LOG_WARN("GlyphAtlas::evictAndRecyclePage: SDL_WaitForGPUFences failed: %s", SDL_GetError());
                                 gpu_device_->waitForGPU();
                             }
                         }
                         SDL_ReleaseGPUFence(dev, fence);
                     } else {
 
-                        SDL_Log("GlyphAtlas::evictAndRecyclePage: SDL_SubmitGPUCommandBufferAndAcquireFence failed: %s", SDL_GetError());
+                        DONG_LOG_WARN("GlyphAtlas::evictAndRecyclePage: SDL_SubmitGPUCommandBufferAndAcquireFence failed: %s", SDL_GetError());
 
                         gpu_device_->submitCommandBuffer(cmd_buf);
                         gpu_device_->waitForGPU();
@@ -234,7 +233,7 @@ GlyphAtlas::AtlasPage* GlyphAtlas::evictAndRecyclePage() {
 
     victim->texture = SDL_CreateGPUTexture(dev, &tex_info);
     if (!victim->texture) {
-        SDL_Log("GlyphAtlas::evictAndRecyclePage: failed to recreate atlas texture: %s", SDL_GetError());
+        DONG_LOG_ERROR("GlyphAtlas::evictAndRecyclePage: failed to recreate atlas texture: %s", SDL_GetError());
         victim->width = 0;
         victim->height = 0;
         victim->cursor_x = victim->cursor_y = victim->row_height = 0;
@@ -291,14 +290,14 @@ GlyphAtlas::AtlasPage* GlyphAtlas::evictAndRecyclePage() {
                         {
                             DONG_PROFILE_SCOPE_CAT("SDL_WaitForGPUFences", "gpu");
                             if (!SDL_WaitForGPUFences(dev, true, fences, 1)) {
-                                SDL_Log("GlyphAtlas::evictAndRecyclePage: SDL_WaitForGPUFences failed: %s", SDL_GetError());
+                                DONG_LOG_WARN("GlyphAtlas::evictAndRecyclePage: SDL_WaitForGPUFences failed: %s", SDL_GetError());
                                 gpu_device_->waitForGPU();
                             }
                         }
                         SDL_ReleaseGPUFence(dev, fence);
                     } else {
 
-                        SDL_Log("GlyphAtlas::evictAndRecyclePage: SDL_SubmitGPUCommandBufferAndAcquireFence failed: %s", SDL_GetError());
+                        DONG_LOG_WARN("GlyphAtlas::evictAndRecyclePage: SDL_SubmitGPUCommandBufferAndAcquireFence failed: %s", SDL_GetError());
 
                         gpu_device_->submitCommandBuffer(cmd_buf);
                         gpu_device_->waitForGPU();
@@ -328,7 +327,7 @@ GlyphAtlas::AtlasPage* GlyphAtlas::selectPageForGlyph(uint32_t glyph_width, uint
         return nullptr;
     }
     if (glyph_width > atlas_width_ || glyph_height > atlas_height_) {
-        SDL_Log("GlyphAtlas::selectPageForGlyph: glyph too large for atlas page (%u x %u)",
+        DONG_LOG_WARN("GlyphAtlas::selectPageForGlyph: glyph too large for atlas page (%u x %u)",
                 glyph_width, glyph_height);
         return nullptr;
     }
@@ -371,7 +370,7 @@ bool GlyphAtlas::initialize(uint32_t width,
                              uint32_t glyph_bitmap_size,
                              float glyph_distance_range) {
     if (!gpu_device_ || !gpu_device_->isInitialized()) {
-        SDL_Log("GlyphAtlas::initialize: GPU device not initialized");
+        DONG_LOG_ERROR("GlyphAtlas::initialize: GPU device not initialized");
         return false;
     }
 
@@ -411,7 +410,7 @@ const AtlasEntry* GlyphAtlas::getGlyph(uint32_t glyph_id, const std::string& fon
 
 const AtlasEntry* GlyphAtlas::addGlyph(uint32_t glyph_id, const std::string& font_path) {
     if (font_path.empty()) {
-        SDL_Log("GlyphAtlas::addGlyph: font path is empty for glyph %u", glyph_id);
+        DONG_LOG_WARN("GlyphAtlas::addGlyph: font path is empty for glyph %u", glyph_id);
         return nullptr;
     }
 
@@ -433,7 +432,7 @@ const AtlasEntry* GlyphAtlas::addGlyph(uint32_t glyph_id, const std::string& fon
     GlyphMetrics metrics;
 
     if (!generateMSDF(glyph_id, font_path, bitmap, glyph_width, glyph_height, metrics)) {
-        SDL_Log("GlyphAtlas::addGlyph: failed to generate MSDF for glyph %u", glyph_id);
+        DONG_LOG_WARN("GlyphAtlas::addGlyph: failed to generate MSDF for glyph %u", glyph_id);
         return nullptr;
     }
 
@@ -448,7 +447,7 @@ const AtlasEntry* GlyphAtlas::addGlyph(uint32_t glyph_id, const std::string& fon
 
     AtlasPage* page = selectPageForGlyph(glyph_width, glyph_height);
     if (!page || !page->texture) {
-        SDL_Log("GlyphAtlas::addGlyph: no available atlas page for glyph %u", glyph_id);
+        DONG_LOG_WARN("GlyphAtlas::addGlyph: no available atlas page for glyph %u", glyph_id);
         return nullptr;
     }
 
@@ -462,7 +461,7 @@ const AtlasEntry* GlyphAtlas::addGlyph(uint32_t glyph_id, const std::string& fon
     }
 
     if (page->cursor_y + glyph_height > page->height) {
-        SDL_Log("GlyphAtlas::addGlyph: selected page overflows for glyph %u", glyph_id);
+        DONG_LOG_WARN("GlyphAtlas::addGlyph: selected page overflows for glyph %u", glyph_id);
         return nullptr;
     }
 
@@ -475,7 +474,7 @@ const AtlasEntry* GlyphAtlas::addGlyph(uint32_t glyph_id, const std::string& fon
     SDL_GPUDevice* dev = gpu_device_->getHandle();
     SDL_GPUCommandBuffer* cmd_buf = gpu_device_->acquireCommandBuffer();
     if (!cmd_buf) {
-        SDL_Log("GlyphAtlas::addGlyph: failed to acquire command buffer");
+        DONG_LOG_ERROR("GlyphAtlas::addGlyph: failed to acquire command buffer");
         return nullptr;
     }
 
@@ -488,14 +487,14 @@ const AtlasEntry* GlyphAtlas::addGlyph(uint32_t glyph_id, const std::string& fon
 
     SDL_GPUTransferBuffer* transfer_buf = SDL_CreateGPUTransferBuffer(dev, &transfer_info);
     if (!transfer_buf) {
-        SDL_Log("GlyphAtlas::addGlyph: failed to create transfer buffer");
+        DONG_LOG_ERROR("GlyphAtlas::addGlyph: failed to create transfer buffer");
         gpu_device_->submitCommandBuffer(cmd_buf);
         return nullptr;
     }
 
     void* mapped = SDL_MapGPUTransferBuffer(dev, transfer_buf, false);
     if (!mapped) {
-        SDL_Log("GlyphAtlas::addGlyph: failed to map transfer buffer");
+        DONG_LOG_ERROR("GlyphAtlas::addGlyph: failed to map transfer buffer");
         SDL_ReleaseGPUTransferBuffer(dev, transfer_buf);
         gpu_device_->submitCommandBuffer(cmd_buf);
         return nullptr;
@@ -519,7 +518,7 @@ const AtlasEntry* GlyphAtlas::addGlyph(uint32_t glyph_id, const std::string& fon
 
     SDL_GPUCopyPass* copy_pass = SDL_BeginGPUCopyPass(cmd_buf);
     if (!copy_pass) {
-        SDL_Log("GlyphAtlas::addGlyph: failed to begin copy pass");
+        DONG_LOG_ERROR("GlyphAtlas::addGlyph: failed to begin copy pass");
         SDL_ReleaseGPUTransferBuffer(dev, transfer_buf);
         gpu_device_->submitCommandBuffer(cmd_buf);
         return nullptr;
@@ -555,14 +554,14 @@ const AtlasEntry* GlyphAtlas::addGlyph(uint32_t glyph_id, const std::string& fon
         {
             DONG_PROFILE_SCOPE_CAT("SDL_WaitForGPUFences", "gpu");
             if (!SDL_WaitForGPUFences(dev, true, fences, 1)) {
-                SDL_Log("GlyphAtlas::addGlyph: SDL_WaitForGPUFences failed: %s", SDL_GetError());
+                DONG_LOG_WARN("GlyphAtlas::addGlyph: SDL_WaitForGPUFences failed: %s", SDL_GetError());
                 gpu_device_->waitForGPU();
             }
         }
         SDL_ReleaseGPUFence(dev, fence);
     } else {
 
-        SDL_Log("GlyphAtlas::addGlyph: SDL_SubmitGPUCommandBufferAndAcquireFence failed: %s", SDL_GetError());
+        DONG_LOG_WARN("GlyphAtlas::addGlyph: SDL_SubmitGPUCommandBufferAndAcquireFence failed: %s", SDL_GetError());
         gpu_device_->submitCommandBuffer(cmd_buf);
         gpu_device_->waitForGPU();
     }
@@ -692,7 +691,7 @@ void GlyphAtlas::addGlyphsBatched(const std::vector<GlyphRequest>& requests) {
     // 关键优化：不再在 CPU 侧等待 fence；依赖 command buffer 的提交顺序保证 upload 先于后续 draw。
     SDL_GPUCommandBuffer* cmd_buf = gpu_device_->acquireCommandBuffer();
     if (!cmd_buf) {
-        SDL_Log("addGlyphsBatched: failed to acquire command buffer");
+        DONG_LOG_ERROR("addGlyphsBatched: failed to acquire command buffer");
         return;
     }
 
@@ -706,7 +705,7 @@ void GlyphAtlas::addGlyphsBatched(const std::vector<GlyphRequest>& requests) {
 
         SDL_GPUCopyPass* copy_pass = SDL_BeginGPUCopyPass(cmd_buf);
         if (!copy_pass) {
-            SDL_Log("addGlyphsBatched: failed to begin copy pass");
+            DONG_LOG_ERROR("addGlyphsBatched: failed to begin copy pass");
             gpu_device_->submitCommandBuffer(cmd_buf);
             return;
         }
@@ -771,7 +770,7 @@ void GlyphAtlas::addGlyphsBatched(const std::vector<GlyphRequest>& requests) {
         pu.buffers = std::move(transfer_buffers);
         pending_uploads_.push_back(std::move(pu));
     } else {
-        SDL_Log("addGlyphsBatched: SDL_SubmitGPUCommandBufferAndAcquireFence failed: %s", SDL_GetError());
+        DONG_LOG_WARN("addGlyphsBatched: SDL_SubmitGPUCommandBufferAndAcquireFence failed: %s", SDL_GetError());
         gpu_device_->submitCommandBuffer(cmd_buf);
         gpu_device_->waitForGPU();
 
@@ -869,13 +868,13 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
     // 使用 design units face（无像素缩放）
     FT_Face face = getOrCreateDesignUnitsFace(font_path);
     if (!face) {
-        SDL_Log("GlyphAtlas::generateMSDF: failed to get design units face for '%s'", font_path.c_str());
+        DONG_LOG_ERROR("GlyphAtlas::generateMSDF: failed to get design units face for '%s'", font_path.c_str());
         return false;
     }
 
     out_metrics.units_per_em = face->units_per_EM;
     if (out_metrics.units_per_em == 0) {
-        SDL_Log("GlyphAtlas::generateMSDF: invalid units_per_em for '%s'", font_path.c_str());
+        DONG_LOG_ERROR("GlyphAtlas::generateMSDF: invalid units_per_em for '%s'", font_path.c_str());
         return false;
     }
 
@@ -883,7 +882,7 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
     // 添加 FT_LOAD_TARGET_LIGHT 启用轻量级 hinting，改善小字体清晰度
     FT_Int32 load_flags = FT_LOAD_NO_SCALE | FT_LOAD_TARGET_LIGHT;
     if (FT_Load_Glyph(face, glyph_id, load_flags) != 0) {
-        SDL_Log("GlyphAtlas::generateMSDF: failed to load glyph index %u", glyph_id);
+        DONG_LOG_WARN("GlyphAtlas::generateMSDF: failed to load glyph index %u", glyph_id);
         return false;
     }
 
@@ -950,7 +949,7 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
 
 
     if (error != 0) {
-        SDL_Log("GlyphAtlas::generateMSDF: failed to convert outline: %d", error);
+        DONG_LOG_ERROR("GlyphAtlas::generateMSDF: failed to convert outline: %d", error);
         out_width = 0;
         out_height = 0;
         out_metrics.bounds_left = 0.0f;
@@ -961,7 +960,7 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
     }
 
     if (shape.contours.empty()) {
-        SDL_Log("GlyphAtlas::generateMSDF: empty contours for glyph %u", glyph_id);
+        DONG_LOG_DEBUG("GlyphAtlas::generateMSDF: empty contours for glyph %u", glyph_id);
         out_width = 0;
         out_height = 0;
         // 空字形没有边界，初始化为 0

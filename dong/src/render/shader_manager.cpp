@@ -1,6 +1,6 @@
 ﻿#include "shader_manager.hpp"
 #include "gpu_device.hpp"
-#include <SDL3/SDL_log.h>
+#include "../core/log.h"
 #include <SDL3_shadercross/SDL_shadercross.h>
 #include <mutex>
 #include <fstream>
@@ -20,7 +20,7 @@ ShaderManager::ShaderManager(GPUDevice* gpu_device)
     : gpu_device_(gpu_device) {
     if (!g_shadercross_initialized) {
         if (!SDL_ShaderCross_Init()) {
-            SDL_Log("Failed to initialize SDL_shadercross: %s", SDL_GetError());
+            DONG_LOG_ERROR("Failed to initialize SDL_shadercross: %s", SDL_GetError());
         } else {
             g_shadercross_initialized = true;
         }
@@ -38,7 +38,7 @@ SDL_GPUShader* ShaderManager::loadShader(
     const char* entry_point) {
     
     if (!gpu_device_ || !gpu_device_->isInitialized()) {
-        SDL_Log("GPU device not initialized");
+        DONG_LOG_ERROR("GPU device not initialized");
         return nullptr;
     }
 
@@ -52,9 +52,9 @@ SDL_GPUShader* ShaderManager::loadShader(
     SDL_GPUShader* shader = createShaderFromBinary(stage, source, entry_point);
     if (shader) {
         shader_cache_[name] = shader;
-        SDL_Log("Shader '%s' loaded successfully", name.c_str());
+        DONG_LOG_INFO("Shader '%s' loaded successfully", name.c_str());
     } else {
-        SDL_Log("Failed to load shader '%s'", name.c_str());
+        DONG_LOG_ERROR("Failed to load shader '%s'", name.c_str());
     }
 
     return shader;
@@ -67,12 +67,12 @@ SDL_GPUShader* ShaderManager::loadShaderFromHLSL(
     const char* entry_point) {
 
     if (!gpu_device_ || !gpu_device_->isInitialized()) {
-        SDL_Log("GPU device not initialized");
+        DONG_LOG_ERROR("GPU device not initialized");
         return nullptr;
     }
 
     if (!hlsl_source) {
-        SDL_Log("HLSL source is null for shader '%s'", name.c_str());
+        DONG_LOG_ERROR("HLSL source is null for shader '%s'", name.c_str());
         return nullptr;
     }
 
@@ -102,16 +102,16 @@ SDL_GPUShader* ShaderManager::loadShaderFromHLSL(
     SDL_GPUShader* shader = createShaderFromHLSL(stage, hlsl_source, entry_point, name.c_str());
     if (shader) {
         shader_cache_[name] = shader;
-        
+
         // 添加到全局缓存
         {
             std::lock_guard<std::mutex> lock(g_shader_cache_mutex);
             g_global_shader_cache[dev][name] = shader;
         }
-        
-        SDL_Log("HLSL shader '%s' compiled successfully", name.c_str());
+
+        DONG_LOG_INFO("HLSL shader '%s' compiled successfully", name.c_str());
     } else {
-        SDL_Log("Failed to compile HLSL shader '%s'", name.c_str());
+        DONG_LOG_ERROR("Failed to compile HLSL shader '%s'", name.c_str());
     }
 
     return shader;
@@ -124,13 +124,13 @@ SDL_GPUShader* ShaderManager::loadShaderFromHLSLFile(
     const char* entry_point) {
 
     if (!hlsl_file_path || hlsl_file_path[0] == '\0') {
-        SDL_Log("HLSL file path is empty for shader '%s'", name.c_str());
+        DONG_LOG_ERROR("HLSL file path is empty for shader '%s'", name.c_str());
         return nullptr;
     }
 
     std::ifstream in(hlsl_file_path, std::ios::in | std::ios::binary);
     if (!in) {
-        SDL_Log("Failed to open HLSL file '%s' for shader '%s'", hlsl_file_path, name.c_str());
+        DONG_LOG_ERROR("Failed to open HLSL file '%s' for shader '%s'", hlsl_file_path, name.c_str());
         return nullptr;
     }
 
@@ -138,7 +138,7 @@ SDL_GPUShader* ShaderManager::loadShaderFromHLSLFile(
     ss << in.rdbuf();
     std::string source = ss.str();
     if (source.empty()) {
-        SDL_Log("HLSL file '%s' is empty for shader '%s'", hlsl_file_path, name.c_str());
+        DONG_LOG_ERROR("HLSL file '%s' is empty for shader '%s'", hlsl_file_path, name.c_str());
         return nullptr;
     }
 
@@ -177,7 +177,7 @@ SDL_GPUShader* ShaderManager::createShaderFromBinary(
     const char* entry_point) {
     
     if (!source.data || source.size == 0) {
-        SDL_Log("Invalid shader source");
+        DONG_LOG_ERROR("Invalid shader source");
         return nullptr;
     }
 
@@ -194,7 +194,7 @@ SDL_GPUShader* ShaderManager::createShaderFromBinary(
 
     SDL_GPUShader* shader = SDL_CreateGPUShader(gpu_device_->getHandle(), &shader_info);
     if (!shader) {
-        SDL_Log("Failed to create GPU shader: %s", SDL_GetError());
+        DONG_LOG_ERROR("Failed to create GPU shader: %s", SDL_GetError());
     }
 
     return shader;
@@ -207,7 +207,7 @@ SDL_GPUShader* ShaderManager::createShaderFromHLSL(
     const char* debug_name) {
 
     if (!hlsl_source) {
-        SDL_Log("Invalid HLSL source for shader '%s'", debug_name ? debug_name : "<unnamed>");
+        DONG_LOG_ERROR("Invalid HLSL source for shader '%s'", debug_name ? debug_name : "<unnamed>");
         return nullptr;
     }
 
@@ -220,7 +220,7 @@ SDL_GPUShader* ShaderManager::createShaderFromHLSL(
         sc_stage = SDL_SHADERCROSS_SHADERSTAGE_FRAGMENT;
         break;
     default:
-        SDL_Log("Unsupported shader stage for HLSL: %d", (int)stage);
+        DONG_LOG_ERROR("Unsupported shader stage for HLSL: %d", (int)stage);
         return nullptr;
     }
 
@@ -235,7 +235,7 @@ SDL_GPUShader* ShaderManager::createShaderFromHLSL(
     size_t spirv_size = 0;
     void* spirv_data = SDL_ShaderCross_CompileSPIRVFromHLSL(&hlsl_info, &spirv_size);
     if (!spirv_data || spirv_size == 0) {
-        SDL_Log("Failed to compile SPIR-V from HLSL for shader '%s': %s", debug_name ? debug_name : "<unnamed>", SDL_GetError());
+        DONG_LOG_ERROR("Failed to compile SPIR-V from HLSL for shader '%s': %s", debug_name ? debug_name : "<unnamed>", SDL_GetError());
         if (spirv_data) {
             SDL_free(spirv_data);
         }
@@ -253,7 +253,7 @@ SDL_GPUShader* ShaderManager::createShaderFromHLSL(
         props
     );
     if (!metadata) {
-        SDL_Log("Failed to reflect SPIR-V for shader '%s': %s", debug_name ? debug_name : "<unnamed>", SDL_GetError());
+        DONG_LOG_ERROR("Failed to reflect SPIR-V for shader '%s': %s", debug_name ? debug_name : "<unnamed>", SDL_GetError());
         SDL_free(spirv_data);
         SDL_DestroyProperties(props);
         return nullptr;
@@ -274,7 +274,7 @@ SDL_GPUShader* ShaderManager::createShaderFromHLSL(
     );
 
     if (!shader) {
-        SDL_Log("Failed to compile GPU shader from SPIR-V for '%s': %s", debug_name ? debug_name : "<unnamed>", SDL_GetError());
+        DONG_LOG_ERROR("Failed to compile GPU shader from SPIR-V for '%s': %s", debug_name ? debug_name : "<unnamed>", SDL_GetError());
     }
 
     SDL_free(metadata);

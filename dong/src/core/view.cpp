@@ -12,7 +12,6 @@
 #include <algorithm>
 #include <unordered_set>
 #include <filesystem>
-#include <SDL3/SDL_log.h>
 
 
 #include <SDL3/SDL_gpu.h>
@@ -108,13 +107,13 @@ void debugLogLayerTreeIfEnabled(const dong::render::LayerTree& tree) {
         return;
     }
 
-    SDL_Log("[LayerTree] nodes=%zu, root=%d",
+    DONG_LOG_DEBUG("[LayerTree] nodes=%zu, root=%d",
             tree.nodes.size(),
             tree.root_index);
 
     for (std::size_t i = 0; i < tree.nodes.size(); ++i) {
         const auto& node = tree.nodes[i];
-        SDL_Log("[LayerTree] node[%zu]: id=%llu parent=%d type=%d bounds=(%.1f,%.1f,%.1f,%.1f) opacity=%.3f surface=%d dirty(content=%d,transform=%d,opacity=%d,scroll=%d)",
+        DONG_LOG_DEBUG("[LayerTree] node[%zu]: id=%llu parent=%d type=%d bounds=(%.1f,%.1f,%.1f,%.1f) opacity=%.3f surface=%d dirty(content=%d,transform=%d,opacity=%d,scroll=%d)",
                 i,
                 static_cast<unsigned long long>(node.id),
                 node.parent,
@@ -246,21 +245,21 @@ void View::setPlugin(const dong_plugin_vtable_t* plugin, void* plugin_user) {
 
 void View::load_html(const char* html) {
 
-    SDL_Log("[View::load_html] Entry");
+    DONG_LOG_DEBUG("[View::load_html] Entry");
     if (!html || !dom_manager) {
-        SDL_Log("[View::load_html] Early return: html=%p, dom_manager=%p", html, dom_manager.get());
+        DONG_LOG_DEBUG("[View::load_html] Early return: html=%p, dom_manager=%p", html, dom_manager.get());
         return;
     }
-    
-    SDL_Log("[View::load_html] HTML length=%zu", strlen(html));
-    SDL_Log("[View::load_html] Calling dom_manager->loadHTML...");
+
+    DONG_LOG_DEBUG("[View::load_html] HTML length=%zu", strlen(html));
+    DONG_LOG_DEBUG("[View::load_html] Calling dom_manager->loadHTML...");
     if (dom_manager->loadHTML(html)) {
-        SDL_Log("[View::load_html] loadHTML succeeded");
+        DONG_LOG_DEBUG("[View::load_html] loadHTML succeeded");
         // DOM 树被整体替换，清理 JS 侧的节点映射和事件监听
         if (js_bindings) {
-            SDL_Log("[View::load_html] Calling js_bindings->resetForNewDOM...");
+            DONG_LOG_DEBUG("[View::load_html] Calling js_bindings->resetForNewDOM...");
             js_bindings->resetForNewDOM();
-            SDL_Log("[View::load_html] resetForNewDOM done");
+            DONG_LOG_DEBUG("[View::load_html] resetForNewDOM done");
         }
 
         // DOM 树整体替换后，旧的 video node/player 全部失效，必须关闭并重置缓存。
@@ -288,7 +287,7 @@ void View::load_html(const char* html) {
             ensureJSBindingsInitialized();
             
             auto scripts = dom_manager->getElementsByTagName("script");
-            SDL_Log("[View::load_html] Found %zu script tags", scripts.size());
+            DONG_LOG_DEBUG("[View::load_html] Found %zu script tags", scripts.size());
             
             // 调试：打印所有标签
             auto root = dom_manager->getRoot();
@@ -297,25 +296,25 @@ void View::load_html(const char* html) {
                     if (!node) return;
                     std::string indent(depth * 2, ' ');
                     if (node->getType() == dom::DOMNode::NodeType::ELEMENT) {
-                        SDL_Log("[View::load_html] %s<%s>", indent.c_str(), node->getTagName().c_str());
+                        DONG_LOG_DEBUG("[View::load_html] %s<%s>", indent.c_str(), node->getTagName().c_str());
                     }
                     for (const auto& child : node->getChildren()) {
                         printTree(child, depth + 1);
                     }
                 };
-                SDL_Log("[View::load_html] DOM Tree:");
+                DONG_LOG_DEBUG("[View::load_html] DOM Tree:");
                 printTree(root, 0);
             }
-            
+
             for (const auto& script : scripts) {
                 if (script) {
                     std::string code;
-                    
+
                     // 检查是否有 src 属性（外部脚本）
                     std::string src = script->getAttribute("src");
                     if (!src.empty()) {
-                        SDL_Log("[View::load_html] Loading external script: %s", src.c_str());
-                        
+                        DONG_LOG_DEBUG("[View::load_html] Loading external script: %s", src.c_str());
+
                         auto isAbsolutePath = [](const std::string& p) -> bool {
                             if (p.size() >= 2 && std::isalpha(static_cast<unsigned char>(p[0])) && p[1] == ':') {
                                 return true; // Windows drive path
@@ -330,7 +329,7 @@ void View::load_html(const char* html) {
                         // Basic URL handling: support file://, reject http(s)/data.
                         std::string script_path = src;
                         if (script_path.rfind("http://", 0) == 0 || script_path.rfind("https://", 0) == 0 || script_path.rfind("data:", 0) == 0) {
-                            SDL_Log("[View::load_html] Unsupported external script URL: %s", src.c_str());
+                            DONG_LOG_WARN("[View::load_html] Unsupported external script URL: %s", src.c_str());
                         }
                         if (script_path.rfind("file://", 0) == 0) {
                             script_path = script_path.substr(std::string("file://").size());
@@ -352,7 +351,7 @@ void View::load_html(const char* html) {
                                     namespace fs = std::filesystem;
                                     fs::path resolved = fs::path(root) / fs::path(script_path);
                                     const std::string fullPath = resolved.lexically_normal().string();
-                                    SDL_Log("[View::load_html] Trying with resource root: %s", fullPath.c_str());
+                                    DONG_LOG_DEBUG("[View::load_html] Trying with resource root: %s", fullPath.c_str());
                                     file.open(fullPath, std::ios::binary);
                                 } catch (...) {
                                     // ignore
@@ -365,46 +364,46 @@ void View::load_html(const char* html) {
                             const char* basePath = SDL_GetBasePath();
                             if (basePath) {
                                 std::string fullPath = std::string(basePath) + script_path;
-                                SDL_Log("[View::load_html] Trying with base path: %s", fullPath.c_str());
+                                DONG_LOG_DEBUG("[View::load_html] Trying with base path: %s", fullPath.c_str());
                                 file.open(fullPath, std::ios::binary);
                             }
                         }
 
-                        
+
                         if (file.is_open()) {
                             std::stringstream buffer;
                             buffer << file.rdbuf();
                             code = buffer.str();
-                            SDL_Log("[View::load_html] Loaded external script (%zu chars)", code.length());
+                            DONG_LOG_DEBUG("[View::load_html] Loaded external script (%zu chars)", code.length());
                         } else {
-                            SDL_Log("[View::load_html] Failed to load external script: %s", src.c_str());
+                            DONG_LOG_ERROR("[View::load_html] Failed to load external script: %s", src.c_str());
                         }
                     } else {
                         // 获取 script 标签的文本内容（inline 脚本）
-                        SDL_Log("[View::load_html] Script tag has %zu children", script->getChildren().size());
+                        DONG_LOG_DEBUG("[View::load_html] Script tag has %zu children", script->getChildren().size());
                         for (const auto& child : script->getChildren()) {
                             if (child) {
-                                SDL_Log("[View::load_html] Script child type=%d", (int)child->getType());
+                                DONG_LOG_DEBUG("[View::load_html] Script child type=%d", (int)child->getType());
                                 if (child->getType() == dom::DOMNode::NodeType::TEXT) {
                                     code += child->getTextContent();
                                 }
                             }
                         }
                     }
-                    
+
                     if (!code.empty()) {
-                        SDL_Log("[View::load_html] Executing script (%zu chars)", code.length());
+                        DONG_LOG_DEBUG("[View::load_html] Executing script (%zu chars)", code.length());
                         script_engine->eval(code);
                     } else {
-                        SDL_Log("[View::load_html] Script tag is empty");
+                        DONG_LOG_DEBUG("[View::load_html] Script tag is empty");
                     }
                 }
             }
         }
-        
-        SDL_Log("[View::load_html] Done");
+
+        DONG_LOG_DEBUG("[View::load_html] Done");
     } else {
-        SDL_Log("[View::load_html] loadHTML failed");
+        DONG_LOG_ERROR("[View::load_html] loadHTML failed");
     }
 }
 
@@ -643,7 +642,7 @@ void View::update() {
 
     // CPU 路径已经不再支持（原有的 Skia 后端已移除）
     // 如需像素读取，请使用 GPU 渲染模式 + offscreen texture
-    SDL_Log("[View::update] Warning: CPU render path is no longer supported");
+    DONG_LOG_WARN("[View::update] Warning: CPU render path is no longer supported");
 }
 
 void* View::get_pixel_buffer() {
@@ -674,17 +673,17 @@ SDL_GPUTexture* View::renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, 
 
 
     if (!device) {
-        SDL_Log("[View::renderToGPUTexture] Invalid device");
+        DONG_LOG_ERROR("[View::renderToGPUTexture] Invalid device");
         return nullptr;
     }
 
     if (!gpu_driver_) {
-        SDL_Log("[View::renderToGPUTexture] GPU driver not initialized");
+        DONG_LOG_ERROR("[View::renderToGPUTexture] GPU driver not initialized");
         return nullptr;
     }
 
     if (!painter) {
-        SDL_Log("[View::renderToGPUTexture] Painter not initialized");
+        DONG_LOG_ERROR("[View::renderToGPUTexture] Painter not initialized");
         return nullptr;
     }
 
@@ -753,7 +752,7 @@ SDL_GPUTexture* View::renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, 
 
         offscreen_texture_cache_ = SDL_CreateGPUTexture(device, &tex_info);
         if (!offscreen_texture_cache_) {
-            SDL_Log("[View::renderToGPUTexture] Failed to create offscreen texture: %s", SDL_GetError());
+            DONG_LOG_ERROR("[View::renderToGPUTexture] Failed to create offscreen texture: %s", SDL_GetError());
             offscreen_texture_cache_device_ = nullptr;
             offscreen_texture_cache_width_ = 0;
             offscreen_texture_cache_height_ = 0;
@@ -786,7 +785,7 @@ SDL_GPUTexture* View::renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, 
     // 2. 确保布局已计算
     auto root = dom_manager ? dom_manager->getRoot() : nullptr;
     if (!root) {
-        SDL_Log("[View::renderToGPUTexture] No DOM root");
+        DONG_LOG_DEBUG("[View::renderToGPUTexture] No DOM root");
         // 不要在这里释放缓存纹理：它由 View 生命周期管理。
         // 若之前已有有效内容，继续返回旧纹理以避免 3D demo 采样闪烁。
         return offscreen_texture_cache_;
@@ -913,7 +912,7 @@ SDL_GPUTexture* View::renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, 
 
                     const auto* l_layout = layout_engine->getLayout(layout_node);
                     if (l_layout) {
-                        SDL_Log("[Debug][complex] .layout: (%.1f,%.1f) %.1fx%.1f", l_layout->x, l_layout->y, l_layout->width, l_layout->height);
+                        DONG_LOG_DEBUG("[Debug][complex] .layout: (%.1f,%.1f) %.1fx%.1f", l_layout->x, l_layout->y, l_layout->width, l_layout->height);
                     }
 
                     int panel_idx = 0;
@@ -924,14 +923,14 @@ SDL_GPUTexture* View::renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, 
                         const auto& st = child->getComputedStyle();
                         const auto* l = layout_engine->getLayout(child);
                         if (l) {
-                            SDL_Log("[Debug][complex] panel[%d]: (%.1f,%.1f) %.1fx%.1f flex-grow=%.3f flex-shrink=%.3f flex-basis=%s min-width=%s", 
+                            DONG_LOG_DEBUG("[Debug][complex] panel[%d]: (%.1f,%.1f) %.1fx%.1f flex-grow=%.3f flex-shrink=%.3f flex-basis=%s min-width=%s",
                                     panel_idx,
                                     l->x, l->y, l->width, l->height,
                                     st.flex_grow, st.flex_shrink,
                                     fmt_css_value(st.flex_basis).c_str(),
                                     fmt_css_value(st.min_width).c_str());
                         } else {
-                            SDL_Log("[Debug][complex] panel[%d]: <no layout> flex-grow=%.3f flex-shrink=%.3f flex-basis=%s min-width=%s",
+                            DONG_LOG_DEBUG("[Debug][complex] panel[%d]: <no layout> flex-grow=%.3f flex-shrink=%.3f flex-basis=%s min-width=%s",
                                     panel_idx,
                                     st.flex_grow, st.flex_shrink,
                                     fmt_css_value(st.flex_basis).c_str(),
@@ -940,7 +939,7 @@ SDL_GPUTexture* View::renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, 
                         ++panel_idx;
                     }
                 } else {
-                    SDL_Log("[Debug][complex] No .layout node found");
+                    DONG_LOG_DEBUG("[Debug][complex] No .layout node found");
                 }
             }
 
@@ -982,7 +981,7 @@ SDL_GPUTexture* View::renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, 
     }
 
     if (!offscreen_cmd_list_cache_) {
-        SDL_Log("[View::renderToGPUTexture] No cached command list");
+        DONG_LOG_DEBUG("[View::renderToGPUTexture] No cached command list");
         return offscreen_texture_cache_;
     }
 
@@ -1034,37 +1033,37 @@ SDL_GPUTexture* View::renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, 
 }
 
 
-bool View::renderOffscreen(SDL_GPUDevice* device, uint32_t width, uint32_t height, 
+bool View::renderOffscreen(SDL_GPUDevice* device, uint32_t width, uint32_t height,
                            uint8_t* out_pixels) {
     if (!device || !out_pixels) {
-        SDL_Log("[View::renderOffscreen] Invalid parameters");
+        DONG_LOG_ERROR("[View::renderOffscreen] Invalid parameters");
         return false;
     }
-    
+
     // 1. 调用底层接口渲染到GPU纹理
     SDL_GPUTexture* offscreen_texture = renderToGPUTexture(device, width, height);
     if (!offscreen_texture) {
-        SDL_Log("[View::renderOffscreen] Failed to render to GPU texture");
+        DONG_LOG_ERROR("[View::renderOffscreen] Failed to render to GPU texture");
         return false;
     }
     DONG_LOG_DEBUG("[View::renderOffscreen] Got texture %p, now downloading...", (void*)offscreen_texture);
-    
+
     // 2. 创建传输缓冲区用于读回像素
     SDL_GPUTransferBufferCreateInfo transfer_info{};
     transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_DOWNLOAD;
     transfer_info.size = width * height * 4;
-    
+
     SDL_GPUTransferBuffer* download_buffer = SDL_CreateGPUTransferBuffer(device, &transfer_info);
     if (!download_buffer) {
-        SDL_Log("[View::renderOffscreen] Failed to create download buffer: %s", SDL_GetError());
+        DONG_LOG_ERROR("[View::renderOffscreen] Failed to create download buffer: %s", SDL_GetError());
         return false;
     }
 
-    
+
     // 3. 执行纹理到传输缓冲区的拷贝
     SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(device);
     if (!cmd) {
-        SDL_Log("[View::renderOffscreen] Failed to acquire command buffer: %s", SDL_GetError());
+        DONG_LOG_ERROR("[View::renderOffscreen] Failed to acquire command buffer: %s", SDL_GetError());
         SDL_ReleaseGPUTransferBuffer(device, download_buffer);
         return false;
     }
@@ -1100,21 +1099,21 @@ bool View::renderOffscreen(SDL_GPUDevice* device, uint32_t width, uint32_t heigh
     if (fence) {
         SDL_GPUFence* fences[] = { fence };
         if (!SDL_WaitForGPUFences(device, true, fences, 1)) {
-            SDL_Log("[View::renderOffscreen] SDL_WaitForGPUFences failed: %s", SDL_GetError());
+            DONG_LOG_ERROR("[View::renderOffscreen] SDL_WaitForGPUFences failed: %s", SDL_GetError());
             SDL_WaitForGPUIdle(device);
         }
         SDL_ReleaseGPUFence(device, fence);
     } else {
-        SDL_Log("[View::renderOffscreen] SDL_SubmitGPUCommandBufferAndAcquireFence failed: %s", SDL_GetError());
+        DONG_LOG_ERROR("[View::renderOffscreen] SDL_SubmitGPUCommandBufferAndAcquireFence failed: %s", SDL_GetError());
         SDL_SubmitGPUCommandBuffer(cmd);
         SDL_WaitForGPUIdle(device);
     }
 
-    
+
     // 4. Map 并复制像素数据
     void* mapped = SDL_MapGPUTransferBuffer(device, download_buffer, false);
     if (!mapped) {
-        SDL_Log("[View::renderOffscreen] Failed to map download buffer: %s", SDL_GetError());
+        DONG_LOG_ERROR("[View::renderOffscreen] Failed to map download buffer: %s", SDL_GetError());
         SDL_ReleaseGPUTransferBuffer(device, download_buffer);
         return false;
     }
@@ -1135,7 +1134,7 @@ bool View::renderOffscreen(SDL_GPUDevice* device, uint32_t width, uint32_t heigh
 bool View::eval_script(const char* code) {
     DONG_LOG_DEBUG("[View::eval_script] Entry, code=%p, script_engine=%p", (void*)code, (void*)script_engine.get());
     if (!code || !script_engine) {
-        SDL_Log("[View::eval_script] Early return: null code or script_engine");
+        DONG_LOG_DEBUG("[View::eval_script] Early return: null code or script_engine");
         return false;
     }
     DONG_LOG_DEBUG("[View::eval_script] Calling ensureJSBindingsInitialized...");
@@ -1191,14 +1190,14 @@ void View::ensureJSBindingsInitialized() {
         return;
     }
     JSContext* ctx = script_engine->getContext();
-    SDL_Log("[View::ensureJSBindingsInitialized] this=%p Got JSContext=%p", (void*)this, (void*)ctx);
+    DONG_LOG_DEBUG("[View::ensureJSBindingsInitialized] this=%p Got JSContext=%p", (void*)this, (void*)ctx);
     if (!ctx) {
-        SDL_Log("[View::ensureJSBindingsInitialized] this=%p ctx is null, returning", (void*)this);
+        DONG_LOG_DEBUG("[View::ensureJSBindingsInitialized] this=%p ctx is null, returning", (void*)this);
         return;
     }
-    SDL_Log("[View::ensureJSBindingsInitialized] this=%p Calling js_bindings->initialize()...", (void*)this);
+    DONG_LOG_DEBUG("[View::ensureJSBindingsInitialized] this=%p Calling js_bindings->initialize()...", (void*)this);
     js_bindings->initialize();
-    SDL_Log("[View::ensureJSBindingsInitialized] this=%p initialize() done", (void*)this);
+    DONG_LOG_DEBUG("[View::ensureJSBindingsInitialized] this=%p initialize() done", (void*)this);
     js_bindings_initialized_ = true;
 }
 

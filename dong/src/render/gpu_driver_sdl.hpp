@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "gpu_driver.hpp"
 #include <SDL3/SDL_gpu.h>
@@ -9,6 +9,9 @@
 
 #include <ft2build.h>
 #include FT_FREETYPE_H
+
+// Forward declaration for ImageAtlas
+struct DongImageAtlas;
 
 namespace dong::render {
 
@@ -126,16 +129,13 @@ private:
     // Video YUV420P path (same vertex shader, different fragment)
     SDL_GPUShader* video_yuv_fs_ = nullptr;
     SDL_GPUGraphicsPipeline* video_yuv_pipeline_ = nullptr;
-    // 专用于“备份/恢复父 render target”的 copy 管线：关闭 blending，避免把颜色再乘一次 alpha
+    // 专用于"备份/恢复父 render target"的 copy 管线：关闭 blending，避免把颜色再乘一次 alpha
     SDL_GPUGraphicsPipeline* image_copy_pipeline_ = nullptr;
-    SDL_GPUTexture* image_atlas_texture_ = nullptr;
-    SDL_GPUSampler* image_sampler_ = nullptr;
 
-    Uint32 image_atlas_width_ = 0;
-    Uint32 image_atlas_height_ = 0;
-    Uint32 atlas_cursor_x_ = 0;
-    Uint32 atlas_cursor_y_ = 0;
-    Uint32 atlas_row_height_ = 0;
+    // Image Atlas: 使用新的 DongImageAtlas 接口
+    // 支持 RGBA8 (默认) 或压缩格式 (ASTC/BC7)
+    DongImageAtlas* image_atlas_ = nullptr;
+    SDL_GPUSampler* image_sampler_ = nullptr;
 
     // 图层离屏渲染目标缓存池：按尺寸复用纹理，减少反复创建/销毁
     struct LayerRenderTarget {

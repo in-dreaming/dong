@@ -10,6 +10,9 @@
 #include <SDL3/SDL_log.h>
 #include <SDL3/SDL_video.h>
 
+// ImageAtlas
+#include "dong_image_atlas.h"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -1345,13 +1348,15 @@ void GPUDriverSDL::executeDrawImage(ExecuteContext& ctx, const GPUCommand& cmd) 
         entry.width = ex.width;
         entry.height = ex.height;
     } else {
-        if (!image_atlas_texture_) {
+        // Get texture from ImageAtlas
+        SDL_GPUTexture* atlas_texture = static_cast<SDL_GPUTexture*>(dong_atlas_get_texture(image_atlas_, 0));
+        if (!atlas_texture) {
             return;
         }
         if (!ensureImageInAtlas(cmd.image_src, entry)) {
             return;
         }
-        src_texture = image_atlas_texture_;
+        src_texture = atlas_texture;
     }
 
     struct ImageUniformData {

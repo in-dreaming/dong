@@ -1,5 +1,5 @@
-﻿#include "gpu_surface.hpp"
-#include <SDL3/SDL_log.h>
+#include "gpu_surface.hpp"
+#include "../core/log.h"
 
 namespace dong::render {
 
@@ -29,9 +29,9 @@ GPUTextureSurfaceImpl::GPUTextureSurfaceImpl(
 
     render_target_ = SDL_CreateGPUTexture(gpu_device_, &texture_info);
     if (!render_target_) {
-        SDL_Log("Failed to create GPU texture: %s", SDL_GetError());
+        DONG_LOG_ERROR("Failed to create GPU texture: %s", SDL_GetError());
     } else {
-        SDL_Log("GPU texture created: %u x %u", width, height);
+        DONG_LOG_INFO("GPU texture created: %u x %u", width, height);
     }
 }
 
@@ -80,9 +80,9 @@ void GPUTextureSurfaceImpl::resize(uint32_t width, uint32_t height) {
 
     render_target_ = SDL_CreateGPUTexture(gpu_device_, &texture_info);
     if (!render_target_) {
-        SDL_Log("Failed to recreate GPU texture: %s", SDL_GetError());
+        DONG_LOG_ERROR("Failed to recreate GPU texture: %s", SDL_GetError());
     } else {
-        SDL_Log("GPU texture resized to: %u x %u", width, height);
+        DONG_LOG_INFO("GPU texture resized to: %u x %u", width, height);
     }
 
     is_dirty_ = true;
@@ -90,7 +90,7 @@ void GPUTextureSurfaceImpl::resize(uint32_t width, uint32_t height) {
 
 SDL_GPUTexture* GPUTextureSurfaceImpl::acquireSwapchainTexture() {
     if (!gpu_device_ || !window_) {
-        SDL_Log("Cannot acquire swapchain texture: invalid device/window");
+        DONG_LOG_ERROR("Cannot acquire swapchain texture: invalid device/window");
         return nullptr;
     }
 
@@ -101,7 +101,7 @@ SDL_GPUTexture* GPUTextureSurfaceImpl::acquireSwapchainTexture() {
     // 为了满足 SDL_WaitAndAcquireGPUSwapchainTexture 的接口，这里临时获取一个命令缓冲
     SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(gpu_device_);
     if (!cmd) {
-        SDL_Log("Failed to acquire command buffer for swapchain texture: %s", SDL_GetError());
+        DONG_LOG_ERROR("Failed to acquire command buffer for swapchain texture: %s", SDL_GetError());
         return nullptr;
     }
 
@@ -111,7 +111,7 @@ SDL_GPUTexture* GPUTextureSurfaceImpl::acquireSwapchainTexture() {
             &swapchain_texture,
             &swapchain_width,
             &swapchain_height)) {
-        SDL_Log("Failed to acquire swapchain texture: %s", SDL_GetError());
+        DONG_LOG_ERROR("Failed to acquire swapchain texture: %s", SDL_GetError());
         return nullptr;
     }
 

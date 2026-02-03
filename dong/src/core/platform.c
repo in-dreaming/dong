@@ -169,6 +169,7 @@ typedef struct DongPlatformImpl {
     DongSurfaceFactory* surface_factory;
     DongFileSystem* file_system;
     DongLogger* logger;
+    DongImageDecoder* image_decoder;
 } DongPlatformImpl;
 
 // Global singleton storage
@@ -235,6 +236,12 @@ DONG_PLATFORM_API void dong_platform_set_logger(DongPlatform* platform, DongLogg
     impl->logger = logger ? logger : &g_default_logger;
 }
 
+DONG_PLATFORM_API void dong_platform_set_image_decoder(DongPlatform* platform, DongImageDecoder* decoder) {
+    if (!platform) return;
+    DongPlatformImpl* impl = platform_to_impl(platform);
+    impl->image_decoder = decoder;
+}
+
 DONG_PLATFORM_API DongGPUDriver* dong_platform_get_gpu_driver(DongPlatform* platform) {
     if (!platform) return NULL;
     DongPlatformImpl* impl = platform_to_impl(platform);
@@ -257,6 +264,12 @@ DONG_PLATFORM_API DongLogger* dong_platform_get_logger(DongPlatform* platform) {
     if (!platform) return NULL;
     DongPlatformImpl* impl = platform_to_impl(platform);
     return impl->logger;
+}
+
+DONG_PLATFORM_API DongImageDecoder* dong_platform_get_image_decoder(DongPlatform* platform) {
+    if (!platform) return NULL;
+    DongPlatformImpl* impl = platform_to_impl(platform);
+    return impl->image_decoder;
 }
 
 #ifdef __cplusplus

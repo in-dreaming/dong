@@ -10,6 +10,10 @@
 #include <SDL3/SDL_log.h>
 #include <SDL3/SDL_video.h>
 
+// ImageAtlas for GPU texture management
+#include "dong_image_atlas.h"
+#include "dong_sdl_image_atlas.h"
+
 #include <vector>
 #include <algorithm>
 #include <cstring>
@@ -280,25 +284,76 @@ bool GPUDriverSDL::initialize() {
         return false;
     }
 
-    // 创建一张固定大小的 atlas 纹理与采样器
-    image_atlas_width_ = 2048;
-    image_atlas_height_ = 2048;
-    atlas_cursor_x_ = 0;
-    atlas_cursor_y_ = 0;
-    atlas_row_height_ = 0;
+    // 创建 Image Atlas（使用新的 DongImageAtlas 接口）
+    // 根据 GPU 能力选择最佳格式：
+    // 1. 桌面平台优先使用 BC7（高质量，Windows/Linux/macOS 广泛支持）
+    // 2. 移动平台优先使用 ASTC 4x4（iOS/Android 广泛支持）
+    // 3. 降级到 RGBA8（无压缩，全平台支持）
+    //
+    // 注意：启用压缩格式需要同时修改 shader 以正确采样
+    // 目前默认使用 RGBA8，压缩格式支持标记为 TODO
 
-    SDL_GPUTextureCreateInfo tex_info{};
-    tex_info.type = SDL_GPU_TEXTURETYPE_2D;
-    tex_info.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
-    tex_info.width = image_atlas_width_;
-    tex_info.height = image_atlas_height_;
-    tex_info.layer_count_or_depth = 1;
-    tex_info.num_levels = 1;
-    tex_info.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    DongImageFormat selected_atlas_format = DONG_IMAGE_FORMAT_RGBA8;
 
-    image_atlas_texture_ = SDL_CreateGPUTexture(dev, &tex_info);
-    if (!image_atlas_texture_) {
-        SDL_Log("GPUDriverSDL::initialize: failed to create image atlas texture: %s", SDL_GetError());
+    // 检测 GPU 支持的压缩格式
+    // SDL3 GPU 目前没有直接的格式支持查询 API，
+    // 我们通过尝试创建小纹理来检测支持情况
+    auto test_format_support = [dev](SDL_GPUTextureFormat fmt) -> bool {
+        SDL_GPUTextureCreateInfo test_info{};
+        test_info.type = SDL_GPU_TEXTURETYPE_2D;
+        test_info.format = fmt;
+        test_info.width = 4;  // Minimum block size
+        test_info.height = 4;
+        test_info.layer_count_or_depth = 1;
+        test_info.num_levels = 1;
+        test_info.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+
+        SDL_GPUTexture* test_tex = SDL_CreateGPUTexture(dev, &test_info);
+        if (test_tex) {
+            SDL_ReleaseGPUTexture(dev, test_tex);
+            return true;
+        }
+        return false;
+    };
+
+    // 检查环境变量是否强制使用压缩格式
+    const char* atlas_format_env = std::getenv("DONG_ATLAS_FORMAT");
+    if (atlas_format_env) {
+        if (strcmp(atlas_format_env, "BC7") == 0) {
+            if (test_format_support(SDL_GPU_TEXTUREFORMAT_BC7_RGBA_UNORM)) {
+                selected_atlas_format = DONG_IMAGE_FORMAT_BC7;
+                SDL_Log("GPUDriverSDL: Using BC7 atlas format (via env)");
+            } else {
+                SDL_Log("GPUDriverSDL: BC7 not supported, falling back to RGBA8");
+            }
+        } else if (strcmp(atlas_format_env, "ASTC") == 0) {
+            if (test_format_support(SDL_GPU_TEXTUREFORMAT_ASTC_4x4_UNORM)) {
+                selected_atlas_format = DONG_IMAGE_FORMAT_ASTC_4x4;
+                SDL_Log("GPUDriverSDL: Using ASTC 4x4 atlas format (via env)");
+            } else {
+                SDL_Log("GPUDriverSDL: ASTC not supported, falling back to RGBA8");
+            }
+        }
+    }
+    // 未来：自动选择最佳格式
+    // else {
+    //     // 检测并自动选择
+    //     if (test_format_support(SDL_GPU_TEXTUREFORMAT_BC7_RGBA_UNORM)) {
+    //         selected_atlas_format = DONG_IMAGE_FORMAT_BC7;
+    //     } else if (test_format_support(SDL_GPU_TEXTUREFORMAT_ASTC_4x4_UNORM)) {
+    //         selected_atlas_format = DONG_IMAGE_FORMAT_ASTC_4x4;
+    //     }
+    // }
+
+    DongAtlasConfig atlas_cfg = dong_atlas_config_default();
+    atlas_cfg.width = 2048;
+    atlas_cfg.height = 2048;
+    atlas_cfg.format = selected_atlas_format;
+    atlas_cfg.padding = 2;
+
+    image_atlas_ = dong_sdl_image_atlas_create(dev, &atlas_cfg);
+    if (!image_atlas_) {
+        SDL_Log("GPUDriverSDL::initialize: failed to create image atlas");
         return false;
     }
 
@@ -313,8 +368,8 @@ bool GPUDriverSDL::initialize() {
     image_sampler_ = SDL_CreateGPUSampler(dev, &sampler_info);
     if (!image_sampler_) {
         SDL_Log("GPUDriverSDL::initialize: failed to create image sampler: %s", SDL_GetError());
-        SDL_ReleaseGPUTexture(dev, image_atlas_texture_);
-        image_atlas_texture_ = nullptr;
+        dong_atlas_destroy(image_atlas_);
+        image_atlas_ = nullptr;
         return false;
     }
 

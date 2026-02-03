@@ -10,6 +10,11 @@
 
 #include <SDL3/SDL_log.h>
 
+// ImageAtlas and ImageDecoder for compression support
+#include "dong_image_atlas.h"
+#include "dong_image_decoder.h"
+#include "dong_platform.h"
+
 #include <vector>
 #include <algorithm>
 #include <cstring>
@@ -129,13 +134,14 @@ void GPUDriverSDL::prepareResources(const GPUCommandList& commands) {
 }
 
 bool GPUDriverSDL::ensureImageInAtlas(const std::string& src, ImageAtlasEntry& out_entry) {
-    if (!gpu_device_ || !gpu_device_->isInitialized() || !image_atlas_texture_ || !current_cmd_buf_) {
+    if (!gpu_device_ || !gpu_device_->isInitialized() || !image_atlas_ || !current_cmd_buf_) {
         return false;
     }
     if (src.empty()) {
         return false;
     }
 
+    // Check cache first
     auto it = image_atlas_entries_.find(src);
     if (it != image_atlas_entries_.end()) {
         out_entry = it->second;
@@ -147,6 +153,7 @@ bool GPUDriverSDL::ensureImageInAtlas(const std::string& src, ImageAtlasEntry& o
         return false;
     }
 
+    // Load image pixels via ResourceManager (uses IImageDecoder)
     std::vector<uint8_t> pixels;
     uint32_t img_w = 0;
     uint32_t img_h = 0;
@@ -159,22 +166,25 @@ bool GPUDriverSDL::ensureImageInAtlas(const std::string& src, ImageAtlasEntry& o
         return false;
     }
 
-    if (img_w > image_atlas_width_ || img_h > image_atlas_height_) {
-        // Fallback: downscale (nearest) to fit into atlas.
-        // This keeps the rendering path simple (single atlas) while ensuring correctness.
+    // Get atlas dimensions from config
+    uint32_t atlas_w = image_atlas_->config.width;
+    uint32_t atlas_h = image_atlas_->config.height;
+
+    // Downscale if image is too large for atlas
+    if (img_w > atlas_w || img_h > atlas_h) {
         const uint32_t src_w = img_w;
         const uint32_t src_h = img_h;
 
         uint32_t new_w = img_w;
         uint32_t new_h = img_h;
 
-        if (new_w > image_atlas_width_) {
-            new_h = static_cast<uint32_t>((static_cast<uint64_t>(new_h) * image_atlas_width_) / new_w);
-            new_w = image_atlas_width_;
+        if (new_w > atlas_w) {
+            new_h = static_cast<uint32_t>((static_cast<uint64_t>(new_h) * atlas_w) / new_w);
+            new_w = atlas_w;
         }
-        if (new_h > image_atlas_height_) {
-            new_w = static_cast<uint32_t>((static_cast<uint64_t>(new_w) * image_atlas_height_) / new_h);
-            new_h = image_atlas_height_;
+        if (new_h > atlas_h) {
+            new_w = static_cast<uint32_t>((static_cast<uint64_t>(new_w) * atlas_h) / new_h);
+            new_h = atlas_h;
         }
 
         new_w = std::max(1u, new_w);
@@ -204,84 +214,90 @@ bool GPUDriverSDL::ensureImageInAtlas(const std::string& src, ImageAtlasEntry& o
         img_h = new_h;
     }
 
-    // 简单行优先打包：从左到右填充，不够则换行
-    if (atlas_cursor_x_ + img_w > image_atlas_width_) {
-        atlas_cursor_x_ = 0;
-        atlas_cursor_y_ += atlas_row_height_;
-        atlas_row_height_ = 0;
-    }
-
-    if (atlas_cursor_y_ + img_h > image_atlas_height_) {
-        SDL_Log("GPUDriverSDL::ensureImageInAtlas: atlas is full, cannot place '%s'", src.c_str());
+    // Allocate region in atlas
+    DongAtlasEntry atlas_entry = {0};
+    DongAtlasResult result = dong_atlas_alloc(image_atlas_, img_w, img_h, &atlas_entry);
+    if (result != DONG_ATLAS_OK) {
+        SDL_Log("GPUDriverSDL::ensureImageInAtlas: atlas allocation failed for '%s' (%ux%u), error=%d",
+                src.c_str(), img_w, img_h, (int)result);
         return false;
     }
 
-    Uint32 dst_x = atlas_cursor_x_;
-    Uint32 dst_y = atlas_cursor_y_;
-    atlas_cursor_x_ += img_w;
-    atlas_row_height_ = std::max(atlas_row_height_, img_h);
+    // Prepare upload data
+    // If atlas uses compressed format, encode the image first
+    const void* upload_data = pixels.data();
+    size_t upload_size = pixels.size();
+    std::vector<uint8_t> compressed_data;  // Holds encoded data if compression is used
 
-    SDL_GPUDevice* dev = gpu_device_->getHandle();
+    DongImageFormat atlas_format = image_atlas_->config.format;
+    if (dong_image_format_is_compressed(atlas_format)) {
+        // Get ImageDecoder from platform
+        DongPlatform* platform = dong_platform_get();
+        DongImageDecoder* encoder = dong_platform_get_image_decoder(platform);
 
-    // Upload via reusable transfer buffer. IMPORTANT: the buffer must stay alive until the GPU finishes
-    // executing this command buffer, otherwise some backends may sample garbage (nondeterministic frames).
-    uint32_t stride = img_w * 4;
-    uint32_t buffer_size = stride * img_h;
+        if (!encoder) {
+            SDL_Log("GPUDriverSDL::ensureImageInAtlas: no image encoder available for compression");
+            return false;
+        }
 
-    UploadBuffer upload = acquireUploadBuffer(dev, buffer_size);
-    if (!upload.buf) {
-        SDL_Log("GPUDriverSDL::ensureImageInAtlas: failed to acquire transfer buffer: %s", SDL_GetError());
+        // Check if encoding is supported
+        if (!dong_image_can_encode(encoder, DONG_IMAGE_FORMAT_RGBA8, atlas_format)) {
+            SDL_Log("GPUDriverSDL::ensureImageInAtlas: encoding from RGBA8 to %s not supported",
+                    dong_image_format_name(atlas_format));
+            return false;
+        }
+
+        // Prepare source image
+        DongDecodedImage src_img = {0};
+        src_img.data = const_cast<void*>(static_cast<const void*>(pixels.data()));
+        src_img.data_size = pixels.size();
+        src_img.width = img_w;
+        src_img.height = img_h;
+        src_img.row_bytes = img_w * 4;
+        src_img.format = DONG_IMAGE_FORMAT_RGBA8;
+        src_img.mip_levels = 1;
+
+        // Encode to compressed format
+        DongDecodedImage encoded_img = {0};
+        DongEncodeOptions encode_opts = dong_encode_options_default();
+
+        DongImageDecoderResult encode_result = dong_image_encode(encoder, &src_img, atlas_format, &encode_opts, &encoded_img);
+        if (encode_result != DONG_IMAGE_OK) {
+            SDL_Log("GPUDriverSDL::ensureImageInAtlas: encoding to %s failed for '%s', error=%d",
+                    dong_image_format_name(atlas_format), src.c_str(), (int)encode_result);
+            return false;
+        }
+
+        // Copy encoded data to our buffer (so we can free the encoder's allocation)
+        compressed_data.resize(encoded_img.data_size);
+        std::memcpy(compressed_data.data(), encoded_img.data, encoded_img.data_size);
+
+        // Free encoder's allocation
+        dong_image_free(encoder, &encoded_img);
+
+        upload_data = compressed_data.data();
+        upload_size = compressed_data.size();
+
+        DONG_LOG_DEBUG("GPUDriverSDL::ensureImageInAtlas: compressed '%s' from %zu to %zu bytes (%s)",
+                src.c_str(), pixels.size(), upload_size, dong_image_format_name(atlas_format));
+    }
+
+    // Upload pixel data to atlas
+    result = dong_atlas_upload(image_atlas_, &atlas_entry, upload_data, upload_size);
+    if (result != DONG_ATLAS_OK) {
+        SDL_Log("GPUDriverSDL::ensureImageInAtlas: atlas upload failed for '%s', error=%d",
+                src.c_str(), (int)result);
         return false;
     }
 
-    void* mapped = SDL_MapGPUTransferBuffer(dev, upload.buf, false);
-    if (!mapped) {
-        SDL_Log("GPUDriverSDL::ensureImageInAtlas: failed to map transfer buffer: %s", SDL_GetError());
-        free_upload_buffers_.push_back(upload);
-        return false;
-    }
-
-    std::memcpy(mapped, pixels.data(), buffer_size);
-    SDL_UnmapGPUTransferBuffer(dev, upload.buf);
-
-    SDL_GPUCopyPass* copy_pass = SDL_BeginGPUCopyPass(current_cmd_buf_);
-    if (!copy_pass) {
-        SDL_Log("GPUDriverSDL::ensureImageInAtlas: failed to begin copy pass: %s", SDL_GetError());
-        free_upload_buffers_.push_back(upload);
-        return false;
-    }
-
-    SDL_GPUTextureTransferInfo tex_transfer{};
-    tex_transfer.transfer_buffer = upload.buf;
-    tex_transfer.offset = 0;
-    tex_transfer.pixels_per_row = img_w;
-    tex_transfer.rows_per_layer = img_h;
-
-    SDL_GPUTextureRegion region{};
-    region.texture = image_atlas_texture_;
-    region.mip_level = 0;
-    region.layer = 0;
-    region.x = dst_x;
-    region.y = dst_y;
-    region.z = 0;
-    region.w = img_w;
-    region.h = img_h;
-    region.d = 1;
-
-    SDL_UploadToGPUTexture(copy_pass, &tex_transfer, &region, false);
-    SDL_EndGPUCopyPass(copy_pass);
-
-    // Keep this buffer alive until endFrame() fences the command buffer.
-    frame_upload_buffers_.push_back(upload);
-
-
+    // Create cache entry
     ImageAtlasEntry entry{};
     entry.width = img_w;
     entry.height = img_h;
-    entry.u0 = static_cast<float>(dst_x) / static_cast<float>(image_atlas_width_);
-    entry.v0 = static_cast<float>(dst_y) / static_cast<float>(image_atlas_height_);
-    entry.u1 = static_cast<float>(dst_x + img_w) / static_cast<float>(image_atlas_width_);
-    entry.v1 = static_cast<float>(dst_y + img_h) / static_cast<float>(image_atlas_height_);
+    entry.u0 = atlas_entry.u0;
+    entry.v0 = atlas_entry.v0;
+    entry.u1 = atlas_entry.u1;
+    entry.v1 = atlas_entry.v1;
 
     image_atlas_entries_[src] = entry;
     out_entry = entry;

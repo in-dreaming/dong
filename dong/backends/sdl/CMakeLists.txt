@@ -13,6 +13,10 @@ set(CMAKE_CXX_STANDARD 20)
 add_library(dong_sdl_backend SHARED
     dong_sdl_platform.c
     dong_sdl_execute.cpp
+    dong_sdl_image_decoder.c
+    dong_sdl_image_atlas.c
+    dong_astc_encoder.c
+    dong_bc_encoder.c
 
     # SDL execution chain (migrated from old core sdl_render)
     ${CMAKE_SOURCE_DIR}/src/core/profiler.cpp
@@ -49,6 +53,9 @@ target_include_directories(dong_sdl_backend PUBLIC
 
     # Internal headers used by the SDL executor (not part of public API)
     ${CMAKE_SOURCE_DIR}/src
+
+    # stb_image for image decoding
+    ${CMAKE_SOURCE_DIR}/third_party/sdl/src/video
 
     ${CMAKE_SOURCE_DIR}/third_party/SDL_shadercross/include
     ${DXC_INCLUDE_PATH}
@@ -139,5 +146,6 @@ install(TARGETS dong_sdl_backend
 
 install(FILES
     dong_sdl_platform.h
+    dong_sdl_image_decoder.h
     DESTINATION include/dong/backends/sdl
 )
