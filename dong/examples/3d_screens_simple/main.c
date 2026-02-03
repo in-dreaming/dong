@@ -29,13 +29,23 @@
 #include <stdlib.h>
 
 static dong_scene3d_t* g_scene = NULL;
+static int g_toggle_help_requested = 0;
 
-static void on_app_event(void* user_data, const void* sdl_event) {
+static void on_app_event(void* user_data, const dong_app_event_t* event) {
     (void)user_data;
     if (g_scene) {
-        dong_scene3d_process_event(g_scene, sdl_event);
+        dong_scene3d_process_event(g_scene, event);
+    }
+    if (event && event->type == DONG_APP_EVENT_KEY && event->key.pressed) {
+        if (event->key.key_code == SDLK_F1 || event->key.key_code == SDLK_H) {
+            g_toggle_help_requested = 1;
+        }
+
+
     }
 }
+
+
 
 // Screen configuration structure (mirrors ScreenConfig from legacy)
 typedef struct {
@@ -75,33 +85,66 @@ static const ScreenConfig SCREEN_CONFIGS[] = {
 
 static const int NUM_SCREENS = sizeof(SCREEN_CONFIGS) / sizeof(SCREEN_CONFIGS[0]);
 
+static int is_data_dir(const char* dir) {
+    if (!dir || !dir[0]) return 0;
+    char test[1024];
+    snprintf(test, sizeof(test), "%s/screen1_script.html", dir);
+    FILE* f = fopen(test, "r");
+    if (!f) return 0;
+    fclose(f);
+    return 1;
+}
+
+static void try_set_data_path(const char* candidate, char* out, size_t out_size) {
+    if (!candidate || !candidate[0] || out[0]) return;
+    if (!is_data_dir(candidate)) return;
+    strncpy(out, candidate, out_size - 1);
+    out[out_size - 1] = 0;
+    printf("[Scene3D] Found data directory: %s\n", out);
+}
+
+static void try_set_data_path_from_base(const char* base, const char* suffix, char* out, size_t out_size) {
+    if (!base || !base[0] || !suffix || !suffix[0] || out[0]) return;
+    char candidate[1024];
+    snprintf(candidate, sizeof(candidate), "%s%s", base, suffix);
+    try_set_data_path(candidate, out, out_size);
+}
+
 // Get data path (looks for examples/data relative to executable)
 static const char* get_data_path(void) {
     static char path[1024] = {0};
     if (path[0] == 0) {
-        // Try common locations
+        const char* env_root = getenv("DONG_DATA_ROOT");
+        try_set_data_path(env_root, path, sizeof(path));
+
         const char* candidates[] = {
             "data",
             "../data",
             "examples/data",
             "../examples/data",
             "../../examples/data",
+            "dong/examples/data",
+            "../dong/examples/data",
         };
-        for (int i = 0; i < 5; i++) {
-            char test[1024];
-            snprintf(test, sizeof(test), "%s/screen1_script.html", candidates[i]);
-            FILE* f = fopen(test, "r");
-            if (f) {
-                fclose(f);
-                strncpy(path, candidates[i], sizeof(path) - 1);
-                printf("[Scene3D] Found data directory: %s\n", path);
-                return path;
-            }
+        for (int i = 0; i < (int)(sizeof(candidates) / sizeof(candidates[0])); i++) {
+            try_set_data_path(candidates[i], path, sizeof(path));
         }
-        strcpy(path, "data");  // fallback
+
+        const char* base = SDL_GetBasePath();
+        if (base) {
+            try_set_data_path_from_base(base, "data", path, sizeof(path));
+            try_set_data_path_from_base(base, "../data", path, sizeof(path));
+            try_set_data_path_from_base(base, "../examples/data", path, sizeof(path));
+            try_set_data_path_from_base(base, "../../examples/data", path, sizeof(path));
+        }
+
+        if (path[0] == 0) {
+            strcpy(path, "data");
+        }
     }
     return path;
 }
+
 
 // Fallback HUD HTML (used if hud.html not found)
 static const char* FALLBACK_HUD =
@@ -209,20 +252,14 @@ int main(int argc, char* argv[]) {
 
         float dt = dong_app_get_delta_time(app);
 
-        // Handle F1/H for help toggle
-        const Uint8* keys = SDL_GetKeyboardState(NULL);
-        static int was_f1_pressed = 0;
-        static int was_h_pressed = 0;
-        int f1_pressed = keys[SDL_SCANCODE_F1];
-        int h_pressed = keys[SDL_SCANCODE_H];
-
-        if ((f1_pressed && !was_f1_pressed) || (h_pressed && !was_h_pressed)) {
+        // Handle F1/H for help toggle (event-driven)
+        if (g_toggle_help_requested) {
+            g_toggle_help_requested = 0;
             if (hud) {
                 dong_overlay_eval_script(hud, "if(typeof toggleHelp==='function')toggleHelp();");
             }
         }
-        was_f1_pressed = f1_pressed;
-        was_h_pressed = h_pressed;
+
 
         // Update FPS display
         frame_count++;

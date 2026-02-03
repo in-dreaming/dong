@@ -2,6 +2,7 @@
 // Provides SDL-based implementations of the Platform abstraction interfaces.
 
 #include "dong_sdl_platform.h"
+#include "dong_sdl_execute.h"
 #include "dong_platform.h"
 #include "dong_gpu_driver.h"
 #include "dong_surface.h"
@@ -11,6 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+
 
 // =============================================================================
 // SDL GPU Driver Implementation
@@ -22,7 +24,10 @@ typedef struct DongSDLGPUDriverImpl {
     SDL_Window* window;
     int owns_device;
     int initialized;
+
+    DongSDLExecutor* executor;
 } DongSDLGPUDriverImpl;
+
 
 // Forward declarations of vtable functions
 static int sdl_gpu_initialize(DongGPUDriver* driver);
@@ -52,8 +57,10 @@ static int sdl_gpu_update_external_image_yuv420p(DongGPUDriver* driver, const ch
                                                   const uint8_t* plane_u, uint32_t stride_u,
                                                   const uint8_t* plane_v, uint32_t stride_v,
                                                   uint32_t width, uint32_t height);
+static void sdl_gpu_set_resource_root(DongGPUDriver* driver, const char* root);
 static void sdl_gpu_get_capabilities(DongGPUDriver* driver, uint32_t* out_max_texture_size);
 static void* sdl_gpu_get_native_device(DongGPUDriver* driver);
+
 
 static const DongGPUDriverVTable g_sdl_gpu_vtable = {
     .initialize = sdl_gpu_initialize,
@@ -74,9 +81,11 @@ static const DongGPUDriverVTable g_sdl_gpu_vtable = {
     .prepare_resources = sdl_gpu_prepare_resources,
     .update_external_image_rgba = sdl_gpu_update_external_image_rgba,
     .update_external_image_yuv420p = sdl_gpu_update_external_image_yuv420p,
+    .set_resource_root = sdl_gpu_set_resource_root,
     .get_capabilities = sdl_gpu_get_capabilities,
     .get_native_device = sdl_gpu_get_native_device,
 };
+
 
 // =============================================================================
 // SDL GPU Driver VTable Implementations
@@ -100,6 +109,11 @@ static void sdl_gpu_shutdown(DongGPUDriver* driver) {
     DongSDLGPUDriverImpl* impl = (DongSDLGPUDriverImpl*)driver;
     if (!impl) return;
 
+    if (impl->executor) {
+        dong_sdl_executor_destroy(impl->executor);
+        impl->executor = NULL;
+    }
+
     if (impl->owns_device && impl->device) {
         SDL_DestroyGPUDevice(impl->device);
     }
@@ -107,6 +121,7 @@ static void sdl_gpu_shutdown(DongGPUDriver* driver) {
     impl->window = NULL;
     impl->initialized = 0;
 }
+
 
 static SDL_GPUTextureFormat convert_texture_format(DongGPUTextureFormat format) {
     switch (format) {
@@ -318,43 +333,81 @@ static int sdl_gpu_end_frame(DongGPUDriver* driver) {
 }
 
 static int sdl_gpu_execute(DongGPUDriver* driver, const void* command_list) {
-    // NOTE: This is a stub. The actual command execution is handled by the
-    // existing GPUDriverSDL C++ implementation. This C interface is primarily
-    // for resource management and device lifecycle.
-    (void)driver;
-    (void)command_list;
-    return 1;
+    DongSDLGPUDriverImpl* impl = (DongSDLGPUDriverImpl*)driver;
+    if (!impl || !impl->device || !command_list) {
+        return 0;
+    }
+
+    if (!impl->executor) {
+        impl->executor = dong_sdl_executor_create((void*)impl->device, (void*)impl->window);
+        if (!impl->executor) {
+            fprintf(stderr, "[DongSDLGPUDriver] failed to create executor\n");
+            return 0;
+        }
+    }
+
+    return dong_sdl_executor_execute(impl->executor, command_list);
 }
+
 
 static int sdl_gpu_begin_frame_offscreen(DongGPUDriver* driver, DongGPUTexture target,
                                           uint32_t width, uint32_t height) {
-    (void)driver;
-    (void)target;
-    (void)width;
-    (void)height;
-    return 1;
+    DongSDLGPUDriverImpl* impl = (DongSDLGPUDriverImpl*)driver;
+    if (!impl || !impl->device || !target) {
+        return 0;
+    }
+
+    if (!impl->executor) {
+        impl->executor = dong_sdl_executor_create((void*)impl->device, (void*)impl->window);
+        if (!impl->executor) {
+            return 0;
+        }
+    }
+
+    return dong_sdl_executor_begin_frame_offscreen(impl->executor, target, width, height);
 }
 
 static int sdl_gpu_end_frame_offscreen(DongGPUDriver* driver) {
-    (void)driver;
-    return 1;
+    DongSDLGPUDriverImpl* impl = (DongSDLGPUDriverImpl*)driver;
+    if (!impl || !impl->executor) {
+        return 0;
+    }
+
+    return dong_sdl_executor_end_frame_offscreen(impl->executor);
 }
 
 static void sdl_gpu_prepare_resources(DongGPUDriver* driver, const void* command_list) {
-    (void)driver;
-    (void)command_list;
+    DongSDLGPUDriverImpl* impl = (DongSDLGPUDriverImpl*)driver;
+    if (!impl || !impl->device || !command_list) {
+        return;
+    }
+
+    if (!impl->executor) {
+        impl->executor = dong_sdl_executor_create((void*)impl->device, (void*)impl->window);
+        if (!impl->executor) {
+            return;
+        }
+    }
+
+    dong_sdl_executor_prepare_resources(impl->executor, command_list);
 }
 
 static int sdl_gpu_update_external_image_rgba(DongGPUDriver* driver, const char* key,
                                                const uint8_t* rgba, uint32_t width,
                                                uint32_t height, uint32_t stride_bytes) {
-    (void)driver;
-    (void)key;
-    (void)rgba;
-    (void)width;
-    (void)height;
-    (void)stride_bytes;
-    return 0;
+    DongSDLGPUDriverImpl* impl = (DongSDLGPUDriverImpl*)driver;
+    if (!impl || !impl->device || !key || !rgba) {
+        return 0;
+    }
+
+    if (!impl->executor) {
+        impl->executor = dong_sdl_executor_create((void*)impl->device, (void*)impl->window);
+        if (!impl->executor) {
+            return 0;
+        }
+    }
+
+    return dong_sdl_executor_update_external_image_rgba(impl->executor, key, rgba, width, height, stride_bytes);
 }
 
 static int sdl_gpu_update_external_image_yuv420p(DongGPUDriver* driver, const char* key,
@@ -362,17 +415,40 @@ static int sdl_gpu_update_external_image_yuv420p(DongGPUDriver* driver, const ch
                                                   const uint8_t* plane_u, uint32_t stride_u,
                                                   const uint8_t* plane_v, uint32_t stride_v,
                                                   uint32_t width, uint32_t height) {
-    (void)driver;
-    (void)key;
-    (void)plane_y;
-    (void)stride_y;
-    (void)plane_u;
-    (void)stride_u;
-    (void)plane_v;
-    (void)stride_v;
-    (void)width;
-    (void)height;
-    return 0;
+    DongSDLGPUDriverImpl* impl = (DongSDLGPUDriverImpl*)driver;
+    if (!impl || !impl->device || !key || !plane_y || !plane_u || !plane_v) {
+        return 0;
+    }
+
+    if (!impl->executor) {
+        impl->executor = dong_sdl_executor_create((void*)impl->device, (void*)impl->window);
+        if (!impl->executor) {
+            return 0;
+        }
+    }
+
+    return dong_sdl_executor_update_external_image_yuv420p(impl->executor,
+                                                           key,
+                                                           plane_y, stride_y,
+                                                           plane_u, stride_u,
+                                                           plane_v, stride_v,
+                                                           width, height);
+}
+
+static void sdl_gpu_set_resource_root(DongGPUDriver* driver, const char* root) {
+    DongSDLGPUDriverImpl* impl = (DongSDLGPUDriverImpl*)driver;
+    if (!impl || !impl->device) {
+        return;
+    }
+
+    if (!impl->executor) {
+        impl->executor = dong_sdl_executor_create((void*)impl->device, (void*)impl->window);
+        if (!impl->executor) {
+            return;
+        }
+    }
+
+    dong_sdl_executor_set_resource_root(impl->executor, root);
 }
 
 static void sdl_gpu_get_capabilities(DongGPUDriver* driver, uint32_t* out_max_texture_size) {
@@ -381,6 +457,7 @@ static void sdl_gpu_get_capabilities(DongGPUDriver* driver, uint32_t* out_max_te
         *out_max_texture_size = 8192;  // Conservative default
     }
 }
+
 
 static void* sdl_gpu_get_native_device(DongGPUDriver* driver) {
     DongSDLGPUDriverImpl* impl = (DongSDLGPUDriverImpl*)driver;
@@ -643,9 +720,11 @@ DONG_SDL_PLATFORM_API DongGPUDriver* dong_sdl_create_gpu_driver(void* sdl_device
     impl->device = (SDL_GPUDevice*)sdl_device;
     impl->window = (SDL_Window*)sdl_window;
     impl->owns_device = 0;  // Device is externally owned
+    impl->executor = NULL;
 
     return (DongGPUDriver*)impl;
 }
+
 
 DONG_SDL_PLATFORM_API void dong_sdl_destroy_gpu_driver(DongGPUDriver* driver) {
     if (!driver) return;

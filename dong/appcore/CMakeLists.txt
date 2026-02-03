@@ -21,6 +21,11 @@ target_include_directories(dong_appcore PUBLIC
     ${CMAKE_SOURCE_DIR}/include
 )
 
+target_include_directories(dong_appcore PRIVATE
+    ${CMAKE_SOURCE_DIR}/backends/sdl
+)
+
+
 # Define build macro for DLL exports
 target_compile_definitions(dong_appcore PRIVATE DONG_APPCORE_BUILDING_DLL)
 
@@ -49,8 +54,11 @@ if(VULKAN_SDK_PATH)
     target_link_libraries(dong_appcore PRIVATE spirv-cross-c-shared)
 endif()
 
-# Link to dong_render (for GPU rendering support via dong_view API)
-target_link_libraries(dong_appcore PUBLIC dong_render)
+# Link to core dong.dll for dong_engine_* API
+# Link to SDL backend for Platform injection + GPU execution
+# Keep dong_render for legacy dong_view-based Scene3D/Overlay (will be removed once fully migrated).
+target_link_libraries(dong_appcore PUBLIC dong dong_sdl_backend dong_render)
+
 
 # Install
 install(TARGETS dong_appcore

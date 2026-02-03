@@ -167,12 +167,16 @@ typedef struct DongGPUDriverVTable {
                                           const uint8_t* plane_v, uint32_t stride_v,
                                           uint32_t width, uint32_t height);
 
+    // Resource root for resolving relative image paths (optional)
+    void (*set_resource_root)(DongGPUDriver* driver, const char* root);
+
     // Query
     void (*get_capabilities)(DongGPUDriver* driver, uint32_t* out_max_texture_size);
 
     // Native Handle Access (for advanced integration)
     void* (*get_native_device)(DongGPUDriver* driver);
 } DongGPUDriverVTable;
+
 
 // =============================================================================
 // GPU Driver Structure
@@ -224,9 +228,55 @@ static inline int dong_gpu_execute(DongGPUDriver* d, const void* cmd_list) {
     return (d && d->vtable && d->vtable->execute) ? d->vtable->execute(d, cmd_list) : 0;
 }
 
+static inline int dong_gpu_begin_frame_offscreen(DongGPUDriver* d, DongGPUTexture target,
+                                                 uint32_t width, uint32_t height) {
+    return (d && d->vtable && d->vtable->begin_frame_offscreen)
+        ? d->vtable->begin_frame_offscreen(d, target, width, height)
+        : 0;
+}
+
+static inline int dong_gpu_end_frame_offscreen(DongGPUDriver* d) {
+    return (d && d->vtable && d->vtable->end_frame_offscreen) ? d->vtable->end_frame_offscreen(d) : 0;
+}
+
+static inline void dong_gpu_prepare_resources(DongGPUDriver* d, const void* cmd_list) {
+    if (d && d->vtable && d->vtable->prepare_resources) {
+        d->vtable->prepare_resources(d, cmd_list);
+    }
+}
+
+static inline int dong_gpu_update_external_image_rgba(DongGPUDriver* d, const char* key,
+                                                      const uint8_t* rgba, uint32_t width,
+                                                      uint32_t height, uint32_t stride_bytes) {
+    return (d && d->vtable && d->vtable->update_external_image_rgba)
+        ? d->vtable->update_external_image_rgba(d, key, rgba, width, height, stride_bytes)
+        : 0;
+}
+
+static inline int dong_gpu_update_external_image_yuv420p(DongGPUDriver* d, const char* key,
+                                                         const uint8_t* plane_y, uint32_t stride_y,
+                                                         const uint8_t* plane_u, uint32_t stride_u,
+                                                         const uint8_t* plane_v, uint32_t stride_v,
+                                                         uint32_t width, uint32_t height) {
+    return (d && d->vtable && d->vtable->update_external_image_yuv420p)
+        ? d->vtable->update_external_image_yuv420p(d, key,
+                                                   plane_y, stride_y,
+                                                   plane_u, stride_u,
+                                                   plane_v, stride_v,
+                                                   width, height)
+        : 0;
+}
+
+static inline void dong_gpu_set_resource_root(DongGPUDriver* d, const char* root) {
+    if (d && d->vtable && d->vtable->set_resource_root) {
+        d->vtable->set_resource_root(d, root);
+    }
+}
+
 static inline void* dong_gpu_get_native_device(DongGPUDriver* d) {
     return (d && d->vtable && d->vtable->get_native_device) ? d->vtable->get_native_device(d) : NULL;
 }
+
 
 #ifdef __cplusplus
 }

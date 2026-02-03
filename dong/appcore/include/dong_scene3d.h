@@ -89,8 +89,9 @@ DONG_APPCORE_API void dong_screen3d_set_yaw(dong_screen3d_t* screen, float yaw);
 // Execute JavaScript on a screen.
 DONG_APPCORE_API int dong_screen3d_eval_script(dong_screen3d_t* screen, const char* script);
 
-// Get the dong_view pointer for a screen (for advanced use).
+// Get the dong_engine pointer for a screen (for advanced use).
 DONG_APPCORE_API void* dong_screen3d_get_view(dong_screen3d_t* screen);
+
 
 // =============================================================================
 // HUD/Overlay
@@ -124,9 +125,10 @@ DONG_APPCORE_API int dong_scene3d_get_overlay_count(dong_scene3d_t* scene);
 // Returns the screen that received input, or NULL.
 DONG_APPCORE_API dong_screen3d_t* dong_scene3d_handle_input(dong_scene3d_t* scene);
 
-// Process a single SDL_Event for 3D screen input routing.
+// Process a single AppCore input event for 3D screen input routing.
 // Intended to be called from dong_app_set_event_callback().
-DONG_APPCORE_API void dong_scene3d_process_event(dong_scene3d_t* scene, const void* sdl_event);
+DONG_APPCORE_API void dong_scene3d_process_event(dong_scene3d_t* scene, const dong_app_event_t* event);
+
 
 // Update all screens and animations.
 DONG_APPCORE_API void dong_scene3d_update(dong_scene3d_t* scene, float dt);

@@ -37,8 +37,63 @@ extern "C" {
 typedef struct dong_app_t dong_app_t;
 typedef struct dong_renderer_t dong_renderer_t;
 
+// =============================================================================
+// AppCore input event abstraction
+// =============================================================================
+// AppCore must not expose SDL types to its users.
+
+typedef enum dong_app_event_type_t {
+    DONG_APP_EVENT_NONE = 0,
+    DONG_APP_EVENT_QUIT,
+    DONG_APP_EVENT_WINDOW_RESIZED,
+    DONG_APP_EVENT_MOUSE_MOVE,
+    DONG_APP_EVENT_MOUSE_BUTTON,
+    DONG_APP_EVENT_MOUSE_WHEEL,
+    DONG_APP_EVENT_KEY,
+    DONG_APP_EVENT_TEXT,
+} dong_app_event_type_t;
+
+typedef struct dong_app_event_t {
+    dong_app_event_type_t type;
+
+    union {
+        struct {
+            uint32_t width;
+            uint32_t height;
+        } window_resized;
+
+        struct {
+            int32_t x;
+            int32_t y;
+        } mouse_move;
+
+        struct {
+            int32_t button;
+            int pressed;
+            int32_t x;
+            int32_t y;
+        } mouse_button;
+
+
+        struct {
+            float delta_x;
+            float delta_y;
+        } mouse_wheel;
+
+        struct {
+            uint32_t key_code;
+            int pressed;
+        } key;
+
+        struct {
+            const char* text;
+        } text;
+    };
+} dong_app_event_t;
+
 // Event callback for input handling (allows 3D scene to receive input events)
-typedef void (*dong_app_event_callback_t)(void* user_data, const void* sdl_event);
+typedef void (*dong_app_event_callback_t)(void* user_data, const dong_app_event_t* event);
+
 
 // =============================================================================
 // Application Configuration

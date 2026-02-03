@@ -5,7 +5,11 @@
 #include "dong_scene3d.h"
 #include "dong_math.h"
 #include "dong.h"
+#include "dong_platform.h"
+#include "dong_gpu_driver.h"
 #include "dong_plugin_api.h"
+
+
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_gpu.h>
@@ -63,7 +67,76 @@ static const dong_plugin_vtable_t* try_load_plugin(void) {
     return s_plugin_vtable;
 }
 
+static void copy_string(char* dst, size_t dst_size, const char* src) {
+    if (!dst || dst_size == 0) return;
+    if (!src || !src[0]) {
+        dst[0] = 0;
+        return;
+    }
+    strncpy(dst, src, dst_size - 1);
+    dst[dst_size - 1] = 0;
+}
+
+static void extract_dir_from_path(const char* path, char* out_dir, size_t out_size) {
+    if (!out_dir || out_size == 0) return;
+    out_dir[0] = 0;
+    if (!path || !path[0]) return;
+
+    copy_string(out_dir, out_size, path);
+    char* last_sep = strrchr(out_dir, '/');
+    if (!last_sep) last_sep = strrchr(out_dir, '\\');
+    if (last_sep) {
+        *last_sep = 0;
+    } else {
+        out_dir[0] = 0;
+    }
+}
+
+static void build_full_path(const char* root, const char* file, char* out_path, size_t out_size) {
+    if (!out_path || out_size == 0) return;
+    out_path[0] = 0;
+    if (!file || !file[0]) return;
+
+    if (root && root[0]) {
+        SDL_snprintf(out_path, out_size, "%s/%s", root, file);
+    } else {
+        copy_string(out_path, out_size, file);
+    }
+}
+
+static char* read_text_file(const char* path, size_t* out_size) {
+    if (out_size) *out_size = 0;
+    if (!path || !path[0]) return NULL;
+
+    FILE* f = fopen(path, "rb");
+    if (!f) return NULL;
+
+    fseek(f, 0, SEEK_END);
+    long sz = ftell(f);
+    fseek(f, 0, SEEK_SET);
+
+    if (sz <= 0) {
+        fclose(f);
+        return NULL;
+    }
+
+    char* buf = (char*)malloc((size_t)sz + 1);
+    if (!buf) {
+        fclose(f);
+        return NULL;
+    }
+
+    size_t read = fread(buf, 1, (size_t)sz, f);
+    buf[read] = 0;
+    fclose(f);
+
+    if (out_size) *out_size = read;
+    return buf;
+}
+
 // Uniform structures (must match shader)
+
+
 typedef struct {
     float mvp[16];
     float model[16];
@@ -73,7 +146,7 @@ typedef struct {
 
 // Internal structures
 struct dong_screen3d_t {
-    dong_view_t* view;
+    dong_engine_t* engine;
     SDL_GPUTexture* texture;
     float pos_x, pos_y, pos_z;
     float yaw;
@@ -90,16 +163,18 @@ struct dong_screen3d_t {
     int is_video;
     double next_update_time;
 
+    char resource_root[MAX_PATH_LEN];
     char debug_name[256];
 };
+
 
 // dong_overlay_t is defined in overlay.c
 
 struct dong_scene3d_t {
     dong_app_t* app;
-    dong_context_t* ctx;
     SDL_GPUDevice* device;
     SDL_Window* window;
+
 
     dong_screen3d_t* screens[MAX_SCREENS];
     int screen_count;
@@ -149,7 +224,73 @@ struct dong_scene3d_t {
     int32_t last_sent_mouse_y;
 };
 
+static void set_screen_resource_root(dong_screen3d_t* screen, const char* root) {
+    if (!screen || !screen->engine || !root || !root[0]) return;
+    copy_string(screen->resource_root, sizeof(screen->resource_root), root);
+    (void)dong_engine_set_resource_root(screen->engine, root);
+}
+
+static dong_engine_t* create_screen_engine(dong_scene3d_t* scene, uint32_t width, uint32_t height) {
+    if (!scene || !scene->device || !scene->window) return NULL;
+
+    dong_engine_desc_t desc;
+    memset(&desc, 0, sizeof(desc));
+    desc.api_version = DONG_API_VERSION;
+    desc.plugin_api_version = DONG_PLUGIN_API_VERSION;
+    desc.plugin = try_load_plugin();
+    desc.plugin_user = NULL;
+    desc.width = width;
+    desc.height = height;
+
+    dong_engine_t* engine = NULL;
+    if (dong_engine_create(&desc, &engine) != DONG_OK || !engine) {
+        return NULL;
+    }
+    if (dong_engine_set_gpu(engine, scene->device, scene->window) != DONG_OK) {
+        dong_engine_destroy(engine);
+        return NULL;
+    }
+
+    return engine;
+}
+
+static SDL_GPUTexture* ensure_offscreen_texture(SDL_GPUDevice* device,
+                                                SDL_GPUTexture* cached,
+                                                uint32_t* cached_w,
+                                                uint32_t* cached_h,
+                                                uint32_t width,
+                                                uint32_t height) {
+    if (!device) return NULL;
+    if (cached && *cached_w == width && *cached_h == height) {
+        return cached;
+    }
+
+    if (cached) {
+        SDL_ReleaseGPUTexture(device, cached);
+    }
+
+    SDL_GPUTextureCreateInfo tex_info = {0};
+    tex_info.type = SDL_GPU_TEXTURETYPE_2D;
+    tex_info.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    tex_info.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    tex_info.width = width;
+    tex_info.height = height;
+    tex_info.layer_count_or_depth = 1;
+    tex_info.num_levels = 1;
+    tex_info.sample_count = SDL_GPU_SAMPLECOUNT_1;
+
+    SDL_GPUTexture* created = SDL_CreateGPUTexture(device, &tex_info);
+    if (!created) {
+        return NULL;
+    }
+
+    *cached_w = width;
+    *cached_h = height;
+    return created;
+}
+
 // Forward declarations
+
 static int create_pipelines(dong_scene3d_t* scene);
 static void destroy_pipelines(dong_scene3d_t* scene);
 
@@ -236,8 +377,7 @@ DONG_APPCORE_API dong_scene3d_t* dong_scene3d_create(dong_app_t* app) {
     scene->window = (SDL_Window*)dong_app_get_window(app);
     if (!scene->device || !scene->window) { free(scene); return NULL; }
 
-    scene->ctx = dong_create_context();
-    if (!scene->ctx) { free(scene); return NULL; }
+
 
     // Defaults
     scene->cam_x = 0; scene->cam_y = 2.5f; scene->cam_z = 5;
@@ -257,10 +397,10 @@ DONG_APPCORE_API dong_scene3d_t* dong_scene3d_create(dong_app_t* app) {
 
 
     if (!create_pipelines(scene)) {
-        dong_destroy_context(scene->ctx);
         free(scene);
         return NULL;
     }
+
 
     printf("[Scene3D] Created\n");
     return scene;
@@ -270,19 +410,27 @@ DONG_APPCORE_API void dong_scene3d_destroy(dong_scene3d_t* scene) {
     if (!scene) return;
     for (int i = 0; i < scene->screen_count; i++) {
         if (scene->screens[i]) {
-            if (scene->screens[i]->view) dong_view_free(scene->screens[i]->view);
+            if (scene->screens[i]->texture) {
+                SDL_ReleaseGPUTexture(scene->device, scene->screens[i]->texture);
+                scene->screens[i]->texture = NULL;
+            }
+            if (scene->screens[i]->engine) {
+                dong_engine_destroy(scene->screens[i]->engine);
+                scene->screens[i]->engine = NULL;
+            }
             free(scene->screens[i]);
         }
     }
+
     for (int i = 0; i < scene->overlay_count; i++) {
         if (scene->overlays[i]) {
             dong_overlay_destroy(scene->overlays[i]);
         }
     }
     destroy_pipelines(scene);
-    if (scene->ctx) dong_destroy_context(scene->ctx);
     free(scene);
 }
+
 
 // Screen management
 DONG_APPCORE_API dong_screen3d_t* dong_scene3d_add_screen(dong_scene3d_t* scene, const dong_screen3d_config_t* config) {
@@ -299,76 +447,56 @@ DONG_APPCORE_API dong_screen3d_t* dong_scene3d_add_screen(dong_scene3d_t* scene,
     screen->pos_y = config->pos_y;
     screen->pos_z = config->pos_z;
     screen->yaw = config->yaw;
+    screen->resource_root[0] = 0;
 
-    screen->view = dong_view_create(scene->ctx, screen->tex_width, screen->tex_height);
-    if (!screen->view) { free(screen); return NULL; }
-
-    // Enable optional plugin subsystems (e.g. video)
-    const dong_plugin_vtable_t* plugin = try_load_plugin();
-    if (plugin) {
-        dong_view_set_plugin_api(screen->view, plugin, NULL);
+    screen->engine = create_screen_engine(scene, screen->tex_width, screen->tex_height);
+    if (!screen->engine) {
+        free(screen);
+        return NULL;
     }
 
-    dong_view_set_external_gpu_device(screen->view, scene->device, scene->window);
-
-
-    // Determine resource root
-    const char* res_root = config->resource_root;
-    if (!res_root && scene->resource_root[0]) {
-        res_root = scene->resource_root;
+    const char* base_root = config->resource_root;
+    if (!base_root && scene->resource_root[0]) {
+        base_root = scene->resource_root;
     }
 
     if (config->html_file) {
-        // Build full path
         char full_path[MAX_PATH_LEN];
-        if (res_root && res_root[0]) {
-            snprintf(full_path, sizeof(full_path), "%s/%s", res_root, config->html_file);
-        } else {
-            strncpy(full_path, config->html_file, sizeof(full_path) - 1);
-            full_path[sizeof(full_path) - 1] = 0;
+        char file_dir[MAX_PATH_LEN];
+        build_full_path(base_root, config->html_file, full_path, sizeof(full_path));
+        extract_dir_from_path(full_path, file_dir, sizeof(file_dir));
+
+        screen->is_video = (strncmp(config->html_file, "video/", 6) == 0);
+        copy_string(screen->debug_name, sizeof(screen->debug_name), config->html_file);
+
+        if (file_dir[0]) {
+            set_screen_resource_root(screen, file_dir);
+        } else if (base_root && base_root[0]) {
+            set_screen_resource_root(screen, base_root);
         }
 
-        // Detect video screens by path prefix
-        screen->is_video = (strncmp(config->html_file, "video/", 6) == 0);
-
-        // Set debug name
-        strncpy(screen->debug_name, config->html_file, sizeof(screen->debug_name) - 1);
-        dong_view_set_debug_name(screen->view, config->html_file);
-
-
-        // Extract directory from full_path for resource root
-        char file_dir[MAX_PATH_LEN];
-        strncpy(file_dir, full_path, sizeof(file_dir) - 1);
-        file_dir[sizeof(file_dir) - 1] = 0;
-        char* last_sep = strrchr(file_dir, '/');
-        if (!last_sep) last_sep = strrchr(file_dir, '\\');
-        if (last_sep) *last_sep = 0;
-        else file_dir[0] = 0;
-        if (file_dir[0]) dong_view_set_resource_root(screen->view, file_dir);
-
-        FILE* f = fopen(full_path, "rb");
-        if (f) {
-            fseek(f, 0, SEEK_END); long sz = ftell(f); fseek(f, 0, SEEK_SET);
-            char* buf = (char*)malloc(sz + 1);
-            if (buf) {
-                fread(buf, 1, sz, f);
-                buf[sz] = 0;
-                dong_view_load_html(screen->view, buf);
-                free(buf);
+        size_t size = 0;
+        char* buf = read_text_file(full_path, &size);
+        if (buf && size > 0) {
+            if (dong_engine_load_html(screen->engine, buf) == DONG_OK) {
+                printf("[Scene3D] Loaded screen: %s (%ux%u)\n", full_path, screen->tex_width, screen->tex_height);
             }
-            fclose(f);
-            printf("[Scene3D] Loaded screen: %s (%ux%u)\n", full_path, screen->tex_width, screen->tex_height);
         } else {
             printf("[Scene3D] Warning: Failed to open %s\n", full_path);
         }
+        free(buf);
     } else if (config->html_content) {
-        dong_view_load_html(screen->view, config->html_content);
-        strncpy(screen->debug_name, "inline", sizeof(screen->debug_name) - 1);
+        if (base_root && base_root[0]) {
+            set_screen_resource_root(screen, base_root);
+        }
+        (void)dong_engine_load_html(screen->engine, config->html_content);
+        copy_string(screen->debug_name, sizeof(screen->debug_name), "inline");
     }
 
     scene->screens[scene->screen_count++] = screen;
     return screen;
 }
+
 
 DONG_APPCORE_API dong_screen3d_t* dong_scene3d_add_screen_simple(dong_scene3d_t* scene, const char* html_file,
     uint32_t width, uint32_t height, float pos_x, float pos_y, float pos_z) {
@@ -383,7 +511,14 @@ DONG_APPCORE_API void dong_scene3d_remove_screen(dong_scene3d_t* scene, dong_scr
     if (!scene || !screen) return;
     for (int i = 0; i < scene->screen_count; i++) {
         if (scene->screens[i] == screen) {
-            if (screen->view) dong_view_free(screen->view);
+            if (screen->texture) {
+                SDL_ReleaseGPUTexture(scene->device, screen->texture);
+                screen->texture = NULL;
+            }
+            if (screen->engine) {
+                dong_engine_destroy(screen->engine);
+                screen->engine = NULL;
+            }
             free(screen);
             for (int j = i; j < scene->screen_count - 1; j++) scene->screens[j] = scene->screens[j+1];
             scene->screen_count--;
@@ -391,6 +526,7 @@ DONG_APPCORE_API void dong_scene3d_remove_screen(dong_scene3d_t* scene, dong_scr
         }
     }
 }
+
 
 DONG_APPCORE_API int dong_scene3d_get_screen_count(dong_scene3d_t* scene) { return scene ? scene->screen_count : 0; }
 DONG_APPCORE_API dong_screen3d_t* dong_scene3d_get_screen(dong_scene3d_t* scene, int idx) {
@@ -403,9 +539,11 @@ DONG_APPCORE_API void dong_screen3d_set_position(dong_screen3d_t* s, float x, fl
 }
 DONG_APPCORE_API void dong_screen3d_set_yaw(dong_screen3d_t* s, float yaw) { if (s) s->yaw = yaw; }
 DONG_APPCORE_API int dong_screen3d_eval_script(dong_screen3d_t* s, const char* js) {
-    return (s && s->view && js) ? dong_view_eval(s->view, js) : 0;
+    if (!s || !s->engine || !js) return 0;
+    return (dong_engine_eval_script(s->engine, js) == DONG_OK) ? 1 : 0;
 }
-DONG_APPCORE_API void* dong_screen3d_get_view(dong_screen3d_t* s) { return s ? s->view : NULL; }
+DONG_APPCORE_API void* dong_screen3d_get_view(dong_screen3d_t* s) { return s ? s->engine : NULL; }
+
 
 // Camera
 DONG_APPCORE_API void dong_scene3d_get_camera_position(dong_scene3d_t* s, float* x, float* y, float* z) {
@@ -755,7 +893,7 @@ static int pick_hovered_screen(const dong_scene3d_t* scene, const dong_ray_t* ra
 static void send_mouse_move_to_screen(dong_scene3d_t* scene, int idx, int32_t x, int32_t y) {
     if (idx < 0 || idx >= scene->screen_count) return;
     dong_screen3d_t* scr = scene->screens[idx];
-    if (!scr || !scr->view) return;
+    if (!scr || !scr->engine) return;
 
     scr->mouse_x = x;
     scr->mouse_y = y;
@@ -763,12 +901,13 @@ static void send_mouse_move_to_screen(dong_scene3d_t* scene, int idx, int32_t x,
     if (scene->last_sent_mouse_screen != idx ||
         scene->last_sent_mouse_x != x ||
         scene->last_sent_mouse_y != y) {
-        dong_view_send_mouse_move(scr->view, x, y);
+        dong_engine_send_mouse_move(scr->engine, x, y);
         scene->last_sent_mouse_screen = idx;
         scene->last_sent_mouse_x = x;
         scene->last_sent_mouse_y = y;
     }
 }
+
 
 static void update_hover_from_mouse(dong_scene3d_t* scene, int32_t mx, int32_t my, uint32_t w, uint32_t h) {
     if (!scene || w == 0 || h == 0) return;
@@ -799,9 +938,10 @@ static void update_hover_from_mouse(dong_scene3d_t* scene, int32_t mx, int32_t m
     send_mouse_move_to_screen(scene, hovered, sx, sy);
 
     if (!scene->right_mouse_down) {
-        const char* css_cursor = dong_view_get_cursor_at(scr->view, sx, sy);
+        const char* css_cursor = scr->engine ? dong_engine_get_cursor_at(scr->engine, sx, sy) : "auto";
         apply_css_cursor(css_cursor);
     }
+
 
     scene->hovered_idx = hovered;
 }
@@ -827,8 +967,11 @@ static void handle_left_down(dong_scene3d_t* scene) {
         scene->pressed_y = scr->mouse_y;
 
         send_mouse_move_to_screen(scene, scene->pressed_idx, scene->pressed_x, scene->pressed_y);
-        dong_view_send_mouse_down(scr->view, SDL_BUTTON_LEFT);
+        if (scr->engine) {
+            dong_engine_send_mouse_button(scr->engine, SDL_BUTTON_LEFT, 1);
+        }
         return;
+
     }
 
     set_focused_screen(scene, -1);
@@ -845,8 +988,11 @@ static void handle_left_up(dong_scene3d_t* scene) {
         const int32_t upy = (scene->pressed_idx >= 0) ? scene->pressed_y : scr->mouse_y;
 
         send_mouse_move_to_screen(scene, target, upx, upy);
-        dong_view_send_mouse_up(scr->view, SDL_BUTTON_LEFT);
+        if (scr->engine) {
+            dong_engine_send_mouse_button(scr->engine, SDL_BUTTON_LEFT, 0);
+        }
     }
+
 
     scene->pressed_idx = -1;
 }
@@ -856,22 +1002,22 @@ static void handle_wheel(dong_scene3d_t* scene, float dx, float dy) {
     if (scene->hovered_idx < 0 || scene->hovered_idx >= scene->screen_count) return;
 
     dong_screen3d_t* scr = scene->screens[scene->hovered_idx];
-    if (!scr || !scr->view) return;
+    if (!scr || !scr->engine) return;
 
     const float kWheelMultiplier = 3.0f;
     // SDL wheel direction is opposite of our DOM scroll convention; flip Y for intuitive scrolling.
-    dong_view_send_mouse_wheel(scr->view, dx * kWheelMultiplier, -dy * kWheelMultiplier);
+    dong_engine_send_mouse_wheel(scr->engine, dx * kWheelMultiplier, -dy * kWheelMultiplier);
 }
+
 
 static void handle_key(dong_scene3d_t* scene, uint32_t key, int down) {
     if (!scene) return;
     if (scene->focused_idx < 0 || scene->focused_idx >= scene->screen_count) return;
 
     dong_screen3d_t* scr = scene->screens[scene->focused_idx];
-    if (!scr || !scr->view) return;
+    if (!scr || !scr->engine) return;
 
-    if (down) dong_view_send_key_down(scr->view, key);
-    else dong_view_send_key_up(scr->view, key);
+    dong_engine_send_key(scr->engine, key, down ? 1 : 0);
 }
 
 static void handle_text(dong_scene3d_t* scene, const char* text) {
@@ -879,57 +1025,48 @@ static void handle_text(dong_scene3d_t* scene, const char* text) {
     if (scene->focused_idx < 0 || scene->focused_idx >= scene->screen_count) return;
 
     dong_screen3d_t* scr = scene->screens[scene->focused_idx];
-    if (!scr || !scr->view) return;
+    if (!scr || !scr->engine) return;
 
-    dong_view_send_text_input(scr->view, text);
+    dong_engine_send_text(scr->engine, text);
 }
 
-DONG_APPCORE_API void dong_scene3d_process_event(dong_scene3d_t* scene, const void* sdl_event) {
-    if (!scene || !sdl_event) return;
 
-    const SDL_Event* e = (const SDL_Event*)sdl_event;
+DONG_APPCORE_API void dong_scene3d_process_event(dong_scene3d_t* scene, const dong_app_event_t* event) {
+    if (!scene || !event) return;
 
     uint32_t w = 0, h = 0;
     dong_app_get_size(scene->app, &w, &h);
 
-    switch (e->type) {
-        case SDL_EVENT_MOUSE_MOTION:
-            update_hover_from_mouse(scene, (int32_t)e->motion.x, (int32_t)e->motion.y, w, h);
+    switch (event->type) {
+        case DONG_APP_EVENT_MOUSE_MOVE:
+            update_hover_from_mouse(scene, event->mouse_move.x, event->mouse_move.y, w, h);
             break;
-        case SDL_EVENT_MOUSE_BUTTON_DOWN:
-            if (e->button.button == SDL_BUTTON_RIGHT) {
-                scene->right_mouse_down = 1;
-                SDL_SetWindowRelativeMouseMode(scene->window, true);
+        case DONG_APP_EVENT_MOUSE_BUTTON:
+            if (event->mouse_button.button == SDL_BUTTON_RIGHT) {
+                scene->right_mouse_down = event->mouse_button.pressed ? 1 : 0;
+                SDL_SetWindowRelativeMouseMode(scene->window, event->mouse_button.pressed ? true : false);
+                break;
             }
-            if (e->button.button == SDL_BUTTON_LEFT) {
-                update_hover_from_mouse(scene, (int32_t)e->button.x, (int32_t)e->button.y, w, h);
-                handle_left_down(scene);
-            }
-            break;
-        case SDL_EVENT_MOUSE_BUTTON_UP:
-            if (e->button.button == SDL_BUTTON_RIGHT) {
-                scene->right_mouse_down = 0;
-                SDL_SetWindowRelativeMouseMode(scene->window, false);
-            }
-            if (e->button.button == SDL_BUTTON_LEFT) {
-                update_hover_from_mouse(scene, (int32_t)e->button.x, (int32_t)e->button.y, w, h);
-                handle_left_up(scene);
+            if (event->mouse_button.button == SDL_BUTTON_LEFT) {
+                update_hover_from_mouse(scene, event->mouse_button.x, event->mouse_button.y, w, h);
+                if (event->mouse_button.pressed) handle_left_down(scene);
+                else handle_left_up(scene);
             }
             break;
-        case SDL_EVENT_MOUSE_WHEEL:
-            handle_wheel(scene, e->wheel.x, e->wheel.y);
+        case DONG_APP_EVENT_MOUSE_WHEEL:
+            handle_wheel(scene, event->mouse_wheel.delta_x, event->mouse_wheel.delta_y);
             break;
-        case SDL_EVENT_KEY_DOWN:
-            handle_key(scene, e->key.key, 1);
+        case DONG_APP_EVENT_KEY:
+            handle_key(scene, event->key.key_code, event->key.pressed ? 1 : 0);
             break;
-        case SDL_EVENT_KEY_UP:
-            handle_key(scene, e->key.key, 0);
+        case DONG_APP_EVENT_TEXT:
+            handle_text(scene, event->text.text);
             break;
-        case SDL_EVENT_TEXT_INPUT:
-            handle_text(scene, e->text.text);
+        default:
             break;
     }
 }
+
 
 // Input handling (deprecated)
 DONG_APPCORE_API dong_screen3d_t* dong_scene3d_handle_input(dong_scene3d_t* scene) {
@@ -939,14 +1076,51 @@ DONG_APPCORE_API dong_screen3d_t* dong_scene3d_handle_input(dong_scene3d_t* scen
 
 static void update_screen_texture(dong_scene3d_t* scene, int idx) {
     dong_screen3d_t* scr = (scene && idx >= 0 && idx < scene->screen_count) ? scene->screens[idx] : NULL;
-    if (!scr || !scr->view) return;
+    if (!scr || !scr->engine || !scene) return;
 
-    SDL_GPUTexture* new_tex = (SDL_GPUTexture*)dong_view_render_to_gpu_texture(
-        scr->view, scene->device, scr->tex_width, scr->tex_height);
-    if (new_tex) {
-        scr->texture = new_tex;
+    const int debug = (getenv("DONG_DEBUG_SCENE3D_OFFSCREEN") != NULL);
+    if (debug) {
+        printf("[Scene3D] update_screen_texture idx=%d name=%s size=%ux%u\n",
+               idx,
+               scr->debug_name[0] ? scr->debug_name : "(unnamed)",
+               scr->tex_width,
+               scr->tex_height);
     }
+
+    if (scr->resource_root[0]) {
+        set_screen_resource_root(scr, scr->resource_root);
+    }
+
+    DongGPUDriver* driver = dong_platform_get_gpu_driver(dong_platform_get());
+    if (!driver) {
+        if (debug) printf("[Scene3D] update_screen_texture: driver is NULL\n");
+        return;
+    }
+
+    SDL_GPUTexture* target = ensure_offscreen_texture(
+        scene->device, scr->texture, &scr->tex_width, &scr->tex_height, scr->tex_width, scr->tex_height);
+    if (!target) {
+        if (debug) printf("[Scene3D] update_screen_texture: target is NULL\n");
+        return;
+    }
+
+    if (!dong_gpu_begin_frame_offscreen(driver, target, scr->tex_width, scr->tex_height)) {
+        if (debug) printf("[Scene3D] begin_frame_offscreen failed (idx=%d)\n", idx);
+        return;
+    }
+
+
+    if (dong_engine_tick(scr->engine) != DONG_OK) {
+        if (debug) printf("[Scene3D] engine_tick failed (idx=%d)\n", idx);
+        dong_gpu_end_frame_offscreen(driver);
+        return;
+    }
+
+
+    dong_gpu_end_frame_offscreen(driver);
+    scr->texture = target;
 }
+
 
 static double get_scene_time_sec(dong_scene3d_t* scene) {
     if (!scene) return 0.0;
@@ -959,7 +1133,8 @@ static double get_scene_time_sec(dong_scene3d_t* scene) {
 static void update_camera_controls(dong_scene3d_t* scene, float dt) {
     if (!scene || !scene->cam_controls_enabled) return;
 
-    const Uint8* keys = SDL_GetKeyboardState(NULL);
+    const bool* keys = SDL_GetKeyboardState(NULL);
+
     Uint32 mouse = SDL_GetMouseState(NULL, NULL);
     if (mouse & SDL_BUTTON_RMASK) {
         float dx, dy;

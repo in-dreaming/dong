@@ -22,6 +22,10 @@
 #include <algorithm>
 
 #include <dong.h>
+#include <dong_platform.h>
+#include <dong_gpu_driver.h>
+#include "dong_sdl_platform.h"
+
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_gpu.h>
 
@@ -30,12 +34,8 @@
 #include <windows.h>
 #endif
 
-#include "platform/sdl3_window.hpp"
-#include "core/profiler.h"
-
-
-using dong::platform::SDL3Window;
 namespace fs = std::filesystem;
+
 
 // BMP 写入函数
 bool writeBMP(const char* filename, uint32_t width, uint32_t height, const uint8_t* rgba_data) {
@@ -48,7 +48,7 @@ bool writeBMP(const char* filename, uint32_t width, uint32_t height, const uint8
     uint32_t row_size = ((width * 3 + 3) / 4) * 4;  // 4-byte aligned
     uint32_t pixel_data_size = row_size * height;
     uint32_t filesize = 54 + pixel_data_size;
-    
+
     uint8_t bmpfileheader[14] = {
         'B','M', 0,0,0,0, 0,0, 0,0, 54,0,0,0
     };
@@ -72,7 +72,6 @@ bool writeBMP(const char* filename, uint32_t width, uint32_t height, const uint8
     fwrite(bmpfileheader, 1, 14, f);
     fwrite(bmpinfoheader, 1, 40, f);
 
-    // BMP 从底部开始存储
     std::vector<uint8_t> row(row_size, 0);
     for (int y = static_cast<int>(height) - 1; y >= 0; --y) {
         for (uint32_t x = 0; x < width; ++x) {
@@ -173,10 +172,191 @@ static void ensureParentDir(const fs::path& p) {
     }
 }
 
+static fs::path resolveExistingPath(const fs::path& html_file) {
+    fs::path exe_dir;
+    if (const char* base = SDL_GetBasePath()) {
+        exe_dir = fs::path(base);
+    }
+
+    std::error_code ec;
+    if (fs::exists(html_file, ec)) return html_file;
+
+    if (!html_file.is_absolute()) {
+        if (!exe_dir.empty()) {
+            fs::path c1 = exe_dir / html_file;
+            if (fs::exists(c1, ec)) return c1;
+
+            fs::path c2 = exe_dir / "data" / html_file;
+            if (fs::exists(c2, ec)) return c2;
+        }
+
+        fs::path c3 = fs::path("zig-out/bin") / html_file;
+        if (fs::exists(c3, ec)) return c3;
+
+        fs::path c4 = fs::path("zig-out/bin/data") / html_file;
+        if (fs::exists(c4, ec)) return c4;
+    }
+
+    return html_file;
+}
+
+static SDL_GPUTexture* ensureOffscreenTexture(SDL_GPUDevice* device,
+                                              SDL_GPUTexture* cached,
+                                              uint32_t* cached_w,
+                                              uint32_t* cached_h,
+                                              uint32_t width,
+                                              uint32_t height) {
+    if (!device) return nullptr;
+    if (cached && *cached_w == width && *cached_h == height) {
+        return cached;
+    }
+
+    if (cached) {
+        SDL_ReleaseGPUTexture(device, cached);
+    }
+
+    SDL_GPUTextureCreateInfo tex_info{};
+    tex_info.type = SDL_GPU_TEXTURETYPE_2D;
+    tex_info.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    tex_info.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
+
+    tex_info.width = width;
+    tex_info.height = height;
+    tex_info.layer_count_or_depth = 1;
+    tex_info.num_levels = 1;
+    tex_info.sample_count = SDL_GPU_SAMPLECOUNT_1;
+
+    SDL_GPUTexture* created = SDL_CreateGPUTexture(device, &tex_info);
+    if (!created) {
+        SDL_Log("ERROR: Failed to create offscreen texture: %s", SDL_GetError());
+        return nullptr;
+    }
+
+    *cached_w = width;
+    *cached_h = height;
+    return created;
+}
+
+static bool downloadTextureRGBA(SDL_GPUDevice* device, SDL_GPUTexture* texture,
+                                uint32_t width, uint32_t height, uint8_t* out_pixels) {
+    if (!device || !texture || !out_pixels) {
+        return false;
+    }
+
+    SDL_GPUTransferBufferCreateInfo transfer_info{};
+    transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_DOWNLOAD;
+    transfer_info.size = width * height * 4;
+
+    SDL_GPUTransferBuffer* download_buffer = SDL_CreateGPUTransferBuffer(device, &transfer_info);
+    if (!download_buffer) {
+        SDL_Log("ERROR: Failed to create download buffer: %s", SDL_GetError());
+        return false;
+    }
+
+    SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(device);
+    if (!cmd) {
+        SDL_Log("ERROR: Failed to acquire command buffer: %s", SDL_GetError());
+        SDL_ReleaseGPUTransferBuffer(device, download_buffer);
+        return false;
+    }
+
+    SDL_GPUCopyPass* copy_pass = SDL_BeginGPUCopyPass(cmd);
+    SDL_GPUTextureRegion src_region{};
+    src_region.texture = texture;
+    src_region.mip_level = 0;
+    src_region.layer = 0;
+    src_region.x = 0;
+    src_region.y = 0;
+    src_region.z = 0;
+    src_region.w = width;
+    src_region.h = height;
+    src_region.d = 1;
+
+    SDL_GPUTextureTransferInfo dst_transfer{};
+    dst_transfer.transfer_buffer = download_buffer;
+    dst_transfer.offset = 0;
+    dst_transfer.pixels_per_row = 0;
+    dst_transfer.rows_per_layer = 0;
+
+    SDL_DownloadFromGPUTexture(copy_pass, &src_region, &dst_transfer);
+    SDL_EndGPUCopyPass(copy_pass);
+
+    SDL_GPUFence* fence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd);
+    if (fence) {
+        SDL_GPUFence* fences[] = { fence };
+        if (!SDL_WaitForGPUFences(device, true, fences, 1)) {
+            SDL_Log("ERROR: SDL_WaitForGPUFences failed: %s", SDL_GetError());
+            SDL_WaitForGPUIdle(device);
+        }
+        SDL_ReleaseGPUFence(device, fence);
+    } else {
+        SDL_Log("ERROR: SDL_SubmitGPUCommandBufferAndAcquireFence failed: %s", SDL_GetError());
+        SDL_SubmitGPUCommandBuffer(cmd);
+        SDL_WaitForGPUIdle(device);
+    }
+
+    void* mapped = SDL_MapGPUTransferBuffer(device, download_buffer, false);
+    if (!mapped) {
+        SDL_Log("ERROR: Failed to map download buffer: %s", SDL_GetError());
+        SDL_ReleaseGPUTransferBuffer(device, download_buffer);
+        return false;
+    }
+
+    std::memcpy(out_pixels, mapped, width * height * 4);
+    SDL_UnmapGPUTransferBuffer(device, download_buffer);
+    SDL_ReleaseGPUTransferBuffer(device, download_buffer);
+    return true;
+}
+
+static void injectSyntheticInputs(dong_engine_t* engine, uint32_t frame_index) {
+    if (!engine) return;
+
+    if (frame_index == 1) {
+        if (const char* s = std::getenv("DONG_TEST_CLICK")) {
+            int x = 0, y = 0, button = 1;
+            int n = std::sscanf(s, "%d,%d,%d", &x, &y, &button);
+            if (n >= 2) {
+                dong_engine_send_mouse_move(engine, x, y);
+                dong_engine_send_mouse_button(engine, button, 1);
+                dong_engine_send_mouse_button(engine, button, 0);
+            }
+        }
+    }
+
+    if (frame_index > 0) {
+        if (const char* s = std::getenv("DONG_TEST_WHEEL")) {
+            int x = 0, y = 0;
+            float dy = 0.0f;
+            if (std::sscanf(s, "%d,%d,%f", &x, &y, &dy) == 3) {
+                dong_engine_send_mouse_move(engine, x, y);
+                dong_engine_send_mouse_wheel(engine, 0.0f, dy);
+            }
+        }
+    }
+}
+
+static bool executeEngineFrame(dong_engine_t* engine, DongGPUDriver* driver,
+                               bool do_update, const void** cached_cmd_list) {
+    if (!engine || !driver) return false;
+
+    if (do_update || !cached_cmd_list || !*cached_cmd_list) {
+        if (dong_engine_tick(engine) != DONG_OK) {
+            return false;
+        }
+        if (!do_update && cached_cmd_list) {
+            *cached_cmd_list = dong_engine_get_command_list(engine);
+        }
+        return true;
+    }
+
+    return dong_gpu_execute(driver, *cached_cmd_list) != 0;
+}
+
 void printUsage(const char* prog) {
     SDL_Log("Usage:");
     SDL_Log("  %s <html_file> [output.bmp] [width] [height] [frames]", prog);
-    SDL_Log("  %s <html_file> [output.bmp] [width] [height] --frames N [--frame-ms MS] [--no-update] [--profile <trace.json>]", prog);
+    SDL_Log("  %s <html_file> [output.bmp] [width] [height] --frames N [--frame-ms MS] [--no-update]", prog);
+
     SDL_Log("");
     SDL_Log("Arguments:");
     SDL_Log("  html_file   - Path to HTML file (relative to exe or absolute)");
@@ -188,8 +368,8 @@ void printUsage(const char* prog) {
     SDL_Log("Options:");
     SDL_Log("  --frames N           - Render N frames (overrides positional frames)");
     SDL_Log("  --frame-ms MS        - Sleep MS milliseconds between frames (default: 0)");
-    SDL_Log("  --no-update          - Do NOT call dong_view_update() between frames");
-    SDL_Log("  --profile <file.json>- Dump profiler trace to file (Chrome Trace format)");
+    SDL_Log("  --no-update          - Do NOT update scripts/layout between frames");
+
     SDL_Log("");
     SDL_Log("Output rule when frames > 1:");
     SDL_Log("  - If output ends with .bmp, will write: <stem>_f000.bmp, <stem>_f001.bmp, ...");
@@ -213,9 +393,8 @@ void printUsage(const char* prog) {
 }
 
 int main(int argc, char* argv[]) {
-    SDL_Log("=== HTML Render Test ===");
+    SDL_Log("=== HTML Render Test (Engine) ===");
 
-    // 解析参数
     if (argc < 2) {
         printUsage(argv[0]);
         return 1;
@@ -223,8 +402,6 @@ int main(int argc, char* argv[]) {
 
     std::string html_file = argv[1];
 
-    // Backward compatible positional args:
-    //   html_render_test <html_file> [output.bmp] [width] [height] [frames]
     std::string output_file = "zig-out/tmp/render_test.bmp";
     bool output_specified = false;
     uint32_t width = 800;
@@ -232,7 +409,7 @@ int main(int argc, char* argv[]) {
     uint32_t frames = 1;
     uint32_t frame_ms = 0;
     bool do_update = true;
-    std::string profile_output;  // profiler trace output file
+
 
     int positional_index = 0;
     for (int i = 2; i < argc; ++i) {
@@ -266,16 +443,8 @@ int main(int argc, char* argv[]) {
             continue;
         }
 
-        if (a == "--profile") {
-            if (i + 1 >= argc) {
-                SDL_Log("ERROR: --profile requires a file path");
-                return 1;
-            }
-            profile_output = argv[++i];
-            continue;
-        }
 
-        // positional
+
         switch (positional_index) {
             case 0:
                 output_file = a;
@@ -307,44 +476,13 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    // 读取 HTML 文件（兼容 zig build：工作目录通常是仓库根目录，而测试文件在 zig-out/bin/data 下）
+    const fs::path html_path = resolveExistingPath(fs::path(html_file));
+    html_file = html_path.string();
+
     fs::path exe_dir;
     if (const char* base = SDL_GetBasePath()) {
         exe_dir = fs::path(base);
     }
-
-    auto resolveExistingPath = [&](const fs::path& p) -> fs::path {
-        std::error_code ec;
-        if (fs::exists(p, ec)) return p;
-
-        if (!p.is_absolute()) {
-            if (!exe_dir.empty()) {
-                // 1) <exe_dir>/<relative>
-                fs::path c1 = exe_dir / p;
-                if (fs::exists(c1, ec)) return c1;
-
-                // 2) <exe_dir>/data/<relative>  (兼容传 tests/xxx.html 等情况)
-                fs::path c2 = exe_dir / "data" / p;
-                if (fs::exists(c2, ec)) return c2;
-            }
-
-            // 3) <repo_root>/zig-out/bin/<relative>
-            fs::path c3 = fs::path("zig-out/bin") / p;
-            if (fs::exists(c3, ec)) return c3;
-
-            // 4) <repo_root>/zig-out/bin/data/<relative>
-            fs::path c4 = fs::path("zig-out/bin/data") / p;
-            if (fs::exists(c4, ec)) return c4;
-        }
-
-        return p;
-    };
-
-    const fs::path html_path = resolveExistingPath(fs::path(html_file));
-    html_file = html_path.string();
-
-    // 如果用户没显式指定 output，并且当前 exe 在 zig-out/bin 下：
-    // 把默认输出落到 ../tmp，避免从 zig-out/bin 运行时出现 zig-out/bin/zig-out/tmp 的二次嵌套。
     if (!output_specified && output_file == "zig-out/tmp/render_test.bmp" && !exe_dir.empty()) {
         std::error_code ec;
         if (fs::exists(exe_dir / "data", ec)) {
@@ -361,10 +499,7 @@ int main(int argc, char* argv[]) {
     SDL_Log("[Input]  HTML: %s (%zu bytes)", html_file.c_str(), html_content.size());
     SDL_Log("[Render] Size: %ux%u frames=%u frame_ms=%u update=%s",
             width, height, frames, frame_ms, do_update ? "true" : "false");
-    if (!profile_output.empty()) {
-        SDL_Log("[Profile] Output: %s", profile_output.c_str());
-        dong_profiler_init();
-    }
+
 
     std::string html_stem = fs::path(html_file).stem().string();
     fs::path first_output_path = getFrameOutputPath(output_file, html_stem, 0, frames);
@@ -374,196 +509,123 @@ int main(int argc, char* argv[]) {
         SDL_Log("[Output] ...  %s", last_output_path.string().c_str());
     }
 
-    // 创建 SDL 窗口
-    SDL3Window::CreateInfo ci{};
-    ci.title = "HTML Render Test";
-    ci.width = width;
-    ci.height = height;
-    ci.use_gpu = true;
-    ci.debug_mode = false;
-
-    SDL3Window window;
-    if (!window.initialize(ci)) {
-        SDL_Log("ERROR: Failed to initialize SDL3Window: %s", SDL_GetError());
+    if (!SDL_Init(SDL_INIT_VIDEO)) {
+        SDL_Log("ERROR: SDL_Init failed: %s", SDL_GetError());
         return 1;
     }
 
-    SDL_GPUDevice* device = window.getGPUDevice();
+    SDL_Window* window = SDL_CreateWindow("HTML Render Test", width, height, SDL_WINDOW_RESIZABLE);
+    if (!window) {
+        SDL_Log("ERROR: SDL_CreateWindow failed: %s", SDL_GetError());
+        SDL_Quit();
+        return 1;
+    }
+
+    SDL_GPUDevice* device = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_DXIL | SDL_GPU_SHADERFORMAT_MSL,
+                                               false, nullptr);
     if (!device) {
-        SDL_Log("ERROR: GPU device is null");
+        SDL_Log("ERROR: SDL_CreateGPUDevice failed: %s", SDL_GetError());
+        SDL_DestroyWindow(window);
+        SDL_Quit();
         return 1;
     }
 
-    // 创建 Dong 上下文
-    SDL_Log("[Init] Creating dong context...");
-    dong_context_t* ctx = dong_create_context();
-    if (!ctx) {
-        SDL_Log("ERROR: Failed to create dong context");
+    if (!SDL_ClaimWindowForGPUDevice(device, window)) {
+        SDL_Log("ERROR: SDL_ClaimWindowForGPUDevice failed: %s", SDL_GetError());
+        SDL_DestroyGPUDevice(device);
+        SDL_DestroyWindow(window);
+        SDL_Quit();
         return 1;
     }
 
-    SDL_Log("[Init] Creating dong view...");
-    dong_view_t* view = dong_view_create(ctx, width, height);
-    if (!view) {
-        SDL_Log("ERROR: Failed to create dong view");
-        dong_destroy_context(ctx);
+    if (!dong_sdl_platform_init(static_cast<void*>(device), static_cast<void*>(window))) {
+        SDL_Log("ERROR: Failed to init SDL platform backend");
+        SDL_ReleaseWindowFromGPUDevice(device, window);
+        SDL_DestroyGPUDevice(device);
+        SDL_DestroyWindow(window);
+        SDL_Quit();
         return 1;
     }
 
-    // Optional: load platform plugin (enables video backend, etc.)
-#if defined(_WIN32)
-    struct PluginModuleGuard {
-        HMODULE mod = nullptr;
-        ~PluginModuleGuard() {
-            if (mod) {
-                FreeLibrary(mod);
-                mod = nullptr;
-            }
-        }
-    } plugin_guard;
 
-    const dong_plugin_vtable_t* plugin = nullptr;
-    const char* plugin_names[] = {
-        "dong_plugin_sdl.dll",
-        "libdong_plugin_sdl.dll",
-    };
-
-    for (const char* name : plugin_names) {
-        HMODULE m = LoadLibraryA(name);
-        if (!m) continue;
-
-        auto get_api = (dong_plugin_get_api_fn)GetProcAddress(m, "dong_plugin_get_api");
-        if (!get_api) {
-            FreeLibrary(m);
-            continue;
-        }
-
-        const dong_plugin_vtable_t* api = get_api();
-        if (!api || api->info.plugin_api_version != DONG_PLUGIN_API_VERSION) {
-            FreeLibrary(m);
-            continue;
-        }
-
-        plugin = api;
-        plugin_guard.mod = m;
-        SDL_Log("[Init] Loaded plugin: %s (caps=0x%llx)", name, (unsigned long long)api->info.capabilities);
-        break;
+    DongGPUDriver* driver = dong_platform_get_gpu_driver(dong_platform_get());
+    if (!driver) {
+        SDL_Log("ERROR: Platform GPU driver is null");
+        dong_sdl_platform_shutdown();
+        return 1;
     }
 
-    if (plugin) {
-        dong_view_set_plugin_api(view, plugin, nullptr);
-    } else {
-        SDL_Log("[Init] Plugin not loaded (video features disabled)");
-    }
-#endif
+    const std::string resource_root = fs::absolute(fs::path(html_file)).parent_path().string();
+    dong_gpu_set_resource_root(driver, resource_root.c_str());
 
-    // 设置 GPU 渲染模式
-    SDL_Log("[Init] Enabling GPU render mode...");
-    dong_view_set_external_gpu_device(view,
-                                      static_cast<void*>(device),
-                                      static_cast<void*>(window.getHandle()));
+    dong_engine_desc_t desc{};
+    desc.api_version = DONG_API_VERSION;
+    desc.width = width;
+    desc.height = height;
 
-
-    // 资源根目录：让相对路径（../images/bg.png）按 HTML 文件所在目录解析
-    {
-        std::string resource_root = fs::absolute(fs::path(html_file)).parent_path().string();
-        SDL_Log("[Load] Resource root: %s", resource_root.c_str());
-        dong_view_set_resource_root(view, resource_root.c_str());
+    dong_engine_t* engine = nullptr;
+    if (dong_engine_create(&desc, &engine) != DONG_OK || !engine) {
+        SDL_Log("ERROR: Failed to create dong engine");
+        dong_sdl_platform_shutdown();
+        return 1;
     }
 
-    // 加载 HTML
-    SDL_Log("[Load] Loading HTML...");
-    SDL_Log("[Debug] HTML content length: %zu", html_content.length());
-    SDL_Log("[Debug] About to call dong_view_load_html...");
-    dong_view_load_html(view, html_content.c_str());
-    SDL_Log("[Load] HTML loaded successfully");
+    if (dong_engine_set_gpu(engine, static_cast<void*>(device), static_cast<void*>(window)) != DONG_OK) {
 
+        SDL_Log("ERROR: Failed to set GPU device for engine");
+        dong_engine_destroy(engine);
+        dong_sdl_platform_shutdown();
+        return 1;
+    }
 
-    SDL_Log("[Debug] About to create pixel buffer...");
-    // 渲染到像素缓冲区（逐帧导出）
+    if (dong_engine_load_html(engine, html_content.c_str()) != DONG_OK) {
+        SDL_Log("ERROR: Failed to load HTML");
+        dong_engine_destroy(engine);
+        dong_sdl_platform_shutdown();
+        return 1;
+    }
+
+    SDL_GPUTexture* offscreen_texture = nullptr;
+    uint32_t offscreen_w = 0;
+    uint32_t offscreen_h = 0;
     std::vector<uint8_t> pixels(width * height * 4);
-    SDL_Log("[Debug] Pixel buffer created, size=%zu", pixels.size());
+    const void* cached_cmd_list = nullptr;
 
-    auto logPixelStats = [&](uint32_t frame_index) {
-        int total = static_cast<int>(width * height);
-        int black = 0, colored = 0, white = 0;
-        for (int i = 0; i < total; ++i) {
-            int idx = i * 4;
-            int brightness = (pixels[idx] + pixels[idx + 1] + pixels[idx + 2]) / 3;
-            if (brightness < 50) black++;
-            else if (brightness > 200) white++;
-            else colored++;
-        }
-        SDL_Log("[Stats] Frame %u: black=%d(%.1f%%) colored=%d(%.1f%%) white=%d(%.1f%%)",
-                frame_index,
-                black, 100.0f * black / total,
-                colored, 100.0f * colored / total,
-                white, 100.0f * white / total);
-    };
-
-    SDL_Log("[Render] Rendering offscreen...");
     for (uint32_t fi = 0; fi < frames; ++fi) {
-        DONG_PROFILE_SCOPE_CAT("RenderFrame", "frame");
         SDL_Log("[Render] Frame %u: do_update=%d", fi, do_update ? 1 : 0);
 
-        // Optional: inject a synthetic click for tab switching, etc.
-        // Env format: DONG_TEST_CLICK="x,y" or "x,y,button" (SDL button code; left=1)
-        // Note: We inject on frame 1 so the initial script execution can attach event listeners on frame 0.
-        if (fi == 1) {
-            if (const char* s = std::getenv("DONG_TEST_CLICK")) {
-                int x = 0, y = 0, button = 1;
-                int n = std::sscanf(s, "%d,%d,%d", &x, &y, &button);
-                if (n >= 2) {
-                    dong_view_send_mouse_move(view, x, y);
-                    dong_view_send_mouse_down(view, button);
-                    dong_view_send_mouse_up(view, button);
-                }
-            }
+
+        injectSyntheticInputs(engine, fi);
+
+        offscreen_texture = ensureOffscreenTexture(device, offscreen_texture, &offscreen_w, &offscreen_h, width, height);
+        if (!offscreen_texture) {
+            SDL_Log("ERROR: Failed to ensure offscreen texture");
+            break;
         }
 
-
-        // Optional: inject a synthetic mouse wheel between frames for scroll testing.
-        // Env format: DONG_TEST_WHEEL="x,y,dy" (dy uses dong convention: positive = scroll down)
-        if (fi > 0) {
-            if (const char* s = std::getenv("DONG_TEST_WHEEL")) {
-                int x = 0, y = 0;
-                float dy = 0.0f;
-                if (std::sscanf(s, "%d,%d,%f", &x, &y, &dy) == 3) {
-                    dong_view_send_mouse_move(view, x, y);
-                    dong_view_send_mouse_wheel(view, 0.0f, dy);
-                }
-            }
+        if (!dong_gpu_begin_frame_offscreen(driver, offscreen_texture, width, height)) {
+            SDL_Log("ERROR: begin_frame_offscreen failed");
+            break;
         }
 
-        if (do_update) {
-            SDL_Log("[Render] Calling dong_view_update...");
-            dong_view_update(view);
-            SDL_Log("[Render] dong_view_update completed");
+        if (!executeEngineFrame(engine, driver, do_update, &cached_cmd_list)) {
+            SDL_Log("ERROR: Engine render failed");
+            dong_gpu_end_frame_offscreen(driver);
+            break;
         }
 
+        dong_gpu_end_frame_offscreen(driver);
 
-
-
-        if (!dong_view_render_offscreen(view, static_cast<void*>(device), width, height, pixels.data())) {
-
-            SDL_Log("ERROR: dong_view_render_offscreen failed (frame=%u)", fi);
-            dong_view_destroy(view);
-            dong_destroy_context(ctx);
-            return 1;
+        if (!downloadTextureRGBA(device, offscreen_texture, width, height, pixels.data())) {
+            SDL_Log("ERROR: Failed to read back pixels");
+            break;
         }
 
         fs::path out_path = getFrameOutputPath(output_file, html_stem, fi, frames);
         ensureParentDir(out_path);
         if (!writeBMP(out_path.string().c_str(), width, height, pixels.data())) {
             SDL_Log("ERROR: Failed to save BMP (frame=%u): %s", fi, out_path.string().c_str());
-            dong_view_destroy(view);
-            dong_destroy_context(ctx);
-            return 1;
-        }
-
-        // 为了避免日志爆炸：只输出首帧/末帧统计
-        if (fi == 0 || fi + 1 == frames) {
-            logPixelStats(fi);
+            break;
         }
 
         if (frame_ms > 0 && fi + 1 < frames) {
@@ -573,22 +635,22 @@ int main(int argc, char* argv[]) {
 
     SDL_Log("[Save] Saved %u frame(s)", frames);
 
-    // Dump profiler trace if requested
-    if (!profile_output.empty()) {
-        ensureParentDir(fs::path(profile_output));
-        if (dong_profiler_dump(profile_output.c_str()) == 0) {
-            SDL_Log("[Profile] Trace saved to: %s", profile_output.c_str());
-        } else {
-            SDL_Log("[Profile] ERROR: Failed to save trace to: %s", profile_output.c_str());
-        }
+
+
+    if (offscreen_texture) {
+        SDL_ReleaseGPUTexture(device, offscreen_texture);
     }
 
-    // 清理
-    SDL_Log("[Cleanup] Shutting down...");
-    dong_view_destroy(view);
-    dong_destroy_context(ctx);
+    dong_engine_destroy(engine);
+    dong_sdl_platform_shutdown();
+
+    SDL_ReleaseWindowFromGPUDevice(device, window);
+    SDL_DestroyGPUDevice(device);
+    SDL_DestroyWindow(window);
+    SDL_Quit();
 
     fs::path out0 = getFrameOutputPath(output_file, html_stem, 0, frames);
+
     SDL_Log("[Done] Output: %s", out0.string().c_str());
     if (frames > 1) {
         fs::path outN = getFrameOutputPath(output_file, html_stem, frames - 1, frames);

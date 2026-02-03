@@ -6,5 +6,6 @@ rem dong_app.exe --html .\data\video\video_play_test.html --width 960 --height 5
 @REM 3d_screen_script.exe --profiler trace.json
 
 rem set DONG_HUD_KEY_WHITE_BG=1
-set DONG_DEBUG_DISABLE_HUD=1
-d:\mix\agents\game\indr\dong\dong\zig-out\bin\3d_screen_script.exe 
+set DONG_DEBUG_BUTTON_WRAP=1
+set DONG_DEBUG_SCENE3D_OFFSCREEN=1
+d:\mix\agents\game\indr\dong\dong\zig-out\bin\3d_screens_simple.exe > log.log

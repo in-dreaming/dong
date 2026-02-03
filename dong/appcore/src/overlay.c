@@ -5,13 +5,17 @@
  */
 
 #include "dong_overlay.h"
-#include "dong_view.h"
+#include "dong.h"
+#include "dong_platform.h"
+#include "dong_gpu_driver.h"
+#include "dong_plugin_api.h"
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_gpu.h>
 #include <SDL3_shadercross/SDL_shadercross.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+
 
 #define MAX_PATH_LEN 1024
 
@@ -46,10 +50,108 @@ typedef struct {
     float pad[3];
 } UniformsHUD;
 
+// Plugin loading (optional: video, etc.)
+static const dong_plugin_vtable_t* s_plugin_vtable = NULL;
+static void* s_plugin_module = NULL;
+
+static const dong_plugin_vtable_t* try_load_plugin(void) {
+    if (s_plugin_vtable) return s_plugin_vtable;
+    if (s_plugin_module) return NULL;
+
+    const char* filename =
+#if defined(_WIN32)
+        "dong_plugin_sdl.dll";
+#elif defined(__APPLE__)
+        "libdong_plugin_sdl.dylib";
+#else
+        "libdong_plugin_sdl.so";
+#endif
+
+    const char* base_path = SDL_GetBasePath();
+    if (!base_path) {
+        s_plugin_module = (void*)1;
+        return NULL;
+    }
+
+    char path[MAX_PATH_LEN];
+    SDL_snprintf(path, sizeof(path), "%s%s", base_path, filename);
+
+    s_plugin_module = SDL_LoadObject(path);
+    if (!s_plugin_module) {
+        s_plugin_module = (void*)1;
+        return NULL;
+    }
+
+    typedef const dong_plugin_vtable_t* (*get_api_fn)(void);
+    get_api_fn fn = (get_api_fn)SDL_LoadFunction((SDL_SharedObject*)s_plugin_module, "dong_plugin_get_api");
+    if (!fn) {
+        SDL_UnloadObject((SDL_SharedObject*)s_plugin_module);
+        s_plugin_module = (void*)1;
+        return NULL;
+    }
+
+    s_plugin_vtable = fn();
+    return s_plugin_vtable;
+}
+
+static void copy_string(char* dst, size_t dst_size, const char* src) {
+    if (!dst || dst_size == 0) return;
+    if (!src || !src[0]) {
+        dst[0] = 0;
+        return;
+    }
+    strncpy(dst, src, dst_size - 1);
+    dst[dst_size - 1] = 0;
+}
+
+static void extract_dir_from_path(const char* path, char* out_dir, size_t out_size) {
+    if (!out_dir || out_size == 0) return;
+    out_dir[0] = 0;
+    if (!path || !path[0]) return;
+
+    copy_string(out_dir, out_size, path);
+    char* last_sep = strrchr(out_dir, '/');
+    if (!last_sep) last_sep = strrchr(out_dir, '\\');
+    if (last_sep) {
+        *last_sep = 0;
+    } else {
+        out_dir[0] = 0;
+    }
+}
+
+static char* read_text_file(const char* path, size_t* out_size) {
+    if (out_size) *out_size = 0;
+    if (!path || !path[0]) return NULL;
+
+    FILE* f = fopen(path, "rb");
+    if (!f) return NULL;
+
+    fseek(f, 0, SEEK_END);
+    long sz = ftell(f);
+    fseek(f, 0, SEEK_SET);
+
+    if (sz <= 0) {
+        fclose(f);
+        return NULL;
+    }
+
+    char* buf = (char*)malloc((size_t)sz + 1);
+    if (!buf) {
+        fclose(f);
+        return NULL;
+    }
+
+    size_t read = fread(buf, 1, (size_t)sz, f);
+    buf[read] = 0;
+    fclose(f);
+
+    if (out_size) *out_size = read;
+    return buf;
+}
+
 struct dong_overlay_t {
     dong_app_t* app;
-    dong_context_t* ctx;
-    dong_view_t* view;
+    dong_engine_t* engine;
     SDL_GPUDevice* device;
     SDL_Window* window;
     SDL_GPUTexture* texture;
@@ -60,6 +162,7 @@ struct dong_overlay_t {
     SDL_GPUBuffer* quad_vb;
 
     uint32_t width, height;
+    uint32_t tex_width, tex_height;
     int32_t pos_x, pos_y;
     float opacity;
     int enabled;
@@ -67,9 +170,42 @@ struct dong_overlay_t {
     char resource_root[MAX_PATH_LEN];
 };
 
+static SDL_GPUTexture* ensure_offscreen_texture(dong_overlay_t* overlay, uint32_t width, uint32_t height) {
+    if (!overlay || !overlay->device) return NULL;
+
+    if (overlay->texture && overlay->tex_width == width && overlay->tex_height == height) {
+        return overlay->texture;
+    }
+
+    if (overlay->texture) {
+        SDL_ReleaseGPUTexture(overlay->device, overlay->texture);
+        overlay->texture = NULL;
+    }
+
+    SDL_GPUTextureCreateInfo tex_info = {0};
+    tex_info.type = SDL_GPU_TEXTURETYPE_2D;
+    tex_info.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    tex_info.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    tex_info.width = width;
+    tex_info.height = height;
+    tex_info.layer_count_or_depth = 1;
+    tex_info.num_levels = 1;
+    tex_info.sample_count = SDL_GPU_SAMPLECOUNT_1;
+
+    overlay->texture = SDL_CreateGPUTexture(overlay->device, &tex_info);
+    if (!overlay->texture) {
+        return NULL;
+    }
+
+    overlay->tex_width = width;
+    overlay->tex_height = height;
+    return overlay->texture;
+}
+
 // Forward declarations
 static int create_overlay_pipeline(dong_overlay_t* overlay, SDL_GPUTextureFormat swapchain_fmt);
 static void destroy_overlay_pipeline(dong_overlay_t* overlay);
+
 
 // Compile shader helper
 static SDL_GPUShader* compile_shader_ov(SDL_GPUDevice* dev, SDL_GPUShaderStage stage, const char* hlsl, int nSamp, int nUB) {
@@ -126,31 +262,39 @@ DONG_APPCORE_API dong_overlay_t* dong_overlay_create(dong_app_t* app, uint32_t w
     overlay->opacity = 1.0f;
     overlay->enabled = 1;
 
-    // Create Dong context and view
-    overlay->ctx = dong_create_context();
-    if (!overlay->ctx) {
+    overlay->tex_width = 0;
+    overlay->tex_height = 0;
+
+    dong_engine_desc_t desc;
+    memset(&desc, 0, sizeof(desc));
+    desc.api_version = DONG_API_VERSION;
+    desc.plugin_api_version = DONG_PLUGIN_API_VERSION;
+    desc.plugin = try_load_plugin();
+    desc.plugin_user = NULL;
+    desc.width = width;
+    desc.height = height;
+
+    if (dong_engine_create(&desc, &overlay->engine) != DONG_OK || !overlay->engine) {
         free(overlay);
         return NULL;
     }
 
-    overlay->view = dong_view_create(overlay->ctx, width, height);
-    if (!overlay->view) {
-        dong_destroy_context(overlay->ctx);
+    if (dong_engine_set_gpu(overlay->engine, overlay->device, overlay->window) != DONG_OK) {
+        dong_engine_destroy(overlay->engine);
         free(overlay);
         return NULL;
     }
-
-    dong_view_set_external_gpu_device(overlay->view, overlay->device, overlay->window);
-    dong_view_set_debug_name(overlay->view, "overlay");
 
     // Create rendering pipeline
+
     SDL_GPUTextureFormat swfmt = SDL_GetGPUSwapchainTextureFormat(overlay->device, overlay->window);
     if (!create_overlay_pipeline(overlay, swfmt)) {
-        dong_view_free(overlay->view);
-        dong_destroy_context(overlay->ctx);
+        dong_engine_destroy(overlay->engine);
+        overlay->engine = NULL;
         free(overlay);
         return NULL;
     }
+
 
     printf("[Overlay] Created %ux%u\n", width, height);
     return overlay;
@@ -159,81 +303,87 @@ DONG_APPCORE_API dong_overlay_t* dong_overlay_create(dong_app_t* app, uint32_t w
 DONG_APPCORE_API void dong_overlay_destroy(dong_overlay_t* overlay) {
     if (!overlay) return;
     destroy_overlay_pipeline(overlay);
-    if (overlay->view) dong_view_free(overlay->view);
-    if (overlay->ctx) dong_destroy_context(overlay->ctx);
+    if (overlay->texture) {
+        SDL_ReleaseGPUTexture(overlay->device, overlay->texture);
+        overlay->texture = NULL;
+    }
+    if (overlay->engine) {
+        dong_engine_destroy(overlay->engine);
+        overlay->engine = NULL;
+    }
     free(overlay);
 }
 
+
 DONG_APPCORE_API int dong_overlay_load_html(dong_overlay_t* overlay, const char* html) {
-    if (!overlay || !overlay->view || !html) return 0;
-    dong_view_load_html(overlay->view, html);
-    return 1;
+    if (!overlay || !overlay->engine || !html) return 0;
+    return (dong_engine_load_html(overlay->engine, html) == DONG_OK) ? 1 : 0;
 }
+
 
 DONG_APPCORE_API int dong_overlay_load_file(dong_overlay_t* overlay, const char* file_path) {
-    if (!overlay || !overlay->view || !file_path) return 0;
+    if (!overlay || !overlay->engine || !file_path) return 0;
 
-    // Extract directory for resource root
     char dir[MAX_PATH_LEN];
-    strncpy(dir, file_path, sizeof(dir) - 1);
-    dir[sizeof(dir) - 1] = 0;
-    char* last_sep = strrchr(dir, '/');
-    if (!last_sep) last_sep = strrchr(dir, '\\');
-    if (last_sep) *last_sep = 0;
-    else dir[0] = 0;
-    if (dir[0]) dong_view_set_resource_root(overlay->view, dir);
+    extract_dir_from_path(file_path, dir, sizeof(dir));
+    if (dir[0]) {
+        copy_string(overlay->resource_root, sizeof(overlay->resource_root), dir);
+        (void)dong_engine_set_resource_root(overlay->engine, dir);
+    }
 
-    FILE* f = fopen(file_path, "rb");
-    if (!f) {
+    size_t size = 0;
+    char* buf = read_text_file(file_path, &size);
+    if (!buf || size == 0) {
         printf("[Overlay] Failed to open %s\n", file_path);
+        free(buf);
         return 0;
     }
 
-    fseek(f, 0, SEEK_END);
-    long sz = ftell(f);
-    fseek(f, 0, SEEK_SET);
-
-    char* buf = (char*)malloc(sz + 1);
-    if (!buf) {
-        fclose(f);
-        return 0;
-    }
-
-    fread(buf, 1, sz, f);
-    buf[sz] = 0;
-    fclose(f);
-
-    dong_view_load_html(overlay->view, buf);
+    int ok = (dong_engine_load_html(overlay->engine, buf) == DONG_OK) ? 1 : 0;
     free(buf);
 
-    printf("[Overlay] Loaded %s\n", file_path);
-    return 1;
+    if (ok) {
+        printf("[Overlay] Loaded %s\n", file_path);
+    }
+    return ok;
 }
+
 
 DONG_APPCORE_API void dong_overlay_set_resource_root(dong_overlay_t* overlay, const char* root) {
-    if (!overlay || !overlay->view || !root) return;
-    strncpy(overlay->resource_root, root, MAX_PATH_LEN - 1);
-    overlay->resource_root[MAX_PATH_LEN - 1] = 0;
-    dong_view_set_resource_root(overlay->view, root);
+    if (!overlay || !overlay->engine || !root) return;
+    copy_string(overlay->resource_root, sizeof(overlay->resource_root), root);
+    (void)dong_engine_set_resource_root(overlay->engine, root);
 }
 
+
 DONG_APPCORE_API int dong_overlay_eval_script(dong_overlay_t* overlay, const char* script) {
-    if (!overlay || !overlay->view || !script) return 0;
-    return dong_view_eval(overlay->view, script);
+    if (!overlay || !overlay->engine || !script) return 0;
+    return (dong_engine_eval_script(overlay->engine, script) == DONG_OK) ? 1 : 0;
 }
+
 
 DONG_APPCORE_API void dong_overlay_update(dong_overlay_t* overlay, float dt) {
     (void)dt;
-    if (!overlay || !overlay->view || !overlay->enabled) return;
+    if (!overlay || !overlay->engine || !overlay->enabled) return;
 
-    // NOTE: Do NOT call dong_view_update() here! It renders to swapchain.
-    // dong_view_render_to_gpu_texture() handles layout calculation internally.
-    SDL_GPUTexture* new_tex = (SDL_GPUTexture*)dong_view_render_to_gpu_texture(
-        overlay->view, overlay->device, overlay->width, overlay->height);
-    if (new_tex) {
-        overlay->texture = new_tex;
+    DongGPUDriver* driver = dong_platform_get_gpu_driver(dong_platform_get());
+    if (!driver) return;
+
+    SDL_GPUTexture* target = ensure_offscreen_texture(overlay, overlay->width, overlay->height);
+    if (!target) return;
+
+    if (!dong_gpu_begin_frame_offscreen(driver, target, overlay->width, overlay->height)) {
+        return;
     }
+
+    if (dong_engine_tick(overlay->engine) != DONG_OK) {
+        dong_gpu_end_frame_offscreen(driver);
+        return;
+    }
+
+    dong_gpu_end_frame_offscreen(driver);
 }
+
 
 DONG_APPCORE_API void dong_overlay_render(dong_overlay_t* overlay) {
     if (!overlay || !overlay->enabled || !overlay->texture || !overlay->pipeline) return;
@@ -288,28 +438,33 @@ DONG_APPCORE_API int dong_overlay_hit_test(dong_overlay_t* overlay, int32_t x, i
 }
 
 DONG_APPCORE_API void dong_overlay_send_mouse_move(dong_overlay_t* overlay, int32_t x, int32_t y) {
-    if (overlay && overlay->view) dong_view_send_mouse_move(overlay->view, x, y);
+    if (overlay && overlay->engine) {
+        dong_engine_send_mouse_move(overlay->engine, x, y);
+    }
 }
 
 DONG_APPCORE_API void dong_overlay_send_mouse_button(dong_overlay_t* overlay, int32_t button, int pressed) {
-    if (!overlay || !overlay->view) return;
-    if (pressed) dong_view_send_mouse_down(overlay->view, button);
-    else dong_view_send_mouse_up(overlay->view, button);
+    if (!overlay || !overlay->engine) return;
+    dong_engine_send_mouse_button(overlay->engine, button, pressed);
 }
 
 DONG_APPCORE_API void dong_overlay_send_mouse_wheel(dong_overlay_t* overlay, float delta_x, float delta_y) {
-    if (overlay && overlay->view) dong_view_send_mouse_wheel(overlay->view, delta_x, delta_y);
+    if (overlay && overlay->engine) {
+        dong_engine_send_mouse_wheel(overlay->engine, delta_x, delta_y);
+    }
 }
 
 DONG_APPCORE_API void dong_overlay_send_key(dong_overlay_t* overlay, uint32_t key_code, int pressed) {
-    if (!overlay || !overlay->view) return;
-    if (pressed) dong_view_send_key_down(overlay->view, key_code);
-    else dong_view_send_key_up(overlay->view, key_code);
+    if (!overlay || !overlay->engine) return;
+    dong_engine_send_key(overlay->engine, key_code, pressed);
 }
 
 DONG_APPCORE_API void dong_overlay_send_text(dong_overlay_t* overlay, const char* text) {
-    if (overlay && overlay->view && text) dong_view_send_text_input(overlay->view, text);
+    if (overlay && overlay->engine && text) {
+        dong_engine_send_text(overlay->engine, text);
+    }
 }
+
 
 DONG_APPCORE_API void dong_overlay_set_position(dong_overlay_t* overlay, int32_t x, int32_t y) {
     if (overlay) { overlay->pos_x = x; overlay->pos_y = y; }

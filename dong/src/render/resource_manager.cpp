@@ -1,5 +1,7 @@
 ﻿#include "resource_manager.hpp"
+#include "../core/log.h"
 #include <fstream>
+
 #include <sstream>
 #include <iostream>
 #include <cstring>
@@ -73,7 +75,8 @@ bool ResourceManager::getImagePixelsRGBA(const std::string& file_path,
 
     // Basic URL handling: support file://, reject http(s)/data.
     if (path.rfind("http://", 0) == 0 || path.rfind("https://", 0) == 0 || path.rfind("data:", 0) == 0) {
-        std::cerr << "[ResourceManager] unsupported image URL: " << path << std::endl;
+        DONG_LOG_WARN("[ResourceManager] unsupported image URL: %s", path.c_str());
+
         return false;
     }
     if (path.rfind("file://", 0) == 0) {
@@ -97,7 +100,8 @@ bool ResourceManager::getImagePixelsRGBA(const std::string& file_path,
         if (orig != path) {
             const char* env = std::getenv("DONG_DEBUG_RESOURCE_PATHS");
             if (env && env[0] == '1') {
-                std::cerr << "[ResourceManager] resolve: root=" << resource_root_ << " path=" << orig << " -> " << path << std::endl;
+                DONG_LOG_INFO("[ResourceManager] resolve: root=%s path=%s -> %s", resource_root_.c_str(), orig.c_str(), path.c_str());
+
             }
         }
 
@@ -108,7 +112,8 @@ bool ResourceManager::getImagePixelsRGBA(const std::string& file_path,
 #if defined(DONG_USE_SDL_IMAGE)
     SDL_Surface* surface = SDL_LoadPNG(path.c_str());
     if (!surface) {
-        std::cerr << "[ResourceManager] SDL_LoadPNG failed: " << path << " (" << SDL_GetError() << ")" << std::endl;
+        DONG_LOG_ERROR("[ResourceManager] SDL_LoadPNG failed: %s (%s)", path.c_str(), SDL_GetError());
+
         return false;
     }
 
@@ -118,14 +123,16 @@ bool ResourceManager::getImagePixelsRGBA(const std::string& file_path,
         SDL_DestroySurface(surface);
         surface = nullptr;
         if (!rgba) {
-            std::cerr << "[ResourceManager] SDL_ConvertSurface(RGBA32) failed: " << path << " (" << SDL_GetError() << ")" << std::endl;
+            DONG_LOG_ERROR("[ResourceManager] SDL_ConvertSurface(RGBA32) failed: %s (%s)", path.c_str(), SDL_GetError());
+
             return false;
         }
     }
 
     if (SDL_MUSTLOCK(rgba)) {
         if (!SDL_LockSurface(rgba)) {
-            std::cerr << "[ResourceManager] SDL_LockSurface failed: " << path << " (" << SDL_GetError() << ")" << std::endl;
+            DONG_LOG_ERROR("[ResourceManager] SDL_LockSurface failed: %s (%s)", path.c_str(), SDL_GetError());
+
             SDL_DestroySurface(rgba);
             return false;
         }
@@ -162,7 +169,8 @@ bool ResourceManager::getImagePixelsRGBA(const std::string& file_path,
     return true;
 #else
     // dong core build intentionally avoids SDL linkage. Image decoding is not available here.
-    std::cerr << "[ResourceManager] image decoding disabled (build without DONG_USE_SDL_IMAGE): " << path << std::endl;
+    DONG_LOG_WARN("[ResourceManager] image decoding disabled (build without DONG_USE_SDL_IMAGE): %s", path.c_str());
+
     return false;
 #endif
 
@@ -177,7 +185,8 @@ ImageResource* ResourceManager::loadImage(const std::string& file_path) {
     }
     
     // TODO: 使用 stb_image 加载图片
-    std::cerr << "[ResourceManager] loadImage not implemented: " << file_path << std::endl;
+    DONG_LOG_WARN("[ResourceManager] loadImage not implemented: %s", file_path.c_str());
+
     return nullptr;
 }
 
@@ -195,7 +204,8 @@ ImageResource* ResourceManager::loadImageFromMemory(const std::string& name,
     }
     
     // TODO: 使用 stb_image 解码
-    std::cerr << "[ResourceManager] loadImageFromMemory not implemented: " << name << std::endl;
+    DONG_LOG_WARN("[ResourceManager] loadImageFromMemory not implemented: %s", name.c_str());
+
     return nullptr;
 }
 
@@ -219,7 +229,8 @@ FontResource* ResourceManager::loadFont(const std::string& font_name,
     }
     
     // TODO: 使用 FreeType 加载字体
-    std::cerr << "[ResourceManager] loadFont not implemented: " << font_name << std::endl;
+    DONG_LOG_WARN("[ResourceManager] loadFont not implemented: %s", font_name.c_str());
+
     return nullptr;
 }
 
@@ -234,7 +245,8 @@ FontResource* ResourceManager::getFont(const std::string& font_name, float size)
 
 FontResource* ResourceManager::getSystemFont(const std::string& font_family, float size) {
     // TODO: 使用 FreeType + 系统字体查找
-    std::cerr << "[ResourceManager] getSystemFont not implemented: " << font_family << std::endl;
+    DONG_LOG_WARN("[ResourceManager] getSystemFont not implemented: %s", font_family.c_str());
+
     return nullptr;
 }
 

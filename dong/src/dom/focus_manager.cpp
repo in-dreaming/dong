@@ -23,7 +23,11 @@ void FocusManager::setFocus(DOMNodePtr element) {
     }
 
     DOMNodePtr old_focus = focused_element_;
-    
+
+    if (old_focus) {
+        old_focus->setFocused(false);
+    }
+
     // 触发旧元素的 blur 事件
     if (old_focus) {
         dispatchBlurEvent(old_focus);
@@ -32,10 +36,15 @@ void FocusManager::setFocus(DOMNodePtr element) {
     // 更新焦点
     focused_element_ = element;
 
+    if (element) {
+        element->setFocused(true);
+    }
+
     // 触发新元素的 focus 事件
     if (element) {
         dispatchFocusEvent(element);
     }
+
 
     // 调用回调
     if (focus_change_callback_) {

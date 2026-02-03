@@ -113,7 +113,10 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    dong_app_enable_text_input(app, 1);
+
     // Load HTML content (using new simplified API)
+
     if (html_file) {
         if (!dong_app_load_html_file(app, html_file)) {
             fprintf(stderr, "[dong_app] Failed to load HTML file: %s\n", html_file);

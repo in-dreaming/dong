@@ -1383,7 +1383,17 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
         if (intrinsic_w > 0.0f && intrinsic_w < 10000.0f) {
             YGNodeStyleSetMinWidth(yoga_node, intrinsic_w);
         }
+        if (std::getenv("DONG_DEBUG_BUTTON_WRAP")) {
+            std::string text = collapseWhitespace(dom_node->getTextContent());
+            DONG_LOG_INFO("[LayoutEngine] button intrinsic_w=%.2f text='%s' display=%s layout_mode=%d width_auto=%d",
+                          intrinsic_w,
+                          text.c_str(),
+                          style.display.c_str(),
+                          static_cast<int>(style.layout_mode),
+                          style.width.isAuto() ? 1 : 0);
+        }
     }
+
 
     // Flex items that are inline/inline-block often contain text, but Yoga tree excludes TEXT nodes.
     // Without a best-effort intrinsic min-size, these items collapse to padding/border only, and

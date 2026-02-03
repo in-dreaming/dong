@@ -104,7 +104,9 @@ endif()
 add_library(dong SHARED
     src/api_bindings.cpp
     src/core/context.cpp
+    src/core/engine_view.cpp
     src/core/platform.c
+
     src/core/profiler.cpp
     # DOM module (modular structure)
     src/dom/dom_manager.cpp
@@ -197,9 +199,9 @@ endif()
 add_library(dong_render STATIC
     src/api_bindings_legacy.cpp
     src/core/context.cpp
-    src/core/platform.c
     src/core/profiler.cpp
     src/core/view.cpp
+
     # DOM module (modular structure)
     src/dom/dom_manager.cpp
     src/dom/event_system.cpp
@@ -271,7 +273,8 @@ endif()
 
 target_compile_definitions(dong_render PRIVATE SDL_SHADERCROSS_DXC DONG_USE_SDL_IMAGE DONG_SDL_SHADER_DIR=\"${CMAKE_SOURCE_DIR}/src/render/sdl_render/shaders\")
 
-target_link_libraries(dong_render PUBLIC quickjs lexbor yoga)
+target_link_libraries(dong_render PUBLIC dong quickjs lexbor yoga)
+
 
 if(WIN32)
     target_link_libraries(dong_render PUBLIC
@@ -342,10 +345,12 @@ if(BUILD_EXAMPLES)
     # Common function to configure examples
     function(add_dong_example name source)
         add_executable(${name} ${source})
-        target_link_libraries(${name} PRIVATE dong_render)
+        target_link_libraries(${name} PRIVATE dong dong_sdl_backend)
         
         # SDL3
         target_include_directories(${name} PRIVATE "${SDL3_PREFIX}/include")
+        target_include_directories(${name} PRIVATE "${CMAKE_SOURCE_DIR}/backends/sdl")
+
         if(WIN32)
             target_link_directories(${name} PRIVATE "${SDL3_PREFIX}/lib")
             target_link_libraries(${name} PRIVATE SDL3)
@@ -463,8 +468,10 @@ if(BUILD_EXAMPLES)
             examples/features/run_feature_tests.cpp
             examples/features/feature_test_framework.cpp
         )
-        target_link_libraries(run_feature_tests PRIVATE dong_render)
+        target_link_libraries(run_feature_tests PRIVATE dong dong_sdl_backend)
         target_include_directories(run_feature_tests PRIVATE "${SDL3_PREFIX}/include")
+        target_include_directories(run_feature_tests PRIVATE "${CMAKE_SOURCE_DIR}/backends/sdl")
+
         if(WIN32)
             target_link_directories(run_feature_tests PRIVATE "${SDL3_PREFIX}/lib")
             target_link_libraries(run_feature_tests PRIVATE SDL3)
@@ -504,7 +511,9 @@ endif()
 install(TARGETS dong lexbor yoga
     ARCHIVE DESTINATION lib
     LIBRARY DESTINATION lib
+    RUNTIME DESTINATION bin
 )
+
 
 install(DIRECTORY include/ DESTINATION include)
 

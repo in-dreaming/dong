@@ -15,11 +15,13 @@ extern "C" {
     #ifdef DONG_BUILDING_DLL
         #define DONG_PLATFORM_API __declspec(dllexport)
     #else
-        #define DONG_PLATFORM_API __declspec(dllimport)
+        // Platform symbols may be built into static libs (e.g. dong_render/appcore); avoid dllimport.
+        #define DONG_PLATFORM_API
     #endif
 #else
     #define DONG_PLATFORM_API __attribute__((visibility("default")))
 #endif
+
 
 // =============================================================================
 // Platform Abstraction Layer
@@ -37,8 +39,11 @@ extern "C" {
 typedef struct DongGPUDriver DongGPUDriver;
 typedef struct DongSurface DongSurface;
 typedef struct DongSurfaceFactory DongSurfaceFactory;
-typedef struct DongFileSystem DongFileSystem;
-typedef struct DongLogger DongLogger;
+
+// Full definitions (for external injection)
+#include "dong_file_system.h"
+#include "dong_logger.h"
+
 
 // Platform singleton (opaque)
 typedef struct DongPlatform DongPlatform;

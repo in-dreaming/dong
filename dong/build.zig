@@ -401,11 +401,12 @@ pub fn build(b: *std.Build) void {
     // Run shortcuts
     // ==========================================================================
     const run_demo = b.addSystemCommand(&.{
-        if (is_windows) "zig-out\\bin\\interactive_demo.exe" else "zig-out/bin/interactive_demo",
+        if (is_windows) "zig-out\\bin\\interactive_demo_new.exe" else "zig-out/bin/interactive_demo_new",
     });
     run_demo.step.dependOn(&cmake_install.step);
     const run_step = b.step("run", "Run interactive demo");
     run_step.dependOn(&run_demo.step);
+
 
     const run_simple = b.addSystemCommand(&.{
         if (is_windows) "zig-out\\bin\\simple_demo.exe" else "zig-out/bin/simple_demo",

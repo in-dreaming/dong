@@ -3,15 +3,26 @@
 /**
  * Dong Engine 日志分级系统（平台无关）
  *
- * 注意：core 侧不依赖 SDL。平台层可在插件中接管/桥接日志。
+ * 注意：core 侧不依赖 SDL。
+ *
+ * 日志输出策略：
+ * - 优先使用 Platform 注入的 `DongLogger`。
+ * - 若未注入，则使用 Platform 提供的默认 logger。
+ * - 再无 logger 时，fallback 到 stderr/stdout。
  */
+
+#include "dong_platform.h"
+#include "dong_logger.h"
 
 #include <cstdio>
 #include <cstdlib>
+#include <cstdarg>
 #include <chrono>
 
+// =============================================================================
+// Compile-time log filtering
+// =============================================================================
 
-// 日志级别定义
 #define DONG_LOG_LEVEL_NONE    0
 #define DONG_LOG_LEVEL_ERROR   1
 #define DONG_LOG_LEVEL_WARN    2
@@ -19,7 +30,6 @@
 #define DONG_LOG_LEVEL_DEBUG   4
 #define DONG_LOG_LEVEL_VERBOSE 5
 
-// 默认日志级别：INFO（不输出 DEBUG 和 VERBOSE）
 #ifndef DONG_LOG_LEVEL
 #define DONG_LOG_LEVEL DONG_LOG_LEVEL_INFO
 #endif
@@ -28,9 +38,7 @@
 #define DONG_LOG_STDERR stderr
 #endif
 
-// 默认写到 stderr（更适合错误日志），但在 Windows/PowerShell 下，管道通常只捕获 stdout。
-// 设环境变量 DONG_LOG_TO_STDOUT=1 可将 DONG_LOG_* 输出切到 stdout，方便 | Select-String/findstr。
-static inline FILE* dongLogStream() {
+static inline FILE* dongLogFallbackStream() {
     const char* v = std::getenv("DONG_LOG_TO_STDOUT");
     if (v && (v[0] == '1' || v[0] == 'y' || v[0] == 'Y' || v[0] == 't' || v[0] == 'T')) {
         return stdout;
@@ -38,43 +46,77 @@ static inline FILE* dongLogStream() {
     return DONG_LOG_STDERR;
 }
 
-#define DONG_LOG__PRINTF(prefix, fmt, ...) \
-    do { \
-        FILE* __dong_fp = dongLogStream(); \
-        std::fprintf(__dong_fp, "%s", prefix); \
-        std::fprintf(__dong_fp, fmt, ##__VA_ARGS__); \
-        std::fprintf(__dong_fp, "\n"); \
-        std::fflush(__dong_fp); \
-    } while (0)
+static inline const char* dongLogLevelPrefix(DongLoggerLevel level) {
+    switch (level) {
+        case DONG_LOGGER_LEVEL_TRACE: return "[TRACE] ";
+        case DONG_LOGGER_LEVEL_DEBUG: return "[DEBUG] ";
+        case DONG_LOGGER_LEVEL_INFO:  return "[INFO] ";
+        case DONG_LOGGER_LEVEL_WARN:  return "[WARN] ";
+        case DONG_LOGGER_LEVEL_ERROR: return "[ERROR] ";
+        default: return "[LOG] ";
+    }
+}
 
+static inline DongLogger* dongTryGetLogger() {
+    DongPlatform* platform = dong_platform_get();
+    return platform ? dong_platform_get_logger(platform) : nullptr;
+}
 
+static inline void dongLogV(DongLoggerLevel level, const char* fmt, va_list args) {
+    char msg[2048];
+    msg[0] = '\0';
+
+    (void)std::vsnprintf(msg, sizeof(msg), fmt, args);
+
+    DongLogger* logger = dongTryGetLogger();
+    if (logger && logger->vtable && logger->vtable->log) {
+        logger->vtable->log(logger, level, msg);
+        return;
+    }
+
+    FILE* out = dongLogFallbackStream();
+    std::fprintf(out, "%s%s\n", dongLogLevelPrefix(level), msg);
+    std::fflush(out);
+}
+
+static inline void dongLog(DongLoggerLevel level, const char* fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    dongLogV(level, fmt, args);
+    va_end(args);
+}
+
+// =============================================================================
+// Public macros
+// =============================================================================
 
 #if DONG_LOG_LEVEL >= DONG_LOG_LEVEL_ERROR
-    #define DONG_LOG_ERROR(fmt, ...) DONG_LOG__PRINTF("[ERROR] ", fmt, ##__VA_ARGS__)
+    #define DONG_LOG_ERROR(fmt, ...) dongLog(DONG_LOGGER_LEVEL_ERROR, fmt, ##__VA_ARGS__)
 #else
     #define DONG_LOG_ERROR(fmt, ...) ((void)0)
 #endif
 
 #if DONG_LOG_LEVEL >= DONG_LOG_LEVEL_WARN
-    #define DONG_LOG_WARN(fmt, ...) DONG_LOG__PRINTF("[WARN] ", fmt, ##__VA_ARGS__)
+    #define DONG_LOG_WARN(fmt, ...) dongLog(DONG_LOGGER_LEVEL_WARN, fmt, ##__VA_ARGS__)
 #else
     #define DONG_LOG_WARN(fmt, ...) ((void)0)
 #endif
 
 #if DONG_LOG_LEVEL >= DONG_LOG_LEVEL_INFO
-    #define DONG_LOG_INFO(fmt, ...) DONG_LOG__PRINTF("[INFO] ", fmt, ##__VA_ARGS__)
+    #define DONG_LOG_INFO(fmt, ...) dongLog(DONG_LOGGER_LEVEL_INFO, fmt, ##__VA_ARGS__)
 #else
     #define DONG_LOG_INFO(fmt, ...) ((void)0)
 #endif
 
 #if DONG_LOG_LEVEL >= DONG_LOG_LEVEL_DEBUG
-    #define DONG_LOG_DEBUG(fmt, ...) DONG_LOG__PRINTF("[DEBUG] ", fmt, ##__VA_ARGS__)
+    #define DONG_LOG_DEBUG(fmt, ...) dongLog(DONG_LOGGER_LEVEL_DEBUG, fmt, ##__VA_ARGS__)
 #else
     #define DONG_LOG_DEBUG(fmt, ...) ((void)0)
 #endif
 
 #if DONG_LOG_LEVEL >= DONG_LOG_LEVEL_VERBOSE
-    #define DONG_LOG_VERBOSE(fmt, ...) DONG_LOG__PRINTF("[VERBOSE] ", fmt, ##__VA_ARGS__)
+    // VERBOSE 映射到 TRACE
+    #define DONG_LOG_VERBOSE(fmt, ...) dongLog(DONG_LOGGER_LEVEL_TRACE, fmt, ##__VA_ARGS__)
 #else
     #define DONG_LOG_VERBOSE(fmt, ...) ((void)0)
 #endif
@@ -83,35 +125,31 @@ static inline FILE* dongLogStream() {
 // 性能计时工具
 // =============================================================================
 
-// 启用/禁用性能计时（设为 0 可完全禁用，无运行时开销）
 #ifndef DONG_PERF_ENABLED
 #define DONG_PERF_ENABLED 0
 #endif
 
-// 性能计时阈值（毫秒），超过此值才输出警告
 #ifndef DONG_PERF_WARN_THRESHOLD_MS
 #define DONG_PERF_WARN_THRESHOLD_MS 16.0
 #endif
 
 #if DONG_PERF_ENABLED
 
-// RAII 计时器类
 class DongPerfTimer {
 public:
     DongPerfTimer(const char* name, double warn_threshold_ms = DONG_PERF_WARN_THRESHOLD_MS)
         : m_name(name), m_warn_threshold_ms(warn_threshold_ms),
           m_start(std::chrono::high_resolution_clock::now()) {}
-    
+
     ~DongPerfTimer() {
         auto end = std::chrono::high_resolution_clock::now();
         double ms = std::chrono::duration<double, std::milli>(end - m_start).count();
         if (ms >= m_warn_threshold_ms) {
-            std::fprintf(stderr, "[PERF_WARN] %s: %.3f ms (threshold: %.1f ms)\n", 
+            std::fprintf(stderr, "[PERF_WARN] %s: %.3f ms (threshold: %.1f ms)\n",
                 m_name, ms, m_warn_threshold_ms);
         }
     }
 
-    // 手动获取当前耗时（不结束计时）
     double elapsed_ms() const {
         auto now = std::chrono::high_resolution_clock::now();
         return std::chrono::duration<double, std::milli>(now - m_start).count();
@@ -123,11 +161,9 @@ private:
     std::chrono::high_resolution_clock::time_point m_start;
 };
 
-// 作用域计时宏（超阈值自动警告）
 #define DONG_PERF_SCOPE(name) DongPerfTimer __dong_perf_timer_##__LINE__(name)
 #define DONG_PERF_SCOPE_THRESHOLD(name, threshold_ms) DongPerfTimer __dong_perf_timer_##__LINE__(name, threshold_ms)
 
-// 手动计时宏
 #define DONG_PERF_START(var) auto var##_start = std::chrono::high_resolution_clock::now()
 #define DONG_PERF_END_LOG(var, name) do { \
     auto var##_end = std::chrono::high_resolution_clock::now(); \
@@ -136,9 +172,10 @@ private:
 } while(0)
 
 #else
-// 禁用时为空操作
+
 #define DONG_PERF_SCOPE(name) ((void)0)
 #define DONG_PERF_SCOPE_THRESHOLD(name, threshold_ms) ((void)0)
 #define DONG_PERF_START(var) ((void)0)
 #define DONG_PERF_END_LOG(var, name) ((void)0)
+
 #endif

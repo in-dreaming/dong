@@ -503,7 +503,14 @@ void renderFullText(const dom::DOMNodePtr& node,
     }
 
     // For overflow, we should clip or wrap
+    if (std::getenv("DONG_DEBUG_BUTTON_WRAP")) {
+        if (node && node->getTagName() == "button") {
+            DONG_LOG_INFO("[PainterText] button text_width=%.2f inner_width=%.2f nowrap=%d text='%s'",
+                          text_width, inner_width, nowrap ? 1 : 0, text.c_str());
+        }
+    }
     if (!nowrap && text_width > inner_width && inner_width > 0.0f) {
+
         // Simple wrap: estimate characters per line
         float avg_char_width = text_width / static_cast<float>(text.length());
         size_t chars_per_line = static_cast<size_t>(inner_width / avg_char_width);

@@ -77,8 +77,15 @@ DONG_API dong_result_t dong_engine_resize(dong_engine_t* engine, uint32_t width,
 // The device and window are owned by the caller (typically the plugin).
 DONG_API dong_result_t dong_engine_set_gpu(dong_engine_t* engine, void* gpu_device, void* window);
 
+// Set resource root for resolving relative asset/script paths.
+DONG_API dong_result_t dong_engine_set_resource_root(dong_engine_t* engine, const char* root);
+
+// Query cursor at a given position (returns CSS cursor name; valid until next tick).
+DONG_API const char* dong_engine_get_cursor_at(dong_engine_t* engine, int32_t x, int32_t y);
+
 // Input event handling
 DONG_API dong_result_t dong_engine_send_mouse_move(dong_engine_t* engine, int32_t x, int32_t y);
+
 DONG_API dong_result_t dong_engine_send_mouse_button(dong_engine_t* engine, int32_t button, int pressed);
 DONG_API dong_result_t dong_engine_send_mouse_wheel(dong_engine_t* engine, float delta_x, float delta_y);
 DONG_API dong_result_t dong_engine_send_key(dong_engine_t* engine, uint32_t key_code, int pressed);
@@ -101,13 +108,11 @@ DONG_API const void* dong_engine_get_command_list(dong_engine_t* engine);
 DONG_API void dong_engine_invalidate_commands(dong_engine_t* engine);
 
 // =============================================================================
-// View API
+// View API (legacy / advanced)
 // =============================================================================
-// Low-level view API for advanced integrations.
-// Most users should use dong_appcore instead.
-#ifndef DONG_DISABLE_VIEW_API
-#include "dong_view.h"
-#endif
+// Not included by default.
+// If you need the view API, include "dong_view.h" explicitly.
+
 
 #ifdef __cplusplus
 }

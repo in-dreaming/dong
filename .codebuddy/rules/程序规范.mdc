@@ -1,6 +1,5 @@
 ---
-description: 
-globs:
+# Please note: Do not modify the header of this document. If modified, CodeBuddy (Internal Edition) will apply the default logic settings.
 alwaysApply: true
 ---
 - 1. 不要写长函数，要拆分成多个小函数。一般一个函数不超过70行。
