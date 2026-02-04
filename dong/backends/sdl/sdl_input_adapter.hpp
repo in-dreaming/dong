@@ -1,6 +1,6 @@
-﻿#pragma once
+#pragma once
 
-#include "input_adapter.hpp"
+#include "../../src/input/input_adapter.hpp"
 
 // Forward declare SDL types to avoid including SDL headers in this header
 struct SDL_Window;

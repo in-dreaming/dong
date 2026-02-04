@@ -228,24 +228,35 @@ add_library(dong_render STATIC
     src/render/painter/painter_children.cpp
     src/render/render_surface.cpp
     src/render/resource_manager.cpp
-    src/render/gpu_device.cpp
-    src/render/gpu_surface.cpp
+    # NOTE: SDL-specific render files migrated to backends/sdl/
+    # src/render/gpu_device.cpp -> backends/sdl/sdl_gpu_device.cpp
+    # src/render/gpu_surface.cpp -> backends/sdl/sdl_gpu_surface.cpp
+    # src/render/gpu_painter.cpp -> backends/sdl/sdl_gpu_painter.cpp
+    # src/render/shader_manager.cpp -> backends/sdl/sdl_shader_manager.cpp
+    # src/render/glyph_atlas.cpp -> backends/sdl/sdl_glyph_atlas.cpp
+    # src/render/sdl_render/* -> backends/sdl/sdl_gpu_driver_*.cpp
+
+    # Core render files (platform-agnostic)
     src/render/font_resolver.cpp
     src/render/font_finder.cpp
     src/render/text_shaper.cpp
     src/render/font_metrics.cpp
-    src/render/gpu_painter.cpp
+
+    # TODO: Remove after full backend migration (kept for compatibility)
     src/render/gpu_driver_sdl.cpp
     src/render/sdl_render/gpu_driver_sdl_init.cpp
     src/render/sdl_render/gpu_driver_sdl_execute.cpp
     src/render/sdl_render/gpu_driver_sdl_resources.cpp
     src/render/sdl_render/gpu_driver_sdl_fonts.cpp
     src/render/sdl_render/gpu_driver_factory.cpp
+    src/render/gpu_device.cpp
+    src/render/gpu_surface.cpp
+    src/render/gpu_painter.cpp
     src/render/shader_manager.cpp
     src/render/glyph_atlas.cpp
-    # Platform
-    src/platform/sdl3_window.cpp
-    src/input/input_adapter_sdl3.cpp
+    # Platform (SDL implementations moved to backends/sdl/)
+    # src/platform/sdl3_window.cpp
+    # src/input/input_adapter_sdl3.cpp
     third_party/SDL_shadercross/src/SDL_shadercross.c
 )
 

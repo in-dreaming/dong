@@ -18,7 +18,16 @@ add_library(dong_sdl_backend SHARED
     dong_astc_encoder.c
     dong_bc_encoder.c
 
-    # SDL execution chain (migrated from old core sdl_render)
+    # SDL Plugin (Phase 1: Plugin injection)
+    dong_sdl_plugin.cpp
+
+    # SDL Window (migrated from src/platform/)
+    sdl_window.cpp
+
+    # SDL Input Adapter (migrated from src/input/)
+    sdl_input_adapter.cpp
+
+    # SDL execution chain (migrated from src/render/)
     ${CMAKE_SOURCE_DIR}/src/core/profiler.cpp
 
     ${CMAKE_SOURCE_DIR}/src/render/render_surface.cpp
@@ -30,17 +39,26 @@ add_library(dong_sdl_backend SHARED
     ${CMAKE_SOURCE_DIR}/src/render/text_shaper.cpp
     ${CMAKE_SOURCE_DIR}/src/render/font_metrics.cpp
 
+    # Phase 2: SDL GPU Driver (migrated from src/render/)
+    sdl_gpu_driver.cpp
+    sdl_gpu_driver_init.cpp
+    sdl_gpu_driver_execute.cpp
+    sdl_gpu_driver_resources.cpp
+    sdl_gpu_driver_fonts.cpp
+
+    # Phase 5: SDL-specific rendering components (migrated from src/render/)
+    sdl_gpu_device.cpp
+    sdl_shader_manager.cpp
+    sdl_glyph_atlas.cpp
+    sdl_gpu_surface.cpp
+    sdl_gpu_painter.cpp
+
+    # TODO(Phase 5 complete): Remove these after full migration
     ${CMAKE_SOURCE_DIR}/src/render/gpu_device.cpp
     ${CMAKE_SOURCE_DIR}/src/render/gpu_surface.cpp
     ${CMAKE_SOURCE_DIR}/src/render/gpu_painter.cpp
-    ${CMAKE_SOURCE_DIR}/src/render/gpu_driver_sdl.cpp
     ${CMAKE_SOURCE_DIR}/src/render/shader_manager.cpp
     ${CMAKE_SOURCE_DIR}/src/render/glyph_atlas.cpp
-
-    ${CMAKE_SOURCE_DIR}/src/render/sdl_render/gpu_driver_sdl_init.cpp
-    ${CMAKE_SOURCE_DIR}/src/render/sdl_render/gpu_driver_sdl_execute.cpp
-    ${CMAKE_SOURCE_DIR}/src/render/sdl_render/gpu_driver_sdl_resources.cpp
-    ${CMAKE_SOURCE_DIR}/src/render/sdl_render/gpu_driver_sdl_fonts.cpp
 
     # Shader cross-compile support (required by ShaderManager)
     ${CMAKE_SOURCE_DIR}/third_party/SDL_shadercross/src/SDL_shadercross.c
@@ -80,7 +98,7 @@ endif()
 target_compile_definitions(dong_sdl_backend PRIVATE
     DONG_SDL_BUILDING_DLL
     SDL_SHADERCROSS_DXC
-    DONG_SDL_SHADER_DIR=\"${CMAKE_SOURCE_DIR}/src/render/sdl_render/shaders\"
+    DONG_SDL_SHADER_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/shaders\"
 )
 
 
@@ -147,5 +165,6 @@ install(TARGETS dong_sdl_backend
 install(FILES
     dong_sdl_platform.h
     dong_sdl_image_decoder.h
+    dong_sdl_plugin.h
     DESTINATION include/dong/backends/sdl
 )

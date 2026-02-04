@@ -1,5 +1,5 @@
-﻿#include "input_adapter_sdl3.hpp"
-#include "../core/log.h"
+#include "sdl_input_adapter.hpp"
+#include "../src/core/log.h"
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_keyboard.h>

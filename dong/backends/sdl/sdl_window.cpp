@@ -1,5 +1,5 @@
-﻿#include "sdl3_window.hpp"
-#include <SDL3/SDL_log.h>
+#include "sdl_window.hpp"
+#include "../src/core/log.h"
 
 #include <cstdlib>
 #include <cstring>
@@ -23,7 +23,7 @@ SDL3Window::~SDL3Window() {
 
 bool SDL3Window::initialize(const CreateInfo& info) {
     if (window_) {
-        SDL_Log("Window already initialized");
+        DONG_LOG_WARN("Window already initialized");
         return false;
     }
 
@@ -70,7 +70,7 @@ bool SDL3Window::processEvents() {
                 } else {
                     SDL_GetWindowSize(window_, (int*)&width_, (int*)&height_);
                 }
-                SDL_Log("Window resized to %u x %u", width_, height_);
+                DONG_LOG_INFO("Window resized to %u x %u", width_, height_);
                 break;
             }
 
@@ -93,11 +93,11 @@ void SDL3Window::resize(uint32_t width, uint32_t height) {
 
 bool SDL3Window::initializeSDL() {
     if (!SDL_Init(SDL_INIT_VIDEO)) {
-        SDL_Log("Failed to initialize SDL: %s", SDL_GetError());
+        DONG_LOG_ERROR("Failed to initialize SDL: %s", SDL_GetError());
         return false;
     }
 
-    SDL_Log("SDL initialized successfully");
+    DONG_LOG_INFO("SDL initialized successfully");
     return true;
 }
 
@@ -108,7 +108,7 @@ bool SDL3Window::createWindow(const CreateInfo& info) {
     window_ = SDL_CreateWindow(info.title, (int)info.width, (int)info.height, flags);
 
     if (!window_) {
-        SDL_Log("Failed to create window: %s", SDL_GetError());
+        DONG_LOG_ERROR("Failed to create window: %s", SDL_GetError());
         return false;
     }
 
@@ -116,7 +116,7 @@ bool SDL3Window::createWindow(const CreateInfo& info) {
     height_ = info.height;
 
     SDL_ShowWindow(window_);
-    SDL_Log("Window created successfully: %u x %u", width_, height_);
+    DONG_LOG_INFO("Window created successfully: %u x %u", width_, height_);
 
     return true;
 }
@@ -133,13 +133,13 @@ bool SDL3Window::createGPUDevice(bool debug_mode) {
 
     gpu_device_ = SDL_CreateGPUDevice(format_flags, debug_mode, nullptr);
     if (!gpu_device_) {
-        SDL_Log("Failed to create GPU device: %s", SDL_GetError());
+        DONG_LOG_ERROR("Failed to create GPU device: %s", SDL_GetError());
         return false;
     }
 
     // 将 GPU 设备与窗口关联
     if (!SDL_ClaimWindowForGPUDevice(gpu_device_, window_)) {
-        SDL_Log("Failed to claim window for GPU device: %s", SDL_GetError());
+        DONG_LOG_ERROR("Failed to claim window for GPU device: %s", SDL_GetError());
         SDL_DestroyGPUDevice(gpu_device_);
         gpu_device_ = nullptr;
         return false;
@@ -153,9 +153,9 @@ bool SDL3Window::createGPUDevice(bool debug_mode) {
             const int n = std::atoi(v);
             if (n >= 1 && n <= 3) {
                 SDL_SetGPUAllowedFramesInFlight(gpu_device_, (Uint32)n);
-                SDL_Log("[GPU] AllowedFramesInFlight=%d", n);
+                DONG_LOG_INFO("[GPU] AllowedFramesInFlight=%d", n);
             } else {
-                SDL_Log("[GPU] Invalid DONG_GPU_FRAMES_IN_FLIGHT=%s (expected 1..3)", v);
+                DONG_LOG_WARN("[GPU] Invalid DONG_GPU_FRAMES_IN_FLIGHT=%s (expected 1..3)", v);
             }
         }
 
@@ -170,7 +170,7 @@ bool SDL3Window::createGPUDevice(bool debug_mode) {
             } else if (std::strcmp(pm, "immediate") == 0) {
                 mode = SDL_GPU_PRESENTMODE_IMMEDIATE;
             } else {
-                SDL_Log("[GPU] Invalid DONG_GPU_PRESENT_MODE=%s (use mailbox|vsync|immediate)", pm);
+                DONG_LOG_WARN("[GPU] Invalid DONG_GPU_PRESENT_MODE=%s (use mailbox|vsync|immediate)", pm);
                 mode_from_env = false;
                 mode = SDL_GPU_PRESENTMODE_MAILBOX;
             }
@@ -183,7 +183,7 @@ bool SDL3Window::createGPUDevice(bool debug_mode) {
                 SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
                 mode
             )) {
-                SDL_Log("[GPU] PresentMode request failed, falling back to VSYNC");
+                DONG_LOG_WARN("[GPU] PresentMode request failed, falling back to VSYNC");
                 SDL_SetGPUSwapchainParameters(
                     gpu_device_,
                     window_,
@@ -199,7 +199,7 @@ bool SDL3Window::createGPUDevice(bool debug_mode) {
                 SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
                 SDL_GPU_PRESENTMODE_MAILBOX
             )) {
-                SDL_Log("MAILBOX present mode not supported, falling back to VSYNC");
+                DONG_LOG_INFO("MAILBOX present mode not supported, falling back to VSYNC");
                 SDL_SetGPUSwapchainParameters(
                     gpu_device_,
                     window_,
@@ -210,7 +210,7 @@ bool SDL3Window::createGPUDevice(bool debug_mode) {
         }
     }
 
-    SDL_Log("GPU device created and claimed for window");
+    DONG_LOG_INFO("GPU device created and claimed for window");
 
     return true;
 }

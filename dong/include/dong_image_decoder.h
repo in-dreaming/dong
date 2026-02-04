@@ -106,12 +106,13 @@ typedef struct DongEncodeOptions {
 
 // Default encode options
 static inline DongEncodeOptions dong_encode_options_default(void) {
-    DongEncodeOptions opts = {0};
-    opts.quality = DONG_ENCODE_QUALITY_NORMAL;
-    opts.generate_mipmaps = 0;
-    opts.srgb = 1;
-    opts.normal_map = 0;
-    opts.hdr = 0;
+    DongEncodeOptions opts = {
+        .quality = DONG_ENCODE_QUALITY_NORMAL,
+        .generate_mipmaps = 0,
+        .srgb = 1,
+        .normal_map = 0,
+        .hdr = 0
+    };
     return opts;
 }
 

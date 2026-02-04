@@ -1,14 +1,18 @@
-#include "../gpu_driver_sdl.hpp"
+// =============================================================================
+// SDL GPU Driver - Resource Management (Phase 2B)
+// =============================================================================
+// Migrated from: src/render/sdl_render/gpu_driver_sdl_resources.cpp
+// =============================================================================
 
+#include "sdl_gpu_driver.hpp"
 
-#include "../gpu_device.hpp"
-#include "../resource_manager.hpp"
-#include "../glyph_atlas.hpp"
-#include "../font_resolver.hpp"
-#include "../../core/log.h"
-#include "../../core/profiler.h"
+#include "../../src/render/gpu_device.hpp"
+#include "../../src/render/resource_manager.hpp"
+#include "../../src/render/glyph_atlas.hpp"
+#include "../../src/render/font_resolver.hpp"
+#include "../../src/core/log.h"
+#include "../../src/core/profiler.h"
 
-// ImageAtlas and ImageDecoder for compression support
 #include "dong_image_atlas.h"
 #include "dong_image_decoder.h"
 #include "dong_platform.h"
@@ -20,9 +24,10 @@
 #include <unordered_map>
 #include <unordered_set>
 
-namespace dong::render {
+namespace dong {
+namespace render {
 
-void GPUDriverSDL::prepareResources(const GPUCommandList& commands) {
+void SDLGPUDriver::prepareResources(const GPUCommandList& commands) {
     if (!gpu_device_ || !gpu_device_->isInitialized()) {
         DONG_LOG_WARN("[prepareResources] SKIP: gpu_device not ready");
         return;
@@ -30,14 +35,7 @@ void GPUDriverSDL::prepareResources(const GPUCommandList& commands) {
 
     DONG_LOG_VERBOSE("[prepareResources] START frame=%llu commands=%zu", frame_index_ + 1, commands.commands.size());
 
-    // ========== 优化：批量收集所有 glyph，按 atlas tier 分组后一次性上传 ==========
-    //
-    // 之前的实现为每个 glyph 单独调用 addGlyph()，导致每个 glyph 都有一次 GPU sync。
-    // 新实现：
-    // 1. 遍历所有 DrawText 命令，收集需要添加的 glyph 请求
-    // 2. 按 atlas tier 分组
-    // 3. 每个 tier 调用 addGlyphsBatched() 一次性处理
-    //
+    // ========== 批量收集所有 glyph，按 atlas tier 分组后一次性上传 ==========
 
     // 按 tier (bitmap_px) -> glyph requests 分组
     std::unordered_map<uint32_t, std::vector<GlyphAtlas::GlyphRequest>> tier_requests;
@@ -67,7 +65,6 @@ void GPUDriverSDL::prepareResources(const GPUCommandList& commands) {
         if (!font_path || font_path->empty()) {
             continue;
         }
-
 
         // 选择合适的 glyph atlas tier
         float font_size = cmd.font_size > 0.0f ? cmd.font_size : 16.0f;
@@ -131,7 +128,7 @@ void GPUDriverSDL::prepareResources(const GPUCommandList& commands) {
     DONG_LOG_DEBUG("[prepareResources] END frame=%llu", frame_index_ + 1);
 }
 
-bool GPUDriverSDL::ensureImageInAtlas(const std::string& src, ImageAtlasEntry& out_entry) {
+bool SDLGPUDriver::ensureImageInAtlas(const std::string& src, ImageAtlasEntry& out_entry) {
     if (!gpu_device_ || !gpu_device_->isInitialized() || !image_atlas_ || !current_cmd_buf_) {
         return false;
     }
@@ -147,7 +144,7 @@ bool GPUDriverSDL::ensureImageInAtlas(const std::string& src, ImageAtlasEntry& o
     }
 
     if (!image_resource_manager_) {
-        DONG_LOG_ERROR("GPUDriverSDL::ensureImageInAtlas: no image resource manager bound");
+        DONG_LOG_ERROR("SDLGPUDriver::ensureImageInAtlas: no image resource manager bound");
         return false;
     }
 
@@ -156,7 +153,7 @@ bool GPUDriverSDL::ensureImageInAtlas(const std::string& src, ImageAtlasEntry& o
     uint32_t img_w = 0;
     uint32_t img_h = 0;
     if (!image_resource_manager_->getImagePixelsRGBA(src, pixels, img_w, img_h)) {
-        DONG_LOG_ERROR("GPUDriverSDL::ensureImageInAtlas: failed to get pixels for '%s'", src.c_str());
+        DONG_LOG_ERROR("SDLGPUDriver::ensureImageInAtlas: failed to get pixels for '%s'", src.c_str());
         return false;
     }
 
@@ -188,7 +185,7 @@ bool GPUDriverSDL::ensureImageInAtlas(const std::string& src, ImageAtlasEntry& o
         new_w = std::max(1u, new_w);
         new_h = std::max(1u, new_h);
 
-        DONG_LOG_INFO("GPUDriverSDL::ensureImageInAtlas: downscaling '%s' from %ux%u to %ux%u to fit atlas",
+        DONG_LOG_INFO("SDLGPUDriver::ensureImageInAtlas: downscaling '%s' from %ux%u to %ux%u to fit atlas",
                 src.c_str(), src_w, src_h, new_w, new_h);
 
         std::vector<uint8_t> scaled;
@@ -216,7 +213,7 @@ bool GPUDriverSDL::ensureImageInAtlas(const std::string& src, ImageAtlasEntry& o
     DongAtlasEntry atlas_entry = {0};
     DongAtlasResult result = dong_atlas_alloc(image_atlas_, img_w, img_h, &atlas_entry);
     if (result != DONG_ATLAS_OK) {
-        DONG_LOG_ERROR("GPUDriverSDL::ensureImageInAtlas: atlas allocation failed for '%s' (%ux%u), error=%d",
+        DONG_LOG_ERROR("SDLGPUDriver::ensureImageInAtlas: atlas allocation failed for '%s' (%ux%u), error=%d",
                 src.c_str(), img_w, img_h, (int)result);
         return false;
     }
@@ -225,27 +222,24 @@ bool GPUDriverSDL::ensureImageInAtlas(const std::string& src, ImageAtlasEntry& o
     // If atlas uses compressed format, encode the image first
     const void* upload_data = pixels.data();
     size_t upload_size = pixels.size();
-    std::vector<uint8_t> compressed_data;  // Holds encoded data if compression is used
+    std::vector<uint8_t> compressed_data;
 
     DongImageFormat atlas_format = image_atlas_->config.format;
     if (dong_image_format_is_compressed(atlas_format)) {
-        // Get ImageDecoder from platform
         DongPlatform* platform = dong_platform_get();
         DongImageDecoder* encoder = dong_platform_get_image_decoder(platform);
 
         if (!encoder) {
-            DONG_LOG_ERROR("GPUDriverSDL::ensureImageInAtlas: no image encoder available for compression");
+            DONG_LOG_ERROR("SDLGPUDriver::ensureImageInAtlas: no image encoder available for compression");
             return false;
         }
 
-        // Check if encoding is supported
         if (!dong_image_can_encode(encoder, DONG_IMAGE_FORMAT_RGBA8, atlas_format)) {
-            DONG_LOG_ERROR("GPUDriverSDL::ensureImageInAtlas: encoding from RGBA8 to %s not supported",
+            DONG_LOG_ERROR("SDLGPUDriver::ensureImageInAtlas: encoding from RGBA8 to %s not supported",
                     dong_image_format_name(atlas_format));
             return false;
         }
 
-        // Prepare source image
         DongDecodedImage src_img = {0};
         src_img.data = const_cast<void*>(static_cast<const void*>(pixels.data()));
         src_img.data_size = pixels.size();
@@ -255,35 +249,31 @@ bool GPUDriverSDL::ensureImageInAtlas(const std::string& src, ImageAtlasEntry& o
         src_img.format = DONG_IMAGE_FORMAT_RGBA8;
         src_img.mip_levels = 1;
 
-        // Encode to compressed format
         DongDecodedImage encoded_img = {0};
         DongEncodeOptions encode_opts = dong_encode_options_default();
 
         DongImageDecoderResult encode_result = dong_image_encode(encoder, &src_img, atlas_format, &encode_opts, &encoded_img);
         if (encode_result != DONG_IMAGE_OK) {
-            DONG_LOG_ERROR("GPUDriverSDL::ensureImageInAtlas: encoding to %s failed for '%s', error=%d",
+            DONG_LOG_ERROR("SDLGPUDriver::ensureImageInAtlas: encoding to %s failed for '%s', error=%d",
                     dong_image_format_name(atlas_format), src.c_str(), (int)encode_result);
             return false;
         }
 
-        // Copy encoded data to our buffer (so we can free the encoder's allocation)
         compressed_data.resize(encoded_img.data_size);
         std::memcpy(compressed_data.data(), encoded_img.data, encoded_img.data_size);
-
-        // Free encoder's allocation
         dong_image_free(encoder, &encoded_img);
 
         upload_data = compressed_data.data();
         upload_size = compressed_data.size();
 
-        DONG_LOG_DEBUG("GPUDriverSDL::ensureImageInAtlas: compressed '%s' from %zu to %zu bytes (%s)",
+        DONG_LOG_DEBUG("SDLGPUDriver::ensureImageInAtlas: compressed '%s' from %zu to %zu bytes (%s)",
                 src.c_str(), pixels.size(), upload_size, dong_image_format_name(atlas_format));
     }
 
     // Upload pixel data to atlas
     result = dong_atlas_upload(image_atlas_, &atlas_entry, upload_data, upload_size);
     if (result != DONG_ATLAS_OK) {
-        DONG_LOG_ERROR("GPUDriverSDL::ensureImageInAtlas: atlas upload failed for '%s', error=%d",
+        DONG_LOG_ERROR("SDLGPUDriver::ensureImageInAtlas: atlas upload failed for '%s', error=%d",
                 src.c_str(), (int)result);
         return false;
     }
@@ -302,4 +292,64 @@ bool GPUDriverSDL::ensureImageInAtlas(const std::string& src, ImageAtlasEntry& o
     return true;
 }
 
-} // namespace dong::render
+void SDLGPUDriver::reapUploadBuffers(SDL_GPUDevice* dev) {
+    if (!dev) return;
+
+    // Move any finished frame upload buffers back to the free list.
+    for (size_t i = 0; i < pending_upload_buffers_.size();) {
+        PendingUploadBuffers& p = pending_upload_buffers_[i];
+        if (!p.fence) {
+            for (auto& b : p.buffers) {
+                if (b.buf) free_upload_buffers_.push_back(b);
+            }
+            pending_upload_buffers_.erase(pending_upload_buffers_.begin() + (ptrdiff_t)i);
+            continue;
+        }
+
+        if (SDL_QueryGPUFence(dev, static_cast<SDL_GPUFence*>(p.fence))) {
+            for (auto& b : p.buffers) {
+                if (b.buf) free_upload_buffers_.push_back(b);
+            }
+            SDL_ReleaseGPUFence(dev, static_cast<SDL_GPUFence*>(p.fence));
+            pending_upload_buffers_.erase(pending_upload_buffers_.begin() + (ptrdiff_t)i);
+            continue;
+        }
+
+        ++i;
+    }
+}
+
+SDLGPUDriver::UploadBuffer SDLGPUDriver::acquireUploadBuffer(SDL_GPUDevice* dev, uint32_t size) {
+    UploadBuffer out;
+    if (!dev || size == 0) return out;
+
+    // Best-fit from free list.
+    size_t best = (size_t)-1;
+    uint32_t best_size = 0;
+    for (size_t i = 0; i < free_upload_buffers_.size(); ++i) {
+        const UploadBuffer& b = free_upload_buffers_[i];
+        if (!b.buf || b.size < size) continue;
+        if (best == (size_t)-1 || b.size < best_size) {
+            best = i;
+            best_size = b.size;
+            if (best_size == size) break;
+        }
+    }
+
+    if (best != (size_t)-1) {
+        out = free_upload_buffers_[best];
+        free_upload_buffers_.erase(free_upload_buffers_.begin() + (ptrdiff_t)best);
+        return out;
+    }
+
+    SDL_GPUTransferBufferCreateInfo transfer_info{};
+    transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+    transfer_info.size = size;
+
+    out.buf = SDL_CreateGPUTransferBuffer(dev, &transfer_info);
+    out.size = out.buf ? size : 0;
+    return out;
+}
+
+} // namespace render
+} // namespace dong

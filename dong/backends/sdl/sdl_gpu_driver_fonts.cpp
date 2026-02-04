@@ -1,17 +1,21 @@
-#include "../gpu_driver_sdl.hpp"
+// =============================================================================
+// SDL GPU Driver - Font/Glyph Management (Phase 2B)
+// =============================================================================
+// Migrated from: src/render/sdl_render/gpu_driver_sdl_fonts.cpp
+// =============================================================================
 
+#include "sdl_gpu_driver.hpp"
 
-
-#include "../../core/log.h"
+#include "../../src/core/log.h"
 
 #include <algorithm>
 #include <cmath>
 #include <limits>
 
+namespace dong {
+namespace render {
 
-namespace dong::render {
-
-GPUDriverSDL::GlyphAtlasTier* GPUDriverSDL::selectGlyphAtlasTier(float font_size) {
+SDLGPUDriver::GlyphAtlasTier* SDLGPUDriver::selectGlyphAtlasTier(float font_size) {
     if (glyph_atlas_tiers_.empty()) {
         return nullptr;
     }
@@ -64,20 +68,10 @@ GPUDriverSDL::GlyphAtlasTier* GPUDriverSDL::selectGlyphAtlasTier(float font_size
         best = &glyph_atlas_tiers_.front();
     }
 
-    // DEBUG: 每100帧输出一次tier选择统计
-    //static int frame_count = 0;
-    //static bool first_log = true;
-    // if (first_log || frame_count % 100 == 0) {
-    //     SDL_Log("[TIER SELECT] font_size=%.1fpx -> tier=%upx (target=%upx)",
-    //             font_size, best->bitmap_px, target_tier_px);
-    //     first_log = false;
-    // }
-    //++frame_count;
-
     return best;
 }
 
-FT_Face GPUDriverSDL::getOrCreateFace(const std::string& font_path, uint32_t pixel_size) {
+FT_Face SDLGPUDriver::getOrCreateFace(const std::string& font_path, uint32_t pixel_size) {
     if (!ft_library_ || font_path.empty()) {
         return nullptr;
     }
@@ -85,7 +79,7 @@ FT_Face GPUDriverSDL::getOrCreateFace(const std::string& font_path, uint32_t pix
     if (it == ft_face_cache_.end()) {
         FT_Face face = nullptr;
         if (FT_New_Face(ft_library_, font_path.c_str(), 0, &face) != 0) {
-            DONG_LOG_ERROR("GPUDriverSDL: failed to load font face '%s'", font_path.c_str());
+            DONG_LOG_ERROR("SDLGPUDriver: failed to load font face '%s'", font_path.c_str());
             return nullptr;
         }
         ft_face_cache_[font_path] = face;
@@ -98,4 +92,5 @@ FT_Face GPUDriverSDL::getOrCreateFace(const std::string& font_path, uint32_t pix
     return face;
 }
 
-} // namespace dong::render
+} // namespace render
+} // namespace dong
