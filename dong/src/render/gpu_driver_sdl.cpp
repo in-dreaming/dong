@@ -6,7 +6,6 @@
 #include "font_resolver.hpp"
 #include "../core/log.h"
 #include "../core/profiler.h"
-#include <SDL3/SDL_log.h>
 #include <SDL3/SDL_video.h>
 #include <vector>
 #include <algorithm>
@@ -236,7 +235,7 @@ void GPUDriverSDL::beginFrame() {
         return;
     }
     if (!gpu_device_ || !gpu_device_->isInitialized()) {
-        SDL_Log("GPUDriverSDL::beginFrame: device not initialized");
+        DONG_LOG_ERROR("GPUDriverSDL::beginFrame: device not initialized");
         return;
     }
 
@@ -247,7 +246,7 @@ void GPUDriverSDL::beginFrame() {
 
     current_cmd_buf_ = gpu_device_->acquireCommandBuffer();
     if (!current_cmd_buf_) {
-        SDL_Log("GPUDriverSDL::beginFrame: failed to acquire command buffer");
+        DONG_LOG_ERROR("GPUDriverSDL::beginFrame: failed to acquire command buffer");
         return;
     }
 
@@ -260,7 +259,7 @@ void GPUDriverSDL::beginFrame() {
     }
 
     if (debug_rt_enabled_) {
-        SDL_Log("[GPUDriverSDL::beginFrame] frame=%llu mode=window", frame_index_);
+        DONG_LOG_DEBUG("[GPUDriverSDL::beginFrame] frame=%llu mode=window", frame_index_);
     }
 }
 
@@ -287,7 +286,7 @@ void GPUDriverSDL::endFrame() {
             frame_upload_buffers_.clear();
         } else {
             // Fallback: fence not available. Submit and wait for GPU idle, then safely recycle buffers.
-            SDL_Log("GPUDriverSDL::endFrame: SDL_SubmitGPUCommandBufferAndAcquireFence failed: %s", SDL_GetError());
+            DONG_LOG_ERROR("GPUDriverSDL::endFrame: SDL_SubmitGPUCommandBufferAndAcquireFence failed: %s", SDL_GetError());
             gpu_device_->submitCommandBuffer(current_cmd_buf_);
             gpu_device_->waitForGPU();
             for (auto& b : frame_upload_buffers_) {
@@ -417,7 +416,7 @@ bool GPUDriverSDL::updateExternalImageRGBA(const std::string& key,
 
         ex.texture = SDL_CreateGPUTexture(dev, &tex_info);
         if (!ex.texture) {
-            SDL_Log("GPUDriverSDL::updateExternalImageRGBA: failed to create texture: %s", SDL_GetError());
+            DONG_LOG_ERROR("GPUDriverSDL::updateExternalImageRGBA: failed to create texture: %s", SDL_GetError());
             external_images_.erase(key);
             return false;
         }
@@ -430,13 +429,13 @@ bool GPUDriverSDL::updateExternalImageRGBA(const std::string& key,
 
     UploadBuffer upload = acquireUploadBuffer(dev, upload_size);
     if (!upload.buf) {
-        SDL_Log("GPUDriverSDL::updateExternalImageRGBA: failed to acquire transfer buffer: %s", SDL_GetError());
+        DONG_LOG_ERROR("GPUDriverSDL::updateExternalImageRGBA: failed to acquire transfer buffer: %s", SDL_GetError());
         return false;
     }
 
     void* mapped = SDL_MapGPUTransferBuffer(dev, upload.buf, false);
     if (!mapped) {
-        SDL_Log("GPUDriverSDL::updateExternalImageRGBA: failed to map transfer buffer: %s", SDL_GetError());
+        DONG_LOG_ERROR("GPUDriverSDL::updateExternalImageRGBA: failed to map transfer buffer: %s", SDL_GetError());
         SDL_ReleaseGPUTransferBuffer(dev, upload.buf);
         return false;
     }
@@ -460,7 +459,7 @@ bool GPUDriverSDL::updateExternalImageRGBA(const std::string& key,
 
     SDL_GPUCopyPass* copy_pass = SDL_BeginGPUCopyPass(current_cmd_buf_);
     if (!copy_pass) {
-        SDL_Log("GPUDriverSDL::updateExternalImageRGBA: failed to begin copy pass: %s", SDL_GetError());
+        DONG_LOG_ERROR("GPUDriverSDL::updateExternalImageRGBA: failed to begin copy pass: %s", SDL_GetError());
         // No GPU work queued; safe to reuse this buffer.
         free_upload_buffers_.push_back(upload);
         return false;
@@ -550,7 +549,7 @@ bool GPUDriverSDL::updateExternalImageYUV420P(const std::string& key,
 
         tex = SDL_CreateGPUTexture(dev, &tex_info);
         if (!tex) {
-            SDL_Log("GPUDriverSDL::updateExternalImageYUV420P: failed to create plane texture: %s", SDL_GetError());
+            DONG_LOG_ERROR("GPUDriverSDL::updateExternalImageYUV420P: failed to create plane texture: %s", SDL_GetError());
             return false;
         }
         return true;
@@ -589,13 +588,13 @@ bool GPUDriverSDL::updateExternalImageYUV420P(const std::string& key,
 
     UploadBuffer upload = acquireUploadBuffer(dev, upload_size);
     if (!upload.buf) {
-        SDL_Log("GPUDriverSDL::updateExternalImageYUV420P: failed to acquire transfer buffer: %s", SDL_GetError());
+        DONG_LOG_ERROR("GPUDriverSDL::updateExternalImageYUV420P: failed to acquire transfer buffer: %s", SDL_GetError());
         return false;
     }
 
     void* mapped = SDL_MapGPUTransferBuffer(dev, upload.buf, false);
     if (!mapped) {
-        SDL_Log("GPUDriverSDL::updateExternalImageYUV420P: failed to map transfer buffer: %s", SDL_GetError());
+        DONG_LOG_ERROR("GPUDriverSDL::updateExternalImageYUV420P: failed to map transfer buffer: %s", SDL_GetError());
         SDL_ReleaseGPUTransferBuffer(dev, upload.buf);
         return false;
     }
@@ -622,7 +621,7 @@ bool GPUDriverSDL::updateExternalImageYUV420P(const std::string& key,
 
     SDL_GPUCopyPass* copy_pass = SDL_BeginGPUCopyPass(current_cmd_buf_);
     if (!copy_pass) {
-        SDL_Log("GPUDriverSDL::updateExternalImageYUV420P: failed to begin copy pass: %s", SDL_GetError());
+        DONG_LOG_ERROR("GPUDriverSDL::updateExternalImageYUV420P: failed to begin copy pass: %s", SDL_GetError());
         free_upload_buffers_.push_back(upload);
         return false;
     }

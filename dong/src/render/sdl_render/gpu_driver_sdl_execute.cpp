@@ -7,7 +7,6 @@
 #include "../../core/log.h"
 #include "../../core/profiler.h"
 
-#include <SDL3/SDL_log.h>
 #include <SDL3/SDL_video.h>
 
 // ImageAtlas
@@ -282,7 +281,7 @@ struct GPUDriverSDL::ExecuteContext {
         scissor = intersect_rect(scissor, target_bounds);
 
         if (debug_rt_enabled) {
-            SDL_Log("[apply_scissor] origin=(%.1f,%.1f) scissor: x=%d y=%d w=%d h=%d",
+            DONG_LOG_DEBUG("[apply_scissor] origin=(%.1f,%.1f) scissor: x=%d y=%d w=%d h=%d",
                     ox_f, oy_f, scissor.x, scissor.y, scissor.w, scissor.h);
         }
 
@@ -339,11 +338,11 @@ struct GPUDriverSDL::ExecuteContext {
             return;
         }
         if (render_target_stack.empty()) {
-            SDL_Log("%s frame=%llu rt_depth=0 (swapchain=%p)", prefix, frame_index, (void*)swapchain_texture);
+            DONG_LOG_DEBUG("%s frame=%llu rt_depth=0 (swapchain=%p)", prefix, frame_index, (void*)swapchain_texture);
             return;
         }
         const RenderTargetState& top = render_target_stack.back();
-        SDL_Log("%s frame=%llu rt_depth=%zu top_rt=%p size=%ux%u is_swapchain=%d",
+        DONG_LOG_DEBUG("%s frame=%llu rt_depth=%zu top_rt=%p size=%ux%u is_swapchain=%d",
                 prefix,
                 frame_index,
                 render_target_stack.size(),
@@ -356,7 +355,7 @@ struct GPUDriverSDL::ExecuteContext {
 
 bool GPUDriverSDL::executeSetupMainTarget(ExecuteContext& ctx) {
     if (!ctx.dev) {
-        SDL_Log("GPUDriverSDL::execute: no GPU device");
+        DONG_LOG_ERROR("GPUDriverSDL::execute: no GPU device");
         return false;
     }
 
@@ -371,13 +370,13 @@ bool GPUDriverSDL::executeSetupMainTarget(ExecuteContext& ctx) {
         ctx.w = offscreen_width_;
         ctx.h = offscreen_height_;
         if (ctx.debug_rt_enabled) {
-            SDL_Log("[GPUDriverSDL::execute] frame=%llu mode=offscreen viewport=%ux%u", ctx.frame_index, ctx.w, ctx.h);
+            DONG_LOG_DEBUG("[GPUDriverSDL::execute] frame=%llu mode=offscreen viewport=%ux%u", ctx.frame_index, ctx.w, ctx.h);
         }
         return true;
     }
 
     if (!window_) {
-        SDL_Log("GPUDriverSDL::execute: no window for swapchain rendering");
+        DONG_LOG_ERROR("GPUDriverSDL::execute: no window for swapchain rendering");
         return false;
     }
 
@@ -388,7 +387,7 @@ bool GPUDriverSDL::executeSetupMainTarget(ExecuteContext& ctx) {
     int win_h = 0;
     if (!SDL_GetWindowSizeInPixels(window_, &win_w, &win_h) || win_w <= 0 || win_h <= 0) {
         if (!SDL_GetWindowSize(window_, &win_w, &win_h) || win_w <= 0 || win_h <= 0) {
-            SDL_Log("GPUDriverSDL::execute: failed to query window size");
+            DONG_LOG_ERROR("GPUDriverSDL::execute: failed to query window size");
             return false;
         }
     }
@@ -418,16 +417,16 @@ bool GPUDriverSDL::executeSetupMainTarget(ExecuteContext& ctx) {
 
         intermediate_texture_ = SDL_CreateGPUTexture(ctx.dev, &tex_info);
         if (!intermediate_texture_) {
-            SDL_Log("GPUDriverSDL::execute: failed to create intermediate texture: %s", SDL_GetError());
+            DONG_LOG_ERROR("GPUDriverSDL::execute: failed to create intermediate texture: %s", SDL_GetError());
             // 回退：直接渲染到 swapchain（此路径下不允许 split cmd buf）
             Uint32 w = ctx.w;
             Uint32 h = ctx.h;
             if (!SDL_AcquireGPUSwapchainTexture(ctx.cmd_buf, window_, &ctx.real_swapchain_texture, &w, &h)) {
-                SDL_Log("GPUDriverSDL::execute: failed to acquire swapchain texture (fallback)");
+                DONG_LOG_ERROR("GPUDriverSDL::execute: failed to acquire swapchain texture (fallback)");
                 return false;
             }
             if (!ctx.real_swapchain_texture) {
-                SDL_Log("[GPUDriverSDL::execute] swapchain texture is null (fallback), skipping frame");
+                DONG_LOG_DEBUG("[GPUDriverSDL::execute] swapchain texture is null (fallback), skipping frame");
                 return false;
             }
             ctx.swapchain_texture = ctx.real_swapchain_texture;
@@ -437,7 +436,7 @@ bool GPUDriverSDL::executeSetupMainTarget(ExecuteContext& ctx) {
             ctx.swapchain_texture = intermediate_texture_;
             ctx.use_intermediate = true;
             if (ctx.debug_rt_enabled) {
-                SDL_Log("[GPUDriverSDL::execute] frame=%llu created intermediate texture %p size=%ux%u",
+                DONG_LOG_DEBUG("[GPUDriverSDL::execute] frame=%llu created intermediate texture %p size=%ux%u",
                         ctx.frame_index, (void*)intermediate_texture_, ctx.w, ctx.h);
             }
         }
@@ -447,7 +446,7 @@ bool GPUDriverSDL::executeSetupMainTarget(ExecuteContext& ctx) {
     }
 
     if (ctx.debug_rt_enabled) {
-        SDL_Log("[GPUDriverSDL::execute] frame=%llu mode=window viewport=%ux%u swapchain=%p intermediate=%p use_intermediate=%d",
+        DONG_LOG_DEBUG("[GPUDriverSDL::execute] frame=%llu mode=window viewport=%ux%u swapchain=%p intermediate=%p use_intermediate=%d",
                 ctx.frame_index, ctx.w, ctx.h, (void*)ctx.real_swapchain_texture, (void*)intermediate_texture_, ctx.use_intermediate ? 1 : 0);
     }
 
@@ -490,7 +489,7 @@ void GPUDriverSDL::executeBeginPass(ExecuteContext& ctx) {
     ctx.render_target_stack.push_back(RenderTargetState{ctx.swapchain_texture, ctx.w, ctx.h, offscreen_target_ == nullptr, 0.0f, 0.0f});
 
     if (ctx.debug_rt_enabled) {
-        SDL_Log("[GPUDriverSDL::execute] BeginPass frame=%llu swapchain_texture=%p offscreen_target_=%p is_offscreen=%d viewport=%ux%u",
+        DONG_LOG_DEBUG("[GPUDriverSDL::execute] BeginPass frame=%llu swapchain_texture=%p offscreen_target_=%p is_offscreen=%d viewport=%ux%u",
                 ctx.frame_index, (void*)ctx.swapchain_texture, (void*)offscreen_target_, offscreen_target_ != nullptr ? 1 : 0, ctx.w, ctx.h);
     }
 
@@ -515,7 +514,7 @@ void GPUDriverSDL::executeBeginPass(ExecuteContext& ctx) {
 
     ctx.pass = SDL_BeginGPURenderPass(ctx.cmd_buf, &ctx.color_target, 1, nullptr);
     if (!ctx.pass) {
-        SDL_Log("GPUDriverSDL::execute: failed to begin render pass: %s", SDL_GetError());
+        DONG_LOG_ERROR("GPUDriverSDL::execute: failed to begin render pass: %s", SDL_GetError());
         ctx.aborted = true;
         return;
     }
@@ -535,7 +534,7 @@ void GPUDriverSDL::executeBeginPass(ExecuteContext& ctx) {
 
 void GPUDriverSDL::executeEndPass(ExecuteContext& ctx) {
     if (ctx.debug_rt_enabled) {
-        SDL_Log("[GPUDriverSDL::execute] frame=%llu EndPass: pass=%p offscreen=%d use_intermediate=%d",
+        DONG_LOG_DEBUG("[GPUDriverSDL::execute] frame=%llu EndPass: pass=%p offscreen=%d use_intermediate=%d",
                 ctx.frame_index, (void*)ctx.pass, offscreen_target_ != nullptr ? 1 : 0, ctx.use_intermediate ? 1 : 0);
     }
 
@@ -560,13 +559,13 @@ void GPUDriverSDL::executeEndPass(ExecuteContext& ctx) {
             if (!kSwapchainNowait) {
                 DONG_PROFILE_SCOPE_CAT("SDL_WaitAndAcquireGPUSwapchainTexture", "gpu");
                 if (!SDL_WaitAndAcquireGPUSwapchainTexture(ctx.cmd_buf, window_, &ctx.real_swapchain_texture, &sw, &sh)) {
-                    SDL_Log("GPUDriverSDL::execute: failed to wait+acquire swapchain texture at EndPass");
+                    DONG_LOG_ERROR("GPUDriverSDL::execute: failed to wait+acquire swapchain texture at EndPass");
                     return;
                 }
             } else {
                 DONG_PROFILE_SCOPE_CAT("SDL_AcquireGPUSwapchainTexture", "gpu");
                 if (!SDL_AcquireGPUSwapchainTexture(ctx.cmd_buf, window_, &ctx.real_swapchain_texture, &sw, &sh)) {
-                    SDL_Log("GPUDriverSDL::execute: failed to acquire swapchain texture at EndPass");
+                    DONG_LOG_ERROR("GPUDriverSDL::execute: failed to acquire swapchain texture at EndPass");
                     return;
                 }
             }
@@ -586,7 +585,7 @@ void GPUDriverSDL::executeEndPass(ExecuteContext& ctx) {
         }
 
         if (ctx.debug_rt_enabled) {
-            SDL_Log("[GPUDriverSDL::execute] frame=%llu EndPass: blit intermediate=%p to swapchain=%p",
+            DONG_LOG_DEBUG("[GPUDriverSDL::execute] frame=%llu EndPass: blit intermediate=%p to swapchain=%p",
                     ctx.frame_index, (void*)intermediate_texture_, (void*)ctx.real_swapchain_texture);
         }
 
@@ -603,7 +602,7 @@ void GPUDriverSDL::executeEndPass(ExecuteContext& ctx) {
         }
 
         if (ctx.debug_rt_enabled && (src_w != dst_w || src_h != dst_h)) {
-            SDL_Log("[GPUDriverSDL::execute] EndPass: blit scale src=%ux%u dst=%ux%u", src_w, src_h, dst_w, dst_h);
+            DONG_LOG_DEBUG("[GPUDriverSDL::execute] EndPass: blit scale src=%ux%u dst=%ux%u", src_w, src_h, dst_w, dst_h);
         }
 
         SDL_GPUBlitInfo blit_info{};
@@ -662,12 +661,12 @@ void GPUDriverSDL::executePopClip(ExecuteContext& ctx) {
 
 void GPUDriverSDL::executeBeginIsolatedLayer(ExecuteContext& ctx, const GPUCommand& cmd) {
     if (ctx.render_target_stack.empty()) {
-        SDL_Log("GPUDriverSDL::execute: BeginIsolatedLayer without active render target");
+        DONG_LOG_ERROR("GPUDriverSDL::execute: BeginIsolatedLayer without active render target");
         return;
     }
 
     if (ctx.debug_rt_enabled) {
-        SDL_Log("[GPUDriverSDL::execute] BeginIsolatedLayer frame=%llu layer_id=%llu layer_dirty=%d skip_depth=%d",
+        DONG_LOG_DEBUG("[GPUDriverSDL::execute] BeginIsolatedLayer frame=%llu layer_id=%llu layer_dirty=%d skip_depth=%d",
                 ctx.frame_index,
                 static_cast<unsigned long long>(cmd.layer_id),
                 cmd.layer_dirty ? 1 : 0,
@@ -676,7 +675,7 @@ void GPUDriverSDL::executeBeginIsolatedLayer(ExecuteContext& ctx, const GPUComma
     }
 
     if (!ctx.dev) {
-        SDL_Log("GPUDriverSDL::execute: no GPU device for isolated layer");
+        DONG_LOG_ERROR("GPUDriverSDL::execute: no GPU device for isolated layer");
         return;
     }
 
@@ -724,7 +723,7 @@ void GPUDriverSDL::executeBeginIsolatedLayer(ExecuteContext& ctx, const GPUComma
     if (ctx.layer_cache_enabled && !layer_dirty && cache_entry && cache_entry->texture) {
         if (ctx.debug_log_layer_cache) {
             ++ctx.debug_layer_cache_reused;
-            SDL_Log("[GPUDriverSDL layer-cache] frame=%llu reuse layer id=%llu size=%ux%u bounds=(%.1f,%.1f,%.1f,%.1f)",
+            DONG_LOG_DEBUG("[GPUDriverSDL layer-cache] frame=%llu reuse layer id=%llu size=%ux%u bounds=(%.1f,%.1f,%.1f,%.1f)",
                     ctx.frame_index,
                     static_cast<unsigned long long>(layer_id),
                     static_cast<unsigned int>(cache_entry->width),
@@ -816,7 +815,7 @@ void GPUDriverSDL::executeBeginIsolatedLayer(ExecuteContext& ctx, const GPUComma
             gpu_device_->submitCommandBuffer(ctx.cmd_buf);
             ctx.cmd_buf = gpu_device_->acquireCommandBuffer();
             if (!ctx.cmd_buf) {
-                SDL_Log("GPUDriverSDL::execute: failed to acquire command buffer after split");
+                DONG_LOG_ERROR("GPUDriverSDL::execute: failed to acquire command buffer after split");
                 ctx.aborted = true;
                 return;
             }
@@ -852,7 +851,7 @@ void GPUDriverSDL::executeBeginIsolatedLayer(ExecuteContext& ctx, const GPUComma
                     tex_info.sample_count = SDL_GPU_SAMPLECOUNT_1;
                     entry.texture = SDL_CreateGPUTexture(ctx.dev, &tex_info);
                     if (!entry.texture) {
-                        SDL_Log("GPUDriverSDL::execute: failed to recreate layer texture: %s", SDL_GetError());
+                        DONG_LOG_ERROR("GPUDriverSDL::execute: failed to recreate layer texture: %s", SDL_GetError());
                         break;
                     }
                 }
@@ -895,7 +894,7 @@ void GPUDriverSDL::executeBeginIsolatedLayer(ExecuteContext& ctx, const GPUComma
 
         layer_texture = SDL_CreateGPUTexture(ctx.dev, &tex_info);
         if (!layer_texture) {
-            SDL_Log("GPUDriverSDL::execute: failed to create layer texture: %s", SDL_GetError());
+            DONG_LOG_ERROR("GPUDriverSDL::execute: failed to create layer texture: %s", SDL_GetError());
             return;
         }
 
@@ -912,7 +911,7 @@ void GPUDriverSDL::executeBeginIsolatedLayer(ExecuteContext& ctx, const GPUComma
 
     if (ctx.debug_log_layer_cache) {
         ++ctx.debug_layer_cache_rasterized;
-        SDL_Log("[GPUDriverSDL layer-cache] frame=%llu rasterize layer id=%llu size=%ux%u bounds=(%.1f,%.1f,%.1f,%.1f)",
+        DONG_LOG_DEBUG("[GPUDriverSDL layer-cache] frame=%llu rasterize layer id=%llu size=%ux%u bounds=(%.1f,%.1f,%.1f,%.1f)",
                 ctx.frame_index,
                 static_cast<unsigned long long>(layer_id),
                 static_cast<unsigned int>(target_w),
@@ -935,7 +934,7 @@ void GPUDriverSDL::executeBeginIsolatedLayer(ExecuteContext& ctx, const GPUComma
 
     ctx.pass = SDL_BeginGPURenderPass(ctx.cmd_buf, &layer_target, 1, nullptr);
     if (!ctx.pass) {
-        SDL_Log("GPUDriverSDL::execute: failed to begin layer pass: %s", SDL_GetError());
+        DONG_LOG_ERROR("GPUDriverSDL::execute: failed to begin layer pass: %s", SDL_GetError());
         SDL_ReleaseGPUTexture(ctx.dev, layer_texture);
         ctx.render_target_stack.pop_back();
         if (cache_entry) {
@@ -968,7 +967,7 @@ void GPUDriverSDL::executeBeginIsolatedLayer(ExecuteContext& ctx, const GPUComma
 
 void GPUDriverSDL::executeEndIsolatedLayer(ExecuteContext& ctx, const GPUCommand&) {
     if (ctx.isolated_layer_stack.empty()) {
-        SDL_Log("GPUDriverSDL::execute: EndIsolatedLayer without matching layer");
+        DONG_LOG_ERROR("GPUDriverSDL::execute: EndIsolatedLayer without matching layer");
         return;
     }
 
@@ -1047,7 +1046,7 @@ void GPUDriverSDL::executeEndIsolatedLayer(ExecuteContext& ctx, const GPUCommand
 
     // 脏图层：结束子 pass 并合成到父 render target
     if (ctx.render_target_stack.size() <= 1) {
-        SDL_Log("GPUDriverSDL::execute: EndIsolatedLayer without matching layer render target");
+        DONG_LOG_ERROR("GPUDriverSDL::execute: EndIsolatedLayer without matching layer render target");
         return;
     }
 
@@ -1064,7 +1063,7 @@ void GPUDriverSDL::executeEndIsolatedLayer(ExecuteContext& ctx, const GPUCommand
             gpu_device_->submitCommandBuffer(ctx.cmd_buf);
             ctx.cmd_buf = gpu_device_->acquireCommandBuffer();
             if (!ctx.cmd_buf) {
-                SDL_Log("GPUDriverSDL::execute: failed to acquire command buffer after split");
+                DONG_LOG_ERROR("GPUDriverSDL::execute: failed to acquire command buffer after split");
                 ctx.aborted = true;
                 return;
             }
@@ -1079,7 +1078,7 @@ void GPUDriverSDL::executeEndIsolatedLayer(ExecuteContext& ctx, const GPUCommand
     RenderTargetState& parent_target = ctx.render_target_stack.back();
 
     if (ctx.debug_rt_enabled) {
-        SDL_Log("[GPUDriverSDL::execute] EndIsolatedLayer frame=%llu layer_id=%llu dirty=%d compositing child_rt=%p -> parent_rt=%p",
+        DONG_LOG_DEBUG("[GPUDriverSDL::execute] EndIsolatedLayer frame=%llu layer_id=%llu dirty=%d compositing child_rt=%p -> parent_rt=%p",
                 ctx.frame_index,
                 static_cast<unsigned long long>(layer_info.id),
                 layer_info.dirty ? 1 : 0,
@@ -1097,7 +1096,7 @@ void GPUDriverSDL::executeEndIsolatedLayer(ExecuteContext& ctx, const GPUCommand
 
     ctx.pass = SDL_BeginGPURenderPass(ctx.cmd_buf, &color_target, 1, nullptr);
     if (!ctx.pass) {
-        SDL_Log("GPUDriverSDL::execute: failed to begin parent render pass for EndIsolatedLayer");
+        DONG_LOG_ERROR("GPUDriverSDL::execute: failed to begin parent render pass for EndIsolatedLayer");
         return;
     }
 
@@ -1176,7 +1175,7 @@ void GPUDriverSDL::executeEndIsolatedLayer(ExecuteContext& ctx, const GPUCommand
 
 void GPUDriverSDL::executeDrawRect(ExecuteContext& ctx, const GPUCommand& cmd) {
     if (!ctx.pass || !rect_pipeline_) {
-        SDL_Log("[RECT] SKIP: pass=%p rect_pipeline_=%p", (void*)ctx.pass, (void*)rect_pipeline_);
+        DONG_LOG_DEBUG("[RECT] SKIP: pass=%p rect_pipeline_=%p", (void*)ctx.pass, (void*)rect_pipeline_);
         return;
     }
 
@@ -1216,7 +1215,7 @@ void GPUDriverSDL::executeDrawRoundedRect(ExecuteContext& ctx, const GPUCommand&
                    cmd.rect.x, cmd.rect.y, cmd.rect.width, cmd.rect.height);
 
     if (!ctx.pass || !round_rect_pipeline_) {
-        SDL_Log("[ROUND_RECT] SKIP: pass=%p round_rect_pipeline_=%p", (void*)ctx.pass, (void*)round_rect_pipeline_);
+        DONG_LOG_DEBUG("[ROUND_RECT] SKIP: pass=%p round_rect_pipeline_=%p", (void*)ctx.pass, (void*)round_rect_pipeline_);
         return;
     }
 
@@ -1797,7 +1796,7 @@ void GPUDriverSDL::executeDispatchCommand(const GPUCommand& cmd, ExecuteContext&
         cmd.type != GPUCommandType::BeginPass &&
         cmd.type != GPUCommandType::EndPass) {
         if (ctx.debug_rt_enabled) {
-            SDL_Log("[GPUDriverSDL::execute] frame=%llu skip cmd type=%d due_to_non_dirty_layer depth=%d",
+            DONG_LOG_DEBUG("[GPUDriverSDL::execute] frame=%llu skip cmd type=%d due_to_non_dirty_layer depth=%d",
                     ctx.frame_index,
                     static_cast<int>(cmd.type),
                     ctx.skip_draw_depth);
@@ -1850,9 +1849,9 @@ void GPUDriverSDL::executeDispatchCommand(const GPUCommand& cmd, ExecuteContext&
 
 void GPUDriverSDL::execute(const GPUCommandList& commands) {
     DONG_PROFILE_SCOPE_CAT("GPU::execute", "gpu");
-    
+
     if (!in_frame_ || !current_cmd_buf_ || !gpu_device_) {
-        SDL_Log("GPUDriverSDL::execute: invalid state");
+        DONG_LOG_ERROR("GPUDriverSDL::execute: invalid state");
         return;
     }
 
@@ -1925,7 +1924,7 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
             cmd_index++;
 
             if (ctx.debug_rt_enabled && offscreen_target_) {
-                SDL_Log("[GPUDriverSDL::execute] frame=%llu processing cmd type=%d skip_depth=%d",
+                DONG_LOG_DEBUG("[GPUDriverSDL::execute] frame=%llu processing cmd type=%d skip_depth=%d",
                         ctx.frame_index,
                         static_cast<int>(cmd.type),
                         ctx.skip_draw_depth);
@@ -1940,7 +1939,7 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
 
 
     if (ctx.debug_log_layer_cache && (ctx.debug_layer_cache_rasterized > 0 || ctx.debug_layer_cache_reused > 0)) {
-        SDL_Log("[GPUDriverSDL layer-cache] frame=%llu summary: rasterize=%u, reuse=%u",
+        DONG_LOG_DEBUG("[GPUDriverSDL layer-cache] frame=%llu summary: rasterize=%u, reuse=%u",
                 ctx.frame_index,
                 static_cast<unsigned int>(ctx.debug_layer_cache_rasterized),
                 static_cast<unsigned int>(ctx.debug_layer_cache_reused));
@@ -1949,7 +1948,7 @@ void GPUDriverSDL::execute(const GPUCommandList& commands) {
     if (ctx.debug_log_draw_batches && !commands.draw_batches.empty()) {
         for (size_t i = 0; i < commands.draw_batches.size(); ++i) {
             const DrawBatchRange& batch = commands.draw_batches[i];
-            SDL_Log("[GPUDriverSDL debug] draw batch %zu: type=%d, sort_key=0x%llx, count=%u, start=%u",
+            DONG_LOG_DEBUG("[GPUDriverSDL debug] draw batch %zu: type=%d, sort_key=0x%llx, count=%u, start=%u",
                     i,
                     static_cast<int>(batch.type),
                     static_cast<unsigned long long>(batch.sort_key),

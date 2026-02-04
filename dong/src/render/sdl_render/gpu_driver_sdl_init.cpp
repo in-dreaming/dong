@@ -7,7 +7,6 @@
 #include "../font_resolver.hpp"
 #include "../../core/log.h"
 
-#include <SDL3/SDL_log.h>
 #include <SDL3/SDL_video.h>
 
 // ImageAtlas for GPU texture management
@@ -26,7 +25,7 @@ namespace dong::render {
 
 bool GPUDriverSDL::initialize() {
     if (!gpu_device_ || !gpu_device_->isInitialized() || !window_ || !shader_manager_) {
-        SDL_Log("GPUDriverSDL::initialize: invalid device, window, or shader manager");
+        DONG_LOG_ERROR("GPUDriverSDL::initialize: invalid device, window, or shader manager");
         return false;
     }
 
@@ -35,7 +34,7 @@ bool GPUDriverSDL::initialize() {
     // 获取 swapchain 的实际格式，用于创建兼容的 pipeline
     // Windows D3D12/Vulkan 通常使用 B8G8R8A8，macOS Metal 使用 BGRA8 或 RGBA8
     SDL_GPUTextureFormat swapchain_format = SDL_GetGPUSwapchainTextureFormat(dev, window_);
-    SDL_Log("GPUDriverSDL::initialize: swapchain format = %d", swapchain_format);
+    DONG_LOG_INFO("GPUDriverSDL::initialize: swapchain format = %d", swapchain_format);
 
     // 对于离屏渲染，我们使用 R8G8B8A8_UNORM，因为它是最通用的格式
     // 但对于 swapchain 渲染，需要使用 swapchain 的实际格式
@@ -74,7 +73,7 @@ bool GPUDriverSDL::initialize() {
 
 
     if (!rect_vs_ || !rect_fs_) {
-        SDL_Log("GPUDriverSDL::initialize: failed to compile rect shaders");
+        DONG_LOG_ERROR("GPUDriverSDL::initialize: failed to compile rect shaders");
         return false;
     }
 
@@ -106,7 +105,7 @@ bool GPUDriverSDL::initialize() {
 
     rect_pipeline_ = SDL_CreateGPUGraphicsPipeline(dev, &pci);
     if (!rect_pipeline_) {
-        SDL_Log("GPUDriverSDL::initialize: failed to create rect pipeline: %s", SDL_GetError());
+        DONG_LOG_ERROR("GPUDriverSDL::initialize: failed to create rect pipeline: %s", SDL_GetError());
         return false;
     }
 
@@ -126,7 +125,7 @@ bool GPUDriverSDL::initialize() {
 
 
     if (!round_rect_vs_ || !round_rect_fs_) {
-        SDL_Log("GPUDriverSDL::initialize: failed to compile round-rect shaders");
+        DONG_LOG_ERROR("GPUDriverSDL::initialize: failed to compile round-rect shaders");
         return false;
     }
 
@@ -157,7 +156,7 @@ bool GPUDriverSDL::initialize() {
 
     round_rect_pipeline_ = SDL_CreateGPUGraphicsPipeline(dev, &rrci);
     if (!round_rect_pipeline_) {
-        SDL_Log("GPUDriverSDL::initialize: failed to create round-rect pipeline: %s", SDL_GetError());
+        DONG_LOG_ERROR("GPUDriverSDL::initialize: failed to create round-rect pipeline: %s", SDL_GetError());
         return false;
     }
 
@@ -177,7 +176,7 @@ bool GPUDriverSDL::initialize() {
 
 
     if (!shadow_vs_ || !shadow_fs_) {
-        SDL_Log("GPUDriverSDL::initialize: failed to compile shadow shaders");
+        DONG_LOG_ERROR("GPUDriverSDL::initialize: failed to compile shadow shaders");
         return false;
     }
 
@@ -208,7 +207,7 @@ bool GPUDriverSDL::initialize() {
 
     shadow_pipeline_ = SDL_CreateGPUGraphicsPipeline(dev, &shadow_ci);
     if (!shadow_pipeline_) {
-        SDL_Log("GPUDriverSDL::initialize: failed to create shadow pipeline: %s", SDL_GetError());
+        DONG_LOG_ERROR("GPUDriverSDL::initialize: failed to create shadow pipeline: %s", SDL_GetError());
         return false;
     }
 
@@ -228,7 +227,7 @@ bool GPUDriverSDL::initialize() {
 
 
     if (!image_vs_ || !image_fs_) {
-        SDL_Log("GPUDriverSDL::initialize: failed to compile image shaders");
+        DONG_LOG_ERROR("GPUDriverSDL::initialize: failed to compile image shaders");
         return false;
     }
 
@@ -240,7 +239,7 @@ bool GPUDriverSDL::initialize() {
         "main"
     );
     if (!video_yuv_fs_) {
-        SDL_Log("GPUDriverSDL::initialize: failed to compile video_yuv_fs shader");
+        DONG_LOG_ERROR("GPUDriverSDL::initialize: failed to compile video_yuv_fs shader");
         return false;
     }
 
@@ -271,7 +270,7 @@ bool GPUDriverSDL::initialize() {
 
     image_pipeline_ = SDL_CreateGPUGraphicsPipeline(dev, &ipci);
     if (!image_pipeline_) {
-        SDL_Log("GPUDriverSDL::initialize: failed to create image pipeline: %s", SDL_GetError());
+        DONG_LOG_ERROR("GPUDriverSDL::initialize: failed to create image pipeline: %s", SDL_GetError());
         return false;
     }
 
@@ -280,7 +279,7 @@ bool GPUDriverSDL::initialize() {
     yuv_pci.fragment_shader = video_yuv_fs_;
     video_yuv_pipeline_ = SDL_CreateGPUGraphicsPipeline(dev, &yuv_pci);
     if (!video_yuv_pipeline_) {
-        SDL_Log("GPUDriverSDL::initialize: failed to create video_yuv pipeline: %s", SDL_GetError());
+        DONG_LOG_ERROR("GPUDriverSDL::initialize: failed to create video_yuv pipeline: %s", SDL_GetError());
         return false;
     }
 
@@ -322,16 +321,16 @@ bool GPUDriverSDL::initialize() {
         if (strcmp(atlas_format_env, "BC7") == 0) {
             if (test_format_support(SDL_GPU_TEXTUREFORMAT_BC7_RGBA_UNORM)) {
                 selected_atlas_format = DONG_IMAGE_FORMAT_BC7;
-                SDL_Log("GPUDriverSDL: Using BC7 atlas format (via env)");
+                DONG_LOG_INFO("GPUDriverSDL: Using BC7 atlas format (via env)");
             } else {
-                SDL_Log("GPUDriverSDL: BC7 not supported, falling back to RGBA8");
+                DONG_LOG_WARN("GPUDriverSDL: BC7 not supported, falling back to RGBA8");
             }
         } else if (strcmp(atlas_format_env, "ASTC") == 0) {
             if (test_format_support(SDL_GPU_TEXTUREFORMAT_ASTC_4x4_UNORM)) {
                 selected_atlas_format = DONG_IMAGE_FORMAT_ASTC_4x4;
-                SDL_Log("GPUDriverSDL: Using ASTC 4x4 atlas format (via env)");
+                DONG_LOG_INFO("GPUDriverSDL: Using ASTC 4x4 atlas format (via env)");
             } else {
-                SDL_Log("GPUDriverSDL: ASTC not supported, falling back to RGBA8");
+                DONG_LOG_WARN("GPUDriverSDL: ASTC not supported, falling back to RGBA8");
             }
         }
     }
@@ -353,7 +352,7 @@ bool GPUDriverSDL::initialize() {
 
     image_atlas_ = dong_sdl_image_atlas_create(dev, &atlas_cfg);
     if (!image_atlas_) {
-        SDL_Log("GPUDriverSDL::initialize: failed to create image atlas");
+        DONG_LOG_ERROR("GPUDriverSDL::initialize: failed to create image atlas");
         return false;
     }
 
@@ -367,7 +366,7 @@ bool GPUDriverSDL::initialize() {
 
     image_sampler_ = SDL_CreateGPUSampler(dev, &sampler_info);
     if (!image_sampler_) {
-        SDL_Log("GPUDriverSDL::initialize: failed to create image sampler: %s", SDL_GetError());
+        DONG_LOG_ERROR("GPUDriverSDL::initialize: failed to create image sampler: %s", SDL_GetError());
         dong_atlas_destroy(image_atlas_);
         image_atlas_ = nullptr;
         return false;
@@ -389,7 +388,7 @@ bool GPUDriverSDL::initialize() {
 
 
     if (!text_vs_ || !text_fs_) {
-        SDL_Log("GPUDriverSDL::initialize: failed to compile text shaders");
+        DONG_LOG_ERROR("GPUDriverSDL::initialize: failed to compile text shaders");
         return false;
     }
 
@@ -419,7 +418,7 @@ bool GPUDriverSDL::initialize() {
 
     text_pipeline_ = SDL_CreateGPUGraphicsPipeline(dev, &tpci);
     if (!text_pipeline_) {
-        SDL_Log("GPUDriverSDL::initialize: failed to create text pipeline: %s", SDL_GetError());
+        DONG_LOG_ERROR("GPUDriverSDL::initialize: failed to create text pipeline: %s", SDL_GetError());
         return false;
     }
 
@@ -435,7 +434,7 @@ bool GPUDriverSDL::initialize() {
 
     text_sampler_ = SDL_CreateGPUSampler(dev, &text_sampler_info);
     if (!text_sampler_) {
-        SDL_Log("GPUDriverSDL::initialize: failed to create text sampler: %s", SDL_GetError());
+        DONG_LOG_ERROR("GPUDriverSDL::initialize: failed to create text sampler: %s", SDL_GetError());
         return false;
     }
 
@@ -485,7 +484,7 @@ bool GPUDriverSDL::initialize() {
     for (const auto& cfg : tier_configs) {
         auto atlas = std::make_unique<GlyphAtlas>(gpu_device_);
         if (!atlas->initialize(2048, 2048, cfg.bitmap_px, cfg.distance_range)) {
-            SDL_Log("GPUDriverSDL::initialize: failed to initialize glyph atlas tier %u", cfg.bitmap_px);
+            DONG_LOG_ERROR("GPUDriverSDL::initialize: failed to initialize glyph atlas tier %u", cfg.bitmap_px);
             return false;
         }
         GlyphAtlasTier tier{};
@@ -496,7 +495,7 @@ bool GPUDriverSDL::initialize() {
     }
 
     if (FT_Init_FreeType(&ft_library_) != 0) {
-        SDL_Log("GPUDriverSDL::initialize: failed to initialize FreeType library for caching");
+        DONG_LOG_ERROR("GPUDriverSDL::initialize: failed to initialize FreeType library for caching");
         ft_library_ = nullptr;
         return false;
     }
@@ -505,7 +504,7 @@ bool GPUDriverSDL::initialize() {
     // RenderTarget/图层合成调试日志默认关闭，可通过环境变量 DONG_DEBUG_RT=1 开启
     debug_rt_enabled_ = false;
 
-    SDL_Log("GPUDriverSDL initialized successfully");
+    DONG_LOG_INFO("GPUDriverSDL initialized successfully");
     return true;
 }
 
