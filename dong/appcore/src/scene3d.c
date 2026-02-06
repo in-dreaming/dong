@@ -163,6 +163,10 @@ struct dong_screen3d_t {
     int is_video;
     double next_update_time;
 
+    // Dirty flag for optimization - only re-render when content changes
+    int dirty;
+    int frames_without_update;
+
     char resource_root[MAX_PATH_LEN];
     char debug_name[256];
 };
@@ -454,6 +458,11 @@ DONG_APPCORE_API dong_screen3d_t* dong_scene3d_add_screen(dong_scene3d_t* scene,
         free(screen);
         return NULL;
     }
+
+    // Initialize optimization fields
+    screen->dirty = 1;  // Mark as dirty to ensure first render
+    screen->frames_without_update = 0;
+    screen->next_update_time = 0.0;
 
     const char* base_root = config->resource_root;
     if (!base_root && scene->resource_root[0]) {
@@ -905,6 +914,8 @@ static void send_mouse_move_to_screen(dong_scene3d_t* scene, int idx, int32_t x,
         scene->last_sent_mouse_screen = idx;
         scene->last_sent_mouse_x = x;
         scene->last_sent_mouse_y = y;
+        // Mark screen as dirty since mouse move may trigger hover effects
+        scr->dirty = 1;
     }
 }
 
@@ -970,6 +981,8 @@ static void handle_left_down(dong_scene3d_t* scene) {
         if (scr->engine) {
             dong_engine_send_mouse_button(scr->engine, SDL_BUTTON_LEFT, 1);
         }
+        // Mark as dirty since click may change UI state
+        scr->dirty = 1;
         return;
 
     }
@@ -991,6 +1004,8 @@ static void handle_left_up(dong_scene3d_t* scene) {
         if (scr->engine) {
             dong_engine_send_mouse_button(scr->engine, SDL_BUTTON_LEFT, 0);
         }
+        // Mark as dirty since mouse up may trigger click handlers
+        scr->dirty = 1;
     }
 
 
@@ -1007,7 +1022,8 @@ static void handle_wheel(dong_scene3d_t* scene, float dx, float dy) {
     const float kWheelMultiplier = 3.0f;
     // dong_app 已经对 SDL wheel 做了方向校正，这里保持一致即可。
     dong_engine_send_mouse_wheel(scr->engine, dx * kWheelMultiplier, dy * kWheelMultiplier);
-
+    // Mark as dirty since scrolling changes content position
+    scr->dirty = 1;
 }
 
 
@@ -1019,6 +1035,8 @@ static void handle_key(dong_scene3d_t* scene, uint32_t key, int down) {
     if (!scr || !scr->engine) return;
 
     dong_engine_send_key(scr->engine, key, down ? 1 : 0);
+    // Mark as dirty since key input may change UI state
+    scr->dirty = 1;
 }
 
 static void handle_text(dong_scene3d_t* scene, const char* text) {
@@ -1029,6 +1047,8 @@ static void handle_text(dong_scene3d_t* scene, const char* text) {
     if (!scr || !scr->engine) return;
 
     dong_engine_send_text(scr->engine, text);
+    // Mark as dirty since text input changes content
+    scr->dirty = 1;
 }
 
 
@@ -1164,50 +1184,95 @@ static void update_screens_scheduled(dong_scene3d_t* scene) {
     if (!scene) return;
 
     const double now_sec = get_scene_time_sec(scene);
-    const int video_max_fps = 30;
-    const double video_interval = 1.0 / (double)video_max_fps;
-    const int bg_updates_per_frame = 2;
+    // Video screens: 30fps, Background static screens: 1fps (minimal update for static content)
+    const double video_interval = 1.0 / 30.0;
+    const double bg_static_interval = 1.0 / 1.0;  // Only 1fps for static background screens (was 5fps)
+    const int max_updates_per_frame = 2;  // Limit max updates per frame to avoid stutter
 
+    // First frame: update all screens once
     if (!scene->initial_full_update_done) {
         for (int i = 0; i < scene->screen_count; i++) {
             update_screen_texture(scene, i);
             dong_screen3d_t* scr = scene->screens[i];
-            if (scr && scr->is_video) {
-                scr->next_update_time = now_sec + video_interval;
+            if (scr) {
+                scr->dirty = 0;
+                scr->frames_without_update = 0;
+                if (scr->is_video) {
+                    scr->next_update_time = now_sec + video_interval;
+                } else {
+                    scr->next_update_time = now_sec + bg_static_interval;
+                }
             }
         }
         scene->initial_full_update_done = 1;
         return;
     }
 
+    int updates_this_frame = 0;
+
+    // Priority 1: Hovered screen - update every frame for responsiveness
     if (scene->hovered_idx >= 0) {
-        update_screen_texture(scene, scene->hovered_idx);
-    }
-    if (scene->focused_idx >= 0 && scene->focused_idx != scene->hovered_idx) {
-        update_screen_texture(scene, scene->focused_idx);
+        dong_screen3d_t* scr = scene->screens[scene->hovered_idx];
+        if (scr) {
+            update_screen_texture(scene, scene->hovered_idx);
+            scr->dirty = 0;
+            scr->frames_without_update = 0;
+            scr->next_update_time = now_sec + video_interval;
+            updates_this_frame++;
+        }
     }
 
-    for (int i = 0; i < scene->screen_count; i++) {
+    // Priority 2: Focused screen - update every frame
+    if (scene->focused_idx >= 0 && scene->focused_idx != scene->hovered_idx) {
+        dong_screen3d_t* scr = scene->screens[scene->focused_idx];
+        if (scr) {
+            update_screen_texture(scene, scene->focused_idx);
+            scr->dirty = 0;
+            scr->frames_without_update = 0;
+            scr->next_update_time = now_sec + video_interval;
+            updates_this_frame++;
+        }
+    }
+
+    // Priority 3: Background video screens - 30fps but only if not visible
+    for (int i = 0; i < scene->screen_count && updates_this_frame < max_updates_per_frame; i++) {
         dong_screen3d_t* scr = scene->screens[i];
         if (!scr || !scr->is_video) continue;
         if (i == scene->hovered_idx || i == scene->focused_idx) continue;
 
         if (now_sec >= scr->next_update_time) {
             update_screen_texture(scene, i);
+            scr->dirty = 0;
+            scr->frames_without_update = 0;
             scr->next_update_time = now_sec + video_interval;
+            updates_this_frame++;
         }
     }
 
-    int bg_updated = 0;
-    for (int attempts = 0; attempts < scene->screen_count && bg_updated < bg_updates_per_frame; ++attempts) {
+    // Priority 4: Background static screens - only 5fps
+    for (int i = 0; i < scene->screen_count && updates_this_frame < max_updates_per_frame; i++) {
         int idx = (scene->bg_rr_cursor++) % scene->screen_count;
         if (idx == scene->hovered_idx || idx == scene->focused_idx) continue;
 
         dong_screen3d_t* scr = scene->screens[idx];
         if (!scr || scr->is_video) continue;
 
-        update_screen_texture(scene, idx);
-        bg_updated++;
+        // Only update if enough time has passed (5fps for static content)
+        if (now_sec >= scr->next_update_time) {
+            update_screen_texture(scene, idx);
+            scr->dirty = 0;
+            scr->frames_without_update = 0;
+            scr->next_update_time = now_sec + bg_static_interval;
+            updates_this_frame++;
+        }
+    }
+
+    // Increment frame counter for screens that weren't updated
+    for (int i = 0; i < scene->screen_count; i++) {
+        dong_screen3d_t* scr = scene->screens[i];
+        if (scr) {
+            scr->frames_without_update++;
+        }
     }
 }
 
