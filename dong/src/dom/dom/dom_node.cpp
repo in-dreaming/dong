@@ -1,6 +1,8 @@
 #include "dom_node.hpp"
 #include "../css/style_engine.hpp"
 #include "../css/selector_matcher.hpp"
+#include "../focus_manager.hpp"
+#include "../event_system.hpp"
 #include <iostream>
 #include <algorithm>
 #include <cctype>
@@ -10,6 +12,10 @@
 
 
 namespace dong::dom {
+
+// Static member definitions
+FocusManager* DOMNode::s_focus_manager_ = nullptr;
+EventDispatcher* DOMNode::s_event_dispatcher_ = nullptr;
 
 // ClassList implementation
 ClassList::ClassList(DOMNode* node) : node_(node) {}
@@ -838,8 +844,57 @@ void DOMNode::scrollTo(float x, float y) {
 
 
 void DOMNode::scrollIntoView(bool alignToTop) {
-    // TODO: Implement scroll into view
-    (void)alignToTop;
+    // Find the nearest scroll container ancestor
+    DOMNodePtr scroll_container = nullptr;
+    auto current = getParent();
+    while (current) {
+        if (current->isScrollContainer()) {
+            scroll_container = current;
+            break;
+        }
+        current = current->getParent();
+    }
+    
+    if (!scroll_container) {
+        return; // No scroll container found
+    }
+    
+    // Get this node's position relative to the scroll container
+    float node_top = offset_top_;
+    float node_left = offset_left_;
+    float node_height = offset_height_;
+    float node_width = offset_width_;
+    
+    float container_height = scroll_container->getClientHeight();
+    float container_width = scroll_container->getClientWidth();
+    
+    float current_scroll_x = scroll_container->getScrollLeft();
+    float current_scroll_y = scroll_container->getScrollTop();
+    
+    float new_scroll_x = current_scroll_x;
+    float new_scroll_y = current_scroll_y;
+    
+    // Calculate target scroll position relative to the scroll container's content
+    float relative_top = node_top - scroll_container->getOffsetTop();
+    float relative_left = node_left - scroll_container->getOffsetLeft();
+    
+    if (alignToTop) {
+        // Align element's top with container's top
+        new_scroll_y = relative_top;
+    } else {
+        // Align element's bottom with container's bottom
+        new_scroll_y = relative_top + node_height - container_height;
+    }
+    
+    // Ensure horizontal visibility
+    if (relative_left < current_scroll_x) {
+        new_scroll_x = relative_left;
+    } else if (relative_left + node_width > current_scroll_x + container_width) {
+        new_scroll_x = relative_left + node_width - container_width;
+    }
+    
+    // Apply scroll
+    scroll_container->scrollTo(new_scroll_x, new_scroll_y);
 }
 
 bool DOMNode::isScrollContainer() const {
@@ -1004,15 +1059,38 @@ DOMNodePtr DOMNode::closest(const std::string& selector) {
 }
 
 void DOMNode::focus() {
-    // TODO: Implement focus management
+    if (!s_focus_manager_) return;
+    
+    // Only focus if element is focusable
+    if (FocusManager::isFocusable(shared_from_this())) {
+        s_focus_manager_->setFocus(shared_from_this());
+    }
 }
 
 void DOMNode::blur() {
-    // TODO: Implement focus management
+    if (!s_focus_manager_) return;
+    
+    // Only blur if this element has focus
+    if (s_focus_manager_->hasFocus(shared_from_this())) {
+        s_focus_manager_->blur();
+    }
 }
 
 void DOMNode::click() {
-    // TODO: Dispatch click event
+    // Dispatch click event
+    if (s_event_dispatcher_) {
+        Event event;
+        event.type = EventType::CLICK;
+        event.type_name = "click";
+        event.target = shared_from_this();
+        event.current_target = shared_from_this();
+        s_event_dispatcher_->dispatch(event);
+    }
+    
+    // Also try to focus if focusable
+    if (FocusManager::isFocusable(shared_from_this())) {
+        focus();
+    }
 }
 
 void DOMNode::print(int depth) const {

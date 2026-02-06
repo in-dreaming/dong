@@ -167,6 +167,11 @@ View::View(uint32_t width, uint32_t height)
       )) {
     // 设置焦点管理器的事件分发器
     focus_manager->setEventDispatcher(event_dispatcher.get());
+    
+    // 设置 DOMNode 的静态指针，用于 focus/blur/click 方法
+    dom::DOMNode::setFocusManager(focus_manager.get());
+    dom::DOMNode::setEventDispatcher(event_dispatcher.get());
+    
     // Defer JS bindings initialization until after first HTML load / script eval
     painter = std::make_unique<render::Painter>(render_surface.get());
 }

@@ -217,6 +217,10 @@ public:
     void focus();
     void blur();
     void click();
+    
+    // Static accessors for focus manager and event dispatcher (set by View)
+    static void setFocusManager(class FocusManager* fm) { s_focus_manager_ = fm; }
+    static void setEventDispatcher(class EventDispatcher* ed) { s_event_dispatcher_ = ed; }
 
     // Runtime interaction states for pseudo-classes (:hover/:active/:focus)
     bool isHovered() const { return hovered_; }
@@ -285,6 +289,10 @@ protected:
     DOMNodePtr pseudo_after_;
 
     std::unique_ptr<ClassList> class_list_;
+    
+    // Static pointers to FocusManager and EventDispatcher (set by View)
+    static class FocusManager* s_focus_manager_;
+    static class EventDispatcher* s_event_dispatcher_;
 };
 
 } // namespace dong::dom
