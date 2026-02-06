@@ -67,6 +67,7 @@ public:
     // Frame management
     void beginFrame();
     void endFrame();
+    bool isInFrame() const { return in_frame_; }
 
     // Execute GPU command list from core
     void execute(const GPUCommandList& commands);

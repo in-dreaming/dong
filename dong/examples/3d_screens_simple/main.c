@@ -245,6 +245,8 @@ int main(int argc, char* argv[]) {
     int frame_count = 0;
     float fps_timer = 0.0f;
     float fps = 0.0f;
+    float total_time = 0.0f;
+    int total_frames = 0;
 
     // Main loop
     while (dong_app_is_running(app)) {
@@ -263,7 +265,9 @@ int main(int argc, char* argv[]) {
 
         // Update FPS display
         frame_count++;
+        total_frames++;
         fps_timer += dt;
+        total_time += dt;
         if (fps_timer >= 1.0f) {
             fps = (float)frame_count / fps_timer;
             frame_count = 0;
@@ -277,13 +281,22 @@ int main(int argc, char* argv[]) {
                     (int)fps);
                 dong_overlay_eval_script(hud, js);
             }
+            // Also print to console for performance monitoring
+            printf("[FPS] %.1f\n", fps);
         }
+
+        // Auto-exit after 3 seconds for benchmark
+        // if (total_time >= 10.0f) {
+        //     printf("\n[BENCHMARK] Total frames: %d, Time: %.2fs, Average FPS: %.1f\n", 
+        //            total_frames, total_time, (float)total_frames / total_time);
+        //     break;
+        // }
 
         // Update scene (camera controls, HTML texture updates, overlay updates)
         dong_scene3d_update(scene, dt);
 
         // Render 3D scene + HUD overlays (all in one pass)
-        // Note: dong_scene3d_render handles swapchain acquisition and submission internally,
+        // Note: dong_scene3d_render handles swapchain acquisition and submission internally,e'e'e'eeeee
         // so we don't need to call dong_app_present here.
         dong_scene3d_render(scene);
 

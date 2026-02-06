@@ -497,7 +497,10 @@ DONG_APPCORE_API void dong_app_present(dong_app_t* app_handle) {
     if (!app || !app->gpu_device || !app->window) return;
 
     if (app->engine) {
+        // Tick engine (handles rendering to swapchain internally via dong_engine_set_gpu)
         (void)dong_engine_tick(app->engine);
+        // Engine rendering is done, submit any remaining GPU work
+        // Note: The engine uses dong_gpu_execute which handles submission
         return;
     }
 

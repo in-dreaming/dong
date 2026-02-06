@@ -291,10 +291,21 @@ bool SDLGPUDriver::updateExternalImageRGBA(const std::string& key,
                                            uint32_t height,
                                            uint32_t stride_bytes) {
     if (key.empty() || !rgba || width == 0 || height == 0) return false;
-    if (!gpu_device_ || !gpu_device_->isInitialized() || !current_cmd_buf_) return false;
+    if (!gpu_device_ || !gpu_device_->isInitialized()) return false;
 
     SDL_GPUDevice* dev = gpu_device_->getHandle();
     if (!dev) return false;
+
+    // If not in a frame, acquire a temporary command buffer for the upload
+    bool temp_frame = false;
+    if (!current_cmd_buf_) {
+        current_cmd_buf_ = gpu_device_->acquireCommandBuffer();
+        if (!current_cmd_buf_) {
+            DONG_LOG_ERROR("SDLGPUDriver::updateExternalImageRGBA: failed to acquire temp command buffer");
+            return false;
+        }
+        temp_frame = true;
+    }
 
     ExternalImage& ex = external_images_[key];
     if (ex.format != ExternalImageFormat::RGBA8) {
@@ -389,6 +400,13 @@ bool SDLGPUDriver::updateExternalImageRGBA(const std::string& key,
     SDL_EndGPUCopyPass(copy_pass);
 
     frame_upload_buffers_.push_back(upload);
+
+    // If we acquired a temporary command buffer, submit it now
+    if (temp_frame) {
+        gpu_device_->submitCommandBuffer(current_cmd_buf_);
+        current_cmd_buf_ = nullptr;
+    }
+
     return true;
 }
 
@@ -402,10 +420,21 @@ bool SDLGPUDriver::updateExternalImageYUV420P(const std::string& key,
                                               uint32_t width,
                                               uint32_t height) {
     if (key.empty() || !plane_y || !plane_u || !plane_v || width == 0 || height == 0) return false;
-    if (!gpu_device_ || !gpu_device_->isInitialized() || !current_cmd_buf_) return false;
+    if (!gpu_device_ || !gpu_device_->isInitialized()) return false;
 
     SDL_GPUDevice* dev = gpu_device_->getHandle();
     if (!dev) return false;
+
+    // If not in a frame, acquire a temporary command buffer for the upload
+    bool temp_frame = false;
+    if (!current_cmd_buf_) {
+        current_cmd_buf_ = gpu_device_->acquireCommandBuffer();
+        if (!current_cmd_buf_) {
+            DONG_LOG_ERROR("SDLGPUDriver::updateExternalImageYUV420P: failed to acquire temp command buffer");
+            return false;
+        }
+        temp_frame = true;
+    }
 
     if (stride_y == 0) stride_y = width;
     const uint32_t cw = (width + 1) / 2;
@@ -533,6 +562,13 @@ bool SDLGPUDriver::updateExternalImageYUV420P(const std::string& key,
     SDL_EndGPUCopyPass(copy_pass);
 
     frame_upload_buffers_.push_back(upload);
+
+    // If we acquired a temporary command buffer, submit it now
+    if (temp_frame) {
+        gpu_device_->submitCommandBuffer(current_cmd_buf_);
+        current_cmd_buf_ = nullptr;
+    }
+
     return true;
 }
 

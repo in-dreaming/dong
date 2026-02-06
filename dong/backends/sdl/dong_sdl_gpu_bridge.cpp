@@ -97,10 +97,17 @@ int dong_sdl_gpu_bridge_execute(DongSDLGPUBridge* bridge, const void* command_li
         return 0;
     }
 
-    bridge->driver->beginFrame();
+    // Check if already in a frame (e.g., offscreen rendering)
+    bool already_in_frame = bridge->driver->isInFrame();
+    
+    if (!already_in_frame) {
+        bridge->driver->beginFrame();
+    }
     bridge->driver->prepareResources(*list);
     bridge->driver->execute(*list);
-    bridge->driver->endFrame();
+    if (!already_in_frame) {
+        bridge->driver->endFrame();
+    }
     return 1;
 }
 

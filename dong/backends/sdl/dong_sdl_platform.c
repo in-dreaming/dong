@@ -3,6 +3,7 @@
 
 #include "dong_sdl_platform.h"
 #include "dong_sdl_gpu_bridge.h"
+#include "dong_sdl_image_decoder.h"
 #include "dong_platform.h"
 #include "dong_gpu_driver.h"
 #include "dong_surface.h"
@@ -899,7 +900,13 @@ DONG_SDL_PLATFORM_API int dong_sdl_platform_init(void* sdl_device, void* sdl_win
         dong_platform_set_surface_factory(platform, factory);
     }
 
-    return (driver && factory) ? 1 : 0;
+    // Create and register image decoder
+    DongImageDecoder* decoder = dong_sdl_image_decoder_create();
+    if (decoder) {
+        dong_platform_set_image_decoder(platform, decoder);
+    }
+
+    return (driver && factory && decoder) ? 1 : 0;
 }
 
 DONG_SDL_PLATFORM_API void dong_sdl_platform_shutdown(void) {
@@ -908,6 +915,7 @@ DONG_SDL_PLATFORM_API void dong_sdl_platform_shutdown(void) {
     // Get and destroy registered subsystems
     DongGPUDriver* driver = dong_platform_get_gpu_driver(platform);
     DongSurfaceFactory* factory = dong_platform_get_surface_factory(platform);
+    DongImageDecoder* decoder = dong_platform_get_image_decoder(platform);
 
     // Clear platform registrations
     dong_platform_reset();
@@ -915,4 +923,5 @@ DONG_SDL_PLATFORM_API void dong_sdl_platform_shutdown(void) {
     // Destroy implementations
     dong_sdl_destroy_gpu_driver(driver);
     dong_sdl_destroy_surface_factory(factory);
+    dong_sdl_image_decoder_destroy(decoder);
 }
