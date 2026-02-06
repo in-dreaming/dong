@@ -106,7 +106,6 @@ add_library(dong SHARED
     src/core/context.cpp
     src/core/engine_view.cpp
     src/core/platform.c
-
     src/core/profiler.cpp
     # DOM module (modular structure)
     src/dom/dom_manager.cpp
@@ -200,6 +199,9 @@ add_library(dong_render STATIC
     src/core/context.cpp
     src/core/profiler.cpp
     src/core/view.cpp
+    src/core/global_shared.cpp
+    src/core/global_shared_c_api.cpp
+    src/render/glyph_atlas.cpp
 
     # DOM module (modular structure)
     src/dom/dom_manager.cpp

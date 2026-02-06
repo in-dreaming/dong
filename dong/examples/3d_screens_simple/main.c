@@ -250,6 +250,7 @@ int main(int argc, char* argv[]) {
 
     // Main loop
     while (dong_app_is_running(app)) {
+
         if (!dong_app_poll_events(app)) break;
 
         float dt = dong_app_get_delta_time(app);

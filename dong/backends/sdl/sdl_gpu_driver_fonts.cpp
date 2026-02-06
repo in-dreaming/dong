@@ -7,6 +7,7 @@
 #include "sdl_gpu_driver.hpp"
 
 #include "../../src/core/log.h"
+#include "../../src/core/global_shared.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -15,7 +16,21 @@
 namespace dong {
 namespace render {
 
-SDLGPUDriver::GlyphAtlasTier* SDLGPUDriver::selectGlyphAtlasTier(float font_size) {
+GlyphAtlas* SDLGPUDriver::getGlyphAtlasForFontSize(float font_size) {
+    // 如果使用 GlobalShared，从 GlobalShared 获取
+    if (use_global_shared_glyph_atlas_) {
+        auto* global_shared = GlobalShared::instance();
+        if (global_shared) {
+            auto* tier = global_shared->getGlyphAtlasTierForFontSize(font_size);
+            if (tier && tier->atlas) {
+                return tier->atlas.get();
+            }
+        }
+        DONG_LOG_ERROR("SDLGPUDriver::getGlyphAtlasForFontSize: GlobalShared not available");
+        return nullptr;
+    }
+    
+    // 本地模式：从自己的 glyph_atlas_tiers_ 获取
     if (glyph_atlas_tiers_.empty()) {
         return nullptr;
     }
@@ -68,7 +83,29 @@ SDLGPUDriver::GlyphAtlasTier* SDLGPUDriver::selectGlyphAtlasTier(float font_size
         best = &glyph_atlas_tiers_.front();
     }
 
-    return best;
+    return best->atlas.get();
+}
+
+GlyphAtlas* SDLGPUDriver::getGlyphAtlasForBitmapPx(uint32_t bitmap_px) {
+    // 如果使用 GlobalShared，从 GlobalShared 获取
+    if (use_global_shared_glyph_atlas_) {
+        auto* global_shared = GlobalShared::instance();
+        if (global_shared) {
+            auto* tier = global_shared->getGlyphAtlasTier(bitmap_px);
+            if (tier && tier->atlas) {
+                return tier->atlas.get();
+            }
+        }
+        return nullptr;
+    }
+    
+    // 本地模式：从自己的 glyph_atlas_tiers_ 查找
+    for (auto& tier : glyph_atlas_tiers_) {
+        if (tier.bitmap_px == bitmap_px) {
+            return tier.atlas.get();
+        }
+    }
+    return nullptr;
 }
 
 FT_Face SDLGPUDriver::getOrCreateFace(const std::string& font_path, uint32_t pixel_size) {

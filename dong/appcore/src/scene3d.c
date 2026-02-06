@@ -8,8 +8,7 @@
 #include "dong_platform.h"
 #include "dong_gpu_driver.h"
 #include "dong_plugin_api.h"
-
-
+#include "dong_global_shared.h"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_gpu.h>
@@ -381,7 +380,19 @@ DONG_APPCORE_API dong_scene3d_t* dong_scene3d_create(dong_app_t* app) {
     scene->window = (SDL_Window*)dong_app_get_window(app);
     if (!scene->device || !scene->window) { free(scene); return NULL; }
 
-
+    // Initialize GlobalShared for multi-view resource sharing
+    // This enables shared GlyphAtlas across all screens, saving ~1GB GPU memory for 23 screens
+    if (!dong_global_shared_is_initialized()) {
+        DongPlatform* platform = dong_platform_get();
+        DongGPUDriver* driver = platform ? dong_platform_get_gpu_driver(platform) : NULL;
+        if (driver) {
+            if (dong_global_shared_initialize(driver)) {
+                printf("[Scene3D] GlobalShared initialized for resource sharing\n");
+            } else {
+                printf("[Scene3D] Warning: Failed to initialize GlobalShared\n");
+            }
+        }
+    }
 
     // Defaults
     scene->cam_x = 0; scene->cam_y = 2.5f; scene->cam_z = 5;
@@ -405,6 +416,10 @@ DONG_APPCORE_API dong_scene3d_t* dong_scene3d_create(dong_app_t* app) {
         return NULL;
     }
 
+    // Log GlobalShared stats
+    if (dong_global_shared_is_initialized()) {
+        dong_global_shared_log_stats();
+    }
 
     printf("[Scene3D] Created\n");
     return scene;
@@ -412,6 +427,8 @@ DONG_APPCORE_API dong_scene3d_t* dong_scene3d_create(dong_app_t* app) {
 
 DONG_APPCORE_API void dong_scene3d_destroy(dong_scene3d_t* scene) {
     if (!scene) return;
+    
+    // Destroy all screens (this will release GlobalShared references via SDLGPUDriver destruction)
     for (int i = 0; i < scene->screen_count; i++) {
         if (scene->screens[i]) {
             if (scene->screens[i]->texture) {
@@ -432,6 +449,15 @@ DONG_APPCORE_API void dong_scene3d_destroy(dong_scene3d_t* scene) {
         }
     }
     destroy_pipelines(scene);
+    
+    // Shutdown GlobalShared after all engines are destroyed
+    // This will log a warning if there are still active references
+    if (dong_global_shared_is_initialized()) {
+        dong_global_shared_log_stats();
+        dong_global_shared_shutdown();
+        printf("[Scene3D] GlobalShared shutdown\n");
+    }
+    
     free(scene);
 }
 
@@ -1180,14 +1206,23 @@ static void update_camera_controls(dong_scene3d_t* scene, float dt) {
     if (keys[SDL_SCANCODE_LCTRL] || keys[SDL_SCANCODE_Q]) scene->cam_y -= spd;
 }
 
+// Calculate distance from camera to screen for LOD
+static float get_screen_distance_sq(dong_scene3d_t* scene, dong_screen3d_t* scr) {
+    if (!scene || !scr) return 1000000.0f;
+    float dx = scr->pos_x - scene->cam_x;
+    float dy = scr->pos_y - scene->cam_y;
+    float dz = scr->pos_z - scene->cam_z;
+    return dx*dx + dy*dy + dz*dz;
+}
+
 static void update_screens_scheduled(dong_scene3d_t* scene) {
     if (!scene) return;
 
     const double now_sec = get_scene_time_sec(scene);
-    // Video screens: 30fps, Background static screens: 1fps (minimal update for static content)
+    // Video screens: 30fps, Background static screens: 0.2fps (every 5 seconds)
     const double video_interval = 1.0 / 30.0;
-    const double bg_static_interval = 1.0 / 1.0;  // Only 1fps for static background screens (was 5fps)
-    const int max_updates_per_frame = 2;  // Limit max updates per frame to avoid stutter
+    const double bg_static_interval = 5.0;  // Only 0.2fps for static background screens (was 1fps)
+    const int max_updates_per_frame = 1;  // Only 1 update per frame for background screens
 
     // First frame: update all screens once
     if (!scene->initial_full_update_done) {
@@ -1234,7 +1269,7 @@ static void update_screens_scheduled(dong_scene3d_t* scene) {
         }
     }
 
-    // Priority 3: Background video screens - 30fps but only if not visible
+    // Priority 3: Background video screens - 30fps but only if time elapsed
     for (int i = 0; i < scene->screen_count && updates_this_frame < max_updates_per_frame; i++) {
         dong_screen3d_t* scr = scene->screens[i];
         if (!scr || !scr->is_video) continue;
@@ -1249,22 +1284,48 @@ static void update_screens_scheduled(dong_scene3d_t* scene) {
         }
     }
 
-    // Priority 4: Background static screens - only 5fps
-    for (int i = 0; i < scene->screen_count && updates_this_frame < max_updates_per_frame; i++) {
-        int idx = (scene->bg_rr_cursor++) % scene->screen_count;
-        if (idx == scene->hovered_idx || idx == scene->focused_idx) continue;
+    // Priority 4: Background static screens - only 0.2fps with distance LOD
+    if (updates_this_frame < max_updates_per_frame) {
+        // Find the screen that needs update most urgently and is closest
+        int best_idx = -1;
+        float best_dist_sq = 999999999.0f;
+        double most_overdue = 0.0;
 
-        dong_screen3d_t* scr = scene->screens[idx];
-        if (!scr || scr->is_video) continue;
+        for (int i = 0; i < scene->screen_count; i++) {
+            int idx = (scene->bg_rr_cursor + i) % scene->screen_count;
+            if (idx == scene->hovered_idx || idx == scene->focused_idx) continue;
 
-        // Only update if enough time has passed (5fps for static content)
-        if (now_sec >= scr->next_update_time) {
-            update_screen_texture(scene, idx);
+            dong_screen3d_t* scr = scene->screens[idx];
+            if (!scr || scr->is_video) continue;
+
+            // Check if update is due
+            double overdue = now_sec - scr->next_update_time;
+            if (overdue >= 0) {
+                float dist_sq = get_screen_distance_sq(scene, scr);
+                // Prefer more overdue screens, but also consider distance
+                if (overdue > most_overdue || (overdue > most_overdue - 1.0 && dist_sq < best_dist_sq)) {
+                    most_overdue = overdue;
+                    best_dist_sq = dist_sq;
+                    best_idx = idx;
+                }
+            }
+        }
+
+        if (best_idx >= 0) {
+            dong_screen3d_t* scr = scene->screens[best_idx];
+            update_screen_texture(scene, best_idx);
             scr->dirty = 0;
             scr->frames_without_update = 0;
-            scr->next_update_time = now_sec + bg_static_interval;
+            // Closer screens update slightly more frequently
+            float dist_sq = best_dist_sq;
+            double interval = bg_static_interval;
+            if (dist_sq < 25.0f) interval = 2.0;  // Within 5 units: every 2 seconds
+            else if (dist_sq < 100.0f) interval = 3.0;  // Within 10 units: every 3 seconds
+            scr->next_update_time = now_sec + interval;
             updates_this_frame++;
         }
+
+        scene->bg_rr_cursor++;
     }
 
     // Increment frame counter for screens that weren't updated

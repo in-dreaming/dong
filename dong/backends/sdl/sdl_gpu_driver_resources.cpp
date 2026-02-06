@@ -69,12 +69,12 @@ void SDLGPUDriver::prepareResources(const GPUCommandList& commands) {
 
         // 选择合适的 glyph atlas tier
         float font_size = cmd.font_size > 0.0f ? cmd.font_size : 16.0f;
-        GlyphAtlasTier* glyph_tier = selectGlyphAtlasTier(font_size);
-        if (!glyph_tier || !glyph_tier->atlas) {
+        GlyphAtlas* glyph_atlas = getGlyphAtlasForFontSize(font_size);
+        if (!glyph_atlas) {
             continue;
         }
 
-        uint32_t tier_key = glyph_tier->bitmap_px;
+        uint32_t tier_key = glyph_atlas->getGlyphBitmapSize();
 
         // 收集 glyph 请求
         for (const auto& glyph : cmd.glyphs) {
@@ -109,21 +109,14 @@ void SDLGPUDriver::prepareResources(const GPUCommandList& commands) {
     for (auto& [tier_key, requests] : tier_requests) {
         if (requests.empty()) continue;
 
-        // 找到对应的 tier
-        GlyphAtlasTier* tier = nullptr;
-        for (auto& t : glyph_atlas_tiers_) {
-            if (t.bitmap_px == tier_key) {
-                tier = &t;
-                break;
-            }
-        }
-
-        if (!tier || !tier->atlas) continue;
+        // 获取对应的 atlas（支持 GlobalShared 模式）
+        GlyphAtlas* atlas = getGlyphAtlasForBitmapPx(tier_key);
+        if (!atlas) continue;
 
         DONG_LOG_DEBUG("[prepareResources] tier %upx: batching %zu glyph requests", tier_key, requests.size());
 
         // 使用批量接口添加
-        tier->atlas->addGlyphsBatched(requests);
+        atlas->addGlyphsBatched(requests);
     }
 
     DONG_LOG_DEBUG("[prepareResources] END frame=%llu", frame_index_ + 1);

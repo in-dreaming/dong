@@ -11,6 +11,7 @@
 #include "../../src/render/glyph_atlas.hpp"
 #include "../../src/render/font_resolver.hpp"
 #include "../../src/core/log.h"
+#include "../../src/core/global_shared.hpp"
 
 #include <SDL3/SDL_video.h>
 
@@ -420,30 +421,50 @@ bool SDLGPUDriver::initialize() {
     // bitmap_px 表示单个 glyph 的 MSDF 纹理分辨率，
     // 采用 (128, 192, 256, 384) 四档，优化小字体清晰度和大字体边缘质量。
     glyph_atlas_tiers_.clear();
-    struct GlyphTierConfig {
-        uint32_t bitmap_px;
-        float distance_range;
-    };
+    
+    // 检查是否可以使用 GlobalShared 的 GlyphAtlas
+    // 只要 GlobalShared 已初始化，就使用共享资源（因为所有屏幕应该在同进程中）
+    auto* global_shared = GlobalShared::instance();
+    if (global_shared && GlobalShared::isInitialized()) {
+        // 使用 GlobalShared 的共享 GlyphAtlas
+        DONG_LOG_INFO("SDLGPUDriver::initialize: Using GlobalShared GlyphAtlas");
+        use_global_shared_glyph_atlas_ = true;
+        
+        // 增加引用计数
+        global_shared->addRef();
+        
+        // 我们只存储引用，不创建新的 atlas
+        // 实际使用时通过 global_shared->getGlyphAtlasTierForFontSize() 获取
+    } else {
+        // 自己创建 GlyphAtlas（独立模式，兼容旧代码）
+        DONG_LOG_INFO("SDLGPUDriver::initialize: Creating local GlyphAtlas tiers");
+        use_global_shared_glyph_atlas_ = false;
+        
+        struct GlyphTierConfig {
+            uint32_t bitmap_px;
+            float distance_range;
+        };
 
-    // 字体渲染优化配置 - 确保小字体清晰
-    const GlyphTierConfig tier_configs[] = {
-        {128u,  7.0f},  // 9px-14px
-        {192u,  9.0f},  // 14-22px
-        {256u,  11.0f}, // 22-36px
-        {384u,  12.0f}, // 36px+
-    };
+        // 字体渲染优化配置 - 确保小字体清晰
+        const GlyphTierConfig tier_configs[] = {
+            {128u,  7.0f},  // 9px-14px
+            {192u,  9.0f},  // 14-22px
+            {256u,  11.0f}, // 22-36px
+            {384u,  12.0f}, // 36px+
+        };
 
-    for (const auto& cfg : tier_configs) {
-        auto atlas = std::make_unique<GlyphAtlas>(dong_gpu_driver_);
-        if (!atlas->initialize(2048, 2048, cfg.bitmap_px, cfg.distance_range)) {
-            DONG_LOG_ERROR("SDLGPUDriver::initialize: failed to initialize glyph atlas tier %u", cfg.bitmap_px);
-            return false;
+        for (const auto& cfg : tier_configs) {
+            auto atlas = std::make_unique<GlyphAtlas>(dong_gpu_driver_);
+            if (!atlas->initialize(2048, 2048, cfg.bitmap_px, cfg.distance_range)) {
+                DONG_LOG_ERROR("SDLGPUDriver::initialize: failed to initialize glyph atlas tier %u", cfg.bitmap_px);
+                return false;
+            }
+            GlyphAtlasTier tier{};
+            tier.bitmap_px = cfg.bitmap_px;
+            tier.distance_range = cfg.distance_range;
+            tier.atlas = std::move(atlas);
+            glyph_atlas_tiers_.push_back(std::move(tier));
         }
-        GlyphAtlasTier tier{};
-        tier.bitmap_px = cfg.bitmap_px;
-        tier.distance_range = cfg.distance_range;
-        tier.atlas = std::move(atlas);
-        glyph_atlas_tiers_.push_back(std::move(tier));
     }
 
     if (FT_Init_FreeType(&ft_library_) != 0) {

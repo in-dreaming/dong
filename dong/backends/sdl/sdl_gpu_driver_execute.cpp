@@ -1493,23 +1493,19 @@ void SDLGPUDriver::executeDrawText(ExecuteContext& ctx, const GPUCommand& cmd) {
 
     float font_size = cmd.font_size > 0.0f ? cmd.font_size : 16.0f;
 
-    GlyphAtlasTier* glyph_tier = selectGlyphAtlasTier(font_size);
-    if (!glyph_tier || !glyph_tier->atlas) {
-        DONG_LOG_WARN("SDLGPUDriver: no glyph atlas tier available for font_size=%.1f", font_size);
-        return;
-    }
-    GlyphAtlas* glyph_atlas = glyph_tier->atlas.get();
+    GlyphAtlas* glyph_atlas = getGlyphAtlasForFontSize(font_size);
     if (!glyph_atlas || !text_sampler_) {
-        DONG_LOG_WARN("SDLGPUDriver: glyph atlas unavailable");
+        DONG_LOG_WARN("SDLGPUDriver: no glyph atlas available for font_size=%.1f", font_size);
         return;
     }
 
-    DONG_LOG_DEBUG("[DrawText] using tier=%upx atlas=%p font=%s",
-                   glyph_tier->bitmap_px,
+    DONG_LOG_DEBUG("[DrawText] font_size=%.1f atlas=%p font=%s",
+                   font_size,
                    (void*)glyph_atlas,
                    default_font_path->c_str());
 
-    const float atlas_range = glyph_tier->distance_range;
+    // Get atlas properties from the glyph atlas
+    const float atlas_range = glyph_atlas->getGlyphDistanceRange();
     const float gamma_correction = -2.2f;
     const float pixel_scale = cmd.scale_to_pixels;
 
@@ -1596,7 +1592,7 @@ void SDLGPUDriver::executeDrawText(ExecuteContext& ctx, const GPUCommand& cmd) {
         }
 
         const float msdf_scale = (entry->metrics.msdf_scale > 0.0f) ? entry->metrics.msdf_scale : 1.0f;
-        const float msdf_size = static_cast<float>(glyph_tier->bitmap_px);
+        const float msdf_size = static_cast<float>(glyph_atlas->getGlyphBitmapSize());
 
         const float render_scale = glyph_pixel_scale / msdf_scale;
         const float glyph_w = msdf_size * render_scale;

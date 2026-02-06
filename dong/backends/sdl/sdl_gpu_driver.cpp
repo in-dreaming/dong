@@ -20,6 +20,7 @@
 #include "../../src/render/gpu_ir.hpp"
 #include "../../src/core/log.h"
 #include "../../src/core/profiler.h"
+#include "../../src/core/global_shared.hpp"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_gpu.h>
@@ -149,6 +150,15 @@ SDLGPUDriver::~SDLGPUDriver() {
     if (ft_library_) {
         FT_Done_FreeType(ft_library_);
         ft_library_ = nullptr;
+    }
+
+    // 释放 GlobalShared 引用（如果使用了共享 GlyphAtlas）
+    if (use_global_shared_glyph_atlas_) {
+        auto* global_shared = GlobalShared::instance();
+        if (global_shared) {
+            global_shared->release();
+            DONG_LOG_DEBUG("SDLGPUDriver: Released GlobalShared reference");
+        }
     }
 
     gpu_device_ = nullptr;

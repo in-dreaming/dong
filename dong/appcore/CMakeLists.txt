@@ -19,6 +19,7 @@ add_library(dong_appcore SHARED
 target_include_directories(dong_appcore PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/src
 )
 
 target_include_directories(dong_appcore PRIVATE

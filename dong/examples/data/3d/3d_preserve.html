@@ -1,0 +1,20 @@
+<div class="scene">
+  <div class="parent">
+    <div class="child">CHILD</div>
+  </div>
+</div>
+
+<style>
+.scene { perspective: 800px; margin:100px; }
+.parent {
+  width:200px;height:200px;
+  background:#444;
+  transform-style: preserve-3d;
+  transform: rotateY(40deg);
+}
+.child{
+  width:100px;height:100px;
+  background:cyan;
+  transform: translateZ(80px);
+}
+</style>

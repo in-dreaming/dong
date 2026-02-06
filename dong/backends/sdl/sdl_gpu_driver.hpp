@@ -234,7 +234,17 @@ private:
     FT_Library ft_library_ = nullptr;
     std::unordered_map<std::string, FT_Face> ft_face_cache_;
 
-    GlyphAtlasTier* selectGlyphAtlasTier(float font_size);
+    // GlobalShared 集成
+    bool use_global_shared_glyph_atlas_ = false;
+    
+    // 获取适合字号的 GlyphAtlas
+    // 如果使用 GlobalShared，则返回 GlobalShared 的 atlas
+    GlyphAtlas* getGlyphAtlasForFontSize(float font_size);
+    
+    // 根据 bitmap_px 获取 GlyphAtlas（用于 prepareResources）
+    // 如果使用 GlobalShared，则返回 GlobalShared 的 atlas
+    GlyphAtlas* getGlyphAtlasForBitmapPx(uint32_t bitmap_px);
+    
     FT_Face getOrCreateFace(const std::string& font_path, uint32_t pixel_size);
 
     // Execute context (refactored from monolithic execute)
