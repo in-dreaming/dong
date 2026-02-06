@@ -25,3 +25,4 @@ build-cmake/
 build-zig/
 /tmp/
 .tools/
+build-test/

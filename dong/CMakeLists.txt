@@ -197,7 +197,6 @@ endif()
 # dong_render: Core rendering library with SDL GPU backend
 # Contains: DOM/CSS/Layout engine + SDL_GPU rendering pipeline
 add_library(dong_render STATIC
-    src/api_bindings_legacy.cpp
     src/core/context.cpp
     src/core/profiler.cpp
     src/core/view.cpp
