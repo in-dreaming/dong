@@ -3,8 +3,8 @@
 #include "../../src/core/profiler.h"
 #include <cstring>
 
-namespace dong {
-namespace render {
+
+namespace dong::sdl_backend {
 
 GPUDevice::~GPUDevice() {
     // Only destroy devices that we created ourselves. External devices are
@@ -76,11 +76,11 @@ void GPUDevice::submitCommandBuffer(SDL_GPUCommandBuffer* cmd_buf) const {
     }
 }
 
+
 void GPUDevice::waitForGPU() const {
     if (device_) {
         SDL_WaitForGPUIdle(device_);
     }
 }
 
-} // namespace render
-} // namespace dong
+} // namespace dong::sdl_backend

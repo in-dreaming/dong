@@ -6,8 +6,8 @@
 
 #include "sdl_gpu_driver.hpp"
 
-#include "../../src/render/gpu_device.hpp"
-#include "../../src/render/shader_manager.hpp"
+#include "sdl_gpu_device.hpp"
+#include "sdl_shader_manager.hpp"
 #include "../../src/render/glyph_atlas.hpp"
 #include "../../src/render/font_resolver.hpp"
 #include "../../src/core/log.h"
@@ -434,7 +434,7 @@ bool SDLGPUDriver::initialize() {
     };
 
     for (const auto& cfg : tier_configs) {
-        auto atlas = std::make_unique<GlyphAtlas>(gpu_device_);
+        auto atlas = std::make_unique<GlyphAtlas>(dong_gpu_driver_);
         if (!atlas->initialize(2048, 2048, cfg.bitmap_px, cfg.distance_range)) {
             DONG_LOG_ERROR("SDLGPUDriver::initialize: failed to initialize glyph atlas tier %u", cfg.bitmap_px);
             return false;

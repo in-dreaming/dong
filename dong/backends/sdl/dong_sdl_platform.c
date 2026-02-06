@@ -2,7 +2,7 @@
 // Provides SDL-based implementations of the Platform abstraction interfaces.
 
 #include "dong_sdl_platform.h"
-#include "dong_sdl_execute.h"
+#include "dong_sdl_gpu_bridge.h"
 #include "dong_platform.h"
 #include "dong_gpu_driver.h"
 #include "dong_surface.h"
@@ -25,7 +25,7 @@ typedef struct DongSDLGPUDriverImpl {
     int owns_device;
     int initialized;
 
-    DongSDLExecutor* executor;
+    DongSDLGPUBridge* bridge;
 } DongSDLGPUDriverImpl;
 
 
@@ -42,6 +42,15 @@ static int sdl_gpu_upload_texture(DongGPUDriver* driver, DongGPUTexture texture,
                                    uint32_t width, uint32_t height, uint32_t x, uint32_t y);
 static int sdl_gpu_upload_buffer(DongGPUDriver* driver, DongGPUBuffer buffer,
                                   const void* data, uint32_t size, uint32_t offset);
+static int sdl_gpu_upload_texture_subrect(DongGPUDriver* driver, DongGPUTexture texture,
+                                           const void* data,
+                                           uint32_t dest_x, uint32_t dest_y,
+                                           uint32_t width, uint32_t height,
+                                           uint32_t src_stride_bytes,
+                                           void** out_fence);
+static int sdl_gpu_query_fence(DongGPUDriver* driver, void* fence);
+static void sdl_gpu_release_fence(DongGPUDriver* driver, void* fence);
+static void sdl_gpu_wait_for_gpu(DongGPUDriver* driver);
 static int sdl_gpu_begin_frame(DongGPUDriver* driver);
 static int sdl_gpu_end_frame(DongGPUDriver* driver);
 static int sdl_gpu_execute(DongGPUDriver* driver, const void* command_list);
@@ -60,6 +69,7 @@ static int sdl_gpu_update_external_image_yuv420p(DongGPUDriver* driver, const ch
 static void sdl_gpu_set_resource_root(DongGPUDriver* driver, const char* root);
 static void sdl_gpu_get_capabilities(DongGPUDriver* driver, uint32_t* out_max_texture_size);
 static void* sdl_gpu_get_native_device(DongGPUDriver* driver);
+static void* sdl_gpu_get_native_texture_handle(DongGPUDriver* driver, DongGPUTexture texture);
 
 
 static const DongGPUDriverVTable g_sdl_gpu_vtable = {
@@ -73,6 +83,10 @@ static const DongGPUDriverVTable g_sdl_gpu_vtable = {
     .destroy_sampler = sdl_gpu_destroy_sampler,
     .upload_texture = sdl_gpu_upload_texture,
     .upload_buffer = sdl_gpu_upload_buffer,
+    .upload_texture_subrect = sdl_gpu_upload_texture_subrect,
+    .query_fence = sdl_gpu_query_fence,
+    .release_fence = sdl_gpu_release_fence,
+    .wait_for_gpu = sdl_gpu_wait_for_gpu,
     .begin_frame = sdl_gpu_begin_frame,
     .end_frame = sdl_gpu_end_frame,
     .execute = sdl_gpu_execute,
@@ -84,6 +98,7 @@ static const DongGPUDriverVTable g_sdl_gpu_vtable = {
     .set_resource_root = sdl_gpu_set_resource_root,
     .get_capabilities = sdl_gpu_get_capabilities,
     .get_native_device = sdl_gpu_get_native_device,
+    .get_native_texture_handle = sdl_gpu_get_native_texture_handle,
 };
 
 
@@ -109,9 +124,9 @@ static void sdl_gpu_shutdown(DongGPUDriver* driver) {
     DongSDLGPUDriverImpl* impl = (DongSDLGPUDriverImpl*)driver;
     if (!impl) return;
 
-    if (impl->executor) {
-        dong_sdl_executor_destroy(impl->executor);
-        impl->executor = NULL;
+    if (impl->bridge) {
+        dong_sdl_gpu_bridge_destroy(impl->bridge);
+        impl->bridge = NULL;
     }
 
     if (impl->owns_device && impl->device) {
@@ -338,15 +353,15 @@ static int sdl_gpu_execute(DongGPUDriver* driver, const void* command_list) {
         return 0;
     }
 
-    if (!impl->executor) {
-        impl->executor = dong_sdl_executor_create((void*)impl->device, (void*)impl->window);
-        if (!impl->executor) {
-            fprintf(stderr, "[DongSDLGPUDriver] failed to create executor\n");
+    if (!impl->bridge) {
+        impl->bridge = dong_sdl_gpu_bridge_create((void*)impl->device, (void*)impl->window, driver);
+        if (!impl->bridge) {
+            fprintf(stderr, "[DongSDLGPUDriver] failed to create bridge\n");
             return 0;
         }
     }
 
-    return dong_sdl_executor_execute(impl->executor, command_list);
+    return dong_sdl_gpu_bridge_execute(impl->bridge, command_list);
 }
 
 
@@ -357,23 +372,23 @@ static int sdl_gpu_begin_frame_offscreen(DongGPUDriver* driver, DongGPUTexture t
         return 0;
     }
 
-    if (!impl->executor) {
-        impl->executor = dong_sdl_executor_create((void*)impl->device, (void*)impl->window);
-        if (!impl->executor) {
+    if (!impl->bridge) {
+        impl->bridge = dong_sdl_gpu_bridge_create((void*)impl->device, (void*)impl->window, driver);
+        if (!impl->bridge) {
             return 0;
         }
     }
 
-    return dong_sdl_executor_begin_frame_offscreen(impl->executor, target, width, height);
+    return dong_sdl_gpu_bridge_begin_frame_offscreen(impl->bridge, target, width, height);
 }
 
 static int sdl_gpu_end_frame_offscreen(DongGPUDriver* driver) {
     DongSDLGPUDriverImpl* impl = (DongSDLGPUDriverImpl*)driver;
-    if (!impl || !impl->executor) {
+    if (!impl || !impl->bridge) {
         return 0;
     }
 
-    return dong_sdl_executor_end_frame_offscreen(impl->executor);
+    return dong_sdl_gpu_bridge_end_frame_offscreen(impl->bridge);
 }
 
 static void sdl_gpu_prepare_resources(DongGPUDriver* driver, const void* command_list) {
@@ -382,14 +397,14 @@ static void sdl_gpu_prepare_resources(DongGPUDriver* driver, const void* command
         return;
     }
 
-    if (!impl->executor) {
-        impl->executor = dong_sdl_executor_create((void*)impl->device, (void*)impl->window);
-        if (!impl->executor) {
+    if (!impl->bridge) {
+        impl->bridge = dong_sdl_gpu_bridge_create((void*)impl->device, (void*)impl->window, driver);
+        if (!impl->bridge) {
             return;
         }
     }
 
-    dong_sdl_executor_prepare_resources(impl->executor, command_list);
+    dong_sdl_gpu_bridge_prepare_resources(impl->bridge, command_list);
 }
 
 static int sdl_gpu_update_external_image_rgba(DongGPUDriver* driver, const char* key,
@@ -400,14 +415,14 @@ static int sdl_gpu_update_external_image_rgba(DongGPUDriver* driver, const char*
         return 0;
     }
 
-    if (!impl->executor) {
-        impl->executor = dong_sdl_executor_create((void*)impl->device, (void*)impl->window);
-        if (!impl->executor) {
+    if (!impl->bridge) {
+        impl->bridge = dong_sdl_gpu_bridge_create((void*)impl->device, (void*)impl->window, driver);
+        if (!impl->bridge) {
             return 0;
         }
     }
 
-    return dong_sdl_executor_update_external_image_rgba(impl->executor, key, rgba, width, height, stride_bytes);
+    return dong_sdl_gpu_bridge_update_external_image_rgba(impl->bridge, key, rgba, width, height, stride_bytes);
 }
 
 static int sdl_gpu_update_external_image_yuv420p(DongGPUDriver* driver, const char* key,
@@ -420,19 +435,19 @@ static int sdl_gpu_update_external_image_yuv420p(DongGPUDriver* driver, const ch
         return 0;
     }
 
-    if (!impl->executor) {
-        impl->executor = dong_sdl_executor_create((void*)impl->device, (void*)impl->window);
-        if (!impl->executor) {
+    if (!impl->bridge) {
+        impl->bridge = dong_sdl_gpu_bridge_create((void*)impl->device, (void*)impl->window, driver);
+        if (!impl->bridge) {
             return 0;
         }
     }
 
-    return dong_sdl_executor_update_external_image_yuv420p(impl->executor,
-                                                           key,
-                                                           plane_y, stride_y,
-                                                           plane_u, stride_u,
-                                                           plane_v, stride_v,
-                                                           width, height);
+    return dong_sdl_gpu_bridge_update_external_image_yuv420p(impl->bridge,
+                                                             key,
+                                                             plane_y, stride_y,
+                                                             plane_u, stride_u,
+                                                             plane_v, stride_v,
+                                                             width, height);
 }
 
 static void sdl_gpu_set_resource_root(DongGPUDriver* driver, const char* root) {
@@ -441,14 +456,14 @@ static void sdl_gpu_set_resource_root(DongGPUDriver* driver, const char* root) {
         return;
     }
 
-    if (!impl->executor) {
-        impl->executor = dong_sdl_executor_create((void*)impl->device, (void*)impl->window);
-        if (!impl->executor) {
+    if (!impl->bridge) {
+        impl->bridge = dong_sdl_gpu_bridge_create((void*)impl->device, (void*)impl->window, driver);
+        if (!impl->bridge) {
             return;
         }
     }
 
-    dong_sdl_executor_set_resource_root(impl->executor, root);
+    dong_sdl_gpu_bridge_set_resource_root(impl->bridge, root);
 }
 
 static void sdl_gpu_get_capabilities(DongGPUDriver* driver, uint32_t* out_max_texture_size) {
@@ -462,6 +477,125 @@ static void sdl_gpu_get_capabilities(DongGPUDriver* driver, uint32_t* out_max_te
 static void* sdl_gpu_get_native_device(DongGPUDriver* driver) {
     DongSDLGPUDriverImpl* impl = (DongSDLGPUDriverImpl*)driver;
     return impl ? impl->device : NULL;
+}
+
+// =============================================================================
+// Extended Atlas Upload API (for GlyphAtlas)
+// =============================================================================
+
+static int sdl_gpu_upload_texture_subrect(DongGPUDriver* driver, DongGPUTexture texture,
+                                           const void* data,
+                                           uint32_t dest_x, uint32_t dest_y,
+                                           uint32_t width, uint32_t height,
+                                           uint32_t src_stride_bytes,
+                                           void** out_fence) {
+    DongSDLGPUDriverImpl* impl = (DongSDLGPUDriverImpl*)driver;
+    if (!impl || !impl->device || !texture || !data) return -1;
+
+    SDL_GPUDevice* dev = impl->device;
+
+    // Calculate buffer size based on stride
+    uint32_t buffer_size = src_stride_bytes * height;
+
+    // Create transfer buffer
+    SDL_GPUTransferBufferCreateInfo tb_info = {0};
+    tb_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+    tb_info.size = buffer_size;
+
+    SDL_GPUTransferBuffer* transfer = SDL_CreateGPUTransferBuffer(dev, &tb_info);
+    if (!transfer) return -1;
+
+    // Map and copy data (respecting source stride)
+    void* mapped = SDL_MapGPUTransferBuffer(dev, transfer, false);
+    if (mapped) {
+        const uint8_t* src = (const uint8_t*)data;
+        uint8_t* dst = (uint8_t*)mapped;
+        uint32_t row_size = width * 4;  // RGBA
+
+        if (src_stride_bytes == row_size) {
+            // Fast path: contiguous data
+            memcpy(dst, src, buffer_size);
+        } else {
+            // Slow path: copy row by row
+            for (uint32_t y = 0; y < height; ++y) {
+                memcpy(dst + y * row_size, src + y * src_stride_bytes, row_size);
+            }
+        }
+        SDL_UnmapGPUTransferBuffer(dev, transfer);
+    }
+
+    // Upload via command buffer
+    SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(dev);
+    if (!cmd) {
+        SDL_ReleaseGPUTransferBuffer(dev, transfer);
+        return -1;
+    }
+
+    SDL_GPUCopyPass* copy_pass = SDL_BeginGPUCopyPass(cmd);
+    if (copy_pass) {
+        SDL_GPUTextureTransferInfo src = {0};
+        src.transfer_buffer = transfer;
+        src.offset = 0;
+        src.pixels_per_row = width;
+        src.rows_per_layer = height;
+
+        SDL_GPUTextureRegion dst = {0};
+        dst.texture = (SDL_GPUTexture*)texture;
+        dst.x = dest_x;
+        dst.y = dest_y;
+        dst.w = width;
+        dst.h = height;
+        dst.d = 1;
+
+        SDL_UploadToGPUTexture(copy_pass, &src, &dst, false);
+        SDL_EndGPUCopyPass(copy_pass);
+    }
+
+    // Submit and optionally get fence
+    SDL_GPUFence* fence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd);
+    if (fence) {
+        if (out_fence) {
+            *out_fence = fence;
+        } else {
+            // No fence requested, wait and release
+            SDL_WaitForGPUFences(dev, true, &fence, 1);
+            SDL_ReleaseGPUFence(dev, fence);
+        }
+    }
+
+    // Note: Transfer buffer will be released when fence is signaled
+    // For simplicity, we track this internally or caller must manage
+    // In a full implementation, we'd track (fence, transfer) pairs
+    SDL_ReleaseGPUTransferBuffer(dev, transfer);
+
+    return 0;
+}
+
+static int sdl_gpu_query_fence(DongGPUDriver* driver, void* fence) {
+    DongSDLGPUDriverImpl* impl = (DongSDLGPUDriverImpl*)driver;
+    if (!impl || !impl->device || !fence) return 1;  // Return signaled if invalid
+
+    return SDL_QueryGPUFence(impl->device, (SDL_GPUFence*)fence) ? 1 : 0;
+}
+
+static void sdl_gpu_release_fence(DongGPUDriver* driver, void* fence) {
+    DongSDLGPUDriverImpl* impl = (DongSDLGPUDriverImpl*)driver;
+    if (!impl || !impl->device || !fence) return;
+
+    SDL_ReleaseGPUFence(impl->device, (SDL_GPUFence*)fence);
+}
+
+static void sdl_gpu_wait_for_gpu(DongGPUDriver* driver) {
+    DongSDLGPUDriverImpl* impl = (DongSDLGPUDriverImpl*)driver;
+    if (!impl || !impl->device) return;
+
+    SDL_WaitForGPUIdle(impl->device);
+}
+
+static void* sdl_gpu_get_native_texture_handle(DongGPUDriver* driver, DongGPUTexture texture) {
+    (void)driver;
+    // The DongGPUTexture is already the SDL_GPUTexture* handle
+    return texture;
 }
 
 // =============================================================================
@@ -720,7 +854,7 @@ DONG_SDL_PLATFORM_API DongGPUDriver* dong_sdl_create_gpu_driver(void* sdl_device
     impl->device = (SDL_GPUDevice*)sdl_device;
     impl->window = (SDL_Window*)sdl_window;
     impl->owns_device = 0;  // Device is externally owned
-    impl->executor = NULL;
+    impl->bridge = NULL;
 
     return (DongGPUDriver*)impl;
 }

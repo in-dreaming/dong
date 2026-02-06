@@ -4,23 +4,28 @@
 #include <string>
 #include <cstdint>
 #include "gpu_ir.hpp"
-#include <SDL3/SDL_gpu.h>
 
-struct SDL_Window;
+// Forward declarations for C API types
+struct DongGPUDriver;
+struct DongSurface;
 
 namespace dong::render {
 
-class GPUDevice;
-class ShaderManager;
 class ResourceManager;
 
+// Opaque GPU texture handle (backend-specific)
+using GPUTextureHandle = void*;
 
-// 支持多后端选择的枚举，目前仅实现 SDL_gpu 后端
+// 支持多后端选择的枚举
 enum class GPUBackendType : uint8_t {
     SDL_GPU = 0,
+    VULKAN = 1,
+    METAL = 2,
+    D3D12 = 3,
 };
 
 // 抽象 GPUDriver，后端（基于 SDL_gpu / OpenGL / Metal 等）实现该接口
+// Note: Core 层通过此抽象接口访问 GPU 能力，不直接依赖 SDL
 class GPUDriver {
 public:
     virtual ~GPUDriver() = default;
@@ -80,18 +85,36 @@ public:
     virtual void execute(const GPUCommandList& commands) = 0;
     
     // Offscreen rendering (optional, default implementations do nothing)
-    virtual void beginFrameOffscreen(SDL_GPUTexture* target, uint32_t width, uint32_t height) {
+    // target is an opaque GPUTextureHandle (backend-specific native texture)
+    virtual void beginFrameOffscreen(GPUTextureHandle target, uint32_t width, uint32_t height) {
         (void)target; (void)width; (void)height;
     }
     virtual void endFrameOffscreen() {}
+
+    // Get the underlying C API driver (for advanced use cases)
+    // Returns DongGPUDriver* which can be cast to backend-specific type
+    virtual DongGPUDriver* getNativeDriver() = 0;
 };
 
 // GPUDriver 工厂：根据后端类型创建具体实现
+// Note: This factory is implemented in the backend (e.g., backends/sdl/)
+// to avoid core -> backend dependency
+using GPUDriverFactory = std::unique_ptr<GPUDriver>(*)(
+    GPUBackendType backend,
+    void* native_device,    // e.g., SDL_GPUDevice* for SDL backend
+    void* native_window,    // e.g., SDL_Window* for SDL backend
+    void* shader_manager    // backend-specific shader manager
+);
+
+// Set the factory function (called by backend during initialization)
+void SetGPUDriverFactory(GPUDriverFactory factory);
+
+// Create a GPUDriver using the registered factory
 std::unique_ptr<GPUDriver> CreateGPUDriver(
     GPUBackendType backend,
-    GPUDevice* device,
-    SDL_Window* window,
-    ShaderManager* shader_manager
+    void* native_device,
+    void* native_window,
+    void* shader_manager
 );
 
 } // namespace dong::render

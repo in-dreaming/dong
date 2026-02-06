@@ -4,8 +4,7 @@
 #include <SDL3/SDL_gpu.h>
 #include <memory>
 
-namespace dong {
-namespace render {
+namespace dong::sdl_backend {
 
 class GPUDevice;
 class ShaderManager;
@@ -25,7 +24,7 @@ public:
     bool initialize();
 
     // 从 DisplayList 渲染
-    void renderDisplayList(const DisplayList& display_list);
+    void renderDisplayList(const dong::render::DisplayList& display_list);
 
     // GPU 特定接口
     void beginFrame();
@@ -44,8 +43,7 @@ private:
     uint32_t content_height_ = 0;
 
     void setupPipelines();
-    void renderDisplayListInternal(const DisplayList& display_list);
+    void renderDisplayListInternal(const dong::render::DisplayList& display_list);
 };
 
-} // namespace render
-} // namespace dong
+} // namespace dong::sdl_backend

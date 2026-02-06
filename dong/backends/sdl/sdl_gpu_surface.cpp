@@ -1,21 +1,20 @@
 #include "sdl_gpu_surface.hpp"
 #include "../../src/core/log.h"
 
-namespace dong {
-namespace render {
+namespace dong::sdl_backend {
 
 GPUTextureSurfaceImpl::GPUTextureSurfaceImpl(
     SDL_GPUDevice* gpu_device,
     SDL_Window* window,
     uint32_t width,
     uint32_t height
-) : GPUTextureSurface(width, height, 0),
+) : dong::render::GPUTextureSurface(width, height, 0),
     gpu_device_(gpu_device),
     window_(window),
     width_(width),
     height_(height),
     is_dirty_(true) {
-
+    
     // 创建渲染目标纹理
     SDL_GPUTextureCreateInfo texture_info = {
         .type = SDL_GPU_TEXTURETYPE_2D,
@@ -120,5 +119,4 @@ SDL_GPUTexture* GPUTextureSurfaceImpl::acquireSwapchainTexture() {
     return swapchain_texture;
 }
 
-} // namespace render
-} // namespace dong
+} // namespace dong::sdl_backend

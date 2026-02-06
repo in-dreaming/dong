@@ -12,6 +12,9 @@
 // Forward declaration for ImageAtlas
 struct DongImageAtlas;
 
+// Forward declaration for C API GPU Driver
+typedef struct DongGPUDriver DongGPUDriver;
+
 // SDL types (backend internal use)
 struct SDL_Window;
 struct SDL_GPUDevice;
@@ -22,11 +25,14 @@ struct SDL_GPUSampler;
 struct SDL_GPUCommandBuffer;
 
 namespace dong {
+namespace sdl_backend {
+class GPUDevice;
+class ShaderManager;
+}
+
 namespace render {
 
 // Core types (forward declarations, will be decoupled in future phases)
-class GPUDevice;
-class ShaderManager;
 class ResourceManager;
 class GlyphAtlas;
 struct GPUCommandList;
@@ -52,7 +58,7 @@ struct Rect;
 
 class SDLGPUDriver {
 public:
-    SDLGPUDriver(GPUDevice* device, SDL_Window* window, ShaderManager* shader_manager);
+    SDLGPUDriver(sdl_backend::GPUDevice* device, SDL_Window* window, sdl_backend::ShaderManager* shader_manager);
     ~SDLGPUDriver();
 
     // Initialize pipelines and resources
@@ -92,6 +98,10 @@ public:
     // Resource manager injection
     void setImageResourceManager(ResourceManager* manager) { image_resource_manager_ = manager; }
 
+    // DongGPUDriver injection (required for GlyphAtlas creation)
+    void setDongGPUDriver(DongGPUDriver* driver) { dong_gpu_driver_ = driver; }
+    DongGPUDriver* getDongGPUDriver() const { return dong_gpu_driver_; }
+
     // Debug options
     void setDebugLogDrawBatches(bool enable) { debug_log_draw_batches_ = enable; }
     void setDebugLogLayerCache(bool enable) { debug_log_layer_cache_ = enable; }
@@ -101,10 +111,11 @@ public:
 
 private:
     // Dependencies (to be decoupled in future phases)
-    GPUDevice* gpu_device_;
+    sdl_backend::GPUDevice* gpu_device_;
     SDL_Window* window_;
-    ShaderManager* shader_manager_;
+    sdl_backend::ShaderManager* shader_manager_;
     ResourceManager* image_resource_manager_ = nullptr;
+    DongGPUDriver* dong_gpu_driver_ = nullptr;  // C API driver for GlyphAtlas
 
     // SDL GPU state
     SDL_GPUCommandBuffer* current_cmd_buf_ = nullptr;
@@ -200,7 +211,12 @@ private:
 
     void reapUploadBuffers(SDL_GPUDevice* dev);
     UploadBuffer acquireUploadBuffer(SDL_GPUDevice* dev, uint32_t size);
+
+    SDL_GPUCommandBuffer* acquireCommandBufferForUploads(SDL_GPUDevice* dev, bool& out_temp);
+    void submitStandaloneUploadCommandBuffer(SDL_GPUDevice* dev, SDL_GPUCommandBuffer* cmd_buf);
+
     bool ensureImageInAtlas(const std::string& src, ImageAtlasEntry& out_entry);
+
 
     // Text rendering
     SDL_GPUShader* text_vs_ = nullptr;
@@ -244,9 +260,9 @@ private:
 
 // Factory function (backend internal)
 std::unique_ptr<SDLGPUDriver> CreateSDLGPUDriver(
-    GPUDevice* device,
+    sdl_backend::GPUDevice* device,
     SDL_Window* window,
-    ShaderManager* shader_manager
+    sdl_backend::ShaderManager* shader_manager
 );
 
 } // namespace render

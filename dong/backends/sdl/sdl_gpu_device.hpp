@@ -5,8 +5,7 @@
 #include <vector>
 #include <SDL3/SDL_gpu.h>
 
-namespace dong {
-namespace render {
+namespace dong::sdl_backend {
 
 // GPU 设备管理：负责 SDL GPU 设备的生命周期和状态
 class GPUDevice {
@@ -52,5 +51,4 @@ private:
     bool owns_device_ = false; // true: we created the device and must destroy it
 };
 
-} // namespace render
-} // namespace dong
+} // namespace dong::sdl_backend

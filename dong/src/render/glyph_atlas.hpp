@@ -5,7 +5,9 @@
 #include <vector>
 #include <unordered_map>
 #include <memory>
-#include <SDL3/SDL_gpu.h>
+
+// GPU Driver abstraction (platform-agnostic)
+#include "dong_gpu_driver.h"
 
 namespace dong::render {
 
@@ -60,12 +62,17 @@ struct AtlasEntry {
     GlyphMetrics metrics;
 };
 
-class GPUDevice;
+// GPU Texture handle alias for clarity
+using GPUTextureHandle = DongGPUTexture;
 
 // MSDF 字形 Atlas 管理器
+// Note: This is a CORE module that should not depend on SDL.
+// GPU operations are performed via injected DongGPUDriver.
 class GlyphAtlas {
 public:
-    explicit GlyphAtlas(GPUDevice* gpu_device);
+    // GlyphAtlas requires a DongGPUDriver for GPU operations.
+    // The driver must outlive the GlyphAtlas instance.
+    explicit GlyphAtlas(DongGPUDriver* driver);
     ~GlyphAtlas();
 
     // 初始化 Atlas（创建 GPU 纹理）
@@ -92,10 +99,16 @@ public:
     // 获取 Atlas GPU 纹理（用于绑定到 shader）
     // 为了兼容旧代码，此接口返回第 0 页的纹理；
     // 新代码应优先使用 getAtlasTextureForPage/ getPageCount 组合。
-    SDL_GPUTexture* getAtlasTexture() const;
+    // Note: Returns opaque DongGPUTexture. Use dong_gpu_get_native_texture_handle()
+    // to obtain the backend-specific native handle (e.g., SDL_GPUTexture*).
+    GPUTextureHandle getAtlasTexture() const;
 
-    // 按页获取 Atlas 纹理；若页索引越界或纹理不存在则返回 nullptr。
-    SDL_GPUTexture* getAtlasTextureForPage(uint32_t page_index) const;
+    // 按页获取 Atlas 纹理；若页索引越界或纹理不存在则返回空 handle。
+    GPUTextureHandle getAtlasTextureForPage(uint32_t page_index) const;
+
+    // Get the native texture handle for a specific page (backend-specific).
+    // For SDL backend, this returns SDL_GPUTexture*.
+    void* getNativeTextureHandleForPage(uint32_t page_index) const;
 
     // 当前已分配的页数
     uint32_t getPageCount() const { return static_cast<uint32_t>(pages_.size()); }
@@ -108,8 +121,10 @@ public:
     float getGlyphDistanceRange() const { return glyph_distance_range_; }
 
 private:
+    DongGPUDriver* driver_ = nullptr;  // Injected GPU driver (must outlive GlyphAtlas)
+
     struct AtlasPage {
-        SDL_GPUTexture* texture = nullptr;
+        DongGPUTexture texture = nullptr;  // Opaque GPU texture handle
         uint32_t width = 0;
         uint32_t height = 0;
         uint32_t cursor_x = 0;
@@ -120,13 +135,12 @@ private:
         uint64_t last_used = 0;
     };
 
-    // 异步上传：transfer buffer 需要在 GPU 完成后再释放。
+    // 异步上传：fence 需要在 GPU 完成后再释放。
     struct PendingUpload {
-        SDL_GPUFence* fence = nullptr;
-        std::vector<SDL_GPUTransferBuffer*> buffers;
+        void* fence = nullptr;  // Opaque fence handle from driver
+        // Transfer buffers are tracked by the driver internally.
+        // Core layer does not need to manage them directly.
     };
-
-    GPUDevice* gpu_device_ = nullptr;
 
     uint32_t atlas_width_ = 2048;
     uint32_t atlas_height_ = 2048;
@@ -150,8 +164,8 @@ private:
 
     std::string makeGlyphKey(uint32_t codepoint, const std::string& font_path) const;
 
-    void reapPendingUploads(SDL_GPUDevice* dev);
-    void waitAllPendingUploads(SDL_GPUDevice* dev);
+    void reapPendingUploads();
+    void waitAllPendingUploads();
 
     // 页管理
     bool createPage();

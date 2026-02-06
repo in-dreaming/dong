@@ -6,7 +6,8 @@
 
 #include "sdl_gpu_driver.hpp"
 
-#include "../../src/render/gpu_device.hpp"
+#include "sdl_gpu_device.hpp"
+#include "../../src/render/gpu_ir.hpp"
 #include "../../src/render/resource_manager.hpp"
 #include "../../src/render/glyph_atlas.hpp"
 #include "../../src/render/font_resolver.hpp"
@@ -351,5 +352,56 @@ SDLGPUDriver::UploadBuffer SDLGPUDriver::acquireUploadBuffer(SDL_GPUDevice* dev,
     return out;
 }
 
+SDL_GPUCommandBuffer* SDLGPUDriver::acquireCommandBufferForUploads(SDL_GPUDevice* dev, bool& out_temp) {
+    out_temp = false;
+    if (current_cmd_buf_) {
+        return current_cmd_buf_;
+    }
+    if (!gpu_device_ || !gpu_device_->isInitialized() || !dev) {
+        return nullptr;
+    }
+
+    reapUploadBuffers(dev);
+
+    SDL_GPUCommandBuffer* cmd = gpu_device_->acquireCommandBuffer();
+    if (!cmd) {
+        return nullptr;
+    }
+
+    out_temp = true;
+    return cmd;
+}
+
+void SDLGPUDriver::submitStandaloneUploadCommandBuffer(SDL_GPUDevice* dev, SDL_GPUCommandBuffer* cmd_buf) {
+    if (!gpu_device_ || !gpu_device_->isInitialized() || !cmd_buf) {
+        return;
+    }
+
+    if (dev && !frame_upload_buffers_.empty()) {
+        SDL_GPUFence* fence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd_buf);
+        if (fence) {
+            PendingUploadBuffers pending;
+            pending.fence = fence;
+            pending.buffers = std::move(frame_upload_buffers_);
+            pending_upload_buffers_.push_back(std::move(pending));
+            frame_upload_buffers_.clear();
+            return;
+        }
+
+        DONG_LOG_ERROR("SDLGPUDriver: fence acquisition failed for standalone upload: %s", SDL_GetError());
+        gpu_device_->submitCommandBuffer(cmd_buf);
+        gpu_device_->waitForGPU();
+
+        for (auto& b : frame_upload_buffers_) {
+            if (b.buf) free_upload_buffers_.push_back(b);
+        }
+        frame_upload_buffers_.clear();
+        return;
+    }
+
+    gpu_device_->submitCommandBuffer(cmd_buf);
+}
+
 } // namespace render
 } // namespace dong
+

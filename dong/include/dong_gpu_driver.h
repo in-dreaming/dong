@@ -140,6 +140,22 @@ typedef struct DongGPUDriverVTable {
     int (*upload_buffer)(DongGPUDriver* driver, DongGPUBuffer buffer,
                          const void* data, uint32_t size, uint32_t offset);
 
+    // Atlas/Glyph Upload (extended upload with stride and fence support)
+    // Uploads data to a sub-rectangle of the texture with explicit stride.
+    // If out_fence is non-NULL, the backend may return a fence for async tracking.
+    int (*upload_texture_subrect)(DongGPUDriver* driver, DongGPUTexture texture,
+                                   const void* data,
+                                   uint32_t dest_x, uint32_t dest_y,
+                                   uint32_t width, uint32_t height,
+                                   uint32_t src_stride_bytes,
+                                   void** out_fence);
+
+    // Fence Management (for async upload tracking)
+    // Returns 1 if fence is signaled (GPU completed), 0 if not ready or invalid.
+    int (*query_fence)(DongGPUDriver* driver, void* fence);
+    void (*release_fence)(DongGPUDriver* driver, void* fence);
+    void (*wait_for_gpu)(DongGPUDriver* driver);
+
     // Frame Management
     int (*begin_frame)(DongGPUDriver* driver);
     int (*end_frame)(DongGPUDriver* driver);
@@ -175,6 +191,11 @@ typedef struct DongGPUDriverVTable {
 
     // Native Handle Access (for advanced integration)
     void* (*get_native_device)(DongGPUDriver* driver);
+
+    // Native Texture Handle Access
+    // Returns the backend-specific native texture handle (e.g., SDL_GPUTexture*)
+    // This is needed for shader binding in backend-specific code.
+    void* (*get_native_texture_handle)(DongGPUDriver* driver, DongGPUTexture texture);
 } DongGPUDriverVTable;
 
 
@@ -275,6 +296,48 @@ static inline void dong_gpu_set_resource_root(DongGPUDriver* d, const char* root
 
 static inline void* dong_gpu_get_native_device(DongGPUDriver* d) {
     return (d && d->vtable && d->vtable->get_native_device) ? d->vtable->get_native_device(d) : NULL;
+}
+
+// Atlas Upload (subrect with stride)
+static inline int dong_gpu_upload_texture_subrect(DongGPUDriver* d, DongGPUTexture texture,
+                                                   const void* data,
+                                                   uint32_t dest_x, uint32_t dest_y,
+                                                   uint32_t width, uint32_t height,
+                                                   uint32_t src_stride_bytes,
+                                                   void** out_fence) {
+    if (d && d->vtable && d->vtable->upload_texture_subrect) {
+        return d->vtable->upload_texture_subrect(d, texture, data, dest_x, dest_y,
+                                                  width, height, src_stride_bytes, out_fence);
+    }
+    return -1;
+}
+
+// Fence Management
+static inline int dong_gpu_query_fence(DongGPUDriver* d, void* fence) {
+    if (d && d->vtable && d->vtable->query_fence) {
+        return d->vtable->query_fence(d, fence);
+    }
+    return 1;  // Return "signaled" if not implemented
+}
+
+static inline void dong_gpu_release_fence(DongGPUDriver* d, void* fence) {
+    if (d && d->vtable && d->vtable->release_fence) {
+        d->vtable->release_fence(d, fence);
+    }
+}
+
+static inline void dong_gpu_wait_for_gpu(DongGPUDriver* d) {
+    if (d && d->vtable && d->vtable->wait_for_gpu) {
+        d->vtable->wait_for_gpu(d);
+    }
+}
+
+// Native Texture Handle
+static inline void* dong_gpu_get_native_texture_handle(DongGPUDriver* d, DongGPUTexture texture) {
+    if (d && d->vtable && d->vtable->get_native_texture_handle) {
+        return d->vtable->get_native_texture_handle(d, texture);
+    }
+    return NULL;
 }
 
 

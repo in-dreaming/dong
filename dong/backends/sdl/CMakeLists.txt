@@ -12,7 +12,8 @@ set(CMAKE_CXX_STANDARD 20)
 
 add_library(dong_sdl_backend SHARED
     dong_sdl_platform.c
-    dong_sdl_execute.cpp
+    dong_sdl_gpu_bridge.cpp
+    # dong_sdl_execute.cpp  # Removed - using bridge instead
     dong_sdl_image_decoder.c
     dong_sdl_image_atlas.c
     dong_astc_encoder.c
@@ -28,8 +29,6 @@ add_library(dong_sdl_backend SHARED
     sdl_input_adapter.cpp
 
     # SDL execution chain (migrated from src/render/)
-    ${CMAKE_SOURCE_DIR}/src/core/profiler.cpp
-
     ${CMAKE_SOURCE_DIR}/src/render/render_surface.cpp
 
     ${CMAKE_SOURCE_DIR}/src/render/resource_manager.cpp
@@ -49,16 +48,16 @@ add_library(dong_sdl_backend SHARED
     # Phase 5: SDL-specific rendering components (migrated from src/render/)
     sdl_gpu_device.cpp
     sdl_shader_manager.cpp
-    sdl_glyph_atlas.cpp
+    # sdl_glyph_atlas.cpp  # Removed - using src/render/glyph_atlas.cpp instead
     sdl_gpu_surface.cpp
     sdl_gpu_painter.cpp
 
     # TODO(Phase 5 complete): Remove these after full migration
-    ${CMAKE_SOURCE_DIR}/src/render/gpu_device.cpp
-    ${CMAKE_SOURCE_DIR}/src/render/gpu_surface.cpp
-    ${CMAKE_SOURCE_DIR}/src/render/gpu_painter.cpp
-    ${CMAKE_SOURCE_DIR}/src/render/shader_manager.cpp
-    ${CMAKE_SOURCE_DIR}/src/render/glyph_atlas.cpp
+    # ${CMAKE_SOURCE_DIR}/src/render/gpu_device.cpp
+    # ${CMAKE_SOURCE_DIR}/src/render/gpu_surface.cpp
+    # ${CMAKE_SOURCE_DIR}/src/render/gpu_painter.cpp
+    # ${CMAKE_SOURCE_DIR}/src/render/shader_manager.cpp
+    # ${CMAKE_SOURCE_DIR}/src/render/glyph_atlas.cpp
 
     # Shader cross-compile support (required by ShaderManager)
     ${CMAKE_SOURCE_DIR}/third_party/SDL_shadercross/src/SDL_shadercross.c
@@ -124,7 +123,7 @@ if(VULKAN_SDK_PATH)
 endif()
 
 # Link to core dong library for platform singleton + shared subsystems
-target_link_libraries(dong_sdl_backend PRIVATE dong)
+target_link_libraries(dong_sdl_backend PRIVATE dong dong_render)
 
 # Text shaping/rasterization deps (required by glyph atlas)
 if(WIN32)

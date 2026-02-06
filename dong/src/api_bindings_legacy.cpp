@@ -1,10 +1,16 @@
 ﻿#include "dong_view.h"
 #include "core/context.hpp"
 #include "core/view.hpp"
+#include "dong_gpu_driver.h"
+#include "dong_surface.h"
 #include <SDL3/SDL.h>
 
 using DongContext = dong::Context;
 using DongView = dong::View;
+
+// Forward declaration for SDL backend driver creation
+// This is a legacy compatibility function - new code should use dong_sdl_platform.h
+extern "C" DongGPUDriver* dong_sdl_gpu_driver_create(void* sdl_device, void* sdl_window);
 
 extern "C" {
 
@@ -116,9 +122,11 @@ void dong_view_set_render_mode(dong_view_t* view, bool use_gpu) {
 
 void dong_view_set_external_gpu_device(dong_view_t* view, void* device, void* window) {
     if (!view || !device || !window) return;
-    SDL_GPUDevice* gpu_device = reinterpret_cast<SDL_GPUDevice*>(device);
-    SDL_Window* sdl_window = reinterpret_cast<SDL_Window*>(window);
-    reinterpret_cast<DongView*>(view)->setExternalGPUDevice(gpu_device, sdl_window);
+    // Create DongGPUDriver from SDL device/window and inject into View
+    DongGPUDriver* driver = dong_sdl_gpu_driver_create(device, window);
+    if (driver) {
+        reinterpret_cast<DongView*>(view)->setExternalGPUDriver(driver, nullptr);
+    }
 }
 
 bool dong_view_eval(dong_view_t* view, const char* script) {
@@ -137,16 +145,24 @@ const char* dong_view_eval_return(dong_view_t* view, const char* script) {
 void* dong_view_render_to_gpu_texture(dong_view_t* view, void* gpu_device,
                                       uint32_t width, uint32_t height) {
     if (!view || !gpu_device) return nullptr;
-    SDL_GPUDevice* device = reinterpret_cast<SDL_GPUDevice*>(gpu_device);
-    return reinterpret_cast<DongView*>(view)->renderToGPUTexture(device, width, height);
+    // Create temporary DongGPUDriver from SDL device for legacy API compatibility
+    DongGPUDriver* driver = dong_sdl_gpu_driver_create(gpu_device, nullptr);
+    if (!driver) return nullptr;
+    DongGPUTexture texture = reinterpret_cast<DongView*>(view)->renderToGPUTexture(driver, width, height);
+    // Note: driver is not released here - caller manages the SDL device lifetime
+    return dong_gpu_get_native_texture_handle(driver, texture);
 }
 
 bool dong_view_render_offscreen(dong_view_t* view, void* gpu_device,
                                 uint32_t width, uint32_t height,
                                 uint8_t* out_pixels) {
     if (!view || !gpu_device || !out_pixels) return false;
-    SDL_GPUDevice* device = reinterpret_cast<SDL_GPUDevice*>(gpu_device);
-    return reinterpret_cast<DongView*>(view)->renderOffscreen(device, width, height, out_pixels);
+    // Create temporary DongGPUDriver from SDL device for legacy API compatibility
+    DongGPUDriver* driver = dong_sdl_gpu_driver_create(gpu_device, nullptr);
+    if (!driver) return false;
+    bool result = reinterpret_cast<DongView*>(view)->renderOffscreen(driver, width, height, out_pixels);
+    // Note: driver is not released here - caller manages the SDL device lifetime
+    return result;
 }
 
 } // extern "C"

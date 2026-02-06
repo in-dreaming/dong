@@ -13,6 +13,17 @@
 
 #include <cstdint>
 
+// DLL export/import macros
+#if defined(_WIN32) || defined(_WIN64)
+    #ifdef DONG_BUILDING_DLL
+        #define DONG_PROFILER_API __declspec(dllexport)
+    #else
+        #define DONG_PROFILER_API __declspec(dllimport)
+    #endif
+#else
+    #define DONG_PROFILER_API __attribute__((visibility("default")))
+#endif
+
 // ============================================================================
 // 编译开关
 // ============================================================================
@@ -30,41 +41,41 @@ extern "C" {
 #endif
 
 // 初始化 profiler（可选，首次使用时自动初始化）
-void dong_profiler_init(void);
+DONG_PROFILER_API void dong_profiler_init(void);
 
 // 关闭 profiler 并释放资源
-void dong_profiler_shutdown(void);
+DONG_PROFILER_API void dong_profiler_shutdown(void);
 
 // 开始一个 profiler 事件
-void dong_profiler_begin(const char* name, const char* category);
+DONG_PROFILER_API void dong_profiler_begin(const char* name, const char* category);
 
 // 结束当前事件
-void dong_profiler_end(void);
+DONG_PROFILER_API void dong_profiler_end(void);
 
 // 记录瞬时事件（无持续时间）
-void dong_profiler_instant(const char* name, const char* category);
+DONG_PROFILER_API void dong_profiler_instant(const char* name, const char* category);
 
 // 开始新的一帧（用于帧边界标记）
-void dong_profiler_frame_begin(void);
+DONG_PROFILER_API void dong_profiler_frame_begin(void);
 
 // 结束当前帧
-void dong_profiler_frame_end(void);
+DONG_PROFILER_API void dong_profiler_frame_end(void);
 
 // 导出 Chrome Trace JSON 到文件
 // 返回 0 成功，-1 失败
-int dong_profiler_dump(const char* filepath);
+DONG_PROFILER_API int dong_profiler_dump(const char* filepath);
 
 // 清空所有已记录的事件
-void dong_profiler_clear(void);
+DONG_PROFILER_API void dong_profiler_clear(void);
 
 // 获取当前帧号
-uint64_t dong_profiler_get_frame(void);
+DONG_PROFILER_API uint64_t dong_profiler_get_frame(void);
 
 // 设置是否启用（运行时开关）
-void dong_profiler_set_enabled(int enabled);
+DONG_PROFILER_API void dong_profiler_set_enabled(int enabled);
 
 // 获取是否启用
-int dong_profiler_is_enabled(void);
+DONG_PROFILER_API int dong_profiler_is_enabled(void);
 
 #ifdef __cplusplus
 }

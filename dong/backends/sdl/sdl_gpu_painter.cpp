@@ -5,8 +5,7 @@
 #include "../../src/core/log.h"
 #include <cstring>
 
-namespace dong {
-namespace render {
+namespace dong::sdl_backend {
 
 GPUPainter::GPUPainter(
     GPUTextureSurfaceImpl* gpu_surface,
@@ -40,7 +39,7 @@ bool GPUPainter::initialize() {
 
     content_width_ = gpu_surface_->getWidth();
     content_height_ = gpu_surface_->getHeight();
-
+    
     if (content_width_ == 0 || content_height_ == 0) {
         content_width_ = 960;
         content_height_ = 600;
@@ -51,9 +50,9 @@ bool GPUPainter::initialize() {
     return true;
 }
 
-void GPUPainter::renderDisplayList(const DisplayList& display_list) {
+void GPUPainter::renderDisplayList(const dong::render::DisplayList& display_list) {
     (void)display_list;
-
+    
     if (!gpu_surface_ || !gpu_device_ || !gpu_device_->isInitialized()) {
         DONG_LOG_WARN("GPUPainter::renderDisplayList: invalid GPU surface or device");
         return;
@@ -69,7 +68,7 @@ void GPUPainter::renderDisplayList(const DisplayList& display_list) {
     endFrame();
 }
 
-void GPUPainter::renderDisplayListInternal(const DisplayList& display_list) {
+void GPUPainter::renderDisplayListInternal(const dong::render::DisplayList& display_list) {
     (void)display_list;
     // TODO: 实际渲染 DisplayList
     DONG_LOG_DEBUG("GPUPainter::renderDisplayListInternal: stub");
@@ -99,12 +98,13 @@ void GPUPainter::endFrame() {
         return;
     }
 
-    if (current_cmd_buf_ && gpu_device_) {
+    if (current_cmd_buf_) {
         gpu_device_->submitCommandBuffer(current_cmd_buf_);
+        current_cmd_buf_ = nullptr;
     }
 
-    current_cmd_buf_ = nullptr;
     is_rendering_ = false;
+    in_frame_ = false;
 }
 
 void GPUPainter::resizeContentTexture(uint32_t width, uint32_t height) {
@@ -113,8 +113,7 @@ void GPUPainter::resizeContentTexture(uint32_t width, uint32_t height) {
 }
 
 void GPUPainter::setupPipelines() {
-    // TODO: 设置渲染管线
+    // TODO: 设置 GPU 管线
 }
 
-} // namespace render
-} // namespace dong
+} // namespace dong::sdl_backend

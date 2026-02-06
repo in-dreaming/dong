@@ -6,8 +6,7 @@
 #include <string>
 #include <SDL3/SDL_gpu.h>
 
-namespace dong {
-namespace render {
+namespace dong::sdl_backend {
 
 class GPUDevice;
 
@@ -46,6 +45,7 @@ public:
         const char* entry_point = "main"
     );
 
+
     // 获取已缓存的着色器
     SDL_GPUShader* getShader(const std::string& name) const;
 
@@ -73,5 +73,4 @@ private:
     );
 };
 
-} // namespace render
-} // namespace dong
+} // namespace dong::sdl_backend

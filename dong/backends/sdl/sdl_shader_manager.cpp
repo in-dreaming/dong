@@ -6,12 +6,13 @@
 #include <fstream>
 #include <sstream>
 
-namespace dong {
-namespace render {
+
+namespace dong::sdl_backend {
 
 static bool g_shadercross_initialized = false;
 
 // 全局 shader 缓存：按 (device, shader_name) 缓存编译后的 shader
+// 这样多个 View 共享同一个 GPU device 时可以复用 shader
 static std::mutex g_shader_cache_mutex;
 static std::unordered_map<SDL_GPUDevice*, std::unordered_map<std::string, SDL_GPUShader*>> g_global_shader_cache;
 
@@ -35,7 +36,7 @@ SDL_GPUShader* ShaderManager::loadShader(
     SDL_GPUShaderStage stage,
     const ShaderSource& source,
     const char* entry_point) {
-
+    
     if (!gpu_device_ || !gpu_device_->isInitialized()) {
         DONG_LOG_ERROR("GPU device not initialized");
         return nullptr;
@@ -76,7 +77,7 @@ SDL_GPUShader* ShaderManager::loadShaderFromHLSL(
     }
 
     SDL_GPUDevice* dev = gpu_device_->getHandle();
-
+    
     // 先检查全局缓存
     {
         std::lock_guard<std::mutex> lock(g_shader_cache_mutex);
@@ -146,6 +147,7 @@ SDL_GPUShader* ShaderManager::loadShaderFromHLSLFile(
 }
 
 SDL_GPUShader* ShaderManager::getShader(const std::string& name) const {
+
     auto it = shader_cache_.find(name);
     if (it != shader_cache_.end()) {
         return it->second;
@@ -173,7 +175,7 @@ SDL_GPUShader* ShaderManager::createShaderFromBinary(
     SDL_GPUShaderStage stage,
     const ShaderSource& source,
     const char* entry_point) {
-
+    
     if (!source.data || source.size == 0) {
         DONG_LOG_ERROR("Invalid shader source");
         return nullptr;
@@ -282,5 +284,4 @@ SDL_GPUShader* ShaderManager::createShaderFromHLSL(
     return shader;
 }
 
-} // namespace render
-} // namespace dong
+} // namespace dong::sdl_backend

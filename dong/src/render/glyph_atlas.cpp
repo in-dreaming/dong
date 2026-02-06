@@ -1,5 +1,4 @@
 #include "glyph_atlas.hpp"
-#include "gpu_device.hpp"
 #include "font_metrics.hpp"
 #include "../core/log.h"
 #include "../core/profiler.h"
@@ -21,23 +20,22 @@
 
 namespace dong::render {
 
-GlyphAtlas::GlyphAtlas(GPUDevice* gpu_device)
-    : gpu_device_(gpu_device) {}
+GlyphAtlas::GlyphAtlas(DongGPUDriver* driver)
+    : driver_(driver) {}
 
 GlyphAtlas::~GlyphAtlas() {
-    if (!gpu_device_ || !gpu_device_->isInitialized()) {
+    if (!driver_) {
         return;
     }
 
-    SDL_GPUDevice* dev = gpu_device_->getHandle();
-
-    // 尽量确保所有异步上传完成后再释放 transfer buffer。
+    // 尽量确保所有异步上传完成后再释放资源。
     // 这里选择等待是因为 GlyphAtlas 生命周期结束后，我们无法再安全地延后释放。
-    waitAllPendingUploads(dev);
+    waitAllPendingUploads();
 
+    // Release all atlas textures via driver
     for (auto& page : pages_) {
         if (page.texture) {
-            SDL_ReleaseGPUTexture(dev, page.texture);
+            dong_gpu_destroy_texture(driver_, page.texture);
             page.texture = nullptr;
         }
     }
@@ -45,18 +43,25 @@ GlyphAtlas::~GlyphAtlas() {
 }
 
 
-SDL_GPUTexture* GlyphAtlas::getAtlasTexture() const {
+GPUTextureHandle GlyphAtlas::getAtlasTexture() const {
     if (pages_.empty()) {
         return nullptr;
     }
     return pages_.front().texture;
 }
 
-SDL_GPUTexture* GlyphAtlas::getAtlasTextureForPage(uint32_t page_index) const {
+GPUTextureHandle GlyphAtlas::getAtlasTextureForPage(uint32_t page_index) const {
     if (page_index >= pages_.size()) {
         return nullptr;
     }
     return pages_[page_index].texture;
+}
+
+void* GlyphAtlas::getNativeTextureHandleForPage(uint32_t page_index) const {
+    if (page_index >= pages_.size() || !driver_) {
+        return nullptr;
+    }
+    return dong_gpu_get_native_texture_handle(driver_, pages_[page_index].texture);
 }
 
 std::string GlyphAtlas::makeGlyphKey(uint32_t glyph_id, const std::string& font_path) const {
@@ -67,8 +72,8 @@ std::string GlyphAtlas::makeGlyphKey(uint32_t glyph_id, const std::string& font_
 }
 
 bool GlyphAtlas::createPage() {
-    if (!gpu_device_ || !gpu_device_->isInitialized()) {
-        DONG_LOG_ERROR("GlyphAtlas::createPage: GPU device not initialized");
+    if (!driver_) {
+        DONG_LOG_ERROR("GlyphAtlas::createPage: GPU driver not set");
         return false;
     }
 
@@ -76,20 +81,18 @@ bool GlyphAtlas::createPage() {
         return false;
     }
 
-    SDL_GPUDevice* dev = gpu_device_->getHandle();
+    // Create texture via driver
+    DongGPUTextureDesc desc{};
+    desc.width = atlas_width_;
+    desc.height = atlas_height_;
+    desc.format = DONG_GPU_TEXTURE_FORMAT_RGBA8_UNORM;
+    desc.usage = DONG_GPU_TEXTURE_USAGE_SAMPLER | DONG_GPU_TEXTURE_USAGE_TRANSFER_DST;
+    desc.mip_levels = 1;
+    desc.debug_name = "GlyphAtlas";
 
-    SDL_GPUTextureCreateInfo tex_info{};
-    tex_info.type = SDL_GPU_TEXTURETYPE_2D;
-    tex_info.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
-    tex_info.width = atlas_width_;
-    tex_info.height = atlas_height_;
-    tex_info.layer_count_or_depth = 1;
-    tex_info.num_levels = 1;
-    tex_info.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
-
-    SDL_GPUTexture* texture = SDL_CreateGPUTexture(dev, &tex_info);
+    DongGPUTexture texture = dong_gpu_create_texture(driver_, &desc);
     if (!texture) {
-        DONG_LOG_ERROR("GlyphAtlas::createPage: failed to create atlas texture: %s", SDL_GetError());
+        DONG_LOG_ERROR("GlyphAtlas::createPage: failed to create atlas texture");
         return false;
     }
 
@@ -97,73 +100,31 @@ bool GlyphAtlas::createPage() {
     // 否则 glyph 之间的 padding 区域会包含垃圾数据，导致渲染时出现细线
     {
         uint32_t buffer_size = atlas_width_ * atlas_height_ * 4;
-        
-        SDL_GPUTransferBufferCreateInfo transfer_info{};
-        transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-        transfer_info.size = buffer_size;
-        
-        SDL_GPUTransferBuffer* transfer_buf = SDL_CreateGPUTransferBuffer(dev, &transfer_info);
-        if (transfer_buf) {
-            void* mapped = SDL_MapGPUTransferBuffer(dev, transfer_buf, false);
-            if (mapped) {
-                // 全黑 = RGBA(0,0,0,255)，MSDF 中 0 表示字形外部（距离场负值）
-                std::memset(mapped, 0, buffer_size);
-                SDL_UnmapGPUTransferBuffer(dev, transfer_buf);
-                
-                SDL_GPUCommandBuffer* cmd_buf = gpu_device_->acquireCommandBuffer();
-                if (cmd_buf) {
-                    SDL_GPUCopyPass* copy_pass = SDL_BeginGPUCopyPass(cmd_buf);
-                    if (copy_pass) {
-                        SDL_GPUTextureTransferInfo tex_transfer{};
-                        tex_transfer.transfer_buffer = transfer_buf;
-                        tex_transfer.offset = 0;
-                        tex_transfer.pixels_per_row = atlas_width_;   // 关键：设置每行像素数
-                        tex_transfer.rows_per_layer = atlas_height_;  // 关键：设置每层行数
-                        
-                        SDL_GPUTextureRegion region{};
-                        region.texture = texture;
-                        region.mip_level = 0;
-                        region.layer = 0;
-                        region.x = 0;
-                        region.y = 0;
-                        region.z = 0;
-                        region.w = atlas_width_;
-                        region.h = atlas_height_;
-                        region.d = 1;
-                        
-                        SDL_UploadToGPUTexture(copy_pass, &tex_transfer, &region, false);
-                        SDL_EndGPUCopyPass(copy_pass);
-                    }
+        std::vector<uint8_t> zero_buffer(buffer_size, 0);  // 全黑 = RGBA(0,0,0,255)
 
-                    // 使用 fence 精确等待该 command buffer 完成，避免某些后端 copy/transfer 队列
-                    // 在 WaitForGPUIdle 下仍存在时序差异，导致首帧采样到未完成上传的 atlas。
-                    SDL_GPUFence* fence = nullptr;
-                    {
-                        DONG_PROFILE_SCOPE_CAT("SDL_SubmitGPUCommandBufferAndAcquireFence", "gpu");
-                        fence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd_buf);
-                    }
-                    if (fence) {
-                        SDL_GPUFence* fences[] = { fence };
-                        {
-                            DONG_PROFILE_SCOPE_CAT("SDL_WaitForGPUFences", "gpu");
-                            if (!SDL_WaitForGPUFences(dev, true, fences, 1)) {
-                                DONG_LOG_WARN("GlyphAtlas::evictAndRecyclePage: SDL_WaitForGPUFences failed: %s", SDL_GetError());
-                                gpu_device_->waitForGPU();
-                            }
-                        }
-                        SDL_ReleaseGPUFence(dev, fence);
-                    } else {
+        void* fence = nullptr;
+        int result = dong_gpu_upload_texture_subrect(
+            driver_, texture,
+            zero_buffer.data(),
+            0, 0,  // dest_x, dest_y
+            atlas_width_, atlas_height_,
+            atlas_width_ * 4,  // src_stride_bytes
+            &fence);
 
-                        DONG_LOG_WARN("GlyphAtlas::evictAndRecyclePage: SDL_SubmitGPUCommandBufferAndAcquireFence failed: %s", SDL_GetError());
+        if (result != 0) {
+            DONG_LOG_WARN("GlyphAtlas::createPage: failed to initialize texture to black");
+        }
 
-                        gpu_device_->submitCommandBuffer(cmd_buf);
-                        gpu_device_->waitForGPU();
-                    }
-
-
-                }
+        // Wait for initialization to complete before using
+        if (fence) {
+            // Poll until fence is signaled
+            while (!dong_gpu_query_fence(driver_, fence)) {
+                // Yield or small sleep could be added here if needed
             }
-            SDL_ReleaseGPUTransferBuffer(dev, transfer_buf);
+            dong_gpu_release_fence(driver_, fence);
+        } else {
+            // Synchronous path: driver didn't provide fence, use wait_for_gpu
+            dong_gpu_wait_for_gpu(driver_);
         }
     }
 
@@ -184,7 +145,7 @@ bool GlyphAtlas::createPage() {
 }
 
 GlyphAtlas::AtlasPage* GlyphAtlas::evictAndRecyclePage() {
-    if (pages_.empty()) {
+    if (pages_.empty() || !driver_) {
         return nullptr;
     }
 
@@ -206,9 +167,9 @@ GlyphAtlas::AtlasPage* GlyphAtlas::evictAndRecyclePage() {
         victim = &pages_.front();
     }
 
-    SDL_GPUDevice* dev = gpu_device_->getHandle();
+    // Release old texture via driver
     if (victim->texture) {
-        SDL_ReleaseGPUTexture(dev, victim->texture);
+        dong_gpu_destroy_texture(driver_, victim->texture);
         victim->texture = nullptr;
     }
 
@@ -222,18 +183,17 @@ GlyphAtlas::AtlasPage* GlyphAtlas::evictAndRecyclePage() {
     }
 
     // 重新创建纹理并重置装箱状态
-    SDL_GPUTextureCreateInfo tex_info{};
-    tex_info.type = SDL_GPU_TEXTURETYPE_2D;
-    tex_info.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
-    tex_info.width = atlas_width_;
-    tex_info.height = atlas_height_;
-    tex_info.layer_count_or_depth = 1;
-    tex_info.num_levels = 1;
-    tex_info.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    DongGPUTextureDesc desc{};
+    desc.width = atlas_width_;
+    desc.height = atlas_height_;
+    desc.format = DONG_GPU_TEXTURE_FORMAT_RGBA8_UNORM;
+    desc.usage = DONG_GPU_TEXTURE_USAGE_SAMPLER | DONG_GPU_TEXTURE_USAGE_TRANSFER_DST;
+    desc.mip_levels = 1;
+    desc.debug_name = "GlyphAtlas";
 
-    victim->texture = SDL_CreateGPUTexture(dev, &tex_info);
+    victim->texture = dong_gpu_create_texture(driver_, &desc);
     if (!victim->texture) {
-        DONG_LOG_ERROR("GlyphAtlas::evictAndRecyclePage: failed to recreate atlas texture: %s", SDL_GetError());
+        DONG_LOG_ERROR("GlyphAtlas::evictAndRecyclePage: failed to recreate atlas texture");
         victim->width = 0;
         victim->height = 0;
         victim->cursor_x = victim->cursor_y = victim->row_height = 0;
@@ -245,68 +205,29 @@ GlyphAtlas::AtlasPage* GlyphAtlas::evictAndRecyclePage() {
     // 关键：初始化纹理为全黑，避免垃圾数据导致的细线问题
     {
         uint32_t buffer_size = atlas_width_ * atlas_height_ * 4;
-        
-        SDL_GPUTransferBufferCreateInfo transfer_info{};
-        transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-        transfer_info.size = buffer_size;
-        
-        SDL_GPUTransferBuffer* transfer_buf = SDL_CreateGPUTransferBuffer(dev, &transfer_info);
-        if (transfer_buf) {
-            void* mapped = SDL_MapGPUTransferBuffer(dev, transfer_buf, false);
-            if (mapped) {
-                std::memset(mapped, 0, buffer_size);
-                SDL_UnmapGPUTransferBuffer(dev, transfer_buf);
-                
-                SDL_GPUCommandBuffer* cmd_buf = gpu_device_->acquireCommandBuffer();
-                if (cmd_buf) {
-                    SDL_GPUCopyPass* copy_pass = SDL_BeginGPUCopyPass(cmd_buf);
-                    if (copy_pass) {
-                        SDL_GPUTextureTransferInfo tex_transfer{};
-                        tex_transfer.transfer_buffer = transfer_buf;
-                        tex_transfer.offset = 0;
-                        
-                        SDL_GPUTextureRegion region{};
-                        region.texture = victim->texture;
-                        region.mip_level = 0;
-                        region.layer = 0;
-                        region.x = 0;
-                        region.y = 0;
-                        region.z = 0;
-                        region.w = atlas_width_;
-                        region.h = atlas_height_;
-                        region.d = 1;
-                        
-                        SDL_UploadToGPUTexture(copy_pass, &tex_transfer, &region, false);
-                        SDL_EndGPUCopyPass(copy_pass);
-                    }
+        std::vector<uint8_t> zero_buffer(buffer_size, 0);
 
-                    SDL_GPUFence* fence = nullptr;
-                    {
-                        DONG_PROFILE_SCOPE_CAT("SDL_SubmitGPUCommandBufferAndAcquireFence", "gpu");
-                        fence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd_buf);
-                    }
-                    if (fence) {
-                        SDL_GPUFence* fences[] = { fence };
-                        {
-                            DONG_PROFILE_SCOPE_CAT("SDL_WaitForGPUFences", "gpu");
-                            if (!SDL_WaitForGPUFences(dev, true, fences, 1)) {
-                                DONG_LOG_WARN("GlyphAtlas::evictAndRecyclePage: SDL_WaitForGPUFences failed: %s", SDL_GetError());
-                                gpu_device_->waitForGPU();
-                            }
-                        }
-                        SDL_ReleaseGPUFence(dev, fence);
-                    } else {
+        void* fence = nullptr;
+        int result = dong_gpu_upload_texture_subrect(
+            driver_, victim->texture,
+            zero_buffer.data(),
+            0, 0,  // dest_x, dest_y
+            atlas_width_, atlas_height_,
+            atlas_width_ * 4,  // src_stride_bytes
+            &fence);
 
-                        DONG_LOG_WARN("GlyphAtlas::evictAndRecyclePage: SDL_SubmitGPUCommandBufferAndAcquireFence failed: %s", SDL_GetError());
+        if (result != 0) {
+            DONG_LOG_WARN("GlyphAtlas::evictAndRecyclePage: failed to initialize texture to black");
+        }
 
-                        gpu_device_->submitCommandBuffer(cmd_buf);
-                        gpu_device_->waitForGPU();
-                    }
-
-
-                }
+        // Wait for initialization
+        if (fence) {
+            while (!dong_gpu_query_fence(driver_, fence)) {
+                // Poll until complete
             }
-            SDL_ReleaseGPUTransferBuffer(dev, transfer_buf);
+            dong_gpu_release_fence(driver_, fence);
+        } else {
+            dong_gpu_wait_for_gpu(driver_);
         }
     }
 
@@ -369,8 +290,8 @@ bool GlyphAtlas::initialize(uint32_t width,
                              uint32_t height,
                              uint32_t glyph_bitmap_size,
                              float glyph_distance_range) {
-    if (!gpu_device_ || !gpu_device_->isInitialized()) {
-        DONG_LOG_ERROR("GlyphAtlas::initialize: GPU device not initialized");
+    if (!driver_) {
+        DONG_LOG_ERROR("GlyphAtlas::initialize: GPU driver not set");
         return false;
     }
 
@@ -382,7 +303,6 @@ bool GlyphAtlas::initialize(uint32_t width,
     page_to_keys_.clear();
     pages_.clear();
     usage_counter_ = 0;
-
 
     if (!createPage()) {
         DONG_LOG_ERROR("GlyphAtlas::initialize: failed to create initial page");
@@ -470,105 +390,40 @@ const AtlasEntry* GlyphAtlas::addGlyph(uint32_t glyph_id, const std::string& fon
     page->cursor_x += glyph_width + kAtlasPadding;
     page->row_height = std::max(page->row_height, glyph_height);
 
-    // 上传到 GPU（通过 transfer buffer）
-    SDL_GPUDevice* dev = gpu_device_->getHandle();
-    SDL_GPUCommandBuffer* cmd_buf = gpu_device_->acquireCommandBuffer();
-    if (!cmd_buf) {
-        DONG_LOG_ERROR("GlyphAtlas::addGlyph: failed to acquire command buffer");
-        return nullptr;
-    }
-
-    uint32_t stride = glyph_width * 4;
-    uint32_t buffer_size = stride * glyph_height;
-
-    SDL_GPUTransferBufferCreateInfo transfer_info{};
-    transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-    transfer_info.size = buffer_size;
-
-    SDL_GPUTransferBuffer* transfer_buf = SDL_CreateGPUTransferBuffer(dev, &transfer_info);
-    if (!transfer_buf) {
-        DONG_LOG_ERROR("GlyphAtlas::addGlyph: failed to create transfer buffer");
-        gpu_device_->submitCommandBuffer(cmd_buf);
-        return nullptr;
-    }
-
-    void* mapped = SDL_MapGPUTransferBuffer(dev, transfer_buf, false);
-    if (!mapped) {
-        DONG_LOG_ERROR("GlyphAtlas::addGlyph: failed to map transfer buffer");
-        SDL_ReleaseGPUTransferBuffer(dev, transfer_buf);
-        gpu_device_->submitCommandBuffer(cmd_buf);
-        return nullptr;
-    }
-
-    uint8_t* dst_bytes = static_cast<uint8_t*>(mapped);
-    // 直接复制，Y 轴翻转已经在 generateMSDF 中完成
-    std::memcpy(dst_bytes, bitmap.data(), bitmap.size());
-    
+    // 上传到 GPU（通过 driver）
     // DEBUG: 验证上传前的数据
     int upload_non_zero = 0;
     for (size_t i = 0; i < bitmap.size(); i += 4) {
-        if (dst_bytes[i] > 0 || dst_bytes[i+1] > 0 || dst_bytes[i+2] > 0) {
+        if (bitmap[i] > 0 || bitmap[i+1] > 0 || bitmap[i+2] > 0) {
             upload_non_zero++;
         }
     }
     DONG_LOG_DEBUG("[ATLAS UPLOAD] glyph=%u bitmap_size=%zu non_zero_pixels=%d dst=(%u,%u) size=(%u,%u) texture=%p",
             glyph_id, bitmap.size(), upload_non_zero, dst_x, dst_y, glyph_width, glyph_height, (void*)page->texture);
-    
-    SDL_UnmapGPUTransferBuffer(dev, transfer_buf);
 
-    SDL_GPUCopyPass* copy_pass = SDL_BeginGPUCopyPass(cmd_buf);
-    if (!copy_pass) {
-        DONG_LOG_ERROR("GlyphAtlas::addGlyph: failed to begin copy pass");
-        SDL_ReleaseGPUTransferBuffer(dev, transfer_buf);
-        gpu_device_->submitCommandBuffer(cmd_buf);
+    void* fence = nullptr;
+    int upload_result = dong_gpu_upload_texture_subrect(
+        driver_, page->texture,
+        bitmap.data(),
+        dst_x, dst_y,  // dest position in atlas
+        glyph_width, glyph_height,
+        glyph_width * 4,  // src_stride_bytes (RGBA)
+        &fence);
+
+    if (upload_result != 0) {
+        DONG_LOG_ERROR("GlyphAtlas::addGlyph: failed to upload glyph to atlas");
         return nullptr;
     }
 
-    SDL_GPUTextureTransferInfo tex_transfer{};
-    tex_transfer.transfer_buffer = transfer_buf;
-    tex_transfer.offset = 0;
-    tex_transfer.pixels_per_row = glyph_width;  // 关键：设置每行像素数
-    tex_transfer.rows_per_layer = glyph_height; // 关键：设置每层行数
-
-    SDL_GPUTextureRegion region{};
-    region.texture = page->texture;
-    region.mip_level = 0;
-    region.layer = 0;
-    region.x = dst_x;
-    region.y = dst_y;
-    region.z = 0;
-    region.w = glyph_width;
-    region.h = glyph_height;
-    region.d = 1;
-
-    SDL_UploadToGPUTexture(copy_pass, &tex_transfer, &region, false);
-    SDL_EndGPUCopyPass(copy_pass);
-
-    SDL_GPUFence* fence = nullptr;
-    {
-        DONG_PROFILE_SCOPE_CAT("SDL_SubmitGPUCommandBufferAndAcquireFence", "gpu");
-        fence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd_buf);
-    }
+    // Wait for upload to complete (synchronous for single glyph)
     if (fence) {
-        SDL_GPUFence* fences[] = { fence };
-        {
-            DONG_PROFILE_SCOPE_CAT("SDL_WaitForGPUFences", "gpu");
-            if (!SDL_WaitForGPUFences(dev, true, fences, 1)) {
-                DONG_LOG_WARN("GlyphAtlas::addGlyph: SDL_WaitForGPUFences failed: %s", SDL_GetError());
-                gpu_device_->waitForGPU();
-            }
+        while (!dong_gpu_query_fence(driver_, fence)) {
+            // Poll until complete
         }
-        SDL_ReleaseGPUFence(dev, fence);
+        dong_gpu_release_fence(driver_, fence);
     } else {
-
-        DONG_LOG_WARN("GlyphAtlas::addGlyph: SDL_SubmitGPUCommandBufferAndAcquireFence failed: %s", SDL_GetError());
-        gpu_device_->submitCommandBuffer(cmd_buf);
-        gpu_device_->waitForGPU();
+        dong_gpu_wait_for_gpu(driver_);
     }
-
-
-    SDL_ReleaseGPUTransferBuffer(dev, transfer_buf);
-
 
     // 创建 AtlasEntry
     AtlasEntry entry{};
@@ -597,12 +452,11 @@ const AtlasEntry* GlyphAtlas::addGlyph(uint32_t glyph_id, const std::string& fon
 void GlyphAtlas::addGlyphsBatched(const std::vector<GlyphRequest>& requests) {
     DONG_PROFILE_SCOPE_CAT("addGlyphsBatched", "glyph_atlas");
 
-    if (requests.empty() || !gpu_device_ || !gpu_device_->isInitialized()) {
+    if (requests.empty() || !driver_) {
         return;
     }
 
-    SDL_GPUDevice* dev = gpu_device_->getHandle();
-    reapPendingUploads(dev);
+    reapPendingUploads();
 
     // 阶段1：收集需要添加的字形（过滤已缓存的）
     struct PendingGlyph {
@@ -687,100 +541,36 @@ void GlyphAtlas::addGlyphsBatched(const std::vector<GlyphRequest>& requests) {
 
     DONG_LOG_DEBUG("addGlyphsBatched: processing %zu glyphs in single batch", pending.size());
 
-    // 阶段2：批量上传到 GPU（单个命令缓冲区）。
+    // 阶段2：批量上传到 GPU（单次命令缓冲区）。
     // 关键优化：不再在 CPU 侧等待 fence；依赖 command buffer 的提交顺序保证 upload 先于后续 draw。
-    SDL_GPUCommandBuffer* cmd_buf = gpu_device_->acquireCommandBuffer();
-    if (!cmd_buf) {
-        DONG_LOG_ERROR("addGlyphsBatched: failed to acquire command buffer");
-        return;
-    }
-
-
-    // 存储需要释放的 transfer buffers
-    std::vector<SDL_GPUTransferBuffer*> transfer_buffers;
-    transfer_buffers.reserve(pending.size());
-
     {
         DONG_PROFILE_SCOPE_CAT("addGlyphsBatched:upload", "gpu");
 
-        SDL_GPUCopyPass* copy_pass = SDL_BeginGPUCopyPass(cmd_buf);
-        if (!copy_pass) {
-            DONG_LOG_ERROR("addGlyphsBatched: failed to begin copy pass");
-            gpu_device_->submitCommandBuffer(cmd_buf);
-            return;
-        }
-
         for (auto& pg : pending) {
-            uint32_t stride = pg.width * 4;
-            uint32_t buffer_size = stride * pg.height;
+            if (!pg.page) continue;
 
-            SDL_GPUTransferBufferCreateInfo transfer_info{};
-            transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-            transfer_info.size = buffer_size;
+            void* fence = nullptr;
+            int result = dong_gpu_upload_texture_subrect(
+                driver_, pg.page->texture,
+                pg.bitmap.data(),
+                pg.dst_x, pg.dst_y,
+                pg.width, pg.height,
+                pg.width * 4,  // src_stride_bytes
+                &fence);
 
-            SDL_GPUTransferBuffer* transfer_buf = SDL_CreateGPUTransferBuffer(dev, &transfer_info);
-            if (!transfer_buf) {
-                DONG_LOG_DEBUG("addGlyphsBatched: failed to create transfer buffer for glyph %u", pg.glyph_id);
-                continue;
-            }
-            transfer_buffers.push_back(transfer_buf);
-
-            void* mapped = SDL_MapGPUTransferBuffer(dev, transfer_buf, false);
-            if (!mapped) {
-                DONG_LOG_DEBUG("addGlyphsBatched: failed to map transfer buffer for glyph %u", pg.glyph_id);
+            if (result != 0) {
+                DONG_LOG_DEBUG("addGlyphsBatched: failed to upload glyph %u", pg.glyph_id);
                 continue;
             }
 
-            std::memcpy(mapped, pg.bitmap.data(), pg.bitmap.size());
-            SDL_UnmapGPUTransferBuffer(dev, transfer_buf);
-
-            SDL_GPUTextureTransferInfo tex_transfer{};
-            tex_transfer.transfer_buffer = transfer_buf;
-            tex_transfer.offset = 0;
-            tex_transfer.pixels_per_row = pg.width;
-            tex_transfer.rows_per_layer = pg.height;
-
-            SDL_GPUTextureRegion region{};
-            region.texture = pg.page->texture;
-            region.mip_level = 0;
-            region.layer = 0;
-            region.x = pg.dst_x;
-            region.y = pg.dst_y;
-            region.z = 0;
-            region.w = pg.width;
-            region.h = pg.height;
-            region.d = 1;
-
-            SDL_UploadToGPUTexture(copy_pass, &tex_transfer, &region, false);
+            // Collect fence for async tracking
+            if (fence) {
+                PendingUpload pu;
+                pu.fence = fence;
+                pending_uploads_.push_back(pu);
+            }
         }
-
-        SDL_EndGPUCopyPass(copy_pass);
     }
-
-    // 提交 upload command buffer：优先拿 fence 做异步回收；若拿不到 fence，则退化为同步等待。
-    SDL_GPUFence* fence = nullptr;
-    {
-        DONG_PROFILE_SCOPE_CAT("SDL_SubmitGPUCommandBufferAndAcquireFence", "gpu");
-        fence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd_buf);
-    }
-
-    if (fence) {
-        PendingUpload pu;
-        pu.fence = fence;
-        pu.buffers = std::move(transfer_buffers);
-        pending_uploads_.push_back(std::move(pu));
-    } else {
-        DONG_LOG_WARN("addGlyphsBatched: SDL_SubmitGPUCommandBufferAndAcquireFence failed: %s", SDL_GetError());
-        gpu_device_->submitCommandBuffer(cmd_buf);
-        gpu_device_->waitForGPU();
-
-        // 退化路径：GPU 已 idle，立即释放 transfer buffers。
-        for (auto* tb : transfer_buffers) {
-            SDL_ReleaseGPUTransferBuffer(dev, tb);
-        }
-        transfer_buffers.clear();
-    }
-
 
     // 阶段3：更新缓存
     for (const auto& pg : pending) {
@@ -803,25 +593,19 @@ void GlyphAtlas::addGlyphsBatched(const std::vector<GlyphRequest>& requests) {
     DONG_LOG_DEBUG("addGlyphsBatched: completed batch of %zu glyphs", pending.size());
 }
 
-void GlyphAtlas::reapPendingUploads(SDL_GPUDevice* dev) {
-    if (!dev) return;
+void GlyphAtlas::reapPendingUploads() {
+    if (!driver_) return;
 
     for (size_t i = 0; i < pending_uploads_.size();) {
         PendingUpload& p = pending_uploads_[i];
         if (!p.fence) {
-            // 容错：无 fence 直接释放。
-            for (auto* tb : p.buffers) {
-                if (tb) SDL_ReleaseGPUTransferBuffer(dev, tb);
-            }
+            // 容错：无 fence 直接移除
             pending_uploads_.erase(pending_uploads_.begin() + (ptrdiff_t)i);
             continue;
         }
 
-        if (SDL_QueryGPUFence(dev, p.fence)) {
-            for (auto* tb : p.buffers) {
-                if (tb) SDL_ReleaseGPUTransferBuffer(dev, tb);
-            }
-            SDL_ReleaseGPUFence(dev, p.fence);
+        if (dong_gpu_query_fence(driver_, p.fence)) {
+            dong_gpu_release_fence(driver_, p.fence);
             pending_uploads_.erase(pending_uploads_.begin() + (ptrdiff_t)i);
             continue;
         }
@@ -830,24 +614,16 @@ void GlyphAtlas::reapPendingUploads(SDL_GPUDevice* dev) {
     }
 }
 
-void GlyphAtlas::waitAllPendingUploads(SDL_GPUDevice* dev) {
-    if (!dev) return;
+void GlyphAtlas::waitAllPendingUploads() {
+    if (!driver_) return;
     if (pending_uploads_.empty()) return;
 
-    // 更稳妥的 shutdown 路径：直接等待 device idle，然后释放所有 fence/transfer buffers。
-    // 相比逐 fence SDL_WaitForGPUFences，这个路径在某些后端/销毁阶段更不容易触发崩溃。
-    if (gpu_device_) {
-        gpu_device_->waitForGPU();
-    }
+    // 更稳妥的 shutdown 路径：直接等待 device idle，然后释放所有 fence
+    dong_gpu_wait_for_gpu(driver_);
 
     for (auto& p : pending_uploads_) {
-        for (auto* tb : p.buffers) {
-            if (tb) SDL_ReleaseGPUTransferBuffer(dev, tb);
-        }
-        p.buffers.clear();
-
         if (p.fence) {
-            SDL_ReleaseGPUFence(dev, p.fence);
+            dong_gpu_release_fence(driver_, p.fence);
             p.fence = nullptr;
         }
     }
@@ -1036,13 +812,12 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
                 glyph_id, glyph_w_scaled, glyph_h_scaled, available_size);
     }
 
-    DONG_LOG_DEBUG("[MSDF] glyph=%u msdf_size=%d range=%.2f width=%.2f height=%.2f scale=%.4f (uniform=%.4f)",
+    DONG_LOG_DEBUG("[MSDF] glyph=%u msdf_size=%d range=%.2f width=%.2f height=%.2f scale=%.4f",
             glyph_id,
             msdf_size,
             range,
             width, height,
-            scale,
-            uniform_scale);
+            scale);
     
     // 正确的 translate 计算
     // msdfgen 的 Projection 公式是: msdf_coord = scale * (shape_coord + translate)

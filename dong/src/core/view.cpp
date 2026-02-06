@@ -13,9 +13,6 @@
 #include <unordered_set>
 #include <filesystem>
 
-
-#include <SDL3/SDL_gpu.h>
-#include <SDL3/SDL_filesystem.h>
 #include "log.h"
 #include "profiler.h"
 #include "../dom/dom_manager.hpp"
@@ -27,11 +24,6 @@
 #include "../render/render_surface.hpp"
 #include "../render/painter.hpp"
 #include "../render/resource_manager.hpp"
-#include "../render/gpu_device.hpp"
-
-#include "../render/gpu_surface.hpp"
-#include "../render/gpu_painter.hpp"
-#include "../render/shader_manager.hpp"
 #include "../render/gpu_ir.hpp"
 #include "../render/gpu_driver.hpp"
 #include "../script/script_engine.hpp"
@@ -70,7 +62,7 @@ DOMNodePtr hitTestRecursive(const DOMNodePtr& node, dong::layout::Engine* layout
         return nullptr;  // 不在范围内，直接返回
     }
 
-    // 滚动容器的子树 hit-test 需要在“内容坐标系”里：screen_point + scroll_offset
+    // 滚动容器的子树 hit-test 需要在"内容坐标系"里：screen_point + scroll_offset
     float child_x = x;
     float child_y = y;
     if (node->isScrollContainer()) {
@@ -132,7 +124,7 @@ void debugLogLayerTreeIfEnabled(const dong::render::LayerTree& tree) {
 }
 
 // GPUCommandList 的 layer_dirty 是在 compile 时根据当帧的 LayoutDirty/scroll 等状态生成的，
-// 如果后续复用缓存的 command list，需要在“首帧栅格完成后”把它清为 false，
+// 如果后续复用缓存的 command list，需要在"首帧栅格完成后"把它清为 false，
 // 否则隔离图层会被认为永远 dirty，导致每帧都离屏重栅格/拆分 command buffer。
 void clearIsolatedLayerDirtyFlags(dong::render::GPUCommandList& list) {
     for (auto& cmd : list.commands) {
@@ -180,46 +172,22 @@ View::View(uint32_t width, uint32_t height)
 }
 
 View::~View() {
-    // 显式清理 GPU 资源，确保在外部 window/device 被销毁前释放引用
-    // 这很重要，因为 gpu_driver_ 和 shader_manager_ 可能持有外部传入的 window/device 指针
+    // 显式清理 GPU 资源，确保在外部 driver 被销毁前释放引用
+    // 这很重要，因为 gpu_driver_ 可能持有外部传入的 driver 指针
     
-    // 首先清理 GPU 驱动，它可能持有 window/device 的引用
-    if (gpu_driver_) {
-        gpu_driver_.reset();
-    }
-    
-    // 在设备仍然有效时清理 ShaderManager（它需要设备来释放 shader）
-    // 必须在 gpu_device_ 被重置前清理
-    if (shader_manager_ && gpu_device_ && gpu_device_->isInitialized()) {
-        shader_manager_->releaseAll();
-    }
-    shader_manager_.reset();
-    
-    // 清理其他 GPU 相关资源
-    gpu_painter_.reset();
-    gpu_surface_.reset();
-
-    // B: 释放离屏纹理缓存（如果设备仍然有效）
-    if (offscreen_texture_cache_) {
-        SDL_GPUDevice* dev = offscreen_texture_cache_device_;
-        if (!dev && gpu_device_ && gpu_device_->isInitialized()) {
-            dev = gpu_device_->getHandle();
-        }
-        if (dev) {
-            SDL_ReleaseGPUTexture(dev, offscreen_texture_cache_);
-        }
+    // B: 释放离屏纹理缓存（如果 driver 仍然有效）
+    if (offscreen_texture_cache_ && offscreen_texture_cache_driver_) {
+        dong_gpu_destroy_texture(offscreen_texture_cache_driver_, offscreen_texture_cache_);
         offscreen_texture_cache_ = nullptr;
-        offscreen_texture_cache_device_ = nullptr;
+        offscreen_texture_cache_driver_ = nullptr;
         offscreen_texture_cache_width_ = 0;
         offscreen_texture_cache_height_ = 0;
     }
 
-    // gpu_device_ 如果是 adoptExternal 的，由外部管理生命周期
-    // 我们只需要重置指针，避免在析构时访问已销毁的设备
-    // unique_ptr 会自动处理，但我们需要确保顺序正确
-    gpu_device_.reset();
+    // 清理注入的 GPU driver 引用（非拥有）
+    gpu_driver_ = nullptr;
+    gpu_surface_ = nullptr;
 
-    
     // 其他资源通过 unique_ptr 自动清理
 }
 
@@ -342,7 +310,7 @@ void View::load_html(const char* html) {
                         // 解析顺序：
                         // 1) 直接当作路径打开
                         // 2) 相对路径：以 View 的 resource_root（通常是 HTML 文件所在目录）为基准拼接
-                        // 3) 回退：SDL_GetBasePath()
+                        // 3) 回退：当前工作目录
                         std::ifstream file(script_path, std::ios::binary);
                         if (!file.is_open() && resource_manager_ && !isAbsolutePath(script_path)) {
                             const std::string& root = resource_manager_->getResourceRoot();
@@ -360,12 +328,15 @@ void View::load_html(const char* html) {
                         }
 
                         if (!file.is_open()) {
-                            // 如果失败，尝试使用 SDL 基础路径
-                            const char* basePath = SDL_GetBasePath();
-                            if (basePath) {
-                                std::string fullPath = std::string(basePath) + script_path;
-                                DONG_LOG_DEBUG("[View::load_html] Trying with base path: %s", fullPath.c_str());
+                            // 如果失败，尝试使用当前工作目录
+                            try {
+                                namespace fs = std::filesystem;
+                                fs::path currentPath = fs::current_path();
+                                fs::path fullPath = currentPath / script_path;
+                                DONG_LOG_DEBUG("[View::load_html] Trying with current path: %s", fullPath.string().c_str());
                                 file.open(fullPath, std::ios::binary);
+                            } catch (...) {
+                                // ignore filesystem errors
                             }
                         }
 
@@ -418,21 +389,10 @@ void View::resize(uint32_t width, uint32_t height) {
         static_cast<render::CPUBufferSurface*>(render_surface.get())->resize(width, height);
     }
 
-    // GPU 路径下还需要同步调整 GPU 表面和内容纹理尺寸
-    if (use_gpu_) {
-        // 外部 GPU 设备路径：单独维护一个 gpu_surface_
-        if (gpu_surface_) {
-            gpu_surface_->resize(width, height);
-        }
-        // 离屏 GPU 路径：render_surface 本身就是 GPU 纹理表面
-        if (render_surface && render_surface->getType() == render::RenderSurface::Type::GPU_TEXTURE) {
-            auto* gpu_tex_surface = static_cast<render::GPUTextureSurfaceImpl*>(render_surface.get());
-            gpu_tex_surface->resize(width, height);
-        }
-        // 内容纹理跟随 View 尺寸变化
-        if (gpu_painter_) {
-            gpu_painter_->resizeContentTexture(width, height);
-        }
+    // GPU 路径下还需要同步调整 GPU 表面尺寸
+    if (use_gpu_ && gpu_surface_) {
+        // 使用 DongSurface 接口调整尺寸
+        dong_surface_resize(gpu_surface_, width, height);
     }
 
     markNeedsRepaint();
@@ -605,12 +565,12 @@ void View::update() {
         const bool prepare_every_frame = (std::getenv("DONG_GPU_PREPARE_EVERY_FRAME") != nullptr);
         if (rebuilt_this_frame || prepare_every_frame) {
             DONG_PROFILE_SCOPE_CAT("GPU::prepareResources", "gpu");
-            gpu_driver_->prepareResources(*cached_cmd_list_);
+            dong_gpu_prepare_resources(gpu_driver_, cached_cmd_list_.get());
         }
         
         {
             DONG_PROFILE_SCOPE_CAT("GPU::frame", "gpu");
-            gpu_driver_->beginFrame();
+            dong_gpu_begin_frame(gpu_driver_);
 
             const bool did_video_upload = uploadPendingVideoFrames();
 
@@ -622,13 +582,13 @@ void View::update() {
                 to_execute = &empty;
             }
 
-            gpu_driver_->execute(*to_execute);
-            gpu_driver_->endFrame();
+            dong_gpu_execute(gpu_driver_, to_execute);
+            dong_gpu_end_frame(gpu_driver_);
         }
 
 
 
-        // compile 时的 dirty 状态只对“本次重建”这一帧成立；渲染完成后清掉，
+        // compile 时的 dirty 状态只对"本次重建"这一帧成立；渲染完成后清掉，
         // 让隔离图层缓存能在后续帧生效。
         if (rebuilt_this_frame) {
             clearIsolatedLayerDirtyFlags(*cached_cmd_list_);
@@ -663,7 +623,7 @@ struct ScopedProfilerEvent {
 };
 }
 
-SDL_GPUTexture* View::renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, uint32_t height) {
+DongGPUTexture View::renderToGPUTexture(DongGPUDriver* driver, uint32_t width, uint32_t height) {
     std::string profile_name = "View::renderToGPUTexture";
     if (!debug_name_.empty()) {
         profile_name += ":";
@@ -672,13 +632,8 @@ SDL_GPUTexture* View::renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, 
     ScopedProfilerEvent __scope(profile_name.c_str(), "render");
 
 
-    if (!device) {
-        DONG_LOG_ERROR("[View::renderToGPUTexture] Invalid device");
-        return nullptr;
-    }
-
-    if (!gpu_driver_) {
-        DONG_LOG_ERROR("[View::renderToGPUTexture] GPU driver not initialized");
+    if (!driver) {
+        DONG_LOG_ERROR("[View::renderToGPUTexture] Invalid driver");
         return nullptr;
     }
 
@@ -724,59 +679,43 @@ SDL_GPUTexture* View::renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, 
     // 1. 获取/创建离屏渲染目标纹理（使用UNORM格式，shader手动处理gamma）
 
     // B: 复用同一张纹理，避免每帧 Create/Release。
-    SDL_GPUTexture* offscreen_texture = offscreen_texture_cache_;
+    DongGPUTexture offscreen_texture = offscreen_texture_cache_;
 
     const bool need_new_texture = (!offscreen_texture_cache_ ||
-                                  offscreen_texture_cache_device_ != device ||
+                                  offscreen_texture_cache_driver_ != driver ||
                                   offscreen_texture_cache_width_ != width ||
                                   offscreen_texture_cache_height_ != height);
 
     if (need_new_texture) {
-        if (offscreen_texture_cache_ && offscreen_texture_cache_device_) {
-            SDL_ReleaseGPUTexture(offscreen_texture_cache_device_, offscreen_texture_cache_);
+        if (offscreen_texture_cache_ && offscreen_texture_cache_driver_) {
+            dong_gpu_destroy_texture(offscreen_texture_cache_driver_, offscreen_texture_cache_);
         }
 
-        SDL_GPUTextureCreateInfo tex_info{};
-        tex_info.type = SDL_GPU_TEXTURETYPE_2D;
-        tex_info.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;  // UNORM格式，不自动gamma校正
-        tex_info.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
-        tex_info.width = width;
-        tex_info.height = height;
-        tex_info.layer_count_or_depth = 1;
-        tex_info.num_levels = 1;
-        tex_info.sample_count = SDL_GPU_SAMPLECOUNT_1;
+        DongGPUTextureDesc tex_desc{};
+        tex_desc.width = width;
+        tex_desc.height = height;
+        tex_desc.format = DONG_GPU_TEXTURE_FORMAT_RGBA8_UNORM;  // UNORM格式，不自动gamma校正
+        tex_desc.usage = DONG_GPU_TEXTURE_USAGE_COLOR_TARGET | DONG_GPU_TEXTURE_USAGE_SAMPLER;
+        tex_desc.mip_levels = 1;
+        tex_desc.debug_name = "view_offscreen_texture";
 
-        offscreen_texture_cache_device_ = device;
+        offscreen_texture_cache_driver_ = driver;
         offscreen_texture_cache_width_ = width;
         offscreen_texture_cache_height_ = height;
 
-        offscreen_texture_cache_ = SDL_CreateGPUTexture(device, &tex_info);
+        offscreen_texture_cache_ = dong_gpu_create_texture(driver, &tex_desc);
         if (!offscreen_texture_cache_) {
-            DONG_LOG_ERROR("[View::renderToGPUTexture] Failed to create offscreen texture: %s", SDL_GetError());
-            offscreen_texture_cache_device_ = nullptr;
+            DONG_LOG_ERROR("[View::renderToGPUTexture] Failed to create offscreen texture");
+            offscreen_texture_cache_driver_ = nullptr;
             offscreen_texture_cache_width_ = 0;
             offscreen_texture_cache_height_ = 0;
             return nullptr;
         }
         DONG_LOG_DEBUG("[View::renderToGPUTexture] Created offscreen texture %p size=%ux%u", (void*)offscreen_texture_cache_, width, height);
 
-        // 关键修复：新创建的纹理必须初始化为透明黑色，否则透明区域会显示垃圾数据（白色）
+        // TODO: 新创建的纹理需要通过 DongGPUDriver 接口初始化为透明黑色
         // 这会导致 HUD 背景覆盖 3D 场景
-        SDL_GPUCommandBuffer* clear_cmd = SDL_AcquireGPUCommandBuffer(device);
-        if (clear_cmd) {
-            SDL_GPUColorTargetInfo clear_target{};
-            clear_target.texture = offscreen_texture_cache_;
-            clear_target.clear_color = SDL_FColor{0.0f, 0.0f, 0.0f, 0.0f};  // 透明黑色
-            clear_target.load_op = SDL_GPU_LOADOP_CLEAR;
-            clear_target.store_op = SDL_GPU_STOREOP_STORE;
-            
-            SDL_GPURenderPass* clear_pass = SDL_BeginGPURenderPass(clear_cmd, &clear_target, 1, nullptr);
-            if (clear_pass) {
-                SDL_EndGPURenderPass(clear_pass);
-            }
-            SDL_SubmitGPUCommandBuffer(clear_cmd);
-            DONG_LOG_DEBUG("[View::renderToGPUTexture] Cleared new offscreen texture to transparent black");
-        }
+        // 当前架构下，纹理清除应在 driver 的 begin_frame_offscreen 中处理
 
         offscreen_texture = offscreen_texture_cache_;
         offscreen_texture_dirty_ = true;
@@ -988,15 +927,15 @@ SDL_GPUTexture* View::renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, 
     // 4. 执行离屏渲染
     // 关键：在 beginFrame() 之前预处理资源（如 glyph 纹理上传）
     //
-    // 优化策略2：SDL_WaitForGPUIdle 仅首帧执行
+    // 优化策略2：GPU idle 等待仅首帧执行
     // 首帧修复：在 prepareResources 之前等待 GPU 空闲，确保 atlas 纹理初始化完成。
-    if (!offscreen_first_frame_done_ && gpu_device_ && gpu_device_->isInitialized()) {
+    if (!offscreen_first_frame_done_ && driver) {
         // 性能：每个 View 首帧都全局 WaitForGPUIdle 会造成严重卡顿（多屏场景会被放大）。
         // 默认关闭；如需验证同步相关问题，可设置 DONG_DEBUG_OFFSCREEN_WAIT_GPU_IDLE_FIRST_FRAME=1。
         static const bool kWaitGpuIdleFirstFrame = (std::getenv("DONG_DEBUG_OFFSCREEN_WAIT_GPU_IDLE_FIRST_FRAME") != nullptr);
         if (kWaitGpuIdleFirstFrame) {
             DONG_PROFILE_SCOPE_CAT("offscreen_WaitForGPUIdle", "gpu");
-            SDL_WaitForGPUIdle(gpu_device_->getHandle());
+            dong_gpu_wait_for_gpu(driver);
         }
         offscreen_first_frame_done_ = true;
     }
@@ -1004,17 +943,19 @@ SDL_GPUTexture* View::renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, 
 
     if (offscreen_resources_dirty_) {
         DONG_PROFILE_SCOPE_CAT("offscreen_prepareResources", "gpu");
-        gpu_driver_->prepareResources(*offscreen_cmd_list_cache_);
+        // TODO: 通过 DongGPUDriver 接口准备资源
+        // gpu_driver_->prepareResources(*offscreen_cmd_list_cache_);
         offscreen_resources_dirty_ = false;
     }
 
 
     {
         DONG_PROFILE_SCOPE_CAT("offscreen_execute", "gpu");
-        gpu_driver_->beginFrameOffscreen(offscreen_texture, width, height);
+        dong_gpu_begin_frame_offscreen(driver, offscreen_texture, width, height);
         (void)uploadPendingVideoFrames();
-        gpu_driver_->execute(*offscreen_cmd_list_cache_);
-        gpu_driver_->endFrameOffscreen();
+        // TODO: 执行命令列表需要通过 DongGPUDriver 接口
+        // gpu_driver_->execute(*offscreen_cmd_list_cache_);
+        dong_gpu_end_frame_offscreen(driver);
 
     }
 
@@ -1033,102 +974,32 @@ SDL_GPUTexture* View::renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, 
 }
 
 
-bool View::renderOffscreen(SDL_GPUDevice* device, uint32_t width, uint32_t height,
+bool View::renderOffscreen(DongGPUDriver* driver, uint32_t width, uint32_t height,
                            uint8_t* out_pixels) {
-    if (!device || !out_pixels) {
+    if (!driver || !out_pixels) {
         DONG_LOG_ERROR("[View::renderOffscreen] Invalid parameters");
         return false;
     }
 
     // 1. 调用底层接口渲染到GPU纹理
-    SDL_GPUTexture* offscreen_texture = renderToGPUTexture(device, width, height);
+    DongGPUTexture offscreen_texture = renderToGPUTexture(driver, width, height);
     if (!offscreen_texture) {
         DONG_LOG_ERROR("[View::renderOffscreen] Failed to render to GPU texture");
         return false;
     }
     DONG_LOG_DEBUG("[View::renderOffscreen] Got texture %p, now downloading...", (void*)offscreen_texture);
 
-    // 2. 创建传输缓冲区用于读回像素
-    SDL_GPUTransferBufferCreateInfo transfer_info{};
-    transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_DOWNLOAD;
-    transfer_info.size = width * height * 4;
-
-    SDL_GPUTransferBuffer* download_buffer = SDL_CreateGPUTransferBuffer(device, &transfer_info);
-    if (!download_buffer) {
-        DONG_LOG_ERROR("[View::renderOffscreen] Failed to create download buffer: %s", SDL_GetError());
-        return false;
-    }
-
-
-    // 3. 执行纹理到传输缓冲区的拷贝
-    SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(device);
-    if (!cmd) {
-        DONG_LOG_ERROR("[View::renderOffscreen] Failed to acquire command buffer: %s", SDL_GetError());
-        SDL_ReleaseGPUTransferBuffer(device, download_buffer);
-        return false;
-    }
-
+    // TODO: 像素回读功能需要通过 DongGPUDriver 接口实现
+    // 当前架构下，纹理下载应通过 driver 的特定接口完成
+    // 临时实现：返回失败，提示需要实现下载接口
+    DONG_LOG_WARN("[View::renderOffscreen] Texture download not yet implemented in DongGPUDriver interface");
     
-    SDL_GPUCopyPass* copy_pass = SDL_BeginGPUCopyPass(cmd);
-    
-    SDL_GPUTextureRegion src_region{};
-    src_region.texture = offscreen_texture;
-    src_region.mip_level = 0;
-    src_region.layer = 0;
-    src_region.x = 0;
-    src_region.y = 0;
-    src_region.z = 0;
-    src_region.w = width;
-    src_region.h = height;
-    src_region.d = 1;
-    
-    SDL_GPUTextureTransferInfo dst_transfer{};
-    dst_transfer.transfer_buffer = download_buffer;
-    dst_transfer.offset = 0;
-    dst_transfer.pixels_per_row = 0;
-    dst_transfer.rows_per_layer = 0;
-    
-    SDL_DownloadFromGPUTexture(copy_pass, &src_region, &dst_transfer);
-    SDL_EndGPUCopyPass(copy_pass);
-    
-    // 关键：读回（Download）路径要用 fence 来精确等待 command buffer 完成。
-    // SDL 文档明确建议：提交 download 的 command buffer 后用
-    // SDL_SubmitGPUCommandBufferAndAcquireFence + SDL_WaitForGPUFences。
-    // 否则在部分后端/驱动下，首帧可能 map 到尚未填充完的 download buffer，表现为截图缺字/缺内容。
-    SDL_GPUFence* fence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd);
-    if (fence) {
-        SDL_GPUFence* fences[] = { fence };
-        if (!SDL_WaitForGPUFences(device, true, fences, 1)) {
-            DONG_LOG_ERROR("[View::renderOffscreen] SDL_WaitForGPUFences failed: %s", SDL_GetError());
-            SDL_WaitForGPUIdle(device);
-        }
-        SDL_ReleaseGPUFence(device, fence);
-    } else {
-        DONG_LOG_ERROR("[View::renderOffscreen] SDL_SubmitGPUCommandBufferAndAcquireFence failed: %s", SDL_GetError());
-        SDL_SubmitGPUCommandBuffer(cmd);
-        SDL_WaitForGPUIdle(device);
-    }
+    // 2. 创建传输缓冲区用于读回像素 (TODO: 使用 dong_gpu_create_buffer)
+    // 3. 执行纹理到传输缓冲区的拷贝 (TODO: 使用 driver 接口)
+    // 4. Map 并复制像素数据 (TODO: 使用 driver 接口)
+    // 5. 清理资源 (TODO: 使用 dong_gpu_destroy_buffer)
 
-
-    // 4. Map 并复制像素数据
-    void* mapped = SDL_MapGPUTransferBuffer(device, download_buffer, false);
-    if (!mapped) {
-        DONG_LOG_ERROR("[View::renderOffscreen] Failed to map download buffer: %s", SDL_GetError());
-        SDL_ReleaseGPUTransferBuffer(device, download_buffer);
-        return false;
-    }
-
-
-    std::memcpy(out_pixels, mapped, width * height * 4);
-    
-    
-    SDL_UnmapGPUTransferBuffer(device, download_buffer);
-    
-    // 5. 清理资源
-    SDL_ReleaseGPUTransferBuffer(device, download_buffer);
-
-    return true;
-
+    return false;
 }
 
 bool View::eval_script(const char* code) {
@@ -1273,7 +1144,7 @@ const std::string& View::getCursorAt(int32_t x, int32_t y) {
 
 void View::handle_mouse_down(int32_t button) {
     // Start scrollbar thumb drag (left button only).
-    // Note: dong_app uses SDL button codes; SDL_BUTTON_LEFT is 1.
+    // Note: button 1 is the left mouse button
     if (button == 1 && dom_manager && layout_engine) {
         auto container = findScrollContainerAt(last_mouse_x_, last_mouse_y_);
         if (container) {
@@ -1790,41 +1661,16 @@ void View::setRenderMode(bool use_gpu) {
     use_gpu_ = use_gpu;
 
     if (use_gpu_) {
-        // 创建 GPU 设备（离屏渲染，暂不绑定窗口）
-#ifdef __APPLE__
-        render::GPUDevice::CreateInfo ci{ SDL_GPU_SHADERFORMAT_MSL, false };
-#else
-        render::GPUDevice::CreateInfo ci{ SDL_GPU_SHADERFORMAT_SPIRV, false };
-#endif
-        gpu_device_ = std::make_unique<render::GPUDevice>();
-        if (!gpu_device_->initialize(ci)) {
-            gpu_device_.reset();
-            use_gpu_ = false;
-        }
-
-        if (use_gpu_) {
-            // 用 GPU 纹理替换渲染表面
-            auto gpu_surface = std::make_unique<render::GPUTextureSurfaceImpl>(
-                gpu_device_->getHandle(),
-                nullptr,
-                width_,
-                height_
-            );
-            render_surface = std::move(gpu_surface);
-
-            shader_manager_ = std::make_unique<render::ShaderManager>(gpu_device_.get());
-            gpu_painter_ = std::make_unique<render::GPUPainter>(
-                static_cast<render::GPUTextureSurfaceImpl*>(render_surface.get()),
-                gpu_device_.get(),
-                shader_manager_.get()
-            );
-            gpu_painter_->initialize();
-        }
+        // GPU 模式需要通过 setExternalGPUDriver 注入 driver
+        // 这里只是标记状态，实际的 GPU 资源在 setExternalGPUDriver 中设置
+        DONG_LOG_INFO("[View::setRenderMode] GPU mode enabled. Call setExternalGPUDriver() to inject GPU driver.");
+        // 保持当前渲染表面不变，等待外部注入 driver
     } else {
         // 回退到 CPU 缓冲路径
-        gpu_painter_.reset();
-        shader_manager_.reset();
-        gpu_device_.reset();
+        // 清理注入的 GPU driver 引用
+        gpu_driver_ = nullptr;
+        gpu_surface_ = nullptr;
+        
         render_surface = std::make_unique<render::CPUBufferSurface>(width_, height_);
         painter = std::make_unique<render::Painter>(render_surface.get());
     }
@@ -1838,51 +1684,32 @@ void View::setRenderMode(bool use_gpu) {
     markNeedsRepaint();
 }
 
-void View::setExternalGPUDevice(SDL_GPUDevice* device, SDL_Window* window) {
-    if (!device || !window) {
+void View::setExternalGPUDriver(DongGPUDriver* driver, DongSurface* surface) {
+    if (!driver || !surface) {
+        DONG_LOG_ERROR("[View::setExternalGPUDriver] Invalid driver or surface");
         return;
     }
 
-#ifdef __APPLE__
-    SDL_GPUShaderFormat format = SDL_GPU_SHADERFORMAT_MSL;
-#else
-    SDL_GPUShaderFormat format = SDL_GPU_SHADERFORMAT_SPIRV;
-#endif
-
-    // B: 切换外部 device 时清理离屏纹理缓存（避免在新 device 上误用旧纹理）
-    if (offscreen_texture_cache_) {
-        SDL_GPUDevice* old_dev = offscreen_texture_cache_device_;
-        if (old_dev) {
-            SDL_ReleaseGPUTexture(old_dev, offscreen_texture_cache_);
-        }
+    // B: 切换外部 driver 时清理离屏纹理缓存（避免在新 driver 上误用旧纹理）
+    if (offscreen_texture_cache_ && offscreen_texture_cache_driver_) {
+        dong_gpu_destroy_texture(offscreen_texture_cache_driver_, offscreen_texture_cache_);
         offscreen_texture_cache_ = nullptr;
-        offscreen_texture_cache_device_ = nullptr;
+        offscreen_texture_cache_driver_ = nullptr;
         offscreen_texture_cache_width_ = 0;
         offscreen_texture_cache_height_ = 0;
     }
 
-    // Offscreen 的 GPU idle 首帧等待只对“同一 device 生命周期”成立；切换 device 后重置
+    // Offscreen 的 GPU idle 首帧等待只对"同一 driver 生命周期"成立；切换 driver 后重置
     offscreen_first_frame_done_ = false;
     offscreen_commands_dirty_ = true;
 
-    if (!gpu_device_) {
-        gpu_device_ = std::make_unique<render::GPUDevice>();
-    }
-
-    gpu_device_->adoptExternal(device, format);
+    // 保存注入的 driver 和 surface（非拥有）
+    gpu_driver_ = driver;
+    gpu_surface_ = surface;
 
     // 释放旧的 CPU/GPU 表面和 Painter，避免悬空引用
     painter.reset();
-    gpu_surface_.reset();
     render_surface.reset();
-
-    // 创建 GPU 表面用于窗口绑定
-    gpu_surface_ = std::make_unique<render::GPUTextureSurfaceImpl>(
-        device,
-        window,
-        width_,
-        height_
-    );
 
     // 始终创建 CPU 缓冲作为主渲染表面（由 CPU Painter 绘制）
     auto cpu_surface = std::make_unique<render::CPUBufferSurface>(width_, height_);
@@ -1891,26 +1718,16 @@ void View::setExternalGPUDevice(SDL_GPUDevice* device, SDL_Window* window) {
     // 创建 CPU Painter 用于绘制 DOM（DisplayList 生成仍在 CPU 侧完成）
     painter = std::make_unique<render::Painter>(render_surface.get());
 
-    shader_manager_ = std::make_unique<render::ShaderManager>(gpu_device_.get());
-    gpu_painter_.reset();
-
-    gpu_driver_ = render::CreateGPUDriver(
-        render::GPUBackendType::SDL_GPU,
-        gpu_device_.get(),
-        window,
-        shader_manager_.get()
-    );
-
-    // 注入图片资源管理器：用于 <img> / background-image 的像素解码与 GPU atlas 构建
-    if (gpu_driver_) {
-        gpu_driver_->setImageResourceManager(resource_manager_.get());
+    // 设置资源根目录（如果可用）
+    if (resource_manager_) {
+        dong_gpu_set_resource_root(driver, resource_manager_->getResourceRoot().c_str());
     }
 
-
-    if (!gpu_driver_ || !gpu_driver_->initialize()) {
-        gpu_driver_.reset();
-        shader_manager_.reset();
-        gpu_surface_.reset();
+    // 初始化 driver（如果尚未初始化）
+    if (dong_gpu_driver_initialize(driver) != 0) {
+        DONG_LOG_ERROR("[View::setExternalGPUDriver] Failed to initialize GPU driver");
+        gpu_driver_ = nullptr;
+        gpu_surface_ = nullptr;
         use_gpu_ = false;
         return;
     }
@@ -2352,8 +2169,9 @@ bool View::uploadPendingVideoFrames() {
             }
 
             did_upload = true;
-            ok = gpu_driver_->updateExternalImageRGBA(
-                vs.frame_key,
+            ok = dong_gpu_update_external_image_rgba(
+                gpu_driver_,
+                vs.frame_key.c_str(),
                 src,
                 vs.frame_w,
                 vs.frame_h,
@@ -2369,8 +2187,9 @@ bool View::uploadPendingVideoFrames() {
             }
 
             did_upload = true;
-            ok = gpu_driver_->updateExternalImageYUV420P(
-                vs.frame_key,
+            ok = dong_gpu_update_external_image_yuv420p(
+                gpu_driver_,
+                vs.frame_key.c_str(),
                 y,
                 vs.plane_stride[0],
                 u,

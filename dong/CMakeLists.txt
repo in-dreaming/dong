@@ -242,22 +242,16 @@ add_library(dong_render STATIC
     src/render/text_shaper.cpp
     src/render/font_metrics.cpp
 
-    # TODO: Remove after full backend migration (kept for compatibility)
-    src/render/gpu_driver_sdl.cpp
-    src/render/sdl_render/gpu_driver_sdl_init.cpp
-    src/render/sdl_render/gpu_driver_sdl_execute.cpp
-    src/render/sdl_render/gpu_driver_sdl_resources.cpp
-    src/render/sdl_render/gpu_driver_sdl_fonts.cpp
-    src/render/sdl_render/gpu_driver_factory.cpp
-    src/render/gpu_device.cpp
-    src/render/gpu_surface.cpp
-    src/render/gpu_painter.cpp
-    src/render/shader_manager.cpp
-    src/render/glyph_atlas.cpp
+    # NOTE: GPU-related files migrated to backends/sdl/
+    # - gpu_device.cpp -> backends/sdl/sdl_gpu_device.cpp
+    # - gpu_surface.cpp -> backends/sdl/sdl_gpu_surface.cpp
+    # - gpu_painter.cpp -> backends/sdl/sdl_gpu_painter.cpp
+    # - shader_manager.cpp -> backends/sdl/sdl_shader_manager.cpp
+    src/render/glyph_atlas.cpp  # TODO: Will be moved to core after GPUTextureOps injection
     # Platform (SDL implementations moved to backends/sdl/)
     # src/platform/sdl3_window.cpp
     # src/input/input_adapter_sdl3.cpp
-    third_party/SDL_shadercross/src/SDL_shadercross.c
+    third_party/SDL_shadercross/src/SDL_shadercross.c  # Needed by shader_manager
 )
 
 target_include_directories(dong_render PUBLIC

@@ -9,6 +9,8 @@
 #include <string.h>
 #include <stdio.h>
 
+#include <SDL3/SDL.h>
+
 // =============================================================================
 // stb_image integration
 // =============================================================================
@@ -18,7 +20,7 @@
 #define STBI_ONLY_PNG
 #define STBI_ONLY_JPEG
 #define STBI_ONLY_BMP
-#define STBI_ONLY_GIF
+// #define STBI_ONLY_GIF  // Disable GIF support due to stbi__g_failure_reason issue
 #define STBI_ONLY_TGA
 
 // Silence warnings in stb_image

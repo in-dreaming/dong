@@ -4,11 +4,10 @@
 #include <SDL3/SDL_gpu.h>
 #include <memory>
 
-namespace dong {
-namespace render {
+namespace dong::sdl_backend {
 
 // GPU 纹理表面的完整实现
-class GPUTextureSurfaceImpl : public GPUTextureSurface {
+class GPUTextureSurfaceImpl : public dong::render::GPUTextureSurface {
 public:
     GPUTextureSurfaceImpl(
         SDL_GPUDevice* gpu_device,
@@ -56,5 +55,4 @@ private:
     bool is_dirty_;
 };
 
-} // namespace render
-} // namespace dong
+} // namespace dong::sdl_backend

@@ -12,8 +12,8 @@
 #include "sdl_gpu_driver.hpp"
 
 // Core includes (temporary, to be decoupled in future phases)
-#include "../../src/render/gpu_device.hpp"
-#include "../../src/render/shader_manager.hpp"
+#include "sdl_gpu_device.hpp"
+#include "sdl_shader_manager.hpp"
 #include "../../src/render/resource_manager.hpp"
 #include "../../src/render/glyph_atlas.hpp"
 #include "../../src/render/font_resolver.hpp"
@@ -57,7 +57,7 @@ void writeLinearColor(const Color& color, float out_rgba[4]) {
 // Construction / Destruction
 // =============================================================================
 
-SDLGPUDriver::SDLGPUDriver(GPUDevice* device, SDL_Window* window, ShaderManager* shader_manager)
+SDLGPUDriver::SDLGPUDriver(sdl_backend::GPUDevice* device, SDL_Window* window, sdl_backend::ShaderManager* shader_manager)
     : gpu_device_(device), window_(window), shader_manager_(shader_manager) {}
 
 SDLGPUDriver::~SDLGPUDriver() {
@@ -559,9 +559,9 @@ bool SDLGPUDriver::updateExternalImageYUV420P(const std::string& key,
 // =============================================================================
 
 std::unique_ptr<SDLGPUDriver> CreateSDLGPUDriver(
-    GPUDevice* device,
+    sdl_backend::GPUDevice* device,
     SDL_Window* window,
-    ShaderManager* shader_manager) {
+    sdl_backend::ShaderManager* shader_manager) {
     return std::make_unique<SDLGPUDriver>(device, window, shader_manager);
 }
 

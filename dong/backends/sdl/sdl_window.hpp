@@ -5,10 +5,21 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_gpu.h>
 
+// DLL export/import macros
+#if defined(_WIN32) || defined(_WIN64)
+    #ifdef DONG_SDL_BUILDING_DLL
+        #define DONG_SDL_API __declspec(dllexport)
+    #else
+        #define DONG_SDL_API __declspec(dllimport)
+    #endif
+#else
+    #define DONG_SDL_API __attribute__((visibility("default")))
+#endif
+
 namespace dong::platform {
 
 // SDL3 窗口管理：负责 SDL3 窗口、GPU 设备和事件循环
-class SDL3Window {
+class DONG_SDL_API SDL3Window {
 public:
     struct CreateInfo {
         const char* title;

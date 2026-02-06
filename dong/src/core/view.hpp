@@ -7,11 +7,8 @@
 #include <vector>
 
 #include "dong_plugin_api.h"
-
-// Forward declare SDL types
-struct SDL_GPUDevice;
-struct SDL_GPUTexture;
-struct SDL_Window;
+#include "dong_gpu_driver.h"
+#include "dong_surface.h"
 
 namespace dong::dom {
 class Manager;
@@ -25,14 +22,9 @@ namespace dong::render {
 class Painter;
 class RenderSurface;
 class ResourceManager;
-class GPUDevice;
-class GPUTextureSurfaceImpl;
-class GPUPainter;
-class ShaderManager;
 class GPUDriver;
 struct GPUCommandList;
 }
-
 
 namespace dong::script {
 class ScriptEngine;
@@ -89,16 +81,18 @@ public:
 
     // Rendering modes
     void setRenderMode(bool use_gpu);
-    void setExternalGPUDevice(SDL_GPUDevice* device, SDL_Window* window);
+    // Inject external GPU driver (replaces setExternalGPUDevice with SDL types)
+    void setExternalGPUDriver(DongGPUDriver* driver, DongSurface* surface);
     
     // Offscreen rendering API
     // 底层接口：渲染到 GPU 纹理。
     // B: 纹理由 View 内部缓存并复用（避免每帧 Create/Release 造成的驱动开销）。
     // 返回的纹理指针在 view 生命周期内有效；调用方不要释放（也不应长期持有跨设备切换）。
-    SDL_GPUTexture* renderToGPUTexture(SDL_GPUDevice* device, uint32_t width, uint32_t height);
+    // Returns opaque DongGPUTexture handle. Use dong_gpu_get_native_texture_handle() to get native handle if needed.
+    DongGPUTexture renderToGPUTexture(DongGPUDriver* driver, uint32_t width, uint32_t height);
 
     // 上层接口：渲染到GPU纹理并回读到内存（基于 renderToGPUTexture 实现）
-    bool renderOffscreen(SDL_GPUDevice* device, uint32_t width, uint32_t height,
+    bool renderOffscreen(DongGPUDriver* driver, uint32_t width, uint32_t height,
                         uint8_t* out_pixels);
 
 
@@ -189,12 +183,9 @@ private:
     bool uploadPendingVideoFrames();
 
 
-    // GPU 渲染相关（可选）
-    std::unique_ptr<render::GPUDevice> gpu_device_;
-    std::unique_ptr<render::GPUTextureSurfaceImpl> gpu_surface_;
-    std::unique_ptr<render::ShaderManager> shader_manager_;
-    std::unique_ptr<render::GPUPainter> gpu_painter_;
-    std::unique_ptr<render::GPUDriver> gpu_driver_;
+    // GPU 渲染相关（可选）- 通过注入的 DongGPUDriver 访问，不直接依赖 SDL
+    DongGPUDriver* gpu_driver_ = nullptr;  // Non-owning, injected via setExternalGPUDriver
+    DongSurface* gpu_surface_ = nullptr;   // Non-owning, injected via setExternalGPUDriver
 
     // 缓存的 GPU 命令列表（用于 swapchain 渲染时避免每帧重新编译）
     std::unique_ptr<render::GPUCommandList> cached_cmd_list_;
@@ -208,8 +199,8 @@ private:
 
 
     // B：离屏纹理缓存（避免每次 renderToGPUTexture 都 Create/Release）
-    SDL_GPUDevice* offscreen_texture_cache_device_ = nullptr; // non-owning
-    SDL_GPUTexture* offscreen_texture_cache_ = nullptr;       // owned by View (released when possible)
+    DongGPUDriver* offscreen_texture_cache_driver_ = nullptr; // non-owning
+    DongGPUTexture offscreen_texture_cache_ = nullptr;       // owned by View (released when possible)
     uint32_t offscreen_texture_cache_width_ = 0;
     uint32_t offscreen_texture_cache_height_ = 0;
 
@@ -217,7 +208,7 @@ private:
     // 否则 renderToGPUTexture() 直接返回上一帧的纹理，避免每帧重复渲染。
     bool offscreen_texture_dirty_ = true;
 
-    // 优化策略2：SDL_WaitForGPUIdle 仅首帧执行
+    // 优化策略2：GPU idle 等待仅首帧执行
     bool offscreen_first_frame_done_ = false;
 
 
