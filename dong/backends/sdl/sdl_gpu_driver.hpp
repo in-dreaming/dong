@@ -28,6 +28,7 @@ namespace dong {
 namespace sdl_backend {
 class GPUDevice;
 class ShaderManager;
+class GPUTextureCompressor;
 }
 
 namespace render {
@@ -117,6 +118,7 @@ private:
     sdl_backend::ShaderManager* shader_manager_;
     ResourceManager* image_resource_manager_ = nullptr;
     DongGPUDriver* dong_gpu_driver_ = nullptr;  // C API driver for GlyphAtlas
+    std::unique_ptr<sdl_backend::GPUTextureCompressor> gpu_compressor_;  // GPU texture compression
 
     // SDL GPU state
     SDL_GPUCommandBuffer* current_cmd_buf_ = nullptr;

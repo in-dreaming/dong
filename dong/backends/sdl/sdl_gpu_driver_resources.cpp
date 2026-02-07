@@ -7,6 +7,7 @@
 #include "sdl_gpu_driver.hpp"
 
 #include "sdl_gpu_device.hpp"
+#include "gpu_texture_compressor.hpp"
 #include "../../src/render/gpu_ir.hpp"
 #include "../../src/render/resource_manager.hpp"
 #include "../../src/render/glyph_atlas.hpp"
@@ -212,64 +213,119 @@ bool SDLGPUDriver::ensureImageInAtlas(const std::string& src, ImageAtlasEntry& o
         return false;
     }
 
-    // Prepare upload data
-    // If atlas uses compressed format, encode the image first
-    const void* upload_data = pixels.data();
-    size_t upload_size = pixels.size();
-    std::vector<uint8_t> compressed_data;
+    // Get atlas texture for direct GPU compression
+    SDL_GPUTexture* atlas_texture = static_cast<SDL_GPUTexture*>(
+        dong_atlas_get_texture(image_atlas_, atlas_entry.atlas_page));
 
     DongImageFormat atlas_format = image_atlas_->config.format;
+
+    // If atlas uses compressed format, try GPU compression directly to atlas texture
     if (dong_image_format_is_compressed(atlas_format)) {
-        DongPlatform* platform = dong_platform_get();
-        DongImageDecoder* encoder = dong_platform_get_image_decoder(platform);
+        bool gpu_compressed = false;
 
-        if (!encoder) {
-            DONG_LOG_ERROR("SDLGPUDriver::ensureImageInAtlas: no image encoder available for compression");
-            return false;
+        // Determine GPU compress format
+        sdl_backend::GPUCompressFormat gpu_format = sdl_backend::GPUCompressFormat::BC7;
+        bool format_supported = false;
+
+        switch (atlas_format) {
+            case DONG_IMAGE_FORMAT_BC7:
+                gpu_format = sdl_backend::GPUCompressFormat::BC7;
+                format_supported = gpu_compressor_ && gpu_compressor_->isFormatSupported(gpu_format);
+                break;
+            case DONG_IMAGE_FORMAT_ASTC_4x4:
+                gpu_format = sdl_backend::GPUCompressFormat::ASTC_4x4;
+                format_supported = gpu_compressor_ && gpu_compressor_->isFormatSupported(gpu_format);
+                break;
+            case DONG_IMAGE_FORMAT_ASTC_5x5:
+                gpu_format = sdl_backend::GPUCompressFormat::ASTC_5x5;
+                format_supported = gpu_compressor_ && gpu_compressor_->isFormatSupported(gpu_format);
+                break;
+            case DONG_IMAGE_FORMAT_ASTC_6x6:
+                gpu_format = sdl_backend::GPUCompressFormat::ASTC_6x6;
+                format_supported = gpu_compressor_ && gpu_compressor_->isFormatSupported(gpu_format);
+                break;
+            case DONG_IMAGE_FORMAT_ASTC_8x8:
+                gpu_format = sdl_backend::GPUCompressFormat::ASTC_8x8;
+                format_supported = gpu_compressor_ && gpu_compressor_->isFormatSupported(gpu_format);
+                break;
+            default:
+                break;
         }
 
-        if (!dong_image_can_encode(encoder, DONG_IMAGE_FORMAT_RGBA8, atlas_format)) {
-            DONG_LOG_ERROR("SDLGPUDriver::ensureImageInAtlas: encoding from RGBA8 to %s not supported",
-                    dong_image_format_name(atlas_format));
-            return false;
+        // Try GPU compression directly to atlas texture region
+        if (format_supported && atlas_texture) {
+            if (gpu_compressor_->compressToTextureRegion(
+                    pixels.data(), img_w, img_h, gpu_format,
+                    atlas_texture, atlas_entry.x, atlas_entry.y)) {
+                gpu_compressed = true;
+                DONG_LOG_DEBUG("SDLGPUDriver::ensureImageInAtlas: GPU compressed '%s' %ux%u directly to atlas (%u,%u) (%s)",
+                        src.c_str(), img_w, img_h, atlas_entry.x, atlas_entry.y,
+                        gpu_format == sdl_backend::GPUCompressFormat::BC7 ? "BC7" :
+                        gpu_format == sdl_backend::GPUCompressFormat::ASTC_4x4 ? "ASTC_4x4" :
+                        gpu_format == sdl_backend::GPUCompressFormat::ASTC_5x5 ? "ASTC_5x5" :
+                        gpu_format == sdl_backend::GPUCompressFormat::ASTC_6x6 ? "ASTC_6x6" : "ASTC_8x8");
+            } else {
+                DONG_LOG_DEBUG("SDLGPUDriver::ensureImageInAtlas: GPU direct compression failed for '%s', falling back to CPU",
+                        src.c_str());
+            }
         }
 
-        DongDecodedImage src_img = {0};
-        src_img.data = const_cast<void*>(static_cast<const void*>(pixels.data()));
-        src_img.data_size = pixels.size();
-        src_img.width = img_w;
-        src_img.height = img_h;
-        src_img.row_bytes = img_w * 4;
-        src_img.format = DONG_IMAGE_FORMAT_RGBA8;
-        src_img.mip_levels = 1;
+        // Fall back to CPU compression if GPU failed or not available
+        if (!gpu_compressed) {
+            DongPlatform* platform = dong_platform_get();
+            DongImageDecoder* encoder = dong_platform_get_image_decoder(platform);
 
-        DongDecodedImage encoded_img = {0};
-        DongEncodeOptions encode_opts = dong_encode_options_default();
+            if (!encoder) {
+                DONG_LOG_ERROR("SDLGPUDriver::ensureImageInAtlas: no image encoder available for compression");
+                return false;
+            }
 
-        DongImageDecoderResult encode_result = dong_image_encode(encoder, &src_img, atlas_format, &encode_opts, &encoded_img);
-        if (encode_result != DONG_IMAGE_OK) {
-            DONG_LOG_ERROR("SDLGPUDriver::ensureImageInAtlas: encoding to %s failed for '%s', error=%d",
-                    dong_image_format_name(atlas_format), src.c_str(), (int)encode_result);
+            if (!dong_image_can_encode(encoder, DONG_IMAGE_FORMAT_RGBA8, atlas_format)) {
+                DONG_LOG_ERROR("SDLGPUDriver::ensureImageInAtlas: encoding from RGBA8 to %s not supported",
+                        dong_image_format_name(atlas_format));
+                return false;
+            }
+
+            DongDecodedImage src_img = {0};
+            src_img.data = const_cast<void*>(static_cast<const void*>(pixels.data()));
+            src_img.data_size = pixels.size();
+            src_img.width = img_w;
+            src_img.height = img_h;
+            src_img.row_bytes = img_w * 4;
+            src_img.format = DONG_IMAGE_FORMAT_RGBA8;
+            src_img.mip_levels = 1;
+
+            DongDecodedImage encoded_img = {0};
+            DongEncodeOptions encode_opts = dong_encode_options_default();
+
+            DongImageDecoderResult encode_result = dong_image_encode(encoder, &src_img, atlas_format, &encode_opts, &encoded_img);
+            if (encode_result != DONG_IMAGE_OK) {
+                DONG_LOG_ERROR("SDLGPUDriver::ensureImageInAtlas: encoding to %s failed for '%s', error=%d",
+                        dong_image_format_name(atlas_format), src.c_str(), (int)encode_result);
+                return false;
+            }
+
+            // Upload CPU compressed data to atlas
+            result = dong_atlas_upload(image_atlas_, &atlas_entry, encoded_img.data, encoded_img.data_size);
+            dong_image_free(encoder, &encoded_img);
+
+            if (result != DONG_ATLAS_OK) {
+                DONG_LOG_ERROR("SDLGPUDriver::ensureImageInAtlas: atlas upload failed for '%s', error=%d",
+                        src.c_str(), (int)result);
+                return false;
+            }
+
+            DONG_LOG_DEBUG("SDLGPUDriver::ensureImageInAtlas: CPU compressed '%s' %ux%u (%s)",
+                    src.c_str(), img_w, img_h, dong_image_format_name(atlas_format));
+        }
+    } else {
+        // Uncompressed format - direct upload
+        result = dong_atlas_upload(image_atlas_, &atlas_entry, pixels.data(), pixels.size());
+        if (result != DONG_ATLAS_OK) {
+            DONG_LOG_ERROR("SDLGPUDriver::ensureImageInAtlas: atlas upload failed for '%s', error=%d",
+                    src.c_str(), (int)result);
             return false;
         }
-
-        compressed_data.resize(encoded_img.data_size);
-        std::memcpy(compressed_data.data(), encoded_img.data, encoded_img.data_size);
-        dong_image_free(encoder, &encoded_img);
-
-        upload_data = compressed_data.data();
-        upload_size = compressed_data.size();
-
-        DONG_LOG_DEBUG("SDLGPUDriver::ensureImageInAtlas: compressed '%s' from %zu to %zu bytes (%s)",
-                src.c_str(), pixels.size(), upload_size, dong_image_format_name(atlas_format));
-    }
-
-    // Upload pixel data to atlas
-    result = dong_atlas_upload(image_atlas_, &atlas_entry, upload_data, upload_size);
-    if (result != DONG_ATLAS_OK) {
-        DONG_LOG_ERROR("SDLGPUDriver::ensureImageInAtlas: atlas upload failed for '%s', error=%d",
-                src.c_str(), (int)result);
-        return false;
     }
 
     // Create cache entry

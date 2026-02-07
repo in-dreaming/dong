@@ -8,6 +8,7 @@
 
 #include "sdl_gpu_device.hpp"
 #include "sdl_shader_manager.hpp"
+#include "gpu_texture_compressor.hpp"
 #include "../../src/render/glyph_atlas.hpp"
 #include "../../src/render/font_resolver.hpp"
 #include "../../src/core/log.h"
@@ -476,6 +477,15 @@ bool SDLGPUDriver::initialize() {
 
     // RenderTarget/图层合成调试日志默认关闭，可通过环境变量 DONG_DEBUG_RT=1 开启
     debug_rt_enabled_ = false;
+
+    // Initialize GPU texture compressor for BC7/ASTC compression
+    gpu_compressor_ = std::make_unique<sdl_backend::GPUTextureCompressor>(gpu_device_, shader_manager_);
+    if (gpu_compressor_ && gpu_compressor_->initialize()) {
+        DONG_LOG_INFO("SDLGPUDriver: GPU texture compressor initialized");
+    } else {
+        DONG_LOG_WARN("SDLGPUDriver: GPU texture compressor not available, falling back to CPU");
+        gpu_compressor_.reset();
+    }
 
     DONG_LOG_INFO("SDLGPUDriver initialized successfully");
     return true;

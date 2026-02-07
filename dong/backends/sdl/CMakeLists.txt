@@ -19,6 +19,9 @@ add_library(dong_sdl_backend SHARED
     dong_astc_encoder.c
     dong_bc_encoder.c
 
+    # GPU Texture Compression (compute shaders)
+    gpu_texture_compressor.cpp
+
     # SDL Plugin (Phase 1: Plugin injection)
     dong_sdl_plugin.cpp
 

@@ -101,7 +101,7 @@ static AtlasPage* create_page(SDLImageAtlas* atlas) {
     tex_info.height = atlas->base.config.height;
     tex_info.layer_count_or_depth = 1;
     tex_info.num_levels = 1;
-    tex_info.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    tex_info.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER | SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_WRITE;
 
     SDL_GPUTexture* texture = SDL_CreateGPUTexture(atlas->device, &tex_info);
     if (!texture) {

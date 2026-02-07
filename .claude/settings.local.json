@@ -22,7 +22,9 @@
       "Bash(cmd:*)",
       "Bash(powershell.exe -Command:*)",
       "Bash(python -c:*)",
-      "Bash(chcp:*)"
+      "Bash(chcp:*)",
+      "Bash(D:/mix/agents/game/indr/dong/dong/zig/zig.exe:*)",
+      "Bash(where:*)"
     ]
   }
 }
