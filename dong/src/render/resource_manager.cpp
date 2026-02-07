@@ -1,5 +1,7 @@
 #include "resource_manager.hpp"
 #include "../core/log.h"
+#include "font_resolver.hpp"
+#include "font_metrics.hpp"
 #include "dong_platform.h"
 #include "dong_file_system.h"
 #include "dong_image_decoder.h"
@@ -8,6 +10,9 @@
 #include <cstring>
 #include <algorithm>
 #include <cctype>
+
+#include <ft2build.h>
+#include FT_FREETYPE_H
 
 namespace dong::render {
 
@@ -18,7 +23,11 @@ ImageResource::~ImageResource() {
 
 // FontResource destructor
 FontResource::~FontResource() {
-    // Font resources are managed by FreeType/HarfBuzz
+    // Release FreeType face if loaded
+    if (ft_face) {
+        FT_Done_Face(ft_face);
+        ft_face = nullptr;
+    }
 }
 
 ResourceManager::ResourceManager() = default;
@@ -262,9 +271,49 @@ FontResource* ResourceManager::loadFont(const std::string& font_name,
         return it->second.get();
     }
 
-    // TODO: Use FreeType to load font (requires IFontLoader abstraction)
-    DONG_LOG_WARN("[ResourceManager] loadFont not implemented: %s", font_name.c_str());
-    return nullptr;
+    // Resolve font path using font resolver
+    std::string resolved_path = resolveFontPath(file_path.empty() ? font_name : file_path);
+    if (resolved_path.empty()) {
+        DONG_LOG_WARN("[ResourceManager] could not resolve font path: %s", 
+                      file_path.empty() ? font_name.c_str() : file_path.c_str());
+        return nullptr;
+    }
+
+    // Load font using FreeType via font_metrics
+    FT_Face face = getOrCreateDesignUnitsFace(resolved_path);
+    if (!face) {
+        DONG_LOG_WARN("[ResourceManager] failed to load font: %s", resolved_path.c_str());
+        return nullptr;
+    }
+
+    // Create FontResource
+    auto resource = std::make_unique<FontResource>();
+    resource->font_name = font_name;
+    resource->font_size = size;
+    resource->file_path = resolved_path;
+    
+    // Create a sized face for this font size
+    // Note: We reference the design face and create a new sized instance
+    FT_Face sized_face = nullptr;
+    FT_Library ft_lib = getSharedFreeTypeLibrary();
+    if (ft_lib) {
+        FT_New_Face(ft_lib, resolved_path.c_str(), 0, &sized_face);
+    }
+    if (sized_face) {
+        FT_Set_Pixel_Sizes(sized_face, 0, static_cast<FT_UInt>(size));
+        resource->ft_face = sized_face;
+    } else {
+        // Fall back to design face if sized face creation fails
+        resource->ft_face = face;
+    }
+
+    FontResource* ptr = resource.get();
+    font_cache_[cache_key] = std::move(resource);
+
+    DONG_LOG_DEBUG("[ResourceManager] loaded font: %s @ %.1fpx -> %s", 
+                   font_name.c_str(), size, resolved_path.c_str());
+
+    return ptr;
 }
 
 FontResource* ResourceManager::getFont(const std::string& font_name, float size) const {
@@ -277,9 +326,23 @@ FontResource* ResourceManager::getFont(const std::string& font_name, float size)
 }
 
 FontResource* ResourceManager::getSystemFont(const std::string& font_family, float size) {
-    // TODO: Use FontFinder + FreeType
-    DONG_LOG_WARN("[ResourceManager] getSystemFont not implemented: %s", font_family.c_str());
-    return nullptr;
+    std::string cache_key = makeFontCacheKey(font_family, size);
+
+    // Check cache first
+    auto it = font_cache_.find(cache_key);
+    if (it != font_cache_.end()) {
+        return it->second.get();
+    }
+
+    // Use font resolver to find system font
+    std::string font_path = resolveFontPath(font_family);
+    if (font_path.empty()) {
+        DONG_LOG_WARN("[ResourceManager] system font not found: %s", font_family.c_str());
+        return nullptr;
+    }
+
+    // Load the resolved font
+    return loadFont(font_family, font_path, size);
 }
 
 void ResourceManager::clearImageCache() {

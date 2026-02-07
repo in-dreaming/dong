@@ -198,9 +198,10 @@ endif()
 add_library(dong_render STATIC
     src/core/context.cpp
     src/core/profiler.cpp
-    src/core/view.cpp
+    src/core/engine_view.cpp
     src/core/global_shared.cpp
     src/core/global_shared_c_api.cpp
+    src/core/glyph_atlas_c_api.cpp
     src/render/glyph_atlas.cpp
 
     # DOM module (modular structure)

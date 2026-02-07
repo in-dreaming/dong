@@ -6,6 +6,10 @@
 #include <cstdint>
 #include <vector>
 
+// Forward declare FreeType types
+struct FT_FaceRec_;
+typedef struct FT_FaceRec_* FT_Face;
+
 namespace dong::render {
 
 // Image cache entry
@@ -22,7 +26,8 @@ struct ImageResource {
 struct FontResource {
     std::string font_name;
     float font_size = 16.0f;
-    void* sk_typeface = nullptr;  // SkTypeface* (opaque)
+    std::string file_path;      // Font file path
+    FT_Face ft_face = nullptr;  // FreeType face (loaded at specific size)
     
     ~FontResource();
 };
