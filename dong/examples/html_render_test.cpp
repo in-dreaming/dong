@@ -363,6 +363,7 @@ static void injectSyntheticInputs(dong_engine_t* engine, uint32_t frame_index) {
             int x = 0, y = 0, button = 1;
             int n = std::sscanf(s, "%d,%d,%d", &x, &y, &button);
             if (n >= 2) {
+                SDL_Log("[TestClick] Injecting click at (%d, %d) button=%d", x, y, button);
                 dong_engine_send_mouse_move(engine, x, y);
                 dong_engine_send_mouse_button(engine, button, 1);
                 dong_engine_send_mouse_button(engine, button, 0);

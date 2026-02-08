@@ -487,9 +487,23 @@ bool SelectorMatcher::matchesPseudoClass(const std::string& pseudo, DOMNodePtr n
         return node->isActive();
     } else if (name == "focus") {
         return node->isFocused();
-    } else if (name == "focus-visible" || name == "focus-within") {
-        // Not implemented yet (would require focus-ring heuristics / subtree traversal).
-        return false;
+    } else if (name == "focus-visible") {
+        // :focus-visible matches when element is focused and should show focus ring
+        // Heuristic: keyboard focus shows ring, mouse click typically doesn't
+        return node->isFocusVisible();
+    } else if (name == "focus-within") {
+        // :focus-within matches if element or any descendant has focus
+        if (node->isFocused()) return true;
+        // Check descendants
+        std::function<bool(DOMNodePtr)> checkDescendants = [&](DOMNodePtr n) -> bool {
+            for (const auto& child : n->getChildren()) {
+                if (child->isFocused() || checkDescendants(child)) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        return checkDescendants(node);
     }
 
     // Valid/invalid (simplified)

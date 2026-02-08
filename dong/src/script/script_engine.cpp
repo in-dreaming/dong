@@ -328,15 +328,43 @@ void ScriptEngine::bindGlobalObject(const std::string& name, void* object) {
     JS_FreeValue(context_, global);
 }
 
-void ScriptEngine::bindGlobalFunction(const std::string& name, void* func) {
-    // TODO: 浣跨敤 JS_NewCFunction 鍖呰 C 鍑芥暟
-    (void)name;
-    (void)func;
+void ScriptEngine::bindGlobalFunction(const std::string& name, JSCFunction* func, int argc) {
+    if (!context_) return;
+    JSValue global = JS_GetGlobalObject(context_);
+    JSValue js_func = JS_NewCFunction(context_, func, name.c_str(), argc);
+    JS_SetPropertyStr(context_, global, name.c_str(), js_func);
+    JS_FreeValue(context_, global);
 }
 
 void ScriptEngine::processPendingTasks() {
-    // TODO: 杩愯寰换鍔￠槦鍒楋紙Promise锛?
-    // 鍙€夛細瀹氭湡璋冪敤 js_std_loop() 鎴栫被浼肩殑浠诲姟澶勭悊鍑芥暟
+    if (!context_ || !runtime_) return;
+
+    // 执行所有 pending 的 Promise 微任务
+    // QuickJS 使用 JS_ExecutePendingJob 来处理微任务队列
+    JSContext* ctx = nullptr;
+    int executed = 0;
+    const int max_jobs = 1000; // 防止无限循环
+    
+    while (executed < max_jobs) {
+        int result = JS_ExecutePendingJob(runtime_, &ctx);
+        if (result < 0) {
+            // 执行出错，获取异常信息
+            if (ctx) {
+                JSValue exception = JS_GetException(ctx);
+                const char* error_str = JS_ToCString(ctx, exception);
+                if (error_str) {
+                    std::fprintf(stderr, "[ScriptEngine] Microtask error: %s\n", error_str);
+                    JS_FreeCString(ctx, error_str);
+                }
+                JS_FreeValue(ctx, exception);
+            }
+            break;
+        } else if (result == 0) {
+            // 没有更多任务
+            break;
+        }
+        ++executed;
+    }
 }
 
 void ScriptEngine::initializeBuiltins() {

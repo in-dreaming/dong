@@ -222,10 +222,11 @@ public:
     static void setFocusManager(class FocusManager* fm) { s_focus_manager_ = fm; }
     static void setEventDispatcher(class EventDispatcher* ed) { s_event_dispatcher_ = ed; }
 
-    // Runtime interaction states for pseudo-classes (:hover/:active/:focus)
+    // Runtime interaction states for pseudo-classes (:hover/:active/:focus/:focus-visible)
     bool isHovered() const { return hovered_; }
     bool isActive() const { return active_; }
     bool isFocused() const { return focused_; }
+    bool isFocusVisible() const { return focus_visible_; }
 
     void setHovered(bool v) {
         if (hovered_ == v) return;
@@ -240,6 +241,12 @@ public:
     void setFocused(bool v) {
         if (focused_ == v) return;
         focused_ = v;
+        // Note: focus-visible is set separately by FocusManager
+        markStyleDirty();
+    }
+    void setFocusVisible(bool v) {
+        if (focus_visible_ == v) return;
+        focus_visible_ = v;
         markStyleDirty();
     }
 
@@ -258,10 +265,11 @@ protected:
     bool style_dirty_ = true;
 
 
-    // Interaction states (used by selector matcher for :hover/:active/:focus)
+    // Interaction states (used by selector matcher for :hover/:active/:focus/:focus-visible)
     bool hovered_ = false;
     bool active_ = false;
     bool focused_ = false;
+    bool focus_visible_ = false;
 
     // Scroll state
     float scroll_x_ = 0.0f;

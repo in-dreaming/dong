@@ -50,22 +50,24 @@ GPUTextureSurface::GPUTextureSurface(uint32_t width, uint32_t height, uint32_t t
 }
 
 GPUTextureSurface::~GPUTextureSurface() {
-    // TODO: 释放 GPU 纹理资源（需要 GL 上下文）
+    // 基类不管理 GPU 资源，由后端子类（如 GPUTextureSurfaceImpl）负责释放
+    // SDL 后端在 ~GPUTextureSurfaceImpl() 中调用 SDL_ReleaseGPUTexture
 }
 
 void GPUTextureSurface::clear(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
-    // TODO: 通过 OpenGL/Vulkan API 清空 GPU 纹理
+    // 基类实现为空，由后端子类实现具体的 GPU 清空操作
+    // SDL 后端在渲染 pass 中处理清空
     is_dirty_ = true;
 }
 
 void GPUTextureSurface::lock() {
-    // TODO: 如果需要 CPU 访问 GPU 纹理，可以在这里进行 GPU->CPU 同步
-    // 例如：glReadPixels()
+    // 基类实现为空，由后端子类实现 GPU->CPU 同步（如需要）
+    // 当前 SDL 后端不需要显式 lock，渲染时自动处理同步
 }
 
 void GPUTextureSurface::unlock() {
-    // TODO: CPU 修改完成后，进行 CPU->GPU 同步
-    // 例如：glTexImage2D() 或 glTexSubImage2D()
+    // 基类实现为空，由后端子类实现 CPU->GPU 同步（如需要）
+    // 当前 SDL 后端不需要显式 unlock
 }
 
 } // namespace dong::render

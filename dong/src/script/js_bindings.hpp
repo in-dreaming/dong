@@ -23,6 +23,9 @@ public:
     // 初始化所有内置 API
     void initialize();
 
+    // 扫描 DOM 树并注册内联事件处理器（如 onclick, onchange 等）
+    void scanAndRegisterInlineEventHandlers();
+
     // 注册 DOM 节点到 JS 环境
     JSValue createJSElement(JSContext* ctx, const dom::DOMNodePtr& node);
 

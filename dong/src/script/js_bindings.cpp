@@ -772,16 +772,84 @@ static JSValue elem_getTextContent(JSContext* ctx, JSValueConst this_val, int ar
 
 static JSValue elem_setTextContent(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     if (argc < 1) return JS_UNDEFINED;
-    
+
     const char* text = JS_ToCString(ctx, argv[0]);
     auto node = JSBindings::getNodeOpaque(ctx, this_val);
-    
+
     if (node && text) {
         node->setTextContent(text);
         node->markLayoutDirty();  // 触发重新渲染
     }
-    
+
     if (text) JS_FreeCString(ctx, text);
+    return JS_UNDEFINED;
+}
+
+static JSValue elem_getInnerHTML(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_UNDEFINED;
+
+    std::string html = node->getInnerHTML();
+    return JS_NewString(ctx, html.c_str());
+}
+
+static JSValue elem_setInnerHTML(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_UNDEFINED;
+
+    const char* html = JS_ToCString(ctx, argv[0]);
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+
+    if (node && html) {
+        node->setInnerHTML(html);
+        node->markLayoutDirty();  // 触发重新渲染
+    }
+
+    if (html) JS_FreeCString(ctx, html);
+    return JS_UNDEFINED;
+}
+
+static JSValue elem_getOuterHTML(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_UNDEFINED;
+
+    std::string html = node->getOuterHTML();
+    return JS_NewString(ctx, html.c_str());
+}
+
+static JSValue elem_setOuterHTML(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_UNDEFINED;
+
+    const char* html = JS_ToCString(ctx, argv[0]);
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+
+    if (node && html) {
+        node->setOuterHTML(html);
+        // Parent should be marked dirty since this node is replaced
+        if (auto parent = node->getParent()) {
+            parent->markLayoutDirty();
+        }
+    }
+
+    if (html) JS_FreeCString(ctx, html);
+    return JS_UNDEFINED;
+}
+
+static JSValue elem_insertAdjacentHTML(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    if (argc < 2) return JS_UNDEFINED;
+
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_UNDEFINED;
+
+    const char* position = JS_ToCString(ctx, argv[0]);
+    const char* html = JS_ToCString(ctx, argv[1]);
+
+    if (position && html) {
+        node->insertAdjacentHTML(position, html);
+        node->markLayoutDirty();
+    }
+
+    if (position) JS_FreeCString(ctx, position);
+    if (html) JS_FreeCString(ctx, html);
     return JS_UNDEFINED;
 }
 
@@ -1377,6 +1445,74 @@ void JSBindings::initialize() {
     initializeEventAPI();
 }
 
+void JSBindings::scanAndRegisterInlineEventHandlers() {
+    DONG_LOG_INFO("[JSBindings] scanAndRegisterInlineEventHandlers starting");
+    if (!engine_ || !dom_manager_) {
+        DONG_LOG_WARN("[JSBindings] Cannot scan: engine=%p, dom_manager=%p", (void*)engine_, (void*)dom_manager_);
+        return;
+    }
+
+    JSContext* ctx = engine_->getContext();
+    if (!ctx) {
+        DONG_LOG_WARN("[JSBindings] Cannot scan: context is null");
+        return;
+    }
+
+    auto root = dom_manager_->getRoot();
+    if (!root) {
+        DONG_LOG_WARN("[JSBindings] Cannot scan: root is null");
+        return;
+    }
+    DONG_LOG_INFO("[JSBindings] Starting DOM scan for inline event handlers");
+
+    const char* event_attrs[] = {
+        "onclick", "onchange", "oninput", "onfocus", "onblur",
+        "onkeydown", "onkeyup", "onkeypress",
+        "onmousedown", "onmouseup", "onmousemove", "onmouseover", "onmouseout",
+        "onsubmit", "onload", "onerror", nullptr
+    };
+
+    // Recursively scan DOM tree for elements with inline event handlers
+    int found_count = 0;
+    std::function<void(const dom::DOMNodePtr&)> scanNode = [&](const dom::DOMNodePtr& node) {
+        if (!node) return;
+        if (node->getType() != dom::DOMNode::NodeType::ELEMENT) {
+            // Skip non-element nodes but still recurse into children
+            for (const auto& child : node->getChildren()) {
+                scanNode(child);
+            }
+            return;
+        }
+
+        // Check if this element has any inline event handlers
+        bool has_inline_event = false;
+        std::string found_attrs;
+        for (const char** attr = event_attrs; *attr; ++attr) {
+            if (node->hasAttribute(*attr)) {
+                has_inline_event = true;
+                if (!found_attrs.empty()) found_attrs += ", ";
+                found_attrs += *attr;
+            }
+        }
+
+        if (has_inline_event) {
+            DONG_LOG_INFO("[JSBindings] Found element <%s> with inline handlers: %s", node->getTagName().c_str(), found_attrs.c_str());
+            found_count++;
+            // Create JS element for this node - this will register the event handlers
+            JSValue elem = createJSElement(ctx, node);
+            JS_FreeValue(ctx, elem);
+        }
+
+        // Recurse into children
+        for (const auto& child : node->getChildren()) {
+            scanNode(child);
+        }
+    };
+
+    scanNode(root);
+    DONG_LOG_INFO("[JSBindings] DOM scan completed, found %d elements with inline event handlers", found_count);
+}
+
 void JSBindings::initializeConsoleAPI() {
     if (!engine_) return;
 
@@ -1488,6 +1624,16 @@ void JSBindings::initializeEventAPI() {
 JSValue JSBindings::createJSElement(JSContext* ctx, const dom::DOMNodePtr& node) {
     if (!node) return JS_NULL;
 
+    // Check if this node already has a JS wrapper (to avoid duplicate inline handler registration)
+    auto bindings = getBindingsFromContext(ctx);
+    bool already_has_wrapper = false;
+    if (bindings) {
+        auto it = bindings->node_to_id_.find(node.get());
+        if (it != bindings->node_to_id_.end()) {
+            already_has_wrapper = true;
+        }
+    }
+
     JSValue elem = JS_NewObject(ctx);
     
     // Store DOM node pointer
@@ -1514,6 +1660,22 @@ JSValue JSBindings::createJSElement(JSContext* ctx, const dom::DOMNodePtr& node)
     JS_DefinePropertyGetSet(ctx, elem, textContent_atom, tc_getter, tc_setter,
         JS_PROP_ENUMERABLE | JS_PROP_CONFIGURABLE);
     JS_FreeAtom(ctx, textContent_atom);
+
+    // innerHTML - use getter/setter for dynamic access
+    JSAtom innerHTML_atom = JS_NewAtom(ctx, "innerHTML");
+    JSValue ih_getter = JS_NewCFunction(ctx, elem_getInnerHTML, "get innerHTML", 0);
+    JSValue ih_setter = JS_NewCFunction(ctx, elem_setInnerHTML, "set innerHTML", 1);
+    JS_DefinePropertyGetSet(ctx, elem, innerHTML_atom, ih_getter, ih_setter,
+        JS_PROP_ENUMERABLE | JS_PROP_CONFIGURABLE);
+    JS_FreeAtom(ctx, innerHTML_atom);
+
+    // outerHTML - use getter/setter for dynamic access
+    JSAtom outerHTML_atom = JS_NewAtom(ctx, "outerHTML");
+    JSValue oh_getter = JS_NewCFunction(ctx, elem_getOuterHTML, "get outerHTML", 0);
+    JSValue oh_setter = JS_NewCFunction(ctx, elem_setOuterHTML, "set outerHTML", 1);
+    JS_DefinePropertyGetSet(ctx, elem, outerHTML_atom, oh_getter, oh_setter,
+        JS_PROP_ENUMERABLE | JS_PROP_CONFIGURABLE);
+    JS_FreeAtom(ctx, outerHTML_atom);
 
     // <video> minimal media API
     if (node->getTagName() == "video") {
@@ -1569,10 +1731,62 @@ JSValue JSBindings::createJSElement(JSContext* ctx, const dom::DOMNodePtr& node)
         JS_NewCFunction(ctx, elem_getComputedStyle, "getComputedStyle", 0));
     JS_SetPropertyStr(ctx, elem, "getChildren",
         JS_NewCFunction(ctx, elem_getChildren, "getChildren", 0));
-    
+    JS_SetPropertyStr(ctx, elem, "insertAdjacentHTML",
+        JS_NewCFunction(ctx, elem_insertAdjacentHTML, "insertAdjacentHTML", 2));
+
     // style and classList
     JS_SetPropertyStr(ctx, elem, "style", elem_getStyle(ctx, elem, 0, nullptr));
     JS_SetPropertyStr(ctx, elem, "classList", elem_getClassList(ctx, elem, 0, nullptr));
+
+    // Handle inline event handlers (onclick, onchange, etc.) - only on first creation
+    if (bindings && !already_has_wrapper) {
+        const char* event_attrs[] = {
+            "onclick", "onchange", "oninput", "onfocus", "onblur",
+            "onkeydown", "onkeyup", "onkeypress",
+            "onmousedown", "onmouseup", "onmousemove", "onmouseover", "onmouseout",
+            "onsubmit", "onload", "onerror", nullptr
+        };
+
+        for (const char** attr = event_attrs; *attr; ++attr) {
+            if (node->hasAttribute(*attr)) {
+                std::string js_code = node->getAttribute(*attr);
+                if (!js_code.empty()) {
+                    // Create a wrapper function that executes the inline code
+                    std::string wrapper = "(function(event) { " + js_code + " })";
+
+                    // Evaluate to get the function
+                    JSValue func = JS_Eval(ctx, wrapper.c_str(), wrapper.length(),
+                                           "<inline_event>", JS_EVAL_TYPE_GLOBAL);
+
+                    if (JS_IsException(func)) {
+                        JSValue exc = JS_GetException(ctx);
+                        const char* err = JS_ToCString(ctx, exc);
+                        DONG_LOG_ERROR("[JSBindings] Failed to create inline handler for %s: %s", *attr, err ? err : "unknown");
+                        if (err) JS_FreeCString(ctx, err);
+                        JS_FreeValue(ctx, exc);
+                    } else if (JS_IsFunction(ctx, func)) {
+                        // Extract event type (e.g., "onclick" -> "click")
+                        std::string event_type(*attr + 2); // Skip "on" prefix
+
+                        // Get node_id (now it should be set after setNodeOpaque)
+                        uint64_t node_id = bindings->getNodeIdFor(node);
+                        if (node_id != 0) {
+                            // Register the listener
+                            JSValue fn_dup = JS_DupValue(ctx, func);
+                            bindings->registerEventListener(node_id, event_type, fn_dup);
+                            JS_FreeValue(ctx, fn_dup);
+
+                            // Ensure event bridge
+                            bindings->ensureEventBridgeForNode(node, event_type, node_id);
+                            DONG_LOG_INFO("[JSBindings] Registered inline handler for %s='%s' on node_id=%llu",
+                                         *attr, js_code.c_str(), (unsigned long long)node_id);
+                        }
+                    }
+                    JS_FreeValue(ctx, func);
+                }
+            }
+        }
+    }
 
     return elem;
 }
@@ -1636,7 +1850,6 @@ void JSBindings::ensureEventBridgeForNode(const dom::DOMNodePtr& node, const std
     void* key = node.get();
     auto& per_node = event_bridge_ids_[key];
     if (per_node.find(type) != per_node.end()) {
-        // Bridge listener already registered for this (node, type)
         return;
     }
 
@@ -1651,7 +1864,6 @@ void JSBindings::ensureEventBridgeForNode(const dom::DOMNodePtr& node, const std
             this->dispatchKeyEvent(node_id, type.c_str(), ev.key_code);
         };
     } else {
-        // Unsupported event type for bridging; ignore.
         return;
     }
 
@@ -1667,15 +1879,21 @@ void JSBindings::dispatchMouseEvent(uint64_t node_id, const char* type, int32_t 
     if (!ctx) return;
 
     auto node_it = listeners_.find(node_id);
-    if (node_it == listeners_.end()) return;
+    if (node_it == listeners_.end()) {
+        return;
+    }
     auto& type_map = node_it->second;
     auto type_it = type_map.find(type);
-    if (type_it == type_map.end()) return;
+    if (type_it == type_map.end()) {
+        return;
+    }
 
     auto& funcs = type_it->second;
 
     for (auto& fn : funcs) {
-        if (!JS_IsFunction(ctx, fn)) continue;
+        if (!JS_IsFunction(ctx, fn)) {
+            continue;
+        }
 
         JSValue ev = JS_NewObject(ctx);
         JS_SetPropertyStr(ctx, ev, "type", JS_NewString(ctx, type));
@@ -1697,8 +1915,7 @@ void JSBindings::dispatchMouseEvent(uint64_t node_id, const char* type, int32_t 
             JSValue exc = JS_GetException(ctx);
             const char* err = JS_ToCString(ctx, exc);
             if (err) {
-                std::fprintf(stderr, "[JSBindings] mouse event error: %s\
-", err);
+                DONG_LOG_ERROR("[JSBindings] mouse event error: %s", err);
                 JS_FreeCString(ctx, err);
             }
             JS_FreeValue(ctx, exc);

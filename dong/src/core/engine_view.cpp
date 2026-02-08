@@ -24,6 +24,7 @@
 #include <cstring>
 #include <string>
 #include <sstream>
+#include <iostream>
 #include <functional>
 #include <vector>
 
@@ -57,6 +58,7 @@ DOMNodePtr hitTestRecursive(const DOMNodePtr& node, dong::layout::Engine* layout
     float h = layout->height;
 
     bool in_bounds = (x >= lx && x <= lx + w && y >= ly && y <= ly + h);
+
     if (!in_bounds) {
         return nullptr;
     }
@@ -904,20 +906,32 @@ struct EngineView::Impl {
         }
 
         // Execute <script> tags (inline or src)
+        DONG_LOG_INFO("[EngineView] Script execution starting, script_engine=%p, dom_manager=%p",
+                      (void*)script_engine.get(), (void*)dom_manager.get());
         if (script_engine && dom_manager) {
             ensureJSBindingsInitialized();
 
+            // Scan DOM tree for inline event handlers (onclick, onchange, etc.) and register them
+            if (js_bindings) {
+                DONG_LOG_INFO("[EngineView] Scanning for inline event handlers...");
+                js_bindings->scanAndRegisterInlineEventHandlers();
+                DONG_LOG_INFO("[EngineView] Inline event handler scan completed");
+            } else {
+                DONG_LOG_WARN("[EngineView] js_bindings is null, skipping inline handler registration");
+            }
+
             auto scripts = dom_manager->getElementsByTagName("script");
+            DONG_LOG_INFO("[EngineView] Found %zu script tag(s)", scripts.size());
             for (const auto& script : scripts) {
                 if (!script) continue;
 
                 std::string code;
                 std::string src = script->getAttribute("src");
+                DONG_LOG_INFO("[EngineView] Processing script tag, src='%s'", src.c_str());
 
                 if (!src.empty()) {
                     (void)readTextFileFromPlatformFS(src, resource_root, code);
                 } else {
-
                     for (const auto& child : script->getChildren()) {
                         if (child && child->getType() == dong::dom::DOMNode::NodeType::TEXT) {
                             code += child->getTextContent();
@@ -925,10 +939,15 @@ struct EngineView::Impl {
                     }
                 }
 
+                DONG_LOG_INFO("[EngineView] Script code length: %zu bytes", code.length());
                 if (!code.empty()) {
+                    DONG_LOG_INFO("[EngineView] Executing script...");
                     script_engine->eval(code);
+                    DONG_LOG_INFO("[EngineView] Script execution completed");
                 }
             }
+        } else {
+            DONG_LOG_WARN("[EngineView] Cannot execute scripts: script_engine or dom_manager is null");
         }
 
         return true;
@@ -1051,12 +1070,6 @@ struct EngineView::Impl {
         if (!script_engine || !js_bindings || !event_dispatcher) return;
 
         auto target = hitTestElementAt(dom_manager.get(), layout_engine.get(), x, y);
-        if (!target && dom_manager) {
-            auto buttons = dom_manager->getElementsByTagName("button");
-            if (!buttons.empty()) {
-                target = buttons[0];
-            }
-        }
         if (!target) return;
 
         dong::dom::EventType ev_type;

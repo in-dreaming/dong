@@ -24,7 +24,14 @@
       "Bash(python -c:*)",
       "Bash(chcp:*)",
       "Bash(D:/mix/agents/game/indr/dong/dong/zig/zig.exe:*)",
-      "Bash(where:*)"
+      "Bash(where:*)",
+      "Bash(python:*)",
+      "Bash(cd:*)",
+      "Bash(findstr:*)",
+      "Bash(powershell.exe:*)",
+      "Bash(DONG_TEST_CLICK=\"100,200,1\" powershell.exe:*)",
+      "Bash(DONG_TEST_CLICK=\"100,150,1\" powershell.exe -NoProfile -Command:*)",
+      "Bash(DONG_TEST_CLICK=\"100,170,1\" powershell.exe -NoProfile -Command:*)"
     ]
   }
 }

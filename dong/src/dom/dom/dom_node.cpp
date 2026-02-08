@@ -3,6 +3,7 @@
 #include "../css/selector_matcher.hpp"
 #include "../focus_manager.hpp"
 #include "../event_system.hpp"
+#include "../html/html_parser.hpp"
 #include <iostream>
 #include <algorithm>
 #include <cctype>
@@ -576,13 +577,20 @@ std::string DOMNode::getInnerHTML() const {
 void DOMNode::setInnerHTML(const std::string& html) {
     // Clear existing children
     children_.clear();
-    // TODO: Parse HTML and add children
-    // For now, just add as text
+
+    // Parse HTML fragment and add children
     if (!html.empty()) {
-        auto text_node = std::make_shared<DOMNode>(NodeType::TEXT);
-        text_node->text_content_ = html;
-        appendChild(text_node);
+        HTMLParser parser;
+        auto fragment = parser.parseFragment(html, shared_from_this());
+        if (fragment) {
+            // Move all children from fragment to this node
+            for (const auto& child : fragment->getChildren()) {
+                appendChild(child->cloneNode(true));
+            }
+        }
     }
+    // Mark both style and layout dirty to ensure new nodes get styled and laid out
+    markStyleDirty();
     markLayoutDirty();
 }
 
@@ -620,21 +628,67 @@ std::string DOMNode::getOuterHTML() const {
 }
 
 void DOMNode::setOuterHTML(const std::string& html) {
-    // TODO: Parse HTML and replace self
     auto parent = parent_.lock();
-    if (parent) {
-        // For now, just replace with text
-        auto text_node = std::make_shared<DOMNode>(NodeType::TEXT);
-        text_node->text_content_ = html;
-        parent->replaceChild(text_node, shared_from_this());
+    if (!parent) return;
+    
+    // Parse HTML fragment
+    if (!html.empty()) {
+        HTMLParser parser;
+        auto fragment = parser.parseFragment(html, parent);
+        if (fragment && !fragment->getChildren().empty()) {
+            // Replace self with the first child of fragment
+            auto new_node = fragment->getChildren().front()->cloneNode(true);
+            parent->replaceChild(new_node, shared_from_this());
+        } else {
+            // If parsing failed or empty, just remove self
+            remove();
+        }
+    } else {
+        // Empty HTML means remove self
+        remove();
     }
 }
 
 void DOMNode::insertAdjacentHTML(const std::string& position, const std::string& html) {
-    // TODO: Parse HTML
-    auto text_node = std::make_shared<DOMNode>(NodeType::TEXT);
-    text_node->text_content_ = html;
-    insertAdjacentElement(position, text_node);
+    if (html.empty()) return;
+    
+    // Parse HTML fragment
+    HTMLParser parser;
+    auto fragment = parser.parseFragment(html, shared_from_this());
+    if (!fragment) return;
+    
+    // Insert based on position
+    if (position == "beforebegin") {
+        auto parent = parent_.lock();
+        if (parent) {
+            for (const auto& child : fragment->getChildren()) {
+                parent->insertBefore(child->cloneNode(true), shared_from_this());
+            }
+        }
+    } else if (position == "afterbegin") {
+        // Insert as first children
+        auto children = fragment->getChildren();
+        for (auto it = children.rbegin(); it != children.rend(); ++it) {
+            insertBefore((*it)->cloneNode(true), getFirstChild());
+        }
+    } else if (position == "beforeend") {
+        // Insert as last children
+        for (const auto& child : fragment->getChildren()) {
+            appendChild(child->cloneNode(true));
+        }
+    } else if (position == "afterend") {
+        auto parent = parent_.lock();
+        if (parent) {
+            auto next = getNextSibling();
+            for (const auto& child : fragment->getChildren()) {
+                if (next) {
+                    parent->insertBefore(child->cloneNode(true), next);
+                } else {
+                    parent->appendChild(child->cloneNode(true));
+                }
+            }
+        }
+    }
 }
 
 void DOMNode::insertAdjacentElement(const std::string& position, DOMNodePtr element) {

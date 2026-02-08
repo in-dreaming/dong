@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>innerHTML Auto Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        .container {
+            border: 2px solid #333;
+            padding: 10px;
+            margin: 10px 0;
+            min-height: 50px;
+        }
+        .highlight {
+            background: yellow;
+            padding: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>innerHTML Test (Auto)</h1>
+    
+    <div class="container" id="test1">
+        <p>Original content</p>
+    </div>
+    
+    <div id="output" style="margin-top: 20px; padding: 10px; background: #f0f0f0;"></div>
+    
+    <script>
+        function log(msg) {
+            const output = document.getElementById('output');
+            output.innerHTML += msg + '<br>';
+        }
+        
+        // Auto test innerHTML on page load
+        window.onload = function() {
+            console.log('Window onload triggered');
+            
+            const container = document.getElementById('test1');
+            console.log('Container found:', container ? 'yes' : 'no');
+            
+            // Test innerHTML
+            container.innerHTML = '<p class="highlight">New content via innerHTML! <span>Nested span</span></p>';
+            log('innerHTML set successfully');
+            log('New content: ' + container.innerHTML.substring(0, 100));
+            
+            console.log('innerHTML test completed');
+        };
+    </script>
+</body>
+</html>

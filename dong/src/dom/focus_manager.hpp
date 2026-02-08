@@ -76,10 +76,18 @@ public:
     using FocusChangeCallback = std::function<void(DOMNodePtr old_focus, DOMNodePtr new_focus)>;
     void setFocusChangeCallback(FocusChangeCallback callback);
 
+    /**
+     * 设置焦点是否通过键盘（如 Tab 键）获得
+     * 影响 :focus-visible 伪类的匹配
+     */
+    void setKeyboardFocus(bool is_keyboard) { keyboard_focus_ = is_keyboard; }
+    bool isKeyboardFocus() const { return keyboard_focus_; }
+
 private:
     DOMNodePtr focused_element_;
     EventDispatcher* event_dispatcher_ = nullptr;
     FocusChangeCallback focus_change_callback_;
+    bool keyboard_focus_ = false; // 焦点是否通过键盘获得
 
     // 收集所有可聚焦元素（按 tab 顺序）
     void collectFocusableElements(DOMNodePtr node, std::vector<DOMNodePtr>& out);

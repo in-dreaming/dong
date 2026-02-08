@@ -33,7 +33,7 @@ public:
 
     // 绑定 C++ 对象到 JavaScript 上下文
     void bindGlobalObject(const std::string& name, void* object);
-    void bindGlobalFunction(const std::string& name, void* func);
+    void bindGlobalFunction(const std::string& name, JSCFunction* func, int argc = 0);
 
     // 获取原生 QuickJS 对象（用于高级集成）
     JSContext* getContext() const { return context_; }
