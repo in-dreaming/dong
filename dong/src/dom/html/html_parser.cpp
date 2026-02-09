@@ -279,6 +279,7 @@ void HTMLParser::applyDefaultStyles(DOMNodePtr node) {
         {"time", [](ComputedStyle& s) { s.setDisplay("inline"); }},
         {"data", [](ComputedStyle& s) { s.setDisplay("inline"); }},
         {"wbr", [](ComputedStyle& s) { s.setDisplay("inline"); }},
+        {"label", [](ComputedStyle& s) { s.setDisplay("inline"); }},
         
         // Headings
         {"h1", [](ComputedStyle& s) { s.setDisplay("block"); s.font_weight = "bold"; s.font_size = 32.0f; }},
@@ -303,7 +304,7 @@ void HTMLParser::applyDefaultStyles(DOMNodePtr node) {
         
         // Special elements
         {"br", [](ComputedStyle& s) { 
-            s.setDisplay("block"); 
+            s.setDisplay("inline"); 
             s.height = CSSValue(0.0f, CSSValue::Unit::PIXEL); 
         }},
         {"hr", [](ComputedStyle& s) { 

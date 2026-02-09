@@ -1458,11 +1458,6 @@ void SDLGPUDriver::executeDrawImage(ExecuteContext& ctx, const GPUCommand& cmd) 
 
 void SDLGPUDriver::executeDrawText(ExecuteContext& ctx, const GPUCommand& cmd) {
     if (!ctx.pass || !text_pipeline_ || glyph_atlas_tiers_.empty() || cmd.glyphs.empty()) {
-        DONG_LOG_WARN("[DrawText] EARLY EXIT: pass=%p text_pipeline=%p tiers_empty=%d glyphs_empty=%d",
-                      (void*)ctx.pass,
-                      (void*)text_pipeline_,
-                      glyph_atlas_tiers_.empty() ? 1 : 0,
-                      cmd.glyphs.empty() ? 1 : 0);
         return;
     }
 
@@ -1495,14 +1490,8 @@ void SDLGPUDriver::executeDrawText(ExecuteContext& ctx, const GPUCommand& cmd) {
 
     GlyphAtlas* glyph_atlas = getGlyphAtlasForFontSize(font_size);
     if (!glyph_atlas || !text_sampler_) {
-        DONG_LOG_WARN("SDLGPUDriver: no glyph atlas available for font_size=%.1f", font_size);
         return;
     }
-
-    DONG_LOG_DEBUG("[DrawText] font_size=%.1f atlas=%p font=%s",
-                   font_size,
-                   (void*)glyph_atlas,
-                   default_font_path->c_str());
 
     // Get atlas properties from the glyph atlas
     const float atlas_range = glyph_atlas->getGlyphDistanceRange();
@@ -1551,6 +1540,7 @@ void SDLGPUDriver::executeDrawText(ExecuteContext& ctx, const GPUCommand& cmd) {
     for (size_t glyph_idx = 0; glyph_idx < cmd.glyphs.size(); ++glyph_idx) {
         const auto& glyph = cmd.glyphs[glyph_idx];
         if (glyph.glyph_id == 0) {
+            DONG_LOG_INFO("[DrawText] SKIP glyph[%zu]: glyph_id is 0", glyph_idx);
             continue;
         }
 
@@ -1559,6 +1549,9 @@ void SDLGPUDriver::executeDrawText(ExecuteContext& ctx, const GPUCommand& cmd) {
             const uint16_t idx = glyph.font_path_index;
             if (idx < cmd.font_paths.size()) {
                 glyph_font_path_ptr = &cmd.font_paths[idx];
+            } else {
+                DONG_LOG_WARN("[DrawText] glyph[%zu]: font_path_index %u out of range (size=%zu)",
+                              glyph_idx, idx, cmd.font_paths.size());
             }
         }
         const std::string& glyph_font_path = glyph_font_path_ptr ? *glyph_font_path_ptr : *default_font_path;
@@ -1568,12 +1561,10 @@ void SDLGPUDriver::executeDrawText(ExecuteContext& ctx, const GPUCommand& cmd) {
             glyph_pixel_scale = font_size / static_cast<float>(glyph.units_per_em);
         }
 
+        (void)glyph_idx; // Suppress unused warning in release builds
+
         const AtlasEntry* entry = glyph_atlas->addGlyph(glyph.glyph_id, glyph_font_path);
         if (!entry) {
-            DONG_LOG_VERBOSE("[DrawText] SKIP glyph[%zu]: glyph_id=%u no_entry (font=%s)",
-                             glyph_idx,
-                             glyph.glyph_id,
-                             glyph_font_path.c_str());
             continue;
         }
 
@@ -1784,13 +1775,13 @@ void SDLGPUDriver::executeDispatchCommand(const GPUCommand& cmd, ExecuteContext&
         cmd.type != GPUCommandType::EndIsolatedLayer &&
         cmd.type != GPUCommandType::BeginPass &&
         cmd.type != GPUCommandType::EndPass) {
-        if (ctx.debug_rt_enabled) {
-            DONG_LOG_DEBUG("[SDLGPUDriver::execute] frame=%llu skip cmd type=%d due_to_non_dirty_layer depth=%d",
-                    ctx.frame_index,
-                    static_cast<int>(cmd.type),
-                    ctx.skip_draw_depth);
-        }
+        DONG_LOG_INFO("[executeDispatchCommand] SKIP cmd type=%d due_to_skip_draw_depth=%d",
+                static_cast<int>(cmd.type), ctx.skip_draw_depth);
         return;
+    }
+    
+    if (cmd.type == GPUCommandType::DrawText) {
+        DONG_LOG_INFO("[executeDispatchCommand] DrawText: glyphs=%zu", cmd.glyphs.size());
     }
 
     switch (cmd.type) {
@@ -1898,15 +1889,11 @@ void SDLGPUDriver::execute(const GPUCommandList& commands) {
         DONG_PROFILE_SCOPE_CAT("GPU::executeCommands", "gpu");
 
         int cmd_index = 0;
+        int draw_text_count = 0;
         for (const auto& cmd : commands.commands) {
-            if (cmd.type == GPUCommandType::PushClipRect) {
-                DONG_LOG_DEBUG("[GPU Execute] cmd[%d] PushClipRect: y=%.1f h=%.1f skip_depth=%d",
-                               cmd_index,
-                               cmd.rect.y,
-                               cmd.rect.height,
-                               ctx.skip_draw_depth);
-            } else if (cmd.type == GPUCommandType::PopClip) {
-                DONG_LOG_DEBUG("[GPU Execute] cmd[%d] PopClip skip_depth=%d", cmd_index, ctx.skip_draw_depth);
+            if (cmd.type == GPUCommandType::DrawText) {
+                DONG_LOG_INFO("[GPU Execute] cmd[%d] DrawText: glyphs=%zu", cmd_index, cmd.glyphs.size());
+                draw_text_count++;
             }
             cmd_index++;
 

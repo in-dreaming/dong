@@ -1040,12 +1040,23 @@ struct EngineView::Impl {
             auto root = dom_manager->getRoot();
             if (root) {
                 painter->buildDisplayList(root, layout_engine.get());
+                const auto& dl = painter->getDisplayList();
+                DONG_LOG_INFO("[tick] DisplayList items: %zu", dl.items.size());
+                int text_count = 0;
+                for (const auto& item : dl.items) {
+                    if (item.type == dong::render::DisplayItemType::DrawGlyphRun) {
+                        text_count++;
+                        DONG_LOG_INFO("[tick]   DrawGlyphRun: glyphs=%zu", item.glyph_run.glyphs.size());
+                    }
+                }
+                DONG_LOG_INFO("[tick] Total DrawGlyphRun items: %d", text_count);
 
                 if (!cached_cmd_list) {
                     cached_cmd_list = std::make_unique<dong::render::GPUCommandList>();
                 }
                 dong::render::GPUCompiler compiler;
                 compiler.compile(painter->getDisplayList(), *cached_cmd_list, &painter->getLayerTree());
+                DONG_LOG_INFO("[tick] GPU commands: %zu", cached_cmd_list->commands.size());
                 commands_dirty = false;
             }
         }

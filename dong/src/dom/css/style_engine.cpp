@@ -109,6 +109,12 @@ input, select, textarea {
   border-style: inset;
   border-color: #767676;
   border-radius: 2px;
+  min-height: 24px;
+}
+
+/* Default width for text inputs (matches browser defaults) */
+input[type="text"], input[type="password"], input[type="email"], input[type="search"], input[type="url"] {
+  width: 150px;
 }
 
 /* Override author "input { width:100% }" for checkbox/radio-like controls. */

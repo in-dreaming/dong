@@ -647,6 +647,8 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
         DONG_LOG_ERROR("GlyphAtlas::generateMSDF: failed to get design units face for '%s'", font_path.c_str());
         return false;
     }
+    
+
 
     out_metrics.units_per_em = face->units_per_EM;
     if (out_metrics.units_per_em == 0) {
@@ -722,6 +724,7 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
     // 注意：在 FT_LOAD_NO_SCALE 模式下，outline 点坐标已经是 font units（不是 26.6 fixed point），不需要再做 1/64 缩放。
     msdfgen::Shape shape;
     FT_Error error = msdfgen::readFreetypeOutline(shape, &face->glyph->outline, 1.0);
+
 
 
     if (error != 0) {

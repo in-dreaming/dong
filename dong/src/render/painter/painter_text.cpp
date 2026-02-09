@@ -296,6 +296,7 @@ void renderInput(const dom::DOMNodePtr& node,
 
     std::string text = node->getAttribute("value");
     Color color = makeColorFromCss(style.color);
+    std::string placeholder = node->getAttribute("placeholder");
     if (text.empty()) {
         text = node->getAttribute("placeholder");
         color.a *= 0.5f;
@@ -304,8 +305,10 @@ void renderInput(const dom::DOMNodePtr& node,
 
     TextShapeRequest req{text, style.font_family, style.font_weight, style.font_style, font_size};
     ShapedText shaped;
-    if (!shaper.shape(req, shaped) || shaped.glyphs.empty()) return;
-
+    if (!shaper.shape(req, shaped) || shaped.glyphs.empty()) {
+        return;
+    }
+    
     float scale = shaped.scale_to_pixels;
     float ascent = shaped.ascent_units > 0.0f ? shaped.ascent_units : font_size / scale;
     float line_h = shaped.line_height_units;

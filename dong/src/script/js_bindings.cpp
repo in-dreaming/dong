@@ -853,6 +853,22 @@ static JSValue elem_insertAdjacentHTML(JSContext* ctx, JSValueConst this_val, in
     return JS_UNDEFINED;
 }
 
+static JSValue elem_focus(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (node) {
+        node->focus();
+    }
+    return JS_UNDEFINED;
+}
+
+static JSValue elem_blur(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (node) {
+        node->blur();
+    }
+    return JS_UNDEFINED;
+}
+
 static JSValue elem_addEventListener(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     if (argc < 2) return JS_UNDEFINED;
 
@@ -1733,6 +1749,12 @@ JSValue JSBindings::createJSElement(JSContext* ctx, const dom::DOMNodePtr& node)
         JS_NewCFunction(ctx, elem_getChildren, "getChildren", 0));
     JS_SetPropertyStr(ctx, elem, "insertAdjacentHTML",
         JS_NewCFunction(ctx, elem_insertAdjacentHTML, "insertAdjacentHTML", 2));
+
+    // focus and blur
+    JS_SetPropertyStr(ctx, elem, "focus",
+        JS_NewCFunction(ctx, elem_focus, "focus", 0));
+    JS_SetPropertyStr(ctx, elem, "blur",
+        JS_NewCFunction(ctx, elem_blur, "blur", 0));
 
     // style and classList
     JS_SetPropertyStr(ctx, elem, "style", elem_getStyle(ctx, elem, 0, nullptr));

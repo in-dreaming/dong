@@ -695,6 +695,18 @@ static bool computeInlineMetricsForNode(const dom::DOMNodePtr& node,
         tag == "h5" || tag == "h6" || tag == "p" || tag == "span" ||
         tag == "button" || tag == "code" || tag == "div" || tag == "footer";
 
+    // Special handling for input elements: use placeholder or value attribute for text metrics
+    if (tag == "input") {
+        std::string input_text = node->getAttribute("value");
+        if (input_text.empty()) {
+            input_text = node->getAttribute("placeholder");
+        }
+        if (!input_text.empty()) {
+            raw_text = input_text;
+            has_text_child = true;
+        }
+    }
+
     if (!has_text_child || (!tag_prefers_text && has_element_child)) {
         return false;
     }
@@ -2187,6 +2199,7 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
                     float line_height_px = 0.0f;
                     float offset_x_in_content = 0.0f;
                     std::string vertical_align = "baseline"; // baseline, top, middle, bottom
+                    bool is_line_break = false; // true for <br> elements
                 };
 
                 std::vector<InlineItem> items;
@@ -2198,12 +2211,22 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
                     }
 
                     const auto& child_style = child->getComputedStyle();
+                    const std::string child_tag = child->getTagName();
                     
                     if (child_style.position == "absolute") {
                         // 缁濆瀹氫綅鍏冪礌涓嶅弬涓庡唴鑱旀牸寮忓寲涓婁笅鏂囷紝鐢变笓闂ㄧ殑瀹氫綅甯冨眬闃舵澶勭悊
                         continue;
                     }
                     if (!isInlineLevelDisplay(child_style.display)) {
+                        continue;
+                    }
+
+                    // Handle <br> tag as a forced line break
+                    if (child_tag == "br") {
+                        InlineItem line_break_item{};
+                        line_break_item.node = child;
+                        line_break_item.is_line_break = true;
+                        items.push_back(line_break_item);
                         continue;
                     }
 
@@ -2320,6 +2343,22 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
 
                     for (size_t i = 0; i < items.size(); ++i) {
                         InlineItem& item = items[i];
+
+                        // Handle <br> tag: force line break
+                        if (item.is_line_break) {
+                            if (!current_line.item_indices.empty()) {
+                                lines.push_back(current_line);
+                                current_line = LineInfo{};
+                                if (has_container_text_metrics) {
+                                    current_line.max_baseline_from_border_top = container_baseline_from_border_top;
+                                    current_line.max_line_height_px = container_line_height_px;
+                                }
+                                current_line_used_w = 0.0f;
+                            }
+                            // <br> itself doesn't take up space, just forces a new line
+                            continue;
+                        }
+
                         float total_w = item.margin_left + item.preferred_width + item.margin_right;
 
                         if (!current_line.item_indices.empty() && current_line_used_w + total_w > content_w + 0.1f) {
