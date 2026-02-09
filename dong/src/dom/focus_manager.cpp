@@ -11,6 +11,16 @@ void FocusManager::setEventDispatcher(EventDispatcher* dispatcher) {
     event_dispatcher_ = dispatcher;
 }
 
+namespace {
+    void markFocusChainDirty(const dong::dom::DOMNodePtr& node) {
+        auto current = node;
+        while (current) {
+            current->markStyleDirty();
+            current = current->getParent();
+        }
+    }
+}
+
 void FocusManager::setFocus(DOMNodePtr element) {
     // 如果元素相同，不做任何事
     if (focused_element_ == element) {
@@ -27,6 +37,7 @@ void FocusManager::setFocus(DOMNodePtr element) {
     if (old_focus) {
         old_focus->setFocused(false);
         old_focus->setFocusVisible(false);
+        markFocusChainDirty(old_focus);
     }
 
     // 触发旧元素的 blur 事件
@@ -41,13 +52,13 @@ void FocusManager::setFocus(DOMNodePtr element) {
         element->setFocused(true);
         // 只有键盘聚焦时才设置 focus-visible
         element->setFocusVisible(keyboard_focus_);
+        markFocusChainDirty(element);
     }
 
     // 触发新元素的 focus 事件
     if (element) {
         dispatchFocusEvent(element);
     }
-
 
     // 调用回调
     if (focus_change_callback_) {

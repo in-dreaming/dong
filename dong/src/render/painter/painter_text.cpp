@@ -269,6 +269,12 @@ void renderMixedPath(const dom::DOMNodePtr& node,
         if (!child) continue;
         if (child->getType() == dom::DOMNode::NodeType::ELEMENT) {
             const auto& cs = child->getComputedStyle();
+            const std::string tag = child->getTagName();
+            if (tag == "br") {
+                state.cumulative_x = 0.0f;
+                state.baseline_y += state.line_height_px;
+                continue;
+            }
             if (cs.display == "inline") {
                 drawInlineChild(child, state, style, shaper, builder);
             } else if (cs.display == "inline-block") {
@@ -278,6 +284,7 @@ void renderMixedPath(const dom::DOMNodePtr& node,
             drawTextChild(child, state, style, shaper, builder);
         }
     }
+
 }
 
 // ========== Input 元素渲染 ==========

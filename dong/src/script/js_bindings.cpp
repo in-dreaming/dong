@@ -671,6 +671,8 @@ static JSValue doc_createElement(JSContext* ctx, JSValueConst this_val, int argc
     JS_FreeCString(ctx, tag);
     
     if (!node) return JS_NULL;
+
+    dong::dom::StyleEngine::applyDefaultStyleForNode(node);
     
     // 杩斿洖 JS 鍏冪礌瀵硅薄
     return bindings->createJSElement(ctx, node);

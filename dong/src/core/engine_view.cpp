@@ -297,6 +297,8 @@ struct EngineView::Impl {
               dom_manager.get(),
               event_dispatcher.get())) {
         focus_manager->setEventDispatcher(event_dispatcher.get());
+        dong::dom::DOMNode::setFocusManager(focus_manager.get());
+        dong::dom::DOMNode::setEventDispatcher(event_dispatcher.get());
         ctx.initialize();
     }
 
@@ -1151,8 +1153,6 @@ struct EngineView::Impl {
         }
 
         dispatchMouseEvent("mouseup", last_mouse_x, last_mouse_y, button);
-        clearActiveElement();
-        dispatchMouseEvent("click", last_mouse_x, last_mouse_y, button);
 
         if (focus_manager && dom_manager && layout_engine) {
             auto clicked = hitTestElementAt(dom_manager.get(), layout_engine.get(), last_mouse_x, last_mouse_y);
@@ -1160,7 +1160,11 @@ struct EngineView::Impl {
                 focus_manager->focusOnClick(clicked);
             }
         }
+
+        clearActiveElement();
+        dispatchMouseEvent("click", last_mouse_x, last_mouse_y, button);
     }
+
 
 
     void sendMouseWheel(float delta_x, float delta_y) {

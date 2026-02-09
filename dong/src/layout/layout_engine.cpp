@@ -834,7 +834,130 @@ static bool computeInlineMetricsForNode(const dom::DOMNodePtr& node,
     return true;
 }
 
+static bool computeInlineMetricsForTextNode(const dom::DOMNodePtr& node,
+                                            InlineMetrics& out_metrics,
+                                            float fallback_font_size_px) {
+    if (!node || node->getType() != dom::DOMNode::NodeType::TEXT) {
+        return false;
+    }
+
+    const auto& style = node->getComputedStyle();
+    float font_size_px = style.font_size > 0.0f ? style.font_size : fallback_font_size_px;
+    if (font_size_px <= 0.0f) {
+        font_size_px = 16.0f;
+    }
+
+    std::string text = collapseWhitespace(node->getRawTextContent());
+    if (text.empty()) {
+        return false;
+    }
+
+    TextShaper shaper;
+    TextShapeRequest req{};
+    req.text = text;
+    req.font_family = style.font_family;
+    req.font_weight = style.font_weight;
+    req.font_style = style.font_style;
+    req.font_size = font_size_px;
+
+    ShapedText shaped{};
+    if (!shaper.shape(req, shaped) || shaped.glyphs.empty()) {
+        return false;
+    }
+
+    const float scale = shaped.scale_to_pixels;
+    if (scale <= 0.0f || !std::isfinite(scale)) {
+        return false;
+    }
+
+    float min_x_units = shaped.glyphs.front().pen_x_units;
+    float max_x_units = shaped.glyphs.front().pen_x_units + shaped.glyphs.front().advance_x_units;
+    for (const auto& g : shaped.glyphs) {
+        min_x_units = std::min(min_x_units, g.pen_x_units);
+        max_x_units = std::max(max_x_units, g.pen_x_units + g.advance_x_units);
+    }
+
+    float content_width_px = (max_x_units - min_x_units) * scale;
+    if (content_width_px < 0.0f || !std::isfinite(content_width_px)) {
+        content_width_px = shaped.width_units * scale;
+    }
+    if (content_width_px < 0.0f) {
+        content_width_px = 0.0f;
+    }
+
+    if (style.letter_spacing_em != 0.0f) {
+        const float letter_spacing_px = style.letter_spacing_em * font_size_px;
+        const int glyph_count = static_cast<int>(shaped.glyphs.size());
+        if (glyph_count > 1) {
+            content_width_px += letter_spacing_px * static_cast<float>(glyph_count - 1);
+        }
+    }
+
+    if (style.word_spacing_px != 0.0f) {
+        int space_count = 0;
+        for (const auto& g : shaped.glyphs) {
+            if (g.cluster < text.size() && text[g.cluster] == ' ') {
+                ++space_count;
+            }
+        }
+        int effective_spaces = space_count;
+        if (!shaped.glyphs.empty()) {
+            const auto& g_last = shaped.glyphs.back();
+            if (g_last.cluster < text.size() && text[g_last.cluster] == ' ') {
+                effective_spaces = std::max(0, effective_spaces - 1);
+            }
+        }
+        if (effective_spaces > 0) {
+            content_width_px += style.word_spacing_px * static_cast<float>(effective_spaces);
+        }
+    }
+
+    out_metrics.content_width_px = content_width_px;
+    out_metrics.total_width_px = content_width_px;
+
+    float line_height_units = shaped.line_height_units;
+    float ascent_units = shaped.ascent_units;
+    float descent_units = shaped.descent_units;
+
+    if (style.line_height > 0.0f) {
+        if (style.line_height_is_unitless) {
+            float css_line_height_px = style.line_height * font_size_px;
+            line_height_units = css_line_height_px / std::max(scale, 1e-3f);
+        } else {
+            line_height_units = style.line_height / std::max(scale, 1e-3f);
+        }
+    }
+
+    if (line_height_units <= 0.0f) {
+        line_height_units = font_size_px / std::max(scale, 1e-3f);
+    }
+
+    const float min_line_height_px = font_size_px * 1.2f;
+    if (line_height_units * scale < min_line_height_px) {
+        line_height_units = min_line_height_px / std::max(scale, 1e-3f);
+    }
+    if (ascent_units <= 0.0f) {
+        ascent_units = font_size_px / std::max(scale, 1e-3f);
+    }
+
+    float descent_abs_units = descent_units < 0.0f ? -descent_units : 0.0f;
+    float metrics_height_units = ascent_units + descent_abs_units;
+    if (metrics_height_units <= 0.0f) {
+        metrics_height_units = line_height_units;
+    }
+    float extra_leading_units = line_height_units - metrics_height_units;
+    if (extra_leading_units < 0.0f) {
+        extra_leading_units = 0.0f;
+    }
+    float top_leading_units = extra_leading_units * 0.5f;
+
+    out_metrics.line_height_px = line_height_units * scale;
+    out_metrics.baseline_from_content_top_px = (top_leading_units + ascent_units) * scale;
+    return true;
+}
+
 bool isInlineLevelDisplay(const std::string& display) {
+
     return display == "inline" || display == "inline-block";
 }
 
@@ -859,7 +982,17 @@ bool isInlineFormattingContext(const dom::DOMNodePtr& node) {
     bool has_block_like_child = false;
 
     for (const auto& child : node->getChildren()) {
-        if (!child || child->getType() != dom::DOMNode::NodeType::ELEMENT) {
+        if (!child) {
+            continue;
+        }
+        if (child->getType() == dom::DOMNode::NodeType::TEXT) {
+            std::string text = collapseWhitespace(child->getRawTextContent());
+            if (!text.empty()) {
+                has_inline_child = true;
+            }
+            continue;
+        }
+        if (child->getType() != dom::DOMNode::NodeType::ELEMENT) {
             continue;
         }
         const auto& cs = child->getComputedStyle();
@@ -870,6 +1003,7 @@ bool isInlineFormattingContext(const dom::DOMNodePtr& node) {
             has_block_like_child = true;
         }
     }
+
 
     // 浠呭綋瀛樺湪 inline/inline-block 瀛愬厓绱狅紝涓旀病鏈夋贩鍏ュ叾浠?block/flex 瀛愬厓绱犳椂锛?
     // 灏嗚瀹瑰櫒瑙嗕负鍐呰仈鏍煎紡鍖栦笂涓嬫枃銆傝繖鏍峰彲浠ュ畨鍏ㄥ湴瑕嗙洊 align_basic_layout 绛夊満鏅紝
@@ -2206,7 +2340,31 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
                 items.reserve(node->getChildren().size());
 
                 for (const auto& child : node->getChildren()) {
-                    if (!child || child->getType() != dom::DOMNode::NodeType::ELEMENT) {
+                    if (!child) {
+                        continue;
+                    }
+                    if (child->getType() == dom::DOMNode::NodeType::TEXT) {
+                        InlineMetrics metrics{};
+                        if (!computeInlineMetricsForTextNode(child, metrics, container_style.font_size)) {
+                            continue;
+                        }
+
+                        InlineItem item{};
+                        item.node = child;
+                        item.margin_left = 0.0f;
+                        item.margin_right = 0.0f;
+                        item.preferred_width = metrics.total_width_px > 0.0f ? metrics.total_width_px : metrics.content_width_px;
+                        if (item.preferred_width <= 0.0f) {
+                            item.preferred_width = 1.0f;
+                        }
+                        item.preferred_height = metrics.line_height_px > 0.0f ? metrics.line_height_px : (container_style.font_size > 0.0f ? container_style.font_size * 1.2f : 16.0f);
+                        item.line_height_px = item.preferred_height;
+                        item.baseline_from_border_top = metrics.baseline_from_content_top_px;
+                        item.vertical_align = "baseline";
+                        items.push_back(item);
+                        continue;
+                    }
+                    if (child->getType() != dom::DOMNode::NodeType::ELEMENT) {
                         continue;
                     }
 
@@ -2214,6 +2372,7 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
                     const std::string child_tag = child->getTagName();
                     
                     if (child_style.position == "absolute") {
+
                         // 缁濆瀹氫綅鍏冪礌涓嶅弬涓庡唴鑱旀牸寮忓寲涓婁笅鏂囷紝鐢变笓闂ㄧ殑瀹氫綅甯冨眬闃舵澶勭悊
                         continue;
                     }

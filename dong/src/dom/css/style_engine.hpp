@@ -80,8 +80,13 @@ public:
                                          const std::string& value,
                                          ComputedStyle& style);
 
+    // Apply default tag styles (shared by parser + runtime recompute)
+    static void applyDefaultStyleForNode(DOMNodePtr node);
+    static void applyDefaultStylesRecursive(DOMNodePtr node);
+
     // Calculate computed styles for a node (considering cascade)
     void computeStyles(DOMNodePtr node);
+
     
     // 优化策略3：增量样式计算 - 只计算 dirty 节点
     void computeStylesIncremental(DOMNodePtr node);

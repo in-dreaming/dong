@@ -8,6 +8,8 @@
 #include <sstream>
 #include <cctype>
 #include <unordered_set>
+#include <string_view>
+
 
 namespace dong::dom {
 
@@ -37,7 +39,121 @@ void applyInlineStyleAttributeIfAny(DOMNodePtr node) {
     CSSParser::parseInlineStyle(style_str, node->getComputedStyle());
 }
 
+using TagStyleHandler = void(*)(ComputedStyle&);
+
+const std::unordered_map<std::string_view, TagStyleHandler> kTagDefaultHandlers = {
+    // Block-level elements
+    {"div", [](ComputedStyle& s) { s.setDisplay("block"); }},
+    {"p", [](ComputedStyle& s) { s.setDisplay("block"); }},
+    {"body", [](ComputedStyle& s) { s.setDisplay("block"); }},
+    {"html", [](ComputedStyle& s) { s.setDisplay("block"); }},
+    {"main", [](ComputedStyle& s) { s.setDisplay("block"); }},
+    {"section", [](ComputedStyle& s) { s.setDisplay("block"); }},
+    {"article", [](ComputedStyle& s) { s.setDisplay("block"); }},
+    {"nav", [](ComputedStyle& s) { s.setDisplay("block"); }},
+    {"header", [](ComputedStyle& s) { s.setDisplay("block"); }},
+    {"footer", [](ComputedStyle& s) { s.setDisplay("block"); }},
+    {"aside", [](ComputedStyle& s) { s.setDisplay("block"); }},
+    {"address", [](ComputedStyle& s) { s.setDisplay("block"); }},
+    {"blockquote", [](ComputedStyle& s) { s.setDisplay("block"); }},
+    {"figure", [](ComputedStyle& s) { s.setDisplay("block"); }},
+    {"figcaption", [](ComputedStyle& s) { s.setDisplay("block"); }},
+    {"ul", [](ComputedStyle& s) { s.setDisplay("block"); }},
+    {"ol", [](ComputedStyle& s) { s.setDisplay("block"); }},
+    {"li", [](ComputedStyle& s) { s.setDisplay("block"); }},
+    {"dl", [](ComputedStyle& s) { s.setDisplay("block"); }},
+    {"dt", [](ComputedStyle& s) { s.setDisplay("block"); }},
+    {"dd", [](ComputedStyle& s) { s.setDisplay("block"); }},
+    {"form", [](ComputedStyle& s) { s.setDisplay("block"); }},
+    {"fieldset", [](ComputedStyle& s) { s.setDisplay("block"); }},
+
+    // Inline elements
+    {"span", [](ComputedStyle& s) { s.setDisplay("inline"); }},
+    {"a", [](ComputedStyle& s) { s.setDisplay("inline"); }},
+    {"b", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_weight = "bold"; }},
+    {"i", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_style = "italic"; }},
+    {"strong", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_weight = "bold"; }},
+    {"em", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_style = "italic"; }},
+    {"code", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_family = "Menlo, Consolas, monospace"; }},
+    {"kbd", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_family = "Menlo, Consolas, monospace"; }},
+    {"samp", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_family = "Menlo, Consolas, monospace"; }},
+    {"var", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_style = "italic"; }},
+    {"small", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_size = 12.0f; }},
+    {"s", [](ComputedStyle& s) { s.setDisplay("inline"); s.text_decoration = "line-through"; }},
+    {"cite", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_style = "italic"; }},
+    {"q", [](ComputedStyle& s) { s.setDisplay("inline"); }},
+    {"mark", [](ComputedStyle& s) { s.setDisplay("inline"); s.background_color = "#ffff00"; }},
+    {"sub", [](ComputedStyle& s) { s.setDisplay("inline"); s.vertical_align = "sub"; s.font_size = 12.0f; }},
+    {"sup", [](ComputedStyle& s) { s.setDisplay("inline"); s.vertical_align = "super"; s.font_size = 12.0f; }},
+    {"u", [](ComputedStyle& s) { s.setDisplay("inline"); s.text_decoration = "underline"; }},
+    {"abbr", [](ComputedStyle& s) { s.setDisplay("inline"); }},
+    {"time", [](ComputedStyle& s) { s.setDisplay("inline"); }},
+    {"data", [](ComputedStyle& s) { s.setDisplay("inline"); }},
+    {"wbr", [](ComputedStyle& s) { s.setDisplay("inline"); }},
+    {"label", [](ComputedStyle& s) { s.setDisplay("inline"); }},
+
+    // Headings
+    {"h1", [](ComputedStyle& s) { s.setDisplay("block"); s.font_weight = "bold"; s.font_size = 32.0f; }},
+    {"h2", [](ComputedStyle& s) { s.setDisplay("block"); s.font_weight = "bold"; s.font_size = 28.0f; }},
+    {"h3", [](ComputedStyle& s) { s.setDisplay("block"); s.font_weight = "bold"; s.font_size = 24.0f; }},
+    {"h4", [](ComputedStyle& s) { s.setDisplay("block"); s.font_weight = "bold"; s.font_size = 20.0f; }},
+    {"h5", [](ComputedStyle& s) { s.setDisplay("block"); s.font_weight = "bold"; s.font_size = 18.0f; }},
+    {"h6", [](ComputedStyle& s) { s.setDisplay("block"); s.font_weight = "bold"; s.font_size = 16.0f; }},
+
+    // Form elements (inline-block)
+    {"button", [](ComputedStyle& s) { s.setDisplay("inline-block"); }},
+    {"input", [](ComputedStyle& s) { s.setDisplay("inline-block"); }},
+    {"select", [](ComputedStyle& s) { s.setDisplay("inline-block"); }},
+    {"textarea", [](ComputedStyle& s) { s.setDisplay("inline-block"); }},
+
+    // Media elements (inline-block)
+    {"img", [](ComputedStyle& s) { s.setDisplay("inline-block"); }},
+    {"video", [](ComputedStyle& s) { s.setDisplay("inline-block"); }},
+    {"canvas", [](ComputedStyle& s) { s.setDisplay("inline-block"); }},
+    {"svg", [](ComputedStyle& s) { s.setDisplay("inline-block"); }},
+    {"picture", [](ComputedStyle& s) { s.setDisplay("inline-block"); }},
+
+    // Special elements
+    {"br", [](ComputedStyle& s) {
+        s.setDisplay("inline");
+        s.height = CSSValue(0.0f, CSSValue::Unit::PIXEL);
+    }},
+    {"hr", [](ComputedStyle& s) {
+        s.setDisplay("block");
+        s.height = CSSValue(1.0f, CSSValue::Unit::PIXEL);
+        s.margin_top = CSSValue(8.0f, CSSValue::Unit::PIXEL);
+        s.margin_bottom = CSSValue(8.0f, CSSValue::Unit::PIXEL);
+        s.border_width = 0.0f;
+        s.background_color = "#cccccc";
+    }},
+    {"pre", [](ComputedStyle& s) {
+        s.setDisplay("block");
+        s.font_family = "Menlo, Consolas, monospace";
+    }},
+
+    // Table elements
+    {"table", [](ComputedStyle& s) { s.setDisplay("table"); }},
+    {"tr", [](ComputedStyle& s) { s.setDisplay("table-row"); }},
+    {"td", [](ComputedStyle& s) { s.setDisplay("table-cell"); }},
+    {"th", [](ComputedStyle& s) { s.setDisplay("table-cell"); }},
+    {"thead", [](ComputedStyle& s) { s.setDisplay("table-row-group"); }},
+    {"tbody", [](ComputedStyle& s) { s.setDisplay("table-row-group"); }},
+    {"tfoot", [](ComputedStyle& s) { s.setDisplay("table-row-group"); }},
+};
+
+void applyDefaultStyleForElement(const DOMNodePtr& node) {
+    auto& style = node->getComputedStyle();
+    const std::string& tag = node->getTagName();
+    auto it = kTagDefaultHandlers.find(tag);
+    if (it != kTagDefaultHandlers.end()) {
+        it->second(style);
+        return;
+    }
+    style.setDisplay("block");
+}
+
 } // anonymous namespace
+
 
 
 void Stylesheet::addRule(const std::string& selector, const ComputedStyle& style, 
@@ -112,6 +228,12 @@ input, select, textarea {
   min-height: 24px;
 }
 
+/* Default focus style for inputs (matches browser default outline) */
+input:focus, select:focus, textarea:focus {
+  outline: 2px solid #4A90E2;
+  outline-offset: 1px;
+}
+
 /* Default width for text inputs (matches browser defaults) */
 input[type="text"], input[type="password"], input[type="email"], input[type="search"], input[type="url"] {
   width: 150px;
@@ -140,8 +262,30 @@ input[type="checkbox"], input[type="radio"] {
     addStylesheet(std::string(kUserAgentCSS));
 }
 
+void StyleEngine::applyDefaultStyleForNode(DOMNodePtr node) {
+    if (!node) return;
+
+    node->getComputedStyle() = ComputedStyle{};
+
+    if (node->getType() != DOMNode::NodeType::ELEMENT) {
+        return;
+    }
+
+    applyDefaultStyleForElement(node);
+}
+
+void StyleEngine::applyDefaultStylesRecursive(DOMNodePtr node) {
+    if (!node) return;
+
+    applyDefaultStyleForNode(node);
+
+    for (const auto& child : node->getChildren()) {
+        applyDefaultStylesRecursive(child);
+    }
+}
 
 void StyleEngine::addStylesheet(const std::string& css) {
+
     Stylesheet sheet;
     auto rules = parseCSS(css);
     for (const auto& rule : rules) {
@@ -195,8 +339,11 @@ void StyleEngine::computeStyles(DOMNodePtr node) {
     
     if (!node) return;
 
+    applyDefaultStyleForNode(node);
+
     // Apply matching rules
     applyMatchingRules(node);
+
     
     // Inherit from parent
     inheritFromParent(node);
@@ -227,11 +374,13 @@ void StyleEngine::computeStyles(DOMNodePtr node) {
 
 void StyleEngine::recomputeNodeStyle(DOMNodePtr node) {
     if (!node) return;
+    applyDefaultStyleForNode(node);
     applyMatchingRules(node);
     inheritFromParent(node);
     applyInlineStyleAttributeIfAny(node);
     node->getComputedStyle().layout_mode = deriveLayoutModeFromDisplay(node->getComputedStyle());
 }
+
 
 
 void StyleEngine::applyMatchingRules(DOMNodePtr node) {
@@ -1382,8 +1531,11 @@ void StyleEngine::computeStylesIncremental(DOMNodePtr node) {
     
     if (!node) return;
 
+    applyDefaultStyleForNode(node);
+
     // 使用索引加速的规则匹配
     applyMatchingRulesIndexed(node);
+
     
     // Inherit from parent
     inheritFromParent(node);
