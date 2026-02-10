@@ -196,11 +196,30 @@ html, body {
   background-color: #ffffff;
 }
 
+/* Basic block spacing to better match browser defaults. */
+h1 {
+  margin: 0.67em 0;
+}
+
+p {
+  margin: 1em 0;
+}
+
+ol, ul {
+  margin: 1em 0;
+  padding-left: 40px;
+}
+
+li {
+  display: list-item;
+}
+
 /* Controls default to inline-block in browsers; our ComputedStyle defaults to block. */
 button, input, select, textarea {
   display: inline-block;
   box-sizing: border-box;
 }
+
 
 button {
   padding: 2px 6px;

@@ -957,8 +957,33 @@ static bool computeInlineMetricsForTextNode(const dom::DOMNodePtr& node,
 }
 
 bool isInlineLevelDisplay(const std::string& display) {
-
     return display == "inline" || display == "inline-block";
+}
+
+// Check if node has any inline-level children (text nodes or inline/inline-block elements)
+// Used to determine if we need to prevent Yoga's default stretch behavior
+static bool hasInlineLevelChild(const dom::DOMNodePtr& node) {
+    if (!node || node->getType() != dom::DOMNode::NodeType::ELEMENT) {
+        return false;
+    }
+    for (const auto& child : node->getChildren()) {
+        if (!child) continue;
+        if (child->getType() == dom::DOMNode::NodeType::TEXT) {
+            std::string text = collapseWhitespace(child->getRawTextContent());
+            if (!text.empty()) {
+                return true;
+            }
+            continue;
+        }
+        if (child->getType() != dom::DOMNode::NodeType::ELEMENT) {
+            continue;
+        }
+        const auto& cs = child->getComputedStyle();
+        if (isInlineLevelDisplay(cs.display)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 bool isInlineFormattingContext(const dom::DOMNodePtr& node) {
@@ -1425,7 +1450,49 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
     // 璁剧疆涓?flex-direction: row锛岃 Yoga 鑳芥纭绠楀鍣ㄩ珮搴?
     if (isInlineFormattingContext(dom_node)) {
         YGNodeStyleSetFlexDirection(yoga_node, YGFlexDirectionRow);
-        YGNodeStyleSetFlexWrap(yoga_node, YGWrapWrap); // 鍏佽鎹㈣
+        YGNodeStyleSetFlexWrap(yoga_node, YGWrapWrap);
+    }
+
+    // ==========================================================================
+    // Fix A: Prevent Yoga from stretching inline-level children in block containers
+    // ==========================================================================
+    // Problem: Yoga treats all containers as flex by default with align-items: stretch.
+    // This causes inline-block elements (buttons, inputs) to stretch to full width.
+    // Solution: For non-flex block containers with inline children, set align-items: flex-start.
+    if (style.layout_mode != dom::LayoutMode::Flex) {
+        const bool align_is_default = style.align_items.empty() ||
+            style.align_items == "stretch" ||
+            style.align_items == "normal";
+        if (align_is_default && hasInlineLevelChild(dom_node)) {
+            YGNodeStyleSetAlignItems(yoga_node, YGAlignFlexStart);
+        }
+    }
+
+    // ==========================================================================
+    // Fix B: Prevent inline-block elements from being stretched by parent
+    // ==========================================================================
+    // Also set align-self: flex-start on inline-block elements themselves,
+    // and compute intrinsic width for width: auto elements.
+    {
+        auto parent_node = dom_node->getParent();
+        if (parent_node && parent_node->getType() == dom::DOMNode::NodeType::ELEMENT) {
+            const auto& parent_style = parent_node->getComputedStyle();
+            const bool parent_is_flex = (parent_style.layout_mode == dom::LayoutMode::Flex);
+            const bool is_inline_block = (style.display == "inline-block");
+
+            if (!parent_is_flex && is_inline_block) {
+                // Prevent Yoga's default stretch from widening inline-block elements
+                YGNodeStyleSetAlignSelf(yoga_node, YGAlignFlexStart);
+
+                // For inline-block with width: auto, set intrinsic width based on text content
+                if (style.width.isAuto()) {
+                    float intrinsic_w = computeIntrinsicTextWidth(dom_node);
+                    if (intrinsic_w > 0.0f && intrinsic_w < 10000.0f && std::isfinite(intrinsic_w)) {
+                        YGNodeStyleSetWidth(yoga_node, intrinsic_w);
+                    }
+                }
+            }
+        }
     }
 
     bool width_converted_to_max = false;
