@@ -72,6 +72,54 @@ static JSValue console_error(JSContext* ctx, JSValueConst this_val, int argc, JS
 
 } // extern "C"
 
+// ============================================================
+// Window-level API stubs (alert, confirm, prompt)
+// ============================================================
+
+extern "C" {
+
+static JSValue js_alert(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val;
+    if (argc > 0) {
+        const char* str = JS_ToCString(ctx, argv[0]);
+        if (str) {
+            DONG_LOG_INFO("[JS:alert] %s", str);
+            JS_FreeCString(ctx, str);
+        }
+    }
+    return JS_UNDEFINED;
+}
+
+static JSValue js_confirm(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val;
+    if (argc > 0) {
+        const char* str = JS_ToCString(ctx, argv[0]);
+        if (str) {
+            DONG_LOG_INFO("[JS:confirm] %s", str);
+            JS_FreeCString(ctx, str);
+        }
+    }
+    return JS_TRUE;
+}
+
+static JSValue js_prompt(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val;
+    if (argc > 0) {
+        const char* str = JS_ToCString(ctx, argv[0]);
+        if (str) {
+            DONG_LOG_INFO("[JS:prompt] %s", str);
+            JS_FreeCString(ctx, str);
+        }
+    }
+    // Return default value if provided, otherwise null
+    if (argc > 1) {
+        return JS_DupValue(ctx, argv[1]);
+    }
+    return JS_NULL;
+}
+
+} // extern "C"
+
 namespace dong::script {
 
 namespace {
@@ -1549,6 +1597,15 @@ void JSBindings::initializeConsoleAPI() {
 
     // JS_SetPropertyStr takes ownership of 'console', so we must NOT free it afterwards.
     JS_SetPropertyStr(ctx, global, "console", console);
+
+    // Window-level browser API stubs
+    JS_SetPropertyStr(ctx, global, "alert",
+        JS_NewCFunction(ctx, js_alert, "alert", 1));
+    JS_SetPropertyStr(ctx, global, "confirm",
+        JS_NewCFunction(ctx, js_confirm, "confirm", 1));
+    JS_SetPropertyStr(ctx, global, "prompt",
+        JS_NewCFunction(ctx, js_prompt, "prompt", 2));
+
     JS_FreeValue(ctx, global);
 }
 
