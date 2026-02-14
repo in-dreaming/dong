@@ -307,7 +307,7 @@ public:
         data.baseline_x += translate_x_;
         data.baseline_y += translate_y_;
         item.glyph_run = std::move(data);
-        DONG_LOG_INFO("[DisplayListBuilder] addGlyphRun: glyphs=%zu baseline=(%.1f,%.1f) font='%s'",
+        DONG_LOG_DEBUG("[DisplayListBuilder] addGlyphRun: glyphs=%zu baseline=(%.1f,%.1f) font='%s'",
                       item.glyph_run.glyphs.size(),
                       item.glyph_run.baseline_x,
                       item.glyph_run.baseline_y,

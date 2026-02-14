@@ -166,6 +166,8 @@ struct dong_overlay_t {
     int32_t pos_x, pos_y;
     float opacity;
     int enabled;
+    int dirty;                          // Needs re-render when content changes
+    int initial_render_done;            // First frame rendered
 
     char resource_root[MAX_PATH_LEN];
 };
@@ -358,13 +360,22 @@ DONG_APPCORE_API void dong_overlay_set_resource_root(dong_overlay_t* overlay, co
 
 DONG_APPCORE_API int dong_overlay_eval_script(dong_overlay_t* overlay, const char* script) {
     if (!overlay || !overlay->engine || !script) return 0;
-    return (dong_engine_eval_script(overlay->engine, script) == DONG_OK) ? 1 : 0;
+    int result = (dong_engine_eval_script(overlay->engine, script) == DONG_OK) ? 1 : 0;
+    if (result) {
+        overlay->dirty = 1;  // Script may have changed content
+    }
+    return result;
 }
 
 
 DONG_APPCORE_API void dong_overlay_update(dong_overlay_t* overlay, float dt) {
     (void)dt;
     if (!overlay || !overlay->engine || !overlay->enabled) return;
+
+    // Only render on first frame or when dirty
+    if (overlay->initial_render_done && !overlay->dirty) {
+        return;
+    }
 
     DongGPUDriver* driver = dong_platform_get_gpu_driver(dong_platform_get());
     if (!driver) return;
@@ -382,6 +393,8 @@ DONG_APPCORE_API void dong_overlay_update(dong_overlay_t* overlay, float dt) {
     }
 
     dong_gpu_end_frame_offscreen(driver);
+    overlay->initial_render_done = 1;
+    overlay->dirty = 0;
 }
 
 

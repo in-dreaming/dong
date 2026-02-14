@@ -1540,7 +1540,7 @@ void SDLGPUDriver::executeDrawText(ExecuteContext& ctx, const GPUCommand& cmd) {
     for (size_t glyph_idx = 0; glyph_idx < cmd.glyphs.size(); ++glyph_idx) {
         const auto& glyph = cmd.glyphs[glyph_idx];
         if (glyph.glyph_id == 0) {
-            DONG_LOG_INFO("[DrawText] SKIP glyph[%zu]: glyph_id is 0", glyph_idx);
+            DONG_LOG_DEBUG("[DrawText] SKIP glyph[%zu]: glyph_id is 0", glyph_idx);
             continue;
         }
 
@@ -1775,13 +1775,13 @@ void SDLGPUDriver::executeDispatchCommand(const GPUCommand& cmd, ExecuteContext&
         cmd.type != GPUCommandType::EndIsolatedLayer &&
         cmd.type != GPUCommandType::BeginPass &&
         cmd.type != GPUCommandType::EndPass) {
-        DONG_LOG_INFO("[executeDispatchCommand] SKIP cmd type=%d due_to_skip_draw_depth=%d",
+        DONG_LOG_DEBUG("[executeDispatchCommand] SKIP cmd type=%d due_to_skip_draw_depth=%d",
                 static_cast<int>(cmd.type), ctx.skip_draw_depth);
         return;
     }
-    
+
     if (cmd.type == GPUCommandType::DrawText) {
-        DONG_LOG_INFO("[executeDispatchCommand] DrawText: glyphs=%zu", cmd.glyphs.size());
+        DONG_LOG_DEBUG("[executeDispatchCommand] DrawText: glyphs=%zu", cmd.glyphs.size());
     }
 
     switch (cmd.type) {
@@ -1892,7 +1892,7 @@ void SDLGPUDriver::execute(const GPUCommandList& commands) {
         int draw_text_count = 0;
         for (const auto& cmd : commands.commands) {
             if (cmd.type == GPUCommandType::DrawText) {
-                DONG_LOG_INFO("[GPU Execute] cmd[%d] DrawText: glyphs=%zu", cmd_index, cmd.glyphs.size());
+                DONG_LOG_DEBUG("[GPU Execute] cmd[%d] DrawText: glyphs=%zu", cmd_index, cmd.glyphs.size());
                 draw_text_count++;
             }
             cmd_index++;

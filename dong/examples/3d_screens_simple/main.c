@@ -286,9 +286,9 @@ int main(int argc, char* argv[]) {
             printf("[FPS] %.1f\n", fps);
         }
 
-        // Auto-exit after 3 seconds for benchmark
+        // Auto-exit after 10 seconds for benchmark (uncomment for testing)
         // if (total_time >= 10.0f) {
-        //     printf("\n[BENCHMARK] Total frames: %d, Time: %.2fs, Average FPS: %.1f\n", 
+        //     printf("\n[BENCHMARK] Total frames: %d, Time: %.2fs, Average FPS: %.1f\n",
         //            total_frames, total_time, (float)total_frames / total_time);
         //     break;
         // }

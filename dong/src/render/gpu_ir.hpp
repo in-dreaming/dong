@@ -125,7 +125,7 @@ class GPUCompiler {
 public:
     // 支持可选的 LayerTree，用于在图层命令上携带 transform/scroll 等属性
     void compile(const DisplayList& dl, GPUCommandList& out, const LayerTree* layer_tree = nullptr) {
-        DONG_LOG_INFO("[GPUCompiler] compile: items=%zu", dl.items.size());
+        DONG_LOG_DEBUG("[GPUCompiler] compile: items=%zu", dl.items.size());
         out.commands.clear();
 
         auto find_layer_by_id = [layer_tree](uint64_t id) -> const LayerNode* {

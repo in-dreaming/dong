@@ -31,7 +31,15 @@
       "Bash(powershell.exe:*)",
       "Bash(DONG_TEST_CLICK=\"100,200,1\" powershell.exe:*)",
       "Bash(DONG_TEST_CLICK=\"100,150,1\" powershell.exe -NoProfile -Command:*)",
-      "Bash(DONG_TEST_CLICK=\"100,170,1\" powershell.exe -NoProfile -Command:*)"
+      "Bash(DONG_TEST_CLICK=\"100,170,1\" powershell.exe -NoProfile -Command:*)",
+      "Bash(git checkout:*)",
+      "Bash(xxd:*)",
+      "Bash(./zig-out/bin/html_test.exe:*)",
+      "Bash(D:/mix/agents/game/indr/dong/dong/zig-out/bin/html_render_test.exe:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(zig-out/bin/html_render_test.exe:*)",
+      "Bash(Select-String:*)"
     ]
   }
 }
