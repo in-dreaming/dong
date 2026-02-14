@@ -290,7 +290,8 @@ SDL_GPUComputePipeline* ShaderManager::createComputePipelineFromHLSL(
     const char* hlsl_source,
     const ComputePipelineInfo& info,
     const char* entry_point,
-    const char* debug_name) {
+    const char* debug_name,
+    const char* include_dir) {
 
     if (!hlsl_source) {
         DONG_LOG_ERROR("Invalid HLSL source for compute pipeline '%s'", debug_name ? debug_name : "<unnamed>");
@@ -301,7 +302,7 @@ SDL_GPUComputePipeline* ShaderManager::createComputePipelineFromHLSL(
     SDL_ShaderCross_HLSL_Info hlsl_info{};
     hlsl_info.source = hlsl_source;
     hlsl_info.entrypoint = entry_point;
-    hlsl_info.include_dir = nullptr;
+    hlsl_info.include_dir = include_dir;
     hlsl_info.defines = nullptr;
     hlsl_info.shader_stage = SDL_SHADERCROSS_SHADERSTAGE_COMPUTE;
     hlsl_info.props = 0;
@@ -368,7 +369,8 @@ SDL_GPUComputePipeline* ShaderManager::loadComputePipelineFromHLSL(
     const std::string& name,
     const char* hlsl_source,
     const ComputePipelineInfo& info,
-    const char* entry_point) {
+    const char* entry_point,
+    const char* include_dir) {
 
     if (!gpu_device_ || !gpu_device_->isInitialized()) {
         DONG_LOG_ERROR("GPU device not initialized");
@@ -402,7 +404,7 @@ SDL_GPUComputePipeline* ShaderManager::loadComputePipelineFromHLSL(
     }
 
     // 编译新 compute pipeline
-    SDL_GPUComputePipeline* pipeline = createComputePipelineFromHLSL(hlsl_source, info, entry_point, name.c_str());
+    SDL_GPUComputePipeline* pipeline = createComputePipelineFromHLSL(hlsl_source, info, entry_point, name.c_str(), include_dir);
     if (pipeline) {
         compute_pipeline_cache_[name] = pipeline;
 

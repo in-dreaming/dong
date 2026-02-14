@@ -63,7 +63,8 @@ public:
         const std::string& name,
         const char* hlsl_source,
         const ComputePipelineInfo& info,
-        const char* entry_point = "main"
+        const char* entry_point = "main",
+        const char* include_dir = nullptr
     );
 
     // 从 HLSL 文件加载 compute pipeline
@@ -111,7 +112,8 @@ private:
         const char* hlsl_source,
         const ComputePipelineInfo& info,
         const char* entry_point,
-        const char* debug_name
+        const char* debug_name,
+        const char* include_dir = nullptr
     );
 };
 

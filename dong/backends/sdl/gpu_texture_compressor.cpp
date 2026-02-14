@@ -29,6 +29,14 @@ static std::string getShaderPath(const char* filename) {
     return base + "/cmp/" + filename;
 }
 
+static std::string getShaderIncludeDir() {
+    std::string base = DONG_SDL_SHADER_DIR;
+    if (!base.empty() && (base.back() == '/' || base.back() == '\\')) {
+        return base + "cmp";
+    }
+    return base + "/cmp";
+}
+
 static std::string loadShaderSource(const char* filename) {
     std::string path = getShaderPath(filename);
     std::ifstream file(path, std::ios::in | std::ios::binary);
@@ -64,6 +72,7 @@ bool GPUTextureCompressor::initialize() {
     // Load shader sources from files
     std::string bc7_source = loadShaderSource("bc7_encode_cs.hlsl");
     std::string astc_source = loadShaderSource("astc_encode_cs.hlsl");
+    std::string include_dir = getShaderIncludeDir();
 
     // Initialize BC7 pipeline
     if (!bc7_source.empty()) {
@@ -76,7 +85,7 @@ bool GPUTextureCompressor::initialize() {
         bc7_info.threadcount_z = 1;
 
         bc7_pipeline_ = shader_manager_->loadComputePipelineFromHLSL(
-            "bc7_encode_cs", bc7_source.c_str(), bc7_info, "main");
+            "bc7_encode_cs", bc7_source.c_str(), bc7_info, "main", include_dir.c_str());
 
         if (!bc7_pipeline_) {
             DONG_LOG_WARN("GPUTextureCompressor: Failed to create BC7 compute pipeline");
@@ -94,7 +103,7 @@ bool GPUTextureCompressor::initialize() {
         astc_info.threadcount_z = 1;
 
         astc_4x4_pipeline_ = shader_manager_->loadComputePipelineFromHLSL(
-            "astc_encode_cs", astc_source.c_str(), astc_info, "main");
+            "astc_encode_cs", astc_source.c_str(), astc_info, "main", include_dir.c_str());
 
         // All ASTC sizes use the same pipeline with different uniforms
         astc_5x5_pipeline_ = astc_4x4_pipeline_;
