@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <unordered_set>
 #include "../../layout/layout_engine.hpp"
+#include "../../core/log.h"
 
 namespace dong::render {
 namespace {
@@ -182,34 +183,29 @@ void drawInlineChild(const dom::DOMNodePtr& child,
     child->setAttribute("__inline_rendered__", "1");
 }
 
-void drawTextChild(const dom::DOMNodePtr& child,
-                   MixedPathState& state,
-                   const dom::ComputedStyle& container_style,
-                   TextShaper& shaper,
-                   DisplayListBuilder& builder) {
+void drawTextChildAtPosition(const dom::DOMNodePtr& child,
+                             float draw_x, float draw_y, float available_width,
+                             float baseline_y, float line_height_px,
+                             const dom::ComputedStyle& container_style,
+                             float container_font_size,
+                             const Color& text_color,
+                             TextShaper& shaper,
+                             DisplayListBuilder& builder) {
     std::string text = collapseWhitespace(child->getRawTextContent());
     if (text.empty()) return;
 
-    // Line break if needed
-    float available = state.inner_width - state.cumulative_x;
-    if (available < 20.0f) {
-        state.cumulative_x = 0.0f;
-        state.baseline_y += state.line_height_px;
-        available = state.inner_width;
-    }
-
     TextShapeRequest req{text, container_style.font_family, container_style.font_weight,
-                         container_style.font_style, state.container_font_size};
+                         container_style.font_style, container_font_size};
     ShapedText shaped;
     if (!shaper.shape(req, shaped) || shaped.glyphs.empty()) return;
 
     float scale = shaped.scale_to_pixels;
     float text_width = shaped.width_units * scale;
-    float ascent = shaped.ascent_units > 0.0f ? shaped.ascent_units : state.container_font_size / scale;
+    float ascent = shaped.ascent_units > 0.0f ? shaped.ascent_units : container_font_size / scale;
 
     // Truncate if needed
-    if (text_width > available && available > 0.0f) {
-        float ratio = available / text_width;
+    if (text_width > available_width && available_width > 0.0f) {
+        float ratio = available_width / text_width;
         size_t len = static_cast<size_t>(text.length() * ratio);
         if (len > 0) {
             size_t wb = text.find_last_of(" \t\n\r", len);
@@ -222,17 +218,16 @@ void drawTextChild(const dom::DOMNodePtr& child,
     }
 
     DrawGlyphRunData run;
-    run.rect = {state.x + state.pad_left + state.cumulative_x,
-                state.baseline_y - ascent * scale, text_width, state.line_height_px};
-    run.color = state.text_color;
-    run.font_size = state.container_font_size;
+    run.rect = {draw_x, baseline_y - ascent * scale, text_width, line_height_px};
+    run.color = text_color;
+    run.font_size = container_font_size;
     run.font_family = container_style.font_family;
     run.font_weight = container_style.font_weight;
     run.font_style = container_style.font_style;
     run.font_paths = shaped.font_paths;
     run.font_path = shaped.font_path;
     run.baseline_x = run.rect.x;
-    run.baseline_y = state.baseline_y;
+    run.baseline_y = baseline_y;
     run.units_per_em = shaped.units_per_em;
     run.scale_to_pixels = shaped.scale_to_pixels;
     fillTextShadow(run, container_style);
@@ -243,7 +238,37 @@ void drawTextChild(const dom::DOMNodePtr& child,
         run.glyphs.push_back(inst);
     }
     builder.addGlyphRun(std::move(run));
-    state.cumulative_x += text_width;
+}
+
+void drawTextChild(const dom::DOMNodePtr& child,
+                   MixedPathState& state,
+                   const dom::ComputedStyle& container_style,
+                   TextShaper& shaper,
+                   DisplayListBuilder& builder) {
+    // Line break if needed
+    float available = state.inner_width - state.cumulative_x;
+    if (available < 20.0f) {
+        state.cumulative_x = 0.0f;
+        state.baseline_y += state.line_height_px;
+        available = state.inner_width;
+    }
+
+    float draw_x = state.x + state.pad_left + state.cumulative_x;
+    drawTextChildAtPosition(child, draw_x, state.baseline_y, available,
+                            state.baseline_y, state.line_height_px,
+                            container_style, state.container_font_size,
+                            state.text_color, shaper, builder);
+
+    // Advance cumulative_x by measuring text width
+    std::string text = collapseWhitespace(child->getRawTextContent());
+    if (!text.empty()) {
+        TextShapeRequest req{text, container_style.font_family, container_style.font_weight,
+                             container_style.font_style, state.container_font_size};
+        ShapedText shaped;
+        if (shaper.shape(req, shaped) && !shaped.glyphs.empty()) {
+            state.cumulative_x += shaped.width_units * shaped.scale_to_pixels;
+        }
+    }
 }
 
 float getInlineBlockWidth(const dom::DOMNodePtr& child,
@@ -281,7 +306,25 @@ void renderMixedPath(const dom::DOMNodePtr& node,
                 state.cumulative_x += getInlineBlockWidth(child, cs, engine);
             }
         } else if (child->getType() == dom::DOMNode::NodeType::TEXT) {
-            drawTextChild(child, state, style, shaper, builder);
+            // Check if IFC has computed a position for this text node
+            const layout::LayoutNode* text_layout = engine ? engine->getLayout(child) : nullptr;
+            if (text_layout) {
+                // Use IFC-computed position
+                float draw_x = text_layout->layout.position[0];
+                float draw_y = text_layout->layout.position[1];
+                float available = text_layout->layout.dimensions[0];
+                // Baseline = text node top + same baseline offset the container uses
+                float baseline_offset = state.baseline_y - state.y - state.pad_top;
+                float ifc_baseline = draw_y + baseline_offset;
+                drawTextChildAtPosition(child, draw_x, draw_y, available,
+                                        ifc_baseline, state.line_height_px,
+                                        style, state.container_font_size,
+                                        state.text_color, shaper, builder);
+                // Advance cumulative_x to stay in sync
+                state.cumulative_x = (draw_x - state.x - state.pad_left) + text_layout->layout.dimensions[0];
+            } else {
+                drawTextChild(child, state, style, shaper, builder);
+            }
         }
     }
 

@@ -7,6 +7,7 @@
 #include <iostream>
 #include <algorithm>
 #include <functional>
+#include <unordered_set>
 #include <cmath>
 #include <cstdlib>
 
@@ -1033,7 +1034,42 @@ bool isInlineFormattingContext(const dom::DOMNodePtr& node) {
     // 浠呭綋瀛樺湪 inline/inline-block 瀛愬厓绱狅紝涓旀病鏈夋贩鍏ュ叾浠?block/flex 瀛愬厓绱犳椂锛?
     // 灏嗚瀹瑰櫒瑙嗕负鍐呰仈鏍煎紡鍖栦笂涓嬫枃銆傝繖鏍峰彲浠ュ畨鍏ㄥ湴瑕嗙洊 align_basic_layout 绛夊満鏅紝
     // 鍙堜笉褰卞搷閫氱敤 block 甯冨眬銆?
+    // Only treat as IFC when there are inline children and no block children mixed in.
+    // Mixed-content containers are handled separately via anonymous block wrapping.
     return has_inline_child && !has_block_like_child;
+}
+
+// Detect block containers that have both block-level and inline-level children.
+// Per CSS spec, these need anonymous block box generation to wrap consecutive inline runs.
+bool hasMixedBlockInlineChildren(const dom::DOMNodePtr& node) {
+    if (!node || node->getType() != dom::DOMNode::NodeType::ELEMENT) {
+        return false;
+    }
+    const auto& style = node->getComputedStyle();
+    if (style.layout_mode == dom::LayoutMode::Flex || style.display == "none") {
+        return false;
+    }
+
+    bool has_inline = false;
+    bool has_block = false;
+
+    for (const auto& child : node->getChildren()) {
+        if (!child) continue;
+        if (child->getType() == dom::DOMNode::NodeType::TEXT) continue;
+        if (child->getType() != dom::DOMNode::NodeType::ELEMENT) continue;
+
+        const auto& cs = child->getComputedStyle();
+        if (cs.display == "none") continue;
+        if (cs.position == "absolute" || cs.position == "fixed") continue;
+
+        if (isInlineLevelDisplay(cs.display)) {
+            has_inline = true;
+        } else {
+            has_block = true;
+        }
+        if (has_inline && has_block) return true;
+    }
+    return false;
 }
 
 } // anonymous namespace
@@ -1052,6 +1088,12 @@ Engine::Engine() {
 }
 
 Engine::~Engine() {
+    for (auto& ab : anon_blocks_) {
+        if (ab.yoga_node) {
+            YGNodeFree(ab.yoga_node);
+        }
+    }
+    anon_blocks_.clear();
     layout_cache.clear();
     if (yoga_config) {
         YGConfigFree(yoga_config);
@@ -1086,7 +1128,20 @@ void Engine::calculateLayout(dom::DOMNodePtr root, float width, float height) {
         return;
     }
 
-    // Rebuild layout tree from scratch each time for now to avoid stale Yoga nodes
+    // Rebuild layout tree from scratch each time for now to avoid stale Yoga nodes.
+    // Anonymous wrapper Yoga nodes must be detached from parents and freed before
+    // clearing layout_cache (which frees parent Yoga nodes via LayoutNode dtor).
+    for (auto& ab : anon_blocks_) {
+        if (ab.yoga_node) {
+            YGNode* parent = YGNodeGetOwner(ab.yoga_node);
+            if (parent) {
+                YGNodeRemoveChild(parent, ab.yoga_node);
+            }
+            YGNodeFree(ab.yoga_node);
+            ab.yoga_node = nullptr;
+        }
+    }
+    anon_blocks_.clear();
     layout_cache.clear();
 
     // Prefer the first real element (e.g., <html>) as the Yoga root instead of the #document node
@@ -1213,36 +1268,111 @@ void Engine::calculateLayout(dom::DOMNodePtr root, float width, float height) {
             }
 
             // Recursively extract child layouts. Only ELEMENT nodes get Yoga children.
-            // Track cumulative height of siblings for position correction
+            // Track cumulative height of siblings for position correction.
+            //
+            // Anonymous block wrappers: when a Yoga child is an anonymous wrapper
+            // (created for mixed block+inline content), we must extract layouts for
+            // the DOM children that were placed inside the wrapper, using the
+            // wrapper's computed position as the parent origin.
             uint32_t child_count = YGNodeGetChildCount(yoga_node);
             uint32_t yoga_child_index = 0;
             float child_cumulative_height = 0.0f;
             
             // Get parent padding for child positioning
             float parent_padding_top = style.padding_top.isPixel() ? style.padding_top.value : 0.0f;
-            
-            for (const auto& child_dom : dom_node->getChildren()) {
-                if (!child_dom || child_dom->getType() != dom::DOMNode::NodeType::ELEMENT) {
-                    continue;
+
+            // Build a lookup for anonymous wrapper Yoga nodes -> their DOM children
+            auto findAnonBlock = [this](YGNode* yg) -> const AnonBlockInfo* {
+                for (const auto& ab : anon_blocks_) {
+                    if (ab.yoga_node == yg) return &ab;
                 }
-                if (yoga_child_index >= child_count) {
-                    break;
-                }
+                return nullptr;
+            };
+
+            // Iterate DOM children, matching them to Yoga children (accounting for anon wrappers)
+            auto dom_children_iter = dom_node->getChildren().begin();
+            auto dom_children_end = dom_node->getChildren().end();
+
+            while (yoga_child_index < child_count) {
                 YGNode* child_yoga = YGNodeGetChild(yoga_node, yoga_child_index);
-                if (child_yoga) {
-                    // Pass cumulative sibling height for position correction
-                    extractLayoutRecursive(child_dom, child_yoga,
-                                            node_layout->x, node_layout->y,
-                                            parent_padding_top + child_cumulative_height);
-                    
-                    // Get the child's corrected height for cumulative tracking
-                    auto child_layout = layout_cache.find(child_dom.get());
-                    if (child_layout != layout_cache.end() && child_layout->second) {
-                        float child_h = child_layout->second->height;
-                        // Also add margin-bottom if present
-                        const auto& child_style = child_dom->getComputedStyle();
-                        float margin_bottom = child_style.margin_bottom.isPixel() ? child_style.margin_bottom.value : 0.0f;
-                        child_cumulative_height += child_h + margin_bottom;
+                if (!child_yoga) { ++yoga_child_index; continue; }
+
+                const AnonBlockInfo* anon = findAnonBlock(child_yoga);
+                if (anon) {
+                    // Anonymous wrapper: extract position from the wrapper Yoga node,
+                    // then extract layouts for each DOM child within
+                    float anon_left = YGNodeLayoutGetLeft(child_yoga);
+                    float anon_top = YGNodeLayoutGetTop(child_yoga);
+                    float anon_w = YGNodeLayoutGetWidth(child_yoga);
+                    float anon_h = YGNodeLayoutGetHeight(child_yoga);
+                    float anon_x = node_layout->x + anon_left;
+                    float anon_y = node_layout->y + anon_top;
+
+                    // Store anonymous wrapper's layout in layout_cache keyed by YGNode*
+                    // so the third-pass sibling adjustment can find and shift it.
+                    // NOTE: yoga_node is left null — ownership belongs to anon_blocks_
+                    // and is freed there; setting it here would cause double-free.
+                    auto& anon_layout = layout_cache[static_cast<void*>(child_yoga)];
+                    if (!anon_layout) {
+                        anon_layout = std::make_unique<LayoutNode>();
+                    }
+                    anon_layout->yoga_node = nullptr;
+                    anon_layout->x = anon_x;
+                    anon_layout->y = anon_y;
+                    anon_layout->width = anon_w;
+                    anon_layout->height = anon_h;
+                    anon_layout->layout.position[0] = anon_x;
+                    anon_layout->layout.position[1] = anon_y;
+                    anon_layout->layout.dimensions[0] = anon_w;
+                    anon_layout->layout.dimensions[1] = anon_h;
+
+                    uint32_t anon_yoga_idx = 0;
+                    uint32_t anon_child_count = YGNodeGetChildCount(child_yoga);
+                    for (const auto& anon_child_dom : anon->children) {
+                        if (anon_yoga_idx >= anon_child_count) break;
+                        YGNode* anon_child_yoga = YGNodeGetChild(child_yoga, anon_yoga_idx);
+                        if (anon_child_yoga) {
+                            extractLayoutRecursive(anon_child_dom, anon_child_yoga,
+                                                   anon_x, anon_y, 0.0f);
+                        }
+                        ++anon_yoga_idx;
+                    }
+
+                    // Track cumulative height using the wrapper's height
+                    child_cumulative_height += anon_h;
+
+                    // Advance dom_children_iter past the children that were in the anon wrapper
+                    for (size_t skip = 0; skip < anon->children.size(); ) {
+                        if (dom_children_iter == dom_children_end) break;
+                        const auto& dch = *dom_children_iter;
+                        ++dom_children_iter;
+                        if (dch && dch->getType() == dom::DOMNode::NodeType::ELEMENT) {
+                            ++skip;
+                        }
+                    }
+                } else {
+                    // Regular DOM child: find the next element in the DOM children
+                    dom::DOMNodePtr child_dom;
+                    while (dom_children_iter != dom_children_end) {
+                        const auto& candidate = *dom_children_iter;
+                        ++dom_children_iter;
+                        if (candidate && candidate->getType() == dom::DOMNode::NodeType::ELEMENT) {
+                            child_dom = candidate;
+                            break;
+                        }
+                    }
+
+                    if (child_dom) {
+                        extractLayoutRecursive(child_dom, child_yoga,
+                                               node_layout->x, node_layout->y,
+                                               parent_padding_top + child_cumulative_height);
+                        auto child_it = layout_cache.find(child_dom.get());
+                        if (child_it != layout_cache.end() && child_it->second) {
+                            float child_h = child_it->second->height;
+                            const auto& child_style = child_dom->getComputedStyle();
+                            float mb = child_style.margin_bottom.isPixel() ? child_style.margin_bottom.value : 0.0f;
+                            child_cumulative_height += child_h + mb;
+                        }
                     }
                 }
                 ++yoga_child_index;
@@ -1328,39 +1458,140 @@ YGNode* Engine::createYogaNode(dom::DOMNodePtr dom_node) {
     // Apply DOM styles to Yoga node
     applyDOMStylesToYoga(dom_node, yoga_node);
 
-    // Recursively create or reuse Yoga nodes for children
+    // Recursively create Yoga nodes for children (handles anonymous block wrapping)
+    buildChildYogaNodes(dom_node, yoga_node);
+
+    return yoga_node;
+}
+
+// ---------------------------------------------------------------------------
+// buildChildYogaNodes: Create Yoga child nodes for a DOM parent.
+//
+// When a block container has mixed block + inline-level children (e.g. <body>
+// with both <div> and <button>), CSS mandates "anonymous block box" generation:
+// consecutive inline-level siblings are wrapped in an anonymous block that
+// establishes an inline formatting context.
+//
+// We implement this by inserting anonymous Yoga wrapper nodes (row + wrap) for
+// each run of consecutive inline-level children. Block-level children are
+// added directly as before.
+// ---------------------------------------------------------------------------
+void Engine::buildChildYogaNodes(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
     const auto& parent_style = dom_node->getComputedStyle();
     const bool parent_is_block_like = (parent_style.layout_mode == dom::LayoutMode::Block);
+    const bool needs_anon_wrapping = parent_is_block_like && hasMixedBlockInlineChildren(dom_node);
 
     dom::DOMNodePtr prev_element_child;
     YGNode* prev_child_yoga = nullptr;
 
-    for (const auto& child : dom_node->getChildren()) {
-        if (child && child->getType() == dom::DOMNode::NodeType::ELEMENT) {
-            YGNode* child_yoga = createYogaNode(child);
+    // Helper: flush an anonymous wrapper containing accumulated inline children
+    auto flushAnonWrapper = [&](std::vector<dom::DOMNodePtr>& inline_run) {
+        if (inline_run.empty()) return;
+
+        // Create the anonymous Yoga wrapper node
+        YGNode* anon_yoga = YGNodeNewWithConfig(yoga_config);
+        if (!anon_yoga) { inline_run.clear(); return; }
+
+        // Style the anonymous wrapper: row direction, wrap, no stretch
+        YGNodeStyleSetDisplay(anon_yoga, YGDisplayFlex);
+        YGNodeStyleSetFlexDirection(anon_yoga, YGFlexDirectionRow);
+        YGNodeStyleSetFlexWrap(anon_yoga, YGWrapWrap);
+        YGNodeStyleSetAlignItems(anon_yoga, YGAlignFlexStart);
+
+        // Add inline children to the anonymous wrapper
+        for (const auto& inline_child : inline_run) {
+            YGNode* child_yoga = createYogaNode(inline_child);
             if (child_yoga) {
-                // Approximate vertical margin collapsing between sibling block items
-                // for non-flex parents, so that gaps match CSS block layout better.
-                if (parent_is_block_like && prev_child_yoga) {
-                    collapseVerticalMarginBetweenSiblings(prev_element_child, prev_child_yoga,
-                                                          child, child_yoga);
-                }
-
-                YGNodeInsertChild(yoga_node, child_yoga, YGNodeGetChildCount(yoga_node));
-
-                auto& child_layout = layout_cache[child.get()];
+                YGNodeInsertChild(anon_yoga, child_yoga, YGNodeGetChildCount(anon_yoga));
+                auto& child_layout = layout_cache[inline_child.get()];
                 if (!child_layout) {
                     child_layout = std::make_unique<LayoutNode>();
                 }
                 child_layout->yoga_node = child_yoga;
+            }
+        }
 
-                prev_element_child = child;
-                prev_child_yoga = child_yoga;
+        // Margin collapsing with previous sibling
+        if (parent_is_block_like && prev_child_yoga && !inline_run.empty()) {
+            collapseVerticalMarginBetweenSiblings(prev_element_child, prev_child_yoga,
+                                                  inline_run.front(), anon_yoga);
+        }
+
+        YGNodeInsertChild(yoga_node, anon_yoga, YGNodeGetChildCount(yoga_node));
+
+        // Record this anonymous block for layout extraction
+        AnonBlockInfo info;
+        info.yoga_node = anon_yoga;
+        info.parent = dom_node;
+        info.children = inline_run;
+        anon_blocks_.push_back(std::move(info));
+
+        prev_element_child = inline_run.back();
+        prev_child_yoga = anon_yoga;
+        inline_run.clear();
+    };
+
+    if (needs_anon_wrapping) {
+        // Mixed content: group consecutive inline-level children into anonymous blocks
+        std::vector<dom::DOMNodePtr> current_inline_run;
+
+        for (const auto& child : dom_node->getChildren()) {
+            if (!child || child->getType() != dom::DOMNode::NodeType::ELEMENT) continue;
+
+            const auto& cs = child->getComputedStyle();
+            if (cs.display == "none") continue;
+
+            bool is_inline = isInlineLevelDisplay(cs.display);
+            bool is_out_of_flow = (cs.position == "absolute" || cs.position == "fixed");
+
+            if (is_inline && !is_out_of_flow) {
+                current_inline_run.push_back(child);
+            } else {
+                // Flush any pending inline run before this block child
+                flushAnonWrapper(current_inline_run);
+
+                // Add block child directly
+                YGNode* child_yoga = createYogaNode(child);
+                if (child_yoga) {
+                    if (parent_is_block_like && prev_child_yoga) {
+                        collapseVerticalMarginBetweenSiblings(prev_element_child, prev_child_yoga,
+                                                              child, child_yoga);
+                    }
+                    YGNodeInsertChild(yoga_node, child_yoga, YGNodeGetChildCount(yoga_node));
+                    auto& child_layout = layout_cache[child.get()];
+                    if (!child_layout) {
+                        child_layout = std::make_unique<LayoutNode>();
+                    }
+                    child_layout->yoga_node = child_yoga;
+                    prev_element_child = child;
+                    prev_child_yoga = child_yoga;
+                }
+            }
+        }
+        // Flush trailing inline run
+        flushAnonWrapper(current_inline_run);
+    } else {
+        // No mixed content: add all children directly (original behavior)
+        for (const auto& child : dom_node->getChildren()) {
+            if (child && child->getType() == dom::DOMNode::NodeType::ELEMENT) {
+                YGNode* child_yoga = createYogaNode(child);
+                if (child_yoga) {
+                    if (parent_is_block_like && prev_child_yoga) {
+                        collapseVerticalMarginBetweenSiblings(prev_element_child, prev_child_yoga,
+                                                              child, child_yoga);
+                    }
+                    YGNodeInsertChild(yoga_node, child_yoga, YGNodeGetChildCount(yoga_node));
+                    auto& child_layout = layout_cache[child.get()];
+                    if (!child_layout) {
+                        child_layout = std::make_unique<LayoutNode>();
+                    }
+                    child_layout->yoga_node = child_yoga;
+                    prev_element_child = child;
+                    prev_child_yoga = child_yoga;
+                }
             }
         }
     }
-
-    return yoga_node;
 }
 
 void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
@@ -1533,24 +1764,14 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
         }
     }
 
-    // 鍩轰簬鐪熷疄瀛椾綋搴﹂噺鐨?intrinsic sizing锛?
-    // 濡傛灉鏄枃鏈富瀵肩殑鍧楃骇鍏冪礌锛屼笖楂樺害涓?auto锛屽垯浣跨敤 TextShaper
-    // 璁＄畻涓€琛屾枃瀛楃殑琛岄珮锛屽苟灏?padding 涓€璧风撼鍏ユ渶灏忛珮搴︼紝閬垮厤鏂囨湰瀹瑰櫒楂樺害
-    // 浠呯敱 padding 鍐冲畾锛屽鑷翠笌娴忚鍣ㄥ樊寮傝繃澶с€?
-    // 
-    // 绗﹀悎 CSS 鏍囧噯锛氫粎璁剧疆 min-height锛岃瀹瑰櫒鑳藉鏍规嵁瀛愬厓绱犲唴瀹硅嚜鐒舵墿灞曪紝
-    // 閬垮厤鏄惧紡閿佸畾 height 瀵艰嚧澶氬瓙鍏冪礌瀹瑰櫒琚帇缂┿€?
-    if ((tag == "h1" || tag == "h2" || tag == "h3" || tag == "h4" ||
-         tag == "h5" || tag == "h6" || tag == "p" || tag == "button" ||
-         tag == "div") &&
-        style.height.isAuto()) {
+    // Any block-level element with text content and height:auto needs minHeight from its
+    // text so Yoga can properly size it. Without this, Yoga leaf nodes (no Yoga children
+    // since text nodes aren't represented) collapse to height 0, causing exponential
+    // spacing growth in lists (<li>) and other block containers.
+    if (style.layout_mode == dom::LayoutMode::Block && style.height.isAuto()) {
         float intrinsic_h = computeIntrinsicTextHeight(dom_node, parent_content_w);
-
-        
         if (intrinsic_h > 0.0f && intrinsic_h < 10000.0f) {
             YGNodeStyleSetMinHeight(yoga_node, intrinsic_h);
-            // 绉婚櫎鏄惧紡 height 璁剧疆锛岃 Yoga 鏍规嵁鍐呭鑷姩璁＄畻楂樺害
-            // YGNodeStyleSetHeight(yoga_node, intrinsic_h);
         }
     }
     
@@ -2621,7 +2842,15 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
                             InlineItem& item = items[idx];
                             auto it_child_layout = layout_cache.find(item.node.get());
                             if (it_child_layout == layout_cache.end() || !it_child_layout->second) {
-                                continue;
+                                // Text nodes don't get layout_cache entries from Yoga.
+                                // Create synthetic entries so the painter can use IFC positions.
+                                if (item.node && item.node->getType() == dom::DOMNode::NodeType::TEXT) {
+                                    auto& text_layout = layout_cache[item.node.get()];
+                                    text_layout = std::make_unique<LayoutNode>();
+                                    it_child_layout = layout_cache.find(item.node.get());
+                                } else {
+                                    continue;
+                                }
                             }
                             LayoutNode* child_layout = it_child_layout->second.get();
 
@@ -2806,126 +3035,231 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
         // 但 Yoga 已经给出了兄弟元素的 Y。如果不把后续兄弟整体下移，会出现
         // "后一个 block 覆盖前一个（因为绘制顺序在后）"的现象。
         //
-        // 策略：对当前容器的**正常流 block 子元素**做一次"最小下移修正"，确保：
+        // 策略：对当前容器的**正常流子元素**（包括匿名包装器）做一次"最小下移修正"，确保：
         // child.y >= prev.y + prev.height + margin-bottom(prev) + margin-top(child)
         // 仅当 child 被放得过高时才下移（不做上移），减少对 Yoga/flex 结果的干扰。
         {
-            std::function<void(const dom::DOMNodePtr&, float)> shiftSubtreeY;
-            shiftSubtreeY = [this, &shiftSubtreeY](const dom::DOMNodePtr& n, float dy) {
-                if (!n || n->getType() != dom::DOMNode::NodeType::ELEMENT) return;
-                auto itn = layout_cache.find(n.get());
-                if (itn != layout_cache.end() && itn->second) {
-                    LayoutNode* ln = itn->second.get();
-                    ln->y += dy;
-                    ln->layout.position[1] = ln->y;
-                    dirty_rect_.expand(ln->x, ln->y, ln->width, ln->height);
-                }
-                for (const auto& ch : n->getChildren()) {
-                    if (!ch || ch->getType() != dom::DOMNode::NodeType::ELEMENT) continue;
-                    const auto& cs = ch->getComputedStyle();
-                    if (cs.display == "none") continue;
-                    // 绝对/固定定位会在后续 layoutPositionedElements 阶段重新计算位置
-                    if (cs.position == "absolute" || cs.position == "fixed") continue;
-                    shiftSubtreeY(ch, dy);
-                }
-            };
-
-            float cumulative_delta_y = 0.0f;
-            dom::DOMNodePtr prev_flow_child = nullptr;
-
-            for (const auto& child : node->getChildren()) {
-                if (!child || child->getType() != dom::DOMNode::NodeType::ELEMENT) {
-                    continue;
-                }
-
-                const auto& child_style = child->getComputedStyle();
-                if (child_style.display == "none" ||
-                    child_style.position == "absolute" ||
-                    child_style.position == "fixed" ||
-                    child_style.display == "inline" ||
-                    child_style.display == "inline-block") {
-                    continue;
-                }
-
-                auto child_it = layout_cache.find(child.get());
-                if (child_it == layout_cache.end() || !child_it->second) {
-                    continue;
-                }
-                LayoutNode* child_layout = child_it->second.get();
-
-                if (prev_flow_child) {
-                    auto prev_it = layout_cache.find(prev_flow_child.get());
-                    if (prev_it != layout_cache.end() && prev_it->second) {
-                        LayoutNode* prev_layout = prev_it->second.get();
-                        const auto& prev_style = prev_flow_child->getComputedStyle();
-
-                        float margin_bottom = prev_style.margin_bottom.isPixel()
-                                             ? prev_style.margin_bottom.value : 0.0f;
-                        float margin_top = child_style.margin_top.isPixel()
-                                          ? child_style.margin_top.value : 0.0f;
-
-                        float expected_y = prev_layout->y + prev_layout->height + margin_bottom + margin_top;
-                        float delta = expected_y - child_layout->y;
-                        if (delta > 0.1f) {
-                            if (std::getenv("DONG_DEBUG_IFC_SHIFT")) {
-                                const std::string parent_cls = node->hasAttribute("class") ? node->getAttribute("class") : std::string();
-                                const std::string prev_cls = prev_flow_child->hasAttribute("class") ? prev_flow_child->getAttribute("class") : std::string();
-                                const std::string child_cls = child->hasAttribute("class") ? child->getAttribute("class") : std::string();
-                                DONG_LOG_INFO("[IFC_SHIFT] parent='%s' prev='%s' child='%s' prev_y=%.1f prev_h=%.1f child_y=%.1f expected_y=%.1f delta=%.1f",
-                                    parent_cls.c_str(), prev_cls.c_str(), child_cls.c_str(),
-                                    prev_layout->y, prev_layout->height, child_layout->y, expected_y, delta);
-                            }
-                            cumulative_delta_y += delta;
-                        }
-                    }
-                }
-
-                if (std::abs(cumulative_delta_y) > 0.1f) {
-                    shiftSubtreeY(child, cumulative_delta_y);
-                }
-
-                prev_flow_child = child;
-            }
-
-            // 如果有子元素移动了，更新容器高度
-            if (std::abs(cumulative_delta_y) > 0.1f && !style.height.isPixel()) {
-                float pad_bottom = style.padding_bottom.isPixel() ? style.padding_bottom.value : 0.0f;
-
-                // 找到最后一个可见子元素的底部
-                float max_bottom = layout->y;
-                for (const auto& child : node->getChildren()) {
-                    if (!child || child->getType() != dom::DOMNode::NodeType::ELEMENT) {
-                        continue;
-                    }
-                    const auto& child_style = child->getComputedStyle();
-                    if (child_style.display == "none" ||
-                        child_style.position == "absolute" ||
-                        child_style.position == "fixed") {
-                        continue;
-                    }
-                    auto child_it = layout_cache.find(child.get());
-                    if (child_it != layout_cache.end() && child_it->second) {
-                        float margin_bottom = child_style.margin_bottom.isPixel()
-                                             ? child_style.margin_bottom.value : 0.0f;
-                        float child_bottom = child_it->second->y + child_it->second->height + margin_bottom;
-                        if (child_bottom > max_bottom) {
-                            max_bottom = child_bottom;
-                        }
-                    }
-                }
-
-                float new_height = max_bottom - layout->y + pad_bottom;
-                if (new_height > layout->height) {
-                    layout->height = new_height;
-                    layout->layout.dimensions[1] = new_height;
-                    dirty_rect_.expand(layout->x, layout->y, layout->width, layout->height);
-                }
-            }
+            adjustSiblingYPositions(node, layout, style);
         }
         }
     };
     
     adjustSiblingPositions(root, 0.0f);
+}
+
+// ---------------------------------------------------------------------------
+// shiftSubtreeY: Shift a DOM subtree (element or text node) by dy pixels
+// vertically, updating all layout_cache entries recursively.
+// ---------------------------------------------------------------------------
+void Engine::shiftSubtreeY(const dom::DOMNodePtr& n, float dy) {
+    if (!n) return;
+    if (n->getType() == dom::DOMNode::NodeType::TEXT) {
+        auto itn = layout_cache.find(n.get());
+        if (itn != layout_cache.end() && itn->second) {
+            LayoutNode* ln = itn->second.get();
+            ln->y += dy;
+            ln->layout.position[1] = ln->y;
+        }
+        return;
+    }
+    if (n->getType() != dom::DOMNode::NodeType::ELEMENT) return;
+    auto itn = layout_cache.find(n.get());
+    if (itn != layout_cache.end() && itn->second) {
+        LayoutNode* ln = itn->second.get();
+        ln->y += dy;
+        ln->layout.position[1] = ln->y;
+        dirty_rect_.expand(ln->x, ln->y, ln->width, ln->height);
+    }
+    for (const auto& ch : n->getChildren()) {
+        if (!ch) continue;
+        if (ch->getType() == dom::DOMNode::NodeType::TEXT) {
+            auto it_text = layout_cache.find(ch.get());
+            if (it_text != layout_cache.end() && it_text->second) {
+                LayoutNode* tln = it_text->second.get();
+                tln->y += dy;
+                tln->layout.position[1] = tln->y;
+            }
+            continue;
+        }
+        if (ch->getType() != dom::DOMNode::NodeType::ELEMENT) continue;
+        const auto& cs = ch->getComputedStyle();
+        if (cs.display == "none") continue;
+        if (cs.position == "absolute" || cs.position == "fixed") continue;
+        shiftSubtreeY(ch, dy);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// shiftAnonWrapperY: Shift an anonymous wrapper and all its children by dy.
+// ---------------------------------------------------------------------------
+void Engine::shiftAnonWrapperY(const AnonBlockInfo& ab, float dy) {
+    // Shift the wrapper's own layout entry (keyed by YGNode*)
+    auto it_wrap = layout_cache.find(static_cast<void*>(ab.yoga_node));
+    if (it_wrap != layout_cache.end() && it_wrap->second) {
+        LayoutNode* wln = it_wrap->second.get();
+        wln->y += dy;
+        wln->layout.position[1] = wln->y;
+        dirty_rect_.expand(wln->x, wln->y, wln->width, wln->height);
+    }
+    // Shift each DOM child inside the wrapper
+    for (const auto& child : ab.children) {
+        shiftSubtreeY(child, dy);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// adjustSiblingYPositions: For a given parent node, adjust Y positions of
+// its normal-flow children (including anonymous wrappers) so that siblings
+// don't overlap after IFC height expansion.
+//
+// This builds an ordered "flow item" list that interleaves block-level DOM
+// children with anonymous wrappers, then ensures each item's Y >= prev bottom.
+// ---------------------------------------------------------------------------
+void Engine::adjustSiblingYPositions(const dom::DOMNodePtr& node,
+                                     LayoutNode* layout,
+                                     const dom::ComputedStyle& style) {
+    // A flow item is either a block-level DOM child or an anonymous wrapper.
+    struct FlowItem {
+        dom::DOMNodePtr dom_child;         // non-null for block DOM child
+        const AnonBlockInfo* anon = nullptr; // non-null for anonymous wrapper
+    };
+
+    // Collect anonymous wrappers for this parent
+    std::vector<const AnonBlockInfo*> parent_anon_blocks;
+    for (const auto& ab : anon_blocks_) {
+        if (ab.parent.get() == node.get()) {
+            parent_anon_blocks.push_back(&ab);
+        }
+    }
+
+    // Build the ordered flow item list by iterating DOM children.
+    // Block children are added directly. When we encounter an inline/inline-block
+    // child that is the first child of an anonymous wrapper, we add the wrapper
+    // as a single flow item and skip the rest of its children.
+    std::vector<FlowItem> flow_items;
+    std::unordered_set<const AnonBlockInfo*> visited_anons;
+
+    for (const auto& child : node->getChildren()) {
+        if (!child || child->getType() != dom::DOMNode::NodeType::ELEMENT) {
+            continue;
+        }
+        const auto& child_style = child->getComputedStyle();
+        if (child_style.display == "none" ||
+            child_style.position == "absolute" ||
+            child_style.position == "fixed") {
+            continue;
+        }
+
+        bool is_inline = (child_style.display == "inline" ||
+                          child_style.display == "inline-block");
+        if (is_inline) {
+            // Check if this child is the first element of an anonymous wrapper
+            for (const auto* ab : parent_anon_blocks) {
+                if (visited_anons.count(ab)) continue;
+                if (!ab->children.empty() && ab->children[0].get() == child.get()) {
+                    flow_items.push_back({nullptr, ab});
+                    visited_anons.insert(ab);
+                    break;
+                }
+            }
+            // If it's an inline child belonging to an already-visited wrapper, skip it.
+            continue;
+        }
+
+        // Block-level DOM child
+        auto child_it = layout_cache.find(child.get());
+        if (child_it == layout_cache.end() || !child_it->second) {
+            continue;
+        }
+        flow_items.push_back({child, nullptr});
+    }
+
+    // Now iterate the flow items and adjust Y positions.
+    // For each item, compute expected_y from the (already-shifted) previous sibling.
+    // Shift the current item by exactly (expected_y - current_y) when positive.
+    // Because shiftSubtreeY modifies item_layout->y in place, prev_layout->y
+    // already reflects corrections when we process the next item.
+    bool any_shifted = false;
+    LayoutNode* prev_layout = nullptr;
+    float prev_margin_bottom = 0.0f;
+
+    for (auto& item : flow_items) {
+        LayoutNode* item_layout = nullptr;
+        float item_margin_top = 0.0f;
+
+        if (item.dom_child) {
+            auto it = layout_cache.find(item.dom_child.get());
+            if (it != layout_cache.end() && it->second) {
+                item_layout = it->second.get();
+            }
+            const auto& cs = item.dom_child->getComputedStyle();
+            item_margin_top = cs.margin_top.isPixel() ? cs.margin_top.value : 0.0f;
+        } else if (item.anon) {
+            auto it = layout_cache.find(static_cast<void*>(item.anon->yoga_node));
+            if (it != layout_cache.end() && it->second) {
+                item_layout = it->second.get();
+            }
+        }
+
+        if (!item_layout) continue;
+
+        if (prev_layout) {
+            float expected_y = prev_layout->y + prev_layout->height
+                             + prev_margin_bottom + item_margin_top;
+            float shift = expected_y - item_layout->y;
+            if (shift > 0.1f) {
+                if (item.dom_child) {
+                    shiftSubtreeY(item.dom_child, shift);
+                } else if (item.anon) {
+                    shiftAnonWrapperY(*item.anon, shift);
+                }
+                any_shifted = true;
+            }
+        }
+
+        prev_layout = item_layout;
+        if (item.dom_child) {
+            const auto& cs = item.dom_child->getComputedStyle();
+            prev_margin_bottom = cs.margin_bottom.isPixel() ? cs.margin_bottom.value : 0.0f;
+        } else {
+            prev_margin_bottom = 0.0f;
+        }
+    }
+
+    // Update container height if children were shifted
+    if (any_shifted && !style.height.isPixel()) {
+        float pad_bottom = style.padding_bottom.isPixel()
+                          ? style.padding_bottom.value : 0.0f;
+        float max_bottom = layout->y;
+
+        // Check block DOM children
+        for (const auto& child : node->getChildren()) {
+            if (!child || child->getType() != dom::DOMNode::NodeType::ELEMENT) continue;
+            const auto& cs = child->getComputedStyle();
+            if (cs.display == "none" || cs.position == "absolute" || cs.position == "fixed") continue;
+            auto it = layout_cache.find(child.get());
+            if (it != layout_cache.end() && it->second) {
+                float mb = cs.margin_bottom.isPixel() ? cs.margin_bottom.value : 0.0f;
+                float bottom = it->second->y + it->second->height + mb;
+                if (bottom > max_bottom) max_bottom = bottom;
+            }
+        }
+        // Also check anonymous wrappers
+        for (const auto* ab : parent_anon_blocks) {
+            auto it = layout_cache.find(static_cast<void*>(ab->yoga_node));
+            if (it != layout_cache.end() && it->second) {
+                float bottom = it->second->y + it->second->height;
+                if (bottom > max_bottom) max_bottom = bottom;
+            }
+        }
+
+        float new_height = max_bottom - layout->y + pad_bottom;
+        if (new_height > layout->height) {
+            layout->height = new_height;
+            layout->layout.dimensions[1] = new_height;
+            dirty_rect_.expand(layout->x, layout->y, layout->width, layout->height);
+        }
+    }
 }
 
 void Engine::layoutPositionedElements(dom::DOMNodePtr root) {

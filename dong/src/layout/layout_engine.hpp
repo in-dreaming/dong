@@ -5,6 +5,7 @@
 
 #include <memory>
 #include <unordered_map>
+#include <vector>
 
 // Forward declare Yoga types
 extern "C" {
@@ -73,6 +74,17 @@ private:
     std::unordered_map<void*, std::unique_ptr<LayoutNode>> layout_cache;
     DirtyRect dirty_rect_;  // Accumulates all regions that changed this frame
 
+    // Anonymous block wrappers: maps an anonymous YGNode* to its inline-level DOM children.
+    // Created when a block container has mixed block + inline-level children (CSS anonymous
+    // block box generation). The anonymous wrapper uses row + wrap direction so that
+    // consecutive inline-level elements are laid out horizontally.
+    struct AnonBlockInfo {
+        YGNode* yoga_node = nullptr;
+        dom::DOMNodePtr parent;  // The DOM parent that owns this anonymous wrapper
+        std::vector<dom::DOMNodePtr> children;
+    };
+    std::vector<AnonBlockInfo> anon_blocks_;
+
     // Viewport size for resolving vw/vh units during Yoga style mapping
     float viewport_width_ = 0.0f;
     float viewport_height_ = 0.0f;
@@ -80,6 +92,7 @@ private:
 
     // Yoga node creation and style mapping
     YGNode* createYogaNode(dom::DOMNodePtr dom_node);
+    void buildChildYogaNodes(dom::DOMNodePtr dom_node, YGNode* yoga_node);
     void applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node);
     void mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yoga_node,
                                 float parent_content_width_px, float parent_content_height_px);
@@ -100,6 +113,13 @@ private:
 
     // Positioned layout (position: absolute)
     void layoutPositionedElements(dom::DOMNodePtr root);
+
+    // Third-pass sibling Y adjustment helpers
+    void shiftSubtreeY(const dom::DOMNodePtr& n, float dy);
+    void shiftAnonWrapperY(const AnonBlockInfo& ab, float dy);
+    void adjustSiblingYPositions(const dom::DOMNodePtr& node,
+                                 LayoutNode* layout,
+                                 const dom::ComputedStyle& style);
 
     // Incremental layout helpers
     bool calculateLayoutIncremental(dom::DOMNodePtr dom_node, YGNode* yoga_node,
