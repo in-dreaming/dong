@@ -24,5 +24,6 @@ dong/third_party/skia/
 build-cmake/
 build-zig/
 /tmp/
+dong/tmp/
 .tools/
 build-test/

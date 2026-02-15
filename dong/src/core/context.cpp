@@ -19,10 +19,11 @@ bool Context::initialize() {
 
     std::cout << "[Context] Initializing " << getName() << " v" << getVersion() << std::endl;
 
-    // TODO: Initialize platform-specific resources if needed
-    // - Font management
-    // - Color space
-    // - DPI settings
+    // Platform-specific resources are now injected via Plugin system:
+    // - GPUDriver: injected via DongGPUDriver C interface
+    // - ImageDecoder: injected via DongImageDecoder interface
+    // - FileSystem: injected via DongFileSystem interface
+    // No additional initialization needed here.
 
     initialized_ = true;
     return true;

@@ -230,13 +230,8 @@ add_library(dong_render STATIC
     src/render/painter/painter_children.cpp
     src/render/render_surface.cpp
     src/render/resource_manager.cpp
-    # NOTE: SDL-specific render files migrated to backends/sdl/
-    # src/render/gpu_device.cpp -> backends/sdl/sdl_gpu_device.cpp
-    # src/render/gpu_surface.cpp -> backends/sdl/sdl_gpu_surface.cpp
-    # src/render/gpu_painter.cpp -> backends/sdl/sdl_gpu_painter.cpp
-    # src/render/shader_manager.cpp -> backends/sdl/sdl_shader_manager.cpp
-    # src/render/glyph_atlas.cpp -> backends/sdl/sdl_glyph_atlas.cpp
-    # src/render/sdl_render/* -> backends/sdl/sdl_gpu_driver_*.cpp
+    # NOTE: SDL-specific render files have been migrated to backends/sdl/
+    # Migration complete - sdl_gpu_driver.cpp now handles all GPU rendering
 
     # Core render files (platform-agnostic)
     src/render/font_resolver.cpp
@@ -244,16 +239,10 @@ add_library(dong_render STATIC
     src/render/text_shaper.cpp
     src/render/font_metrics.cpp
 
-    # NOTE: GPU-related files migrated to backends/sdl/
-    # - gpu_device.cpp -> backends/sdl/sdl_gpu_device.cpp
-    # - gpu_surface.cpp -> backends/sdl/sdl_gpu_surface.cpp
-    # - gpu_painter.cpp -> backends/sdl/sdl_gpu_painter.cpp
-    # - shader_manager.cpp -> backends/sdl/sdl_shader_manager.cpp
-    src/render/glyph_atlas.cpp  # TODO: Will be moved to core after GPUTextureOps injection
-    # Platform (SDL implementations moved to backends/sdl/)
-    # src/platform/sdl3_window.cpp
-    # src/input/input_adapter_sdl3.cpp
-    third_party/SDL_shadercross/src/SDL_shadercross.c  # Needed by shader_manager
+    # GlyphAtlas (shared by all views via GlobalShared)
+    src/render/glyph_atlas.cpp
+    # SDL_shadercross for shader compilation
+    third_party/SDL_shadercross/src/SDL_shadercross.c
 )
 
 target_include_directories(dong_render PUBLIC

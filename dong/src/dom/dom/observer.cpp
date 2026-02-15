@@ -1,8 +1,20 @@
 #include "observer.hpp"
 #include "dom_node.hpp"
 #include <algorithm>
+#include <chrono>
 
 namespace dong::dom {
+
+namespace {
+// 时间原点（模块加载时初始化，用于计算相对时间戳）
+static auto g_time_origin = std::chrono::steady_clock::now();
+
+// 获取当前时间戳（毫秒），类似于 performance.now()
+static double getPerformanceNow() {
+    auto now = std::chrono::steady_clock::now();
+    return std::chrono::duration<double, std::milli>(now - g_time_origin).count();
+}
+} // anonymous namespace
 
 // MutationObserver implementation
 MutationObserver::MutationObserver(Callback callback) 
@@ -310,7 +322,7 @@ void IntersectionObserver::checkIntersections(float viewportX, float viewportY,
             
             entry.intersectionRatio = ratio;
             entry.isIntersecting = isIntersecting;
-            entry.time = 0;  // TODO: Use actual timestamp
+            entry.time = getPerformanceNow();
             
             entries.push_back(entry);
         }

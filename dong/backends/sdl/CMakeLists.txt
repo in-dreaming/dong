@@ -53,14 +53,9 @@ add_library(dong_sdl_backend SHARED
     sdl_shader_manager.cpp
     # sdl_glyph_atlas.cpp  # Removed - using src/render/glyph_atlas.cpp instead
     sdl_gpu_surface.cpp
-    sdl_gpu_painter.cpp
+    # sdl_gpu_painter.cpp  # Removed - unused, SDLGPUDriver handles all rendering
 
-    # TODO(Phase 5 complete): Remove these after full migration
-    # ${CMAKE_SOURCE_DIR}/src/render/gpu_device.cpp
-    # ${CMAKE_SOURCE_DIR}/src/render/gpu_surface.cpp
-    # ${CMAKE_SOURCE_DIR}/src/render/gpu_painter.cpp
-    # ${CMAKE_SOURCE_DIR}/src/render/shader_manager.cpp
-    # ${CMAKE_SOURCE_DIR}/src/render/glyph_atlas.cpp
+    # Phase 5 migration complete - old src/render files have been migrated or removed
 
     # Shader cross-compile support (required by ShaderManager)
     ${CMAKE_SOURCE_DIR}/third_party/SDL_shadercross/src/SDL_shadercross.c
