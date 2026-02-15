@@ -41,9 +41,17 @@ bool SDLGPUDriver::initialize() {
     SDL_GPUTextureFormat swapchain_format = SDL_GetGPUSwapchainTextureFormat(dev, window_);
     DONG_LOG_INFO("SDLGPUDriver::initialize: swapchain format = %d", swapchain_format);
 
-    // 对于离屏渲染，我们使用 R8G8B8A8_UNORM，因为它是最通用的格式
-    SDL_GPUTextureFormat pipeline_format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
-    (void)pipeline_format;
+    // Determine render target format based on swapchain format (HDR detection)
+    // R16G16B16A16_SFLOAT is used for HDR Extended Linear
+    if (swapchain_format == SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT) {
+        render_target_format_ = SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT;
+        hdr_enabled_ = true;
+        DONG_LOG_INFO("SDLGPUDriver::initialize: HDR mode enabled (R16G16B16A16_FLOAT)");
+    } else {
+        render_target_format_ = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+        hdr_enabled_ = false;
+        DONG_LOG_INFO("SDLGPUDriver::initialize: SDR mode (R8G8B8A8_UNORM)");
+    }
 
 #ifndef DONG_SDL_SHADER_DIR
 #define DONG_SDL_SHADER_DIR "src/render/sdl_render/shaders"
@@ -77,7 +85,7 @@ bool SDLGPUDriver::initialize() {
 
     SDL_GPUGraphicsPipelineCreateInfo pci{};
     SDL_GPUColorTargetDescription color_desc{};
-    color_desc.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    color_desc.format = render_target_format_;
     // 启用 alpha 混合，支持半透明背景
     color_desc.blend_state.enable_blend = true;
     color_desc.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
@@ -128,7 +136,7 @@ bool SDLGPUDriver::initialize() {
 
     SDL_GPUGraphicsPipelineCreateInfo rrci{};
     SDL_GPUColorTargetDescription color_desc_rr{};
-    color_desc_rr.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    color_desc_rr.format = render_target_format_;
     // 启用 alpha 混合，支持半透明背景和抗锯齿边缘
     color_desc_rr.blend_state.enable_blend = true;
     color_desc_rr.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
@@ -178,7 +186,7 @@ bool SDLGPUDriver::initialize() {
 
     SDL_GPUGraphicsPipelineCreateInfo shadow_ci{};
     SDL_GPUColorTargetDescription color_desc_shadow{};
-    color_desc_shadow.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    color_desc_shadow.format = render_target_format_;
     // 启用 alpha 混合，支持半透明阴影
     color_desc_shadow.blend_state.enable_blend = true;
     color_desc_shadow.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
@@ -240,7 +248,7 @@ bool SDLGPUDriver::initialize() {
 
     SDL_GPUGraphicsPipelineCreateInfo ipci{};
     SDL_GPUColorTargetDescription color_desc2{};
-    color_desc2.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    color_desc2.format = render_target_format_;
     // 启用 alpha 混合，支持半透明图片
     color_desc2.blend_state.enable_blend = true;
     color_desc2.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
@@ -374,7 +382,7 @@ bool SDLGPUDriver::initialize() {
 
     SDL_GPUGraphicsPipelineCreateInfo tpci{};
     SDL_GPUColorTargetDescription color_desc_text{};
-    color_desc_text.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    color_desc_text.format = render_target_format_;
     color_desc_text.blend_state.enable_blend = true;
     color_desc_text.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
     color_desc_text.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
@@ -489,6 +497,18 @@ bool SDLGPUDriver::initialize() {
 
     DONG_LOG_INFO("SDLGPUDriver initialized successfully");
     return true;
+}
+
+void SDLGPUDriver::setHDREnabled(bool enable) {
+    if (enable) {
+        render_target_format_ = SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT;
+        hdr_enabled_ = true;
+        DONG_LOG_INFO("SDLGPUDriver: HDR mode enabled");
+    } else {
+        render_target_format_ = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+        hdr_enabled_ = false;
+        DONG_LOG_INFO("SDLGPUDriver: SDR mode enabled");
+    }
 }
 
 } // namespace render

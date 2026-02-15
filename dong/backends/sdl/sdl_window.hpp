@@ -27,6 +27,7 @@ public:
         uint32_t height;
         bool use_gpu;
         bool debug_mode;
+        bool enable_hdr;        // Request HDR mode (HDR Extended Linear)
     };
 
     SDL3Window() = default;
@@ -54,6 +55,9 @@ public:
     uint32_t getWidth() const { return width_; }
     uint32_t getHeight() const { return height_; }
 
+    // Check if HDR mode is active
+    bool isHDREnabled() const { return hdr_enabled_; }
+
     // 检查是否初始化
     bool isInitialized() const { return window_ != nullptr; }
 
@@ -64,6 +68,8 @@ private:
     uint32_t height_ = 0;
     bool should_close_ = false;
     bool use_gpu_ = false;
+    bool hdr_enabled_ = false;
+    bool enable_hdr_request_ = false;
 
     bool initializeSDL();
     bool createWindow(const CreateInfo& info);

@@ -9,6 +9,8 @@
 #include <ft2build.h>
 #include FT_FREETYPE_H
 
+#include <SDL3/SDL_gpu.h>
+
 // Forward declaration for ImageAtlas
 struct DongImageAtlas;
 
@@ -17,12 +19,6 @@ typedef struct DongGPUDriver DongGPUDriver;
 
 // SDL types (backend internal use)
 struct SDL_Window;
-struct SDL_GPUDevice;
-struct SDL_GPUTexture;
-struct SDL_GPUShader;
-struct SDL_GPUGraphicsPipeline;
-struct SDL_GPUSampler;
-struct SDL_GPUCommandBuffer;
 
 namespace dong {
 namespace sdl_backend {
@@ -111,6 +107,11 @@ public:
     void setLayerCacheEnabled(bool enable) { layer_cache_enabled_ = enable; }
     void setSplitCommandBufferForIsolatedLayers(bool enable) { split_cmd_buf_for_isolated_layers_ = enable; }
 
+    // HDR support
+    void setHDREnabled(bool enable);
+    bool isHDREnabled() const { return hdr_enabled_; }
+    SDL_GPUTextureFormat getRenderTargetFormat() const { return render_target_format_; }
+
 private:
     // Dependencies (to be decoupled in future phases)
     sdl_backend::GPUDevice* gpu_device_;
@@ -131,6 +132,10 @@ private:
     bool layer_cache_enabled_ = false;
     bool split_cmd_buf_for_isolated_layers_ = true;
     bool debug_rt_enabled_ = false;
+
+    // HDR support
+    bool hdr_enabled_ = false;
+    SDL_GPUTextureFormat render_target_format_ = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
 
     // Frame counter
     unsigned long long frame_index_ = 0;

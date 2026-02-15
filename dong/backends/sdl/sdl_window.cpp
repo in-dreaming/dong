@@ -37,6 +37,7 @@ bool SDL3Window::initialize(const CreateInfo& info) {
     }
 
     use_gpu_ = info.use_gpu;
+    enable_hdr_request_ = info.enable_hdr;
     if (use_gpu_) {
         if (!createGPUDevice(info.debug_mode)) {
             SDL_DestroyWindow(window_);
@@ -148,6 +149,7 @@ bool SDL3Window::createGPUDevice(bool debug_mode) {
     // 允许通过环境变量控制 swapchain present mode / frames-in-flight（性能排查常用）。
     // - DONG_GPU_PRESENT_MODE=mailbox|vsync|immediate
     // - DONG_GPU_FRAMES_IN_FLIGHT=1|2|3
+    // - DONG_HDR=1 to force HDR mode
     {
         if (const char* v = std::getenv("DONG_GPU_FRAMES_IN_FLIGHT")) {
             const int n = std::atoi(v);
@@ -156,6 +158,28 @@ bool SDL3Window::createGPUDevice(bool debug_mode) {
                 DONG_LOG_INFO("[GPU] AllowedFramesInFlight=%d", n);
             } else {
                 DONG_LOG_WARN("[GPU] Invalid DONG_GPU_FRAMES_IN_FLIGHT=%s (expected 1..3)", v);
+            }
+        }
+
+        // Check if HDR is requested (via CreateInfo or environment variable)
+        bool request_hdr = enable_hdr_request_;
+        if (const char* hdr_env = std::getenv("DONG_HDR")) {
+            request_hdr = (std::strcmp(hdr_env, "1") == 0);
+        }
+
+        // Determine swapchain composition (SDR or HDR)
+        SDL_GPUSwapchainComposition composition = SDL_GPU_SWAPCHAINCOMPOSITION_SDR;
+        hdr_enabled_ = false;
+
+        if (request_hdr) {
+            // Try HDR Extended Linear (R16G16B16A16_FLOAT)
+            if (SDL_WindowSupportsGPUSwapchainComposition(gpu_device_, window_,
+                                                          SDL_GPU_SWAPCHAINCOMPOSITION_HDR_EXTENDED_LINEAR)) {
+                composition = SDL_GPU_SWAPCHAINCOMPOSITION_HDR_EXTENDED_LINEAR;
+                hdr_enabled_ = true;
+                DONG_LOG_INFO("[GPU] HDR Extended Linear supported and enabled");
+            } else {
+                DONG_LOG_INFO("[GPU] HDR Extended Linear not supported, using SDR");
             }
         }
 
@@ -180,32 +204,66 @@ bool SDL3Window::createGPUDevice(bool debug_mode) {
             if (!SDL_SetGPUSwapchainParameters(
                 gpu_device_,
                 window_,
-                SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
+                composition,
                 mode
             )) {
                 DONG_LOG_WARN("[GPU] PresentMode request failed, falling back to VSYNC");
-                SDL_SetGPUSwapchainParameters(
-                    gpu_device_,
-                    window_,
-                    SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
-                    SDL_GPU_PRESENTMODE_VSYNC
-                );
+                if (hdr_enabled_) {
+                    // Try HDR with VSYNC
+                    if (!SDL_SetGPUSwapchainParameters(
+                        gpu_device_,
+                        window_,
+                        composition,
+                        SDL_GPU_PRESENTMODE_VSYNC
+                    )) {
+                        // Fall back to SDR
+                        hdr_enabled_ = false;
+                        composition = SDL_GPU_SWAPCHAINCOMPOSITION_SDR;
+                        SDL_SetGPUSwapchainParameters(
+                            gpu_device_,
+                            window_,
+                            composition,
+                            SDL_GPU_PRESENTMODE_VSYNC
+                        );
+                        DONG_LOG_WARN("[GPU] HDR failed, fell back to SDR");
+                    }
+                } else {
+                    SDL_SetGPUSwapchainParameters(
+                        gpu_device_,
+                        window_,
+                        composition,
+                        SDL_GPU_PRESENTMODE_VSYNC
+                    );
+                }
             }
         } else {
             // 默认策略：优先 MAILBOX，不支持则回退 VSYNC。
             if (!SDL_SetGPUSwapchainParameters(
                 gpu_device_,
                 window_,
-                SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
+                composition,
                 SDL_GPU_PRESENTMODE_MAILBOX
             )) {
                 DONG_LOG_INFO("MAILBOX present mode not supported, falling back to VSYNC");
-                SDL_SetGPUSwapchainParameters(
+                if (!SDL_SetGPUSwapchainParameters(
                     gpu_device_,
                     window_,
-                    SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
+                    composition,
                     SDL_GPU_PRESENTMODE_VSYNC
-                );
+                )) {
+                    // If HDR failed, try SDR
+                    if (hdr_enabled_) {
+                        hdr_enabled_ = false;
+                        composition = SDL_GPU_SWAPCHAINCOMPOSITION_SDR;
+                        SDL_SetGPUSwapchainParameters(
+                            gpu_device_,
+                            window_,
+                            composition,
+                            SDL_GPU_PRESENTMODE_VSYNC
+                        );
+                        DONG_LOG_WARN("[GPU] HDR swapchain failed, fell back to SDR");
+                    }
+                }
             }
         }
     }

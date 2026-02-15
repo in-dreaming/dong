@@ -107,6 +107,8 @@ typedef struct dong_app_config_t {
     int enable_dong;            // Non-zero to enable HTML rendering
     int vsync;                  // Non-zero to enable vsync
     int fullscreen;             // Non-zero for fullscreen mode
+    int enable_hdr;             // Non-zero to request HDR mode (HDR Extended Linear)
+    float hdr_max_luminance;    // Max luminance in nits (0 = default 1000)
 } dong_app_config_t;
 
 // =============================================================================
@@ -179,6 +181,14 @@ DONG_APPCORE_API void* dong_app_get_window(dong_app_t* app);
 
 // Get the dong_engine_t pointer (if enable_dong was set).
 DONG_APPCORE_API void* dong_app_get_dong_engine(dong_app_t* app);
+
+// Check if HDR mode is active.
+// Returns non-zero if HDR is enabled, 0 if running in SDR mode.
+DONG_APPCORE_API int dong_app_is_hdr_enabled(dong_app_t* app);
+
+// Get the maximum HDR luminance in nits.
+// Returns 0 if HDR is not enabled.
+DONG_APPCORE_API float dong_app_get_hdr_max_luminance(dong_app_t* app);
 
 // =============================================================================
 // HTML Content Management

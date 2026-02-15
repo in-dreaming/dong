@@ -411,7 +411,7 @@ bool SDLGPUDriver::executeSetupMainTarget(ExecuteContext& ctx) {
 
         SDL_GPUTextureCreateInfo tex_info{};
         tex_info.type = SDL_GPU_TEXTURETYPE_2D;
-        tex_info.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+        tex_info.format = render_target_format_;
         tex_info.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
         tex_info.width = ctx.w;
         tex_info.height = ctx.h;
@@ -841,7 +841,7 @@ void SDLGPUDriver::executeBeginIsolatedLayer(ExecuteContext& ctx, const GPUComma
                 if (!entry.texture) {
                     SDL_GPUTextureCreateInfo tex_info{};
                     tex_info.type = SDL_GPU_TEXTURETYPE_2D;
-                    tex_info.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+                    tex_info.format = render_target_format_;
                     tex_info.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
                     tex_info.width = target_w;
                     tex_info.height = target_h;
@@ -883,7 +883,7 @@ void SDLGPUDriver::executeBeginIsolatedLayer(ExecuteContext& ctx, const GPUComma
     if (!layer_texture) {
         SDL_GPUTextureCreateInfo tex_info{};
         tex_info.type = SDL_GPU_TEXTURETYPE_2D;
-        tex_info.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+        tex_info.format = render_target_format_;
         tex_info.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
         tex_info.width = target_w;
         tex_info.height = target_h;

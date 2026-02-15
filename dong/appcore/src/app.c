@@ -102,6 +102,9 @@ typedef struct dong_app_impl_t {
     int enable_dong;
     int running;
     int vsync;
+    int enable_hdr;
+    int hdr_enabled;            // Actual HDR status (may differ from enable_hdr if not supported)
+    float hdr_max_luminance;    // Max luminance in nits
 
     uint64_t last_frame_time;
     float delta_time;
@@ -121,9 +124,32 @@ static void app_set_present_mode(dong_app_impl_t* app) {
     }
 
     SDL_GPUPresentMode mode = app->vsync ? SDL_GPU_PRESENTMODE_VSYNC : SDL_GPU_PRESENTMODE_IMMEDIATE;
-    SDL_SetGPUSwapchainParameters(app->gpu_device, app->window,
-                                  SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
-                                  mode);
+    SDL_GPUSwapchainComposition composition = SDL_GPU_SWAPCHAINCOMPOSITION_SDR;
+
+    // Try to enable HDR if requested
+    app->hdr_enabled = 0;
+    if (app->enable_hdr) {
+        // Check for HDR Extended Linear support (R16G16B16A16_FLOAT)
+        if (SDL_WindowSupportsGPUSwapchainComposition(app->gpu_device, app->window,
+                                                       SDL_GPU_SWAPCHAINCOMPOSITION_HDR_EXTENDED_LINEAR)) {
+            composition = SDL_GPU_SWAPCHAINCOMPOSITION_HDR_EXTENDED_LINEAR;
+            app->hdr_enabled = 1;
+            printf("[DongApp] HDR Extended Linear supported, enabling HDR mode\n");
+        } else {
+            printf("[DongApp] HDR Extended Linear not supported, falling back to SDR\n");
+        }
+    }
+
+    if (!SDL_SetGPUSwapchainParameters(app->gpu_device, app->window, composition, mode)) {
+        printf("[DongApp] Failed to set swapchain parameters: %s\n", SDL_GetError());
+        // Fallback to SDR if HDR failed
+        if (app->hdr_enabled) {
+            app->hdr_enabled = 0;
+            SDL_SetGPUSwapchainParameters(app->gpu_device, app->window,
+                                          SDL_GPU_SWAPCHAINCOMPOSITION_SDR, mode);
+            printf("[DongApp] Fell back to SDR mode\n");
+        }
+    }
 }
 
 static void app_send_event_callback(dong_app_impl_t* app, const dong_app_event_t* ev) {
@@ -341,6 +367,9 @@ DONG_APPCORE_API dong_app_t* dong_app_create(const dong_app_config_t* config) {
     app->height = config->height > 0 ? config->height : 600;
     app->enable_dong = config->enable_dong;
     app->vsync = config->vsync;
+    app->enable_hdr = config->enable_hdr;
+    app->hdr_enabled = 0;
+    app->hdr_max_luminance = config->hdr_max_luminance > 0.0f ? config->hdr_max_luminance : 1000.0f;
 
     SDL_WindowFlags window_flags = 0;
     if (config->resizable) window_flags |= SDL_WINDOW_RESIZABLE;
@@ -625,4 +654,15 @@ DONG_APPCORE_API void dong_app_set_event_callback(dong_app_t* app_handle, dong_a
     if (!app) return;
     app->event_callback = callback;
     app->event_callback_user_data = user_data;
+}
+
+DONG_APPCORE_API int dong_app_is_hdr_enabled(dong_app_t* app_handle) {
+    dong_app_impl_t* app = (dong_app_impl_t*)app_handle;
+    return app ? app->hdr_enabled : 0;
+}
+
+DONG_APPCORE_API float dong_app_get_hdr_max_luminance(dong_app_t* app_handle) {
+    dong_app_impl_t* app = (dong_app_impl_t*)app_handle;
+    if (!app || !app->hdr_enabled) return 0.0f;
+    return app->hdr_max_luminance;
 }
