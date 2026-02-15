@@ -88,6 +88,10 @@ SDLGPUDriver::~SDLGPUDriver() {
         if (shadow_vs_) SDL_ReleaseGPUShader(dev, shadow_vs_);
         if (shadow_fs_) SDL_ReleaseGPUShader(dev, shadow_fs_);
 
+        if (gradient_pipeline_) SDL_ReleaseGPUGraphicsPipeline(dev, gradient_pipeline_);
+        if (gradient_vs_) SDL_ReleaseGPUShader(dev, gradient_vs_);
+        if (gradient_fs_) SDL_ReleaseGPUShader(dev, gradient_fs_);
+
         if (image_pipeline_) SDL_ReleaseGPUGraphicsPipeline(dev, image_pipeline_);
         if (video_yuv_pipeline_) SDL_ReleaseGPUGraphicsPipeline(dev, video_yuv_pipeline_);
         if (image_vs_) SDL_ReleaseGPUShader(dev, image_vs_);

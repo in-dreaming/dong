@@ -855,34 +855,46 @@ struct EngineView::Impl {
         return hit;
     }
 
+    // Set hover on a node and all its ancestors (browser behavior).
+    static void setHoverChain(const DOMNodePtr& node, bool v) {
+        for (auto n = node; n; n = n->getParent()) {
+            n->setHovered(v);
+        }
+    }
+
+    // Set active on a node and all its ancestors (browser behavior).
+    static void setActiveChain(const DOMNodePtr& node, bool v) {
+        for (auto n = node; n; n = n->getParent()) {
+            n->setActive(v);
+        }
+    }
+
     void updateHoverState(int32_t x, int32_t y) {
         auto hit = hitElementAt(x, y);
         if (hit == hovered_element) return;
 
-        if (hovered_element) {
-            hovered_element->setHovered(false);
-        }
+        // Clear old chain
+        setHoverChain(hovered_element, false);
         hovered_element = hit;
-        if (hovered_element) {
-            hovered_element->setHovered(true);
-        }
+        // Set new chain
+        setHoverChain(hovered_element, true);
         markNeedsRepaint();
     }
 
     void setActiveElement(const DOMNodePtr& hit) {
         if (active_element && active_element != hit) {
-            active_element->setActive(false);
+            setActiveChain(active_element, false);
         }
         active_element = hit;
         if (active_element) {
-            active_element->setActive(true);
+            setActiveChain(active_element, true);
         }
         markNeedsRepaint();
     }
 
     void clearActiveElement() {
         if (!active_element) return;
-        active_element->setActive(false);
+        setActiveChain(active_element, false);
         active_element.reset();
         markNeedsRepaint();
     }
@@ -1017,7 +1029,7 @@ struct EngineView::Impl {
 
         if (dom_manager) {
             auto root = dom_manager->getRoot();
-            if (root && root->isStyleDirty()) {
+            if (root && (root->isStyleDirty() || root->isStyleSubtreeDirty())) {
                 if (auto* se = dom_manager->getStyleEngine()) {
                     DONG_PROFILE_SCOPE_CAT("Style::compute", "style");
                     se->computeStylesIncremental(root);
@@ -1031,6 +1043,7 @@ struct EngineView::Impl {
             if (root && root->isLayoutDirty()) {
                 DONG_PROFILE_SCOPE_CAT("Layout::calculate", "layout");
                 layout_engine->calculateLayout(root, static_cast<float>(width), static_cast<float>(height));
+                root->clearLayoutDirtyRecursive();
                 markNeedsRepaint();
             }
         }

@@ -122,6 +122,7 @@ struct PipelineBindingState {
         Rect,
         RoundRect,
         Shadow,
+        Gradient,
         Image,
         ImageYUV,
         Text,
@@ -1298,6 +1299,58 @@ void SDLGPUDriver::executeDrawShadow(ExecuteContext& ctx, const GPUCommand& cmd)
     SDL_DrawGPUPrimitives(ctx.pass, 4, 1, 0, 0);
 }
 
+void SDLGPUDriver::executeDrawGradient(ExecuteContext& ctx, const GPUCommand& cmd) {
+    if (!ctx.pass || !gradient_pipeline_) {
+        return;
+    }
+
+    // Uniform layout must match gradient_vs/fs.hlsl
+    struct GradientUniformData {
+        float rect[4];
+        float viewport[4];
+        float transform[8];
+        float gradient_params[4]; // angle_rad, stop_count, radius, 0
+        float stop_colors[8][4];  // RGBA for up to 8 stops
+        float stop_positions[2][4]; // 8 positions packed into 2 float4s
+        ClipUniformBlock clip;
+    };
+
+    GradientUniformData u{};
+    u.rect[0] = cmd.rect.x;
+    u.rect[1] = cmd.rect.y;
+    u.rect[2] = cmd.rect.width;
+    u.rect[3] = cmd.rect.height;
+
+    ctx.writeViewport(u.viewport);
+    writeTransform(u.transform, ctx.getCurrentTransform());
+
+    // Convert degrees to radians
+    float angle_rad = cmd.gradient_angle_deg * 3.14159265358979f / 180.0f;
+    u.gradient_params[0] = angle_rad;
+    u.gradient_params[1] = static_cast<float>(cmd.gradient_stop_count);
+    u.gradient_params[2] = cmd.radius;
+    u.gradient_params[3] = 0.0f;
+
+    for (int i = 0; i < cmd.gradient_stop_count && i < 8; ++i) {
+        writeLinearColor(cmd.gradient_stops[i].color, u.stop_colors[i]);
+        int vec_idx = i / 4;
+        int comp_idx = i % 4;
+        u.stop_positions[vec_idx][comp_idx] = cmd.gradient_stops[i].position;
+    }
+
+    ctx.fillClipUniform(u.clip);
+
+    SDL_PushGPUVertexUniformData(ctx.cmd_buf, 0, &u, sizeof(u));
+    SDL_PushGPUFragmentUniformData(ctx.cmd_buf, 0, &u, sizeof(u));
+
+    if (ctx.pipeline_state.active != PipelineBindingState::ActivePipeline::Gradient) {
+        SDL_BindGPUGraphicsPipeline(ctx.pass, gradient_pipeline_);
+        ctx.pipeline_state.active = PipelineBindingState::ActivePipeline::Gradient;
+    }
+
+    SDL_DrawGPUPrimitives(ctx.pass, 4, 1, 0, 0);
+}
+
 void SDLGPUDriver::executeDrawImage(ExecuteContext& ctx, const GPUCommand& cmd) {
     if (!ctx.pass || !image_pipeline_ || !image_sampler_) {
         return;
@@ -1815,6 +1868,9 @@ void SDLGPUDriver::executeDispatchCommand(const GPUCommand& cmd, ExecuteContext&
         break;
     case GPUCommandType::DrawShadowQuad:
         executeDrawShadow(ctx, cmd);
+        break;
+    case GPUCommandType::DrawGradientQuad:
+        executeDrawGradient(ctx, cmd);
         break;
     case GPUCommandType::DrawImageQuad:
         executeDrawImage(ctx, cmd);

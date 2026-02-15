@@ -14,6 +14,7 @@ struct CSSCalcExpression;
 // CSS style value - can be pixel, percent, auto, or calc expression
 struct CSSValue {
     enum class Unit {
+        UNSET,  // Property not explicitly set (default)
         PIXEL,
         PERCENT,
         AUTO,
@@ -29,16 +30,18 @@ struct CSSValue {
     };
 
     float value = 0.0f;
-    Unit unit = Unit::PIXEL;
+    Unit unit = Unit::UNSET;
     std::shared_ptr<CSSCalcExpression> calc_expr;  // For calc() values
 
     CSSValue() = default;
     CSSValue(float v, Unit u) : value(v), unit(u) {}
 
+    bool isUnset() const { return unit == Unit::UNSET; }
     bool isAuto() const { return unit == Unit::AUTO; }
     bool isPercent() const { return unit == Unit::PERCENT; }
     bool isPixel() const { return unit == Unit::PIXEL; }
     bool isCalc() const { return unit == Unit::CALC && calc_expr != nullptr; }
+    bool isSet() const { return unit != Unit::UNSET; }
     
     // Resolve to pixels given context
     float resolvePixels(float parent_size, float root_font_size, float viewport_width, float viewport_height) const;

@@ -32,6 +32,7 @@ enum class DisplayItemType : uint8_t {
     DrawShadow,      // box-shadow with blur
     DrawImage,
     DrawGlyphRun,
+    DrawLinearGradient,  // CSS linear-gradient background
     PushLayer,
     PopLayer,
     PushClipRect,
@@ -118,6 +119,23 @@ struct ClipData {
     bool is_rounded = false;
 };
 
+// Linear gradient stop (resolved to Color + position)
+struct GradientColorStop {
+    Color color;
+    float position = 0.0f;  // 0.0 to 1.0
+};
+
+// Max stops passed via uniforms to GPU shader
+static constexpr int kMaxGradientStops = 8;
+
+struct DrawLinearGradientData {
+    Rect rect;
+    float angle_deg = 180.0f;           // CSS angle in degrees
+    float radius = 0.0f;                // border-radius for clipping
+    int stop_count = 0;
+    GradientColorStop stops[kMaxGradientStops];
+};
+
 struct LayerData {
     Rect bounds;
     float opacity = 1.0f;
@@ -135,6 +153,7 @@ struct DisplayItem {
     DrawShadowData shadow;
     DrawImageData image;
     DrawGlyphRunData glyph_run;
+    DrawLinearGradientData gradient;
     ClipData clip;
     LayerData layer;
 };
@@ -295,6 +314,14 @@ public:
         item.image.src = src;
         item.image.opacity = opacity;
         item.image.fit = fit;
+        list_.items.push_back(std::move(item));
+    }
+
+    void addLinearGradient(const DrawLinearGradientData& data) {
+        DisplayItem item{};
+        item.type = DisplayItemType::DrawLinearGradient;
+        item.gradient = data;
+        item.gradient.rect = applyTranslate(data.rect);
         list_.items.push_back(std::move(item));
     }
 

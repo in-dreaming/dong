@@ -155,8 +155,10 @@ public:
 
     // Style dirty (used to skip full style recompute when only layout/text changed)
     void markStyleDirty();
+    void markStyleSubtreeDirty();
     void clearStyleDirtyRecursive();
     bool isStyleDirty() const { return style_dirty_; }
+    bool isStyleSubtreeDirty() const { return style_subtree_dirty_; }
 
     // Scroll
 
@@ -263,6 +265,7 @@ protected:
     ComputedStyle computed_style_;
     bool layout_dirty_ = true;
     bool style_dirty_ = true;
+    bool style_subtree_dirty_ = false;
 
 
     // Interaction states (used by selector matcher for :hover/:active/:focus/:focus-visible)

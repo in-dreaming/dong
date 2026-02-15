@@ -164,6 +164,10 @@ private:
     SDL_GPUShader* shadow_fs_ = nullptr;
     SDL_GPUGraphicsPipeline* shadow_pipeline_ = nullptr;
 
+    SDL_GPUShader* gradient_vs_ = nullptr;
+    SDL_GPUShader* gradient_fs_ = nullptr;
+    SDL_GPUGraphicsPipeline* gradient_pipeline_ = nullptr;
+
     SDL_GPUShader* image_vs_ = nullptr;
     SDL_GPUShader* image_fs_ = nullptr;
     SDL_GPUGraphicsPipeline* image_pipeline_ = nullptr;
@@ -272,6 +276,7 @@ private:
     void executeDrawRect(ExecuteContext& ctx, const GPUCommand& cmd);
     void executeDrawRoundedRect(ExecuteContext& ctx, const GPUCommand& cmd);
     void executeDrawShadow(ExecuteContext& ctx, const GPUCommand& cmd);
+    void executeDrawGradient(ExecuteContext& ctx, const GPUCommand& cmd);
     void executeDrawImage(ExecuteContext& ctx, const GPUCommand& cmd);
     void executeDrawText(ExecuteContext& ctx, const GPUCommand& cmd);
 };

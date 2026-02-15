@@ -213,6 +213,26 @@ static void fillTextShadow(DrawGlyphRunData& glyph_run, const dong::dom::Compute
     }
 }
 
+// Convert CSSGradient to DrawLinearGradientData for the display list.
+static DrawLinearGradientData buildLinearGradientData(
+    const dong::dom::CSSGradient& grad,
+    const Rect& target_rect,
+    float border_radius)
+{
+    DrawLinearGradientData data{};
+    data.rect = target_rect;
+    data.angle_deg = grad.angle;
+    data.radius = border_radius;
+
+    int count = std::min(static_cast<int>(grad.stops.size()), kMaxGradientStops);
+    data.stop_count = count;
+    for (int i = 0; i < count; ++i) {
+        data.stops[i].color = makeColorFromCss(grad.stops[i].color);
+        data.stops[i].position = grad.stops[i].position;
+    }
+    return data;
+}
+
 static std::string collapseWhitespace(const std::string& input) {
     if (input.empty()) return "";
 
@@ -662,6 +682,19 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                     }
                 }
 
+                // CSS gradients paint on top of background-color
+                for (const auto& grad : style.background_gradients) {
+                    if (grad.type == dong::dom::CSSGradient::Type::LINEAR && grad.stops.size() >= 2) {
+                        Rect inner_rect = bg_clip_rect;
+                        float inset_for_radius = 0.0f;
+                        if (bg_clip_kw == "padding-box") inset_for_radius = bmax;
+                        else if (bg_clip_kw == "content-box") inset_for_radius = bmax + min_pad;
+                        float inner_radius = std::max(0.0f, radius - inset_for_radius);
+                        auto gdata = buildLinearGradientData(grad, inner_rect, inner_radius);
+                        builder.addLinearGradient(gdata);
+                    }
+                }
+
                 if (has_border) {
                     const std::string st_t = effectiveBorderStyle(style.border_top_style);
                     const std::string st_r = effectiveBorderStyle(style.border_right_style);
@@ -747,6 +780,14 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                 if (has_background) {
                     Color bg_color = makeColorFromCss(style.background_color);
                     builder.addRect(bg_clip_rect, bg_color);
+                }
+
+                // CSS gradients paint on top of background-color (non-rounded path)
+                for (const auto& grad : style.background_gradients) {
+                    if (grad.type == dong::dom::CSSGradient::Type::LINEAR && grad.stops.size() >= 2) {
+                        auto gdata = buildLinearGradientData(grad, bg_clip_rect, 0.0f);
+                        builder.addLinearGradient(gdata);
+                    }
                 }
 
                 if (has_border) {

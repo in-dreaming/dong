@@ -29,6 +29,273 @@ LayoutMode deriveLayoutModeFromDisplay(const ComputedStyle& style) {
     return LayoutMode::Block;
 }
 
+// ── Sub-functions for applyRuleProperties (declared before the caller) ──
+
+void applyRuleTextProperties(const ComputedStyle& rs, ComputedStyle& computed) {
+    if (rs.font_size != 16.0f) computed.font_size = rs.font_size;
+    if (!rs.font_weight.empty() && rs.font_weight != "normal") computed.font_weight = rs.font_weight;
+    if (!rs.font_style.empty() && rs.font_style != "normal") computed.font_style = rs.font_style;
+    if (!rs.font_family.empty() && rs.font_family != "Arial") computed.font_family = rs.font_family;
+    if (!rs.font_variant.empty() && rs.font_variant != "normal") computed.font_variant = rs.font_variant;
+
+    if (!rs.text_align.empty() && rs.text_align != "left") computed.text_align = rs.text_align;
+    if (!rs.text_decoration.empty() && rs.text_decoration != "none")
+        computed.text_decoration = rs.text_decoration;
+    if (!rs.text_decoration_color.empty()) computed.text_decoration_color = rs.text_decoration_color;
+    if (!rs.text_decoration_style.empty() && rs.text_decoration_style != "solid")
+        computed.text_decoration_style = rs.text_decoration_style;
+    if (rs.text_decoration_thickness != 1.0f)
+        computed.text_decoration_thickness = rs.text_decoration_thickness;
+    if (rs.letter_spacing_em != 0.0f) computed.letter_spacing_em = rs.letter_spacing_em;
+    if (rs.word_spacing_px != 0.0f) computed.word_spacing_px = rs.word_spacing_px;
+    if (rs.has_line_height) {
+        computed.has_line_height = true;
+        computed.line_height = rs.line_height;
+        computed.line_height_is_unitless = rs.line_height_is_unitless;
+    }
+    if (!rs.text_transform.empty() && rs.text_transform != "none")
+        computed.text_transform = rs.text_transform;
+    if (!rs.text_overflow.empty() && rs.text_overflow != "clip")
+        computed.text_overflow = rs.text_overflow;
+    if (!rs.white_space.empty() && rs.white_space != "normal")
+        computed.white_space = rs.white_space;
+    if (!rs.word_break.empty() && rs.word_break != "normal")
+        computed.word_break = rs.word_break;
+    if (!rs.overflow_wrap.empty() && rs.overflow_wrap != "normal")
+        computed.overflow_wrap = rs.overflow_wrap;
+    if (!rs.vertical_align.empty() && rs.vertical_align != "baseline")
+        computed.vertical_align = rs.vertical_align;
+    if (!rs.direction.empty() && rs.direction != "ltr") computed.direction = rs.direction;
+    if (rs.text_indent != 0.0f) computed.text_indent = rs.text_indent;
+    if (rs.webkit_line_clamp != 0) computed.webkit_line_clamp = rs.webkit_line_clamp;
+
+    // Text shadow
+    if (rs.text_shadow_offset_x != 0.0f || rs.text_shadow_offset_y != 0.0f ||
+        rs.text_shadow_blur != 0.0f || !rs.text_shadow_color.empty()) {
+        computed.text_shadow_offset_x = rs.text_shadow_offset_x;
+        computed.text_shadow_offset_y = rs.text_shadow_offset_y;
+        computed.text_shadow_blur = rs.text_shadow_blur;
+        computed.text_shadow_color = rs.text_shadow_color;
+    }
+}
+
+void applyRuleBorderRadius(const ComputedStyle& rs, ComputedStyle& computed) {
+    if (rs.border_radius != 0.0f) {
+        computed.border_radius = rs.border_radius;
+        computed.border_top_left_radius = rs.border_radius;
+        computed.border_top_right_radius = rs.border_radius;
+        computed.border_bottom_left_radius = rs.border_radius;
+        computed.border_bottom_right_radius = rs.border_radius;
+    }
+    if (rs.border_top_left_radius != 0.0f)
+        computed.border_top_left_radius = rs.border_top_left_radius;
+    if (rs.border_top_right_radius != 0.0f)
+        computed.border_top_right_radius = rs.border_top_right_radius;
+    if (rs.border_bottom_left_radius != 0.0f)
+        computed.border_bottom_left_radius = rs.border_bottom_left_radius;
+    if (rs.border_bottom_right_radius != 0.0f)
+        computed.border_bottom_right_radius = rs.border_bottom_right_radius;
+
+    if (computed.border_radius == 0.0f) {
+        const float max_corner = std::max(
+            std::max(computed.border_top_left_radius, computed.border_top_right_radius),
+            std::max(computed.border_bottom_left_radius, computed.border_bottom_right_radius)
+        );
+        if (max_corner > 0.0f) {
+            computed.border_radius = max_corner;
+        }
+    }
+}
+
+void applyRuleBorderProperties(const ComputedStyle& rs, ComputedStyle& computed) {
+    if (rs.border_width >= 0.0f) computed.border_width = rs.border_width;
+    if (!rs.border_color.empty()) computed.border_color = rs.border_color;
+    if (!rs.border_style.empty()) computed.border_style = rs.border_style;
+
+    if (rs.border_top_width >= 0.0f) computed.border_top_width = rs.border_top_width;
+    if (rs.border_right_width >= 0.0f) computed.border_right_width = rs.border_right_width;
+    if (rs.border_bottom_width >= 0.0f) computed.border_bottom_width = rs.border_bottom_width;
+    if (rs.border_left_width >= 0.0f) computed.border_left_width = rs.border_left_width;
+    if (!rs.border_top_color.empty()) computed.border_top_color = rs.border_top_color;
+    if (!rs.border_right_color.empty()) computed.border_right_color = rs.border_right_color;
+    if (!rs.border_bottom_color.empty()) computed.border_bottom_color = rs.border_bottom_color;
+    if (!rs.border_left_color.empty()) computed.border_left_color = rs.border_left_color;
+    if (!rs.border_top_style.empty()) computed.border_top_style = rs.border_top_style;
+    if (!rs.border_right_style.empty()) computed.border_right_style = rs.border_right_style;
+    if (!rs.border_bottom_style.empty()) computed.border_bottom_style = rs.border_bottom_style;
+    if (!rs.border_left_style.empty()) computed.border_left_style = rs.border_left_style;
+}
+
+void applyRuleOverflowProperties(const ComputedStyle& rs, ComputedStyle& computed) {
+    if (!rs.overflow.empty() && rs.overflow != "visible") {
+        computed.overflow = rs.overflow;
+        computed.overflow_x = rs.overflow;
+        computed.overflow_y = rs.overflow;
+    }
+    if (!rs.overflow_x.empty() && rs.overflow_x != "visible") computed.overflow_x = rs.overflow_x;
+    if (!rs.overflow_y.empty() && rs.overflow_y != "visible") computed.overflow_y = rs.overflow_y;
+    if (!rs.visibility.empty() && rs.visibility != "visible") computed.visibility = rs.visibility;
+    if (!rs.cursor.empty() && rs.cursor != "auto") computed.cursor = rs.cursor;
+}
+
+void applyRuleBoxModel(const ComputedStyle& rs, ComputedStyle& computed) {
+    // width/height/min/max: only apply if explicitly set (not UNSET)
+    if (rs.width.isSet() && !rs.width.isAuto()) computed.width = rs.width;
+    if (rs.height.isSet() && !rs.height.isAuto()) computed.height = rs.height;
+    if (rs.min_width.isSet() && !rs.min_width.isAuto()) computed.min_width = rs.min_width;
+    if (rs.max_width.isSet() && !rs.max_width.isAuto()) computed.max_width = rs.max_width;
+    if (rs.min_height.isSet() && !rs.min_height.isAuto()) computed.min_height = rs.min_height;
+    if (rs.max_height.isSet() && !rs.max_height.isAuto()) computed.max_height = rs.max_height;
+
+    // margin: only apply if explicitly set
+    if (rs.margin_top.isSet()) computed.margin_top = rs.margin_top;
+    if (rs.margin_right.isSet()) computed.margin_right = rs.margin_right;
+    if (rs.margin_bottom.isSet()) computed.margin_bottom = rs.margin_bottom;
+    if (rs.margin_left.isSet()) computed.margin_left = rs.margin_left;
+
+    // padding: only apply if explicitly set
+    if (rs.padding_top.isSet()) computed.padding_top = rs.padding_top;
+    if (rs.padding_right.isSet()) computed.padding_right = rs.padding_right;
+    if (rs.padding_bottom.isSet()) computed.padding_bottom = rs.padding_bottom;
+    if (rs.padding_left.isSet()) computed.padding_left = rs.padding_left;
+
+    // position offsets: only apply if explicitly set
+    if (rs.top.isSet() && !rs.top.isAuto()) computed.top = rs.top;
+    if (rs.right.isSet() && !rs.right.isAuto()) computed.right = rs.right;
+    if (rs.bottom.isSet() && !rs.bottom.isAuto()) computed.bottom = rs.bottom;
+    if (rs.left.isSet() && !rs.left.isAuto()) computed.left = rs.left;
+
+    if (rs.z_index != 0) computed.z_index = rs.z_index;
+}
+
+void applyRuleFlexbox(const ComputedStyle& rs, ComputedStyle& computed) {
+    if (!rs.flex_direction.empty() && rs.flex_direction != "row")
+        computed.flex_direction = rs.flex_direction;
+    if (!rs.flex_wrap.empty() && rs.flex_wrap != "nowrap") computed.flex_wrap = rs.flex_wrap;
+    if (!rs.justify_content.empty() && rs.justify_content != "flex-start")
+        computed.justify_content = rs.justify_content;
+    if (!rs.align_items.empty() && rs.align_items != "stretch")
+        computed.align_items = rs.align_items;
+    if (!rs.align_content.empty() && rs.align_content != "stretch")
+        computed.align_content = rs.align_content;
+    if (!rs.align_self.empty() && rs.align_self != "auto") computed.align_self = rs.align_self;
+    if (rs.flex != 0.0f) computed.flex = rs.flex;
+    if (rs.flex_grow != 0.0f) computed.flex_grow = rs.flex_grow;
+    if (rs.flex_shrink != 1.0f) computed.flex_shrink = rs.flex_shrink;
+    if (rs.flex_basis.isSet() && !rs.flex_basis.isAuto()) computed.flex_basis = rs.flex_basis;
+    if (rs.order != 0) computed.order = rs.order;
+    if (rs.gap > 0.0f) {
+        computed.gap = rs.gap;
+        computed.row_gap = rs.gap;
+        computed.column_gap = rs.gap;
+    }
+    if (rs.row_gap > 0.0f) computed.row_gap = rs.row_gap;
+    if (rs.column_gap > 0.0f) computed.column_gap = rs.column_gap;
+}
+
+void applyRuleTransform(const ComputedStyle& rs, ComputedStyle& computed) {
+    if (rs.transform_translate_x != 0.0f) computed.transform_translate_x = rs.transform_translate_x;
+    if (rs.transform_translate_y != 0.0f) computed.transform_translate_y = rs.transform_translate_y;
+    if (rs.transform_scale_x != 1.0f) computed.transform_scale_x = rs.transform_scale_x;
+    if (rs.transform_scale_y != 1.0f) computed.transform_scale_y = rs.transform_scale_y;
+    if (rs.transform_rotate != 0.0f) computed.transform_rotate = rs.transform_rotate;
+    if (rs.transform_skew_x != 0.0f) computed.transform_skew_x = rs.transform_skew_x;
+    if (rs.transform_skew_y != 0.0f) computed.transform_skew_y = rs.transform_skew_y;
+    if (rs.transform_origin_x != 50.0f) computed.transform_origin_x = rs.transform_origin_x;
+    if (rs.transform_origin_y != 50.0f) computed.transform_origin_y = rs.transform_origin_y;
+    if (!rs.transform_style.empty() && rs.transform_style != "flat")
+        computed.transform_style = rs.transform_style;
+    if (rs.perspective != 0.0f) computed.perspective = rs.perspective;
+    if (!rs.backface_visibility.empty() && rs.backface_visibility != "visible")
+        computed.backface_visibility = rs.backface_visibility;
+}
+
+// ── Main shared property application function ──
+// Called by both applyMatchingRules() and applyMatchingRulesIndexed().
+void applyRuleProperties(const ComputedStyle& rs, ComputedStyle& computed) {
+    // Visual / color
+    if (!rs.color.empty() && rs.color != "#000000") computed.color = rs.color;
+    if (!rs.background_color.empty() && rs.background_color != "transparent")
+        computed.background_color = rs.background_color;
+    if (!rs.background_image.empty()) computed.background_image = rs.background_image;
+    if (!rs.background_size.empty() && rs.background_size != "auto")
+        computed.background_size = rs.background_size;
+    if (!rs.background_repeat.empty() && rs.background_repeat != "repeat")
+        computed.background_repeat = rs.background_repeat;
+    if (!rs.background_position.empty() && rs.background_position != "0% 0%")
+        computed.background_position = rs.background_position;
+    if (!rs.background_attachment.empty() && rs.background_attachment != "scroll")
+        computed.background_attachment = rs.background_attachment;
+    if (!rs.background_clip.empty() && rs.background_clip != "border-box")
+        computed.background_clip = rs.background_clip;
+    if (!rs.background_origin.empty() && rs.background_origin != "padding-box")
+        computed.background_origin = rs.background_origin;
+    if (!rs.object_fit.empty() && rs.object_fit != "fill") computed.object_fit = rs.object_fit;
+    if (!rs.background_gradients.empty()) computed.background_gradients = rs.background_gradients;
+
+    applyRuleTextProperties(rs, computed);
+
+    // Display / position
+    if (!rs.display.empty()) {
+        computed.display = rs.display;
+        computed.layout_mode = deriveLayoutModeFromDisplay(computed);
+    }
+    if (!rs.position.empty() && rs.position != "static") computed.position = rs.position;
+
+    applyRuleBorderRadius(rs, computed);
+    applyRuleBorderProperties(rs, computed);
+    applyRuleOverflowProperties(rs, computed);
+
+    // Outline
+    if (rs.outline_width != 0.0f) computed.outline_width = rs.outline_width;
+    if (!rs.outline_color.empty() && rs.outline_color != "#000000")
+        computed.outline_color = rs.outline_color;
+    if (!rs.outline_style.empty() && rs.outline_style != "none")
+        computed.outline_style = rs.outline_style;
+    if (rs.outline_offset != 0.0f) computed.outline_offset = rs.outline_offset;
+
+    // Box misc
+    if (!rs.box_sizing.empty() && rs.box_sizing != "content-box")
+        computed.box_sizing = rs.box_sizing;
+    if (rs.opacity != 1.0f) computed.opacity = rs.opacity;
+    if (rs.isolation_isolate) computed.isolation_isolate = true;
+    if (!rs.box_shadows.empty()) computed.box_shadows = rs.box_shadows;
+
+    // Filters
+    if (!rs.filters.empty()) computed.filters = rs.filters;
+    if (!rs.backdrop_filters.empty()) computed.backdrop_filters = rs.backdrop_filters;
+    if (!rs.mix_blend_mode.empty() && rs.mix_blend_mode != "normal")
+        computed.mix_blend_mode = rs.mix_blend_mode;
+    if (!rs.background_blend_mode.empty() && rs.background_blend_mode != "normal")
+        computed.background_blend_mode = rs.background_blend_mode;
+
+    applyRuleBoxModel(rs, computed);
+    applyRuleFlexbox(rs, computed);
+    applyRuleTransform(rs, computed);
+
+    // Transitions and animations
+    if (!rs.transitions.empty()) computed.transitions = rs.transitions;
+    if (!rs.animations.empty()) computed.animations = rs.animations;
+
+    // Clip path
+    if (!rs.clip_path.empty()) computed.clip_path = rs.clip_path;
+
+    // Pointer events / interaction
+    if (!rs.pointer_events.empty() && rs.pointer_events != "auto")
+        computed.pointer_events = rs.pointer_events;
+    if (!rs.user_select.empty() && rs.user_select != "auto")
+        computed.user_select = rs.user_select;
+    if (!rs.touch_action.empty() && rs.touch_action != "auto")
+        computed.touch_action = rs.touch_action;
+    if (!rs.caret_color.empty() && rs.caret_color != "auto")
+        computed.caret_color = rs.caret_color;
+
+    // Float/Clear
+    if (!rs.float_value.empty() && rs.float_value != "none")
+        computed.float_value = rs.float_value;
+    if (!rs.clear.empty() && rs.clear != "none") computed.clear = rs.clear;
+}
+
 void applyInlineStyleAttributeIfAny(DOMNodePtr node) {
     if (!node) return;
     if (!node->hasAttribute("style")) return;
@@ -423,250 +690,8 @@ void StyleEngine::applyMatchingRules(DOMNodePtr node) {
         });
     
     auto& computed = node->getComputedStyle();
-    
     for (const auto& rule : matching_rules) {
-        const auto& rs = rule.style;
-        
-        // Apply non-default values
-        if (!rs.color.empty() && rs.color != "#000000") computed.color = rs.color;
-        if (!rs.background_color.empty() && rs.background_color != "transparent") 
-            computed.background_color = rs.background_color;
-        if (!rs.background_image.empty()) computed.background_image = rs.background_image;
-        if (!rs.background_size.empty() && rs.background_size != "auto") 
-            computed.background_size = rs.background_size;
-        if (!rs.background_repeat.empty() && rs.background_repeat != "repeat") 
-            computed.background_repeat = rs.background_repeat;
-        if (!rs.background_position.empty() && rs.background_position != "0% 0%") computed.background_position = rs.background_position;
-        if (!rs.background_attachment.empty() && rs.background_attachment != "scroll") computed.background_attachment = rs.background_attachment;
-        if (!rs.background_clip.empty() && rs.background_clip != "border-box") computed.background_clip = rs.background_clip;
-        if (!rs.background_origin.empty() && rs.background_origin != "padding-box") computed.background_origin = rs.background_origin;
-        if (!rs.object_fit.empty() && rs.object_fit != "fill") computed.object_fit = rs.object_fit;
-        if (!rs.background_gradients.empty()) computed.background_gradients = rs.background_gradients;
-
-
-        
-        if (rs.font_size != 16.0f) computed.font_size = rs.font_size;
-        if (!rs.font_weight.empty() && rs.font_weight != "normal") computed.font_weight = rs.font_weight;
-        if (!rs.font_style.empty() && rs.font_style != "normal") computed.font_style = rs.font_style;
-        if (!rs.font_family.empty() && rs.font_family != "Arial") computed.font_family = rs.font_family;
-        if (!rs.font_variant.empty() && rs.font_variant != "normal") computed.font_variant = rs.font_variant;
-        
-        if (!rs.text_align.empty() && rs.text_align != "left") computed.text_align = rs.text_align;
-        if (!rs.text_decoration.empty() && rs.text_decoration != "none") 
-            computed.text_decoration = rs.text_decoration;
-        if (!rs.text_decoration_color.empty()) computed.text_decoration_color = rs.text_decoration_color;
-        if (!rs.text_decoration_style.empty() && rs.text_decoration_style != "solid")
-            computed.text_decoration_style = rs.text_decoration_style;
-        if (rs.text_decoration_thickness != 1.0f) 
-            computed.text_decoration_thickness = rs.text_decoration_thickness;
-        if (rs.letter_spacing_em != 0.0f) computed.letter_spacing_em = rs.letter_spacing_em;
-        if (rs.word_spacing_px != 0.0f) computed.word_spacing_px = rs.word_spacing_px;
-        if (rs.has_line_height) {
-            computed.has_line_height = true;
-            computed.line_height = rs.line_height;
-            computed.line_height_is_unitless = rs.line_height_is_unitless;
-        }
-        if (!rs.text_transform.empty() && rs.text_transform != "none") 
-            computed.text_transform = rs.text_transform;
-
-        if (!rs.text_overflow.empty() && rs.text_overflow != "clip") 
-            computed.text_overflow = rs.text_overflow;
-        if (!rs.white_space.empty() && rs.white_space != "normal") 
-            computed.white_space = rs.white_space;
-        if (!rs.word_break.empty() && rs.word_break != "normal") 
-            computed.word_break = rs.word_break;
-        if (!rs.overflow_wrap.empty() && rs.overflow_wrap != "normal") 
-            computed.overflow_wrap = rs.overflow_wrap;
-        if (!rs.vertical_align.empty() && rs.vertical_align != "baseline") 
-            computed.vertical_align = rs.vertical_align;
-        if (!rs.direction.empty() && rs.direction != "ltr") computed.direction = rs.direction;
-        if (rs.text_indent != 0.0f) computed.text_indent = rs.text_indent;
-        if (rs.webkit_line_clamp != 0) computed.webkit_line_clamp = rs.webkit_line_clamp;
-        
-        // Text shadow
-        if (rs.text_shadow_offset_x != 0.0f || rs.text_shadow_offset_y != 0.0f || 
-            rs.text_shadow_blur != 0.0f || !rs.text_shadow_color.empty()) {
-            computed.text_shadow_offset_x = rs.text_shadow_offset_x;
-            computed.text_shadow_offset_y = rs.text_shadow_offset_y;
-            computed.text_shadow_blur = rs.text_shadow_blur;
-            computed.text_shadow_color = rs.text_shadow_color;
-        }
-        
-        if (!rs.display.empty()) {
-            computed.display = rs.display;
-            computed.layout_mode = deriveLayoutModeFromDisplay(rs.display);
-        }
-        if (!rs.position.empty() && rs.position != "static") computed.position = rs.position;
-        
-        if (rs.border_radius != 0.0f) {
-            computed.border_radius = rs.border_radius;
-            computed.border_top_left_radius = rs.border_radius;
-            computed.border_top_right_radius = rs.border_radius;
-            computed.border_bottom_left_radius = rs.border_radius;
-            computed.border_bottom_right_radius = rs.border_radius;
-        }
-        if (rs.border_top_left_radius != 0.0f) 
-            computed.border_top_left_radius = rs.border_top_left_radius;
-        if (rs.border_top_right_radius != 0.0f) 
-            computed.border_top_right_radius = rs.border_top_right_radius;
-        if (rs.border_bottom_left_radius != 0.0f) 
-            computed.border_bottom_left_radius = rs.border_bottom_left_radius;
-        if (rs.border_bottom_right_radius != 0.0f) 
-            computed.border_bottom_right_radius = rs.border_bottom_right_radius;
-
-        // `border-radius` 支持 2/3/4 值时，解析结果会落到四个 corner 字段，
-        // 但现阶段渲染管线只支持统一半径（单一 float）。这里做一个保守兜底：
-        // 只要任意 corner 有值，就用最大值作为统一半径，至少恢复“圆角矩形”的外观。
-        if (computed.border_radius == 0.0f) {
-            const float max_corner = std::max(
-                std::max(computed.border_top_left_radius, computed.border_top_right_radius),
-                std::max(computed.border_bottom_left_radius, computed.border_bottom_right_radius)
-            );
-            if (max_corner > 0.0f) {
-                computed.border_radius = max_corner;
-            }
-        }
-        
-        // Border shorthand + per-side overrides
-
-        if (rs.border_width >= 0.0f) computed.border_width = rs.border_width;
-        if (!rs.border_color.empty()) computed.border_color = rs.border_color;
-        if (!rs.border_style.empty()) computed.border_style = rs.border_style;
-
-        if (rs.border_top_width >= 0.0f) computed.border_top_width = rs.border_top_width;
-        if (rs.border_right_width >= 0.0f) computed.border_right_width = rs.border_right_width;
-        if (rs.border_bottom_width >= 0.0f) computed.border_bottom_width = rs.border_bottom_width;
-        if (rs.border_left_width >= 0.0f) computed.border_left_width = rs.border_left_width;
-        if (!rs.border_top_color.empty()) computed.border_top_color = rs.border_top_color;
-        if (!rs.border_right_color.empty()) computed.border_right_color = rs.border_right_color;
-        if (!rs.border_bottom_color.empty()) computed.border_bottom_color = rs.border_bottom_color;
-        if (!rs.border_left_color.empty()) computed.border_left_color = rs.border_left_color;
-        if (!rs.border_top_style.empty()) computed.border_top_style = rs.border_top_style;
-        if (!rs.border_right_style.empty()) computed.border_right_style = rs.border_right_style;
-        if (!rs.border_bottom_style.empty()) computed.border_bottom_style = rs.border_bottom_style;
-        if (!rs.border_left_style.empty()) computed.border_left_style = rs.border_left_style;
-
-        
-        if (!rs.overflow.empty() && rs.overflow != "visible") {
-            computed.overflow = rs.overflow;
-            computed.overflow_x = rs.overflow;
-            computed.overflow_y = rs.overflow;
-        }
-        if (!rs.overflow_x.empty() && rs.overflow_x != "visible") computed.overflow_x = rs.overflow_x;
-        if (!rs.overflow_y.empty() && rs.overflow_y != "visible") computed.overflow_y = rs.overflow_y;
-        if (!rs.visibility.empty() && rs.visibility != "visible") computed.visibility = rs.visibility;
-        if (!rs.cursor.empty() && rs.cursor != "auto") computed.cursor = rs.cursor;
-        
-        if (rs.outline_width != 0.0f) computed.outline_width = rs.outline_width;
-        if (!rs.outline_color.empty() && rs.outline_color != "#000000") 
-            computed.outline_color = rs.outline_color;
-        if (!rs.outline_style.empty() && rs.outline_style != "none") 
-            computed.outline_style = rs.outline_style;
-        if (rs.outline_offset != 0.0f) computed.outline_offset = rs.outline_offset;
-        
-        if (!rs.box_sizing.empty() && rs.box_sizing != "content-box") 
-            computed.box_sizing = rs.box_sizing;
-        if (rs.opacity != 1.0f) computed.opacity = rs.opacity;
-        if (rs.isolation_isolate) computed.isolation_isolate = true;
-        if (!rs.box_shadows.empty()) computed.box_shadows = rs.box_shadows;
-        
-        // Filters
-        if (!rs.filters.empty()) computed.filters = rs.filters;
-        if (!rs.backdrop_filters.empty()) computed.backdrop_filters = rs.backdrop_filters;
-        if (!rs.mix_blend_mode.empty() && rs.mix_blend_mode != "normal") 
-            computed.mix_blend_mode = rs.mix_blend_mode;
-        if (!rs.background_blend_mode.empty() && rs.background_blend_mode != "normal")
-            computed.background_blend_mode = rs.background_blend_mode;
-        
-        // Box model
-        if (rs.width.unit != CSSValue::Unit::AUTO) computed.width = rs.width;
-        if (rs.height.unit != CSSValue::Unit::AUTO) computed.height = rs.height;
-        if (rs.min_width.unit != CSSValue::Unit::AUTO) computed.min_width = rs.min_width;
-        if (rs.max_width.unit != CSSValue::Unit::AUTO) computed.max_width = rs.max_width;
-        if (rs.min_height.unit != CSSValue::Unit::AUTO) computed.min_height = rs.min_height;
-        if (rs.max_height.unit != CSSValue::Unit::AUTO) computed.max_height = rs.max_height;
-        
-        if (rs.margin_top.unit != CSSValue::Unit::AUTO || rs.margin_top.value != 0.0f) 
-            computed.margin_top = rs.margin_top;
-        if (rs.margin_right.unit != CSSValue::Unit::AUTO || rs.margin_right.value != 0.0f) 
-            computed.margin_right = rs.margin_right;
-        if (rs.margin_bottom.unit != CSSValue::Unit::AUTO || rs.margin_bottom.value != 0.0f) 
-            computed.margin_bottom = rs.margin_bottom;
-        if (rs.margin_left.unit != CSSValue::Unit::AUTO || rs.margin_left.value != 0.0f) 
-            computed.margin_left = rs.margin_left;
-        
-        if (rs.padding_top.value != 0.0f) computed.padding_top = rs.padding_top;
-        if (rs.padding_right.value != 0.0f) computed.padding_right = rs.padding_right;
-        if (rs.padding_bottom.value != 0.0f) computed.padding_bottom = rs.padding_bottom;
-        if (rs.padding_left.value != 0.0f) computed.padding_left = rs.padding_left;
-        
-        if (rs.top.unit != CSSValue::Unit::AUTO) computed.top = rs.top;
-        if (rs.right.unit != CSSValue::Unit::AUTO) computed.right = rs.right;
-        if (rs.bottom.unit != CSSValue::Unit::AUTO) computed.bottom = rs.bottom;
-        if (rs.left.unit != CSSValue::Unit::AUTO) computed.left = rs.left;
-        if (rs.z_index != 0) computed.z_index = rs.z_index;
-        
-        // Flexbox
-        if (!rs.flex_direction.empty() && rs.flex_direction != "row") 
-            computed.flex_direction = rs.flex_direction;
-        if (!rs.flex_wrap.empty() && rs.flex_wrap != "nowrap") computed.flex_wrap = rs.flex_wrap;
-        if (!rs.justify_content.empty() && rs.justify_content != "flex-start") 
-            computed.justify_content = rs.justify_content;
-        if (!rs.align_items.empty() && rs.align_items != "stretch") 
-            computed.align_items = rs.align_items;
-        if (!rs.align_content.empty() && rs.align_content != "stretch") 
-            computed.align_content = rs.align_content;
-        if (!rs.align_self.empty() && rs.align_self != "auto") computed.align_self = rs.align_self;
-        if (rs.flex != 0.0f) computed.flex = rs.flex;
-        if (rs.flex_grow != 0.0f) computed.flex_grow = rs.flex_grow;
-        if (rs.flex_shrink != 1.0f) computed.flex_shrink = rs.flex_shrink;
-        if (rs.flex_basis.unit != CSSValue::Unit::AUTO) computed.flex_basis = rs.flex_basis;
-        if (rs.order != 0) computed.order = rs.order;
-        if (rs.gap > 0.0f) {
-            computed.gap = rs.gap;
-            computed.row_gap = rs.gap;
-            computed.column_gap = rs.gap;
-        }
-        if (rs.row_gap > 0.0f) computed.row_gap = rs.row_gap;
-        if (rs.column_gap > 0.0f) computed.column_gap = rs.column_gap;
-        
-        // Transform
-        if (rs.transform_translate_x != 0.0f) computed.transform_translate_x = rs.transform_translate_x;
-        if (rs.transform_translate_y != 0.0f) computed.transform_translate_y = rs.transform_translate_y;
-        if (rs.transform_scale_x != 1.0f) computed.transform_scale_x = rs.transform_scale_x;
-        if (rs.transform_scale_y != 1.0f) computed.transform_scale_y = rs.transform_scale_y;
-        if (rs.transform_rotate != 0.0f) computed.transform_rotate = rs.transform_rotate;
-        if (rs.transform_skew_x != 0.0f) computed.transform_skew_x = rs.transform_skew_x;
-        if (rs.transform_skew_y != 0.0f) computed.transform_skew_y = rs.transform_skew_y;
-        if (rs.transform_origin_x != 50.0f) computed.transform_origin_x = rs.transform_origin_x;
-        if (rs.transform_origin_y != 50.0f) computed.transform_origin_y = rs.transform_origin_y;
-        if (!rs.transform_style.empty() && rs.transform_style != "flat") 
-            computed.transform_style = rs.transform_style;
-        if (rs.perspective != 0.0f) computed.perspective = rs.perspective;
-        if (!rs.backface_visibility.empty() && rs.backface_visibility != "visible")
-            computed.backface_visibility = rs.backface_visibility;
-        
-        // Transitions and animations
-        if (!rs.transitions.empty()) computed.transitions = rs.transitions;
-        if (!rs.animations.empty()) computed.animations = rs.animations;
-        
-        // Clip path
-        if (!rs.clip_path.empty()) computed.clip_path = rs.clip_path;
-        
-        // Pointer events
-        if (!rs.pointer_events.empty() && rs.pointer_events != "auto") 
-            computed.pointer_events = rs.pointer_events;
-        if (!rs.user_select.empty() && rs.user_select != "auto") 
-            computed.user_select = rs.user_select;
-        if (!rs.touch_action.empty() && rs.touch_action != "auto") 
-            computed.touch_action = rs.touch_action;
-        if (!rs.caret_color.empty() && rs.caret_color != "auto") 
-            computed.caret_color = rs.caret_color;
-        
-        // Float/Clear
-        if (!rs.float_value.empty() && rs.float_value != "none") 
-            computed.float_value = rs.float_value;
-        if (!rs.clear.empty() && rs.clear != "none") computed.clear = rs.clear;
+        applyRuleProperties(rule.style, computed);
     }
 }
 
@@ -1092,7 +1117,7 @@ void StyleEngine::rebuildRuleIndex() {
     
     int normalized_source_order = 0;
 
-    // 收集所有规则到扁平列表（并按“样式表顺序 + 规则顺序”重排 source_order）
+    // 收集所有规则到扁平列表（并按"样式表顺序 + 规则顺序"重排 source_order）
     for (const auto& sheet : stylesheets_) {
         for (const auto& rule : sheet.getRules()) {
             CSSRule normalized = rule;
@@ -1295,274 +1320,39 @@ void StyleEngine::applyMatchingRulesIndexed(DOMNodePtr node) {
             return a.source_order < b.source_order;
         });
     
-    // 应用规则（与原 applyMatchingRules 相同的属性应用逻辑）
+    // 应用规则（使用共享的属性应用函数）
     auto& computed = node->getComputedStyle();
-    
     for (const auto& rule : matching_rules) {
-        const auto& rs = rule.style;
-        
-        // Apply non-default values (与原实现相同)
-        if (!rs.color.empty() && rs.color != "#000000") computed.color = rs.color;
-        if (!rs.background_color.empty() && rs.background_color != "transparent") 
-            computed.background_color = rs.background_color;
-        if (!rs.background_image.empty()) computed.background_image = rs.background_image;
-        if (!rs.background_size.empty() && rs.background_size != "auto") 
-            computed.background_size = rs.background_size;
-        if (!rs.background_repeat.empty() && rs.background_repeat != "repeat") 
-            computed.background_repeat = rs.background_repeat;
-        if (!rs.background_position.empty() && rs.background_position != "0% 0%") computed.background_position = rs.background_position;
-        if (!rs.background_attachment.empty() && rs.background_attachment != "scroll") computed.background_attachment = rs.background_attachment;
-        if (!rs.background_clip.empty() && rs.background_clip != "border-box") computed.background_clip = rs.background_clip;
-        if (!rs.background_origin.empty() && rs.background_origin != "padding-box") computed.background_origin = rs.background_origin;
-        if (!rs.object_fit.empty() && rs.object_fit != "fill") computed.object_fit = rs.object_fit;
-        if (!rs.background_gradients.empty()) computed.background_gradients = rs.background_gradients;
-
-
-        
-        if (rs.font_size != 16.0f) computed.font_size = rs.font_size;
-        if (!rs.font_weight.empty() && rs.font_weight != "normal") computed.font_weight = rs.font_weight;
-        if (!rs.font_style.empty() && rs.font_style != "normal") computed.font_style = rs.font_style;
-        if (!rs.font_family.empty() && rs.font_family != "Arial") computed.font_family = rs.font_family;
-        if (!rs.font_variant.empty() && rs.font_variant != "normal") computed.font_variant = rs.font_variant;
-        
-        if (!rs.text_align.empty() && rs.text_align != "left") computed.text_align = rs.text_align;
-        if (!rs.text_decoration.empty() && rs.text_decoration != "none") 
-            computed.text_decoration = rs.text_decoration;
-        if (!rs.text_decoration_color.empty()) computed.text_decoration_color = rs.text_decoration_color;
-        if (!rs.text_decoration_style.empty() && rs.text_decoration_style != "solid")
-            computed.text_decoration_style = rs.text_decoration_style;
-        if (rs.text_decoration_thickness != 1.0f) 
-            computed.text_decoration_thickness = rs.text_decoration_thickness;
-        if (rs.letter_spacing_em != 0.0f) computed.letter_spacing_em = rs.letter_spacing_em;
-        if (rs.word_spacing_px != 0.0f) computed.word_spacing_px = rs.word_spacing_px;
-        if (rs.has_line_height) {
-            computed.has_line_height = true;
-            computed.line_height = rs.line_height;
-            computed.line_height_is_unitless = rs.line_height_is_unitless;
-        }
-        if (!rs.text_transform.empty() && rs.text_transform != "none") 
-            computed.text_transform = rs.text_transform;
-
-        if (!rs.text_overflow.empty() && rs.text_overflow != "clip") 
-            computed.text_overflow = rs.text_overflow;
-        if (!rs.white_space.empty() && rs.white_space != "normal") 
-            computed.white_space = rs.white_space;
-        if (!rs.word_break.empty() && rs.word_break != "normal") 
-            computed.word_break = rs.word_break;
-        if (!rs.overflow_wrap.empty() && rs.overflow_wrap != "normal") 
-            computed.overflow_wrap = rs.overflow_wrap;
-        if (!rs.vertical_align.empty() && rs.vertical_align != "baseline") 
-            computed.vertical_align = rs.vertical_align;
-        if (!rs.direction.empty() && rs.direction != "ltr") computed.direction = rs.direction;
-        if (rs.text_indent != 0.0f) computed.text_indent = rs.text_indent;
-        if (rs.webkit_line_clamp != 0) computed.webkit_line_clamp = rs.webkit_line_clamp;
-        
-        // Text shadow
-        if (rs.text_shadow_offset_x != 0.0f || rs.text_shadow_offset_y != 0.0f || 
-            rs.text_shadow_blur != 0.0f || !rs.text_shadow_color.empty()) {
-            computed.text_shadow_offset_x = rs.text_shadow_offset_x;
-            computed.text_shadow_offset_y = rs.text_shadow_offset_y;
-            computed.text_shadow_blur = rs.text_shadow_blur;
-            computed.text_shadow_color = rs.text_shadow_color;
-        }
-        
-        if (!rs.display.empty()) {
-            computed.display = rs.display;
-            computed.layout_mode = deriveLayoutModeFromDisplay(rs.display);
-        }
-        if (!rs.position.empty() && rs.position != "static") computed.position = rs.position;
-        
-        if (rs.border_radius != 0.0f) {
-            computed.border_radius = rs.border_radius;
-            computed.border_top_left_radius = rs.border_radius;
-            computed.border_top_right_radius = rs.border_radius;
-            computed.border_bottom_left_radius = rs.border_radius;
-            computed.border_bottom_right_radius = rs.border_radius;
-        }
-        if (rs.border_top_left_radius != 0.0f) 
-            computed.border_top_left_radius = rs.border_top_left_radius;
-        if (rs.border_top_right_radius != 0.0f) 
-            computed.border_top_right_radius = rs.border_top_right_radius;
-        if (rs.border_bottom_left_radius != 0.0f) 
-            computed.border_bottom_left_radius = rs.border_bottom_left_radius;
-        if (rs.border_bottom_right_radius != 0.0f) 
-            computed.border_bottom_right_radius = rs.border_bottom_right_radius;
-
-        // `border-radius` 支持 2/3/4 值时，解析结果会落到四个 corner 字段，
-        // 但现阶段渲染管线只支持统一半径（单一 float）。这里做一个保守兜底：
-        // 只要任意 corner 有值，就用最大值作为统一半径，至少恢复“圆角矩形”的外观。
-        if (computed.border_radius == 0.0f) {
-            const float max_corner = std::max(
-                std::max(computed.border_top_left_radius, computed.border_top_right_radius),
-                std::max(computed.border_bottom_left_radius, computed.border_bottom_right_radius)
-            );
-            if (max_corner > 0.0f) {
-                computed.border_radius = max_corner;
-            }
-        }
-        
-        // Border shorthand + per-side overrides
-
-        if (rs.border_width >= 0.0f) computed.border_width = rs.border_width;
-        if (!rs.border_color.empty()) computed.border_color = rs.border_color;
-        if (!rs.border_style.empty()) computed.border_style = rs.border_style;
-
-        if (rs.border_top_width >= 0.0f) computed.border_top_width = rs.border_top_width;
-        if (rs.border_right_width >= 0.0f) computed.border_right_width = rs.border_right_width;
-        if (rs.border_bottom_width >= 0.0f) computed.border_bottom_width = rs.border_bottom_width;
-        if (rs.border_left_width >= 0.0f) computed.border_left_width = rs.border_left_width;
-        if (!rs.border_top_color.empty()) computed.border_top_color = rs.border_top_color;
-        if (!rs.border_right_color.empty()) computed.border_right_color = rs.border_right_color;
-        if (!rs.border_bottom_color.empty()) computed.border_bottom_color = rs.border_bottom_color;
-        if (!rs.border_left_color.empty()) computed.border_left_color = rs.border_left_color;
-        if (!rs.border_top_style.empty()) computed.border_top_style = rs.border_top_style;
-        if (!rs.border_right_style.empty()) computed.border_right_style = rs.border_right_style;
-        if (!rs.border_bottom_style.empty()) computed.border_bottom_style = rs.border_bottom_style;
-        if (!rs.border_left_style.empty()) computed.border_left_style = rs.border_left_style;
-
-        
-        if (!rs.overflow.empty() && rs.overflow != "visible") {
-            computed.overflow = rs.overflow;
-            computed.overflow_x = rs.overflow;
-            computed.overflow_y = rs.overflow;
-        }
-        if (!rs.overflow_x.empty() && rs.overflow_x != "visible") computed.overflow_x = rs.overflow_x;
-        if (!rs.overflow_y.empty() && rs.overflow_y != "visible") computed.overflow_y = rs.overflow_y;
-        if (!rs.visibility.empty() && rs.visibility != "visible") computed.visibility = rs.visibility;
-        if (!rs.cursor.empty() && rs.cursor != "auto") computed.cursor = rs.cursor;
-        
-        if (rs.outline_width != 0.0f) computed.outline_width = rs.outline_width;
-        if (!rs.outline_color.empty() && rs.outline_color != "#000000") 
-            computed.outline_color = rs.outline_color;
-        if (!rs.outline_style.empty() && rs.outline_style != "none") 
-            computed.outline_style = rs.outline_style;
-        if (rs.outline_offset != 0.0f) computed.outline_offset = rs.outline_offset;
-        
-        if (!rs.box_sizing.empty() && rs.box_sizing != "content-box") 
-            computed.box_sizing = rs.box_sizing;
-        if (rs.opacity != 1.0f) computed.opacity = rs.opacity;
-        if (rs.isolation_isolate) computed.isolation_isolate = true;
-        if (!rs.box_shadows.empty()) computed.box_shadows = rs.box_shadows;
-        
-        // Filters
-        if (!rs.filters.empty()) computed.filters = rs.filters;
-        if (!rs.backdrop_filters.empty()) computed.backdrop_filters = rs.backdrop_filters;
-        if (!rs.mix_blend_mode.empty() && rs.mix_blend_mode != "normal") 
-            computed.mix_blend_mode = rs.mix_blend_mode;
-        if (!rs.background_blend_mode.empty() && rs.background_blend_mode != "normal")
-            computed.background_blend_mode = rs.background_blend_mode;
-        
-        // Box model
-        if (rs.width.unit != CSSValue::Unit::AUTO) computed.width = rs.width;
-        if (rs.height.unit != CSSValue::Unit::AUTO) computed.height = rs.height;
-        if (rs.min_width.unit != CSSValue::Unit::AUTO) computed.min_width = rs.min_width;
-        if (rs.max_width.unit != CSSValue::Unit::AUTO) computed.max_width = rs.max_width;
-        if (rs.min_height.unit != CSSValue::Unit::AUTO) computed.min_height = rs.min_height;
-        if (rs.max_height.unit != CSSValue::Unit::AUTO) computed.max_height = rs.max_height;
-        
-        if (rs.margin_top.unit != CSSValue::Unit::AUTO || rs.margin_top.value != 0.0f) 
-            computed.margin_top = rs.margin_top;
-        if (rs.margin_right.unit != CSSValue::Unit::AUTO || rs.margin_right.value != 0.0f) 
-            computed.margin_right = rs.margin_right;
-        if (rs.margin_bottom.unit != CSSValue::Unit::AUTO || rs.margin_bottom.value != 0.0f) 
-            computed.margin_bottom = rs.margin_bottom;
-        if (rs.margin_left.unit != CSSValue::Unit::AUTO || rs.margin_left.value != 0.0f) 
-            computed.margin_left = rs.margin_left;
-        
-        if (rs.padding_top.value != 0.0f) computed.padding_top = rs.padding_top;
-        if (rs.padding_right.value != 0.0f) computed.padding_right = rs.padding_right;
-        if (rs.padding_bottom.value != 0.0f) computed.padding_bottom = rs.padding_bottom;
-        if (rs.padding_left.value != 0.0f) computed.padding_left = rs.padding_left;
-        
-        if (rs.top.unit != CSSValue::Unit::AUTO) computed.top = rs.top;
-        if (rs.right.unit != CSSValue::Unit::AUTO) computed.right = rs.right;
-        if (rs.bottom.unit != CSSValue::Unit::AUTO) computed.bottom = rs.bottom;
-        if (rs.left.unit != CSSValue::Unit::AUTO) computed.left = rs.left;
-        if (rs.z_index != 0) computed.z_index = rs.z_index;
-        
-        // Flexbox
-        if (!rs.flex_direction.empty() && rs.flex_direction != "row") 
-            computed.flex_direction = rs.flex_direction;
-        if (!rs.flex_wrap.empty() && rs.flex_wrap != "nowrap") computed.flex_wrap = rs.flex_wrap;
-        if (!rs.justify_content.empty() && rs.justify_content != "flex-start") 
-            computed.justify_content = rs.justify_content;
-        if (!rs.align_items.empty() && rs.align_items != "stretch") 
-            computed.align_items = rs.align_items;
-        if (!rs.align_content.empty() && rs.align_content != "stretch") 
-            computed.align_content = rs.align_content;
-        if (!rs.align_self.empty() && rs.align_self != "auto") computed.align_self = rs.align_self;
-        if (rs.flex != 0.0f) computed.flex = rs.flex;
-        if (rs.flex_grow != 0.0f) computed.flex_grow = rs.flex_grow;
-        if (rs.flex_shrink != 1.0f) computed.flex_shrink = rs.flex_shrink;
-        if (rs.flex_basis.unit != CSSValue::Unit::AUTO) computed.flex_basis = rs.flex_basis;
-        if (rs.order != 0) computed.order = rs.order;
-        if (rs.gap > 0.0f) {
-            computed.gap = rs.gap;
-            computed.row_gap = rs.gap;
-            computed.column_gap = rs.gap;
-        }
-        if (rs.row_gap > 0.0f) computed.row_gap = rs.row_gap;
-        if (rs.column_gap > 0.0f) computed.column_gap = rs.column_gap;
-        
-        // Transform
-        if (rs.transform_translate_x != 0.0f) computed.transform_translate_x = rs.transform_translate_x;
-        if (rs.transform_translate_y != 0.0f) computed.transform_translate_y = rs.transform_translate_y;
-        if (rs.transform_scale_x != 1.0f) computed.transform_scale_x = rs.transform_scale_x;
-        if (rs.transform_scale_y != 1.0f) computed.transform_scale_y = rs.transform_scale_y;
-        if (rs.transform_rotate != 0.0f) computed.transform_rotate = rs.transform_rotate;
-        if (rs.transform_skew_x != 0.0f) computed.transform_skew_x = rs.transform_skew_x;
-        if (rs.transform_skew_y != 0.0f) computed.transform_skew_y = rs.transform_skew_y;
-        if (rs.transform_origin_x != 50.0f) computed.transform_origin_x = rs.transform_origin_x;
-        if (rs.transform_origin_y != 50.0f) computed.transform_origin_y = rs.transform_origin_y;
-        if (!rs.transform_style.empty() && rs.transform_style != "flat") 
-            computed.transform_style = rs.transform_style;
-        if (rs.perspective != 0.0f) computed.perspective = rs.perspective;
-        if (!rs.backface_visibility.empty() && rs.backface_visibility != "visible")
-            computed.backface_visibility = rs.backface_visibility;
-        
-        // Transitions and animations
-        if (!rs.transitions.empty()) computed.transitions = rs.transitions;
-        if (!rs.animations.empty()) computed.animations = rs.animations;
-        
-        // Clip path
-        if (!rs.clip_path.empty()) computed.clip_path = rs.clip_path;
-        
-        // Pointer events
-        if (!rs.pointer_events.empty() && rs.pointer_events != "auto") 
-            computed.pointer_events = rs.pointer_events;
-        if (!rs.user_select.empty() && rs.user_select != "auto") 
-            computed.user_select = rs.user_select;
-        if (!rs.touch_action.empty() && rs.touch_action != "auto") 
-            computed.touch_action = rs.touch_action;
-        if (!rs.caret_color.empty() && rs.caret_color != "auto") 
-            computed.caret_color = rs.caret_color;
-        
-        // Float/Clear
-        if (!rs.float_value.empty() && rs.float_value != "none") 
-            computed.float_value = rs.float_value;
-        if (!rs.clear.empty() && rs.clear != "none") computed.clear = rs.clear;
+        applyRuleProperties(rule.style, computed);
     }
 }
 
-// 优化策略3：增量样式计算
+// 优化策略3：增量样式计算 - 只重算 dirty 节点
 void StyleEngine::computeStylesIncremental(DOMNodePtr node) {
     DONG_PROFILE_FUNCTION();
     
     if (!node) return;
 
+    const bool self_dirty = node->isStyleDirty();
+    const bool subtree_dirty = node->isStyleSubtreeDirty();
+
+    if (self_dirty) {
+        recomputeNodeStyleFull(node);
+    }
+
+    // Only recurse into children if subtree has dirty nodes
+    if (self_dirty || subtree_dirty) {
+        for (const auto& child : node->getChildren()) {
+            computeStylesIncremental(child);
+        }
+    }
+}
+
+void StyleEngine::recomputeNodeStyleFull(DOMNodePtr node) {
     applyDefaultStyleForNode(node);
-
-    // 使用索引加速的规则匹配
     applyMatchingRulesIndexed(node);
-
-    
-    // Inherit from parent
     inheritFromParent(node);
-
-    // Inline style overrides author rules
     applyInlineStyleAttributeIfAny(node);
-    
-    // Hide certain elements
 
     static const std::unordered_set<std::string> kAlwaysHiddenTags = {
         "head", "style", "script", "meta", "title", "link"
@@ -1571,16 +1361,8 @@ void StyleEngine::computeStylesIncremental(DOMNodePtr node) {
         node->getComputedStyle().display = "none";
     }
 
-    // Derive layout mode
     node->getComputedStyle().layout_mode = deriveLayoutModeFromDisplay(node->getComputedStyle());
-
-    // Process pseudo-elements (::before/::after)
     processPseudoElements(node);
-
-    // Recursively compute styles for children
-    for (const auto& child : node->getChildren()) {
-        computeStylesIncremental(child);
-    }
 }
 
 } // namespace dong::dom

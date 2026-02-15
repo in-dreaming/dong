@@ -33,6 +33,7 @@ float CSSValue::resolvePixels(float parent_size, float root_font_size,
             return 0.0f;
         case Unit::AUTO:
         case Unit::INHERIT:
+        case Unit::UNSET:
         default:
             return 0.0f;
     }

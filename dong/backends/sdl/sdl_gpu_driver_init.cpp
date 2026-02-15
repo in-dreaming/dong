@@ -215,6 +215,55 @@ bool SDLGPUDriver::initialize() {
         return false;
     }
 
+    // 渐变绘制着色器：线性渐变 quad
+    gradient_vs_ = shader_manager_->loadShaderFromHLSLFile(
+        "dong_gradient_vs",
+        SDL_GPU_SHADERSTAGE_VERTEX,
+        shader_path("gradient_vs.hlsl").c_str(),
+        "main"
+    );
+    gradient_fs_ = shader_manager_->loadShaderFromHLSLFile(
+        "dong_gradient_fs",
+        SDL_GPU_SHADERSTAGE_FRAGMENT,
+        shader_path("gradient_fs.hlsl").c_str(),
+        "main"
+    );
+
+    if (!gradient_vs_ || !gradient_fs_) {
+        DONG_LOG_ERROR("SDLGPUDriver::initialize: failed to compile gradient shaders");
+        return false;
+    }
+
+    SDL_GPUGraphicsPipelineCreateInfo grad_ci{};
+    SDL_GPUColorTargetDescription color_desc_grad{};
+    color_desc_grad.format = render_target_format_;
+    color_desc_grad.blend_state.enable_blend = true;
+    color_desc_grad.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+    color_desc_grad.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    color_desc_grad.blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
+    color_desc_grad.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+    color_desc_grad.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    color_desc_grad.blend_state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
+
+    grad_ci.target_info.num_color_targets = 1;
+    grad_ci.target_info.color_target_descriptions = &color_desc_grad;
+    grad_ci.target_info.has_depth_stencil_target = false;
+
+    grad_ci.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLESTRIP;
+    grad_ci.vertex_shader = gradient_vs_;
+    grad_ci.fragment_shader = gradient_fs_;
+
+    grad_ci.vertex_input_state.num_vertex_buffers = 0;
+    grad_ci.vertex_input_state.vertex_buffer_descriptions = nullptr;
+    grad_ci.vertex_input_state.num_vertex_attributes = 0;
+    grad_ci.vertex_input_state.vertex_attributes = nullptr;
+
+    gradient_pipeline_ = SDL_CreateGPUGraphicsPipeline(dev, &grad_ci);
+    if (!gradient_pipeline_) {
+        DONG_LOG_ERROR("SDLGPUDriver::initialize: failed to create gradient pipeline: %s", SDL_GetError());
+        return false;
+    }
+
     // 图片绘制着色器：使用 SV_VertexID 生成矩形，并根据 atlas UV 采样
     image_vs_ = shader_manager_->loadShaderFromHLSLFile(
         "dong_image_vs",

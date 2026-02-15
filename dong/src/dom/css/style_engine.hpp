@@ -94,6 +94,9 @@ public:
     // Recompute styles for a single node (for dynamic updates)
     void recomputeNodeStyle(DOMNodePtr node);
 
+    // Full style recompute for a single node (used by incremental path)
+    void recomputeNodeStyleFull(DOMNodePtr node);
+
     // Check if selector matches node
     bool matches(const std::string& selector, DOMNodePtr node);
     

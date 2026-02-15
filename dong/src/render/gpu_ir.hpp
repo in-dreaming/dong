@@ -29,6 +29,7 @@ enum class GPUCommandType : uint8_t {
     DrawRoundedRectQuad,     // 圆角矩形 quad（analytic SDF）
     DrawShadowQuad,          // 带模糊的阴影 quad（SDF + blur）
     DrawText,                // 文本 glyph run
+    DrawGradientQuad,        // 线性渐变 quad
 
     // 剪裁与图层命令
     PushClipRect,
@@ -99,6 +100,11 @@ struct GPUCommand {
     float text_shadow_blur = 0.0f;
     Color text_shadow_color;
     bool has_text_shadow = false;
+
+    // Gradient rendering (DrawGradientQuad only)
+    float gradient_angle_deg = 180.0f;
+    int gradient_stop_count = 0;
+    GradientColorStop gradient_stops[kMaxGradientStops];
 };
 
 struct DrawBatchRange {
@@ -190,6 +196,9 @@ public:
                 break;
             case GPUCommandType::DrawText:
                 pipeline_id = 4; // 文本管线
+                break;
+            case GPUCommandType::DrawGradientQuad:
+                pipeline_id = 6; // 渐变管线
                 break;
             default:
                 pipeline_id = 0; // 非绘制类命令
@@ -406,6 +415,22 @@ public:
                 text_count++;
                 break;
             }
+            case DisplayItemType::DrawLinearGradient: {
+                GPUCommand cmd{};
+                cmd.type = GPUCommandType::DrawGradientQuad;
+                cmd.instance_count = 1;
+                cmd.rect = item.gradient.rect;
+                cmd.radius = item.gradient.radius;
+                cmd.gradient_angle_deg = item.gradient.angle_deg;
+                cmd.gradient_stop_count = item.gradient.stop_count;
+                for (int i = 0; i < item.gradient.stop_count; ++i) {
+                    cmd.gradient_stops[i].color = apply_opacity(item.gradient.stops[i].color, current_opacity());
+                    cmd.gradient_stops[i].position = item.gradient.stops[i].position;
+                }
+                cmd.sort_key = make_sort_key(cmd.type, cmd);
+                out.commands.push_back(cmd);
+                break;
+            }
             default:
                 // 其他类型先忽略，后续再逐步接入
                 break;
@@ -434,6 +459,7 @@ public:
                 case GPUCommandType::DrawShadowQuad:
                 case GPUCommandType::DrawImageQuad:
                 case GPUCommandType::DrawText:
+                case GPUCommandType::DrawGradientQuad:
                     out.sorted_draw_indices.push_back(i);
                     break;
                 default:

@@ -838,13 +838,23 @@ void DOMNode::markStyleDirty() {
         style_dirty_ = true;
     }
 
+    // Propagate subtree-dirty flag to ancestors (without marking them as self-dirty)
     if (auto p = parent_.lock()) {
-        p->markStyleDirty();
+        p->markStyleSubtreeDirty();
+    }
+}
+
+void DOMNode::markStyleSubtreeDirty() {
+    if (style_subtree_dirty_) return;  // already propagated
+    style_subtree_dirty_ = true;
+    if (auto p = parent_.lock()) {
+        p->markStyleSubtreeDirty();
     }
 }
 
 void DOMNode::clearStyleDirtyRecursive() {
     style_dirty_ = false;
+    style_subtree_dirty_ = false;
     for (auto& child : children_) {
         if (child) {
             child->clearStyleDirtyRecursive();
