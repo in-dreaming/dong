@@ -20,8 +20,8 @@ endif()
 # Configuration
 # =============================================================================
 set(VULKAN_SDK_PATH "$ENV{VULKAN_SDK}" CACHE PATH "Vulkan SDK path")
-set(DXC_LIB_PATH "third_party/dxc_2025_07_14/lib/x64" CACHE PATH "DXC library path")
-set(DXC_INCLUDE_PATH "third_party/dxc_2025_07_14/include" CACHE PATH "DXC include path")
+set(DXC_LIB_PATH "third_party/dxc/lib/x64" CACHE PATH "DXC library path")
+set(DXC_INCLUDE_PATH "third_party/dxc/include" CACHE PATH "DXC include path")
 
 # =============================================================================
 # Third-party dependencies (built by zig build or manually)

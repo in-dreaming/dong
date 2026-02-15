@@ -1,0 +1,327 @@
+#!/usr/bin/env python3
+"""
+Dong Shader Pre-compilation Script
+
+Pre-compiles HLSL shaders to SPIRV and optionally Metal for mobile platforms.
+This allows mobile builds to not require DXC at runtime.
+
+Usage:
+    python scripts/precompile_shaders.py [--output DIR] [--vulkan|--metal|--all]
+
+Example:
+    python scripts/precompile_shaders.py --output shaders_compiled --vulkan
+    python scripts/precompile_shaders.py --output shaders_compiled --all
+
+Requirements:
+    - dxc (DirectXShaderCompiler) - for HLSL to SPIRV
+    - Optional: spirv-cross - for SPIRV to Metal (macOS/iOS)
+"""
+
+import os
+import sys
+import argparse
+import subprocess
+import shutil
+from pathlib import Path
+from typing import List, Tuple
+
+# Shader source directory
+SHADER_DIR = Path("backends/sdl/shaders")
+
+# Shader definitions: (filename, shader_type, entry_point)
+SHADERS = [
+    # Vertex shaders
+    ("rect_vs.hlsl", "vs", "VSMain"),
+    ("round_rect_vs.hlsl", "vs", "VSMain"),
+    ("image_vs.hlsl", "vs", "VSMain"),
+    ("text_vs.hlsl", "vs", "VSMain"),
+    ("shadow_vs.hlsl", "vs", "VSMain"),
+    ("gradient_vs.hlsl", "vs", "VSMain"),
+    # Fragment/Pixel shaders
+    ("rect_fs.hlsl", "ps", "PSMain"),
+    ("round_rect_fs.hlsl", "ps", "PSMain"),
+    ("image_fs.hlsl", "ps", "PSMain"),
+    ("text_fs.hlsl", "ps", "PSMain"),
+    ("shadow_fs.hlsl", "ps", "PSMain"),
+    ("gradient_fs.hlsl", "ps", "PSMain"),
+    ("video_yuv_fs.hlsl", "ps", "PSMain"),
+]
+
+def find_dxc() -> str:
+    """Find DXC compiler executable."""
+    # Try environment variable
+    dxc_path = os.environ.get("DXC_PATH")
+    if dxc_path and Path(dxc_path).exists():
+        return dxc_path
+
+    # Try common locations
+    if sys.platform == "win32":
+        candidates = [
+            "third_party/dxc/bin/x64/dxc.exe",
+            "C:/Program Files/DXC/bin/dxc.exe",
+            "C:/VulkanSDK/*/Bin/dxc.exe",
+        ]
+    elif sys.platform == "darwin":
+        candidates = [
+            "/usr/local/bin/dxc",
+            "/opt/homebrew/bin/dxc",
+        ]
+    else:
+        candidates = [
+            "/usr/bin/dxc",
+            "/usr/local/bin/dxc",
+        ]
+
+    for candidate in candidates:
+        if "*" in candidate:
+            import glob
+            matches = glob.glob(candidate)
+            if matches:
+                return matches[0]
+        elif Path(candidate).exists():
+            return candidate
+
+    # Try PATH
+    dxc = shutil.which("dxc")
+    if dxc:
+        return dxc
+
+    raise RuntimeError("DXC compiler not found. Install DXC or set DXC_PATH environment variable.")
+
+
+def find_spirv_cross() -> str:
+    """Find spirv-cross executable."""
+    # Try environment variable
+    cross_path = os.environ.get("SPIRV_CROSS_PATH")
+    if cross_path and Path(cross_path).exists():
+        return cross_path
+
+    # Try PATH
+    cross = shutil.which("spirv-cross")
+    if cross:
+        return cross
+
+    # Try Vulkan SDK
+    vulkan_sdk = os.environ.get("VULKAN_SDK")
+    if vulkan_sdk:
+        if sys.platform == "win32":
+            candidate = Path(vulkan_sdk) / "Bin" / "spirv-cross.exe"
+        else:
+            candidate = Path(vulkan_sdk) / "bin" / "spirv-cross"
+        if candidate.exists():
+            return str(candidate)
+
+    return None
+
+
+def compile_hlsl_to_spirv(
+    dxc: str,
+    input_file: Path,
+    output_file: Path,
+    shader_type: str,
+    entry_point: str
+) -> bool:
+    """Compile HLSL shader to SPIRV using DXC."""
+    profile = f"{shader_type}_6_0"
+
+    cmd = [
+        dxc,
+        "-spirv",
+        "-T", profile,
+        "-E", entry_point,
+        "-Fo", str(output_file),
+        str(input_file),
+    ]
+
+    # Include path for common.hlsl
+    cmd.extend(["-I", str(input_file.parent)])
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            print(f"  Error compiling {input_file.name}:")
+            print(result.stderr)
+            return False
+        return True
+    except Exception as e:
+        print(f"  Error running DXC: {e}")
+        return False
+
+
+def compile_spirv_to_metal(
+    spirv_cross: str,
+    input_file: Path,
+    output_file: Path
+) -> bool:
+    """Convert SPIRV to Metal using spirv-cross."""
+    cmd = [
+        spirv_cross,
+        "--msl",
+        "--output", str(output_file),
+        str(input_file),
+    ]
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            print(f"  Error converting {input_file.name} to Metal:")
+            print(result.stderr)
+            return False
+        return True
+    except Exception as e:
+        print(f"  Error running spirv-cross: {e}")
+        return False
+
+
+def generate_shader_header(output_dir: Path, shaders: List[Tuple[str, bytes]]) -> None:
+    """Generate a C header file with embedded shader bytecode."""
+    header_file = output_dir / "compiled_shaders.h"
+
+    with open(header_file, "w") as f:
+        f.write("// Auto-generated shader bytecode\n")
+        f.write("// Generated by precompile_shaders.py\n\n")
+        f.write("#pragma once\n\n")
+        f.write("#include <stdint.h>\n")
+        f.write("#include <stddef.h>\n\n")
+
+        for name, data in shaders:
+            # Convert filename to C identifier
+            c_name = name.replace(".", "_").replace("-", "_").upper()
+
+            f.write(f"// {name}\n")
+            f.write(f"static const uint8_t {c_name}_DATA[] = {{\n    ")
+
+            # Write bytes in rows of 16
+            for i, byte in enumerate(data):
+                if i > 0 and i % 16 == 0:
+                    f.write("\n    ")
+                f.write(f"0x{byte:02x}, ")
+
+            f.write("\n};\n")
+            f.write(f"static const size_t {c_name}_SIZE = sizeof({c_name}_DATA);\n\n")
+
+        # Generate lookup table
+        f.write("// Shader lookup table\n")
+        f.write("typedef struct {\n")
+        f.write("    const char* name;\n")
+        f.write("    const uint8_t* data;\n")
+        f.write("    size_t size;\n")
+        f.write("} CompiledShader;\n\n")
+
+        f.write("static const CompiledShader COMPILED_SHADERS[] = {\n")
+        for name, _ in shaders:
+            c_name = name.replace(".", "_").replace("-", "_").upper()
+            f.write(f'    {{ "{name}", {c_name}_DATA, {c_name}_SIZE }},\n')
+        f.write("};\n")
+        f.write(f"static const size_t COMPILED_SHADERS_COUNT = {len(shaders)};\n")
+
+    print(f"Generated header: {header_file}")
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Pre-compile Dong shaders")
+    parser.add_argument(
+        "--output", "-o",
+        default="backends/sdl/shaders/compiled",
+        help="Output directory for compiled shaders"
+    )
+    parser.add_argument(
+        "--vulkan", action="store_true",
+        help="Compile to SPIRV for Vulkan"
+    )
+    parser.add_argument(
+        "--metal", action="store_true",
+        help="Compile to Metal shaders (requires spirv-cross)"
+    )
+    parser.add_argument(
+        "--all", action="store_true",
+        help="Compile all formats"
+    )
+    parser.add_argument(
+        "--header", action="store_true",
+        help="Generate C header with embedded bytecode"
+    )
+
+    args = parser.parse_args()
+
+    if args.all:
+        args.vulkan = True
+        args.metal = True
+
+    if not args.vulkan and not args.metal:
+        args.vulkan = True  # Default to Vulkan
+
+    # Find compilers
+    try:
+        dxc = find_dxc()
+        print(f"Using DXC: {dxc}")
+    except RuntimeError as e:
+        print(f"Error: {e}")
+        return 1
+
+    spirv_cross = None
+    if args.metal:
+        spirv_cross = find_spirv_cross()
+        if spirv_cross:
+            print(f"Using spirv-cross: {spirv_cross}")
+        else:
+            print("Warning: spirv-cross not found, skipping Metal compilation")
+            args.metal = False
+
+    # Create output directory
+    output_dir = Path(args.output)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    if args.vulkan:
+        spirv_dir = output_dir / "spirv"
+        spirv_dir.mkdir(exist_ok=True)
+
+    if args.metal:
+        metal_dir = output_dir / "metal"
+        metal_dir.mkdir(exist_ok=True)
+
+    # Compile shaders
+    success_count = 0
+    fail_count = 0
+    compiled_spirv = []
+
+    for shader_file, shader_type, entry_point in SHADERS:
+        input_file = SHADER_DIR / shader_file
+        if not input_file.exists():
+            print(f"Warning: Shader not found: {input_file}")
+            fail_count += 1
+            continue
+
+        base_name = shader_file.replace(".hlsl", "")
+        print(f"Compiling: {shader_file}")
+
+        # Compile to SPIRV
+        if args.vulkan:
+            spirv_file = spirv_dir / f"{base_name}.spv"
+            if compile_hlsl_to_spirv(dxc, input_file, spirv_file, shader_type, entry_point):
+                print(f"  -> {spirv_file}")
+                with open(spirv_file, "rb") as f:
+                    compiled_spirv.append((f"{base_name}.spv", f.read()))
+                success_count += 1
+            else:
+                fail_count += 1
+                continue
+
+            # Convert to Metal if requested
+            if args.metal and spirv_cross:
+                metal_file = metal_dir / f"{base_name}.metal"
+                if compile_spirv_to_metal(spirv_cross, spirv_file, metal_file):
+                    print(f"  -> {metal_file}")
+                else:
+                    print(f"  Warning: Metal conversion failed for {shader_file}")
+
+    # Generate header if requested
+    if args.header and compiled_spirv:
+        generate_shader_header(output_dir, compiled_spirv)
+
+    print(f"\nCompleted: {success_count} succeeded, {fail_count} failed")
+    return 0 if fail_count == 0 else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

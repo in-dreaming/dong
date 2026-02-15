@@ -1,7 +1,9 @@
 zig-cache/
 zig-out/
+zig-out-*/
 zig-build-output/
 build/
+build-cmake/
 build-cmake-core/
 build-ninja-core/
 .DS_Store
@@ -27,3 +29,6 @@ third_party/skia/linux/
 
 # CMake build directories
 third_party/*/build-zig/
+
+# DXC binaries (auto-downloaded during build)
+third_party/dxc/

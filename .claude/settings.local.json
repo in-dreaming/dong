@@ -39,7 +39,18 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(zig-out/bin/html_render_test.exe:*)",
-      "Bash(Select-String:*)"
+      "Bash(Select-String:*)",
+      "Bash(awk:*)",
+      "Bash(sort:*)",
+      "WebSearch",
+      "Bash(zig:*)",
+      "Bash(ar:*)",
+      "Bash(objdump:*)",
+      "Bash(readelf:*)",
+      "Bash(git check-ignore:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(curl:*)",
+      "Bash(minimal_dong_demo.exe:*)"
     ]
   }
 }

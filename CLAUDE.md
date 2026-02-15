@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Build System
 
-All commands must be run from the `dong/` subdirectory. The project uses **Zig** as the build orchestrator, which manages CMake builds for all dependencies and the main library.
+All commands must be run from the `dong/` subdirectory. The project uses **Zig** as the primary build system with **pure Zig builds** for most dependencies and CMake fallback for complex libraries (SDL3, Dong core).
 
 ```bash
 cd dong
@@ -17,6 +17,15 @@ cd dong
 zig build                    # Build everything (deps + dong + examples)
 zig build examples           # Build all examples to zig-out/bin
 zig build deps               # Build only third-party dependencies
+
+# Individual dependency builds (pure Zig)
+zig build quickjs            # Build QuickJS only
+zig build lexbor             # Build Lexbor only
+zig build yoga               # Build Yoga only
+zig build freetype           # Build FreeType only
+zig build harfbuzz           # Build HarfBuzz only
+zig build msdfgen            # Build msdfgen only
+zig build sdl3               # Build SDL3 only (CMake)
 
 # Run examples (AppCore-based, recommended)
 # After build, run from zig-out/bin:
@@ -30,15 +39,97 @@ zig build run-feature-tests  # Run feature tests
 zig build render-all-tests   # Renders all HTML files in examples/data/tests/
 ```
 
+### Cross-Compilation
+
+The build system supports cross-compilation to multiple platforms from Windows:
+
+```bash
+# Linux x64 (glibc)
+zig build -Dtarget=x86_64-linux-gnu -Dlibs-only=true -p zig-out-linux-x64 deps
+
+# Linux ARM64 (glibc)
+zig build -Dtarget=aarch64-linux-gnu -Dlibs-only=true -p zig-out-linux-arm64 deps
+
+# Linux x64 (musl, fully static)
+zig build -Dtarget=x86_64-linux-musl -Dlibs-only=true -p zig-out-linux-musl-x64 deps
+
+# Linux ARM64 (musl, fully static)
+zig build -Dtarget=aarch64-linux-musl -Dlibs-only=true -p zig-out-linux-musl-arm64 deps
+```
+
+Cross-compilation helper script:
+```bash
+python scripts/cross_compile.py all         # Build all Linux targets
+python scripts/cross_compile.py linux-arm64 # Build specific target
+python scripts/cross_compile.py list        # List available targets
+```
+
+**Note**: macOS/iOS cross-compilation requires macOS SDK (only available on macOS host).
+
+Mobile targets automatically enter "libs-only" mode, building static libraries for integration into native apps.
+
 ### Build Configuration
 
-Copy `build.env.example` to `build.env` and configure paths (VULKAN_SDK_PATH, DXC_LIB_PATH, etc.). Platform-specific examples: `build.env.windows.example`, `build.env.macos.example`.
+Copy `build.env.example` to `build.env` and configure paths (VULKAN_SDK_PATH, DXC_LIB_PATH, etc.). Platform-specific examples:
+- `build.env.windows.example` - Windows configuration
+- `build.env.macos.example` - macOS configuration
+- `build.env.android.example` - Android cross-compilation
+- `build.env.ios.example` - iOS cross-compilation
+- `build.env.ohos.example` - HarmonyOS cross-compilation
 
 ### Windows Notes
 - Uses `clang-cl` + Ninja for CMake builds
 - If using WSL bash, use `cmd.exe /c zig build` to avoid zig missing
 - Always builds in Release mode to avoid `_ITERATOR_DEBUG_LEVEL` mismatches
 - DXC libraries expected in `third_party/dxc_2025_07_14/lib/x64`
+
+### Dependency Build System
+
+| Dependency | Build Method | Notes |
+|------------|--------------|-------|
+| QuickJS | Pure Zig | GNU C11, Windows compat headers |
+| Lexbor | Pure Zig | Platform-specific ports |
+| Yoga | Pure Zig | C++20, -fno-exceptions |
+| FreeType | Pure Zig | Module-based compilation |
+| HarfBuzz | Pure Zig | Amalgamation build |
+| msdfgen | Pure Zig | Core + ext modules |
+| Dong Core | Pure Zig | Main C++ library (C++20) |
+| SDL Backend | Pure Zig | SDL GPU driver (C++20) |
+| SDL3 | CMake | Complex platform code |
+
+### Pure Zig Build Steps
+
+```bash
+# Build individual components with pure Zig
+zig build dong-core     # Build Dong Core library
+zig build sdl-backend   # Build SDL backend library
+
+# Cross-compile to Linux ARM64
+zig build -Dtarget=aarch64-linux-gnu dong-core
+```
+
+### Shader Pre-compilation
+
+For mobile platforms, pre-compile shaders to SPIRV:
+
+```bash
+# Pre-compile to SPIRV for Vulkan
+python scripts/precompile_shaders.py --vulkan
+
+# Generate C header with embedded bytecode
+python scripts/precompile_shaders.py --vulkan --header
+
+# Pre-compile to Metal (requires spirv-cross)
+python scripts/precompile_shaders.py --metal
+```
+
+### DXC Download
+
+Download DXC compiler binaries:
+
+```bash
+python scripts/download_dxc.py --version 2025_07_14
+```
 
 ## Architecture
 

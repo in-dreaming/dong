@@ -30,7 +30,7 @@ if(VULKAN_SDK_PATH)
 endif()
 
 # DXC library (needed by dong_render via SDL_shadercross)
-set(DXC_LIB_PATH "${CMAKE_SOURCE_DIR}/third_party/dxc_2025_07_14/lib/x64" CACHE PATH "DXC library path")
+set(DXC_LIB_PATH "${CMAKE_SOURCE_DIR}/third_party/dxc/lib/x64" CACHE PATH "DXC library path")
 target_link_directories(dong_app PRIVATE ${DXC_LIB_PATH})
 target_link_libraries(dong_app PRIVATE dxcompiler)
 

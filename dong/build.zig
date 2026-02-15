@@ -2,12 +2,21 @@ const std = @import("std");
 const builtin = @import("builtin");
 
 // =============================================================================
+// DXC Configuration
+// =============================================================================
+const DXC_VERSION = "v1.8.2407";
+const DXC_DATE = "2024_07_31"; // Release date for download URL
+const DXC_DIR = "third_party/dxc";
+
+// =============================================================================
 // Build Configuration (loaded from build.env)
 // =============================================================================
 const BuildConfig = struct {
     vulkan_sdk_path: ?[]const u8 = null,
     dxc_lib_path: ?[]const u8 = null,
-    dxc_include_path: []const u8 = "third_party/DXC-1.8.2505.1/include",
+    dxc_include_path: []const u8 = DXC_DIR ++ "/inc",
+    android_ndk_path: ?[]const u8 = null,
+    ios_sdk_path: ?[]const u8 = null,
 };
 
 fn loadBuildConfig(allocator: std.mem.Allocator) BuildConfig {
@@ -23,17 +32,14 @@ fn loadBuildConfig(allocator: std.mem.Allocator) BuildConfig {
     var line_buf: [1024]u8 = undefined;
 
     while (buf_reader.reader().readUntilDelimiterOrEof(&line_buf, '\n') catch null) |line| {
-        // Remove \r if present (Windows line endings)
         const trimmed_line = if (line.len > 0 and line[line.len - 1] == '\r')
             line[0 .. line.len - 1]
         else
             line;
 
-        // Skip empty lines and comments
         const stripped = std.mem.trim(u8, trimmed_line, " \t");
         if (stripped.len == 0 or stripped[0] == '#') continue;
 
-        // Parse KEY=VALUE
         if (std.mem.indexOf(u8, stripped, "=")) |eq_pos| {
             const key = std.mem.trim(u8, stripped[0..eq_pos], " \t");
             const value = std.mem.trim(u8, stripped[eq_pos + 1 ..], " \t");
@@ -46,6 +52,10 @@ fn loadBuildConfig(allocator: std.mem.Allocator) BuildConfig {
                 config.dxc_lib_path = allocator.dupe(u8, value) catch null;
             } else if (std.mem.eql(u8, key, "DXC_INCLUDE_PATH")) {
                 config.dxc_include_path = allocator.dupe(u8, value) catch "third_party/DXC-1.8.2505.1/include";
+            } else if (std.mem.eql(u8, key, "ANDROID_NDK_PATH")) {
+                config.android_ndk_path = allocator.dupe(u8, value) catch null;
+            } else if (std.mem.eql(u8, key, "IOS_SDK_PATH")) {
+                config.ios_sdk_path = allocator.dupe(u8, value) catch null;
             }
         }
     }
@@ -54,204 +64,159 @@ fn loadBuildConfig(allocator: std.mem.Allocator) BuildConfig {
 }
 
 // =============================================================================
-// Unified Build System
-// All platforms use CMake for C++ code, zig orchestrates the build
+// Platform Detection Helpers
+// =============================================================================
+const PlatformInfo = struct {
+    is_windows: bool,
+    is_macos: bool,
+    is_linux: bool,
+    is_ios: bool,
+    is_android: bool,
+    is_ohos: bool, // HarmonyOS
+    is_mobile: bool,
+    is_desktop: bool,
+    is_native: bool, // Building for host platform
+    lib_prefix: []const u8,
+    static_lib_ext: []const u8,
+    shared_lib_ext: []const u8,
+    target_triple: []const u8,
+};
+
+fn getPlatformInfo(b: *std.Build, target: std.Build.ResolvedTarget) PlatformInfo {
+    const os_tag = target.result.os.tag;
+    const abi = target.result.abi;
+    const cpu_arch = target.result.cpu.arch;
+
+    const is_windows = os_tag == .windows;
+    const is_macos = os_tag == .macos;
+    const is_ios = os_tag == .ios;
+    const is_linux = os_tag == .linux;
+    const is_android = is_linux and (abi == .android or abi == .androideabi);
+    const is_ohos = is_linux and (abi == .ohos or abi == .ohoseabi);
+
+    // Check if building for native platform
+    const host_os = builtin.os.tag;
+    const host_cpu = builtin.cpu.arch;
+    const is_native = (os_tag == host_os) and (cpu_arch == host_cpu);
+
+    // Build target triple string
+    const arch_str = @tagName(cpu_arch);
+    const os_str = @tagName(os_tag);
+    const abi_str = @tagName(abi);
+    const target_triple = b.fmt("{s}-{s}-{s}", .{ arch_str, os_str, abi_str });
+
+    return .{
+        .is_windows = is_windows,
+        .is_macos = is_macos,
+        .is_linux = is_linux and !is_android and !is_ohos,
+        .is_ios = is_ios,
+        .is_android = is_android,
+        .is_ohos = is_ohos,
+        .is_mobile = is_ios or is_android or is_ohos,
+        .is_desktop = is_windows or is_macos or (is_linux and !is_android and !is_ohos),
+        .is_native = is_native,
+        .lib_prefix = if (is_windows) "" else "lib",
+        .static_lib_ext = if (is_windows) ".lib" else ".a",
+        .shared_lib_ext = if (is_windows) ".dll" else if (is_macos or is_ios) ".dylib" else ".so",
+        .target_triple = target_triple,
+    };
+}
+
+// =============================================================================
+// Build Options
+// =============================================================================
+const BuildOptions = struct {
+    enable_ffmpeg: bool,
+    enable_sdl: bool,
+    android_api_level: u32,
+    ios_deployment_target: []const u8,
+    libs_only: bool, // Only build static libraries (for mobile)
+};
+
+fn getBuildOptions(b: *std.Build, platform: PlatformInfo) BuildOptions {
+    const enable_ffmpeg = b.option(bool, "ffmpeg", "Enable FFmpeg support (default: true on desktop)") orelse platform.is_desktop;
+    const enable_sdl = b.option(bool, "sdl", "Enable SDL3 backend (default: true on desktop)") orelse platform.is_desktop;
+    const android_api_level = b.option(u32, "android-api", "Android API level (default: 21)") orelse 21;
+    const ios_target = b.option([]const u8, "ios-target", "iOS deployment target (default: 12.0)") orelse "12.0";
+    const libs_only = b.option(bool, "libs-only", "Only build static libraries") orelse platform.is_mobile;
+
+    return .{
+        .enable_ffmpeg = enable_ffmpeg,
+        .enable_sdl = enable_sdl,
+        .android_api_level = android_api_level,
+        .ios_deployment_target = ios_target,
+        .libs_only = libs_only,
+    };
+}
+
+// =============================================================================
+// Main Build Function
 // =============================================================================
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+    const platform = getPlatformInfo(b, target);
+    const options = getBuildOptions(b, platform);
 
     // Load build configuration
-    const config = loadBuildConfig(b.allocator);
+    var config = loadBuildConfig(b.allocator);
 
-    const is_windows = target.result.os.tag == .windows;
-    const is_macos = target.result.os.tag == .macos;
-    const is_linux = target.result.os.tag == .linux;
+    // Print build info
+    std.debug.print("Building for: {s} (native: {})\n", .{ platform.target_triple, platform.is_native });
+    if (platform.is_android) {
+        std.debug.print("  Android API level: {}\n", .{options.android_api_level});
+    }
+    if (platform.is_ios) {
+        std.debug.print("  iOS deployment target: {s}\n", .{options.ios_deployment_target});
+    }
 
-    // Determine build type string for CMake
-    // On Windows, always use Release to avoid _ITERATOR_DEBUG_LEVEL mismatch
-    const cmake_build_type = if (is_windows) "Release" else switch (optimize) {
+    // ==========================================================================
+    // DXC Auto-download (Windows desktop only)
+    // ==========================================================================
+    const dxc_step = ensureDxc(b, platform, &config);
+
+    // Build type for CMake (SDL3 fallback)
+    const cmake_build_type = if (platform.is_windows) "Release" else switch (optimize) {
         .Debug => "Debug",
         .ReleaseSafe, .ReleaseFast, .ReleaseSmall => "Release",
     };
 
     // ==========================================================================
-    // Third-party dependencies paths
+    // QuickJS (Pure Zig Build)
     // ==========================================================================
-    const freetype_build_dir = "third_party/freetype/build-zig";
-    const freetype_prefix = "zig-out/freetype";
-    const harfbuzz_build_dir = "third_party/harfbuzz/build-zig";
-    const harfbuzz_prefix = "zig-out/harfbuzz";
-    const msdfgen_build_dir = "third_party/msdfgen/build-zig";
-    const msdfgen_prefix = "zig-out/msdfgen";
+    const quickjs = buildQuickJS(b, target, optimize, platform);
+
+    // ==========================================================================
+    // Lexbor (Pure Zig Build)
+    // ==========================================================================
+    const lexbor = buildLexbor(b, target, optimize, platform);
+
+    // ==========================================================================
+    // Yoga (Pure Zig Build)
+    // ==========================================================================
+    const yoga = buildYoga(b, target, optimize);
+
+    // ==========================================================================
+    // FreeType (Pure Zig Build)
+    // ==========================================================================
+    const freetype = buildFreeType(b, target, optimize, platform);
+
+    // ==========================================================================
+    // HarfBuzz (Pure Zig Build)
+    // ==========================================================================
+    const harfbuzz = buildHarfBuzz(b, target, optimize, platform, freetype);
+
+    // ==========================================================================
+    // msdfgen (Pure Zig Build)
+    // ==========================================================================
+    const msdfgen = buildMsdfgen(b, target, optimize, platform, freetype);
+
+    // ==========================================================================
+    // SDL3 via CMake (shared) - too complex for initial pure Zig migration
+    // ==========================================================================
     const sdl3_build_dir = "third_party/sdl/build-zig";
     const sdl3_prefix = "zig-out/sdl3";
-    const quickjs_build_dir = "third_party/quickjs_make/build-zig";
-    const quickjs_prefix = "zig-out/quickjs";
 
-    const freetype_include_abs = b.fmt("{s}/{s}/include/freetype2", .{ b.build_root.path.?, freetype_prefix });
-    const freetype_lib_abs = if (is_windows)
-        b.fmt("{s}/{s}/lib/freetype.lib", .{ b.build_root.path.?, freetype_prefix })
-    else
-        b.fmt("{s}/{s}/lib/libfreetype.a", .{ b.build_root.path.?, freetype_prefix });
-
-    // ==========================================================================
-    // QuickJS via CMake (static library for all platforms)
-    // Uses compat layer on Windows for POSIX features (sys/time.h)
-    // ==========================================================================
-    var quickjs_cmake_args = std.ArrayList([]const u8).init(b.allocator);
-    quickjs_cmake_args.appendSlice(&.{
-        "cmake", "-S", "third_party/quickjs_make", "-B", quickjs_build_dir,
-        b.fmt("-DCMAKE_BUILD_TYPE={s}", .{cmake_build_type}),
-        "-DBUILD_SHARED_LIBS=OFF",
-    }) catch unreachable;
-
-    if (is_windows) {
-        quickjs_cmake_args.appendSlice(&.{
-            "-G", "Ninja",
-            "-DCMAKE_C_COMPILER=clang-cl",
-            "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL",
-        }) catch unreachable;
-    } else if (is_linux) {
-        quickjs_cmake_args.appendSlice(&.{
-            "-G", "Ninja",
-            "-DCMAKE_C_COMPILER=zig",
-            "-DCMAKE_C_COMPILER_ARG1=cc",
-        }) catch unreachable;
-    }
-
-    const quickjs_cmake_config = b.addSystemCommand(quickjs_cmake_args.items);
-    const quickjs_cmake_build = b.addSystemCommand(&.{ "cmake", "--build", quickjs_build_dir, "--config", "Release" });
-    quickjs_cmake_build.step.dependOn(&quickjs_cmake_config.step);
-    const quickjs_cmake_install = b.addSystemCommand(&.{ "cmake", "--install", quickjs_build_dir, "--prefix", quickjs_prefix });
-    quickjs_cmake_install.step.dependOn(&quickjs_cmake_build.step);
-
-    // ==========================================================================
-    // FreeType via CMake (static)
-    // ==========================================================================
-    var freetype_cmake_args = std.ArrayList([]const u8).init(b.allocator);
-    freetype_cmake_args.appendSlice(&.{
-        "cmake", "-S", "third_party/freetype", "-B", freetype_build_dir,
-        b.fmt("-DCMAKE_BUILD_TYPE={s}", .{cmake_build_type}),
-        "-DBUILD_SHARED_LIBS=OFF",
-        "-DFT_DISABLE_HARFBUZZ=ON",
-        "-DFT_DISABLE_PNG=ON",
-        "-DFT_DISABLE_ZLIB=ON",
-        "-DFT_DISABLE_BZIP2=ON",
-        "-DFT_DISABLE_BROTLI=ON",
-    }) catch unreachable;
-
-    if (is_windows) {
-        freetype_cmake_args.appendSlice(&.{
-            "-G", "Ninja",
-            "-DCMAKE_C_COMPILER=clang-cl",
-            "-DCMAKE_CXX_COMPILER=clang-cl",
-            "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL",
-        }) catch unreachable;
-    } else if (is_linux) {
-        freetype_cmake_args.appendSlice(&.{
-            "-G", "Ninja",
-            "-DCMAKE_C_COMPILER=zig",
-            "-DCMAKE_C_COMPILER_ARG1=cc",
-            "-DCMAKE_CXX_COMPILER=zig",
-            "-DCMAKE_CXX_COMPILER_ARG1=c++",
-        }) catch unreachable;
-    }
-
-    const freetype_cmake_config = b.addSystemCommand(freetype_cmake_args.items);
-    const freetype_cmake_build = b.addSystemCommand(&.{ "cmake", "--build", freetype_build_dir, "--config", cmake_build_type });
-    freetype_cmake_build.step.dependOn(&freetype_cmake_config.step);
-    const freetype_cmake_install = b.addSystemCommand(&.{ "cmake", "--install", freetype_build_dir, "--prefix", freetype_prefix });
-    freetype_cmake_install.step.dependOn(&freetype_cmake_build.step);
-
-    // ==========================================================================
-    // HarfBuzz via CMake (static)
-    // ==========================================================================
-    var harfbuzz_cmake_args = std.ArrayList([]const u8).init(b.allocator);
-    harfbuzz_cmake_args.appendSlice(&.{
-        "cmake", "-S", "third_party/harfbuzz", "-B", harfbuzz_build_dir,
-        b.fmt("-DCMAKE_BUILD_TYPE={s}", .{cmake_build_type}),
-        "-DBUILD_SHARED_LIBS=OFF",
-        "-DHB_HAVE_FREETYPE=ON",
-        b.fmt("-DFREETYPE_INCLUDE_DIRS={s}", .{freetype_include_abs}),
-        b.fmt("-DFREETYPE_LIBRARY={s}", .{freetype_lib_abs}),
-        "-DHB_HAVE_GLIB=OFF",
-        "-DHB_HAVE_ICU=OFF",
-        "-DHB_BUILD_UTILS=OFF",
-        "-DHB_BUILD_SUBSET=OFF",
-    }) catch unreachable;
-
-    if (is_windows) {
-        harfbuzz_cmake_args.appendSlice(&.{
-            "-G", "Ninja",
-            "-DCMAKE_C_COMPILER=clang-cl",
-            "-DCMAKE_CXX_COMPILER=clang-cl",
-            "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL",
-        }) catch unreachable;
-    } else if (is_linux) {
-        harfbuzz_cmake_args.appendSlice(&.{
-            "-G", "Ninja",
-            "-DCMAKE_C_COMPILER=zig",
-            "-DCMAKE_C_COMPILER_ARG1=cc",
-            "-DCMAKE_CXX_COMPILER=zig",
-            "-DCMAKE_CXX_COMPILER_ARG1=c++",
-        }) catch unreachable;
-    }
-
-    const harfbuzz_cmake_config = b.addSystemCommand(harfbuzz_cmake_args.items);
-    harfbuzz_cmake_config.step.dependOn(&freetype_cmake_install.step);
-    const harfbuzz_cmake_build = b.addSystemCommand(&.{ "cmake", "--build", harfbuzz_build_dir, "--config", cmake_build_type });
-    harfbuzz_cmake_build.step.dependOn(&harfbuzz_cmake_config.step);
-    const harfbuzz_cmake_install = b.addSystemCommand(&.{ "cmake", "--install", harfbuzz_build_dir, "--prefix", harfbuzz_prefix });
-    harfbuzz_cmake_install.step.dependOn(&harfbuzz_cmake_build.step);
-
-    // ==========================================================================
-    // msdfgen via CMake (static)
-    // ==========================================================================
-    var msdfgen_cmake_args = std.ArrayList([]const u8).init(b.allocator);
-    msdfgen_cmake_args.appendSlice(&.{
-        "cmake", "-S", "third_party/msdfgen", "-B", msdfgen_build_dir,
-        b.fmt("-DCMAKE_BUILD_TYPE={s}", .{cmake_build_type}),
-        "-DMSDFGEN_CORE_ONLY=OFF",
-        "-DMSDFGEN_BUILD_STANDALONE=OFF",
-        "-DMSDFGEN_USE_VCPKG=OFF",
-        "-DMSDFGEN_INSTALL=ON",
-        "-DBUILD_SHARED_LIBS=OFF",
-        "-DMSDFGEN_USE_SKIA=OFF",
-        "-DMSDFGEN_DISABLE_SVG=ON",
-        "-DMSDFGEN_DISABLE_PNG=ON",
-        "-DMSDFGEN_DYNAMIC_RUNTIME=ON",
-        b.fmt("-DFREETYPE_INCLUDE_DIRS={s}", .{freetype_include_abs}),
-        b.fmt("-DFREETYPE_LIBRARY={s}", .{freetype_lib_abs}),
-    }) catch unreachable;
-
-    if (is_windows) {
-        msdfgen_cmake_args.appendSlice(&.{
-            "-G", "Ninja",
-            "-DCMAKE_C_COMPILER=clang-cl",
-            "-DCMAKE_CXX_COMPILER=clang-cl",
-            "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL",
-        }) catch unreachable;
-    } else if (is_linux) {
-        msdfgen_cmake_args.appendSlice(&.{
-            "-G", "Ninja",
-            "-DCMAKE_C_COMPILER=zig",
-            "-DCMAKE_C_COMPILER_ARG1=cc",
-            "-DCMAKE_CXX_COMPILER=zig",
-            "-DCMAKE_CXX_COMPILER_ARG1=c++",
-        }) catch unreachable;
-    }
-
-    const msdfgen_cmake_config = b.addSystemCommand(msdfgen_cmake_args.items);
-    msdfgen_cmake_config.step.dependOn(&freetype_cmake_install.step);
-    const msdfgen_cmake_build = b.addSystemCommand(&.{ "cmake", "--build", msdfgen_build_dir, "--config", cmake_build_type });
-    msdfgen_cmake_build.step.dependOn(&msdfgen_cmake_config.step);
-    const msdfgen_cmake_install = b.addSystemCommand(&.{ "cmake", "--install", msdfgen_build_dir, "--prefix", msdfgen_prefix });
-    msdfgen_cmake_install.step.dependOn(&msdfgen_cmake_build.step);
-
-    // ==========================================================================
-    // SDL3 via CMake (shared)
-    // ==========================================================================
     var sdl3_cmake_args = std.ArrayList([]const u8).init(b.allocator);
     sdl3_cmake_args.appendSlice(&.{
         "cmake", "-S", "third_party/sdl", "-B", sdl3_build_dir,
@@ -263,20 +228,16 @@ pub fn build(b: *std.Build) void {
         "-DSDL_EXAMPLES=OFF",
     }) catch unreachable;
 
-    if (is_windows) {
+    if (platform.is_windows) {
         sdl3_cmake_args.appendSlice(&.{
             "-G", "Ninja",
             "-DCMAKE_C_COMPILER=clang-cl",
             "-DCMAKE_CXX_COMPILER=clang-cl",
             "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL",
         }) catch unreachable;
-    } else if (is_linux) {
+    } else if (platform.is_linux) {
         sdl3_cmake_args.appendSlice(&.{
             "-G", "Ninja",
-            "-DCMAKE_C_COMPILER=zig",
-            "-DCMAKE_C_COMPILER_ARG1=cc",
-            "-DCMAKE_CXX_COMPILER=zig",
-            "-DCMAKE_CXX_COMPILER_ARG1=c++",
             "-DSDL_UNIX_CONSOLE_BUILD=ON",
         }) catch unreachable;
     }
@@ -288,7 +249,59 @@ pub fn build(b: *std.Build) void {
     sdl3_cmake_install.step.dependOn(&sdl3_cmake_build.step);
 
     // ==========================================================================
-    // Dong core + examples via CMake (unified for all platforms)
+    // Mobile/Cross-compile: libs-only mode
+    // For mobile platforms, we only build the static libraries
+    // ==========================================================================
+    if (options.libs_only) {
+        // Build Dong Core for mobile
+        const dong_core = buildDongCore(b, target, optimize, platform, quickjs, lexbor, yoga, freetype, harfbuzz, msdfgen);
+
+        // For mobile/cross-compile, just install the static libraries
+        const libs_only_step = b.step("libs", "Build only static libraries (for mobile integration)");
+        libs_only_step.dependOn(&quickjs.step);
+        libs_only_step.dependOn(&lexbor.step);
+        libs_only_step.dependOn(&yoga.step);
+        libs_only_step.dependOn(&freetype.step);
+        libs_only_step.dependOn(&harfbuzz.step);
+        libs_only_step.dependOn(&msdfgen.step);
+        libs_only_step.dependOn(&dong_core.step);
+        b.getInstallStep().dependOn(libs_only_step);
+
+        // Still provide individual build steps for libs-only mode
+        const quickjs_step = b.step("quickjs", "Build QuickJS only");
+        quickjs_step.dependOn(&quickjs.step);
+
+        const lexbor_step = b.step("lexbor", "Build Lexbor only");
+        lexbor_step.dependOn(&lexbor.step);
+
+        const yoga_step = b.step("yoga", "Build Yoga only");
+        yoga_step.dependOn(&yoga.step);
+
+        const freetype_step = b.step("freetype", "Build FreeType only");
+        freetype_step.dependOn(&freetype.step);
+
+        const harfbuzz_step = b.step("harfbuzz", "Build HarfBuzz only");
+        harfbuzz_step.dependOn(&harfbuzz.step);
+
+        const msdfgen_step = b.step("msdfgen", "Build msdfgen only");
+        msdfgen_step.dependOn(&msdfgen.step);
+
+        const dong_core_step = b.step("dong-core", "Build Dong Core only");
+        dong_core_step.dependOn(&dong_core.step);
+
+        const deps_step = b.step("deps", "Build all third-party dependencies");
+        deps_step.dependOn(libs_only_step);
+
+        // Print info about cross-compilation
+        std.debug.print("\n=== Cross-compilation mode ===\n", .{});
+        std.debug.print("Target: {s}\n", .{platform.target_triple});
+        std.debug.print("Building static libraries only.\n", .{});
+        std.debug.print("Output: zig-out/lib/\n\n", .{});
+        return; // Skip CMake build for mobile targets
+    }
+
+    // ==========================================================================
+    // Dong core + examples via CMake (for now - will migrate later)
     // ==========================================================================
     const cmake_build_dir = "build-cmake";
 
@@ -299,9 +312,9 @@ pub fn build(b: *std.Build) void {
 
     const dxc_lib_cmake_arg = if (config.dxc_lib_path) |dxc_path|
         b.fmt("-DDXC_LIB_PATH={s}", .{dxc_path})
-    else if (is_windows)
-        "-DDXC_LIB_PATH=third_party/dxc_2025_07_14/lib/x64"
-    else if (is_macos)
+    else if (platform.is_windows)
+        b.fmt("-DDXC_LIB_PATH={s}/lib/x64", .{DXC_DIR})
+    else if (platform.is_macos)
         "-DDXC_LIB_PATH=/usr/local/lib"
     else
         "-DDXC_LIB_PATH=";
@@ -314,51 +327,45 @@ pub fn build(b: *std.Build) void {
         dxc_lib_cmake_arg,
     }) catch unreachable;
 
-    if (is_windows) {
+    if (platform.is_windows) {
         dong_cmake_args.appendSlice(&.{
             "-G", "Ninja",
             "-DCMAKE_C_COMPILER=clang-cl",
             "-DCMAKE_CXX_COMPILER=clang-cl",
             "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL",
         }) catch unreachable;
-    } else if (is_linux) {
+    } else if (platform.is_linux) {
         dong_cmake_args.appendSlice(&.{
             "-G", "Ninja",
-            "-DCMAKE_C_COMPILER=zig",
-            "-DCMAKE_C_COMPILER_ARG1=cc",
-            "-DCMAKE_CXX_COMPILER=zig",
-            "-DCMAKE_CXX_COMPILER_ARG1=c++",
-            // WSL/devcontainers commonly lack system 'make'. Avoid building FFmpeg-from-source.
-            // The plugin can still load system FFmpeg libs at runtime if present.
             "-DDONG_PLUGIN_SDL_ENABLE_FFMPEG=OFF",
         }) catch unreachable;
     }
 
     const cmake_config = b.addSystemCommand(dong_cmake_args.items);
-    cmake_config.step.dependOn(&freetype_cmake_install.step);
-    cmake_config.step.dependOn(&harfbuzz_cmake_install.step);
-    cmake_config.step.dependOn(&msdfgen_cmake_install.step);
+    // Depend on Zig-built libraries being installed first
+    cmake_config.step.dependOn(&quickjs.step);
+    cmake_config.step.dependOn(&lexbor.step);
+    cmake_config.step.dependOn(&yoga.step);
+    cmake_config.step.dependOn(&freetype.step);
+    cmake_config.step.dependOn(&harfbuzz.step);
+    cmake_config.step.dependOn(&msdfgen.step);
     cmake_config.step.dependOn(&sdl3_cmake_install.step);
-    cmake_config.step.dependOn(&quickjs_cmake_install.step);
+    // Depend on DXC being downloaded
+    if (dxc_step) |step| {
+        cmake_config.step.dependOn(step);
+    }
 
     const cmake_build = b.addSystemCommand(&.{ "cmake", "--build", cmake_build_dir, "--config", cmake_build_type });
     cmake_build.step.dependOn(&cmake_config.step);
 
-    // ==========================================================================
-    // Build steps
-    // ==========================================================================
-    
-    // Install step (cmake --install)
-    // On Windows, the destination exe can be locked if it's currently running.
-    // Treat that specific case as a non-fatal install skip (build artifacts still exist in build-cmake).
-    const cmake_install = if (is_windows)
+    // Install step
+    const cmake_install = if (platform.is_windows)
         b.addSystemCommand(&.{
             "powershell",
             "-NoProfile",
             "-Command",
             b.fmt(
                 "& {{ $out = & cmake --install {s} --prefix zig-out 2>&1; $ec = $LASTEXITCODE; if ($ec -eq 0) {{ $out }} else {{ if ($out -match 'file INSTALL cannot copy file' -and ($out -match 'Permission' -and $out -match 'denied')) {{ Write-Host 'NOTE: cmake install skipped because a target file is locked (close running exe and re-run to refresh zig-out/bin).'; exit 0 }} else {{ $out; exit $ec }} }} }}",
-
                 .{cmake_build_dir},
             ),
         })
@@ -367,7 +374,7 @@ pub fn build(b: *std.Build) void {
     cmake_install.step.dependOn(&cmake_build.step);
     b.getInstallStep().dependOn(&cmake_install.step);
 
-    if (is_windows) {
+    if (platform.is_windows) {
         const copy_runtime = b.addSystemCommand(&.{
             "powershell",
             "-NoProfile",
@@ -381,57 +388,76 @@ pub fn build(b: *std.Build) void {
         b.getInstallStep().dependOn(&copy_runtime.step);
     }
 
-    // examples step now also installs to zig-out/bin
-
-
+    // ==========================================================================
+    // Build Steps
+    // ==========================================================================
     const examples_step = b.step("examples", "Build all examples and install to zig-out/bin");
     examples_step.dependOn(&cmake_install.step);
 
-    // ==========================================================================
-    // Individual dependency build steps (for debugging/manual builds)
-    // ==========================================================================
+    // Individual dependency build steps
     const deps_step = b.step("deps", "Build all third-party dependencies only");
-    deps_step.dependOn(&freetype_cmake_install.step);
-    deps_step.dependOn(&harfbuzz_cmake_install.step);
-    deps_step.dependOn(&msdfgen_cmake_install.step);
+    deps_step.dependOn(&quickjs.step);
+    deps_step.dependOn(&lexbor.step);
+    deps_step.dependOn(&yoga.step);
+    deps_step.dependOn(&freetype.step);
+    deps_step.dependOn(&harfbuzz.step);
+    deps_step.dependOn(&msdfgen.step);
     deps_step.dependOn(&sdl3_cmake_install.step);
-    deps_step.dependOn(&quickjs_cmake_install.step);
+
+    const quickjs_step = b.step("quickjs", "Build QuickJS only");
+    quickjs_step.dependOn(&quickjs.step);
+
+    const lexbor_step = b.step("lexbor", "Build Lexbor only");
+    lexbor_step.dependOn(&lexbor.step);
+
+    const yoga_step = b.step("yoga", "Build Yoga only");
+    yoga_step.dependOn(&yoga.step);
 
     const freetype_step = b.step("freetype", "Build FreeType only");
-    freetype_step.dependOn(&freetype_cmake_install.step);
+    freetype_step.dependOn(&freetype.step);
 
     const harfbuzz_step = b.step("harfbuzz", "Build HarfBuzz only");
-    harfbuzz_step.dependOn(&harfbuzz_cmake_install.step);
+    harfbuzz_step.dependOn(&harfbuzz.step);
 
     const msdfgen_step = b.step("msdfgen", "Build msdfgen only");
-    msdfgen_step.dependOn(&msdfgen_cmake_install.step);
+    msdfgen_step.dependOn(&msdfgen.step);
 
     const sdl3_step = b.step("sdl3", "Build SDL3 only");
     sdl3_step.dependOn(&sdl3_cmake_install.step);
 
-    const quickjs_step = b.step("quickjs", "Build QuickJS only");
-    quickjs_step.dependOn(&quickjs_cmake_install.step);
+    // ==========================================================================
+    // Dong Core (Pure Zig Build) - Desktop mode only for now
+    // ==========================================================================
+    const dong_core = buildDongCore(b, target, optimize, platform, quickjs, lexbor, yoga, freetype, harfbuzz, msdfgen);
+    const dong_core_step = b.step("dong-core", "Build Dong Core (pure Zig)");
+    dong_core_step.dependOn(&dong_core.step);
+
+    // ==========================================================================
+    // SDL Backend (Pure Zig Build) - Desktop mode only
+    // ==========================================================================
+    const sdl_backend = buildSDLBackend(b, target, optimize, platform, config, dong_core);
+    const sdl_backend_step = b.step("sdl-backend", "Build SDL Backend (pure Zig)");
+    sdl_backend_step.dependOn(&sdl_backend.step);
 
     // ==========================================================================
     // Run shortcuts
     // ==========================================================================
     const run_demo = b.addSystemCommand(&.{
-        if (is_windows) "zig-out\\bin\\interactive_demo_new.exe" else "zig-out/bin/interactive_demo_new",
+        if (platform.is_windows) "zig-out\\bin\\interactive_demo_new.exe" else "zig-out/bin/interactive_demo_new",
     });
     run_demo.step.dependOn(&cmake_install.step);
     const run_step = b.step("run", "Run interactive demo");
     run_step.dependOn(&run_demo.step);
 
-
     const run_simple = b.addSystemCommand(&.{
-        if (is_windows) "zig-out\\bin\\simple_demo.exe" else "zig-out/bin/simple_demo",
+        if (platform.is_windows) "zig-out\\bin\\simple_demo.exe" else "zig-out/bin/simple_demo",
     });
     run_simple.step.dependOn(&cmake_install.step);
     const run_simple_step = b.step("run-simple", "Run simple demo");
     run_simple_step.dependOn(&run_simple.step);
 
     const run_complete = b.addSystemCommand(&.{
-        if (is_windows) "zig-out\\bin\\complete_demo.exe" else "zig-out/bin/complete_demo",
+        if (platform.is_windows) "zig-out\\bin\\complete_demo.exe" else "zig-out/bin/complete_demo",
     });
     run_complete.step.dependOn(&cmake_install.step);
     const run_complete_step = b.step("run-complete", "Run complete demo");
@@ -439,17 +465,15 @@ pub fn build(b: *std.Build) void {
 
     // Feature tests
     const run_feature_tests = b.addSystemCommand(&.{
-        if (is_windows) "zig-out\\bin\\run_feature_tests.exe" else "zig-out/bin/run_feature_tests",
+        if (platform.is_windows) "zig-out\\bin\\run_feature_tests.exe" else "zig-out/bin/run_feature_tests",
     });
     run_feature_tests.step.dependOn(&cmake_install.step);
     const run_feature_tests_step = b.step("run-feature-tests", "Run feature tests");
     run_feature_tests_step.dependOn(&run_feature_tests.step);
 
-    // HTML render test - renders HTML to BMP for visual verification
-    // Usage: zig build run-html-test -- <html_file> [output.bmp] [width] [height] [frames]
-    //        zig build run-html-test -- <html_file> [output.bmp] [width] [height] --frames N [--frame-ms MS] [--no-update]
+    // HTML render test
     const run_html_test = b.addSystemCommand(&.{
-        if (is_windows) "zig-out\\bin\\html_render_test.exe" else "zig-out/bin/html_render_test",
+        if (platform.is_windows) "zig-out\\bin\\html_render_test.exe" else "zig-out/bin/html_render_test",
     });
     run_html_test.step.dependOn(&cmake_install.step);
     if (b.args) |args| {
@@ -459,7 +483,7 @@ pub fn build(b: *std.Build) void {
     run_html_test_step.dependOn(&run_html_test.step);
 
     // Batch render all test HTML files
-    const render_all_tests = b.addSystemCommand(if (is_windows) &.{
+    const render_all_tests = b.addSystemCommand(if (platform.is_windows) &.{
         "cmd", "/c", "for %f in (zig-out\\bin\\data\\tests\\*.html) do zig-out\\bin\\html_render_test.exe %f zig-out\\tmp\\tests\\%~nf.bmp 800 600",
     } else &.{
         "sh", "-c", "for f in zig-out/bin/data/tests/*.html; do ./zig-out/bin/html_render_test \"$f\" \"zig-out/tmp/tests/$(basename \"$f\" .html).bmp\" 800 600; done",
@@ -470,9 +494,699 @@ pub fn build(b: *std.Build) void {
 
     // 3D screens simple demo
     const run_3d_simple = b.addSystemCommand(&.{
-        if (is_windows) "zig-out\\bin\\3d_screens_simple.exe" else "zig-out/bin/3d_screens_simple",
+        if (platform.is_windows) "zig-out\\bin\\3d_screens_simple.exe" else "zig-out/bin/3d_screens_simple",
     });
     run_3d_simple.step.dependOn(&cmake_install.step);
     const run_3d_simple_step = b.step("run-3d-simple", "Run 3D screens simple demo");
     run_3d_simple_step.dependOn(&run_3d_simple.step);
 }
+
+// =============================================================================
+// QuickJS Build
+// =============================================================================
+fn buildQuickJS(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    platform: PlatformInfo,
+) *std.Build.Step.InstallArtifact {
+    const quickjs = b.addStaticLibrary(.{
+        .name = "quickjs",
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const quickjs_src = "third_party/quickjs";
+    const quickjs_compat = "third_party/quickjs_make/compat";
+
+    quickjs.addCSourceFiles(.{
+        .files = &.{
+            quickjs_src ++ "/quickjs.c",
+            quickjs_src ++ "/libregexp.c",
+            quickjs_src ++ "/libunicode.c",
+            quickjs_src ++ "/cutils.c",
+            quickjs_src ++ "/dtoa.c",
+        },
+        .flags = &.{
+            "-std=gnu11", // Use GNU C extensions for inline assembly support
+            "-D_GNU_SOURCE",
+            "-DCONFIG_VERSION=\"2024-02-14\"",
+        },
+    });
+
+    quickjs.addIncludePath(b.path(quickjs_src));
+    quickjs.linkLibC();
+
+    if (platform.is_windows) {
+        // Windows-specific settings
+        quickjs.addIncludePath(b.path(quickjs_compat));
+        quickjs.root_module.addCMacro("_CRT_SECURE_NO_WARNINGS", "");
+        quickjs.root_module.addCMacro("_CRT_NONSTDC_NO_DEPRECATE", "");
+        // Use EMSCRIPTEN=1 to disable CONFIG_ATOMICS (avoids pthread_cond dependency)
+        quickjs.root_module.addCMacro("EMSCRIPTEN", "1");
+        quickjs.root_module.addCMacro("CONFIG_STACK_CHECK", "");
+    }
+
+    quickjs.installHeader(b.path(quickjs_src ++ "/quickjs.h"), "quickjs.h");
+    quickjs.installHeader(b.path(quickjs_src ++ "/quickjs-libc.h"), "quickjs-libc.h");
+
+    return b.addInstallArtifact(quickjs, .{});
+}
+
+// =============================================================================
+// Lexbor Build
+// =============================================================================
+fn buildLexbor(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    platform: PlatformInfo,
+) *std.Build.Step.InstallArtifact {
+    const lexbor = b.addStaticLibrary(.{
+        .name = "lexbor_static",
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const lexbor_src = "third_party/lexbor/source";
+
+    // Collect all lexbor source files
+    var sources = std.ArrayList([]const u8).init(b.allocator);
+
+    // Core modules to include
+    const modules = [_][]const u8{
+        "lexbor/core",
+        "lexbor/css",
+        "lexbor/css/at_rule",
+        "lexbor/css/property",
+        "lexbor/css/selectors",
+        "lexbor/css/syntax",
+        "lexbor/css/syntax/tokenizer",
+        "lexbor/dom",
+        "lexbor/dom/interfaces",
+        "lexbor/encoding",
+        "lexbor/engine",
+        "lexbor/html",
+        "lexbor/html/interfaces",
+        "lexbor/ns",
+        "lexbor/punycode",
+        "lexbor/selectors",
+        "lexbor/tag",
+        "lexbor/unicode",
+        "lexbor/url",
+        "lexbor/utils",
+    };
+
+    for (modules) |mod| {
+        const mod_path = b.fmt("{s}/{s}", .{ lexbor_src, mod });
+        var dir = std.fs.cwd().openDir(mod_path, .{ .iterate = true }) catch continue;
+        defer dir.close();
+
+        var iter = dir.iterate();
+        while (iter.next() catch null) |entry| {
+            if (entry.kind == .file and std.mem.endsWith(u8, entry.name, ".c")) {
+                const full_path = b.fmt("{s}/{s}", .{ mod_path, entry.name });
+                sources.append(b.allocator.dupe(u8, full_path) catch unreachable) catch unreachable;
+            }
+        }
+    }
+
+    // Add platform-specific port files
+    if (platform.is_windows) {
+        const win_port = b.fmt("{s}/lexbor/ports/windows_nt/lexbor/core", .{lexbor_src});
+        var dir = std.fs.cwd().openDir(win_port, .{ .iterate = true }) catch |err| blk: {
+            std.debug.print("Warning: Could not open Windows port dir: {}\n", .{err});
+            break :blk null;
+        };
+        if (dir) |*d| {
+            defer d.close();
+            var iter = d.iterate();
+            while (iter.next() catch null) |entry| {
+                if (entry.kind == .file and std.mem.endsWith(u8, entry.name, ".c")) {
+                    const full_path = b.fmt("{s}/{s}", .{ win_port, entry.name });
+                    sources.append(b.allocator.dupe(u8, full_path) catch unreachable) catch unreachable;
+                }
+            }
+        }
+    } else {
+        const posix_port = b.fmt("{s}/lexbor/ports/posix/lexbor/core", .{lexbor_src});
+        var dir = std.fs.cwd().openDir(posix_port, .{ .iterate = true }) catch |err| blk: {
+            std.debug.print("Warning: Could not open POSIX port dir: {}\n", .{err});
+            break :blk null;
+        };
+        if (dir) |*d| {
+            defer d.close();
+            var iter = d.iterate();
+            while (iter.next() catch null) |entry| {
+                if (entry.kind == .file and std.mem.endsWith(u8, entry.name, ".c")) {
+                    const full_path = b.fmt("{s}/{s}", .{ posix_port, entry.name });
+                    sources.append(b.allocator.dupe(u8, full_path) catch unreachable) catch unreachable;
+                }
+            }
+        }
+    }
+
+    // Convert to slice for addCSourceFiles
+    const source_slice = sources.toOwnedSlice() catch unreachable;
+    lexbor.addCSourceFiles(.{
+        .files = source_slice,
+        .flags = &.{"-std=c11"},
+    });
+
+    lexbor.addIncludePath(b.path(lexbor_src));
+    lexbor.root_module.addCMacro("LEXBOR_STATIC", "");
+    lexbor.linkLibC();
+
+    return b.addInstallArtifact(lexbor, .{});
+}
+
+// =============================================================================
+// Yoga Build
+// =============================================================================
+fn buildYoga(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+) *std.Build.Step.InstallArtifact {
+    const yoga = b.addStaticLibrary(.{
+        .name = "yogacore",
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const yoga_src = "third_party/yoga";
+
+    yoga.addCSourceFiles(.{
+        .files = &.{
+            yoga_src ++ "/yoga/YGConfig.cpp",
+            yoga_src ++ "/yoga/YGEnums.cpp",
+            yoga_src ++ "/yoga/YGNode.cpp",
+            yoga_src ++ "/yoga/YGNodeLayout.cpp",
+            yoga_src ++ "/yoga/YGNodeStyle.cpp",
+            yoga_src ++ "/yoga/YGPixelGrid.cpp",
+            yoga_src ++ "/yoga/YGValue.cpp",
+            yoga_src ++ "/yoga/algorithm/AbsoluteLayout.cpp",
+            yoga_src ++ "/yoga/algorithm/Baseline.cpp",
+            yoga_src ++ "/yoga/algorithm/Cache.cpp",
+            yoga_src ++ "/yoga/algorithm/CalculateLayout.cpp",
+            yoga_src ++ "/yoga/algorithm/FlexLine.cpp",
+            yoga_src ++ "/yoga/algorithm/PixelGrid.cpp",
+            yoga_src ++ "/yoga/config/Config.cpp",
+            yoga_src ++ "/yoga/debug/AssertFatal.cpp",
+            yoga_src ++ "/yoga/debug/Log.cpp",
+            yoga_src ++ "/yoga/event/event.cpp",
+            yoga_src ++ "/yoga/node/LayoutResults.cpp",
+            yoga_src ++ "/yoga/node/Node.cpp",
+        },
+        .flags = &.{
+            "-std=c++20",
+            "-fno-exceptions",
+            "-fno-rtti",
+        },
+    });
+
+    yoga.addIncludePath(b.path(yoga_src));
+    yoga.linkLibCpp();
+
+    return b.addInstallArtifact(yoga, .{});
+}
+
+// =============================================================================
+// FreeType Build
+// =============================================================================
+fn buildFreeType(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    platform: PlatformInfo,
+) *std.Build.Step.InstallArtifact {
+    const freetype = b.addStaticLibrary(.{
+        .name = "freetype",
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const ft_src = "third_party/freetype/src";
+    const ft_include = "third_party/freetype/include";
+
+    // FreeType uses a single-file-per-module compilation approach
+    var sources = std.ArrayList([]const u8).init(b.allocator);
+
+    // Base module files
+    sources.appendSlice(&.{
+        ft_src ++ "/base/ftbase.c",
+        ft_src ++ "/base/ftbbox.c",
+        ft_src ++ "/base/ftbdf.c",
+        ft_src ++ "/base/ftbitmap.c",
+        ft_src ++ "/base/ftcid.c",
+        ft_src ++ "/base/ftfstype.c",
+        ft_src ++ "/base/ftgasp.c",
+        ft_src ++ "/base/ftglyph.c",
+        ft_src ++ "/base/ftgxval.c",
+        ft_src ++ "/base/ftinit.c",
+        ft_src ++ "/base/ftmm.c",
+        ft_src ++ "/base/ftotval.c",
+        ft_src ++ "/base/ftpatent.c",
+        ft_src ++ "/base/ftpfr.c",
+        ft_src ++ "/base/ftstroke.c",
+        ft_src ++ "/base/ftsynth.c",
+        ft_src ++ "/base/fttype1.c",
+        ft_src ++ "/base/ftwinfnt.c",
+    }) catch unreachable;
+
+    // Platform-specific system/debug files
+    if (platform.is_windows) {
+        sources.appendSlice(&.{
+            "third_party/freetype/builds/windows/ftsystem.c",
+            "third_party/freetype/builds/windows/ftdebug.c",
+        }) catch unreachable;
+    } else {
+        sources.appendSlice(&.{
+            ft_src ++ "/base/ftsystem.c",
+            ft_src ++ "/base/ftdebug.c",
+        }) catch unreachable;
+    }
+
+    // Font format modules
+    sources.appendSlice(&.{
+        ft_src ++ "/truetype/truetype.c",
+        ft_src ++ "/type1/type1.c",
+        ft_src ++ "/cff/cff.c",
+        ft_src ++ "/cid/type1cid.c",
+        ft_src ++ "/pfr/pfr.c",
+        ft_src ++ "/type42/type42.c",
+        ft_src ++ "/winfonts/winfnt.c",
+        ft_src ++ "/pcf/pcf.c",
+        ft_src ++ "/bdf/bdf.c",
+        ft_src ++ "/sfnt/sfnt.c",
+    }) catch unreachable;
+
+    // Rasterizer modules
+    sources.appendSlice(&.{
+        ft_src ++ "/smooth/smooth.c",
+        ft_src ++ "/raster/raster.c",
+        ft_src ++ "/sdf/sdf.c",
+        ft_src ++ "/svg/svg.c",
+    }) catch unreachable;
+
+    // Helper modules
+    sources.appendSlice(&.{
+        ft_src ++ "/autofit/autofit.c",
+        ft_src ++ "/pshinter/pshinter.c",
+        ft_src ++ "/psaux/psaux.c",
+        ft_src ++ "/psnames/psnames.c",
+        ft_src ++ "/gzip/ftgzip.c",
+        ft_src ++ "/lzw/ftlzw.c",
+    }) catch unreachable;
+
+    const source_slice = sources.toOwnedSlice() catch unreachable;
+    freetype.addCSourceFiles(.{
+        .files = source_slice,
+        .flags = &.{
+            "-DFT2_BUILD_LIBRARY",
+        },
+    });
+
+    freetype.addIncludePath(b.path(ft_include));
+    freetype.linkLibC();
+
+    return b.addInstallArtifact(freetype, .{});
+}
+
+// =============================================================================
+// HarfBuzz Build
+// =============================================================================
+fn buildHarfBuzz(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    platform: PlatformInfo,
+    freetype_artifact: *std.Build.Step.InstallArtifact,
+) *std.Build.Step.InstallArtifact {
+    _ = platform;
+
+    const harfbuzz = b.addStaticLibrary(.{
+        .name = "harfbuzz",
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const hb_src = "third_party/harfbuzz/src";
+
+    // HarfBuzz provides an amalgamation file for easier building
+    harfbuzz.addCSourceFiles(.{
+        .files = &.{
+            hb_src ++ "/harfbuzz.cc",
+        },
+        .flags = &.{
+            "-std=c++17",
+            "-DHB_HAVE_FREETYPE",
+            "-DHB_NO_MT", // Disable multi-threading for simpler build
+        },
+    });
+
+    harfbuzz.addIncludePath(b.path(hb_src));
+    harfbuzz.addIncludePath(b.path("third_party/freetype/include"));
+    harfbuzz.linkLibCpp();
+
+    // Depend on FreeType being built
+    harfbuzz.step.dependOn(&freetype_artifact.step);
+
+    return b.addInstallArtifact(harfbuzz, .{});
+}
+
+// =============================================================================
+// msdfgen Build
+// =============================================================================
+fn buildMsdfgen(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    platform: PlatformInfo,
+    freetype_artifact: *std.Build.Step.InstallArtifact,
+) *std.Build.Step.InstallArtifact {
+    _ = platform;
+
+    const msdfgen = b.addStaticLibrary(.{
+        .name = "msdfgen",
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const msdf_root = "third_party/msdfgen";
+
+    // Core sources
+    msdfgen.addCSourceFiles(.{
+        .files = &.{
+            msdf_root ++ "/core/Contour.cpp",
+            msdf_root ++ "/core/DistanceMapping.cpp",
+            msdf_root ++ "/core/EdgeHolder.cpp",
+            msdf_root ++ "/core/MSDFErrorCorrection.cpp",
+            msdf_root ++ "/core/Projection.cpp",
+            msdf_root ++ "/core/Scanline.cpp",
+            msdf_root ++ "/core/Shape.cpp",
+            msdf_root ++ "/core/contour-combiners.cpp",
+            msdf_root ++ "/core/edge-coloring.cpp",
+            msdf_root ++ "/core/edge-segments.cpp",
+            msdf_root ++ "/core/edge-selectors.cpp",
+            msdf_root ++ "/core/equation-solver.cpp",
+            msdf_root ++ "/core/msdf-error-correction.cpp",
+            msdf_root ++ "/core/msdfgen.cpp",
+            msdf_root ++ "/core/rasterization.cpp",
+            msdf_root ++ "/core/render-sdf.cpp",
+            msdf_root ++ "/core/sdf-error-estimation.cpp",
+            msdf_root ++ "/core/shape-description.cpp",
+            // Extension sources (font loading)
+            msdf_root ++ "/ext/import-font.cpp",
+            msdf_root ++ "/ext/resolve-shape-geometry.cpp",
+        },
+        .flags = &.{
+            "-std=c++11",
+            "-DMSDFGEN_USE_CPP11",
+            "-DMSDFGEN_DISABLE_SVG",
+            "-DMSDFGEN_DISABLE_PNG",
+            "-DMSDFGEN_PUBLIC=",
+            "-DMSDFGEN_EXT_PUBLIC=",
+        },
+    });
+
+    msdfgen.addIncludePath(b.path(msdf_root));
+    msdfgen.addIncludePath(b.path("third_party/freetype/include"));
+    msdfgen.linkLibCpp();
+
+    // Depend on FreeType being built
+    msdfgen.step.dependOn(&freetype_artifact.step);
+
+    return b.addInstallArtifact(msdfgen, .{});
+}
+
+// =============================================================================
+// Dong Core Build (Pure Zig)
+// =============================================================================
+fn buildDongCore(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    platform: PlatformInfo,
+    quickjs_artifact: *std.Build.Step.InstallArtifact,
+    lexbor_artifact: *std.Build.Step.InstallArtifact,
+    yoga_artifact: *std.Build.Step.InstallArtifact,
+    freetype_artifact: *std.Build.Step.InstallArtifact,
+    harfbuzz_artifact: *std.Build.Step.InstallArtifact,
+    msdfgen_artifact: *std.Build.Step.InstallArtifact,
+) *std.Build.Step.InstallArtifact {
+    const dong_core = b.addStaticLibrary(.{
+        .name = "dong_core",
+        .target = target,
+        .optimize = optimize,
+    });
+
+    // Core C++ sources
+    dong_core.addCSourceFiles(.{
+        .files = &.{
+            // Core
+            "src/api_bindings.cpp",
+            "src/core/context.cpp",
+            "src/core/engine_view.cpp",
+            "src/core/profiler.cpp",
+            "src/core/global_shared.cpp",
+            "src/core/global_shared_c_api.cpp",
+            "src/core/glyph_atlas_c_api.cpp",
+            // DOM
+            "src/dom/dom_manager.cpp",
+            "src/dom/event_system.cpp",
+            "src/dom/focus_manager.cpp",
+            "src/dom/input_element.cpp",
+            "src/dom/css/css_value.cpp",
+            "src/dom/css/css_parser.cpp",
+            "src/dom/css/selector_matcher.cpp",
+            "src/dom/css/style_engine.cpp",
+            "src/dom/dom/dom_node.cpp",
+            "src/dom/dom/observer.cpp",
+            "src/dom/html/html_parser.cpp",
+            // Animation
+            "src/animation/animation_controller.cpp",
+            // Layout
+            "src/layout/layout_engine.cpp",
+            // Script
+            "src/script/script_engine.cpp",
+            "src/script/js_bindings.cpp",
+            // Render (platform-agnostic)
+            "src/render/painter.cpp",
+            "src/render/painter/painter_media.cpp",
+            "src/render/painter/painter_text.cpp",
+            "src/render/painter/painter_children.cpp",
+            "src/render/render_surface.cpp",
+            "src/render/resource_manager.cpp",
+            "src/render/font_resolver.cpp",
+            "src/render/font_finder.cpp",
+            "src/render/text_shaper.cpp",
+            "src/render/font_metrics.cpp",
+            "src/render/glyph_atlas.cpp",
+        },
+        .flags = &.{
+            "-std=c++20",
+            "-DDONG_BUILDING_DLL",
+        },
+    });
+
+    // Core C sources
+    dong_core.addCSourceFiles(.{
+        .files = &.{
+            "src/core/platform.c",
+        },
+        .flags = &.{"-std=c11"},
+    });
+
+    // Include directories
+    dong_core.addIncludePath(b.path("include"));
+    dong_core.addIncludePath(b.path("src"));
+    dong_core.addIncludePath(b.path("third_party/quickjs"));
+    dong_core.addIncludePath(b.path("third_party/lexbor/source"));
+    dong_core.addIncludePath(b.path("third_party/yoga"));
+    dong_core.addIncludePath(b.path("third_party/freetype/include"));
+    dong_core.addIncludePath(b.path("third_party/harfbuzz/src"));
+    dong_core.addIncludePath(b.path("third_party")); // For msdfgen/msdfgen.h
+
+    dong_core.linkLibCpp();
+    dong_core.linkLibC();
+
+    // Platform-specific settings
+    if (platform.is_windows) {
+        dong_core.root_module.addCMacro("_CRT_SECURE_NO_WARNINGS", "");
+        dong_core.root_module.addCMacro("NOMINMAX", "");
+        dong_core.linkSystemLibrary("user32");
+        dong_core.linkSystemLibrary("gdi32");
+        dong_core.linkSystemLibrary("ole32");
+        dong_core.linkSystemLibrary("shell32");
+        dong_core.linkSystemLibrary("advapi32");
+    }
+
+    // Dependencies
+    dong_core.step.dependOn(&quickjs_artifact.step);
+    dong_core.step.dependOn(&lexbor_artifact.step);
+    dong_core.step.dependOn(&yoga_artifact.step);
+    dong_core.step.dependOn(&freetype_artifact.step);
+    dong_core.step.dependOn(&harfbuzz_artifact.step);
+    dong_core.step.dependOn(&msdfgen_artifact.step);
+
+    return b.addInstallArtifact(dong_core, .{});
+}
+
+// =============================================================================
+// SDL Backend Build (Pure Zig)
+// =============================================================================
+fn buildSDLBackend(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    platform: PlatformInfo,
+    config: BuildConfig,
+    dong_core_artifact: *std.Build.Step.InstallArtifact,
+) *std.Build.Step.InstallArtifact {
+    const sdl_backend = b.addStaticLibrary(.{
+        .name = "dong_sdl_backend",
+        .target = target,
+        .optimize = optimize,
+    });
+
+    // SDL backend sources
+    sdl_backend.addCSourceFiles(.{
+        .files = &.{
+            "backends/sdl/sdl_gpu_driver.cpp",
+            "backends/sdl/sdl_gpu_driver_init.cpp",
+            "backends/sdl/sdl_gpu_driver_execute.cpp",
+            "backends/sdl/sdl_gpu_driver_resources.cpp",
+            "backends/sdl/sdl_gpu_driver_fonts.cpp",
+            "backends/sdl/sdl_gpu_device.cpp",
+            "backends/sdl/sdl_gpu_surface.cpp",
+            "backends/sdl/sdl_gpu_painter.cpp",
+            "backends/sdl/sdl_shader_manager.cpp",
+            "backends/sdl/sdl_window.cpp",
+            "backends/sdl/sdl_input_adapter.cpp",
+            "backends/sdl/dong_sdl_plugin.cpp",
+            "backends/sdl/dong_sdl_gpu_bridge.cpp",
+            "backends/sdl/gpu_texture_compressor.cpp",
+        },
+        .flags = &.{
+            "-std=c++20",
+            "-DDONG_SDL_BUILDING_DLL",
+        },
+    });
+
+    // SDL_shadercross
+    sdl_backend.addCSourceFiles(.{
+        .files = &.{
+            "third_party/SDL_shadercross/src/SDL_shadercross.c",
+        },
+        .flags = &.{
+            "-DSDL_SHADERCROSS_DXC",
+            "-DSDL_SHADERCROSS_SPIRVCROSS",
+        },
+    });
+
+    // Include directories
+    sdl_backend.addIncludePath(b.path("include"));
+    sdl_backend.addIncludePath(b.path("src"));
+    sdl_backend.addIncludePath(b.path("backends/sdl"));
+    sdl_backend.addIncludePath(b.path("third_party/sdl/include"));
+    sdl_backend.addIncludePath(b.path("third_party/SDL_shadercross/include"));
+    sdl_backend.addIncludePath(b.path("third_party/quickjs"));
+    sdl_backend.addIncludePath(b.path("third_party/lexbor/source"));
+    sdl_backend.addIncludePath(b.path("third_party/yoga"));
+    sdl_backend.addIncludePath(b.path("third_party/freetype/include"));
+    sdl_backend.addIncludePath(b.path("third_party/harfbuzz/src"));
+    sdl_backend.addIncludePath(b.path("third_party")); // For msdfgen/msdfgen.h
+    sdl_backend.addIncludePath(b.path(config.dxc_include_path));
+
+    // Vulkan SDK include for spirv_cross_c.h
+    if (config.vulkan_sdk_path) |vk_path| {
+        if (platform.is_windows) {
+            const vk_include = b.fmt("{s}/Include/spirv_cross", .{vk_path});
+            sdl_backend.addIncludePath(.{ .cwd_relative = vk_include });
+        } else {
+            const vk_include = b.fmt("{s}/include/spirv_cross", .{vk_path});
+            sdl_backend.addIncludePath(.{ .cwd_relative = vk_include });
+        }
+    }
+
+    sdl_backend.linkLibCpp();
+    sdl_backend.linkLibC();
+
+    // Platform-specific settings
+    if (platform.is_windows) {
+        sdl_backend.root_module.addCMacro("_CRT_SECURE_NO_WARNINGS", "");
+        sdl_backend.root_module.addCMacro("NOMINMAX", "");
+        sdl_backend.linkSystemLibrary("user32");
+        sdl_backend.linkSystemLibrary("gdi32");
+    }
+
+    // Shader directory define
+    sdl_backend.root_module.addCMacro("DONG_SDL_SHADER_DIR", "\"backends/sdl/shaders\"");
+
+    // Dependencies
+    sdl_backend.step.dependOn(&dong_core_artifact.step);
+
+    return b.addInstallArtifact(sdl_backend, .{});
+}
+
+// =============================================================================
+// DXC Auto-download
+// =============================================================================
+fn ensureDxc(b: *std.Build, platform: PlatformInfo, config: *BuildConfig) ?*std.Build.Step {
+    // DXC is only needed for Windows desktop builds with SDL backend
+    if (!platform.is_windows or !platform.is_native) {
+        return null;
+    }
+
+    // Check if DXC already exists
+    const dxc_lib_path = config.dxc_lib_path orelse (DXC_DIR ++ "/lib/x64");
+    const dxc_dll_path = DXC_DIR ++ "/bin/x64/dxcompiler.dll";
+
+    // Check if DXC is already downloaded
+    if (std.fs.cwd().access(dxc_dll_path, .{})) |_| {
+        std.debug.print("DXC found at: {s}\n", .{DXC_DIR});
+        config.dxc_lib_path = dxc_lib_path;
+        return null;
+    } else |_| {
+        std.debug.print("DXC not found, will download...\n", .{});
+    }
+
+    // Create download step using PowerShell (Windows)
+    const download_step = b.addSystemCommand(&.{
+        "powershell",
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-Command",
+        b.fmt(
+            \\$ErrorActionPreference = 'Stop'
+            \\$version = '{s}'
+            \\$date = '{s}'
+            \\$outDir = '{s}'
+            \\$zipFile = "$env:TEMP\dxc.zip"
+            \\$url = "https://github.com/microsoft/DirectXShaderCompiler/releases/download/$version/dxc_$date.zip"
+            \\
+            \\Write-Host "Downloading DXC $version..."
+            \\Write-Host "URL: $url"
+            \\
+            \\# Download
+            \\[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+            \\Invoke-WebRequest -Uri $url -OutFile $zipFile -UseBasicParsing
+            \\
+            \\# Extract
+            \\Write-Host "Extracting to $outDir..."
+            \\if (Test-Path $outDir) {{ Remove-Item -Recurse -Force $outDir }}
+            \\Expand-Archive -Path $zipFile -DestinationPath $outDir -Force
+            \\
+            \\# Cleanup
+            \\Remove-Item $zipFile -Force
+            \\
+            \\Write-Host "DXC $version installed to $outDir"
+        , .{ DXC_VERSION, DXC_DATE, DXC_DIR }),
+    });
+
+    config.dxc_lib_path = dxc_lib_path;
+
+    return &download_step.step;
+}
+
