@@ -18,6 +18,7 @@ void Painter::paintMediaElements(const dom::DOMNodePtr& node,
                                 DisplayListBuilder& builder) {
     using painter_detail::collapseWhitespace;
     using painter_detail::makeColorFromCss;
+    using painter_detail::toLowerCopy;
 
     if (!node || !layout_node || is_hidden) {
         return;
@@ -34,13 +35,6 @@ void Painter::paintMediaElements(const dom::DOMNodePtr& node,
         rect.height = layout_node->layout.dimensions[1];
 
         if (rect.width <= 0.0f || rect.height <= 0.0f) return;
-
-        auto toLowerCopy = [](std::string s) {
-            std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
-                return static_cast<char>(std::tolower(c));
-            });
-            return s;
-        };
 
         const std::string object_fit = toLowerCopy(collapseWhitespace(style.object_fit));
         ImageFitMode fit = ImageFitMode::Fill;
@@ -73,13 +67,6 @@ void Painter::paintMediaElements(const dom::DOMNodePtr& node,
         // If video decoder has produced a frame, View will set an internal attribute
         // ("__dong_video_frame") with a special src key ("video://...").
         std::string frame_src = node->getAttribute("__dong_video_frame");
-
-        auto toLowerCopy = [](std::string s) {
-            std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
-                return static_cast<char>(std::tolower(c));
-            });
-            return s;
-        };
 
         const std::string object_fit = toLowerCopy(collapseWhitespace(style.object_fit));
         ImageFitMode fit = ImageFitMode::Fill;

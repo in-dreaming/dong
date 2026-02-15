@@ -1,6 +1,7 @@
 #include "layout_engine.hpp"
 #include "../core/log.h"
 #include "../core/profiler.h"
+#include "../core/string_utils.h"
 #include <yoga/YGNode.h>
 #include <yoga/YGConfig.h>
 #include <yoga/Yoga.h>
@@ -51,28 +52,7 @@ using dong::render::ShapedText;
 using dong::render::TextMeasureCacheKey;
 using dong::render::TextMeasureResult;
 using dong::render::TextMeasureCache;
-
-static std::string collapseWhitespace(const std::string& input) {
-    if (input.empty()) return "";
-    std::string output;
-    output.reserve(input.size());
-    bool in_space = false;
-    for (char c : input) {
-        if (std::isspace(static_cast<unsigned char>(c))) {
-            if (!in_space) {
-                output.push_back(' ');
-                in_space = true;
-            }
-        } else {
-            output.push_back(c);
-            in_space = false;
-        }
-    }
-    size_t first = output.find_first_not_of(' ');
-    if (first == std::string::npos) return "";
-    size_t last = output.find_last_not_of(' ');
-    return output.substr(first, last - first + 1);
-}
+using dong::collapseWhitespace;
 
 // 璁＄畻鍏冪礌鐨勫唴鍦ㄦ枃鏈搴︼紙鍖呭惈 padding锛夛紝鐢ㄤ簬鎸夐挳绛?inline-block 鍏冪礌鐨勮嚜閫傚簲瀹藉害
 // 绗﹀悎 CSS 鏍囧噯锛歸idth: auto 鏃讹紝鍏冪礌瀹藉害 = 鍐呭瀹藉害 + padding + border
@@ -1945,6 +1925,219 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// applyDOMStylesToYoga helper: Fix alignment for inline elements
+// ---------------------------------------------------------------------------
+void Engine::applyYogaInlineAlignmentFixes(dom::DOMNodePtr dom_node, YGNode* yoga_node,
+                                           const dom::ComputedStyle& style) {
+    // Prevent Yoga from stretching inline-level children in block containers
+    if (style.layout_mode != dom::LayoutMode::Flex) {
+        const bool align_is_default = style.align_items.empty() ||
+            style.align_items == "stretch" ||
+            style.align_items == "normal";
+        if (align_is_default && hasInlineLevelChild(dom_node)) {
+            YGNodeStyleSetAlignItems(yoga_node, YGAlignFlexStart);
+        }
+    }
+
+    // Prevent inline-block elements from being stretched by parent
+    auto parent_node = dom_node->getParent();
+    if (parent_node && parent_node->getType() == dom::DOMNode::NodeType::ELEMENT) {
+        const auto& parent_style = parent_node->getComputedStyle();
+        const bool parent_is_flex = (parent_style.layout_mode == dom::LayoutMode::Flex);
+        const bool is_inline_block = (style.display == "inline-block");
+
+        if (!parent_is_flex && is_inline_block) {
+            YGNodeStyleSetAlignSelf(yoga_node, YGAlignFlexStart);
+            if (style.width.isAuto()) {
+                float intrinsic_w = computeIntrinsicTextWidth(dom_node);
+                if (intrinsic_w > 0.0f && intrinsic_w < 10000.0f && std::isfinite(intrinsic_w)) {
+                    YGNodeStyleSetWidth(yoga_node, intrinsic_w);
+                }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// applyDOMStylesToYoga helper: Propagate width to flex-basis for row flex items
+// ---------------------------------------------------------------------------
+void Engine::applyYogaFlexBasisFromWidth(dom::DOMNodePtr dom_node, YGNode* yoga_node,
+                                         const dom::ComputedStyle& style,
+                                         bool width_converted_to_max, float converted_width_value) {
+    bool parent_row_flex = false;
+    if (auto parent = dom_node->getParent()) {
+        if (parent->getType() == dom::DOMNode::NodeType::ELEMENT) {
+            const auto& parent_style = parent->getComputedStyle();
+            if (parent_style.layout_mode == dom::LayoutMode::Flex) {
+                std::string dir = parent_style.flex_direction;
+                if (dir.empty()) dir = "row";
+                if (dir == "row" || dir == "row-reverse") {
+                    parent_row_flex = true;
+                }
+            }
+        }
+    }
+
+    bool has_explicit_width = style.width.isPixel() || style.width.isPercent() || width_converted_to_max;
+    bool has_custom_flex_basis = style.flex_basis.unit != dom::CSSValue::Unit::AUTO;
+    if (parent_row_flex && has_explicit_width && !has_custom_flex_basis) {
+        if (width_converted_to_max) {
+            YGNodeStyleSetFlexBasis(yoga_node, converted_width_value);
+        } else if (style.width.isPixel()) {
+            YGNodeStyleSetFlexBasis(yoga_node, style.width.value);
+        } else if (style.width.isPercent()) {
+            YGNodeStyleSetFlexBasisPercent(yoga_node, style.width.value);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// applyDOMStylesToYoga helper: Special handling for input elements
+// ---------------------------------------------------------------------------
+void Engine::applyYogaInputElementStyles(dom::DOMNodePtr dom_node, YGNode* yoga_node,
+                                         const dom::ComputedStyle& style) {
+    bool is_checkbox_or_radio = false;
+    if (dom_node->hasAttribute("type")) {
+        std::string input_type = dom_node->getAttribute("type");
+        std::transform(input_type.begin(), input_type.end(), input_type.begin(),
+                      [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        is_checkbox_or_radio = (input_type == "checkbox" || input_type == "radio");
+    }
+
+    if (is_checkbox_or_radio) {
+        YGNodeStyleSetWidth(yoga_node, 13.0f);
+        YGNodeStyleSetHeight(yoga_node, 13.0f);
+    } else {
+        float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
+        float pad_t = style.padding_top.isPixel() ? style.padding_top.value : 2.0f;
+        float pad_b = style.padding_bottom.isPixel() ? style.padding_bottom.value : 2.0f;
+        float border_w = style.border_width > 0.0f ? style.border_width : 1.0f;
+        float input_height = font_size + pad_t + pad_b + border_w * 2.0f;
+        YGNodeStyleSetHeight(yoga_node, input_height);
+
+        if (style.width.isAuto()) {
+            YGNodeStyleSetMinWidth(yoga_node, 150.0f);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// applyDOMStylesToYoga helper: Set min sizes for inline elements with text
+// ---------------------------------------------------------------------------
+void Engine::applyYogaInlineElementMinSizes(dom::DOMNodePtr dom_node, YGNode* yoga_node,
+                                            const dom::ComputedStyle& style) {
+    const bool is_inline_level = (style.display == "inline" || style.display == "inline-block");
+    if (!is_inline_level || (!style.width.isAuto() && !style.height.isAuto())) {
+        return;
+    }
+
+    std::string text = collapseWhitespace(dom_node->getTextContent());
+    if (text.empty()) return;
+
+    float font_size_px = style.font_size > 0.0f ? style.font_size : 16.0f;
+    if (!std::isfinite(font_size_px) || font_size_px <= 0.0f) {
+        font_size_px = 16.0f;
+    }
+
+    TextShaper shaper;
+    TextShapeRequest req{};
+    req.text = text;
+    req.font_family = style.font_family;
+    req.font_weight = style.font_weight;
+    req.font_style = style.font_style;
+    req.font_size = font_size_px;
+
+    ShapedText shaped{};
+    if (!shaper.shape(req, shaped) || shaped.glyphs.empty() ||
+        !std::isfinite(shaped.scale_to_pixels) || shaped.scale_to_pixels <= 0.0f) {
+        return;
+    }
+
+    const float scale = shaped.scale_to_pixels;
+
+    // Calculate content width
+    float min_x_units = shaped.glyphs.front().pen_x_units;
+    float max_x_units = shaped.glyphs.front().pen_x_units + shaped.glyphs.front().advance_x_units;
+    for (const auto& g : shaped.glyphs) {
+        min_x_units = std::min(min_x_units, g.pen_x_units);
+        max_x_units = std::max(max_x_units, g.pen_x_units + g.advance_x_units);
+    }
+
+    float content_width_px = (max_x_units - min_x_units) * scale;
+    if (content_width_px < 0.0f || !std::isfinite(content_width_px)) {
+        content_width_px = shaped.width_units * scale;
+    }
+    if (content_width_px < 0.0f) content_width_px = 0.0f;
+
+    // Apply letter-spacing
+    if (style.letter_spacing_em != 0.0f) {
+        const float letter_spacing_px = style.letter_spacing_em * font_size_px;
+        const int glyph_count = static_cast<int>(shaped.glyphs.size());
+        if (glyph_count > 1) {
+            content_width_px += letter_spacing_px * static_cast<float>(glyph_count - 1);
+        }
+    }
+
+    // Apply word-spacing
+    if (style.word_spacing_px != 0.0f) {
+        int space_count = 0;
+        for (const auto& g : shaped.glyphs) {
+            if (g.cluster < text.size() && text[g.cluster] == ' ') {
+                ++space_count;
+            }
+        }
+        int effective_spaces = space_count;
+        if (!shaped.glyphs.empty()) {
+            const auto& g_last = shaped.glyphs.back();
+            if (g_last.cluster < text.size() && text[g_last.cluster] == ' ') {
+                effective_spaces = std::max(0, effective_spaces - 1);
+            }
+        }
+        if (effective_spaces > 0) {
+            content_width_px += style.word_spacing_px * static_cast<float>(effective_spaces);
+        }
+    }
+
+    const float pad_l = style.padding_left.isPixel() ? style.padding_left.value : 0.0f;
+    const float pad_r = style.padding_right.isPixel() ? style.padding_right.value : 0.0f;
+    const float pad_t = style.padding_top.isPixel() ? style.padding_top.value : 0.0f;
+    const float pad_b = style.padding_bottom.isPixel() ? style.padding_bottom.value : 0.0f;
+    const float border_w = style.border_width > 0.0f ? style.border_width : 0.0f;
+
+    if (style.width.isAuto()) {
+        const float min_w = content_width_px + pad_l + pad_r + border_w * 2.0f;
+        if (min_w > 0.0f && min_w < 100000.0f && std::isfinite(min_w)) {
+            YGNodeStyleSetMinWidth(yoga_node, min_w);
+        }
+    }
+
+    if (style.height.isAuto()) {
+        float line_height_units = shaped.line_height_units;
+        if (style.line_height > 0.0f) {
+            if (style.line_height_is_unitless) {
+                float css_line_height_px = style.line_height * font_size_px;
+                line_height_units = css_line_height_px / std::max(scale, 1e-3f);
+            } else {
+                line_height_units = style.line_height / std::max(scale, 1e-3f);
+            }
+        }
+        if (line_height_units <= 0.0f || !std::isfinite(line_height_units)) {
+            line_height_units = font_size_px / std::max(scale, 1e-3f);
+        }
+        const float min_line_height_px = font_size_px * 1.2f;
+        float line_height_px = line_height_units * scale;
+        if (line_height_px < min_line_height_px) {
+            line_height_px = min_line_height_px;
+        }
+
+        const float min_h = line_height_px + pad_t + pad_b + border_w * 2.0f;
+        if (min_h > 0.0f && min_h < 100000.0f && std::isfinite(min_h)) {
+            YGNodeStyleSetMinHeight(yoga_node, min_h);
+        }
+    }
+}
+
 
 void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yoga_node,
                                      float parent_content_width_px, float parent_content_height_px) {
@@ -2561,6 +2754,351 @@ void Engine::layoutBlockFormattingContext(dom::DOMNodePtr root) {
 
     // Start from root with no parent
     walk(root, nullptr);
+}
+
+// ---------------------------------------------------------------------------
+// IFC Helper: Collect inline items from container's children
+// ---------------------------------------------------------------------------
+void Engine::collectInlineItems(const dom::DOMNodePtr& container,
+                                const IFCContext& ctx,
+                                std::vector<InlineItem>& items) {
+    const auto& container_style = container->getComputedStyle();
+
+    for (const auto& child : container->getChildren()) {
+        if (!child) continue;
+
+        // Handle text nodes
+        if (child->getType() == dom::DOMNode::NodeType::TEXT) {
+            InlineMetrics metrics{};
+            if (!computeInlineMetricsForTextNode(child, metrics, container_style.font_size)) {
+                continue;
+            }
+            InlineItem item{};
+            item.node = child;
+            item.preferred_width = metrics.total_width_px > 0.0f ? metrics.total_width_px : metrics.content_width_px;
+            if (item.preferred_width <= 0.0f) item.preferred_width = 1.0f;
+            item.preferred_height = metrics.line_height_px > 0.0f ? metrics.line_height_px :
+                (container_style.font_size > 0.0f ? container_style.font_size * 1.2f : 16.0f);
+            item.line_height_px = item.preferred_height;
+            item.baseline_from_border_top = metrics.baseline_from_content_top_px;
+            item.vertical_align = "baseline";
+            items.push_back(item);
+            continue;
+        }
+
+        if (child->getType() != dom::DOMNode::NodeType::ELEMENT) continue;
+
+        const auto& child_style = child->getComputedStyle();
+        const std::string child_tag = child->getTagName();
+
+        // Skip absolutely positioned elements
+        if (child_style.position == "absolute") continue;
+        if (!isInlineLevelDisplay(child_style.display)) continue;
+
+        // Handle <br> as line break
+        if (child_tag == "br") {
+            InlineItem item{};
+            item.node = child;
+            item.is_line_break = true;
+            items.push_back(item);
+            continue;
+        }
+
+        InlineMetrics metrics{};
+        bool has_text_metrics = computeInlineMetricsForNode(child, metrics, container_style.font_size);
+
+        bool has_explicit_width = child_style.width.isPixel() || child_style.width.isPercent();
+        bool has_explicit_height = child_style.height.isPixel() || child_style.height.isPercent();
+        bool has_min_width = child_style.min_width.isPixel() || child_style.min_width.isPercent();
+        bool has_min_height = child_style.min_height.isPixel() || child_style.min_height.isPercent();
+
+        if (!has_text_metrics && !has_explicit_width && !has_explicit_height && !has_min_width && !has_min_height) {
+            continue;
+        }
+
+        InlineItem item{};
+        item.node = child;
+        item.margin_left = parsePixelValue(child_style.margin_left, ctx.content_w);
+        item.margin_right = parsePixelValue(child_style.margin_right, ctx.content_w);
+
+        float pad_l = child_style.padding_left.isPixel() ? child_style.padding_left.value : 0.0f;
+        float pad_r = child_style.padding_right.isPixel() ? child_style.padding_right.value : 0.0f;
+        float pad_t = child_style.padding_top.isPixel() ? child_style.padding_top.value : 0.0f;
+        float pad_b = child_style.padding_bottom.isPixel() ? child_style.padding_bottom.value : 0.0f;
+        float border_w = child_style.border_width > 0.0f ? child_style.border_width : 0.0f;
+
+        // Calculate width
+        float width_px = 0.0f;
+        if (child_style.width.isPixel()) {
+            width_px = child_style.width.value;
+        } else if (child_style.width.isPercent()) {
+            width_px = parsePercentValue(child_style.width, ctx.content_w);
+        } else if (has_text_metrics) {
+            width_px = metrics.total_width_px + border_w * 2.0f;
+        }
+        if (width_px <= 0.0f && has_text_metrics) width_px = metrics.line_height_px;
+        if (width_px <= 0.0f) width_px = 16.0f;
+
+        // Apply min-width
+        if (child_style.min_width.isPixel() && child_style.min_width.value > width_px) {
+            width_px = child_style.min_width.value;
+        } else if (child_style.min_width.isPercent()) {
+            float min_w = parsePercentValue(child_style.min_width, ctx.content_w);
+            if (min_w > width_px) width_px = min_w;
+        }
+
+        // Calculate height
+        float height_px = 0.0f;
+        if (child_style.height.isPixel()) {
+            height_px = child_style.height.value;
+        } else if (child_style.height.isPercent() && has_text_metrics) {
+            height_px = metrics.line_height_px + pad_t + pad_b + border_w * 2.0f;
+        } else if (has_text_metrics) {
+            height_px = metrics.line_height_px + pad_t + pad_b + border_w * 2.0f;
+        }
+        if (height_px <= 0.0f && has_text_metrics) height_px = metrics.line_height_px;
+        if (height_px <= 0.0f) height_px = 16.0f;
+
+        // Apply min-height
+        if (child_style.min_height.isPixel() && child_style.min_height.value > height_px) {
+            height_px = child_style.min_height.value;
+        }
+
+        item.preferred_width = width_px;
+        item.preferred_height = height_px;
+        item.line_height_px = height_px;
+
+        if (has_text_metrics) {
+            item.baseline_from_border_top = border_w + pad_t + metrics.baseline_from_content_top_px;
+        } else {
+            item.baseline_from_border_top = height_px;
+        }
+        item.vertical_align = child_style.vertical_align;
+        items.push_back(item);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// IFC Helper: Break inline items into lines
+// ---------------------------------------------------------------------------
+void Engine::breakIntoLines(std::vector<InlineItem>& items,
+                           const IFCContext& ctx,
+                           std::vector<LineInfo>& lines) {
+    LineInfo current_line{};
+    if (ctx.has_container_text_metrics) {
+        current_line.max_baseline_from_border_top = ctx.container_baseline_from_border_top;
+        current_line.max_line_height_px = ctx.container_line_height_px;
+    }
+    float current_line_used_w = 0.0f;
+
+    for (size_t i = 0; i < items.size(); ++i) {
+        InlineItem& item = items[i];
+
+        // Handle <br>: force line break
+        if (item.is_line_break) {
+            if (!current_line.item_indices.empty()) {
+                lines.push_back(current_line);
+                current_line = LineInfo{};
+                if (ctx.has_container_text_metrics) {
+                    current_line.max_baseline_from_border_top = ctx.container_baseline_from_border_top;
+                    current_line.max_line_height_px = ctx.container_line_height_px;
+                }
+                current_line_used_w = 0.0f;
+            }
+            continue;
+        }
+
+        float total_w = item.margin_left + item.preferred_width + item.margin_right;
+
+        // Wrap to next line if needed
+        if (!current_line.item_indices.empty() && current_line_used_w + total_w > ctx.content_w + 0.1f) {
+            lines.push_back(current_line);
+            current_line = LineInfo{};
+            if (ctx.has_container_text_metrics) {
+                current_line.max_baseline_from_border_top = ctx.container_baseline_from_border_top;
+                current_line.max_line_height_px = ctx.container_line_height_px;
+            }
+            current_line_used_w = 0.0f;
+        }
+
+        item.offset_x_in_content = current_line_used_w + item.margin_left;
+        current_line.item_indices.push_back(i);
+        current_line_used_w += total_w;
+
+        if (item.baseline_from_border_top > current_line.max_baseline_from_border_top) {
+            current_line.max_baseline_from_border_top = item.baseline_from_border_top;
+        }
+        if (item.line_height_px > current_line.max_line_height_px) {
+            current_line.max_line_height_px = item.line_height_px;
+        }
+    }
+
+    if (!current_line.item_indices.empty()) {
+        lines.push_back(current_line);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// IFC Helper: Layout items within lines (vertical alignment)
+// ---------------------------------------------------------------------------
+void Engine::layoutLineItems(std::vector<InlineItem>& items,
+                            const std::vector<LineInfo>& lines,
+                            const IFCContext& ctx,
+                            const dom::DOMNodePtr& container) {
+    float current_line_top = ctx.content_y;
+
+    for (const LineInfo& line : lines) {
+        float baseline_y = current_line_top + line.max_baseline_from_border_top;
+
+        for (size_t idx : line.item_indices) {
+            InlineItem& item = items[idx];
+            auto it_child_layout = layout_cache.find(item.node.get());
+
+            if (it_child_layout == layout_cache.end() || !it_child_layout->second) {
+                // Create synthetic layout entries for text nodes
+                if (item.node && item.node->getType() == dom::DOMNode::NodeType::TEXT) {
+                    auto& text_layout = layout_cache[item.node.get()];
+                    text_layout = std::make_unique<LayoutNode>();
+                    it_child_layout = layout_cache.find(item.node.get());
+                } else {
+                    continue;
+                }
+            }
+            LayoutNode* child_layout = it_child_layout->second.get();
+
+            float new_x = ctx.content_x + item.offset_x_in_content;
+            float new_y = 0.0f;
+
+            // Calculate Y based on vertical-align
+            const std::string& va = item.vertical_align;
+            if (va == "top") {
+                new_y = current_line_top;
+            } else if (va == "bottom") {
+                new_y = current_line_top + line.max_line_height_px - item.preferred_height;
+            } else if (va == "middle") {
+                float line_center = current_line_top + line.max_line_height_px * 0.5f;
+                new_y = line_center - item.preferred_height * 0.5f;
+            } else {
+                // baseline (default)
+                new_y = baseline_y - item.baseline_from_border_top;
+            }
+
+            bool layout_changed = (child_layout->x != new_x) || (child_layout->y != new_y) ||
+                                  (child_layout->width != item.preferred_width) ||
+                                  (child_layout->height != item.preferred_height);
+
+            child_layout->x = new_x;
+            child_layout->y = new_y;
+            child_layout->width = item.preferred_width;
+            child_layout->height = item.preferred_height;
+            child_layout->layout.position[0] = child_layout->x;
+            child_layout->layout.position[1] = child_layout->y;
+            child_layout->layout.dimensions[0] = child_layout->width;
+            child_layout->layout.dimensions[1] = child_layout->height;
+
+            if (layout_changed) {
+                dirty_rect_.expand(child_layout->x, child_layout->y,
+                                   child_layout->width, child_layout->height);
+            }
+        }
+        current_line_top += line.max_line_height_px;
+    }
+
+    // Update container height if needed
+    const auto& container_style = container->getComputedStyle();
+    auto it_container = layout_cache.find(container.get());
+    if (it_container != layout_cache.end() && it_container->second) {
+        LayoutNode* container_layout = it_container->second.get();
+        float total_content_height = current_line_top - ctx.content_y;
+        if (total_content_height > 0.0f) {
+            float new_container_height = ctx.pad_top + total_content_height + ctx.pad_bottom;
+            if (!container_style.height.isPixel() && new_container_height > container_layout->height) {
+                container_layout->height = new_container_height;
+                container_layout->layout.dimensions[1] = new_container_height;
+                dirty_rect_.expand(container_layout->x, container_layout->y,
+                                 container_layout->width, container_layout->height);
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// IFC Helper: Propagate height changes bottom-up
+// ---------------------------------------------------------------------------
+float Engine::propagateIFCHeights(const dom::DOMNodePtr& node) {
+    if (!node || node->getType() != dom::DOMNode::NodeType::ELEMENT) {
+        return 0.0f;
+    }
+
+    const auto& style = node->getComputedStyle();
+    if (style.display == "none") return 0.0f;
+
+    auto it = layout_cache.find(node.get());
+    if (it == layout_cache.end() || !it->second) return 0.0f;
+    LayoutNode* layout = it->second.get();
+
+    if (style.position == "absolute" || style.position == "fixed") return 0.0f;
+
+    float max_child_bottom = 0.0f;
+    for (const auto& child : node->getChildren()) {
+        if (!child || child->getType() != dom::DOMNode::NodeType::ELEMENT) continue;
+        const auto& child_style = child->getComputedStyle();
+        if (child_style.display == "none" ||
+            child_style.position == "absolute" ||
+            child_style.position == "fixed") continue;
+
+        float child_bottom = propagateIFCHeights(child);
+        if (child_bottom > max_child_bottom) max_child_bottom = child_bottom;
+    }
+
+    if (max_child_bottom > 0.0f && !style.height.isPixel()) {
+        float pad_bottom = style.padding_bottom.isPixel() ? style.padding_bottom.value : 0.0f;
+        float border_bottom = style.border_width > 0.0f ? style.border_width : 0.0f;
+        float required_height = max_child_bottom - layout->y + pad_bottom + border_bottom;
+
+        if (required_height > layout->height) {
+            layout->height = required_height;
+            layout->layout.dimensions[1] = required_height;
+            dirty_rect_.expand(layout->x, layout->y, layout->width, layout->height);
+        }
+    }
+
+    return layout->y + layout->height;
+}
+
+// ---------------------------------------------------------------------------
+// IFC Helper: Adjust sibling positions after IFC height changes
+// ---------------------------------------------------------------------------
+void Engine::adjustPositionsAfterIFC(const dom::DOMNodePtr& node, float parent_delta_y) {
+    if (!node || node->getType() != dom::DOMNode::NodeType::ELEMENT) return;
+
+    const auto& style = node->getComputedStyle();
+    if (style.display == "none") return;
+
+    auto it = layout_cache.find(node.get());
+    if (it == layout_cache.end() || !it->second) return;
+    LayoutNode* layout = it->second.get();
+
+    if (std::abs(parent_delta_y) > 0.1f) {
+        layout->y += parent_delta_y;
+        layout->layout.position[1] = layout->y;
+        dirty_rect_.expand(layout->x, layout->y, layout->width, layout->height);
+    }
+
+    for (const auto& child : node->getChildren()) {
+        if (child && child->getType() == dom::DOMNode::NodeType::ELEMENT) {
+            const auto& child_style = child->getComputedStyle();
+            if (child_style.display != "none" &&
+                child_style.position != "absolute" &&
+                child_style.position != "fixed") {
+                adjustPositionsAfterIFC(child, 0.0f);
+            }
+        }
+    }
+
+    if (style.display != "flex" && style.display != "inline-flex") {
+        adjustSiblingYPositions(node, layout, style);
+    }
 }
 
 void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {

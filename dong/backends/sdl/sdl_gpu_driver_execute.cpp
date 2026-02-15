@@ -116,6 +116,16 @@ struct ClipUniformBlock {
     float clip_meta[4];
 };
 
+// Shared uniform structure for layer compositing operations
+struct LayerCompositeUniforms {
+    float rect[4];
+    float uv_rect[4];
+    float viewport[4];
+    float transform[8];
+    float tint[4];
+    ClipUniformBlock clip;
+};
+
 struct PipelineBindingState {
     enum class ActivePipeline : uint8_t {
         None,
@@ -745,15 +755,6 @@ void SDLGPUDriver::executeBeginIsolatedLayer(ExecuteContext& ctx, const GPUComma
         // 否则若该图层内部存在"子隔离图层"（例如 video layer 每帧重栅格），
         // 原本在 EndIsolatedLayer 再合成缓存会把子层的新内容覆盖掉，表现为视频冻结。
         if (ctx.pass && image_pipeline_ && image_sampler_ && layer_state.bounds.width > 0.0f && layer_state.bounds.height > 0.0f) {
-            struct LayerCompositeUniforms {
-                float rect[4];
-                float uv_rect[4];
-                float viewport[4];
-                float transform[8];
-                float tint[4];
-                ClipUniformBlock clip;
-            };
-
             LayerCompositeUniforms u{};
             u.rect[0] = layer_state.bounds.x;
             u.rect[1] = layer_state.bounds.y;
@@ -999,15 +1000,6 @@ void SDLGPUDriver::executeEndIsolatedLayer(ExecuteContext& ctx, const GPUCommand
             return;
         }
 
-        struct LayerCompositeUniforms {
-            float rect[4];
-            float uv_rect[4];
-            float viewport[4];
-            float transform[8];
-            float tint[4];
-            ClipUniformBlock clip;
-        };
-
         LayerCompositeUniforms u{};
         u.rect[0] = layer_info.bounds.x;
         u.rect[1] = layer_info.bounds.y;
@@ -1118,15 +1110,6 @@ void SDLGPUDriver::executeEndIsolatedLayer(ExecuteContext& ctx, const GPUCommand
     if (layer_info.bounds.width <= 0.0f || layer_info.bounds.height <= 0.0f) {
         return;
     }
-
-    struct LayerCompositeUniforms {
-        float rect[4];
-        float uv_rect[4];
-        float viewport[4];
-        float transform[8];
-        float tint[4];
-        ClipUniformBlock clip;
-    };
 
     LayerCompositeUniforms u{};
     u.rect[0] = layer_info.bounds.x;

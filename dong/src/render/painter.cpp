@@ -10,10 +10,19 @@
 #include <cstdlib>
 #include "../core/log.h"
 #include "../core/profiler.h"
+#include "../core/string_utils.h"
 namespace dong::render {
 
 
 namespace {
+
+using dong::collapseWhitespace;
+using dong::toLower;
+
+// Helper to lowercase + collapse whitespace
+inline std::string toLowerCollapsed(const std::string& s) {
+    return toLower(collapseWhitespace(s));
+}
 
 // CSS 颜色解析器（正式版）：支�?#rgb/#rgba/#rrggbb/#rrggbbaa �?rgb()/rgba() 子集
 static void parseCssColor(const std::string& css, uint8_t& r, uint8_t& g, uint8_t& b, uint8_t& a) {
@@ -231,30 +240,6 @@ static DrawLinearGradientData buildLinearGradientData(
         data.stops[i].position = grad.stops[i].position;
     }
     return data;
-}
-
-static std::string collapseWhitespace(const std::string& input) {
-    if (input.empty()) return "";
-
-    std::string output;
-    output.reserve(input.size());
-    bool in_space = false;
-    for (char c : input) {
-        if (std::isspace(static_cast<unsigned char>(c))) {
-            if (!in_space) {
-                output.push_back(' ');
-                in_space = true;
-            }
-        } else {
-            output.push_back(c);
-            in_space = false;
-        }
-    }
-
-    size_t first = output.find_first_not_of(' ');
-    if (first == std::string::npos) return "";
-    size_t last = output.find_last_not_of(' ');
-    return output.substr(first, last - first + 1);
 }
 
 // 简单的文本宽度估算（后续用 HarfBuzz 替换�?
@@ -521,20 +506,13 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         const float viewport_w = surface_ ? static_cast<float>(surface_->getWidth()) : 800.0f;
         const float viewport_h = surface_ ? static_cast<float>(surface_->getHeight()) : 600.0f;
 
-        auto toLowerCopy = [](std::string s) {
-            std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
-                return static_cast<char>(std::tolower(c));
-            });
-            return s;
-        };
-
         auto resolvePx = [&](const dong::dom::CSSValue& v, float parent_size) -> float {
             return v.resolvePixels(parent_size, 16.0f, viewport_w, viewport_h);
         };
 
         // Border helpers: support per-side overrides, matching layout_engine.cpp semantics.
-        auto normalizeBorderStyle = [&](std::string s) -> std::string {
-            return toLowerCopy(collapseWhitespace(s));
+        auto normalizeBorderStyle = [&](const std::string& s) -> std::string {
+            return dong::toLower(collapseWhitespace(s));
         };
         auto effectiveBorderStyle = [&](const std::string& side_style) -> std::string {
             const std::string& st = !side_style.empty() ? side_style : style.border_style;
@@ -584,9 +562,9 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
             return bg_border_box;
         };
 
-        const std::string bg_clip_kw = toLowerCopy(collapseWhitespace(style.background_clip));
-        const std::string bg_origin_kw = toLowerCopy(collapseWhitespace(style.background_origin));
-        const std::string bg_attach_kw = toLowerCopy(collapseWhitespace(style.background_attachment));
+        const std::string bg_clip_kw = toLowerCollapsed(style.background_clip);
+        const std::string bg_origin_kw = toLowerCollapsed(style.background_origin);
+        const std::string bg_attach_kw = toLowerCollapsed(style.background_attachment);
 
         Rect bg_clip_rect = pickBox(bg_clip_kw);
         Rect bg_origin_rect = pickBox(bg_origin_kw);
@@ -903,16 +881,9 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
             }
             
             if (!image_url.empty()) {
-                auto toLowerCopy = [](std::string s) {
-                    std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
-                        return static_cast<char>(std::tolower(c));
-                    });
-                    return s;
-                };
-
-                const std::string bg_size = toLowerCopy(collapseWhitespace(style.background_size));
-                const std::string bg_repeat = toLowerCopy(collapseWhitespace(style.background_repeat));
-                const std::string bg_pos = toLowerCopy(collapseWhitespace(style.background_position));
+                const std::string bg_size = toLowerCollapsed(style.background_size);
+                const std::string bg_repeat = toLowerCollapsed(style.background_repeat);
+                const std::string bg_pos = toLowerCollapsed(style.background_position);
 
                 // Backgrounds are clipped to background-clip.
                 float bg_clip_radius = radius;

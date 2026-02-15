@@ -97,6 +97,17 @@ private:
     void mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yoga_node,
                                 float parent_content_width_px, float parent_content_height_px);
 
+    // applyDOMStylesToYoga helpers (refactored)
+    void applyYogaInlineAlignmentFixes(dom::DOMNodePtr dom_node, YGNode* yoga_node,
+                                       const dom::ComputedStyle& style);
+    void applyYogaFlexBasisFromWidth(dom::DOMNodePtr dom_node, YGNode* yoga_node,
+                                     const dom::ComputedStyle& style,
+                                     bool width_converted_to_max, float converted_width_value);
+    void applyYogaInputElementStyles(dom::DOMNodePtr dom_node, YGNode* yoga_node,
+                                     const dom::ComputedStyle& style);
+    void applyYogaInlineElementMinSizes(dom::DOMNodePtr dom_node, YGNode* yoga_node,
+                                        const dom::ComputedStyle& style);
+
 
     // CSS unit conversion
     float parsePixelValue(const dom::CSSValue& value, float parent_size = 0);
@@ -110,6 +121,52 @@ private:
 
     // Inline formatting context layout
     void layoutInlineFormattingContexts(dom::DOMNodePtr root);
+
+    // IFC helper structures and functions (refactored from layoutInlineFormattingContexts)
+    struct InlineItem {
+        dom::DOMNodePtr node;
+        float margin_left = 0.0f;
+        float margin_right = 0.0f;
+        float preferred_width = 0.0f;
+        float preferred_height = 0.0f;
+        float baseline_from_border_top = 0.0f;
+        float line_height_px = 0.0f;
+        float offset_x_in_content = 0.0f;
+        std::string vertical_align = "baseline";
+        bool is_line_break = false;
+    };
+
+    struct LineInfo {
+        std::vector<size_t> item_indices;
+        float max_baseline_from_border_top = 0.0f;
+        float max_line_height_px = 0.0f;
+    };
+
+    struct IFCContext {
+        float container_x = 0.0f;
+        float container_y = 0.0f;
+        float content_x = 0.0f;
+        float content_y = 0.0f;
+        float content_w = 0.0f;
+        float pad_top = 0.0f;
+        float pad_bottom = 0.0f;
+        float container_baseline_from_border_top = 0.0f;
+        float container_line_height_px = 0.0f;
+        bool has_container_text_metrics = false;
+    };
+
+    void collectInlineItems(const dom::DOMNodePtr& container,
+                           const IFCContext& ctx,
+                           std::vector<InlineItem>& items);
+    void breakIntoLines(std::vector<InlineItem>& items,
+                       const IFCContext& ctx,
+                       std::vector<LineInfo>& lines);
+    void layoutLineItems(std::vector<InlineItem>& items,
+                        const std::vector<LineInfo>& lines,
+                        const IFCContext& ctx,
+                        const dom::DOMNodePtr& container);
+    float propagateIFCHeights(const dom::DOMNodePtr& node);
+    void adjustPositionsAfterIFC(const dom::DOMNodePtr& node, float parent_delta_y);
 
     // Positioned layout (position: absolute)
     void layoutPositionedElements(dom::DOMNodePtr root);

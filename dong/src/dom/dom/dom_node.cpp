@@ -4,6 +4,7 @@
 #include "../focus_manager.hpp"
 #include "../event_system.hpp"
 #include "../html/html_parser.hpp"
+#include "../../core/string_utils.h"
 #include <iostream>
 #include <algorithm>
 #include <cctype>
@@ -865,15 +866,10 @@ void DOMNode::clearStyleDirtyRecursive() {
 
 namespace {
 
-static std::string toLowerCopy(std::string s) {
-    std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
-        return static_cast<char>(std::tolower(c));
-    });
-    return s;
-}
+using dong::toLower;
 
 static bool isScrollOverflowValue(const std::string& v) {
-    const std::string lowered = toLowerCopy(v);
+    const std::string lowered = toLower(v);
     return lowered == "scroll" || lowered == "auto";
 }
 

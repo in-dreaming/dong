@@ -11,8 +11,11 @@
 
 #include "../display_list.hpp" // Color, DrawGlyphRunData
 #include "../../dom/css/computed_style.hpp"
+#include "../../core/string_utils.h"
 
 namespace dong::render::painter_detail {
+
+using dong::collapseWhitespace;
 
 // CSS 颜色解析器：支持 #rgb/#rgba/#rrggbb/#rrggbbaa 与 rgb()/rgba() 子集
 inline void parseCssColor(const std::string& css, uint8_t& r, uint8_t& g, uint8_t& b, uint8_t& a) {
@@ -200,36 +203,9 @@ inline void fillTextShadow(DrawGlyphRunData& glyph_run, const dong::dom::Compute
     }
 }
 
-inline std::string collapseWhitespace(const std::string& input) {
-    if (input.empty()) return "";
-
-    std::string output;
-    output.reserve(input.size());
-    bool in_space = false;
-    for (char c : input) {
-        if (std::isspace(static_cast<unsigned char>(c))) {
-            if (!in_space) {
-                output.push_back(' ');
-                in_space = true;
-            }
-        } else {
-            output.push_back(c);
-            in_space = false;
-        }
-    }
-
-    size_t first = output.find_first_not_of(' ');
-    if (first == std::string::npos) return "";
-    size_t last = output.find_last_not_of(' ');
-    return output.substr(first, last - first + 1);
-}
-
-inline std::string toLowerCopy(std::string s) {
-    std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
-        return static_cast<char>(std::tolower(c));
-    });
-    return s;
-}
+// Use shared toLower from string_utils.h
+using dong::toLower;
+inline std::string toLowerCopy(const std::string& s) { return toLower(s); }
 
 // Similar to collapseWhitespace, but preserves explicit newlines (\n).
 // Used to implement `white-space: pre-line`-like behavior without destroying line breaks.
