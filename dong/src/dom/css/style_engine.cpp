@@ -995,34 +995,11 @@ void StyleEngine::processPseudoElements(DOMNodePtr node) {
                 
                 if (matcher_.matches(base_selector, node)) {
                     has_before = true;
-                    // Apply rule styles to before_style
                     const auto& rs = rule.style;
                     if (!rs.content.empty() || rs.content == "") {
                         before_style.content = rs.content;
                     }
-                    // Copy other properties
-                    if (!rs.display.empty()) {
-                        before_style.display = rs.display;
-                        before_style.layout_mode = deriveLayoutModeFromDisplay(rs.display);
-                    }
-                    if (!rs.color.empty()) before_style.color = rs.color;
-                    if (!rs.background_color.empty()) before_style.background_color = rs.background_color;
-                    if (rs.width.value != 0.0f || !rs.width.isAuto()) before_style.width = rs.width;
-                    if (rs.height.value != 0.0f || !rs.height.isAuto()) before_style.height = rs.height;
-                    before_style.margin_top = rs.margin_top;
-                    before_style.margin_right = rs.margin_right;
-                    before_style.margin_bottom = rs.margin_bottom;
-                    before_style.margin_left = rs.margin_left;
-                    before_style.padding_top = rs.padding_top;
-                    before_style.padding_right = rs.padding_right;
-                    before_style.padding_bottom = rs.padding_bottom;
-                    before_style.padding_left = rs.padding_left;
-                    if (rs.font_size != 16.0f) before_style.font_size = rs.font_size;
-                    if (!rs.font_family.empty()) before_style.font_family = rs.font_family;
-                    if (rs.border_radius > 0.0f) before_style.border_radius = rs.border_radius;
-                    if (rs.border_width > 0.0f) before_style.border_width = rs.border_width;
-                    if (!rs.border_color.empty()) before_style.border_color = rs.border_color;
-                    if (!rs.border_style.empty()) before_style.border_style = rs.border_style;
+                    applyRuleProperties(rs, before_style);
                 }
             }
             
@@ -1042,28 +1019,7 @@ void StyleEngine::processPseudoElements(DOMNodePtr node) {
                     if (!rs.content.empty() || rs.content == "") {
                         after_style.content = rs.content;
                     }
-                    if (!rs.display.empty()) {
-                        after_style.display = rs.display;
-                        after_style.layout_mode = deriveLayoutModeFromDisplay(rs.display);
-                    }
-                    if (!rs.color.empty()) after_style.color = rs.color;
-                    if (!rs.background_color.empty()) after_style.background_color = rs.background_color;
-                    if (rs.width.value != 0.0f || !rs.width.isAuto()) after_style.width = rs.width;
-                    if (rs.height.value != 0.0f || !rs.height.isAuto()) after_style.height = rs.height;
-                    after_style.margin_top = rs.margin_top;
-                    after_style.margin_right = rs.margin_right;
-                    after_style.margin_bottom = rs.margin_bottom;
-                    after_style.margin_left = rs.margin_left;
-                    after_style.padding_top = rs.padding_top;
-                    after_style.padding_right = rs.padding_right;
-                    after_style.padding_bottom = rs.padding_bottom;
-                    after_style.padding_left = rs.padding_left;
-                    if (rs.font_size != 16.0f) after_style.font_size = rs.font_size;
-                    if (!rs.font_family.empty()) after_style.font_family = rs.font_family;
-                    if (rs.border_radius > 0.0f) after_style.border_radius = rs.border_radius;
-                    if (rs.border_width > 0.0f) after_style.border_width = rs.border_width;
-                    if (!rs.border_color.empty()) after_style.border_color = rs.border_color;
-                    if (!rs.border_style.empty()) after_style.border_style = rs.border_style;
+                    applyRuleProperties(rs, after_style);
                 }
             }
         }
