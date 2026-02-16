@@ -67,7 +67,7 @@
 
 |元素|状态|说明|
 |---|---|---|
-|`<a>`|✅支持|支持href、target属性|
+|`<a>`|⚠️部分支持|支持href、target属性，但缺少默认样式(蓝色/下划线/pointer光标)|
 |`<span>`|✅支持|核心内联容器|
 |`<br>`|✅支持|换行|
 |`<em>`|✅支持|斜体样式|
@@ -147,12 +147,12 @@
 |元素|状态|说明|
 |---|---|---|
 |`<form>`|⚠️部分支持|仅作为容器，无提交|
-|`<label>`|✅支持|for属性关联|
+|`<label>`|⚠️部分支持|for属性解析，但点击label不聚焦关联input|
 |`<input>`|⚠️部分支持|见下方input类型表|
 |`<button>`|✅支持|可点击按钮|
-|`<select>`|✅支持|下拉选择框|
-|`<option>`|✅支持|选项|
-|`<optgroup>`|✅支持|选项分组|
+|`<select>`|⚠️部分支持|解析支持，但无下拉弹出渲染、无键盘导航|
+|`<option>`|⚠️部分支持|解析支持，依赖select完整实现|
+|`<optgroup>`|⚠️部分支持|解析支持，无视觉分组|
 |`<textarea>`|✅支持|多行文本输入|
 |`<output>`|✅支持|作为内联容器|
 |`<progress>`|✅支持|进度条渲染|
@@ -172,8 +172,8 @@
 |`url`|⚠️部分支持|作为text处理|
 |`tel`|⚠️部分支持|作为text处理|
 |`search`|⚠️部分支持|作为text处理|
-|`checkbox`|✅支持|复选框|
-|`radio`|✅支持|单选按钮|
+|`checkbox`|⚠️部分支持|渲染支持，但点击不切换checked状态|
+|`radio`|⚠️部分支持|渲染支持，但点击不切换，不互斥|
 |`range`|✅支持|滑块|
 |`color`|⚠️可演进|需颜色选择器|
 |`date`|⚠️可演进|需日期选择器|
@@ -191,9 +191,9 @@
 
 |元素|状态|说明|
 |---|---|---|
-|`<details>`|✅支持|可折叠内容|
-|`<summary>`|✅支持|折叠标题|
-|`<dialog>`|✅支持|模态对话框|
+|`<details>`|⚠️部分支持|解析支持，但无点击展开/折叠行为、无open属性切换、无disclosure triangle|
+|`<summary>`|⚠️部分支持|解析支持，但无折叠交互、无默认list-item样式|
+|`<dialog>`|⚠️部分支持|解析支持，但无showModal()/show()/close()、无::backdrop、无top-layer|
 |`<menu>`|❌不支持|上下文菜单|
 
 ### 2.12 脚本元素
@@ -205,9 +205,40 @@
 |`<template>`|✅支持|模板克隆|
 |`<slot>`|⚠️可演进|Web Components|
 
+### 2.13 全局属性支持
+
+|属性|状态|说明|
+|---|---|---|
+|`id`|✅支持|lexbor已支持|
+|`class`|✅支持|lexbor已支持|
+|`style`|✅支持|内联样式|
+|`hidden`|⚠️待修复|属性可解析但无display:none行为|
+|`tabindex`|⚠️部分支持|属性可存储，焦点顺序行为待完善|
+|`autofocus`|❌待实现|页面加载后自动聚焦|
+|`data-*`|⚠️部分支持|属性可存储，JS dataset API缺失|
+|`dir`|⚠️部分支持|CSS direction存在但HTML属性未映射|
+|`lang`|⚠️待实现|未传递给HarfBuzz做语言感知塑形|
+|`title`|⚠️部分支持|属性可存储，无tooltip渲染|
+|`inert`|❌待实现|不可交互子树|
+|`draggable`|❌待实现|拖拽系统|
+|`contenteditable`|❌待实现|富文本编辑|
+|`inputmode`|❌待实现|移动端虚拟键盘提示|
+|`role`|⚠️部分支持|属性可存储，无无障碍树|
+|`aria-*`|⚠️部分支持|属性可存储，无无障碍树|
+
 ---
 
 ## 3. CSS属性支持清单
+
+### 3.0 已知系统性缺陷
+
+**继承检测机制有误**：`StyleEngine::inheritFromParent()` 使用默认值比较（如 `color=="#000000"` 则继承），导致显式设置黑色被错误覆盖。需添加"属性已显式设置"标志位。
+
+**缺失CSS全局关键字**：`inherit` / `initial` / `unset` / `revert` 均不支持。
+
+**`!important` 未支持**：声明中的 `!important` 可能不影响级联优先级。
+
+**缺失可继承属性传播**：`visibility`, `text-indent`, `text-transform`, `word-break`, `overflow-wrap`, `word-spacing` 未在继承函数中处理。
 
 ### 3.1 盒模型
 
@@ -221,15 +252,15 @@
 |`max-height`|✅支持|Yoga已支持|
 |`margin`|✅支持|Yoga已支持|
 |`margin-top/right/bottom/left`|✅支持|Yoga已支持|
-|`margin-inline/block`|✅支持|映射到Yoga|
+|`margin-inline/block`|⚠️部分支持|逻辑属性简写缺失，需映射到物理属性|
 |`padding`|✅支持|Yoga已支持|
 |`padding-top/right/bottom/left`|✅支持|Yoga已支持|
-|`padding-inline/block`|✅支持|映射到Yoga|
+|`padding-inline/block`|⚠️部分支持|逻辑属性简写缺失，需映射到物理属性|
 |`border`|✅支持|Yoga已支持|
 |`border-width`|✅支持|Yoga已支持|
 |`border-style`|⚠️部分支持|solid/dashed/dotted/none|
 |`border-color`|✅支持|SDL GPU渲染|
-|`border-radius`|✅支持|SDL GPU圆角|
+|`border-radius`|⚠️部分支持|px值支持，百分比值(50%)解析为px数值|
 |`box-sizing`|✅支持|Yoga已支持|
 |`box-shadow`|✅支持|SDL GPU渲染|
 |`outline`|✅支持|SDL GPU渲染|
@@ -275,10 +306,13 @@
 |`display: inline`|✅支持|自研Inline布局|
 |`display: inline-block`|✅支持|自研布局|
 |`display: none`|✅支持|Yoga已支持|
-|`position`|✅支持|Yoga已支持relative/absolute|
+|`display: contents`|❌待实现|布局透传，组件包装器模式|
+|`display: flow-root`|❌待实现|新建BFC|
+|`display: list-item`|⚠️部分支持|UA样式存在但无marker生成|
+|`position`|⚠️部分支持|relative/absolute支持，fixed退化为absolute，sticky未实现|
 |`top/right/bottom/left`|✅支持|Yoga已支持|
 |`inset`|✅支持|映射到Yoga|
-|`z-index`|✅支持|SDL GPU图层排序|
+|`z-index`|⚠️部分支持|不区分auto与0，auto应不创建堆叠上下文|
 |`float`|⚠️部分支持|基础左右浮动|
 |`clear`|⚠️部分支持|基础清除|
 |`overflow`|✅支持|裁剪+滚动|
@@ -296,7 +330,48 @@
 |`column-gap`|✅支持|Flex上下文中|
 |`column-rule`|❌不支持|多列布局复杂|
 
-### 3.6 颜色与背景
+### 3.5a 待新增CSS属性
+
+|属性|状态|说明|
+|---|---|---|
+|`aspect-ratio`|❌待实现|响应式宽高比，Baseline 2021|
+|`object-position`|❌待实现|替换内容定位，配合object-fit|
+|`list-style-type`|❌待实现|列表标记类型|
+|`list-style-position`|❌待实现|列表标记位置|
+|`list-style`|❌待实现|列表样式简写|
+|`will-change`|❌待实现|GPU合成层提示|
+|`scroll-behavior`|❌待实现|smooth/auto滚动过渡|
+|`overscroll-behavior`|❌待实现|防止滚动链|
+|`accent-color`|❌待实现|表单控件主题色|
+|`appearance`|❌待实现|去除默认控件样式|
+|`table-layout`|❌待实现|fixed/auto表格布局|
+|`border-collapse`|❌待实现|表格边框合并|
+|`border-spacing`|❌待实现|表格边框间距|
+|`caption-side`|❌待实现|表格标题定位|
+|`tab-size`|❌待实现|制表符宽度|
+|`contain`|❌待实现|渲染隔离|
+|`content-visibility`|❌待实现|跳过离屏渲染|
+|`color-scheme`|❌待实现|light/dark主题|
+|`counter-reset`|❌待实现|CSS计数器|
+|`counter-increment`|❌待实现|CSS计数器|
+|`quotes`|❌待实现|引号定义|
+|`scroll-snap-type`|❌待实现|滚动吸附|
+|`scroll-snap-align`|❌待实现|滚动吸附对齐|
+|`image-rendering`|❌待实现|像素风纹理采样|
+
+### 3.5b 待新增CSS简写/逻辑属性
+
+|属性|状态|说明|
+|---|---|---|
+|`place-items`|❌待实现|align-items + justify-items|
+|`place-content`|❌待实现|align-content + justify-content|
+|`place-self`|❌待实现|align-self + justify-self|
+|`margin-inline-start/end`|❌待实现|CSS逻辑属性|
+|`padding-block-start/end`|❌待实现|CSS逻辑属性|
+|`border-inline/block`|❌待实现|CSS逻辑属性|
+|`inset-block/inline`|❌待实现|CSS逻辑属性|
+
+
 
 |属性|状态|说明|
 |---|---|---|
@@ -468,12 +543,19 @@
 |`:is()`|✅支持|lexbor已支持|
 |`:where()`|✅支持|lexbor已支持|
 |`:has()`|⚠️部分支持|性能敏感|
+|`:open`/`:closed`|❌待实现|details/dialog状态|
+|`:target`|❌待实现|URL hash匹配|
+|`:any-link`|❌待实现|带href的a元素|
+|`:indeterminate`|❌待实现|checkbox不确定状态|
+|`:nth-last-of-type()`|❌待实现|仅有nth-of-type|
 |`::before`|✅支持|伪元素渲染|
 |`::after`|✅支持|伪元素渲染|
-|`::first-line`|⚠️部分支持|基础支持|
-|`::first-letter`|⚠️部分支持|基础支持|
-|`::placeholder`|✅支持|占位符样式|
-|`::selection`|✅支持|选中文本样式|
+|`::first-line`|⚠️部分支持|选择器匹配但无渲染实现|
+|`::first-letter`|⚠️部分支持|选择器匹配但无渲染实现|
+|`::placeholder`|⚠️部分支持|选择器匹配但无渲染实现|
+|`::selection`|⚠️部分支持|选择器匹配但无渲染实现|
+|`::marker`|❌待实现|列表标记样式|
+|`::backdrop`|❌待实现|modal dialog背景遮罩|
 
 ### 3.14 At规则
 
@@ -522,9 +604,12 @@
 |`lab()/lch()`|⚠️可演进|颜色值|
 |`oklch()/oklab()`|⚠️可演进|颜色值|
 |`color()`|⚠️可演进|颜色函数|
-|`color-mix()`|⚠️可演进|颜色混合|
+|`color-mix()`|❌待实现|颜色混合，Baseline 2023|
+|`light-dark()`|❌待实现|随color-scheme切换|
+|`counter()`|❌待实现|CSS计数器|
+|`counters()`|❌待实现|CSS计数器|
+|`env()`|❌待实现|safe-area-inset-*|
 |`attr()`|⚠️部分支持|基础属性引用|
-|`env()`|⚠️部分支持|safe-area-inset-*|
 
 ---
 
@@ -534,29 +619,30 @@
 
 |属性/方法|状态|说明|
 |---|---|---|
-|`nodeType`|✅支持|QuickJS绑定|
-|`nodeName`|✅支持|QuickJS绑定|
-|`nodeValue`|✅支持|QuickJS绑定|
-|`textContent`|✅支持|QuickJS绑定|
-|`parentNode`|✅支持|QuickJS绑定|
-|`parentElement`|✅支持|QuickJS绑定|
-|`childNodes`|✅支持|QuickJS绑定|
-|`firstChild`|✅支持|QuickJS绑定|
-|`lastChild`|✅支持|QuickJS绑定|
-|`previousSibling`|✅支持|QuickJS绑定|
-|`nextSibling`|✅支持|QuickJS绑定|
-|`ownerDocument`|✅支持|QuickJS绑定|
+|`nodeType`|⚠️待绑定|C++层支持，JS绑定缺失|
+|`nodeName`|⚠️待绑定|C++层支持，JS绑定缺失|
+|`nodeValue`|⚠️待绑定|C++层支持，JS绑定缺失|
+|`textContent`|⚠️部分支持|getter可用，setter待绑定|
+|`parentNode`|⚠️待绑定|C++层支持，JS绑定缺失|
+|`parentElement`|⚠️待绑定|C++层支持，JS绑定缺失|
+|`childNodes`|⚠️待绑定|仅有非标准getChildren()|
+|`firstChild`|⚠️待绑定|C++层支持，JS绑定缺失|
+|`lastChild`|⚠️待绑定|C++层支持，JS绑定缺失|
+|`previousSibling`|⚠️待绑定|C++层支持，JS绑定缺失|
+|`nextSibling`|⚠️待绑定|C++层支持，JS绑定缺失|
+|`ownerDocument`|⚠️待绑定|C++层支持，JS绑定缺失|
 |`appendChild()`|✅支持|QuickJS绑定|
-|`insertBefore()`|✅支持|QuickJS绑定|
+|`insertBefore()`|⚠️待绑定|C++层支持，JS绑定缺失|
 |`removeChild()`|✅支持|QuickJS绑定|
-|`replaceChild()`|✅支持|QuickJS绑定|
-|`cloneNode()`|✅支持|QuickJS绑定|
-|`contains()`|✅支持|QuickJS绑定|
-|`hasChildNodes()`|✅支持|QuickJS绑定|
-|`normalize()`|✅支持|QuickJS绑定|
-|`isEqualNode()`|✅支持|QuickJS绑定|
-|`isSameNode()`|✅支持|QuickJS绑定|
-|`compareDocumentPosition()`|✅支持|QuickJS绑定|
+|`replaceChild()`|⚠️待绑定|C++层支持，JS绑定缺失|
+|`cloneNode()`|⚠️待绑定|C++层支持，JS绑定缺失|
+|`contains()`|⚠️待绑定|C++层支持，JS绑定缺失|
+|`hasChildNodes()`|⚠️待绑定|C++层支持，JS绑定缺失|
+|`normalize()`|⚠️待绑定|C++层支持，JS绑定缺失|
+|`isEqualNode()`|⚠️待绑定|C++层支持，JS绑定缺失|
+|`isSameNode()`|⚠️待绑定|C++层支持，JS绑定缺失|
+|`compareDocumentPosition()`|⚠️待绑定|C++层支持，JS绑定缺失|
+|`isConnected`|❌待实现|框架常用，需新增|
 
 ### 4.2 Element接口
 
@@ -569,58 +655,62 @@
 |`attributes`|✅支持|QuickJS绑定|
 |`innerHTML`|✅支持|lexbor解析|
 |`outerHTML`|✅支持|lexbor序列化|
-|`children`|✅支持|QuickJS绑定|
-|`firstElementChild`|✅支持|QuickJS绑定|
-|`lastElementChild`|✅支持|QuickJS绑定|
-|`previousElementSibling`|✅支持|QuickJS绑定|
-|`nextElementSibling`|✅支持|QuickJS绑定|
-|`childElementCount`|✅支持|QuickJS绑定|
+|`dataset`|⚠️待绑定|data-*属性可存储但无JS DOMStringMap|
+|`hidden`|⚠️待绑定|属性可解析但无行为(需UA样式+JS属性)|
+|`children`|⚠️部分支持|非标准getChildren()方法，应为property|
+|`firstElementChild`|⚠️待绑定|C++层支持，JS绑定缺失|
+|`lastElementChild`|⚠️待绑定|C++层支持，JS绑定缺失|
+|`previousElementSibling`|⚠️待绑定|C++层支持，JS绑定缺失|
+|`nextElementSibling`|⚠️待绑定|C++层支持，JS绑定缺失|
+|`childElementCount`|⚠️待绑定|C++层支持，JS绑定缺失|
 |`getAttribute()`|✅支持|QuickJS绑定|
 |`setAttribute()`|✅支持|QuickJS绑定|
-|`removeAttribute()`|✅支持|QuickJS绑定|
-|`hasAttribute()`|✅支持|QuickJS绑定|
-|`toggleAttribute()`|✅支持|QuickJS绑定|
-|`getAttributeNames()`|✅支持|QuickJS绑定|
-|`querySelector()`|✅支持|lexbor选择器|
-|`querySelectorAll()`|✅支持|lexbor选择器|
-|`matches()`|✅支持|lexbor选择器|
-|`closest()`|✅支持|lexbor选择器|
-|`getElementsByTagName()`|✅支持|QuickJS绑定|
-|`getElementsByClassName()`|✅支持|QuickJS绑定|
-|`getBoundingClientRect()`|✅支持|Yoga布局结果|
-|`getClientRects()`|✅支持|Yoga布局结果|
-|`scrollIntoView()`|✅支持|自研滚动|
-|`scroll()/scrollTo()`|✅支持|自研滚动|
-|`scrollBy()`|✅支持|自研滚动|
-|`scrollTop/scrollLeft`|✅支持|自研滚动|
-|`scrollWidth/scrollHeight`|✅支持|Yoga布局结果|
-|`clientTop/clientLeft`|✅支持|Yoga布局结果|
-|`clientWidth/clientHeight`|✅支持|Yoga布局结果|
-|`offsetTop/offsetLeft`|✅支持|Yoga布局结果|
-|`offsetWidth/offsetHeight`|✅支持|Yoga布局结果|
-|`offsetParent`|✅支持|QuickJS绑定|
+|`removeAttribute()`|⚠️待绑定|C++层支持，JS绑定缺失|
+|`hasAttribute()`|⚠️待绑定|C++层支持，JS绑定缺失|
+|`toggleAttribute()`|⚠️待绑定|C++层支持，JS绑定缺失|
+|`getAttributeNames()`|⚠️待绑定|C++层支持，JS绑定缺失|
+|`querySelector()`|⚠️部分支持|仅document上可用，元素级未绑定|
+|`querySelectorAll()`|⚠️部分支持|仅document上可用，元素级未绑定|
+|`matches()`|⚠️待绑定|C++层支持，JS绑定缺失|
+|`closest()`|⚠️待绑定|C++层支持，JS绑定缺失|
+|`getElementsByTagName()`|⚠️待绑定|C++层支持，元素级JS绑定缺失|
+|`getElementsByClassName()`|⚠️待绑定|C++层支持，元素级JS绑定缺失|
+|`getBoundingClientRect()`|⚠️待绑定|Yoga布局结果可用，JS绑定缺失|
+|`getClientRects()`|⚠️待绑定|Yoga布局结果可用，JS绑定缺失|
+|`scrollIntoView()`|⚠️待绑定|C++层支持，JS绑定缺失|
+|`scroll()/scrollTo()`|⚠️待绑定|C++层支持，JS绑定缺失|
+|`scrollBy()`|⚠️待绑定|C++层支持，JS绑定缺失|
+|`scrollTop/scrollLeft`|⚠️待绑定|C++层支持，JS绑定缺失|
+|`scrollWidth/scrollHeight`|⚠️待绑定|Yoga布局结果可用，JS绑定缺失|
+|`clientTop/clientLeft`|⚠️待绑定|Yoga布局结果可用，JS绑定缺失|
+|`clientWidth/clientHeight`|⚠️待绑定|Yoga布局结果可用，JS绑定缺失|
+|`offsetTop/offsetLeft`|⚠️待绑定|Yoga布局结果可用，JS绑定缺失|
+|`offsetWidth/offsetHeight`|⚠️待绑定|Yoga布局结果可用，JS绑定缺失|
+|`offsetParent`|⚠️待绑定|C++层支持，JS绑定缺失|
 |`insertAdjacentHTML()`|✅支持|lexbor解析|
-|`insertAdjacentElement()`|✅支持|QuickJS绑定|
-|`insertAdjacentText()`|✅支持|QuickJS绑定|
-|`remove()`|✅支持|QuickJS绑定|
-|`before()`|✅支持|QuickJS绑定|
-|`after()`|✅支持|QuickJS绑定|
-|`replaceWith()`|✅支持|QuickJS绑定|
-|`prepend()`|✅支持|QuickJS绑定|
-|`append()`|✅支持|QuickJS绑定|
+|`insertAdjacentElement()`|⚠️待绑定|C++层支持，JS绑定缺失|
+|`insertAdjacentText()`|⚠️待绑定|C++层支持，JS绑定缺失|
+|`remove()`|⚠️待绑定|C++层支持，JS绑定缺失|
+|`before()`|⚠️待绑定|C++层支持，JS绑定缺失|
+|`after()`|⚠️待绑定|C++层支持，JS绑定缺失|
+|`replaceWith()`|⚠️待绑定|C++层支持，JS绑定缺失|
+|`prepend()`|⚠️待绑定|C++层支持，JS绑定缺失|
+|`append()`|⚠️待绑定|C++层支持，JS绑定缺失|
+|`replaceChildren()`|❌待实现|需新增|
 |`focus()`|✅支持|焦点管理|
 |`blur()`|✅支持|焦点管理|
-|`click()`|✅支持|事件触发|
+|`click()`|⚠️待绑定|C++层支持，JS绑定缺失|
+|`dispatchEvent()`|⚠️待绑定|C++层支持，JS绑定缺失|
 
 ### 4.3 Document接口
 
 |属性/方法|状态|说明|
 |---|---|---|
 |`documentElement`|✅支持|QuickJS绑定|
-|`head`|✅支持|QuickJS绑定|
+|`head`|⚠️待绑定|C++层支持，JS绑定缺失|
 |`body`|✅支持|QuickJS绑定|
 |`title`|✅支持|QuickJS绑定|
-|`activeElement`|✅支持|焦点管理|
+|`activeElement`|⚠️待绑定|焦点管理C++层支持，JS绑定缺失|
 |`getElementById()`|✅支持|QuickJS绑定|
 |`getElementsByTagName()`|✅支持|QuickJS绑定|
 |`getElementsByClassName()`|✅支持|QuickJS绑定|
@@ -630,7 +720,7 @@
 |`createElement()`|✅支持|QuickJS绑定|
 |`createTextNode()`|✅支持|QuickJS绑定|
 |`createComment()`|✅支持|QuickJS绑定|
-|`createDocumentFragment()`|✅支持|QuickJS绑定|
+|`createDocumentFragment()`|⚠️待绑定|C++层支持，JS绑定缺失|
 |`createAttribute()`|✅支持|QuickJS绑定|
 |`importNode()`|✅支持|QuickJS绑定|
 |`adoptNode()`|✅支持|QuickJS绑定|
@@ -650,16 +740,16 @@
 |`EventTarget`|✅支持|QuickJS绑定|
 |`addEventListener()`|✅支持|QuickJS绑定|
 |`removeEventListener()`|✅支持|QuickJS绑定|
-|`dispatchEvent()`|✅支持|QuickJS绑定|
+|`dispatchEvent()`|⚠️待绑定|C++层支持，JS绑定缺失|
 |`Event`|✅支持|QuickJS绑定|
 |`CustomEvent`|✅支持|QuickJS绑定|
 |`MouseEvent`|✅支持|SDL事件映射|
 |`KeyboardEvent`|✅支持|SDL事件映射|
-|`WheelEvent`|✅支持|SDL事件映射|
-|`PointerEvent`|✅支持|SDL事件映射|
-|`TouchEvent`|✅支持|SDL事件映射|
+|`WheelEvent`|⚠️部分支持|C++滚动处理存在，但JS事件无deltaX/Y/Z属性|
+|`PointerEvent`|⚠️部分支持|C++ PointerType存在，但JS无pointerId/pointerType等属性|
+|`TouchEvent`|⚠️部分支持|C++ touch处理存在，但JS事件未完整暴露|
 |`FocusEvent`|✅支持|焦点管理|
-|`InputEvent`|✅支持|表单输入|
+|`InputEvent`|⚠️部分支持|事件触发但缺少data/inputType属性|
 |`CompositionEvent`|⚠️可演进|IME输入|
 |`DragEvent`|⚠️可演进|拖拽系统|
 |`AnimationEvent`|✅支持|动画系统|
@@ -667,15 +757,62 @@
 |`UIEvent`|✅支持|QuickJS绑定|
 |`event.preventDefault()`|✅支持|QuickJS绑定|
 |`event.stopPropagation()`|✅支持|QuickJS绑定|
-|`event.stopImmediatePropagation()`|✅支持|QuickJS绑定|
-|`event.target`|✅支持|QuickJS绑定|
-|`event.currentTarget`|✅支持|QuickJS绑定|
+|`event.stopImmediatePropagation()`|⚠️待绑定|C++层支持，JS绑定缺失|
+|`event.target`|✅支持|dispatch时设置|
+|`event.currentTarget`|⚠️待绑定|需在事件处理期间正确设置|
 |`event.bubbles`|✅支持|事件冒泡|
 |`event.cancelable`|✅支持|QuickJS绑定|
 |`event.composed`|⚠️可演进|Shadow DOM|
 |`event.eventPhase`|✅支持|捕获/冒泡阶段|
 
-### 4.5 CSSOM
+### 4.4a 缺失的事件类型
+
+|事件|状态|说明|
+|---|---|---|
+|`scroll`|❌待实现|滚动事件，JS无法监听|
+|`resize`|❌待实现|窗口/元素尺寸变化|
+|`DOMContentLoaded`|❌待实现|DOM解析完成|
+|`change`|❌待实现|表单值提交|
+|`submit`|❌待实现|表单提交|
+|`contextmenu`|❌待实现|右键菜单|
+|`load`/`error` (img)|❌待实现|资源加载|
+|`toggle`|❌待实现|details展开/折叠|
+|`close`/`cancel`|❌待实现|dialog关闭|
+|`compositionstart/update/end`|❌待实现|IME输入(CJK)|
+|`copy`/`cut`/`paste`|❌待实现|剪贴板|
+|`beforeinput`|❌待实现|可取消的输入前事件|
+
+### 4.4b 事件属性缺失
+
+|事件类型|缺失属性|说明|
+|---|---|---|
+|MouseEvent|`offsetX`/`offsetY`|相对目标元素位置|
+|MouseEvent|`pageX`/`pageY`|相对文档位置|
+|MouseEvent|`altKey`/`ctrlKey`/`shiftKey`/`metaKey`|修饰键状态|
+|KeyboardEvent|`key`/`code`|dispatch时未设置|
+|KeyboardEvent|修饰键|dispatch时未设置|
+|WheelEvent|`deltaX`/`deltaY`/`deltaZ`|滚动量|
+|InputEvent|`data`/`inputType`|插入字符/变更类型|
+|FocusEvent|`relatedTarget`|失去/获得焦点的对端元素|
+|PointerEvent|`pointerId`/`pointerType`/`pressure`|指针属性|
+
+### 4.4c HTMLElement特定接口(待实现)
+
+|接口|属性/方法|说明|
+|---|---|---|
+|HTMLInputElement|`value`, `checked`, `disabled`, `type`, `name`|表单核心属性|
+|HTMLInputElement|`placeholder`, `required`, `readOnly`|验证属性|
+|HTMLInputElement|`select()`, `setSelectionRange()`|选区方法|
+|HTMLInputElement|`checkValidity()`, `setCustomValidity()`|验证方法|
+|HTMLSelectElement|`value`, `selectedIndex`, `options`|选择框核心|
+|HTMLTextAreaElement|`value`, `selectionStart`, `selectionEnd`|文本域核心|
+|HTMLDialogElement|`open`, `showModal()`, `show()`, `close()`|对话框核心|
+|HTMLDetailsElement|`open`|折叠面板|
+|HTMLAnchorElement|`href`, `target`|链接属性|
+|HTMLImageElement|`src`, `alt`, `naturalWidth/Height`, `complete`|图片属性|
+|HTMLFormElement|`elements`, `submit()`, `reset()`|表单方法|
+
+
 
 |接口/方法|状态|说明|
 |---|---|---|
@@ -690,9 +827,9 @@
 |`CSSKeyframesRule`|✅支持|QuickJS绑定|
 |`insertRule()`|✅支持|QuickJS绑定|
 |`deleteRule()`|✅支持|QuickJS绑定|
-|`CSS.supports()`|✅支持|特性检测|
-|`matchMedia()`|✅支持|媒体查询|
-|`MediaQueryList`|✅支持|QuickJS绑定|
+|`CSS.supports()`|⚠️待绑定|C++层支持，JS绑定缺失|
+|`matchMedia()`|⚠️待绑定|C++层支持，JS绑定缺失|
+|`MediaQueryList`|⚠️待绑定|C++层支持，JS绑定缺失|
 
 ### 4.6 定时器与动画帧
 
@@ -752,8 +889,8 @@
 |`AbortController`|✅支持|QuickJS绑定|
 |`AbortSignal`|✅支持|QuickJS绑定|
 |`IntersectionObserver`|⚠️可演进|可见性监测|
-|`ResizeObserver`|✅支持|布局监听|
-|`MutationObserver`|✅支持|DOM变更监听|
+|`ResizeObserver`|⚠️待绑定|C++层支持，JS绑定缺失|
+|`MutationObserver`|⚠️待绑定|C++层支持，JS绑定缺失|
 |`PerformanceObserver`|⚠️可演进|性能监测|
 |`Clipboard`|⚠️可演进|系统剪贴板|
 |`Notification`|❌不支持|系统通知|
@@ -763,6 +900,11 @@
 |`Navigator`|⚠️部分支持|基础属性|
 |`Screen`|✅支持|SDL窗口信息|
 |`Window`|⚠️部分支持|简化实现|
+|`performance.now()`|❌待实现|高精度时间戳|
+|`structuredClone()`|❌待实现|深拷贝JS对象|
+|`DOMParser`|❌待实现|HTML字符串解析为DOM|
+|`DOMRect`|❌待实现|getBoundingClientRect返回类型|
+|`FormData`|❌待实现|表单数据收集|
 
 ---
 
@@ -786,6 +928,15 @@
 |DOM|WebGL|直接使用SDL GPU|
 |DOM|WebRTC|音视频通信复杂|
 |DOM|WebXR|XR设备支持复杂|
+
+---
+
+## 6. 差距分析备注
+
+> 本文档经过源码级对照分析（2024年），部分此前标记为"✅支持"的特性已更正为实际状态。
+> 标记为"⚠️待绑定"表示 C++ 层已有实现但 QuickJS JS 绑定缺失。
+> 标记为"❌待实现"表示需要新增功能。
+> 完整差距分析详见 `html_css_dom_gap_analysis.md`，待办事项详见 `/doc/todo.md`。
 
 ---
 
