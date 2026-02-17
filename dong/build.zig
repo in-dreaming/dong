@@ -17,6 +17,7 @@ const BuildConfig = struct {
     dxc_include_path: []const u8 = DXC_DIR ++ "/inc",
     android_ndk_path: ?[]const u8 = null,
     ios_sdk_path: ?[]const u8 = null,
+    enable_ffmpeg: bool = true, // auto-detected if not set in build.env
 };
 
 fn loadBuildConfig(allocator: std.mem.Allocator) BuildConfig {
@@ -56,8 +57,20 @@ fn loadBuildConfig(allocator: std.mem.Allocator) BuildConfig {
                 config.android_ndk_path = allocator.dupe(u8, value) catch null;
             } else if (std.mem.eql(u8, key, "IOS_SDK_PATH")) {
                 config.ios_sdk_path = allocator.dupe(u8, value) catch null;
+            } else if (std.mem.eql(u8, key, "ENABLE_FFMPEG")) {
+                config.enable_ffmpeg = std.mem.eql(u8, value, "1") or
+                    std.ascii.eqlIgnoreCase(value, "ON") or
+                    std.ascii.eqlIgnoreCase(value, "TRUE") or
+                    std.ascii.eqlIgnoreCase(value, "YES");
             }
         }
+    }
+
+    // Auto-detect: disable FFmpeg if the source tree is absent
+    if (config.enable_ffmpeg) {
+        std.fs.cwd().access("third_party/ffmpeg/configure", .{}) catch {
+            config.enable_ffmpeg = false;
+        };
     }
 
     return config;
@@ -337,9 +350,13 @@ pub fn build(b: *std.Build) void {
     } else if (platform.is_linux) {
         dong_cmake_args.appendSlice(&.{
             "-G", "Ninja",
-            "-DDONG_PLUGIN_SDL_ENABLE_FFMPEG=OFF",
         }) catch unreachable;
     }
+
+    // Always pass FFmpeg flag explicitly to override any stale CMake cache value
+    dong_cmake_args.append(
+        if (config.enable_ffmpeg) "-DDONG_PLUGIN_SDL_ENABLE_FFMPEG=ON" else "-DDONG_PLUGIN_SDL_ENABLE_FFMPEG=OFF",
+    ) catch unreachable;
 
     const cmake_config = b.addSystemCommand(dong_cmake_args.items);
     // Depend on Zig-built libraries being installed first
@@ -971,6 +988,7 @@ fn buildDongCore(
             // Script
             "src/script/script_engine.cpp",
             "src/script/js_bindings.cpp",
+            "src/script/js_node_bindings.cpp",
             // Render (platform-agnostic)
             "src/render/painter.cpp",
             "src/render/painter/painter_media.cpp",

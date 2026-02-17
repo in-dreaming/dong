@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  body { font-size: 16px; padding: 20px; }
+  #target { padding: 20px; background: lightyellow; border: 2px solid orange; }
+  #result { margin-top: 20px; padding: 10px; background: #eee; white-space: pre; font-family: monospace; }
+</style>
+</head>
+<body>
+  <div id="target" tabindex="0">Click here and press keys</div>
+  <div id="result"></div>
+  <script>
+    var r = '';
+    var target = document.getElementById('target');
+
+    target.addEventListener('keydown', function(e) {
+      r += 'keydown: key="' + e.key + '" code="' + e.code + '" keyCode=' + e.keyCode + '\n';
+      r += '  altKey=' + e.altKey + ' ctrlKey=' + e.ctrlKey + ' shiftKey=' + e.shiftKey + '\n';
+      document.getElementById('result').textContent = r;
+    });
+
+    target.addEventListener('keyup', function(e) {
+      r += 'keyup: key="' + e.key + '" code="' + e.code + '" keyCode=' + e.keyCode + '\n';
+      document.getElementById('result').textContent = r;
+    });
+
+    r += 'KeyboardEvent test loaded\n';
+    r += 'Focus the yellow box and press keys\n';
+    r += 'Should see key, code, and modifier properties\n';
+    document.getElementById('result').textContent = r;
+    console.log('Events keyboard test loaded');
+  </script>
+</body>
+</html>

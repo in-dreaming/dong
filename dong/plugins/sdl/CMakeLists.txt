@@ -97,6 +97,12 @@ if(DONG_PLUGIN_SDL_ENABLE_FFMPEG)
         --enable-avutil
         --enable-swscale
 
+        # Disable unneeded libraries to avoid build/install failures from
+        # shell script issues on Windows (pkg-config generation uses shell scripts).
+        --disable-avdevice
+        --disable-avfilter
+        --disable-swresample
+
         # Minimal demux/decoder stack (file:// + MP4/H.264).
         --enable-protocol=file
         --enable-demuxer=mov
@@ -113,14 +119,25 @@ if(DONG_PLUGIN_SDL_ENABLE_FFMPEG)
     # IMPORTANT: join args into a single bash string (avoid CMake list splitting).
     string(JOIN " " _ffmpeg_common_args_str ${_ffmpeg_common_args})
 
-    # Build-in-source: use ./configure, and distclean if we previously configured.
+    # Build-in-source: clean generated config files, then run configure.
     # IMPORTANT: avoid ';' here (CMake treats it as a list separator and splits the command).
-    set(_ffmpeg_configure_cmd "(test -f Makefile && ${MAKE_EXECUTABLE} distclean || true) && ./configure ${_ffmpeg_common_args_str}")
+    # NOTE: use "source ./configure" instead of "./configure" because Git-for-Windows bash
+    #       cannot execute shell scripts as sub-processes from non-MSYS parents (MSYS fork issue).
+    #       Sourcing runs the script in the same bash process, which works reliably.
+    # NOTE: After sourcing configure, we must restore the original Makefile from git because
+    #       in-source configure detects Makefile absence and generates a self-referencing wrapper.
+    # NOTE: We also pre-generate ffversion.h because the build's version.sh
+    #       cannot run as a file subprocess in Git-for-Windows (MSYS fork issue).
+    set(_ffmpeg_configure_cmd "rm -f ffbuild/config.mak config.h config.asm && source ./configure ${_ffmpeg_common_args_str} && git checkout -- Makefile && source ffbuild/version.sh . libavutil/ffversion.h")
 
 
 
     set(_ffmpeg_build_cmd ${MAKE_EXECUTABLE})
-    set(_ffmpeg_install_cmd ${MAKE_EXECUTABLE} install)
+    # Custom install: bypass 'make install' because FFmpeg's install targets depend on
+    # shell scripts (pkgconfig_generate.sh, libversion.sh) that fail in Git-for-Windows.
+    # Instead, manually copy the DLLs, libs, and headers we need.
+    set(_ffmpeg_install_dir_esc "${FFMPEG_INSTALL_DIR}")
+    set(_ffmpeg_install_cmd "mkdir -p '${_ffmpeg_install_dir_esc}/bin' && cp -f lib*/*.dll '${_ffmpeg_install_dir_esc}/bin/' && (cp -f lib*/*.lib '${_ffmpeg_install_dir_esc}/bin/' 2>/dev/null || true) && (cp -f lib*/*.dll.a '${_ffmpeg_install_dir_esc}/bin/' 2>/dev/null || true) && mkdir -p '${_ffmpeg_install_dir_esc}/include/libavcodec' '${_ffmpeg_install_dir_esc}/include/libavformat' '${_ffmpeg_install_dir_esc}/include/libavutil' '${_ffmpeg_install_dir_esc}/include/libswscale' && cp -f libavcodec/*.h '${_ffmpeg_install_dir_esc}/include/libavcodec/' && cp -f libavformat/*.h '${_ffmpeg_install_dir_esc}/include/libavformat/' && cp -f libavutil/*.h '${_ffmpeg_install_dir_esc}/include/libavutil/' && cp -f libswscale/*.h '${_ffmpeg_install_dir_esc}/include/libswscale/'")
 
     # Parallel build where supported.
     if(NOT "${MAKE_EXECUTABLE}" MATCHES "nmake(\\.exe)?$")
@@ -162,9 +179,9 @@ if(DONG_PLUGIN_SDL_ENABLE_FFMPEG)
 
     ExternalProject_Add(ffmpeg_ep
         SOURCE_DIR "${FFMPEG_SOURCE_DIR}"
-        CONFIGURE_COMMAND "${BASH_EXECUTABLE}" -lc "${_ffmpeg_bash_env}${_ffmpeg_configure_cmd}"
-        BUILD_COMMAND "${BASH_EXECUTABLE}" -lc "${_ffmpeg_bash_env}${_ffmpeg_build_cmd_str}"
-        INSTALL_COMMAND "${BASH_EXECUTABLE}" -lc "${_ffmpeg_bash_env}${_ffmpeg_install_cmd_str}"
+        CONFIGURE_COMMAND "${BASH_EXECUTABLE}" --noprofile --norc -c "${_ffmpeg_bash_env}${_ffmpeg_configure_cmd}"
+        BUILD_COMMAND "${BASH_EXECUTABLE}" --noprofile --norc -c "${_ffmpeg_bash_env}${_ffmpeg_build_cmd_str}"
+        INSTALL_COMMAND "${BASH_EXECUTABLE}" --noprofile --norc -c "${_ffmpeg_bash_env}${_ffmpeg_install_cmd_str}"
         BUILD_IN_SOURCE 1
         UPDATE_COMMAND ""
     )

@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace dong::dom {
 
@@ -215,6 +216,17 @@ struct ComputedStyle {
     bool is_pseudo_element = false;
     std::string pseudo_type;  // "before" or "after"
     
+    // Track which properties were explicitly set by CSS rules or inline styles.
+    // Used by inheritFromParent() to avoid overriding explicitly set values.
+    std::unordered_set<std::string> explicitly_set_properties_;
+
+    bool isExplicitlySet(const std::string& prop) const {
+        return explicitly_set_properties_.count(prop) > 0;
+    }
+    void markExplicitlySet(const std::string& prop) {
+        explicitly_set_properties_.insert(prop);
+    }
+
     // CSS custom properties (variables)
     std::shared_ptr<CSSVariables> css_variables;
     

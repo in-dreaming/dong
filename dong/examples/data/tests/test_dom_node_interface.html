@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  body { font-size: 16px; padding: 20px; }
+  #result { margin-top: 20px; padding: 10px; background: #eee; white-space: pre; font-family: monospace; }
+</style>
+</head>
+<body>
+  <div id="parent">
+    <div id="child1">Child 1</div>
+    <div id="child2">Child 2</div>
+    <div id="child3">Child 3</div>
+  </div>
+  <div id="result"></div>
+  <script>
+    var r = '';
+    var parent = document.getElementById('parent');
+    var c1 = document.getElementById('child1');
+    var c2 = document.getElementById('child2');
+    var c3 = document.getElementById('child3');
+
+    // parentNode / parentElement
+    r += 'c1.parentNode === parent: ' + (c1.parentNode === parent ? 'PASS' : 'FAIL') + '\n';
+    r += 'c1.parentElement === parent: ' + (c1.parentElement === parent ? 'PASS' : 'FAIL') + '\n';
+
+    // childNodes
+    var cn = parent.childNodes;
+    r += 'parent.childNodes is array-like: ' + (cn.length >= 3 ? 'PASS' : 'FAIL (len=' + cn.length + ')') + '\n';
+
+    // firstChild / lastChild
+    r += 'parent.firstChild exists: ' + (parent.firstChild !== null ? 'PASS' : 'FAIL') + '\n';
+    r += 'parent.lastChild exists: ' + (parent.lastChild !== null ? 'PASS' : 'FAIL') + '\n';
+
+    // nodeType / nodeName
+    r += 'parent.nodeType === Node.ELEMENT_NODE: ' + (parent.nodeType === Node.ELEMENT_NODE ? 'PASS' : 'FAIL (' + parent.nodeType + ')') + '\n';
+    r += 'parent.nodeName === "DIV": ' + (parent.nodeName === 'DIV' ? 'PASS' : 'FAIL (' + parent.nodeName + ')') + '\n';
+
+    // Node constants
+    r += 'Node.ELEMENT_NODE === 1: ' + (Node.ELEMENT_NODE === 1 ? 'PASS' : 'FAIL') + '\n';
+    r += 'Node.TEXT_NODE === 3: ' + (Node.TEXT_NODE === 3 ? 'PASS' : 'FAIL') + '\n';
+    r += 'Node.DOCUMENT_NODE === 9: ' + (Node.DOCUMENT_NODE === 9 ? 'PASS' : 'FAIL') + '\n';
+
+    // nextSibling / previousSibling
+    r += 'c1.nextElementSibling === c2: ' + (c1.nextElementSibling === c2 ? 'PASS' : 'FAIL') + '\n';
+    r += 'c2.previousElementSibling === c1: ' + (c2.previousElementSibling === c1 ? 'PASS' : 'FAIL') + '\n';
+
+    // childElementCount
+    r += 'parent.childElementCount >= 3: ' + (parent.childElementCount >= 3 ? 'PASS' : 'FAIL (' + parent.childElementCount + ')') + '\n';
+
+    // insertBefore
+    var newDiv = document.createElement('div');
+    newDiv.textContent = 'Inserted';
+    parent.insertBefore(newDiv, c2);
+    r += 'insertBefore executed: PASS\n';
+
+    // hasChildNodes / contains
+    r += 'parent.hasChildNodes(): ' + (parent.hasChildNodes() ? 'PASS' : 'FAIL') + '\n';
+    r += 'parent.contains(c1): ' + (parent.contains(c1) ? 'PASS' : 'FAIL') + '\n';
+
+    document.getElementById('result').textContent = r;
+    console.log('DOM Node interface test loaded');
+  </script>
+</body>
+</html>

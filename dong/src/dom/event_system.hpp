@@ -36,6 +36,10 @@ enum class EventType {
     CHANGE,
     INPUT,
     SUBMIT,
+    SCROLL,
+    RESIZE,
+    WHEEL,
+    DOM_CONTENT_LOADED,
     CUSTOM
 };
 
@@ -71,6 +75,22 @@ struct Event {
     // Keyboard event data
     uint32_t key_code = 0;
     std::string key_name;
+    std::string key_string;      // Standard 'key' property (e.g. "Enter", "a")
+    std::string code_string;     // Standard 'code' property (e.g. "Enter", "KeyA")
+
+    // Modifier key state
+    bool alt_key = false;
+    bool ctrl_key = false;
+    bool shift_key = false;
+    bool meta_key = false;
+
+    // Wheel event data
+    float delta_x = 0.0f;
+    float delta_y = 0.0f;
+    float delta_z = 0.0f;
+
+    // Input event data
+    std::string input_data;      // The inserted text for 'input' events
     
     // Custom data
     std::unordered_map<std::string, std::string> data;
@@ -147,6 +167,10 @@ private:
         {"change", EventType::CHANGE},
         {"input", EventType::INPUT},
         {"submit", EventType::SUBMIT},
+        {"scroll", EventType::SCROLL},
+        {"resize", EventType::RESIZE},
+        {"wheel", EventType::WHEEL},
+        {"DOMContentLoaded", EventType::DOM_CONTENT_LOADED},
     };
 };
 

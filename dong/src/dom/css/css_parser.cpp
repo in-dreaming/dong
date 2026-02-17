@@ -1791,17 +1791,19 @@ void CSSParser::parseInlineStyle(const std::string& style_str, ComputedStyle& st
         value.erase(value.find_last_not_of(" \t") + 1);
         
         applyProperty(property, value, style);
+        // Mark as explicitly set for inheritance tracking
+        style.markExplicitlySet(property);
     }
 }
 
-void CSSParser::applyProperty(const std::string& property, const std::string& value, 
+void CSSParser::applyProperty(const std::string& property, const std::string& value,
                                ComputedStyle& style) {
     // Normalize property name to lowercase
     std::string prop = property;
     std::transform(prop.begin(), prop.end(), prop.begin(), [](unsigned char c) {
         return static_cast<char>(std::tolower(c));
     });
-    
+
     // Normalize value: remove trailing semicolon and trim whitespace
     std::string val = value;
     if (!val.empty() && val.back() == ';') {
@@ -1810,6 +1812,35 @@ void CSSParser::applyProperty(const std::string& property, const std::string& va
     val.erase(0, val.find_first_not_of(" \t\n\r"));
     size_t last = val.find_last_not_of(" \t\n\r");
     if (last != std::string::npos) val = val.substr(0, last + 1);
+
+    // Handle CSS global keywords: inherit, initial, unset
+    if (val == "inherit") {
+        // Mark as NOT explicitly set, so inheritFromParent will pick it up
+        style.explicitly_set_properties_.erase(prop);
+        return;
+    }
+    if (val == "initial") {
+        // Reset to default - leave the ComputedStyle default value
+        // and mark as explicitly set so inherit won't override
+        style.markExplicitlySet(prop);
+        return;
+    }
+    if (val == "unset") {
+        // For inheritable properties: behave like inherit
+        // For non-inheritable: behave like initial
+        static const std::unordered_set<std::string> kInheritable = {
+            "color", "font-family", "font-size", "font-weight", "font-style",
+            "text-align", "line-height", "letter-spacing", "word-spacing",
+            "white-space", "direction", "cursor", "visibility",
+            "text-indent", "text-transform", "word-break", "overflow-wrap"
+        };
+        if (kInheritable.count(prop)) {
+            style.explicitly_set_properties_.erase(prop);
+        } else {
+            style.markExplicitlySet(prop);
+        }
+        return;
+    }
 
     // O(1) dispatch table lookup instead of O(n) if-else chain
     static const auto& handlers = getPropertyHandlers();

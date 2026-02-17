@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  body { font-size: 18px; padding: 20px; }
+  input { padding: 5px; margin: 5px; font-size: 16px; }
+  #result { margin-top: 20px; padding: 10px; background: #eee; white-space: pre; }
+</style>
+</head>
+<body>
+  <div>
+    <label>Readonly: </label>
+    <input type="text" id="input1" readonly value="Cannot edit this">
+  </div>
+  <div>
+    <label>Editable: </label>
+    <input type="text" id="input2" value="Can edit this">
+  </div>
+  <div id="result"></div>
+  <script>
+    var r = '';
+    var i1 = document.getElementById('input1');
+    var i2 = document.getElementById('input2');
+
+    r += 'input1 readonly: value="' + i1.value + '"\n';
+    r += 'input2 editable: value="' + i2.value + '"\n';
+    r += 'Try typing in both inputs\n';
+
+    i1.addEventListener('input', function() {
+      r += 'ERROR: input1 should not receive input events (readonly)\n';
+      document.getElementById('result').textContent = r;
+    });
+
+    i2.addEventListener('input', function() {
+      r += 'input2 value changed: "' + i2.value + '"\n';
+      document.getElementById('result').textContent = r;
+    });
+
+    document.getElementById('result').textContent = r;
+    console.log('Input readonly test loaded');
+  </script>
+</body>
+</html>

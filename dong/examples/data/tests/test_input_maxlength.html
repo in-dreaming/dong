@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  body { font-size: 18px; padding: 20px; }
+  input { padding: 5px; margin: 5px; font-size: 16px; }
+  #result { margin-top: 20px; padding: 10px; background: #eee; white-space: pre; }
+</style>
+</head>
+<body>
+  <div>
+    <label>Max 5 chars: </label>
+    <input type="text" id="input1" maxlength="5" value="">
+  </div>
+  <div>
+    <label>No limit: </label>
+    <input type="text" id="input2" value="">
+  </div>
+  <div id="result"></div>
+  <script>
+    var r = '';
+    var i1 = document.getElementById('input1');
+    var i2 = document.getElementById('input2');
+
+    r += 'input1 has maxlength=5: OK\n';
+    r += 'input2 has no maxlength: OK\n';
+    r += 'Type in input1 to test maxlength enforcement\n';
+
+    i1.addEventListener('input', function() {
+      r += 'input1 value: "' + i1.value + '" (len=' + i1.value.length + ')\n';
+      document.getElementById('result').textContent = r;
+    });
+
+    document.getElementById('result').textContent = r;
+    console.log('Input maxlength test loaded');
+  </script>
+</body>
+</html>

@@ -32,13 +32,13 @@ LayoutMode deriveLayoutModeFromDisplay(const ComputedStyle& style) {
 // ── Sub-functions for applyRuleProperties (declared before the caller) ──
 
 void applyRuleTextProperties(const ComputedStyle& rs, ComputedStyle& computed) {
-    if (rs.font_size != 16.0f) computed.font_size = rs.font_size;
-    if (!rs.font_weight.empty() && rs.font_weight != "normal") computed.font_weight = rs.font_weight;
-    if (!rs.font_style.empty() && rs.font_style != "normal") computed.font_style = rs.font_style;
-    if (!rs.font_family.empty() && rs.font_family != "Arial") computed.font_family = rs.font_family;
+    if (rs.font_size != 16.0f) { computed.font_size = rs.font_size; computed.markExplicitlySet("font-size"); }
+    if (!rs.font_weight.empty() && rs.font_weight != "normal") { computed.font_weight = rs.font_weight; computed.markExplicitlySet("font-weight"); }
+    if (!rs.font_style.empty() && rs.font_style != "normal") { computed.font_style = rs.font_style; computed.markExplicitlySet("font-style"); }
+    if (!rs.font_family.empty() && rs.font_family != "Arial") { computed.font_family = rs.font_family; computed.markExplicitlySet("font-family"); }
     if (!rs.font_variant.empty() && rs.font_variant != "normal") computed.font_variant = rs.font_variant;
 
-    if (!rs.text_align.empty() && rs.text_align != "left") computed.text_align = rs.text_align;
+    if (!rs.text_align.empty() && rs.text_align != "left") { computed.text_align = rs.text_align; computed.markExplicitlySet("text-align"); }
     if (!rs.text_decoration.empty() && rs.text_decoration != "none")
         computed.text_decoration = rs.text_decoration;
     if (!rs.text_decoration_color.empty()) computed.text_decoration_color = rs.text_decoration_color;
@@ -46,27 +46,27 @@ void applyRuleTextProperties(const ComputedStyle& rs, ComputedStyle& computed) {
         computed.text_decoration_style = rs.text_decoration_style;
     if (rs.text_decoration_thickness != 1.0f)
         computed.text_decoration_thickness = rs.text_decoration_thickness;
-    if (rs.letter_spacing_em != 0.0f) computed.letter_spacing_em = rs.letter_spacing_em;
-    if (rs.word_spacing_px != 0.0f) computed.word_spacing_px = rs.word_spacing_px;
+    if (rs.letter_spacing_em != 0.0f) { computed.letter_spacing_em = rs.letter_spacing_em; computed.markExplicitlySet("letter-spacing"); }
+    if (rs.word_spacing_px != 0.0f) { computed.word_spacing_px = rs.word_spacing_px; computed.markExplicitlySet("word-spacing"); }
     if (rs.has_line_height) {
         computed.has_line_height = true;
         computed.line_height = rs.line_height;
         computed.line_height_is_unitless = rs.line_height_is_unitless;
     }
     if (!rs.text_transform.empty() && rs.text_transform != "none")
-        computed.text_transform = rs.text_transform;
+        { computed.text_transform = rs.text_transform; computed.markExplicitlySet("text-transform"); }
     if (!rs.text_overflow.empty() && rs.text_overflow != "clip")
         computed.text_overflow = rs.text_overflow;
     if (!rs.white_space.empty() && rs.white_space != "normal")
-        computed.white_space = rs.white_space;
+        { computed.white_space = rs.white_space; computed.markExplicitlySet("white-space"); }
     if (!rs.word_break.empty() && rs.word_break != "normal")
-        computed.word_break = rs.word_break;
+        { computed.word_break = rs.word_break; computed.markExplicitlySet("word-break"); }
     if (!rs.overflow_wrap.empty() && rs.overflow_wrap != "normal")
-        computed.overflow_wrap = rs.overflow_wrap;
+        { computed.overflow_wrap = rs.overflow_wrap; computed.markExplicitlySet("overflow-wrap"); }
     if (!rs.vertical_align.empty() && rs.vertical_align != "baseline")
         computed.vertical_align = rs.vertical_align;
-    if (!rs.direction.empty() && rs.direction != "ltr") computed.direction = rs.direction;
-    if (rs.text_indent != 0.0f) computed.text_indent = rs.text_indent;
+    if (!rs.direction.empty() && rs.direction != "ltr") { computed.direction = rs.direction; computed.markExplicitlySet("direction"); }
+    if (rs.text_indent != 0.0f) { computed.text_indent = rs.text_indent; computed.markExplicitlySet("text-indent"); }
     if (rs.webkit_line_clamp != 0) computed.webkit_line_clamp = rs.webkit_line_clamp;
 
     // Text shadow
@@ -134,8 +134,8 @@ void applyRuleOverflowProperties(const ComputedStyle& rs, ComputedStyle& compute
     }
     if (!rs.overflow_x.empty() && rs.overflow_x != "visible") computed.overflow_x = rs.overflow_x;
     if (!rs.overflow_y.empty() && rs.overflow_y != "visible") computed.overflow_y = rs.overflow_y;
-    if (!rs.visibility.empty() && rs.visibility != "visible") computed.visibility = rs.visibility;
-    if (!rs.cursor.empty() && rs.cursor != "auto") computed.cursor = rs.cursor;
+    if (!rs.visibility.empty() && rs.visibility != "visible") { computed.visibility = rs.visibility; computed.markExplicitlySet("visibility"); }
+    if (!rs.cursor.empty() && rs.cursor != "auto") { computed.cursor = rs.cursor; computed.markExplicitlySet("cursor"); }
 }
 
 void applyRuleBoxModel(const ComputedStyle& rs, ComputedStyle& computed) {
@@ -214,7 +214,7 @@ void applyRuleTransform(const ComputedStyle& rs, ComputedStyle& computed) {
 // Called by both applyMatchingRules() and applyMatchingRulesIndexed().
 void applyRuleProperties(const ComputedStyle& rs, ComputedStyle& computed) {
     // Visual / color
-    if (!rs.color.empty() && rs.color != "#000000") computed.color = rs.color;
+    if (!rs.color.empty() && rs.color != "#000000") { computed.color = rs.color; computed.markExplicitlySet("color"); }
     if (!rs.background_color.empty() && rs.background_color != "transparent")
         computed.background_color = rs.background_color;
     if (!rs.background_image.empty()) computed.background_image = rs.background_image;
@@ -336,7 +336,7 @@ const std::unordered_map<std::string_view, TagStyleHandler> kTagDefaultHandlers 
 
     // Inline elements
     {"span", [](ComputedStyle& s) { s.setDisplay("inline"); }},
-    {"a", [](ComputedStyle& s) { s.setDisplay("inline"); }},
+    {"a", [](ComputedStyle& s) { s.setDisplay("inline"); s.color = "#0000EE"; s.text_decoration = "underline"; s.cursor = "pointer"; }},
     {"b", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_weight = "bold"; }},
     {"i", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_style = "italic"; }},
     {"strong", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_weight = "bold"; }},
@@ -646,7 +646,10 @@ void StyleEngine::computeStyles(DOMNodePtr node) {
         node->getComputedStyle().display = "none";
     }
 
-    // Derive layout mode
+    // [hidden] attribute support
+    if (node->hasAttribute("hidden")) {
+        node->getComputedStyle().display = "none";
+    }
     node->getComputedStyle().layout_mode = deriveLayoutModeFromDisplay(node->getComputedStyle());
 
     // Process pseudo-elements (::before/::after)
@@ -698,27 +701,32 @@ void StyleEngine::applyMatchingRules(DOMNodePtr node) {
 void StyleEngine::inheritFromParent(DOMNodePtr node) {
     auto parent = node->getParent();
     if (!parent) return;
-    
+
     auto& computed = node->getComputedStyle();
     const auto& parent_style = parent->getComputedStyle();
-    
-    // Inherit text properties
-    if (computed.color == "#000000") computed.color = parent_style.color;
-    if (computed.font_family == "Arial") computed.font_family = parent_style.font_family;
-    if (computed.font_size == 16.0f) computed.font_size = parent_style.font_size;
-    if (computed.font_weight == "normal") computed.font_weight = parent_style.font_weight;
-    if (computed.font_style == "normal") computed.font_style = parent_style.font_style;
-    if (computed.text_align == "left") computed.text_align = parent_style.text_align;
+
+    // Inherit text properties (only if not explicitly set)
+    if (!computed.isExplicitlySet("color")) computed.color = parent_style.color;
+    if (!computed.isExplicitlySet("font-family")) computed.font_family = parent_style.font_family;
+    if (!computed.isExplicitlySet("font-size")) computed.font_size = parent_style.font_size;
+    if (!computed.isExplicitlySet("font-weight")) computed.font_weight = parent_style.font_weight;
+    if (!computed.isExplicitlySet("font-style")) computed.font_style = parent_style.font_style;
+    if (!computed.isExplicitlySet("text-align")) computed.text_align = parent_style.text_align;
     if (!computed.has_line_height) {
         computed.line_height = parent_style.line_height;
         computed.line_height_is_unitless = parent_style.line_height_is_unitless;
     }
 
-    if (computed.letter_spacing_em == 0.0f) computed.letter_spacing_em = parent_style.letter_spacing_em;
-    if (computed.word_spacing_px == 0.0f) computed.word_spacing_px = parent_style.word_spacing_px;
-    if (computed.white_space == "normal") computed.white_space = parent_style.white_space;
-    if (computed.direction == "ltr") computed.direction = parent_style.direction;
-    if (computed.cursor == "auto") computed.cursor = parent_style.cursor;
+    if (!computed.isExplicitlySet("letter-spacing")) computed.letter_spacing_em = parent_style.letter_spacing_em;
+    if (!computed.isExplicitlySet("word-spacing")) computed.word_spacing_px = parent_style.word_spacing_px;
+    if (!computed.isExplicitlySet("white-space")) computed.white_space = parent_style.white_space;
+    if (!computed.isExplicitlySet("direction")) computed.direction = parent_style.direction;
+    if (!computed.isExplicitlySet("cursor")) computed.cursor = parent_style.cursor;
+    if (!computed.isExplicitlySet("visibility")) computed.visibility = parent_style.visibility;
+    if (!computed.isExplicitlySet("text-indent")) computed.text_indent = parent_style.text_indent;
+    if (!computed.isExplicitlySet("text-transform")) computed.text_transform = parent_style.text_transform;
+    if (!computed.isExplicitlySet("word-break")) computed.word_break = parent_style.word_break;
+    if (!computed.isExplicitlySet("overflow-wrap")) computed.overflow_wrap = parent_style.overflow_wrap;
 }
 
 bool StyleEngine::matches(const std::string& selector, DOMNodePtr node) {
@@ -1314,6 +1322,11 @@ void StyleEngine::recomputeNodeStyleFull(DOMNodePtr node) {
         "head", "style", "script", "meta", "title", "link"
     };
     if (kAlwaysHiddenTags.count(node->getTagName()) > 0) {
+        node->getComputedStyle().display = "none";
+    }
+
+    // [hidden] attribute support
+    if (node->hasAttribute("hidden")) {
         node->getComputedStyle().display = "none";
     }
 

@@ -1,4 +1,5 @@
 ﻿#include "js_bindings.hpp"
+#include "js_node_bindings.hpp"
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -1509,6 +1510,12 @@ void JSBindings::initialize() {
     initializeDocumentAPI();
     initializeElementAPI();
     initializeEventAPI();
+
+    // Initialize Node constants (Node.ELEMENT_NODE, etc.)
+    JSContext* ctx = engine_->getContext();
+    if (ctx) {
+        initializeNodeConstants(ctx);
+    }
 }
 
 void JSBindings::scanAndRegisterInlineEventHandlers() {
@@ -1665,6 +1672,21 @@ void JSBindings::initializeDocumentAPI() {
     // CSSOM: document.styleSheets
     JS_SetPropertyStr(ctx, document, "styleSheets", doc_getStyleSheets(ctx, document, 0, nullptr));
 
+    // document.addEventListener / removeEventListener
+    // Delegate to body node for event handling
+    JS_SetPropertyStr(ctx, document, "addEventListener",
+        JS_NewCFunction(ctx, elem_addEventListener, "addEventListener", 2));
+    JS_SetPropertyStr(ctx, document, "removeEventListener",
+        JS_NewCFunction(ctx, elem_removeEventListener, "removeEventListener", 2));
+
+    // Give document a __node_id__ if body exists, so event listeners can be registered
+    if (dom_manager_) {
+        auto body_nodes = dom_manager_->getElementsByTagName("body");
+        if (!body_nodes.empty()) {
+            setNodeOpaque(ctx, document, body_nodes[0]);
+        }
+    }
+
     // JS_SetPropertyStr takes ownership of 'document'
     JS_SetPropertyStr(ctx, global, "document", document);
     JS_FreeValue(ctx, global);
@@ -1819,6 +1841,11 @@ JSValue JSBindings::createJSElement(JSContext* ctx, const dom::DOMNodePtr& node)
     JS_SetPropertyStr(ctx, elem, "style", elem_getStyle(ctx, elem, 0, nullptr));
     JS_SetPropertyStr(ctx, elem, "classList", elem_getClassList(ctx, elem, 0, nullptr));
 
+    // Bind Node, Element, and HTMLElement interface properties (from js_node_bindings.cpp)
+    bindNodeProperties(ctx, elem, node, bindings);
+    bindElementProperties(ctx, elem, node, bindings);
+    bindHTMLElementProperties(ctx, elem, node, bindings);
+
     // Handle inline event handlers (onclick, onchange, etc.) - only on first creation
     if (bindings && !already_has_wrapper) {
         const char* event_attrs[] = {
@@ -1936,7 +1963,8 @@ void JSBindings::ensureEventBridgeForNode(const dom::DOMNodePtr& node, const std
 
     dom::EventListener callback;
 
-    if (type == "click" || type == "mousedown" || type == "mouseup" || type == "mousemove") {
+    if (type == "click" || type == "mousedown" || type == "mouseup" || type == "mousemove" ||
+        type == "mouseenter" || type == "mouseleave" || type == "mouseover" || type == "mouseout") {
         callback = [this, node_id, type](const dom::Event& ev) {
             this->dispatchMouseEvent(node_id, type.c_str(), ev.mouse_x, ev.mouse_y, ev.mouse_button);
         };
@@ -1944,8 +1972,17 @@ void JSBindings::ensureEventBridgeForNode(const dom::DOMNodePtr& node, const std
         callback = [this, node_id, type](const dom::Event& ev) {
             this->dispatchKeyEvent(node_id, type.c_str(), ev.key_code);
         };
+    } else if (type == "focus" || type == "blur" || type == "change" || type == "input" ||
+               type == "submit" || type == "scroll" || type == "resize" ||
+               type == "DOMContentLoaded" || type == "wheel") {
+        callback = [this, node_id, type](const dom::Event&) {
+            this->dispatchSimpleEvent(node_id, type.c_str());
+        };
     } else {
-        return;
+        // Unknown event type - still create a simple bridge
+        callback = [this, node_id, type](const dom::Event&) {
+            this->dispatchSimpleEvent(node_id, type.c_str());
+        };
     }
 
     uint64_t listener_id = event_dispatcher_->addEventListener(node, type, callback);
@@ -1984,12 +2021,32 @@ void JSBindings::dispatchMouseEvent(uint64_t node_id, const char* type, int32_t 
         JS_SetPropertyStr(ctx, ev, "bubbles", JS_TRUE);
         JS_SetPropertyStr(ctx, ev, "cancelable", JS_TRUE);
 
+        // offsetX/offsetY: relative to target element's bounding rect
         auto dom_it = id_to_node_.find(node_id);
         if (dom_it != id_to_node_.end()) {
+            auto rect = dom_it->second->getBoundingClientRect();
+            JS_SetPropertyStr(ctx, ev, "offsetX", JS_NewFloat64(ctx, x - rect.x));
+            JS_SetPropertyStr(ctx, ev, "offsetY", JS_NewFloat64(ctx, y - rect.y));
+
             JSValue target = createJSElement(ctx, dom_it->second);
             JS_SetPropertyStr(ctx, ev, "target", target);
             JS_SetPropertyStr(ctx, ev, "currentTarget", JS_DupValue(ctx, target));
+        } else {
+            JS_SetPropertyStr(ctx, ev, "offsetX", JS_NewInt32(ctx, 0));
+            JS_SetPropertyStr(ctx, ev, "offsetY", JS_NewInt32(ctx, 0));
         }
+
+        // Modifier keys (default false)
+        JS_SetPropertyStr(ctx, ev, "altKey", JS_FALSE);
+        JS_SetPropertyStr(ctx, ev, "ctrlKey", JS_FALSE);
+        JS_SetPropertyStr(ctx, ev, "shiftKey", JS_FALSE);
+        JS_SetPropertyStr(ctx, ev, "metaKey", JS_FALSE);
+
+        // Event methods
+        JS_SetPropertyStr(ctx, ev, "preventDefault",
+            JS_NewCFunction(ctx, event_preventDefault, "preventDefault", 0));
+        JS_SetPropertyStr(ctx, ev, "stopPropagation",
+            JS_NewCFunction(ctx, event_stopPropagation, "stopPropagation", 0));
 
         JSValue ret = JS_Call(ctx, fn, JS_UNDEFINED, 1, &ev);
         if (JS_IsException(ret)) {
@@ -2026,8 +2083,61 @@ void JSBindings::dispatchKeyEvent(uint64_t node_id, const char* type, uint32_t k
         JS_SetPropertyStr(ctx, ev, "type", JS_NewString(ctx, type));
         JS_SetPropertyStr(ctx, ev, "keyCode", JS_NewInt32(ctx, (int32_t)key_code));
         JS_SetPropertyStr(ctx, ev, "charCode", JS_NewInt32(ctx, (int32_t)key_code));
+        JS_SetPropertyStr(ctx, ev, "which", JS_NewInt32(ctx, (int32_t)key_code));
         JS_SetPropertyStr(ctx, ev, "bubbles", JS_TRUE);
         JS_SetPropertyStr(ctx, ev, "cancelable", JS_TRUE);
+
+        // Map key_code to standard 'key' and 'code' strings
+        std::string key_str;
+        std::string code_str;
+        if (key_code >= 32 && key_code < 127) {
+            key_str = std::string(1, (char)key_code);
+            if (key_code >= 'a' && key_code <= 'z') {
+                code_str = std::string("Key") + (char)(key_code - 32);
+            } else if (key_code >= 'A' && key_code <= 'Z') {
+                code_str = std::string("Key") + (char)key_code;
+            } else if (key_code >= '0' && key_code <= '9') {
+                code_str = std::string("Digit") + (char)key_code;
+            } else if (key_code == ' ') {
+                key_str = " ";
+                code_str = "Space";
+            } else {
+                code_str = key_str;
+            }
+        } else if (key_code == 13) {
+            key_str = "Enter"; code_str = "Enter";
+        } else if (key_code == 27) {
+            key_str = "Escape"; code_str = "Escape";
+        } else if (key_code == 8) {
+            key_str = "Backspace"; code_str = "Backspace";
+        } else if (key_code == 9) {
+            key_str = "Tab"; code_str = "Tab";
+        } else if (key_code == 127) {
+            key_str = "Delete"; code_str = "Delete";
+        } else if (key_code == 0x40000050) {
+            key_str = "ArrowLeft"; code_str = "ArrowLeft";
+        } else if (key_code == 0x4000004F) {
+            key_str = "ArrowRight"; code_str = "ArrowRight";
+        } else if (key_code == 0x40000052) {
+            key_str = "ArrowUp"; code_str = "ArrowUp";
+        } else if (key_code == 0x40000051) {
+            key_str = "ArrowDown"; code_str = "ArrowDown";
+        }
+
+        JS_SetPropertyStr(ctx, ev, "key", JS_NewString(ctx, key_str.c_str()));
+        JS_SetPropertyStr(ctx, ev, "code", JS_NewString(ctx, code_str.c_str()));
+
+        // Modifier keys
+        JS_SetPropertyStr(ctx, ev, "altKey", JS_FALSE);
+        JS_SetPropertyStr(ctx, ev, "ctrlKey", JS_FALSE);
+        JS_SetPropertyStr(ctx, ev, "shiftKey", JS_FALSE);
+        JS_SetPropertyStr(ctx, ev, "metaKey", JS_FALSE);
+
+        // Event methods
+        JS_SetPropertyStr(ctx, ev, "preventDefault",
+            JS_NewCFunction(ctx, event_preventDefault, "preventDefault", 0));
+        JS_SetPropertyStr(ctx, ev, "stopPropagation",
+            JS_NewCFunction(ctx, event_stopPropagation, "stopPropagation", 0));
 
         auto dom_it = id_to_node_.find(node_id);
         if (dom_it != id_to_node_.end()) {

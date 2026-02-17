@@ -960,6 +960,31 @@ struct EngineView::Impl {
                     DONG_LOG_INFO("[EngineView] Script execution completed");
                 }
             }
+
+            // Dispatch DOMContentLoaded event on document (body)
+            if (js_bindings) {
+                auto bodies = dom_manager->getElementsByTagName("body");
+                dong::dom::DOMNodePtr doc_target;
+                if (!bodies.empty()) {
+                    doc_target = bodies[0];
+                } else {
+                    doc_target = dom_manager->getRoot();
+                }
+                if (doc_target) {
+                    uint64_t nid = js_bindings->getNodeIdFor(doc_target);
+                    if (!nid) {
+                        JSContext* qctx = script_engine->getContext();
+                        if (qctx) {
+                            JSValue tmp = js_bindings->createJSElement(qctx, doc_target);
+                            JS_FreeValue(qctx, tmp);
+                            nid = js_bindings->getNodeIdFor(doc_target);
+                        }
+                    }
+                    if (nid) {
+                        js_bindings->dispatchSimpleEvent(nid, "DOMContentLoaded");
+                    }
+                }
+            }
         } else {
             DONG_LOG_WARN("[EngineView] Cannot execute scripts: script_engine or dom_manager is null");
         }
@@ -1176,6 +1201,54 @@ struct EngineView::Impl {
 
         clearActiveElement();
         dispatchMouseEvent("click", last_mouse_x, last_mouse_y, button);
+
+        // Checkbox/radio toggle on click
+        if (dom_manager && layout_engine) {
+            auto clicked = hitTestElementAt(dom_manager.get(), layout_engine.get(), last_mouse_x, last_mouse_y);
+            if (clicked && clicked->getTagName() == "input") {
+                std::string type = clicked->getAttribute("type");
+                if (type == "checkbox") {
+                    if (clicked->hasAttribute("checked")) {
+                        clicked->removeAttribute("checked");
+                    } else {
+                        clicked->setAttribute("checked", "");
+                    }
+                    markNeedsRepaint();
+                    // Dispatch change event
+                    if (js_bindings && script_engine) {
+                        ensureJSBindingsInitialized();
+                        uint64_t nid = js_bindings->getNodeIdFor(clicked);
+                        if (nid) {
+                            js_bindings->dispatchSimpleEvent(nid, "change");
+                        }
+                    }
+                } else if (type == "radio") {
+                    if (!clicked->hasAttribute("checked")) {
+                        // Uncheck other radios in same name group
+                        std::string name = clicked->getAttribute("name");
+                        if (!name.empty()) {
+                            auto inputs = dom_manager->getElementsByTagName("input");
+                            for (auto& inp : inputs) {
+                                if (inp.get() != clicked.get() &&
+                                    inp->getAttribute("type") == "radio" &&
+                                    inp->getAttribute("name") == name) {
+                                    inp->removeAttribute("checked");
+                                }
+                            }
+                        }
+                        clicked->setAttribute("checked", "");
+                        markNeedsRepaint();
+                        if (js_bindings && script_engine) {
+                            ensureJSBindingsInitialized();
+                            uint64_t nid = js_bindings->getNodeIdFor(clicked);
+                            if (nid) {
+                                js_bindings->dispatchSimpleEvent(nid, "change");
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
 
@@ -1189,6 +1262,15 @@ struct EngineView::Impl {
         constexpr float kScrollSpeed = 20.0f;
         scroll_container->scrollBy(delta_x * kScrollSpeed, delta_y * kScrollSpeed);
         markNeedsRepaint();
+
+        // Dispatch scroll event on the scroll container
+        if (js_bindings && script_engine) {
+            ensureJSBindingsInitialized();
+            uint64_t nid = js_bindings->getNodeIdFor(scroll_container);
+            if (nid) {
+                js_bindings->dispatchSimpleEvent(nid, "scroll");
+            }
+        }
     }
 
     void sendKey(uint32_t key_code, bool pressed) {
@@ -1206,7 +1288,7 @@ struct EngineView::Impl {
 
             if (focus_manager) {
                 auto focused = focus_manager->getFocusedElement();
-                if (focused && dong::dom::isEditableElement(focused)) {
+                if (focused && dong::dom::isEditableElement(focused) && !focused->hasAttribute("readonly")) {
                     auto* state = dong::dom::getInputState(focused);
                     if (state) {
                         bool handled = false;
@@ -1248,11 +1330,46 @@ struct EngineView::Impl {
         }
 
         if (focused && dong::dom::isEditableElement(focused)) {
+            // Check readonly
+            if (focused->hasAttribute("readonly")) {
+                return;
+            }
+
             auto* state = dong::dom::getInputState(focused);
             if (state) {
+                // Check maxlength
+                if (focused->hasAttribute("maxlength")) {
+                    std::string ml_str = focused->getAttribute("maxlength");
+                    int maxlen = -1;
+                    try { maxlen = std::stoi(ml_str); } catch (...) {}
+                    if (maxlen >= 0) {
+                        // Count current UTF-8 chars
+                        size_t current_len = 0;
+                        for (size_t i = 0; i < state->getValue().size(); ) {
+                            unsigned char c = state->getValue()[i];
+                            if ((c & 0x80) == 0) i += 1;
+                            else if ((c & 0xE0) == 0xC0) i += 2;
+                            else if ((c & 0xF0) == 0xE0) i += 3;
+                            else i += 4;
+                            current_len++;
+                        }
+                        if (current_len >= static_cast<size_t>(maxlen)) {
+                            return;
+                        }
+                    }
+                }
                 state->insertText(text);
                 focused->setAttribute("value", state->getValue());
                 markNeedsRepaint();
+
+                // Dispatch input event
+                if (js_bindings && script_engine) {
+                    ensureJSBindingsInitialized();
+                    uint64_t nid = js_bindings->getNodeIdFor(focused);
+                    if (nid) {
+                        js_bindings->dispatchSimpleEvent(nid, "input");
+                    }
+                }
             }
         }
     }

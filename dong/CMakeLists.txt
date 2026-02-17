@@ -126,6 +126,7 @@ add_library(dong SHARED
     # Script
     src/script/script_engine.cpp
     src/script/js_bindings.cpp
+    src/script/js_node_bindings.cpp
     # Render
     src/render/painter.cpp
     src/render/painter/painter_media.cpp
@@ -223,6 +224,7 @@ add_library(dong_render STATIC
     # Script
     src/script/script_engine.cpp
     src/script/js_bindings.cpp
+    src/script/js_node_bindings.cpp
     # Render
     src/render/painter.cpp
     src/render/painter/painter_media.cpp

@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  body { font-size: 16px; padding: 20px; }
+  .target { background: lightblue; padding: 5px; margin: 3px; }
+  .nested { background: lightyellow; padding: 5px; }
+  #result { margin-top: 20px; padding: 10px; background: #eee; white-space: pre; font-family: monospace; }
+</style>
+</head>
+<body>
+  <div id="container" class="outer">
+    <div class="target" id="t1">Target 1</div>
+    <div class="target nested" id="t2">Target 2</div>
+    <div id="t3">
+      <span class="target" id="t4">Nested target</span>
+    </div>
+  </div>
+  <div id="removeme">Remove me</div>
+  <div id="result"></div>
+  <script>
+    var r = '';
+    var container = document.getElementById('container');
+    var t1 = document.getElementById('t1');
+    var t2 = document.getElementById('t2');
+
+    // querySelector on element
+    var found = container.querySelector('.target');
+    r += 'container.querySelector(".target"): ' + (found !== null ? 'PASS' : 'FAIL') + '\n';
+
+    // querySelectorAll on element
+    var all = container.querySelectorAll('.target');
+    r += 'container.querySelectorAll(".target").length >= 2: ' + (all.length >= 2 ? 'PASS' : 'FAIL (' + all.length + ')') + '\n';
+
+    // matches
+    r += 't1.matches(".target"): ' + (t1.matches('.target') ? 'PASS' : 'FAIL') + '\n';
+    r += 't1.matches(".nested"): ' + (t1.matches('.nested') === false ? 'PASS' : 'FAIL') + '\n';
+    r += 't2.matches(".target.nested"): ' + (t2.matches('.target.nested') ? 'PASS' : 'FAIL') + '\n';
+
+    // closest
+    var t4 = document.getElementById('t4');
+    var closest = t4.closest('#container');
+    r += 't4.closest("#container") found: ' + (closest !== null ? 'PASS' : 'FAIL') + '\n';
+
+    // getBoundingClientRect
+    var rect = t1.getBoundingClientRect();
+    r += 'getBoundingClientRect has width: ' + (typeof rect.width === 'number' ? 'PASS' : 'FAIL') + '\n';
+    r += 'getBoundingClientRect has x: ' + (typeof rect.x === 'number' ? 'PASS' : 'FAIL') + '\n';
+
+    // remove
+    var removeme = document.getElementById('removeme');
+    removeme.remove();
+    var afterRemove = document.getElementById('removeme');
+    r += 'element.remove() works: ' + (afterRemove === null ? 'PASS' : 'FAIL') + '\n';
+
+    // hidden property
+    r += 'container.hidden === false: ' + (container.hidden === false ? 'PASS' : 'FAIL') + '\n';
+    container.hidden = true;
+    r += 'container.hidden after set true: ' + (container.hidden === true ? 'PASS' : 'FAIL') + '\n';
+    container.hidden = false;
+
+    // hasAttribute / removeAttribute
+    t1.setAttribute('data-test', 'hello');
+    r += 'hasAttribute("data-test"): ' + (t1.hasAttribute('data-test') ? 'PASS' : 'FAIL') + '\n';
+    t1.removeAttribute('data-test');
+    r += 'removeAttribute works: ' + (!t1.hasAttribute('data-test') ? 'PASS' : 'FAIL') + '\n';
+
+    document.getElementById('result').textContent = r;
+    console.log('DOM Element interface test loaded');
+  </script>
+</body>
+</html>
