@@ -75,9 +75,9 @@ target_include_directories(dong_sdl_backend PUBLIC
     ${CMAKE_SOURCE_DIR}/third_party/SDL_shadercross/include
     ${DXC_INCLUDE_PATH}
 
-    ${FREETYPE_PREFIX}/include/freetype2
-    ${HARFBUZZ_PREFIX}/include/harfbuzz
-    ${MSDFGEN_PREFIX}/include
+    ${CMAKE_SOURCE_DIR}/third_party/freetype/include
+    ${CMAKE_SOURCE_DIR}/third_party/harfbuzz/src
+    ${CMAKE_SOURCE_DIR}/third_party
 )
 
 # spirv-cross headers (used by SDL_shadercross)
@@ -109,6 +109,10 @@ target_link_libraries(dong_sdl_backend PRIVATE SDL3)
 if(WIN32)
     target_link_directories(dong_sdl_backend PRIVATE ${DXC_LIB_PATH})
     target_link_libraries(dong_sdl_backend PRIVATE dxcompiler)
+elseif(APPLE AND DXC_LIB_PATH)
+    # On macOS, DXC is part of VulkanSDK
+    target_link_directories(dong_sdl_backend PRIVATE ${DXC_LIB_PATH})
+    target_link_libraries(dong_sdl_backend PRIVATE dxcompiler)
 endif()
 
 if(VULKAN_SDK_PATH)
@@ -124,19 +128,19 @@ endif()
 target_link_libraries(dong_sdl_backend PRIVATE dong dong_render)
 
 # Text shaping/rasterization deps (required by glyph atlas)
+set(ZIG_OUT_PREFIX "${CMAKE_SOURCE_DIR}/zig-out")
 if(WIN32)
     target_link_libraries(dong_sdl_backend PRIVATE
-        "${FREETYPE_PREFIX}/lib/freetype.lib"
-        "${HARFBUZZ_PREFIX}/lib/harfbuzz.lib"
-        "${MSDFGEN_PREFIX}/lib/msdfgen-core.lib"
-        "${MSDFGEN_PREFIX}/lib/msdfgen-ext.lib"
+        "${ZIG_OUT_PREFIX}/lib/freetype.lib"
+        "${ZIG_OUT_PREFIX}/lib/harfbuzz.lib"
+        "${ZIG_OUT_PREFIX}/lib/msdfgen-core.lib"
+        "${ZIG_OUT_PREFIX}/lib/msdfgen-ext.lib"
     )
 else()
     target_link_libraries(dong_sdl_backend PRIVATE
-        "${FREETYPE_PREFIX}/lib/libfreetype.a"
-        "${HARFBUZZ_PREFIX}/lib/libharfbuzz.a"
-        "${MSDFGEN_PREFIX}/lib/libmsdfgen-core.a"
-        "${MSDFGEN_PREFIX}/lib/libmsdfgen-ext.a"
+        "${ZIG_OUT_PREFIX}/lib/libfreetype.a"
+        "${ZIG_OUT_PREFIX}/lib/libharfbuzz.a"
+        "${ZIG_OUT_PREFIX}/lib/libmsdfgen.a"
     )
 endif()
 

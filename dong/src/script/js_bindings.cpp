@@ -18,6 +18,10 @@ static dong::script::JSBindings* getBindingsFromContext(JSContext* ctx) {
     return static_cast<dong::script::JSBindings*>(JS_GetContextOpaque(ctx));
 }
 
+static bool debugScriptEval() {
+    return std::getenv("DONG_DEBUG_SCRIPT_EVAL") != nullptr;
+}
+
 // ============================================================
 // Console API Implementation - extern "C" for QuickJS callbacks
 // ============================================================
@@ -395,6 +399,11 @@ JSValue computed_style_getPropertyValue(JSContext* ctx, JSValueConst this_val, i
         return JS_NewString(ctx, "");
     }
 
+    const bool dbg = debugScriptEval();
+    if (dbg) {
+        DONG_LOG_INFO("[JS] computedStyle.getPropertyValue('%s')", prop);
+    }
+
     std::string css_prop(prop);
     JS_FreeCString(ctx, prop);
 
@@ -404,6 +413,10 @@ JSValue computed_style_getPropertyValue(JSContext* ctx, JSValueConst this_val, i
     });
 
     std::string val = getComputedStyleValue(node->getComputedStyle(), css_prop);
+    if (dbg) {
+        DONG_LOG_INFO("[JS] computedStyle.getPropertyValue -> '%s'", val.c_str());
+    }
+
     return JS_NewString(ctx, val.c_str());
 }
 
@@ -412,6 +425,11 @@ JSValue window_getComputedStyle(JSContext* ctx, JSValueConst this_val, int argc,
 
     if (argc < 1) {
         return JS_NULL;
+    }
+
+    const bool dbg = debugScriptEval();
+    if (dbg) {
+        DONG_LOG_INFO("[JS] window.getComputedStyle(...) begin");
     }
 
     JSValue element = JS_DupValue(ctx, argv[0]);
@@ -430,6 +448,10 @@ JSValue window_getComputedStyle(JSContext* ctx, JSValueConst this_val, int argc,
     JS_SetPropertyStr(ctx, obj, "display", JS_NewString(ctx, node->getComputedStyle().display.c_str()));
     JS_SetPropertyStr(ctx, obj, "color", JS_NewString(ctx, node->getComputedStyle().color.c_str()));
     JS_SetPropertyStr(ctx, obj, "backgroundColor", JS_NewString(ctx, node->getComputedStyle().background_color.c_str()));
+
+    if (dbg) {
+        DONG_LOG_INFO("[JS] window.getComputedStyle(...) -> object");
+    }
 
     return obj;
 }
@@ -557,7 +579,7 @@ JSValue createStyleProxy(JSContext* ctx, JSValueConst element, const dom::DOMNod
     JSValue target = JS_NewObject(ctx);
     JS_SetPropertyStr(ctx, target, "__element__", JS_DupValue(ctx, element));
 
-    // Seed common properties for easier inspection
+    // Seed common properties for easier inspection.
     if (node) {
         const auto& style = node->getComputedStyle();
         JS_SetPropertyStr(ctx, target, "display", JS_NewString(ctx, style.display.c_str()));
@@ -573,9 +595,28 @@ JSValue createStyleProxy(JSContext* ctx, JSValueConst element, const dom::DOMNod
     JSValue proxy_ctor = JS_GetPropertyStr(ctx, global, "Proxy");
     JS_FreeValue(ctx, global);
 
+    if (!JS_IsFunction(ctx, proxy_ctor)) {
+        if (debugScriptEval()) {
+            DONG_LOG_WARN("[JS] Proxy constructor not available; returning plain style object");
+        }
+        JS_FreeValue(ctx, proxy_ctor);
+        JS_FreeValue(ctx, handler);
+        return target;
+    }
+
     JSValue argv_local[2] = { target, handler };
     JSValue proxy = JS_CallConstructor(ctx, proxy_ctor, 2, argv_local);
     JS_FreeValue(ctx, proxy_ctor);
+
+    if (JS_IsException(proxy)) {
+        if (debugScriptEval()) {
+            DONG_LOG_WARN("[JS] Proxy construction failed; returning plain style object");
+        }
+        JS_FreeValue(ctx, proxy);
+        JS_FreeValue(ctx, handler);
+        return target;
+    }
+
     JS_FreeValue(ctx, target);
     JS_FreeValue(ctx, handler);
     return proxy;
@@ -590,19 +631,32 @@ JSValue createStyleProxy(JSContext* ctx, JSValueConst element, const dom::DOMNod
 static JSValue doc_getElementById(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     auto bindings = getBindingsFromContext(ctx);
     if (!bindings || argc < 1) return JS_NULL;
-    
+
+    const bool dbg = debugScriptEval();
+    if (dbg) {
+        DONG_LOG_INFO("[JS] document.getElementById(...) enter");
+    }
+
     const char* id = JS_ToCString(ctx, argv[0]);
     if (!id) return JS_NULL;
-    
+
+    if (dbg) {
+        DONG_LOG_INFO("[JS] document.getElementById('%s')", id);
+    }
+
     auto dom_mgr = bindings->dom_manager_;
     if (!dom_mgr) {
         JS_FreeCString(ctx, id);
         return JS_NULL;
     }
-    
+
     auto node = dom_mgr->getElementById(id);
     JS_FreeCString(ctx, id);
-    
+
+    if (dbg) {
+        DONG_LOG_INFO("[JS] document.getElementById -> node=%p", (void*)node.get());
+    }
+
     if (!node) return JS_NULL;
     return bindings->createJSElement(ctx, node);
 }
@@ -770,18 +824,27 @@ static JSValue elem_getAttribute(JSContext* ctx, JSValueConst this_val, int argc
 
 static JSValue elem_setAttribute(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     if (argc < 2) return JS_UNDEFINED;
-    
+
     const char* attr_name = JS_ToCString(ctx, argv[0]);
     const char* attr_value = JS_ToCString(ctx, argv[1]);
-    
+
+    const bool dbg = debugScriptEval();
+    if (dbg && attr_name) {
+        DONG_LOG_INFO("[JS] element.setAttribute('%s', ...)", attr_name);
+    }
+
     auto node = JSBindings::getNodeOpaque(ctx, this_val);
     if (node && attr_name && attr_value) {
         node->setAttribute(attr_name, attr_value);
     }
-    
+
+    if (dbg) {
+        DONG_LOG_INFO("[JS] element.setAttribute done (node=%p)", (void*)node.get());
+    }
+
     if (attr_name) JS_FreeCString(ctx, attr_name);
     if (attr_value) JS_FreeCString(ctx, attr_value);
-    
+
     return JS_UNDEFINED;
 }
 
@@ -1721,6 +1784,11 @@ void JSBindings::initializeEventAPI() {
 JSValue JSBindings::createJSElement(JSContext* ctx, const dom::DOMNodePtr& node) {
     if (!node) return JS_NULL;
 
+    const bool dbg = debugScriptEval();
+    if (dbg) {
+        DONG_LOG_INFO("[JS] createJSElement begin node=%p tag=%s", (void*)node.get(), node->getTagName().c_str());
+    }
+
     // Check if this node already has a JS wrapper (to avoid duplicate inline handler registration)
     auto bindings = getBindingsFromContext(ctx);
     bool already_has_wrapper = false;
@@ -1894,6 +1962,10 @@ JSValue JSBindings::createJSElement(JSContext* ctx, const dom::DOMNodePtr& node)
                 }
             }
         }
+    }
+
+    if (dbg) {
+        DONG_LOG_INFO("[JS] createJSElement done node=%p", (void*)node.get());
     }
 
     return elem;

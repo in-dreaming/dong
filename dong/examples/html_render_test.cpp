@@ -441,6 +441,8 @@ void printUsage(const char* prog) {
 }
 
 int main(int argc, char* argv[]) {
+    fprintf(stderr, "[DEBUG] html_render_test starting...\n");
+    fflush(stderr);
     SDL_Log("=== HTML Render Test (Engine) ===");
 
     if (argc < 2) {

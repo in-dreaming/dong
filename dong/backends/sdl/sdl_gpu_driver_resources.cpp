@@ -120,6 +120,10 @@ void SDLGPUDriver::prepareResources(const GPUCommandList& commands) {
         atlas->addGlyphsBatched(requests);
     }
 
+    // WORKAROUND: SDL3 waitForGPU() causes deadlock in upload context
+    // Instead, we rely on command buffer submission order to ensure uploads complete before draws
+    // The GPU will execute uploads before subsequent render passes
+
     DONG_LOG_DEBUG("[prepareResources] END frame=%llu", frame_index_ + 1);
 }
 

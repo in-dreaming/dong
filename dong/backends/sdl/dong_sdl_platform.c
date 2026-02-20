@@ -19,6 +19,12 @@
 // SDL GPU Driver Implementation
 // =============================================================================
 
+// Transfer buffer tracking for async cleanup
+typedef struct PendingTransferBuffer {
+    SDL_GPUTransferBuffer* buffer;
+    SDL_GPUFence* fence;
+} PendingTransferBuffer;
+
 typedef struct DongSDLGPUDriverImpl {
     DongGPUDriver base;  // Must be first for C polymorphism
     SDL_GPUDevice* device;
@@ -27,6 +33,11 @@ typedef struct DongSDLGPUDriverImpl {
     int initialized;
 
     DongSDLGPUBridge* bridge;
+
+    // Async transfer buffer lifecycle management
+    PendingTransferBuffer* pending_transfers;
+    size_t pending_transfer_count;
+    size_t pending_transfer_capacity;
 } DongSDLGPUDriverImpl;
 
 
@@ -125,6 +136,23 @@ static void sdl_gpu_shutdown(DongGPUDriver* driver) {
     DongSDLGPUDriverImpl* impl = (DongSDLGPUDriverImpl*)driver;
     if (!impl) return;
 
+    // Release all pending transfer buffers
+    if (impl->pending_transfers) {
+        for (size_t i = 0; i < impl->pending_transfer_count; i++) {
+            PendingTransferBuffer* pending = &impl->pending_transfers[i];
+            if (pending->fence && impl->device) {
+                SDL_ReleaseGPUFence(impl->device, pending->fence);
+            }
+            if (pending->buffer && impl->device) {
+                SDL_ReleaseGPUTransferBuffer(impl->device, pending->buffer);
+            }
+        }
+        free(impl->pending_transfers);
+        impl->pending_transfers = NULL;
+        impl->pending_transfer_count = 0;
+        impl->pending_transfer_capacity = 0;
+    }
+
     if (impl->bridge) {
         dong_sdl_gpu_bridge_destroy(impl->bridge);
         impl->bridge = NULL;
@@ -137,6 +165,32 @@ static void sdl_gpu_shutdown(DongGPUDriver* driver) {
     impl->window = NULL;
     impl->initialized = 0;
 }
+
+// Reap completed transfer buffers (called at beginning of frame)
+static void sdl_gpu_reap_transfer_buffers(DongSDLGPUDriverImpl* impl) {
+    if (!impl || !impl->device || !impl->pending_transfers) return;
+
+    size_t write_idx = 0;
+    for (size_t read_idx = 0; read_idx < impl->pending_transfer_count; read_idx++) {
+        PendingTransferBuffer* pending = &impl->pending_transfers[read_idx];
+
+        // Check if fence is signaled
+        int signaled = SDL_QueryGPUFence(impl->device, pending->fence);
+        if (signaled) {
+            // GPU finished reading, safe to release now
+            SDL_ReleaseGPUFence(impl->device, pending->fence);
+            SDL_ReleaseGPUTransferBuffer(impl->device, pending->buffer);
+        } else {
+            // Keep this entry
+            if (write_idx != read_idx) {
+                impl->pending_transfers[write_idx] = impl->pending_transfers[read_idx];
+            }
+            write_idx++;
+        }
+    }
+    impl->pending_transfer_count = write_idx;
+}
+
 
 
 static SDL_GPUTextureFormat convert_texture_format(DongGPUTextureFormat format) {
@@ -337,6 +391,10 @@ static int sdl_gpu_upload_buffer(DongGPUDriver* driver, DongGPUBuffer buffer,
 static int sdl_gpu_begin_frame(DongGPUDriver* driver) {
     DongSDLGPUDriverImpl* impl = (DongSDLGPUDriverImpl*)driver;
     if (!impl || !impl->device) return 0;
+
+    // Reap completed transfer buffers
+    sdl_gpu_reap_transfer_buffers(impl);
+
     // Frame begin is handled implicitly in execute
     return 1;
 }
@@ -552,22 +610,44 @@ static int sdl_gpu_upload_texture_subrect(DongGPUDriver* driver, DongGPUTexture 
         SDL_EndGPUCopyPass(copy_pass);
     }
 
-    // Submit and optionally get fence
+    // Submit and acquire fence
     SDL_GPUFence* fence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd);
-    if (fence) {
-        if (out_fence) {
-            *out_fence = fence;
-        } else {
-            // No fence requested, wait and release
-            SDL_WaitForGPUFences(dev, true, &fence, 1);
-            SDL_ReleaseGPUFence(dev, fence);
-        }
+    if (!fence) {
+        // Failed to acquire fence - must wait synchronously (fallback path)
+        SDL_SubmitGPUCommandBuffer(cmd);
+        SDL_WaitForGPUIdle(dev);  // CAUTION: May deadlock on some platforms
+        SDL_ReleaseGPUTransferBuffer(dev, transfer);
+        return 0;
     }
 
-    // Note: Transfer buffer will be released when fence is signaled
-    // For simplicity, we track this internally or caller must manage
-    // In a full implementation, we'd track (fence, transfer) pairs
-    SDL_ReleaseGPUTransferBuffer(dev, transfer);
+    // Store (fence, buffer) pair for async cleanup
+    // Expand capacity if needed
+    if (impl->pending_transfer_count >= impl->pending_transfer_capacity) {
+        size_t new_capacity = impl->pending_transfer_capacity ? impl->pending_transfer_capacity * 2 : 8;
+        PendingTransferBuffer* new_array = (PendingTransferBuffer*)realloc(
+            impl->pending_transfers,
+            new_capacity * sizeof(PendingTransferBuffer)
+        );
+        if (!new_array) {
+            // Out of memory - must wait synchronously (fallback path)
+            SDL_WaitForGPUFences(dev, true, &fence, 1);
+            SDL_ReleaseGPUFence(dev, fence);
+            SDL_ReleaseGPUTransferBuffer(dev, transfer);
+            return 0;
+        }
+        impl->pending_transfers = new_array;
+        impl->pending_transfer_capacity = new_capacity;
+    }
+
+    // Add to pending list
+    impl->pending_transfers[impl->pending_transfer_count].buffer = transfer;
+    impl->pending_transfers[impl->pending_transfer_count].fence = fence;
+    impl->pending_transfer_count++;
+
+    // If caller requested fence, also return it (they can poll it separately)
+    if (out_fence) {
+        *out_fence = fence;
+    }
 
     return 0;
 }
@@ -856,6 +936,11 @@ DONG_SDL_PLATFORM_API DongGPUDriver* dong_sdl_create_gpu_driver(void* sdl_device
     impl->window = (SDL_Window*)sdl_window;
     impl->owns_device = 0;  // Device is externally owned
     impl->bridge = NULL;
+
+    // Initialize transfer buffer tracking
+    impl->pending_transfers = NULL;
+    impl->pending_transfer_count = 0;
+    impl->pending_transfer_capacity = 0;
 
     return (DongGPUDriver*)impl;
 }

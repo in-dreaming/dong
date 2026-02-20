@@ -1625,6 +1625,10 @@ void SDLGPUDriver::executeDrawText(ExecuteContext& ctx, const GPUCommand& cmd) {
         const float glyph_w = msdf_size * render_scale;
         const float glyph_h = msdf_size * render_scale;
 
+        DONG_LOG_DEBUG("[DrawText] glyph=%u msdf_scale=%.4f msdf_size=%.1f glyph_pixel_scale=%.4f render_scale=%.4f w=%.1f h=%.1f uv=(%.4f,%.4f)-(%.4f,%.4f)",
+                      glyph.glyph_id, msdf_scale, msdf_size, glyph_pixel_scale, render_scale,
+                      glyph_w, glyph_h, entry->u0, entry->v0, entry->u1, entry->v1);
+
         if (glyph_w <= 0.0f || glyph_h <= 0.0f) {
             DONG_LOG_VERBOSE("[DrawText] SKIP glyph[%zu]: glyph_id=%u zero_size (w=%.1f h=%.1f render_scale=%.4f msdf_size=%.0f)",
                              glyph_idx,
@@ -1870,7 +1874,8 @@ void SDLGPUDriver::execute(const GPUCommandList& commands) {
     DONG_PROFILE_SCOPE_CAT("GPU::execute", "gpu");
 
     if (!in_frame_ || !current_cmd_buf_ || !gpu_device_) {
-        DONG_LOG_ERROR("SDLGPUDriver::execute: invalid state");
+        DONG_LOG_ERROR("SDLGPUDriver::execute: invalid state (in_frame=%d cmd_buf=%p device=%p)",
+                       in_frame_, current_cmd_buf_, gpu_device_);
         return;
     }
 

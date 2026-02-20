@@ -87,12 +87,29 @@ FT_Face getOrCreateDesignUnitsFace(const std::string& font_path) {
     }
 
     FT_Face face = nullptr;
-    if (FT_New_Face(g_ft_library, font_path.c_str(), 0, &face) != 0) {
-        DONG_LOG_INFO("FontMetrics: failed to load design units face '%s'", font_path.c_str());
+    FT_Error error = FT_New_Face(g_ft_library, font_path.c_str(), 0, &face);
+    if (error != 0) {
+        DONG_LOG_ERROR("FontMetrics: FT_New_Face failed for '%s': error=%d", font_path.c_str(), error);
+        return nullptr;
+    }
+    if (!face) {
+        DONG_LOG_ERROR("FontMetrics: FT_New_Face returned NULL face for '%s'", font_path.c_str());
         return nullptr;
     }
 
-    // 涓嶈缃?pixel size锛屼繚鎸?design units 妯″紡
+    DONG_LOG_INFO("FontMetrics: Loaded design face '%s' (family='%s', style='%s')",
+                  font_path.c_str(),
+                  face->family_name ? face->family_name : "?",
+                  face->style_name ? face->style_name : "?");
+
+    // NOTE:
+    // We primarily use this face in design-units mode (FT_LOAD_NO_SCALE) so that metrics and
+    // MSDF generation are font-size independent.
+    // However, some integrations (notably hb-ft) assume an active FT_Size exists and may
+    // return zero advances if the face has never had a size set.
+    // Setting a deterministic size here keeps the face usable for both paths.
+    (void)FT_Set_Pixel_Sizes(face, 0, face->units_per_EM > 0 ? face->units_per_EM : 16);
+
     g_design_face_cache.emplace(font_path, face);
     g_design_face_last_used[font_path] = g_face_usage_counter;
 

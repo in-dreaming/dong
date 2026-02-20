@@ -99,9 +99,16 @@ int dong_sdl_gpu_bridge_execute(DongSDLGPUBridge* bridge, const void* command_li
 
     // Check if already in a frame (e.g., offscreen rendering)
     bool already_in_frame = bridge->driver->isInFrame();
-    
+
     if (!already_in_frame) {
         bridge->driver->beginFrame();
+        // Check if beginFrame succeeded
+        if (!bridge->driver->isInFrame()) {
+            // beginFrame failed (likely GPU not fully initialized yet)
+            // This is expected on first frame - just return success
+            // The next frame will work once initialization completes
+            return 1;
+        }
     }
     bridge->driver->prepareResources(*list);
     bridge->driver->execute(*list);

@@ -10,6 +10,20 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
 
+# =============================================================================
+# macOS: Ensure installed executables can locate dylibs in ../lib
+#
+# We install binaries to:  <prefix>/bin
+# and shared libraries to: <prefix>/lib
+# Some targets link against dylibs with install name "@rpath/...".
+# Without an LC_RPATH in the executable, dyld cannot resolve them.
+# =============================================================================
+if(APPLE)
+    set(CMAKE_MACOSX_RPATH ON)
+    set(CMAKE_INSTALL_RPATH "@executable_path/../lib")
+    set(CMAKE_BUILD_WITH_INSTALL_RPATH ON)
+endif()
+
 # Windows MSVC runtime
 if(WIN32 AND NOT MINGW)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
@@ -30,7 +44,7 @@ set(FREETYPE_PREFIX "${CMAKE_SOURCE_DIR}/zig-out/freetype")
 set(HARFBUZZ_PREFIX "${CMAKE_SOURCE_DIR}/zig-out/harfbuzz")
 set(MSDFGEN_PREFIX "${CMAKE_SOURCE_DIR}/zig-out/msdfgen")
 set(SDL3_PREFIX "${CMAKE_SOURCE_DIR}/zig-out/sdl3")
-set(QUICKJS_PREFIX "${CMAKE_SOURCE_DIR}/zig-out/quickjs")
+set(ZIG_OUT_PREFIX "${CMAKE_SOURCE_DIR}/zig-out")
 
 # =============================================================================
 # QuickJS library (static for all platforms - ensures ABI compatibility)
@@ -38,13 +52,13 @@ set(QUICKJS_PREFIX "${CMAKE_SOURCE_DIR}/zig-out/quickjs")
 add_library(quickjs STATIC IMPORTED GLOBAL)
 if(WIN32)
     set_target_properties(quickjs PROPERTIES
-        IMPORTED_LOCATION "${QUICKJS_PREFIX}/lib/quickjs.lib"
-        INTERFACE_INCLUDE_DIRECTORIES "${QUICKJS_PREFIX}/include"
+        IMPORTED_LOCATION "${ZIG_OUT_PREFIX}/lib/quickjs.lib"
+        INTERFACE_INCLUDE_DIRECTORIES "${ZIG_OUT_PREFIX}/include"
     )
 else()
     set_target_properties(quickjs PROPERTIES
-        IMPORTED_LOCATION "${QUICKJS_PREFIX}/lib/libquickjs.a"
-        INTERFACE_INCLUDE_DIRECTORIES "${QUICKJS_PREFIX}/include"
+        IMPORTED_LOCATION "${ZIG_OUT_PREFIX}/lib/libquickjs.a"
+        INTERFACE_INCLUDE_DIRECTORIES "${ZIG_OUT_PREFIX}/include"
     )
 endif()
 
@@ -143,12 +157,12 @@ add_library(dong SHARED
 target_include_directories(dong PUBLIC
     include
     src
-    ${QUICKJS_PREFIX}/include
+    ${ZIG_OUT_PREFIX}/include
     third_party/lexbor/source
     third_party/yoga
-    ${FREETYPE_PREFIX}/include/freetype2
-    ${HARFBUZZ_PREFIX}/include/harfbuzz
-    ${MSDFGEN_PREFIX}/include
+    third_party/freetype/include
+    third_party/harfbuzz/src
+    third_party
 )
 
 # Define DONG_BUILDING_DLL for export macros
@@ -159,10 +173,10 @@ target_link_libraries(dong PUBLIC quickjs lexbor yoga)
 # Link FreeType, HarfBuzz, msdfgen
 if(WIN32)
     target_link_libraries(dong PUBLIC
-        "${FREETYPE_PREFIX}/lib/freetype.lib"
-        "${HARFBUZZ_PREFIX}/lib/harfbuzz.lib"
-        "${MSDFGEN_PREFIX}/lib/msdfgen-core.lib"
-        "${MSDFGEN_PREFIX}/lib/msdfgen-ext.lib"
+        "${ZIG_OUT_PREFIX}/lib/freetype.lib"
+        "${ZIG_OUT_PREFIX}/lib/harfbuzz.lib"
+        "${ZIG_OUT_PREFIX}/lib/msdfgen-core.lib"
+        "${ZIG_OUT_PREFIX}/lib/msdfgen-ext.lib"
     )
     # Link clang compiler-rt builtins for __udivti3 etc (used by QuickJS BigInt)
     # QuickJS is built with Zig/Clang, so we always need builtins regardless of host compiler
@@ -187,11 +201,17 @@ if(WIN32)
     endif()
 else()
     target_link_libraries(dong PUBLIC
-        "${FREETYPE_PREFIX}/lib/libfreetype.a"
-        "${HARFBUZZ_PREFIX}/lib/libharfbuzz.a"
-        "${MSDFGEN_PREFIX}/lib/libmsdfgen-core.a"
-        "${MSDFGEN_PREFIX}/lib/libmsdfgen-ext.a"
+        "${ZIG_OUT_PREFIX}/lib/libfreetype.a"
+        "${ZIG_OUT_PREFIX}/lib/libharfbuzz.a"
+        "${ZIG_OUT_PREFIX}/lib/libmsdfgen.a"
     )
+    # Link CoreFoundation and CoreText frameworks on macOS
+    if(APPLE)
+        target_link_libraries(dong PUBLIC
+            "-framework CoreFoundation"
+            "-framework CoreText"
+        )
+    endif()
 endif()
 
 # dong_render: Core rendering library with SDL GPU backend
@@ -250,14 +270,14 @@ add_library(dong_render STATIC
 target_include_directories(dong_render PUBLIC
     include
     src
-    ${QUICKJS_PREFIX}/include
+    ${ZIG_OUT_PREFIX}/include
     third_party/lexbor/source
     third_party/yoga
     third_party/sdl/include
     third_party/SDL_shadercross/include
-    ${FREETYPE_PREFIX}/include/freetype2
-    ${HARFBUZZ_PREFIX}/include/harfbuzz
-    ${MSDFGEN_PREFIX}/include
+    third_party/freetype/include
+    third_party/harfbuzz/src
+    third_party
     ${DXC_INCLUDE_PATH}
 )
 
@@ -276,10 +296,10 @@ target_link_libraries(dong_render PUBLIC dong quickjs lexbor yoga)
 
 if(WIN32)
     target_link_libraries(dong_render PUBLIC
-        "${FREETYPE_PREFIX}/lib/freetype.lib"
-        "${HARFBUZZ_PREFIX}/lib/harfbuzz.lib"
-        "${MSDFGEN_PREFIX}/lib/msdfgen-core.lib"
-        "${MSDFGEN_PREFIX}/lib/msdfgen-ext.lib"
+        "${ZIG_OUT_PREFIX}/lib/freetype.lib"
+        "${ZIG_OUT_PREFIX}/lib/harfbuzz.lib"
+        "${ZIG_OUT_PREFIX}/lib/msdfgen-core.lib"
+        "${ZIG_OUT_PREFIX}/lib/msdfgen-ext.lib"
     )
     # Link clang compiler-rt builtins for __udivti3 etc (used by QuickJS BigInt)
     if(CLANG_RT_BUILTIN)
@@ -287,10 +307,9 @@ if(WIN32)
     endif()
 else()
     target_link_libraries(dong_render PUBLIC
-        "${FREETYPE_PREFIX}/lib/libfreetype.a"
-        "${HARFBUZZ_PREFIX}/lib/libharfbuzz.a"
-        "${MSDFGEN_PREFIX}/lib/libmsdfgen-core.a"
-        "${MSDFGEN_PREFIX}/lib/libmsdfgen-ext.a"
+        "${ZIG_OUT_PREFIX}/lib/libfreetype.a"
+        "${ZIG_OUT_PREFIX}/lib/libharfbuzz.a"
+        "${ZIG_OUT_PREFIX}/lib/libmsdfgen.a"
     )
 endif()
 
@@ -572,7 +591,29 @@ if(WIN32)
     install(FILES "${SDL3_PREFIX}/bin/SDL3.dll" DESTINATION bin)
 elseif(APPLE)
     file(GLOB SDL3_DYLIBS "${SDL3_PREFIX}/lib/libSDL3*.dylib")
-    install(FILES ${SDL3_DYLIBS} DESTINATION lib)
+    # dylib needs executable bit on macOS, so treat as PROGRAMS to preserve runnable perms
+    install(PROGRAMS ${SDL3_DYLIBS} DESTINATION lib)
+
+    # VulkanSDK runtime dylibs used by SDL_shadercross (and therefore by dong_sdl_backend)
+    # The executable records these as @rpath/..., so we must ship them alongside our own dylibs.
+    # NOTE: On macOS these are often symlinks (e.g. libspirv-cross-c-shared.0.dylib -> *.0.67.0.dylib),
+    # so we install the whole set to keep symlinks valid.
+    set(VULKAN_RUNTIME_LIB_DIR "")
+    if(DXC_LIB_PATH AND EXISTS "${DXC_LIB_PATH}/libdxcompiler.dylib")
+        set(VULKAN_RUNTIME_LIB_DIR "${DXC_LIB_PATH}")
+    elseif(VULKAN_SDK_PATH AND EXISTS "${VULKAN_SDK_PATH}/lib/libdxcompiler.dylib")
+        set(VULKAN_RUNTIME_LIB_DIR "${VULKAN_SDK_PATH}/lib")
+    elseif(EXISTS "/usr/local/lib/libdxcompiler.dylib")
+        set(VULKAN_RUNTIME_LIB_DIR "/usr/local/lib")
+    endif()
+
+    if(VULKAN_RUNTIME_LIB_DIR)
+        file(GLOB VULKAN_RUNTIME_DYLIBS
+            "${VULKAN_RUNTIME_LIB_DIR}/libdxcompiler.dylib"
+            "${VULKAN_RUNTIME_LIB_DIR}/libspirv-cross-c-shared*.dylib"
+        )
+        install(PROGRAMS ${VULKAN_RUNTIME_DYLIBS} DESTINATION lib)
+    endif()
 else()
     file(GLOB SDL3_SOS "${SDL3_PREFIX}/lib/libSDL3*.so*")
     install(FILES ${SDL3_SOS} DESTINATION lib)

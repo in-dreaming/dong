@@ -857,7 +857,7 @@ fn buildHarfBuzz(
         },
         .flags = &.{
             "-std=c++17",
-            "-DHB_HAVE_FREETYPE",
+            "-DHAVE_FREETYPE",
             "-DHB_NO_MT", // Disable multi-threading for simpler build
         },
     });
@@ -903,6 +903,7 @@ fn buildMsdfgen(
             msdf_root ++ "/core/Scanline.cpp",
             msdf_root ++ "/core/Shape.cpp",
             msdf_root ++ "/core/contour-combiners.cpp",
+            msdf_root ++ "/core/convergent-curve-ordering.cpp",
             msdf_root ++ "/core/edge-coloring.cpp",
             msdf_root ++ "/core/edge-segments.cpp",
             msdf_root ++ "/core/edge-selectors.cpp",
@@ -1115,7 +1116,13 @@ fn buildSDLBackend(
     sdl_backend.addIncludePath(b.path("third_party/freetype/include"));
     sdl_backend.addIncludePath(b.path("third_party/harfbuzz/src"));
     sdl_backend.addIncludePath(b.path("third_party")); // For msdfgen/msdfgen.h
-    sdl_backend.addIncludePath(b.path(config.dxc_include_path));
+
+    // DXC include path (can be absolute or relative)
+    if (std.fs.path.isAbsolute(config.dxc_include_path)) {
+        sdl_backend.addIncludePath(.{ .cwd_relative = config.dxc_include_path });
+    } else {
+        sdl_backend.addIncludePath(b.path(config.dxc_include_path));
+    }
 
     // Vulkan SDK include for spirv_cross_c.h
     if (config.vulkan_sdk_path) |vk_path| {

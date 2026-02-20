@@ -16,9 +16,17 @@ def run(cmd, cwd=None, env=None):
 
 
 
+def find_html_render_test(bin_dir: Path) -> Path | None:
+    for name in ("html_render_test", "html_render_test.exe"):
+        p = bin_dir / name
+        if p.exists():
+            return p
+    return None
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Batch-run dong html_render_test in multi-frame mode and check intra-run determinism.")
-    ap.add_argument("--bin-dir", default="zig-out/bin", help="Directory containing html_render_test.exe (default: zig-out/bin)")
+    ap.add_argument("--bin-dir", default="zig-out/bin", help="Directory containing html_render_test (default: zig-out/bin)")
     ap.add_argument("--tests-dir", default="zig-out/bin/data/tests", help="Directory containing test HTML files")
     ap.add_argument("--case", action="append",
                     help="Only run specific test case stem(s) (without .html). Can be repeated.")
@@ -37,9 +45,10 @@ def main() -> int:
     out_dir = (repo_root / args.out_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    exe = bin_dir / "html_render_test.exe"
-    if not exe.exists():
-        print(f"ERROR: not found: {exe}", file=sys.stderr)
+    exe = find_html_render_test(bin_dir)
+    if not exe:
+        cand = [str((bin_dir / n).resolve()) for n in ("html_render_test", "html_render_test.exe")]
+        print("ERROR: html_render_test binary not found. Tried:\n  " + "\n  ".join(cand), file=sys.stderr)
         return 2
 
     vl_tool = (repo_root / "scripts/tools/vl_tool_multi.py").resolve()

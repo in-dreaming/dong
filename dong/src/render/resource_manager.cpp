@@ -297,13 +297,23 @@ FontResource* ResourceManager::loadFont(const std::string& font_name,
     FT_Face sized_face = nullptr;
     FT_Library ft_lib = getSharedFreeTypeLibrary();
     if (ft_lib) {
-        FT_New_Face(ft_lib, resolved_path.c_str(), 0, &sized_face);
+        FT_Error error = FT_New_Face(ft_lib, resolved_path.c_str(), 0, &sized_face);
+        if (error != 0) {
+            DONG_LOG_ERROR("[ResourceManager] FT_New_Face failed for '%s': error=%d",
+                           resolved_path.c_str(), error);
+            sized_face = nullptr;
+        } else {
+            DONG_LOG_INFO("[ResourceManager] FT_New_Face succeeded for '%s'", resolved_path.c_str());
+        }
+    } else {
+        DONG_LOG_ERROR("[ResourceManager] FreeType library not initialized");
     }
     if (sized_face) {
         FT_Set_Pixel_Sizes(sized_face, 0, static_cast<FT_UInt>(size));
         resource->ft_face = sized_face;
     } else {
         // Fall back to design face if sized face creation fails
+        DONG_LOG_WARN("[ResourceManager] Falling back to design face for '%s'", resolved_path.c_str());
         resource->ft_face = face;
     }
 

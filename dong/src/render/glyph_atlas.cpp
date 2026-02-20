@@ -334,6 +334,8 @@ const AtlasEntry* GlyphAtlas::addGlyph(uint32_t glyph_id, const std::string& fon
         return nullptr;
     }
 
+    DONG_LOG_DEBUG("GlyphAtlas::addGlyph: Adding glyph %u from '%s'", glyph_id, font_path.c_str());
+
     // 检查是否已缓存
     std::string key = makeGlyphKey(glyph_id, font_path);
     auto it = cache_.find(key);
@@ -342,6 +344,7 @@ const AtlasEntry* GlyphAtlas::addGlyph(uint32_t glyph_id, const std::string& fon
         if (entry.atlas_page < pages_.size()) {
             pages_[entry.atlas_page].last_used = ++usage_counter_;
         }
+        DONG_LOG_DEBUG("GlyphAtlas::addGlyph: Glyph %u cached, returning existing entry", glyph_id);
         return &it->second;
     }
 
@@ -356,12 +359,16 @@ const AtlasEntry* GlyphAtlas::addGlyph(uint32_t glyph_id, const std::string& fon
         return nullptr;
     }
 
+    DONG_LOG_DEBUG("GlyphAtlas::addGlyph: MSDF generated for glyph %u, size=%ux%u",
+                  glyph_id, glyph_width, glyph_height);
+
     if (glyph_width == 0 || glyph_height == 0 || bitmap.empty()) {
         // 空字形（如空格）
         AtlasEntry entry{};
         entry.metrics = metrics;
         entry.atlas_page = 0;
         cache_[key] = entry;
+        DONG_LOG_DEBUG("GlyphAtlas::addGlyph: Glyph %u is empty (space), cached", glyph_id);
         return &cache_[key];
     }
 
@@ -479,11 +486,15 @@ void GlyphAtlas::addGlyphsBatched(const std::vector<GlyphRequest>& requests) {
     {
         DONG_PROFILE_SCOPE_CAT("addGlyphsBatched:generateMSDF", "glyph_atlas");
         for (const auto& req : requests) {
-            if (req.font_path.empty()) continue;
+            if (req.font_path.empty()) {
+                DONG_LOG_DEBUG("[addGlyphsBatched] SKIP: font_path empty for glyph %u", req.glyph_id);
+                continue;
+            }
 
             std::string key = makeGlyphKey(req.glyph_id, req.font_path);
             if (cache_.find(key) != cache_.end()) {
                 // 已缓存，跳过
+                DONG_LOG_DEBUG("[addGlyphsBatched] SKIP: glyph %u already cached", req.glyph_id);
                 continue;
             }
 
@@ -535,7 +546,11 @@ void GlyphAtlas::addGlyphsBatched(const std::vector<GlyphRequest>& requests) {
         }
     }
 
+    DONG_LOG_DEBUG("addGlyphsBatched: after MSDF generation, pending.size()=%zu (from %zu requests)",
+                  pending.size(), requests.size());
+
     if (pending.empty()) {
+        DONG_LOG_DEBUG("addGlyphsBatched: pending is empty, all glyphs were cached or failed");
         return;
     }
 
@@ -549,6 +564,17 @@ void GlyphAtlas::addGlyphsBatched(const std::vector<GlyphRequest>& requests) {
         for (auto& pg : pending) {
             if (!pg.page) continue;
 
+            // DEBUG: 验证上传前的数据
+            int upload_non_zero = 0;
+            for (size_t i = 0; i < pg.bitmap.size(); i += 4) {
+                if (pg.bitmap[i] > 0 || pg.bitmap[i+1] > 0 || pg.bitmap[i+2] > 0) {
+                    upload_non_zero++;
+                }
+            }
+            DONG_LOG_DEBUG("[BATCH UPLOAD] glyph=%u bitmap_size=%zu non_zero_pixels=%d dst=(%u,%u) size=(%u,%u) texture=%p page=%u",
+                    pg.glyph_id, pg.bitmap.size(), upload_non_zero, pg.dst_x, pg.dst_y, pg.width, pg.height,
+                    (void*)pg.page->texture, pg.page->page_index);
+
             void* fence = nullptr;
             int result = dong_gpu_upload_texture_subrect(
                 driver_, pg.page->texture,
@@ -559,8 +585,15 @@ void GlyphAtlas::addGlyphsBatched(const std::vector<GlyphRequest>& requests) {
                 &fence);
 
             if (result != 0) {
-                DONG_LOG_DEBUG("addGlyphsBatched: failed to upload glyph %u", pg.glyph_id);
+                DONG_LOG_ERROR("addGlyphsBatched: failed to upload glyph %u", pg.glyph_id);
                 continue;
+            }
+
+            // DEBUG: Verify first glyph upload by checking fence
+            static bool first_glyph_logged = false;
+            if (!first_glyph_logged && fence) {
+                DONG_LOG_DEBUG("[BATCH UPLOAD] First glyph fence=%p, will be tracked", fence);
+                first_glyph_logged = true;
             }
 
             // Collect fence for async tracking
@@ -570,6 +603,10 @@ void GlyphAtlas::addGlyphsBatched(const std::vector<GlyphRequest>& requests) {
                 pending_uploads_.push_back(pu);
             }
         }
+
+        // TODO: 需要等待上传完成，但 SDL_WaitForGPUIdle 会死锁
+        // 暂时不等待，依赖渲染前的同步
+        // dong_gpu_wait_for_gpu(driver_);
     }
 
     // 阶段3：更新缓存
@@ -583,6 +620,10 @@ void GlyphAtlas::addGlyphsBatched(const std::vector<GlyphRequest>& requests) {
         entry.u1 = static_cast<float>(pg.dst_x + pg.width) / static_cast<float>(pg.page->width);
         entry.v1 = static_cast<float>(pg.dst_y + pg.height) / static_cast<float>(pg.page->height);
         entry.metrics = pg.metrics;
+
+        DONG_LOG_DEBUG("[BATCH CACHE] glyph=%u page=%u dst=(%u,%u) size=(%u,%u) uv=(%.4f,%.4f)-(%.4f,%.4f) msdf_scale=%.4f",
+                      pg.glyph_id, pg.page->page_index, pg.dst_x, pg.dst_y, pg.width, pg.height,
+                      entry.u0, entry.v0, entry.u1, entry.v1, entry.metrics.msdf_scale);
 
         cache_[pg.key] = entry;
         page_to_keys_[pg.page->page_index].push_back(pg.key);

@@ -1032,6 +1032,11 @@ struct EngineView::Impl {
     }
 
     bool tick() {
+        static int frame_count = 0;
+        static bool gpu_ready = false;
+
+        DONG_LOG_INFO("[tick] Frame %d starting", frame_count++);
+
         DONG_PROFILE_SCOPE_CAT("EngineView::tick", "frame");
 
         static auto start_time = std::chrono::steady_clock::now();
@@ -1073,30 +1078,48 @@ struct EngineView::Impl {
             }
         }
 
+        // GPU ready check - skip Frame 0 execution, render starting from Frame 1
+        // TEMP FIX: Disabled for html_render_test debugging
+        /*
+        if (use_gpu) {
+            static bool first_frame_skip = true;
+            if (first_frame_skip) {
+                DongGPUDriver* driver = dong_platform_get_gpu_driver(dong_platform_get());
+                if (driver && driver->vtable && driver->vtable->execute) {
+                    DONG_LOG_INFO("[tick] Skipping Frame 0 to allow GPU initialization");
+                    first_frame_skip = false;
+                    gpu_ready = false;  // Skip this frame
+                    return true;  // Return early without rendering
+                }
+            }
+            gpu_ready = true;  // Subsequent frames can render
+        }
+        */
+        gpu_ready = true;  // Always ready
 
-        if (use_gpu && commands_dirty && dom_manager && layout_engine && painter) {
+        if (use_gpu && commands_dirty && gpu_ready && dom_manager && layout_engine && painter) {
             DONG_PROFILE_SCOPE_CAT("Render::generateCommands", "render");
 
             auto root = dom_manager->getRoot();
             if (root) {
                 painter->buildDisplayList(root, layout_engine.get());
                 const auto& dl = painter->getDisplayList();
-                DONG_LOG_DEBUG("[tick] DisplayList items: %zu", dl.items.size());
+                DONG_LOG_INFO("[tick] DisplayList items: %zu", dl.items.size());
                 int text_count = 0;
                 for (const auto& item : dl.items) {
                     if (item.type == dong::render::DisplayItemType::DrawGlyphRun) {
                         text_count++;
-                        DONG_LOG_DEBUG("[tick]   DrawGlyphRun: glyphs=%zu", item.glyph_run.glyphs.size());
+                        DONG_LOG_INFO("[tick]   DrawGlyphRun: glyphs=%zu", item.glyph_run.glyphs.size());
                     }
                 }
-                DONG_LOG_DEBUG("[tick] Total DrawGlyphRun items: %d", text_count);
+                DONG_LOG_INFO("[tick] Total DrawGlyphRun items: %d", text_count);
 
                 if (!cached_cmd_list) {
                     cached_cmd_list = std::make_unique<dong::render::GPUCommandList>();
                 }
                 dong::render::GPUCompiler compiler;
                 compiler.compile(painter->getDisplayList(), *cached_cmd_list, &painter->getLayerTree());
-                DONG_LOG_DEBUG("[tick] GPU commands: %zu", cached_cmd_list->commands.size());
+                DONG_LOG_INFO("[tick] GPU commands: %zu", cached_cmd_list->commands.size());
                 commands_dirty = false;
             }
         }
@@ -1105,11 +1128,14 @@ struct EngineView::Impl {
             (void)uploadPendingVideoFrames();
         }
 
-        if (use_gpu && cached_cmd_list && !commands_dirty) {
+        if (use_gpu && cached_cmd_list && !commands_dirty && gpu_ready) {
             DongGPUDriver* driver = dong_platform_get_gpu_driver(dong_platform_get());
             if (driver) {
+                DONG_LOG_INFO("[tick] Executing %zu GPU commands", cached_cmd_list->commands.size());
                 DONG_PROFILE_SCOPE_CAT("GPU::execute", "render");
                 (void)dong_gpu_execute(driver, cached_cmd_list.get());
+            } else {
+                DONG_LOG_WARN("[tick] GPU driver not available");
             }
         }
 

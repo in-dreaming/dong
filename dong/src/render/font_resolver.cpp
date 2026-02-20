@@ -1,5 +1,6 @@
 ﻿#include "font_resolver.hpp"
 #include "font_finder.hpp"
+#include "../core/log.h"
 
 #include <algorithm>
 #include <cctype>
@@ -195,8 +196,19 @@ const std::unordered_map<std::string, std::vector<std::string>> kFontCandidates 
 };
 
 // CJK font fallback list (sorted by priority)
-// Windows prefers Microsoft YaHei UI, macOS prefers PingFang SC
+// Platform-specific fonts are listed first for better performance
 const std::vector<std::string> kCJKFallbackFonts = {
+#if defined(__APPLE__) && defined(__MACH__)
+    // macOS Chinese fonts - prioritize fonts that exist on most macOS systems
+    "/System/Library/Fonts/STHeiti Light.ttc",      // STHeiti (macOS 10.6+, always present)
+    "/System/Library/Fonts/STHeiti Medium.ttc",     // STHeiti Medium
+    "/System/Library/Fonts/PingFang.ttc",           // PingFang SC (macOS 10.11+)
+    "/Library/Fonts/PingFang.ttc",                  // PingFang SC (user-installed)
+    "/System/Library/Fonts/Hiragino Sans GB.ttc",   // Hiragino Sans GB
+    "/Library/Fonts/Songti.ttc",                    // Songti SC
+    "/Library/Fonts/Kaiti.ttc",                     // Kaiti SC
+    "/System/Library/Fonts/CJKSymbolsFallback.ttc", // CJK Symbols (fallback)
+#elif defined(_WIN32) || defined(_WIN64)
     // Windows Chinese fonts - Microsoft YaHei UI first
     "C:/Windows/Fonts/msyh.ttc",      // Microsoft YaHei UI
     "C:/Windows/Fonts/msyhbd.ttc",    // Microsoft YaHei UI Bold
@@ -206,19 +218,13 @@ const std::vector<std::string> kCJKFallbackFonts = {
     "C:/Windows/Fonts/simkai.ttf",    // KaiTi
     "C:/Windows/Fonts/STXIHEI.TTF",   // STXihei
     "C:/Windows/Fonts/mingliu.ttc",   // MingLiU
-    // macOS Chinese fonts - PingFang SC first
-    "/System/Library/Fonts/PingFang.ttc",           // PingFang SC
-    "/Library/Fonts/PingFang.ttc",
-    "/System/Library/Fonts/STHeiti Light.ttc",      // STHeiti
-    "/System/Library/Fonts/STHeiti Medium.ttc",
-    "/System/Library/Fonts/Hiragino Sans GB.ttc",   // Hiragino Sans GB
-    "/Library/Fonts/Songti.ttc",                    // Songti SC
-    "/Library/Fonts/Kaiti.ttc",                     // Kaiti SC
+#else
     // Linux Chinese fonts
     "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
     "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
     "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
     "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+#endif
 };
 
 std::string findExistingFont(const std::vector<std::string>& candidates) {
@@ -361,7 +367,7 @@ std::string resolveFontPath(const std::string& requested_family,
                             const std::string& font_weight) {
     // Ensure font finder is initialized
     ensureFontFinderInitialized();
-    
+
     auto families = splitFontFamilies(requested_family);
     if (families.empty()) {
         families.push_back("sans-serif");
@@ -369,18 +375,25 @@ std::string resolveFontPath(const std::string& requested_family,
 
     const int numeric_weight = normalizeFontWeight(font_weight);
 
+    DONG_LOG_INFO("[FontResolver] Resolving font: family='%s', weight=%d", requested_family.c_str(), numeric_weight);
+
     // 1. First try system font lookup API
     for (const auto& family : families) {
         std::string canonical = canonicalFontFamily(family);
+        DONG_LOG_INFO("[FontResolver] Trying family '%s' (canonical: '%s')", family.c_str(), canonical.c_str());
         std::vector<FontMatch> system_matches = findSystemFonts(canonical, numeric_weight);
-        
+
         if (!system_matches.empty()) {
             // Return first matched font path
             std::string path = system_matches[0].path;
+            DONG_LOG_INFO("[FontResolver] System font matched: '%s'", path.c_str());
             namespace fs = std::filesystem;
             std::error_code ec;
             if (fs::exists(path, ec) && !ec) {
+                DONG_LOG_INFO("[FontResolver] Using font: '%s'", path.c_str());
                 return path;
+            } else {
+                DONG_LOG_WARN("[FontResolver] System font does not exist: '%s'", path.c_str());
             }
         }
     }
@@ -407,10 +420,17 @@ std::string resolveFontPath(const std::string& requested_family,
 
     if (candidate_paths.empty()) {
         // Fallback to sans-serif candidates
+        DONG_LOG_INFO("[FontResolver] No candidates found, falling back to sans-serif");
         appendCandidatesForFamilyAndWeight("sans-serif", numeric_weight, candidate_paths);
     }
 
-    return findExistingFont(candidate_paths);
+    std::string result = findExistingFont(candidate_paths);
+    if (result.empty()) {
+        DONG_LOG_ERROR("[FontResolver] Failed to find any font for '%s', weight=%d", requested_family.c_str(), numeric_weight);
+    } else {
+        DONG_LOG_INFO("[FontResolver] Using font: '%s'", result.c_str());
+    }
+    return result;
 }
 
 namespace {
