@@ -93,6 +93,17 @@ public:
                                     uint32_t width,
                                     uint32_t height);
 
+    // Upload RGBA pixels into a sub-rectangle of an existing texture.
+    // IMPORTANT: This tries to reuse the current frame command buffer when possible,
+    // so uploads are ordered before subsequent draws in the same frame.
+    bool uploadTextureSubrectRGBA(SDL_GPUTexture* texture,
+                                 const void* rgba,
+                                 uint32_t dest_x,
+                                 uint32_t dest_y,
+                                 uint32_t width,
+                                 uint32_t height,
+                                 uint32_t src_stride_bytes);
+
     // Resource manager injection
     void setImageResourceManager(ResourceManager* manager) { image_resource_manager_ = manager; }
 

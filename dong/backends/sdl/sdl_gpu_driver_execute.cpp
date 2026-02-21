@@ -1493,7 +1493,9 @@ void SDLGPUDriver::executeDrawImage(ExecuteContext& ctx, const GPUCommand& cmd) 
 }
 
 void SDLGPUDriver::executeDrawText(ExecuteContext& ctx, const GPUCommand& cmd) {
-    if (!ctx.pass || !text_pipeline_ || glyph_atlas_tiers_.empty() || cmd.glyphs.empty()) {
+    // Note: When GlobalShared glyph atlas is enabled, `glyph_atlas_tiers_` is intentionally empty.
+    // We must not early-return on that; atlas selection is handled by getGlyphAtlasForFontSize().
+    if (!ctx.pass || !text_pipeline_ || cmd.glyphs.empty()) {
         return;
     }
 

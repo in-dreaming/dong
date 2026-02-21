@@ -302,6 +302,7 @@ bool GlyphAtlas::initialize(uint32_t width,
     cache_.clear();
     page_to_keys_.clear();
     pages_.clear();
+    pages_.reserve(max_pages_);
     usage_counter_ = 0;
 
     if (!createPage()) {
@@ -317,7 +318,13 @@ const AtlasEntry* GlyphAtlas::getGlyph(uint32_t glyph_id, const std::string& fon
     if (font_path.empty()) {
         return nullptr;
     }
-    auto it = cache_.find(makeGlyphKey(glyph_id, font_path));
+
+    if (!pending_uploads_.empty()) {
+        reapPendingUploads();
+    }
+
+    const std::string key = makeGlyphKey(glyph_id, font_path);
+    auto it = cache_.find(key);
     if (it != cache_.end()) {
         const AtlasEntry& entry = it->second;
         if (entry.atlas_page < pages_.size()) {
@@ -325,6 +332,12 @@ const AtlasEntry* GlyphAtlas::getGlyph(uint32_t glyph_id, const std::string& fon
         }
         return &it->second;
     }
+
+    // 若该 glyph 正在异步上传，先返回空，避免在渲染 pass 内重复/同步上传导致卡顿或死锁。
+    if (pending_keys_.find(key) != pending_keys_.end()) {
+        return nullptr;
+    }
+
     return nullptr;
 }
 
@@ -332,6 +345,10 @@ const AtlasEntry* GlyphAtlas::addGlyph(uint32_t glyph_id, const std::string& fon
     if (font_path.empty()) {
         DONG_LOG_WARN("GlyphAtlas::addGlyph: font path is empty for glyph %u", glyph_id);
         return nullptr;
+    }
+
+    if (!pending_uploads_.empty()) {
+        reapPendingUploads();
     }
 
     DONG_LOG_DEBUG("GlyphAtlas::addGlyph: Adding glyph %u from '%s'", glyph_id, font_path.c_str());
@@ -346,6 +363,11 @@ const AtlasEntry* GlyphAtlas::addGlyph(uint32_t glyph_id, const std::string& fon
         }
         DONG_LOG_DEBUG("GlyphAtlas::addGlyph: Glyph %u cached, returning existing entry", glyph_id);
         return &it->second;
+    }
+
+    // 若该 glyph 正在异步上传，避免重复上传。
+    if (pending_keys_.find(key) != pending_keys_.end()) {
+        return nullptr;
     }
 
     // 生成 MSDF 位图
@@ -474,7 +496,7 @@ void GlyphAtlas::addGlyphsBatched(const std::vector<GlyphRequest>& requests) {
         uint32_t width = 0;
         uint32_t height = 0;
         GlyphMetrics metrics;
-        AtlasPage* page = nullptr;
+        uint32_t page_index = UINT32_MAX;
         uint32_t dst_x = 0;
         uint32_t dst_y = 0;
     };
@@ -495,6 +517,10 @@ void GlyphAtlas::addGlyphsBatched(const std::vector<GlyphRequest>& requests) {
             if (cache_.find(key) != cache_.end()) {
                 // 已缓存，跳过
                 DONG_LOG_DEBUG("[addGlyphsBatched] SKIP: glyph %u already cached", req.glyph_id);
+                continue;
+            }
+            if (pending_keys_.find(key) != pending_keys_.end()) {
+                // 已在异步上传中，跳过
                 continue;
             }
 
@@ -520,27 +546,31 @@ void GlyphAtlas::addGlyphsBatched(const std::vector<GlyphRequest>& requests) {
 
             // 分配 atlas 位置
             constexpr uint32_t kAtlasPadding = 2;
-            pg.page = selectPageForGlyph(pg.width, pg.height);
-            if (!pg.page || !pg.page->texture) {
+            AtlasPage* page = selectPageForGlyph(pg.width, pg.height);
+            if (!page || !page->texture) {
                 DONG_LOG_DEBUG("addGlyphsBatched: no available atlas page for glyph %u", req.glyph_id);
                 continue;
             }
 
-            if (pg.page->cursor_x + pg.width + kAtlasPadding > pg.page->width) {
-                pg.page->cursor_x = 0;
-                pg.page->cursor_y += pg.page->row_height + kAtlasPadding;
-                pg.page->row_height = 0;
+            // IMPORTANT: 不要在 batch 中保存 AtlasPage* 指针。
+            // selectPageForGlyph() 可能会 push_back 新页导致 vector 重新分配，之前保存的指针会变成悬空指针。
+            pg.page_index = page->page_index;
+
+            if (page->cursor_x + pg.width + kAtlasPadding > page->width) {
+                page->cursor_x = 0;
+                page->cursor_y += page->row_height + kAtlasPadding;
+                page->row_height = 0;
             }
 
-            if (pg.page->cursor_y + pg.height > pg.page->height) {
+            if (page->cursor_y + pg.height > page->height) {
                 DONG_LOG_DEBUG("addGlyphsBatched: selected page overflows for glyph %u", req.glyph_id);
                 continue;
             }
 
-            pg.dst_x = pg.page->cursor_x;
-            pg.dst_y = pg.page->cursor_y;
-            pg.page->cursor_x += pg.width + kAtlasPadding;
-            pg.page->row_height = std::max(pg.page->row_height, pg.height);
+            pg.dst_x = page->cursor_x;
+            pg.dst_y = page->cursor_y;
+            page->cursor_x += pg.width + kAtlasPadding;
+            page->row_height = std::max(page->row_height, pg.height);
 
             pending.push_back(std::move(pg));
         }
@@ -562,7 +592,13 @@ void GlyphAtlas::addGlyphsBatched(const std::vector<GlyphRequest>& requests) {
         DONG_PROFILE_SCOPE_CAT("addGlyphsBatched:upload", "gpu");
 
         for (auto& pg : pending) {
-            if (!pg.page) continue;
+            if (pg.page_index == UINT32_MAX || pg.page_index >= pages_.size()) {
+                continue;
+            }
+            AtlasPage& page = pages_[pg.page_index];
+            if (!page.texture) {
+                continue;
+            }
 
             // DEBUG: 验证上传前的数据
             int upload_non_zero = 0;
@@ -573,11 +609,11 @@ void GlyphAtlas::addGlyphsBatched(const std::vector<GlyphRequest>& requests) {
             }
             DONG_LOG_DEBUG("[BATCH UPLOAD] glyph=%u bitmap_size=%zu non_zero_pixels=%d dst=(%u,%u) size=(%u,%u) texture=%p page=%u",
                     pg.glyph_id, pg.bitmap.size(), upload_non_zero, pg.dst_x, pg.dst_y, pg.width, pg.height,
-                    (void*)pg.page->texture, pg.page->page_index);
+                    (void*)page.texture, page.page_index);
 
             void* fence = nullptr;
             int result = dong_gpu_upload_texture_subrect(
-                driver_, pg.page->texture,
+                driver_, page.texture,
                 pg.bitmap.data(),
                 pg.dst_x, pg.dst_y,
                 pg.width, pg.height,
@@ -596,39 +632,37 @@ void GlyphAtlas::addGlyphsBatched(const std::vector<GlyphRequest>& requests) {
                 first_glyph_logged = true;
             }
 
-            // Collect fence for async tracking
+            AtlasEntry entry{};
+            entry.atlas_page = page.page_index;
+            entry.u0 = static_cast<float>(pg.dst_x) / static_cast<float>(page.width);
+            entry.v0 = static_cast<float>(pg.dst_y) / static_cast<float>(page.height);
+            entry.u1 = static_cast<float>(pg.dst_x + pg.width) / static_cast<float>(page.width);
+            entry.v1 = static_cast<float>(pg.dst_y + pg.height) / static_cast<float>(page.height);
+            entry.metrics = pg.metrics;
+
             if (fence) {
                 PendingUpload pu;
                 pu.fence = fence;
-                pending_uploads_.push_back(pu);
+                pu.key = pg.key;
+                pu.entry = entry;
+                pu.page_index = page.page_index;
+                pending_uploads_.push_back(std::move(pu));
+                pending_keys_.insert(pg.key);
+                continue;
             }
+
+            DONG_LOG_DEBUG("[BATCH CACHE] glyph=%u page=%u dst=(%u,%u) size=(%u,%u) uv=(%.4f,%.4f)-(%.4f,%.4f) msdf_scale=%.4f",
+                          pg.glyph_id, page.page_index, pg.dst_x, pg.dst_y, pg.width, pg.height,
+                          entry.u0, entry.v0, entry.u1, entry.v1, entry.metrics.msdf_scale);
+
+            cache_[pg.key] = entry;
+            page_to_keys_[page.page_index].push_back(pg.key);
+            page.glyph_count += 1;
+            page.last_used = ++usage_counter_;
         }
 
-        // TODO: 需要等待上传完成，但 SDL_WaitForGPUIdle 会死锁
-        // 暂时不等待，依赖渲染前的同步
-        // dong_gpu_wait_for_gpu(driver_);
-    }
-
-    // 阶段3：更新缓存
-    for (const auto& pg : pending) {
-        if (!pg.page) continue;
-
-        AtlasEntry entry{};
-        entry.atlas_page = pg.page->page_index;
-        entry.u0 = static_cast<float>(pg.dst_x) / static_cast<float>(pg.page->width);
-        entry.v0 = static_cast<float>(pg.dst_y) / static_cast<float>(pg.page->height);
-        entry.u1 = static_cast<float>(pg.dst_x + pg.width) / static_cast<float>(pg.page->width);
-        entry.v1 = static_cast<float>(pg.dst_y + pg.height) / static_cast<float>(pg.page->height);
-        entry.metrics = pg.metrics;
-
-        DONG_LOG_DEBUG("[BATCH CACHE] glyph=%u page=%u dst=(%u,%u) size=(%u,%u) uv=(%.4f,%.4f)-(%.4f,%.4f) msdf_scale=%.4f",
-                      pg.glyph_id, pg.page->page_index, pg.dst_x, pg.dst_y, pg.width, pg.height,
-                      entry.u0, entry.v0, entry.u1, entry.v1, entry.metrics.msdf_scale);
-
-        cache_[pg.key] = entry;
-        page_to_keys_[pg.page->page_index].push_back(pg.key);
-        pg.page->glyph_count += 1;
-        pg.page->last_used = ++usage_counter_;
+        // 不在这里 wait_for_gpu：在渲染 pass 内调用可能死锁。
+        // 异步上传（有 fence）的条目会在 reapPendingUploads() 时写入 cache。
     }
 
     DONG_LOG_DEBUG("addGlyphsBatched: completed batch of %zu glyphs", pending.size());
@@ -640,13 +674,26 @@ void GlyphAtlas::reapPendingUploads() {
     for (size_t i = 0; i < pending_uploads_.size();) {
         PendingUpload& p = pending_uploads_[i];
         if (!p.fence) {
-            // 容错：无 fence 直接移除
+            if (!p.key.empty()) {
+                pending_keys_.erase(p.key);
+            }
             pending_uploads_.erase(pending_uploads_.begin() + (ptrdiff_t)i);
             continue;
         }
 
         if (dong_gpu_query_fence(driver_, p.fence)) {
             dong_gpu_release_fence(driver_, p.fence);
+
+            if (!p.key.empty()) {
+                cache_[p.key] = p.entry;
+                page_to_keys_[p.page_index].push_back(p.key);
+                if (p.page_index < pages_.size()) {
+                    pages_[p.page_index].glyph_count += 1;
+                    pages_[p.page_index].last_used = ++usage_counter_;
+                }
+                pending_keys_.erase(p.key);
+            }
+
             pending_uploads_.erase(pending_uploads_.begin() + (ptrdiff_t)i);
             continue;
         }
@@ -666,6 +713,9 @@ void GlyphAtlas::waitAllPendingUploads() {
         if (p.fence) {
             dong_gpu_release_fence(driver_, p.fence);
             p.fence = nullptr;
+        }
+        if (!p.key.empty()) {
+            pending_keys_.erase(p.key);
         }
     }
 

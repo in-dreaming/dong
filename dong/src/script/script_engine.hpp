@@ -1,5 +1,6 @@
 ﻿#pragma once
 
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
@@ -43,8 +44,11 @@ public:
     void processPendingTasks();
 
 private:
+    static int interruptHandler(JSRuntime* rt, void* opaque);
+
     JSRuntime* runtime_;
     JSContext* context_;
+    uint64_t interrupt_deadline_ns_ = 0;
 
     void initializeBuiltins();
 };

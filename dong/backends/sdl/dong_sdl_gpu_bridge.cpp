@@ -164,6 +164,34 @@ int dong_sdl_gpu_bridge_update_external_image_yuv420p(DongSDLGPUBridge* bridge, 
     return ok ? 1 : 0;
 }
 
+int dong_sdl_gpu_bridge_upload_texture_subrect_rgba(DongSDLGPUBridge* bridge,
+                                                   void* sdl_texture,
+                                                   const void* rgba,
+                                                   uint32_t dest_x,
+                                                   uint32_t dest_y,
+                                                   uint32_t width,
+                                                   uint32_t height,
+                                                   uint32_t src_stride_bytes) {
+    if (!bridge || !bridge->driver || !sdl_texture || !rgba) {
+        return 0;
+    }
+
+    bool ok = bridge->driver->uploadTextureSubrectRGBA(static_cast<SDL_GPUTexture*>(sdl_texture),
+                                                       rgba,
+                                                       dest_x,
+                                                       dest_y,
+                                                       width,
+                                                       height,
+                                                       src_stride_bytes);
+    return ok ? 1 : 0;
+}
+
+int dong_sdl_gpu_bridge_is_in_frame(DongSDLGPUBridge* bridge) {
+    if (!bridge || !bridge->driver) {
+        return 0;
+    }
+    return bridge->driver->isInFrame() ? 1 : 0;
+}
 
 void dong_sdl_gpu_bridge_set_resource_root(DongSDLGPUBridge* bridge, const char* root) {
     if (!bridge || !bridge->resource_manager) {

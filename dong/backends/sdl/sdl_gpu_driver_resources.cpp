@@ -455,6 +455,102 @@ void SDLGPUDriver::submitStandaloneUploadCommandBuffer(SDL_GPUDevice* dev, SDL_G
     gpu_device_->submitCommandBuffer(cmd_buf);
 }
 
+bool SDLGPUDriver::uploadTextureSubrectRGBA(SDL_GPUTexture* texture,
+                                           const void* rgba,
+                                           uint32_t dest_x,
+                                           uint32_t dest_y,
+                                           uint32_t width,
+                                           uint32_t height,
+                                           uint32_t src_stride_bytes) {
+    if (!gpu_device_ || !gpu_device_->isInitialized() || !texture || !rgba) {
+        return false;
+    }
+
+    SDL_GPUDevice* dev = gpu_device_->getHandle();
+    if (!dev) {
+        return false;
+    }
+
+    if (width == 0 || height == 0) {
+        return true;
+    }
+
+    const uint32_t row_bytes = width * 4;
+    const uint64_t total_bytes = static_cast<uint64_t>(row_bytes) * static_cast<uint64_t>(height);
+    if (total_bytes > 0xFFFFFFFFu) {
+        DONG_LOG_ERROR("SDLGPUDriver::uploadTextureSubrectRGBA: upload too large (%llu bytes)",
+                      static_cast<unsigned long long>(total_bytes));
+        return false;
+    }
+
+    UploadBuffer upload = acquireUploadBuffer(dev, static_cast<uint32_t>(total_bytes));
+    if (!upload.buf || upload.size < total_bytes) {
+        return false;
+    }
+
+    auto* transfer = static_cast<SDL_GPUTransferBuffer*>(upload.buf);
+    void* mapped = SDL_MapGPUTransferBuffer(dev, transfer, false);
+    if (!mapped) {
+        free_upload_buffers_.push_back(upload);
+        return false;
+    }
+
+    const uint8_t* src = static_cast<const uint8_t*>(rgba);
+    uint8_t* dst = static_cast<uint8_t*>(mapped);
+    if (src_stride_bytes == row_bytes) {
+        std::memcpy(dst, src, static_cast<size_t>(total_bytes));
+    } else {
+        for (uint32_t y = 0; y < height; ++y) {
+            std::memcpy(dst + static_cast<size_t>(y) * row_bytes,
+                        src + static_cast<size_t>(y) * src_stride_bytes,
+                        row_bytes);
+        }
+    }
+    SDL_UnmapGPUTransferBuffer(dev, transfer);
+
+    bool temp_cmd = false;
+    SDL_GPUCommandBuffer* cmd = acquireCommandBufferForUploads(dev, temp_cmd);
+    if (!cmd) {
+        free_upload_buffers_.push_back(upload);
+        return false;
+    }
+
+    SDL_GPUCopyPass* copy_pass = SDL_BeginGPUCopyPass(cmd);
+    if (!copy_pass) {
+        free_upload_buffers_.push_back(upload);
+        if (temp_cmd) {
+            submitStandaloneUploadCommandBuffer(dev, cmd);
+        }
+        return false;
+    }
+
+    SDL_GPUTextureTransferInfo src_info{};
+    src_info.transfer_buffer = transfer;
+    src_info.offset = 0;
+    src_info.pixels_per_row = width;
+    src_info.rows_per_layer = height;
+
+    SDL_GPUTextureRegion dst_info{};
+    dst_info.texture = texture;
+    dst_info.x = dest_x;
+    dst_info.y = dest_y;
+    dst_info.w = width;
+    dst_info.h = height;
+    dst_info.d = 1;
+
+    SDL_UploadToGPUTexture(copy_pass, &src_info, &dst_info, false);
+    SDL_EndGPUCopyPass(copy_pass);
+
+    // Keep upload buffer alive until cmd buffer submission.
+    frame_upload_buffers_.push_back(upload);
+
+    if (temp_cmd) {
+        submitStandaloneUploadCommandBuffer(dev, cmd);
+    }
+
+    return true;
+}
+
 } // namespace render
 } // namespace dong
 

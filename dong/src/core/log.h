@@ -18,6 +18,58 @@
 #include <cstdlib>
 #include <cstdarg>
 #include <chrono>
+#include <atomic>
+#include <mutex>
+#include <cstring>
+
+// =============================================================================
+// Runtime log filtering (defaults to WARN)
+// =============================================================================
+// 说明：历史上 DONG 日志只有编译期筛选，DEBUG 打开时会导致性能显著下降。
+// 这里增加一个运行时门控：默认只输出 INFO/WARN/ERROR。
+//
+// 通过环境变量控制：
+//   DONG_LOG_LEVEL=error|warn|info|debug|trace|none
+//
+// 注意：这里的“level”采用 DongLoggerLevel 的顺序：TRACE(0) < DEBUG(1) < INFO(2) < WARN(3) < ERROR(4)
+
+inline std::once_flag g_dong_log_level_once;
+inline std::atomic<int> g_dong_log_level_runtime{static_cast<int>(DONG_LOGGER_LEVEL_WARN)};
+
+static inline DongLoggerLevel dongParseRuntimeLogLevel(const char* v) {
+    if (!v || !v[0]) {
+        return DONG_LOGGER_LEVEL_WARN;
+    }
+
+    if (std::strcmp(v, "0") == 0 || std::strcmp(v, "none") == 0 || std::strcmp(v, "off") == 0) {
+        return static_cast<DongLoggerLevel>(static_cast<int>(DONG_LOGGER_LEVEL_ERROR) + 1); // sentinel: disable all
+    }
+    if (std::strcmp(v, "error") == 0) return DONG_LOGGER_LEVEL_ERROR;
+    if (std::strcmp(v, "warn") == 0 || std::strcmp(v, "warning") == 0) return DONG_LOGGER_LEVEL_WARN;
+    if (std::strcmp(v, "info") == 0) return DONG_LOGGER_LEVEL_INFO;
+    if (std::strcmp(v, "debug") == 0) return DONG_LOGGER_LEVEL_DEBUG;
+    if (std::strcmp(v, "trace") == 0 || std::strcmp(v, "verbose") == 0) return DONG_LOGGER_LEVEL_TRACE;
+
+    // fallback: unknown value -> WARN
+    return DONG_LOGGER_LEVEL_WARN;
+}
+
+static inline void dongInitRuntimeLogLevelOnce() {
+    std::call_once(g_dong_log_level_once, []() {
+        const char* v = std::getenv("DONG_LOG_LEVEL");
+        const DongLoggerLevel parsed = dongParseRuntimeLogLevel(v);
+        g_dong_log_level_runtime.store(static_cast<int>(parsed), std::memory_order_relaxed);
+    });
+}
+
+static inline bool dongLogShouldLog(DongLoggerLevel level) {
+    dongInitRuntimeLogLevelOnce();
+    const int thr = g_dong_log_level_runtime.load(std::memory_order_relaxed);
+    if (thr > static_cast<int>(DONG_LOGGER_LEVEL_ERROR)) {
+        return false; // none/off
+    }
+    return static_cast<int>(level) >= thr;
+}
 
 // =============================================================================
 // Compile-time log filtering
@@ -91,32 +143,52 @@ static inline void dongLog(DongLoggerLevel level, const char* fmt, ...) {
 // =============================================================================
 
 #if DONG_LOG_LEVEL >= DONG_LOG_LEVEL_ERROR
-    #define DONG_LOG_ERROR(fmt, ...) dongLog(DONG_LOGGER_LEVEL_ERROR, fmt, ##__VA_ARGS__)
+    #define DONG_LOG_ERROR(fmt, ...) do { \
+        if (dongLogShouldLog(DONG_LOGGER_LEVEL_ERROR)) { \
+            dongLog(DONG_LOGGER_LEVEL_ERROR, fmt, ##__VA_ARGS__); \
+        } \
+    } while(0)
 #else
     #define DONG_LOG_ERROR(fmt, ...) ((void)0)
 #endif
 
 #if DONG_LOG_LEVEL >= DONG_LOG_LEVEL_WARN
-    #define DONG_LOG_WARN(fmt, ...) dongLog(DONG_LOGGER_LEVEL_WARN, fmt, ##__VA_ARGS__)
+    #define DONG_LOG_WARN(fmt, ...) do { \
+        if (dongLogShouldLog(DONG_LOGGER_LEVEL_WARN)) { \
+            dongLog(DONG_LOGGER_LEVEL_WARN, fmt, ##__VA_ARGS__); \
+        } \
+    } while(0)
 #else
     #define DONG_LOG_WARN(fmt, ...) ((void)0)
 #endif
 
 #if DONG_LOG_LEVEL >= DONG_LOG_LEVEL_INFO
-    #define DONG_LOG_INFO(fmt, ...) dongLog(DONG_LOGGER_LEVEL_INFO, fmt, ##__VA_ARGS__)
+    #define DONG_LOG_INFO(fmt, ...) do { \
+        if (dongLogShouldLog(DONG_LOGGER_LEVEL_INFO)) { \
+            dongLog(DONG_LOGGER_LEVEL_INFO, fmt, ##__VA_ARGS__); \
+        } \
+    } while(0)
 #else
     #define DONG_LOG_INFO(fmt, ...) ((void)0)
 #endif
 
 #if DONG_LOG_LEVEL >= DONG_LOG_LEVEL_DEBUG
-    #define DONG_LOG_DEBUG(fmt, ...) dongLog(DONG_LOGGER_LEVEL_DEBUG, fmt, ##__VA_ARGS__)
+    #define DONG_LOG_DEBUG(fmt, ...) do { \
+        if (dongLogShouldLog(DONG_LOGGER_LEVEL_DEBUG)) { \
+            dongLog(DONG_LOGGER_LEVEL_DEBUG, fmt, ##__VA_ARGS__); \
+        } \
+    } while(0)
 #else
     #define DONG_LOG_DEBUG(fmt, ...) ((void)0)
 #endif
 
 #if DONG_LOG_LEVEL >= DONG_LOG_LEVEL_VERBOSE
     // VERBOSE 映射到 TRACE
-    #define DONG_LOG_VERBOSE(fmt, ...) dongLog(DONG_LOGGER_LEVEL_TRACE, fmt, ##__VA_ARGS__)
+    #define DONG_LOG_VERBOSE(fmt, ...) do { \
+        if (dongLogShouldLog(DONG_LOGGER_LEVEL_TRACE)) { \
+            dongLog(DONG_LOGGER_LEVEL_TRACE, fmt, ##__VA_ARGS__); \
+        } \
+    } while(0)
 #else
     #define DONG_LOG_VERBOSE(fmt, ...) ((void)0)
 #endif

@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 #include <memory>
 
 // GPU Driver abstraction (platform-agnostic)
@@ -135,11 +136,13 @@ private:
         uint64_t last_used = 0;
     };
 
-    // 异步上传：fence 需要在 GPU 完成后再释放。
+    // 异步上传：当 upload 不是严格“同一 command buffer 顺序可见”时，需要 fence。
+    // 为避免在渲染 pass 内死锁，异步上传完成后再把 entry 写入 cache。
     struct PendingUpload {
         void* fence = nullptr;  // Opaque fence handle from driver
-        // Transfer buffers are tracked by the driver internally.
-        // Core layer does not need to manage them directly.
+        std::string key;
+        AtlasEntry entry;
+        uint32_t page_index = 0;
     };
 
     uint32_t atlas_width_ = 2048;
@@ -161,6 +164,7 @@ private:
 
     // 未完成的异步上传（在后续帧/下一次 addGlyphsBatched 时回收）。
     std::vector<PendingUpload> pending_uploads_;
+    std::unordered_set<std::string> pending_keys_;
 
     std::string makeGlyphKey(uint32_t codepoint, const std::string& font_path) const;
 

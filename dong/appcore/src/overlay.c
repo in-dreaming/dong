@@ -210,32 +210,80 @@ static void destroy_overlay_pipeline(dong_overlay_t* overlay);
 
 
 // Compile shader helper
-static SDL_GPUShader* compile_shader_ov(SDL_GPUDevice* dev, SDL_GPUShaderStage stage, const char* hlsl, int nSamp, int nUB) {
-    SDL_GPUShaderFormat fmts = SDL_GetGPUShaderFormats(dev);
-    SDL_ShaderCross_HLSL_Info info = {0};
-    info.source = hlsl;
-    info.entrypoint = "main";
-    info.shader_stage = (stage == SDL_GPU_SHADERSTAGE_VERTEX) ? SDL_SHADERCROSS_SHADERSTAGE_VERTEX : SDL_SHADERCROSS_SHADERSTAGE_FRAGMENT;
-
-    void* code = NULL; size_t sz = 0;
-    SDL_GPUShaderFormat fmt = SDL_GPU_SHADERFORMAT_INVALID;
-
-    if (fmts & SDL_GPU_SHADERFORMAT_SPIRV) {
-        code = SDL_ShaderCross_CompileSPIRVFromHLSL(&info, &sz);
-        fmt = SDL_GPU_SHADERFORMAT_SPIRV;
-    } else if (fmts & SDL_GPU_SHADERFORMAT_DXIL) {
-        code = SDL_ShaderCross_CompileDXILFromHLSL(&info, &sz);
-        fmt = SDL_GPU_SHADERFORMAT_DXIL;
+static SDL_ShaderCross_ShaderStage to_shadercross_stage(SDL_GPUShaderStage stage) {
+    switch (stage) {
+    case SDL_GPU_SHADERSTAGE_VERTEX:
+        return SDL_SHADERCROSS_SHADERSTAGE_VERTEX;
+    case SDL_GPU_SHADERSTAGE_FRAGMENT:
+        return SDL_SHADERCROSS_SHADERSTAGE_FRAGMENT;
+    default:
+        return SDL_SHADERCROSS_SHADERSTAGE_FRAGMENT;
     }
-    if (!code) return NULL;
+}
 
-    SDL_GPUShaderCreateInfo sci = {0};
-    sci.code = code; sci.code_size = sz;
-    sci.entrypoint = "main"; sci.format = fmt; sci.stage = stage;
-    sci.num_samplers = nSamp; sci.num_uniform_buffers = nUB;
-    SDL_GPUShader* sh = SDL_CreateGPUShader(dev, &sci);
-    SDL_free(code);
-    return sh;
+static SDL_GPUShader* compile_shader_ov(SDL_GPUDevice* dev,
+                                       SDL_GPUShaderStage stage,
+                                       const char* hlsl,
+                                       const char* debug_name,
+                                       int expected_samplers,
+                                       int expected_uniform_buffers) {
+    if (!dev || !hlsl) return NULL;
+
+    SDL_ShaderCross_ShaderStage sc_stage = to_shadercross_stage(stage);
+
+    SDL_ShaderCross_HLSL_Info hlsl_info = {0};
+    hlsl_info.source = hlsl;
+    hlsl_info.entrypoint = "main";
+    hlsl_info.shader_stage = sc_stage;
+
+    size_t spirv_size = 0;
+    void* spirv_data = SDL_ShaderCross_CompileSPIRVFromHLSL(&hlsl_info, &spirv_size);
+    if (!spirv_data || spirv_size == 0) {
+        printf("[Overlay] ShaderCross HLSL->SPIRV failed (%s)\n", SDL_GetError());
+        if (spirv_data) SDL_free(spirv_data);
+        return NULL;
+    }
+
+    SDL_PropertiesID props = SDL_CreateProperties();
+    if (debug_name && debug_name[0]) {
+        SDL_SetStringProperty(props, SDL_SHADERCROSS_PROP_SHADER_DEBUG_NAME_STRING, debug_name);
+    }
+
+    SDL_ShaderCross_GraphicsShaderMetadata* metadata = SDL_ShaderCross_ReflectGraphicsSPIRV(
+        (const Uint8*)spirv_data, spirv_size, props);
+    if (!metadata) {
+        printf("[Overlay] ShaderCross SPIRV reflection failed (%s)\n", SDL_GetError());
+        SDL_free(spirv_data);
+        SDL_DestroyProperties(props);
+        return NULL;
+    }
+
+    if (expected_samplers >= 0 && (int)metadata->resource_info.num_samplers != expected_samplers) {
+        printf("[Overlay] Warning: shader '%s' samplers=%u expected=%d\n",
+               debug_name ? debug_name : "<unnamed>", metadata->resource_info.num_samplers, expected_samplers);
+    }
+    if (expected_uniform_buffers >= 0 && (int)metadata->resource_info.num_uniform_buffers != expected_uniform_buffers) {
+        printf("[Overlay] Warning: shader '%s' uniform_buffers=%u expected=%d\n",
+               debug_name ? debug_name : "<unnamed>", metadata->resource_info.num_uniform_buffers, expected_uniform_buffers);
+    }
+
+    SDL_ShaderCross_SPIRV_Info spirv_info = {0};
+    spirv_info.bytecode = (const Uint8*)spirv_data;
+    spirv_info.bytecode_size = spirv_size;
+    spirv_info.entrypoint = "main";
+    spirv_info.shader_stage = sc_stage;
+    spirv_info.props = props;
+
+    SDL_GPUShader* shader = SDL_ShaderCross_CompileGraphicsShaderFromSPIRV(
+        dev, &spirv_info, &metadata->resource_info, props);
+    if (!shader) {
+        printf("[Overlay] ShaderCross SPIRV->GPU shader failed (%s)\n", SDL_GetError());
+    }
+
+    SDL_free(metadata);
+    SDL_free(spirv_data);
+    SDL_DestroyProperties(props);
+    return shader;
 }
 
 DONG_APPCORE_API dong_overlay_t* dong_overlay_create(dong_app_t* app, uint32_t width, uint32_t height) {
@@ -542,8 +590,10 @@ static int create_overlay_pipeline(dong_overlay_t* overlay, SDL_GPUTextureFormat
     SDL_ReleaseGPUTransferBuffer(overlay->device, tb);
 
     // Compile shaders
-    SDL_GPUShader* vs = compile_shader_ov(overlay->device, SDL_GPU_SHADERSTAGE_VERTEX, VS_HUD, 0, 0);
-    SDL_GPUShader* fs = compile_shader_ov(overlay->device, SDL_GPU_SHADERSTAGE_FRAGMENT, FS_HUD, 1, 1);
+    SDL_GPUShader* vs = compile_shader_ov(overlay->device, SDL_GPU_SHADERSTAGE_VERTEX, VS_HUD,
+                                         "overlay/VS_HUD", 0, 0);
+    SDL_GPUShader* fs = compile_shader_ov(overlay->device, SDL_GPU_SHADERSTAGE_FRAGMENT, FS_HUD,
+                                         "overlay/FS_HUD", 1, 1);
     if (!vs || !fs) {
         if (vs) SDL_ReleaseGPUShader(overlay->device, vs);
         if (fs) SDL_ReleaseGPUShader(overlay->device, fs);

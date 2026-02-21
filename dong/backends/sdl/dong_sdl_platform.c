@@ -551,7 +551,32 @@ static int sdl_gpu_upload_texture_subrect(DongGPUDriver* driver, DongGPUTexture 
     DongSDLGPUDriverImpl* impl = (DongSDLGPUDriverImpl*)driver;
     if (!impl || !impl->device || !texture || !data) return -1;
 
+    // Preferred path: route through the C++ SDLGPUDriver so uploads reuse the current frame
+    // command buffer when available. This guarantees upload ordering relative to draw calls.
+    // IMPORTANT: do NOT create the bridge here. This function can be called during bridge creation
+    // (GlyphAtlas tier initialization), and creating the bridge recursively would stack overflow.
+    if (impl->bridge && dong_sdl_gpu_bridge_is_in_frame(impl->bridge)) {
+        int ok = dong_sdl_gpu_bridge_upload_texture_subrect_rgba(impl->bridge,
+                                                                texture,
+                                                                data,
+                                                                dest_x,
+                                                                dest_y,
+                                                                width,
+                                                                height,
+                                                                src_stride_bytes);
+        if (ok) {
+            if (out_fence) {
+                *out_fence = NULL; // ordered within active frame
+            }
+            return 0;
+        }
+    }
+
     SDL_GPUDevice* dev = impl->device;
+
+    // Fallback path: standalone command buffer + fence.
+    // Note: this does NOT guarantee ordering with SDLGPUDriver draws in the same frame.
+    // It is kept as a fallback for early init or when bridge is unavailable.
 
     // Calculate buffer size based on stride
     uint32_t buffer_size = src_stride_bytes * height;

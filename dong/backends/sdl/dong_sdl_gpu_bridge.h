@@ -33,6 +33,21 @@ int dong_sdl_gpu_bridge_update_external_image_yuv420p(DongSDLGPUBridge* bridge, 
                                                       const uint8_t* plane_v, uint32_t stride_v,
                                                       uint32_t width, uint32_t height);
 
+// Upload to a sub-rectangle of an existing texture (used by GlyphAtlas).
+// This will reuse the SDLGPUDriver's current command buffer when available, so upload ordering
+// is consistent with subsequent draw calls in the same frame.
+int dong_sdl_gpu_bridge_upload_texture_subrect_rgba(DongSDLGPUBridge* bridge,
+                                                   void* sdl_texture,
+                                                   const void* rgba,
+                                                   uint32_t dest_x,
+                                                   uint32_t dest_y,
+                                                   uint32_t width,
+                                                   uint32_t height,
+                                                   uint32_t src_stride_bytes);
+
+// Returns non-zero if the internal SDLGPUDriver is currently inside a frame (command buffer active).
+int dong_sdl_gpu_bridge_is_in_frame(DongSDLGPUBridge* bridge);
+
 void dong_sdl_gpu_bridge_set_resource_root(DongSDLGPUBridge* bridge, const char* root);
 
 // Offscreen rendering.

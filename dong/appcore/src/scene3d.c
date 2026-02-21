@@ -66,14 +66,28 @@ static const dong_plugin_vtable_t* try_load_plugin(void) {
     return s_plugin_vtable;
 }
 
+static size_t strnlen_upto(const char* s, size_t max_len) {
+    if (!s) return 0;
+    size_t n = 0;
+    while (n < max_len && s[n]) {
+        n++;
+    }
+    return n;
+}
+
 static void copy_string(char* dst, size_t dst_size, const char* src) {
     if (!dst || dst_size == 0) return;
     if (!src || !src[0]) {
         dst[0] = 0;
         return;
     }
-    strncpy(dst, src, dst_size - 1);
-    dst[dst_size - 1] = 0;
+
+    const size_t max_copy = dst_size - 1;
+    const size_t n = strnlen_upto(src, max_copy);
+    if ((const char*)dst != src) {
+        memmove(dst, src, n);
+    }
+    dst[n] = 0;
 }
 
 static void extract_dir_from_path(const char* path, char* out_dir, size_t out_size) {
@@ -166,6 +180,10 @@ struct dong_screen3d_t {
     int dirty;
     int frames_without_update;
 
+    // Warmup: 某些资源（图片/字体/video poster）可能在首次 tick 后异步就绪。
+    // 3D 多屏为了省性能不会每帧都 tick 静态页面，因此给每个 screen 一个短暂的 warmup 更新窗口。
+    int warmup_updates_remaining;
+
     char resource_root[MAX_PATH_LEN];
     char debug_name[256];
 };
@@ -203,6 +221,7 @@ struct dong_scene3d_t {
     SDL_GPUSampler* sampler;
     SDL_GPUBuffer* quad_vb;
     SDL_GPUTexture* depth_texture;
+    SDL_GPUTextureFormat depth_format;
     uint32_t depth_width, depth_height;
 
     // GPU resources for HUD overlay
@@ -227,10 +246,34 @@ struct dong_scene3d_t {
     int32_t last_sent_mouse_y;
 };
 
+static dong_mat4_t build_solo_screen_model(const dong_scene3d_t* scene, const dong_screen3d_t* scr) {
+    if (!scene || !scr) {
+        return dong_mat4_identity();
+    }
+
+    // Place the screen directly in front of the camera, facing the camera.
+    const float yaw = scene->cam_yaw;
+    const float pitch = scene->cam_pitch;
+
+    dong_vec3_t eye = dong_vec3(scene->cam_x, scene->cam_y, scene->cam_z);
+    dong_vec3_t fwd = dong_vec3(
+        cosf(pitch) * sinf(yaw),
+        sinf(pitch),
+        cosf(pitch) * cosf(yaw));
+
+    const float dist = 3.0f;
+    dong_vec3_t pos = dong_vec3_add(eye, dong_vec3_scale(fwd, dist));
+
+    dong_mat4_t scale = dong_mat4_scale(scr->screen_width * 2.0f, scr->screen_height * 2.0f, 1.0f);
+    dong_mat4_t rotate = dong_mat4_rotate_y(yaw + DONG_PI);
+    dong_mat4_t translate = dong_mat4_translate(pos.x, pos.y, pos.z);
+    return dong_mat4_multiply(translate, dong_mat4_multiply(rotate, scale));
+}
+
 static void set_screen_resource_root(dong_screen3d_t* screen, const char* root) {
     if (!screen || !screen->engine || !root || !root[0]) return;
     copy_string(screen->resource_root, sizeof(screen->resource_root), root);
-    (void)dong_engine_set_resource_root(screen->engine, root);
+    (void)dong_engine_set_resource_root(screen->engine, screen->resource_root);
 }
 
 static dong_engine_t* create_screen_engine(dong_scene3d_t* scene, uint32_t width, uint32_t height) {
@@ -292,6 +335,213 @@ static SDL_GPUTexture* ensure_offscreen_texture(SDL_GPUDevice* device,
     return created;
 }
 
+static int env_i32_or_default(const char* name, int default_value) {
+    const char* s = getenv(name);
+    if (!s || !s[0]) return default_value;
+    char* end = NULL;
+    long v = strtol(s, &end, 10);
+    if (end == s) return default_value;
+    return (int)v;
+}
+
+static int get_solo_screen_idx(void) {
+    return env_i32_or_default("DONG_SCENE3D_SOLO_SCREEN", -1);
+}
+
+static int write_bmp24(const char* filename, uint32_t width, uint32_t height, const uint8_t* rgba_data, int input_is_bgra) {
+    if (!filename || !filename[0] || !rgba_data || width == 0 || height == 0) return 0;
+    (void)input_is_bgra;
+
+    FILE* f = fopen(filename, "wb");
+    if (!f) return 0;
+
+    const uint32_t row_size = ((width * 3 + 3) / 4) * 4;
+    const uint32_t pixel_data_size = row_size * height;
+    const uint32_t filesize = 54 + pixel_data_size;
+
+    uint8_t bmpfileheader[14] = {'B','M', 0,0,0,0, 0,0, 0,0, 54,0,0,0};
+    bmpfileheader[2] = (uint8_t)(filesize);
+    bmpfileheader[3] = (uint8_t)(filesize >> 8);
+    bmpfileheader[4] = (uint8_t)(filesize >> 16);
+    bmpfileheader[5] = (uint8_t)(filesize >> 24);
+
+    uint8_t bmpinfoheader[40] = {40,0,0,0, 0,0,0,0, 0,0,0,0, 1,0, 24,0};
+    bmpinfoheader[4]  = (uint8_t)(width);
+    bmpinfoheader[5]  = (uint8_t)(width >> 8);
+    bmpinfoheader[6]  = (uint8_t)(width >> 16);
+    bmpinfoheader[7]  = (uint8_t)(width >> 24);
+    bmpinfoheader[8]  = (uint8_t)(height);
+    bmpinfoheader[9]  = (uint8_t)(height >> 8);
+    bmpinfoheader[10] = (uint8_t)(height >> 16);
+    bmpinfoheader[11] = (uint8_t)(height >> 24);
+
+    fwrite(bmpfileheader, 1, 14, f);
+    fwrite(bmpinfoheader, 1, 40, f);
+
+    uint8_t* row = (uint8_t*)calloc(1, row_size);
+    if (!row) {
+        fclose(f);
+        return 0;
+    }
+
+    for (int y = (int)height - 1; y >= 0; --y) {
+        for (uint32_t x = 0; x < width; ++x) {
+            const uint32_t idx = ((uint32_t)y * width + x) * 4;
+            if (input_is_bgra) {
+                row[x * 3 + 0] = rgba_data[idx + 0];
+                row[x * 3 + 1] = rgba_data[idx + 1];
+                row[x * 3 + 2] = rgba_data[idx + 2];
+            } else {
+                row[x * 3 + 0] = rgba_data[idx + 2];
+                row[x * 3 + 1] = rgba_data[idx + 1];
+                row[x * 3 + 2] = rgba_data[idx + 0];
+            }
+        }
+        fwrite(row, 1, row_size, f);
+    }
+
+    free(row);
+    fclose(f);
+    return 1;
+}
+
+static int read_gpu_texture_rgba8(SDL_GPUDevice* dev,
+                                 SDL_GPUTexture* tex,
+                                 uint32_t width,
+                                 uint32_t height,
+                                 uint8_t** out_rgba,
+                                 uint32_t* out_size) {
+    if (out_rgba) *out_rgba = NULL;
+    if (out_size) *out_size = 0;
+    if (!dev || !tex || width == 0 || height == 0 || !out_rgba || !out_size) return 0;
+
+    const uint32_t size = width * height * 4;
+
+    SDL_GPUTransferBufferCreateInfo tb_info = {0};
+    tb_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_DOWNLOAD;
+    tb_info.size = size;
+
+    SDL_GPUTransferBuffer* transfer = SDL_CreateGPUTransferBuffer(dev, &tb_info);
+    if (!transfer) return 0;
+
+    SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(dev);
+    if (!cmd) {
+        SDL_ReleaseGPUTransferBuffer(dev, transfer);
+        return 0;
+    }
+
+    SDL_GPUCopyPass* copy_pass = SDL_BeginGPUCopyPass(cmd);
+    if (!copy_pass) {
+        SDL_CancelGPUCommandBuffer(cmd);
+        SDL_ReleaseGPUTransferBuffer(dev, transfer);
+        return 0;
+    }
+
+    SDL_GPUTextureRegion src = {0};
+    src.texture = tex;
+    src.x = 0;
+    src.y = 0;
+    src.w = width;
+    src.h = height;
+    src.d = 1;
+
+    SDL_GPUTextureTransferInfo dst = {0};
+    dst.transfer_buffer = transfer;
+    dst.offset = 0;
+    dst.pixels_per_row = width;
+    dst.rows_per_layer = height;
+
+    SDL_DownloadFromGPUTexture(copy_pass, &src, &dst);
+    SDL_EndGPUCopyPass(copy_pass);
+
+    SDL_GPUFence* fence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd);
+    if (!fence) {
+        SDL_ReleaseGPUTransferBuffer(dev, transfer);
+        return 0;
+    }
+
+    while (!SDL_QueryGPUFence(dev, fence)) {
+        SDL_Delay(1);
+    }
+    SDL_ReleaseGPUFence(dev, fence);
+
+    void* mapped = SDL_MapGPUTransferBuffer(dev, transfer, false);
+    if (!mapped) {
+        SDL_ReleaseGPUTransferBuffer(dev, transfer);
+        return 0;
+    }
+
+    uint8_t* buf = (uint8_t*)malloc(size);
+    if (!buf) {
+        SDL_UnmapGPUTransferBuffer(dev, transfer);
+        SDL_ReleaseGPUTransferBuffer(dev, transfer);
+        return 0;
+    }
+
+    memcpy(buf, mapped, size);
+    SDL_UnmapGPUTransferBuffer(dev, transfer);
+    SDL_ReleaseGPUTransferBuffer(dev, transfer);
+
+    *out_rgba = buf;
+    *out_size = size;
+    return 1;
+}
+
+static void maybe_dump_screen_texture(dong_scene3d_t* scene, int idx, SDL_GPUTexture* tex, uint32_t w, uint32_t h) {
+    static int done = 0;
+    if (done) return;
+
+    const int want = env_i32_or_default("DONG_SCENE3D_DUMP_SCREEN", -1);
+    if (want < 0 || want != idx) return;
+
+    const char* out = getenv("DONG_SCENE3D_DUMP_OUT");
+    if (!out || !out[0]) out = "/tmp/scene3d_screen_dump.bmp";
+
+    uint8_t* rgba = NULL;
+    uint32_t size = 0;
+    if (!read_gpu_texture_rgba8(scene->device, tex, w, h, &rgba, &size) || !rgba) {
+        printf("[Scene3D] dump failed (idx=%d)\n", idx);
+        return;
+    }
+
+    if (write_bmp24(out, w, h, rgba, 0)) {
+        printf("[Scene3D] dumped screen %d to %s (%ux%u)\n", idx, out, w, h);
+        done = 1;
+    }
+
+    free(rgba);
+}
+
+static void maybe_dump_swapchain_texture(dong_scene3d_t* scene, SDL_GPUTexture* tex, uint32_t w, uint32_t h, int input_is_bgra) {
+    static int done = 0;
+    static int frame_no = 0;
+    if (done) return;
+
+    const int want = env_i32_or_default("DONG_SCENE3D_DUMP_FRAME", 0);
+    if (!want) return;
+
+    frame_no++;
+    const int after = env_i32_or_default("DONG_SCENE3D_DUMP_FRAME_AFTER", 0);
+    if (frame_no < after) return;
+
+    const char* out = getenv("DONG_SCENE3D_DUMP_FRAME_OUT");
+    if (!out || !out[0]) out = "/tmp/scene3d_frame_dump.bmp";
+
+    uint8_t* rgba = NULL;
+    uint32_t size = 0;
+    if (!read_gpu_texture_rgba8(scene->device, tex, w, h, &rgba, &size) || !rgba) {
+        printf("[Scene3D] frame dump failed\n");
+        return;
+    }
+
+    if (write_bmp24(out, w, h, rgba, input_is_bgra)) {
+        printf("[Scene3D] dumped frame to %s (%ux%u)\n", out, w, h);
+        done = 1;
+    }
+
+    free(rgba);
+}
+
 // Forward declarations
 
 static int create_pipelines(dong_scene3d_t* scene);
@@ -345,27 +595,11 @@ static const char* FS_HUD =
     "float4 main(PSInput input) : SV_Target0 {\n"
     "    float4 c = tex.Sample(texSampler, input.uv);\n"
     "    float rgbEnergy = dot(c.rgb, float3(0.3333, 0.3333, 0.3333));\n"
-    "    // Case 1: Low alpha + bright RGB = transparent background\n"
-    "    if (c.a < 0.1 && rgbEnergy > 0.7) {\n"
+    "    // Key out near-white opaque background only (avoid killing antialiased text).\n"
+    "    if (c.a > 0.98 && rgbEnergy > 0.98 && abs(c.r - c.g) < 0.03 && abs(c.g - c.b) < 0.03) {\n"
     "        c = float4(0.0, 0.0, 0.0, 0.0);\n"
     "    }\n"
-    "    // Case 2: Near-white with high alpha but no saturation (gray/white background)\n"
-    "    else if (c.a > 0.9 && rgbEnergy > 0.95 && \n"
-    "             abs(c.r - c.g) < 0.05 && abs(c.g - c.b) < 0.05) {\n"
-    "        c = float4(0.0, 0.0, 0.0, 0.0);\n"
-    "    }\n"
-    "    // Case 3: Promote alpha for actual colored content (not grayscale background)\n"
-    "    else if (c.a <= 0.001 && rgbEnergy > 0.01 && rgbEnergy <= 0.7) {\n"
-    "        c.a = 1.0;\n"
-    "    }\n"
-    "    float4 outc = c * uColor;\n"
-    "    // Premultiply alpha for correct blending\n"
-    "    outc.rgb *= outc.a;\n"
-    "    // Final safety: clamp RGB to 0 for fully transparent pixels\n"
-    "    if (outc.a <= 0.001) {\n"
-    "        outc.rgb = float3(0.0, 0.0, 0.0);\n"
-    "    }\n"
-    "    return outc;\n"
+    "    return c * uColor;\n"
     "}\n";
 
 // Scene lifecycle
@@ -488,6 +722,7 @@ DONG_APPCORE_API dong_screen3d_t* dong_scene3d_add_screen(dong_scene3d_t* scene,
     // Initialize optimization fields
     screen->dirty = 1;  // Mark as dirty to ensure first render
     screen->frames_without_update = 0;
+    screen->warmup_updates_remaining = 0;
     screen->next_update_time = 0.0;
 
     const char* base_root = config->resource_root;
@@ -1121,9 +1356,9 @@ DONG_APPCORE_API dong_screen3d_t* dong_scene3d_handle_input(dong_scene3d_t* scen
     return NULL;
 }
 
-static void update_screen_texture(dong_scene3d_t* scene, int idx) {
+static int update_screen_texture(dong_scene3d_t* scene, int idx) {
     dong_screen3d_t* scr = (scene && idx >= 0 && idx < scene->screen_count) ? scene->screens[idx] : NULL;
-    if (!scr || !scr->engine || !scene) return;
+    if (!scr || !scr->engine || !scene) return 0;
 
     const int debug = (getenv("DONG_DEBUG_SCENE3D_OFFSCREEN") != NULL);
     if (debug) {
@@ -1141,31 +1376,34 @@ static void update_screen_texture(dong_scene3d_t* scene, int idx) {
     DongGPUDriver* driver = dong_platform_get_gpu_driver(dong_platform_get());
     if (!driver) {
         if (debug) printf("[Scene3D] update_screen_texture: driver is NULL\n");
-        return;
+        return 0;
     }
 
     SDL_GPUTexture* target = ensure_offscreen_texture(
         scene->device, scr->texture, &scr->tex_width, &scr->tex_height, scr->tex_width, scr->tex_height);
     if (!target) {
         if (debug) printf("[Scene3D] update_screen_texture: target is NULL\n");
-        return;
+        return 0;
     }
 
     if (!dong_gpu_begin_frame_offscreen(driver, target, scr->tex_width, scr->tex_height)) {
         if (debug) printf("[Scene3D] begin_frame_offscreen failed (idx=%d)\n", idx);
-        return;
+        return 0;
     }
 
 
     if (dong_engine_tick(scr->engine) != DONG_OK) {
         if (debug) printf("[Scene3D] engine_tick failed (idx=%d)\n", idx);
         dong_gpu_end_frame_offscreen(driver);
-        return;
+        return 0;
     }
 
 
     dong_gpu_end_frame_offscreen(driver);
     scr->texture = target;
+
+    maybe_dump_screen_texture(scene, idx, target, scr->tex_width, scr->tex_height);
+    return 1;
 }
 
 
@@ -1215,6 +1453,18 @@ static float get_screen_distance_sq(dong_scene3d_t* scene, dong_screen3d_t* scr)
     return dx*dx + dy*dy + dz*dz;
 }
 
+static void mark_screen_updated(dong_screen3d_t* scr, double now_sec, double video_interval, int consume_warmup) {
+    if (!scr) return;
+    scr->dirty = 0;
+    scr->frames_without_update = 0;
+    if (consume_warmup && scr->warmup_updates_remaining > 0) {
+        scr->warmup_updates_remaining -= 1;
+    }
+    if (scr->is_video) {
+        scr->next_update_time = now_sec + video_interval;
+    }
+}
+
 static void update_screens_scheduled(dong_scene3d_t* scene) {
     if (!scene) return;
 
@@ -1223,18 +1473,24 @@ static void update_screens_scheduled(dong_scene3d_t* scene) {
     const double video_interval = 1.0 / 30.0;
     const int max_updates_per_frame = 1;  // Only 1 update per frame for background screens
 
+    // Warmup: 在启动后的短时间内，多 tick 几次静态页面，确保异步资源能落到画面上。
+    const int warmup_extra_updates = 2;
+
+    // Static refresh: 即使没有输入事件，静态页面也需要偶尔 tick 一次
+    // 来把“延迟就绪”的资源（图片/字体等）落到屏幕上。
+    // 这里用帧计数做近似节流：大约每 ~10 秒让每个静态 screen 至少刷新一次。
+    const int static_refresh_frames = 600;
+
     // First frame: update all screens once
     if (!scene->initial_full_update_done) {
         for (int i = 0; i < scene->screen_count; i++) {
-            update_screen_texture(scene, i);
-            dong_screen3d_t* scr = scene->screens[i];
-            if (scr) {
-                scr->dirty = 0;
-                scr->frames_without_update = 0;
-                if (scr->is_video) {
-                    scr->next_update_time = now_sec + video_interval;
+            if (update_screen_texture(scene, i)) {
+                dong_screen3d_t* scr = scene->screens[i];
+                if (scr) {
+                    scr->warmup_updates_remaining = warmup_extra_updates;
+                    mark_screen_updated(scr, now_sec, video_interval, 0);
+                    // Static screens: no scheduled updates after warmup, only dirty-based
                 }
-                // Static screens: no scheduled updates, only dirty-based
             }
         }
         scene->initial_full_update_done = 1;
@@ -1243,47 +1499,44 @@ static void update_screens_scheduled(dong_scene3d_t* scene) {
 
     int updates_this_frame = 0;
 
-    // Priority 1: Hovered screen - only update when dirty (input events set dirty flag)
+    // Priority 1: Hovered screen - update when dirty, during warmup, or on periodic refresh
     if (scene->hovered_idx >= 0) {
         dong_screen3d_t* scr = scene->screens[scene->hovered_idx];
-        if (scr && scr->dirty) {
-            update_screen_texture(scene, scene->hovered_idx);
-            scr->dirty = 0;
-            scr->frames_without_update = 0;
-            scr->next_update_time = now_sec + video_interval;
-            updates_this_frame++;
+        if (scr && (scr->dirty || scr->warmup_updates_remaining > 0 || scr->frames_without_update >= static_refresh_frames)) {
+            if (update_screen_texture(scene, scene->hovered_idx)) {
+                mark_screen_updated(scr, now_sec, video_interval, 1);
+                updates_this_frame++;
+            }
         }
     }
 
-    // Priority 2: Focused screen - only update when dirty
+    // Priority 2: Focused screen - update when dirty, during warmup, or on periodic refresh
     if (scene->focused_idx >= 0 && scene->focused_idx != scene->hovered_idx) {
         dong_screen3d_t* scr = scene->screens[scene->focused_idx];
-        if (scr && scr->dirty) {
-            update_screen_texture(scene, scene->focused_idx);
-            scr->dirty = 0;
-            scr->frames_without_update = 0;
-            scr->next_update_time = now_sec + video_interval;
-            updates_this_frame++;
+        if (scr && (scr->dirty || scr->warmup_updates_remaining > 0 || scr->frames_without_update >= static_refresh_frames)) {
+            if (update_screen_texture(scene, scene->focused_idx)) {
+                mark_screen_updated(scr, now_sec, video_interval, 1);
+                updates_this_frame++;
+            }
         }
     }
 
-    // Priority 3: Background video screens - 30fps but only if time elapsed
+    // Priority 3: Background video screens - 30fps, plus warmup for poster/resources
     for (int i = 0; i < scene->screen_count && updates_this_frame < max_updates_per_frame; i++) {
         dong_screen3d_t* scr = scene->screens[i];
         if (!scr || !scr->is_video) continue;
         if (i == scene->hovered_idx || i == scene->focused_idx) continue;
 
-        if (now_sec >= scr->next_update_time) {
-            update_screen_texture(scene, i);
-            scr->dirty = 0;
-            scr->frames_without_update = 0;
-            scr->next_update_time = now_sec + video_interval;
-            updates_this_frame++;
+        if (scr->warmup_updates_remaining > 0 || now_sec >= scr->next_update_time) {
+            if (update_screen_texture(scene, i)) {
+                mark_screen_updated(scr, now_sec, video_interval, 1);
+                updates_this_frame++;
+            }
         }
     }
 
-    // Priority 4: Background static screens - only update when dirty
-    // Static HTML pages don't need periodic updates after initial render
+    // Priority 4: Background static screens - update when dirty or during warmup
+    // Static HTML pages don't need periodic updates after warmup.
     if (updates_this_frame < max_updates_per_frame) {
         for (int i = 0; i < scene->screen_count; i++) {
             if (updates_this_frame >= max_updates_per_frame) break;
@@ -1294,12 +1547,11 @@ static void update_screens_scheduled(dong_scene3d_t* scene) {
             dong_screen3d_t* scr = scene->screens[idx];
             if (!scr || scr->is_video) continue;
 
-            // Only update static screens when they have pending changes
-            if (scr->dirty) {
-                update_screen_texture(scene, idx);
-                scr->dirty = 0;
-                scr->frames_without_update = 0;
-                updates_this_frame++;
+            if (scr->dirty || scr->warmup_updates_remaining > 0 || scr->frames_without_update >= static_refresh_frames) {
+                if (update_screen_texture(scene, idx)) {
+                    mark_screen_updated(scr, now_sec, video_interval, 1);
+                    updates_this_frame++;
+                }
             }
         }
         scene->bg_rr_cursor++;
@@ -1343,9 +1595,10 @@ DONG_APPCORE_API void dong_scene3d_render(dong_scene3d_t* scene) {
         if (scene->depth_texture) SDL_ReleaseGPUTexture(scene->device, scene->depth_texture);
         SDL_GPUTextureCreateInfo dti = {0};
         dti.type = SDL_GPU_TEXTURETYPE_2D;
-        dti.format = SDL_GPU_TEXTUREFORMAT_D24_UNORM;
+        dti.format = scene->depth_format;
         dti.width = sw; dti.height = sh;
         dti.layer_count_or_depth = 1; dti.num_levels = 1;
+        dti.sample_count = SDL_GPU_SAMPLECOUNT_1;
         dti.usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET;
         scene->depth_texture = SDL_CreateGPUTexture(scene->device, &dti);
         scene->depth_width = sw; scene->depth_height = sh;
@@ -1367,9 +1620,31 @@ DONG_APPCORE_API void dong_scene3d_render(dong_scene3d_t* scene) {
         return;
     }
 
+    // Optional: render into an intermediate texture so we can safely read back a frame.
+    // Swapchain textures must only be referenced by the command buffer that acquired them.
+    SDL_GPUTexture* capture_tex = NULL;
+    SDL_GPUTexture* color_target = swapchain;
+    const int want_dump_frame = env_i32_or_default("DONG_SCENE3D_DUMP_FRAME", 0);
+    if (want_dump_frame) {
+        SDL_GPUTextureCreateInfo ti = {0};
+        ti.type = SDL_GPU_TEXTURETYPE_2D;
+        ti.format = SDL_GetGPUSwapchainTextureFormat(scene->device, scene->window);
+        ti.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
+        ti.width = swapchain_w;
+        ti.height = swapchain_h;
+        ti.layer_count_or_depth = 1;
+        ti.num_levels = 1;
+        ti.sample_count = SDL_GPU_SAMPLECOUNT_1;
+
+        capture_tex = SDL_CreateGPUTexture(scene->device, &ti);
+        if (capture_tex) {
+            color_target = capture_tex;
+        }
+    }
+
     if (swapchain && scene->screen_pipeline) {
         SDL_GPUColorTargetInfo cti = {0};
-        cti.texture = swapchain;
+        cti.texture = color_target;
         cti.load_op = SDL_GPU_LOADOP_CLEAR;
         cti.store_op = SDL_GPU_STOREOP_STORE;
         cti.clear_color.r = scene->bg_r;
@@ -1399,17 +1674,26 @@ DONG_APPCORE_API void dong_scene3d_render(dong_scene3d_t* scene) {
             dong_mat4_t proj = dong_mat4_perspective(DONG_DEG_TO_RAD(60), aspect, 0.1f, 1000.0f);
             dong_mat4_t vp = dong_mat4_multiply(proj, view);
 
+            const int solo_idx = get_solo_screen_idx();
+
             // Render each screen
             for (int i = 0; i < scene->screen_count; i++) {
                 dong_screen3d_t* scr = scene->screens[i];
                 if (!scr || !scr->texture) continue;
+                if (solo_idx >= 0 && i != solo_idx) continue;
 
-                // Model matrix: translate * rotate * scale
-                // Scale by screen_width and screen_height to size the unit quad
-                dong_mat4_t scale = dong_mat4_scale(scr->screen_width, scr->screen_height, 1.0f);
-                dong_mat4_t rotate = dong_mat4_rotate_y(scr->yaw);
-                dong_mat4_t translate = dong_mat4_translate(scr->pos_x, scr->pos_y, scr->pos_z);
-                dong_mat4_t model = dong_mat4_multiply(translate, dong_mat4_multiply(rotate, scale));
+                dong_mat4_t model;
+                if (solo_idx >= 0) {
+                    model = build_solo_screen_model(scene, scr);
+                } else {
+                    // Model matrix: translate * rotate * scale
+                    // Scale by screen_width and screen_height to size the unit quad
+                    dong_mat4_t scale = dong_mat4_scale(scr->screen_width, scr->screen_height, 1.0f);
+                    dong_mat4_t rotate = dong_mat4_rotate_y(scr->yaw);
+                    dong_mat4_t translate = dong_mat4_translate(scr->pos_x, scr->pos_y, scr->pos_z);
+                    model = dong_mat4_multiply(translate, dong_mat4_multiply(rotate, scale));
+                }
+
                 dong_mat4_t mvp = dong_mat4_multiply(vp, model);
 
                 UniformsTextured u = {0};
@@ -1443,7 +1727,7 @@ DONG_APPCORE_API void dong_scene3d_render(dong_scene3d_t* scene) {
             }
 
             SDL_GPUColorTargetInfo hud_cti = {0};
-            hud_cti.texture = swapchain;
+            hud_cti.texture = color_target;
             hud_cti.load_op = SDL_GPU_LOADOP_LOAD;  // Preserve 3D scene
             hud_cti.store_op = SDL_GPU_STOREOP_STORE;
 
@@ -1480,46 +1764,153 @@ DONG_APPCORE_API void dong_scene3d_render(dong_scene3d_t* scene) {
         }
     }
 
+    if (capture_tex) {
+        // Copy the rendered frame to the swapchain for presentation.
+        SDL_GPUCopyPass* copy_pass = SDL_BeginGPUCopyPass(cmd);
+        if (copy_pass) {
+            SDL_GPUTextureLocation src = {0};
+            src.texture = capture_tex;
+            SDL_GPUTextureLocation dst = {0};
+            dst.texture = swapchain;
+            SDL_CopyGPUTextureToTexture(copy_pass, &src, &dst, swapchain_w, swapchain_h, 1, false);
+            SDL_EndGPUCopyPass(copy_pass);
+        }
+
+        SDL_GPUFence* fence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd);
+        if (fence) {
+            while (!SDL_QueryGPUFence(scene->device, fence)) {
+                SDL_Delay(1);
+            }
+            SDL_ReleaseGPUFence(scene->device, fence);
+        }
+
+        int capture_is_bgra = 0;
+        SDL_GPUTextureFormat fmt = SDL_GetGPUSwapchainTextureFormat(scene->device, scene->window);
+        if (fmt == SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM || fmt == SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM_SRGB) {
+            capture_is_bgra = 1;
+        }
+
+        maybe_dump_swapchain_texture(scene, capture_tex, swapchain_w, swapchain_h, capture_is_bgra);
+        SDL_ReleaseGPUTexture(scene->device, capture_tex);
+        return;
+    }
+
     SDL_SubmitGPUCommandBuffer(cmd);
 }
 
 // Pipeline creation
-static SDL_GPUShader* compile_shader(SDL_GPUDevice* dev, SDL_GPUShaderStage stage, const char* hlsl, int nSamp, int nUB) {
-    SDL_GPUShaderFormat fmts = SDL_GetGPUShaderFormats(dev);
-    SDL_ShaderCross_HLSL_Info info = {0};
-    info.source = hlsl;
-    info.entrypoint = "main";
-    info.shader_stage = (stage == SDL_GPU_SHADERSTAGE_VERTEX) ? SDL_SHADERCROSS_SHADERSTAGE_VERTEX : SDL_SHADERCROSS_SHADERSTAGE_FRAGMENT;
-
-    void* code = NULL; size_t sz = 0;
-    SDL_GPUShaderFormat fmt = SDL_GPU_SHADERFORMAT_INVALID;
-
-    if (fmts & SDL_GPU_SHADERFORMAT_SPIRV) {
-        code = SDL_ShaderCross_CompileSPIRVFromHLSL(&info, &sz);
-        fmt = SDL_GPU_SHADERFORMAT_SPIRV;
-    } else if (fmts & SDL_GPU_SHADERFORMAT_DXIL) {
-        code = SDL_ShaderCross_CompileDXILFromHLSL(&info, &sz);
-        fmt = SDL_GPU_SHADERFORMAT_DXIL;
+static SDL_ShaderCross_ShaderStage to_shadercross_stage(SDL_GPUShaderStage stage) {
+    switch (stage) {
+    case SDL_GPU_SHADERSTAGE_VERTEX:
+        return SDL_SHADERCROSS_SHADERSTAGE_VERTEX;
+    case SDL_GPU_SHADERSTAGE_FRAGMENT:
+        return SDL_SHADERCROSS_SHADERSTAGE_FRAGMENT;
+    default:
+        return SDL_SHADERCROSS_SHADERSTAGE_FRAGMENT;
     }
-    if (!code) return NULL;
+}
 
-    SDL_GPUShaderCreateInfo sci = {0};
-    sci.code = code; sci.code_size = sz;
-    sci.entrypoint = "main"; sci.format = fmt; sci.stage = stage;
-    sci.num_samplers = nSamp; sci.num_uniform_buffers = nUB;
-    SDL_GPUShader* sh = SDL_CreateGPUShader(dev, &sci);
-    SDL_free(code);
-    return sh;
+static SDL_GPUShader* compile_shader(SDL_GPUDevice* dev,
+                                    SDL_GPUShaderStage stage,
+                                    const char* hlsl,
+                                    const char* debug_name,
+                                    int expected_samplers,
+                                    int expected_uniform_buffers) {
+    if (!dev || !hlsl) return NULL;
+
+    SDL_ShaderCross_ShaderStage sc_stage = to_shadercross_stage(stage);
+
+    SDL_ShaderCross_HLSL_Info hlsl_info = {0};
+    hlsl_info.source = hlsl;
+    hlsl_info.entrypoint = "main";
+    hlsl_info.shader_stage = sc_stage;
+
+    size_t spirv_size = 0;
+    void* spirv_data = SDL_ShaderCross_CompileSPIRVFromHLSL(&hlsl_info, &spirv_size);
+    if (!spirv_data || spirv_size == 0) {
+        printf("[Scene3D] ShaderCross HLSL->SPIRV failed (%s)\n", SDL_GetError());
+        if (spirv_data) SDL_free(spirv_data);
+        return NULL;
+    }
+
+    SDL_PropertiesID props = SDL_CreateProperties();
+    if (debug_name && debug_name[0]) {
+        SDL_SetStringProperty(props, SDL_SHADERCROSS_PROP_SHADER_DEBUG_NAME_STRING, debug_name);
+    }
+
+    SDL_ShaderCross_GraphicsShaderMetadata* metadata = SDL_ShaderCross_ReflectGraphicsSPIRV(
+        (const Uint8*)spirv_data, spirv_size, props);
+    if (!metadata) {
+        printf("[Scene3D] ShaderCross SPIRV reflection failed (%s)\n", SDL_GetError());
+        SDL_free(spirv_data);
+        SDL_DestroyProperties(props);
+        return NULL;
+    }
+
+    if (expected_samplers >= 0 && (int)metadata->resource_info.num_samplers != expected_samplers) {
+        printf("[Scene3D] Warning: shader '%s' samplers=%u expected=%d\n",
+               debug_name ? debug_name : "<unnamed>", metadata->resource_info.num_samplers, expected_samplers);
+    }
+    if (expected_uniform_buffers >= 0 && (int)metadata->resource_info.num_uniform_buffers != expected_uniform_buffers) {
+        printf("[Scene3D] Warning: shader '%s' uniform_buffers=%u expected=%d\n",
+               debug_name ? debug_name : "<unnamed>", metadata->resource_info.num_uniform_buffers, expected_uniform_buffers);
+    }
+
+    SDL_ShaderCross_SPIRV_Info spirv_info = {0};
+    spirv_info.bytecode = (const Uint8*)spirv_data;
+    spirv_info.bytecode_size = spirv_size;
+    spirv_info.entrypoint = "main";
+    spirv_info.shader_stage = sc_stage;
+    spirv_info.props = props;
+
+    SDL_GPUShader* shader = SDL_ShaderCross_CompileGraphicsShaderFromSPIRV(
+        dev, &spirv_info, &metadata->resource_info, props);
+    if (!shader) {
+        printf("[Scene3D] ShaderCross SPIRV->GPU shader failed (%s)\n", SDL_GetError());
+    }
+
+    SDL_free(metadata);
+    SDL_free(spirv_data);
+    SDL_DestroyProperties(props);
+    return shader;
+}
+
+static SDL_GPUTextureFormat choose_depth_format(SDL_GPUDevice* device) {
+    if (!device) return SDL_GPU_TEXTUREFORMAT_INVALID;
+
+    const SDL_GPUTextureUsageFlags usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET;
+    const SDL_GPUTextureType type = SDL_GPU_TEXTURETYPE_2D;
+
+    const SDL_GPUTextureFormat candidates[] = {
+        SDL_GPU_TEXTUREFORMAT_D32_FLOAT,
+        SDL_GPU_TEXTUREFORMAT_D16_UNORM,
+        SDL_GPU_TEXTUREFORMAT_D24_UNORM,
+    };
+
+    for (size_t i = 0; i < (sizeof(candidates) / sizeof(candidates[0])); i++) {
+        if (SDL_GPUTextureSupportsFormat(device, candidates[i], type, usage)) {
+            return candidates[i];
+        }
+    }
+
+    return SDL_GPU_TEXTUREFORMAT_INVALID;
 }
 
 static int create_pipelines(dong_scene3d_t* scene) {
-    if (!SDL_ShaderCross_Init()) return 0;
+    if (!SDL_ShaderCross_Init()) {
+        printf("[Scene3D] SDL_ShaderCross_Init failed (%s)\n", SDL_GetError());
+        return 0;
+    }
 
     // Sampler
     SDL_GPUSamplerCreateInfo sai = {0};
     sai.min_filter = sai.mag_filter = SDL_GPU_FILTER_LINEAR;
     sai.address_mode_u = sai.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
     scene->sampler = SDL_CreateGPUSampler(scene->device, &sai);
+    if (!scene->sampler) {
+        printf("[Scene3D] Failed to create sampler (%s)\n", SDL_GetError());
+        return 0;
+    }
 
     // Quad VB - unit quad centered at origin, will be scaled by model matrix
     // Each screen uses its own screen_width/screen_height to scale this
@@ -1531,6 +1922,10 @@ static int create_pipelines(dong_scene3d_t* scene) {
     vbi.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
     vbi.size = sizeof(quad);
     scene->quad_vb = SDL_CreateGPUBuffer(scene->device, &vbi);
+    if (!scene->quad_vb) {
+        printf("[Scene3D] Failed to create quad vertex buffer (%s)\n", SDL_GetError());
+        return 0;
+    }
 
     SDL_GPUTransferBufferCreateInfo tbi = {0};
     tbi.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
@@ -1550,8 +1945,10 @@ static int create_pipelines(dong_scene3d_t* scene) {
     SDL_ReleaseGPUTransferBuffer(scene->device, tb);
 
     // Shaders
-    SDL_GPUShader* vs = compile_shader(scene->device, SDL_GPU_SHADERSTAGE_VERTEX, VS_TEXTURED, 0, 1);
-    SDL_GPUShader* fs = compile_shader(scene->device, SDL_GPU_SHADERSTAGE_FRAGMENT, FS_TEXTURED, 1, 1);
+    SDL_GPUShader* vs = compile_shader(scene->device, SDL_GPU_SHADERSTAGE_VERTEX, VS_TEXTURED,
+                                       "scene3d/VS_TEXTURED", 0, 1);
+    SDL_GPUShader* fs = compile_shader(scene->device, SDL_GPU_SHADERSTAGE_FRAGMENT, FS_TEXTURED,
+                                       "scene3d/FS_TEXTURED", 1, 1);
     if (!vs || !fs) {
         if (vs) SDL_ReleaseGPUShader(scene->device, vs);
         if (fs) SDL_ReleaseGPUShader(scene->device, fs);
@@ -1560,6 +1957,12 @@ static int create_pipelines(dong_scene3d_t* scene) {
 
     // Pipeline
     SDL_GPUTextureFormat swfmt = SDL_GetGPUSwapchainTextureFormat(scene->device, scene->window);
+
+    scene->depth_format = choose_depth_format(scene->device);
+    if (scene->depth_format == SDL_GPU_TEXTUREFORMAT_INVALID) {
+        printf("[Scene3D] No supported depth format on this GPU backend\n");
+        return 0;
+    }
 
     SDL_GPUVertexBufferDescription vbd = {0};
     vbd.slot = 0; vbd.pitch = 5 * sizeof(float); vbd.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
@@ -1570,13 +1973,9 @@ static int create_pipelines(dong_scene3d_t* scene) {
 
     SDL_GPUColorTargetDescription ctd = {0};
     ctd.format = swfmt;
-    ctd.blend_state.enable_blend = 1;
-    ctd.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
-    ctd.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
-    ctd.blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
-    ctd.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
-    ctd.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
-    ctd.blend_state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
+    // 3D screen 是“显示器面板”，语义上应当是不透明的。
+    // 这里关闭 blending，让屏幕内容不受纹理 alpha 影响（可避免文字 alpha 异常导致整屏文字消失）。
+    ctd.blend_state.enable_blend = 0;
 
     SDL_GPUGraphicsPipelineCreateInfo pci = {0};
     pci.vertex_shader = vs;
@@ -1589,7 +1988,7 @@ static int create_pipelines(dong_scene3d_t* scene) {
     pci.target_info.num_color_targets = 1;
     pci.target_info.color_target_descriptions = &ctd;
     pci.target_info.has_depth_stencil_target = 1;
-    pci.target_info.depth_stencil_format = SDL_GPU_TEXTUREFORMAT_D24_UNORM;
+    pci.target_info.depth_stencil_format = scene->depth_format;
     pci.depth_stencil_state.enable_depth_test = 1;
     pci.depth_stencil_state.enable_depth_write = 1;
     pci.depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_LESS;
@@ -1601,7 +2000,10 @@ static int create_pipelines(dong_scene3d_t* scene) {
     SDL_ReleaseGPUShader(scene->device, vs);
     SDL_ReleaseGPUShader(scene->device, fs);
 
-    if (!scene->screen_pipeline) return 0;
+    if (!scene->screen_pipeline) {
+        printf("[Scene3D] Failed to create screen pipeline (%s)\n", SDL_GetError());
+        return 0;
+    }
 
     // =========================================================================
     // HUD Pipeline (fullscreen quad, no depth, premultiplied alpha)
@@ -1640,8 +2042,10 @@ static int create_pipelines(dong_scene3d_t* scene) {
     SDL_ReleaseGPUTransferBuffer(scene->device, hud_tb);
 
     // HUD shaders
-    SDL_GPUShader* hud_vs = compile_shader(scene->device, SDL_GPU_SHADERSTAGE_VERTEX, VS_HUD, 0, 0);
-    SDL_GPUShader* hud_fs = compile_shader(scene->device, SDL_GPU_SHADERSTAGE_FRAGMENT, FS_HUD, 1, 1);
+    SDL_GPUShader* hud_vs = compile_shader(scene->device, SDL_GPU_SHADERSTAGE_VERTEX, VS_HUD,
+                                           "scene3d/VS_HUD", 0, 0);
+    SDL_GPUShader* hud_fs = compile_shader(scene->device, SDL_GPU_SHADERSTAGE_FRAGMENT, FS_HUD,
+                                           "scene3d/FS_HUD", 1, 1);
     if (!hud_vs || !hud_fs) {
         if (hud_vs) SDL_ReleaseGPUShader(scene->device, hud_vs);
         if (hud_fs) SDL_ReleaseGPUShader(scene->device, hud_fs);

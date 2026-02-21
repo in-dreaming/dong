@@ -51,7 +51,9 @@
 #define CONFIG_VERSION "2024-01"
 #endif
 
-#define OPTIMIZE         1
+// NOTE: QuickJS peephole optimizer has been observed to trigger SIGTRAP on some valid scripts
+// (e.g. typeof comparisons used by our HTML test pages). Disable it to favor stability.
+#define OPTIMIZE         0
 #define SHORT_OPCODES    1
 #if defined(EMSCRIPTEN)
 #define DIRECT_DISPATCH  0

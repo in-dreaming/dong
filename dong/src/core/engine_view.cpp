@@ -21,6 +21,7 @@
 #include "../script/script_engine.hpp"
 #include "../script/js_bindings.hpp"
 
+#include <cstdlib>
 #include <cstring>
 #include <string>
 #include <sstream>
@@ -923,7 +924,12 @@ struct EngineView::Impl {
         DONG_LOG_INFO("[EngineView] Script execution starting, script_engine=%p, dom_manager=%p",
                       (void*)script_engine.get(), (void*)dom_manager.get());
         if (script_engine && dom_manager) {
-            ensureJSBindingsInitialized();
+            const char* disable_scripts_env = std::getenv("DONG_DISABLE_SCRIPTS");
+            const bool scripts_disabled = (disable_scripts_env && disable_scripts_env[0] != '\0' && std::strcmp(disable_scripts_env, "0") != 0);
+            if (scripts_disabled) {
+                DONG_LOG_WARN("[EngineView] Script execution disabled by DONG_DISABLE_SCRIPTS");
+            } else {
+                ensureJSBindingsInitialized();
 
             // Scan DOM tree for inline event handlers (onclick, onchange, etc.) and register them
             if (js_bindings) {
@@ -985,6 +991,7 @@ struct EngineView::Impl {
                     }
                 }
             }
+            }
         } else {
             DONG_LOG_WARN("[EngineView] Cannot execute scripts: script_engine or dom_manager is null");
         }
@@ -1035,7 +1042,7 @@ struct EngineView::Impl {
         static int frame_count = 0;
         static bool gpu_ready = false;
 
-        DONG_LOG_INFO("[tick] Frame %d starting", frame_count++);
+        DONG_LOG_DEBUG("[tick] Frame %d starting", frame_count++);
 
         DONG_PROFILE_SCOPE_CAT("EngineView::tick", "frame");
 
@@ -1104,22 +1111,22 @@ struct EngineView::Impl {
             if (root) {
                 painter->buildDisplayList(root, layout_engine.get());
                 const auto& dl = painter->getDisplayList();
-                DONG_LOG_INFO("[tick] DisplayList items: %zu", dl.items.size());
+                DONG_LOG_DEBUG("[tick] DisplayList items: %zu", dl.items.size());
                 int text_count = 0;
                 for (const auto& item : dl.items) {
                     if (item.type == dong::render::DisplayItemType::DrawGlyphRun) {
                         text_count++;
-                        DONG_LOG_INFO("[tick]   DrawGlyphRun: glyphs=%zu", item.glyph_run.glyphs.size());
+                        DONG_LOG_DEBUG("[tick]   DrawGlyphRun: glyphs=%zu", item.glyph_run.glyphs.size());
                     }
                 }
-                DONG_LOG_INFO("[tick] Total DrawGlyphRun items: %d", text_count);
+                DONG_LOG_DEBUG("[tick] Total DrawGlyphRun items: %d", text_count);
 
                 if (!cached_cmd_list) {
                     cached_cmd_list = std::make_unique<dong::render::GPUCommandList>();
                 }
                 dong::render::GPUCompiler compiler;
                 compiler.compile(painter->getDisplayList(), *cached_cmd_list, &painter->getLayerTree());
-                DONG_LOG_INFO("[tick] GPU commands: %zu", cached_cmd_list->commands.size());
+                DONG_LOG_DEBUG("[tick] GPU commands: %zu", cached_cmd_list->commands.size());
                 commands_dirty = false;
             }
         }
@@ -1131,7 +1138,7 @@ struct EngineView::Impl {
         if (use_gpu && cached_cmd_list && !commands_dirty && gpu_ready) {
             DongGPUDriver* driver = dong_platform_get_gpu_driver(dong_platform_get());
             if (driver) {
-                DONG_LOG_INFO("[tick] Executing %zu GPU commands", cached_cmd_list->commands.size());
+                DONG_LOG_DEBUG("[tick] Executing %zu GPU commands", cached_cmd_list->commands.size());
                 DONG_PROFILE_SCOPE_CAT("GPU::execute", "render");
                 (void)dong_gpu_execute(driver, cached_cmd_list.get());
             } else {

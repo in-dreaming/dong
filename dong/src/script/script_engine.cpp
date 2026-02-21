@@ -14,21 +14,9 @@ namespace {
 
 using SteadyClock = std::chrono::steady_clock;
 
-thread_local uint64_t g_interrupt_deadline_ns = 0;
-
 uint64_t steadyNowNs() {
     const auto now = SteadyClock::now().time_since_epoch();
     return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(now).count());
-}
-
-int quickjsInterruptHandler(JSRuntime* rt, void* opaque) {
-    (void)rt;
-    (void)opaque;
-    const uint64_t deadline = g_interrupt_deadline_ns;
-    if (deadline == 0) {
-        return 0;
-    }
-    return steadyNowNs() > deadline ? 1 : 0;
 }
 
 uint64_t getScriptTimeoutNs() {
@@ -141,13 +129,28 @@ std::string jsValueToStdString(JSContext* ctx, JSValueConst v) {
 
 } // namespace
 
+int ScriptEngine::interruptHandler(JSRuntime* rt, void* opaque) {
+    (void)rt;
+    auto* self = static_cast<ScriptEngine*>(opaque);
+    if (!self) {
+        return 0;
+    }
+
+    const uint64_t deadline = self->interrupt_deadline_ns_;
+    if (deadline == 0) {
+        return 0;
+    }
+
+    return steadyNowNs() > deadline ? 1 : 0;
+}
+
 ScriptEngine::ScriptEngine() : runtime_(nullptr), context_(nullptr) {
     runtime_ = JS_NewRuntime();
     if (!runtime_) {
         return;
     }
 
-    JS_SetInterruptHandler(runtime_, quickjsInterruptHandler, nullptr);
+    JS_SetInterruptHandler(runtime_, &ScriptEngine::interruptHandler, this);
 
     context_ = JS_NewContext(runtime_);
     if (!context_) {
@@ -207,24 +210,45 @@ bool ScriptEngine::eval(const std::string& code) {
         }
     }
 
-    const uint64_t timeout_ns = getScriptTimeoutNs();
-    if (timeout_ns != 0) {
-        g_interrupt_deadline_ns = steadyNowNs() + timeout_ns;
-    } else {
-        g_interrupt_deadline_ns = 0;
+    if (dbg) {
+        DONG_LOG_INFO("[ScriptEngine] eval compile begin");
     }
 
-    JSValue result = JS_Eval(context_, code.c_str(), code.length(), "<eval>", JS_EVAL_TYPE_GLOBAL);
-
-    // Always clear the deadline after a single eval.
-    g_interrupt_deadline_ns = 0;
+    JSValue compiled = JS_Eval(context_, code.c_str(), code.length(), "<eval>",
+                               JS_EVAL_TYPE_GLOBAL | JS_EVAL_FLAG_COMPILE_ONLY);
 
     if (dbg) {
-        DONG_LOG_INFO("[ScriptEngine] eval JS_Eval returned (is_exception=%d)", JS_IsException(result));
+        DONG_LOG_INFO("[ScriptEngine] eval compile done (is_exception=%d)", JS_IsException(compiled));
+    }
+
+    if (JS_IsException(compiled)) {
+        dumpJsException(context_, "eval/compile");
+        JS_FreeValue(context_, compiled);
+        return false;
+    }
+
+    const uint64_t timeout_ns = getScriptTimeoutNs();
+    if (timeout_ns != 0) {
+        interrupt_deadline_ns_ = steadyNowNs() + timeout_ns;
+    } else {
+        interrupt_deadline_ns_ = 0;
+    }
+
+    if (dbg) {
+        DONG_LOG_INFO("[ScriptEngine] eval exec begin");
+    }
+
+    JSValue result = JS_EvalFunction(context_, compiled);
+
+    // Always clear the deadline after a single eval.
+    interrupt_deadline_ns_ = 0;
+
+    if (dbg) {
+        DONG_LOG_INFO("[ScriptEngine] eval exec done (is_exception=%d)", JS_IsException(result));
     }
 
     if (JS_IsException(result)) {
-        dumpJsException(context_, "eval");
+        dumpJsException(context_, "eval/exec");
         JS_FreeValue(context_, result);
         return false;
     }
@@ -244,18 +268,26 @@ std::string ScriptEngine::evalWithReturn(const std::string& code) {
         return "";
     }
 
-    const uint64_t timeout_ns = getScriptTimeoutNs();
-    if (timeout_ns != 0) {
-        g_interrupt_deadline_ns = steadyNowNs() + timeout_ns;
-    } else {
-        g_interrupt_deadline_ns = 0;
+    JSValue compiled = JS_Eval(context_, code.c_str(), code.length(), "<eval>",
+                               JS_EVAL_TYPE_GLOBAL | JS_EVAL_FLAG_COMPILE_ONLY);
+    if (JS_IsException(compiled)) {
+        dumpJsException(context_, "evalWithReturn/compile");
+        JS_FreeValue(context_, compiled);
+        return "";
     }
 
-    JSValue result = JS_Eval(context_, code.c_str(), code.length(), "<eval>", JS_EVAL_TYPE_GLOBAL);
-    g_interrupt_deadline_ns = 0;
+    const uint64_t timeout_ns = getScriptTimeoutNs();
+    if (timeout_ns != 0) {
+        interrupt_deadline_ns_ = steadyNowNs() + timeout_ns;
+    } else {
+        interrupt_deadline_ns_ = 0;
+    }
+
+    JSValue result = JS_EvalFunction(context_, compiled);
+    interrupt_deadline_ns_ = 0;
 
     if (JS_IsException(result)) {
-        dumpJsException(context_, "evalWithReturn");
+        dumpJsException(context_, "evalWithReturn/exec");
         JS_FreeValue(context_, result);
         return "";
     }

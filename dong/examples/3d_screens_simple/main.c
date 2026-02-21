@@ -67,7 +67,6 @@ static const ScreenConfig SCREEN_CONFIGS[] = {
     {"tests/background_clip_test.html", 960, 640, 3.0f, 2.0f},
     {"tests/background_origin_test.html", 960, 640, 3.0f, 2.0f},
     {"tests/font_style_test.html", 960, 640, 3.0f, 2.0f},
-    {"tests/getcomputedstyle_smoke_test.html", 960, 640, 3.0f, 2.0f},
     {"tests/outline_test.html", 960, 640, 3.0f, 2.0f},
     {"tests/queryselector_complex_test.html", 960, 640, 3.0f, 2.0f},
     {"tests/stylesheets_deleterule_test.html", 960, 640, 3.0f, 2.0f},
@@ -164,6 +163,9 @@ int main(int argc, char* argv[]) {
     printf("=== Dong 3D Multi-Screen Demo (AppCore) ===\n");
     printf("This demo supports %d HTML screens with automatic arrangement\n", NUM_SCREENS);
     printf("Controls: RMB+Mouse=Look, WASD=Move, Space/E=Up, Ctrl/Q=Down, Shift=Sprint, F1/H=Help, ESC=Exit\n");
+
+    // 为了与 ./dong_app --html 的表现保持一致，这里不再默认禁用脚本。
+    // 如需禁用：自行设置环境变量 DONG_DISABLE_SCRIPTS=1。
 
     // Create application
     dong_app_config_t config = {0};
