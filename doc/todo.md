@@ -8,56 +8,56 @@
 
 ### CSS 级联/继承
 
-- [ ] 修复 CSS 继承检测机制：添加"属性已显式设置"标志位，替代 `inheritFromParent()` 中的默认值比较（当前 `color=="#000000"` 则继承，导致显式设黑色被覆盖）
-- [ ] 支持 CSS 全局关键字 `inherit` / `initial` / `unset`
-- [ ] 补全缺失的可继承属性：`visibility`, `text-indent`, `text-transform`, `word-break`, `overflow-wrap`, `word-spacing`
+- [x] 修复 CSS 继承检测机制：添加"属性已显式设置"标志位，替代 `inheritFromParent()` 中的默认值比较（当前 `color=="#000000"` 则继承，导致显式设黑色被覆盖）
+- [x] 支持 CSS 全局关键字 `inherit` / `initial` / `unset`
+- [x] 补全缺失的可继承属性：`visibility`, `text-indent`, `text-transform`, `word-break`, `overflow-wrap`, `word-spacing`
 
 ### HTML 属性行为
 
-- [ ] `[hidden]` 属性：UA 样式表加 `[hidden] { display: none !important; }`
-- [ ] checkbox/radio 点击切换 `checked` 属性（当前 painter 读取属性但无点击事件处理）
-- [ ] `<a>` 默认样式：UA 样式表加 `a { color: #0000EE; text-decoration: underline; cursor: pointer; }`
-- [ ] `maxlength` / `minlength`：`InputElementState::insertText` 需检查长度限制
-- [ ] `readonly`：阻止 readonly input 的编辑操作
+- [x] `[hidden]` 属性：UA 样式表加 `[hidden] { display: none !important; }`
+- [x] checkbox/radio 点击切换 `checked` 属性（当前 painter 读取属性但无点击事件处理）
+- [x] `<a>` 默认样式：UA 样式表加 `a { color: #0000EE; text-decoration: underline; cursor: pointer; }`
+- [x] `maxlength` / `minlength`：`InputElementState::insertText` 需检查长度限制
+- [x] `readonly`：阻止 readonly input 的编辑操作
 - [ ] `<select>` 下拉弹出渲染（当前无下拉弹出层、无选项列表渲染）
 
 ### JS DOM 绑定 - Node 接口
 
-- [ ] 绑定 `parentNode` / `parentElement` 属性
-- [ ] 绑定 `childNodes` 属性（当前仅有非标准 `getChildren()`）
-- [ ] 绑定 `firstChild` / `lastChild` 属性
-- [ ] 绑定 `nodeType` / `nodeName` 属性
-- [ ] 绑定 `insertBefore()`（草案声称支持但实际未绑定）
-- [ ] 暴露 Node 类型常量（`ELEMENT_NODE=1`, `TEXT_NODE=3` 等）
+- [x] 绑定 `parentNode` / `parentElement` 属性
+- [x] 绑定 `childNodes` 属性（当前仅有非标准 `getChildren()`）
+- [x] 绑定 `firstChild` / `lastChild` 属性
+- [x] 绑定 `nodeType` / `nodeName` 属性
+- [x] 绑定 `insertBefore()`（草案声称支持但实际未绑定）
+- [x] 暴露 Node 类型常量（`ELEMENT_NODE=1`, `TEXT_NODE=3` 等）
 
 ### JS DOM 绑定 - Element 接口
 
-- [ ] 绑定 `element.dataset`（DOMStringMap，`data-*` 属性访问）
-- [ ] 绑定 `element.querySelector()` / `querySelectorAll()`（当前仅 document 上可用）
-- [ ] 绑定 `element.matches()` / `element.closest()`
-- [ ] 绑定 `element.getBoundingClientRect()`（需 DOMRect 返回类型）
-- [ ] 绑定 `element.remove()`（草案声称支持但实际未绑定）
-- [ ] 绑定 `element.dispatchEvent()`（草案声称支持但实际未绑定）
-- [ ] 绑定 `element.hidden` 属性（boolean，反映 hidden attribute）
+- [x] 绑定 `element.dataset`（DOMStringMap，`data-*` 属性访问）
+- [x] 绑定 `element.querySelector()` / `querySelectorAll()`（当前仅 document 上可用）
+- [x] 绑定 `element.matches()` / `element.closest()`
+- [x] 绑定 `element.getBoundingClientRect()`（需 DOMRect 返回类型）
+- [x] 绑定 `element.remove()`（草案声称支持但实际未绑定）
+- [x] 绑定 `element.dispatchEvent()`（草案声称支持但实际未绑定）
+- [x] 绑定 `element.hidden` 属性（boolean，反映 hidden attribute）
 
 ### JS DOM 绑定 - HTMLElement 特定接口
 
-- [ ] `HTMLInputElement.value` / `.checked` / `.disabled` / `.type` / `.name`
-- [ ] `HTMLSelectElement.value` / `.selectedIndex` / `.options`
-- [ ] `HTMLTextAreaElement.value`
+- [x] `HTMLInputElement.value` / `.checked` / `.disabled` / `.type` / `.name`
+- [x] `HTMLSelectElement.value` / `.selectedIndex` / `.options`
+- [x] `HTMLTextAreaElement.value`
 
 ### 事件系统
 
-- [ ] 实现 `scroll` 事件（JS 无法监听滚动）
-- [ ] 实现 `resize` 事件
-- [ ] 实现 `DOMContentLoaded` 事件
-- [ ] 实现 `change` 事件（input blur 时、checkbox/select 立即触发）
-- [ ] MouseEvent dispatch 时设置 `offsetX`/`offsetY`
-- [ ] MouseEvent dispatch 时设置 `altKey`/`ctrlKey`/`shiftKey`/`metaKey`
-- [ ] KeyboardEvent dispatch 时设置 `key` 和 `code`（当前仅构造器中初始化为 ""）
-- [ ] KeyboardEvent dispatch 时设置修饰键
-- [ ] WheelEvent 绑定 `deltaX`/`deltaY`/`deltaZ`
-- [ ] InputEvent 绑定 `data`（插入的字符）
+- [x] 实现 `scroll` 事件（JS 无法监听滚动）
+- [x] 实现 `resize` 事件
+- [x] 实现 `DOMContentLoaded` 事件
+- [x] 实现 `change` 事件（input blur 时、checkbox/select 立即触发）
+- [x] MouseEvent dispatch 时设置 `offsetX`/`offsetY`
+- [x] MouseEvent dispatch 时设置 `altKey`/`ctrlKey`/`shiftKey`/`metaKey`
+- [x] KeyboardEvent dispatch 时设置 `key` 和 `code`（当前仅构造器中初始化为 ""）
+- [x] KeyboardEvent dispatch 时设置修饰键
+- [x] WheelEvent 绑定 `deltaX`/`deltaY`/`deltaZ`
+- [x] InputEvent 绑定 `data`（插入的字符）
 
 ---
 

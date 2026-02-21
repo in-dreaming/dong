@@ -29,7 +29,7 @@ public:
     void moveCursor(int delta);  // 正数向右，负数向左
 
     // 文本编辑操作
-    void insertText(const std::string& text);
+    void insertText(const std::string& text, DOMNodePtr node = nullptr);
     void deleteBackward();  // Backspace
     void deleteForward();   // Delete
     void clear();

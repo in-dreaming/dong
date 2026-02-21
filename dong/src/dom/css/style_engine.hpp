@@ -133,7 +133,15 @@ private:
     
     // Inherit properties from parent
     void inheritFromParent(DOMNodePtr node);
-    
+
+    // Process CSS global keywords (inherit, initial, unset)
+    void processGlobalKeywords(DOMNodePtr node, DOMNodePtr parent);
+
+    // Copy a single property value from parent to child
+    void copyPropertyFromParent(const std::string& prop,
+                                ComputedStyle& child_style,
+                                const ComputedStyle& parent_style);
+
     // Process pseudo-elements (::before/::after)
     void processPseudoElements(DOMNodePtr node);
     

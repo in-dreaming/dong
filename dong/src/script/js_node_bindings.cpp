@@ -631,6 +631,79 @@ static JSValue input_setName(JSContext* ctx, JSValueConst this_val, int argc, JS
     return JS_UNDEFINED;
 }
 
+// Select element - selectedIndex
+static JSValue select_getSelectedIndex(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc; (void)argv;
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_NewInt32(ctx, -1);
+
+    // Find selected option index
+    int index = 0;
+    auto children = node->getChildren();
+    for (size_t i = 0; i < children.size(); ++i) {
+        auto& child = children[i];
+        if (child->getTagName() == "option") {
+            if (child->hasAttribute("selected")) {
+                return JS_NewInt32(ctx, static_cast<int32_t>(index));
+            }
+            index++;
+        }
+    }
+
+    // Return 0 if no option selected (first option is default)
+    return JS_NewInt32(ctx, index > 0 ? 0 : -1);
+}
+
+static JSValue select_setSelectedIndex(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_UNDEFINED;
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_UNDEFINED;
+
+    int32_t new_index = 0;
+    JS_ToInt32(ctx, &new_index, argv[0]);
+
+    // Clear all selected attributes and set new one
+    int index = 0;
+    auto children = node->getChildren();
+    for (size_t i = 0; i < children.size(); ++i) {
+        auto& child = children[i];
+        if (child->getTagName() == "option") {
+            if (index == new_index) {
+                child->setAttribute("selected", "");
+            } else {
+                child->removeAttribute("selected");
+            }
+            index++;
+        }
+    }
+
+    return JS_UNDEFINED;
+}
+
+// Select element - options (returns array of option elements)
+static JSValue select_getOptions(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc; (void)argv;
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_NewArray(ctx);
+
+    auto* bindings = getBindingsFromCtx(ctx);
+    if (!bindings) return JS_NewArray(ctx);
+
+    JSValue arr = JS_NewArray(ctx);
+    uint32_t arr_index = 0;
+
+    auto children = node->getChildren();
+    for (size_t i = 0; i < children.size(); ++i) {
+        auto& child = children[i];
+        if (child->getTagName() == "option") {
+            JSValue opt = bindings->createJSElement(ctx, child);
+            JS_SetPropertyUint32(ctx, arr, arr_index++, opt);
+        }
+    }
+
+    return arr;
+}
+
 // Scroll properties
 static JSValue elem_getScrollTop(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     (void)argc; (void)argv;
@@ -812,10 +885,12 @@ void bindHTMLElementProperties(JSContext* ctx, JSValue elem, const dom::DOMNodeP
         DEFINE_GETTER_SETTER(ctx, elem, "type", input_getType, input_setType);
         DEFINE_GETTER_SETTER(ctx, elem, "name", input_getName, input_setName);
     } else if (tag == "select") {
-        // Basic select stubs
+        // Select element bindings
         DEFINE_GETTER_SETTER(ctx, elem, "value", input_getValue, input_setValue);
         DEFINE_GETTER_SETTER(ctx, elem, "disabled", input_getDisabled, input_setDisabled);
         DEFINE_GETTER_SETTER(ctx, elem, "name", input_getName, input_setName);
+        DEFINE_GETTER_SETTER(ctx, elem, "selectedIndex", select_getSelectedIndex, select_setSelectedIndex);
+        DEFINE_GETTER(ctx, elem, "options", select_getOptions);
     }
 }
 

@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>CSS Global Keyword: inherit</title>
+    <style>
+        body {
+            margin: 20px;
+            font-family: Arial, sans-serif;
+        }
+
+        .parent {
+            color: blue;
+            font-size: 20px;
+            font-weight: bold;
+            background-color: #f0f0f0;
+            border: 3px solid red;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+
+        .child-inherit {
+            /* Force inherit non-inheritable properties */
+            background-color: inherit;
+            border: inherit;
+            padding: inherit;
+        }
+
+        .child-normal {
+            /* Normal behavior - don't inherit non-inheritable properties */
+        }
+
+        h1 {
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+
+        .test-box {
+            margin-bottom: 30px;
+        }
+    </style>
+</head>
+<body>
+    <h1>CSS Global Keyword: inherit</h1>
+
+    <div class="test-box">
+        <h2>Test 1: Inheritable Properties (color, font-size, font-weight)</h2>
+        <div class="parent">
+            Parent (blue, 20px, bold)
+            <div class="child-normal">Child without inherit (should inherit color/font naturally)</div>
+        </div>
+    </div>
+
+    <div class="test-box">
+        <h2>Test 2: Non-Inheritable Properties (background-color, border, padding)</h2>
+        <div class="parent">
+            Parent (gray background, red border, 10px padding)
+            <div class="child-inherit">Child with inherit keyword (should copy parent's background/border/padding)</div>
+        </div>
+    </div>
+
+    <div class="test-box">
+        <h2>Test 3: Comparison</h2>
+        <div class="parent">
+            Parent
+            <div class="child-normal">Normal child (no border/background)</div>
+            <div class="child-inherit">inherit child (has border/background)</div>
+        </div>
+    </div>
+</body>
+</html>

@@ -698,12 +698,103 @@ void StyleEngine::applyMatchingRules(DOMNodePtr node) {
     }
 }
 
+void StyleEngine::processGlobalKeywords(DOMNodePtr node, DOMNodePtr parent) {
+    if (!node || !parent) return;
+
+    auto& computed = node->getComputedStyle();
+    const auto& parent_style = parent->getComputedStyle();
+
+    // Define inheritable properties
+    static const std::unordered_set<std::string> kInheritable = {
+        "color", "font-family", "font-size", "font-weight", "font-style",
+        "text-align", "line-height", "letter-spacing", "word-spacing",
+        "white-space", "direction", "cursor", "visibility",
+        "text-indent", "text-transform", "word-break", "overflow-wrap"
+    };
+
+    // Process each global keyword property
+    for (const auto& [prop, keyword] : computed.global_keyword_properties_) {
+        if (keyword == "inherit") {
+            // Force inherit from parent, regardless of whether property is inheritable
+            copyPropertyFromParent(prop, computed, parent_style);
+        } else if (keyword == "initial") {
+            // Reset to initial value (already done by not setting the property)
+            // The ComputedStyle constructor sets default values
+        } else if (keyword == "unset") {
+            // If inheritable: behave like inherit; otherwise: behave like initial
+            if (kInheritable.count(prop)) {
+                copyPropertyFromParent(prop, computed, parent_style);
+            }
+            // For non-inheritable, leave at default (initial behavior)
+        }
+    }
+}
+
+void StyleEngine::copyPropertyFromParent(const std::string& prop,
+                                         ComputedStyle& child_style,
+                                         const ComputedStyle& parent_style) {
+    // Copy property value from parent to child
+    // This is a simplified implementation - in production, you'd use a property map
+    if (prop == "color") child_style.color = parent_style.color;
+    else if (prop == "font-family") child_style.font_family = parent_style.font_family;
+    else if (prop == "font-size") child_style.font_size = parent_style.font_size;
+    else if (prop == "font-weight") child_style.font_weight = parent_style.font_weight;
+    else if (prop == "font-style") child_style.font_style = parent_style.font_style;
+    else if (prop == "text-align") child_style.text_align = parent_style.text_align;
+    else if (prop == "line-height") {
+        child_style.line_height = parent_style.line_height;
+        child_style.line_height_is_unitless = parent_style.line_height_is_unitless;
+    }
+    else if (prop == "letter-spacing") child_style.letter_spacing_em = parent_style.letter_spacing_em;
+    else if (prop == "word-spacing") child_style.word_spacing_px = parent_style.word_spacing_px;
+    else if (prop == "white-space") child_style.white_space = parent_style.white_space;
+    else if (prop == "direction") child_style.direction = parent_style.direction;
+    else if (prop == "cursor") child_style.cursor = parent_style.cursor;
+    else if (prop == "visibility") child_style.visibility = parent_style.visibility;
+    else if (prop == "text-indent") child_style.text_indent = parent_style.text_indent;
+    else if (prop == "text-transform") child_style.text_transform = parent_style.text_transform;
+    else if (prop == "word-break") child_style.word_break = parent_style.word_break;
+    else if (prop == "overflow-wrap") child_style.overflow_wrap = parent_style.overflow_wrap;
+    // Non-inheritable properties
+    else if (prop == "border") {
+        child_style.border_top_width = parent_style.border_top_width;
+        child_style.border_right_width = parent_style.border_right_width;
+        child_style.border_bottom_width = parent_style.border_bottom_width;
+        child_style.border_left_width = parent_style.border_left_width;
+        child_style.border_color = parent_style.border_color;
+        child_style.border_style = parent_style.border_style;
+    }
+    else if (prop == "margin") {
+        child_style.margin_top = parent_style.margin_top;
+        child_style.margin_right = parent_style.margin_right;
+        child_style.margin_bottom = parent_style.margin_bottom;
+        child_style.margin_left = parent_style.margin_left;
+    }
+    else if (prop == "padding") {
+        child_style.padding_top = parent_style.padding_top;
+        child_style.padding_right = parent_style.padding_right;
+        child_style.padding_bottom = parent_style.padding_bottom;
+        child_style.padding_left = parent_style.padding_left;
+    }
+    else if (prop == "background-color") child_style.background_color = parent_style.background_color;
+    else if (prop == "width") child_style.width = parent_style.width;
+    else if (prop == "height") child_style.height = parent_style.height;
+    else if (prop == "display") {
+        child_style.display = parent_style.display;
+        child_style.layout_mode = parent_style.layout_mode;
+    }
+    // Add more properties as needed
+}
+
 void StyleEngine::inheritFromParent(DOMNodePtr node) {
     auto parent = node->getParent();
     if (!parent) return;
 
     auto& computed = node->getComputedStyle();
     const auto& parent_style = parent->getComputedStyle();
+
+    // Process global keywords first
+    processGlobalKeywords(node, parent);
 
     // Inherit text properties (only if not explicitly set)
     if (!computed.isExplicitlySet("color")) computed.color = parent_style.color;

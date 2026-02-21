@@ -60,6 +60,8 @@ struct Event {
     // Mouse/Pointer event data
     int32_t mouse_x = 0;
     int32_t mouse_y = 0;
+    int32_t offset_x = 0;  // Relative to target element
+    int32_t offset_y = 0;  // Relative to target element
     int32_t mouse_button = 0;
     
     // Pointer-specific data

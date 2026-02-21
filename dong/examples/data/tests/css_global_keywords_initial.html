@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>CSS Global Keyword: initial</title>
+    <style>
+        body {
+            margin: 20px;
+            font-family: Arial, sans-serif;
+            color: red;
+            font-size: 20px;
+        }
+
+        .parent {
+            color: blue;
+            font-size: 24px;
+            font-weight: bold;
+            background-color: yellow;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+
+        .child-initial-color {
+            /* Reset color to initial (black) */
+            color: initial;
+        }
+
+        .child-initial-font-size {
+            /* Reset font-size to initial (medium/16px) */
+            font-size: initial;
+        }
+
+        .child-initial-all {
+            /* Reset multiple properties to initial */
+            color: initial;
+            font-size: initial;
+            font-weight: initial;
+        }
+
+        h1 {
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+
+        .test-box {
+            margin-bottom: 30px;
+            border: 1px solid #ccc;
+            padding: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>CSS Global Keyword: initial</h1>
+
+    <div class="test-box">
+        <h2>Test 1: Reset Inherited Color</h2>
+        <div class="parent">
+            Parent (blue color, 24px)
+            <div>Normal child (inherits blue)</div>
+            <div class="child-initial-color">Child with color: initial (should be black, not blue)</div>
+        </div>
+    </div>
+
+    <div class="test-box">
+        <h2>Test 2: Reset Inherited Font Size</h2>
+        <div class="parent">
+            Parent (24px font)
+            <div>Normal child (inherits 24px)</div>
+            <div class="child-initial-font-size">Child with font-size: initial (should be default 16px)</div>
+        </div>
+    </div>
+
+    <div class="test-box">
+        <h2>Test 3: Reset Multiple Properties</h2>
+        <div class="parent">
+            Parent (blue, 24px, bold)
+            <div>Normal child (inherits all)</div>
+            <div class="child-initial-all">Child with all initial (black, 16px, normal weight)</div>
+        </div>
+    </div>
+
+    <div class="test-box">
+        <h2>Test 4: Body Inherits Red</h2>
+        <p>This paragraph should be red from body</p>
+        <p style="color: initial">This paragraph uses color: initial (should be black)</p>
+    </div>
+</body>
+</html>

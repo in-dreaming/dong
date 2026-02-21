@@ -220,11 +220,23 @@ struct ComputedStyle {
     // Used by inheritFromParent() to avoid overriding explicitly set values.
     std::unordered_set<std::string> explicitly_set_properties_;
 
+    // Track properties with global keywords (inherit, initial, unset)
+    std::unordered_map<std::string, std::string> global_keyword_properties_;
+
     bool isExplicitlySet(const std::string& prop) const {
         return explicitly_set_properties_.count(prop) > 0;
     }
     void markExplicitlySet(const std::string& prop) {
         explicitly_set_properties_.insert(prop);
+    }
+
+    // Check if a property has a global keyword
+    bool hasGlobalKeyword(const std::string& prop) const {
+        return global_keyword_properties_.count(prop) > 0;
+    }
+    const std::string* getGlobalKeyword(const std::string& prop) const {
+        auto it = global_keyword_properties_.find(prop);
+        return it != global_keyword_properties_.end() ? &it->second : nullptr;
     }
 
     // CSS custom properties (variables)

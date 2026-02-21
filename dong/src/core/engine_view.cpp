@@ -1070,6 +1070,24 @@ struct EngineView::Impl {
         if (root) {
             root->markLayoutDirty();
         }
+
+        // Dispatch resize event on window (body element)
+        if (js_bindings && script_engine && dom_manager) {
+            auto bodies = dom_manager->getElementsByTagName("body");
+            dong::dom::DOMNodePtr target;
+            if (!bodies.empty()) {
+                target = bodies[0];
+            } else {
+                target = root;
+            }
+            if (target) {
+                ensureJSBindingsInitialized();
+                uint64_t nid = js_bindings->getNodeIdFor(target);
+                if (nid) {
+                    js_bindings->dispatchSimpleEvent(nid, "resize");
+                }
+            }
+        }
     }
 
     bool setGPU(void* device, void* window) {
@@ -1228,6 +1246,25 @@ struct EngineView::Impl {
         dong::dom::Event event = event_dispatcher->createMouseEvent(ev_type, x, y, button);
         event.target = target;
         event.current_target = target;
+
+        // Calculate offsetX/offsetY relative to target element
+        if (layout_engine) {
+            auto layout_node = layout_engine->getLayout(target);
+            if (layout_node) {
+                float elem_x = layout_node->x;
+                float elem_y = layout_node->y;
+                event.offset_x = static_cast<int32_t>(x - elem_x);
+                event.offset_y = static_cast<int32_t>(y - elem_y);
+            } else {
+                // Fallback: offset == global position
+                event.offset_x = x;
+                event.offset_y = y;
+            }
+        } else {
+            event.offset_x = x;
+            event.offset_y = y;
+        }
+
         event_dispatcher->dispatch(event);
     }
 
@@ -1425,28 +1462,7 @@ struct EngineView::Impl {
 
             auto* state = dong::dom::getInputState(focused);
             if (state) {
-                // Check maxlength
-                if (focused->hasAttribute("maxlength")) {
-                    std::string ml_str = focused->getAttribute("maxlength");
-                    int maxlen = -1;
-                    try { maxlen = std::stoi(ml_str); } catch (...) {}
-                    if (maxlen >= 0) {
-                        // Count current UTF-8 chars
-                        size_t current_len = 0;
-                        for (size_t i = 0; i < state->getValue().size(); ) {
-                            unsigned char c = state->getValue()[i];
-                            if ((c & 0x80) == 0) i += 1;
-                            else if ((c & 0xE0) == 0xC0) i += 2;
-                            else if ((c & 0xF0) == 0xE0) i += 3;
-                            else i += 4;
-                            current_len++;
-                        }
-                        if (current_len >= static_cast<size_t>(maxlen)) {
-                            return;
-                        }
-                    }
-                }
-                state->insertText(text);
+                state->insertText(text, focused);
                 focused->setAttribute("value", state->getValue());
                 markNeedsRepaint();
 

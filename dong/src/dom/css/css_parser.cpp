@@ -1814,31 +1814,11 @@ void CSSParser::applyProperty(const std::string& property, const std::string& va
     if (last != std::string::npos) val = val.substr(0, last + 1);
 
     // Handle CSS global keywords: inherit, initial, unset
-    if (val == "inherit") {
-        // Mark as NOT explicitly set, so inheritFromParent will pick it up
-        style.explicitly_set_properties_.erase(prop);
-        return;
-    }
-    if (val == "initial") {
-        // Reset to default - leave the ComputedStyle default value
-        // and mark as explicitly set so inherit won't override
+    if (val == "inherit" || val == "initial" || val == "unset") {
+        // Mark the property with a special value to indicate global keyword
+        style.global_keyword_properties_[prop] = val;
+        // Mark as explicitly set to prevent normal inheritance
         style.markExplicitlySet(prop);
-        return;
-    }
-    if (val == "unset") {
-        // For inheritable properties: behave like inherit
-        // For non-inheritable: behave like initial
-        static const std::unordered_set<std::string> kInheritable = {
-            "color", "font-family", "font-size", "font-weight", "font-style",
-            "text-align", "line-height", "letter-spacing", "word-spacing",
-            "white-space", "direction", "cursor", "visibility",
-            "text-indent", "text-transform", "word-break", "overflow-wrap"
-        };
-        if (kInheritable.count(prop)) {
-            style.explicitly_set_properties_.erase(prop);
-        } else {
-            style.markExplicitlySet(prop);
-        }
         return;
     }
 

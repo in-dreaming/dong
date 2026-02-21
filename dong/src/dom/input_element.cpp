@@ -35,15 +35,72 @@ void InputElementState::moveCursor(int delta) {
     clearSelection();
 }
 
-void InputElementState::insertText(const std::string& text) {
+void InputElementState::insertText(const std::string& text, DOMNodePtr node) {
+    // Check maxlength attribute if node is provided
+    if (node && node->hasAttribute("maxlength")) {
+        try {
+            int maxlength = std::stoi(node->getAttribute("maxlength"));
+            if (maxlength >= 0) {
+                size_t current_length = utf8CharCount();
+                // Calculate how many characters we can insert
+                size_t text_chars = 0;
+                for (size_t i = 0; i < text.size(); ) {
+                    unsigned char c = text[i];
+                    if ((c & 0x80) == 0) i += 1;
+                    else if ((c & 0xE0) == 0xC0) i += 2;
+                    else if ((c & 0xF0) == 0xE0) i += 3;
+                    else i += 4;
+                    text_chars++;
+                }
+
+                // If we have a selection, it will be deleted first
+                size_t chars_after_deletion = current_length;
+                if (hasSelection()) {
+                    chars_after_deletion -= (selection_end_ - selection_start_);
+                }
+
+                // Check if we would exceed maxlength
+                if (chars_after_deletion + text_chars > static_cast<size_t>(maxlength)) {
+                    // Truncate text to fit maxlength
+                    size_t available = static_cast<size_t>(maxlength) - chars_after_deletion;
+                    if (available == 0) {
+                        return; // Cannot insert any characters
+                    }
+                    // Truncate text to available characters
+                    size_t byte_count = 0;
+                    size_t char_count = 0;
+                    for (size_t i = 0; i < text.size() && char_count < available; ) {
+                        unsigned char c = text[i];
+                        if ((c & 0x80) == 0) byte_count += 1, i += 1;
+                        else if ((c & 0xE0) == 0xC0) byte_count += 2, i += 2;
+                        else if ((c & 0xF0) == 0xE0) byte_count += 3, i += 3;
+                        else byte_count += 4, i += 4;
+                        char_count++;
+                    }
+                    std::string truncated_text = text.substr(0, byte_count);
+                    // Continue with truncated text
+                    if (hasSelection()) {
+                        deleteSelection();
+                    }
+                    size_t byte_offset = utf8ByteOffset(cursor_position_);
+                    value_.insert(byte_offset, truncated_text);
+                    cursor_position_ += char_count;
+                    return;
+                }
+            }
+        } catch (...) {
+            // Invalid maxlength value, ignore
+        }
+    }
+
     if (hasSelection()) {
         deleteSelection();
     }
-    
+
     // 在光标位置插入文本
     size_t byte_offset = utf8ByteOffset(cursor_position_);
     value_.insert(byte_offset, text);
-    
+
     // 移动光标到插入文本之后
     // 计算插入文本的字符数
     size_t inserted_chars = 0;
