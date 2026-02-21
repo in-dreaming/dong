@@ -284,6 +284,61 @@ static SDL_GPUTexture* ensureOffscreenTexture(SDL_GPUDevice* device,
     return created;
 }
 
+static bool envFlagEnabled(const char* name, bool default_value) {
+    const char* v = std::getenv(name);
+    if (!v || !v[0]) return default_value;
+    return (v[0] != '0');
+}
+
+static bool downloadIsBGRA(SDL_GPUDevice* device) {
+    (void)device;
+    // Default to assuming RGBA for offscreen downloads. Some backends may need
+    // manual override for diagnostic captures.
+    if (envFlagEnabled("DONG_GPU_DOWNLOAD_BGRA", false)) {
+        return true;
+    }
+    if (envFlagEnabled("DONG_GPU_DOWNLOAD_RGBA", false)) {
+        return false;
+    }
+    return false;
+}
+
+static void logPixelRGBA(const char* label, const uint8_t* pixels, uint32_t width, uint32_t x, uint32_t y) {
+    if (!label || !pixels || width == 0) return;
+    const size_t idx = (static_cast<size_t>(y) * static_cast<size_t>(width) + static_cast<size_t>(x)) * 4;
+    SDL_Log("[download] %s (%u,%u) bytes=%u,%u,%u,%u", label, x, y,
+            (unsigned)pixels[idx + 0], (unsigned)pixels[idx + 1], (unsigned)pixels[idx + 2], (unsigned)pixels[idx + 3]);
+}
+
+static void fixupDownloadedPixelsToRGBA(SDL_GPUDevice* device, uint32_t width, uint32_t height, uint8_t* pixels) {
+    if (!device || !pixels) return;
+    if (!downloadIsBGRA(device)) return;
+
+    const bool debug = envFlagEnabled("DONG_GPU_DOWNLOAD_DEBUG", false);
+    if (debug) {
+        const char* driver = SDL_GetGPUDeviceDriver(device);
+        SDL_Log("[download] driver=%s fixup=BGRA->RGBA", driver ? driver : "(null)");
+
+        const uint32_t sx = (width > 401) ? 400 : (width ? (width - 1) : 0);
+        const uint32_t sy = (height > 261) ? 260 : (height ? (height - 1) : 0);
+        logPixelRGBA("before mid", pixels, width, width / 2, height / 2);
+        logPixelRGBA("before sample", pixels, width, sx, sy);
+    }
+
+    const size_t pixel_count = static_cast<size_t>(width) * static_cast<size_t>(height);
+    for (size_t i = 0; i < pixel_count; ++i) {
+        uint8_t* p = pixels + i * 4;
+        std::swap(p[0], p[2]);
+    }
+
+    if (debug) {
+        const uint32_t sx = (width > 401) ? 400 : (width ? (width - 1) : 0);
+        const uint32_t sy = (height > 261) ? 260 : (height ? (height - 1) : 0);
+        logPixelRGBA("after mid", pixels, width, width / 2, height / 2);
+        logPixelRGBA("after sample", pixels, width, sx, sy);
+    }
+}
+
 static bool downloadTextureRGBA(SDL_GPUDevice* device, SDL_GPUTexture* texture,
                                 uint32_t width, uint32_t height, uint8_t* out_pixels) {
     if (!device || !texture || !out_pixels) {
@@ -352,6 +407,8 @@ static bool downloadTextureRGBA(SDL_GPUDevice* device, SDL_GPUTexture* texture,
     std::memcpy(out_pixels, mapped, width * height * 4);
     SDL_UnmapGPUTransferBuffer(device, download_buffer);
     SDL_ReleaseGPUTransferBuffer(device, download_buffer);
+
+    fixupDownloadedPixelsToRGBA(device, width, height, out_pixels);
     return true;
 }
 

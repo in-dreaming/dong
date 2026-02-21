@@ -13,9 +13,17 @@ def run(cmd, cwd=None):
     return p.stdout
 
 
+def find_html_render_test(bin_dir: Path) -> Path | None:
+    for name in ("html_render_test", "html_render_test.exe"):
+        p = bin_dir / name
+        if p.exists():
+            return p
+    return None
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Render browser baseline + dong multi-frame outputs, then build a merged diff image + JSON report.")
-    ap.add_argument("--bin-dir", default="zig-out/bin", help="Directory containing html_render_test.exe")
+    ap.add_argument("--bin-dir", default="zig-out/bin", help="Directory containing html_render_test (default: zig-out/bin)")
     ap.add_argument("--tests-dir", default="zig-out/bin/data/tests", help="Directory containing *.html")
     ap.add_argument("--out-dir", default="zig-out/tmp/baseline_compare", help="Output directory")
     ap.add_argument("--width", type=int, default=800)
@@ -33,9 +41,10 @@ def main() -> int:
     out_dir = (repo_root / args.out_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    exe = bin_dir / "html_render_test.exe"
-    if not exe.exists():
-        print(f"ERROR: not found: {exe}", file=sys.stderr)
+    exe = find_html_render_test(bin_dir)
+    if not exe:
+        cand = [str((bin_dir / n).resolve()) for n in ("html_render_test", "html_render_test.exe")]
+        print("ERROR: html_render_test binary not found. Tried:\n  " + "\n  ".join(cand), file=sys.stderr)
         return 2
 
     baseline = (repo_root / "scripts/tools/html_baseline_render.py").resolve()
@@ -53,6 +62,19 @@ def main() -> int:
         stem = html.stem
         case_dir = out_dir / stem
         case_dir.mkdir(parents=True, exist_ok=True)
+
+        # Clean old outputs to avoid stale frames (different frame count / zero-pad width) polluting the glob.
+        for p in case_dir.glob(f"{stem}_f*.bmp"):
+            try:
+                p.unlink()
+            except OSError:
+                pass
+        for p in [case_dir / f"{stem}_merged.png", case_dir / f"{stem}_report.json", case_dir / f"{stem}_base.png"]:
+            try:
+                if p.exists():
+                    p.unlink()
+            except OSError:
+                pass
 
         base_png = case_dir / f"{stem}_base.png"
         print(f"[BASE] {stem} -> {base_png}")
@@ -100,8 +122,13 @@ def main() -> int:
             str(html),
             "--base",
             str(base_png),
-            "--glob",
-            str(case_dir / f"{stem}_f*.bmp"),
+        ]
+        if args.frames <= 1:
+            cmd2 += ["--frames", out_base]
+        else:
+            cmd2 += ["--glob", str(case_dir / f"{stem}_f*.bmp")]
+
+        cmd2 += [
             "--out-image",
             str(merged),
             "--out-json",

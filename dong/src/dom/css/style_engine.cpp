@@ -704,6 +704,75 @@ void StyleEngine::processGlobalKeywords(DOMNodePtr node, DOMNodePtr parent) {
     auto& computed = node->getComputedStyle();
     const auto& parent_style = parent->getComputedStyle();
 
+    // 全局关键字 initial/unset 的语义必须“覆盖掉已经算出来的值”。
+    // 不能仅依赖 ComputedStyle 的构造默认值，否则会把更早匹配到的规则残留在 computed 里。
+    static const ComputedStyle kInitial;
+
+    auto resetToInitial = [&](const std::string& prop) {
+        if (prop == "color") computed.color = kInitial.color;
+        else if (prop == "font-family") computed.font_family = kInitial.font_family;
+        else if (prop == "font-size") computed.font_size = kInitial.font_size;
+        else if (prop == "font-weight") computed.font_weight = kInitial.font_weight;
+        else if (prop == "font-style") computed.font_style = kInitial.font_style;
+        else if (prop == "text-align") computed.text_align = kInitial.text_align;
+        else if (prop == "line-height") {
+            computed.has_line_height = kInitial.has_line_height;
+            computed.line_height = kInitial.line_height;
+            computed.line_height_is_unitless = kInitial.line_height_is_unitless;
+        }
+        else if (prop == "letter-spacing") computed.letter_spacing_em = kInitial.letter_spacing_em;
+        else if (prop == "word-spacing") computed.word_spacing_px = kInitial.word_spacing_px;
+        else if (prop == "white-space") computed.white_space = kInitial.white_space;
+        else if (prop == "direction") computed.direction = kInitial.direction;
+        else if (prop == "cursor") computed.cursor = kInitial.cursor;
+        else if (prop == "visibility") computed.visibility = kInitial.visibility;
+        else if (prop == "text-indent") computed.text_indent = kInitial.text_indent;
+        else if (prop == "text-transform") computed.text_transform = kInitial.text_transform;
+        else if (prop == "word-break") computed.word_break = kInitial.word_break;
+        else if (prop == "overflow-wrap") computed.overflow_wrap = kInitial.overflow_wrap;
+
+        // Non-inheritable properties used by tests
+        else if (prop == "border") {
+            computed.border_color = kInitial.border_color;
+            computed.border_width = kInitial.border_width;
+            computed.border_style = kInitial.border_style;
+
+            computed.border_top_width = kInitial.border_top_width;
+            computed.border_right_width = kInitial.border_right_width;
+            computed.border_bottom_width = kInitial.border_bottom_width;
+            computed.border_left_width = kInitial.border_left_width;
+            computed.border_top_color = kInitial.border_top_color;
+            computed.border_right_color = kInitial.border_right_color;
+            computed.border_bottom_color = kInitial.border_bottom_color;
+            computed.border_left_color = kInitial.border_left_color;
+            computed.border_top_style = kInitial.border_top_style;
+            computed.border_right_style = kInitial.border_right_style;
+            computed.border_bottom_style = kInitial.border_bottom_style;
+            computed.border_left_style = kInitial.border_left_style;
+        }
+        else if (prop == "padding") {
+            computed.padding_top = kInitial.padding_top;
+            computed.padding_right = kInitial.padding_right;
+            computed.padding_bottom = kInitial.padding_bottom;
+            computed.padding_left = kInitial.padding_left;
+        }
+        else if (prop == "margin") {
+            computed.margin_top = kInitial.margin_top;
+            computed.margin_right = kInitial.margin_right;
+            computed.margin_bottom = kInitial.margin_bottom;
+            computed.margin_left = kInitial.margin_left;
+        }
+        else if (prop == "background-color") {
+            computed.background_color = kInitial.background_color;
+        }
+        else if (prop == "width") computed.width = kInitial.width;
+        else if (prop == "height") computed.height = kInitial.height;
+        else if (prop == "display") {
+            computed.display = kInitial.display;
+            computed.layout_mode = kInitial.layout_mode;
+        }
+    };
+
     // Define inheritable properties
     static const std::unordered_set<std::string> kInheritable = {
         "color", "font-family", "font-size", "font-weight", "font-style",
@@ -718,14 +787,14 @@ void StyleEngine::processGlobalKeywords(DOMNodePtr node, DOMNodePtr parent) {
             // Force inherit from parent, regardless of whether property is inheritable
             copyPropertyFromParent(prop, computed, parent_style);
         } else if (keyword == "initial") {
-            // Reset to initial value (already done by not setting the property)
-            // The ComputedStyle constructor sets default values
+            resetToInitial(prop);
         } else if (keyword == "unset") {
             // If inheritable: behave like inherit; otherwise: behave like initial
             if (kInheritable.count(prop)) {
                 copyPropertyFromParent(prop, computed, parent_style);
+            } else {
+                resetToInitial(prop);
             }
-            // For non-inheritable, leave at default (initial behavior)
         }
     }
 }
@@ -757,12 +826,24 @@ void StyleEngine::copyPropertyFromParent(const std::string& prop,
     else if (prop == "overflow-wrap") child_style.overflow_wrap = parent_style.overflow_wrap;
     // Non-inheritable properties
     else if (prop == "border") {
+        // Copy the full border shorthand + per-side overrides.
+        // This is required for correct `border: inherit` semantics.
+        child_style.border_color = parent_style.border_color;
+        child_style.border_width = parent_style.border_width;
+        child_style.border_style = parent_style.border_style;
+
         child_style.border_top_width = parent_style.border_top_width;
         child_style.border_right_width = parent_style.border_right_width;
         child_style.border_bottom_width = parent_style.border_bottom_width;
         child_style.border_left_width = parent_style.border_left_width;
-        child_style.border_color = parent_style.border_color;
-        child_style.border_style = parent_style.border_style;
+        child_style.border_top_color = parent_style.border_top_color;
+        child_style.border_right_color = parent_style.border_right_color;
+        child_style.border_bottom_color = parent_style.border_bottom_color;
+        child_style.border_left_color = parent_style.border_left_color;
+        child_style.border_top_style = parent_style.border_top_style;
+        child_style.border_right_style = parent_style.border_right_style;
+        child_style.border_bottom_style = parent_style.border_bottom_style;
+        child_style.border_left_style = parent_style.border_left_style;
     }
     else if (prop == "margin") {
         child_style.margin_top = parent_style.margin_top;

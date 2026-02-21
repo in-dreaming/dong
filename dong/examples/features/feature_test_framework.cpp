@@ -102,6 +102,34 @@ static SDL_GPUTexture* ensureOffscreenTexture(SDL_GPUDevice* device, int width, 
     return s_offscreen_texture;
 }
 
+static bool envFlagEnabled(const char* name, bool default_value) {
+    const char* v = std::getenv(name);
+    if (!v || !v[0]) return default_value;
+    return (v[0] != '0');
+}
+
+static bool downloadIsBGRA(SDL_GPUDevice* device) {
+    (void)device;
+    if (envFlagEnabled("DONG_GPU_DOWNLOAD_BGRA", false)) {
+        return true;
+    }
+    if (envFlagEnabled("DONG_GPU_DOWNLOAD_RGBA", false)) {
+        return false;
+    }
+    return false;
+}
+
+static void fixupDownloadedPixelsToRGBA(SDL_GPUDevice* device, int width, int height, uint8_t* pixels) {
+    if (!device || !pixels) return;
+    if (!downloadIsBGRA(device)) return;
+
+    const size_t pixel_count = static_cast<size_t>(width) * static_cast<size_t>(height);
+    for (size_t i = 0; i < pixel_count; ++i) {
+        uint8_t* p = pixels + i * 4;
+        std::swap(p[0], p[2]);
+    }
+}
+
 static bool downloadTextureRGBA(SDL_GPUDevice* device, SDL_GPUTexture* texture,
                                 int width, int height, uint8_t* out_pixels) {
     if (!device || !texture || !out_pixels) {
@@ -170,6 +198,8 @@ static bool downloadTextureRGBA(SDL_GPUDevice* device, SDL_GPUTexture* texture,
     std::memcpy(out_pixels, mapped, static_cast<size_t>(width) * static_cast<size_t>(height) * 4);
     SDL_UnmapGPUTransferBuffer(device, download_buffer);
     SDL_ReleaseGPUTransferBuffer(device, download_buffer);
+
+    fixupDownloadedPixelsToRGBA(device, width, height, out_pixels);
     return true;
 }
 

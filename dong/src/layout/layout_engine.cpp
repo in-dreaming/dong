@@ -1016,7 +1016,9 @@ bool isInlineFormattingContext(const dom::DOMNodePtr& node) {
     // 鍙堜笉褰卞搷閫氱敤 block 甯冨眬銆?
     // Only treat as IFC when there are inline children and no block children mixed in.
     // Mixed-content containers are handled separately via anonymous block wrapping.
-    return has_inline_child && !has_block_like_child;
+    // FIX: 即使有 block 子元素混入，只要有内联内容，我们也需要为内联内容分配布局空间
+    // layoutInlineFormattingContexts will skip block children and only process inline items
+    return has_inline_child;
 }
 
 // Detect block containers that have both block-level and inline-level children.
@@ -1035,7 +1037,16 @@ bool hasMixedBlockInlineChildren(const dom::DOMNodePtr& node) {
 
     for (const auto& child : node->getChildren()) {
         if (!child) continue;
-        if (child->getType() == dom::DOMNode::NodeType::TEXT) continue;
+
+        if (child->getType() == dom::DOMNode::NodeType::TEXT) {
+            std::string text = collapseWhitespace(child->getRawTextContent());
+            if (!text.empty()) {
+                has_inline = true;
+            }
+            if (has_inline && has_block) return true;
+            continue;
+        }
+
         if (child->getType() != dom::DOMNode::NodeType::ELEMENT) continue;
 
         const auto& cs = child->getComputedStyle();
@@ -1309,26 +1320,42 @@ void Engine::calculateLayout(dom::DOMNodePtr root, float width, float height) {
                     uint32_t anon_yoga_idx = 0;
                     uint32_t anon_child_count = YGNodeGetChildCount(child_yoga);
                     for (const auto& anon_child_dom : anon->children) {
+                        if (!anon_child_dom) continue;
+
+                        if (anon_child_dom->getType() != dom::DOMNode::NodeType::ELEMENT) {
+                            // Text nodes don't have Yoga children; keep a lightweight placeholder.
+                            auto& text_layout = layout_cache[anon_child_dom.get()];
+                            if (!text_layout) {
+                                text_layout = std::make_unique<LayoutNode>();
+                            }
+                            text_layout->x = anon_x;
+                            text_layout->y = anon_y;
+                            text_layout->width = 0.0f;
+                            text_layout->height = 0.0f;
+                            text_layout->layout.position[0] = anon_x;
+                            text_layout->layout.position[1] = anon_y;
+                            text_layout->layout.dimensions[0] = 0.0f;
+                            text_layout->layout.dimensions[1] = 0.0f;
+                            continue;
+                        }
+
                         if (anon_yoga_idx >= anon_child_count) break;
                         YGNode* anon_child_yoga = YGNodeGetChild(child_yoga, anon_yoga_idx);
+                        ++anon_yoga_idx;
                         if (anon_child_yoga) {
                             extractLayoutRecursive(anon_child_dom, anon_child_yoga,
                                                    anon_x, anon_y, 0.0f);
                         }
-                        ++anon_yoga_idx;
                     }
 
                     // Track cumulative height using the wrapper's height
                     child_cumulative_height += anon_h;
 
-                    // Advance dom_children_iter past the children that were in the anon wrapper
-                    for (size_t skip = 0; skip < anon->children.size(); ) {
+                    // Advance dom_children_iter past the DOM children that belong to this anon wrapper.
+                    // NOTE: anon->children may include TEXT nodes, so we must advance by count, not just ELEMENTs.
+                    for (size_t skip = 0; skip < anon->children.size(); ++skip) {
                         if (dom_children_iter == dom_children_end) break;
-                        const auto& dch = *dom_children_iter;
                         ++dom_children_iter;
-                        if (dch && dch->getType() == dom::DOMNode::NodeType::ELEMENT) {
-                            ++skip;
-                        }
                     }
                 } else {
                     // Regular DOM child: find the next element in the DOM children
@@ -1478,8 +1505,19 @@ void Engine::buildChildYogaNodes(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
         YGNodeStyleSetFlexWrap(anon_yoga, YGWrapWrap);
         YGNodeStyleSetAlignItems(anon_yoga, YGAlignFlexStart);
 
-        // Add inline children to the anonymous wrapper
+        bool has_text_child = false;
+
+        // Add inline children to the anonymous wrapper (Yoga only supports ELEMENT nodes here).
         for (const auto& inline_child : inline_run) {
+            if (!inline_child) continue;
+            if (inline_child->getType() == dom::DOMNode::NodeType::TEXT) {
+                std::string text = collapseWhitespace(inline_child->getRawTextContent());
+                if (!text.empty()) {
+                    has_text_child = true;
+                }
+                continue;
+            }
+
             YGNode* child_yoga = createYogaNode(inline_child);
             if (child_yoga) {
                 YGNodeInsertChild(anon_yoga, child_yoga, YGNodeGetChildCount(anon_yoga));
@@ -1488,6 +1526,18 @@ void Engine::buildChildYogaNodes(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
                     child_layout = std::make_unique<LayoutNode>();
                 }
                 child_layout->yoga_node = child_yoga;
+            }
+        }
+
+        // Text runs have no Yoga children; give the wrapper a min-height so following block
+        // siblings start below the text line (prevents overlap in mixed text + block children).
+        if (has_text_child) {
+            InlineMetrics metrics{};
+            if (computeInlineMetricsForNode(dom_node, metrics, parent_style.font_size) && metrics.line_height_px > 0.0f) {
+                YGNodeStyleSetMinHeight(anon_yoga, metrics.line_height_px);
+            } else {
+                float fs = parent_style.font_size > 0.0f ? parent_style.font_size : 16.0f;
+                YGNodeStyleSetMinHeight(anon_yoga, fs * 1.2f);
             }
         }
 
@@ -1516,7 +1566,18 @@ void Engine::buildChildYogaNodes(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
         std::vector<dom::DOMNodePtr> current_inline_run;
 
         for (const auto& child : dom_node->getChildren()) {
-            if (!child || child->getType() != dom::DOMNode::NodeType::ELEMENT) continue;
+            if (!child) continue;
+
+            if (child->getType() == dom::DOMNode::NodeType::TEXT) {
+                // TEXT 节点属于 inline-level 内容：需要被包进匿名块，才能为文本分配垂直空间。
+                std::string text = collapseWhitespace(child->getRawTextContent());
+                if (!text.empty()) {
+                    current_inline_run.push_back(child);
+                }
+                continue;
+            }
+
+            if (child->getType() != dom::DOMNode::NodeType::ELEMENT) continue;
 
             const auto& cs = child->getComputedStyle();
             if (cs.display == "none") continue;
@@ -3678,9 +3739,32 @@ void Engine::adjustSiblingYPositions(const dom::DOMNodePtr& node,
     std::unordered_set<const AnonBlockInfo*> visited_anons;
 
     for (const auto& child : node->getChildren()) {
-        if (!child || child->getType() != dom::DOMNode::NodeType::ELEMENT) {
+        if (!child) {
             continue;
         }
+
+        if (child->getType() == dom::DOMNode::NodeType::TEXT) {
+            std::string text = collapseWhitespace(child->getRawTextContent());
+            if (text.empty()) {
+                continue;
+            }
+
+            // Text counts as inline-level content: it can be the start of an anonymous wrapper.
+            for (const auto* ab : parent_anon_blocks) {
+                if (visited_anons.count(ab)) continue;
+                if (!ab->children.empty() && ab->children[0].get() == child.get()) {
+                    flow_items.push_back({nullptr, ab});
+                    visited_anons.insert(ab);
+                    break;
+                }
+            }
+            continue;
+        }
+
+        if (child->getType() != dom::DOMNode::NodeType::ELEMENT) {
+            continue;
+        }
+
         const auto& child_style = child->getComputedStyle();
         if (child_style.display == "none" ||
             child_style.position == "absolute" ||
@@ -3691,7 +3775,7 @@ void Engine::adjustSiblingYPositions(const dom::DOMNodePtr& node,
         bool is_inline = (child_style.display == "inline" ||
                           child_style.display == "inline-block");
         if (is_inline) {
-            // Check if this child is the first element of an anonymous wrapper
+            // Check if this child is the first node of an anonymous wrapper
             for (const auto* ab : parent_anon_blocks) {
                 if (visited_anons.count(ab)) continue;
                 if (!ab->children.empty() && ab->children[0].get() == child.get()) {

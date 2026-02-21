@@ -24,6 +24,86 @@ inline std::string toLowerCollapsed(const std::string& s) {
     return toLower(collapseWhitespace(s));
 }
 
+enum class BorderSide {
+    Top,
+    Right,
+    Bottom,
+    Left,
+};
+
+static void addDashedBorderHorizontal(DisplayListBuilder& builder,
+                                     const Rect& r,
+                                     const Color& c,
+                                     float dash_len_px,
+                                     float gap_len_px) {
+    if (r.width <= 0.0f || r.height <= 0.0f) return;
+    if (dash_len_px <= 0.0f) dash_len_px = 1.0f;
+    if (gap_len_px < 0.0f) gap_len_px = 0.0f;
+
+    float x = r.x;
+    const float end = r.x + r.width;
+    const float step = dash_len_px + gap_len_px;
+    if (step <= 0.0f) return;
+
+    while (x < end) {
+        const float w = std::min(dash_len_px, end - x);
+        if (w > 0.0f) {
+            builder.addRect(Rect{x, r.y, w, r.height}, c);
+        }
+        x += step;
+    }
+}
+
+static void addDashedBorderVertical(DisplayListBuilder& builder,
+                                   const Rect& r,
+                                   const Color& c,
+                                   float dash_len_px,
+                                   float gap_len_px) {
+    if (r.width <= 0.0f || r.height <= 0.0f) return;
+    if (dash_len_px <= 0.0f) dash_len_px = 1.0f;
+    if (gap_len_px < 0.0f) gap_len_px = 0.0f;
+
+    float y = r.y;
+    const float end = r.y + r.height;
+    const float step = dash_len_px + gap_len_px;
+    if (step <= 0.0f) return;
+
+    while (y < end) {
+        const float h = std::min(dash_len_px, end - y);
+        if (h > 0.0f) {
+            builder.addRect(Rect{r.x, y, r.width, h}, c);
+        }
+        y += step;
+    }
+}
+
+static void paintBorderSide(DisplayListBuilder& builder,
+                            BorderSide side,
+                            const Rect& side_rect,
+                            const Color& c,
+                            const std::string& border_style_lower) {
+    if (side_rect.width <= 0.0f || side_rect.height <= 0.0f) return;
+
+    // `solid`/`double`/etc 暂时走实线填充；`dashed`/`dotted` 用分段矩形近似。
+    if (border_style_lower == "dashed" || border_style_lower == "dotted") {
+        const float thickness = (side == BorderSide::Top || side == BorderSide::Bottom)
+            ? side_rect.height
+            : side_rect.width;
+        const float base = std::max(1.0f, thickness);
+        const float dash = (border_style_lower == "dotted") ? base : (base * 3.0f);
+        const float gap = (border_style_lower == "dotted") ? base : (base * 2.0f);
+
+        if (side == BorderSide::Top || side == BorderSide::Bottom) {
+            addDashedBorderHorizontal(builder, side_rect, c, dash, gap);
+        } else {
+            addDashedBorderVertical(builder, side_rect, c, dash, gap);
+        }
+        return;
+    }
+
+    builder.addRect(side_rect, c);
+}
+
 // CSS 颜色解析器（正式版）：支�?#rgb/#rgba/#rrggbb/#rrggbbaa �?rgb()/rgba() 子集
 static void parseCssColor(const std::string& css, uint8_t& r, uint8_t& g, uint8_t& b, uint8_t& a) {
     auto clampToByte = [](int v) -> uint8_t {
@@ -792,10 +872,10 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                         const Color c_bottom = makeColorFromCss(effectiveBorderColor(style.border_bottom_color));
                         const Color c_left = makeColorFromCss(effectiveBorderColor(style.border_left_color));
 
-                        if (bt > 0.0f) builder.addRect(top_border, c_top);
-                        if (bb > 0.0f) builder.addRect(bottom_border, c_bottom);
-                        if (bl > 0.0f) builder.addRect(left_border, c_left);
-                        if (br > 0.0f) builder.addRect(right_border, c_right);
+                        if (bt > 0.0f) paintBorderSide(builder, BorderSide::Top, top_border, c_top, st_t);
+                        if (bb > 0.0f) paintBorderSide(builder, BorderSide::Bottom, bottom_border, c_bottom, st_b);
+                        if (bl > 0.0f) paintBorderSide(builder, BorderSide::Left, left_border, c_left, st_l);
+                        if (br > 0.0f) paintBorderSide(builder, BorderSide::Right, right_border, c_right, st_r);
                     } else {
                         auto clamp01 = [](float v) {
                             return std::clamp(v, 0.0f, 1.0f);
@@ -1416,23 +1496,40 @@ void Painter::paintBackgroundAndBorder(const Rect& rect,
             auto effectiveColor = [&](const std::string& side_color) -> Color {
                 return makeColorFromCss(!side_color.empty() ? side_color : style.border_color);
             };
+            auto effectiveStyle = [&](const std::string& side_style) -> std::string {
+                const std::string& st = !side_style.empty() ? side_style : style.border_style;
+                return toLowerCollapsed(st);
+            };
+
             if (bw.top > 0.0f) {
-                builder.addRect(Rect{rect.x, rect.y, rect.width, bw.top},
-                               effectiveColor(style.border_top_color));
+                paintBorderSide(builder,
+                                BorderSide::Top,
+                                Rect{rect.x, rect.y, rect.width, bw.top},
+                                effectiveColor(style.border_top_color),
+                                effectiveStyle(style.border_top_style));
             }
             if (bw.right > 0.0f) {
-                builder.addRect(Rect{rect.x + rect.width - bw.right, rect.y + bw.top,
-                                    bw.right, rect.height - bw.top - bw.bottom},
-                               effectiveColor(style.border_right_color));
+                paintBorderSide(builder,
+                                BorderSide::Right,
+                                Rect{rect.x + rect.width - bw.right, rect.y + bw.top,
+                                     bw.right, rect.height - bw.top - bw.bottom},
+                                effectiveColor(style.border_right_color),
+                                effectiveStyle(style.border_right_style));
             }
             if (bw.bottom > 0.0f) {
-                builder.addRect(Rect{rect.x, rect.y + rect.height - bw.bottom, rect.width, bw.bottom},
-                               effectiveColor(style.border_bottom_color));
+                paintBorderSide(builder,
+                                BorderSide::Bottom,
+                                Rect{rect.x, rect.y + rect.height - bw.bottom, rect.width, bw.bottom},
+                                effectiveColor(style.border_bottom_color),
+                                effectiveStyle(style.border_bottom_style));
             }
             if (bw.left > 0.0f) {
-                builder.addRect(Rect{rect.x, rect.y + bw.top, bw.left,
-                                    rect.height - bw.top - bw.bottom},
-                               effectiveColor(style.border_left_color));
+                paintBorderSide(builder,
+                                BorderSide::Left,
+                                Rect{rect.x, rect.y + bw.top, bw.left,
+                                     rect.height - bw.top - bw.bottom},
+                                effectiveColor(style.border_left_color),
+                                effectiveStyle(style.border_left_style));
             }
         }
     }
