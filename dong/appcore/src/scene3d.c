@@ -178,7 +178,6 @@ struct dong_screen3d_t {
 
     // Dirty flag for optimization - only re-render when content changes
     int dirty;
-    int frames_without_update;
 
     // Warmup: 某些资源（图片/字体/video poster）可能在首次 tick 后异步就绪。
     // 3D 多屏为了省性能不会每帧都 tick 静态页面，因此给每个 screen 一个短暂的 warmup 更新窗口。
@@ -240,6 +239,9 @@ struct dong_scene3d_t {
     double scheduler_start_time;
     int bg_rr_cursor;
     int initial_full_update_done;
+
+    // 只有在内容发生变化时才需要提交到 swapchain；否则会被 swapchain/backbuffer 语义节流到几十~一百多 FPS。
+    int dirty;
 
     // Input routing state
     int hovered_idx;
@@ -652,6 +654,8 @@ DONG_APPCORE_API dong_scene3d_t* dong_scene3d_create(dong_app_t* app) {
     scene->last_sent_mouse_x = (int32_t)0x80000000;
     scene->last_sent_mouse_y = (int32_t)0x80000000;
 
+    // 首帧需要渲染一次把初始内容提交到 swapchain。
+    scene->dirty = 1;
 
     if (!create_pipelines(scene)) {
         free(scene);
@@ -729,7 +733,6 @@ DONG_APPCORE_API dong_screen3d_t* dong_scene3d_add_screen(dong_scene3d_t* scene,
 
     // Initialize optimization fields
     screen->dirty = 1;  // Mark as dirty to ensure first render
-    screen->frames_without_update = 0;
     screen->warmup_updates_remaining = 0;
     screen->next_update_time = 0.0;
 
@@ -1414,6 +1417,9 @@ DONG_APPCORE_API void dong_scene3d_process_event(dong_scene3d_t* scene, const do
     uint32_t w = 0, h = 0;
     dong_app_get_size(scene->app, &w, &h);
 
+    // 输入事件通常会引起 hover/focus/滚动/相机等变化，需要重新提交到 swapchain。
+    scene->dirty = 1;
+
     switch (event->type) {
         case DONG_APP_EVENT_MOUSE_MOVE:
             update_hover_from_mouse(scene, event->mouse_move.x, event->mouse_move.y, w, h);
@@ -1568,20 +1574,21 @@ static float get_screen_distance_sq(dong_scene3d_t* scene, dong_screen3d_t* scr)
     return dx*dx + dy*dy + dz*dz;
 }
 
-static void mark_screen_updated(dong_screen3d_t* scr, double now_sec, double video_interval, int consume_warmup) {
+static void mark_screen_updated(dong_screen3d_t* scr,
+                                double now_sec,
+                                double video_interval,
+                                double static_refresh_interval,
+                                int consume_warmup) {
     if (!scr) return;
     scr->dirty = 0;
-    scr->frames_without_update = 0;
     if (consume_warmup && scr->warmup_updates_remaining > 0) {
         scr->warmup_updates_remaining -= 1;
     }
-    if (scr->is_video) {
-        scr->next_update_time = now_sec + video_interval;
-    }
+    scr->next_update_time = now_sec + (scr->is_video ? video_interval : static_refresh_interval);
 }
 
-static void update_screens_scheduled(dong_scene3d_t* scene) {
-    if (!scene) return;
+static int update_screens_scheduled(dong_scene3d_t* scene) {
+    if (!scene) return 0;
 
     const double now_sec = get_scene_time_sec(scene);
     // Video screens: 30fps
@@ -1593,23 +1600,36 @@ static void update_screens_scheduled(dong_scene3d_t* scene) {
 
     // Static refresh: 即使没有输入事件，静态页面也需要偶尔 tick 一次
     // 来把“延迟就绪”的资源（图片/字体等）落到屏幕上。
-    // 这里用帧计数做近似节流：大约每 ~10 秒让每个静态 screen 至少刷新一次。
-    const int static_refresh_frames = 600;
+    // 注意：必须用真实时间节流；用帧计数在高 FPS 下会把“10 秒一次”变成“几百毫秒一次”。
+    const double static_refresh_interval = 10.0;
 
-    // First frame: update all screens once
+    // Video LOD: 只有靠近相机的视频屏幕才后台推进（默认 6m，可通过环境变量调整）。
+    const float video_active_dist = (float)env_i32_or_default("DONG_SCENE3D_VIDEO_ACTIVE_DIST", 6);
+    const float video_active_dist_sq = video_active_dist * video_active_dist;
+
+    // First frame: warm up screens once
     if (!scene->initial_full_update_done) {
+        int updates_total = 0;
         for (int i = 0; i < scene->screen_count; i++) {
-            if (update_screen_texture(scene, i)) {
-                dong_screen3d_t* scr = scene->screens[i];
-                if (scr) {
-                    scr->warmup_updates_remaining = warmup_extra_updates;
-                    mark_screen_updated(scr, now_sec, video_interval, 0);
-                    // Static screens: no scheduled updates after warmup, only dirty-based
+            dong_screen3d_t* scr = scene->screens[i];
+            if (!scr) continue;
+
+            // 视频屏幕很重：默认只预热“离相机近”的视频，避免启动阶段卡很久。
+            if (scr->is_video) {
+                const float dist_sq = get_screen_distance_sq(scene, scr);
+                if (dist_sq > video_active_dist_sq) {
+                    continue;
                 }
+            }
+
+            if (update_screen_texture(scene, i)) {
+                ++updates_total;
+                scr->warmup_updates_remaining = warmup_extra_updates;
+                mark_screen_updated(scr, now_sec, video_interval, static_refresh_interval, 0);
             }
         }
         scene->initial_full_update_done = 1;
-        return;
+        return updates_total;
     }
 
     int updates_this_frame = 0;
@@ -1617,9 +1637,9 @@ static void update_screens_scheduled(dong_scene3d_t* scene) {
     // Priority 1: Hovered screen - update when dirty, during warmup, or on periodic refresh
     if (scene->hovered_idx >= 0) {
         dong_screen3d_t* scr = scene->screens[scene->hovered_idx];
-        if (scr && (scr->dirty || scr->warmup_updates_remaining > 0 || scr->frames_without_update >= static_refresh_frames)) {
+        if (scr && (scr->dirty || scr->warmup_updates_remaining > 0 || now_sec >= scr->next_update_time)) {
             if (update_screen_texture(scene, scene->hovered_idx)) {
-                mark_screen_updated(scr, now_sec, video_interval, 1);
+                mark_screen_updated(scr, now_sec, video_interval, static_refresh_interval, 1);
                 updates_this_frame++;
             }
         }
@@ -1628,23 +1648,31 @@ static void update_screens_scheduled(dong_scene3d_t* scene) {
     // Priority 2: Focused screen - update when dirty, during warmup, or on periodic refresh
     if (scene->focused_idx >= 0 && scene->focused_idx != scene->hovered_idx) {
         dong_screen3d_t* scr = scene->screens[scene->focused_idx];
-        if (scr && (scr->dirty || scr->warmup_updates_remaining > 0 || scr->frames_without_update >= static_refresh_frames)) {
+        if (scr && (scr->dirty || scr->warmup_updates_remaining > 0 || now_sec >= scr->next_update_time)) {
             if (update_screen_texture(scene, scene->focused_idx)) {
-                mark_screen_updated(scr, now_sec, video_interval, 1);
+                mark_screen_updated(scr, now_sec, video_interval, static_refresh_interval, 1);
                 updates_this_frame++;
             }
         }
     }
 
-    // Priority 3: Background video screens - 30fps, plus warmup for poster/resources
+    // Priority 3: Background video screens
+    // 注意：多个视频同时 30fps 会把“离屏 tick”成本放大到很夸张，拖垮整体帧率。
+    // 这里做一个非常直接的 LOD：只有当屏幕足够接近相机时才后台推进视频。
+
     for (int i = 0; i < scene->screen_count && updates_this_frame < max_updates_per_frame; i++) {
         dong_screen3d_t* scr = scene->screens[i];
         if (!scr || !scr->is_video) continue;
         if (i == scene->hovered_idx || i == scene->focused_idx) continue;
 
+        const float dist_sq = get_screen_distance_sq(scene, scr);
+        if (dist_sq > video_active_dist_sq && scr->warmup_updates_remaining <= 0) {
+            continue;
+        }
+
         if (scr->warmup_updates_remaining > 0 || now_sec >= scr->next_update_time) {
             if (update_screen_texture(scene, i)) {
-                mark_screen_updated(scr, now_sec, video_interval, 1);
+                mark_screen_updated(scr, now_sec, video_interval, static_refresh_interval, 1);
                 updates_this_frame++;
             }
         }
@@ -1662,9 +1690,9 @@ static void update_screens_scheduled(dong_scene3d_t* scene) {
             dong_screen3d_t* scr = scene->screens[idx];
             if (!scr || scr->is_video) continue;
 
-            if (scr->dirty || scr->warmup_updates_remaining > 0 || scr->frames_without_update >= static_refresh_frames) {
+            if (scr->dirty || scr->warmup_updates_remaining > 0 || now_sec >= scr->next_update_time) {
                 if (update_screen_texture(scene, idx)) {
-                    mark_screen_updated(scr, now_sec, video_interval, 1);
+                    mark_screen_updated(scr, now_sec, video_interval, static_refresh_interval, 1);
                     updates_this_frame++;
                 }
             }
@@ -1672,21 +1700,31 @@ static void update_screens_scheduled(dong_scene3d_t* scene) {
         scene->bg_rr_cursor++;
     }
 
-    // Increment frame counter for screens that weren't updated
-    for (int i = 0; i < scene->screen_count; i++) {
-        dong_screen3d_t* scr = scene->screens[i];
-        if (scr) {
-            scr->frames_without_update++;
-        }
-    }
+    return updates_this_frame;
 }
 
 // Update
 DONG_APPCORE_API void dong_scene3d_update(dong_scene3d_t* scene, float dt) {
     if (!scene) return;
 
+    const float old_cam_x = scene->cam_x;
+    const float old_cam_y = scene->cam_y;
+    const float old_cam_z = scene->cam_z;
+    const float old_cam_yaw = scene->cam_yaw;
+    const float old_cam_pitch = scene->cam_pitch;
+
     update_camera_controls(scene, dt);
-    update_screens_scheduled(scene);
+
+    if (fabsf(scene->cam_x - old_cam_x) > 1e-6f || fabsf(scene->cam_y - old_cam_y) > 1e-6f ||
+        fabsf(scene->cam_z - old_cam_z) > 1e-6f || fabsf(scene->cam_yaw - old_cam_yaw) > 1e-6f ||
+        fabsf(scene->cam_pitch - old_cam_pitch) > 1e-6f) {
+        scene->dirty = 1;
+    }
+
+    const int screen_updates = update_screens_scheduled(scene);
+    if (screen_updates > 0) {
+        scene->dirty = 1;
+    }
 
     for (int i = 0; i < scene->overlay_count; i++) {
         dong_overlay_t* ov = scene->overlays[i];
@@ -1704,6 +1742,11 @@ DONG_APPCORE_API void dong_scene3d_render(dong_scene3d_t* scene) {
     uint32_t sw, sh;
     dong_app_get_size(scene->app, &sw, &sh);
     if (sw == 0 || sh == 0) return;
+
+    // 无变化时跳过 swapchain 提交：避免 swapchain/backbuffer 的节流把“空转帧率”锁死。
+    if (scene->initial_full_update_done && !scene->dirty) {
+        return;
+    }
 
     // Ensure depth texture
     if (!scene->depth_texture || scene->depth_width != sw || scene->depth_height != sh) {
@@ -1724,8 +1767,14 @@ DONG_APPCORE_API void dong_scene3d_render(dong_scene3d_t* scene) {
 
     SDL_GPUTexture* swapchain = NULL;
     Uint32 swapchain_w = 0, swapchain_h = 0;
-    // Use Wait version to ensure proper synchronization with offscreen renders
-    if (!SDL_WaitAndAcquireGPUSwapchainTexture(cmd, scene->window, &swapchain, &swapchain_w, &swapchain_h)) {
+
+    // 默认用非阻塞 acquire，避免无意把渲染帧率锁到显示器刷新率附近。
+    // 如需更强的同步语义（用于调试或特定后端问题），可设置：DONG_SCENE3D_SWAPCHAIN_WAIT=1
+    const int wait_swapchain = env_i32_or_default("DONG_SCENE3D_SWAPCHAIN_WAIT", 0);
+    const bool ok = wait_swapchain
+        ? SDL_WaitAndAcquireGPUSwapchainTexture(cmd, scene->window, &swapchain, &swapchain_w, &swapchain_h)
+        : SDL_AcquireGPUSwapchainTexture(cmd, scene->window, &swapchain, &swapchain_w, &swapchain_h);
+    if (!ok) {
         SDL_CancelGPUCommandBuffer(cmd);
         return;
     }
@@ -1911,6 +1960,7 @@ DONG_APPCORE_API void dong_scene3d_render(dong_scene3d_t* scene) {
     }
 
     SDL_SubmitGPUCommandBuffer(cmd);
+    scene->dirty = 0;
 }
 
 // Pipeline creation

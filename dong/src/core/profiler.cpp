@@ -5,6 +5,7 @@
 #include <cinttypes>
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>
 #include <mutex>
 #include <thread>
 #include <vector>
@@ -51,21 +52,27 @@ struct ThreadBuffer {
 // 全局状态
 struct ProfilerState {
     std::atomic<bool> initialized{false};
-    std::atomic<bool> enabled{true};
+    std::atomic<bool> enabled{false};
     std::atomic<uint64_t> frame_count{0};
-    
+
     // 起始时间点
     std::chrono::high_resolution_clock::time_point start_time;
-    
+
     // 线程缓冲区管理
     std::mutex buffers_mutex;
     std::vector<ThreadBuffer*> all_buffers;
-    
+
     // 线程局部缓冲区
     static thread_local ThreadBuffer* tls_buffer;
-    
-    ProfilerState() = default;
-    
+
+    ProfilerState() {
+        // 默认关闭：避免无意采集导致帧率大幅下降。
+        // 需要启用时设置：DONG_PROFILER=1 或运行时调用 dong_profiler_set_enabled(1)。
+        const char* v = std::getenv("DONG_PROFILER");
+        const bool on = (v && v[0] && v[0] != '0');
+        enabled.store(on, std::memory_order_relaxed);
+    }
+
     ~ProfilerState() {
         // 清理所有缓冲区
         std::lock_guard<std::mutex> lock(buffers_mutex);

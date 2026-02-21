@@ -286,6 +286,7 @@ int main(int argc, char* argv[]) {
             }
             // Also print to console for performance monitoring
             printf("[FPS] %.1f\n", fps);
+            fflush(stdout);
         }
 
         // Auto-exit after 10 seconds for benchmark (uncomment for testing)
