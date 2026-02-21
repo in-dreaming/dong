@@ -184,6 +184,14 @@ static std::string resolveVideoUrlForPlugin(const std::string& src, const std::s
     return path;
 }
 
+static bool debug_video_enabled() {
+    static int s_cached = -1;
+    if (s_cached != -1) return s_cached != 0;
+    const char* v = std::getenv("DONG_DEBUG_VIDEO");
+    s_cached = (v && v[0] && v[0] != '0') ? 1 : 0;
+    return s_cached != 0;
+}
+
 static void markIsolatedLayerDirtyFlags(dong::render::GPUCommandList& list, uint64_t layer_id) {
     if (layer_id == 0) return;
     for (auto& cmd : list.commands) {
@@ -258,6 +266,10 @@ struct EngineView::Impl {
 
         double last_timeupdate_pts = 0.0;
         double last_resync_wall = 0.0;
+        double last_debug_log_pts = 0.0;
+        double last_debug_pull_wall = 0.0;
+        double last_debug_state_wall = 0.0;
+        int debug_frames_logged = 0;
     };
 
     std::unordered_map<void*, VideoState> video_states;
@@ -362,6 +374,10 @@ struct EngineView::Impl {
         vs.current_pts = 0.0;
         vs.last_timeupdate_pts = 0.0;
         vs.last_resync_wall = 0.0;
+        vs.last_debug_log_pts = 0.0;
+        vs.last_debug_pull_wall = 0.0;
+        vs.last_debug_state_wall = 0.0;
+        vs.debug_frames_logged = 0;
         vs.has_frame = false;
         vs.needs_upload = false;
         vs.frame_format = DONG_VIDEO_PIXEL_FORMAT_RGBA8;
@@ -505,6 +521,16 @@ struct EngineView::Impl {
         }
 
         const double target_time = vs.video_time_start + (wall_time_sec - vs.wall_clock_start);
+
+        if (debug_video_enabled() && (wall_time_sec - vs.last_debug_state_wall) >= 1.0) {
+            vs.last_debug_state_wall = wall_time_sec;
+            DONG_LOG_INFO("[Video] state playing=%d ended=%d ct=%.3f target=%.3f",
+                         vs.playing ? 1 : 0,
+                         vs.ended ? 1 : 0,
+                         vs.current_pts,
+                         target_time);
+        }
+
         static const double kResyncLagSec = ([]() {
             const char* v = std::getenv("DONG_VIDEO_RESYNC_LAG_SEC");
             if (!v || !*v) return 0.50;
@@ -559,7 +585,12 @@ struct EngineView::Impl {
                 return;
             }
             if (r < 0) {
-                return;
+                // No new frame available yet. Keep current state and try again next tick.
+                if (debug_video_enabled() && (wall_time_sec - vs.last_debug_pull_wall) >= 0.5) {
+                    vs.last_debug_pull_wall = wall_time_sec;
+                    DONG_LOG_INFO("[Video] no_new_frame ct=%.3f target=%.3f", vs.current_pts, target_time);
+                }
+                break;
             }
 
             if (frame.plane_data[0] && frame.width > 0 && frame.height > 0) {
@@ -569,6 +600,15 @@ struct EngineView::Impl {
                 vs.needs_upload = true;
                 if (vs.node) {
                     vs.node->setAttribute("__dong_video_currentTime", std::to_string(vs.current_pts));
+                }
+                if (debug_video_enabled() && vs.debug_frames_logged < 5) {
+                    ++vs.debug_frames_logged;
+                    DONG_LOG_INFO("[Video] decoded frame #%d pts=%.3f %ux%u fmt=%d",
+                                 vs.debug_frames_logged,
+                                 frame.pts_seconds,
+                                 frame.width,
+                                 frame.height,
+                                 (int)frame.format);
                 }
             }
 
@@ -581,6 +621,10 @@ struct EngineView::Impl {
         if (vs.current_pts - vs.last_timeupdate_pts >= 0.25) {
             vs.last_timeupdate_pts = vs.current_pts;
             dispatchMediaEvent(vs, "timeupdate");
+            if (debug_video_enabled() && (vs.current_pts - vs.last_debug_log_pts >= 0.25)) {
+                vs.last_debug_log_pts = vs.current_pts;
+                DONG_LOG_INFO("[Video] timeupdate ct=%.3f has_frame=%d needs_upload=%d", vs.current_pts, vs.has_frame ? 1 : 0, vs.needs_upload ? 1 : 0);
+            }
         }
     }
 
@@ -726,6 +770,10 @@ struct EngineView::Impl {
                 vs.current_pts = 0.0;
                 vs.loadeddata_sent = false;
                 vs.last_timeupdate_pts = 0.0;
+                vs.last_debug_log_pts = 0.0;
+                vs.last_debug_pull_wall = 0.0;
+                vs.last_debug_state_wall = 0.0;
+                vs.debug_frames_logged = 0;
 
                 const std::string resolved = resolveVideoUrlForPlugin(src, resource_root);
                 if (resolved.empty()) {
@@ -733,6 +781,16 @@ struct EngineView::Impl {
                     dispatchMediaError(vs, "unsupported/invalid video src");
                     continue;
                 }
+
+                if (debug_video_enabled()) {
+                    DONG_LOG_INFO("[Video] open src='%s' resolved='%s' autoplay=%d loop=%d preload=%d",
+                                 src.c_str(),
+                                 resolved.c_str(),
+                                 vs.autoplay ? 1 : 0,
+                                 vs.loop ? 1 : 0,
+                                 vs.preload ? 1 : 0);
+                }
+
                 vs.player = plugin->video_open(plugin_user, resolved.c_str());
                 if (!vs.player) {
                     vs.errored = true;
@@ -752,9 +810,6 @@ struct EngineView::Impl {
                     }
                 }
 
-                if (vs.preload && plugin->video_seek) {
-                    plugin->video_seek(plugin_user, vs.player, 0.0);
-                }
                 if (vs.preload) {
                     dong_video_frame_t f{};
                     int rr = plugin->video_read_frame(plugin_user, vs.player, &f);

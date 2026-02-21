@@ -212,6 +212,14 @@ struct dong_scene3d_t {
     float cam_speed, cam_sensitivity;
     int cam_controls_enabled;
 
+    // Camera input state (event-driven, avoids relying on SDL_GetKeyboardState timing)
+    int key_w, key_a, key_s, key_d;
+    int key_q, key_e;
+    int key_space;
+    int key_lctrl, key_rctrl;
+    int key_lshift, key_rshift;
+    int skip_next_rel_mouse_delta;
+
     // Background
     float bg_r, bg_g, bg_b, bg_a;
     int depth_test_enabled;
@@ -1288,6 +1296,93 @@ static void handle_wheel(dong_scene3d_t* scene, float dx, float dy) {
 }
 
 
+static void update_camera_key_state_scancode(dong_scene3d_t* scene, uint32_t scancode, int down) {
+    if (!scene) return;
+
+    const int v = down ? 1 : 0;
+    switch (scancode) {
+        case SDL_SCANCODE_W: scene->key_w = v; break;
+        case SDL_SCANCODE_A: scene->key_a = v; break;
+        case SDL_SCANCODE_S: scene->key_s = v; break;
+        case SDL_SCANCODE_D: scene->key_d = v; break;
+        case SDL_SCANCODE_Q: scene->key_q = v; break;
+        case SDL_SCANCODE_E: scene->key_e = v; break;
+        case SDL_SCANCODE_SPACE: scene->key_space = v; break;
+        case SDL_SCANCODE_LCTRL: scene->key_lctrl = v; break;
+        case SDL_SCANCODE_RCTRL: scene->key_rctrl = v; break;
+        case SDL_SCANCODE_LSHIFT: scene->key_lshift = v; break;
+        case SDL_SCANCODE_RSHIFT: scene->key_rshift = v; break;
+        default: break;
+    }
+}
+
+static void update_camera_key_state_fallback_keycode(dong_scene3d_t* scene, uint32_t key, int down) {
+    if (!scene) return;
+
+    const int v = down ? 1 : 0;
+    switch (key) {
+        case SDLK_W: scene->key_w = v; break;
+        case SDLK_A: scene->key_a = v; break;
+        case SDLK_S: scene->key_s = v; break;
+        case SDLK_D: scene->key_d = v; break;
+        case SDLK_Q: scene->key_q = v; break;
+        case SDLK_E: scene->key_e = v; break;
+        case SDLK_SPACE: scene->key_space = v; break;
+        case SDLK_LCTRL: scene->key_lctrl = v; break;
+        case SDLK_RCTRL: scene->key_rctrl = v; break;
+        case SDLK_LSHIFT: scene->key_lshift = v; break;
+        case SDLK_RSHIFT: scene->key_rshift = v; break;
+        default: break;
+    }
+}
+
+static int is_camera_shift_down(const dong_scene3d_t* scene) {
+    return scene && (scene->key_lshift || scene->key_rshift);
+}
+
+static int debug_input_enabled(void) {
+    const char* v = getenv("DONG_DEBUG_INPUT");
+    return (v && v[0] && v[0] != '0');
+}
+
+static int is_camera_ctrl_down(const dong_scene3d_t* scene) {
+    return scene && (scene->key_lctrl || scene->key_rctrl);
+}
+
+static void set_fps_input_mode(dong_scene3d_t* scene, int enable) {
+    if (!scene || !scene->window) return;
+
+    // FPS-mode semantics: grab keyboard+mouse, enable relative mouse, and disable text input
+    // (IME/text input can interfere with letter keys on some platforms).
+    if (enable) {
+        (void)SDL_StopTextInput(scene->window);
+    } else {
+        (void)SDL_StartTextInput(scene->window);
+    }
+
+    (void)SDL_RaiseWindow(scene->window);
+
+    const bool want = enable ? true : false;
+    const bool ok_kbd = SDL_SetWindowKeyboardGrab(scene->window, want);
+    const bool ok_mouse = SDL_SetWindowMouseGrab(scene->window, want);
+    const bool ok_rel = SDL_SetWindowRelativeMouseMode(scene->window, want);
+
+    scene->skip_next_rel_mouse_delta = enable ? 1 : 0;
+
+    float dx = 0.0f, dy = 0.0f;
+    SDL_GetRelativeMouseState(&dx, &dy);
+
+    if (debug_input_enabled()) {
+        fprintf(stderr,
+                "[Scene3D][FPSInput] enable=%d kbd_grab=%d mouse_grab=%d rel=%d err=%s\n",
+                enable ? 1 : 0,
+                ok_kbd ? 1 : 0,
+                ok_mouse ? 1 : 0,
+                ok_rel ? 1 : 0,
+                SDL_GetError());
+    }
+}
+
 static void handle_key(dong_scene3d_t* scene, uint32_t key, int down) {
     if (!scene) return;
     if (scene->focused_idx < 0 || scene->focused_idx >= scene->screen_count) return;
@@ -1326,7 +1421,7 @@ DONG_APPCORE_API void dong_scene3d_process_event(dong_scene3d_t* scene, const do
         case DONG_APP_EVENT_MOUSE_BUTTON:
             if (event->mouse_button.button == SDL_BUTTON_RIGHT) {
                 scene->right_mouse_down = event->mouse_button.pressed ? 1 : 0;
-                SDL_SetWindowRelativeMouseMode(scene->window, event->mouse_button.pressed ? true : false);
+                set_fps_input_mode(scene, event->mouse_button.pressed ? 1 : 0);
                 break;
             }
             if (event->mouse_button.button == SDL_BUTTON_LEFT) {
@@ -1338,9 +1433,27 @@ DONG_APPCORE_API void dong_scene3d_process_event(dong_scene3d_t* scene, const do
         case DONG_APP_EVENT_MOUSE_WHEEL:
             handle_wheel(scene, event->mouse_wheel.delta_x, event->mouse_wheel.delta_y);
             break;
-        case DONG_APP_EVENT_KEY:
-            handle_key(scene, event->key.key_code, event->key.pressed ? 1 : 0);
+        case DONG_APP_EVENT_KEY: {
+            const int down = event->key.pressed ? 1 : 0;
+
+            if (debug_input_enabled()) {
+                fprintf(stderr,
+                        "[Scene3D][Key] key=0x%x sc=0x%x down=%d rep=%d\n",
+                        (unsigned)event->key.key_code,
+                        (unsigned)event->key.scancode,
+                        down,
+                        event->key.repeat);
+            }
+
+            if (event->key.scancode) {
+                update_camera_key_state_scancode(scene, event->key.scancode, down);
+            } else {
+                update_camera_key_state_fallback_keycode(scene, event->key.key_code, down);
+            }
+
+            handle_key(scene, event->key.key_code, down);
             break;
+        }
         case DONG_APP_EVENT_TEXT:
             handle_text(scene, event->text.text);
             break;
@@ -1418,30 +1531,32 @@ static double get_scene_time_sec(dong_scene3d_t* scene) {
 static void update_camera_controls(dong_scene3d_t* scene, float dt) {
     if (!scene || !scene->cam_controls_enabled) return;
 
-    const bool* keys = SDL_GetKeyboardState(NULL);
-
-    Uint32 mouse = SDL_GetMouseState(NULL, NULL);
-    if (mouse & SDL_BUTTON_RMASK) {
-        float dx, dy;
+    if (scene->right_mouse_down) {
+        float dx = 0.0f, dy = 0.0f;
         SDL_GetRelativeMouseState(&dx, &dy);
-        scene->cam_yaw -= dx * scene->cam_sensitivity;
-        scene->cam_pitch -= dy * scene->cam_sensitivity;
-        if (scene->cam_pitch > 1.5f) scene->cam_pitch = 1.5f;
-        if (scene->cam_pitch < -1.5f) scene->cam_pitch = -1.5f;
+
+        if (scene->skip_next_rel_mouse_delta) {
+            scene->skip_next_rel_mouse_delta = 0;
+        } else {
+            scene->cam_yaw -= dx * scene->cam_sensitivity;
+            scene->cam_pitch -= dy * scene->cam_sensitivity;
+            if (scene->cam_pitch > 1.5f) scene->cam_pitch = 1.5f;
+            if (scene->cam_pitch < -1.5f) scene->cam_pitch = -1.5f;
+        }
     }
 
     float spd = scene->cam_speed * dt;
-    if (keys[SDL_SCANCODE_LSHIFT]) spd *= 2;
+    if (is_camera_shift_down(scene)) spd *= 2.0f;
 
     float fx = sinf(scene->cam_yaw), fz = cosf(scene->cam_yaw);
     float rx = -cosf(scene->cam_yaw), rz = sinf(scene->cam_yaw);
 
-    if (keys[SDL_SCANCODE_W]) { scene->cam_x += fx * spd; scene->cam_z += fz * spd; }
-    if (keys[SDL_SCANCODE_S]) { scene->cam_x -= fx * spd; scene->cam_z -= fz * spd; }
-    if (keys[SDL_SCANCODE_D]) { scene->cam_x += rx * spd; scene->cam_z += rz * spd; }
-    if (keys[SDL_SCANCODE_A]) { scene->cam_x -= rx * spd; scene->cam_z -= rz * spd; }
-    if (keys[SDL_SCANCODE_SPACE] || keys[SDL_SCANCODE_E]) scene->cam_y += spd;
-    if (keys[SDL_SCANCODE_LCTRL] || keys[SDL_SCANCODE_Q]) scene->cam_y -= spd;
+    if (scene->key_w) { scene->cam_x += fx * spd; scene->cam_z += fz * spd; }
+    if (scene->key_s) { scene->cam_x -= fx * spd; scene->cam_z -= fz * spd; }
+    if (scene->key_d) { scene->cam_x += rx * spd; scene->cam_z += rz * spd; }
+    if (scene->key_a) { scene->cam_x -= rx * spd; scene->cam_z -= rz * spd; }
+    if (scene->key_space || scene->key_e) scene->cam_y += spd;
+    if (is_camera_ctrl_down(scene) || scene->key_q) scene->cam_y -= spd;
 }
 
 // Calculate distance from camera to screen for LOD

@@ -18,7 +18,7 @@ elseif(APPLE)
     target_link_libraries(dong_plugin_sdl PRIVATE SDL3)
 else()
     target_link_directories(dong_plugin_sdl PRIVATE "${SDL3_PREFIX}/lib")
-    target_link_libraries(dong_plugin_sdl PRIVATE SDL3)
+    target_link_libraries(dong_plugin_sdl PRIVATE SDL3 dl)
 endif()
 
 # =============================================================================
@@ -137,7 +137,7 @@ if(DONG_PLUGIN_SDL_ENABLE_FFMPEG)
     # shell scripts (pkgconfig_generate.sh, libversion.sh) that fail in Git-for-Windows.
     # Instead, manually copy the DLLs, libs, and headers we need.
     set(_ffmpeg_install_dir_esc "${FFMPEG_INSTALL_DIR}")
-    set(_ffmpeg_install_cmd "mkdir -p '${_ffmpeg_install_dir_esc}/bin' && cp -f lib*/*.dll '${_ffmpeg_install_dir_esc}/bin/' && (cp -f lib*/*.lib '${_ffmpeg_install_dir_esc}/bin/' 2>/dev/null || true) && (cp -f lib*/*.dll.a '${_ffmpeg_install_dir_esc}/bin/' 2>/dev/null || true) && mkdir -p '${_ffmpeg_install_dir_esc}/include/libavcodec' '${_ffmpeg_install_dir_esc}/include/libavformat' '${_ffmpeg_install_dir_esc}/include/libavutil' '${_ffmpeg_install_dir_esc}/include/libswscale' && cp -f libavcodec/*.h '${_ffmpeg_install_dir_esc}/include/libavcodec/' && cp -f libavformat/*.h '${_ffmpeg_install_dir_esc}/include/libavformat/' && cp -f libavutil/*.h '${_ffmpeg_install_dir_esc}/include/libavutil/' && cp -f libswscale/*.h '${_ffmpeg_install_dir_esc}/include/libswscale/'")
+    set(_ffmpeg_install_cmd "mkdir -p '${_ffmpeg_install_dir_esc}/bin' && (cp -f lib*/*.dll '${_ffmpeg_install_dir_esc}/bin/' 2>/dev/null || true) && (cp -f lib*/*.dylib '${_ffmpeg_install_dir_esc}/bin/' 2>/dev/null || true) && (cp -f lib*/*.so* '${_ffmpeg_install_dir_esc}/bin/' 2>/dev/null || true) && (cp -f lib*/*.lib '${_ffmpeg_install_dir_esc}/bin/' 2>/dev/null || true) && (cp -f lib*/*.dll.a '${_ffmpeg_install_dir_esc}/bin/' 2>/dev/null || true) && mkdir -p '${_ffmpeg_install_dir_esc}/include/libavcodec' '${_ffmpeg_install_dir_esc}/include/libavformat' '${_ffmpeg_install_dir_esc}/include/libavutil' '${_ffmpeg_install_dir_esc}/include/libswscale' && cp -f libavcodec/*.h '${_ffmpeg_install_dir_esc}/include/libavcodec/' && cp -f libavformat/*.h '${_ffmpeg_install_dir_esc}/include/libavformat/' && cp -f libavutil/*.h '${_ffmpeg_install_dir_esc}/include/libavutil/' && cp -f libswscale/*.h '${_ffmpeg_install_dir_esc}/include/libswscale/'")
 
     # Parallel build where supported.
     if(NOT "${MAKE_EXECUTABLE}" MATCHES "nmake(\\.exe)?$")
@@ -208,6 +208,8 @@ if(DONG_PLUGIN_SDL_ENABLE_FFMPEG)
         DESTINATION bin
         FILES_MATCHING
         PATTERN "*.dll"
+        PATTERN "*.dylib"
+        PATTERN "*.so*"
     )
 endif()
 

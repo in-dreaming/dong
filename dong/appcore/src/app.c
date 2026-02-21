@@ -253,6 +253,11 @@ static void app_forward_event_to_engine(dong_app_impl_t* app, const dong_app_eve
     }
 }
 
+static int debug_input_enabled(void) {
+    const char* v = getenv("DONG_DEBUG_INPUT");
+    return (v && v[0] && v[0] != '0');
+}
+
 static dong_app_event_t app_translate_sdl_event(dong_app_impl_t* app, const SDL_Event* e) {
     dong_app_event_t out;
     memset(&out, 0, sizeof(out));
@@ -300,12 +305,36 @@ static dong_app_event_t app_translate_sdl_event(dong_app_impl_t* app, const SDL_
         case SDL_EVENT_KEY_UP:
             out.type = DONG_APP_EVENT_KEY;
             out.key.key_code = (uint32_t)e->key.key;
+            out.key.scancode = (uint32_t)e->key.scancode;
             out.key.pressed = (e->type == SDL_EVENT_KEY_DOWN) ? 1 : 0;
+            out.key.repeat = e->key.repeat ? 1 : 0;
+            if (debug_input_enabled()) {
+                const char* kname = SDL_GetKeyName((SDL_Keycode)out.key.key_code);
+                const char* sname = SDL_GetScancodeName((SDL_Scancode)out.key.scancode);
+                fprintf(stderr,
+                        "[DongApp][Key] type=%s key=0x%x(%s) sc=0x%x(%s) down=%d rep=%d\n",
+                        (e->type == SDL_EVENT_KEY_DOWN) ? "down" : "up",
+                        (unsigned)out.key.key_code,
+                        (kname && kname[0]) ? kname : "?",
+                        (unsigned)out.key.scancode,
+                        (sname && sname[0]) ? sname : "?",
+                        out.key.pressed,
+                        out.key.repeat);
+            }
             return out;
 
         case SDL_EVENT_TEXT_INPUT:
             out.type = DONG_APP_EVENT_TEXT;
             out.text.text = e->text.text;
+            if (debug_input_enabled()) {
+                fprintf(stderr, "[DongApp][TextInput] %s\n", e->text.text ? e->text.text : "(null)");
+            }
+            return out;
+
+        case SDL_EVENT_TEXT_EDITING:
+            if (debug_input_enabled()) {
+                fprintf(stderr, "[DongApp][TextEditing] %s\n", e->edit.text ? e->edit.text : "(null)");
+            }
             return out;
 
         default:

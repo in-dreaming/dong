@@ -81,8 +81,12 @@ typedef struct dong_app_event_t {
         } mouse_wheel;
 
         struct {
+            // SDL virtual keycode (layout-dependent), e.g. SDLK_W
             uint32_t key_code;
+            // SDL physical scancode (layout-independent), e.g. SDL_SCANCODE_W
+            uint32_t scancode;
             int pressed;
+            int repeat;
         } key;
 
         struct {

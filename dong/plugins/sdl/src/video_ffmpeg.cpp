@@ -22,6 +22,10 @@
 #include <windows.h>
 #endif
 
+#if !defined(_WIN32)
+#include <dlfcn.h>
+#endif
+
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
@@ -70,6 +74,11 @@ struct dong_video_player_t {
     int video_stream = -1;
     AVRational video_time_base = {1, 1};
 
+    // Timestamp tracking (some streams may omit per-frame PTS; use a best-effort fallback)
+    double last_pts_seconds = 0.0;
+    double frame_duration_seconds = 1.0 / 30.0;
+    bool have_last_pts = false;
+
     AVPacket* pkt = nullptr;
     AVFrame* frame = nullptr;
 
@@ -102,20 +111,28 @@ struct dong_video_player_t {
     bool seek_pending = false;
 
     dong_video_metadata_t meta = {};
+
+    // Debug (used when DONG_DEBUG_VIDEO is enabled)
+    int debug_publish_logged = 0;
+    int debug_pts_logged = 0;
 };
 
 namespace {
 
 
 
-// Small helper: load FFmpeg DLLs next to dong_plugin_sdl.dll and resolve only the symbols we use.
-struct FF {
+// Small helper: load FFmpeg shared libraries next to dong_plugin_sdl and resolve only the symbols we use.
 #if defined(_WIN32)
-    HMODULE avutil = nullptr;
-    HMODULE swscale = nullptr;
-    HMODULE avcodec = nullptr;
-    HMODULE avformat = nullptr;
+using ff_mod_t = HMODULE;
+#else
+using ff_mod_t = void*;
 #endif
+
+struct FF {
+    ff_mod_t avutil = nullptr;
+    ff_mod_t swscale = nullptr;
+    ff_mod_t avcodec = nullptr;
+    ff_mod_t avformat = nullptr;
 
     // libavformat
     decltype(&avformat_network_init) p_avformat_network_init = nullptr;
@@ -134,7 +151,6 @@ struct FF {
     decltype(&avcodec_receive_frame) p_avcodec_receive_frame = nullptr;
     decltype(&avcodec_flush_buffers) p_avcodec_flush_buffers = nullptr;
     decltype(&avcodec_free_context) p_avcodec_free_context = nullptr;
-
 
     // libavutil
     decltype(&av_frame_alloc) p_av_frame_alloc = nullptr;
@@ -156,7 +172,7 @@ struct FF {
 static std::once_flag g_ff_once;
 static FF g_ff;
 
-static std::string win32_last_error() {
+static std::string platform_last_error() {
 #if defined(_WIN32)
     DWORD err = GetLastError();
     if (err == 0) return "";
@@ -177,7 +193,8 @@ static std::string win32_last_error() {
     }
     return out;
 #else
-    return "";
+    const char* e = dlerror();
+    return e ? std::string(e) : std::string();
 #endif
 }
 
@@ -198,11 +215,30 @@ static std::filesystem::path get_self_dir() {
     }
     return std::filesystem::path(path).parent_path();
 #else
+    Dl_info info;
+    std::memset(&info, 0, sizeof(info));
+    if (dladdr((void*)&get_self_dir, &info) && info.dli_fname) {
+        try {
+            return std::filesystem::path(info.dli_fname).parent_path();
+        } catch (...) {
+        }
+    }
     return std::filesystem::current_path();
 #endif
 }
 
-static std::filesystem::path find_first_dll(const std::filesystem::path& dir, const char* prefix) {
+static bool is_shared_lib_name(const std::string& name) {
+#if defined(_WIN32)
+    return name.size() >= 4 && name.rfind(".dll") == name.size() - 4;
+#elif defined(__APPLE__)
+    return name.size() >= 6 && name.rfind(".dylib") == name.size() - 6;
+#else
+    // Linux/Unix: libfoo.so or libfoo.so.X
+    return name.find(".so") != std::string::npos;
+#endif
+}
+
+static std::filesystem::path find_best_shared_lib(const std::filesystem::path& dir, const char* prefix) {
     if (!std::filesystem::exists(dir)) return {};
 
     std::filesystem::path best;
@@ -211,8 +247,10 @@ static std::filesystem::path find_first_dll(const std::filesystem::path& dir, co
         auto p = it.path();
         auto name = p.filename().string();
         if (name.size() < 4) continue;
+        if (!prefix || !prefix[0]) continue;
+        if (name.size() < std::strlen(prefix)) continue;
         if (!std::equal(name.begin(), name.begin() + std::strlen(prefix), prefix)) continue;
-        if (p.extension().string() != ".dll") continue;
+        if (!is_shared_lib_name(name)) continue;
 
         // Choose the lexicographically largest match (usually highest version).
         if (best.empty() || name > best.filename().string()) {
@@ -223,42 +261,55 @@ static std::filesystem::path find_first_dll(const std::filesystem::path& dir, co
     return best;
 }
 
-static void* load_sym(HMODULE mod, const char* name) {
+static void* load_sym(ff_mod_t mod, const char* name) {
+    if (!mod || !name || !name[0]) return nullptr;
 #if defined(_WIN32)
-    if (!mod) return nullptr;
     return reinterpret_cast<void*>(GetProcAddress(mod, name));
 #else
-    (void)mod; (void)name;
-    return nullptr;
+    dlerror();
+    return dlsym(mod, name);
+#endif
+}
+
+static ff_mod_t load_library(const std::filesystem::path& p) {
+#if defined(_WIN32)
+    return LoadLibraryA(p.string().c_str());
+#else
+    dlerror();
+    return dlopen(p.string().c_str(), RTLD_NOW | RTLD_LOCAL);
 #endif
 }
 
 static void ff_init_once() {
     std::call_once(g_ff_once, []() {
-#if !defined(_WIN32)
-        SDL_Log("[dong_plugin_sdl][video] FFmpeg loader not implemented for this platform");
-        g_ff.ok = false;
-        return;
-#else
         const auto dir = get_self_dir();
-        const auto avutil = find_first_dll(dir, "avutil-");
-        const auto swscale = find_first_dll(dir, "swscale-");
-        const auto avcodec = find_first_dll(dir, "avcodec-");
-        const auto avformat = find_first_dll(dir, "avformat-");
+
+#if defined(_WIN32)
+        const auto avutil = find_best_shared_lib(dir, "avutil-");
+        const auto swscale = find_best_shared_lib(dir, "swscale-");
+        const auto avcodec = find_best_shared_lib(dir, "avcodec-");
+        const auto avformat = find_best_shared_lib(dir, "avformat-");
+#else
+        const auto avutil = find_best_shared_lib(dir, "libavutil");
+        const auto swscale = find_best_shared_lib(dir, "libswscale");
+        const auto avcodec = find_best_shared_lib(dir, "libavcodec");
+        const auto avformat = find_best_shared_lib(dir, "libavformat");
+#endif
 
         if (avutil.empty() || swscale.empty() || avcodec.empty() || avformat.empty()) {
-            SDL_Log("[dong_plugin_sdl][video] FFmpeg DLLs not found next to plugin. dir=%s", dir.string().c_str());
+            SDL_Log("[dong_plugin_sdl][video] FFmpeg shared libs not found next to plugin. dir=%s", dir.string().c_str());
             g_ff.ok = false;
             return;
         }
 
-        g_ff.avutil = LoadLibraryA(avutil.string().c_str());
-        g_ff.swscale = LoadLibraryA(swscale.string().c_str());
-        g_ff.avcodec = LoadLibraryA(avcodec.string().c_str());
-        g_ff.avformat = LoadLibraryA(avformat.string().c_str());
+        // Note: order matters on some platforms due to inter-lib dependencies.
+        g_ff.avutil = load_library(avutil);
+        g_ff.swscale = load_library(swscale);
+        g_ff.avcodec = load_library(avcodec);
+        g_ff.avformat = load_library(avformat);
 
         if (!g_ff.avutil || !g_ff.swscale || !g_ff.avcodec || !g_ff.avformat) {
-            SDL_Log("[dong_plugin_sdl][video] LoadLibrary failed: %s", win32_last_error().c_str());
+            SDL_Log("[dong_plugin_sdl][video] Failed to load FFmpeg shared libs: %s", platform_last_error().c_str());
             g_ff.ok = false;
             return;
         }
@@ -280,7 +331,6 @@ static void ff_init_once() {
         g_ff.p_avcodec_flush_buffers = reinterpret_cast<decltype(g_ff.p_avcodec_flush_buffers)>(load_sym(g_ff.avcodec, "avcodec_flush_buffers"));
         g_ff.p_avcodec_free_context = reinterpret_cast<decltype(g_ff.p_avcodec_free_context)>(load_sym(g_ff.avcodec, "avcodec_free_context"));
 
-
         g_ff.p_av_frame_alloc = reinterpret_cast<decltype(g_ff.p_av_frame_alloc)>(load_sym(g_ff.avutil, "av_frame_alloc"));
         g_ff.p_av_frame_free = reinterpret_cast<decltype(g_ff.p_av_frame_free)>(load_sym(g_ff.avutil, "av_frame_free"));
         g_ff.p_av_frame_unref = reinterpret_cast<decltype(g_ff.p_av_frame_unref)>(load_sym(g_ff.avutil, "av_frame_unref"));
@@ -299,16 +349,14 @@ static void ff_init_once() {
                   g_ff.p_av_frame_alloc && g_ff.p_av_frame_free && g_ff.p_av_packet_alloc && g_ff.p_av_packet_free &&
                   g_ff.p_sws_getContext && g_ff.p_sws_scale && g_ff.p_sws_freeContext;
 
-
         if (!g_ff.ok) {
             SDL_Log("[dong_plugin_sdl][video] Failed to resolve required FFmpeg symbols");
         } else {
             if (g_ff.p_avformat_network_init) {
                 g_ff.p_avformat_network_init();
             }
-            SDL_Log("[dong_plugin_sdl][video] FFmpeg loaded from %s", dir.string().c_str());
+            SDL_Log("[dong_plugin_sdl][video] FFmpeg loaded (dir=%s)", dir.string().c_str());
         }
-#endif
     });
 }
 
@@ -411,7 +459,29 @@ static bool decode_one_video_frame(dong_video_player_t* p, DecodedFrame& out) {
             int64_t pts = p->frame->best_effort_timestamp;
             if (pts != AV_NOPTS_VALUE) {
                 pts_sec = (double)pts * av_q2d(p->video_time_base);
+            } else if (p->have_last_pts) {
+                pts_sec = p->last_pts_seconds + p->frame_duration_seconds;
             }
+
+            if (const char* dv = std::getenv("DONG_DEBUG_VIDEO")) {
+                if (dv[0] && dv[0] != '0' && p->debug_pts_logged < 12) {
+                    ++p->debug_pts_logged;
+                    SDL_Log("[dong_plugin_sdl][video] ptsdbg#%d raw=%lld last=%.3f have_last=%d fdur=%.4f pre=%.3f",
+                            p->debug_pts_logged,
+                            (long long)pts,
+                            p->last_pts_seconds,
+                            p->have_last_pts ? 1 : 0,
+                            p->frame_duration_seconds,
+                            pts_sec);
+                }
+            }
+
+            // Make timestamps monotonic for smoother playback/timeupdate semantics.
+            if (p->have_last_pts && pts_sec <= p->last_pts_seconds) {
+                pts_sec = p->last_pts_seconds + p->frame_duration_seconds;
+            }
+            p->last_pts_seconds = pts_sec;
+            p->have_last_pts = true;
 
             out.width = static_cast<uint32_t>(w);
             out.height = static_cast<uint32_t>(h);
@@ -564,6 +634,10 @@ static void decode_thread_main(dong_video_player_t* p) {
 
             p->eof.store(false, std::memory_order_release);
 
+            // Reset timestamp tracking around seek.
+            p->last_pts_seconds = do_seek_target;
+            p->have_last_pts = true;
+
             // Clear queued frames.
             {
                 std::lock_guard<std::mutex> qlk(p->queue_mutex);
@@ -618,6 +692,14 @@ static void decode_thread_main(dong_video_player_t* p) {
             std::lock_guard<std::mutex> lk(p->queue_mutex);
             p->ready_slots.push_back(slot_index);
         }
+
+        if (const char* dv = std::getenv("DONG_DEBUG_VIDEO")) {
+            if (dv[0] && dv[0] != '0' && p->debug_publish_logged < 20) {
+                ++p->debug_publish_logged;
+                SDL_Log("[dong_plugin_sdl][video] queued frame #%d pts=%.3f", p->debug_publish_logged, slot.pts_seconds);
+            }
+        }
+
         p->queue_cv.notify_all();
     }
 }
@@ -706,6 +788,20 @@ dong_video_player_t* sdl_video_open(void* /*user*/, const char* url) {
     }
 
     AVStream* vst = p->fmt->streams[p->video_stream];
+
+    // Derive a fallback frame duration from stream frame rate (used when PTS is missing).
+    {
+        double fps = 0.0;
+        if (vst->avg_frame_rate.num > 0 && vst->avg_frame_rate.den > 0) {
+            fps = av_q2d(vst->avg_frame_rate);
+        } else if (vst->r_frame_rate.num > 0 && vst->r_frame_rate.den > 0) {
+            fps = av_q2d(vst->r_frame_rate);
+        }
+        if (fps > 1e-3) {
+            p->frame_duration_seconds = 1.0 / fps;
+        }
+    }
+
     const AVCodec* dec = g_ff.p_avcodec_find_decoder(vst->codecpar->codec_id);
     if (!dec) {
         SDL_Log("[dong_plugin_sdl][video] avcodec_find_decoder failed");
@@ -841,6 +937,12 @@ int sdl_video_read_frame(void* /*user*/, dong_video_player_t* player, dong_video
 
         if (!player->ready_slots.empty()) {
             // Swap in the newest queued frame.
+            // Drop older queued frames to reduce latency and to avoid presenting stale content.
+            while (player->ready_slots.size() > 1) {
+                player->free_slots.push_back(player->ready_slots.front());
+                player->ready_slots.pop_front();
+            }
+
             if (player->held_slot != (std::size_t)-1) {
                 player->free_slots.push_back(player->held_slot);
                 player->held_slot = (std::size_t)-1;
@@ -878,6 +980,12 @@ int sdl_video_read_frame(void* /*user*/, dong_video_player_t* player, dong_video
     if (new_slot != (std::size_t)-1) {
         // Wake decode thread if it was waiting for a free slot.
         player->queue_cv.notify_all();
+    }
+
+    // If there is no newly queued frame, tell the caller to try again later.
+    // The caller is expected to keep presenting the last uploaded frame.
+    if (new_slot == (std::size_t)-1) {
+        return -1;
     }
 
     if (player->held_slot == (std::size_t)-1) {
