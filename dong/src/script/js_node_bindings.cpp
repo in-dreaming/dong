@@ -719,6 +719,30 @@ static JSValue elem_getScrollLeft(JSContext* ctx, JSValueConst this_val, int arg
     return JS_NewFloat64(ctx, node->getScrollLeft());
 }
 
+static JSValue elem_setScrollTop(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_UNDEFINED;
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_UNDEFINED;
+
+    double value;
+    if (JS_ToFloat64(ctx, &value, argv[0]) != 0) return JS_UNDEFINED;
+
+    node->setScrollTop(static_cast<float>(value));
+    return JS_UNDEFINED;
+}
+
+static JSValue elem_setScrollLeft(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_UNDEFINED;
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_UNDEFINED;
+
+    double value;
+    if (JS_ToFloat64(ctx, &value, argv[0]) != 0) return JS_UNDEFINED;
+
+    node->setScrollLeft(static_cast<float>(value));
+    return JS_UNDEFINED;
+}
+
 static JSValue elem_getScrollWidth(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     (void)argc; (void)argv;
     auto node = JSBindings::getNodeOpaque(ctx, this_val);
@@ -860,9 +884,9 @@ void bindElementProperties(JSContext* ctx, JSValue elem, const dom::DOMNodePtr& 
     // dataset proxy
     JS_SetPropertyStr(ctx, elem, "dataset", createDatasetProxy(ctx, elem, node));
 
-    // Scroll/geometry getters
-    DEFINE_GETTER(ctx, elem, "scrollTop", elem_getScrollTop);
-    DEFINE_GETTER(ctx, elem, "scrollLeft", elem_getScrollLeft);
+    // Scroll/geometry properties (with setters for scrollTop/scrollLeft)
+    DEFINE_GETTER_SETTER(ctx, elem, "scrollTop", elem_getScrollTop, elem_setScrollTop);
+    DEFINE_GETTER_SETTER(ctx, elem, "scrollLeft", elem_getScrollLeft, elem_setScrollLeft);
     DEFINE_GETTER(ctx, elem, "scrollWidth", elem_getScrollWidth);
     DEFINE_GETTER(ctx, elem, "scrollHeight", elem_getScrollHeight);
     DEFINE_GETTER(ctx, elem, "clientWidth", elem_getClientWidth);

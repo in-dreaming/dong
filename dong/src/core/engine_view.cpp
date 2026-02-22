@@ -1327,10 +1327,29 @@ struct EngineView::Impl {
         clearActiveElement();
         dispatchMouseEvent("click", last_mouse_x, last_mouse_y, button);
 
+        // Handle <label> for attribute - clicking label focuses associated element
+        if (dom_manager && layout_engine && focus_manager) {
+            auto clicked = hitTestElementAt(dom_manager.get(), layout_engine.get(), last_mouse_x, last_mouse_y);
+            if (clicked && clicked->getTagName() == "label" && clicked->hasAttribute("for")) {
+                std::string target_id = clicked->getAttribute("for");
+                if (!target_id.empty()) {
+                    auto target_element = dom_manager->getElementById(target_id);
+                    if (target_element) {
+                        // Check if target is a focusable element
+                        std::string tag = target_element->getTagName();
+                        if (tag == "input" || tag == "textarea" || tag == "select" || tag == "button") {
+                            focus_manager->setFocus(target_element);
+                            markNeedsRepaint();
+                        }
+                    }
+                }
+            }
+        }
+
         // Checkbox/radio toggle on click
         if (dom_manager && layout_engine) {
             auto clicked = hitTestElementAt(dom_manager.get(), layout_engine.get(), last_mouse_x, last_mouse_y);
-            if (clicked && clicked->getTagName() == "input") {
+            if (clicked && clicked->getTagName() == "input" && !clicked->hasAttribute("disabled")) {
                 std::string type = clicked->getAttribute("type");
                 if (type == "checkbox") {
                     if (clicked->hasAttribute("checked")) {
@@ -1400,6 +1419,7 @@ struct EngineView::Impl {
 
     void sendKey(uint32_t key_code, bool pressed) {
         constexpr uint32_t SDLK_TAB = 9;
+        constexpr uint32_t SDLK_RETURN = 13;
         constexpr uint32_t SDLK_BACKSPACE = 8;
         constexpr uint32_t SDLK_DELETE = 127;
         constexpr uint32_t SDLK_LEFT = 0x40000050;
@@ -1409,6 +1429,31 @@ struct EngineView::Impl {
             if (key_code == SDLK_TAB && focus_manager && dom_manager) {
                 focus_manager->moveFocus(dom_manager->getRoot(), false);
                 return;
+            }
+
+            // Handle Enter key in form inputs
+            if (key_code == SDLK_RETURN && focus_manager && dom_manager) {
+                auto focused = focus_manager->getFocusedElement();
+                if (focused && focused->getTagName() == "input") {
+                    // Find parent form element
+                    auto current = focused->getParent();
+                    while (current) {
+                        if (current->getTagName() == "form") {
+                            // Trigger submit event on the form
+                            if (js_bindings && script_engine) {
+                                ensureJSBindingsInitialized();
+                                uint64_t form_id = js_bindings->getNodeIdFor(current);
+                                if (form_id) {
+                                    js_bindings->dispatchSimpleEvent(form_id, "submit");
+                                }
+                            }
+                            // Prevent default text insertion
+                            dispatchKeyEvent("keydown", key_code);
+                            return;
+                        }
+                        current = current->getParent();
+                    }
+                }
             }
 
             if (focus_manager) {

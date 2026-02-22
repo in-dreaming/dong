@@ -110,17 +110,17 @@
 
 - [ ] `<details>`/`<summary>` 完整交互：点击 toggle、`open` 属性切换、disclosure triangle、`:open` 伪类
 - [ ] `<dialog>` 完整行为：`showModal()`/`show()`/`close()`、`::backdrop`、top-layer、Escape 关闭
-- [ ] `<label>` for 属性点击聚焦关联 input
+- [x] `<label>` for 属性点击聚焦关联 input
 - [x] `autofocus` 属性行为（页面加载后自动聚焦）
-- [ ] `disabled` 完整行为（阻止点击事件 + 视觉灰化）
+- [x] `disabled` 完整行为（阻止点击事件 + 视觉灰化）
 - [ ] `<select>` 键盘导航（Arrow Up/Down, Enter）
 
 ### JS DOM 绑定补充
 
-- [ ] Node: `previousSibling` / `nextSibling`, `textContent` setter, `replaceChild()`, `cloneNode()`, `contains()`, `isConnected`
+- [x] Node: `previousSibling` / `nextSibling`, `textContent` setter, `replaceChild()`, `cloneNode()`, `contains()`, `isConnected`
 - [ ] Element: `children` (as property), `firstElementChild`/`lastElementChild`, `previousElementSibling`/`nextElementSibling`
 - [ ] Element: `hasAttribute()`/`removeAttribute()`（草案声称支持但未绑定）
-- [ ] Element: `scrollTop`/`scrollLeft`, `clientWidth`/`clientHeight`, `offsetWidth`/`offsetHeight`/`offsetTop`/`offsetLeft`
+- [x] Element: `scrollTop`/`scrollLeft`, `clientWidth`/`clientHeight`, `offsetWidth`/`offsetHeight`/`offsetTop`/`offsetLeft`
 - [ ] Element: `before()`/`after()`/`replaceWith()`/`prepend()`/`append()`
 - [ ] Element: `tabIndex` 属性
 - [ ] HTMLDialogElement: `open`, `showModal()`, `show()`, `close()`, `returnValue`
@@ -131,7 +131,7 @@
 
 ### 事件系统补充
 
-- [ ] `submit` 事件
+- [x] `submit` 事件
 - [ ] `contextmenu` 事件
 - [ ] `load` / `error` 事件（img 资源）
 - [ ] `toggle` 事件（`<details>`）

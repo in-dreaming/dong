@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            font-family: Arial;
+            padding: 20px;
+            background: #f0f0f0;
+        }
+        .form-group {
+            margin-bottom: 15px;
+            padding: 10px;
+            background: white;
+            border-radius: 4px;
+        }
+        label {
+            display: inline-block;
+            min-width: 120px;
+            font-weight: bold;
+            color: #333;
+            cursor: pointer;
+        }
+        label:hover {
+            color: #0066cc;
+        }
+        input, textarea, select {
+            padding: 5px;
+            border: 2px solid #ccc;
+            border-radius: 3px;
+            transition: border-color 0.2s;
+        }
+        input:focus, textarea:focus, select:focus {
+            outline: none;
+            border-color: #0066cc;
+            background: #f0f8ff;
+        }
+        .note {
+            color: #666;
+            font-size: 14px;
+            margin-top: 20px;
+            padding: 10px;
+            background: #fff;
+            border-left: 3px solid #0066cc;
+        }
+    </style>
+</head>
+<body>
+    <h1>Label For Attribute Test</h1>
+    <p class="note">
+        Click on any label text to automatically focus the associated input element.
+        The input should get a blue border when focused.
+    </p>
+
+    <div class="form-group">
+        <label for="username">Username:</label>
+        <input type="text" id="username" placeholder="Enter username">
+    </div>
+
+    <div class="form-group">
+        <label for="email">Email:</label>
+        <input type="email" id="email" placeholder="Enter email">
+    </div>
+
+    <div class="form-group">
+        <label for="password">Password:</label>
+        <input type="password" id="password" placeholder="Enter password">
+    </div>
+
+    <div class="form-group">
+        <label for="country">Country:</label>
+        <select id="country">
+            <option>USA</option>
+            <option>Canada</option>
+            <option>UK</option>
+            <option>Australia</option>
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label for="comments">Comments:</label>
+        <textarea id="comments" rows="4" cols="40" placeholder="Enter your comments"></textarea>
+    </div>
+
+    <div class="form-group">
+        <label for="agree">
+            <input type="checkbox" id="agree">
+            I agree to the terms and conditions (checkbox with wrapping label)
+        </label>
+    </div>
+
+    <div class="form-group">
+        <label for="newsletter">Subscribe to newsletter:</label>
+        <input type="checkbox" id="newsletter">
+    </div>
+
+    <script>
+        // Test script to verify focus events
+        document.querySelectorAll('input, textarea, select').forEach(element => {
+            element.addEventListener('focus', function() {
+                console.log('Focused:', this.id || this.type);
+            });
+            element.addEventListener('blur', function() {
+                console.log('Blurred:', this.id || this.type);
+            });
+        });
+    </script>
+</body>
+</html>

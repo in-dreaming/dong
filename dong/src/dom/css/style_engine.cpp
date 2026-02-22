@@ -613,6 +613,18 @@ input[type="checkbox"], input[type="radio"] {
   border-radius: 2px;
   box-sizing: border-box;
 }
+
+/* [hidden] attribute support - must use !important to override author styles */
+[hidden] {
+  display: none !important;
+}
+
+/* Disabled elements - visual feedback and pointer-events */
+button[disabled], input[disabled], select[disabled], textarea[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
 )CSS";
 
 

@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            font-family: Arial;
+            padding: 20px;
+            background: #f0f0f0;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+            padding: 10px;
+            background: #f9f9f9;
+            border-radius: 4px;
+        }
+        label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        input, select, textarea, button {
+            padding: 8px;
+            margin: 5px 0;
+            border: 2px solid #2196f3;
+            border-radius: 4px;
+        }
+        button {
+            background: #2196f3;
+            color: white;
+            cursor: pointer;
+            padding: 10px 20px;
+            font-size: 14px;
+            border: none;
+        }
+        button:hover:not([disabled]) {
+            background: #1976d2;
+        }
+        .toggle-btn {
+            background: #4caf50;
+            margin-left: 10px;
+        }
+        .toggle-btn:hover {
+            background: #45a049;
+        }
+        .note {
+            color: #666;
+            font-size: 14px;
+            padding: 10px;
+            background: #fff3cd;
+            border-left: 3px solid #ffc107;
+            margin-bottom: 10px;
+        }
+        .log {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: monospace;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .log-entry {
+            padding: 3px 0;
+        }
+        .disabled-info {
+            background: #ffebee;
+            padding: 10px;
+            border-left: 3px solid #f44336;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Disabled Attribute Complete Behavior Test</h1>
+
+    <div class="container">
+        <p class="note">
+            <strong>Test Instructions:</strong><br>
+            1. Click "Toggle Disabled" buttons to enable/disable elements<br>
+            2. Try to interact with disabled elements (should not work)<br>
+            3. Disabled elements should appear visually grayed out (opacity 0.5)<br>
+            4. Disabled elements should not receive focus<br>
+            5. All interactions with disabled elements should be logged below
+        </p>
+
+        <div class="form-group">
+            <label>Text Input:</label>
+            <input type="text" id="textInput" value="Normal text input" placeholder="Type here">
+            <button class="toggle-btn" onclick="toggleDisabled('textInput')">Toggle Disabled</button>
+        </div>
+
+        <div class="form-group">
+            <label>Checkbox:</label>
+            <input type="checkbox" id="checkbox1" checked>
+            <label for="checkbox1">Click me (can be disabled)</label>
+            <button class="toggle-btn" onclick="toggleDisabled('checkbox1')">Toggle Disabled</button>
+        </div>
+
+        <div class="form-group">
+            <label>Radio Buttons:</label>
+            <input type="radio" name="radio" id="radio1" checked> Option 1
+            <button class="toggle-btn" onclick="toggleDisabled('radio1')">Toggle Radio 1</button><br>
+            <input type="radio" name="radio" id="radio2"> Option 2
+            <button class="toggle-btn" onclick="toggleDisabled('radio2')">Toggle Radio 2</button>
+        </div>
+
+        <div class="form-group">
+            <label>Select Dropdown:</label>
+            <select id="select1">
+                <option>Choice A</option>
+                <option>Choice B</option>
+                <option>Choice C</option>
+            </select>
+            <button class="toggle-btn" onclick="toggleDisabled('select1')">Toggle Disabled</button>
+        </div>
+
+        <div class="form-group">
+            <label>Textarea:</label>
+            <textarea id="textarea1" rows="3">This is a textarea that can be disabled</textarea><br>
+            <button class="toggle-btn" onclick="toggleDisabled('textarea1')">Toggle Disabled</button>
+        </div>
+
+        <div class="form-group">
+            <label>Button:</label>
+            <button id="button1" onclick="logClick('button1')">Click Me Button</button>
+            <button class="toggle-btn" onclick="toggleDisabled('button1')">Toggle Disabled</button>
+        </div>
+
+        <div class="form-group">
+            <label>Submit Button:</label>
+            <button id="submitBtn" type="submit" onclick="logClick('submitBtn')">Submit</button>
+            <button class="toggle-btn" onclick="toggleDisabled('submitBtn')">Toggle Disabled</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>Interaction Log</h2>
+        <div class="log" id="interactionLog">
+            <div style="color: #999;">Interactions will be logged here...</div>
+        </div>
+        <button onclick="clearLog()" style="margin-top: 10px;">Clear Log</button>
+    </div>
+
+    <div class="container">
+        <h2>Current Disabled States</h2>
+        <div class="disabled-info" id="statusDisplay"></div>
+    </div>
+
+    <script>
+        const log = document.getElementById('interactionLog');
+        const statusDisplay = document.getElementById('statusDisplay');
+
+        function logInteraction(message, type = 'info') {
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            const timestamp = new Date().toLocaleTimeString();
+            entry.textContent = `[${timestamp}] ${message}`;
+            entry.style.color = type === 'blocked' ? '#f44336' : type === 'success' ? '#4caf50' : '#333';
+
+            // Clear placeholder
+            if (log.firstChild && log.firstChild.textContent.includes('will be logged')) {
+                log.innerHTML = '';
+            }
+
+            log.appendChild(entry);
+            log.scrollTop = log.scrollHeight;
+        }
+
+        function clearLog() {
+            log.innerHTML = '<div style="color: #999;">Log cleared...</div>';
+        }
+
+        function toggleDisabled(elementId) {
+            const element = document.getElementById(elementId);
+            if (element.hasAttribute('disabled')) {
+                element.removeAttribute('disabled');
+                logInteraction(`${elementId} ENABLED`, 'success');
+            } else {
+                element.setAttribute('disabled', '');
+                logInteraction(`${elementId} DISABLED`, 'blocked');
+            }
+            updateStatusDisplay();
+        }
+
+        function logClick(elementId) {
+            const element = document.getElementById(elementId);
+            if (element.hasAttribute('disabled')) {
+                logInteraction(`❌ BLOCKED: Tried to click disabled ${elementId}`, 'blocked');
+            } else {
+                logInteraction(`✓ SUCCESS: Clicked ${elementId}`, 'success');
+            }
+        }
+
+        function updateStatusDisplay() {
+            const elements = ['textInput', 'checkbox1', 'radio1', 'radio2', 'select1', 'textarea1', 'button1', 'submitBtn'];
+            const statuses = elements.map(id => {
+                const el = document.getElementById(id);
+                const disabled = el && el.hasAttribute('disabled');
+                return `${id}: ${disabled ? '🔴 DISABLED' : '🟢 ENABLED'}`;
+            });
+            statusDisplay.innerHTML = statuses.join('<br>');
+        }
+
+        // Add event listeners to all interactive elements
+        ['textInput', 'checkbox1', 'radio1', 'radio2', 'select1', 'textarea1', 'button1', 'submitBtn'].forEach(id => {
+            const element = document.getElementById(id);
+            if (element) {
+                element.addEventListener('focus', function() {
+                    if (this.hasAttribute('disabled')) {
+                        logInteraction(`❌ BLOCKED: ${id} received focus (SHOULD NOT HAPPEN!)`, 'blocked');
+                    } else {
+                        logInteraction(`✓ ${id} focused`, 'success');
+                    }
+                });
+
+                element.addEventListener('click', function() {
+                    if (this.hasAttribute('disabled')) {
+                        logInteraction(`❌ BLOCKED: Click event on disabled ${id} (SHOULD NOT HAPPEN!)`, 'blocked');
+                    } else {
+                        logInteraction(`✓ Click event on ${id}`, 'success');
+                    }
+                });
+
+                if (element.tagName === 'INPUT' && (element.type === 'checkbox' || element.type === 'radio')) {
+                    element.addEventListener('change', function() {
+                        if (this.hasAttribute('disabled')) {
+                            logInteraction(`❌ BLOCKED: Change event on disabled ${id} (SHOULD NOT HAPPEN!)`, 'blocked');
+                        } else {
+                            logInteraction(`✓ Change event on ${id}`, 'success');
+                        }
+                    });
+                }
+            }
+        });
+
+        // Initial status display
+        updateStatusDisplay();
+        logInteraction('Test page loaded - all elements enabled initially', 'info');
+    </script>
+</body>
+</html>

@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            font-family: Arial;
+            padding: 20px;
+            background: #f0f0f0;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .scroll-box {
+            width: 300px;
+            height: 200px;
+            overflow: auto;
+            border: 2px solid #2196f3;
+            background: #e3f2fd;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+        .scroll-content {
+            width: 600px;
+            height: 400px;
+            background: linear-gradient(45deg, #bbdefb 25%, transparent 25%),
+                        linear-gradient(-45deg, #bbdefb 25%, transparent 25%),
+                        linear-gradient(45deg, transparent 75%, #bbdefb 75%),
+                        linear-gradient(-45deg, transparent 75%, #bbdefb 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+            padding: 20px;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        button {
+            padding: 8px 16px;
+            background: #2196f3;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover {
+            background: #1976d2;
+        }
+        .info {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+        .output {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .pass { color: #4caf50; }
+        .fail { color: #f44336; }
+    </style>
+</head>
+<body>
+    <h1>Element.scrollTop / scrollLeft Test</h1>
+
+    <div class="container">
+        <h2>Interactive Scroll Box</h2>
+        <div class="scroll-box" id="scrollBox">
+            <div class="scroll-content">
+                <h3>Scrollable Content</h3>
+                <p>This is a scrollable area with content larger than the visible area.</p>
+                <p>Use the buttons below to programmatically control the scroll position.</p>
+                <p style="margin-top: 50px;">Middle section...</p>
+                <p style="margin-top: 100px;">Bottom section...</p>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button onclick="scrollToTop()">Scroll to Top</button>
+            <button onclick="scrollToMiddle()">Scroll to Middle</button>
+            <button onclick="scrollToBottom()">Scroll to Bottom</button>
+            <button onclick="scrollToLeft()">Scroll to Left</button>
+            <button onclick="scrollToRight()">Scroll to Right</button>
+            <button onclick="scrollToCenter()">Scroll to Center</button>
+            <button onclick="showScrollInfo()">Show Scroll Info</button>
+        </div>
+
+        <div class="info" id="scrollInfo"></div>
+    </div>
+
+    <div class="container">
+        <h2>Automated Tests</h2>
+        <div class="output" id="output"></div>
+    </div>
+
+    <script>
+        const scrollBox = document.getElementById('scrollBox');
+        const scrollInfo = document.getElementById('scrollInfo');
+        const output = document.getElementById('output');
+
+        let passed = 0;
+        let failed = 0;
+
+        function log(msg, isPass = null) {
+            const span = document.createElement('span');
+            if (isPass === true) {
+                span.className = 'pass';
+                span.textContent = '✓ ' + msg;
+                passed++;
+            } else if (isPass === false) {
+                span.className = 'fail';
+                span.textContent = '✗ ' + msg;
+                failed++;
+            } else {
+                span.textContent = msg;
+            }
+            output.appendChild(span);
+            output.appendChild(document.createTextNode('\n'));
+        }
+
+        function test(name, condition, actual, expected) {
+            const pass = condition;
+            if (pass) {
+                log(`${name}: PASS`, true);
+            } else {
+                log(`${name}: FAIL (expected: ${expected}, got: ${actual})`, false);
+            }
+        }
+
+        function showScrollInfo() {
+            scrollInfo.innerHTML = `
+scrollTop: ${scrollBox.scrollTop}
+scrollLeft: ${scrollBox.scrollLeft}
+scrollWidth: ${scrollBox.scrollWidth}
+scrollHeight: ${scrollBox.scrollHeight}
+clientWidth: ${scrollBox.clientWidth}
+clientHeight: ${scrollBox.clientHeight}
+            `.trim();
+        }
+
+        function scrollToTop() {
+            scrollBox.scrollTop = 0;
+            showScrollInfo();
+        }
+
+        function scrollToMiddle() {
+            scrollBox.scrollTop = scrollBox.scrollHeight / 2;
+            showScrollInfo();
+        }
+
+        function scrollToBottom() {
+            scrollBox.scrollTop = scrollBox.scrollHeight;
+            showScrollInfo();
+        }
+
+        function scrollToLeft() {
+            scrollBox.scrollLeft = 0;
+            showScrollInfo();
+        }
+
+        function scrollToRight() {
+            scrollBox.scrollLeft = scrollBox.scrollWidth;
+            showScrollInfo();
+        }
+
+        function scrollToCenter() {
+            scrollBox.scrollTop = scrollBox.scrollHeight / 2;
+            scrollBox.scrollLeft = scrollBox.scrollWidth / 2;
+            showScrollInfo();
+        }
+
+        // Run automated tests
+        log('=== scrollTop / scrollLeft Tests ===\n');
+
+        // Test initial state
+        log('\n--- Initial state ---');
+        test('scrollTop is 0 initially', scrollBox.scrollTop === 0, scrollBox.scrollTop, '0');
+        test('scrollLeft is 0 initially', scrollBox.scrollLeft === 0, scrollBox.scrollLeft, '0');
+        test('scrollWidth > clientWidth', scrollBox.scrollWidth > scrollBox.clientWidth,
+             `${scrollBox.scrollWidth} > ${scrollBox.clientWidth}`, 'true');
+        test('scrollHeight > clientHeight', scrollBox.scrollHeight > scrollBox.clientHeight,
+             `${scrollBox.scrollHeight} > ${scrollBox.clientHeight}`, 'true');
+
+        // Test setting scrollTop
+        log('\n--- scrollTop setter test ---');
+        scrollBox.scrollTop = 50;
+        test('scrollTop setter works', Math.abs(scrollBox.scrollTop - 50) < 1,
+             scrollBox.scrollTop, '50');
+
+        // Test setting scrollLeft
+        log('\n--- scrollLeft setter test ---');
+        scrollBox.scrollLeft = 100;
+        test('scrollLeft setter works', Math.abs(scrollBox.scrollLeft - 100) < 1,
+             scrollBox.scrollLeft, '100');
+
+        // Test setting to 0
+        log('\n--- Reset to 0 test ---');
+        scrollBox.scrollTop = 0;
+        scrollBox.scrollLeft = 0;
+        test('scrollTop reset to 0', scrollBox.scrollTop === 0, scrollBox.scrollTop, '0');
+        test('scrollLeft reset to 0', scrollBox.scrollLeft === 0, scrollBox.scrollLeft, '0');
+
+        // Test setting to large value (should clamp)
+        log('\n--- Clamping test ---');
+        const maxScrollTop = scrollBox.scrollHeight - scrollBox.clientHeight;
+        const maxScrollLeft = scrollBox.scrollWidth - scrollBox.clientWidth;
+        scrollBox.scrollTop = 99999;
+        scrollBox.scrollLeft = 99999;
+        test('scrollTop clamped to max', Math.abs(scrollBox.scrollTop - maxScrollTop) < 1,
+             scrollBox.scrollTop, maxScrollTop);
+        test('scrollLeft clamped to max', Math.abs(scrollBox.scrollLeft - maxScrollLeft) < 1,
+             scrollBox.scrollLeft, maxScrollLeft);
+
+        // Test negative values (should clamp to 0)
+        log('\n--- Negative value test ---');
+        scrollBox.scrollTop = -100;
+        scrollBox.scrollLeft = -100;
+        test('scrollTop clamped to 0 from negative', scrollBox.scrollTop === 0,
+             scrollBox.scrollTop, '0');
+        test('scrollLeft clamped to 0 from negative', scrollBox.scrollLeft === 0,
+             scrollBox.scrollLeft, '0');
+
+        // Summary
+        log(`\n=== Test Summary ===`);
+        log(`Total: ${passed + failed} tests`);
+        log(`Passed: ${passed}`, true);
+        if (failed > 0) {
+            log(`Failed: ${failed}`, false);
+        }
+
+        // Show initial info
+        showScrollInfo();
+    </script>
+</body>
+</html>
