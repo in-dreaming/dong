@@ -75,10 +75,10 @@ struct ComputedStyle {
 
     std::string color = "#000000";
     float border_radius = 0.0f;
-    float border_top_left_radius = 0.0f;
-    float border_top_right_radius = 0.0f;
-    float border_bottom_left_radius = 0.0f;
-    float border_bottom_right_radius = 0.0f;
+    CSSValue border_top_left_radius;
+    CSSValue border_top_right_radius;
+    CSSValue border_bottom_left_radius;
+    CSSValue border_bottom_right_radius;
 
     // Border (shorthand / all-sides)
     std::string border_color = "#000000";

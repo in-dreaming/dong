@@ -185,10 +185,10 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
 
         // Border radius
         {"border-radius", [](const std::string& val, ComputedStyle& style) { parseBorderRadiusShorthandHelper(val, style); }},
-        {"border-top-left-radius", [](const std::string& val, ComputedStyle& style) { style.border_top_left_radius = parseFloatHelper(val); }},
-        {"border-top-right-radius", [](const std::string& val, ComputedStyle& style) { style.border_top_right_radius = parseFloatHelper(val); }},
-        {"border-bottom-left-radius", [](const std::string& val, ComputedStyle& style) { style.border_bottom_left_radius = parseFloatHelper(val); }},
-        {"border-bottom-right-radius", [](const std::string& val, ComputedStyle& style) { style.border_bottom_right_radius = parseFloatHelper(val); }},
+        {"border-top-left-radius", [](const std::string& val, ComputedStyle& style) { style.border_top_left_radius = CSSParser::parseValue(val); }},
+        {"border-top-right-radius", [](const std::string& val, ComputedStyle& style) { style.border_top_right_radius = CSSParser::parseValue(val); }},
+        {"border-bottom-left-radius", [](const std::string& val, ComputedStyle& style) { style.border_bottom_left_radius = CSSParser::parseValue(val); }},
+        {"border-bottom-right-radius", [](const std::string& val, ComputedStyle& style) { style.border_bottom_right_radius = CSSParser::parseValue(val); }},
 
         
         // Outline
@@ -642,24 +642,25 @@ inline void parseBorderRadiusShorthandHelper(const std::string& value, ComputedS
     while (iss >> part) parts.push_back(part);
 
     if (parts.size() == 1) {
-        float v = parseFloatHelper(parts[0]);
-        style.border_radius = v;
+        CSSValue v = CSSParser::parseValue(parts[0]);
+        // Still set the legacy float for backwards compatibility
+        style.border_radius = (v.unit == CSSValue::Unit::PIXEL) ? v.value : v.value;
         style.border_top_left_radius = v;
         style.border_top_right_radius = v;
         style.border_bottom_left_radius = v;
         style.border_bottom_right_radius = v;
     } else if (parts.size() == 2) {
-        style.border_top_left_radius = style.border_bottom_right_radius = parseFloatHelper(parts[0]);
-        style.border_top_right_radius = style.border_bottom_left_radius = parseFloatHelper(parts[1]);
+        style.border_top_left_radius = style.border_bottom_right_radius = CSSParser::parseValue(parts[0]);
+        style.border_top_right_radius = style.border_bottom_left_radius = CSSParser::parseValue(parts[1]);
     } else if (parts.size() == 3) {
-        style.border_top_left_radius = parseFloatHelper(parts[0]);
-        style.border_top_right_radius = style.border_bottom_left_radius = parseFloatHelper(parts[1]);
-        style.border_bottom_right_radius = parseFloatHelper(parts[2]);
+        style.border_top_left_radius = CSSParser::parseValue(parts[0]);
+        style.border_top_right_radius = style.border_bottom_left_radius = CSSParser::parseValue(parts[1]);
+        style.border_bottom_right_radius = CSSParser::parseValue(parts[2]);
     } else if (parts.size() >= 4) {
-        style.border_top_left_radius = parseFloatHelper(parts[0]);
-        style.border_top_right_radius = parseFloatHelper(parts[1]);
-        style.border_bottom_right_radius = parseFloatHelper(parts[2]);
-        style.border_bottom_left_radius = parseFloatHelper(parts[3]);
+        style.border_top_left_radius = CSSParser::parseValue(parts[0]);
+        style.border_top_right_radius = CSSParser::parseValue(parts[1]);
+        style.border_bottom_right_radius = CSSParser::parseValue(parts[2]);
+        style.border_bottom_left_radius = CSSParser::parseValue(parts[3]);
     }
 }
 
@@ -2049,24 +2050,24 @@ void CSSParser::parseBorderRadiusShorthand(const std::string& value, ComputedSty
     while (iss >> part) parts.push_back(part);
 
     if (parts.size() == 1) {
-        float v = parseFloat(parts[0]);
-        style.border_radius = v;
+        CSSValue v = parseValue(parts[0]);
+        style.border_radius = (v.unit == CSSValue::Unit::PIXEL) ? v.value : v.value;
         style.border_top_left_radius = v;
         style.border_top_right_radius = v;
         style.border_bottom_left_radius = v;
         style.border_bottom_right_radius = v;
     } else if (parts.size() == 2) {
-        style.border_top_left_radius = style.border_bottom_right_radius = parseFloat(parts[0]);
-        style.border_top_right_radius = style.border_bottom_left_radius = parseFloat(parts[1]);
+        style.border_top_left_radius = style.border_bottom_right_radius = parseValue(parts[0]);
+        style.border_top_right_radius = style.border_bottom_left_radius = parseValue(parts[1]);
     } else if (parts.size() == 3) {
-        style.border_top_left_radius = parseFloat(parts[0]);
-        style.border_top_right_radius = style.border_bottom_left_radius = parseFloat(parts[1]);
-        style.border_bottom_right_radius = parseFloat(parts[2]);
+        style.border_top_left_radius = parseValue(parts[0]);
+        style.border_top_right_radius = style.border_bottom_left_radius = parseValue(parts[1]);
+        style.border_bottom_right_radius = parseValue(parts[2]);
     } else if (parts.size() >= 4) {
-        style.border_top_left_radius = parseFloat(parts[0]);
-        style.border_top_right_radius = parseFloat(parts[1]);
-        style.border_bottom_right_radius = parseFloat(parts[2]);
-        style.border_bottom_left_radius = parseFloat(parts[3]);
+        style.border_top_left_radius = parseValue(parts[0]);
+        style.border_top_right_radius = parseValue(parts[1]);
+        style.border_bottom_right_radius = parseValue(parts[2]);
+        style.border_bottom_left_radius = parseValue(parts[3]);
     }
 }
 

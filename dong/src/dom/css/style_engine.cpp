@@ -82,27 +82,35 @@ void applyRuleTextProperties(const ComputedStyle& rs, ComputedStyle& computed) {
 void applyRuleBorderRadius(const ComputedStyle& rs, ComputedStyle& computed) {
     if (rs.border_radius != 0.0f) {
         computed.border_radius = rs.border_radius;
-        computed.border_top_left_radius = rs.border_radius;
-        computed.border_top_right_radius = rs.border_radius;
-        computed.border_bottom_left_radius = rs.border_radius;
-        computed.border_bottom_right_radius = rs.border_radius;
+        CSSValue v(rs.border_radius, CSSValue::Unit::PIXEL);
+        computed.border_top_left_radius = v;
+        computed.border_top_right_radius = v;
+        computed.border_bottom_left_radius = v;
+        computed.border_bottom_right_radius = v;
     }
-    if (rs.border_top_left_radius != 0.0f)
+    if (rs.border_top_left_radius.isSet())
         computed.border_top_left_radius = rs.border_top_left_radius;
-    if (rs.border_top_right_radius != 0.0f)
+    if (rs.border_top_right_radius.isSet())
         computed.border_top_right_radius = rs.border_top_right_radius;
-    if (rs.border_bottom_left_radius != 0.0f)
+    if (rs.border_bottom_left_radius.isSet())
         computed.border_bottom_left_radius = rs.border_bottom_left_radius;
-    if (rs.border_bottom_right_radius != 0.0f)
+    if (rs.border_bottom_right_radius.isSet())
         computed.border_bottom_right_radius = rs.border_bottom_right_radius;
 
     if (computed.border_radius == 0.0f) {
-        const float max_corner = std::max(
-            std::max(computed.border_top_left_radius, computed.border_top_right_radius),
-            std::max(computed.border_bottom_left_radius, computed.border_bottom_right_radius)
-        );
-        if (max_corner > 0.0f) {
-            computed.border_radius = max_corner;
+        // Update legacy border_radius from individual corners (for backwards compatibility)
+        // Use pixel value if all corners are pixels
+        if (computed.border_top_left_radius.isPixel() &&
+            computed.border_top_right_radius.isPixel() &&
+            computed.border_bottom_left_radius.isPixel() &&
+            computed.border_bottom_right_radius.isPixel()) {
+            const float max_corner = std::max(
+                std::max(computed.border_top_left_radius.value, computed.border_top_right_radius.value),
+                std::max(computed.border_bottom_left_radius.value, computed.border_bottom_right_radius.value)
+            );
+            if (max_corner > 0.0f) {
+                computed.border_radius = max_corner;
+            }
         }
     }
 }

@@ -89,7 +89,7 @@
 - [x] `z-index: auto` vs `0` 区分（`auto` 不创建堆叠上下文）
 - [x] `font-size` 关键字值（`xx-small`~`xx-large`, `smaller`/`larger`）
 - [x] `border-width` 关键字值（`thin`/`medium`/`thick`）
-- [ ] `border-radius` 百分比值修复（当前 `50%` 解析为 `50px`）
+- [x] `border-radius` 百分比值修复（当前 `50%` 解析为 `50px`）
 - [x] `opacity` 百分比值支持（`opacity: 50%`）
 - [x] `gap` 双值语法 + 百分比值 + `calc()` 支持（双值语法已实现）
 - [x] `overflow` 双值语法（`overflow: hidden auto`）- 有单独的 overflow-x/overflow-y
@@ -123,12 +123,12 @@
 - [x] Element: `children` (as property), `firstElementChild`/`lastElementChild`, `previousElementSibling`/`nextElementSibling`
 - [x] Element: `hasAttribute()`/`removeAttribute()`（草案声称支持但未绑定）
 - [x] Element: `scrollTop`/`scrollLeft`, `clientWidth`/`clientHeight`, `offsetWidth`/`offsetHeight`/`offsetTop`/`offsetLeft`
-- [ ] Element: `before()`/`after()`/`replaceWith()`/`prepend()`/`append()`
-- [ ] Element: `tabIndex` 属性
+- [x] Element: `before()`/`after()`/`replaceWith()`/`prepend()`/`append()`
+- [x] Element: `tabIndex` 属性
 - [ ] HTMLDialogElement: `open`, `showModal()`, `show()`, `close()`, `returnValue`
 - [ ] HTMLDetailsElement: `open` 属性
-- [ ] HTMLAnchorElement: `href`, `target`
-- [ ] HTMLImageElement: `src`, `alt`, `naturalWidth`/`naturalHeight`, `complete`
+- [x] HTMLAnchorElement: `href`, `target`
+- [x] HTMLImageElement: `src`, `alt`, `naturalWidth`/`naturalHeight`, `complete`
 - [x] Document: `head`, `activeElement`, `createDocumentFragment()`, `readyState`
 
 ### 事件系统补充

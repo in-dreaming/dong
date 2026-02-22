@@ -1453,7 +1453,39 @@ void Painter::paintBackgroundAndBorder(const Rect& rect,
                                        DisplayListBuilder& builder) {
     bool has_background = !style.background_color.empty() && style.background_color != "transparent";
     bool has_border = (bw.top > 0.0f || bw.right > 0.0f || bw.bottom > 0.0f || bw.left > 0.0f);
+
+    // Resolve border-radius values (support percentages relative to element size)
+    // For border-radius, percentages are relative to the corresponding dimension:
+    // horizontal radii use width, vertical radii use height
+    // For simplicity, we'll use a single radius value (the average of width/height for percentage)
     float radius = style.border_radius;
+
+    // Check if any corner has a set value (which might be percentage)
+    if (style.border_top_left_radius.isSet() || style.border_top_right_radius.isSet() ||
+        style.border_bottom_left_radius.isSet() || style.border_bottom_right_radius.isSet()) {
+
+        // Helper to resolve a corner radius value
+        auto resolveRadius = [&](const dom::CSSValue& val) -> float {
+            if (!val.isSet()) return radius; // Fall back to legacy value
+            if (val.isPercent()) {
+                // For percentage border-radius, use the average of width and height
+                // (In full CSS spec, horizontal and vertical radii can differ, but we use circular arcs)
+                float ref_size = (rect.width + rect.height) * 0.5f;
+                return val.value * ref_size / 100.0f;
+            } else if (val.isPixel()) {
+                return val.value;
+            }
+            return 0.0f;
+        };
+
+        // For now, use the maximum of all four corners as the single radius
+        // (Painter currently doesn't support per-corner radii)
+        float tl = resolveRadius(style.border_top_left_radius);
+        float tr = resolveRadius(style.border_top_right_radius);
+        float bl = resolveRadius(style.border_bottom_left_radius);
+        float br = resolveRadius(style.border_bottom_right_radius);
+        radius = std::max(std::max(tl, tr), std::max(bl, br));
+    }
 
     if (rect.width <= 0.0f || rect.height <= 0.0f) return;
 

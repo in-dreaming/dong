@@ -245,6 +245,141 @@ static JSValue elem_cloneNode(JSContext* ctx, JSValueConst this_val, int argc, J
 }
 
 // ============================================================
+// Modern DOM manipulation methods (Element.before/after/etc.)
+// ============================================================
+
+// Helper to convert JSValue to DOM node or text node
+static dom::DOMNodePtr convertToNode(JSContext* ctx, JSValueConst val, dong::dom::Manager* dom_mgr) {
+    (void)dom_mgr; // Not needed since we create text nodes directly
+
+    // If it's already a node, return it
+    auto node = JSBindings::getNodeOpaque(ctx, val);
+    if (node) return node;
+
+    // If it's a string, create a text node
+    if (JS_IsString(val)) {
+        const char* str = JS_ToCString(ctx, val);
+        if (str) {
+            auto text_node = std::make_shared<dom::DOMNode>(dom::DOMNode::NodeType::TEXT, "");
+            text_node->setNodeValue(str);
+            JS_FreeCString(ctx, str);
+            return text_node;
+        }
+    }
+
+    return nullptr;
+}
+
+static JSValue elem_before(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_UNDEFINED;
+
+    auto parent = node->getParentNode();
+    if (!parent) return JS_UNDEFINED;
+
+    auto* bindings = getBindingsFromCtx(ctx);
+    if (!bindings || !bindings->dom_manager_) return JS_UNDEFINED;
+
+    // Insert each argument before this node
+    for (int i = 0; i < argc; ++i) {
+        auto newNode = convertToNode(ctx, argv[i], bindings->dom_manager_);
+        if (newNode) {
+            parent->insertBefore(newNode, node);
+        }
+    }
+
+    return JS_UNDEFINED;
+}
+
+static JSValue elem_after(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_UNDEFINED;
+
+    auto parent = node->getParentNode();
+    if (!parent) return JS_UNDEFINED;
+
+    auto* bindings = getBindingsFromCtx(ctx);
+    if (!bindings || !bindings->dom_manager_) return JS_UNDEFINED;
+
+    // Find the next sibling to insert before
+    auto nextSibling = node->getNextSibling();
+
+    // Insert each argument after this node
+    for (int i = 0; i < argc; ++i) {
+        auto newNode = convertToNode(ctx, argv[i], bindings->dom_manager_);
+        if (newNode) {
+            parent->insertBefore(newNode, nextSibling);
+        }
+    }
+
+    return JS_UNDEFINED;
+}
+
+static JSValue elem_replaceWith(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_UNDEFINED;
+
+    auto parent = node->getParentNode();
+    if (!parent) return JS_UNDEFINED;
+
+    auto* bindings = getBindingsFromCtx(ctx);
+    if (!bindings || !bindings->dom_manager_) return JS_UNDEFINED;
+
+    auto nextSibling = node->getNextSibling();
+
+    // Insert all new nodes before this node
+    for (int i = 0; i < argc; ++i) {
+        auto newNode = convertToNode(ctx, argv[i], bindings->dom_manager_);
+        if (newNode) {
+            parent->insertBefore(newNode, node);
+        }
+    }
+
+    // Remove this node
+    parent->removeChild(node);
+
+    return JS_UNDEFINED;
+}
+
+static JSValue elem_prepend(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_UNDEFINED;
+
+    auto* bindings = getBindingsFromCtx(ctx);
+    if (!bindings || !bindings->dom_manager_) return JS_UNDEFINED;
+
+    auto firstChild = node->getFirstChild();
+
+    // Insert each argument at the beginning
+    for (int i = 0; i < argc; ++i) {
+        auto newNode = convertToNode(ctx, argv[i], bindings->dom_manager_);
+        if (newNode) {
+            node->insertBefore(newNode, firstChild);
+        }
+    }
+
+    return JS_UNDEFINED;
+}
+
+static JSValue elem_append(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_UNDEFINED;
+
+    auto* bindings = getBindingsFromCtx(ctx);
+    if (!bindings || !bindings->dom_manager_) return JS_UNDEFINED;
+
+    // Append each argument to the end
+    for (int i = 0; i < argc; ++i) {
+        auto newNode = convertToNode(ctx, argv[i], bindings->dom_manager_);
+        if (newNode) {
+            node->appendChild(newNode);
+        }
+    }
+
+    return JS_UNDEFINED;
+}
+
+// ============================================================
 // Element interface methods
 // ============================================================
 
@@ -368,6 +503,44 @@ static JSValue elem_dispatchEvent(JSContext* ctx, JSValueConst this_val, int arg
 
     JS_FreeCString(ctx, type);
     return JS_TRUE;
+}
+
+// ============================================================
+// tabIndex property
+// ============================================================
+
+static JSValue elem_getTabIndex(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc; (void)argv;
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_NewInt32(ctx, -1);
+
+    std::string tabindex = node->getAttribute("tabindex");
+    if (tabindex.empty()) {
+        // Default tabIndex is -1 for non-focusable elements, 0 for focusable elements
+        // For simplicity, return -1 if not explicitly set
+        return JS_NewInt32(ctx, -1);
+    }
+
+    try {
+        int value = std::stoi(tabindex);
+        return JS_NewInt32(ctx, value);
+    } catch (...) {
+        return JS_NewInt32(ctx, -1);
+    }
+}
+
+static JSValue elem_setTabIndex(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_UNDEFINED;
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_UNDEFINED;
+
+    int32_t value;
+    if (JS_ToInt32(ctx, &value, argv[0]) < 0) {
+        return JS_UNDEFINED;
+    }
+
+    node->setAttribute("tabindex", std::to_string(value));
+    return JS_UNDEFINED;
 }
 
 static JSValue elem_getHidden(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
@@ -902,6 +1075,18 @@ void bindElementProperties(JSContext* ctx, JSValue elem, const dom::DOMNodePtr& 
     JS_SetPropertyStr(ctx, elem, "removeAttribute",
         JS_NewCFunction(ctx, elem_removeAttribute, "removeAttribute", 1));
 
+    // Modern DOM manipulation methods
+    JS_SetPropertyStr(ctx, elem, "before",
+        JS_NewCFunction(ctx, elem_before, "before", 0));
+    JS_SetPropertyStr(ctx, elem, "after",
+        JS_NewCFunction(ctx, elem_after, "after", 0));
+    JS_SetPropertyStr(ctx, elem, "replaceWith",
+        JS_NewCFunction(ctx, elem_replaceWith, "replaceWith", 0));
+    JS_SetPropertyStr(ctx, elem, "prepend",
+        JS_NewCFunction(ctx, elem_prepend, "prepend", 0));
+    JS_SetPropertyStr(ctx, elem, "append",
+        JS_NewCFunction(ctx, elem_append, "append", 0));
+
     // hidden property
     DEFINE_GETTER_SETTER(ctx, elem, "hidden", elem_getHidden, elem_setHidden);
 
@@ -919,6 +1104,118 @@ void bindElementProperties(JSContext* ctx, JSValue elem, const dom::DOMNodePtr& 
     DEFINE_GETTER(ctx, elem, "offsetHeight", elem_getOffsetHeight);
     DEFINE_GETTER(ctx, elem, "offsetTop", elem_getOffsetTop);
     DEFINE_GETTER(ctx, elem, "offsetLeft", elem_getOffsetLeft);
+
+    // tabIndex property
+    DEFINE_GETTER_SETTER(ctx, elem, "tabIndex", elem_getTabIndex, elem_setTabIndex);
+}
+
+// ============================================================
+// HTMLAnchorElement properties
+// ============================================================
+
+static JSValue anchor_getHref(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc; (void)argv;
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_UNDEFINED;
+    std::string href = node->getAttribute("href");
+    return JS_NewString(ctx, href.c_str());
+}
+
+static JSValue anchor_setHref(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_UNDEFINED;
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_UNDEFINED;
+    const char* str = JS_ToCString(ctx, argv[0]);
+    if (str) {
+        node->setAttribute("href", str);
+        JS_FreeCString(ctx, str);
+    }
+    return JS_UNDEFINED;
+}
+
+static JSValue anchor_getTarget(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc; (void)argv;
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_UNDEFINED;
+    std::string target = node->getAttribute("target");
+    return JS_NewString(ctx, target.c_str());
+}
+
+static JSValue anchor_setTarget(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_UNDEFINED;
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_UNDEFINED;
+    const char* str = JS_ToCString(ctx, argv[0]);
+    if (str) {
+        node->setAttribute("target", str);
+        JS_FreeCString(ctx, str);
+    }
+    return JS_UNDEFINED;
+}
+
+// ============================================================
+// HTMLImageElement properties
+// ============================================================
+
+static JSValue img_getSrc(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc; (void)argv;
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_UNDEFINED;
+    std::string src = node->getAttribute("src");
+    return JS_NewString(ctx, src.c_str());
+}
+
+static JSValue img_setSrc(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_UNDEFINED;
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_UNDEFINED;
+    const char* str = JS_ToCString(ctx, argv[0]);
+    if (str) {
+        node->setAttribute("src", str);
+        JS_FreeCString(ctx, str);
+    }
+    return JS_UNDEFINED;
+}
+
+static JSValue img_getAlt(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc; (void)argv;
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_UNDEFINED;
+    std::string alt = node->getAttribute("alt");
+    return JS_NewString(ctx, alt.c_str());
+}
+
+static JSValue img_setAlt(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_UNDEFINED;
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_UNDEFINED;
+    const char* str = JS_ToCString(ctx, argv[0]);
+    if (str) {
+        node->setAttribute("alt", str);
+        JS_FreeCString(ctx, str);
+    }
+    return JS_UNDEFINED;
+}
+
+static JSValue img_getNaturalWidth(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc; (void)argv;
+    // TODO: Return actual loaded image width
+    // For now, return 0 (image dimensions not yet tracked)
+    return JS_NewInt32(ctx, 0);
+}
+
+static JSValue img_getNaturalHeight(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc; (void)argv;
+    // TODO: Return actual loaded image height
+    // For now, return 0 (image dimensions not yet tracked)
+    return JS_NewInt32(ctx, 0);
+}
+
+static JSValue img_getComplete(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc; (void)argv;
+    // TODO: Track image load status
+    // For now, always return true (images are loaded synchronously)
+    return JS_NewBool(ctx, true);
 }
 
 void bindHTMLElementProperties(JSContext* ctx, JSValue elem, const dom::DOMNodePtr& node, JSBindings* bindings) {
@@ -939,6 +1236,17 @@ void bindHTMLElementProperties(JSContext* ctx, JSValue elem, const dom::DOMNodeP
         DEFINE_GETTER_SETTER(ctx, elem, "name", input_getName, input_setName);
         DEFINE_GETTER_SETTER(ctx, elem, "selectedIndex", select_getSelectedIndex, select_setSelectedIndex);
         DEFINE_GETTER(ctx, elem, "options", select_getOptions);
+    } else if (tag == "a") {
+        // Anchor element bindings
+        DEFINE_GETTER_SETTER(ctx, elem, "href", anchor_getHref, anchor_setHref);
+        DEFINE_GETTER_SETTER(ctx, elem, "target", anchor_getTarget, anchor_setTarget);
+    } else if (tag == "img") {
+        // Image element bindings
+        DEFINE_GETTER_SETTER(ctx, elem, "src", img_getSrc, img_setSrc);
+        DEFINE_GETTER_SETTER(ctx, elem, "alt", img_getAlt, img_setAlt);
+        DEFINE_GETTER(ctx, elem, "naturalWidth", img_getNaturalWidth);
+        DEFINE_GETTER(ctx, elem, "naturalHeight", img_getNaturalHeight);
+        DEFINE_GETTER(ctx, elem, "complete", img_getComplete);
     }
 }
 
