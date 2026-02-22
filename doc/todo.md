@@ -1,3 +1,8 @@
+注意
+- 完成的任务需要标注完成。
+- 需要在examples/data/tests下添加测试用例。使用dong/scripts/tools/run_baseline_compare.py进行基准对比验证feature实现是否正确。
+
+
 # Dong Engine - Web标准对齐 TODO
 
 基于 gap analysis 整理的待办事项，按优先级分组。
@@ -10,7 +15,7 @@
 
 ### 表单基础可用性
 
-- [ ] `<select>` 下拉弹出渲染（当前无下拉弹出层、无选项列表渲染）
+- [x] `<select>` 下拉弹出渲染 - 已实现下拉框展开/收起、选项点击、键盘导航（方向键、Enter、Escape），支持 `selectedIndex`/`value`/`options` 属性，触发 `change` 事件。测试用例：`test_select_keyboard.html`、`test_select_basic.html`
 
 ---
 

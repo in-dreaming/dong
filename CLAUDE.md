@@ -257,6 +257,70 @@ dong_engine_eval_script(dong_engine_t* engine, const char* code);
 ### Output Paths
 Use absolute paths for output directories to avoid nested `zig-out/zig-out/` paths.
 
+## Form Elements
+
+Dong supports standard HTML form elements with full interactive functionality:
+
+### Select Elements
+
+The `<select>` element provides dropdown list functionality with complete interaction support:
+
+**Features**:
+- Click to expand/collapse dropdown
+- Option selection via mouse click
+- Keyboard navigation (Arrow keys, Enter, Escape)
+- JavaScript property access (`selectedIndex`, `value`, `options`)
+- `change` event dispatched on selection
+- CSS styling (border, background, padding, focus states)
+
+**Example**:
+```html
+<select id="country">
+  <option value="us">United States</option>
+  <option value="uk">United Kingdom</option>
+  <option value="ca">Canada</option>
+</select>
+
+<script>
+  const select = document.getElementById('country');
+  select.addEventListener('change', (e) => {
+    console.log('Selected:', e.target.value);
+  });
+
+  // JavaScript API
+  console.log(select.selectedIndex);  // Current selected index
+  console.log(select.value);          // Current selected value
+  console.log(select.options.length); // Number of options
+</script>
+```
+
+**Implementation**:
+- State management: `src/dom/select_element.hpp/cpp`
+- Rendering: `src/render/painter/painter_select.cpp`
+- Event routing: `src/core/engine_view.cpp`
+
+**Test cases**: `examples/data/tests/test_select_keyboard.html`, `test_select_basic.html`
+
+### Input Elements
+
+The `<input>` and `<textarea>` elements support text editing with full interaction:
+
+**Features**:
+- Text input with cursor positioning
+- Selection (copy/paste-ready)
+- Keyboard editing (Backspace, Delete, Arrow keys)
+- `maxlength` validation
+- `placeholder` rendering
+- `readonly` and `disabled` states
+
+**Implementation**: `src/dom/input_element.hpp/cpp`
+
+### Other Form Elements
+
+- `<button>` - Click events, focus management
+- Checkbox/Radio - Visual state, `checked` property
+- `<label>` - `for` attribute association
+
 ## Third-Party Dependencies
 
 All built via CMake, orchestrated by Zig:
