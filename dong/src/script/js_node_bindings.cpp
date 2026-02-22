@@ -1169,11 +1169,38 @@ static JSValue img_setSrc(JSContext* ctx, JSValueConst this_val, int argc, JSVal
     if (argc < 1) return JS_UNDEFINED;
     auto node = JSBindings::getNodeOpaque(ctx, this_val);
     if (!node) return JS_UNDEFINED;
+
     const char* str = JS_ToCString(ctx, argv[0]);
-    if (str) {
-        node->setAttribute("src", str);
-        JS_FreeCString(ctx, str);
+    if (!str) return JS_UNDEFINED;
+
+    std::string src(str);
+    JS_FreeCString(ctx, str);
+
+    // Set the src attribute
+    node->setAttribute("src", src);
+
+    // Dispatch load/error event
+    // In real browsers, these events are async, but for simplicity we dispatch synchronously
+    // TODO: Make async using setTimeout or actual image loading callback
+    auto* bindings = getBindingsFromCtx(ctx);
+    if (bindings) {
+        uint64_t nid = bindings->getNodeIdFor(node);
+        if (!nid) {
+            // Ensure the node has an ID
+            JSValue tmp = bindings->createJSElement(ctx, node);
+            JS_FreeValue(ctx, tmp);
+            nid = bindings->getNodeIdFor(node);
+        }
+
+        if (nid) {
+            // Determine event type
+            // For now: empty src = error, non-empty = load
+            // TODO: Check actual image file existence/loading status
+            const char* event_type = src.empty() ? "error" : "load";
+            bindings->dispatchSimpleEvent(nid, event_type);
+        }
     }
+
     return JS_UNDEFINED;
 }
 

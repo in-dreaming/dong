@@ -91,12 +91,12 @@ private:
 
     // 收集所有可聚焦元素（按 tab 顺序）
     void collectFocusableElements(DOMNodePtr node, std::vector<DOMNodePtr>& out);
-    
+
     // 触发 focus 事件
-    void dispatchFocusEvent(DOMNodePtr element);
-    
+    void dispatchFocusEvent(DOMNodePtr element, DOMNodePtr related_target = nullptr);
+
     // 触发 blur 事件
-    void dispatchBlurEvent(DOMNodePtr element);
+    void dispatchBlurEvent(DOMNodePtr element, DOMNodePtr related_target = nullptr);
 };
 
 } // namespace dong::dom

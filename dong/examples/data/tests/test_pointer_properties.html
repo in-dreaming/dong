@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        #test-area {
+            width: 400px;
+            height: 300px;
+            background-color: #f0f0f0;
+            border: 3px solid #333;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            user-select: none;
+        }
+        #results {
+            margin-top: 20px;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        .result-item {
+            padding: 5px;
+            margin: 3px 0;
+            background-color: #e8f5e9;
+            border-left: 4px solid #4caf50;
+        }
+        .error {
+            background-color: #ffebee;
+            border-left-color: #f44336;
+        }
+    </style>
+</head>
+<body>
+    <h1>PointerEvent Properties Test</h1>
+    <p>Click, move mouse, and interact with the test area below:</p>
+
+    <div id="test-area">
+        Click or move mouse here
+    </div>
+
+    <div id="results"></div>
+
+    <script>
+        const testArea = document.getElementById('test-area');
+        const results = document.getElementById('results');
+        let eventCount = 0;
+
+        function addResult(msg, isError) {
+            const div = document.createElement('div');
+            div.className = 'result-item' + (isError ? ' error' : '');
+            div.textContent = `[${++eventCount}] ${msg}`;
+            results.appendChild(div);
+
+            // Keep only last 20 results
+            while (results.children.length > 20) {
+                results.removeChild(results.firstChild);
+            }
+        }
+
+        function checkPointerProperties(e) {
+            const checks = [];
+
+            // Check pointerId exists
+            if (typeof e.pointerId !== 'undefined') {
+                checks.push(`pointerId=${e.pointerId}`);
+            } else {
+                checks.push(`pointerId=MISSING`);
+            }
+
+            // Check pointerType exists
+            if (typeof e.pointerType !== 'undefined') {
+                checks.push(`pointerType="${e.pointerType}"`);
+            } else {
+                checks.push(`pointerType=MISSING`);
+            }
+
+            // Check pressure exists
+            if (typeof e.pressure !== 'undefined') {
+                checks.push(`pressure=${e.pressure.toFixed(2)}`);
+            } else {
+                checks.push(`pressure=MISSING`);
+            }
+
+            // Check isPrimary exists
+            if (typeof e.isPrimary !== 'undefined') {
+                checks.push(`isPrimary=${e.isPrimary}`);
+            } else {
+                checks.push(`isPrimary=MISSING`);
+            }
+
+            return checks.join(', ');
+        }
+
+        // Test mousedown event
+        testArea.addEventListener('mousedown', function(e) {
+            const props = checkPointerProperties(e);
+            addResult(`mousedown: ${props}`);
+        });
+
+        // Test mouseup event
+        testArea.addEventListener('mouseup', function(e) {
+            const props = checkPointerProperties(e);
+            addResult(`mouseup: ${props}`);
+        });
+
+        // Test mousemove event (throttled)
+        let lastMoveTime = 0;
+        testArea.addEventListener('mousemove', function(e) {
+            const now = Date.now();
+            if (now - lastMoveTime > 200) {  // Throttle to every 200ms
+                const props = checkPointerProperties(e);
+                addResult(`mousemove: ${props}`);
+                lastMoveTime = now;
+            }
+        });
+
+        // Test click event
+        testArea.addEventListener('click', function(e) {
+            const props = checkPointerProperties(e);
+            addResult(`click: ${props}`);
+
+            // Validate expected values
+            const hasAllProps =
+                typeof e.pointerId !== 'undefined' &&
+                typeof e.pointerType !== 'undefined' &&
+                typeof e.pressure !== 'undefined' &&
+                typeof e.isPrimary !== 'undefined';
+
+            if (hasAllProps) {
+                // Check for reasonable values
+                const valid =
+                    e.pointerId === 0 &&  // Mouse should be pointer 0
+                    e.pointerType === "mouse" &&
+                    e.isPrimary === true;
+
+                if (valid) {
+                    addResult('✓ All PointerEvent properties present and valid!', false);
+                } else {
+                    addResult('⚠ Properties present but values unexpected', true);
+                }
+            } else {
+                addResult('✗ Some PointerEvent properties missing!', true);
+            }
+        });
+
+        // Initial message
+        addResult('Test initialized. Waiting for mouse events...');
+    </script>
+</body>
+</html>

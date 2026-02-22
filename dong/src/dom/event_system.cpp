@@ -52,26 +52,41 @@ void EventDispatcher::removeEventListener(DOMNodePtr target, const std::string& 
     }
 }
 
-void EventDispatcher::dispatch(const Event& event) {
-    if (!event.target) return;
+void EventDispatcher::dispatch(const Event& orig_event) {
+    if (!orig_event.target) return;
+
+    // Create mutable copy to update current_target
+    Event event = orig_event;
 
     // Walk up the DOM tree and dispatch to all parents
     DOMNodePtr current = event.target;
-    
+
     while (current && !event.stopped) {
+        // Set currentTarget to the element currently handling the event
+        event.current_target = current;
+
         uintptr_t key = reinterpret_cast<uintptr_t>(current.get());
         auto it = listeners.find(key);
         if (it != listeners.end()) {
             auto& type_listeners = it->second;
             auto type_it = type_listeners.find(static_cast<int>(event.type));
-            
+
             if (type_it != type_listeners.end()) {
                 for (const auto& entry : type_it->second) {
+                    // Check both stopped and stopped_immediate
+                    if (event.stopped_immediate) {
+                        break;  // Stop calling any more listeners on this element
+                    }
                     if (!event.stopped) {
                         entry.callback(event);
                     }
                 }
             }
+        }
+
+        // stopImmediatePropagation also stops propagation to parent elements
+        if (event.stopped_immediate) {
+            break;
         }
 
         current = current->getParent();

@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        .test-area {
+            margin: 20px 0;
+            padding: 40px;
+            border: 2px solid #333;
+            background-color: #f0f0f0;
+            cursor: context-menu;
+        }
+        .test-area:hover {
+            background-color: #e0e0e0;
+        }
+        #log {
+            background-color: #fff;
+            padding: 15px;
+            border: 1px solid #ddd;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 14px;
+            margin-top: 20px;
+        }
+        .log-entry {
+            padding: 8px;
+            margin: 5px 0;
+            border-left: 4px solid #4caf50;
+            background-color: #e8f5e9;
+        }
+        .log-entry.contextmenu {
+            border-left-color: #ff9800;
+            background-color: #fff3e0;
+        }
+        .log-entry.prevented {
+            border-left-color: #f44336;
+            background-color: #ffebee;
+        }
+        .event-detail {
+            padding-left: 20px;
+            color: #666;
+            font-size: 13px;
+        }
+        .summary {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #e3f2fd;
+            border: 1px solid #2196f3;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            margin: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Contextmenu Event Test</h1>
+    <p><strong>Instructions:</strong> Right-click on the areas below to test contextmenu events.</p>
+
+    <div class="test-area" id="area1">
+        <h3>Area 1: Normal Context Menu</h3>
+        <p>Right-click here to trigger contextmenu event.</p>
+    </div>
+
+    <div class="test-area" id="area2">
+        <h3>Area 2: Prevented Context Menu</h3>
+        <p>Right-click here. The contextmenu event will be prevented with preventDefault().</p>
+    </div>
+
+    <div class="test-area" id="area3">
+        <h3>Area 3: Nested Elements</h3>
+        <p>Right-click on the <button id="nestedBtn">button</button> inside this area.</p>
+    </div>
+
+    <div>
+        <button id="clearBtn">Clear Log</button>
+    </div>
+
+    <div id="log"></div>
+    <div class="summary" id="summary"></div>
+
+    <script>
+        const log = document.getElementById('log');
+        const summary = document.getElementById('summary');
+
+        let eventCount = 0;
+        let contextmenuEvents = 0;
+        let preventedEvents = 0;
+
+        function getElementDesc(elem) {
+            if (!elem) return 'null';
+            let desc = elem.tagName.toLowerCase();
+            if (elem.id) desc += '#' + elem.id;
+            if (elem.className) desc += '.' + elem.className.split(' ')[0];
+            return desc;
+        }
+
+        function addLog(eventType, event, prevented = false) {
+            eventCount++;
+            if (eventType === 'contextmenu') {
+                contextmenuEvents++;
+                if (prevented) preventedEvents++;
+            }
+
+            const div = document.createElement('div');
+            div.className = 'log-entry';
+            if (eventType === 'contextmenu') div.className += ' contextmenu';
+            if (prevented) div.className += ' prevented';
+
+            const targetDesc = getElementDesc(event.target);
+            const currentTargetDesc = getElementDesc(event.currentTarget);
+
+            let msg = `[${eventCount}] ${eventType} on ${targetDesc}`;
+            if (prevented) msg += ' [PREVENTED]';
+            div.textContent = msg;
+
+            const detail = document.createElement('div');
+            detail.className = 'event-detail';
+            detail.innerHTML = `
+                currentTarget: ${currentTargetDesc}<br>
+                button: ${event.button}<br>
+                clientX: ${event.clientX}, clientY: ${event.clientY}<br>
+                ctrlKey: ${event.ctrlKey}, shiftKey: ${event.shiftKey}, altKey: ${event.altKey}<br>
+                cancelable: ${event.cancelable}<br>
+                defaultPrevented: ${event.defaultPrevented}
+            `;
+            div.appendChild(detail);
+
+            log.appendChild(div);
+
+            // Keep only last 20 entries
+            while (log.children.length > 20) {
+                log.removeChild(log.firstChild);
+            }
+
+            // Auto scroll to bottom
+            log.scrollTop = log.scrollHeight;
+
+            updateSummary();
+        }
+
+        function updateSummary() {
+            const hasContextmenu = contextmenuEvents > 0;
+            const preventRate = contextmenuEvents > 0 ? ((preventedEvents / contextmenuEvents) * 100).toFixed(0) : 0;
+
+            summary.innerHTML = `
+                <h3>Test Summary</h3>
+                <p><strong>Total events:</strong> ${eventCount}</p>
+                <p><strong>Contextmenu events:</strong> ${contextmenuEvents}</p>
+                <p><strong>Prevented events:</strong> ${preventedEvents} (${preventRate}%)</p>
+                ${hasContextmenu ?
+                    '<p style="color: green; font-weight: bold;">✓ contextmenu event is working!</p>' :
+                    '<p style="color: red; font-weight: bold;">✗ No contextmenu detected yet. Try right-clicking.</p>'
+                }
+            `;
+        }
+
+        // Area 1: Normal contextmenu
+        document.getElementById('area1').addEventListener('contextmenu', function(e) {
+            addLog('contextmenu', e, false);
+        });
+
+        // Area 2: Prevented contextmenu
+        document.getElementById('area2').addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+            addLog('contextmenu', e, true);
+        });
+
+        // Area 3: Nested elements
+        document.getElementById('area3').addEventListener('contextmenu', function(e) {
+            addLog('contextmenu', e, false);
+        });
+
+        document.getElementById('nestedBtn').addEventListener('contextmenu', function(e) {
+            addLog('contextmenu', e, false);
+            // Don't stop propagation - let it bubble to area3
+        });
+
+        // Clear button
+        document.getElementById('clearBtn').addEventListener('click', function() {
+            log.innerHTML = '';
+            eventCount = 0;
+            contextmenuEvents = 0;
+            preventedEvents = 0;
+            updateSummary();
+        });
+
+        // Also log mousedown and click for comparison
+        document.getElementById('area1').addEventListener('mousedown', function(e) {
+            if (e.button === 2) {
+                addLog('mousedown (right)', e);
+            }
+        });
+
+        // Initial message
+        const initial = document.createElement('div');
+        initial.className = 'log-entry';
+        initial.textContent = 'Test initialized. Right-click on the areas above.';
+        log.appendChild(initial);
+
+        updateSummary();
+    </script>
+</body>
+</html>

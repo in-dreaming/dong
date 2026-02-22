@@ -990,6 +990,7 @@ fn buildDongCore(
             "src/script/script_engine.cpp",
             "src/script/js_bindings.cpp",
             "src/script/js_node_bindings.cpp",
+            "src/script/js_observer_bindings.cpp",
             // Render (platform-agnostic)
             "src/render/painter.cpp",
             "src/render/painter/painter_media.cpp",

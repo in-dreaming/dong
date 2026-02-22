@@ -847,6 +847,7 @@ void StyleEngine::processGlobalKeywords(DOMNodePtr node, DOMNodePtr parent) {
         else if (prop == "text-transform") computed.text_transform = kInitial.text_transform;
         else if (prop == "word-break") computed.word_break = kInitial.word_break;
         else if (prop == "overflow-wrap") computed.overflow_wrap = kInitial.overflow_wrap;
+        else if (prop == "tab-size") computed.tab_size = kInitial.tab_size;
 
         // Non-inheritable properties used by tests
         else if (prop == "border") {
@@ -895,7 +896,7 @@ void StyleEngine::processGlobalKeywords(DOMNodePtr node, DOMNodePtr parent) {
         "color", "font-family", "font-size", "font-weight", "font-style",
         "text-align", "line-height", "letter-spacing", "word-spacing",
         "white-space", "direction", "cursor", "visibility",
-        "text-indent", "text-transform", "word-break", "overflow-wrap"
+        "text-indent", "text-transform", "word-break", "overflow-wrap", "tab-size"
     };
 
     // Process each global keyword property
@@ -941,6 +942,7 @@ void StyleEngine::copyPropertyFromParent(const std::string& prop,
     else if (prop == "text-transform") child_style.text_transform = parent_style.text_transform;
     else if (prop == "word-break") child_style.word_break = parent_style.word_break;
     else if (prop == "overflow-wrap") child_style.overflow_wrap = parent_style.overflow_wrap;
+    else if (prop == "tab-size") child_style.tab_size = parent_style.tab_size;
     // Non-inheritable properties
     else if (prop == "border") {
         // Copy the full border shorthand + per-side overrides.
@@ -1016,6 +1018,7 @@ void StyleEngine::inheritFromParent(DOMNodePtr node) {
     if (!computed.isExplicitlySet("text-transform")) computed.text_transform = parent_style.text_transform;
     if (!computed.isExplicitlySet("word-break")) computed.word_break = parent_style.word_break;
     if (!computed.isExplicitlySet("overflow-wrap")) computed.overflow_wrap = parent_style.overflow_wrap;
+    if (!computed.isExplicitlySet("tab-size")) computed.tab_size = parent_style.tab_size;
 }
 
 bool StyleEngine::matches(const std::string& selector, DOMNodePtr node) {

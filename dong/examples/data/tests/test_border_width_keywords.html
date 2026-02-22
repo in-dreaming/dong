@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Border Width Keywords Test</title>
+    <style>
+        body {
+            margin: 20px;
+            font-family: Arial, sans-serif;
+            background: white;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .test-box {
+            width: 150px;
+            height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-style: solid;
+            border-color: #333;
+            background: #f0f0f0;
+        }
+
+        .thin {
+            border-width: thin;
+        }
+
+        .medium {
+            border-width: medium;
+        }
+
+        .thick {
+            border-width: thick;
+        }
+
+        .mixed {
+            border-top-width: thin;
+            border-right-width: medium;
+            border-bottom-width: thick;
+            border-left-width: medium;
+            border-style: solid;
+            border-color: #333;
+        }
+
+        .shorthand {
+            border: thick solid #666;
+        }
+
+        .uppercase {
+            border-width: THIN;
+        }
+
+        .comparison {
+            display: flex;
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .px-1 {
+            border: 1px solid #00f;
+        }
+
+        .px-3 {
+            border: 3px solid #00f;
+        }
+
+        .px-5 {
+            border: 5px solid #00f;
+        }
+
+        h2 {
+            margin-top: 30px;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+
+        .label {
+            font-size: 12px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <h1 style="font-size: 20px;">Border Width Keywords Test</h1>
+
+    <h2>Keyword Values</h2>
+    <div class="container">
+        <div>
+            <div class="label">thin (should be 1px)</div>
+            <div class="test-box thin">thin</div>
+        </div>
+
+        <div>
+            <div class="label">medium (should be 3px)</div>
+            <div class="test-box medium">medium</div>
+        </div>
+
+        <div>
+            <div class="label">thick (should be 5px)</div>
+            <div class="test-box thick">thick</div>
+        </div>
+    </div>
+
+    <h2>Mixed Per-Side Keywords</h2>
+    <div>
+        <div class="label">top: thin, right: medium, bottom: thick, left: medium</div>
+        <div class="test-box mixed">mixed</div>
+    </div>
+
+    <h2>Shorthand with Keyword</h2>
+    <div>
+        <div class="label">border: thick solid #666</div>
+        <div class="test-box shorthand">shorthand</div>
+    </div>
+
+    <h2>Case Insensitivity</h2>
+    <div>
+        <div class="label">border-width: THIN (uppercase)</div>
+        <div class="test-box uppercase">THIN</div>
+    </div>
+
+    <h2>Comparison with Pixel Values</h2>
+    <div class="comparison">
+        <div>
+            <div class="label">1px</div>
+            <div class="test-box px-1">1px</div>
+        </div>
+        <div>
+            <div class="label">3px</div>
+            <div class="test-box px-3">3px</div>
+        </div>
+        <div>
+            <div class="label">5px</div>
+            <div class="test-box px-5">5px</div>
+        </div>
+    </div>
+</body>
+</html>

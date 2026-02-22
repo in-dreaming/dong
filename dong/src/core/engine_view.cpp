@@ -1313,6 +1313,12 @@ struct EngineView::Impl {
             auto hit = hitElementAt(last_mouse_x, last_mouse_y);
             setActiveElement(hit);
             dispatchMouseEvent("mousedown", last_mouse_x, last_mouse_y, button);
+
+            // Dispatch contextmenu event on right-click (button 2)
+            if (button == 2) {
+                dispatchMouseEvent("contextmenu", last_mouse_x, last_mouse_y, button);
+            }
+
             return;
         }
 
@@ -1425,11 +1431,93 @@ struct EngineView::Impl {
         constexpr uint32_t SDLK_DELETE = 127;
         constexpr uint32_t SDLK_LEFT = 0x40000050;
         constexpr uint32_t SDLK_RIGHT = 0x4000004F;
+        constexpr uint32_t SDLK_UP = 0x40000052;
+        constexpr uint32_t SDLK_DOWN = 0x40000051;
 
         if (pressed) {
             if (key_code == SDLK_TAB && focus_manager && dom_manager) {
                 focus_manager->moveFocus(dom_manager->getRoot(), false);
                 return;
+            }
+
+            // Handle select element keyboard navigation
+            if (focus_manager && dom_manager) {
+                auto focused = focus_manager->getFocusedElement();
+                if (focused && focused->getTagName() == "select") {
+                    bool handled = false;
+
+                    if (key_code == SDLK_UP || key_code == SDLK_DOWN) {
+                        // Get current selectedIndex
+                        int current_index = 0;
+                        if (focused->hasAttribute("data-selected-index")) {
+                            try {
+                                current_index = std::stoi(focused->getAttribute("data-selected-index"));
+                            } catch (...) {}
+                        }
+
+                        // Count option elements
+                        int option_count = 0;
+                        std::vector<dong::dom::DOMNodePtr> options;
+                        for (const auto& child : focused->getChildren()) {
+                            if (child->getTagName() == "option") {
+                                options.push_back(child);
+                                option_count++;
+                            }
+                        }
+
+                        if (option_count > 0) {
+                            // Update index
+                            if (key_code == SDLK_UP && current_index > 0) {
+                                current_index--;
+                                handled = true;
+                            } else if (key_code == SDLK_DOWN && current_index < option_count - 1) {
+                                current_index++;
+                                handled = true;
+                            }
+
+                            if (handled) {
+                                // Update selectedIndex attribute
+                                focused->setAttribute("data-selected-index", std::to_string(current_index));
+
+                                // Update value attribute from selected option
+                                if (current_index >= 0 && current_index < (int)options.size()) {
+                                    std::string value = options[current_index]->getAttribute("value");
+                                    if (value.empty()) {
+                                        // Use text content if no value attribute
+                                        value = options[current_index]->getTextContent();
+                                    }
+                                    focused->setAttribute("value", value);
+                                }
+
+                                markNeedsRepaint();
+
+                                // Dispatch change event
+                                if (js_bindings && script_engine) {
+                                    ensureJSBindingsInitialized();
+                                    uint64_t nid = js_bindings->getNodeIdFor(focused);
+                                    if (nid) {
+                                        js_bindings->dispatchSimpleEvent(nid, "change");
+                                    }
+                                }
+                            }
+                        }
+                    } else if (key_code == SDLK_RETURN) {
+                        // Enter key - just dispatch change event
+                        if (js_bindings && script_engine) {
+                            ensureJSBindingsInitialized();
+                            uint64_t nid = js_bindings->getNodeIdFor(focused);
+                            if (nid) {
+                                js_bindings->dispatchSimpleEvent(nid, "change");
+                            }
+                        }
+                        handled = true;
+                    }
+
+                    if (handled) {
+                        dispatchKeyEvent("keydown", key_code);
+                        return;
+                    }
+                }
             }
 
             // Handle Enter key in form inputs
@@ -1463,13 +1551,16 @@ struct EngineView::Impl {
                     auto* state = dong::dom::getInputState(focused);
                     if (state) {
                         bool handled = false;
+                        const char* input_type = nullptr;
 
                         if (key_code == SDLK_BACKSPACE) {
                             state->deleteBackward();
                             handled = true;
+                            input_type = "deleteContentBackward";
                         } else if (key_code == SDLK_DELETE) {
                             state->deleteForward();
                             handled = true;
+                            input_type = "deleteContentForward";
                         } else if (key_code == SDLK_LEFT) {
                             state->moveCursor(-1);
                             handled = true;
@@ -1481,6 +1572,15 @@ struct EngineView::Impl {
                         if (handled) {
                             focused->setAttribute("value", state->getValue());
                             markNeedsRepaint();
+
+                            // Dispatch input event for delete operations
+                            if (input_type && js_bindings && script_engine) {
+                                ensureJSBindingsInitialized();
+                                uint64_t nid = js_bindings->getNodeIdFor(focused);
+                                if (nid) {
+                                    js_bindings->dispatchInputEvent(nid, input_type, nullptr);
+                                }
+                            }
                         }
                     }
                 }
@@ -1512,12 +1612,12 @@ struct EngineView::Impl {
                 focused->setAttribute("value", state->getValue());
                 markNeedsRepaint();
 
-                // Dispatch input event
+                // Dispatch input event with inputType
                 if (js_bindings && script_engine) {
                     ensureJSBindingsInitialized();
                     uint64_t nid = js_bindings->getNodeIdFor(focused);
                     if (nid) {
-                        js_bindings->dispatchSimpleEvent(nid, "input");
+                        js_bindings->dispatchInputEvent(nid, "insertText", text);
                     }
                 }
             }

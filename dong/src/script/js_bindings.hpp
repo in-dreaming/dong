@@ -80,6 +80,12 @@ public:
     void dispatchSimpleEvent(uint64_t node_id, const char* type);
     void dispatchMediaEvent(uint64_t node_id, const char* type, double current_time, double duration, const char* message = nullptr);
 
+    // Input event dispatch with inputType and data properties
+    void dispatchInputEvent(uint64_t node_id, const char* input_type, const char* data = nullptr);
+
+    // Focus event dispatch with relatedTarget property
+    void dispatchFocusEvent(uint64_t node_id, const char* type, uint64_t related_node_id);
+
     bool hasEventListeners(uint64_t node_id, const char* type) const;
 
     // Bridge between JS listeners and C++ DOM EventDispatcher

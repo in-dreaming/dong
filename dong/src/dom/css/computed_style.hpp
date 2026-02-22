@@ -154,7 +154,8 @@ struct ComputedStyle {
     std::string unicode_bidi = "normal";
     float text_indent = 0.0f;
     int webkit_line_clamp = 0;
-    
+    int tab_size = 8;  // CSS tab-size property (default: 8 spaces)
+
     // Text shadow
     float text_shadow_offset_x = 0.0f;
     float text_shadow_offset_y = 0.0f;

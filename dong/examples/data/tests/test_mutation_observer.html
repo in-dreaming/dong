@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        #target {
+            padding: 20px;
+            border: 2px solid #333;
+            background-color: #f0f0f0;
+            margin: 20px 0;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 14px;
+            margin: 5px;
+        }
+        #log {
+            background-color: #fff;
+            padding: 15px;
+            border: 1px solid #ddd;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 13px;
+            margin-top: 20px;
+        }
+        .log-entry {
+            padding: 8px;
+            margin: 5px 0;
+            border-left: 4px solid #4caf50;
+            background-color: #e8f5e9;
+        }
+        .log-entry.attributes {
+            border-left-color: #2196f3;
+            background-color: #e3f2fd;
+        }
+        .log-entry.childList {
+            border-left-color: #ff9800;
+            background-color: #fff3e0;
+        }
+        .summary {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #e3f2fd;
+            border: 1px solid #2196f3;
+        }
+    </style>
+</head>
+<body>
+    <h1>MutationObserver Test</h1>
+    <p><strong>Instructions:</strong> Click buttons to modify the DOM and observe mutations.</p>
+
+    <div id="target" class="original-class" data-test="initial">
+        <p id="para1">Original paragraph</p>
+    </div>
+
+    <div>
+        <button id="addChild">Add Child</button>
+        <button id="removeChild">Remove Child</button>
+        <button id="modifyAttr">Modify Attribute</button>
+        <button id="changeClass">Change Class</button>
+        <button id="changeData">Change data-test</button>
+        <button id="clearLog">Clear Log</button>
+    </div>
+
+    <div id="log"></div>
+    <div class="summary" id="summary"></div>
+
+    <script>
+        const log = document.getElementById('log');
+        const summary = document.getElementById('summary');
+        const target = document.getElementById('target');
+
+        let mutationCount = 0;
+        let attributeMutations = 0;
+        let childListMutations = 0;
+        let childCounter = 0;
+
+        function addLog(mutation) {
+            mutationCount++;
+
+            const div = document.createElement('div');
+            div.className = 'log-entry ' + mutation.type;
+
+            let msg = `[${mutationCount}] ${mutation.type}`;
+
+            if (mutation.type === 'attributes') {
+                attributeMutations++;
+                msg += ` - ${mutation.attributeName}`;
+                if (mutation.oldValue !== null) {
+                    msg += ` (old: "${mutation.oldValue}")`;
+                }
+            } else if (mutation.type === 'childList') {
+                childListMutations++;
+                if (mutation.addedNodes.length > 0) {
+                    msg += ` - added ${mutation.addedNodes.length} node(s)`;
+                }
+                if (mutation.removedNodes.length > 0) {
+                    msg += ` - removed ${mutation.removedNodes.length} node(s)`;
+                }
+            }
+
+            div.textContent = msg;
+
+            // Add details
+            if (mutation.target) {
+                const detail = document.createElement('div');
+                detail.style.paddingLeft = '20px';
+                detail.style.color = '#666';
+                detail.style.fontSize = '12px';
+
+                let detailText = `target: ${mutation.target.nodeName}`;
+                if (mutation.target.id) detailText += `#${mutation.target.id}`;
+
+                detail.textContent = detailText;
+                div.appendChild(detail);
+            }
+
+            log.appendChild(div);
+
+            // Keep only last 30 entries
+            while (log.children.length > 30) {
+                log.removeChild(log.firstChild);
+            }
+
+            // Auto scroll to bottom
+            log.scrollTop = log.scrollHeight;
+
+            updateSummary();
+        }
+
+        function updateSummary() {
+            const hasMutations = mutationCount > 0;
+
+            summary.innerHTML = `
+                <h3>Test Summary</h3>
+                <p><strong>Total mutations:</strong> ${mutationCount}</p>
+                <p><strong>Attribute mutations:</strong> ${attributeMutations}</p>
+                <p><strong>ChildList mutations:</strong> ${childListMutations}</p>
+                ${hasMutations ?
+                    '<p style="color: green; font-weight: bold;">✓ MutationObserver is working!</p>' :
+                    '<p style="color: red; font-weight: bold;">✗ No mutations detected yet</p>'
+                }
+            `;
+        }
+
+        // Create MutationObserver
+        const observer = new MutationObserver(function(mutations, obs) {
+            console.log('MutationObserver callback called with', mutations.length, 'mutations');
+
+            mutations.forEach(function(mutation) {
+                addLog(mutation);
+            });
+        });
+
+        // Start observing
+        observer.observe(target, {
+            attributes: true,
+            attributeOldValue: true,
+            childList: true,
+            subtree: true
+        });
+
+        // Button handlers
+        document.getElementById('addChild').addEventListener('click', function() {
+            const newDiv = document.createElement('div');
+            newDiv.textContent = 'New child ' + (++childCounter);
+            newDiv.id = 'child' + childCounter;
+            target.appendChild(newDiv);
+        });
+
+        document.getElementById('removeChild').addEventListener('click', function() {
+            if (target.children.length > 1) {
+                target.removeChild(target.lastChild);
+            }
+        });
+
+        document.getElementById('modifyAttr').addEventListener('click', function() {
+            const currentTitle = target.getAttribute('title') || '';
+            target.setAttribute('title', 'Modified ' + Date.now());
+        });
+
+        document.getElementById('changeClass').addEventListener('click', function() {
+            if (target.className === 'original-class') {
+                target.className = 'modified-class';
+            } else {
+                target.className = 'original-class';
+            }
+        });
+
+        document.getElementById('changeData').addEventListener('click', function() {
+            const current = target.getAttribute('data-test');
+            target.setAttribute('data-test', current === 'initial' ? 'changed' : 'initial');
+        });
+
+        document.getElementById('clearLog').addEventListener('click', function() {
+            log.innerHTML = '';
+            mutationCount = 0;
+            attributeMutations = 0;
+            childListMutations = 0;
+            updateSummary();
+        });
+
+        // Initial message
+        const initial = document.createElement('div');
+        initial.className = 'log-entry';
+        initial.textContent = 'MutationObserver initialized and observing. Click buttons to test.';
+        log.appendChild(initial);
+
+        updateSummary();
+
+        // Test that the API exists
+        console.log('MutationObserver available:', typeof MutationObserver !== 'undefined');
+        console.log('Observer instance:', observer);
+    </script>
+</body>
+</html>

@@ -2286,10 +2286,11 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
     }
     
     // Set overflow for scroll containers
-    // When overflow is hidden/scroll/auto, Yoga should not expand to fit content
+    // When overflow is hidden/scroll/auto/clip, Yoga should not expand to fit content
+    // clip is similar to hidden but disables all scrolling mechanisms
     if (style.overflow == "scroll") {
         YGNodeStyleSetOverflow(yoga_node, YGOverflowScroll);
-    } else if (style.overflow == "hidden" || style.overflow == "auto") {
+    } else if (style.overflow == "hidden" || style.overflow == "auto" || style.overflow == "clip") {
         YGNodeStyleSetOverflow(yoga_node, YGOverflowHidden);
     } else {
         YGNodeStyleSetOverflow(yoga_node, YGOverflowVisible);

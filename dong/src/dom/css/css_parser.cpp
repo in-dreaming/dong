@@ -295,6 +295,10 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
         {"direction", [](const std::string& val, ComputedStyle& style) { style.direction = val; }},
         {"unicode-bidi", [](const std::string& val, ComputedStyle& style) { style.unicode_bidi = val; }},
         {"text-indent", [](const std::string& val, ComputedStyle& style) { style.text_indent = parseFloatHelper(val); }},
+        {"tab-size", [](const std::string& val, ComputedStyle& style) {
+            int tab_val = static_cast<int>(parseFloatHelper(val));
+            if (tab_val > 0) style.tab_size = tab_val;
+        }},
         {"-webkit-line-clamp", [](const std::string& val, ComputedStyle& style) { style.webkit_line_clamp = static_cast<int>(parseFloatHelper(val)); }},
         {"text-shadow", [](const std::string& val, ComputedStyle& style) { CSSParser::parseTextShadow(val, style); }},
         

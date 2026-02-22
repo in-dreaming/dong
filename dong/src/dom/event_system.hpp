@@ -56,7 +56,8 @@ struct Event {
     std::string type_name;
     DOMNodePtr target;
     DOMNodePtr current_target;
-    
+    DOMNodePtr related_target;  // For FocusEvent and MouseEvent
+
     // Mouse/Pointer event data
     int32_t mouse_x = 0;
     int32_t mouse_y = 0;
@@ -96,12 +97,17 @@ struct Event {
     
     // Custom data
     std::unordered_map<std::string, std::string> data;
-    
+
     bool stopped = false;
     bool prevented = false;
+    bool stopped_immediate = false;  // For stopImmediatePropagation()
 
     void stopPropagation() { stopped = true; }
     void preventDefault() { prevented = true; }
+    void stopImmediatePropagation() {
+        stopped = true;
+        stopped_immediate = true;
+    }
 };
 
 // Event listener callback

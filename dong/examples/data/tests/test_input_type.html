@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        #test-input {
+            width: 400px;
+            padding: 10px;
+            border: 2px solid #333;
+            font-size: 16px;
+            margin-bottom: 20px;
+        }
+        #log {
+            background-color: #f5f5f5;
+            padding: 15px;
+            border: 1px solid #ddd;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        .log-entry {
+            padding: 5px;
+            margin: 3px 0;
+            border-left: 3px solid #4caf50;
+            background-color: #e8f5e9;
+        }
+        .log-entry.error {
+            border-left-color: #f44336;
+            background-color: #ffebee;
+        }
+        .summary {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #e3f2fd;
+            border: 1px solid #2196f3;
+        }
+        .property {
+            margin: 5px 0;
+            padding-left: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>InputEvent.inputType Test</h1>
+    <p><strong>Instructions:</strong> Type text, press Backspace, and press Delete in the input field below.</p>
+
+    <input type="text" id="test-input" placeholder="Type here to test inputType..." value="">
+
+    <div id="log"></div>
+    <div class="summary" id="summary"></div>
+
+    <script>
+        const input = document.getElementById('test-input');
+        const log = document.getElementById('log');
+        const summary = document.getElementById('summary');
+
+        let eventCount = 0;
+        const inputTypes = new Set();
+
+        function addLog(msg, isError = false) {
+            const div = document.createElement('div');
+            div.className = 'log-entry' + (isError ? ' error' : '');
+            div.textContent = `[${++eventCount}] ${msg}`;
+            log.appendChild(div);
+
+            // Keep only last 30 entries
+            while (log.children.length > 30) {
+                log.removeChild(log.firstChild);
+            }
+
+            // Auto scroll to bottom
+            log.scrollTop = log.scrollHeight;
+        }
+
+        function updateSummary() {
+            const types = Array.from(inputTypes);
+            summary.innerHTML = `
+                <h3>Summary</h3>
+                <p><strong>Total events:</strong> ${eventCount}</p>
+                <p><strong>Unique inputType values:</strong></p>
+                <div class="property">${types.length > 0 ? types.join(', ') : 'None yet'}</div>
+            `;
+        }
+
+        input.addEventListener('input', function(e) {
+            // Check for InputEvent properties
+            const hasInputType = typeof e.inputType !== 'undefined';
+            const hasData = 'data' in e;
+
+            if (!hasInputType) {
+                addLog('✗ Missing inputType property!', true);
+                return;
+            }
+
+            inputTypes.add(e.inputType);
+
+            let msg = `InputEvent: inputType="${e.inputType}"`;
+
+            if (hasData) {
+                if (e.data !== null && e.data !== undefined) {
+                    msg += `, data="${e.data}"`;
+                } else {
+                    msg += `, data=null`;
+                }
+            }
+
+            // Validate inputType values
+            const validTypes = ['insertText', 'deleteContentBackward', 'deleteContentForward'];
+            const isValidType = validTypes.includes(e.inputType);
+
+            addLog(msg, !isValidType);
+
+            if (isValidType) {
+                // Check data consistency
+                if (e.inputType === 'insertText' && e.data === null) {
+                    addLog('⚠ insertText should have non-null data', true);
+                } else if (e.inputType.startsWith('delete') && e.data !== null) {
+                    addLog('⚠ delete operations should have null data', true);
+                } else {
+                    addLog('✓ InputEvent properties valid!');
+                }
+            } else {
+                addLog(`⚠ Unexpected inputType value: "${e.inputType}"`, true);
+            }
+
+            updateSummary();
+        });
+
+        addLog('Test initialized. Start typing, use Backspace, or Delete to test.');
+        updateSummary();
+    </script>
+</body>
+</html>

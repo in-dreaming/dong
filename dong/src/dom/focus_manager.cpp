@@ -40,9 +40,9 @@ void FocusManager::setFocus(DOMNodePtr element) {
         markFocusChainDirty(old_focus);
     }
 
-    // 触发旧元素的 blur 事件
+    // 触发旧元素的 blur 事件，relatedTarget 是新获得焦点的元素
     if (old_focus) {
-        dispatchBlurEvent(old_focus);
+        dispatchBlurEvent(old_focus, element);
     }
 
     // 更新焦点
@@ -55,9 +55,9 @@ void FocusManager::setFocus(DOMNodePtr element) {
         markFocusChainDirty(element);
     }
 
-    // 触发新元素的 focus 事件
+    // 触发新元素的 focus 事件，relatedTarget 是失去焦点的元素
     if (element) {
-        dispatchFocusEvent(element);
+        dispatchFocusEvent(element, old_focus);
     }
 
     // 调用回调
@@ -264,21 +264,23 @@ void FocusManager::collectFocusableElements(DOMNodePtr node, std::vector<DOMNode
     }
 }
 
-void FocusManager::dispatchFocusEvent(DOMNodePtr element) {
+void FocusManager::dispatchFocusEvent(DOMNodePtr element, DOMNodePtr related) {
     if (!event_dispatcher_ || !element) return;
 
     Event event = event_dispatcher_->createEvent(EventType::FOCUS);
     event.target = element;
     event.current_target = element;
+    event.related_target = related;  // The element that lost focus
     event_dispatcher_->dispatch(event);
 }
 
-void FocusManager::dispatchBlurEvent(DOMNodePtr element) {
+void FocusManager::dispatchBlurEvent(DOMNodePtr element, DOMNodePtr related) {
     if (!event_dispatcher_ || !element) return;
 
     Event event = event_dispatcher_->createEvent(EventType::BLUR);
     event.target = element;
     event.current_target = element;
+    event.related_target = related;  // The element that will gain focus
     event_dispatcher_->dispatch(event);
 }
 
