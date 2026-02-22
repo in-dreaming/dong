@@ -16,6 +16,7 @@ namespace dong::dom {
 namespace {
 
 // Forward declarations for helper functions used in handlers
+inline float parseFontSizeHelper(const std::string& s);
 inline float parseFloatHelper(const std::string& s);
 inline void parseMarginShorthandHelper(const std::string& value, ComputedStyle& style);
 inline void parsePaddingShorthandHelper(const std::string& value, ComputedStyle& style);
@@ -88,7 +89,15 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
             }
         }},
         {"z-index", [](const std::string& val, ComputedStyle& style) {
-            try { style.z_index = std::stoi(val); } catch (...) { style.z_index = 0; }
+            if (val == "auto") {
+                style.z_index = std::nullopt;  // auto = no stacking context
+            } else {
+                try {
+                    style.z_index = std::stoi(val);  // numeric value = create stacking context
+                } catch (...) {
+                    style.z_index = std::nullopt;
+                }
+            }
         }},
         
         // Visual - colors & backgrounds
@@ -112,6 +121,14 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
 
         {"opacity", [](const std::string& val, ComputedStyle& style) {
             float v = parseFloatHelper(val);
+            // Support percentage values (e.g., "50%" -> 0.5)
+            std::string trimmed = val;
+            trimmed.erase(0, trimmed.find_first_not_of(" \t\n\r"));
+            size_t last = trimmed.find_last_not_of(" \t\n\r");
+            if (last != std::string::npos) trimmed = trimmed.substr(0, last + 1);
+            if (!trimmed.empty() && trimmed.back() == '%') {
+                v = v / 100.0f;
+            }
             style.opacity = std::max(0.0f, std::min(1.0f, v));
         }},
 
@@ -214,7 +231,7 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
         
         // Text & font
         {"font-family", [](const std::string& val, ComputedStyle& style) { style.font_family = val; }},
-        {"font-size", [](const std::string& val, ComputedStyle& style) { style.font_size = parseFloatHelper(val); }},
+        {"font-size", [](const std::string& val, ComputedStyle& style) { style.font_size = parseFontSizeHelper(val); }},
         {"font-weight", [](const std::string& val, ComputedStyle& style) { style.font_weight = val; }},
         {"font-style", [](const std::string& val, ComputedStyle& style) { style.font_style = val; }},
         {"font-variant", [](const std::string& val, ComputedStyle& style) { style.font_variant = val; }},
@@ -305,9 +322,28 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
         {"flex-basis", [](const std::string& val, ComputedStyle& style) { style.flex_basis = CSSParser::parseValue(val); }},
         {"order", [](const std::string& val, ComputedStyle& style) { style.order = static_cast<int>(parseFloatHelper(val)); }},
         {"gap", [](const std::string& val, ComputedStyle& style) {
-            style.gap = parseFloatHelper(val);
-            style.row_gap = style.gap;
-            style.column_gap = style.gap;
+            // Support dual-value syntax: gap: row-gap column-gap
+            std::istringstream iss(val);
+            std::vector<std::string> parts;
+            std::string part;
+            while (iss >> part) parts.push_back(part);
+
+            if (parts.size() == 1) {
+                // Single value: applies to both row and column
+                float v = parseFloatHelper(parts[0]);
+                style.gap = v;
+                style.row_gap = v;
+                style.column_gap = v;
+            } else if (parts.size() >= 2) {
+                // Dual value: first is row-gap, second is column-gap
+                style.row_gap = parseFloatHelper(parts[0]);
+                style.column_gap = parseFloatHelper(parts[1]);
+                style.gap = style.row_gap; // Set gap to row-gap for backwards compatibility
+            } else {
+                style.gap = 0.0f;
+                style.row_gap = 0.0f;
+                style.column_gap = 0.0f;
+            }
         }},
         {"row-gap", [](const std::string& val, ComputedStyle& style) { style.row_gap = parseFloatHelper(val); }},
         {"column-gap", [](const std::string& val, ComputedStyle& style) { style.column_gap = parseFloatHelper(val); }},
@@ -455,7 +491,55 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
 }
 
 // Helper: parseFloat wrapper for use in lambdas
+inline float parseFontSizeHelper(const std::string& s) {
+    // Trim and convert to lowercase for keyword comparison
+    std::string v = s;
+    v.erase(0, v.find_first_not_of(" \t\n\r"));
+    size_t last = v.find_last_not_of(" \t\n\r");
+    if (last != std::string::npos && last + 1 < v.size()) {
+        v.erase(last + 1);
+    }
+
+    std::string lower = v;
+    std::transform(lower.begin(), lower.end(), lower.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+
+    // Handle font-size absolute keywords (CSS spec)
+    if (lower == "xx-small") return 10.0f;
+    if (lower == "x-small") return 12.0f;
+    if (lower == "small") return 14.0f;
+    if (lower == "medium") return 16.0f;  // Default font size
+    if (lower == "large") return 18.0f;
+    if (lower == "x-large") return 24.0f;
+    if (lower == "xx-large") return 32.0f;
+
+    // For relative keywords (smaller/larger), we need parent context
+    // For now, return a reasonable default - this should be handled in style engine
+    // TODO: Implement smaller/larger in style_engine.cpp using parent font-size
+    if (lower == "smaller") return 14.0f;  // Approximate smaller
+    if (lower == "larger") return 18.0f;   // Approximate larger
+
+    return CSSParser::parseFloat(s);
+}
+
 inline float parseFloatHelper(const std::string& s) {
+    // Trim and convert to lowercase for keyword comparison
+    std::string v = s;
+    v.erase(0, v.find_first_not_of(" \t\n\r"));
+    size_t last = v.find_last_not_of(" \t\n\r");
+    if (last != std::string::npos && last + 1 < v.size()) {
+        v.erase(last + 1);
+    }
+
+    std::string lower = v;
+    std::transform(lower.begin(), lower.end(), lower.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+
+    // Handle border-width keywords (CSS spec: thin=1px, medium=3px, thick=5px)
+    if (lower == "thin") return 1.0f;
+    if (lower == "medium") return 3.0f;
+    if (lower == "thick") return 5.0f;
+
     return CSSParser::parseFloat(s);
 }
 
@@ -556,7 +640,7 @@ inline void parseBorderRadiusShorthandHelper(const std::string& value, ComputedS
     std::vector<std::string> parts;
     std::string part;
     while (iss >> part) parts.push_back(part);
-    
+
     if (parts.size() == 1) {
         float v = parseFloatHelper(parts[0]);
         style.border_radius = v;
@@ -665,19 +749,32 @@ inline void parseFontShorthandHelper(const std::string& value, ComputedStyle& st
             style.font_weight = part;
         } else if (part == "small-caps") {
             style.font_variant = part;
-        } else if (!found_size && (std::isdigit(static_cast<unsigned char>(part[0])) || part[0] == '.')) {
-            // Check for line-height (e.g., "16px/1.5")
+        } else if (!found_size) {
+            // Try to parse as font-size (handles both numbers and keywords)
+            // Check for line-height (e.g., "16px/1.5" or "medium/1.5")
             size_t slash = part.find('/');
             if (slash != std::string::npos) {
-                style.font_size = parseFloatHelper(part.substr(0, slash));
+                style.font_size = parseFontSizeHelper(part.substr(0, slash));
                 std::string lh = part.substr(slash + 1);
                 style.line_height = parseFloatHelper(lh);
                 style.has_line_height = true;
                 style.line_height_is_unitless = (lh.find("px") == std::string::npos);
+                found_size = true;
             } else {
-                style.font_size = parseFloatHelper(part);
+                // Check if this looks like a font-size (number or keyword)
+                std::string lower = part;
+                std::transform(lower.begin(), lower.end(), lower.begin(),
+                               [](unsigned char c) { return std::tolower(c); });
+                bool is_size_keyword = (lower == "xx-small" || lower == "x-small" ||
+                                       lower == "small" || lower == "medium" ||
+                                       lower == "large" || lower == "x-large" ||
+                                       lower == "xx-large" || lower == "smaller" ||
+                                       lower == "larger");
+                if (std::isdigit(static_cast<unsigned char>(part[0])) || part[0] == '.' || is_size_keyword) {
+                    style.font_size = parseFontSizeHelper(part);
+                    found_size = true;
+                }
             }
-            found_size = true;
         } else if (found_size) {
             // Everything after size is font-family
             std::string family = part;
@@ -1589,13 +1686,26 @@ std::vector<CSSRule> CSSParser::parse(const std::string& css) {
         style.border_color = "";
         style.border_width = -1.0f;
 
-        
+
         for (const auto& decl : decls) {
             size_t colon = decl.find(':');
             if (colon != std::string::npos) {
                 std::string prop = trimWhitespace(decl.substr(0, colon));
                 std::string value = trimWhitespace(decl.substr(colon + 1));
+
+                // Check for !important
+                bool is_important = false;
+                size_t important_pos = value.find("!important");
+                if (important_pos != std::string::npos) {
+                    is_important = true;
+                    value = value.substr(0, important_pos);
+                    value = trimWhitespace(value);
+                }
+
                 applyProperty(prop, value, style);
+                if (is_important) {
+                    style.markImportant(prop);
+                }
             }
         }
         
@@ -1774,25 +1884,38 @@ void CSSParser::parseInlineStyle(const std::string& style_str, ComputedStyle& st
     while (pos < style_str.length()) {
         size_t semicolon = style_str.find(';', pos);
         if (semicolon == std::string::npos) semicolon = style_str.length();
-        
+
         std::string declaration = style_str.substr(pos, semicolon - pos);
         pos = semicolon + 1;
-        
+
         size_t colon = declaration.find(':');
         if (colon == std::string::npos) continue;
-        
+
         std::string property = declaration.substr(0, colon);
         std::string value = declaration.substr(colon + 1);
-        
+
         // Trim whitespace
         property.erase(0, property.find_first_not_of(" \t"));
         property.erase(property.find_last_not_of(" \t") + 1);
         value.erase(0, value.find_first_not_of(" \t"));
         value.erase(value.find_last_not_of(" \t") + 1);
-        
+
+        // Check for !important
+        bool is_important = false;
+        size_t important_pos = value.find("!important");
+        if (important_pos != std::string::npos) {
+            is_important = true;
+            value = value.substr(0, important_pos);
+            // Trim trailing whitespace after removing !important
+            value.erase(value.find_last_not_of(" \t") + 1);
+        }
+
         applyProperty(property, value, style);
         // Mark as explicitly set for inheritance tracking
         style.markExplicitlySet(property);
+        if (is_important) {
+            style.markImportant(property);
+        }
     }
 }
 
@@ -1924,7 +2047,7 @@ void CSSParser::parseBorderRadiusShorthand(const std::string& value, ComputedSty
     std::vector<std::string> parts;
     std::string part;
     while (iss >> part) parts.push_back(part);
-    
+
     if (parts.size() == 1) {
         float v = parseFloat(parts[0]);
         style.border_radius = v;

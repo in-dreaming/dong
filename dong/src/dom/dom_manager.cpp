@@ -17,8 +17,42 @@ bool Manager::loadHTML(const std::string& html) {
         // for runtime recomputation
         style_engine = std::make_unique<StyleEngine>();
         parser->extractAndApplyStyles(root, style_engine.get());
+
+        // Handle autofocus attribute - find first element with autofocus and focus it
+        handleAutofocus(root);
     }
     return root != nullptr;
+}
+
+// Helper function to recursively find the first element with autofocus attribute
+static DOMNodePtr findAutofocusElement(DOMNodePtr node) {
+    if (!node) return nullptr;
+
+    if (node->hasAttribute("autofocus")) {
+        // Check if it's a focusable element (input, textarea, select, button, a with href)
+        std::string tag = node->getTagName();
+        if (tag == "input" || tag == "textarea" || tag == "select" ||
+            tag == "button" || (tag == "a" && node->hasAttribute("href"))) {
+            return node;
+        }
+    }
+
+    // Search children
+    for (const auto& child : node->getChildren()) {
+        DOMNodePtr found = findAutofocusElement(child);
+        if (found) return found;
+    }
+
+    return nullptr;
+}
+
+void Manager::handleAutofocus(DOMNodePtr root_node) {
+    DOMNodePtr autofocus_element = findAutofocusElement(root_node);
+    if (autofocus_element) {
+        // TODO: Call focus() method on the element
+        // For now, just mark it - actual focus implementation depends on the input system
+        autofocus_element->setAttribute("__autofocused__", "1");
+    }
 }
 
 bool Manager::loadHTMLWithCSS(const std::string& html, const std::string& css) {

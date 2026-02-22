@@ -71,7 +71,8 @@ void Painter::paintChildrenAndOverlays(const dom::DOMNodePtr& node,
             continue;
         }
         const auto& child_style = child->getComputedStyle();
-        if (child_style.z_index != 0) {
+        // Check if any child has a non-auto z-index (which creates a stacking context)
+        if (child_style.z_index.has_value()) {
             need_z_sort = true;
             break;
         }
@@ -109,7 +110,7 @@ void Painter::paintChildrenAndOverlays(const dom::DOMNodePtr& node,
             const auto& child_style = child->getComputedStyle();
             ChildWithZIndex item{};
             item.child = child;
-            item.z_index = child_style.z_index;
+            item.z_index = child_style.z_index.value_or(0);  // auto is treated as 0 for sorting
             item.original_order = order++;
             sorted_children.push_back(item);
         }

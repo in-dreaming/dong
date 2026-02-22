@@ -213,87 +213,158 @@ void applyRuleTransform(const ComputedStyle& rs, ComputedStyle& computed) {
 // ── Main shared property application function ──
 // Called by both applyMatchingRules() and applyMatchingRulesIndexed().
 void applyRuleProperties(const ComputedStyle& rs, ComputedStyle& computed) {
+    // Helper macro to apply property with !important support
+    // Only apply if: target is not !important OR source is also !important
+    #define APPLY_PROP(prop_name, src_val, condition) \
+        if ((condition) && (!computed.isImportant(prop_name) || rs.isImportant(prop_name))) { \
+            src_val; \
+            if (rs.isImportant(prop_name)) computed.markImportant(prop_name); \
+        }
+
     // Visual / color
-    if (!rs.color.empty() && rs.color != "#000000") { computed.color = rs.color; computed.markExplicitlySet("color"); }
-    if (!rs.background_color.empty() && rs.background_color != "transparent")
-        computed.background_color = rs.background_color;
-    if (!rs.background_image.empty()) computed.background_image = rs.background_image;
-    if (!rs.background_size.empty() && rs.background_size != "auto")
-        computed.background_size = rs.background_size;
-    if (!rs.background_repeat.empty() && rs.background_repeat != "repeat")
-        computed.background_repeat = rs.background_repeat;
-    if (!rs.background_position.empty() && rs.background_position != "0% 0%")
-        computed.background_position = rs.background_position;
-    if (!rs.background_attachment.empty() && rs.background_attachment != "scroll")
-        computed.background_attachment = rs.background_attachment;
-    if (!rs.background_clip.empty() && rs.background_clip != "border-box")
-        computed.background_clip = rs.background_clip;
-    if (!rs.background_origin.empty() && rs.background_origin != "padding-box")
-        computed.background_origin = rs.background_origin;
-    if (!rs.object_fit.empty() && rs.object_fit != "fill") computed.object_fit = rs.object_fit;
-    if (!rs.background_gradients.empty()) computed.background_gradients = rs.background_gradients;
+    APPLY_PROP("color", computed.color = rs.color; computed.markExplicitlySet("color"),
+               !rs.color.empty() && rs.color != "#000000");
+    APPLY_PROP("background-color", computed.background_color = rs.background_color,
+               !rs.background_color.empty() && rs.background_color != "transparent");
+    APPLY_PROP("background-image", computed.background_image = rs.background_image,
+               !rs.background_image.empty());
+    APPLY_PROP("background-size", computed.background_size = rs.background_size,
+               !rs.background_size.empty() && rs.background_size != "auto");
+    APPLY_PROP("background-repeat", computed.background_repeat = rs.background_repeat,
+               !rs.background_repeat.empty() && rs.background_repeat != "repeat");
+    APPLY_PROP("background-position", computed.background_position = rs.background_position,
+               !rs.background_position.empty() && rs.background_position != "0% 0%");
+    APPLY_PROP("background-attachment", computed.background_attachment = rs.background_attachment,
+               !rs.background_attachment.empty() && rs.background_attachment != "scroll");
+    APPLY_PROP("background-clip", computed.background_clip = rs.background_clip,
+               !rs.background_clip.empty() && rs.background_clip != "border-box");
+    APPLY_PROP("background-origin", computed.background_origin = rs.background_origin,
+               !rs.background_origin.empty() && rs.background_origin != "padding-box");
+    APPLY_PROP("object-fit", computed.object_fit = rs.object_fit,
+               !rs.object_fit.empty() && rs.object_fit != "fill");
+    APPLY_PROP("background-gradient", computed.background_gradients = rs.background_gradients,
+               !rs.background_gradients.empty());
 
     applyRuleTextProperties(rs, computed);
 
     // Display / position
-    if (!rs.display.empty()) {
+    if (!rs.display.empty() && (!computed.isImportant("display") || rs.isImportant("display"))) {
         computed.display = rs.display;
         computed.layout_mode = deriveLayoutModeFromDisplay(computed);
+        if (rs.isImportant("display")) computed.markImportant("display");
     }
-    if (!rs.position.empty() && rs.position != "static") computed.position = rs.position;
+    APPLY_PROP("position", computed.position = rs.position,
+               !rs.position.empty() && rs.position != "static");
 
     applyRuleBorderRadius(rs, computed);
     applyRuleBorderProperties(rs, computed);
     applyRuleOverflowProperties(rs, computed);
 
     // Outline
-    if (rs.outline_width != 0.0f) computed.outline_width = rs.outline_width;
-    if (!rs.outline_color.empty() && rs.outline_color != "#000000")
-        computed.outline_color = rs.outline_color;
-    if (!rs.outline_style.empty() && rs.outline_style != "none")
-        computed.outline_style = rs.outline_style;
-    if (rs.outline_offset != 0.0f) computed.outline_offset = rs.outline_offset;
+    APPLY_PROP("outline-width", computed.outline_width = rs.outline_width,
+               rs.outline_width != 0.0f);
+    APPLY_PROP("outline-color", computed.outline_color = rs.outline_color,
+               !rs.outline_color.empty() && rs.outline_color != "#000000");
+    APPLY_PROP("outline-style", computed.outline_style = rs.outline_style,
+               !rs.outline_style.empty() && rs.outline_style != "none");
+    APPLY_PROP("outline-offset", computed.outline_offset = rs.outline_offset,
+               rs.outline_offset != 0.0f);
 
     // Box misc
-    if (!rs.box_sizing.empty() && rs.box_sizing != "content-box")
-        computed.box_sizing = rs.box_sizing;
-    if (rs.opacity != 1.0f) computed.opacity = rs.opacity;
-    if (rs.isolation_isolate) computed.isolation_isolate = true;
-    if (!rs.box_shadows.empty()) computed.box_shadows = rs.box_shadows;
+    APPLY_PROP("box-sizing", computed.box_sizing = rs.box_sizing,
+               !rs.box_sizing.empty() && rs.box_sizing != "content-box");
+    APPLY_PROP("opacity", computed.opacity = rs.opacity,
+               rs.opacity != 1.0f);
+    APPLY_PROP("isolation", computed.isolation_isolate = true,
+               rs.isolation_isolate);
+    APPLY_PROP("box-shadow", computed.box_shadows = rs.box_shadows,
+               !rs.box_shadows.empty());
 
     // Filters
-    if (!rs.filters.empty()) computed.filters = rs.filters;
-    if (!rs.backdrop_filters.empty()) computed.backdrop_filters = rs.backdrop_filters;
-    if (!rs.mix_blend_mode.empty() && rs.mix_blend_mode != "normal")
-        computed.mix_blend_mode = rs.mix_blend_mode;
-    if (!rs.background_blend_mode.empty() && rs.background_blend_mode != "normal")
-        computed.background_blend_mode = rs.background_blend_mode;
+    APPLY_PROP("filter", computed.filters = rs.filters,
+               !rs.filters.empty());
+    APPLY_PROP("backdrop-filter", computed.backdrop_filters = rs.backdrop_filters,
+               !rs.backdrop_filters.empty());
+    APPLY_PROP("mix-blend-mode", computed.mix_blend_mode = rs.mix_blend_mode,
+               !rs.mix_blend_mode.empty() && rs.mix_blend_mode != "normal");
+    APPLY_PROP("background-blend-mode", computed.background_blend_mode = rs.background_blend_mode,
+               !rs.background_blend_mode.empty() && rs.background_blend_mode != "normal");
 
     applyRuleBoxModel(rs, computed);
     applyRuleFlexbox(rs, computed);
     applyRuleTransform(rs, computed);
 
     // Transitions and animations
-    if (!rs.transitions.empty()) computed.transitions = rs.transitions;
-    if (!rs.animations.empty()) computed.animations = rs.animations;
+    APPLY_PROP("transition", computed.transitions = rs.transitions,
+               !rs.transitions.empty());
+    APPLY_PROP("animation", computed.animations = rs.animations,
+               !rs.animations.empty());
 
     // Clip path
-    if (!rs.clip_path.empty()) computed.clip_path = rs.clip_path;
+    APPLY_PROP("clip-path", computed.clip_path = rs.clip_path,
+               !rs.clip_path.empty());
 
     // Pointer events / interaction
-    if (!rs.pointer_events.empty() && rs.pointer_events != "auto")
-        computed.pointer_events = rs.pointer_events;
-    if (!rs.user_select.empty() && rs.user_select != "auto")
-        computed.user_select = rs.user_select;
-    if (!rs.touch_action.empty() && rs.touch_action != "auto")
-        computed.touch_action = rs.touch_action;
-    if (!rs.caret_color.empty() && rs.caret_color != "auto")
-        computed.caret_color = rs.caret_color;
+    APPLY_PROP("pointer-events", computed.pointer_events = rs.pointer_events,
+               !rs.pointer_events.empty() && rs.pointer_events != "auto");
+    APPLY_PROP("user-select", computed.user_select = rs.user_select,
+               !rs.user_select.empty() && rs.user_select != "auto");
+    APPLY_PROP("touch-action", computed.touch_action = rs.touch_action,
+               !rs.touch_action.empty() && rs.touch_action != "auto");
+    APPLY_PROP("caret-color", computed.caret_color = rs.caret_color,
+               !rs.caret_color.empty() && rs.caret_color != "auto");
 
     // Float/Clear
-    if (!rs.float_value.empty() && rs.float_value != "none")
-        computed.float_value = rs.float_value;
-    if (!rs.clear.empty() && rs.clear != "none") computed.clear = rs.clear;
+    APPLY_PROP("float", computed.float_value = rs.float_value,
+               !rs.float_value.empty() && rs.float_value != "none");
+    APPLY_PROP("clear", computed.clear = rs.clear,
+               !rs.clear.empty() && rs.clear != "none");
+
+    #undef APPLY_PROP
+}
+
+// Apply only !important properties from a rule
+// This is called after inline styles to enforce !important semantics
+void applyImportantPropertiesOnly(const ComputedStyle& rs, ComputedStyle& computed) {
+    // Helper macro to apply property only if marked as !important
+    #define APPLY_IF_IMPORTANT(prop_name, src_val, condition) \
+        if ((condition) && rs.isImportant(prop_name)) { \
+            src_val; \
+            computed.markImportant(prop_name); \
+        }
+
+    // Visual / color
+    APPLY_IF_IMPORTANT("color", computed.color = rs.color; computed.markExplicitlySet("color"),
+                       !rs.color.empty() && rs.color != "#000000");
+    APPLY_IF_IMPORTANT("background-color", computed.background_color = rs.background_color,
+                       !rs.background_color.empty() && rs.background_color != "transparent");
+    APPLY_IF_IMPORTANT("background-image", computed.background_image = rs.background_image,
+                       !rs.background_image.empty());
+
+    // Display / position
+    if (!rs.display.empty() && rs.isImportant("display")) {
+        computed.display = rs.display;
+        computed.layout_mode = deriveLayoutModeFromDisplay(computed);
+        computed.markImportant("display");
+    }
+    APPLY_IF_IMPORTANT("position", computed.position = rs.position,
+                       !rs.position.empty() && rs.position != "static");
+
+    // Font properties
+    if (rs.font_size != 16.0f && rs.isImportant("font-size")) {
+        computed.font_size = rs.font_size;
+        computed.markExplicitlySet("font-size");
+        computed.markImportant("font-size");
+    }
+    APPLY_IF_IMPORTANT("font-family", computed.font_family = rs.font_family; computed.markExplicitlySet("font-family"),
+                       !rs.font_family.empty() && rs.font_family != "Arial");
+    APPLY_IF_IMPORTANT("font-weight", computed.font_weight = rs.font_weight; computed.markExplicitlySet("font-weight"),
+                       !rs.font_weight.empty() && rs.font_weight != "normal");
+
+    // Add more properties as needed...
+    // For now, this covers the most common use cases
+
+    #undef APPLY_IF_IMPORTANT
 }
 
 void applyInlineStyleAttributeIfAny(DOMNodePtr node) {
@@ -622,21 +693,47 @@ void StyleEngine::applyInlineStyleProperty(const std::string& property,
 
 void StyleEngine::computeStyles(DOMNodePtr node) {
     DONG_PROFILE_FUNCTION();
-    
+
     if (!node) return;
 
     applyDefaultStyleForNode(node);
 
-    // Apply matching rules
-    applyMatchingRules(node);
+    // Collect matching rules once
+    std::vector<CSSRule> matching_rules;
+    for (const auto& sheet : stylesheets_) {
+        for (const auto& rule : sheet.getRules()) {
+            if (matcher_.matches(rule.selector, node)) {
+                matching_rules.push_back(rule);
+            }
+        }
+    }
 
-    
+    // Sort by specificity, then by source order
+    std::sort(matching_rules.begin(), matching_rules.end(),
+        [](const CSSRule& a, const CSSRule& b) {
+            if (a.specificity != b.specificity) {
+                return a.specificity < b.specificity;
+            }
+            return a.source_order < b.source_order;
+        });
+
+    // Apply all properties from matching rules
+    auto& computed = node->getComputedStyle();
+    for (const auto& rule : matching_rules) {
+        applyRuleProperties(rule.style, computed);
+    }
+
     // Inherit from parent
     inheritFromParent(node);
 
     // Inline style overrides author rules
     applyInlineStyleAttributeIfAny(node);
-    
+
+    // Re-apply !important properties from rules - these override inline styles
+    for (const auto& rule : matching_rules) {
+        applyImportantPropertiesOnly(rule.style, computed);
+    }
+
     // Hide certain elements
 
     static const std::unordered_set<std::string> kAlwaysHiddenTags = {
@@ -674,7 +771,7 @@ void StyleEngine::recomputeNodeStyle(DOMNodePtr node) {
 
 void StyleEngine::applyMatchingRules(DOMNodePtr node) {
     std::vector<CSSRule> matching_rules;
-    
+
     for (const auto& sheet : stylesheets_) {
         for (const auto& rule : sheet.getRules()) {
             if (matcher_.matches(rule.selector, node)) {
@@ -682,7 +779,7 @@ void StyleEngine::applyMatchingRules(DOMNodePtr node) {
             }
         }
     }
-    
+
     // Sort by specificity, then by source order
     std::sort(matching_rules.begin(), matching_rules.end(),
         [](const CSSRule& a, const CSSRule& b) {
@@ -691,7 +788,7 @@ void StyleEngine::applyMatchingRules(DOMNodePtr node) {
             }
             return a.source_order < b.source_order;
         });
-    
+
     auto& computed = node->getComputedStyle();
     for (const auto& rule : matching_rules) {
         applyRuleProperties(rule.style, computed);

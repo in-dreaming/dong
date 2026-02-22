@@ -43,6 +43,9 @@ private:
     DOMNodePtr root;
     std::unique_ptr<Parser> parser;
     std::unique_ptr<StyleEngine> style_engine;
+
+    // Helper function to handle autofocus attribute after HTML loading
+    void handleAutofocus(DOMNodePtr root_node);
 };
 
 } // namespace dong::dom

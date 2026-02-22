@@ -5,6 +5,7 @@
 #include <vector>
 #include <unordered_map>
 #include <unordered_set>
+#include <optional>
 
 namespace dong::dom {
 
@@ -57,7 +58,7 @@ struct ComputedStyle {
     CSSValue right = CSSValue(0.0f, CSSValue::Unit::AUTO);
     CSSValue bottom = CSSValue(0.0f, CSSValue::Unit::AUTO);
     CSSValue left = CSSValue(0.0f, CSSValue::Unit::AUTO);
-    int z_index = 0;
+    std::optional<int> z_index;  // nullopt = auto (no stacking context), value = create stacking context
 
     // Visual
     std::string background_color = "transparent";
@@ -223,6 +224,9 @@ struct ComputedStyle {
     // Track properties with global keywords (inherit, initial, unset)
     std::unordered_map<std::string, std::string> global_keyword_properties_;
 
+    // Track properties with !important declarations
+    std::unordered_set<std::string> important_properties_;
+
     bool isExplicitlySet(const std::string& prop) const {
         return explicitly_set_properties_.count(prop) > 0;
     }
@@ -237,6 +241,14 @@ struct ComputedStyle {
     const std::string* getGlobalKeyword(const std::string& prop) const {
         auto it = global_keyword_properties_.find(prop);
         return it != global_keyword_properties_.end() ? &it->second : nullptr;
+    }
+
+    // Check if a property has !important declaration
+    bool isImportant(const std::string& prop) const {
+        return important_properties_.count(prop) > 0;
+    }
+    void markImportant(const std::string& prop) {
+        important_properties_.insert(prop);
     }
 
     // CSS custom properties (variables)

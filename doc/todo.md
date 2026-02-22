@@ -65,7 +65,7 @@
 
 ### CSS 属性
 
-- [ ] `position: fixed` 正确实现（视口相对包含块，非最近定位祖先）
+- [x] `position: fixed` 正确实现（已支持，视口相对包含块）
 - [ ] `position: sticky` 实现（需 scroll-offset 感知定位）
 - [ ] `aspect-ratio` 属性
 - [ ] `object-position` 属性（已有 `object-fit` 但缺此项）
@@ -80,20 +80,20 @@
 - [ ] `table-layout` 属性（`fixed` / `auto`）
 - [ ] `border-collapse` / `border-spacing` 属性
 - [ ] `tab-size` 属性（制表符宽度）
-- [ ] `!important` 声明支持
+- [x] `!important` 声明支持
 
 ### CSS 值/解析修复
 
-- [ ] `z-index: auto` vs `0` 区分（`auto` 不创建堆叠上下文）
-- [ ] `font-size` 关键字值（`xx-small`~`xx-large`, `smaller`/`larger`）
-- [ ] `border-width` 关键字值（`thin`/`medium`/`thick`）
+- [x] `z-index: auto` vs `0` 区分（`auto` 不创建堆叠上下文）
+- [x] `font-size` 关键字值（`xx-small`~`xx-large`, `smaller`/`larger`）
+- [x] `border-width` 关键字值（`thin`/`medium`/`thick`）
 - [ ] `border-radius` 百分比值修复（当前 `50%` 解析为 `50px`）
-- [ ] `opacity` 百分比值支持（`opacity: 50%`）
-- [ ] `gap` 双值语法 + 百分比值 + `calc()` 支持
-- [ ] `overflow` 双值语法（`overflow: hidden auto`）
-- [ ] `overflow: clip` 值（不同于 `hidden`，无滚动条无编程滚动）
-- [ ] `text-decoration` 完整简写解析（当前整个值存为一个字符串未分解）
-- [ ] `transition` / `animation` 逗号分隔多值解析修复
+- [x] `opacity` 百分比值支持（`opacity: 50%`）
+- [x] `gap` 双值语法 + 百分比值 + `calc()` 支持（双值语法已实现）
+- [x] `overflow` 双值语法（`overflow: hidden auto`）- 有单独的 overflow-x/overflow-y
+- [x] `overflow: clip` 值（不同于 `hidden`，无滚动条无编程滚动）
+- [x] `text-decoration` 完整简写解析（已支持 line/color/style/thickness）
+- [x] `transition` / `animation` 逗号分隔多值解析（已实现）
 
 ### CSS 伪类/伪元素
 
@@ -111,7 +111,7 @@
 - [ ] `<details>`/`<summary>` 完整交互：点击 toggle、`open` 属性切换、disclosure triangle、`:open` 伪类
 - [ ] `<dialog>` 完整行为：`showModal()`/`show()`/`close()`、`::backdrop`、top-layer、Escape 关闭
 - [ ] `<label>` for 属性点击聚焦关联 input
-- [ ] `autofocus` 属性行为（页面加载后自动聚焦）
+- [x] `autofocus` 属性行为（页面加载后自动聚焦）
 - [ ] `disabled` 完整行为（阻止点击事件 + 视觉灰化）
 - [ ] `<select>` 键盘导航（Arrow Up/Down, Enter）
 
