@@ -4,9 +4,15 @@
 #include <unordered_map>
 #include <vector>
 #include <string>
+#include <chrono>
 #include "script_engine.hpp"
 #include "../dom/dom_manager.hpp"
 #include "../dom/event_system.hpp"
+
+// Forward declarations
+namespace dong::dom {
+class FocusManager;
+}
 
 extern "C" {
 #include "quickjs.h"
@@ -17,7 +23,7 @@ namespace dong::script {
 // JavaScript 绑定层 - 提供 JavaScript 访问 DOM 和事件系统的接口
 class JSBindings {
 public:
-    JSBindings(ScriptEngine* engine, dom::Manager* dom_manager, dom::EventDispatcher* event_dispatcher);
+    JSBindings(ScriptEngine* engine, dom::Manager* dom_manager, dom::EventDispatcher* event_dispatcher, dom::FocusManager* focus_manager = nullptr);
     ~JSBindings();
 
     // 初始化所有内置 API
@@ -36,6 +42,10 @@ public:
     ScriptEngine* engine_;
     dom::Manager* dom_manager_;
     dom::EventDispatcher* event_dispatcher_;
+    dom::FocusManager* focus_manager_;
+
+    // Start time for performance.now()
+    std::chrono::steady_clock::time_point script_start_time_;
 
 private:
     
@@ -53,6 +63,7 @@ private:
     void initializeElementAPI();
     void initializeEventAPI();
     void initializeConsoleAPI();
+    void initializePerformanceAPI();
 
 public:
     // Helper methods (public for use by callback functions)

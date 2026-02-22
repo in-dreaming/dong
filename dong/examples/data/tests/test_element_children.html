@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            font-family: Arial;
+            padding: 20px;
+            background: #f0f0f0;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .test-group {
+            margin-bottom: 15px;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 4px;
+            border-left: 3px solid #2196f3;
+        }
+        .result {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            margin-top: 10px;
+        }
+        .pass {
+            color: #4caf50;
+            font-weight: bold;
+        }
+        .fail {
+            color: #f44336;
+            font-weight: bold;
+        }
+        .note {
+            color: #666;
+            font-size: 14px;
+            padding: 10px;
+            background: #fff3cd;
+            border-left: 3px solid #ffc107;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Element Children Properties Test</h1>
+
+    <div class="container">
+        <p class="note">
+            <strong>Test Instructions:</strong><br>
+            This page tests firstElementChild, lastElementChild properties.<br>
+            These properties should return the first/last child ELEMENT (skipping text nodes).
+        </p>
+
+        <div class="test-group">
+            <h3>Test 1: firstElementChild and lastElementChild</h3>
+            <div id="test1">
+                <!-- Comment node -->
+                Text node before
+                <span id="first">First Element</span>
+                Text node middle
+                <div>Middle Element</div>
+                Text node after
+                <strong id="last">Last Element</strong>
+                More text
+            </div>
+            <div class="result" id="result1"></div>
+        </div>
+
+        <div class="test-group">
+            <h3>Test 2: Empty Element</h3>
+            <div id="test2"></div>
+            <div class="result" id="result2"></div>
+        </div>
+
+        <div class="test-group">
+            <h3>Test 3: Text-Only Element</h3>
+            <div id="test3">Just text, no elements</div>
+            <div class="result" id="result3"></div>
+        </div>
+
+        <div class="test-group">
+            <h3>Test 4: Single Element Child</h3>
+            <div id="test4">
+                Text before
+                <span id="only">Only Element</span>
+                Text after
+            </div>
+            <div class="result" id="result4"></div>
+        </div>
+
+        <div class="test-group">
+            <h3>Test 5: children vs childNodes</h3>
+            <div id="test5">
+                Text node 1
+                <span>Element 1</span>
+                Text node 2
+                <span>Element 2</span>
+                Text node 3
+            </div>
+            <div class="result" id="result5"></div>
+        </div>
+    </div>
+
+    <script>
+        function runTests() {
+            // Test 1: firstElementChild and lastElementChild
+            const test1 = document.getElementById('test1');
+            const result1 = document.getElementById('result1');
+            const first = test1.firstElementChild;
+            const last = test1.lastElementChild;
+
+            const test1Pass = first && first.id === 'first' && last && last.id === 'last';
+            result1.innerHTML = `
+                firstElementChild.id = "${first ? first.id : 'null'}" (expected: "first")<br>
+                lastElementChild.id = "${last ? last.id : 'null'}" (expected: "last")<br>
+                <span class="${test1Pass ? 'pass' : 'fail'}">${test1Pass ? '✓ PASS' : '✗ FAIL'}</span>
+            `;
+
+            // Test 2: Empty element
+            const test2 = document.getElementById('test2');
+            const result2 = document.getElementById('result2');
+            const first2 = test2.firstElementChild;
+            const last2 = test2.lastElementChild;
+
+            const test2Pass = first2 === null && last2 === null;
+            result2.innerHTML = `
+                firstElementChild = ${first2 === null ? 'null' : 'NOT NULL'} (expected: null)<br>
+                lastElementChild = ${last2 === null ? 'null' : 'NOT NULL'} (expected: null)<br>
+                <span class="${test2Pass ? 'pass' : 'fail'}">${test2Pass ? '✓ PASS' : '✗ FAIL'}</span>
+            `;
+
+            // Test 3: Text-only element
+            const test3 = document.getElementById('test3');
+            const result3 = document.getElementById('result3');
+            const first3 = test3.firstElementChild;
+            const last3 = test3.lastElementChild;
+
+            const test3Pass = first3 === null && last3 === null;
+            result3.innerHTML = `
+                firstElementChild = ${first3 === null ? 'null' : 'NOT NULL'} (expected: null)<br>
+                lastElementChild = ${last3 === null ? 'null' : 'NOT NULL'} (expected: null)<br>
+                <span class="${test3Pass ? 'pass' : 'fail'}">${test3Pass ? '✓ PASS' : '✗ FAIL'}</span>
+            `;
+
+            // Test 4: Single element child
+            const test4 = document.getElementById('test4');
+            const result4 = document.getElementById('result4');
+            const first4 = test4.firstElementChild;
+            const last4 = test4.lastElementChild;
+            const same = first4 === last4;
+
+            const test4Pass = first4 && first4.id === 'only' && last4 && last4.id === 'only' && same;
+            result4.innerHTML = `
+                firstElementChild.id = "${first4 ? first4.id : 'null'}" (expected: "only")<br>
+                lastElementChild.id = "${last4 ? last4.id : 'null'}" (expected: "only")<br>
+                firstElementChild === lastElementChild: ${same} (expected: true)<br>
+                <span class="${test4Pass ? 'pass' : 'fail'}">${test4Pass ? '✓ PASS' : '✗ FAIL'}</span>
+            `;
+
+            // Test 5: children vs childNodes
+            const test5 = document.getElementById('test5');
+            const result5 = document.getElementById('result5');
+            const childNodesCount = test5.childNodes.length;
+            const childrenCount = test5.children.length;
+            const firstChildNodeType = test5.firstChild ? test5.firstChild.nodeType : null;
+            const firstChildIsText = firstChildNodeType === 3; // TEXT_NODE
+            const firstElementChildTag = test5.firstElementChild ? test5.firstElementChild.tagName : null;
+
+            const test5Pass = childNodesCount > childrenCount && firstChildIsText && firstElementChildTag === 'SPAN';
+            result5.innerHTML = `
+                childNodes.length = ${childNodesCount} (includes text nodes)<br>
+                children.length = ${childrenCount} (elements only)<br>
+                firstChild.nodeType = ${firstChildNodeType} (3 = TEXT_NODE)<br>
+                firstElementChild.tagName = ${firstElementChildTag} (expected: SPAN)<br>
+                <span class="${test5Pass ? 'pass' : 'fail'}">${test5Pass ? '✓ PASS' : '✗ FAIL'}</span>
+            `;
+
+            // Summary
+            const allPass = test1Pass && test2Pass && test3Pass && test4Pass && test5Pass;
+            console.log(allPass ? 'All tests passed!' : 'Some tests failed!');
+        }
+
+        // Run tests after page load
+        document.addEventListener('DOMContentLoaded', runTests);
+    </script>
+</body>
+</html>

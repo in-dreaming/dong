@@ -8,6 +8,7 @@
 #include <algorithm>
 #include "../core/log.h"
 #include "../dom/css/style_engine.hpp"
+#include "../dom/focus_manager.hpp"
 extern "C" {
 #include "quickjs.h"
 }
@@ -627,6 +628,35 @@ JSValue createStyleProxy(JSContext* ctx, JSValueConst element, const dom::DOMNod
 // ============================================================
 // Document API Implementation
 // ============================================================
+
+static JSValue doc_getHead(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc; (void)argv; (void)this_val;
+    auto bindings = getBindingsFromContext(ctx);
+    if (!bindings) return JS_NULL;
+
+    auto dom_mgr = bindings->dom_manager_;
+    if (!dom_mgr) return JS_NULL;
+
+    // Find <head> element
+    auto head_nodes = dom_mgr->getElementsByTagName("head");
+    if (head_nodes.empty()) return JS_NULL;
+
+    return bindings->createJSElement(ctx, head_nodes[0]);
+}
+
+static JSValue doc_getActiveElement(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc; (void)argv; (void)this_val;
+    auto bindings = getBindingsFromContext(ctx);
+    if (!bindings) return JS_NULL;
+
+    auto focus_mgr = bindings->focus_manager_;
+    if (!focus_mgr) return JS_NULL;
+
+    auto focused = focus_mgr->getFocusedElement();
+    if (!focused) return JS_NULL;
+
+    return bindings->createJSElement(ctx, focused);
+}
 
 static JSValue doc_getElementById(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     auto bindings = getBindingsFromContext(ctx);
@@ -1549,9 +1579,10 @@ static JSValue keyboard_event_constructor(JSContext* ctx, JSValueConst this_val,
 // JSBindings Implementation
 // ============================================================
 
-JSBindings::JSBindings(ScriptEngine* engine, dom::Manager* dom_manager, 
-                       dom::EventDispatcher* event_dispatcher)
-    : engine_(engine), dom_manager_(dom_manager), event_dispatcher_(event_dispatcher) {
+JSBindings::JSBindings(ScriptEngine* engine, dom::Manager* dom_manager,
+                       dom::EventDispatcher* event_dispatcher, dom::FocusManager* focus_manager)
+    : engine_(engine), dom_manager_(dom_manager), event_dispatcher_(event_dispatcher), focus_manager_(focus_manager),
+      script_start_time_(std::chrono::steady_clock::now()) {
     // Set context opaque to this JSBindings instance for per-context lookup
     if (engine_ && engine_->getContext()) {
         JS_SetContextOpaque(engine_->getContext(), this);
@@ -1570,6 +1601,7 @@ void JSBindings::initialize() {
     if (!engine_) return;
 
     initializeConsoleAPI();
+    initializePerformanceAPI();
     initializeDocumentAPI();
     initializeElementAPI();
     initializeEventAPI();
@@ -1679,6 +1711,42 @@ void JSBindings::initializeConsoleAPI() {
     JS_FreeValue(ctx, global);
 }
 
+// ============================================================
+// Performance API
+// ============================================================
+
+static JSValue performance_now(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val; (void)argc; (void)argv;
+
+    auto bindings = getBindingsFromContext(ctx);
+    if (!bindings) return JS_NewFloat64(ctx, 0.0);
+
+    auto now = std::chrono::steady_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
+        now - bindings->script_start_time_);
+
+    // Convert to milliseconds with fractional precision
+    double ms = duration.count() / 1000.0;
+
+    return JS_NewFloat64(ctx, ms);
+}
+
+void JSBindings::initializePerformanceAPI() {
+    if (!engine_) return;
+
+    JSContext* ctx = engine_->getContext();
+    if (!ctx) return;
+
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue performance = JS_NewObject(ctx);
+
+    JS_SetPropertyStr(ctx, performance, "now",
+        JS_NewCFunction(ctx, performance_now, "now", 0));
+
+    JS_SetPropertyStr(ctx, global, "performance", performance);
+    JS_FreeValue(ctx, global);
+}
+
 void JSBindings::initializeDocumentAPI() {
     if (!engine_) return;
 
@@ -1731,6 +1799,20 @@ void JSBindings::initializeDocumentAPI() {
         }
     }
     JS_SetPropertyStr(ctx, document, "documentElement", html);
+
+    // Document.head property (getter-based)
+    JSAtom head_atom = JS_NewAtom(ctx, "head");
+    JSValue head_getter = JS_NewCFunction(ctx, doc_getHead, "get head", 0);
+    JS_DefinePropertyGetSet(ctx, document, head_atom, head_getter, JS_UNDEFINED,
+        JS_PROP_ENUMERABLE | JS_PROP_CONFIGURABLE);
+    JS_FreeAtom(ctx, head_atom);
+
+    // Document.activeElement property (getter-based)
+    JSAtom active_atom = JS_NewAtom(ctx, "activeElement");
+    JSValue active_getter = JS_NewCFunction(ctx, doc_getActiveElement, "get activeElement", 0);
+    JS_DefinePropertyGetSet(ctx, document, active_atom, active_getter, JS_UNDEFINED,
+        JS_PROP_ENUMERABLE | JS_PROP_CONFIGURABLE);
+    JS_FreeAtom(ctx, active_atom);
 
     // CSSOM: document.styleSheets
     JS_SetPropertyStr(ctx, document, "styleSheets", doc_getStyleSheets(ctx, document, 0, nullptr));

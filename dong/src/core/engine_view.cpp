@@ -308,7 +308,8 @@ struct EngineView::Impl {
           js_bindings(std::make_unique<dong::script::JSBindings>(
               script_engine.get(),
               dom_manager.get(),
-              event_dispatcher.get())) {
+              event_dispatcher.get(),
+              focus_manager.get())) {
         focus_manager->setEventDispatcher(event_dispatcher.get());
         dong::dom::DOMNode::setFocusManager(focus_manager.get());
         dong::dom::DOMNode::setEventDispatcher(event_dispatcher.get());

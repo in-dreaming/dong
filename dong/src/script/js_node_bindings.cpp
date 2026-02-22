@@ -141,6 +141,28 @@ static JSValue elem_getPreviousElementSibling(JSContext* ctx, JSValueConst this_
     return bindings->createJSElement(ctx, sib);
 }
 
+static JSValue elem_getFirstElementChild(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc; (void)argv;
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_NULL;
+    auto first = node->getFirstElementChild();
+    if (!first) return JS_NULL;
+    auto* bindings = getBindingsFromCtx(ctx);
+    if (!bindings) return JS_NULL;
+    return bindings->createJSElement(ctx, first);
+}
+
+static JSValue elem_getLastElementChild(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc; (void)argv;
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_NULL;
+    auto last = node->getLastElementChild();
+    if (!last) return JS_NULL;
+    auto* bindings = getBindingsFromCtx(ctx);
+    if (!bindings) return JS_NULL;
+    return bindings->createJSElement(ctx, last);
+}
+
 static JSValue elem_getNodeType(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     (void)argc; (void)argv;
     auto node = JSBindings::getNodeOpaque(ctx, this_val);
@@ -839,6 +861,8 @@ void bindNodeProperties(JSContext* ctx, JSValue elem, const dom::DOMNodePtr& nod
     DEFINE_GETTER(ctx, elem, "previousSibling", elem_getPreviousSibling);
     DEFINE_GETTER(ctx, elem, "nextElementSibling", elem_getNextElementSibling);
     DEFINE_GETTER(ctx, elem, "previousElementSibling", elem_getPreviousElementSibling);
+    DEFINE_GETTER(ctx, elem, "firstElementChild", elem_getFirstElementChild);
+    DEFINE_GETTER(ctx, elem, "lastElementChild", elem_getLastElementChild);
     DEFINE_GETTER(ctx, elem, "nodeType", elem_getNodeType);
     DEFINE_GETTER(ctx, elem, "nodeName", elem_getNodeName);
     DEFINE_GETTER(ctx, elem, "nodeValue", elem_getNodeValue);

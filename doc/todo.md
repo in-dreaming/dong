@@ -2,6 +2,8 @@
 
 基于 gap analysis 整理的待办事项，按优先级分组。
 
+注意：完成了的任务需要进行完成标注
+
 ---
 
 ## P0 - 基础功能缺失（影响基本可用性）
@@ -118,8 +120,8 @@
 ### JS DOM 绑定补充
 
 - [x] Node: `previousSibling` / `nextSibling`, `textContent` setter, `replaceChild()`, `cloneNode()`, `contains()`, `isConnected`
-- [ ] Element: `children` (as property), `firstElementChild`/`lastElementChild`, `previousElementSibling`/`nextElementSibling`
-- [ ] Element: `hasAttribute()`/`removeAttribute()`（草案声称支持但未绑定）
+- [x] Element: `children` (as property), `firstElementChild`/`lastElementChild`, `previousElementSibling`/`nextElementSibling`
+- [x] Element: `hasAttribute()`/`removeAttribute()`（草案声称支持但未绑定）
 - [x] Element: `scrollTop`/`scrollLeft`, `clientWidth`/`clientHeight`, `offsetWidth`/`offsetHeight`/`offsetTop`/`offsetLeft`
 - [ ] Element: `before()`/`after()`/`replaceWith()`/`prepend()`/`append()`
 - [ ] Element: `tabIndex` 属性
@@ -127,7 +129,7 @@
 - [ ] HTMLDetailsElement: `open` 属性
 - [ ] HTMLAnchorElement: `href`, `target`
 - [ ] HTMLImageElement: `src`, `alt`, `naturalWidth`/`naturalHeight`, `complete`
-- [ ] Document: `head`, `activeElement`, `createDocumentFragment()`, `readyState`
+- [x] Document: `head`, `activeElement`, `createDocumentFragment()`, `readyState`
 
 ### 事件系统补充
 
@@ -154,7 +156,7 @@
 
 ### Web API
 
-- [ ] `performance.now()`
+- [x] `performance.now()`
 
 ---
 
