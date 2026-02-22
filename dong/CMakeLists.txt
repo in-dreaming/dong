@@ -126,6 +126,7 @@ add_library(dong SHARED
     src/dom/event_system.cpp
     src/dom/focus_manager.cpp
     src/dom/input_element.cpp
+    src/dom/select_element.cpp
     src/dom/css/css_value.cpp
     src/dom/css/css_parser.cpp
     src/dom/css/selector_matcher.cpp
@@ -231,6 +232,7 @@ add_library(dong_render STATIC
     src/dom/event_system.cpp
     src/dom/focus_manager.cpp
     src/dom/input_element.cpp
+    src/dom/select_element.cpp
     src/dom/css/css_value.cpp
     src/dom/css/css_parser.cpp
     src/dom/css/selector_matcher.cpp
