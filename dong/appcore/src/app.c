@@ -237,9 +237,14 @@ static void app_forward_event_to_engine(dong_app_impl_t* app, const dong_app_eve
             (void)dong_engine_send_mouse_move(app->engine, ev->mouse_move.x, ev->mouse_move.y);
             break;
         case DONG_APP_EVENT_MOUSE_BUTTON:
+            // 重要：engine_view 的 mouse down/up 会基于最近一次 mouse_move 的坐标做 hit-test。
+            // 如果用户“点击但鼠标没动”，仅发送 mouse_button 会导致 last_mouse_x/y 过期，出现点不开/点不准。
+            (void)dong_engine_send_mouse_move(app->engine, ev->mouse_button.x, ev->mouse_button.y);
             (void)dong_engine_send_mouse_button(app->engine, ev->mouse_button.button, ev->mouse_button.pressed);
             break;
         case DONG_APP_EVENT_MOUSE_WHEEL:
+            // 同上：滚轮滚动需要准确的鼠标位置来找到 scroll container。
+            (void)dong_engine_send_mouse_move(app->engine, ev->mouse_wheel.x, ev->mouse_wheel.y);
             (void)dong_engine_send_mouse_wheel(app->engine, ev->mouse_wheel.delta_x, ev->mouse_wheel.delta_y);
             break;
         case DONG_APP_EVENT_KEY:
@@ -296,6 +301,8 @@ static dong_app_event_t app_translate_sdl_event(dong_app_impl_t* app, const SDL_
 
         case SDL_EVENT_MOUSE_WHEEL:
             out.type = DONG_APP_EVENT_MOUSE_WHEEL;
+            out.mouse_wheel.x = (int32_t)e->wheel.mouse_x;
+            out.mouse_wheel.y = (int32_t)e->wheel.mouse_y;
             out.mouse_wheel.delta_x = e->wheel.x;
             out.mouse_wheel.delta_y = -e->wheel.y;
             return out;
@@ -521,6 +528,12 @@ DONG_APPCORE_API int dong_app_poll_events(dong_app_t* app_handle) {
         if (ev.type == DONG_APP_EVENT_MOUSE_MOVE) {
             app->mouse_x = ev.mouse_move.x;
             app->mouse_y = ev.mouse_move.y;
+        } else if (ev.type == DONG_APP_EVENT_MOUSE_BUTTON) {
+            app->mouse_x = ev.mouse_button.x;
+            app->mouse_y = ev.mouse_button.y;
+        } else if (ev.type == DONG_APP_EVENT_MOUSE_WHEEL) {
+            app->mouse_x = ev.mouse_wheel.x;
+            app->mouse_y = ev.mouse_wheel.y;
         }
 
         if (ev.type != DONG_APP_EVENT_NONE) {

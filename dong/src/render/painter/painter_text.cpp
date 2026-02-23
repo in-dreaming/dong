@@ -442,7 +442,8 @@ void Painter::paintTextAndInput(const dom::DOMNodePtr& node,
     float bl = effectiveBorderWidth(style.border_left_width, style.border_left_style);
 
     // 处理文本内容（如果不是特殊标签）
-    if (tag != "script" && tag != "style" && tag != "head" && tag != "img" && tag != "video") {
+    // select 的展示文本由专用渲染器负责（painter_select），这里避免把 <option> 子树当作普通文本绘制。
+    if (tag != "script" && tag != "style" && tag != "head" && tag != "img" && tag != "video" && tag != "select") {
         ContentAnalysis analysis = analyzeChildren(node);
 
         auto path = determinePath(analysis, tag, style);

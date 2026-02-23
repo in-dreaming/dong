@@ -2309,6 +2309,7 @@ void JSBindings::dispatchMouseEvent(uint64_t node_id, const char* type, int32_t 
         JS_SetPropertyStr(ctx, ev, "cancelable", JS_TRUE);
 
         // offsetX/offsetY: relative to target element's bounding rect
+        JSValue this_val = JS_UNDEFINED;
         auto dom_it = id_to_node_.find(node_id);
         if (dom_it != id_to_node_.end()) {
             auto rect = dom_it->second->getBoundingClientRect();
@@ -2316,8 +2317,10 @@ void JSBindings::dispatchMouseEvent(uint64_t node_id, const char* type, int32_t 
             JS_SetPropertyStr(ctx, ev, "offsetY", JS_NewFloat64(ctx, y - rect.y));
 
             JSValue target = createJSElement(ctx, dom_it->second);
+            JSValue current_target = JS_DupValue(ctx, target);
+            this_val = JS_DupValue(ctx, target);
             JS_SetPropertyStr(ctx, ev, "target", target);
-            JS_SetPropertyStr(ctx, ev, "currentTarget", JS_DupValue(ctx, target));
+            JS_SetPropertyStr(ctx, ev, "currentTarget", current_target);
         } else {
             JS_SetPropertyStr(ctx, ev, "offsetX", JS_NewInt32(ctx, 0));
             JS_SetPropertyStr(ctx, ev, "offsetY", JS_NewInt32(ctx, 0));
@@ -2344,7 +2347,7 @@ void JSBindings::dispatchMouseEvent(uint64_t node_id, const char* type, int32_t 
         JS_SetPropertyStr(ctx, ev, "stopImmediatePropagation",
             JS_NewCFunction(ctx, event_stopImmediatePropagation, "stopImmediatePropagation", 0));
 
-        JSValue ret = JS_Call(ctx, fn, JS_UNDEFINED, 1, &ev);
+        JSValue ret = JS_Call(ctx, fn, this_val, 1, &ev);
         if (JS_IsException(ret)) {
             JSValue exc = JS_GetException(ctx);
             const char* err = JS_ToCString(ctx, exc);
@@ -2355,6 +2358,9 @@ void JSBindings::dispatchMouseEvent(uint64_t node_id, const char* type, int32_t 
             JS_FreeValue(ctx, exc);
         }
         JS_FreeValue(ctx, ret);
+        if (!JS_IsUndefined(this_val)) {
+            JS_FreeValue(ctx, this_val);
+        }
 
         // Check if stopImmediatePropagation was called
         JSValue stopped_immediate = JS_GetPropertyStr(ctx, ev, "__stoppedImmediate");
@@ -2445,14 +2451,17 @@ void JSBindings::dispatchKeyEvent(uint64_t node_id, const char* type, uint32_t k
         JS_SetPropertyStr(ctx, ev, "stopPropagation",
             JS_NewCFunction(ctx, event_stopPropagation, "stopPropagation", 0));
 
+        JSValue this_val = JS_UNDEFINED;
         auto dom_it = id_to_node_.find(node_id);
         if (dom_it != id_to_node_.end()) {
             JSValue target = createJSElement(ctx, dom_it->second);
+            JSValue current_target = JS_DupValue(ctx, target);
+            this_val = JS_DupValue(ctx, target);
             JS_SetPropertyStr(ctx, ev, "target", target);
-            JS_SetPropertyStr(ctx, ev, "currentTarget", JS_DupValue(ctx, target));
+            JS_SetPropertyStr(ctx, ev, "currentTarget", current_target);
         }
 
-        JSValue ret = JS_Call(ctx, fn, JS_UNDEFINED, 1, &ev);
+        JSValue ret = JS_Call(ctx, fn, this_val, 1, &ev);
         if (JS_IsException(ret)) {
             JSValue exc = JS_GetException(ctx);
             const char* err = JS_ToCString(ctx, exc);
@@ -2463,6 +2472,9 @@ void JSBindings::dispatchKeyEvent(uint64_t node_id, const char* type, uint32_t k
             JS_FreeValue(ctx, exc);
         }
         JS_FreeValue(ctx, ret);
+        if (!JS_IsUndefined(this_val)) {
+            JS_FreeValue(ctx, this_val);
+        }
         JS_FreeValue(ctx, ev);
     }
 }
@@ -2489,14 +2501,17 @@ void JSBindings::dispatchSimpleEvent(uint64_t node_id, const char* type) {
         JS_SetPropertyStr(ctx, ev, "bubbles", JS_TRUE);
         JS_SetPropertyStr(ctx, ev, "cancelable", JS_TRUE);
 
+        JSValue this_val = JS_UNDEFINED;
         auto dom_it = id_to_node_.find(node_id);
         if (dom_it != id_to_node_.end()) {
             JSValue target = createJSElement(ctx, dom_it->second);
+            JSValue current_target = JS_DupValue(ctx, target);
+            this_val = JS_DupValue(ctx, target);
             JS_SetPropertyStr(ctx, ev, "target", target);
-            JS_SetPropertyStr(ctx, ev, "currentTarget", JS_DupValue(ctx, target));
+            JS_SetPropertyStr(ctx, ev, "currentTarget", current_target);
         }
 
-        JSValue ret = JS_Call(ctx, fn, JS_UNDEFINED, 1, &ev);
+        JSValue ret = JS_Call(ctx, fn, this_val, 1, &ev);
         if (JS_IsException(ret)) {
             JSValue exc = JS_GetException(ctx);
             const char* err = JS_ToCString(ctx, exc);
@@ -2507,6 +2522,9 @@ void JSBindings::dispatchSimpleEvent(uint64_t node_id, const char* type) {
             JS_FreeValue(ctx, exc);
         }
         JS_FreeValue(ctx, ret);
+        if (!JS_IsUndefined(this_val)) {
+            JS_FreeValue(ctx, this_val);
+        }
         JS_FreeValue(ctx, ev);
     }
 }
@@ -2538,14 +2556,17 @@ void JSBindings::dispatchInputEvent(uint64_t node_id, const char* input_type, co
         JS_SetPropertyStr(ctx, ev, "inputType", JS_NewString(ctx, input_type));
         JS_SetPropertyStr(ctx, ev, "data", data ? JS_NewString(ctx, data) : JS_NULL);
 
+        JSValue this_val = JS_UNDEFINED;
         auto dom_it = id_to_node_.find(node_id);
         if (dom_it != id_to_node_.end()) {
             JSValue target = createJSElement(ctx, dom_it->second);
+            JSValue current_target = JS_DupValue(ctx, target);
+            this_val = JS_DupValue(ctx, target);
             JS_SetPropertyStr(ctx, ev, "target", target);
-            JS_SetPropertyStr(ctx, ev, "currentTarget", JS_DupValue(ctx, target));
+            JS_SetPropertyStr(ctx, ev, "currentTarget", current_target);
         }
 
-        JSValue ret = JS_Call(ctx, fn, JS_UNDEFINED, 1, &ev);
+        JSValue ret = JS_Call(ctx, fn, this_val, 1, &ev);
         if (JS_IsException(ret)) {
             JSValue exc = JS_GetException(ctx);
             const char* err = JS_ToCString(ctx, exc);
@@ -2556,6 +2577,9 @@ void JSBindings::dispatchInputEvent(uint64_t node_id, const char* input_type, co
             JS_FreeValue(ctx, exc);
         }
         JS_FreeValue(ctx, ret);
+        if (!JS_IsUndefined(this_val)) {
+            JS_FreeValue(ctx, this_val);
+        }
         JS_FreeValue(ctx, ev);
     }
 }

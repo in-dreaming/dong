@@ -76,6 +76,9 @@ typedef struct dong_app_event_t {
 
 
         struct {
+            // 鼠标当前位置（屏幕坐标，逻辑像素）
+            int32_t x;
+            int32_t y;
             float delta_x;
             float delta_y;
         } mouse_wheel;

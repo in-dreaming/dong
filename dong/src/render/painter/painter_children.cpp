@@ -21,6 +21,19 @@ void Painter::paintChildrenAndOverlays(const dom::DOMNodePtr& node,
         }
     }
 
+    // <select> 是 replaced control：其子树（<option>/<optgroup>）不走常规递归绘制。
+    // 关闭态/打开态由 painter_select 负责渲染。
+    if (node->getTagName() == "select") {
+        // 6. 渲染 ::after 伪元素
+        if (node->hasPseudoElements()) {
+            auto pseudo_after = node->getPseudoAfter();
+            if (pseudo_after) {
+                renderPseudoElement(pseudo_after, node_rect, builder);
+            }
+        }
+        return;
+    }
+
     // 5. 递归子节点（按 z-index 排序）
     const auto& children = node->getChildren();
 

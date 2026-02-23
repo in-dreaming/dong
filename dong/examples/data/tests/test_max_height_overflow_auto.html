@@ -1,0 +1,61 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>max-height + overflow:auto regression</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 24px; }
+    .card { background: #fff; border: 1px solid #ddd; border-radius: 10px; padding: 16px; }
+    .hint { color: #555; margin: 6px 0 14px; }
+    #log {
+      background: #111;
+      color: #f5f5f5;
+      border-radius: 6px;
+      padding: 10px;
+      max-height: 140px;
+      overflow: auto;
+      font-family: Menlo, Monaco, Consolas, 'Courier New', monospace;
+      font-size: 14px;
+      line-height: 18px;
+    }
+    #below {
+      margin-top: 16px;
+      padding: 12px;
+      background: #f7f7f7;
+      border-radius: 8px;
+      border: 1px dashed #bbb;
+    }
+    .row { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div style="font-size:18px;font-weight:700;">max-height + overflow:auto</div>
+    <div class="hint">页面加载后会自动追加多行日志。正确行为：黑框高度固定，内容溢出走内部滚动；下方灰框位置不被推走。</div>
+    <div id="log"></div>
+    <div id="below">Below marker: should stay close to the log box.</div>
+  </div>
+
+  <script>
+    const log = document.getElementById('log');
+    let i = 0;
+
+    function appendLine(text) {
+      const d = document.createElement('div');
+      d.className = 'row';
+      d.textContent = text;
+      log.appendChild(d);
+    }
+
+    function burstAppend(count) {
+      for (let k = 0; k < count; k++) {
+        appendLine(`[${String(i).padStart(3, '0')}] The quick brown fox jumps over the lazy dog. 0123456789`);
+        i++;
+      }
+    }
+
+    // Make growth deterministic without user interaction.
+    burstAppend(80);
+  </script>
+</body>
+</html>

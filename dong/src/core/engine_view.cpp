@@ -296,6 +296,9 @@ struct EngineView::Impl {
     DOMNodePtr hovered_element;
     DOMNodePtr active_element;
 
+    // 当前打开的 <select>（用于把下拉框区域的点击正确路由到该 select）
+    DOMNodePtr open_select_element;
+
     Impl(uint32_t w, uint32_t h)
 
         : width(w), height(h),
@@ -1299,6 +1302,31 @@ struct EngineView::Impl {
         js_bindings->dispatchKeyEvent(node_id, type, key_code);
     }
 
+    uint64_t ensureNodeIdForJS(const DOMNodePtr& node) {
+        if (!node || !script_engine || !js_bindings) return 0;
+        ensureJSBindingsInitialized();
+
+        uint64_t node_id = js_bindings->getNodeIdFor(node);
+        if (node_id) return node_id;
+
+        JSContext* qjs = script_engine->getContext();
+        if (!qjs) return 0;
+
+        JSValue tmp = js_bindings->createJSElement(qjs, node);
+        JS_FreeValue(qjs, tmp);
+        return js_bindings->getNodeIdFor(node);
+    }
+
+    void dispatchSimpleEventForNode(const DOMNodePtr& node, const char* type) {
+        if (!type || !type[0] || !node) return;
+        if (!script_engine || !js_bindings) return;
+
+        uint64_t node_id = ensureNodeIdForJS(node);
+        if (!node_id) return;
+
+        js_bindings->dispatchSimpleEvent(node_id, type);
+    }
+
     void sendMouseMove(int32_t x, int32_t y) {
         last_mouse_x = x;
         last_mouse_y = y;
@@ -1306,21 +1334,139 @@ struct EngineView::Impl {
         dispatchMouseEvent("mousemove", x, y, 0);
     }
 
+    static constexpr float kSelectOptionHeight = 30.0f;
+
+    bool computeSelectGeometry(const DOMNodePtr& select,
+                              float& select_x, float& select_y,
+                              float& select_w, float& select_h,
+                              float& dropdown_x, float& dropdown_y,
+                              float& dropdown_w, float& dropdown_h) const {
+        if (!layout_engine || !select) return false;
+        auto layout_node = layout_engine->getLayout(select);
+        if (!layout_node) return false;
+
+        select_x = layout_node->x;
+        select_y = layout_node->y;
+        select_w = layout_node->width;
+        select_h = layout_node->height;
+
+        auto* state = dong::dom::getSelectState(select);
+        size_t option_count = state ? state->getOptionCount() : 0;
+
+        dropdown_x = select_x;
+        dropdown_y = select_y + select_h;
+        dropdown_w = select_w;
+        dropdown_h = static_cast<float>(option_count) * kSelectOptionHeight;
+        return true;
+    }
+
+    DOMNodePtr normalizeSelectHit(const DOMNodePtr& hit) const {
+        if (!hit) return nullptr;
+        if (dong::dom::isSelectElement(hit)) return hit;
+        if (hit->getTagName() == "option") {
+            auto parent = hit->getParent();
+            if (parent && dong::dom::isSelectElement(parent)) {
+                return parent;
+            }
+        }
+        return nullptr;
+    }
+
+    bool handleOpenSelectMouseDown(int32_t x, int32_t y, int32_t button) {
+        if (button != 1) return false;
+        if (!open_select_element) return false;
+
+        auto* state = dong::dom::getSelectState(open_select_element);
+        if (!state || !state->isOpen()) {
+            open_select_element.reset();
+            return false;
+        }
+
+        float sx = 0, sy = 0, sw = 0, sh = 0;
+        float dx = 0, dy = 0, dw = 0, dh = 0;
+        if (!computeSelectGeometry(open_select_element, sx, sy, sw, sh, dx, dy, dw, dh)) {
+            return false;
+        }
+
+        float fx = static_cast<float>(x);
+        float fy = static_cast<float>(y);
+
+        auto inRect = [](float px, float py, float rx, float ry, float rw, float rh) {
+            return px >= rx && px <= rx + rw && py >= ry && py <= ry + rh;
+        };
+
+        const bool in_select = inRect(fx, fy, sx, sy, sw, sh);
+        const bool in_dropdown = (dh > 0.0f) && inRect(fx, fy, dx, dy, dw, dh);
+
+        if (in_dropdown) {
+            const float rel_y = fy - dy;
+            size_t option_index = static_cast<size_t>(rel_y / kSelectOptionHeight);
+            if (option_index < state->getOptionCount()) {
+                state->selectOption(option_index);
+                state->close();
+                open_select_element->setAttribute("value", state->getSelectedValue());
+
+                dispatchSimpleEventForNode(open_select_element, "change");
+
+                open_select_element.reset();
+                markNeedsRepaint();
+                return true;
+            }
+        }
+
+        if (in_select) {
+            state->close();
+            open_select_element.reset();
+            markNeedsRepaint();
+            return true;
+        }
+
+        // Click outside: close dropdown but do not consume the event.
+        state->close();
+        open_select_element.reset();
+        markNeedsRepaint();
+        return false;
+    }
+
 
     void sendMouseButton(int32_t button, bool pressed) {
         updateHoverState(last_mouse_x, last_mouse_y);
 
         if (pressed) {
-            // Select element click handling (BEFORE general click handling)
+            // Select 下拉框不在 DOM/layout hit-test 中：如果当前有打开的 select，优先把点击路由过去。
+            if (handleOpenSelectMouseDown(last_mouse_x, last_mouse_y, button)) {
+                return;
+            }
+
             auto hit = hitElementAt(last_mouse_x, last_mouse_y);
 
-            // Check if click is on a select element
-            if (hit && dong::dom::isSelectElement(hit)) {
-                auto* state = dong::dom::getSelectState(hit);
+            // Select element click handling (BEFORE general click handling)
+            // 兼容：如果 hit 到的是 <option>，将其归一化到父 <select>。
+            auto select_hit = normalizeSelectHit(hit);
+            if (select_hit && button == 1) {
+                auto* state = dong::dom::getSelectState(select_hit);
                 if (state) {
-                    state->toggle();
+                    state->syncFromDOM(select_hit);
+
+                    // 只允许一个 select 下拉同时打开
+                    if (open_select_element && open_select_element.get() != select_hit.get()) {
+                        auto* open_state = dong::dom::getSelectState(open_select_element);
+                        if (open_state && open_state->isOpen()) {
+                            open_state->close();
+                        }
+                        open_select_element.reset();
+                    }
+
+                    if (state->isOpen()) {
+                        state->close();
+                        open_select_element.reset();
+                    } else {
+                        state->open();
+                        open_select_element = select_hit;
+                    }
+
+                    setActiveElement(select_hit);
                     markNeedsRepaint();
-                    // Event consumed - no further processing needed for now
                     return;
                 }
             }
@@ -1380,13 +1526,7 @@ struct EngineView::Impl {
                     }
                     markNeedsRepaint();
                     // Dispatch change event
-                    if (js_bindings && script_engine) {
-                        ensureJSBindingsInitialized();
-                        uint64_t nid = js_bindings->getNodeIdFor(clicked);
-                        if (nid) {
-                            js_bindings->dispatchSimpleEvent(nid, "change");
-                        }
-                    }
+                    dispatchSimpleEventForNode(clicked, "change");
                 } else if (type == "radio") {
                     if (!clicked->hasAttribute("checked")) {
                         // Uncheck other radios in same name group
@@ -1403,13 +1543,7 @@ struct EngineView::Impl {
                         }
                         clicked->setAttribute("checked", "");
                         markNeedsRepaint();
-                        if (js_bindings && script_engine) {
-                            ensureJSBindingsInitialized();
-                            uint64_t nid = js_bindings->getNodeIdFor(clicked);
-                            if (nid) {
-                                js_bindings->dispatchSimpleEvent(nid, "change");
-                            }
-                        }
+                        dispatchSimpleEventForNode(clicked, "change");
                     }
                 }
             }
@@ -1456,80 +1590,62 @@ struct EngineView::Impl {
 
             // Handle select element keyboard navigation
             if (focus_manager && dom_manager) {
+                constexpr uint32_t SDLK_ESCAPE = 27;
+
                 auto focused = focus_manager->getFocusedElement();
                 if (focused && focused->getTagName() == "select") {
-                    bool handled = false;
+                    auto* state = dong::dom::getSelectState(focused);
+                    if (state) {
+                        state->syncFromDOM(focused);
 
-                    if (key_code == SDLK_UP || key_code == SDLK_DOWN) {
-                        // Get current selectedIndex
-                        int current_index = 0;
-                        if (focused->hasAttribute("data-selected-index")) {
-                            try {
-                                current_index = std::stoi(focused->getAttribute("data-selected-index"));
-                            } catch (...) {}
-                        }
+                        bool handled = false;
 
-                        // Count option elements
-                        int option_count = 0;
-                        std::vector<dong::dom::DOMNodePtr> options;
-                        for (const auto& child : focused->getChildren()) {
-                            if (child->getTagName() == "option") {
-                                options.push_back(child);
-                                option_count++;
-                            }
-                        }
-
-                        if (option_count > 0) {
-                            // Update index
-                            if (key_code == SDLK_UP && current_index > 0) {
-                                current_index--;
-                                handled = true;
-                            } else if (key_code == SDLK_DOWN && current_index < option_count - 1) {
-                                current_index++;
-                                handled = true;
-                            }
-
-                            if (handled) {
-                                // Update selectedIndex attribute
-                                focused->setAttribute("data-selected-index", std::to_string(current_index));
-
-                                // Update value attribute from selected option
-                                if (current_index >= 0 && current_index < (int)options.size()) {
-                                    std::string value = options[current_index]->getAttribute("value");
-                                    if (value.empty()) {
-                                        // Use text content if no value attribute
-                                        value = options[current_index]->getTextContent();
-                                    }
-                                    focused->setAttribute("value", value);
+                        if (key_code == SDLK_UP || key_code == SDLK_DOWN) {
+                            const size_t n = state->getOptionCount();
+                            if (n > 0) {
+                                size_t idx = state->getSelectedIndex();
+                                if (key_code == SDLK_UP && idx > 0) {
+                                    idx--;
+                                    handled = true;
+                                } else if (key_code == SDLK_DOWN && idx + 1 < n) {
+                                    idx++;
+                                    handled = true;
                                 }
 
+                                if (handled) {
+                                    state->selectOption(idx);
+                                    focused->setAttribute("value", state->getSelectedValue());
+
+                                    markNeedsRepaint();
+
+                                    dispatchSimpleEventForNode(focused, "change");
+                                }
+                            }
+                        } else if (key_code == SDLK_RETURN) {
+                            // Enter: toggle dropdown open/close
+                            state->toggle();
+                            if (state->isOpen()) {
+                                open_select_element = focused;
+                            } else if (open_select_element.get() == focused.get()) {
+                                open_select_element.reset();
+                            }
+                            markNeedsRepaint();
+                            handled = true;
+                        } else if (key_code == SDLK_ESCAPE) {
+                            if (state->isOpen()) {
+                                state->close();
+                                if (open_select_element.get() == focused.get()) {
+                                    open_select_element.reset();
+                                }
                                 markNeedsRepaint();
-
-                                // Dispatch change event
-                                if (js_bindings && script_engine) {
-                                    ensureJSBindingsInitialized();
-                                    uint64_t nid = js_bindings->getNodeIdFor(focused);
-                                    if (nid) {
-                                        js_bindings->dispatchSimpleEvent(nid, "change");
-                                    }
-                                }
+                                handled = true;
                             }
                         }
-                    } else if (key_code == SDLK_RETURN) {
-                        // Enter key - just dispatch change event
-                        if (js_bindings && script_engine) {
-                            ensureJSBindingsInitialized();
-                            uint64_t nid = js_bindings->getNodeIdFor(focused);
-                            if (nid) {
-                                js_bindings->dispatchSimpleEvent(nid, "change");
-                            }
-                        }
-                        handled = true;
-                    }
 
-                    if (handled) {
-                        dispatchKeyEvent("keydown", key_code);
-                        return;
+                        if (handled) {
+                            dispatchKeyEvent("keydown", key_code);
+                            return;
+                        }
                     }
                 }
             }

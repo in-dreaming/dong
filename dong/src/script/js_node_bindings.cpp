@@ -2,6 +2,7 @@
 #include "js_bindings.hpp"
 #include "../core/log.h"
 #include "../dom/input_element.hpp"
+#include "../dom/select_element.hpp"
 
 #include <string>
 #include <algorithm>
@@ -724,6 +725,15 @@ static JSValue input_getValue(JSContext* ctx, JSValueConst this_val, int argc, J
     (void)argc; (void)argv;
     auto node = JSBindings::getNodeOpaque(ctx, this_val);
     if (!node) return JS_NewString(ctx, "");
+
+    // Check for select element
+    if (node->getNodeName() == "select") {
+        auto* state = dom::getSelectState(node);
+        if (state) {
+            return JS_NewString(ctx, state->getSelectedValue().c_str());
+        }
+    }
+
     // First check if there's an InputElementState
     auto* state = dom::getInputState(node);
     if (state) {
@@ -832,7 +842,13 @@ static JSValue select_getSelectedIndex(JSContext* ctx, JSValueConst this_val, in
     auto node = JSBindings::getNodeOpaque(ctx, this_val);
     if (!node) return JS_NewInt32(ctx, -1);
 
-    // Find selected option index
+    // Get from SelectElementState
+    auto* state = dong::dom::getSelectState(node);
+    if (state) {
+        return JS_NewInt32(ctx, static_cast<int32_t>(state->getSelectedIndex()));
+    }
+
+    // Fallback: Find selected option index from DOM
     int index = 0;
     auto children = node->getChildren();
     for (size_t i = 0; i < children.size(); ++i) {
@@ -857,7 +873,14 @@ static JSValue select_setSelectedIndex(JSContext* ctx, JSValueConst this_val, in
     int32_t new_index = 0;
     JS_ToInt32(ctx, &new_index, argv[0]);
 
-    // Clear all selected attributes and set new one
+    // Update SelectElementState
+    auto* state = dong::dom::getSelectState(node);
+    if (state && new_index >= 0 && static_cast<size_t>(new_index) < state->getOptionCount()) {
+        state->selectOption(static_cast<size_t>(new_index));
+        // DOM sync happens via engine_view event handling
+    }
+
+    // Also update DOM attributes (fallback for when state doesn't exist)
     int index = 0;
     auto children = node->getChildren();
     for (size_t i = 0; i < children.size(); ++i) {

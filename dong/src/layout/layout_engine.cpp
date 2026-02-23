@@ -1485,6 +1485,13 @@ YGNode* Engine::createYogaNode(dom::DOMNodePtr dom_node) {
 // ---------------------------------------------------------------------------
 void Engine::buildChildYogaNodes(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
     const auto& parent_style = dom_node->getComputedStyle();
+
+    // <select> 是 replaced control：其 <option>/<optgroup> 子树不参与常规布局树，
+    // 关闭态/打开态都由专用的 select 渲染与事件逻辑处理。
+    if (dom_node && dom_node->getTagName() == "select") {
+        return;
+    }
+
     const bool parent_is_block_like = (parent_style.layout_mode == dom::LayoutMode::Block);
     const bool needs_anon_wrapping = parent_is_block_like && hasMixedBlockInlineChildren(dom_node);
 
@@ -1847,6 +1854,20 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
             if (style.width.isAuto()) {
                 YGNodeStyleSetMinWidth(yoga_node, 150.0f);  // \u9ed8\u8ba4\u6700\u5c0f\u5bbd\u5ea6
             }
+        }
+    }
+
+    // select 也是 replaced control：关闭态只展示选中项（由 painter_select 绘制），
+    // 布局上给一个类似 input 的合理默认高度，避免在无子节点时 Yoga 高度塌缩。
+    if (tag == "select") {
+        float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
+        float pad_top = style.padding_top.isPixel() ? style.padding_top.value : 0.0f;
+        float pad_bottom = style.padding_bottom.isPixel() ? style.padding_bottom.value : 0.0f;
+        float select_height = font_size * 1.2f + pad_top + pad_bottom;
+        YGNodeStyleSetHeight(yoga_node, select_height);
+
+        if (style.width.isAuto()) {
+            YGNodeStyleSetMinWidth(yoga_node, 150.0f);
         }
     }
     
@@ -3085,6 +3106,41 @@ void Engine::layoutLineItems(std::vector<InlineItem>& items,
 }
 
 // ---------------------------------------------------------------------------
+// Max-height helpers (used by post-pass height propagation)
+// ---------------------------------------------------------------------------
+static float effective_border_side_width(float side_width,
+                                         const std::string& side_style,
+                                         float fallback_width,
+                                         const std::string& fallback_style) {
+    float w = (side_width >= 0.0f) ? side_width : fallback_width;
+    if (w < 0.0f) w = 0.0f;
+    const std::string& st = !side_style.empty() ? side_style : fallback_style;
+    if (st == "none" || st == "hidden") return 0.0f;
+    return w;
+}
+
+static float effective_border_vertical_px(const dong::dom::ComputedStyle& style) {
+    const float bt = effective_border_side_width(style.border_top_width, style.border_top_style,
+                                                 style.border_width, style.border_style);
+    const float bb = effective_border_side_width(style.border_bottom_width, style.border_bottom_style,
+                                                 style.border_width, style.border_style);
+    return bt + bb;
+}
+
+static std::optional<float> max_height_border_box_px(const dong::dom::ComputedStyle& style) {
+    if (!style.max_height.isPixel()) {
+        return std::nullopt;
+    }
+    float max_h = style.max_height.value;
+    if (style.box_sizing == "content-box") {
+        const float pad_t = style.padding_top.isPixel() ? style.padding_top.value : 0.0f;
+        const float pad_b = style.padding_bottom.isPixel() ? style.padding_bottom.value : 0.0f;
+        max_h += pad_t + pad_b + effective_border_vertical_px(style);
+    }
+    return max_h;
+}
+
+// ---------------------------------------------------------------------------
 // IFC Helper: Propagate height changes bottom-up
 // ---------------------------------------------------------------------------
 float Engine::propagateIFCHeights(const dom::DOMNodePtr& node) {
@@ -3115,8 +3171,21 @@ float Engine::propagateIFCHeights(const dom::DOMNodePtr& node) {
 
     if (max_child_bottom > 0.0f && !style.height.isPixel()) {
         float pad_bottom = style.padding_bottom.isPixel() ? style.padding_bottom.value : 0.0f;
-        float border_bottom = style.border_width > 0.0f ? style.border_width : 0.0f;
+        float border_bottom = effective_border_side_width(style.border_bottom_width, style.border_bottom_style,
+                                                          style.border_width, style.border_style);
         float required_height = max_child_bottom - layout->y + pad_bottom + border_bottom;
+
+        // Important: Yoga already applies max-height, but our post-pass propagation must not override it.
+        if (auto max_h = max_height_border_box_px(style)) {
+            if (required_height > *max_h) {
+                required_height = *max_h;
+            }
+            if (layout->height > *max_h) {
+                layout->height = *max_h;
+                layout->layout.dimensions[1] = *max_h;
+                dirty_rect_.expand(layout->x, layout->y, layout->width, layout->height);
+            }
+        }
 
         if (required_height > layout->height) {
             layout->height = required_height;
@@ -3510,10 +3579,20 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
                         // 只有当计算出的高度大于 Yoga 计算的高度时才更新
                         // （如果 CSS 指定了固定高度，应该尊重它）
                         if (!container_style.height.isPixel() && new_container_height > container_layout->height) {
-                            container_layout->height = new_container_height;
-                            container_layout->layout.dimensions[1] = new_container_height;
-                            dirty_rect_.expand(container_layout->x, container_layout->y,
-                                             container_layout->width, container_layout->height);
+                            float target_h = new_container_height;
+
+                            // Respect max-height: do not grow scroll/overflow containers beyond their max constraint.
+                            // Otherwise a log list (appendChild) will keep pushing layout height and appears "unscrollable".
+                            if (auto max_h = max_height_border_box_px(container_style)) {
+                                target_h = std::min(target_h, *max_h);
+                            }
+
+                            if (target_h > container_layout->height) {
+                                container_layout->height = target_h;
+                                container_layout->layout.dimensions[1] = target_h;
+                                dirty_rect_.expand(container_layout->x, container_layout->y,
+                                                 container_layout->width, container_layout->height);
+                            }
                         }
                     }
                 }
@@ -3577,6 +3656,18 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
             float pad_bottom = style.padding_bottom.isPixel() ? style.padding_bottom.value : 0.0f;
             float border_bottom = style.border_width > 0.0f ? style.border_width : 0.0f;
             float required_height = max_child_bottom - layout->y + pad_bottom + border_bottom;
+
+            // Respect max-height (pixel) during post-pass height propagation.
+            // Yoga already applies max-height, but our post pass can accidentally override it.
+            if (auto max_h = max_height_border_box_px(style)) {
+                required_height = std::min(required_height, *max_h);
+
+                if (layout->height > *max_h) {
+                    layout->height = *max_h;
+                    layout->layout.dimensions[1] = *max_h;
+                    dirty_rect_.expand(layout->x, layout->y, layout->width, layout->height);
+                }
+            }
             
             if (required_height > layout->height) {
                 layout->height = required_height;
@@ -3877,6 +3968,18 @@ void Engine::adjustSiblingYPositions(const dom::DOMNodePtr& node,
         }
 
         float new_height = max_bottom - layout->y + pad_bottom;
+
+        if (auto max_h = max_height_border_box_px(style)) {
+            if (new_height > *max_h) {
+                new_height = *max_h;
+            }
+            if (layout->height > *max_h) {
+                layout->height = *max_h;
+                layout->layout.dimensions[1] = *max_h;
+                dirty_rect_.expand(layout->x, layout->y, layout->width, layout->height);
+            }
+        }
+
         if (new_height > layout->height) {
             layout->height = new_height;
             layout->layout.dimensions[1] = new_height;
