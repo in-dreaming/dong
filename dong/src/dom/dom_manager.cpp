@@ -12,11 +12,12 @@ Manager::~Manager() = default;
 bool Manager::loadHTML(const std::string& html) {
     root = parser->parse(html);
     if (root) {
-        // Extract stylesheets from the parsed DOM and add to our persistent StyleEngine
-        // The parser already computed initial styles, but we need to keep the stylesheets
-        // for runtime recomputation
+        // Extract stylesheets from the parsed DOM and add to our persistent StyleEngine.
+        // Important: do a full style pass here so we don't rely on the parser's internal
+        // "initial style" side effects (which may differ across HTML shapes).
         style_engine = std::make_unique<StyleEngine>();
         parser->extractAndApplyStyles(root, style_engine.get());
+        style_engine->computeStyles(root);
 
         // Handle autofocus attribute - find first element with autofocus and focus it
         handleAutofocus(root);

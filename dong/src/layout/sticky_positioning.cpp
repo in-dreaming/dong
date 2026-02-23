@@ -1,16 +1,77 @@
 #include "sticky_positioning.hpp"
 #include "layout_engine.hpp"
+#include "../core/log.h"
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
+#include <memory>
 
-namespace dong::layout {
+namespace dong {
+namespace layout {
+
+namespace {
+
+inline float clampf(float v, float lo, float hi) {
+    if (v < lo) return lo;
+    if (v > hi) return hi;
+    return v;
+}
+
+inline bool hasInset(float inset) {
+    return !std::isnan(inset);
+}
+
+struct ScrollportRect {
+    float x;
+    float y;
+    float w;
+    float h;
+
+    ScrollportRect() : x(0.0f), y(0.0f), w(0.0f), h(0.0f) {}
+};
+
+ScrollportRect getScrollportRect(const StickyMetadata& meta) {
+    ScrollportRect r;
+    if (!meta.scroll_container) {
+        return r;
+    }
+    r.x = meta.scroll_container->getClientLeft();
+    r.y = meta.scroll_container->getClientTop();
+    r.w = meta.scroll_container->getClientWidth();
+    r.h = meta.scroll_container->getClientHeight();
+    return r;
+}
+
+float maxVisualY(const StickyMetadata& meta) {
+    return meta.containing_block_y + meta.containing_block_height - meta.original_height;
+}
+
+float maxVisualX(const StickyMetadata& meta) {
+    return meta.containing_block_x + meta.containing_block_width - meta.original_width;
+}
+
+float resolveInsetPx(const dom::CSSValue& v, float reference_size) {
+    if (!v.isSet() || v.isAuto()) {
+        return NAN;
+    }
+    if (v.isPixel()) {
+        return v.value;
+    }
+    if (v.isPercent()) {
+        return reference_size * (v.value / 100.0f);
+    }
+    // TODO: support calc()/em/rem/vw/vh when layout context is available.
+    return NAN;
+}
+
+} // namespace
 
 dom::DOMNodePtr findScrollContainer(dom::DOMNodePtr node) {
     if (!node) return nullptr;
 
-    auto parent = node->getParentNode();
+    dom::DOMNodePtr parent = node->getParentNode();
     while (parent) {
-        const auto& style = parent->getComputedStyle();
+        const dom::ComputedStyle& style = parent->getComputedStyle();
         bool is_scroll = (style.overflow == "auto" || style.overflow == "scroll" ||
                          style.overflow_y == "auto" || style.overflow_y == "scroll" ||
                          style.overflow_x == "auto" || style.overflow_x == "scroll");
@@ -28,7 +89,7 @@ dom::DOMNodePtr findScrollContainer(dom::DOMNodePtr node) {
 void computeStickyMetadata(dom::DOMNodePtr node, LayoutNode* layout) {
     if (!node || !layout) return;
 
-    auto meta = std::make_unique<StickyMetadata>();
+    std::unique_ptr<StickyMetadata> meta(new StickyMetadata());
 
     meta->original_x = layout->x;
     meta->original_y = layout->y;
@@ -37,24 +98,10 @@ void computeStickyMetadata(dom::DOMNodePtr node, LayoutNode* layout) {
 
     meta->scroll_container = findScrollContainer(node);
 
-    const auto& style = node->getComputedStyle();
-    if (style.top.unit != dom::CSSValue::Unit::AUTO) {
-        meta->inset_top = style.top.value;
-    }
-    if (style.bottom.unit != dom::CSSValue::Unit::AUTO) {
-        meta->inset_bottom = style.bottom.value;
-    }
-    if (style.left.unit != dom::CSSValue::Unit::AUTO) {
-        meta->inset_left = style.left.value;
-    }
-    if (style.right.unit != dom::CSSValue::Unit::AUTO) {
-        meta->inset_right = style.right.value;
-    }
-
-    auto parent = node->getParentNode();
+    dom::DOMNodePtr parent = node->getParentNode();
     if (parent) {
         if (layout->parent) {
-            const auto& parent_style = parent->getComputedStyle();
+            const dom::ComputedStyle& parent_style = parent->getComputedStyle();
             float pad_top = 0.0f, pad_left = 0.0f, pad_right = 0.0f, pad_bottom = 0.0f;
 
             if (parent_style.padding_top.unit == dom::CSSValue::Unit::PIXEL) {
@@ -87,6 +134,12 @@ void computeStickyMetadata(dom::DOMNodePtr node, LayoutNode* layout) {
         meta->containing_block_height = 10000.0f;
     }
 
+    const dom::ComputedStyle& style = node->getComputedStyle();
+    meta->inset_top = resolveInsetPx(style.top, meta->containing_block_height);
+    meta->inset_bottom = resolveInsetPx(style.bottom, meta->containing_block_height);
+    meta->inset_left = resolveInsetPx(style.left, meta->containing_block_width);
+    meta->inset_right = resolveInsetPx(style.right, meta->containing_block_width);
+
     meta->visual_x = meta->original_x;
     meta->visual_y = meta->original_y;
     meta->is_stuck = false;
@@ -94,79 +147,83 @@ void computeStickyMetadata(dom::DOMNodePtr node, LayoutNode* layout) {
     layout->sticky_metadata = std::move(meta);
 }
 
-void applyStickyOffset(dom::DOMNodePtr node, LayoutNode* layout,
-                       float scroll_x, float scroll_y) {
+void applyStickyOffset(dom::DOMNodePtr node, LayoutNode* layout, float scroll_x, float scroll_y) {
     if (!node || !layout || !layout->sticky_metadata) return;
 
-    auto& meta = layout->sticky_metadata;
+    StickyMetadata* meta = layout->sticky_metadata.get();
 
     meta->visual_x = meta->original_x;
     meta->visual_y = meta->original_y;
     meta->is_stuck = false;
 
-    if (!std::isnan(meta->inset_top)) {
-        float threshold_y = meta->original_y - meta->inset_top;
+    const ScrollportRect sp = getScrollportRect(*meta);
 
-        if (scroll_y >= threshold_y) {
-            float target_y = scroll_y + meta->inset_top;
+    static const bool kDbgSticky = ([]() {
+        const char* v = std::getenv("DONG_DEBUG_STICKY");
+        return v && v[0] == '1';
+    })();
+    const bool dbg_this = kDbgSticky && node->getAttribute("id") == "sticky";
+    if (dbg_this) {
+        DONG_LOG_INFO(
+            "[StickyDbg] begin scroll=(%.1f,%.1f) sp=(%.1f,%.1f,%.1f,%.1f) orig=(%.1f,%.1f) inset_top=%.1f",
+            scroll_x, scroll_y, sp.x, sp.y, sp.w, sp.h, meta->original_x, meta->original_y, meta->inset_top);
+    }
 
-            float max_y = meta->containing_block_y + meta->containing_block_height - meta->original_height;
-            target_y = std::min(target_y, max_y);
+    // Note: `scroll_x/scroll_y` are in scroll-container content coordinates.
+    // Layout positions are in global coordinates and the painter applies a `-scroll`
+    // translate for scroll containers. Therefore, when a sticky element is stuck we
+    // must set `visual_*` in the pre-translate space so that after `-scroll` it lands
+    // at `scrollport + inset`.
 
-            target_y = std::max(target_y, meta->containing_block_y);
-
+    // --- Vertical stickiness ---
+    if (hasInset(meta->inset_top)) {
+        const float threshold_scroll_y = meta->original_y - (sp.y + meta->inset_top);
+        if (dbg_this) {
+            DONG_LOG_INFO("[StickyDbg] top: threshold=%.1f scroll_y=%.1f", threshold_scroll_y, scroll_y);
+        }
+        if (scroll_y >= threshold_scroll_y) {
+            float target_y = sp.y + meta->inset_top + scroll_y;
+            target_y = clampf(target_y, meta->containing_block_y, maxVisualY(*meta));
             meta->visual_y = target_y;
             meta->is_stuck = true;
         }
-    } else if (!std::isnan(meta->inset_bottom)) {
-        float viewport_bottom = scroll_y + meta->original_height;
-        float threshold_y = meta->original_y + meta->original_height + meta->inset_bottom;
-
-        if (viewport_bottom <= threshold_y) {
-            float target_y = viewport_bottom - meta->original_height - meta->inset_bottom;
-
-            float min_y = meta->containing_block_y;
-            target_y = std::max(target_y, min_y);
-
-            float max_y = meta->containing_block_y + meta->containing_block_height - meta->original_height;
-            target_y = std::min(target_y, max_y);
-
+    } else if (hasInset(meta->inset_bottom) && sp.h > 0.0f) {
+        const float scrollport_bottom = sp.y + sp.h;
+        const float target_screen_y = scrollport_bottom - meta->inset_bottom - meta->original_height;
+        const float current_screen_y = meta->original_y - scroll_y;
+        if (current_screen_y > target_screen_y) {
+            float target_y = target_screen_y + scroll_y;
+            target_y = clampf(target_y, meta->containing_block_y, maxVisualY(*meta));
             meta->visual_y = target_y;
             meta->is_stuck = true;
         }
     }
 
-    if (!std::isnan(meta->inset_left)) {
-        float threshold_x = meta->original_x - meta->inset_left;
+    if (dbg_this) {
+        DONG_LOG_INFO("[StickyDbg] end: is_stuck=%d visual_y=%.1f", meta->is_stuck ? 1 : 0, meta->visual_y);
+    }
 
-        if (scroll_x >= threshold_x) {
-            float target_x = scroll_x + meta->inset_left;
-
-            float max_x = meta->containing_block_x + meta->containing_block_width - meta->original_width;
-            target_x = std::min(target_x, max_x);
-
-            target_x = std::max(target_x, meta->containing_block_x);
-
+    // --- Horizontal stickiness ---
+    if (hasInset(meta->inset_left)) {
+        const float threshold_scroll_x = meta->original_x - (sp.x + meta->inset_left);
+        if (scroll_x >= threshold_scroll_x) {
+            float target_x = sp.x + meta->inset_left + scroll_x;
+            target_x = clampf(target_x, meta->containing_block_x, maxVisualX(*meta));
             meta->visual_x = target_x;
             meta->is_stuck = true;
         }
-    } else if (!std::isnan(meta->inset_right)) {
-        float viewport_right = scroll_x + meta->original_width;
-        float threshold_x = meta->original_x + meta->original_width + meta->inset_right;
-
-        if (viewport_right <= threshold_x) {
-            float target_x = viewport_right - meta->original_width - meta->inset_right;
-
-            float min_x = meta->containing_block_x;
-            target_x = std::max(target_x, min_x);
-
-            float max_x = meta->containing_block_x + meta->containing_block_width - meta->original_width;
-            target_x = std::min(target_x, max_x);
-
+    } else if (hasInset(meta->inset_right) && sp.w > 0.0f) {
+        const float scrollport_right = sp.x + sp.w;
+        const float target_screen_x = scrollport_right - meta->inset_right - meta->original_width;
+        const float current_screen_x = meta->original_x - scroll_x;
+        if (current_screen_x > target_screen_x) {
+            float target_x = target_screen_x + scroll_x;
+            target_x = clampf(target_x, meta->containing_block_x, maxVisualX(*meta));
             meta->visual_x = target_x;
             meta->is_stuck = true;
         }
     }
 }
 
-}  // namespace dong::layout
+}  // namespace layout
+}  // namespace dong

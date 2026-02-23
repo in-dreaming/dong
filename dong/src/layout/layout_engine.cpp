@@ -1252,9 +1252,29 @@ void Engine::calculateLayout(dom::DOMNodePtr root, float width, float height) {
             node_layout->height = new_height;
             node_layout->layout_recalculated = true;
             
-            // Debug: log button-row and button layout
+            // Debug: dump extracted layout for nodes matching an env-filtered class.
+            // Usage: DONG_DEBUG_LAYOUT_CLASS=block (substring match)
+            static const char* kDbgClass = []() -> const char* {
+                const char* v = std::getenv("DONG_DEBUG_LAYOUT_CLASS");
+                return (v && v[0]) ? v : nullptr;
+            }();
+
             const std::string debug_class = dom_node->getAttribute("class");
             const std::string tag = dom_node->getTagName();
+            if (kDbgClass && (std::strcmp(kDbgClass, "*") == 0 ||
+                              debug_class.find(kDbgClass) != std::string::npos)) {
+                const auto& cs = dom_node->getComputedStyle();
+                DONG_LOG_INFO(
+                    "[LayoutDump] tag=%s id=%s class=%s css_h_unit=%d css_h=%.1f yoga_h=%.1f extracted_h=%.1f y=%.1f",
+                    tag.c_str(),
+                    dom_node->getAttribute("id").c_str(),
+                    debug_class.c_str(),
+                    static_cast<int>(cs.height.unit),
+                    cs.height.value,
+                    height,
+                    new_height,
+                    new_y);
+            }
 
             // Keep legacy fields and new layout struct in sync (absolute coords)
             node_layout->layout.position[0] = node_layout->x;
@@ -1757,6 +1777,48 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
 
     mapComputedStylesToYoga(style, yoga_node, parent_content_w, parent_content_h);
 
+    // Block-flow inside overflow containers should be allowed to exceed the scrollport.
+    // Because we approximate block layout using Yoga's flex column model, the default
+    // `flex-shrink: 1` would otherwise force the content child to shrink to the
+    // scrollport height (making scrollHeight too small).
+    if (auto parent = dom_node->getParent()) {
+        if (parent->getType() == dom::DOMNode::NodeType::ELEMENT) {
+            const auto& ps = parent->getComputedStyle();
+            const bool parent_overflow =
+                (ps.overflow == "auto" || ps.overflow == "scroll" || ps.overflow == "hidden" || ps.overflow == "clip" ||
+                 ps.overflow_x == "auto" || ps.overflow_x == "scroll" || ps.overflow_x == "hidden" || ps.overflow_x == "clip" ||
+                 ps.overflow_y == "auto" || ps.overflow_y == "scroll" || ps.overflow_y == "hidden" || ps.overflow_y == "clip");
+
+            if (parent_overflow && ps.layout_mode != dom::LayoutMode::Flex &&
+                style.layout_mode == dom::LayoutMode::Block &&
+                (style.height.isAuto() || style.height.isUnset())) {
+                YGNodeStyleSetFlexGrow(yoga_node, 0.0f);
+                YGNodeStyleSetFlexShrink(yoga_node, 0.0f);
+            }
+        }
+    }
+
+    // Debug: validate that style->Yoga mapping is applied as expected.
+    // Usage: DONG_DEBUG_LAYOUT_CLASS=block|sticky|*
+    static const char* kDbgClass = []() -> const char* {
+        const char* v = std::getenv("DONG_DEBUG_LAYOUT_CLASS");
+        return (v && v[0]) ? v : nullptr;
+    }();
+    if (kDbgClass) {
+        const std::string cls = dom_node->getAttribute("class");
+        if (std::strcmp(kDbgClass, "*") == 0 || cls.find(kDbgClass) != std::string::npos) {
+            YGValue yh = YGNodeStyleGetHeight(yoga_node);
+            DONG_LOG_INFO(
+                "[YogaStyle] tag=%s id=%s class=%s css_h_unit=%d css_h=%.1f yoga_style_h=(unit=%d,val=%.1f)",
+                tag.c_str(),
+                dom_node->getAttribute("id").c_str(),
+                cls.c_str(),
+                static_cast<int>(style.height.unit),
+                style.height.value,
+                static_cast<int>(yh.unit),
+                yh.value);
+        }
+    }
 
     // 濡傛灉褰撳墠鑺傜偣鏄唴鑱旀牸寮忓寲涓婁笅鏂囷紙鍖呭惈 inline/inline-block 瀛愬厓绱狅級锛?
     // 璁剧疆涓?flex-direction: row锛岃 Yoga 鑳芥纭绠楀鍣ㄩ珮搴?

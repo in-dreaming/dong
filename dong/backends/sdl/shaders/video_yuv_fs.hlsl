@@ -89,8 +89,9 @@ float4 main(PSInput input) : SV_Target0 {
     float3 rgb = yuv_to_rgb_bt709(y, u, v);
     rgb = saturate(rgb);
 
-    float3 tinted = rgb * input.tint.rgb;
-    float alpha = input.tint.a;
+    // Use uniform tint instead of interpolated varying to avoid backend linkage issues.
+    float3 tinted = rgb * uTint.rgb;
+    float alpha = uTint.a;
 
     return float4(tinted, alpha);
 }

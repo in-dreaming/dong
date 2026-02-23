@@ -280,6 +280,11 @@ protected:
     float content_width_ = 0.0f;
     float content_height_ = 0.0f;
 
+    // Scroll geometry bookkeeping: avoid clamping scroll offsets until both
+    // client rect + content size have been initialized at least once.
+    bool has_client_rect_ = false;
+    bool has_content_size_ = false;
+
     // Client rect
     float client_top_ = 0.0f;
     float client_left_ = 0.0f;

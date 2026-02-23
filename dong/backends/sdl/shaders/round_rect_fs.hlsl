@@ -9,8 +9,8 @@ struct PSInput {
 };
 
 
-// Fragment shader 的 uniform buffer 必须使用 space3
-cbuffer RoundRectUniforms : register(b0, space3) {
+// Fragment shader uniform buffer: keep in sync with SDL_GPU fragment uniform slot mapping.
+cbuffer RoundRectUniforms : register(b0, space1) {
     float4 uRect;
     float4 uRadius;
     float4 uViewport;
@@ -88,7 +88,7 @@ float4 main(PSInput input) : SV_Target0 {
     }
 
 
-    float4 base = input.color;
+    float4 base = uColor;
     base.a *= alpha;
     // 直接输出 sRGB 颜色，不做 gamma 转换
     return base;

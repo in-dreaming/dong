@@ -1,9 +1,61 @@
 #include "../painter.hpp"
 
 #include <algorithm>
+#include <cstdlib>
 #include <vector>
 
 namespace dong::render {
+
+namespace {
+
+float computeScrollContentBottom(const dom::DOMNodePtr& node,
+                                layout::Engine* layout_engine,
+                                float current_max_bottom) {
+    if (!node || !layout_engine) {
+        return current_max_bottom;
+    }
+
+    for (const auto& child : node->getChildren()) {
+        if (!child || child->getType() != dom::DOMNode::NodeType::ELEMENT) {
+            continue;
+        }
+
+        if (const layout::LayoutNode* child_layout = layout_engine->getLayout(child)) {
+            const float child_bottom = child_layout->layout.position[1] + child_layout->layout.dimensions[1];
+            current_max_bottom = std::max(current_max_bottom, child_bottom);
+        }
+
+        current_max_bottom = computeScrollContentBottom(child, layout_engine, current_max_bottom);
+    }
+
+    return current_max_bottom;
+}
+
+inline float effectiveBorderWidthPx(const dom::ComputedStyle& style,
+                                   float side_width,
+                                   const std::string& side_style) {
+    const std::string& st = !side_style.empty() ? side_style : style.border_style;
+    if (st == "none" || st == "hidden") {
+        return 0.0f;
+    }
+    return (side_width >= 0.0f) ? side_width : std::max(0.0f, style.border_width);
+}
+
+Rect computeClientRectFromBorderBox(const Rect& border_box, const dom::ComputedStyle& style) {
+    const float bt = effectiveBorderWidthPx(style, style.border_top_width, style.border_top_style);
+    const float br = effectiveBorderWidthPx(style, style.border_right_width, style.border_right_style);
+    const float bb = effectiveBorderWidthPx(style, style.border_bottom_width, style.border_bottom_style);
+    const float bl = effectiveBorderWidthPx(style, style.border_left_width, style.border_left_style);
+
+    Rect client = border_box;
+    client.x += bl;
+    client.y += bt;
+    client.width = std::max(0.0f, border_box.width - bl - br);
+    client.height = std::max(0.0f, border_box.height - bt - bb);
+    return client;
+}
+
+} // namespace
 
 void Painter::paintChildrenAndOverlays(const dom::DOMNodePtr& node,
                                       const layout::LayoutNode* layout_node,
@@ -42,28 +94,25 @@ void Painter::paintChildrenAndOverlays(const dom::DOMNodePtr& node,
     bool have_scroll_content_height = false;
 
     // 维护滚动容器的 client/content 尺寸（用于 scrollTo/scrollBy clamp 与滚动条绘制）
+    Rect client_rect = node_rect;
     if (is_scroll_container && has_layout_rect) {
-        float content_bottom = node_rect.y;
-        for (const auto& child : children) {
-            if (!child || child->getType() != dom::DOMNode::NodeType::ELEMENT) {
-                continue;
-            }
-            const layout::LayoutNode* child_layout = layout_engine_ ? layout_engine_->getLayout(child) : nullptr;
-            if (child_layout) {
-                float child_bottom = child_layout->layout.position[1] + child_layout->layout.dimensions[1];
-                if (child_bottom > content_bottom) {
-                    content_bottom = child_bottom;
-                }
-            }
+        const dom::ComputedStyle& style = node->getComputedStyle();
+        client_rect = computeClientRectFromBorderBox(node_rect, style);
+
+        float content_bottom = client_rect.y;
+        if (layout_engine_) {
+            // 用子树的最大 bottom 作为内容底部（比只看直接子节点更鲁棒）。
+            content_bottom = computeScrollContentBottom(node, layout_engine_, content_bottom);
         }
-        float content_height = content_bottom - node_rect.y;
+
+        float content_height = content_bottom - client_rect.y;
         if (content_height < 0.0f) content_height = 0.0f;
 
         scroll_content_height = content_height;
         have_scroll_content_height = true;
 
-        node->setClientRect(node_rect.y, node_rect.x, node_rect.width, node_rect.height);
-        node->setContentSize(node_rect.width, content_height);
+        node->setClientRect(client_rect.y, client_rect.x, client_rect.width, client_rect.height);
+        node->setContentSize(client_rect.width, content_height);
     }
 
     // 如果是滚动容器，应用滚动偏移到子元素
@@ -91,7 +140,17 @@ void Painter::paintChildrenAndOverlays(const dom::DOMNodePtr& node,
         }
     }
 
+    auto should_defer_sticky = [](const dom::DOMNodePtr& n) {
+        return n && n->getType() == dom::DOMNode::NodeType::ELEMENT &&
+               n->getComputedStyle().position == "sticky";
+    };
+
     if (!need_z_sort) {
+        // Sticky elements are positioned; when stuck they can overlap later siblings.
+        // Paint stickies last so they appear above normal-flow content.
+        std::vector<dom::DOMNodePtr> deferred_sticky;
+        deferred_sticky.reserve(children.size());
+
         for (const auto& child : children) {
             if (!child || child->getType() != dom::DOMNode::NodeType::ELEMENT) {
                 continue;
@@ -102,6 +161,16 @@ void Painter::paintChildrenAndOverlays(const dom::DOMNodePtr& node,
                 continue;
             }
 
+            if (should_defer_sticky(child)) {
+                deferred_sticky.push_back(child);
+                continue;
+            }
+
+            const layout::LayoutNode* child_layout = layout_engine_ ? layout_engine_->getLayout(child) : nullptr;
+            buildDisplayListNode(child, child_layout, builder);
+        }
+
+        for (const auto& child : deferred_sticky) {
             const layout::LayoutNode* child_layout = layout_engine_ ? layout_engine_->getLayout(child) : nullptr;
             buildDisplayListNode(child, child_layout, builder);
         }
@@ -137,14 +206,28 @@ void Painter::paintChildrenAndOverlays(const dom::DOMNodePtr& node,
                       return a.original_order < b.original_order;
                   });
 
+        std::vector<dom::DOMNodePtr> deferred_sticky;
+        deferred_sticky.reserve(sorted_children.size());
+
         for (const auto& item : sorted_children) {
             // 跳过已经在容器层绘制过的 inline 元素
             if (item.child->getAttribute("__inline_rendered__") == "1") {
                 item.child->setAttribute("__inline_rendered__", "");  // 清除标记
                 continue;
             }
+
+            if (should_defer_sticky(item.child)) {
+                deferred_sticky.push_back(item.child);
+                continue;
+            }
+
             const layout::LayoutNode* child_layout = layout_engine_ ? layout_engine_->getLayout(item.child) : nullptr;
             buildDisplayListNode(item.child, child_layout, builder);
+        }
+
+        for (const auto& child : deferred_sticky) {
+            const layout::LayoutNode* child_layout = layout_engine_ ? layout_engine_->getLayout(child) : nullptr;
+            buildDisplayListNode(child, child_layout, builder);
         }
     }
 
@@ -162,11 +245,16 @@ void Painter::paintChildrenAndOverlays(const dom::DOMNodePtr& node,
     }
 
     // 7. 滚动条渲染（在子节点之后绘制，确保滚动条在内容之上）
-    if (is_scroll_container && layout_node && node_rect.width > 0.0f && node_rect.height > 0.0f) {
+    static const bool kDisableScrollbars = []() {
+        const char* v = ::getenv("DONG_DISABLE_SCROLLBARS");
+        return v && v[0] == '1';
+    }();
+
+    if (!kDisableScrollbars && is_scroll_container && layout_node && node_rect.width > 0.0f && node_rect.height > 0.0f) {
         // 内容高度：优先复用上面计算过的值，避免重复遍历 children。
         float content_height = scroll_content_height;
         if (!have_scroll_content_height) {
-            float content_bottom = node_rect.y;
+            float content_bottom = client_rect.y;
             for (const auto& child : children) {
                 if (!child || child->getType() != dom::DOMNode::NodeType::ELEMENT) {
                     continue;
@@ -180,11 +268,11 @@ void Painter::paintChildrenAndOverlays(const dom::DOMNodePtr& node,
                 }
             }
 
-            content_height = content_bottom - node_rect.y;
+            content_height = content_bottom - client_rect.y;
             if (content_height < 0.0f) content_height = 0.0f;
         }
 
-        float visible_height = node_rect.height;
+        float visible_height = client_rect.height;
 
         // 只有当内容高度大于可视高度时才显示滚动条
         if (content_height > visible_height + 1.0f) {
@@ -192,12 +280,12 @@ void Painter::paintChildrenAndOverlays(const dom::DOMNodePtr& node,
             constexpr float kScrollbarMinThumbHeight = 20.0f;
             constexpr float kScrollbarPadding = 2.0f;
 
-            // 滚动条轨道位置（在容器右侧）
+            // 滚动条轨道位置（在 client 区域右侧）
             Rect track_rect{};
-            track_rect.x = node_rect.x + node_rect.width - kScrollbarWidth - kScrollbarPadding;
-            track_rect.y = node_rect.y + kScrollbarPadding;
+            track_rect.x = client_rect.x + client_rect.width - kScrollbarWidth - kScrollbarPadding;
+            track_rect.y = client_rect.y + kScrollbarPadding;
             track_rect.width = kScrollbarWidth;
-            track_rect.height = node_rect.height - kScrollbarPadding * 2.0f;
+            track_rect.height = client_rect.height - kScrollbarPadding * 2.0f;
 
             Color track_color{};
             track_color.r = 0.0f;

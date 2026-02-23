@@ -775,10 +775,10 @@ void SDLGPUDriver::executeBeginIsolatedLayer(ExecuteContext& ctx, const GPUComma
             u.tint[3] = layer_state.opacity;
             ctx.fillClipUniform(u.clip);
 
+            SDL_BindGPUGraphicsPipeline(ctx.pass, image_pipeline_);
+
             SDL_PushGPUVertexUniformData(ctx.cmd_buf, 0, &u, sizeof(u));
             SDL_PushGPUFragmentUniformData(ctx.cmd_buf, 0, &u, sizeof(u));
-
-            SDL_BindGPUGraphicsPipeline(ctx.pass, image_pipeline_);
 
             SDL_GPUTextureSamplerBinding binding{};
             binding.texture = layer_state.texture;
@@ -1021,10 +1021,10 @@ void SDLGPUDriver::executeEndIsolatedLayer(ExecuteContext& ctx, const GPUCommand
         u.tint[3] = layer_info.opacity;
         ctx.fillClipUniform(u.clip);
 
+        SDL_BindGPUGraphicsPipeline(ctx.pass, image_pipeline_);
+
         SDL_PushGPUVertexUniformData(ctx.cmd_buf, 0, &u, sizeof(u));
         SDL_PushGPUFragmentUniformData(ctx.cmd_buf, 0, &u, sizeof(u));
-
-        SDL_BindGPUGraphicsPipeline(ctx.pass, image_pipeline_);
 
         SDL_GPUTextureSamplerBinding binding{};
         binding.texture = layer_texture;
@@ -1132,10 +1132,10 @@ void SDLGPUDriver::executeEndIsolatedLayer(ExecuteContext& ctx, const GPUCommand
     u.tint[3] = layer_info.opacity;
     ctx.fillClipUniform(u.clip);
 
+    SDL_BindGPUGraphicsPipeline(ctx.pass, image_pipeline_);
+
     SDL_PushGPUVertexUniformData(ctx.cmd_buf, 0, &u, sizeof(u));
     SDL_PushGPUFragmentUniformData(ctx.cmd_buf, 0, &u, sizeof(u));
-
-    SDL_BindGPUGraphicsPipeline(ctx.pass, image_pipeline_);
 
     SDL_GPUTextureSamplerBinding binding{};
     binding.texture = child_target.texture;
@@ -1181,13 +1181,29 @@ void SDLGPUDriver::executeDrawRect(ExecuteContext& ctx, const GPUCommand& cmd) {
     writeTransform(u.transform, ctx.getCurrentTransform());
     ctx.fillClipUniform(u.clip);
 
-    SDL_PushGPUVertexUniformData(ctx.cmd_buf, 0, &u, sizeof(u));
-    SDL_PushGPUFragmentUniformData(ctx.cmd_buf, 0, &u, sizeof(u));
+    static const bool kDbgRectColor = ([]() {
+        const char* v = std::getenv("DONG_DEBUG_RECT_COLOR");
+        return v && v[0] == '1';
+    })();
+    if (kDbgRectColor) {
+        const bool looks_like_sticky = (std::fabs(cmd.rect.width - 560.0f) < 0.5f &&
+                                        std::fabs(cmd.rect.height - 50.0f) < 0.5f);
+        const bool large_fill = (cmd.rect.width > 500.0f && cmd.rect.height > 0.0f && cmd.rect.height < 260.0f);
+        if (looks_like_sticky || large_fill) {
+            DONG_LOG_INFO("[RECT_COLOR] rect=(%.1f,%.1f,%.1f,%.1f) cmd_color=(%.3f,%.3f,%.3f,%.3f) u_color=(%.3f,%.3f,%.3f,%.3f)",
+                          cmd.rect.x, cmd.rect.y, cmd.rect.width, cmd.rect.height,
+                          cmd.color.r, cmd.color.g, cmd.color.b, cmd.color.a,
+                          u.color[0], u.color[1], u.color[2], u.color[3]);
+        }
+    }
 
     if (ctx.pipeline_state.active != PipelineBindingState::ActivePipeline::Rect) {
         SDL_BindGPUGraphicsPipeline(ctx.pass, rect_pipeline_);
         ctx.pipeline_state.active = PipelineBindingState::ActivePipeline::Rect;
     }
+
+    SDL_PushGPUVertexUniformData(ctx.cmd_buf, 0, &u, sizeof(u));
+    SDL_PushGPUFragmentUniformData(ctx.cmd_buf, 0, &u, sizeof(u));
 
     SDL_DrawGPUPrimitives(ctx.pass, 4, 1, 0, 0);
 }
@@ -1230,13 +1246,13 @@ void SDLGPUDriver::executeDrawRoundedRect(ExecuteContext& ctx, const GPUCommand&
     writeLinearColor(cmd.color, u.color);
     ctx.fillClipUniform(u.clip);
 
-    SDL_PushGPUVertexUniformData(ctx.cmd_buf, 0, &u, sizeof(u));
-    SDL_PushGPUFragmentUniformData(ctx.cmd_buf, 0, &u, sizeof(u));
-
     if (ctx.pipeline_state.active != PipelineBindingState::ActivePipeline::RoundRect) {
         SDL_BindGPUGraphicsPipeline(ctx.pass, round_rect_pipeline_);
         ctx.pipeline_state.active = PipelineBindingState::ActivePipeline::RoundRect;
     }
+
+    SDL_PushGPUVertexUniformData(ctx.cmd_buf, 0, &u, sizeof(u));
+    SDL_PushGPUFragmentUniformData(ctx.cmd_buf, 0, &u, sizeof(u));
 
     SDL_DrawGPUPrimitives(ctx.pass, 4, 1, 0, 0);
 }
@@ -1271,13 +1287,13 @@ void SDLGPUDriver::executeDrawShadow(ExecuteContext& ctx, const GPUCommand& cmd)
     writeLinearColor(cmd.color, u.color);
     ctx.fillClipUniform(u.clip);
 
-    SDL_PushGPUVertexUniformData(ctx.cmd_buf, 0, &u, sizeof(u));
-    SDL_PushGPUFragmentUniformData(ctx.cmd_buf, 0, &u, sizeof(u));
-
     if (ctx.pipeline_state.active != PipelineBindingState::ActivePipeline::Shadow) {
         SDL_BindGPUGraphicsPipeline(ctx.pass, shadow_pipeline_);
         ctx.pipeline_state.active = PipelineBindingState::ActivePipeline::Shadow;
     }
+
+    SDL_PushGPUVertexUniformData(ctx.cmd_buf, 0, &u, sizeof(u));
+    SDL_PushGPUFragmentUniformData(ctx.cmd_buf, 0, &u, sizeof(u));
 
     SDL_DrawGPUPrimitives(ctx.pass, 4, 1, 0, 0);
 }
@@ -1323,13 +1339,13 @@ void SDLGPUDriver::executeDrawGradient(ExecuteContext& ctx, const GPUCommand& cm
 
     ctx.fillClipUniform(u.clip);
 
-    SDL_PushGPUVertexUniformData(ctx.cmd_buf, 0, &u, sizeof(u));
-    SDL_PushGPUFragmentUniformData(ctx.cmd_buf, 0, &u, sizeof(u));
-
     if (ctx.pipeline_state.active != PipelineBindingState::ActivePipeline::Gradient) {
         SDL_BindGPUGraphicsPipeline(ctx.pass, gradient_pipeline_);
         ctx.pipeline_state.active = PipelineBindingState::ActivePipeline::Gradient;
     }
+
+    SDL_PushGPUVertexUniformData(ctx.cmd_buf, 0, &u, sizeof(u));
+    SDL_PushGPUFragmentUniformData(ctx.cmd_buf, 0, &u, sizeof(u));
 
     SDL_DrawGPUPrimitives(ctx.pass, 4, 1, 0, 0);
 }
@@ -1455,9 +1471,6 @@ void SDLGPUDriver::executeDrawImage(ExecuteContext& ctx, const GPUCommand& cmd) 
     u.tint[3] = cmd.opacity;
     ctx.fillClipUniform(u.clip);
 
-    SDL_PushGPUVertexUniformData(ctx.cmd_buf, 0, &u, sizeof(u));
-    SDL_PushGPUFragmentUniformData(ctx.cmd_buf, 0, &u, sizeof(u));
-
     SDL_GPUGraphicsPipeline* pipeline = image_pipeline_;
     PipelineBindingState::ActivePipeline desired = PipelineBindingState::ActivePipeline::Image;
     if (is_video_yuv) {
@@ -1469,6 +1482,9 @@ void SDLGPUDriver::executeDrawImage(ExecuteContext& ctx, const GPUCommand& cmd) 
         SDL_BindGPUGraphicsPipeline(ctx.pass, pipeline);
         ctx.pipeline_state.active = desired;
     }
+
+    SDL_PushGPUVertexUniformData(ctx.cmd_buf, 0, &u, sizeof(u));
+    SDL_PushGPUFragmentUniformData(ctx.cmd_buf, 0, &u, sizeof(u));
 
     if (is_video_yuv) {
         SDL_GPUTextureSamplerBinding bindings[3] = {};

@@ -1,11 +1,15 @@
 import argparse
+import os
 import subprocess
 import sys
 from pathlib import Path
 
 
-def run(cmd, cwd=None):
-    p = subprocess.run(cmd, cwd=cwd, shell=False, capture_output=True, text=True)
+def run(cmd, cwd=None, env=None):
+    merged_env = os.environ.copy()
+    if env:
+        merged_env.update(env)
+    p = subprocess.run(cmd, cwd=cwd, env=merged_env, shell=False, capture_output=True, text=True)
     if p.returncode != 0:
         sys.stderr.write(p.stdout)
         sys.stderr.write(p.stderr)
@@ -96,6 +100,8 @@ def main() -> int:
         out_base = str(case_dir / f"{stem}.bmp")
         print(f"[DONG] {stem} frames={args.frames} -> {case_dir}")
         cmd = [
+            "/usr/bin/env",
+            "DONG_DISABLE_SCROLLBARS=1",
             str(exe),
             str(html),
             out_base,

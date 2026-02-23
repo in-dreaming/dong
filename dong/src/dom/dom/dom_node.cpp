@@ -970,9 +970,12 @@ void DOMNode::setClientRect(float top, float left, float width, float height) {
     client_left_ = left;
     client_width_ = width;
     client_height_ = height;
+    has_client_rect_ = true;
 
     // If content size was updated before client size (or vice versa), ensure scroll offsets remain valid.
-    if (isScrollContainer()) {
+    // Important: do NOT clamp until both client rect and content size have been initialized at least once.
+    // Otherwise, early `scrollTop = ...` (before layout) will get clamped to 0 and silently lost.
+    if (isScrollContainer() && has_client_rect_ && has_content_size_) {
         const float max_x = computeMaxScroll(client_width_, content_width_);
         const float max_y = computeMaxScroll(client_height_, content_height_);
         scroll_x_ = std::clamp(scroll_x_, 0.0f, max_x);
@@ -983,8 +986,9 @@ void DOMNode::setClientRect(float top, float left, float width, float height) {
 void DOMNode::setContentSize(float w, float h) {
     content_width_ = w;
     content_height_ = h;
+    has_content_size_ = true;
 
-    if (isScrollContainer()) {
+    if (isScrollContainer() && has_client_rect_ && has_content_size_) {
         const float max_x = computeMaxScroll(client_width_, content_width_);
         const float max_y = computeMaxScroll(client_height_, content_height_);
         scroll_x_ = std::clamp(scroll_x_, 0.0f, max_x);

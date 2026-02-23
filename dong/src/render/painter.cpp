@@ -1125,10 +1125,35 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
 
     DisplayListBuilder::ScopedClip clip_scope;
     if (should_apply_clip) {
-        if (style.border_radius > 0.0f) {
-            clip_scope = builder.pushRoundedClip(node_rect, style.border_radius);
+        auto effectiveBorderWidth = [&](float side_width, const std::string& side_style) -> float {
+            const std::string st = !side_style.empty() ? toLowerCollapsed(side_style) : toLowerCollapsed(style.border_style);
+            if (st == "none" || st == "hidden") {
+                return 0.0f;
+            }
+            if (side_width >= 0.0f) {
+                return side_width;
+            }
+            return std::max(0.0f, style.border_width);
+        };
+
+        const float bt = effectiveBorderWidth(style.border_top_width, style.border_top_style);
+        const float br = effectiveBorderWidth(style.border_right_width, style.border_right_style);
+        const float bb = effectiveBorderWidth(style.border_bottom_width, style.border_bottom_style);
+        const float bl = effectiveBorderWidth(style.border_left_width, style.border_left_style);
+        const float bmax = std::max(std::max(bt, bb), std::max(bl, br));
+
+        // CSS 语义：overflow 的裁剪区域是 padding box（不包含 border），否则子内容会覆盖边框。
+        Rect clip_rect = node_rect;
+        clip_rect.x += bl;
+        clip_rect.y += bt;
+        clip_rect.width = std::max(0.0f, node_rect.width - bl - br);
+        clip_rect.height = std::max(0.0f, node_rect.height - bt - bb);
+
+        const float inner_radius = std::max(0.0f, style.border_radius - bmax);
+        if (inner_radius > 0.0f) {
+            clip_scope = builder.pushRoundedClip(clip_rect, inner_radius);
         } else {
-            clip_scope = builder.pushClipRect(node_rect);
+            clip_scope = builder.pushClipRect(clip_rect);
         }
     }
 

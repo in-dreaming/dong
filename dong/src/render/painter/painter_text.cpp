@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <unordered_set>
 #include "../../layout/layout_engine.hpp"
+#include "../../layout/sticky_positioning.hpp"
 #include "../../core/log.h"
 
 namespace dong::render {
@@ -23,6 +24,15 @@ using painter_detail::collapseWhitespace;
 using painter_detail::fillTextShadow;
 using painter_detail::makeColorFromCss;
 using painter_detail::toLowerCopy;
+
+inline void getPaintOrigin(const layout::LayoutNode* layout, float& out_x, float& out_y) {
+    out_x = layout ? layout->layout.position[0] : 0.0f;
+    out_y = layout ? layout->layout.position[1] : 0.0f;
+    if (layout && layout->sticky_metadata && layout->sticky_metadata->is_stuck) {
+        out_x = layout->sticky_metadata->visual_x;
+        out_y = layout->sticky_metadata->visual_y;
+    }
+}
 
 // ========== 内容分析 ==========
 struct ContentAnalysis {
@@ -92,8 +102,10 @@ MixedPathState initMixedPath(const layout::LayoutNode* layout,
                              float bl, float bt, float br, float bb,
                              TextShaper& shaper) {
     MixedPathState s;
-    s.x = layout->layout.position[0] + bl;
-    s.y = layout->layout.position[1] + bt;
+    float origin_x = 0.0f, origin_y = 0.0f;
+    getPaintOrigin(layout, origin_x, origin_y);
+    s.x = origin_x + bl;
+    s.y = origin_y + bt;
     float width = std::max(0.0f, layout->layout.dimensions[0] - bl - br);
     s.pad_left = style.padding_left.isPixel() ? style.padding_left.value : 0.0f;
     float pad_right = style.padding_right.isPixel() ? style.padding_right.value : 0.0f;
@@ -506,8 +518,10 @@ void renderFullText(const dom::DOMNodePtr& node,
 
     if (text.empty()) return;
 
-    float x = layout->layout.position[0] + bl;
-    float y = layout->layout.position[1] + bt;
+    float origin_x = 0.0f, origin_y = 0.0f;
+    getPaintOrigin(layout, origin_x, origin_y);
+    float x = origin_x + bl;
+    float y = origin_y + bt;
     float width = std::max(0.0f, layout->layout.dimensions[0] - bl - br);
     float height = std::max(0.0f, layout->layout.dimensions[1] - bt - bb);
 

@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            font-size: 16px;
+            line-height: 1.2;
+        }
+        h1 {
+            margin: 0 0 12px 0;
+            font-size: 32px;
+            font-weight: 700;
+        }
+        p {
+            margin: 8px 0 16px 0;
+            font-size: 16px;
+        }
+        .scroll-container {
+            width: 600px;
+            height: 400px;
+            overflow: auto;
+            border: 2px solid #333;
+            background: #f0f0f0;
+        }
+        .content {
+            padding: 20px;
+        }
+        .block {
+            height: 150px;
+            margin-bottom: 20px;
+            padding: 20px;
+            background: #ddd;
+            border: 1px solid #999;
+        }
+        .sticky {
+            position: sticky;
+            top: 10px;
+            background: #4CAF50;
+            color: white;
+            padding: 15px;
+            margin-bottom: 20px;
+            border: 2px solid #2E7D32;
+            font-weight: bold;
+        }
+        .marker {
+            margin-top: 12px;
+            font-size: 14px;
+            color: #444;
+        }
+    </style>
+</head>
+<body>
+    <h1>Sticky Positioning Test - Top (Auto Scroll)</h1>
+    <p>The green box should stick 10px from the top after auto scroll.</p>
+
+    <div class="scroll-container" id="sc">
+        <div class="content">
+            <div class="block">Block 1 - Before sticky</div>
+            <div class="sticky" id="sticky">STICKY ELEMENT - Top: 10px</div>
+            <div class="marker" id="marker">Marker below sticky (should remain below it)</div>
+            <div class="block">Block 2</div>
+            <div class="block">Block 3</div>
+            <div class="block">Block 4</div>
+            <div class="block">Block 5</div>
+            <div class="block">Block 6</div>
+            <div class="block">Block 7</div>
+            <div class="block">Block 8</div>
+            <div class="block">Block 9</div>
+            <div class="block">Block 10</div>
+            <div class="block">Block 11</div>
+            <div class="block">Block 12</div>
+            <div class="block">Block 13</div>
+            <div class="block">Block 14</div>
+            <div class="block">Block 15</div>
+        </div>
+    </div>
+
+    <script>
+        // Force a deterministic scroll position so baseline_compare can validate sticky.
+        // Note: dong's JS runtime doesn't guarantee browser-like timers, so keep it single-shot.
+        (function () {
+            var sc = document.getElementById('sc');
+            if (!sc) return;
+
+            sc.scrollTop = 800;
+
+            var marker = document.getElementById('marker');
+            if (marker) {
+                var block = document.getElementsByClassName('block');
+                var b0 = block && block.length ? block[0] : null;
+                var cs = (typeof getComputedStyle === 'function' && b0) ? getComputedStyle(b0) : null;
+                var bg = cs ? cs.backgroundColor : '';
+                var bw = cs ? cs.borderWidth : '';
+                var disp = cs ? cs.display : '';
+
+                marker.textContent = 'marker scrollTop=' + sc.scrollTop +
+                    ' clientHeight=' + sc.clientHeight +
+                    ' scrollHeight=' + sc.scrollHeight +
+                    ' block(display=' + disp + ' bg=' + bg + ' bw=' + bw + ')';
+            }
+        })();
+    </script>
+</body>
+</html>
