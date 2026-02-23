@@ -129,6 +129,7 @@ add_library(dong SHARED
     src/dom/select_element.cpp
     src/dom/css/css_value.cpp
     src/dom/css/css_parser.cpp
+    src/dom/css/computed_style.cpp
     src/dom/css/selector_matcher.cpp
     src/dom/css/style_engine.cpp
     src/dom/dom/dom_node.cpp
@@ -235,6 +236,7 @@ add_library(dong_render STATIC
     src/dom/select_element.cpp
     src/dom/css/css_value.cpp
     src/dom/css/css_parser.cpp
+    src/dom/css/computed_style.cpp
     src/dom/css/selector_matcher.cpp
     src/dom/css/style_engine.cpp
     src/dom/dom/dom_node.cpp

@@ -53,6 +53,7 @@ struct ComputedStyle {
     // Layout
     std::string display = "block";
     LayoutMode layout_mode = LayoutMode::Block;
+    bool creates_block_formatting_context = false;
     std::string position = "static";
     CSSValue top = CSSValue(0.0f, CSSValue::Unit::AUTO);
     CSSValue right = CSSValue(0.0f, CSSValue::Unit::AUTO);
@@ -268,6 +269,9 @@ struct ComputedStyle {
         display = value;
         layout_mode = deriveLayoutModeFromDisplay(value);
     }
+
+    // Update BFC flag based on style properties
+    void updateBFCFlag();
 };
 
 } // namespace dong::dom

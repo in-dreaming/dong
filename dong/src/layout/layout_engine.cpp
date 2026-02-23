@@ -587,6 +587,12 @@ void collapseVerticalMarginBetweenSiblings(const dom::DOMNodePtr& prev_node,
         return;
     }
 
+    // BFC blocks margin collapse
+    auto parent = curr_node->getParentNode();
+    if (parent && parent->getComputedStyle().creates_block_formatting_context) {
+        return;
+    }
+
     const auto& prev_style = prev_node->getComputedStyle();
     const auto& curr_style = curr_node->getComputedStyle();
 

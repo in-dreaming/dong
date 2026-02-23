@@ -257,6 +257,55 @@ dong_engine_eval_script(dong_engine_t* engine, const char* code);
 ### Output Paths
 Use absolute paths for output directories to avoid nested `zig-out/zig-out/` paths.
 
+## CSS Layout Features
+
+Dong supports modern CSS layout features with standards compliance:
+
+### position: sticky
+
+- **Layout-time space reservation + render-time visual adjustment**: Sticky elements participate in normal flow during layout (siblings are aware of their space), then visually adjust position during rendering based on scroll offset
+- **Sticky positioning containing block creation**: Proper containing block hierarchy for descendants
+- **Clamped to containing block's padding box**: Not content box
+- **Nested sticky support**: Multiple sticky elements stack correctly
+- **Implementation**: `src/layout/sticky_positioning.cpp`
+- **Test cases**: `test_sticky_scroll_top.html`, `test_sticky_scroll_bottom.html`, `test_sticky_parent_clamp.html`, `test_sticky_nested.html`
+
+### aspect-ratio
+
+- **Pre-layout dimension resolution before Yoga**: Calculates missing dimension from aspect ratio before Yoga layout
+- **CSS Box Sizing Module Level 4 compliant**: Transferred size suggestions, min/max constraint interaction
+- **Replaced elements support**: Uses natural width/height of images/videos
+- **Flex/Grid constraint mode**: When both dimensions specified, aspect-ratio acts as constraint
+- **Implementation**: `src/layout/aspect_ratio_resolver.cpp`
+- **Test cases**: `test_aspect_ratio_width_auto_height.html`, `test_aspect_ratio_min_max.html`, `test_aspect_ratio_flex.html`
+
+### display: contents
+
+- **Yoga tree surgery (skip node creation)**: Contents elements don't create Yoga nodes
+- **Children attached to grandparent**: Direct children become children of grandparent in layout
+- **Pseudo-elements still render**: `::before` and `::after` render correctly
+- **Event bubbling through contents elements**: Events traverse through contents parents
+- **Implementation**: `src/layout/display_contents.cpp`
+- **Test cases**: `test_display_contents_layout.html`, `test_display_contents_pseudo.html`, `test_display_contents_events.html`
+
+### display: flow-root
+
+- **BFC margin collapse prevention**: Blocks margin collapse between parent and children
+- **Implementation**: `src/layout/margin_collapse.cpp`
+- **Future**: Float containment (when float implemented)
+- **Test cases**: `test_flow_root_margin_collapse.html`
+
+**Architecture principle**: Layout vs rendering separation
+- Layout phase: Compute positions assuming no scroll
+- Render phase: Apply scroll-aware visual adjustments
+
+**Module strategy**: Yoga协同 (Yoga cooperation)
+- Pre/post-process around Yoga layout
+- Don't modify Yoga library itself
+- Maintain dependency purity
+
+See `doc/css_features.md` for detailed specifications and implementation notes.
+
 ## Form Elements
 
 Dong supports standard HTML form elements with full interactive functionality:

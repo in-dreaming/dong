@@ -769,6 +769,9 @@ void StyleEngine::computeStyles(DOMNodePtr node) {
     }
     node->getComputedStyle().layout_mode = deriveLayoutModeFromDisplay(node->getComputedStyle());
 
+    // Update BFC flag based on computed style properties
+    node->getComputedStyle().updateBFCFlag();
+
     // Process pseudo-elements (::before/::after)
     processPseudoElements(node);
 
@@ -785,6 +788,7 @@ void StyleEngine::recomputeNodeStyle(DOMNodePtr node) {
     inheritFromParent(node);
     applyInlineStyleAttributeIfAny(node);
     node->getComputedStyle().layout_mode = deriveLayoutModeFromDisplay(node->getComputedStyle());
+    node->getComputedStyle().updateBFCFlag();
 }
 
 

@@ -23,10 +23,10 @@
 
 ### 布局/定位正确性（高 ROI）
 
-- [ ] `position: sticky` 实现（需 scroll-offset 感知定位）
-- [ ] `aspect-ratio` 属性
-- [ ] `display: contents` 支持
-- [ ] `display: flow-root` 支持（BFC 行为、常见布局模式）
+- [x] `position: sticky` 实现 - 滚动感知定位，支持 sticky positioning containing block，clamp 到包含块 padding box。布局时保留空间，渲染时视觉调整。测试用例：`test_sticky_scroll_top.html`、`test_sticky_scroll_bottom.html`、`test_sticky_parent_clamp.html`、`test_sticky_nested.html`
+- [x] `aspect-ratio` 属性 - 支持宽高比约束，包含 transferred size suggestions、min/max 约束交互、替换元素固有宽高比、Flex/Grid 约束模式。测试用例：`test_aspect_ratio_width_auto_height.html`、`test_aspect_ratio_min_max.html`、`test_aspect_ratio_flex.html`
+- [x] `display: contents` 支持 - 元素在布局中透明化，子元素成为祖父的直接子元素，支持伪元素渲染和事件冒泡穿透。测试用例：`test_display_contents_layout.html`、`test_display_contents_pseudo.html`、`test_display_contents_events.html`
+- [x] `display: flow-root` 支持 - 创建块级格式化上下文（BFC），阻止边距折叠。暂不实现 float 包含（float 未支持）。测试用例：`test_flow_root_margin_collapse.html`
 
 ### 滚动体系（高 ROI）
 
