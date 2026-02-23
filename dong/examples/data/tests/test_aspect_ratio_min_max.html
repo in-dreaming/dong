@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {
+      margin: 20px;
+      font-family: Arial, sans-serif;
+    }
+    .box {
+      width: 200px;
+      aspect-ratio: 1;
+      max-height: 100px;
+      background: lightgreen;
+      border: 2px solid #333;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 10px;
+    }
+    .info {
+      font-size: 14px;
+      color: #666;
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Aspect Ratio with Min/Max Constraints</h1>
+  <div class="info">Expected: 200px wide × 100px tall (clamped by max-height)</div>
+  <div class="box">Square clamped</div>
+</body>
+</html>

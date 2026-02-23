@@ -139,6 +139,7 @@ add_library(dong SHARED
     src/animation/animation_controller.cpp
     # Layout
     src/layout/layout_engine.cpp
+    src/layout/aspect_ratio_resolver.cpp
     # Script
     src/script/script_engine.cpp
     src/script/js_bindings.cpp
@@ -246,6 +247,7 @@ add_library(dong_render STATIC
     src/animation/animation_controller.cpp
     # Layout
     src/layout/layout_engine.cpp
+    src/layout/aspect_ratio_resolver.cpp
     # Script
     src/script/script_engine.cpp
     src/script/js_bindings.cpp

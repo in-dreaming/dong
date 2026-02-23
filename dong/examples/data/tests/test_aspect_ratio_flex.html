@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {
+      margin: 20px;
+      font-family: Arial, sans-serif;
+    }
+    .container {
+      display: flex;
+      width: 400px;
+      border: 2px solid #666;
+      background: #f0f0f0;
+      padding: 10px;
+      margin-bottom: 10px;
+    }
+    .item {
+      flex: 1;
+      aspect-ratio: 16 / 9;
+      background: lightcoral;
+      border: 2px solid #333;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: bold;
+    }
+    .info {
+      font-size: 14px;
+      color: #666;
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Aspect Ratio in Flex Container</h1>
+  <div class="info">Expected: flex item respects 16:9 aspect ratio</div>
+  <div class="container">
+    <div class="item">Flex Item</div>
+  </div>
+</body>
+</html>

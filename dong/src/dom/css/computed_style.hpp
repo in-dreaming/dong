@@ -49,6 +49,7 @@ struct ComputedStyle {
     CSSValue padding_bottom;
     CSSValue padding_left;
     std::string box_sizing = "content-box";
+    float aspect_ratio = 0.0f;  // 0 = auto, >0 = width/height ratio
 
     // Layout
     std::string display = "block";

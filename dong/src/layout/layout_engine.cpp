@@ -13,6 +13,7 @@
 #include <cstdlib>
 
 #include "../render/text_shaper.hpp"
+#include "aspect_ratio_resolver.hpp"
 
 namespace dong::layout {
 
@@ -1466,6 +1467,11 @@ YGNode* Engine::createYogaNode(dom::DOMNodePtr dom_node) {
         for (uint32_t i = 0; i < child_count; ++i) {
             YGNodeRemoveChild(yoga_node, YGNodeGetChild(yoga_node, 0));
         }
+    }
+
+    // Apply aspect ratio if specified
+    if (dom_node->getComputedStyle().aspect_ratio > 0.0f) {
+        resolveAspectRatio(dom_node, yoga_node);
     }
 
     // Apply DOM styles to Yoga node

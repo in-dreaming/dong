@@ -221,7 +221,21 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
         {"visibility", [](const std::string& val, ComputedStyle& style) { style.visibility = val; }},
         {"cursor", [](const std::string& val, ComputedStyle& style) { style.cursor = val; }},
         {"box-sizing", [](const std::string& val, ComputedStyle& style) { style.box_sizing = val; }},
-        
+        {"aspect-ratio", [](const std::string& val, ComputedStyle& style) {
+            if (val == "auto") {
+                style.aspect_ratio = 0.0f;
+            } else {
+                auto pos = val.find('/');
+                if (pos != std::string::npos) {
+                    float width = std::stof(val.substr(0, pos));
+                    float height = std::stof(val.substr(pos + 1));
+                    style.aspect_ratio = width / height;
+                } else {
+                    style.aspect_ratio = std::stof(val);
+                }
+            }
+        }},
+
         // Box shadow & filters
         {"box-shadow", [](const std::string& val, ComputedStyle& style) { CSSParser::parseBoxShadow(val, style); }},
         {"filter", [](const std::string& val, ComputedStyle& style) { style.filters = CSSParser::parseFilter(val); }},
