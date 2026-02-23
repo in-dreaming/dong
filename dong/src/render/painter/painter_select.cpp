@@ -157,6 +157,98 @@ void renderSelectClosed(
     }
 }
 
+void renderSelectDropdown(
+    const dom::DOMNodePtr& node,
+    const dom::SelectElementState* state,
+    const layout::LayoutNode* layout,
+    const dom::ComputedStyle& style,
+    float bl, float bt, float br, float bb,
+    TextShaper& shaper,
+    DisplayListBuilder& builder
+) {
+    float select_x = layout->layout.position[0] + bl;
+    float select_y = layout->layout.position[1] + bt;
+    float select_w = std::max(0.0f, layout->layout.dimensions[0] - bl - br);
+    float select_h = std::max(0.0f, layout->layout.dimensions[1] - bt - bb);
+
+    const float option_height = 30.0f;
+    size_t option_count = state->getOptionCount();
+    if (option_count == 0) return;
+
+    float dropdown_x = select_x;
+    float dropdown_y = select_y + select_h;
+    float dropdown_w = select_w;
+    float dropdown_h = option_count * option_height;
+
+    Color dropdown_bg = {1.0f, 1.0f, 1.0f, 1.0f};
+    builder.addRect(Rect{dropdown_x, dropdown_y, dropdown_w, dropdown_h}, dropdown_bg);
+
+    Color border_color = {0.7f, 0.7f, 0.7f, 1.0f};
+    float border_w = 1.0f;
+    builder.addRect(Rect{dropdown_x, dropdown_y, dropdown_w, border_w}, border_color);
+    builder.addRect(Rect{dropdown_x + dropdown_w - border_w, dropdown_y, border_w, dropdown_h}, border_color);
+    builder.addRect(Rect{dropdown_x, dropdown_y + dropdown_h - border_w, dropdown_w, border_w}, border_color);
+    builder.addRect(Rect{dropdown_x, dropdown_y, border_w, dropdown_h}, border_color);
+
+    float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
+
+    const auto& options = state->getOptions();
+    size_t selected_index = state->getSelectedIndex();
+
+    for (size_t i = 0; i < option_count; ++i) {
+        const auto& opt = options[i];
+
+        float opt_y = dropdown_y + i * option_height;
+        Rect opt_rect = {dropdown_x, opt_y, dropdown_w, option_height};
+
+        if (i == selected_index) {
+            Color selected_bg = {0.89f, 0.95f, 0.99f, 1.0f};
+            builder.addRect(opt_rect, selected_bg);
+        }
+
+        if (!opt.display_text.empty()) {
+            TextShapeRequest req{opt.display_text, style.font_family, style.font_weight, style.font_style, font_size};
+            ShapedText shaped;
+            if (shaper.shape(req, shaped) && !shaped.glyphs.empty()) {
+                float scale = shaped.scale_to_pixels;
+                float ascent = shaped.ascent_units > 0.0f ? shaped.ascent_units : font_size / scale;
+                float line_h = shaped.line_height_units;
+                if (line_h <= 0.0f) line_h = font_size / scale;
+                float descent_abs = shaped.descent_units < 0.0f ? -shaped.descent_units : 0.0f;
+                float extra = std::max(line_h - (ascent + descent_abs), 0.0f);
+                float baseline_off = (extra * 0.5f + ascent) * scale;
+                float text_h_px = line_h * scale;
+
+                float text_y = opt_y + (option_height - text_h_px) * 0.5f;
+                float baseline_y = text_y + baseline_off;
+                float text_x = dropdown_x + 8.0f;
+
+                DrawGlyphRunData run;
+                run.rect = {text_x, text_y, shaped.width_units * scale, text_h_px};
+                run.color = makeColorFromCss(style.color);
+                run.font_size = font_size;
+                run.font_family = style.font_family;
+                run.font_weight = style.font_weight;
+                run.font_style = style.font_style;
+                run.font_paths = shaped.font_paths;
+                run.font_path = shaped.font_path;
+                run.baseline_x = text_x;
+                run.baseline_y = baseline_y;
+                run.units_per_em = shaped.units_per_em;
+                run.scale_to_pixels = shaped.scale_to_pixels;
+                painter_detail::fillTextShadow(run, style);
+
+                for (const auto& sg : shaped.glyphs) {
+                    GlyphInstance inst{sg.glyph_id, sg.pen_x_units, sg.pen_y_units,
+                                      sg.font_path_index, sg.units_per_em};
+                    run.glyphs.push_back(inst);
+                }
+                builder.addGlyphRun(std::move(run));
+            }
+        }
+    }
+}
+
 } // anonymous namespace
 
 void renderSelect(
@@ -171,10 +263,10 @@ void renderSelect(
     auto* state = dong::dom::getSelectState(node);
     if (!state) return;
 
-    // For Chunk 2: only render closed state
-    // Dropdown rendering will be added in Chunk 4
-    if (!state->isOpen()) {
-        renderSelectClosed(node, state, layout, style, bl, bt, br, bb, shaper, builder);
+    renderSelectClosed(node, state, layout, style, bl, bt, br, bb, shaper, builder);
+
+    if (state->isOpen()) {
+        renderSelectDropdown(node, state, layout, style, bl, bt, br, bb, shaper, builder);
     }
 }
 
