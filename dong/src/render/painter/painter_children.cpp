@@ -1,6 +1,7 @@
 #include "../painter.hpp"
 
 #include <algorithm>
+#include <cstdio>
 #include <cstdlib>
 #include <vector>
 
@@ -53,6 +54,20 @@ Rect computeClientRectFromBorderBox(const Rect& border_box, const dom::ComputedS
     client.width = std::max(0.0f, border_box.width - bl - br);
     client.height = std::max(0.0f, border_box.height - bt - bb);
     return client;
+}
+
+bool shouldDebugScrollMetricsForNode(const dom::DOMNodePtr& node) {
+    static const bool kEnabled = []() {
+        const char* v = ::getenv("DONG_DEBUG_SCROLL_METRICS");
+        return v && v[0] == '1';
+    }();
+
+    if (!kEnabled || !node) {
+        return false;
+    }
+
+    const std::string id = node->getAttribute("id");
+    return id == "sc";
 }
 
 } // namespace
@@ -113,6 +128,17 @@ void Painter::paintChildrenAndOverlays(const dom::DOMNodePtr& node,
 
         node->setClientRect(client_rect.y, client_rect.x, client_rect.width, client_rect.height);
         node->setContentSize(client_rect.width, content_height);
+
+        if (shouldDebugScrollMetricsForNode(node)) {
+            std::fprintf(
+                stderr,
+                "[ScrollMetrics] id=%s client=(x=%.1f,y=%.1f,w=%.1f,h=%.1f) content_h=%.1f scroll_y=%.1f max_scroll_y=%.1f\n",
+                node->getAttribute("id").c_str(),
+                client_rect.x, client_rect.y, client_rect.width, client_rect.height,
+                node->getScrollHeight(),
+                node->getScrollY(),
+                std::max(0.0f, node->getScrollHeight() - node->getClientHeight()));
+        }
     }
 
     // 如果是滚动容器，应用滚动偏移到子元素
