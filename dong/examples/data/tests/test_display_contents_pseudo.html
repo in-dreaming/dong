@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    .contents { display: contents; }
+    .contents::before { content: "Before"; color: red; }
+    .contents::after { content: "After"; color: blue; }
+  </style>
+</head>
+<body>
+  <div class="contents">
+    <span>Middle</span>
+  </div>
+  <!-- Expected: "Before" (red) Middle "After" (blue) -->
+</body>
+</html>

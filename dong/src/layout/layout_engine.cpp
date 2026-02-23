@@ -14,6 +14,7 @@
 
 #include "../render/text_shaper.hpp"
 #include "aspect_ratio_resolver.hpp"
+#include "display_contents.hpp"
 
 namespace dong::layout {
 
@@ -1601,6 +1602,13 @@ void Engine::buildChildYogaNodes(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
             const auto& cs = child->getComputedStyle();
             if (cs.display == "none") continue;
 
+            // display: contents - skip this node, promote children
+            if (shouldSkipLayoutNode(cs)) {
+                buildChildYogaNodes(child, yoga_node);
+                layout_cache[child.get()] = nullptr;  // Mark as skipped
+                continue;
+            }
+
             bool is_inline = isInlineLevelDisplay(cs.display);
             bool is_out_of_flow = (cs.position == "absolute" || cs.position == "fixed");
 
@@ -1634,6 +1642,15 @@ void Engine::buildChildYogaNodes(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
         // No mixed content: add all children directly (original behavior)
         for (const auto& child : dom_node->getChildren()) {
             if (child && child->getType() == dom::DOMNode::NodeType::ELEMENT) {
+                const auto& cs = child->getComputedStyle();
+
+                // display: contents - skip this node, promote children
+                if (shouldSkipLayoutNode(cs)) {
+                    buildChildYogaNodes(child, yoga_node);
+                    layout_cache[child.get()] = nullptr;  // Mark as skipped
+                    continue;
+                }
+
                 YGNode* child_yoga = createYogaNode(child);
                 if (child_yoga) {
                     if (parent_is_block_like && prev_child_yoga) {

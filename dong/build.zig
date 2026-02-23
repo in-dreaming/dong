@@ -989,6 +989,7 @@ fn buildDongCore(
             // Layout
             "src/layout/layout_engine.cpp",
             "src/layout/aspect_ratio_resolver.cpp",
+            "src/layout/display_contents.cpp",
             // Script
             "src/script/script_engine.cpp",
             "src/script/js_bindings.cpp",

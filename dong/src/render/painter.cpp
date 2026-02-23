@@ -11,6 +11,7 @@
 #include "../core/log.h"
 #include "../core/profiler.h"
 #include "../core/string_utils.h"
+#include "../layout/display_contents.hpp"
 namespace dong::render {
 
 
@@ -382,9 +383,26 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
 
     const auto& style = node->getComputedStyle();
     if (style.display == "none") return;
-    
-    // visibility: hidden Ԫ�ز��ɼ�������ռλ
-    // �� display: none ��ͬ��visibility: hidden ��Ȼ���벼��
+
+    // display: contents - no box rendering, but still render children
+    if (layout::shouldSkipLayoutNode(style)) {
+        // TODO: Render ::before pseudo-element if exists
+
+        // Render children
+        for (auto& child : node->getChildren()) {
+            if (child && child->getType() == dom::DOMNode::NodeType::ELEMENT) {
+                auto child_layout = layout_engine_->getLayout(child);
+                buildDisplayListNode(child, child_layout, builder);
+            }
+        }
+
+        // TODO: Render ::after pseudo-element if exists
+
+        return;
+    }
+
+    // visibility: hidden 元素不可见，但仍占位
+    // 与 display: none 不同，visibility: hidden 仍然会进入布局
     const bool is_hidden = (style.visibility == "hidden" || style.visibility == "collapse");
 
     if (node->getType() == dom::DOMNode::NodeType::TEXT) return;

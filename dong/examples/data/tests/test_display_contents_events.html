@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    .contents { display: contents; }
+    .child { background: lightgreen; padding: 10px; }
+  </style>
+</head>
+<body>
+  <div class="contents" onclick="alert('Contents clicked')">
+    <div class="child" onclick="alert('Child clicked')">Click me</div>
+  </div>
+  <!-- Expected: Clicking child bubbles through contents parent -->
+</body>
+</html>
