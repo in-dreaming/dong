@@ -13,6 +13,7 @@
 #include "../dom/event_system.hpp"
 #include "../dom/focus_manager.hpp"
 #include "../dom/input_element.hpp"
+#include "../dom/select_element.hpp"
 #include "../layout/layout_engine.hpp"
 
 #include "../render/render_surface.hpp"
@@ -1310,7 +1311,20 @@ struct EngineView::Impl {
         updateHoverState(last_mouse_x, last_mouse_y);
 
         if (pressed) {
+            // Select element click handling (BEFORE general click handling)
             auto hit = hitElementAt(last_mouse_x, last_mouse_y);
+
+            // Check if click is on a select element
+            if (hit && dong::dom::isSelectElement(hit)) {
+                auto* state = dong::dom::getSelectState(hit);
+                if (state) {
+                    state->toggle();
+                    markNeedsRepaint();
+                    // Event consumed - no further processing needed for now
+                    return;
+                }
+            }
+
             setActiveElement(hit);
             dispatchMouseEvent("mousedown", last_mouse_x, last_mouse_y, button);
 
