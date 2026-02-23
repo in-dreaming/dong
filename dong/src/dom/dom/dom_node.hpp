@@ -170,7 +170,14 @@ public:
     void setScrollY(float y) { scroll_y_ = y; }
     void setScrollTop(float y) { scroll_y_ = y; }
     void setScrollLeft(float x) { scroll_x_ = x; }
-    void scrollBy(float dx, float dy);
+
+    // Scroll result structure
+    struct ScrollResult {
+        bool consumed_x = false;  // Whether horizontal scroll was consumed
+        bool consumed_y = false;  // Whether vertical scroll was consumed
+    };
+
+    ScrollResult scrollBy(float dx, float dy);
     void scrollTo(float x, float y);
     void scrollIntoView(bool alignToTop = true);
     bool isScrollContainer() const;

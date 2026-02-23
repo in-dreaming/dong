@@ -1559,7 +1559,36 @@ struct EngineView::Impl {
         }
 
         constexpr float kScrollSpeed = 20.0f;
-        scroll_container->scrollBy(delta_x * kScrollSpeed, delta_y * kScrollSpeed);
+        float scroll_dx = delta_x * kScrollSpeed;
+        float scroll_dy = delta_y * kScrollSpeed;
+
+        // Try to scroll the current container
+        auto result = scroll_container->scrollBy(scroll_dx, scroll_dy);
+
+        // Check overscroll-behavior for scroll chaining
+        const auto& style = scroll_container->getComputedStyle();
+        bool allow_chain_x = (style.overscroll_behavior_x == "auto");
+        bool allow_chain_y = (style.overscroll_behavior_y == "auto");
+
+        // If scroll was not fully consumed and chaining is allowed, propagate to parent
+        bool should_chain_x = !result.consumed_x && allow_chain_x && (scroll_dx != 0.0f);
+        bool should_chain_y = !result.consumed_y && allow_chain_y && (scroll_dy != 0.0f);
+
+        if (should_chain_x || should_chain_y) {
+            // Find parent scroll container
+            auto parent = scroll_container->getParent();
+            while (parent) {
+                if (parent->isScrollContainer()) {
+                    float remaining_dx = should_chain_x ? scroll_dx : 0.0f;
+                    float remaining_dy = should_chain_y ? scroll_dy : 0.0f;
+                    parent->scrollBy(remaining_dx, remaining_dy);
+                    scroll_container = parent;  // Update for event dispatch
+                    break;
+                }
+                parent = parent->getParent();
+            }
+        }
+
         markNeedsRepaint();
 
         // Dispatch scroll event on the scroll container

@@ -882,14 +882,24 @@ static float computeMaxScroll(float client, float content) {
 
 } // namespace
 
-void DOMNode::scrollBy(float dx, float dy) {
-    if (!isScrollContainer()) return;
+DOMNode::ScrollResult DOMNode::scrollBy(float dx, float dy) {
+    ScrollResult result;
+    if (!isScrollContainer()) return result;
 
     const float max_x = computeMaxScroll(client_width_, content_width_);
     const float max_y = computeMaxScroll(client_height_, content_height_);
 
+    const float old_scroll_x = scroll_x_;
+    const float old_scroll_y = scroll_y_;
+
     scroll_x_ = std::clamp(scroll_x_ + dx, 0.0f, max_x);
     scroll_y_ = std::clamp(scroll_y_ + dy, 0.0f, max_y);
+
+    // Check if scroll was consumed (position changed)
+    result.consumed_x = (scroll_x_ != old_scroll_x);
+    result.consumed_y = (scroll_y_ != old_scroll_y);
+
+    return result;
 }
 
 void DOMNode::scrollTo(float x, float y) {
@@ -898,8 +908,25 @@ void DOMNode::scrollTo(float x, float y) {
     const float max_x = computeMaxScroll(client_width_, content_width_);
     const float max_y = computeMaxScroll(client_height_, content_height_);
 
-    scroll_x_ = std::clamp(x, 0.0f, max_x);
-    scroll_y_ = std::clamp(y, 0.0f, max_y);
+    float target_x = std::clamp(x, 0.0f, max_x);
+    float target_y = std::clamp(y, 0.0f, max_y);
+
+    // Check scroll-behavior property
+    const std::string& behavior = computed_style_.scroll_behavior;
+
+    if (behavior == "smooth") {
+        // TODO: Implement smooth scrolling animation
+        // For now, fall back to instant scroll
+        // Future implementation should:
+        // 1. Store target position and current time
+        // 2. Use easing function (e.g., ease-in-out)
+        // 3. Update position incrementally in tick()
+        // 4. Typical duration: 300-500ms
+    }
+
+    // Instant scroll (also used as fallback for smooth)
+    scroll_x_ = target_x;
+    scroll_y_ = target_y;
 }
 
 

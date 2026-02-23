@@ -142,6 +142,23 @@ void applyRuleOverflowProperties(const ComputedStyle& rs, ComputedStyle& compute
     }
     if (!rs.overflow_x.empty() && rs.overflow_x != "visible") computed.overflow_x = rs.overflow_x;
     if (!rs.overflow_y.empty() && rs.overflow_y != "visible") computed.overflow_y = rs.overflow_y;
+
+    // Scroll behavior properties
+    if (!rs.overscroll_behavior.empty() && rs.overscroll_behavior != "auto") {
+        computed.overscroll_behavior = rs.overscroll_behavior;
+        computed.overscroll_behavior_x = rs.overscroll_behavior;
+        computed.overscroll_behavior_y = rs.overscroll_behavior;
+    }
+    if (!rs.overscroll_behavior_x.empty() && rs.overscroll_behavior_x != "auto") {
+        computed.overscroll_behavior_x = rs.overscroll_behavior_x;
+    }
+    if (!rs.overscroll_behavior_y.empty() && rs.overscroll_behavior_y != "auto") {
+        computed.overscroll_behavior_y = rs.overscroll_behavior_y;
+    }
+    if (!rs.scroll_behavior.empty() && rs.scroll_behavior != "auto") {
+        computed.scroll_behavior = rs.scroll_behavior;
+    }
+
     if (!rs.visibility.empty() && rs.visibility != "visible") { computed.visibility = rs.visibility; computed.markExplicitlySet("visibility"); }
     if (!rs.cursor.empty() && rs.cursor != "auto") { computed.cursor = rs.cursor; computed.markExplicitlySet("cursor"); }
 }

@@ -218,6 +218,17 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
         }},
         {"overflow-x", [](const std::string& val, ComputedStyle& style) { style.overflow_x = val; }},
         {"overflow-y", [](const std::string& val, ComputedStyle& style) { style.overflow_y = val; }},
+
+        // Scroll behavior
+        {"overscroll-behavior", [](const std::string& val, ComputedStyle& style) {
+            style.overscroll_behavior = val;
+            style.overscroll_behavior_x = val;
+            style.overscroll_behavior_y = val;
+        }},
+        {"overscroll-behavior-x", [](const std::string& val, ComputedStyle& style) { style.overscroll_behavior_x = val; }},
+        {"overscroll-behavior-y", [](const std::string& val, ComputedStyle& style) { style.overscroll_behavior_y = val; }},
+        {"scroll-behavior", [](const std::string& val, ComputedStyle& style) { style.scroll_behavior = val; }},
+
         {"visibility", [](const std::string& val, ComputedStyle& style) { style.visibility = val; }},
         {"cursor", [](const std::string& val, ComputedStyle& style) { style.cursor = val; }},
         {"box-sizing", [](const std::string& val, ComputedStyle& style) { style.box_sizing = val; }},

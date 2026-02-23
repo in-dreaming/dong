@@ -105,6 +105,13 @@ struct ComputedStyle {
 
     std::string overflow_x = "visible";
     std::string overflow_y = "visible";
+
+    // Scroll behavior
+    std::string overscroll_behavior = "auto";
+    std::string overscroll_behavior_x = "auto";
+    std::string overscroll_behavior_y = "auto";
+    std::string scroll_behavior = "auto";
+
     std::string visibility = "visible";
     std::string cursor = "auto";
     

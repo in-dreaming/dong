@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Overscroll Behavior - Axis-specific Test</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+        }
+        .legend {
+            margin-bottom: 20px;
+            padding: 10px;
+            background: #e8f4f8;
+            border: 1px solid #4a9eba;
+        }
+        .container {
+            width: 500px;
+            height: 400px;
+            border: 2px solid #333;
+            overflow: auto;
+            background-color: #f0f0f0;
+            margin-bottom: 20px;
+        }
+        .outer-content {
+            width: 1000px;
+            height: 800px;
+            padding: 10px;
+        }
+        .inner-y-contain {
+            width: 300px;
+            height: 200px;
+            border: 2px solid #c00;
+            overflow: auto;
+            background-color: #fff;
+            margin: 10px;
+            /* Prevent vertical scroll chaining, allow horizontal */
+            overscroll-behavior-y: contain;
+            overscroll-behavior-x: auto;
+        }
+        .inner-x-contain {
+            width: 300px;
+            height: 200px;
+            border: 2px solid #00c;
+            overflow: auto;
+            background-color: #fff;
+            margin: 10px;
+            /* Prevent horizontal scroll chaining, allow vertical */
+            overscroll-behavior-x: contain;
+            overscroll-behavior-y: auto;
+        }
+        .inner-content-tall {
+            height: 500px;
+            width: 250px;
+            padding: 10px;
+        }
+        .inner-content-wide {
+            height: 150px;
+            width: 800px;
+            padding: 10px;
+        }
+        h1 {
+            margin: 0 0 10px 0;
+            font-size: 18px;
+        }
+        p {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="legend">
+        <h1>Test: overscroll-behavior-x and overscroll-behavior-y</h1>
+        <p><strong>Red box:</strong> overscroll-behavior-y: contain (vertical scroll won't propagate)</p>
+        <p><strong>Blue box:</strong> overscroll-behavior-x: contain (horizontal scroll won't propagate)</p>
+        <p><strong>Test:</strong> Scroll vertically in red box to the end - outer should not scroll vertically. Scroll horizontally in blue box to the end - outer should not scroll horizontally.</p>
+    </div>
+
+    <div class="container">
+        <div class="outer-content">
+            <p>Outer container (scrollable both directions)</p>
+            <p>This is wide content ---------------------------------------------------------&gt;</p>
+
+            <div class="inner-y-contain">
+                <div class="inner-content-tall">
+                    <p><strong>Red: overscroll-behavior-y: contain</strong></p>
+                    <p>Vertical scroll stops here, horizontal propagates</p>
+                    <p>Line 1</p>
+                    <p>Line 2</p>
+                    <p>Line 3</p>
+                    <p>Line 4</p>
+                    <p>Line 5</p>
+                    <p>Line 6</p>
+                    <p>Line 7</p>
+                    <p>Line 8</p>
+                    <p>Line 9</p>
+                    <p>Line 10</p>
+                    <p>Line 11</p>
+                    <p>Line 12</p>
+                    <p>Line 13</p>
+                    <p>Line 14</p>
+                    <p>Line 15 (end)</p>
+                </div>
+            </div>
+
+            <div class="inner-x-contain">
+                <div class="inner-content-wide">
+                    <p><strong>Blue: overscroll-behavior-x: contain</strong></p>
+                    <p>Horizontal scroll stops here, vertical propagates</p>
+                    <p>Wide content -------------------------------------------------------&gt;</p>
+                    <p>More wide content --------------------------------------------------&gt;</p>
+                    <p>Even more wide content ---------------------------------------------&gt;</p>
+                </div>
+            </div>
+
+            <p>More outer content below</p>
+            <p>Line A</p>
+            <p>Line B</p>
+            <p>Line C</p>
+            <p>Line D</p>
+            <p>Line E</p>
+            <p>Line F</p>
+            <p>Line G</p>
+            <p>Line H</p>
+            <p>Line I</p>
+            <p>Line J (end)</p>
+        </div>
+    </div>
+</body>
+</html>
