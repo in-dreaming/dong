@@ -6,6 +6,17 @@
 #include "../../core/log.h"
 
 namespace dong::render {
+
+// Forward declaration for select rendering
+void renderSelect(
+    const dom::DOMNodePtr& node,
+    const layout::LayoutNode* layout,
+    const dom::ComputedStyle& style,
+    float bl, float bt, float br, float bb,
+    TextShaper& shaper,
+    DisplayListBuilder& builder
+);
+
 namespace {
 
 using painter_detail::collapseWhitespace;
@@ -456,6 +467,11 @@ void Painter::paintTextAndInput(const dom::DOMNodePtr& node,
     if (tag == "input") {
         renderInput(node, layout_node, style, bl, bt, br, bb, text_shaper_, builder);
     }
+
+    // Select 元素特殊渲染
+    if (tag == "select") {
+        renderSelect(node, layout_node, style, bl, bt, br, bb, text_shaper_, builder);
+    }
 }
 
 // ========== 完整文本路径实现 ==========
@@ -667,3 +683,6 @@ void renderFullText(const dom::DOMNodePtr& node,
 } // anonymous namespace
 
 } // namespace dong::render
+
+// Include select rendering implementation
+#include "painter_select.cpp"
