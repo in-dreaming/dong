@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+        }
+        .scroll-container {
+            width: 600px;
+            height: 400px;
+            overflow: auto;
+            border: 2px solid #333;
+            background: #f0f0f0;
+        }
+        .content {
+            padding: 20px;
+        }
+        .block {
+            height: 150px;
+            margin-bottom: 20px;
+            padding: 20px;
+            background: #ddd;
+            border: 1px solid #999;
+        }
+        .sticky {
+            position: sticky;
+            top: 10px;
+            background: #4CAF50;
+            color: white;
+            padding: 15px;
+            margin-bottom: 20px;
+            border: 2px solid #2E7D32;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>Sticky Positioning Test - Top</h1>
+    <p>Scroll down in the container. The green box should stick 10px from the top.</p>
+
+    <div class="scroll-container">
+        <div class="content">
+            <div class="block">Block 1 - Before sticky</div>
+
+            <div class="sticky">STICKY ELEMENT - Top: 10px</div>
+
+            <div class="block">Block 2</div>
+            <div class="block">Block 3</div>
+            <div class="block">Block 4</div>
+            <div class="block">Block 5</div>
+            <div class="block">Block 6</div>
+        </div>
+    </div>
+</body>
+</html>

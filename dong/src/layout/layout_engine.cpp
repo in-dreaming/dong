@@ -15,6 +15,7 @@
 #include "../render/text_shaper.hpp"
 #include "aspect_ratio_resolver.hpp"
 #include "display_contents.hpp"
+#include "sticky_positioning.hpp"
 
 namespace dong::layout {
 
@@ -1407,6 +1408,9 @@ void Engine::calculateLayout(dom::DOMNodePtr root, float width, float height) {
 
     // Then layout positioned elements (position:absolute) relative to their containing blocks.
     layoutPositionedElements(layout_root_dom);
+
+    // Layout sticky elements (position:sticky) after positioned elements
+    layoutStickyElements(layout_root_dom);
 
     // Ensure the #document node itself still has a layout entry so rendering can start from it
     if (layout_root_dom.get() != root.get()) {
@@ -4265,6 +4269,37 @@ void Engine::layoutPositionedElements(dom::DOMNodePtr root) {
                         dirty_rect_.expand(new_x, new_y, layout->width, layout->height);
                     }
                 }
+            }
+        }
+
+        for (const auto& child : node->getChildren()) {
+            if (child && child->getType() == dom::DOMNode::NodeType::ELEMENT) {
+                walk(child);
+            }
+        }
+    };
+
+    walk(root);
+}
+
+void Engine::layoutStickyElements(dom::DOMNodePtr root) {
+    if (!root) {
+        return;
+    }
+
+    std::function<void(const dom::DOMNodePtr&)> walk;
+    walk = [this, &walk](const dom::DOMNodePtr& node) {
+        if (!node) {
+            return;
+        }
+
+        const auto& style = node->getComputedStyle();
+
+        if (style.position == "sticky") {
+            auto it_layout = layout_cache.find(node.get());
+            if (it_layout != layout_cache.end() && it_layout->second) {
+                LayoutNode* layout = it_layout->second.get();
+                computeStickyMetadata(node, layout);
             }
         }
 

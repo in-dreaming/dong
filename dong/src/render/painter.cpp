@@ -12,6 +12,7 @@
 #include "../core/profiler.h"
 #include "../core/string_utils.h"
 #include "../layout/display_contents.hpp"
+#include "../layout/sticky_positioning.hpp"
 namespace dong::render {
 
 
@@ -427,6 +428,28 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         node_rect.width = layout_node->layout.dimensions[0];
         node_rect.height = layout_node->layout.dimensions[1];
         has_layout_rect = node_rect.width > 0.0f && node_rect.height > 0.0f;
+
+        // Apply sticky offset if this is a sticky element
+        if (style.position == "sticky" && layout_node->sticky_metadata) {
+            // Get current scroll position from scroll container
+            float scroll_x = 0.0f;
+            float scroll_y = 0.0f;
+
+            if (layout_node->sticky_metadata->scroll_container) {
+                scroll_x = layout_node->sticky_metadata->scroll_container->getScrollLeft();
+                scroll_y = layout_node->sticky_metadata->scroll_container->getScrollTop();
+            }
+
+            // Apply sticky offset
+            auto* mutable_layout = const_cast<layout::LayoutNode*>(layout_node);
+            layout::applyStickyOffset(node, mutable_layout, scroll_x, scroll_y);
+
+            // Use visual position from sticky metadata
+            if (layout_node->sticky_metadata->is_stuck) {
+                node_rect.x = layout_node->sticky_metadata->visual_x;
+                node_rect.y = layout_node->sticky_metadata->visual_y;
+            }
+        }
     }
 
     const float builder_tx = builder.getTranslateX();

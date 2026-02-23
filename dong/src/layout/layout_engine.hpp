@@ -15,6 +15,8 @@ extern "C" {
 
 namespace dong::layout {
 
+struct StickyMetadata;
+
 // Dirty rectangle for incremental rendering
 struct DirtyRect {
     float x = 0;
@@ -45,6 +47,8 @@ struct LayoutNode {
         float position[2] = {0, 0};  // x, y
         float dimensions[2] = {0, 0}; // width, height
     } layout;
+
+    std::unique_ptr<StickyMetadata> sticky_metadata;
 
     LayoutNode() = default;
     ~LayoutNode();
@@ -170,6 +174,9 @@ private:
 
     // Positioned layout (position: absolute)
     void layoutPositionedElements(dom::DOMNodePtr root);
+
+    // Sticky positioning layout (position: sticky)
+    void layoutStickyElements(dom::DOMNodePtr root);
 
     // Third-pass sibling Y adjustment helpers
     void shiftSubtreeY(const dom::DOMNodePtr& n, float dy);
