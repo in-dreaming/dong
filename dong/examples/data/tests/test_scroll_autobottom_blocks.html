@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Scroll: auto bottom blocks (no text)</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #111;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    /* Put the scroll container at (0,0) so we avoid fractional layout origins. */
+    #sc {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 240px;
+      height: 160px;
+      overflow: auto;
+      background: #222;
+    }
+
+    /* Solid blocks; avoid text to keep pixel diff stable. */
+    .blk {
+      width: 240px;
+      height: 140px;
+    }
+
+    #b1 { background: #c33; }
+    #b2 { background: #3c3; }
+    #b3 { background: #33c; }
+
+    /* Sentinel stripe at the very bottom: should be visible when scrolled to bottom. */
+    #sentinel {
+      width: 240px;
+      height: 12px;
+      background: #fff;
+    }
+  </style>
+</head>
+<body>
+  <div id="sc">
+    <div id="b1" class="blk"></div>
+    <div id="b2" class="blk"></div>
+    <div id="b3" class="blk"></div>
+    <div id="sentinel"></div>
+  </div>
+
+  <script>
+    // Auto-scroll to bottom immediately.
+    // Note: dong's JS runtime does not provide setTimeout; keep this synchronous.
+    (function () {
+      var sc = document.getElementById('sc');
+      sc.scrollTop = sc.scrollHeight;
+    })();
+  </script>
+</body>
+</html>

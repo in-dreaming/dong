@@ -23,7 +23,19 @@ float computeScrollContentBottom(const dom::DOMNodePtr& node,
 
         if (const layout::LayoutNode* child_layout = layout_engine->getLayout(child)) {
             const float child_bottom = child_layout->layout.position[1] + child_layout->layout.dimensions[1];
-            current_max_bottom = std::max(current_max_bottom, child_bottom);
+
+            // scrollHeight 的滚动范围应覆盖子元素的 margin 边缘（尤其是最后一个元素的 margin-bottom）。
+            // 否则 scrollTop = scrollHeight 会被 clamp 到过小的 maxScroll，导致“滚不到底/中段高度不对”。
+            float margin_bottom = 0.0f;
+            const auto& cs = child->getComputedStyle();
+            if (cs.margin_bottom.isPixel()) {
+                margin_bottom = cs.margin_bottom.value;
+            }
+            if (margin_bottom < 0.0f) {
+                margin_bottom = 0.0f; // 负外边距不扩展 scroll 范围
+            }
+
+            current_max_bottom = std::max(current_max_bottom, child_bottom + margin_bottom);
         }
 
         current_max_bottom = computeScrollContentBottom(child, layout_engine, current_max_bottom);
@@ -57,17 +69,26 @@ Rect computeClientRectFromBorderBox(const Rect& border_box, const dom::ComputedS
 }
 
 bool shouldDebugScrollMetricsForNode(const dom::DOMNodePtr& node) {
-    static const bool kEnabled = []() {
-        const char* v = ::getenv("DONG_DEBUG_SCROLL_METRICS");
-        return v && v[0] == '1';
-    }();
+    if (!node) {
+        return false;
+    }
 
-    if (!kEnabled || !node) {
+    // Debug scroll metrics for a specific element id.
+    // - DONG_DEBUG_SCROLL_METRICS=1      -> legacy: only id=="sc"
+    // - DONG_DEBUG_SCROLL_METRICS=<id>   -> debug that id
+    const char* v = ::getenv("DONG_DEBUG_SCROLL_METRICS");
+    if (!v || !v[0]) {
         return false;
     }
 
     const std::string id = node->getAttribute("id");
-    return id == "sc";
+    if (v[0] == '*' && v[1] == '\0') {
+        return true;
+    }
+    if (v[0] == '1' && v[1] == '\0') {
+        return id == "sc";
+    }
+    return id == v;
 }
 
 } // namespace
@@ -110,6 +131,21 @@ void Painter::paintChildrenAndOverlays(const dom::DOMNodePtr& node,
 
     // 维护滚动容器的 client/content 尺寸（用于 scrollTo/scrollBy clamp 与滚动条绘制）
     Rect client_rect = node_rect;
+
+    // Debug helper: print scroll-related styles and rect even if not treated as a scroll container.
+    if (shouldDebugScrollMetricsForNode(node) && has_layout_rect) {
+        const dom::ComputedStyle& dbg_style = node->getComputedStyle();
+        std::fprintf(
+            stderr,
+            "[ScrollDbg] id=%s overflow=%s overflow_y=%s scroll_behavior=%s is_scroll_container=%d rect=(x=%.1f,y=%.1f,w=%.1f,h=%.1f)\n",
+            node->getAttribute("id").c_str(),
+            dbg_style.overflow.c_str(),
+            dbg_style.overflow_y.c_str(),
+            dbg_style.scroll_behavior.c_str(),
+            is_scroll_container ? 1 : 0,
+            node_rect.x, node_rect.y, node_rect.width, node_rect.height);
+    }
+
     if (is_scroll_container && has_layout_rect) {
         const dom::ComputedStyle& style = node->getComputedStyle();
         client_rect = computeClientRectFromBorderBox(node_rect, style);

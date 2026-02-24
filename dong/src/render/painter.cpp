@@ -429,6 +429,10 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         node_rect.height = layout_node->layout.dimensions[1];
         has_layout_rect = node_rect.width > 0.0f && node_rect.height > 0.0f;
 
+        // Expose layout metrics to DOM APIs (offsetTop/Left/Width/Height).
+        // Note: we store absolute coords; JS can derive relative offsets by subtraction.
+        node->setOffsetRect(node_rect.y, node_rect.x, node_rect.width, node_rect.height);
+
         // Apply sticky offset if this is a sticky element
         if (style.position == "sticky" && layout_node->sticky_metadata) {
             // Get current scroll position from scroll container

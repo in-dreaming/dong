@@ -25,6 +25,19 @@ def main() -> int:
     ap.add_argument("--device-scale-factor", type=float, default=1.0, help="Device scale factor (default: 1.0)")
     ap.add_argument("--wait-ms", type=int, default=50, help="Extra wait time before screenshot (default: 50ms)")
     ap.add_argument("--timeout-ms", type=int, default=15000, help="Navigation timeout (default: 15000ms)")
+
+    ap.add_argument(
+        "--click",
+        default="",
+        help="Optional click before screenshot, format: x,y (e.g. 240,190)",
+    )
+    ap.add_argument(
+        "--post-click-wait-ms",
+        type=int,
+        default=50,
+        help="Extra wait time after click before screenshot (default: 50ms)",
+    )
+
     ap.add_argument("--full-page", action="store_true", help="Capture full page (default: viewport only)")
     ap.add_argument(
         "--omit-background",
@@ -71,6 +84,45 @@ def main() -> int:
         page.goto(target, wait_until="load", timeout=args.timeout_ms)
         if args.wait_ms > 0:
             page.wait_for_timeout(args.wait_ms)
+
+        if args.click:
+            try:
+                parts = [p.strip() for p in args.click.split(",")]
+                x = int(parts[0])
+                y = int(parts[1])
+            except Exception:
+                print("ERROR: invalid --click, expected x,y", file=sys.stderr)
+                return 4
+
+            try:
+                hit = page.evaluate(
+                    "(p)=>{const el=document.elementFromPoint(p.x,p.y); return el? (el.tagName+" + "'" + "#" + "'" + "+(el.id||'')+" + "'" + "." + "'" + "+(el.className||'')) : null; }",
+                    {"x": x, "y": y},
+                )
+                print(f"[baseline_click] at=({x},{y}) hit={hit}", file=sys.stderr)
+            except Exception as e:
+                print(f"[baseline_click] elementFromPoint failed: {e}", file=sys.stderr)
+
+            page.mouse.click(x, y)
+            if args.post_click_wait_ms > 0:
+                page.wait_for_timeout(args.post_click_wait_ms)
+
+            try:
+                metrics = page.evaluate(
+                    "() => {\n"
+                    "  const ids = ['autoContainer','smoothContainer'];\n"
+                    "  const out = {};\n"
+                    "  for (const id of ids) {\n"
+                    "    const c = document.getElementById(id);\n"
+                    "    if (!c) { out[id] = null; continue; }\n"
+                    "    out[id] = { scrollTop: c.scrollTop, scrollHeight: c.scrollHeight, clientHeight: c.clientHeight };\n"
+                    "  }\n"
+                    "  return out;\n"
+                    "}"
+                )
+                print(f"[baseline_click] metrics={metrics}", file=sys.stderr)
+            except Exception as e:
+                print(f"[baseline_click] metrics eval failed: {e}", file=sys.stderr)
 
         screenshot_kwargs = {
             "path": str(out_path),

@@ -166,10 +166,14 @@ public:
     float getScrollY() const { return scroll_y_; }
     float getScrollTop() const { return scroll_y_; }
     float getScrollLeft() const { return scroll_x_; }
-    void setScrollX(float x) { scroll_x_ = x; }
-    void setScrollY(float y) { scroll_y_ = y; }
-    void setScrollTop(float y) { scroll_y_ = y; }
-    void setScrollLeft(float x) { scroll_x_ = x; }
+
+    // Note: must clamp to valid scroll range when sizes are known.
+    // When layout hasn't produced client/content sizes yet, preserve the raw value and let
+    // setClientRect()/setContentSize() clamp later (so early scrollTop isn't lost).
+    void setScrollX(float x);
+    void setScrollY(float y);
+    void setScrollTop(float y);
+    void setScrollLeft(float x);
 
     // Scroll result structure
     struct ScrollResult {
@@ -179,6 +183,11 @@ public:
 
     ScrollResult scrollBy(float dx, float dy);
     void scrollTo(float x, float y);
+
+    // Smooth scroll animation (driven by EngineView::tick)
+    bool hasActiveSmoothScroll() const { return smooth_scroll_active_; }
+    bool updateSmoothScroll(double current_time_sec);
+
     void scrollIntoView(bool alignToTop = true);
     bool isScrollContainer() const;
     
@@ -286,6 +295,15 @@ protected:
     float scroll_y_ = 0.0f;
     float content_width_ = 0.0f;
     float content_height_ = 0.0f;
+
+    // Smooth scrolling state (for scroll-behavior: smooth)
+    bool smooth_scroll_active_ = false;
+    double smooth_scroll_start_time_ = -1.0;   // EngineView::tick timebase; -1 means "not started yet"
+    double smooth_scroll_duration_sec_ = 0.35; // Default duration; tuned to be close to browser feel.
+    float smooth_scroll_from_x_ = 0.0f;
+    float smooth_scroll_from_y_ = 0.0f;
+    float smooth_scroll_target_x_raw_ = 0.0f;  // Raw targets (may be clamped once metrics are ready)
+    float smooth_scroll_target_y_raw_ = 0.0f;
 
     // Scroll geometry bookkeeping: avoid clamping scroll offsets until both
     // client rect + content size have been initialized at least once.

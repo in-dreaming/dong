@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>scrollHeight should include margin-bottom</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: Arial, sans-serif;
+      background: #ffffff;
+    }
+
+    .container {
+      width: 360px;
+      height: 200px;
+      border: 2px solid #333;
+      overflow: auto;
+      background: #f0f0f0;
+    }
+
+    .content {
+      padding: 10px;
+      background: transparent;
+    }
+
+    .block {
+      height: 120px;
+      padding: 10px;
+      border: 1px solid #ddd;
+      background: #ffffff;
+      margin-bottom: 10px;
+    }
+
+    .tail {
+      height: 28px;
+      background: #3cb371;
+      border: 1px solid #2e8b57;
+      margin-bottom: 80px; /* The visible grey gap at bottom must be scrollable into view */
+    }
+
+    .label {
+      font-size: 14px;
+      margin: 0 0 8px 0;
+    }
+  </style>
+</head>
+<body>
+  <p class="label">Test: on load, set <code>scrollTop = scrollHeight</code>. Bottom gap (from tail's margin-bottom) must be reachable.</p>
+
+  <div class="container" id="sc">
+    <div class="content">
+      <div class="block">Top block</div>
+      <div class="block">Middle block</div>
+      <div class="tail">TAIL</div>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      var c = document.getElementById('sc');
+      c.scrollTop = c.scrollHeight;
+    })();
+  </script>
+</body>
+</html>

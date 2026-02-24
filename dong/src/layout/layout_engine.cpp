@@ -1030,8 +1030,49 @@ bool isInlineFormattingContext(const dom::DOMNodePtr& node) {
     return has_inline_child;
 }
 
+static bool isWhitespaceOnlyText(const std::string& s) {
+    for (unsigned char c : s) {
+        if (!std::isspace(c)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static float effectiveBorderWidthPx(const dom::ComputedStyle& style,
+                                    float side_width,
+                                    const std::string& side_style) {
+    const std::string& st = !side_style.empty() ? side_style : style.border_style;
+    if (st == "none" || st == "hidden") {
+        return 0.0f;
+    }
+    return (side_width >= 0.0f) ? side_width : std::max(0.0f, style.border_width);
+}
+
+static float expectedBorderBoxHeightPx(const dom::ComputedStyle& style) {
+    if (!style.height.isPixel()) {
+        return -1.0f;
+    }
+
+    float h = style.height.value;
+    if (style.box_sizing == "content-box") {
+        if (style.padding_top.isPixel()) h += style.padding_top.value;
+        if (style.padding_bottom.isPixel()) h += style.padding_bottom.value;
+
+        h += effectiveBorderWidthPx(style, style.border_top_width, style.border_top_style);
+        h += effectiveBorderWidthPx(style, style.border_bottom_width, style.border_bottom_style);
+    }
+
+    if (!std::isfinite(h) || h < 0.0f) {
+        return -1.0f;
+    }
+    return h;
+}
+
 // Detect block containers that have both block-level and inline-level children.
 // Per CSS spec, these need anonymous block box generation to wrap consecutive inline runs.
+// Note: whitespace-only text nodes between block elements are ignored (they should not create
+// extra anonymous blocks / vertical gaps).
 bool hasMixedBlockInlineChildren(const dom::DOMNodePtr& node) {
     if (!node || node->getType() != dom::DOMNode::NodeType::ELEMENT) {
         return false;
@@ -1049,7 +1090,7 @@ bool hasMixedBlockInlineChildren(const dom::DOMNodePtr& node) {
 
         if (child->getType() == dom::DOMNode::NodeType::TEXT) {
             std::string text = collapseWhitespace(child->getRawTextContent());
-            if (!text.empty()) {
+            if (!text.empty() && !isWhitespaceOnlyText(text)) {
                 has_inline = true;
             }
             if (has_inline && has_block) return true;
@@ -1204,25 +1245,60 @@ void Engine::calculateLayout(dom::DOMNodePtr root, float width, float height) {
             float new_y = parent_y + top;
             float new_width = width;
             float new_height = height;
-            
-            // Workaround: detect and fix Yoga layout calculation bugs
-            // Sometimes Yoga returns huge values (> 100000) for height, which indicates a bug
-            // related to scroll containers. We detect and correct these values.
+
+            const bool height_insane_raw = (height > 100000.0f || !std::isfinite(height));
+
             const auto& style = dom_node->getComputedStyle();
             const std::string node_tag = dom_node->getTagName();
-            
+
+            // If CSS provides an explicit pixel height, enforce it as the expected border-box height.
+            // This guards against Yoga returning small-but-wrong heights (e.g. 256 instead of 304).
+            if (style.height.isPixel()) {
+                const float expected_h = expectedBorderBoxHeightPx(style);
+                if (expected_h > 0.0f) {
+                    new_height = expected_h;
+                }
+            }
+
+            // Workaround: detect and fix Yoga layout calculation bugs.
+            // Sometimes Yoga returns huge values (> 100000) for height, which indicates a bug.
             if (new_height > 100000.0f || !std::isfinite(new_height)) {
-                // Try to use the style height if available
-                if (style.height.isPixel()) {
-                    new_height = style.height.value;
+                // Try to derive a sane height from children first (more accurate than guessing a single line).
+                float derived_h = 0.0f;
+                const uint32_t dbg_cc = YGNodeGetChildCount(yoga_node);
+                for (uint32_t i = 0; i < dbg_cc; ++i) {
+                    YGNode* ch = YGNodeGetChild(yoga_node, i);
+                    if (!ch) continue;
+                    const float ct = YGNodeLayoutGetTop(ch);
+                    const float ch_h = YGNodeLayoutGetHeight(ch);
+                    if (std::isfinite(ct) && std::isfinite(ch_h)) {
+                        derived_h = std::max(derived_h, ct + ch_h);
+                    }
+                }
+
+                if (derived_h > 0.0f && derived_h < 100000.0f && std::isfinite(derived_h)) {
+                    const float pad_bottom = style.padding_bottom.isPixel() ? style.padding_bottom.value : 0.0f;
+
+                    float bb = 0.0f;
+                    const std::string& bs = !style.border_bottom_style.empty() ? style.border_bottom_style : style.border_style;
+                    if (bs != "none" && bs != "hidden") {
+                        bb = (style.border_bottom_width >= 0.0f) ? style.border_bottom_width : std::max(0.0f, style.border_width);
+                    }
+
+                    new_height = derived_h + pad_bottom + bb;
+                } else if (style.height.isPixel()) {
+                    const float expected_h = expectedBorderBoxHeightPx(style);
+                    if (expected_h > 0.0f) {
+                        new_height = expected_h;
+                    }
                 } else if (node_tag == "input") {
-                    // input 鍏冪礌锛氫娇鐢?font-size + padding 璁＄畻楂樺害
+                    // input 元素：使用 font-size + padding 计算高度
                     float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
                     float pad_top = style.padding_top.isPixel() ? style.padding_top.value : 0.0f;
                     float pad_bottom = style.padding_bottom.isPixel() ? style.padding_bottom.value : 0.0f;
                     new_height = font_size * 1.2f + pad_top + pad_bottom;
                 } else {
-                    // Fallback to a reasonable default based on content
+                    // Fallback to a reasonable default based on text content
                     for (const auto& child : dom_node->getChildren()) {
                         if (child && child->getType() == dom::DOMNode::NodeType::TEXT) {
                             float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
@@ -1232,7 +1308,7 @@ void Engine::calculateLayout(dom::DOMNodePtr root, float width, float height) {
                     }
                 }
             }
-            
+
             // Fix huge top values by using cumulative sibling height tracking
             if (top > 100000.0f || !std::isfinite(top)) {
                 // Use the cumulative height from previous siblings
@@ -1281,6 +1357,30 @@ void Engine::calculateLayout(dom::DOMNodePtr root, float width, float height) {
             node_layout->layout.position[1] = node_layout->y;
             node_layout->layout.dimensions[0] = node_layout->width;
             node_layout->layout.dimensions[1] = node_layout->height;
+
+            // Debug: dump extracted layout for a specific node id.
+            // Usage: DONG_DEBUG_LAYOUT_ID=autoContainer (or '*')
+            if (const char* dbg_id = std::getenv("DONG_DEBUG_LAYOUT_ID")) {
+                const std::string id = dom_node->getAttribute("id");
+                if ((dbg_id[0] == '*' && dbg_id[1] == '\0') || id == dbg_id) {
+                    const auto& cs = dom_node->getComputedStyle();
+                    std::fprintf(
+                        stderr,
+                        "[LayoutId] tag=%s id=%s css_h_unit=%d css_h=%.1f yoga_h=%.1f extracted_h=%.1f top=%.1f y=%.1f\n",
+                        dom_node->getTagName().c_str(),
+                        id.c_str(),
+                        static_cast<int>(cs.height.unit),
+                        cs.height.value,
+                        height,
+                        new_height,
+                        top,
+                        new_y);
+                }
+            }
+
+            // Expose layout to DOM metrics APIs (offsetTop/Left/Width/Height).
+            // We store absolute coordinates so JS can compute relative offsets by subtraction.
+            dom_node->setOffsetRect(node_layout->y, node_layout->x, node_layout->width, node_layout->height);
 
             // If this node's layout changed, add its area to dirty rect
             if (layout_changed) {
@@ -1412,6 +1512,45 @@ void Engine::calculateLayout(dom::DOMNodePtr root, float width, float height) {
                     }
                 }
                 ++yoga_child_index;
+            }
+
+            // Post-pass: if Yoga returned an insane height for this node,
+            // recompute a stable height from extracted child layouts.
+            // This handles cases where Yoga introduces anonymous wrappers or NaN/huge sizes.
+            if (height_insane_raw && !style.height.isPixel()) {
+                float max_rel_bottom = 0.0f;
+                for (const auto& ch : dom_node->getChildren()) {
+                    if (!ch || ch->getType() != dom::DOMNode::NodeType::ELEMENT) {
+                        continue;
+                    }
+                    auto it = layout_cache.find(ch.get());
+                    if (it == layout_cache.end() || !it->second) {
+                        continue;
+                    }
+                    const float rel_bottom = (it->second->y + it->second->height) - new_y;
+                    if (std::isfinite(rel_bottom)) {
+                        max_rel_bottom = std::max(max_rel_bottom, rel_bottom);
+                    }
+                }
+
+                if (max_rel_bottom > 0.0f && max_rel_bottom < 100000.0f && std::isfinite(max_rel_bottom)) {
+                    const float pad_bottom = style.padding_bottom.isPixel() ? style.padding_bottom.value : 0.0f;
+
+                    float bb = 0.0f;
+                    const std::string& bs = !style.border_bottom_style.empty() ? style.border_bottom_style : style.border_style;
+                    if (bs != "none" && bs != "hidden") {
+                        bb = (style.border_bottom_width >= 0.0f) ? style.border_bottom_width : std::max(0.0f, style.border_width);
+                    }
+
+                    const float corrected_h = max_rel_bottom + pad_bottom + bb;
+                    if (corrected_h > 0.0f && corrected_h < 100000.0f && std::isfinite(corrected_h)) {
+                        if (node_layout->height != corrected_h) {
+                            node_layout->height = corrected_h;
+                            node_layout->layout.dimensions[1] = corrected_h;
+                            dirty_rect_.expand(new_x, new_y, new_width, corrected_h);
+                        }
+                    }
+                }
             }
         };
 
@@ -1556,7 +1695,7 @@ void Engine::buildChildYogaNodes(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
             if (!inline_child) continue;
             if (inline_child->getType() == dom::DOMNode::NodeType::TEXT) {
                 std::string text = collapseWhitespace(inline_child->getRawTextContent());
-                if (!text.empty()) {
+                if (!text.empty() && !isWhitespaceOnlyText(text)) {
                     has_text_child = true;
                 }
                 continue;
@@ -1614,8 +1753,9 @@ void Engine::buildChildYogaNodes(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
 
             if (child->getType() == dom::DOMNode::NodeType::TEXT) {
                 // TEXT 节点属于 inline-level 内容：需要被包进匿名块，才能为文本分配垂直空间。
+                // 但“仅空白”的文本（例如 block 元素之间的缩进/换行）不应引入额外匿名块与间距。
                 std::string text = collapseWhitespace(child->getRawTextContent());
-                if (!text.empty()) {
+                if (!text.empty() && !isWhitespaceOnlyText(text)) {
                     current_inline_run.push_back(child);
                 }
                 continue;
@@ -1966,22 +2106,39 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
         }
     }
     
-    // 绗﹀悎 CSS 鏍囧噯锛氫负 button 鍏冪礌璁剧疆鍩轰簬鏂囨湰鍐呭鐨勬渶灏忓搴?
-    // 鎸夐挳榛樿鏄?inline-block锛屽搴﹀簲鑷€傖應鍐呭 + padding
-    // 杩欑'淇濇寜閽笉浼氥?因?flex 瀹瑰櫒鍘嬬缉鑰屾埅鏂枃瀛?
-    if (tag == "button" && style.width.isAuto()) {
-        float intrinsic_w = computeIntrinsicTextWidth(dom_node);
-        if (intrinsic_w > 0.0f && intrinsic_w < 10000.0f) {
-            YGNodeStyleSetMinWidth(yoga_node, intrinsic_w);
+    // button 默认是 inline-block，尺寸应由内容 + padding 决定。
+    // Yoga 树不包含 TEXT 子节点，容易导致按钮高度塌缩为 0；这里给一个合理的最小高度。
+    if (tag == "button") {
+        if (style.width.isAuto()) {
+            float intrinsic_w = computeIntrinsicTextWidth(dom_node);
+            if (intrinsic_w > 0.0f && intrinsic_w < 10000.0f) {
+                YGNodeStyleSetMinWidth(yoga_node, intrinsic_w);
+            }
+            if (std::getenv("DONG_DEBUG_BUTTON_WRAP")) {
+                std::string text = collapseWhitespace(dom_node->getTextContent());
+                DONG_LOG_INFO("[LayoutEngine] button intrinsic_w=%.2f text='%s' display=%s layout_mode=%d width_auto=%d",
+                              intrinsic_w,
+                              text.c_str(),
+                              style.display.c_str(),
+                              static_cast<int>(style.layout_mode),
+                              style.width.isAuto() ? 1 : 0);
+            }
         }
-        if (std::getenv("DONG_DEBUG_BUTTON_WRAP")) {
-            std::string text = collapseWhitespace(dom_node->getTextContent());
-            DONG_LOG_INFO("[LayoutEngine] button intrinsic_w=%.2f text='%s' display=%s layout_mode=%d width_auto=%d",
-                          intrinsic_w,
-                          text.c_str(),
-                          style.display.c_str(),
-                          static_cast<int>(style.layout_mode),
-                          style.width.isAuto() ? 1 : 0);
+
+        if (style.height.isAuto()) {
+            float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
+            float pad_top = style.padding_top.isPixel() ? style.padding_top.value : 0.0f;
+            float pad_bottom = style.padding_bottom.isPixel() ? style.padding_bottom.value : 0.0f;
+
+            float border_v = 0.0f;
+            if (style.border_width > 0.0f) {
+                border_v = style.border_width * 2.0f;
+            }
+
+            float min_h = font_size * 1.2f + pad_top + pad_bottom + border_v;
+            if (min_h > 0.0f && std::isfinite(min_h)) {
+                YGNodeStyleSetMinHeight(yoga_node, min_h);
+            }
         }
     }
 

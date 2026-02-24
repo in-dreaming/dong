@@ -37,6 +37,12 @@ def main() -> int:
     ap.add_argument("--update", action="store_true", help="Call dong_view_update() between frames")
     ap.add_argument("--llm", action="store_true", help="Enable LLM analysis in vl_tool_multi.py")
     ap.add_argument("--case", default="", help="Only run one case by stem (e.g. cursor_test)")
+
+    ap.add_argument("--click", default="", help="Optional baseline click before capture, format: x,y (e.g. 240,250)")
+    ap.add_argument("--dong-click", default="", help="Optional dong click, format: x,y (button defaults to 1)")
+    ap.add_argument("--base-wait-ms", type=int, default=50, help="Baseline extra wait before click/screenshot (default: 50ms)")
+    ap.add_argument("--base-post-click-wait-ms", type=int, default=50, help="Baseline extra wait after click (default: 50ms)")
+
     args = ap.parse_args()
 
     repo_root = Path(__file__).resolve().parents[2]
@@ -82,7 +88,7 @@ def main() -> int:
 
         base_png = case_dir / f"{stem}_base.png"
         print(f"[BASE] {stem} -> {base_png}")
-        run([
+        cmd_base = [
             sys.executable,
             str(baseline),
             str(html),
@@ -93,8 +99,16 @@ def main() -> int:
             "--height",
             str(args.height),
             "--wait-ms",
-            "50",
-        ])
+            str(args.base_wait_ms),
+        ]
+        if args.click:
+            cmd_base += [
+                "--click",
+                args.click,
+                "--post-click-wait-ms",
+                str(args.base_post_click_wait_ms),
+            ]
+        run(cmd_base)
 
         # Dong frames
         out_base = str(case_dir / f"{stem}.bmp")
@@ -102,6 +116,11 @@ def main() -> int:
         cmd = [
             "/usr/bin/env",
             "DONG_DISABLE_SCROLLBARS=1",
+        ]
+        click_xy = args.dong_click or args.click
+        if click_xy:
+            cmd.append(f"DONG_TEST_CLICK={click_xy},1")
+        cmd += [
             str(exe),
             str(html),
             out_base,

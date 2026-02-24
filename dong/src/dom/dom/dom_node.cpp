@@ -11,6 +11,7 @@
 #include <sstream>
 #include <unordered_set>
 #include <limits>
+#include <cmath>
 
 
 namespace dong::dom {
@@ -902,29 +903,141 @@ DOMNode::ScrollResult DOMNode::scrollBy(float dx, float dy) {
     return result;
 }
 
+void DOMNode::setScrollX(float x) {
+    setScrollLeft(x);
+}
+
+void DOMNode::setScrollY(float y) {
+    setScrollTop(y);
+}
+
+void DOMNode::setScrollTop(float y) {
+    // Always store the raw value, even if style/layout isn't ready yet.
+    // The scroll offset will only be applied visually when this node is a scroll container.
+    // Preserve early scrollTop before layout has established scroll ranges.
+    if (!isScrollContainer() || !(has_client_rect_ && has_content_size_)) {
+        scroll_y_ = y;
+        return;
+    }
+
+    scrollTo(scroll_x_, y);
+}
+
+void DOMNode::setScrollLeft(float x) {
+    if (!isScrollContainer() || !(has_client_rect_ && has_content_size_)) {
+        scroll_x_ = x;
+        return;
+    }
+
+    scrollTo(x, scroll_y_);
+}
+
+namespace {
+
+static float smoothstep01(float t) {
+    t = std::clamp(t, 0.0f, 1.0f);
+    return t * t * (3.0f - 2.0f * t);
+}
+
+static bool nearlyEqual(float a, float b, float eps = 0.01f) {
+    return std::abs(a - b) <= eps;
+}
+
+} // namespace
+
+bool DOMNode::updateSmoothScroll(double current_time_sec) {
+    if (!smooth_scroll_active_) {
+        return false;
+    }
+
+    // Only scroll containers can animate scroll offsets.
+    if (!isScrollContainer()) {
+        smooth_scroll_active_ = false;
+        smooth_scroll_start_time_ = -1.0;
+        return false;
+    }
+
+    // Wait until we have established scroll ranges.
+    if (!(has_client_rect_ && has_content_size_)) {
+        return false;
+    }
+
+    const float max_x = computeMaxScroll(client_width_, content_width_);
+    const float max_y = computeMaxScroll(client_height_, content_height_);
+
+    const float target_x = std::clamp(smooth_scroll_target_x_raw_, 0.0f, max_x);
+    const float target_y = std::clamp(smooth_scroll_target_y_raw_, 0.0f, max_y);
+
+    if (smooth_scroll_start_time_ < 0.0) {
+        smooth_scroll_start_time_ = current_time_sec;
+        smooth_scroll_from_x_ = scroll_x_;
+        smooth_scroll_from_y_ = scroll_y_;
+
+        // If already at target (or target collapses to current after clamping), finish immediately.
+        if (nearlyEqual(smooth_scroll_from_x_, target_x) && nearlyEqual(smooth_scroll_from_y_, target_y)) {
+            scroll_x_ = target_x;
+            scroll_y_ = target_y;
+            smooth_scroll_active_ = false;
+            smooth_scroll_start_time_ = -1.0;
+            return false;
+        }
+    }
+
+    const double duration = std::max(0.0, smooth_scroll_duration_sec_);
+    if (duration <= 1e-6) {
+        const bool changed = !nearlyEqual(scroll_x_, target_x) || !nearlyEqual(scroll_y_, target_y);
+        scroll_x_ = target_x;
+        scroll_y_ = target_y;
+        smooth_scroll_active_ = false;
+        smooth_scroll_start_time_ = -1.0;
+        return changed;
+    }
+
+    const double elapsed = current_time_sec - smooth_scroll_start_time_;
+    const float t = static_cast<float>(elapsed / duration);
+    const float eased = smoothstep01(t);
+
+    const float new_x = smooth_scroll_from_x_ + (target_x - smooth_scroll_from_x_) * eased;
+    const float new_y = smooth_scroll_from_y_ + (target_y - smooth_scroll_from_y_) * eased;
+
+    const bool changed = !nearlyEqual(scroll_x_, new_x) || !nearlyEqual(scroll_y_, new_y);
+    scroll_x_ = new_x;
+    scroll_y_ = new_y;
+
+    if (t >= 1.0f) {
+        scroll_x_ = target_x;
+        scroll_y_ = target_y;
+        smooth_scroll_active_ = false;
+        smooth_scroll_start_time_ = -1.0;
+    }
+
+    return changed;
+}
+
 void DOMNode::scrollTo(float x, float y) {
     if (!isScrollContainer()) return;
 
     const float max_x = computeMaxScroll(client_width_, content_width_);
     const float max_y = computeMaxScroll(client_height_, content_height_);
 
-    float target_x = std::clamp(x, 0.0f, max_x);
-    float target_y = std::clamp(y, 0.0f, max_y);
+    const float target_x = std::clamp(x, 0.0f, max_x);
+    const float target_y = std::clamp(y, 0.0f, max_y);
 
-    // Check scroll-behavior property
     const std::string& behavior = computed_style_.scroll_behavior;
-
     if (behavior == "smooth") {
-        // TODO: Implement smooth scrolling animation
-        // For now, fall back to instant scroll
-        // Future implementation should:
-        // 1. Store target position and current time
-        // 2. Use easing function (e.g., ease-in-out)
-        // 3. Update position incrementally in tick()
-        // 4. Typical duration: 300-500ms
+        // Defer animation start until EngineView::tick (timebase + scroll metrics).
+        smooth_scroll_active_ = true;
+        smooth_scroll_start_time_ = -1.0;
+        smooth_scroll_from_x_ = scroll_x_;
+        smooth_scroll_from_y_ = scroll_y_;
+        smooth_scroll_target_x_raw_ = target_x;
+        smooth_scroll_target_y_raw_ = target_y;
+        return;
     }
 
-    // Instant scroll (also used as fallback for smooth)
+    // Instant scroll
+    smooth_scroll_active_ = false;
+    smooth_scroll_start_time_ = -1.0;
     scroll_x_ = target_x;
     scroll_y_ = target_y;
 }

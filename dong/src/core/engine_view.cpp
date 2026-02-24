@@ -204,6 +204,26 @@ static void markIsolatedLayerDirtyFlags(dong::render::GPUCommandList& list, uint
     }
 }
 
+static void updateSmoothScrollRecursive(const DOMNodePtr& node,
+                                       double now_sec,
+                                       bool& any_active,
+                                       bool& any_changed) {
+    if (!node) return;
+
+    if (node->updateSmoothScroll(now_sec)) {
+        any_changed = true;
+    }
+
+    if (node->hasActiveSmoothScroll()) {
+        any_active = true;
+    }
+
+    for (const auto& ch : node->getChildren()) {
+        if (!ch) continue;
+        updateSmoothScrollRecursive(ch, now_sec, any_active, any_changed);
+    }
+}
+
 } // namespace
 
 struct EngineView::Impl {
@@ -980,6 +1000,18 @@ struct EngineView::Impl {
             root->markLayoutDirty();
         }
 
+        // Prime layout + scroll metrics once so <script> can reliably use scrollHeight/clientHeight.
+        // (In browsers, layout is flushed on demand; without this, early scripts see scrollHeight==0.)
+        if (layout_engine && painter) {
+            if (auto root2 = dom_manager->getRoot()) {
+                if (root2->isLayoutDirty()) {
+                    layout_engine->calculateLayout(root2, static_cast<float>(width), static_cast<float>(height));
+                    root2->clearLayoutDirtyRecursive();
+                }
+                painter->buildDisplayList(root2, layout_engine.get());
+            }
+        }
+
         // Execute <script> tags (inline or src)
         DONG_LOG_INFO("[EngineView] Script execution starting, script_engine=%p, dom_manager=%p",
                       (void*)script_engine.get(), (void*)dom_manager.get());
@@ -1128,6 +1160,20 @@ struct EngineView::Impl {
         auto now = std::chrono::steady_clock::now();
         double current_time = std::chrono::duration<double>(now - start_time).count();
         last_wall_time_sec = current_time;
+
+        // Smooth scrolling (scroll-behavior:smooth) is time-based and should advance every tick.
+        // We update scroll offsets here (before layout/paint) and request a repaint while active.
+        if (dom_manager) {
+            auto root_for_scroll = dom_manager->getRoot();
+            if (root_for_scroll) {
+                bool any_active = false;
+                bool any_changed = false;
+                updateSmoothScrollRecursive(root_for_scroll, current_time, any_active, any_changed);
+                if (any_active || any_changed) {
+                    markNeedsRepaint();
+                }
+            }
+        }
 
         bool dom_tree_dirty = false;
         if (dom_manager) {

@@ -30,8 +30,8 @@
 
 ### 滚动体系（高 ROI）
 
-- [ ] `overscroll-behavior` 属性（防止滚动链）
-- [ ] `scroll-behavior` 属性（可先做简化版 smooth 滚动）
+- [x] `overscroll-behavior` 属性（防止滚动链）- 已实现 auto/contain/none 值，支持 overscroll-behavior-x/y 轴向属性，在 sendMouseWheel() 中实现滚动链控制。测试用例：`test_overscroll_behavior_contain.html`、`test_overscroll_behavior_none.html`、`test_overscroll_behavior_axis.html`
+- [x] `scroll-behavior` 属性（可先做简化版 smooth 滚动）- 已实现 auto/smooth 值解析，scrollTo() 中预留平滑滚动钩子（TODO: 动画未实现，当前为即时滚动）。测试用例：`test_scroll_behavior_smooth.html`
 
 ### 列表体系闭环（高 ROI，建议成组推进）
 

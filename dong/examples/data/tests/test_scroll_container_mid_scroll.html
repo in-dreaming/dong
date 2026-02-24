@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Scroll Container Mid Scroll</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: Arial, sans-serif;
+      background: #ffffff;
+    }
+
+    .legend {
+      margin-bottom: 16px;
+      padding: 10px;
+      background: #e8f4f8;
+      border: 1px solid #4a9eba;
+    }
+
+    .row {
+      display: flex;
+      gap: 20px;
+    }
+
+    .container {
+      width: 400px;
+      height: 300px;
+      border: 2px solid #333;
+      overflow: auto;
+      background-color: #f0f0f0;
+    }
+
+    .container.smooth {
+      border-color: #c00;
+      background-color: #fff3cd;
+      scroll-behavior: smooth;
+    }
+
+    .content {
+      padding: 10px;
+    }
+
+    .section {
+      height: 250px;
+      margin-bottom: 10px;
+      border: 1px solid rgba(0, 0, 0, 0.25);
+      box-sizing: border-box;
+      position: relative;
+    }
+
+    /* Make each section visually distinct without relying on text rendering. */
+    .s1 { background: #ff6b6b; }
+    .s2 { background: #51cf66; }
+    .s3 { background: #339af0; }
+
+    .marker {
+      position: absolute;
+      left: 8px;
+      top: 8px;
+      width: 64px;
+      height: 64px;
+      border: 2px solid rgba(0, 0, 0, 0.5);
+      background: rgba(255, 255, 255, 0.6);
+      box-sizing: border-box;
+    }
+
+    .marker::before {
+      content: "";
+      display: block;
+      width: 100%;
+      height: 16px;
+      background: rgba(0, 0, 0, 0.25);
+    }
+  </style>
+</head>
+<body>
+  <div class="legend">
+    <div><strong>Test:</strong> scroll container mid scroll (no text dependency)</div>
+    <div>Goal: after script sets scrollTop, the visible area should show part of red (S1) and green (S2).</div>
+  </div>
+
+  <div class="row">
+    <div class="container" id="autoContainer">
+      <div class="content">
+        <div class="section s1"><div class="marker"></div></div>
+        <div class="section s2"><div class="marker"></div></div>
+        <div class="section s3"><div class="marker"></div></div>
+      </div>
+    </div>
+
+    <div class="container smooth" id="smoothContainer">
+      <div class="content">
+        <div class="section s1"><div class="marker"></div></div>
+        <div class="section s2"><div class="marker"></div></div>
+        <div class="section s3"><div class="marker"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var autoC = document.getElementById('autoContainer');
+      var smoothC = document.getElementById('smoothContainer');
+      if (autoC) autoC.scrollTop = 260;
+      if (smoothC) smoothC.scrollTop = 260;
+    })();
+  </script>
+</body>
+</html>
