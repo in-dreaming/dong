@@ -182,6 +182,9 @@ target_include_directories(dong PUBLIC
 # Define DONG_BUILDING_DLL for export macros
 target_compile_definitions(dong PRIVATE DONG_BUILDING_DLL)
 
+# Define MSDFGEN_PUBLIC to disable msdfgen-config.h requirement
+target_compile_definitions(dong PUBLIC MSDFGEN_PUBLIC= MSDFGEN_EXT_PUBLIC=)
+
 target_link_libraries(dong PUBLIC quickjs lexbor yoga)
 
 # Link FreeType, HarfBuzz, msdfgen
@@ -317,7 +320,7 @@ if(VULKAN_SDK_PATH)
     endif()
 endif()
 
-target_compile_definitions(dong_render PRIVATE SDL_SHADERCROSS_DXC DONG_USE_SDL_IMAGE DONG_SDL_SHADER_DIR=\"${CMAKE_SOURCE_DIR}/src/render/sdl_render/shaders\")
+target_compile_definitions(dong_render PRIVATE SDL_SHADERCROSS_DXC DONG_USE_SDL_IMAGE DONG_SDL_SHADER_DIR=\"${CMAKE_SOURCE_DIR}/src/render/sdl_render/shaders\" MSDFGEN_PUBLIC= MSDFGEN_EXT_PUBLIC=)
 
 target_link_libraries(dong_render PUBLIC dong quickjs lexbor yoga)
 

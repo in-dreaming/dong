@@ -870,6 +870,13 @@ fn buildFreeType(
     freetype.addIncludePath(b.path(ft_include));
     freetype.linkLibC();
 
+    // Install FreeType headers for CMake to find
+    b.installDirectory(.{
+        .source_dir = b.path(ft_include),
+        .install_dir = .prefix,
+        .install_subdir = "freetype/include/freetype2",
+    });
+
     return b.addInstallArtifact(freetype, .{});
 }
 
@@ -954,6 +961,13 @@ fn buildHarfBuzz(
 
     // Depend on FreeType being built
     harfbuzz.step.dependOn(&freetype_artifact.step);
+
+    // Install HarfBuzz headers for CMake to find
+    b.installDirectory(.{
+        .source_dir = b.path(hb_src),
+        .install_dir = .prefix,
+        .install_subdir = "harfbuzz/include/harfbuzz",
+    });
 
     return &b.addInstallArtifact(harfbuzz, .{}).step;
 }

@@ -15,10 +15,10 @@
 	url = https://github.com/in-dreaming/SDL_shadercross.git
 [submodule "dong/third_party/msdfgen"]
 	path = dong/third_party/msdfgen
-	url = https://github.com/in-dreaming/msdfgen.git
+	url = https://github.com/Chlumsky/msdfgen.git
 [submodule "dong/third_party/harfbuzz"]
 	path = dong/third_party/harfbuzz
-	url = https://github.com/in-dreaming/harfbuzz.git
+	url = https://github.com/harfbuzz/harfbuzz.git
 [submodule "dong/third_party/freetype"]
 	path = dong/third_party/freetype
 	url = https://github.com/in-dreaming/freetype.git
