@@ -470,35 +470,54 @@ void renderMixedPath(const dom::DOMNodePtr& node,
     }
 }
 
-// ========== Input 元素渲染 ==========
-void renderInput(const dom::DOMNodePtr& node,
-                 const layout::LayoutNode* layout,
-                 const dom::ComputedStyle& style,
-                 float bl, float bt, float br, float bb,
-                 TextShaper& shaper,
-                 DisplayListBuilder& builder) {
-    float x = layout->layout.position[0] + bl;
-    float y = layout->layout.position[1] + bt;
-    float w = std::max(0.0f, layout->layout.dimensions[0] - bl - br);
-    float h = std::max(0.0f, layout->layout.dimensions[1] - bt - bb);
-    float pad_l = style.padding_left.isPixel() ? style.padding_left.value : 0.0f;
-    float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
+// ========== Placeholder 样式解析 ==========
+// 从 ::placeholder 伪元素获取渲染样式，回退到默认半透明颜色。
+struct PlaceholderStyle {
+    Color color;
+    float font_size;
+    std::string font_family;
+    std::string font_weight;
+    std::string font_style;
+};
 
-    std::string text = node->getAttribute("value");
-    Color color = makeColorFromCss(style.color);
-    std::string placeholder = node->getAttribute("placeholder");
-    if (text.empty()) {
-        text = node->getAttribute("placeholder");
-        color.a *= 0.5f;
+PlaceholderStyle resolvePlaceholderStyle(const dom::DOMNodePtr& node,
+                                        const dom::ComputedStyle& input_style) {
+    PlaceholderStyle ps;
+    ps.color = makeColorFromCss(input_style.color);
+    ps.font_size = input_style.font_size > 0.0f ? input_style.font_size : 16.0f;
+    ps.font_family = input_style.font_family;
+    ps.font_weight = input_style.font_weight;
+    ps.font_style = input_style.font_style;
+
+    auto pseudo = node->getPseudoPlaceholder();
+    if (pseudo) {
+        const auto& ps_style = pseudo->getComputedStyle();
+        if (!ps_style.color.empty()) ps.color = makeColorFromCss(ps_style.color);
+        if (ps_style.font_size > 0.0f) ps.font_size = ps_style.font_size;
+        if (!ps_style.font_family.empty()) ps.font_family = ps_style.font_family;
+        if (!ps_style.font_weight.empty()) ps.font_weight = ps_style.font_weight;
+        if (!ps_style.font_style.empty()) ps.font_style = ps_style.font_style;
+    } else {
+        // Default: 50% opacity (browser-like default for placeholder)
+        ps.color.a *= 0.5f;
     }
-    if (text.empty() || w <= 0.0f || h <= 0.0f) return;
+    return ps;
+}
 
-    TextShapeRequest req{text, style.font_family, style.font_weight, style.font_style, font_size};
+// Shared glyph-run emission for input/textarea placeholder and value text.
+void emitInputGlyphRun(const std::string& text,
+                       float x, float y, float w, float h, float pad_l,
+                       const Color& color, float font_size,
+                       const std::string& font_family,
+                       const std::string& font_weight,
+                       const std::string& font_style,
+                       const dom::ComputedStyle& style,
+                       TextShaper& shaper,
+                       DisplayListBuilder& builder) {
+    TextShapeRequest req{text, font_family, font_weight, font_style, font_size};
     ShapedText shaped;
-    if (!shaper.shape(req, shaped) || shaped.glyphs.empty()) {
-        return;
-    }
-    
+    if (!shaper.shape(req, shaped) || shaped.glyphs.empty()) return;
+
     float scale = shaped.scale_to_pixels;
     float ascent = shaped.ascent_units > 0.0f ? shaped.ascent_units : font_size / scale;
     float line_h = shaped.line_height_units;
@@ -516,9 +535,9 @@ void renderInput(const dom::DOMNodePtr& node,
     run.rect = {text_x, text_y, shaped.width_units * scale, text_h_px};
     run.color = color;
     run.font_size = font_size;
-    run.font_family = style.font_family;
-    run.font_weight = style.font_weight;
-    run.font_style = style.font_style;
+    run.font_family = font_family;
+    run.font_weight = font_weight;
+    run.font_style = font_style;
     run.font_paths = shaped.font_paths;
     run.font_path = shaped.font_path;
     run.baseline_x = text_x;
@@ -533,6 +552,75 @@ void renderInput(const dom::DOMNodePtr& node,
         run.glyphs.push_back(inst);
     }
     builder.addGlyphRun(std::move(run));
+}
+
+// ========== Input 元素渲染 ==========
+void renderInput(const dom::DOMNodePtr& node,
+                 const layout::LayoutNode* layout,
+                 const dom::ComputedStyle& style,
+                 float bl, float bt, float br, float bb,
+                 TextShaper& shaper,
+                 DisplayListBuilder& builder) {
+    float x = layout->layout.position[0] + bl;
+    float y = layout->layout.position[1] + bt;
+    float w = std::max(0.0f, layout->layout.dimensions[0] - bl - br);
+    float h = std::max(0.0f, layout->layout.dimensions[1] - bt - bb);
+    float pad_l = style.padding_left.isPixel() ? style.padding_left.value : 0.0f;
+
+    std::string text = node->getAttribute("value");
+    Color color = makeColorFromCss(style.color);
+    float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
+    std::string font_family = style.font_family;
+    std::string font_weight = style.font_weight;
+    std::string font_style = style.font_style;
+
+    if (text.empty()) {
+        text = node->getAttribute("placeholder");
+        auto ps = resolvePlaceholderStyle(node, style);
+        color = ps.color;
+        font_size = ps.font_size;
+        font_family = ps.font_family;
+        font_weight = ps.font_weight;
+        font_style = ps.font_style;
+    }
+    if (text.empty() || w <= 0.0f || h <= 0.0f) return;
+
+    emitInputGlyphRun(text, x, y, w, h, pad_l,
+                      color, font_size, font_family, font_weight, font_style,
+                      style, shaper, builder);
+}
+
+// ========== Textarea placeholder 渲染 ==========
+void renderTextareaPlaceholder(const dom::DOMNodePtr& node,
+                               const layout::LayoutNode* layout,
+                               const dom::ComputedStyle& style,
+                               float bl, float bt, float br, float bb,
+                               TextShaper& shaper,
+                               DisplayListBuilder& builder) {
+    // Only render placeholder when textarea has no text children with content
+    bool has_content = false;
+    for (const auto& child : node->getChildren()) {
+        if (child && child->getType() == dom::DOMNode::NodeType::TEXT) {
+            if (!child->getRawTextContent().empty()) { has_content = true; break; }
+        }
+    }
+    if (has_content) return;
+
+    std::string placeholder_text = node->getAttribute("placeholder");
+    if (placeholder_text.empty()) return;
+
+    float x = layout->layout.position[0] + bl;
+    float y = layout->layout.position[1] + bt;
+    float w = std::max(0.0f, layout->layout.dimensions[0] - bl - br);
+    float h = std::max(0.0f, layout->layout.dimensions[1] - bt - bb);
+    if (w <= 0.0f || h <= 0.0f) return;
+
+    float pad_l = style.padding_left.isPixel() ? style.padding_left.value : 0.0f;
+    auto ps = resolvePlaceholderStyle(node, style);
+
+    emitInputGlyphRun(placeholder_text, x, y, w, h, pad_l,
+                      ps.color, ps.font_size, ps.font_family, ps.font_weight, ps.font_style,
+                      style, shaper, builder);
 }
 
 // ========== 完整文本路径声明（完整实现在底部） ==========
@@ -596,6 +684,11 @@ void Painter::paintTextAndInput(const dom::DOMNodePtr& node,
     // Input 元素特殊渲染
     if (tag == "input") {
         renderInput(node, layout_node, style, bl, bt, br, bb, text_shaper_, builder);
+    }
+
+    // Textarea placeholder 渲染（textarea value 由通用文本路径处理）
+    if (tag == "textarea") {
+        renderTextareaPlaceholder(node, layout_node, style, bl, bt, br, bb, text_shaper_, builder);
     }
 
     // Select 元素特殊渲染

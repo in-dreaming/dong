@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>::placeholder Pseudo-Element Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        h2 {
+            margin-top: 20px;
+            color: #333;
+        }
+
+        /* Custom ::placeholder styles */
+        .custom-placeholder::placeholder {
+            color: red;
+            font-style: italic;
+        }
+
+        .styled-placeholder::placeholder {
+            color: #2196F3;
+            font-weight: bold;
+        }
+
+        /* Textarea placeholder */
+        textarea.custom-placeholder::placeholder {
+            color: green;
+            font-style: italic;
+        }
+
+        input, textarea {
+            display: block;
+            margin: 8px 0;
+            padding: 6px 8px;
+            font-size: 14px;
+            width: 300px;
+        }
+        textarea {
+            height: 60px;
+        }
+    </style>
+</head>
+<body>
+    <h1>::placeholder Pseudo-Element Test</h1>
+
+    <h2>Default placeholder (50% opacity)</h2>
+    <input type="text" placeholder="Default placeholder text">
+
+    <h2>Custom color + italic placeholder</h2>
+    <input type="text" class="custom-placeholder" placeholder="Red italic placeholder">
+
+    <h2>Blue bold placeholder</h2>
+    <input type="text" class="styled-placeholder" placeholder="Blue bold placeholder">
+
+    <h2>Input with value (no placeholder shown)</h2>
+    <input type="text" class="custom-placeholder" placeholder="Should NOT appear" value="Has value">
+
+    <h2>Textarea default placeholder</h2>
+    <textarea placeholder="Default textarea placeholder"></textarea>
+
+    <h2>Textarea custom placeholder (green italic)</h2>
+    <textarea class="custom-placeholder" placeholder="Green italic textarea placeholder"></textarea>
+</body>
+</html>

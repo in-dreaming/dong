@@ -1306,9 +1306,11 @@ void StyleEngine::processPseudoElements(DOMNodePtr node) {
     bool has_before = false;
     bool has_after = false;
     bool has_marker = false;
+    bool has_placeholder = false;
     ComputedStyle before_style;
     ComputedStyle after_style;
     ComputedStyle marker_style;
+    ComputedStyle placeholder_style;
 
     for (const auto& sheet : stylesheets_) {
         for (const auto& rule : sheet.getRules()) {
@@ -1369,6 +1371,23 @@ void StyleEngine::processPseudoElements(DOMNodePtr node) {
                     applyRuleProperties(rule.style, marker_style);
                 }
             }
+
+            // Check for ::placeholder (for input and textarea elements)
+            if ((node->getTagName() == "input" || node->getTagName() == "textarea") && (
+                rule.selector.find("::placeholder") != std::string::npos ||
+                rule.selector.find(":placeholder") != std::string::npos)) {
+                std::string base_selector = rule.selector;
+                size_t pos = base_selector.find("::placeholder");
+                if (pos == std::string::npos) pos = base_selector.find(":placeholder");
+                if (pos != std::string::npos) {
+                    base_selector = base_selector.substr(0, pos);
+                }
+
+                if (matcher_.matches(base_selector, node)) {
+                    has_placeholder = true;
+                    applyRuleProperties(rule.style, placeholder_style);
+                }
+            }
         }
     }
 
@@ -1419,6 +1438,33 @@ void StyleEngine::processPseudoElements(DOMNodePtr node) {
             }
         } else {
             node->setPseudoMarker(nullptr);
+        }
+    }
+
+    // Create ::placeholder pseudo-element for input and textarea elements.
+    // ::placeholder is shown when the element has no content (empty value).
+    if (node->getTagName() == "input" || node->getTagName() == "textarea") {
+        const bool has_placeholder_attr = node->hasAttribute("placeholder");
+        const bool value_is_empty = !node->hasAttribute("value") || node->getAttribute("value").empty();
+
+        if (has_placeholder_attr && value_is_empty) {
+            auto pseudo = createPseudoElement(node, "placeholder");
+            if (pseudo) {
+                // Start with parent's styles for inheritance
+                pseudo->getComputedStyle() = node->getComputedStyle();
+                // Apply explicit ::placeholder rules
+                if (has_placeholder) {
+                    applyRuleProperties(placeholder_style, pseudo->getComputedStyle());
+                }
+                // Set placeholder text as content
+                pseudo->getComputedStyle().is_pseudo_element = true;
+                pseudo->getComputedStyle().pseudo_type = "placeholder";
+                pseudo->getComputedStyle().content = node->getAttribute("placeholder");
+                pseudo->setTextContent(node->getAttribute("placeholder"));
+                node->setPseudoPlaceholder(pseudo);
+            }
+        } else {
+            node->setPseudoPlaceholder(nullptr);
         }
     }
 }

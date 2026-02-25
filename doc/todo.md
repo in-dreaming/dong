@@ -40,7 +40,7 @@
 
 ### 伪元素管线（高 ROI）
 
-- [ ] `::placeholder` 渲染实现（选择器匹配已有但无渲染）
+- [x] `::placeholder` 渲染实现（选择器匹配已有但无渲染）- 已实现 `::placeholder` 伪元素渲染管线，支持 `color`、`font-style`、`font-weight`、`font-size`、`font-family` 属性。无 `::placeholder` 规则时回退到 50% 透明度默认行为。支持 `<input>` 和 `<textarea>` 元素。测试用例：`test_placeholder_pseudo.html`
 
 ### 输入法（IME/CJK）事件（高 ROI）
 
