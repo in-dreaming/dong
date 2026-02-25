@@ -6,9 +6,8 @@
 #include <memory>
 #include <unordered_map>
 
-extern "C" {
-#include "quickjs.h"
-}
+#include "quickjs_compat.h"
+
 
 namespace dong::script {
 

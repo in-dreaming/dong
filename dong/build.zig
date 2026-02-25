@@ -166,10 +166,22 @@ fn getBuildOptions(b: *std.Build, platform: PlatformInfo) BuildOptions {
 // Main Build Function
 // =============================================================================
 pub fn build(b: *std.Build) void {
-    const target = b.standardTargetOptions(.{});
+    var target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+
+    // On Windows we build the CMake parts with clang-cl (MSVC ABI). Ensure Zig-built
+    // static libs (QuickJS/FreeType/etc.) use the same ABI to avoid link/runtime mismatches.
+    if (target.result.os.tag == .windows and target.result.abi == .gnu) {
+        target = b.resolveTargetQuery(.{
+            .cpu_arch = target.result.cpu.arch,
+            .os_tag = .windows,
+            .abi = .msvc,
+        });
+    }
+
     const platform = getPlatformInfo(b, target);
     const options = getBuildOptions(b, platform);
+
 
     // Load build configuration
     var config = loadBuildConfig(b.allocator);
@@ -194,35 +206,42 @@ pub fn build(b: *std.Build) void {
         .ReleaseSafe, .ReleaseFast, .ReleaseSmall => "Release",
     };
 
+    // Zig-built third-party static libraries must match the ABI used by the CMake build.
+    // Also, on Windows, default Debug builds enable UBSan in C compilation, which then
+    // requires extra runtime linkage. We build these deps in ReleaseFast to keep linking
+    // simple and consistent with the CMake Release build.
+    const deps_optimize: std.builtin.OptimizeMode = if (platform.is_windows) .ReleaseFast else optimize;
+
     // ==========================================================================
     // QuickJS (Pure Zig Build)
     // ==========================================================================
-    const quickjs = buildQuickJS(b, target, optimize, platform);
+    const quickjs = buildQuickJS(b, target, deps_optimize, platform);
 
     // ==========================================================================
     // Lexbor (Pure Zig Build)
     // ==========================================================================
-    const lexbor = buildLexbor(b, target, optimize, platform);
+    const lexbor = buildLexbor(b, target, deps_optimize, platform);
 
     // ==========================================================================
     // Yoga (Pure Zig Build)
     // ==========================================================================
-    const yoga = buildYoga(b, target, optimize);
+    const yoga = buildYoga(b, target, deps_optimize);
 
     // ==========================================================================
     // FreeType (Pure Zig Build)
     // ==========================================================================
-    const freetype = buildFreeType(b, target, optimize, platform);
+    const freetype = buildFreeType(b, target, deps_optimize, platform);
 
     // ==========================================================================
     // HarfBuzz (Pure Zig Build)
     // ==========================================================================
-    const harfbuzz = buildHarfBuzz(b, target, optimize, platform, freetype);
+    const harfbuzz = buildHarfBuzz(b, target, deps_optimize, platform, freetype);
 
     // ==========================================================================
     // msdfgen (Pure Zig Build)
     // ==========================================================================
-    const msdfgen = buildMsdfgen(b, target, optimize, platform, freetype);
+    const msdfgen = buildMsdfgen(b, target, deps_optimize, platform, freetype);
+
 
     // ==========================================================================
     // SDL3 via CMake (shared) - too complex for initial pure Zig migration
@@ -275,8 +294,9 @@ pub fn build(b: *std.Build) void {
         libs_only_step.dependOn(&lexbor.step);
         libs_only_step.dependOn(&yoga.step);
         libs_only_step.dependOn(&freetype.step);
-        libs_only_step.dependOn(&harfbuzz.step);
-        libs_only_step.dependOn(&msdfgen.step);
+        libs_only_step.dependOn(harfbuzz);
+        libs_only_step.dependOn(msdfgen);
+
         libs_only_step.dependOn(&dong_core.step);
         b.getInstallStep().dependOn(libs_only_step);
 
@@ -294,10 +314,11 @@ pub fn build(b: *std.Build) void {
         freetype_step.dependOn(&freetype.step);
 
         const harfbuzz_step = b.step("harfbuzz", "Build HarfBuzz only");
-        harfbuzz_step.dependOn(&harfbuzz.step);
+        harfbuzz_step.dependOn(harfbuzz);
 
         const msdfgen_step = b.step("msdfgen", "Build msdfgen only");
-        msdfgen_step.dependOn(&msdfgen.step);
+        msdfgen_step.dependOn(msdfgen);
+
 
         const dong_core_step = b.step("dong-core", "Build Dong Core only");
         dong_core_step.dependOn(&dong_core.step);
@@ -364,8 +385,9 @@ pub fn build(b: *std.Build) void {
     cmake_config.step.dependOn(&lexbor.step);
     cmake_config.step.dependOn(&yoga.step);
     cmake_config.step.dependOn(&freetype.step);
-    cmake_config.step.dependOn(&harfbuzz.step);
-    cmake_config.step.dependOn(&msdfgen.step);
+    cmake_config.step.dependOn(harfbuzz);
+    cmake_config.step.dependOn(msdfgen);
+
     cmake_config.step.dependOn(&sdl3_cmake_install.step);
     // Depend on DXC being downloaded
     if (dxc_step) |step| {
@@ -417,8 +439,9 @@ pub fn build(b: *std.Build) void {
     deps_step.dependOn(&lexbor.step);
     deps_step.dependOn(&yoga.step);
     deps_step.dependOn(&freetype.step);
-    deps_step.dependOn(&harfbuzz.step);
-    deps_step.dependOn(&msdfgen.step);
+    deps_step.dependOn(harfbuzz);
+    deps_step.dependOn(msdfgen);
+
     deps_step.dependOn(&sdl3_cmake_install.step);
 
     const quickjs_step = b.step("quickjs", "Build QuickJS only");
@@ -434,10 +457,11 @@ pub fn build(b: *std.Build) void {
     freetype_step.dependOn(&freetype.step);
 
     const harfbuzz_step = b.step("harfbuzz", "Build HarfBuzz only");
-    harfbuzz_step.dependOn(&harfbuzz.step);
+    harfbuzz_step.dependOn(harfbuzz);
 
     const msdfgen_step = b.step("msdfgen", "Build msdfgen only");
-    msdfgen_step.dependOn(&msdfgen.step);
+    msdfgen_step.dependOn(msdfgen);
+
 
     const sdl3_step = b.step("sdl3", "Build SDL3 only");
     sdl3_step.dependOn(&sdl3_cmake_install.step);
@@ -536,6 +560,28 @@ fn buildQuickJS(
     const quickjs_src = "third_party/quickjs";
     const quickjs_compat = "third_party/quickjs_make/compat";
 
+    var c_flags = std.ArrayList([]const u8).init(b.allocator);
+    c_flags.appendSlice(&.{
+        "-std=gnu11", // Use GNU C extensions for inline assembly support
+        "-D_GNU_SOURCE",
+    }) catch unreachable;
+
+
+    if (platform.is_windows) {
+        // Zig's MSVC-targeted clang invocation may pass flags that clang considers
+        // unused during compilation; don't fail the build because of that.
+        c_flags.appendSlice(&.{
+            "-Wno-unused-command-line-argument",
+            "-fms-extensions",
+            // Ensure alloca() is available on Windows.
+            "-include",
+            quickjs_compat ++ "/alloca.h",
+
+        }) catch unreachable;
+    }
+
+    const c_flags_slice = c_flags.toOwnedSlice() catch unreachable;
+
     quickjs.addCSourceFiles(.{
         .files = &.{
             quickjs_src ++ "/quickjs.c",
@@ -544,12 +590,9 @@ fn buildQuickJS(
             quickjs_src ++ "/cutils.c",
             quickjs_src ++ "/dtoa.c",
         },
-        .flags = &.{
-            "-std=gnu11", // Use GNU C extensions for inline assembly support
-            "-D_GNU_SOURCE",
-            "-DCONFIG_VERSION=\"2024-02-14\"",
-        },
+        .flags = c_flags_slice,
     });
+
 
     quickjs.addIncludePath(b.path(quickjs_src));
     quickjs.linkLibC();
@@ -833,14 +876,59 @@ fn buildFreeType(
 // =============================================================================
 // HarfBuzz Build
 // =============================================================================
+
+fn fileExists(rel_path: []const u8) bool {
+    const f = std.fs.cwd().openFile(rel_path, .{}) catch return false;
+    f.close();
+    return true;
+}
+
 fn buildHarfBuzz(
+
     b: *std.Build,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     platform: PlatformInfo,
     freetype_artifact: *std.Build.Step.InstallArtifact,
-) *std.Build.Step.InstallArtifact {
-    _ = platform;
+) *std.Build.Step {
+    const hb_src = "third_party/harfbuzz/src";
+    const hb_amalgamation = hb_src ++ "/harfbuzz.cc";
+
+    // Some workspaces ship only prebuilt libs under zig-out/.
+    // If sources are missing, fall back to the prebuilt archive and ensure it is
+    // installed to zig-out/lib (CMake links from there).
+    if (!fileExists(hb_amalgamation)) {
+        const prebuilt = b.step("harfbuzz_prebuilt", "Use prebuilt harfbuzz from zig-out/");
+        prebuilt.dependOn(&freetype_artifact.step);
+
+        if (platform.is_windows) {
+            const src_lib = if (fileExists("zig-out/harfbuzz/lib/harfbuzz.lib"))
+                "zig-out/harfbuzz/lib/harfbuzz.lib"
+            else
+                "zig-out/lib/harfbuzz.lib";
+
+            if (!fileExists(src_lib)) {
+                @panic("harfbuzz sources missing (third_party/harfbuzz) and no prebuilt harfbuzz.lib found under zig-out/harfbuzz/lib or zig-out/lib");
+            }
+
+            const install_hb = b.addInstallFileWithDir(b.path(src_lib), .lib, "harfbuzz.lib");
+            prebuilt.dependOn(&install_hb.step);
+            return prebuilt;
+        }
+
+        if (fileExists("zig-out/harfbuzz/lib/libharfbuzz.a")) {
+            const install_hb = b.addInstallFileWithDir(b.path("zig-out/harfbuzz/lib/libharfbuzz.a"), .lib, "libharfbuzz.a");
+            prebuilt.dependOn(&install_hb.step);
+            return prebuilt;
+        }
+
+        if (fileExists("zig-out/lib/libharfbuzz.a")) {
+            return prebuilt;
+        }
+
+        @panic("harfbuzz sources missing (third_party/harfbuzz) and no prebuilt libharfbuzz.a found under zig-out");
+    }
+
 
     const harfbuzz = b.addStaticLibrary(.{
         .name = "harfbuzz",
@@ -848,12 +936,10 @@ fn buildHarfBuzz(
         .optimize = optimize,
     });
 
-    const hb_src = "third_party/harfbuzz/src";
-
     // HarfBuzz provides an amalgamation file for easier building
     harfbuzz.addCSourceFiles(.{
         .files = &.{
-            hb_src ++ "/harfbuzz.cc",
+            hb_amalgamation,
         },
         .flags = &.{
             "-std=c++17",
@@ -869,8 +955,9 @@ fn buildHarfBuzz(
     // Depend on FreeType being built
     harfbuzz.step.dependOn(&freetype_artifact.step);
 
-    return b.addInstallArtifact(harfbuzz, .{});
+    return &b.addInstallArtifact(harfbuzz, .{}).step;
 }
+
 
 // =============================================================================
 // msdfgen Build
@@ -881,16 +968,44 @@ fn buildMsdfgen(
     optimize: std.builtin.OptimizeMode,
     platform: PlatformInfo,
     freetype_artifact: *std.Build.Step.InstallArtifact,
-) *std.Build.Step.InstallArtifact {
-    _ = platform;
+) *std.Build.Step {
+    const msdf_root = "third_party/msdfgen";
+
+    const msdf_probe = msdf_root ++ "/core/Contour.cpp";
+
+    // Some workspaces ship only prebuilt libs under zig-out/.
+    if (!fileExists(msdf_probe)) {
+        const prebuilt = b.step("msdfgen_prebuilt", "Use prebuilt msdfgen from zig-out/");
+        prebuilt.dependOn(&freetype_artifact.step);
+
+        if (platform.is_windows) {
+            const core_src = "zig-out/msdfgen/lib/msdfgen-core.lib";
+            const ext_src = "zig-out/msdfgen/lib/msdfgen-ext.lib";
+            if (!fileExists(core_src) or !fileExists(ext_src)) {
+                @panic("msdfgen sources missing (third_party/msdfgen) and prebuilt msdfgen-core/msdfgen-ext not found under zig-out/msdfgen/lib");
+            }
+
+            const install_core = b.addInstallFileWithDir(b.path(core_src), .lib, "msdfgen-core.lib");
+            const install_ext = b.addInstallFileWithDir(b.path(ext_src), .lib, "msdfgen-ext.lib");
+            prebuilt.dependOn(&install_core.step);
+            prebuilt.dependOn(&install_ext.step);
+            return prebuilt;
+        }
+
+        if (fileExists("zig-out/lib/libmsdfgen.a")) {
+            // Non-windows toolchains typically link libmsdfgen.a.
+            return prebuilt;
+        }
+
+        @panic("msdfgen sources missing (third_party/msdfgen) and no usable prebuilt archive found under zig-out");
+    }
+
 
     const msdfgen = b.addStaticLibrary(.{
         .name = "msdfgen",
         .target = target,
         .optimize = optimize,
     });
-
-    const msdf_root = "third_party/msdfgen";
 
     // Core sources
     msdfgen.addCSourceFiles(.{
@@ -935,8 +1050,9 @@ fn buildMsdfgen(
     // Depend on FreeType being built
     msdfgen.step.dependOn(&freetype_artifact.step);
 
-    return b.addInstallArtifact(msdfgen, .{});
+    return &b.addInstallArtifact(msdfgen, .{}).step;
 }
+
 
 // =============================================================================
 // Dong Core Build (Pure Zig)
@@ -950,8 +1066,8 @@ fn buildDongCore(
     lexbor_artifact: *std.Build.Step.InstallArtifact,
     yoga_artifact: *std.Build.Step.InstallArtifact,
     freetype_artifact: *std.Build.Step.InstallArtifact,
-    harfbuzz_artifact: *std.Build.Step.InstallArtifact,
-    msdfgen_artifact: *std.Build.Step.InstallArtifact,
+    harfbuzz_step: *std.Build.Step,
+    msdfgen_step: *std.Build.Step,
 ) *std.Build.Step.InstallArtifact {
     const dong_core = b.addStaticLibrary(.{
         .name = "dong_core",
@@ -998,9 +1114,11 @@ fn buildDongCore(
             "src/script/js_observer_bindings.cpp",
             // Render (platform-agnostic)
             "src/render/painter.cpp",
+            "src/render/painter_select_overlays.cpp",
             "src/render/painter/painter_media.cpp",
             "src/render/painter/painter_text.cpp",
             "src/render/painter/painter_children.cpp",
+
             "src/render/render_surface.cpp",
             "src/render/resource_manager.cpp",
             "src/render/font_resolver.cpp",
@@ -1031,8 +1149,18 @@ fn buildDongCore(
     dong_core.addIncludePath(b.path("third_party/lexbor/source"));
     dong_core.addIncludePath(b.path("third_party/yoga"));
     dong_core.addIncludePath(b.path("third_party/freetype/include"));
-    dong_core.addIncludePath(b.path("third_party/harfbuzz/src"));
-    dong_core.addIncludePath(b.path("third_party")); // For msdfgen/msdfgen.h
+    if (fileExists("third_party/harfbuzz/src/harfbuzz.cc")) {
+        dong_core.addIncludePath(b.path("third_party/harfbuzz/src"));
+    } else {
+        dong_core.addIncludePath(b.path("zig-out/harfbuzz/include"));
+    }
+
+    if (fileExists("third_party/msdfgen/core/Contour.cpp")) {
+        dong_core.addIncludePath(b.path("third_party")); // For msdfgen/msdfgen.h
+    } else {
+        dong_core.addIncludePath(b.path("zig-out/msdfgen/include"));
+    }
+
 
     dong_core.linkLibCpp();
     dong_core.linkLibC();
@@ -1053,8 +1181,9 @@ fn buildDongCore(
     dong_core.step.dependOn(&lexbor_artifact.step);
     dong_core.step.dependOn(&yoga_artifact.step);
     dong_core.step.dependOn(&freetype_artifact.step);
-    dong_core.step.dependOn(&harfbuzz_artifact.step);
-    dong_core.step.dependOn(&msdfgen_artifact.step);
+    dong_core.step.dependOn(harfbuzz_step);
+    dong_core.step.dependOn(msdfgen_step);
+
 
     return b.addInstallArtifact(dong_core, .{});
 }
@@ -1121,8 +1250,18 @@ fn buildSDLBackend(
     sdl_backend.addIncludePath(b.path("third_party/lexbor/source"));
     sdl_backend.addIncludePath(b.path("third_party/yoga"));
     sdl_backend.addIncludePath(b.path("third_party/freetype/include"));
-    sdl_backend.addIncludePath(b.path("third_party/harfbuzz/src"));
-    sdl_backend.addIncludePath(b.path("third_party")); // For msdfgen/msdfgen.h
+    if (fileExists("third_party/harfbuzz/src/harfbuzz.cc")) {
+        sdl_backend.addIncludePath(b.path("third_party/harfbuzz/src"));
+    } else {
+        sdl_backend.addIncludePath(b.path("zig-out/harfbuzz/include"));
+    }
+
+    if (fileExists("third_party/msdfgen/core/Contour.cpp")) {
+        sdl_backend.addIncludePath(b.path("third_party")); // For msdfgen/msdfgen.h
+    } else {
+        sdl_backend.addIncludePath(b.path("zig-out/msdfgen/include"));
+    }
+
 
     // DXC include path (can be absolute or relative)
     if (std.fs.path.isAbsolute(config.dxc_include_path)) {

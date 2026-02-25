@@ -32,11 +32,17 @@ def main() -> int:
         help="Optional click before screenshot, format: x,y (e.g. 240,190)",
     )
     ap.add_argument(
+        "--click-seq",
+        default="",
+        help="Optional click sequence before screenshot, format: x1,y1;x2,y2 (separator ';')",
+    )
+    ap.add_argument(
         "--post-click-wait-ms",
         type=int,
         default=50,
         help="Extra wait time after click before screenshot (default: 50ms)",
     )
+
 
     ap.add_argument("--full-page", action="store_true", help="Capture full page (default: viewport only)")
     ap.add_argument(
@@ -85,13 +91,19 @@ def main() -> int:
         if args.wait_ms > 0:
             page.wait_for_timeout(args.wait_ms)
 
-        if args.click:
+        click_tokens = []
+        if args.click_seq:
+            click_tokens = [t.strip() for t in args.click_seq.split(";") if t.strip()]
+        elif args.click:
+            click_tokens = [args.click.strip()]
+
+        for token in click_tokens:
             try:
-                parts = [p.strip() for p in args.click.split(",")]
+                parts = [p.strip() for p in token.split(",")]
                 x = int(parts[0])
                 y = int(parts[1])
             except Exception:
-                print("ERROR: invalid --click, expected x,y", file=sys.stderr)
+                print("ERROR: invalid click token, expected x,y", file=sys.stderr)
                 return 4
 
             try:
@@ -107,6 +119,7 @@ def main() -> int:
             if args.post_click_wait_ms > 0:
                 page.wait_for_timeout(args.post_click_wait_ms)
 
+        if click_tokens:
             try:
                 metrics = page.evaluate(
                     "() => {\n"
@@ -123,6 +136,7 @@ def main() -> int:
                 print(f"[baseline_click] metrics={metrics}", file=sys.stderr)
             except Exception as e:
                 print(f"[baseline_click] metrics eval failed: {e}", file=sys.stderr)
+
 
         screenshot_kwargs = {
             "path": str(out_path),

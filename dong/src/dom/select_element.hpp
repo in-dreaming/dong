@@ -1,10 +1,15 @@
 #pragma once
 
 #include "dom/dom_node.hpp"
+#include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
 namespace dong::dom {
+
+inline constexpr float kSelectOptionHeight = 30.0f;
+inline constexpr float kSelectDropdownMaxHeight = 240.0f; // 8 options * 30px
 
 // Simple point structure for coordinates
 struct Point {
@@ -33,7 +38,7 @@ struct OptionData {
  * - 打开/关闭状态
  * - 选中项管理
  * - 选项数据存储
- * - 事件处理（将在后续 chunk 实现）
+ * - 下拉滚动/悬停状态
  */
 class SelectElementState {
 public:
@@ -46,21 +51,30 @@ public:
     size_t getOptionCount() const { return options_.size(); }
     std::string getSelectedValue() const;
     int getHoverIndex() const { return hover_index_; }
+    float getScrollOffset() const { return scroll_offset_; }
 
     // 状态变更
     void toggle();
     void open();
     void close();
+
     void selectOption(size_t index);
     void selectByValue(const std::string& value);
+
+    bool isOptionDisabled(size_t index) const;
+
     void setHoverIndex(int index) { hover_index_ = index; }
 
-    // 事件处理（将在后续 chunk 实现）
-    bool handleClick(const Point& pos, const Rect& dropdown_bounds);
-    bool handleKeyDown(uint32_t key_code);
+    // dropdown scroll
+    void scrollBy(float dy_px, float viewport_height_px);
 
     // DOM 同步
     void syncFromDOM(const DOMNodePtr& node);
+    void applySelectionToDOM(const DOMNodePtr& select_node) const;
+
+    // 事件处理（供上层使用；返回是否“消费”该事件）
+    bool handleClick(const Point& pos, const Rect& dropdown_bounds);
+    bool handleKeyDown(uint32_t key_code);
 
     // 访问选项
     const std::vector<OptionData>& getOptions() const { return options_; }
@@ -69,6 +83,7 @@ private:
     bool is_open_ = false;
     size_t selected_index_ = 0;
     int hover_index_ = -1;
+    float scroll_offset_ = 0.0f;
     std::vector<OptionData> options_;
 };
 
@@ -87,4 +102,10 @@ bool isSelectElement(const DOMNodePtr& node);
  */
 void removeSelectState(DOMNodePtr node);
 
+/**
+ * DOM 被重载/替换时，需要清空全局 select 状态，避免悬空指针 key 被复用。
+ */
+void clearAllSelectStates();
+
 } // namespace dong::dom
+

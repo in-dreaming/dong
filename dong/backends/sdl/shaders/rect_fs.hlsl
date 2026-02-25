@@ -5,7 +5,7 @@ struct PSInput {
 };
 
 // Fragment shader uniform buffer: keep in sync with SDL_GPU fragment uniform slot mapping.
-cbuffer RectUniforms : register(b0, space1) {
+cbuffer RectUniforms : register(b0, space3) {
     float4 uRect;
     float4 uColor;
     float4 uViewport;
@@ -46,7 +46,5 @@ float4 main(PSInput input) : SV_Target0 {
     if (discardByClip(input.pixel)) {
         discard;
     }
-    // Use uniform color instead of interpolated varying to avoid backend linkage issues.
-    // 直接输出 sRGB 颜色，不做 gamma 转换
     return uColor;
 }

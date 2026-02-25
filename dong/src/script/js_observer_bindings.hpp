@@ -1,9 +1,8 @@
 // js_observer_bindings.hpp
 #pragma once
 
-extern "C" {
-#include "quickjs.h"
-}
+#include "quickjs_compat.h"
+
 
 namespace dong::script {
 

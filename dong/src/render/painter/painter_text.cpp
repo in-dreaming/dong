@@ -5,6 +5,8 @@
 #include "../../layout/layout_engine.hpp"
 #include "../../layout/sticky_positioning.hpp"
 #include "../../core/log.h"
+#include "../../dom/select_element.hpp"
+
 
 namespace dong::render {
 
@@ -599,7 +601,22 @@ void Painter::paintTextAndInput(const dom::DOMNodePtr& node,
     // Select 元素特殊渲染
     if (tag == "select") {
         renderSelect(node, layout_node, style, bl, bt, br, bb, text_shaper_, builder);
+        if (auto* st = dong::dom::getSelectState(node)) {
+            if (st->isOpen()) {
+                open_select_overlays_.push_back(OpenSelectOverlay{
+                    node,
+                    layout_node,
+                    builder.getTranslateX(),
+                    builder.getTranslateY(),
+                    bl,
+                    bt,
+                    br,
+                    bb,
+                });
+            }
+        }
     }
+
 }
 
 // ========== 完整文本路径实现 ==========

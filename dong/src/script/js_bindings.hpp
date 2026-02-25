@@ -14,9 +14,8 @@ namespace dong::dom {
 class FocusManager;
 }
 
-extern "C" {
-#include "quickjs.h"
-}
+#include "quickjs_compat.h"
+
 
 namespace dong::script {
 

@@ -149,12 +149,14 @@ add_library(dong SHARED
     src/script/js_observer_bindings.cpp
     # Render
     src/render/painter.cpp
+    src/render/painter_select_overlays.cpp
     src/render/painter/painter_media.cpp
     src/render/painter/painter_text.cpp
     src/render/painter/painter_children.cpp
     src/render/render_surface.cpp
     src/render/resource_manager.cpp
     src/render/font_resolver.cpp
+
     src/render/font_finder.cpp
     src/render/text_shaper.cpp
     src/render/font_metrics.cpp
@@ -167,10 +169,15 @@ target_include_directories(dong PUBLIC
     ${ZIG_OUT_PREFIX}/include
     third_party/lexbor/source
     third_party/yoga
-    third_party/freetype/include
-    third_party/harfbuzz/src
+
+    # Third-party headers are installed by zig into zig-out/<dep>/include.
+    ${FREETYPE_PREFIX}/include/freetype2
+    ${HARFBUZZ_PREFIX}/include/harfbuzz
+    ${MSDFGEN_PREFIX}/include
+
     third_party
 )
+
 
 # Define DONG_BUILDING_DLL for export macros
 target_compile_definitions(dong PRIVATE DONG_BUILDING_DLL)
@@ -260,12 +267,14 @@ add_library(dong_render STATIC
     src/script/js_observer_bindings.cpp
     # Render
     src/render/painter.cpp
+    src/render/painter_select_overlays.cpp
     src/render/painter/painter_media.cpp
     src/render/painter/painter_text.cpp
     src/render/painter/painter_children.cpp
     src/render/render_surface.cpp
     src/render/resource_manager.cpp
     # NOTE: SDL-specific render files have been migrated to backends/sdl/
+
     # Migration complete - sdl_gpu_driver.cpp now handles all GPU rendering
 
     # Core render files (platform-agnostic)
@@ -289,11 +298,16 @@ target_include_directories(dong_render PUBLIC
     third_party/yoga
     third_party/sdl/include
     third_party/SDL_shadercross/include
-    third_party/freetype/include
-    third_party/harfbuzz/src
+
+    # Third-party headers are installed by zig into zig-out/<dep>/include.
+    ${FREETYPE_PREFIX}/include/freetype2
+    ${HARFBUZZ_PREFIX}/include/harfbuzz
+    ${MSDFGEN_PREFIX}/include
+
     third_party
     ${DXC_INCLUDE_PATH}
 )
+
 
 if(VULKAN_SDK_PATH)
     if(WIN32)

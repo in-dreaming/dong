@@ -50,24 +50,35 @@ def _run_single_case(stem, html, case_dir, args, exe, baseline, vl_multi, bin_di
         "--height", str(args.height),
         "--wait-ms", str(args.base_wait_ms),
     ]
-    if args.click:
-        cmd_base += ["--click", args.click,
+    click_seq = args.click_seq or args.click
+    if click_seq:
+        cmd_base += ["--click-seq", click_seq,
                      "--post-click-wait-ms", str(args.base_post_click_wait_ms)]
     run(cmd_base)
+
 
     # Dong frames
     out_base = str(case_dir / f"{stem}.bmp")
     print(f"[DONG] {stem} frames={args.frames} -> {case_dir}")
-    cmd = ["/usr/bin/env", "DONG_DISABLE_SCROLLBARS=1"]
-    click_xy = args.dong_click or args.click
-    if click_xy:
-        cmd.append(f"DONG_TEST_CLICK={click_xy},1")
-    cmd += [str(exe), str(html), out_base,
-            str(args.width), str(args.height), str(args.frames),
-            "--frame-ms", str(args.frame_ms)]
+
+    dong_env = {"DONG_DISABLE_SCROLLBARS": "1"}
+    dong_env["DONG_TEST_CLICK_FRAME"] = str(args.dong_click_frame)
+
+
+    dong_click_seq = args.dong_click_seq or args.dong_click or args.click_seq or args.click
+    if dong_click_seq:
+        if ";" in dong_click_seq:
+            dong_env["DONG_TEST_CLICKS"] = dong_click_seq
+        else:
+            dong_env["DONG_TEST_CLICK"] = dong_click_seq
+
+    cmd = [str(exe), str(html), out_base,
+           str(args.width), str(args.height), str(args.frames),
+           "--frame-ms", str(args.frame_ms)]
     if not args.update:
         cmd.append("--no-update")
-    run(cmd, cwd=str(bin_dir))
+    run(cmd, cwd=str(bin_dir), env=dong_env)
+
 
     # Merge + report
     merged = case_dir / f"{stem}_merged.png"
@@ -100,9 +111,14 @@ def main() -> int:
     ap.add_argument("--skip", nargs="*", default=[], help="Skip cases by stem (e.g. --skip complex foo)")
 
     ap.add_argument("--click", default="", help="Optional baseline click before capture, format: x,y (e.g. 240,250)")
+    ap.add_argument("--click-seq", default="", help="Optional baseline click sequence, format: x1,y1;x2,y2 (separator ';')")
     ap.add_argument("--dong-click", default="", help="Optional dong click, format: x,y (button defaults to 1)")
+    ap.add_argument("--dong-click-seq", default="", help="Optional dong click sequence, format: x1,y1;x2,y2 (separator ';')")
+    ap.add_argument("--dong-click-frame", type=int, default=1,
+                    help="Frame index to inject DONG_TEST_CLICK(S) (default: 1; use 0 to open UI on first frame)")
     ap.add_argument("--base-wait-ms", type=int, default=50, help="Baseline extra wait before click/screenshot (default: 50ms)")
     ap.add_argument("--base-post-click-wait-ms", type=int, default=50, help="Baseline extra wait after click (default: 50ms)")
+
 
     args = ap.parse_args()
 

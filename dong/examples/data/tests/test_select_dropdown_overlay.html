@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Select dropdown overlay</title>
+  <style>
+    body { margin: 0; font-family: Arial, sans-serif; background: #fafafa; }
+
+    /* Fix the select position so click coordinates are stable for automation. */
+    #wrap { position: relative; width: 800px; height: 600px; }
+    #s { position: absolute; left: 40px; top: 140px; width: 320px; padding: 10px; font-size: 16px;
+         border: 2px solid #2196f3; border-radius: 6px; background: #fff; }
+
+    /* This block is AFTER the select in DOM order and overlaps the dropdown area.
+       If dropdown is drawn in normal flow, it will be covered by this block.
+       Expected: dropdown should appear ABOVE it (browser-like popup behavior). */
+    #cover {
+      position: absolute;
+      left: 20px;
+      top: 190px;
+      width: 760px;
+      height: 120px;
+      background: #111;
+      border-radius: 8px;
+      z-index: 1;
+      opacity: 0.95;
+    }
+
+    #hint { position: absolute; left: 40px; top: 40px; color: #333; font-size: 18px; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <div id="wrap">
+    <div id="hint">Click the select to open dropdown. It should overlay the dark block.</div>
+
+    <select id="s">
+      <option>Option 1</option>
+      <option selected>Option 2 (selected)</option>
+      <option>Option 3</option>
+      <option>Option 4</option>
+      <option>Option 5</option>
+      <option>Option 6</option>
+    </select>
+
+    <div id="cover"></div>
+  </div>
+</body>
+</html>

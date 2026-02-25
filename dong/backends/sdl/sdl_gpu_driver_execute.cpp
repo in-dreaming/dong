@@ -524,7 +524,7 @@ void SDLGPUDriver::executeBeginPass(ExecuteContext& ctx) {
     ctx.color_target.resolve_texture = nullptr;
     ctx.color_target.resolve_mip_level = 0;
     ctx.color_target.resolve_layer = 0;
-    ctx.color_target.cycle = true;
+    ctx.color_target.cycle = (offscreen_target_ == nullptr);
     ctx.color_target.cycle_resolve_texture = false;
 
     ctx.pass = SDL_BeginGPURenderPass(ctx.cmd_buf, &ctx.color_target, 1, nullptr);

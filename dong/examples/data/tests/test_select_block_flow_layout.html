@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Select block-flow layout</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; background: #fafafa; }
+    .card { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 16px; width: 520px; }
+    h2 { margin-top: 0; margin-right: 0; margin-bottom: 12px; margin-left: 0; }
+
+    select { padding: 10px; font-size: 16px; border: 2px solid #2196f3; border-radius: 6px; background: #fff; width: 320px; }
+    .below { margin-top: 12px; background: #111; color: #f5f5f5; padding: 10px; border-radius: 6px; font-family: Menlo, Monaco, Consolas, 'Courier New', monospace; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <h1>Select block-flow layout</h1>
+
+  <div class="card">
+    <h2>Heading should be above select</h2>
+    <select>
+      <option>Option A</option>
+      <option selected>Option B (selected)</option>
+      <option>Option C</option>
+    </select>
+    <div class="below">Below block should start under the select.</div>
+  </div>
+</body>
+</html>

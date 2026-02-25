@@ -4,6 +4,10 @@
 #include "../text_shaper.hpp"
 #include "../display_list.hpp"
 
+#include <algorithm>
+#include <cmath>
+
+
 namespace dong::render {
 namespace {
 
@@ -166,19 +170,23 @@ void renderSelectDropdown(
     TextShaper& shaper,
     DisplayListBuilder& builder
 ) {
+    (void)node;
+
     float select_x = layout->layout.position[0] + bl;
     float select_y = layout->layout.position[1] + bt;
     float select_w = std::max(0.0f, layout->layout.dimensions[0] - bl - br);
     float select_h = std::max(0.0f, layout->layout.dimensions[1] - bt - bb);
 
-    const float option_height = 30.0f;
-    size_t option_count = state->getOptionCount();
+    const float option_height = dom::kSelectOptionHeight;
+    const float max_dropdown_h = dom::kSelectDropdownMaxHeight;
+
+    const size_t option_count = state->getOptionCount();
     if (option_count == 0) return;
 
     float dropdown_x = select_x;
     float dropdown_y = select_y + select_h;
     float dropdown_w = select_w;
-    float dropdown_h = option_count * option_height;
+    float dropdown_h = std::min(static_cast<float>(option_count) * option_height, max_dropdown_h);
 
     Color dropdown_bg = {1.0f, 1.0f, 1.0f, 1.0f};
     builder.addRect(Rect{dropdown_x, dropdown_y, dropdown_w, dropdown_h}, dropdown_bg);
@@ -190,18 +198,33 @@ void renderSelectDropdown(
     builder.addRect(Rect{dropdown_x, dropdown_y + dropdown_h - border_w, dropdown_w, border_w}, border_color);
     builder.addRect(Rect{dropdown_x, dropdown_y, border_w, dropdown_h}, border_color);
 
-    float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
-
     const auto& options = state->getOptions();
-    size_t selected_index = state->getSelectedIndex();
+    const size_t selected_index = state->getSelectedIndex();
+    const int hover_index = state->getHoverIndex();
 
-    for (size_t i = 0; i < option_count; ++i) {
+    const float scroll = std::max(0.0f, state->getScrollOffset());
+    const size_t first_index = static_cast<size_t>(scroll / option_height);
+    const float y_offset = std::fmod(scroll, option_height);
+
+    const int visible_count = static_cast<int>(std::ceil(dropdown_h / option_height)) + 1;
+    const size_t end_index = std::min(option_count, first_index + static_cast<size_t>(std::max(visible_count, 0)));
+
+    const float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
+
+    for (size_t i = first_index; i < end_index; ++i) {
         const auto& opt = options[i];
 
-        float opt_y = dropdown_y + i * option_height;
+        const float opt_y = dropdown_y + static_cast<float>(i - first_index) * option_height - y_offset;
+        if (opt_y + option_height < dropdown_y || opt_y > dropdown_y + dropdown_h) {
+            continue;
+        }
+
         Rect opt_rect = {dropdown_x, opt_y, dropdown_w, option_height};
 
-        if (i == selected_index) {
+        if (static_cast<int>(i) == hover_index && !opt.disabled) {
+            Color hover_bg = {0.92f, 0.92f, 0.92f, 1.0f};
+            builder.addRect(opt_rect, hover_bg);
+        } else if (i == selected_index) {
             Color selected_bg = {0.89f, 0.95f, 0.99f, 1.0f};
             builder.addRect(opt_rect, selected_bg);
         }
@@ -225,7 +248,7 @@ void renderSelectDropdown(
 
                 DrawGlyphRunData run;
                 run.rect = {text_x, text_y, shaped.width_units * scale, text_h_px};
-                run.color = makeColorFromCss(style.color);
+                run.color = opt.disabled ? Color{0.6f, 0.6f, 0.6f, 1.0f} : makeColorFromCss(style.color);
                 run.font_size = font_size;
                 run.font_family = style.font_family;
                 run.font_weight = style.font_weight;
@@ -247,7 +270,25 @@ void renderSelectDropdown(
             }
         }
     }
+
+    // Simple scroll thumb when content exceeds viewport
+    const float content_h = static_cast<float>(option_count) * option_height;
+    if (content_h > dropdown_h + 0.5f) {
+        const float track_w = 4.0f;
+        const float track_x = dropdown_x + dropdown_w - track_w - 2.0f;
+        const float track_y = dropdown_y + 2.0f;
+        const float track_h = dropdown_h - 4.0f;
+
+        const float ratio = std::clamp(dropdown_h / content_h, 0.05f, 1.0f);
+        const float thumb_h = track_h * ratio;
+        const float max_scroll = std::max(0.0f, content_h - dropdown_h);
+        const float t = max_scroll > 0.0f ? (scroll / max_scroll) : 0.0f;
+        const float thumb_y = track_y + (track_h - thumb_h) * std::clamp(t, 0.0f, 1.0f);
+
+        builder.addRect(Rect{track_x, thumb_y, track_w, thumb_h}, Color{0.75f, 0.75f, 0.75f, 1.0f});
+    }
 }
+
 
 } // anonymous namespace
 
@@ -259,15 +300,25 @@ void renderSelect(
     TextShaper& shaper,
     DisplayListBuilder& builder
 ) {
-    // Get SelectElementState
+    // Closed-state painting only; dropdown is painted as an overlay to avoid being
+    // covered by later siblings in normal flow.
     auto* state = dong::dom::getSelectState(node);
     if (!state) return;
-
     renderSelectClosed(node, state, layout, style, bl, bt, br, bb, shaper, builder);
-
-    if (state->isOpen()) {
-        renderSelectDropdown(node, state, layout, style, bl, bt, br, bb, shaper, builder);
-    }
 }
+
+void renderSelectDropdownOverlay(
+    const dom::DOMNodePtr& node,
+    const layout::LayoutNode* layout,
+    const dom::ComputedStyle& style,
+    float bl, float bt, float br, float bb,
+    TextShaper& shaper,
+    DisplayListBuilder& builder
+) {
+    auto* state = dong::dom::getSelectState(node);
+    if (!state || !state->isOpen()) return;
+    renderSelectDropdown(node, state, layout, style, bl, bt, br, bb, shaper, builder);
+}
+
 
 } // namespace dong::render

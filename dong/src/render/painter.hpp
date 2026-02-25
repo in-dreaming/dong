@@ -39,6 +39,21 @@ private:
     std::vector<int> layer_stack_;
     TextShaper text_shaper_;
 
+    struct OpenSelectOverlay {
+        dom::DOMNodePtr node;
+        const layout::LayoutNode* layout = nullptr;
+        float tx = 0.0f;
+        float ty = 0.0f;
+        float bl = 0.0f;
+        float bt = 0.0f;
+        float br = 0.0f;
+        float bb = 0.0f;
+    };
+    std::vector<OpenSelectOverlay> open_select_overlays_;
+
+    void paintSelectDropdownOverlays(DisplayListBuilder& builder);
+
+
     // 从 DOM/Layout 构建 DisplayList（递归遍历）
     void buildDisplayListNode(const dom::DOMNodePtr& node,
                               const layout::LayoutNode* layout_node,

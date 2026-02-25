@@ -126,6 +126,10 @@ private:
     // Inline formatting context layout
     void layoutInlineFormattingContexts(dom::DOMNodePtr root);
 
+
+
+
+
     // IFC helper structures and functions (refactored from layoutInlineFormattingContexts)
     struct InlineItem {
         dom::DOMNodePtr node;

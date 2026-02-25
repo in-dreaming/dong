@@ -339,15 +339,74 @@ static void fixupDownloadedPixelsToRGBA(SDL_GPUDevice* device, uint32_t width, u
     }
 }
 
+static uint32_t alignUpU32(uint32_t v, uint32_t align) {
+    if (align == 0) return v;
+    return (v + (align - 1)) & ~(align - 1);
+}
+
+static bool shouldPadDownloadRows256(SDL_GPUDevice* device) {
+    if (envFlagEnabled("DONG_GPU_DOWNLOAD_PAD256", false)) {
+        return true;
+    }
+
+    // D3D12 readbacks often require 256-byte row pitch alignment; SDL tries to
+    // hide this via a deferred CPU copy, but relying on that timing is fragile.
+    // We proactively pad rows on D3D12 to make the GPU copy direct and deterministic.
+    const char* driver = device ? SDL_GetGPUDeviceDriver(device) : nullptr;
+    if (!driver) return false;
+    return std::strcmp(driver, "direct3d12") == 0;
+}
+
+struct DownloadLayout {
+    uint32_t width = 0;
+    uint32_t height = 0;
+    uint32_t bytes_per_row = 0;
+    uint32_t padded_bytes_per_row = 0;
+    uint32_t padded_pixels_per_row = 0;
+    uint32_t buffer_size = 0;
+};
+
+static DownloadLayout computeDownloadLayout(SDL_GPUDevice* device, uint32_t width, uint32_t height) {
+    DownloadLayout layout;
+    layout.width = width;
+    layout.height = height;
+    layout.bytes_per_row = width * 4;
+
+    layout.padded_bytes_per_row = layout.bytes_per_row;
+    if (shouldPadDownloadRows256(device)) {
+        layout.padded_bytes_per_row = alignUpU32(layout.bytes_per_row, 256);
+    }
+
+    layout.padded_pixels_per_row = (layout.padded_bytes_per_row / 4);
+    layout.buffer_size = layout.padded_bytes_per_row * height;
+    return layout;
+}
+
+static void copyMappedDownloadToTightRGBA(const void* mapped, const DownloadLayout& layout, uint8_t* out_pixels) {
+    if (!mapped || !out_pixels) return;
+
+    const uint8_t* src = static_cast<const uint8_t*>(mapped);
+    const size_t src_row = static_cast<size_t>(layout.padded_bytes_per_row);
+    const size_t dst_row = static_cast<size_t>(layout.bytes_per_row);
+
+    for (uint32_t y = 0; y < layout.height; ++y) {
+        const uint8_t* src_row_ptr = src + static_cast<size_t>(y) * src_row;
+        uint8_t* dst_row_ptr = out_pixels + static_cast<size_t>(y) * dst_row;
+        std::memcpy(dst_row_ptr, src_row_ptr, dst_row);
+    }
+}
+
 static bool downloadTextureRGBA(SDL_GPUDevice* device, SDL_GPUTexture* texture,
                                 uint32_t width, uint32_t height, uint8_t* out_pixels) {
     if (!device || !texture || !out_pixels) {
         return false;
     }
 
+    const DownloadLayout layout = computeDownloadLayout(device, width, height);
+
     SDL_GPUTransferBufferCreateInfo transfer_info{};
     transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_DOWNLOAD;
-    transfer_info.size = width * height * 4;
+    transfer_info.size = layout.buffer_size;
 
     SDL_GPUTransferBuffer* download_buffer = SDL_CreateGPUTransferBuffer(device, &transfer_info);
     if (!download_buffer) {
@@ -377,8 +436,8 @@ static bool downloadTextureRGBA(SDL_GPUDevice* device, SDL_GPUTexture* texture,
     SDL_GPUTextureTransferInfo dst_transfer{};
     dst_transfer.transfer_buffer = download_buffer;
     dst_transfer.offset = 0;
-    dst_transfer.pixels_per_row = 0;
-    dst_transfer.rows_per_layer = 0;
+    dst_transfer.pixels_per_row = layout.padded_pixels_per_row;
+    dst_transfer.rows_per_layer = height;
 
     SDL_DownloadFromGPUTexture(copy_pass, &src_region, &dst_transfer);
     SDL_EndGPUCopyPass(copy_pass);
@@ -404,7 +463,7 @@ static bool downloadTextureRGBA(SDL_GPUDevice* device, SDL_GPUTexture* texture,
         return false;
     }
 
-    std::memcpy(out_pixels, mapped, width * height * 4);
+    copyMappedDownloadToTightRGBA(mapped, layout, out_pixels);
     SDL_UnmapGPUTransferBuffer(device, download_buffer);
     SDL_ReleaseGPUTransferBuffer(device, download_buffer);
 
@@ -412,11 +471,50 @@ static bool downloadTextureRGBA(SDL_GPUDevice* device, SDL_GPUTexture* texture,
     return true;
 }
 
-static void injectSyntheticInputs(dong_engine_t* engine, uint32_t frame_index) {
+
+static uint32_t parseEnvU32(const char* name, uint32_t default_value) {
+    if (const char* s = std::getenv(name)) {
+        unsigned v = 0;
+        if (std::sscanf(s, "%u", &v) == 1) {
+            return static_cast<uint32_t>(v);
+        }
+    }
+    return default_value;
+}
+
+static uint32_t getClickFrameIndex(uint32_t total_frames) {
+    // If we only render one frame, inject at frame 0 so one-shot captures can
+    // exercise click-driven UI (e.g. select dropdown open state).
+    if (total_frames <= 1) return 0;
+    return parseEnvU32("DONG_TEST_CLICK_FRAME", 1);
+}
+
+static void injectSyntheticInputs(dong_engine_t* engine, uint32_t frame_index, uint32_t total_frames) {
     if (!engine) return;
 
-    if (frame_index == 1) {
-        if (const char* s = std::getenv("DONG_TEST_CLICK")) {
+    const uint32_t click_frame = getClickFrameIndex(total_frames);
+    if (frame_index == click_frame) {
+        if (const char* seq = std::getenv("DONG_TEST_CLICKS")) {
+            // Format: "x,y" or "x,y,button"; multiple clicks separated by ';'
+            std::string s(seq);
+            size_t start = 0;
+            while (start < s.size()) {
+                size_t end = s.find(';', start);
+                if (end == std::string::npos) end = s.size();
+
+                std::string token = s.substr(start, end - start);
+                int x = 0, y = 0, button = 1;
+                int n = std::sscanf(token.c_str(), "%d,%d,%d", &x, &y, &button);
+                if (n >= 2) {
+                    SDL_Log("[TestClick] Injecting click at (%d, %d) button=%d", x, y, button);
+                    dong_engine_send_mouse_move(engine, x, y);
+                    dong_engine_send_mouse_button(engine, button, 1);
+                    dong_engine_send_mouse_button(engine, button, 0);
+                }
+
+                start = end + 1;
+            }
+        } else if (const char* s = std::getenv("DONG_TEST_CLICK")) {
             int x = 0, y = 0, button = 1;
             int n = std::sscanf(s, "%d,%d,%d", &x, &y, &button);
             if (n >= 2) {
@@ -474,6 +572,13 @@ void printUsage(const char* prog) {
     SDL_Log("  --frames N           - Render N frames (overrides positional frames)");
     SDL_Log("  --frame-ms MS        - Sleep MS milliseconds between frames (default: 0)");
     SDL_Log("  --no-update          - Do NOT update scripts/layout between frames");
+
+    SDL_Log("");
+    SDL_Log("Test input injection (env vars):");
+    SDL_Log("  DONG_TEST_CLICK=x,y[,button]");
+    SDL_Log("  DONG_TEST_CLICKS=x1,y1[,...];x2,y2[,...]");
+    SDL_Log("  DONG_TEST_CLICK_FRAME=N (default: 1; forced to 0 when frames==1)");
+    SDL_Log("  DONG_TEST_WHEEL=x,y,dy (wheel injects on frame_index > 0)");
 
     SDL_Log("");
     SDL_Log("Output rule when frames > 1:");
@@ -710,7 +815,7 @@ int main(int argc, char* argv[]) {
         SDL_Log("[Render] Frame %u: do_update=%d", fi, do_update ? 1 : 0);
 
 
-        injectSyntheticInputs(engine, fi);
+        injectSyntheticInputs(engine, fi, frames);
 
         offscreen_texture = ensureOffscreenTexture(device, offscreen_texture, &offscreen_w, &offscreen_h, width, height);
         if (!offscreen_texture) {

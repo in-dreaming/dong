@@ -8,9 +8,8 @@
 #include <algorithm>
 #include <cctype>
 
-extern "C" {
-#include "quickjs.h"
-}
+#include "quickjs_compat.h"
+
 
 // Helper to get JSBindings from context opaque data
 static dong::script::JSBindings* getBindingsFromCtx(JSContext* ctx) {
@@ -746,18 +745,43 @@ static JSValue input_setValue(JSContext* ctx, JSValueConst this_val, int argc, J
     if (argc < 1) return JS_UNDEFINED;
     auto node = JSBindings::getNodeOpaque(ctx, this_val);
     if (!node) return JS_UNDEFINED;
+
     const char* val = JS_ToCString(ctx, argv[0]);
-    if (val) {
-        node->setAttribute("value", val);
-        auto* state = dom::getInputState(node);
-        if (state) {
-            state->setValue(val);
+    if (!val) return JS_UNDEFINED;
+
+    // Special-case: <select>. Its value is derived from selected option.
+    if (node->getTagName() == "select") {
+        auto* sel_state = dom::getSelectState(node);
+        if (sel_state) {
+            sel_state->syncFromDOM(node);
+            const size_t prev = sel_state->getSelectedIndex();
+            sel_state->selectByValue(val);
+            // Only sync DOM if selection actually changed.
+            if (sel_state->getSelectedIndex() != prev) {
+                sel_state->applySelectionToDOM(node);
+            } else {
+                // Keep the attribute in sync as best-effort (useful if options are added later).
+                node->setAttribute("value", val);
+            }
+        } else {
+            node->setAttribute("value", val);
         }
+
         JS_FreeCString(ctx, val);
         node->markLayoutDirty();
+        return JS_UNDEFINED;
     }
+
+    node->setAttribute("value", val);
+    auto* state = dom::getInputState(node);
+    if (state) {
+        state->setValue(val);
+    }
+    JS_FreeCString(ctx, val);
+    node->markLayoutDirty();
     return JS_UNDEFINED;
 }
+
 
 static JSValue input_getChecked(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     (void)argc; (void)argv;
@@ -873,30 +897,42 @@ static JSValue select_setSelectedIndex(JSContext* ctx, JSValueConst this_val, in
     int32_t new_index = 0;
     JS_ToInt32(ctx, &new_index, argv[0]);
 
-    // Update SelectElementState
+    // Prefer SelectElementState (keeps renderer + JS getters consistent).
     auto* state = dong::dom::getSelectState(node);
-    if (state && new_index >= 0 && static_cast<size_t>(new_index) < state->getOptionCount()) {
-        state->selectOption(static_cast<size_t>(new_index));
-        // DOM sync happens via engine_view event handling
+    if (state) {
+        state->syncFromDOM(node);
+        if (new_index >= 0 && static_cast<size_t>(new_index) < state->getOptionCount()) {
+            state->selectOption(static_cast<size_t>(new_index));
+            state->applySelectionToDOM(node);
+        }
+        node->markLayoutDirty();
+        return JS_UNDEFINED;
     }
 
-    // Also update DOM attributes (fallback for when state doesn't exist)
+    // Fallback: update DOM attributes only.
     int index = 0;
+    std::string selected_value;
     auto children = node->getChildren();
     for (size_t i = 0; i < children.size(); ++i) {
         auto& child = children[i];
         if (child->getTagName() == "option") {
             if (index == new_index) {
                 child->setAttribute("selected", "");
+                selected_value = child->hasAttribute("value") ? child->getAttribute("value") : child->getTextContent();
             } else {
                 child->removeAttribute("selected");
             }
             index++;
         }
     }
+    if (!selected_value.empty()) {
+        node->setAttribute("value", selected_value);
+    }
 
+    node->markLayoutDirty();
     return JS_UNDEFINED;
 }
+
 
 // Select element - options (returns array of option elements)
 static JSValue select_getOptions(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {

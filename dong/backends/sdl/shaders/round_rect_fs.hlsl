@@ -10,7 +10,7 @@ struct PSInput {
 
 
 // Fragment shader uniform buffer: keep in sync with SDL_GPU fragment uniform slot mapping.
-cbuffer RoundRectUniforms : register(b0, space1) {
+cbuffer RoundRectUniforms : register(b0, space3) {
     float4 uRect;
     float4 uRadius;
     float4 uViewport;

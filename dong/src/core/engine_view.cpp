@@ -990,9 +990,14 @@ struct EngineView::Impl {
             return false;
         }
 
+        // DOM 重载后，必须清空全局 select 状态（避免悬空 key 被复用）。
+        dong::dom::clearAllSelectStates();
+        open_select_element.reset();
+
         if (js_bindings) {
             js_bindings->resetForNewDOM();
         }
+
         markNeedsRepaint();
 
         auto root = dom_manager->getRoot();
@@ -1148,131 +1153,152 @@ struct EngineView::Impl {
 
     }
 
-    bool tick() {
-        static int frame_count = 0;
-        static bool gpu_ready = false;
-
-        DONG_LOG_DEBUG("[tick] Frame %d starting", frame_count++);
-
-        DONG_PROFILE_SCOPE_CAT("EngineView::tick", "frame");
-
+    double tickUpdateWallTimeSec() {
         static auto start_time = std::chrono::steady_clock::now();
         auto now = std::chrono::steady_clock::now();
-        double current_time = std::chrono::duration<double>(now - start_time).count();
+        const double current_time = std::chrono::duration<double>(now - start_time).count();
         last_wall_time_sec = current_time;
+        return current_time;
+    }
 
-        // Smooth scrolling (scroll-behavior:smooth) is time-based and should advance every tick.
-        // We update scroll offsets here (before layout/paint) and request a repaint while active.
-        if (dom_manager) {
-            auto root_for_scroll = dom_manager->getRoot();
-            if (root_for_scroll) {
-                bool any_active = false;
-                bool any_changed = false;
-                updateSmoothScrollRecursive(root_for_scroll, current_time, any_active, any_changed);
-                if (any_active || any_changed) {
-                    markNeedsRepaint();
-                }
-            }
+    void tickAdvanceSmoothScroll(double current_time) {
+        if (!dom_manager) return;
+        auto root_for_scroll = dom_manager->getRoot();
+        if (!root_for_scroll) return;
+
+        bool any_active = false;
+        bool any_changed = false;
+        updateSmoothScrollRecursive(root_for_scroll, current_time, any_active, any_changed);
+        if (any_active || any_changed) {
+            markNeedsRepaint();
         }
+    }
 
+    void tickSyncVideos(double current_time) {
         bool dom_tree_dirty = false;
         if (dom_manager) {
             auto root_for_media = dom_manager->getRoot();
             dom_tree_dirty = (root_for_media && root_for_media->isLayoutDirty());
         }
         syncVideoElements(current_time, dom_tree_dirty);
+    }
 
-        if (script_engine) {
-            DONG_PROFILE_SCOPE_CAT("Script::processTasks", "script");
-            script_engine->processPendingTasks();
+    void tickProcessScriptTasks() {
+        if (!script_engine) return;
+        DONG_PROFILE_SCOPE_CAT("Script::processTasks", "script");
+        script_engine->processPendingTasks();
+    }
+
+    void tickComputeStylesIfNeeded() {
+        if (!dom_manager) return;
+        auto root = dom_manager->getRoot();
+        if (!root) return;
+        if (!(root->isStyleDirty() || root->isStyleSubtreeDirty())) return;
+
+        if (auto* se = dom_manager->getStyleEngine()) {
+            DONG_PROFILE_SCOPE_CAT("Style::compute", "style");
+            se->computeStylesIncremental(root);
         }
+        root->clearStyleDirtyRecursive();
+    }
 
+    void tickComputeLayoutIfNeeded() {
+        if (!layout_engine || !dom_manager) return;
+        auto root = dom_manager->getRoot();
+        if (!root || !root->isLayoutDirty()) return;
 
-        if (dom_manager) {
-            auto root = dom_manager->getRoot();
-            if (root && (root->isStyleDirty() || root->isStyleSubtreeDirty())) {
-                if (auto* se = dom_manager->getStyleEngine()) {
-                    DONG_PROFILE_SCOPE_CAT("Style::compute", "style");
-                    se->computeStylesIncremental(root);
-                }
-                root->clearStyleDirtyRecursive();
+        DONG_PROFILE_SCOPE_CAT("Layout::calculate", "layout");
+        layout_engine->calculateLayout(root, static_cast<float>(width), static_cast<float>(height));
+        root->clearLayoutDirtyRecursive();
+        markNeedsRepaint();
+    }
+
+    void tickGenerateCommandsIfNeeded() {
+        const bool gpu_ready = true;
+        if (!(use_gpu && commands_dirty && gpu_ready && dom_manager && layout_engine && painter)) return;
+
+        DONG_PROFILE_SCOPE_CAT("Render::generateCommands", "render");
+
+        auto root = dom_manager->getRoot();
+        if (!root) return;
+
+        painter->buildDisplayList(root, layout_engine.get());
+        const auto& dl = painter->getDisplayList();
+        DONG_LOG_DEBUG("[tick] DisplayList items: %zu", dl.items.size());
+
+        int text_count = 0;
+        for (const auto& item : dl.items) {
+            if (item.type == dong::render::DisplayItemType::DrawGlyphRun) {
+                text_count++;
+                DONG_LOG_DEBUG("[tick]   DrawGlyphRun: glyphs=%zu", item.glyph_run.glyphs.size());
             }
         }
+        DONG_LOG_DEBUG("[tick] Total DrawGlyphRun items: %d", text_count);
 
-        if (layout_engine && dom_manager) {
-            auto root = dom_manager->getRoot();
-            if (root && root->isLayoutDirty()) {
-                DONG_PROFILE_SCOPE_CAT("Layout::calculate", "layout");
-                layout_engine->calculateLayout(root, static_cast<float>(width), static_cast<float>(height));
-                root->clearLayoutDirtyRecursive();
-                markNeedsRepaint();
-            }
+        if (!cached_cmd_list) {
+            cached_cmd_list = std::make_unique<dong::render::GPUCommandList>();
+        }
+        dong::render::GPUCompiler compiler;
+        compiler.compile(painter->getDisplayList(), *cached_cmd_list, &painter->getLayerTree());
+        DONG_LOG_DEBUG("[tick] GPU commands: %zu", cached_cmd_list->commands.size());
+        commands_dirty = false;
+    }
+
+    void tickUploadVideoFramesIfNeeded() {
+        if (!use_gpu) return;
+        (void)uploadPendingVideoFrames();
+    }
+
+    void tickExecuteGPUCommandsIfReady() {
+        const bool gpu_ready = true;
+        if (!(use_gpu && cached_cmd_list && !commands_dirty && gpu_ready)) return;
+
+        DongGPUDriver* driver = dong_platform_get_gpu_driver(dong_platform_get());
+        if (!driver) {
+            DONG_LOG_WARN("[tick] GPU driver not available");
+            return;
         }
 
-        // GPU ready check - skip Frame 0 execution, render starting from Frame 1
-        // TEMP FIX: Disabled for html_render_test debugging
-        /*
-        if (use_gpu) {
-            static bool first_frame_skip = true;
-            if (first_frame_skip) {
-                DongGPUDriver* driver = dong_platform_get_gpu_driver(dong_platform_get());
-                if (driver && driver->vtable && driver->vtable->execute) {
-                    DONG_LOG_INFO("[tick] Skipping Frame 0 to allow GPU initialization");
-                    first_frame_skip = false;
-                    gpu_ready = false;  // Skip this frame
-                    return true;  // Return early without rendering
-                }
-            }
-            gpu_ready = true;  // Subsequent frames can render
-        }
-        */
-        gpu_ready = true;  // Always ready
+        DONG_LOG_DEBUG("[tick] Executing %zu GPU commands", cached_cmd_list->commands.size());
+        DONG_PROFILE_SCOPE_CAT("GPU::execute", "render");
+        (void)dong_gpu_execute(driver, cached_cmd_list.get());
+    }
 
-        if (use_gpu && commands_dirty && gpu_ready && dom_manager && layout_engine && painter) {
-            DONG_PROFILE_SCOPE_CAT("Render::generateCommands", "render");
+    bool tick() {
+        static int frame_count = 0;
 
-            auto root = dom_manager->getRoot();
-            if (root) {
-                painter->buildDisplayList(root, layout_engine.get());
-                const auto& dl = painter->getDisplayList();
-                DONG_LOG_DEBUG("[tick] DisplayList items: %zu", dl.items.size());
-                int text_count = 0;
-                for (const auto& item : dl.items) {
-                    if (item.type == dong::render::DisplayItemType::DrawGlyphRun) {
-                        text_count++;
-                        DONG_LOG_DEBUG("[tick]   DrawGlyphRun: glyphs=%zu", item.glyph_run.glyphs.size());
-                    }
-                }
-                DONG_LOG_DEBUG("[tick] Total DrawGlyphRun items: %d", text_count);
+        DONG_LOG_DEBUG("[tick] Frame %d starting", frame_count++);
+        DONG_PROFILE_SCOPE_CAT("EngineView::tick", "frame");
 
-                if (!cached_cmd_list) {
-                    cached_cmd_list = std::make_unique<dong::render::GPUCommandList>();
-                }
-                dong::render::GPUCompiler compiler;
-                compiler.compile(painter->getDisplayList(), *cached_cmd_list, &painter->getLayerTree());
-                DONG_LOG_DEBUG("[tick] GPU commands: %zu", cached_cmd_list->commands.size());
-                commands_dirty = false;
-            }
-        }
+        const double current_time = tickUpdateWallTimeSec();
 
-        if (use_gpu) {
-            (void)uploadPendingVideoFrames();
-        }
+        DONG_LOG_DEBUG("[tick] step: smooth_scroll");
+        tickAdvanceSmoothScroll(current_time);
 
-        if (use_gpu && cached_cmd_list && !commands_dirty && gpu_ready) {
-            DongGPUDriver* driver = dong_platform_get_gpu_driver(dong_platform_get());
-            if (driver) {
-                DONG_LOG_DEBUG("[tick] Executing %zu GPU commands", cached_cmd_list->commands.size());
-                DONG_PROFILE_SCOPE_CAT("GPU::execute", "render");
-                (void)dong_gpu_execute(driver, cached_cmd_list.get());
-            } else {
-                DONG_LOG_WARN("[tick] GPU driver not available");
-            }
-        }
+        DONG_LOG_DEBUG("[tick] step: videos");
+        tickSyncVideos(current_time);
 
+        DONG_LOG_DEBUG("[tick] step: script_tasks");
+        tickProcessScriptTasks();
+
+        DONG_LOG_DEBUG("[tick] step: styles");
+        tickComputeStylesIfNeeded();
+
+        DONG_LOG_DEBUG("[tick] step: layout");
+        tickComputeLayoutIfNeeded();
+
+        DONG_LOG_DEBUG("[tick] step: render_build");
+        tickGenerateCommandsIfNeeded();
+
+        DONG_LOG_DEBUG("[tick] step: video_upload");
+        tickUploadVideoFramesIfNeeded();
+
+        DONG_LOG_DEBUG("[tick] step: gpu_execute");
+        tickExecuteGPUCommandsIfReady();
 
         return true;
     }
+
 
     void dispatchMouseEvent(const char* type, int32_t x, int32_t y, int32_t button) {
         if (!script_engine || !js_bindings || !event_dispatcher) return;
@@ -1377,10 +1403,13 @@ struct EngineView::Impl {
         last_mouse_x = x;
         last_mouse_y = y;
         updateHoverState(x, y);
+        updateOpenSelectHover(x, y);
         dispatchMouseEvent("mousemove", x, y, 0);
     }
 
-    static constexpr float kSelectOptionHeight = 30.0f;
+
+    static constexpr float kSelectOptionHeight = dong::dom::kSelectOptionHeight;
+
 
     bool computeSelectGeometry(const DOMNodePtr& select,
                               float& select_x, float& select_y,
@@ -1402,8 +1431,9 @@ struct EngineView::Impl {
         dropdown_x = select_x;
         dropdown_y = select_y + select_h;
         dropdown_w = select_w;
-        dropdown_h = static_cast<float>(option_count) * kSelectOptionHeight;
+        dropdown_h = std::min(static_cast<float>(option_count) * kSelectOptionHeight, dong::dom::kSelectDropdownMaxHeight);
         return true;
+
     }
 
     DOMNodePtr normalizeSelectHit(const DOMNodePtr& hit) const {
@@ -1418,7 +1448,45 @@ struct EngineView::Impl {
         return nullptr;
     }
 
+    void updateOpenSelectHover(int32_t x, int32_t y) {
+        if (!open_select_element) return;
+
+        auto* state = dong::dom::getSelectState(open_select_element);
+        if (!state || !state->isOpen()) return;
+
+        float sx = 0, sy = 0, sw = 0, sh = 0;
+        float dx = 0, dy = 0, dw = 0, dh = 0;
+        if (!computeSelectGeometry(open_select_element, sx, sy, sw, sh, dx, dy, dw, dh)) {
+            return;
+        }
+
+        const float fx = static_cast<float>(x);
+        const float fy = static_cast<float>(y);
+
+        auto inRect = [](float px, float py, float rx, float ry, float rw, float rh) {
+            return px >= rx && px <= rx + rw && py >= ry && py <= ry + rh;
+        };
+
+        const bool in_dropdown = (dh > 0.0f) && inRect(fx, fy, dx, dy, dw, dh);
+
+        int new_hover = -1;
+        if (in_dropdown) {
+            const float rel_y = fy - dy;
+            const float y_in_content = rel_y + std::max(0.0f, state->getScrollOffset());
+            const size_t idx = static_cast<size_t>(y_in_content / kSelectOptionHeight);
+            if (idx < state->getOptionCount() && !state->isOptionDisabled(idx)) {
+                new_hover = static_cast<int>(idx);
+            }
+        }
+
+        if (new_hover != state->getHoverIndex()) {
+            state->setHoverIndex(new_hover);
+            markNeedsRepaint();
+        }
+    }
+
     bool handleOpenSelectMouseDown(int32_t x, int32_t y, int32_t button) {
+
         if (button != 1) return false;
         if (!open_select_element) return false;
 
@@ -1446,19 +1514,29 @@ struct EngineView::Impl {
 
         if (in_dropdown) {
             const float rel_y = fy - dy;
-            size_t option_index = static_cast<size_t>(rel_y / kSelectOptionHeight);
+            const float y_in_content = rel_y + std::max(0.0f, state->getScrollOffset());
+            size_t option_index = static_cast<size_t>(y_in_content / kSelectOptionHeight);
             if (option_index < state->getOptionCount()) {
-                state->selectOption(option_index);
-                state->close();
-                open_select_element->setAttribute("value", state->getSelectedValue());
+                if (state->isOptionDisabled(option_index)) {
+                    // Disabled option: consume the click, keep dropdown open.
+                    return true;
+                }
 
-                dispatchSimpleEventForNode(open_select_element, "change");
+                const size_t prev_index = state->getSelectedIndex();
+                state->selectOption(option_index);
+                state->applySelectionToDOM(open_select_element);
+                state->close();
+
+                if (state->getSelectedIndex() != prev_index) {
+                    dispatchSimpleEventForNode(open_select_element, "change");
+                }
 
                 open_select_element.reset();
                 markNeedsRepaint();
                 return true;
             }
         }
+
 
         if (in_select) {
             state->close();
@@ -1489,7 +1567,8 @@ struct EngineView::Impl {
             // Select element click handling (BEFORE general click handling)
             // 兼容：如果 hit 到的是 <option>，将其归一化到父 <select>。
             auto select_hit = normalizeSelectHit(hit);
-            if (select_hit && button == 1) {
+            if (select_hit && button == 1 && !select_hit->hasAttribute("disabled")) {
+
                 auto* state = dong::dom::getSelectState(select_hit);
                 if (state) {
                     state->syncFromDOM(select_hit);
@@ -1599,14 +1678,42 @@ struct EngineView::Impl {
 
 
     void sendMouseWheel(float delta_x, float delta_y) {
+        constexpr float kScrollSpeed = 20.0f;
+        float scroll_dx = delta_x * kScrollSpeed;
+        float scroll_dy = delta_y * kScrollSpeed;
+
+        // Select 下拉框滚动：下拉不在 DOM 树中（不属于 scroll container），因此需要在这里优先处理。
+        if (open_select_element) {
+            auto* state = dong::dom::getSelectState(open_select_element);
+            if (state && state->isOpen()) {
+                float sx = 0, sy = 0, sw = 0, sh = 0;
+                float dx = 0, dy = 0, dw = 0, dh = 0;
+                if (computeSelectGeometry(open_select_element, sx, sy, sw, sh, dx, dy, dw, dh)) {
+                    const float fx = static_cast<float>(last_mouse_x);
+                    const float fy = static_cast<float>(last_mouse_y);
+                    auto inRect = [](float px, float py, float rx, float ry, float rw, float rh) {
+                        return px >= rx && px <= rx + rw && py >= ry && py <= ry + rh;
+                    };
+
+                    const bool in_dropdown = (dh > 0.0f) && inRect(fx, fy, dx, dy, dw, dh);
+                    if (in_dropdown) {
+                        const float prev = state->getScrollOffset();
+                        state->scrollBy(scroll_dy, dh);
+                        if (state->getScrollOffset() != prev) {
+                            updateOpenSelectHover(last_mouse_x, last_mouse_y);
+                            markNeedsRepaint();
+                        }
+                        return;
+                    }
+                }
+            }
+        }
+
         auto scroll_container = findScrollContainerAt(dom_manager.get(), layout_engine.get(), last_mouse_x, last_mouse_y);
         if (!scroll_container) {
             return;
         }
 
-        constexpr float kScrollSpeed = 20.0f;
-        float scroll_dx = delta_x * kScrollSpeed;
-        float scroll_dy = delta_y * kScrollSpeed;
 
         // Try to scroll the current container
         auto result = scroll_container->scrollBy(scroll_dx, scroll_dy);
@@ -1668,44 +1775,88 @@ struct EngineView::Impl {
                 constexpr uint32_t SDLK_ESCAPE = 27;
 
                 auto focused = focus_manager->getFocusedElement();
-                if (focused && focused->getTagName() == "select") {
+                if (focused && focused->getTagName() == "select" && !focused->hasAttribute("disabled")) {
                     auto* state = dong::dom::getSelectState(focused);
                     if (state) {
                         state->syncFromDOM(focused);
 
+                        auto nextEnabled = [&](size_t start, int dir) {
+                            if (state->getOptionCount() == 0) return start;
+                            size_t idx = start;
+                            for (size_t step = 0; step < state->getOptionCount(); ++step) {
+                                int ni = static_cast<int>(idx) + dir;
+                                if (ni < 0 || ni >= static_cast<int>(state->getOptionCount())) break;
+                                idx = static_cast<size_t>(ni);
+                                if (!state->isOptionDisabled(idx)) return idx;
+                            }
+                            return start;
+                        };
+
+                        auto ensureVisible = [&](size_t idx) {
+                            float sx = 0, sy = 0, sw = 0, sh = 0;
+                            float dx = 0, dy = 0, dw = 0, dh = 0;
+                            if (!computeSelectGeometry(focused, sx, sy, sw, sh, dx, dy, dw, dh)) return;
+                            if (dh <= 0.0f) return;
+
+                            const float top = static_cast<float>(idx) * kSelectOptionHeight;
+                            const float bottom = top + kSelectOptionHeight;
+                            const float scroll = std::max(0.0f, state->getScrollOffset());
+
+                            if (top < scroll) {
+                                state->scrollBy(top - scroll, dh);
+                            } else if (bottom > scroll + dh) {
+                                state->scrollBy(bottom - (scroll + dh), dh);
+                            }
+                        };
+
                         bool handled = false;
 
                         if (key_code == SDLK_UP || key_code == SDLK_DOWN) {
-                            const size_t n = state->getOptionCount();
-                            if (n > 0) {
-                                size_t idx = state->getSelectedIndex();
-                                if (key_code == SDLK_UP && idx > 0) {
-                                    idx--;
-                                    handled = true;
-                                } else if (key_code == SDLK_DOWN && idx + 1 < n) {
-                                    idx++;
-                                    handled = true;
-                                }
+                            const int dir = (key_code == SDLK_DOWN) ? 1 : -1;
 
-                                if (handled) {
-                                    state->selectOption(idx);
-                                    focused->setAttribute("value", state->getSelectedValue());
-
+                            if (state->isOpen()) {
+                                const int h = state->getHoverIndex();
+                                const size_t base = (h >= 0) ? static_cast<size_t>(h) : state->getSelectedIndex();
+                                const size_t next = nextEnabled(base, dir);
+                                state->setHoverIndex(static_cast<int>(next));
+                                ensureVisible(next);
+                                markNeedsRepaint();
+                                handled = true;
+                            } else {
+                                const size_t prev = state->getSelectedIndex();
+                                const size_t next = nextEnabled(prev, dir);
+                                if (next != prev) {
+                                    state->selectOption(next);
+                                    state->applySelectionToDOM(focused);
                                     markNeedsRepaint();
-
                                     dispatchSimpleEventForNode(focused, "change");
                                 }
+                                handled = true;
                             }
                         } else if (key_code == SDLK_RETURN) {
-                            // Enter: toggle dropdown open/close
-                            state->toggle();
                             if (state->isOpen()) {
+                                const int h = state->getHoverIndex();
+                                if (h >= 0) {
+                                    const size_t prev = state->getSelectedIndex();
+                                    state->selectOption(static_cast<size_t>(h));
+                                    state->applySelectionToDOM(focused);
+                                    if (state->getSelectedIndex() != prev) {
+                                        dispatchSimpleEventForNode(focused, "change");
+                                    }
+                                }
+
+                                state->close();
+                                if (open_select_element.get() == focused.get()) {
+                                    open_select_element.reset();
+                                }
+                                markNeedsRepaint();
+                                handled = true;
+                            } else {
+                                state->open();
                                 open_select_element = focused;
-                            } else if (open_select_element.get() == focused.get()) {
-                                open_select_element.reset();
+                                markNeedsRepaint();
+                                handled = true;
                             }
-                            markNeedsRepaint();
-                            handled = true;
                         } else if (key_code == SDLK_ESCAPE) {
                             if (state->isOpen()) {
                                 state->close();
@@ -1724,6 +1875,7 @@ struct EngineView::Impl {
                     }
                 }
             }
+
 
             // Handle Enter key in form inputs
             if (key_code == SDLK_RETURN && focus_manager && dom_manager) {

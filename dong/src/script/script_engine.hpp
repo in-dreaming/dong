@@ -9,9 +9,8 @@
 
 
 
-extern "C" {
-#include "quickjs.h"
-}
+#include "quickjs_compat.h"
+
 
 
 

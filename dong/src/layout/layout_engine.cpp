@@ -1025,9 +1025,8 @@ bool isInlineFormattingContext(const dom::DOMNodePtr& node) {
     // 鍙堜笉褰卞搷閫氱敤 block 甯冨眬銆?
     // Only treat as IFC when there are inline children and no block children mixed in.
     // Mixed-content containers are handled separately via anonymous block wrapping.
-    // FIX: 即使有 block 子元素混入，只要有内联内容，我们也需要为内联内容分配布局空间
-    // layoutInlineFormattingContexts will skip block children and only process inline items
-    return has_inline_child;
+
+    return has_inline_child && !has_block_like_child;
 }
 
 static bool isWhitespaceOnlyText(const std::string& s) {
@@ -1116,10 +1115,11 @@ bool hasMixedBlockInlineChildren(const dom::DOMNodePtr& node) {
 } // anonymous namespace
 
 LayoutNode::~LayoutNode() {
-    if (yoga_node) {
-        YGNodeFree(yoga_node);
-    }
+    // Yoga node lifetime is managed by Engine::calculateLayout() via YGNodeFreeRecursive.
+    yoga_node = nullptr;
 }
+
+
 
 Engine::Engine() {
     yoga_config = YGConfigNew();
@@ -1129,22 +1129,53 @@ Engine::Engine() {
 }
 
 Engine::~Engine() {
-    for (auto& ab : anon_blocks_) {
-        if (ab.yoga_node) {
-            YGNodeFree(ab.yoga_node);
+    // Free any remaining Yoga trees deterministically.
+    std::unordered_set<YGNode*> roots;
+    roots.reserve(layout_cache.size() + anon_blocks_.size());
+
+    for (auto& kv : layout_cache) {
+        if (!kv.second || !kv.second->yoga_node) continue;
+        YGNode* n = kv.second->yoga_node;
+        if (YGNodeGetOwner(n) == nullptr) {
+            roots.insert(n);
         }
     }
+    for (auto& ab : anon_blocks_) {
+        if (!ab.yoga_node) continue;
+        if (YGNodeGetOwner(ab.yoga_node) == nullptr) {
+            roots.insert(ab.yoga_node);
+        }
+    }
+
+    for (YGNode* r : roots) {
+        YGNodeFreeRecursive(r);
+    }
+
+    for (auto& kv : layout_cache) {
+        if (kv.second) {
+            kv.second->yoga_node = nullptr;
+        }
+    }
+    for (auto& ab : anon_blocks_) {
+        ab.yoga_node = nullptr;
+    }
+
     anon_blocks_.clear();
     layout_cache.clear();
+
     if (yoga_config) {
         YGConfigFree(yoga_config);
     }
 }
 
+
 void Engine::calculateLayout(dom::DOMNodePtr root, float width, float height) {
     DONG_PROFILE_FUNCTION();
-    
+
+    DONG_LOG_DEBUG("[Layout] calculateLayout begin root=%p size=%.0fx%.0f", (void*)root.get(), width, height);
+
     if (!root || !yoga_config) return;
+
 
     // Cache viewport size for resolving vw/vh units in style mapping.
     viewport_width_ = width;
@@ -1169,23 +1200,49 @@ void Engine::calculateLayout(dom::DOMNodePtr root, float width, float height) {
         return;
     }
 
-    // Rebuild layout tree from scratch each time for now to avoid stale Yoga nodes.
-    // Anonymous wrapper Yoga nodes must be detached from parents and freed before
-    // clearing layout_cache (which frees parent Yoga nodes via LayoutNode dtor).
-    for (auto& ab : anon_blocks_) {
-        if (ab.yoga_node) {
-            YGNode* parent = YGNodeGetOwner(ab.yoga_node);
-            if (parent) {
-                YGNodeRemoveChild(parent, ab.yoga_node);
+    // Rebuild layout tree from scratch each time for now.
+    // NOTE: layout_cache destruction order is unspecified (unordered_map), so we must NOT
+    // free Yoga nodes in LayoutNode destructors. Instead, free whole Yoga trees from roots
+    // using YGNodeFreeRecursive, then clear pointers and clear the cache.
+    {
+        std::unordered_set<YGNode*> roots;
+        roots.reserve(layout_cache.size());
+
+        for (auto& kv : layout_cache) {
+            if (!kv.second || !kv.second->yoga_node) continue;
+            YGNode* n = kv.second->yoga_node;
+            if (YGNodeGetOwner(n) == nullptr) {
+                roots.insert(n);
             }
-            YGNodeFree(ab.yoga_node);
-            ab.yoga_node = nullptr;
+        }
+
+        DONG_LOG_DEBUG(
+            "[Layout] freeing previous yoga trees roots=%zu cached_nodes=%zu anon_wrappers=%zu",
+            roots.size(), layout_cache.size(), anon_blocks_.size()
+        );
+
+        for (YGNode* r : roots) {
+            YGNodeFreeRecursive(r);
         }
     }
+
+    for (auto& kv : layout_cache) {
+        if (kv.second) {
+            kv.second->yoga_node = nullptr;
+        }
+    }
+    for (auto& ab : anon_blocks_) {
+        ab.yoga_node = nullptr;
+    }
     anon_blocks_.clear();
+
+    DONG_LOG_DEBUG("[Layout] clearing layout_cache entries=%zu", layout_cache.size());
     layout_cache.clear();
+    DONG_LOG_DEBUG("[Layout] cleared layout_cache");
+
 
     // Prefer the first real element (e.g., <html>) as the Yoga root instead of the #document node
+
     dom::DOMNodePtr layout_root_dom = root;
     if (root->getType() != dom::DOMNode::NodeType::ELEMENT) {
         auto element_child = firstElementChild(root);
@@ -1207,6 +1264,7 @@ void Engine::calculateLayout(dom::DOMNodePtr root, float width, float height) {
     }
 
     // Create Yoga tree from the chosen DOM root
+    DONG_LOG_DEBUG("[Layout] createYogaNode root tag=%s", layout_root_dom->getTagName().c_str());
     YGNode* yoga_root = createYogaNode(layout_root_dom);
     if (!yoga_root) return;
 
@@ -1215,7 +1273,10 @@ void Engine::calculateLayout(dom::DOMNodePtr root, float width, float height) {
     YGNodeStyleSetHeight(yoga_root, height);
 
     // Calculate layout
+    DONG_LOG_DEBUG("[Layout] YGNodeCalculateLayout begin");
     YGNodeCalculateLayout(yoga_root, width, height, YGDirectionLTR);
+    DONG_LOG_DEBUG("[Layout] YGNodeCalculateLayout done");
+
 
     // Extract layout info back to cache (recursively). Convert Yoga's relative
     // positions into absolute coordinates so the painter can use them directly.
@@ -3859,7 +3920,10 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
     };
 
     walk(root);
-    
+
+
+
+
     // 第二遍：自底向上传播高度变化
     // 当 IFC 容器的高度被更新后，其父容器（block 容器）的高度也需要更新
     std::function<float(const dom::DOMNodePtr&)> propagateHeights;

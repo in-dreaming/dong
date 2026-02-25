@@ -2,9 +2,8 @@
 
 #include "../dom/dom/dom_node.hpp"
 
-extern "C" {
-#include "quickjs.h"
-}
+#include "quickjs_compat.h"
+
 
 namespace dong::script {
 

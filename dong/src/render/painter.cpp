@@ -364,13 +364,17 @@ const DisplayList& Painter::buildDisplayList(const dom::DOMNodePtr& root, layout
     display_list_builder_.clear();
     layer_tree_.clear();
     layer_stack_.clear();
+    open_select_overlays_.clear();
+
 
     if (layout_engine_) {
         current_dirty_rect_ = layout_engine_->getDirtyRect();
         const auto* layout_root = layout_engine_->getLayout(root);
         if (layout_root) {
             buildDisplayListNode(root, layout_root, display_list_builder_);
+            paintSelectDropdownOverlays(display_list_builder_);
         }
+
     }
 
     layout_engine_ = nullptr;

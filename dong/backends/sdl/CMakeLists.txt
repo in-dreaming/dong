@@ -75,10 +75,14 @@ target_include_directories(dong_sdl_backend PUBLIC
     ${CMAKE_SOURCE_DIR}/third_party/SDL_shadercross/include
     ${DXC_INCLUDE_PATH}
 
-    ${CMAKE_SOURCE_DIR}/third_party/freetype/include
-    ${CMAKE_SOURCE_DIR}/third_party/harfbuzz/src
+    # Third-party headers are installed by zig into zig-out/<dep>/include.
+    ${FREETYPE_PREFIX}/include/freetype2
+    ${HARFBUZZ_PREFIX}/include/harfbuzz
+    ${MSDFGEN_PREFIX}/include
+
     ${CMAKE_SOURCE_DIR}/third_party
 )
+
 
 # spirv-cross headers (used by SDL_shadercross)
 if(VULKAN_SDK_PATH)

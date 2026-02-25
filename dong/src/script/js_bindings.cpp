@@ -10,9 +10,8 @@
 #include "../core/log.h"
 #include "../dom/css/style_engine.hpp"
 #include "../dom/focus_manager.hpp"
-extern "C" {
-#include "quickjs.h"
-}
+#include "quickjs_compat.h"
+
 
 // Helper to get JSBindings from context opaque data
 static dong::script::JSBindings* getBindingsFromContext(JSContext* ctx) {
@@ -1640,8 +1639,10 @@ static JSValue event_stopImmediatePropagation(JSContext* ctx, JSValueConst this_
 }
 
 static JSValue event_constructor(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val;
+
     JSValue event = JS_NewObject(ctx);
-    
+
     if (argc > 0) {
         const char* type = JS_ToCString(ctx, argv[0]);
         if (type) {
@@ -1649,14 +1650,30 @@ static JSValue event_constructor(JSContext* ctx, JSValueConst this_val, int argc
             JS_FreeCString(ctx, type);
         }
     }
-    
+
+    bool bubbles = false;
+    bool cancelable = false;
+    if (argc > 1 && JS_IsObject(argv[1])) {
+        JSValue b = JS_GetPropertyStr(ctx, argv[1], "bubbles");
+        if (!JS_IsUndefined(b)) {
+            bubbles = JS_ToBool(ctx, b);
+        }
+        JS_FreeValue(ctx, b);
+
+        JSValue c = JS_GetPropertyStr(ctx, argv[1], "cancelable");
+        if (!JS_IsUndefined(c)) {
+            cancelable = JS_ToBool(ctx, c);
+        }
+        JS_FreeValue(ctx, c);
+    }
+
     // Event properties
-    JS_SetPropertyStr(ctx, event, "bubbles", JS_FALSE);
-    JS_SetPropertyStr(ctx, event, "cancelable", JS_FALSE);
+    JS_SetPropertyStr(ctx, event, "bubbles", JS_NewBool(ctx, bubbles));
+    JS_SetPropertyStr(ctx, event, "cancelable", JS_NewBool(ctx, cancelable));
     JS_SetPropertyStr(ctx, event, "defaultPrevented", JS_FALSE);
     JS_SetPropertyStr(ctx, event, "cancelBubble", JS_FALSE);
     JS_SetPropertyStr(ctx, event, "timeStamp", JS_NewInt32(ctx, 0));
-    
+
     // Event methods
     JS_SetPropertyStr(ctx, event, "preventDefault",
         JS_NewCFunction(ctx, event_preventDefault, "preventDefault", 0));
@@ -1664,9 +1681,10 @@ static JSValue event_constructor(JSContext* ctx, JSValueConst this_val, int argc
         JS_NewCFunction(ctx, event_stopPropagation, "stopPropagation", 0));
     JS_SetPropertyStr(ctx, event, "stopImmediatePropagation",
         JS_NewCFunction(ctx, event_stopImmediatePropagation, "stopImmediatePropagation", 0));
-    
+
     return event;
 }
+
 
 static JSValue mouse_event_constructor(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     JSValue event = event_constructor(ctx, this_val, argc, argv);
@@ -1975,14 +1993,15 @@ void JSBindings::initializeEventAPI() {
     JSValue global = JS_GetGlobalObject(ctx);
 
     // Event constructors
-    JSValue event_ctor = JS_NewCFunction(ctx, event_constructor, "Event", 1);
+    JSValue event_ctor = JS_NewCFunction2(ctx, event_constructor, "Event", 1, JS_CFUNC_constructor, 0);
     JS_SetPropertyStr(ctx, global, "Event", event_ctor);
 
-    JSValue mouse_event_ctor = JS_NewCFunction(ctx, mouse_event_constructor, "MouseEvent", 1);
+    JSValue mouse_event_ctor = JS_NewCFunction2(ctx, mouse_event_constructor, "MouseEvent", 1, JS_CFUNC_constructor, 0);
     JS_SetPropertyStr(ctx, global, "MouseEvent", mouse_event_ctor);
 
-    JSValue keyboard_event_ctor = JS_NewCFunction(ctx, keyboard_event_constructor, "KeyboardEvent", 1);
+    JSValue keyboard_event_ctor = JS_NewCFunction2(ctx, keyboard_event_constructor, "KeyboardEvent", 1, JS_CFUNC_constructor, 0);
     JS_SetPropertyStr(ctx, global, "KeyboardEvent", keyboard_event_ctor);
+
 
     JS_FreeValue(ctx, global);
 }
