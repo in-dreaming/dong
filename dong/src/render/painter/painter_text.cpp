@@ -715,6 +715,132 @@ void Painter::paintTextAndInput(const dom::DOMNodePtr& node,
 // ========== 完整文本路径实现 ==========
 namespace {
 
+// Split a string by '\n'. Each segment is a logical line (may be empty for consecutive '\n').
+std::vector<std::string> splitByNewline(const std::string& s) {
+    std::vector<std::string> lines;
+    size_t start = 0;
+    while (start <= s.size()) {
+        size_t pos = s.find('\n', start);
+        if (pos == std::string::npos) {
+            lines.push_back(s.substr(start));
+            break;
+        }
+        lines.push_back(s.substr(start, pos - start));
+        start = pos + 1;
+    }
+    return lines;
+}
+
+// Common state for multi-line text rendering within renderFullText.
+struct FullTextRenderCtx {
+    float x, y, pad_l, pad_t, inner_width;
+    float baseline_offset, effective_line_height, ascent_px;
+    float font_size, scale;
+    Color text_color;
+    std::string text_align;
+    const dom::ComputedStyle& style;
+    TextShaper& shaper;
+    DisplayListBuilder& builder;
+};
+
+// Emit one shaped line at the given line_index.
+void emitFullTextLine(const std::string& line_text, int line_index,
+                      const FullTextRenderCtx& ctx) {
+    if (line_text.empty()) return;
+
+    TextShapeRequest req{line_text, ctx.style.font_family, ctx.style.font_weight,
+                         ctx.style.font_style, ctx.font_size};
+    ShapedText shaped;
+    if (!ctx.shaper.shape(req, shaped) || shaped.glyphs.empty()) return;
+
+    float line_width = shaped.width_units * ctx.scale;
+    float line_x = ctx.x + ctx.pad_l;
+    if (ctx.text_align == "center") {
+        line_x += std::max(0.0f, (ctx.inner_width - line_width) * 0.5f);
+    } else if (ctx.text_align == "right") {
+        line_x += std::max(0.0f, ctx.inner_width - line_width);
+    }
+
+    float baseline_y = ctx.y + ctx.pad_t + ctx.baseline_offset
+                       + static_cast<float>(line_index) * ctx.effective_line_height;
+
+    DrawGlyphRunData run;
+    run.rect = {line_x, baseline_y - ctx.ascent_px, line_width, ctx.effective_line_height};
+    run.color = ctx.text_color;
+    run.font_size = ctx.font_size;
+    run.font_family = ctx.style.font_family;
+    run.font_weight = ctx.style.font_weight;
+    run.font_style = ctx.style.font_style;
+    run.font_paths = shaped.font_paths;
+    run.font_path = shaped.font_path;
+    run.baseline_x = line_x;
+    run.baseline_y = baseline_y;
+    run.units_per_em = shaped.units_per_em;
+    run.scale_to_pixels = shaped.scale_to_pixels;
+    fillTextShadow(run, ctx.style);
+
+    for (const auto& sg : shaped.glyphs) {
+        run.glyphs.push_back({sg.glyph_id, sg.pen_x_units, sg.pen_y_units,
+                              sg.font_path_index, sg.units_per_em});
+    }
+    ctx.builder.addGlyphRun(std::move(run));
+}
+
+// Wrap a single segment (no '\n') into multiple visual lines, emitting each.
+// Returns the number of visual lines emitted.
+int wrapAndEmitSegment(const std::string& segment, int start_line_index,
+                       const FullTextRenderCtx& ctx) {
+    if (segment.empty()) return 0;
+
+    TextShapeRequest req{segment, ctx.style.font_family, ctx.style.font_weight,
+                         ctx.style.font_style, ctx.font_size};
+    ShapedText shaped;
+    if (!ctx.shaper.shape(req, shaped) || shaped.glyphs.empty()) return 0;
+
+    float seg_width = shaped.width_units * ctx.scale;
+
+    // Fits on one line?
+    if (seg_width <= ctx.inner_width || ctx.inner_width <= 0.0f) {
+        emitFullTextLine(segment, start_line_index, ctx);
+        return 1;
+    }
+
+    // Need to wrap
+    float avg_char_width = seg_width / static_cast<float>(segment.length());
+    size_t chars_per_line = static_cast<size_t>(ctx.inner_width / avg_char_width);
+    if (chars_per_line < 1) chars_per_line = 1;
+
+    size_t line_start = 0;
+    int lines_emitted = 0;
+
+    while (line_start < segment.length()) {
+        size_t line_end = std::min(line_start + chars_per_line, segment.length());
+        if (line_end < segment.length()) {
+            size_t word_break = segment.find_last_of(" \t", line_end);
+            if (word_break != std::string::npos && word_break > line_start) {
+                line_end = word_break;
+            }
+        }
+        std::string line_text = segment.substr(line_start, line_end - line_start);
+        emitFullTextLine(line_text, start_line_index + lines_emitted, ctx);
+
+        line_start = line_end;
+        while (line_start < segment.length() &&
+               (segment[line_start] == ' ' || segment[line_start] == '\t')) {
+            ++line_start;
+        }
+        ++lines_emitted;
+        if (lines_emitted > 500) break;
+    }
+    return lines_emitted;
+}
+
+// Determine whether newlines in text should produce forced line breaks.
+bool preservesNewlines(const std::string& white_space) {
+    return white_space == "pre-wrap" || white_space == "pre"
+        || white_space == "pre-line";
+}
+
 void renderFullText(const dom::DOMNodePtr& node,
                     const layout::LayoutNode* layout,
                     const dom::ComputedStyle& style,
@@ -729,7 +855,10 @@ void renderFullText(const dom::DOMNodePtr& node,
         text = collapseWhitespace(text);
     } else if (white_space == "pre-line") {
         text = painter_detail::collapseSpacesPreserveNewlines(text);
+    } else if (white_space == "pre-wrap") {
+        text = painter_detail::collapseSpacesPreserveNewlines(text);
     }
+    // "pre" keeps text as-is (no collapse)
 
     if (!text.empty() && !style.text_transform.empty() && style.text_transform != "none") {
         if (style.text_transform == "uppercase") {
@@ -748,16 +877,12 @@ void renderFullText(const dom::DOMNodePtr& node,
     float x = origin_x + bl;
     float y = origin_y + bt;
     float width = std::max(0.0f, layout->layout.dimensions[0] - bl - br);
-    float height = std::max(0.0f, layout->layout.dimensions[1] - bt - bb);
 
     float pad_l = style.padding_left.isPixel() ? style.padding_left.value : 0.0f;
     float pad_r = style.padding_right.isPixel() ? style.padding_right.value : 0.0f;
     float pad_t = style.padding_top.isPixel() ? style.padding_top.value : 0.0f;
-    float pad_b = style.padding_bottom.isPixel() ? style.padding_bottom.value : 0.0f;
 
     float inner_width = std::max(0.0f, width - pad_l - pad_r);
-    float inner_height = std::max(0.0f, height - pad_t - pad_b);
-    (void)inner_height;
 
     Color text_color = makeColorFromCss(style.color);
     float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
@@ -791,132 +916,48 @@ void renderFullText(const dom::DOMNodePtr& node,
     float ascent_px = ascent_units * scale;
     float baseline_offset = (extra * 0.5f + ascent_units) * scale;
 
-    // Handle white-space: nowrap - single line, no wrapping
     bool nowrap = (white_space == "nowrap");
+    bool has_forced_newlines = preservesNewlines(white_space) && text.find('\n') != std::string::npos;
 
-    // Shape full text
+    FullTextRenderCtx ctx{x, y, pad_l, pad_t, inner_width,
+                          baseline_offset, effective_line_height, ascent_px,
+                          font_size, scale, text_color,
+                          style.text_align, style, shaper, builder};
+
+    // Path 1: text has forced newlines from pre-wrap / pre / pre-line
+    if (has_forced_newlines) {
+        auto segments = splitByNewline(text);
+        int line_index = 0;
+        bool allow_wrap = (white_space != "pre" && white_space != "nowrap");
+        for (const auto& seg : segments) {
+            if (seg.empty()) {
+                ++line_index; // empty line (consecutive \n)
+                continue;
+            }
+            if (allow_wrap) {
+                int emitted = wrapAndEmitSegment(seg, line_index, ctx);
+                line_index += std::max(emitted, 1);
+            } else {
+                emitFullTextLine(seg, line_index, ctx);
+                ++line_index;
+            }
+            if (line_index > 500) break;
+        }
+        return;
+    }
+
+    // Path 2: normal / nowrap / no-newline text — original logic
     TextShapeRequest req{text, style.font_family, style.font_weight, style.font_style, font_size};
     ShapedText shaped;
     if (!shaper.shape(req, shaped) || shaped.glyphs.empty()) return;
 
-    // Simple single-line rendering for most cases
     float text_width = shaped.width_units * scale;
 
-    // Calculate alignment
-    float text_x = x + pad_l;
-    std::string text_align = style.text_align;
-    if (text_align == "center") {
-        text_x = x + pad_l + std::max(0.0f, (inner_width - text_width) * 0.5f);
-    } else if (text_align == "right") {
-        text_x = x + pad_l + std::max(0.0f, inner_width - text_width);
-    }
-
-    // For overflow, we should clip or wrap
-    if (std::getenv("DONG_DEBUG_BUTTON_WRAP")) {
-        if (node && node->getTagName() == "button") {
-            DONG_LOG_INFO("[PainterText] button text_width=%.2f inner_width=%.2f nowrap=%d text='%s'",
-                          text_width, inner_width, nowrap ? 1 : 0, text.c_str());
-        }
-    }
     if (!nowrap && text_width > inner_width && inner_width > 0.0f) {
-
-        // Simple wrap: estimate characters per line
-        float avg_char_width = text_width / static_cast<float>(text.length());
-        size_t chars_per_line = static_cast<size_t>(inner_width / avg_char_width);
-        if (chars_per_line < 1) chars_per_line = 1;
-
-        size_t line_start = 0;
-        int line_index = 0;
-
-        while (line_start < text.length()) {
-            // Find break point
-            size_t line_end = std::min(line_start + chars_per_line, text.length());
-            if (line_end < text.length()) {
-                // Try to break at word boundary
-                size_t word_break = text.find_last_of(" \t\n\r", line_end);
-                if (word_break != std::string::npos && word_break > line_start) {
-                    line_end = word_break;
-                }
-            }
-
-            std::string line_text = text.substr(line_start, line_end - line_start);
-            if (!line_text.empty()) {
-                TextShapeRequest line_req{line_text, style.font_family, style.font_weight,
-                                         style.font_style, font_size};
-                ShapedText line_shaped;
-                if (shaper.shape(line_req, line_shaped) && !line_shaped.glyphs.empty()) {
-                    float line_width = line_shaped.width_units * scale;
-
-                    float line_x = x + pad_l;
-                    if (text_align == "center") {
-                        line_x = x + pad_l + std::max(0.0f, (inner_width - line_width) * 0.5f);
-                    } else if (text_align == "right") {
-                        line_x = x + pad_l + std::max(0.0f, inner_width - line_width);
-                    }
-
-                    float baseline_y = y + pad_t + baseline_offset + static_cast<float>(line_index) * effective_line_height;
-
-                    DrawGlyphRunData run;
-                    run.rect = {line_x, baseline_y - ascent_px, line_width, effective_line_height};
-                    run.color = text_color;
-                    run.font_size = font_size;
-                    run.font_family = style.font_family;
-                    run.font_weight = style.font_weight;
-                    run.font_style = style.font_style;
-                    run.font_paths = line_shaped.font_paths;
-                    run.font_path = line_shaped.font_path;
-                    run.baseline_x = line_x;
-                    run.baseline_y = baseline_y;
-                    run.units_per_em = line_shaped.units_per_em;
-                    run.scale_to_pixels = line_shaped.scale_to_pixels;
-                    fillTextShadow(run, style);
-
-                    for (const auto& sg : line_shaped.glyphs) {
-                        GlyphInstance inst{sg.glyph_id, sg.pen_x_units, sg.pen_y_units,
-                                          sg.font_path_index, sg.units_per_em};
-                        run.glyphs.push_back(inst);
-                    }
-                    builder.addGlyphRun(std::move(run));
-                }
-            }
-
-            line_start = line_end;
-            // Skip whitespace at start of next line
-            while (line_start < text.length() && std::isspace(static_cast<unsigned char>(text[line_start]))) {
-                ++line_start;
-            }
-            ++line_index;
-
-            // Safety limit
-            if (line_index > 100) break;
-        }
+        int emitted = wrapAndEmitSegment(text, 0, ctx);
+        (void)emitted;
     } else {
-        // Single line rendering
-        float baseline_y = y + pad_t + baseline_offset;
-
-        DrawGlyphRunData run;
-        run.rect = {text_x, baseline_y - ascent_px,
-                   nowrap ? text_width : std::min(text_width, inner_width),
-                   effective_line_height};
-        run.color = text_color;
-        run.font_size = font_size;
-        run.font_family = style.font_family;
-        run.font_weight = style.font_weight;
-        run.font_style = style.font_style;
-        run.font_paths = shaped.font_paths;
-        run.font_path = shaped.font_path;
-        run.baseline_x = text_x;
-        run.baseline_y = baseline_y;
-        run.units_per_em = shaped.units_per_em;
-        run.scale_to_pixels = shaped.scale_to_pixels;
-        fillTextShadow(run, style);
-
-        for (const auto& sg : shaped.glyphs) {
-            GlyphInstance inst{sg.glyph_id, sg.pen_x_units, sg.pen_y_units,
-                              sg.font_path_index, sg.units_per_em};
-            run.glyphs.push_back(inst);
-        }
-        builder.addGlyphRun(std::move(run));
+        emitFullTextLine(text, 0, ctx);
     }
 }
 

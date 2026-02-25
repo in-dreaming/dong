@@ -238,6 +238,87 @@ size_t InputElementState::utf8CharAt(size_t byte_offset) const {
     return char_count;
 }
 
+// --- IME composition ---
+
+static size_t utf8CharCountOf(const std::string& s) {
+    size_t count = 0;
+    for (size_t i = 0; i < s.size(); ) {
+        unsigned char c = s[i];
+        if ((c & 0x80) == 0) i += 1;
+        else if ((c & 0xE0) == 0xC0) i += 2;
+        else if ((c & 0xF0) == 0xE0) i += 3;
+        else i += 4;
+        count++;
+    }
+    return count;
+}
+
+size_t InputElementState::getCompositionLength() const {
+    return utf8CharCountOf(composition_text_);
+}
+
+void InputElementState::startComposition(const std::string& text) {
+    if (hasSelection()) {
+        deleteSelection();
+    }
+    is_composing_ = true;
+    composition_start_ = cursor_position_;
+    composition_text_ = text;
+
+    // 在光标位置插入组合文本
+    size_t byte_offset = utf8ByteOffset(cursor_position_);
+    value_.insert(byte_offset, text);
+    cursor_position_ += utf8CharCountOf(text);
+}
+
+void InputElementState::updateComposition(const std::string& text) {
+    if (!is_composing_) {
+        startComposition(text);
+        return;
+    }
+
+    // 删除旧的组合文本
+    size_t old_chars = utf8CharCountOf(composition_text_);
+    size_t byte_start = utf8ByteOffset(composition_start_);
+    size_t byte_end = utf8ByteOffset(composition_start_ + old_chars);
+    value_.erase(byte_start, byte_end - byte_start);
+
+    // 插入新的组合文本
+    composition_text_ = text;
+    value_.insert(byte_start, text);
+    cursor_position_ = composition_start_ + utf8CharCountOf(text);
+}
+
+void InputElementState::endComposition() {
+    if (!is_composing_) return;
+
+    // 删除组合文本（SDL 会紧接着发 TextInput 提交最终文本）
+    size_t comp_chars = utf8CharCountOf(composition_text_);
+    size_t byte_start = utf8ByteOffset(composition_start_);
+    size_t byte_end = utf8ByteOffset(composition_start_ + comp_chars);
+    value_.erase(byte_start, byte_end - byte_start);
+    cursor_position_ = composition_start_;
+
+    is_composing_ = false;
+    composition_text_.clear();
+    composition_start_ = 0;
+}
+
+void InputElementState::cancelComposition() {
+    if (!is_composing_) return;
+
+    // 撤销组合文本
+    size_t comp_chars = utf8CharCountOf(composition_text_);
+    size_t byte_start = utf8ByteOffset(composition_start_);
+    size_t byte_end = utf8ByteOffset(composition_start_ + comp_chars);
+    value_.erase(byte_start, byte_end - byte_start);
+    cursor_position_ = composition_start_;
+
+    is_composing_ = false;
+    composition_text_.clear();
+    composition_start_ = 0;
+}
+
 // 辅助函数实现
 InputElementState* getInputState(DOMNodePtr node) {
     if (!node || !isInputElement(node)) return nullptr;

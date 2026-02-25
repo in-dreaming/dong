@@ -1965,6 +1965,11 @@ struct EngineView::Impl {
 
             auto* state = dong::dom::getInputState(focused);
             if (state) {
+                // 如果正在组合中，先结束组合（endComposition 会撤回预编辑文本）
+                if (state->isComposing()) {
+                    finishComposition(focused, state);
+                }
+
                 state->insertText(text, focused);
                 focused->setAttribute("value", state->getValue());
                 markNeedsRepaint();
@@ -1980,6 +1985,87 @@ struct EngineView::Impl {
             }
         }
     }
+
+    void sendTextEditing(const char* text, int32_t cursor, int32_t selection_length) {
+        dong::dom::DOMNodePtr focused;
+        if (focus_manager) {
+            focused = focus_manager->getFocusedElement();
+        }
+        if (!focused || !dong::dom::isEditableElement(focused)) return;
+        if (focused->hasAttribute("readonly")) return;
+
+        auto* state = dong::dom::getInputState(focused);
+        if (!state) return;
+
+        bool is_empty = (!text || !text[0]);
+
+        if (is_empty && state->isComposing()) {
+            // 空文本 = 组合结束
+            finishComposition(focused, state);
+        } else if (!is_empty && !state->isComposing()) {
+            // 首次非空 = 组合开始
+            beginComposition(focused, state, text);
+        } else if (!is_empty && state->isComposing()) {
+            // 后续非空 = 组合更新
+            continueComposition(focused, state, text);
+        }
+        // is_empty && !isComposing → 无事发生
+    }
+
+private:
+    void dispatchCompositionJS(const dong::dom::DOMNodePtr& node,
+                               const char* type, const char* data) {
+        if (!js_bindings || !script_engine) return;
+        ensureJSBindingsInitialized();
+        uint64_t nid = ensureNodeIdForJS(node);
+        if (!nid) return;
+        js_bindings->dispatchCompositionEvent(nid, type, data);
+    }
+
+    void dispatchInputEventForNode(const dong::dom::DOMNodePtr& node,
+                                    const char* input_type, const char* data) {
+        if (!js_bindings || !script_engine) return;
+        ensureJSBindingsInitialized();
+        uint64_t nid = ensureNodeIdForJS(node);
+        if (!nid) return;
+        js_bindings->dispatchInputEvent(nid, input_type, data);
+    }
+
+    void beginComposition(const dong::dom::DOMNodePtr& focused,
+                          dong::dom::InputElementState* state,
+                          const char* text) {
+        state->startComposition(text);
+        focused->setAttribute("value", state->getValue());
+        markNeedsRepaint();
+
+        // W3C: compositionstart.data is "" (or selected text, which is empty here)
+        dispatchCompositionJS(focused, "compositionstart", "");
+        dispatchCompositionJS(focused, "compositionupdate", text);
+        dispatchInputEventForNode(focused, "insertCompositionText", text);
+    }
+
+    void continueComposition(const dong::dom::DOMNodePtr& focused,
+                             dong::dom::InputElementState* state,
+                             const char* text) {
+        state->updateComposition(text);
+        focused->setAttribute("value", state->getValue());
+        markNeedsRepaint();
+
+        dispatchCompositionJS(focused, "compositionupdate", text);
+        dispatchInputEventForNode(focused, "insertCompositionText", text);
+    }
+
+    void finishComposition(const dong::dom::DOMNodePtr& focused,
+                           dong::dom::InputElementState* state) {
+        std::string final_data = state->getCompositionText();
+        state->endComposition();
+        focused->setAttribute("value", state->getValue());
+        markNeedsRepaint();
+
+        dispatchCompositionJS(focused, "compositionend", final_data.c_str());
+    }
+
+public:
 
     bool evalScript(const char* code) {
         if (!code || !script_engine) {
@@ -2079,6 +2165,10 @@ void EngineView::sendKey(uint32_t key_code, bool pressed) {
 
 void EngineView::sendText(const char* text) {
     if (impl_) impl_->sendText(text);
+}
+
+void EngineView::sendTextEditing(const char* text, int32_t cursor, int32_t selection_length) {
+    if (impl_) impl_->sendTextEditing(text, cursor, selection_length);
 }
 
 bool EngineView::evalScript(const char* code) {

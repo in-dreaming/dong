@@ -85,4 +85,31 @@ inline std::string toLower(const std::string& str) {
     return result;
 }
 
+// Collapse consecutive spaces/tabs into single space, but preserve explicit newlines (\n).
+// Used for white-space: pre-wrap / pre-line behavior.
+inline std::string collapseSpacesPreserveNewlines(const std::string& input) {
+    if (input.empty()) return "";
+    std::string output;
+    output.reserve(input.size());
+    bool in_space = false;
+    for (char c : input) {
+        if (c == '\r') continue;
+        if (c == '\n') {
+            output.push_back('\n');
+            in_space = false;
+            continue;
+        }
+        if (c == ' ' || c == '\t' || c == '\v' || c == '\f') {
+            if (!in_space) {
+                output.push_back(' ');
+                in_space = true;
+            }
+            continue;
+        }
+        output.push_back(c);
+        in_space = false;
+    }
+    return output;
+}
+
 } // namespace dong

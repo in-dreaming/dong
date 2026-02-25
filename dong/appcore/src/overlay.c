@@ -526,6 +526,15 @@ DONG_APPCORE_API void dong_overlay_send_text(dong_overlay_t* overlay, const char
     }
 }
 
+DONG_APPCORE_API void dong_overlay_send_text_editing(dong_overlay_t* overlay,
+                                                      const char* text,
+                                                      int32_t cursor,
+                                                      int32_t selection_length) {
+    if (overlay && overlay->engine) {
+        dong_engine_send_text_editing(overlay->engine, text, cursor, selection_length);
+    }
+}
+
 
 DONG_APPCORE_API void dong_overlay_set_position(dong_overlay_t* overlay, int32_t x, int32_t y) {
     if (overlay) { overlay->pos_x = x; overlay->pos_y = y; }

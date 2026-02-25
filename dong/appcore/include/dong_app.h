@@ -51,6 +51,7 @@ typedef enum dong_app_event_type_t {
     DONG_APP_EVENT_MOUSE_WHEEL,
     DONG_APP_EVENT_KEY,
     DONG_APP_EVENT_TEXT,
+    DONG_APP_EVENT_TEXT_EDITING,
 } dong_app_event_type_t;
 
 typedef struct dong_app_event_t {
@@ -95,6 +96,12 @@ typedef struct dong_app_event_t {
         struct {
             const char* text;
         } text;
+
+        struct {
+            const char* text;
+            int32_t cursor;
+            int32_t selection_length;
+        } text_editing;
     };
 } dong_app_event_t;
 

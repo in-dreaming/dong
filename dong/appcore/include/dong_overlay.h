@@ -76,6 +76,10 @@ DONG_APPCORE_API void dong_overlay_send_mouse_button(dong_overlay_t* overlay, in
 DONG_APPCORE_API void dong_overlay_send_mouse_wheel(dong_overlay_t* overlay, float delta_x, float delta_y);
 DONG_APPCORE_API void dong_overlay_send_key(dong_overlay_t* overlay, uint32_t key_code, int pressed);
 DONG_APPCORE_API void dong_overlay_send_text(dong_overlay_t* overlay, const char* text);
+DONG_APPCORE_API void dong_overlay_send_text_editing(dong_overlay_t* overlay,
+                                                      const char* text,
+                                                      int32_t cursor,
+                                                      int32_t selection_length);
 
 // =============================================================================
 // Configuration

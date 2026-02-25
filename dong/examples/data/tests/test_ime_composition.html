@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>IME Composition Event Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        h2 {
+            margin-top: 16px;
+            color: #333;
+        }
+        input, textarea {
+            display: block;
+            margin: 8px 0;
+            padding: 6px 8px;
+            font-size: 14px;
+            width: 300px;
+        }
+        textarea {
+            height: 60px;
+        }
+        #log {
+            margin-top: 20px;
+            padding: 10px;
+            background: #f5f5f5;
+            border: 1px solid #ccc;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <h1>IME Composition Test</h1>
+
+    <h2>Input (composition events)</h2>
+    <input type="text" id="test-input" placeholder="Type here with IME">
+
+    <h2>Textarea (composition events)</h2>
+    <textarea id="test-textarea" placeholder="Type here with IME"></textarea>
+
+    <h2>Event Log</h2>
+    <div id="log"></div>
+
+    <script>
+        var logEl = document.getElementById('log');
+        function log(msg) {
+            logEl.textContent = logEl.textContent + msg + '\n';
+        }
+
+        function attachEvents(el) {
+            el.addEventListener('compositionstart', function(e) {
+                log('[' + el.id + '] compositionstart: data="' + e.data + '"');
+            });
+            el.addEventListener('compositionupdate', function(e) {
+                log('[' + el.id + '] compositionupdate: data="' + e.data + '"');
+            });
+            el.addEventListener('compositionend', function(e) {
+                log('[' + el.id + '] compositionend: data="' + e.data + '"');
+            });
+            el.addEventListener('input', function(e) {
+                log('[' + el.id + '] input: value="' + el.value + '"');
+            });
+        }
+
+        attachEvents(document.getElementById('test-input'));
+        attachEvents(document.getElementById('test-textarea'));
+    </script>
+</body>
+</html>

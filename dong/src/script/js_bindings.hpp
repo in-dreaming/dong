@@ -82,6 +82,9 @@ public:
     // Input event dispatch with inputType and data properties
     void dispatchInputEvent(uint64_t node_id, const char* input_type, const char* data = nullptr);
 
+    // Composition event dispatch (compositionstart/update/end) with data property
+    void dispatchCompositionEvent(uint64_t node_id, const char* type, const char* data);
+
     // Focus event dispatch with relatedTarget property
     void dispatchFocusEvent(uint64_t node_id, const char* type, uint64_t related_node_id);
 

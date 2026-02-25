@@ -253,6 +253,11 @@ static void app_forward_event_to_engine(dong_app_impl_t* app, const dong_app_eve
         case DONG_APP_EVENT_TEXT:
             (void)dong_engine_send_text(app->engine, ev->text.text);
             break;
+        case DONG_APP_EVENT_TEXT_EDITING:
+            (void)dong_engine_send_text_editing(app->engine, ev->text_editing.text,
+                                                ev->text_editing.cursor,
+                                                ev->text_editing.selection_length);
+            break;
         default:
             break;
     }
@@ -339,6 +344,10 @@ static dong_app_event_t app_translate_sdl_event(dong_app_impl_t* app, const SDL_
             return out;
 
         case SDL_EVENT_TEXT_EDITING:
+            out.type = DONG_APP_EVENT_TEXT_EDITING;
+            out.text_editing.text = e->edit.text;
+            out.text_editing.cursor = e->edit.start;
+            out.text_editing.selection_length = e->edit.length;
             if (debug_input_enabled()) {
                 fprintf(stderr, "[DongApp][TextEditing] %s\n", e->edit.text ? e->edit.text : "(null)");
             }

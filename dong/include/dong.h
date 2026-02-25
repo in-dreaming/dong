@@ -90,6 +90,7 @@ DONG_API dong_result_t dong_engine_send_mouse_button(dong_engine_t* engine, int3
 DONG_API dong_result_t dong_engine_send_mouse_wheel(dong_engine_t* engine, float delta_x, float delta_y);
 DONG_API dong_result_t dong_engine_send_key(dong_engine_t* engine, uint32_t key_code, int pressed);
 DONG_API dong_result_t dong_engine_send_text(dong_engine_t* engine, const char* text);
+DONG_API dong_result_t dong_engine_send_text_editing(dong_engine_t* engine, const char* text, int32_t cursor, int32_t selection_length);
 
 // Script evaluation
 DONG_API dong_result_t dong_engine_eval_script(dong_engine_t* engine, const char* code);

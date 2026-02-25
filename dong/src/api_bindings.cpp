@@ -238,6 +238,16 @@ dong_result_t dong_engine_send_text(dong_engine_t* engine, const char* text) {
     return DONG_OK;
 }
 
+dong_result_t dong_engine_send_text_editing(dong_engine_t* engine, const char* text, int32_t cursor, int32_t selection_length) {
+    auto* e = asEngine(engine);
+    if (!e || !e->view) {
+        return DONG_ERR_INVALID_ARG;
+    }
+
+    e->view->sendTextEditing(text, cursor, selection_length);
+    return DONG_OK;
+}
+
 dong_result_t dong_engine_eval_script(dong_engine_t* engine, const char* code) {
     auto* e = asEngine(engine);
     if (!e || !e->view || !code) {

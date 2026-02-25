@@ -207,36 +207,7 @@ inline void fillTextShadow(DrawGlyphRunData& glyph_run, const dong::dom::Compute
 using dong::toLower;
 inline std::string toLowerCopy(const std::string& s) { return toLower(s); }
 
-// Similar to collapseWhitespace, but preserves explicit newlines (\n).
-// Used to implement `white-space: pre-line`-like behavior without destroying line breaks.
-inline std::string collapseSpacesPreserveNewlines(const std::string& input) {
-    if (input.empty()) return "";
-
-    std::string output;
-    output.reserve(input.size());
-
-    bool in_space = false;
-    for (char c : input) {
-        if (c == '\r') {
-            continue;
-        }
-        if (c == '\n') {
-            output.push_back('\n');
-            in_space = false;
-            continue;
-        }
-        if (c == ' ' || c == '\t' || c == '\v' || c == '\f') {
-            if (!in_space) {
-                output.push_back(' ');
-                in_space = true;
-            }
-            continue;
-        }
-        output.push_back(c);
-        in_space = false;
-    }
-
-    return output;
-}
+// Delegate to shared implementation in string_utils.h
+using dong::collapseSpacesPreserveNewlines;
 
 } // namespace dong::render::painter_detail

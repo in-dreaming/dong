@@ -56,6 +56,7 @@ using dong::render::TextMeasureCacheKey;
 using dong::render::TextMeasureResult;
 using dong::render::TextMeasureCache;
 using dong::collapseWhitespace;
+using dong::collapseSpacesPreserveNewlines;
 
 // 璁＄畻鍏冪礌鐨勫唴鍦ㄦ枃鏈搴︼紙鍖呭惈 padding锛夛紝鐢ㄤ簬鎸夐挳绛?inline-block 鍏冪礌鐨勮嚜閫傚簲瀹藉害
 // 绗﹀悎 CSS 鏍囧噯锛歸idth: auto 鏃讹紝鍏冪礌瀹藉害 = 鍐呭瀹藉害 + padding + border
@@ -389,7 +390,18 @@ float computeIntrinsicTextHeight(const dom::DOMNodePtr& node, float parent_conte
         return 0.0f;
     }
 
-    std::string text = collapseWhitespace(raw_text);
+    // Respect white-space property for newline preservation
+    std::string ws = style.white_space;
+    std::transform(ws.begin(), ws.end(), ws.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    bool ws_preserves_newlines = (ws == "pre-wrap" || ws == "pre" || ws == "pre-line");
+
+    std::string text;
+    if (ws_preserves_newlines) {
+        text = collapseSpacesPreserveNewlines(raw_text);
+    } else {
+        text = collapseWhitespace(raw_text);
+    }
     if (text.empty()) return 0.0f;
 
     float wrap_width_px = 0.0f;
@@ -427,6 +439,63 @@ float computeIntrinsicTextHeight(const dom::DOMNodePtr& node, float parent_conte
     req.font_weight = style.font_weight;
     req.font_style = style.font_style;
     req.font_size = font_size;
+
+    // For texts with forced newlines, compute per-segment line counts
+    if (ws_preserves_newlines && text.find('\n') != std::string::npos) {
+        // Get effective_line_height from a sample shaping
+        ShapedText sample{};
+        TextShapeRequest sample_req = req;
+        sample_req.text = "X";
+        if (!shaper.shape(sample_req, sample) || sample.scale_to_pixels <= 0.0f) {
+            return font_size * 1.2f;
+        }
+        float scale = sample.scale_to_pixels;
+        float effective_line_height = sample.line_height_units * scale;
+        float min_lh = font_size * 1.2f;
+        if (effective_line_height < min_lh) effective_line_height = min_lh;
+
+        int total_lines = 0;
+        size_t seg_start = 0;
+        while (seg_start <= text.size()) {
+            size_t nl_pos = text.find('\n', seg_start);
+            size_t seg_end = (nl_pos == std::string::npos) ? text.size() : nl_pos;
+            std::string seg = text.substr(seg_start, seg_end - seg_start);
+
+            if (seg.empty()) {
+                total_lines += 1; // empty line
+            } else {
+                TextShapeRequest seg_req = req;
+                seg_req.text = seg;
+                ShapedText seg_shaped{};
+                if (shaper.shape(seg_req, seg_shaped) && !seg_shaped.glyphs.empty()
+                    && seg_shaped.scale_to_pixels > 0.0f) {
+                    float seg_width = seg_shaped.width_units * seg_shaped.scale_to_pixels;
+                    if (wrap_width_px > 0.0f && seg_width > wrap_width_px) {
+                        int lines = static_cast<int>(std::ceil(seg_width / wrap_width_px));
+                        total_lines += std::max(lines, 1);
+                    } else {
+                        total_lines += 1;
+                    }
+                } else {
+                    total_lines += 1;
+                }
+            }
+
+            if (nl_pos == std::string::npos) break;
+            seg_start = nl_pos + 1;
+        }
+
+        if (total_lines <= 0) total_lines = 1;
+
+        float pad_top = style.padding_top.isPixel() ? style.padding_top.value : 0.0f;
+        float pad_bottom = style.padding_bottom.isPixel() ? style.padding_bottom.value : 0.0f;
+        float result = effective_line_height * static_cast<float>(total_lines)
+                       + pad_top + pad_bottom;
+        if (result > 10000.0f || result < 0.0f || !std::isfinite(result)) {
+            return font_size * 1.2f;
+        }
+        return result;
+    }
 
     ShapedText shaped{};
     if (!shaper.shape(req, shaped) || shaped.glyphs.empty()) {

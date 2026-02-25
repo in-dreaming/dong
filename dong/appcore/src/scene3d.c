@@ -1410,6 +1410,18 @@ static void handle_text(dong_scene3d_t* scene, const char* text) {
     scr->dirty = 1;
 }
 
+static void handle_text_editing(dong_scene3d_t* scene, const char* text,
+                                int32_t cursor, int32_t selection_length) {
+    if (!scene) return;
+    if (scene->focused_idx < 0 || scene->focused_idx >= scene->screen_count) return;
+
+    dong_screen3d_t* scr = scene->screens[scene->focused_idx];
+    if (!scr || !scr->engine) return;
+
+    dong_engine_send_text_editing(scr->engine, text, cursor, selection_length);
+    scr->dirty = 1;
+}
+
 
 DONG_APPCORE_API void dong_scene3d_process_event(dong_scene3d_t* scene, const dong_app_event_t* event) {
     if (!scene || !event) return;
@@ -1462,6 +1474,11 @@ DONG_APPCORE_API void dong_scene3d_process_event(dong_scene3d_t* scene, const do
         }
         case DONG_APP_EVENT_TEXT:
             handle_text(scene, event->text.text);
+            break;
+        case DONG_APP_EVENT_TEXT_EDITING:
+            handle_text_editing(scene, event->text_editing.text,
+                                event->text_editing.cursor,
+                                event->text_editing.selection_length);
             break;
         default:
             break;

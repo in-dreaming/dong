@@ -46,6 +46,7 @@ public:
     void sendMouseWheel(float delta_x, float delta_y);
     void sendKey(uint32_t key_code, bool pressed);
     void sendText(const char* text);
+    void sendTextEditing(const char* text, int32_t cursor, int32_t selection_length);
 
     // Script
     bool evalScript(const char* code);

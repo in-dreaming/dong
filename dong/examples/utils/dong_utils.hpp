@@ -265,6 +265,11 @@ struct HtmlScreen3D {
     void sendTextInput(const char* text) {
         if (engine) dong_engine_send_text(engine, text);
     }
+
+    // 发送 IME 编辑事件（组合输入）
+    void sendTextEditing(const char* text, int32_t cursor, int32_t selection_length) {
+        if (engine) dong_engine_send_text_editing(engine, text, cursor, selection_length);
+    }
     
     // 执行 JavaScript 代码
     bool eval(const char* js_code) {

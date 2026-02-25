@@ -2284,6 +2284,10 @@ void JSBindings::ensureEventBridgeForNode(const dom::DOMNodePtr& node, const std
         callback = [this, node_id, type](const dom::Event&) {
             this->dispatchSimpleEvent(node_id, type.c_str());
         };
+    } else if (type == "compositionstart" || type == "compositionupdate" || type == "compositionend") {
+        callback = [this, node_id, type](const dom::Event& ev) {
+            this->dispatchCompositionEvent(node_id, type.c_str(), ev.input_data.c_str());
+        };
     } else {
         // Unknown event type - still create a simple bridge
         callback = [this, node_id, type](const dom::Event&) {
@@ -2591,6 +2595,57 @@ void JSBindings::dispatchInputEvent(uint64_t node_id, const char* input_type, co
             const char* err = JS_ToCString(ctx, exc);
             if (err) {
                 std::fprintf(stderr, "[JSBindings] InputEvent error: %s\n", err);
+                JS_FreeCString(ctx, err);
+            }
+            JS_FreeValue(ctx, exc);
+        }
+        JS_FreeValue(ctx, ret);
+        if (!JS_IsUndefined(this_val)) {
+            JS_FreeValue(ctx, this_val);
+        }
+        JS_FreeValue(ctx, ev);
+    }
+}
+
+void JSBindings::dispatchCompositionEvent(uint64_t node_id, const char* type, const char* data) {
+    if (!engine_) return;
+    if (!type || !type[0]) return;
+
+    JSContext* ctx = engine_->getContext();
+    if (!ctx) return;
+
+    auto node_it = listeners_.find(node_id);
+    if (node_it == listeners_.end()) return;
+    auto& type_map = node_it->second;
+    auto type_it = type_map.find(type);
+    if (type_it == type_map.end()) return;
+
+    auto& funcs = type_it->second;
+    for (auto& fn : funcs) {
+        if (!JS_IsFunction(ctx, fn)) continue;
+
+        JSValue ev = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, ev, "type", JS_NewString(ctx, type));
+        JS_SetPropertyStr(ctx, ev, "bubbles", JS_TRUE);
+        JS_SetPropertyStr(ctx, ev, "cancelable", JS_TRUE);
+        JS_SetPropertyStr(ctx, ev, "data", data ? JS_NewString(ctx, data) : JS_NewString(ctx, ""));
+
+        JSValue this_val = JS_UNDEFINED;
+        auto dom_it = id_to_node_.find(node_id);
+        if (dom_it != id_to_node_.end()) {
+            JSValue target = createJSElement(ctx, dom_it->second);
+            JSValue current_target = JS_DupValue(ctx, target);
+            this_val = JS_DupValue(ctx, target);
+            JS_SetPropertyStr(ctx, ev, "target", target);
+            JS_SetPropertyStr(ctx, ev, "currentTarget", current_target);
+        }
+
+        JSValue ret = JS_Call(ctx, fn, this_val, 1, &ev);
+        if (JS_IsException(ret)) {
+            JSValue exc = JS_GetException(ctx);
+            const char* err = JS_ToCString(ctx, exc);
+            if (err) {
+                std::fprintf(stderr, "[JSBindings] CompositionEvent error: %s\n", err);
                 JS_FreeCString(ctx, err);
             }
             JS_FreeValue(ctx, exc);

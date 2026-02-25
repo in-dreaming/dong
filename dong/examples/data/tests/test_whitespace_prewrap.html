@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>white-space: pre-wrap test</title>
+<style>
+body { margin: 10px; font-family: sans-serif; font-size: 14px; background: #fff; }
+
+.box {
+  border: 1px solid #333;
+  padding: 8px;
+  margin-bottom: 10px;
+  width: 300px;
+}
+
+#log {
+  white-space: pre-wrap;
+  background: #f5f5f5;
+  height: 150px;
+  overflow: auto;
+}
+
+#pre-line-box {
+  white-space: pre-line;
+  background: #eef;
+}
+
+#normal-box {
+  white-space: normal;
+  background: #efe;
+}
+</style>
+</head>
+<body>
+  <div class="box" id="log"></div>
+  <div class="box" id="pre-line-box"></div>
+  <div class="box" id="normal-box"></div>
+
+  <script>
+    var logEl = document.getElementById('log');
+    logEl.textContent = 'Line 1\nLine 2\nLine 3\n\nLine 5 (after empty line)\nA long line that should wrap when it exceeds the container width boundary naturally';
+
+    var preLineEl = document.getElementById('pre-line-box');
+    preLineEl.textContent = 'pre-line: A\npre-line: B\npre-line: C';
+
+    var normalEl = document.getElementById('normal-box');
+    normalEl.textContent = 'normal: A\nnormal: B\nnormal: C (newlines should collapse)';
+  </script>
+</body>
+</html>

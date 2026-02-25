@@ -52,6 +52,21 @@ public:
     const std::string& getType() const { return type_; }
     void setType(const std::string& type) { type_ = type; }
 
+    // IME composition 状态
+    bool isComposing() const { return is_composing_; }
+    const std::string& getCompositionText() const { return composition_text_; }
+    size_t getCompositionStart() const { return composition_start_; }
+    size_t getCompositionLength() const;
+
+    // 开始 IME 组合：记录起始位置，插入初始文本
+    void startComposition(const std::string& text);
+    // 更新 IME 组合：替换组合区间内的文本
+    void updateComposition(const std::string& text);
+    // 结束 IME 组合：清除组合状态（不改文本，SDL 会再发 TextInput）
+    void endComposition();
+    // 取消 IME 组合：撤销组合区间文本，恢复光标
+    void cancelComposition();
+
 private:
     std::string value_;
     std::string placeholder_;
@@ -59,6 +74,11 @@ private:
     size_t cursor_position_ = 0;
     size_t selection_start_ = 0;
     size_t selection_end_ = 0;
+
+    // IME composition 状态
+    bool is_composing_ = false;
+    std::string composition_text_;
+    size_t composition_start_ = 0;  // 组合文本起始字符位置
 
     // UTF-8 辅助函数
     size_t utf8CharCount() const;

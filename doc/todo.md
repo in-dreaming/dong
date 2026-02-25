@@ -44,7 +44,7 @@
 
 ### 输入法（IME/CJK）事件（高 ROI）
 
-- [ ] `compositionstart` / `compositionupdate` / `compositionend` 事件
+- [x] `compositionstart` / `compositionupdate` / `compositionend` 事件 - 已实现 IME 组合事件完整管线：SDL `TEXT_EDITING` → 组合状态机（start/update/end）→ DOM 事件分发 → JS CompositionEvent。支持 `<input>` 和 `<textarea>`。公共 C API 新增 `dong_engine_send_text_editing()`。测试用例：`test_ime_composition.html`
 
 ### 常见 UI 兼容性（仍偏高 ROI）
 
