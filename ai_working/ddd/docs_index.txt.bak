@@ -1,0 +1,17 @@
+# DDD Phase 2: Documentation File Index
+# Select Element Implementation
+
+## Files to Process
+
+[x] dong/doc/todo.md - Mark P0 select task as complete
+[x] dong/CLAUDE.md - Add select element to implemented features
+[ ] dong/README.md - Update feature list if needed
+
+## Optional Files (Check if they exist)
+
+[ ] dong/doc/features.md - Document select element support
+[ ] dong/doc/form_elements.md - Add select element documentation
+
+---
+
+Status: 0/3 required files processed

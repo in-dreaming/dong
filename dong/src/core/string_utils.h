@@ -31,6 +31,33 @@ inline std::string collapseWhitespace(const std::string& input) {
     return output.substr(first, last - first + 1);
 }
 
+// Collapse consecutive whitespace into single space, but keep trailing space.
+// Used in Mixed text path where boundary spaces between text nodes and inline
+// elements must be preserved for correct word spacing.
+// Trims leading whitespace (HTML formatting indentation) but preserves trailing
+// space so adjacent inline elements have proper word separation.
+inline std::string collapseWhitespaceKeepTrailing(const std::string& input) {
+    if (input.empty()) return "";
+    std::string output;
+    output.reserve(input.size());
+    bool in_space = false;
+    for (char c : input) {
+        if (std::isspace(static_cast<unsigned char>(c))) {
+            if (!in_space) {
+                output.push_back(' ');
+                in_space = true;
+            }
+        } else {
+            output.push_back(c);
+            in_space = false;
+        }
+    }
+    // Trim leading spaces only; preserve trailing space for word separation
+    size_t first = output.find_first_not_of(' ');
+    if (first == std::string::npos) return "";
+    return output.substr(first);
+}
+
 // Trim leading and trailing whitespace
 inline std::string trimWhitespace(const std::string& str) {
     size_t first = str.find_first_not_of(" \t\n\r\f\v");

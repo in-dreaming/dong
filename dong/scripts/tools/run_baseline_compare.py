@@ -25,6 +25,66 @@ def find_html_render_test(bin_dir: Path) -> Path | None:
     return None
 
 
+def _run_single_case(stem, html, case_dir, args, exe, baseline, vl_multi, bin_dir):
+    """Run baseline + dong render + merge for a single test case."""
+    # Clean old outputs
+    for p in case_dir.glob(f"{stem}_f*.bmp"):
+        try:
+            p.unlink()
+        except OSError:
+            pass
+    for p in [case_dir / f"{stem}_merged.png", case_dir / f"{stem}_report.json", case_dir / f"{stem}_base.png"]:
+        try:
+            if p.exists():
+                p.unlink()
+        except OSError:
+            pass
+
+    # Browser baseline
+    base_png = case_dir / f"{stem}_base.png"
+    print(f"[BASE] {stem} -> {base_png}")
+    cmd_base = [
+        sys.executable, str(baseline), str(html),
+        "--out", str(base_png),
+        "--width", str(args.width),
+        "--height", str(args.height),
+        "--wait-ms", str(args.base_wait_ms),
+    ]
+    if args.click:
+        cmd_base += ["--click", args.click,
+                     "--post-click-wait-ms", str(args.base_post_click_wait_ms)]
+    run(cmd_base)
+
+    # Dong frames
+    out_base = str(case_dir / f"{stem}.bmp")
+    print(f"[DONG] {stem} frames={args.frames} -> {case_dir}")
+    cmd = ["/usr/bin/env", "DONG_DISABLE_SCROLLBARS=1"]
+    click_xy = args.dong_click or args.click
+    if click_xy:
+        cmd.append(f"DONG_TEST_CLICK={click_xy},1")
+    cmd += [str(exe), str(html), out_base,
+            str(args.width), str(args.height), str(args.frames),
+            "--frame-ms", str(args.frame_ms)]
+    if not args.update:
+        cmd.append("--no-update")
+    run(cmd, cwd=str(bin_dir))
+
+    # Merge + report
+    merged = case_dir / f"{stem}_merged.png"
+    report = case_dir / f"{stem}_report.json"
+    print(f"[MERGE] {stem} -> {merged}")
+    cmd2 = [sys.executable, str(vl_multi), str(html),
+            "--base", str(base_png)]
+    if args.frames <= 1:
+        cmd2 += ["--frames", out_base]
+    else:
+        cmd2 += ["--glob", str(case_dir / f"{stem}_f*.bmp")]
+    cmd2 += ["--out-image", str(merged), "--out-json", str(report)]
+    if not args.llm:
+        cmd2.append("--no-llm")
+    run(cmd2)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Render browser baseline + dong multi-frame outputs, then build a merged diff image + JSON report.")
     ap.add_argument("--bin-dir", default="zig-out/bin", help="Directory containing html_render_test (default: zig-out/bin)")
@@ -37,6 +97,7 @@ def main() -> int:
     ap.add_argument("--update", action="store_true", help="Call dong_view_update() between frames")
     ap.add_argument("--llm", action="store_true", help="Enable LLM analysis in vl_tool_multi.py")
     ap.add_argument("--case", default="", help="Only run one case by stem (e.g. cursor_test)")
+    ap.add_argument("--skip", nargs="*", default=[], help="Skip cases by stem (e.g. --skip complex foo)")
 
     ap.add_argument("--click", default="", help="Optional baseline click before capture, format: x,y (e.g. 240,250)")
     ap.add_argument("--dong-click", default="", help="Optional dong click, format: x,y (button defaults to 1)")
@@ -63,109 +124,30 @@ def main() -> int:
     html_files = sorted(tests_dir.glob("*.html"))
     if args.case:
         html_files = [p for p in html_files if p.stem == args.case]
+    if args.skip:
+        skip_set = set(args.skip)
+        html_files = [p for p in html_files if p.stem not in skip_set]
 
     if not html_files:
         print("ERROR: no html tests selected", file=sys.stderr)
         return 3
 
+    failed = []
     for html in html_files:
         stem = html.stem
         case_dir = out_dir / stem
         case_dir.mkdir(parents=True, exist_ok=True)
 
-        # Clean old outputs to avoid stale frames (different frame count / zero-pad width) polluting the glob.
-        for p in case_dir.glob(f"{stem}_f*.bmp"):
-            try:
-                p.unlink()
-            except OSError:
-                pass
-        for p in [case_dir / f"{stem}_merged.png", case_dir / f"{stem}_report.json", case_dir / f"{stem}_base.png"]:
-            try:
-                if p.exists():
-                    p.unlink()
-            except OSError:
-                pass
+        try:
+            _run_single_case(stem, html, case_dir, args, exe, baseline, vl_multi, bin_dir)
+            print(f"[DONE] {stem}")
+        except RuntimeError as e:
+            print(f"[CRASH] {stem}: {e}", file=sys.stderr)
+            failed.append(stem)
 
-        base_png = case_dir / f"{stem}_base.png"
-        print(f"[BASE] {stem} -> {base_png}")
-        cmd_base = [
-            sys.executable,
-            str(baseline),
-            str(html),
-            "--out",
-            str(base_png),
-            "--width",
-            str(args.width),
-            "--height",
-            str(args.height),
-            "--wait-ms",
-            str(args.base_wait_ms),
-        ]
-        if args.click:
-            cmd_base += [
-                "--click",
-                args.click,
-                "--post-click-wait-ms",
-                str(args.base_post_click_wait_ms),
-            ]
-        run(cmd_base)
-
-        # Dong frames
-        out_base = str(case_dir / f"{stem}.bmp")
-        print(f"[DONG] {stem} frames={args.frames} -> {case_dir}")
-        cmd = [
-            "/usr/bin/env",
-            "DONG_DISABLE_SCROLLBARS=1",
-        ]
-        click_xy = args.dong_click or args.click
-        if click_xy:
-            cmd.append(f"DONG_TEST_CLICK={click_xy},1")
-        cmd += [
-            str(exe),
-            str(html),
-            out_base,
-            str(args.width),
-            str(args.height),
-            str(args.frames),
-            "--frame-ms",
-            str(args.frame_ms),
-        ]
-        if not args.update:
-            cmd.append("--no-update")
-        run(cmd, cwd=str(bin_dir))
-
-        # Merge + report
-        pad = len(str(args.frames - 1))
-        base_frame = case_dir / f"{stem}_f{str(0).zfill(pad)}.bmp"
-        merged = case_dir / f"{stem}_merged.png"
-        report = case_dir / f"{stem}_report.json"
-        print(f"[MERGE] {stem} -> {merged}")
-
-        cmd2 = [
-            sys.executable,
-            str(vl_multi),
-            str(html),
-            "--base",
-            str(base_png),
-        ]
-        if args.frames <= 1:
-            cmd2 += ["--frames", out_base]
-        else:
-            cmd2 += ["--glob", str(case_dir / f"{stem}_f*.bmp")]
-
-        cmd2 += [
-            "--out-image",
-            str(merged),
-            "--out-json",
-            str(report),
-        ]
-        if not args.llm:
-            cmd2.append("--no-llm")
-        run(cmd2)
-
-        print(f"[DONE] {stem}: {report}")
-
-    return 0
+    if failed:
+        print(f"\n[SUMMARY] {len(failed)} case(s) crashed: {', '.join(failed)}", file=sys.stderr)
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

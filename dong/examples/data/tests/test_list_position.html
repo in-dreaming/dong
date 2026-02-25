@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>List Marker Position Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        .outside { 
+            list-style-position: outside;
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin: 20px 0;
+        }
+        .inside { 
+            list-style-position: inside;
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin: 20px 0;
+        }
+        h2 {
+            margin-top: 30px;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <h1>List Marker Position Test</h1>
+    
+    <h2>outside (default - marker in margin area)</h2>
+    <ul class="outside">
+        <li>Marker should be outside the content box, in the margin area</li>
+        <li>Notice the marker is to the left of the border</li>
+    </ul>
+    
+    <h2>inside (marker in content flow)</h2>
+    <ul class="inside">
+        <li>Marker should be inside the content flow</li>
+        <li>Notice the marker is inside the border, part of the content</li>
+    </ul>
+    
+    <h2>Comparison with ordered lists</h2>
+    <div style="display: flex; gap: 20px;">
+        <div style="flex: 1;">
+            <h3>outside</h3>
+            <ol class="outside">
+                <li>First item</li>
+                <li>Second item</li>
+                <li>Third item</li>
+            </ol>
+        </div>
+        <div style="flex: 1;">
+            <h3>inside</h3>
+            <ol class="inside">
+                <li>First item</li>
+                <li>Second item</li>
+                <li>Third item</li>
+            </ol>
+        </div>
+    </div>
+</body>
+</html>

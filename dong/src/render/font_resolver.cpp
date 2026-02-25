@@ -275,6 +275,52 @@ int normalizeFontWeight(const std::string& css_weight) {
     return value;
 }
 
+// Bold-variant file paths for common font families.
+// Each entry is checked for existence at runtime; missing paths are silently
+// skipped by findExistingFont().
+void appendBoldCandidatesForFamily(const std::string& canonical_family,
+                                   std::vector<std::string>& out) {
+    // Inter Bold (preferred for sans-serif families when Inter is installed)
+    auto pushInterBold = [&] {
+        out.push_back("C:/Windows/Fonts/Inter-Bold.ttf");
+        out.push_back("/Library/Fonts/Inter-Bold.ttf");
+        out.push_back("/usr/share/fonts/truetype/inter/Inter-Bold.ttf");
+    };
+
+    if (canonical_family == "-apple-system" || canonical_family == "sans-serif"
+        || canonical_family == "system-ui" || canonical_family == "blinkmacsystemfont") {
+        pushInterBold();
+        out.push_back("/System/Library/Fonts/Supplemental/Arial Bold.ttf");
+        out.push_back("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf");
+        out.push_back("C:/Windows/Fonts/arialbd.ttf");
+    } else if (canonical_family == "arial") {
+        pushInterBold();
+        out.push_back("/System/Library/Fonts/Supplemental/Arial Bold.ttf");
+        out.push_back("C:/Windows/Fonts/arialbd.ttf");
+        out.push_back("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf");
+    } else if (canonical_family == "helvetica") {
+        pushInterBold();
+        out.push_back("/System/Library/Fonts/Helvetica.ttc");
+        out.push_back("/System/Library/Fonts/Supplemental/Arial Bold.ttf");
+        out.push_back("C:/Windows/Fonts/arialbd.ttf");
+    } else if (canonical_family == "inter") {
+        pushInterBold();
+    } else if (canonical_family == "segoe ui") {
+        out.push_back("C:/Windows/Fonts/segoeuib.ttf");
+        out.push_back("C:/Windows/Fonts/arialbd.ttf");
+    } else if (canonical_family == "serif" || canonical_family == "times"
+               || canonical_family == "times new roman") {
+        out.push_back("/System/Library/Fonts/Supplemental/Times New Roman Bold.ttf");
+        out.push_back("/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf");
+        out.push_back("C:/Windows/Fonts/timesbd.ttf");
+    } else if (canonical_family == "monospace" || canonical_family == "courier"
+               || canonical_family == "courier new") {
+        out.push_back("/System/Library/Fonts/Supplemental/Courier New Bold.ttf");
+        out.push_back("/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf");
+        out.push_back("C:/Windows/Fonts/consolab.ttf");
+    }
+}
+
 // Append more refined candidate paths based on family + weight (e.g. prefer Bold font files for bold weight),
 // if the corresponding file is not found, it will naturally fallback to the generic list in kFontCandidates.
 void appendCandidatesForFamilyAndWeight(const std::string& canonical_family,
@@ -284,20 +330,9 @@ void appendCandidatesForFamilyAndWeight(const std::string& canonical_family,
 
     const bool is_bold = numeric_weight >= 600;
     if (is_bold) {
-        // For bold, prefer common Bold variant paths (ignored if not exist)
-        if (canonical_family == "-apple-system" || canonical_family == "sans-serif") {
-            out.push_back("/System/Library/Fonts/Supplemental/Arial Bold.ttf");
-            out.push_back("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf");
-            out.push_back("C:/Windows/Fonts/arialbd.ttf");
-        } else if (canonical_family == "serif") {
-            out.push_back("/System/Library/Fonts/Supplemental/Times New Roman Bold.ttf");
-            out.push_back("/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf");
-            out.push_back("C:/Windows/Fonts/timesbd.ttf");
-        } else if (canonical_family == "monospace") {
-            out.push_back("/System/Library/Fonts/Supplemental/Courier New Bold.ttf");
-            out.push_back("/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf");
-            out.push_back("C:/Windows/Fonts/consolab.ttf");
-        }
+        // For bold, prefer Bold variant font files before falling back to
+        // the generic (Regular) candidate list.
+        appendBoldCandidatesForFamily(canonical_family, out);
     }
 
     // Generic candidates (including SF/Helvetica/Arial etc), always as fallback

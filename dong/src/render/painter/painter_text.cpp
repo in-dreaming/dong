@@ -61,7 +61,10 @@ ContentAnalysis analyzeChildren(const dom::DOMNodePtr& node) {
 bool tagPrefersText(const std::string& tag) {
     static const std::unordered_set<std::string> kTextPreferredTags = {
         "h1", "h2", "h3", "h4", "h5", "h6",
-        "p", "span", "button", "code", "div", "footer", "label"
+        "p", "span", "button", "code", "div", "footer", "label",
+        "li", "dt", "dd", "td", "th", "figcaption", "blockquote",
+        "a", "em", "strong", "small", "b", "i", "u", "s",
+        "cite", "mark", "sub", "sup", "abbr", "time", "data"
     };
     return kTextPreferredTags.count(tag) > 0;
 }
@@ -139,55 +142,60 @@ MixedPathState initMixedPath(const layout::LayoutNode* layout,
     return s;
 }
 
-void drawInlineChild(const dom::DOMNodePtr& child,
-                     MixedPathState& state,
-                     const dom::ComputedStyle& container_style,
-                     TextShaper& shaper,
-                     DisplayListBuilder& builder) {
-    const auto& cs = child->getComputedStyle();
-    std::string text;
-    for (const auto& gc : child->getChildren()) {
-        if (gc && gc->getType() == dom::DOMNode::NodeType::TEXT) {
-            text += gc->getRawTextContent();
-        }
+// Measure the pixel width of a single space character in the container's font.
+float measureSpaceWidth(const dom::ComputedStyle& style, float font_size, TextShaper& shaper) {
+    TextShapeRequest req{" ", style.font_family, style.font_weight, style.font_style, font_size};
+    ShapedText shaped;
+    if (shaper.shape(req, shaped) && !shaped.glyphs.empty()) {
+        return shaped.width_units * shaped.scale_to_pixels;
     }
-    text = collapseWhitespace(text);
+    return font_size * 0.25f; // rough fallback
+}
+
+// Check whether the raw text of a node ends with whitespace (before collapse).
+bool rawTextEndsWithSpace(const dom::DOMNodePtr& node) {
+    const std::string& raw = node->getRawTextContent();
+    if (raw.empty()) return false;
+    return std::isspace(static_cast<unsigned char>(raw.back()));
+}
+
+// Check whether the raw text of a node starts with whitespace (before collapse).
+bool rawTextStartsWithSpace(const dom::DOMNodePtr& node) {
+    const std::string& raw = node->getRawTextContent();
+    if (raw.empty()) return false;
+    return std::isspace(static_cast<unsigned char>(raw.front()));
+}
+
+// Emit a single shaped text run at the current Mixed-path cursor position.
+void emitInlineTextRun(const std::string& text,
+                       const dom::ComputedStyle& cs,
+                       const dom::ComputedStyle& container_style,
+                       MixedPathState& state,
+                       TextShaper& shaper,
+                       DisplayListBuilder& builder) {
     if (text.empty()) return;
 
     float font_size = cs.font_size > 0.0f ? cs.font_size : state.container_font_size;
-    TextShapeRequest req{text, cs.font_family.empty() ? container_style.font_family : cs.font_family,
-                         cs.font_weight.empty() ? container_style.font_weight : cs.font_weight,
-                         cs.font_style.empty() ? container_style.font_style : cs.font_style,
-                         font_size};
+    std::string family = cs.font_family.empty() ? container_style.font_family : cs.font_family;
+    std::string weight = cs.font_weight.empty() ? container_style.font_weight : cs.font_weight;
+    std::string style  = cs.font_style.empty()  ? container_style.font_style  : cs.font_style;
+
+    TextShapeRequest req{text, family, weight, style, font_size};
     ShapedText shaped;
     if (!shaper.shape(req, shaped) || shaped.glyphs.empty()) return;
 
     float scale = shaped.scale_to_pixels;
     float text_width = shaped.width_units * scale;
     float ascent = shaped.ascent_units > 0.0f ? shaped.ascent_units : font_size / scale;
-    float pad_l = cs.padding_left.isPixel() ? cs.padding_left.value : 0.0f;
-    float pad_r = cs.padding_right.isPixel() ? cs.padding_right.value : 0.0f;
 
-    // Background
-    if (!cs.background_color.empty() && cs.background_color != "transparent") {
-        Rect r{state.x + state.pad_left + state.cumulative_x,
-               state.baseline_y - state.ascent_px,
-               text_width + pad_l + pad_r, state.line_height_px};
-        if (cs.border_radius > 0.0f)
-            builder.addRoundedRect(r, makeColorFromCss(cs.background_color), cs.border_radius);
-        else
-            builder.addRect(r, makeColorFromCss(cs.background_color));
-    }
-
-    // Glyph run
     DrawGlyphRunData run;
-    run.rect = {state.x + state.pad_left + state.cumulative_x + pad_l,
+    run.rect = {state.x + state.pad_left + state.cumulative_x,
                 state.baseline_y - ascent * scale, text_width, state.line_height_px};
     run.color = makeColorFromCss(!cs.color.empty() ? cs.color : container_style.color);
     run.font_size = font_size;
-    run.font_family = cs.font_family.empty() ? container_style.font_family : cs.font_family;
-    run.font_weight = cs.font_weight.empty() ? container_style.font_weight : cs.font_weight;
-    run.font_style = cs.font_style.empty() ? container_style.font_style : cs.font_style;
+    run.font_family = family;
+    run.font_weight = weight;
+    run.font_style  = style;
     run.font_paths = shaped.font_paths;
     run.font_path = shaped.font_path;
     run.baseline_x = run.rect.x;
@@ -197,13 +205,123 @@ void drawInlineChild(const dom::DOMNodePtr& child,
     fillTextShadow(run, cs);
 
     for (const auto& sg : shaped.glyphs) {
-        GlyphInstance inst{sg.glyph_id, sg.pen_x_units, sg.pen_y_units,
-                          sg.font_path_index, sg.units_per_em};
-        run.glyphs.push_back(inst);
+        run.glyphs.push_back({sg.glyph_id, sg.pen_x_units, sg.pen_y_units,
+                              sg.font_path_index, sg.units_per_em});
     }
     builder.addGlyphRun(std::move(run));
-    state.cumulative_x += text_width + pad_l + pad_r;
-    child->setAttribute("__inline_rendered__", "1");
+    state.cumulative_x += text_width;
+}
+
+// Forward declaration for recursive inline rendering.
+void renderInlineSubtree(const dom::DOMNodePtr& node,
+                         const dom::ComputedStyle& effective_style,
+                         const dom::ComputedStyle& container_style,
+                         MixedPathState& state,
+                         TextShaper& shaper,
+                         DisplayListBuilder& builder);
+
+// Render children of an inline element, inheriting the effective computed style.
+// Handles mixed content: TEXT nodes are shaped immediately; nested inline
+// ELEMENT children (e.g. <em> inside <strong>) are rendered recursively with
+// merged styles.
+void renderInlineChildren(const dom::DOMNodePtr& node,
+                          const dom::ComputedStyle& effective_style,
+                          const dom::ComputedStyle& container_style,
+                          MixedPathState& state,
+                          TextShaper& shaper,
+                          DisplayListBuilder& builder) {
+    bool prev_was_text = false;
+    for (const auto& gc : node->getChildren()) {
+        if (!gc) continue;
+
+        if (gc->getType() == dom::DOMNode::NodeType::TEXT) {
+            // Keep trailing space so adjacent inline elements get a word gap.
+            std::string raw = gc->getRawTextContent();
+            std::string text = collapseWhitespace(raw);
+            if (text.empty()) {
+                // Whitespace-only node: if original had content, emit a space gap.
+                if (!raw.empty() && state.cumulative_x > 0.0f) {
+                    state.cumulative_x += measureSpaceWidth(
+                        container_style, state.container_font_size, shaper);
+                }
+                prev_was_text = true;
+                continue;
+            }
+            // Restore leading space when raw text started with whitespace
+            bool raw_starts_with_space = !raw.empty()
+                && std::isspace(static_cast<unsigned char>(raw.front()));
+            if (raw_starts_with_space && state.cumulative_x > 0.0f) {
+                state.cumulative_x += measureSpaceWidth(
+                    container_style, state.container_font_size, shaper);
+            }
+            emitInlineTextRun(text, effective_style, container_style,
+                              state, shaper, builder);
+            // Trailing space compensation
+            bool raw_ends_with_space = std::isspace(static_cast<unsigned char>(raw.back()));
+            if (raw_ends_with_space) {
+                state.cumulative_x += measureSpaceWidth(
+                    container_style, state.container_font_size, shaper);
+            }
+            prev_was_text = true;
+        } else if (gc->getType() == dom::DOMNode::NodeType::ELEMENT) {
+            const auto& child_cs = gc->getComputedStyle();
+            if (child_cs.display == "inline") {
+                renderInlineSubtree(gc, child_cs, container_style,
+                                    state, shaper, builder);
+                prev_was_text = false;
+            }
+        }
+    }
+}
+
+// Render an inline element subtree: optional background, then children.
+void renderInlineSubtree(const dom::DOMNodePtr& node,
+                         const dom::ComputedStyle& effective_style,
+                         const dom::ComputedStyle& container_style,
+                         MixedPathState& state,
+                         TextShaper& shaper,
+                         DisplayListBuilder& builder) {
+    float pad_l = effective_style.padding_left.isPixel() ? effective_style.padding_left.value : 0.0f;
+    float pad_r = effective_style.padding_right.isPixel() ? effective_style.padding_right.value : 0.0f;
+    state.cumulative_x += pad_l;
+
+    float start_x = state.cumulative_x;
+
+    // Merge style: child inherits container for missing fields.
+    dom::ComputedStyle merged = effective_style;
+    if (merged.font_family.empty()) merged.font_family = container_style.font_family;
+    if (merged.font_weight.empty()) merged.font_weight = container_style.font_weight;
+    if (merged.font_style.empty())  merged.font_style  = container_style.font_style;
+    if (merged.color.empty())       merged.color       = container_style.color;
+
+    renderInlineChildren(node, merged, container_style, state, shaper, builder);
+
+    // Background rect spanning all rendered content of this inline element.
+    float content_width = state.cumulative_x - start_x;
+    if (content_width > 0.0f
+        && !effective_style.background_color.empty()
+        && effective_style.background_color != "transparent") {
+        Rect r{state.x + state.pad_left + start_x - pad_l,
+               state.baseline_y - state.ascent_px,
+               content_width + pad_l + pad_r, state.line_height_px};
+        if (effective_style.border_radius > 0.0f)
+            builder.addRoundedRect(r, makeColorFromCss(effective_style.background_color),
+                                   effective_style.border_radius);
+        else
+            builder.addRect(r, makeColorFromCss(effective_style.background_color));
+    }
+
+    state.cumulative_x += pad_r;
+    node->setAttribute("__inline_rendered__", "1");
+}
+
+void drawInlineChild(const dom::DOMNodePtr& child,
+                     MixedPathState& state,
+                     const dom::ComputedStyle& container_style,
+                     TextShaper& shaper,
+                     DisplayListBuilder& builder) {
+    const auto& cs = child->getComputedStyle();
+    renderInlineSubtree(child, cs, container_style, state, shaper, builder);
 }
 
 void drawTextChildAtPosition(const dom::DOMNodePtr& child,
@@ -214,6 +332,9 @@ void drawTextChildAtPosition(const dom::DOMNodePtr& child,
                              const Color& text_color,
                              TextShaper& shaper,
                              DisplayListBuilder& builder) {
+    // Use collapseWhitespace (trims both ends) for the visible glyph run.
+    // Trailing-space compensation for word separation is handled in the
+    // caller (drawTextChild) by adjusting cumulative_x.
     std::string text = collapseWhitespace(child->getRawTextContent());
     if (text.empty()) return;
 
@@ -268,6 +389,13 @@ void drawTextChild(const dom::DOMNodePtr& child,
                    const dom::ComputedStyle& container_style,
                    TextShaper& shaper,
                    DisplayListBuilder& builder) {
+    // Compensate leading space: if the raw text starts with whitespace
+    // (e.g. " and ") and we already have content on the line, add a space gap.
+    // collapseWhitespace trims both ends, so the space would be lost otherwise.
+    if (rawTextStartsWithSpace(child) && state.cumulative_x > 0.0f) {
+        state.cumulative_x += measureSpaceWidth(container_style, state.container_font_size, shaper);
+    }
+
     // Line break if needed
     float available = state.inner_width - state.cumulative_x;
     if (available < 20.0f) {
@@ -291,6 +419,10 @@ void drawTextChild(const dom::DOMNodePtr& child,
         if (shaper.shape(req, shaped) && !shaped.glyphs.empty()) {
             state.cumulative_x += shaped.width_units * shaped.scale_to_pixels;
         }
+    }
+    // Add trailing space width when original text ends with whitespace
+    if (rawTextEndsWithSpace(child)) {
+        state.cumulative_x += measureSpaceWidth(container_style, state.container_font_size, shaper);
     }
 }
 
@@ -329,28 +461,11 @@ void renderMixedPath(const dom::DOMNodePtr& node,
                 state.cumulative_x += getInlineBlockWidth(child, cs, engine);
             }
         } else if (child->getType() == dom::DOMNode::NodeType::TEXT) {
-            // Check if IFC has computed a position for this text node
-            const layout::LayoutNode* text_layout = engine ? engine->getLayout(child) : nullptr;
-            if (text_layout) {
-                // Use IFC-computed position
-                float draw_x = text_layout->layout.position[0];
-                float draw_y = text_layout->layout.position[1];
-                float available = text_layout->layout.dimensions[0];
-                // Baseline = text node top + same baseline offset the container uses
-                float baseline_offset = state.baseline_y - state.y - state.pad_top;
-                float ifc_baseline = draw_y + baseline_offset;
-                drawTextChildAtPosition(child, draw_x, draw_y, available,
-                                        ifc_baseline, state.line_height_px,
-                                        style, state.container_font_size,
-                                        state.text_color, shaper, builder);
-                // Advance cumulative_x to stay in sync
-                state.cumulative_x = (draw_x - state.x - state.pad_left) + text_layout->layout.dimensions[0];
-            } else {
-                drawTextChild(child, state, style, shaper, builder);
-            }
+            // Always use cumulative_x-based positioning in Mixed path so that
+            // text nodes and inline elements share the same coordinate system.
+            drawTextChild(child, state, style, shaper, builder);
         }
     }
-
 }
 
 // ========== Input 元素渲染 ==========

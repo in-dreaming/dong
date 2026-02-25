@@ -1,0 +1,11 @@
+---
+description: 
+alwaysApply: true
+enabled: true
+updatedAt: 2026-02-22T15:35:27.479Z
+provider: 
+---
+
+注意
+- 完成的任务需要标注完成。
+- 需要在/dong/examples/data/tests下添加测试用例。使用dong/scripts/tools/run_baseline_compare.py进行基准对比验证feature实现是否正确。

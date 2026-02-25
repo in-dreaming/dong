@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Nested Lists Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        h2 {
+            margin-top: 30px;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <h1>Nested Lists Test</h1>
+    
+    <h2>Nested Unordered Lists (counter scoping)</h2>
+    <ul>
+        <li>Level 1 item 1
+            <ul>
+                <li>Level 2 item 1
+                    <ul>
+                        <li>Level 3 item 1</li>
+                        <li>Level 3 item 2</li>
+                    </ul>
+                </li>
+                <li>Level 2 item 2</li>
+            </ul>
+        </li>
+        <li>Level 1 item 2</li>
+    </ul>
+    
+    <h2>Nested Ordered Lists (independent counters)</h2>
+    <ol>
+        <li>Level 1: Should be "1."
+            <ol>
+                <li>Level 2: Should be "1." (new counter scope)</li>
+                <li>Level 2: Should be "2."</li>
+                <li>Level 2: Should be "3."</li>
+            </ol>
+        </li>
+        <li>Level 1: Should be "2."
+            <ol>
+                <li>Level 2: Should be "1." (new counter scope)</li>
+                <li>Level 2: Should be "2."</li>
+            </ol>
+        </li>
+        <li>Level 1: Should be "3."</li>
+    </ol>
+    
+    <h2>Mixed Nested Lists (ul inside ol)</h2>
+    <ol>
+        <li>Ordered item 1
+            <ul>
+                <li>Unordered nested item</li>
+                <li>Another unordered item</li>
+            </ul>
+        </li>
+        <li>Ordered item 2
+            <ul>
+                <li>Unordered nested item</li>
+            </ul>
+        </li>
+    </ol>
+    
+    <h2>Deep Nesting (4 levels)</h2>
+    <ul>
+        <li>Level 1
+            <ul>
+                <li>Level 2
+                    <ul>
+                        <li>Level 3
+                            <ul>
+                                <li>Level 4</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </li>
+            </ul>
+        </li>
+    </ul>
+</body>
+</html>

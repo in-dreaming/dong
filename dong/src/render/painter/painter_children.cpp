@@ -1,9 +1,12 @@
 #include "../painter.hpp"
+#include "painter_style_utils.hpp"
 
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <vector>
+
+#include "../list_marker.hpp"
 
 namespace dong::render {
 
@@ -91,7 +94,125 @@ bool shouldDebugScrollMetricsForNode(const dom::DOMNodePtr& node) {
     return id == v;
 }
 
+// Calculate the 1-based counter for an <li> within its parent <ul>/<ol>.
+// Respects <ol start="N"> attribute.
+int calculateListItemCounter(const dom::DOMNodePtr& li_node) {
+    auto parent = li_node->getParent();
+    if (!parent) return 1;
+
+    int start = 1;
+    if (parent->getTagName() == "ol" && parent->hasAttribute("start")) {
+        try {
+            start = std::stoi(parent->getAttribute("start"));
+        } catch (...) {}
+    }
+
+    int counter = start;
+    for (const auto& sibling : parent->getChildren()) {
+        if (!sibling || sibling->getType() != dom::DOMNode::NodeType::ELEMENT) continue;
+        if (sibling == li_node) return counter;
+        if (sibling->getTagName() == "li") ++counter;
+    }
+    return counter;
+}
+
 } // namespace
+
+// Render the ::marker pseudo-element for a <li> node.
+// Uses the parent <ul>/<ol>'s list-style-type (inherited to the li).
+void Painter::renderMarkerForListItem(const dom::DOMNodePtr& node,
+                                      const Rect& node_rect,
+                                      DisplayListBuilder& builder) {
+    auto marker_pseudo = node->getPseudoMarker();
+    if (!marker_pseudo) return;
+
+    const auto& style = node->getComputedStyle();
+    const auto& marker_style = marker_pseudo->getComputedStyle();
+    const std::string& marker_type = style.list_style_type;
+    if (marker_type == "none") return;
+
+    int counter = calculateListItemCounter(node);
+    std::string marker_text = generateMarkerText(counter, marker_type);
+    if (marker_text.empty()) return;
+
+    // Determine marker color (::marker color overrides, else inherit from li)
+    Color text_color = painter_detail::makeColorFromCss(
+        marker_style.isExplicitlySet("color") ? marker_style.color : style.color);
+    float font_size = marker_style.isExplicitlySet("font-size")
+        ? marker_style.font_size : style.font_size;
+    const std::string& font_family = marker_style.isExplicitlySet("font-family")
+        ? marker_style.font_family : style.font_family;
+    const std::string& font_weight = marker_style.isExplicitlySet("font-weight")
+        ? marker_style.font_weight : style.font_weight;
+    const std::string& font_style_val = marker_style.isExplicitlySet("font-style")
+        ? marker_style.font_style : style.font_style;
+
+    // Shape the marker text
+    TextShapeRequest request;
+    request.text = marker_text;
+    request.font_family = font_family;
+    request.font_weight = font_weight;
+    request.font_style = font_style_val;
+    request.font_size = font_size;
+    request.origin_x = 0;
+    request.origin_y = 0;
+
+    ShapedText shaped;
+    if (!text_shaper_.shape(request, shaped) || shaped.glyphs.empty()) return;
+
+    float scale = shaped.scale_to_pixels;
+    float ascent_px = shaped.ascent_units * scale;
+    float marker_width = shaped.width_units * scale;
+    float marker_height = shaped.line_height_units * scale;
+
+    // Position: "outside" places marker left of the li content, "inside" prepends.
+    const bool is_outside = (style.list_style_position != "inside");
+    constexpr float kMarkerGap = 8.0f; // gap between marker and content
+    float marker_x, marker_y;
+
+    if (is_outside) {
+        marker_x = node_rect.x - marker_width - kMarkerGap;
+    } else {
+        float pl = style.padding_left.isPixel() ? style.padding_left.value : 0.0f;
+        float bl = std::max(0.0f, style.border_left_width >= 0.0f ? style.border_left_width : style.border_width);
+        marker_x = node_rect.x + bl + pl;
+    }
+    float pt = style.padding_top.isPixel() ? style.padding_top.value : 0.0f;
+    float bt = std::max(0.0f, style.border_top_width >= 0.0f ? style.border_top_width : style.border_width);
+    marker_y = node_rect.y + bt + pt;
+
+    float baseline_y = marker_y + ascent_px;
+
+    // Build glyph run
+    DrawGlyphRunData glyph_run{};
+    glyph_run.rect.x = marker_x;
+    glyph_run.rect.y = marker_y;
+    glyph_run.rect.width = marker_width;
+    glyph_run.rect.height = marker_height;
+    glyph_run.color = text_color;
+    glyph_run.font_size = font_size;
+    glyph_run.font_family = font_family;
+    glyph_run.font_weight = font_weight;
+    glyph_run.font_style = font_style_val;
+    glyph_run.font_paths = shaped.font_paths;
+    glyph_run.font_path = shaped.font_path;
+    glyph_run.baseline_x = marker_x;
+    glyph_run.baseline_y = baseline_y;
+    glyph_run.units_per_em = shaped.units_per_em;
+    glyph_run.scale_to_pixels = shaped.scale_to_pixels;
+
+    for (const auto& sg : shaped.glyphs) {
+        GlyphInstance inst{};
+        inst.glyph_id = sg.glyph_id;
+        inst.pen_x_units = sg.pen_x_units;
+        inst.pen_y_units = sg.pen_y_units;
+        inst.font_path_index = sg.font_path_index;
+        inst.units_per_em = sg.units_per_em;
+        glyph_run.glyphs.push_back(inst);
+    }
+
+    builder.addGlyphRun(glyph_run);
+}
 
 void Painter::paintChildrenAndOverlays(const dom::DOMNodePtr& node,
                                       const layout::LayoutNode* layout_node,
@@ -100,6 +221,11 @@ void Painter::paintChildrenAndOverlays(const dom::DOMNodePtr& node,
                                       bool is_scroll_container,
                                       DisplayListBuilder& builder) {
     if (!node) return;
+
+    // 3.5 渲染 ::marker 伪元素（<li> 的列表标记）
+    if (node->getTagName() == "li" && node->getPseudoMarker()) {
+        renderMarkerForListItem(node, node_rect, builder);
+    }
 
     // 4. 渲染 ::before 伪元素
     if (node->hasPseudoElements()) {

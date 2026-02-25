@@ -1008,6 +1008,7 @@ fn buildDongCore(
             "src/render/text_shaper.cpp",
             "src/render/font_metrics.cpp",
             "src/render/glyph_atlas.cpp",
+            "src/render/list_marker.cpp",
         },
         .flags = &.{
             "-std=c++20",

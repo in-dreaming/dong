@@ -1,6 +1,6 @@
 #include "style_engine.hpp"
 #include "../dom/dom_node.hpp"
-
+#include "../../render/list_marker.hpp"
 
 #include "../../core/log.h"
 #include "../../core/profiler.h"
@@ -421,9 +421,6 @@ const std::unordered_map<std::string_view, TagStyleHandler> kTagDefaultHandlers 
     {"blockquote", [](ComputedStyle& s) { s.setDisplay("block"); }},
     {"figure", [](ComputedStyle& s) { s.setDisplay("block"); }},
     {"figcaption", [](ComputedStyle& s) { s.setDisplay("block"); }},
-    {"ul", [](ComputedStyle& s) { s.setDisplay("block"); }},
-    {"ol", [](ComputedStyle& s) { s.setDisplay("block"); }},
-    {"li", [](ComputedStyle& s) { s.setDisplay("block"); }},
     {"dl", [](ComputedStyle& s) { s.setDisplay("block"); }},
     {"dt", [](ComputedStyle& s) { s.setDisplay("block"); }},
     {"dd", [](ComputedStyle& s) { s.setDisplay("block"); }},
@@ -432,22 +429,22 @@ const std::unordered_map<std::string_view, TagStyleHandler> kTagDefaultHandlers 
 
     // Inline elements
     {"span", [](ComputedStyle& s) { s.setDisplay("inline"); }},
-    {"a", [](ComputedStyle& s) { s.setDisplay("inline"); s.color = "#0000EE"; s.text_decoration = "underline"; s.cursor = "pointer"; }},
-    {"b", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_weight = "bold"; }},
-    {"i", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_style = "italic"; }},
-    {"strong", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_weight = "bold"; }},
-    {"em", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_style = "italic"; }},
-    {"code", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_family = "Menlo, Consolas, monospace"; }},
-    {"kbd", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_family = "Menlo, Consolas, monospace"; }},
-    {"samp", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_family = "Menlo, Consolas, monospace"; }},
-    {"var", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_style = "italic"; }},
-    {"small", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_size = 12.0f; }},
+    {"a", [](ComputedStyle& s) { s.setDisplay("inline"); s.color = "#0000EE"; s.text_decoration = "underline"; s.cursor = "pointer"; s.markExplicitlySet("color"); }},
+    {"b", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_weight = "bold"; s.markExplicitlySet("font-weight"); }},
+    {"i", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_style = "italic"; s.markExplicitlySet("font-style"); }},
+    {"strong", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_weight = "bold"; s.markExplicitlySet("font-weight"); }},
+    {"em", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_style = "italic"; s.markExplicitlySet("font-style"); }},
+    {"code", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_family = "Menlo, Consolas, monospace"; s.markExplicitlySet("font-family"); }},
+    {"kbd", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_family = "Menlo, Consolas, monospace"; s.markExplicitlySet("font-family"); }},
+    {"samp", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_family = "Menlo, Consolas, monospace"; s.markExplicitlySet("font-family"); }},
+    {"var", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_style = "italic"; s.markExplicitlySet("font-style"); }},
+    {"small", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_size = 12.0f; s.markExplicitlySet("font-size"); }},
     {"s", [](ComputedStyle& s) { s.setDisplay("inline"); s.text_decoration = "line-through"; }},
-    {"cite", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_style = "italic"; }},
+    {"cite", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_style = "italic"; s.markExplicitlySet("font-style"); }},
     {"q", [](ComputedStyle& s) { s.setDisplay("inline"); }},
     {"mark", [](ComputedStyle& s) { s.setDisplay("inline"); s.background_color = "#ffff00"; }},
-    {"sub", [](ComputedStyle& s) { s.setDisplay("inline"); s.vertical_align = "sub"; s.font_size = 12.0f; }},
-    {"sup", [](ComputedStyle& s) { s.setDisplay("inline"); s.vertical_align = "super"; s.font_size = 12.0f; }},
+    {"sub", [](ComputedStyle& s) { s.setDisplay("inline"); s.vertical_align = "sub"; s.font_size = 12.0f; s.markExplicitlySet("font-size"); }},
+    {"sup", [](ComputedStyle& s) { s.setDisplay("inline"); s.vertical_align = "super"; s.font_size = 12.0f; s.markExplicitlySet("font-size"); }},
     {"u", [](ComputedStyle& s) { s.setDisplay("inline"); s.text_decoration = "underline"; }},
     {"abbr", [](ComputedStyle& s) { s.setDisplay("inline"); }},
     {"time", [](ComputedStyle& s) { s.setDisplay("inline"); }},
@@ -456,12 +453,17 @@ const std::unordered_map<std::string_view, TagStyleHandler> kTagDefaultHandlers 
     {"label", [](ComputedStyle& s) { s.setDisplay("inline"); }},
 
     // Headings
-    {"h1", [](ComputedStyle& s) { s.setDisplay("block"); s.font_weight = "bold"; s.font_size = 32.0f; }},
-    {"h2", [](ComputedStyle& s) { s.setDisplay("block"); s.font_weight = "bold"; s.font_size = 28.0f; }},
-    {"h3", [](ComputedStyle& s) { s.setDisplay("block"); s.font_weight = "bold"; s.font_size = 24.0f; }},
-    {"h4", [](ComputedStyle& s) { s.setDisplay("block"); s.font_weight = "bold"; s.font_size = 20.0f; }},
-    {"h5", [](ComputedStyle& s) { s.setDisplay("block"); s.font_weight = "bold"; s.font_size = 18.0f; }},
-    {"h6", [](ComputedStyle& s) { s.setDisplay("block"); s.font_weight = "bold"; s.font_size = 16.0f; }},
+    {"h1", [](ComputedStyle& s) { s.setDisplay("block"); s.font_weight = "bold"; s.font_size = 32.0f; s.markExplicitlySet("font-weight"); s.markExplicitlySet("font-size"); }},
+    {"h2", [](ComputedStyle& s) { s.setDisplay("block"); s.font_weight = "bold"; s.font_size = 28.0f; s.markExplicitlySet("font-weight"); s.markExplicitlySet("font-size"); }},
+    {"h3", [](ComputedStyle& s) { s.setDisplay("block"); s.font_weight = "bold"; s.font_size = 24.0f; s.markExplicitlySet("font-weight"); s.markExplicitlySet("font-size"); }},
+    {"h4", [](ComputedStyle& s) { s.setDisplay("block"); s.font_weight = "bold"; s.font_size = 20.0f; s.markExplicitlySet("font-weight"); s.markExplicitlySet("font-size"); }},
+    {"h5", [](ComputedStyle& s) { s.setDisplay("block"); s.font_weight = "bold"; s.font_size = 18.0f; s.markExplicitlySet("font-weight"); s.markExplicitlySet("font-size"); }},
+    {"h6", [](ComputedStyle& s) { s.setDisplay("block"); s.font_weight = "bold"; s.font_size = 16.0f; s.markExplicitlySet("font-weight"); s.markExplicitlySet("font-size"); }},
+
+    // List elements
+    {"ul", [](ComputedStyle& s) { s.setDisplay("block"); s.list_style_type = "disc"; }},
+    {"ol", [](ComputedStyle& s) { s.setDisplay("block"); s.list_style_type = "decimal"; }},
+    {"li", [](ComputedStyle& s) { s.setDisplay("list-item"); }},
 
     // Form elements (inline-block)
     {"button", [](ComputedStyle& s) { s.setDisplay("inline-block"); }},
@@ -492,6 +494,7 @@ const std::unordered_map<std::string_view, TagStyleHandler> kTagDefaultHandlers 
     {"pre", [](ComputedStyle& s) {
         s.setDisplay("block");
         s.font_family = "Menlo, Consolas, monospace";
+        s.markExplicitlySet("font-family");
     }},
 
     // Table elements
@@ -842,7 +845,7 @@ void StyleEngine::processGlobalKeywords(DOMNodePtr node, DOMNodePtr parent) {
     auto& computed = node->getComputedStyle();
     const auto& parent_style = parent->getComputedStyle();
 
-    // 全局关键字 initial/unset 的语义必须“覆盖掉已经算出来的值”。
+    // 全局关键字 initial/unset 的语义必须"覆盖掉已经算出来的值"。
     // 不能仅依赖 ComputedStyle 的构造默认值，否则会把更早匹配到的规则残留在 computed 里。
     static const ComputedStyle kInitial;
 
@@ -1040,6 +1043,10 @@ void StyleEngine::inheritFromParent(DOMNodePtr node) {
     if (!computed.isExplicitlySet("word-break")) computed.word_break = parent_style.word_break;
     if (!computed.isExplicitlySet("overflow-wrap")) computed.overflow_wrap = parent_style.overflow_wrap;
     if (!computed.isExplicitlySet("tab-size")) computed.tab_size = parent_style.tab_size;
+
+    // List styling properties (inherited per CSS spec)
+    if (!computed.isExplicitlySet("list-style-type")) computed.list_style_type = parent_style.list_style_type;
+    if (!computed.isExplicitlySet("list-style-position")) computed.list_style_position = parent_style.list_style_position;
 }
 
 bool StyleEngine::matches(const std::string& selector, DOMNodePtr node) {
@@ -1294,13 +1301,15 @@ std::string StyleEngine::extractSelectorComponent(const std::string& selector, s
 
 void StyleEngine::processPseudoElements(DOMNodePtr node) {
     if (!node || node->getType() != DOMNode::NodeType::ELEMENT) return;
-    
+
     // Check for ::before rules
     bool has_before = false;
     bool has_after = false;
+    bool has_marker = false;
     ComputedStyle before_style;
     ComputedStyle after_style;
-    
+    ComputedStyle marker_style;
+
     for (const auto& sheet : stylesheets_) {
         for (const auto& rule : sheet.getRules()) {
             // Check for ::before
@@ -1313,7 +1322,7 @@ void StyleEngine::processPseudoElements(DOMNodePtr node) {
                 if (pos != std::string::npos) {
                     base_selector = base_selector.substr(0, pos);
                 }
-                
+
                 if (matcher_.matches(base_selector, node)) {
                     has_before = true;
                     const auto& rs = rule.style;
@@ -1323,7 +1332,7 @@ void StyleEngine::processPseudoElements(DOMNodePtr node) {
                     applyRuleProperties(rs, before_style);
                 }
             }
-            
+
             // Check for ::after
             if (rule.selector.find("::after") != std::string::npos ||
                 rule.selector.find(":after") != std::string::npos) {
@@ -1333,7 +1342,7 @@ void StyleEngine::processPseudoElements(DOMNodePtr node) {
                 if (pos != std::string::npos) {
                     base_selector = base_selector.substr(0, pos);
                 }
-                
+
                 if (matcher_.matches(base_selector, node)) {
                     has_after = true;
                     const auto& rs = rule.style;
@@ -1343,9 +1352,26 @@ void StyleEngine::processPseudoElements(DOMNodePtr node) {
                     applyRuleProperties(rs, after_style);
                 }
             }
+
+            // Check for ::marker (for li elements)
+            if (node->getTagName() == "li" && (
+                rule.selector.find("::marker") != std::string::npos ||
+                rule.selector.find(":marker") != std::string::npos)) {
+                std::string base_selector = rule.selector;
+                size_t pos = base_selector.find("::marker");
+                if (pos == std::string::npos) pos = base_selector.find(":marker");
+                if (pos != std::string::npos) {
+                    base_selector = base_selector.substr(0, pos);
+                }
+
+                if (matcher_.matches(base_selector, node)) {
+                    has_marker = true;
+                    applyRuleProperties(rule.style, marker_style);
+                }
+            }
         }
     }
-    
+
     // Create ::before pseudo-element if needed
     if (has_before && !before_style.content.empty()) {
         auto pseudo = createPseudoElement(node, "before");
@@ -1359,7 +1385,7 @@ void StyleEngine::processPseudoElements(DOMNodePtr node) {
     } else {
         node->setPseudoBefore(nullptr);
     }
-    
+
     // Create ::after pseudo-element if needed
     if (has_after && !after_style.content.empty()) {
         auto pseudo = createPseudoElement(node, "after");
@@ -1372,6 +1398,28 @@ void StyleEngine::processPseudoElements(DOMNodePtr node) {
         }
     } else {
         node->setPseudoAfter(nullptr);
+    }
+
+    // Create ::marker pseudo-element for li elements.
+    // Unlike ::before/::after, ::marker is created automatically for all <li> elements
+    // (unless list-style-type is "none"). Explicit ::marker CSS rules override defaults.
+    if (node->getTagName() == "li") {
+        const auto& node_style = node->getComputedStyle();
+        const bool needs_marker = (node_style.list_style_type != "none");
+        if (needs_marker) {
+            auto pseudo = createPseudoElement(node, "marker");
+            if (pseudo) {
+                pseudo->getComputedStyle() = node_style;
+                if (has_marker) {
+                    applyRuleProperties(marker_style, pseudo->getComputedStyle());
+                }
+                pseudo->getComputedStyle().is_pseudo_element = true;
+                pseudo->getComputedStyle().pseudo_type = "marker";
+                node->setPseudoMarker(pseudo);
+            }
+        } else {
+            node->setPseudoMarker(nullptr);
+        }
     }
 }
 

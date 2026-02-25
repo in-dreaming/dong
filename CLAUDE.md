@@ -306,6 +306,51 @@ Dong supports modern CSS layout features with standards compliance:
 
 See `doc/css_features.md` for detailed specifications and implementation notes.
 
+## List Styling
+
+Dong supports CSS list styling properties and `::marker` pseudo-element for customizable list markers:
+
+### list-style Properties
+
+- **list-style-type**: Marker types (disc, circle, square, decimal, lower-alpha, upper-alpha, lower-roman, upper-roman, none)
+- **list-style-position**: Marker positioning (outside = margin area, inside = content flow)
+- **list-style**: Shorthand property (e.g., `list-style: circle inside`)
+- **Default styles**: `<ul>` defaults to `disc`, `<ol>` defaults to `decimal`
+- **Counter management**: Each `<ul>`/`<ol>` has independent counter scope for nested lists
+- **`<ol start="N">`**: Sets initial counter value
+
+### ::marker Pseudo-element
+
+- **Automatic generation**: `<li>` elements automatically generate `::marker` pseudo-elements
+- **Independent styling**: Style markers separately via `li::marker { color: red; font-size: 20px; }`
+- **Inherits text styles**: Markers inherit font properties from parent `<li>`
+- **Counter scoping**: Nested lists have independent counters
+
+**Example**:
+```html
+<style>
+  ul { list-style-type: disc; }
+  ol { list-style-type: decimal; }
+  li::marker { color: red; font-weight: bold; }
+</style>
+<ul>
+  <li>Unordered item (red bold disc)</li>
+</ul>
+<ol>
+  <li>Ordered item (red bold "1.")</li>
+</ol>
+```
+
+**Implementation**:
+- Marker generation: `src/render/list_marker.cpp` (pure function)
+- CSS parsing: `src/dom/css/css_parser.cpp` (property handlers)
+- Pseudo-element creation: `src/dom/css/style_engine.cpp`
+- Rendering: `src/render/painter/painter_marker.cpp`
+
+**Test cases**: `test_list_markers_basic.html`, `test_list_style_types.html`, `test_list_position.html`, `test_marker_pseudo.html`, `test_list_nested.html`, `test_ol_start.html`
+
+See `doc/css_features.md` for complete list system documentation.
+
 ## Form Elements
 
 Dong supports standard HTML form elements with full interactive functionality:

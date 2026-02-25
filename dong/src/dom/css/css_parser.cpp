@@ -376,7 +376,28 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
         }},
         {"row-gap", [](const std::string& val, ComputedStyle& style) { style.row_gap = parseFloatHelper(val); }},
         {"column-gap", [](const std::string& val, ComputedStyle& style) { style.column_gap = parseFloatHelper(val); }},
-        
+
+        // List styling
+        {"list-style-type", [](const std::string& val, ComputedStyle& style) {
+            style.list_style_type = val;
+        }},
+        {"list-style-position", [](const std::string& val, ComputedStyle& style) {
+            style.list_style_position = val;
+        }},
+        {"list-style", [](const std::string& val, ComputedStyle& style) {
+            std::istringstream iss(val);
+            std::string part;
+            while (iss >> part) {
+                if (part == "inside" || part == "outside") {
+                    style.list_style_position = part;
+                } else if (part != "none") {
+                    style.list_style_type = part;
+                } else {
+                    style.list_style_type = "none";
+                }
+            }
+        }},
+
         // Transform
         {"transform", [](const std::string& val, ComputedStyle& style) { CSSParser::parseTransform(val, style); }},
         {"transform-origin", [](const std::string& val, ComputedStyle& style) {

@@ -35,8 +35,8 @@
 
 ### 列表体系闭环（高 ROI，建议成组推进）
 
-- [ ] `list-style-type` / `list-style-position` / `list-style` 属性
-- [ ] `::marker` 伪元素（列表标记样式）
+- [x] `list-style-type` / `list-style-position` / `list-style` 属性 - 已实现 disc, circle, square, decimal, lower-alpha, upper-alpha, lower-roman, upper-roman 等标记类型，支持 inside/outside 定位，支持 `list-style` 简写属性。测试用例：`test_list_style_types.html`、`test_list_position.html`、`test_list_style_parsing.html`
+- [x] `::marker` 伪元素（列表标记样式）- 已实现 `::marker` 伪元素渲染，支持独立样式设置（color, font-size, font-weight），支持 `<ul>`/`<ol>` 默认标记，支持嵌套列表计数器作用域。测试用例：`test_marker_pseudo.html`、`test_list_markers_basic.html`、`test_list_nested.html`、`test_ol_start.html`
 
 ### 伪元素管线（高 ROI）
 

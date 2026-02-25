@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Inline Font Weight Test</title>
+<style>
+body {
+    font-family: Arial, sans-serif;
+    font-size: 16px;
+    padding: 20px;
+    background: #fff;
+    color: #222;
+}
+h2 {
+    font-size: 20px;
+    margin: 10px 0 6px 0;
+}
+.section {
+    margin-bottom: 16px;
+    padding: 10px;
+    border: 1px solid #ccc;
+}
+.w100 { font-weight: 100; }
+.w300 { font-weight: 300; }
+.w400 { font-weight: 400; }
+.w700 { font-weight: 700; }
+.w900 { font-weight: 900; }
+</style>
+</head>
+<body>
+
+<h2>1. strong / b / em / i inline elements</h2>
+<div class="section">
+    <p>Normal text with <strong>strong bold</strong> and <b>b bold</b> inline.</p>
+    <p>Normal text with <em>em italic</em> and <i>i italic</i> inline.</p>
+    <p>Mixed: <strong><em>bold italic</em></strong> and <em><strong>italic bold</strong></em>.</p>
+</div>
+
+<h2>2. CSS font-weight values</h2>
+<div class="section">
+    <p><span class="w100">Weight 100</span> | <span class="w300">Weight 300</span> | <span class="w400">Weight 400</span> | <span class="w700">Weight 700</span> | <span class="w900">Weight 900</span></p>
+</div>
+
+<h2>3. Nested inline with weight</h2>
+<div class="section">
+    <p>Start <strong>bold <em>bold-italic</em> bold-only</strong> end.</p>
+    <p>Start <em>italic <strong>bold-italic</strong> italic-only</em> end.</p>
+</div>
+
+<h2>4. Word spacing preserved</h2>
+<div class="section">
+    <p>Word before <strong>bold word</strong> word after should have correct spacing.</p>
+    <p>No extra gaps or missing spaces around <b>inline bold</b> elements.</p>
+</div>
+
+</body>
+</html>

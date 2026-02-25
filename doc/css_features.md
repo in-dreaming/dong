@@ -146,6 +146,129 @@ div {
 
 ---
 
+## Lists & Markers（列表与标记）
+
+### list-style Properties ✅
+
+**状态**: 已实现
+
+**规范**: CSS Lists and Counters Module Level 3
+
+**功能描述**:
+- `list-style-type`: 标记类型（disc, circle, square, decimal, lower-alpha, upper-alpha, lower-roman, upper-roman, none）
+- `list-style-position`: 标记位置（outside = 边距区域, inside = 内容流）
+- `list-style`: 简写属性（例如 `list-style: circle inside`）
+- 默认样式：`<ul>` 默认 `disc`，`<ol>` 默认 `decimal`
+- 嵌套列表：每个 `<ul>`/`<ol>` 有独立的计数器作用域
+- `<ol start="N">`: 设置起始计数值
+
+**实现细节**:
+- CSS 属性解析：在 `src/dom/css/css_parser.cpp` 的 dispatch table 中注册 handler
+- 标记生成：`src/render/list_marker.cpp` 纯函数生成标记文本
+- 伪元素渲染：通过 `::marker` pseudo-element 渲染
+- 计数器管理：每个列表元素维护独立计数器状态
+
+**CSS 语法**:
+```css
+ul {
+  list-style-type: disc;      /* 实心圆（默认） */
+  list-style-position: outside; /* 边距区域（默认） */
+}
+
+ol {
+  list-style-type: decimal;   /* 十进制数字（默认） */
+}
+
+li::marker {
+  color: red;                 /* 标记独立样式 */
+  font-size: 20px;
+  font-weight: bold;
+}
+
+.custom-list {
+  list-style: square inside;  /* 简写：类型 + 位置 */
+}
+```
+
+**支持的标记类型**:
+| 类型 | 示例 | 描述 |
+|------|------|------|
+| `disc` | • | 实心圆（`<ul>` 默认） |
+| `circle` | ○ | 空心圆 |
+| `square` | ▪ | 实心方块 |
+| `decimal` | 1., 2., 3. | 十进制数字（`<ol>` 默认） |
+| `lower-alpha` | a., b., c. | 小写字母 |
+| `upper-alpha` | A., B., C. | 大写字母 |
+| `lower-roman` | i., ii., iii. | 小写罗马数字 |
+| `upper-roman` | I., II., III. | 大写罗马数字 |
+| `none` | (无) | 不显示标记 |
+
+**测试用例**:
+- `test_list_markers_basic.html` - 基本列表渲染（`<ul>`, `<ol>`）
+- `test_list_style_types.html` - 所有标记类型
+- `test_list_position.html` - 标记位置（inside/outside）
+- `test_list_style_parsing.html` - CSS 属性解析
+- `test_list_nested.html` - 嵌套列表计数器作用域
+- `test_ol_start.html` - `<ol start="N">` 属性
+
+**已知限制**:
+- 不支持 `list-style-image`（仅文本标记，图片标记暂缓至 P2）
+- 不支持 `counter-reset`/`counter-increment`（完整计数器系统暂缓至 P2）
+- 不支持 `::marker` 的 `content` 属性（自定义标记内容暂缓至 P2）
+- 不支持复杂标记类型（hebrew, georgian, cjk-ideographic 等，暂缓至 P2）
+
+---
+
+### ::marker Pseudo-element ✅
+
+**状态**: 已实现
+
+**规范**: CSS Pseudo-Elements Module Level 4
+
+**功能描述**:
+- 为 `<li>` 元素自动生成标记伪元素
+- 可独立设置标记样式（color, font-size, font-weight, font-family）
+- 样式继承：标记继承 `<li>` 的文本样式
+- 与 list-style-type 联动：标记内容由 list-style-type 决定
+
+**实现细节**:
+- 伪元素创建：`src/dom/css/style_engine.cpp` 在样式解析时为 `<li>` 创建 `::marker`
+- 标记渲染：`src/render/painter/painter_marker.cpp` 专门模块
+- 定位策略：outside = 渲染在左侧边距，inside = 渲染为首个内联元素
+- 模块：纯函数式标记生成器 + 渲染器
+
+**CSS 选择器**:
+```css
+li::marker {
+  color: red;
+  font-size: 20px;
+  font-weight: bold;
+}
+
+.important-list li::marker {
+  color: orange;
+  content: "⚠ ";  /* 暂不支持，P2 实现 */
+}
+```
+
+**计数器作用域**:
+```html
+<ol>          <!-- 计数器：1 -->
+  <li>A       <!-- 渲染：1. -->
+    <ol>      <!-- 计数器：1（新作用域） -->
+      <li>B   <!-- 渲染：1. -->
+      <li>C   <!-- 渲染：2. -->
+    </ol>
+  </li>
+  <li>D       <!-- 渲染：2. -->
+</ol>
+```
+
+**测试用例**:
+- `test_marker_pseudo.html` - `::marker` 独立样式
+
+---
+
 ## 实现架构
 
 ### 核心原则

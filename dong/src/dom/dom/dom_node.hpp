@@ -143,9 +143,11 @@ public:
     // Pseudo-elements (::before/::after)
     DOMNodePtr getPseudoBefore() const { return pseudo_before_; }
     DOMNodePtr getPseudoAfter() const { return pseudo_after_; }
+    DOMNodePtr getPseudoMarker() const { return pseudo_marker_; }
     void setPseudoBefore(DOMNodePtr node) { pseudo_before_ = node; }
     void setPseudoAfter(DOMNodePtr node) { pseudo_after_ = node; }
-    bool hasPseudoElements() const { return pseudo_before_ || pseudo_after_; }
+    void setPseudoMarker(DOMNodePtr node) { pseudo_marker_ = node; }
+    bool hasPseudoElements() const { return pseudo_before_ || pseudo_after_ || pseudo_marker_; }
     bool isPseudoElement() const { return computed_style_.is_pseudo_element; }
 
     // Layout
@@ -328,6 +330,7 @@ protected:
     // Pseudo-elements
     DOMNodePtr pseudo_before_;
     DOMNodePtr pseudo_after_;
+    DOMNodePtr pseudo_marker_;
 
     std::unique_ptr<ClassList> class_list_;
     

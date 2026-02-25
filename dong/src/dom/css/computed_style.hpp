@@ -226,6 +226,11 @@ struct ComputedStyle {
     std::string content;  // Empty means no content, "none" disables
     bool is_pseudo_element = false;
     std::string pseudo_type;  // "before" or "after"
+
+    // List styling
+    std::string list_style_type = "none";      // disc, circle, square, decimal, etc.
+    std::string list_style_position = "outside"; // outside, inside
+    std::string list_style_image = "none";     // For future, always "none" for now
     
     // Track which properties were explicitly set by CSS rules or inline styles.
     // Used by inheritFromParent() to avoid overriding explicitly set values.

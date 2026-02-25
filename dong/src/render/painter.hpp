@@ -71,6 +71,11 @@ private:
                              const Rect& parent_rect,
                              DisplayListBuilder& builder);
 
+    // 渲染 ::marker 伪元素（列表项标记）
+    void renderMarkerForListItem(const dom::DOMNodePtr& node,
+                                 const Rect& node_rect,
+                                 DisplayListBuilder& builder);
+
 
     // 脏矩形优化
     bool isNodeInDirtyRect(const layout::LayoutNode* layout_node) const;

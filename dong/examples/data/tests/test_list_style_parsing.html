@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>List Style Parsing Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        .test1 { list-style-type: disc; }
+        .test2 { list-style-position: inside; }
+        .test3 { list-style: square outside; }
+        .test4 { list-style: circle inside; }
+        .test5 { list-style-type: decimal; }
+    </style>
+</head>
+<body>
+    <h1>List Style Property Parsing Test</h1>
+    
+    <h2>Test 1: list-style-type: disc</h2>
+    <ul class="test1">
+        <li>Should have disc marker</li>
+    </ul>
+    
+    <h2>Test 2: list-style-position: inside</h2>
+    <ul class="test2">
+        <li>Marker should be inside content flow</li>
+    </ul>
+    
+    <h2>Test 3: list-style: square outside</h2>
+    <ul class="test3">
+        <li>Should have square marker outside</li>
+    </ul>
+    
+    <h2>Test 4: list-style: circle inside</h2>
+    <ul class="test4">
+        <li>Should have circle marker inside</li>
+    </ul>
+    
+    <h2>Test 5: list-style-type: decimal (on ul)</h2>
+    <ul class="test5">
+        <li>Should have decimal number marker</li>
+    </ul>
+</body>
+</html>

@@ -141,6 +141,7 @@ add_library(dong SHARED
     src/layout/layout_engine.cpp
     src/layout/aspect_ratio_resolver.cpp
     src/layout/sticky_positioning.cpp
+    src/layout/display_contents.cpp
     # Script
     src/script/script_engine.cpp
     src/script/js_bindings.cpp
@@ -157,6 +158,7 @@ add_library(dong SHARED
     src/render/font_finder.cpp
     src/render/text_shaper.cpp
     src/render/font_metrics.cpp
+    src/render/list_marker.cpp
 )
 
 target_include_directories(dong PUBLIC
@@ -250,6 +252,7 @@ add_library(dong_render STATIC
     src/layout/layout_engine.cpp
     src/layout/aspect_ratio_resolver.cpp
     src/layout/sticky_positioning.cpp
+    src/layout/display_contents.cpp
     # Script
     src/script/script_engine.cpp
     src/script/js_bindings.cpp
@@ -270,6 +273,7 @@ add_library(dong_render STATIC
     src/render/font_finder.cpp
     src/render/text_shaper.cpp
     src/render/font_metrics.cpp
+    src/render/list_marker.cpp
 
     # GlyphAtlas (shared by all views via GlobalShared)
     src/render/glyph_atlas.cpp
