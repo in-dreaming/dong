@@ -1427,9 +1427,14 @@ void Engine::calculateLayout(dom::DOMNodePtr root, float width, float height) {
                     const auto& cs = dom_node->getComputedStyle();
                     std::fprintf(
                         stderr,
-                        "[LayoutId] tag=%s id=%s css_h_unit=%d css_h=%.1f yoga_h=%.1f extracted_h=%.1f top=%.1f y=%.1f\n",
+                        "[LayoutId] tag=%s id=%s display=%s css_w_unit=%d css_w=%.1f yoga_w=%.1f extracted_w=%.1f css_h_unit=%d css_h=%.1f yoga_h=%.1f extracted_h=%.1f top=%.1f y=%.1f\n",
                         dom_node->getTagName().c_str(),
                         id.c_str(),
+                        cs.display.c_str(),
+                        static_cast<int>(cs.width.unit),
+                        cs.width.value,
+                        width,
+                        new_width,
                         static_cast<int>(cs.height.unit),
                         cs.height.value,
                         height,
@@ -1542,10 +1547,16 @@ void Engine::calculateLayout(dom::DOMNodePtr root, float width, float height) {
                     child_cumulative_height += anon_h;
 
                     // Advance dom_children_iter past the DOM children that belong to this anon wrapper.
-                    // NOTE: anon->children may include TEXT nodes, so we must advance by count, not just ELEMENTs.
-                    for (size_t skip = 0; skip < anon->children.size(); ++skip) {
+                    // IMPORTANT: The DOM child list may contain whitespace-only TEXT nodes that were NOT
+                    // recorded into anon->children. Advancing by count will desync the iterator and can
+                    // cause subsequent Yoga children to be matched against the wrong DOM element.
+                    for (const auto& want : anon->children) {
+                        if (!want) continue;
+                        while (dom_children_iter != dom_children_end && dom_children_iter->get() != want.get()) {
+                            ++dom_children_iter;
+                        }
                         if (dom_children_iter == dom_children_end) break;
-                        ++dom_children_iter;
+                        ++dom_children_iter; // consume the matched node
                     }
                 } else {
                     // Regular DOM child: find the next element in the DOM children
