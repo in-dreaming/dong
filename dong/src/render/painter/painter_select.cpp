@@ -118,47 +118,51 @@ void renderSelectClosed(
     }
 
     // Draw dropdown arrow (right side) - using Unicode ▼ (U+25BC)
-    const std::string arrow_text = "\xE2\x96\xBC"; // UTF-8 encoding of ▼
-    const float arrow_width = 20.0f;
-    float arrow_x = x + w - arrow_width;
+    // appearance:none 时应隐藏默认箭头，但仍保留文本与交互。
+    if (style.appearance != "none") {
+        const std::string arrow_text = "\xE2\x96\xBC"; // UTF-8 encoding of ▼
+        const float arrow_width = 20.0f;
+        float arrow_x = x + w - arrow_width;
 
-    TextShapeRequest arrow_req{arrow_text, style.font_family, style.font_weight, style.font_style, font_size};
-    ShapedText arrow_shaped;
-    if (shaper.shape(arrow_req, arrow_shaped) && !arrow_shaped.glyphs.empty()) {
-        float scale = arrow_shaped.scale_to_pixels;
-        float ascent = arrow_shaped.ascent_units > 0.0f ? arrow_shaped.ascent_units : font_size / scale;
-        float line_h = arrow_shaped.line_height_units;
-        if (line_h <= 0.0f) line_h = font_size / scale;
-        float descent_abs = arrow_shaped.descent_units < 0.0f ? -arrow_shaped.descent_units : 0.0f;
-        float extra = std::max(line_h - (ascent + descent_abs), 0.0f);
-        float baseline_off = (extra * 0.5f + ascent) * scale;
-        float text_h_px = line_h * scale;
+        TextShapeRequest arrow_req{arrow_text, style.font_family, style.font_weight, style.font_style, font_size};
+        ShapedText arrow_shaped;
+        if (shaper.shape(arrow_req, arrow_shaped) && !arrow_shaped.glyphs.empty()) {
+            float scale = arrow_shaped.scale_to_pixels;
+            float ascent = arrow_shaped.ascent_units > 0.0f ? arrow_shaped.ascent_units : font_size / scale;
+            float line_h = arrow_shaped.line_height_units;
+            if (line_h <= 0.0f) line_h = font_size / scale;
+            float descent_abs = arrow_shaped.descent_units < 0.0f ? -arrow_shaped.descent_units : 0.0f;
+            float extra = std::max(line_h - (ascent + descent_abs), 0.0f);
+            float baseline_off = (extra * 0.5f + ascent) * scale;
+            float text_h_px = line_h * scale;
 
-        float arrow_y = y + (h - text_h_px) * 0.5f;
-        float arrow_baseline_y = arrow_y + baseline_off;
+            float arrow_y = y + (h - text_h_px) * 0.5f;
+            float arrow_baseline_y = arrow_y + baseline_off;
 
-        DrawGlyphRunData arrow_run;
-        arrow_run.rect = {arrow_x, arrow_y, arrow_shaped.width_units * scale, text_h_px};
-        arrow_run.color = makeColorFromCss(style.color);
-        arrow_run.font_size = font_size;
-        arrow_run.font_family = style.font_family;
-        arrow_run.font_weight = style.font_weight;
-        arrow_run.font_style = style.font_style;
-        arrow_run.font_paths = arrow_shaped.font_paths;
-        arrow_run.font_path = arrow_shaped.font_path;
-        arrow_run.baseline_x = arrow_x;
-        arrow_run.baseline_y = arrow_baseline_y;
-        arrow_run.units_per_em = arrow_shaped.units_per_em;
-        arrow_run.scale_to_pixels = arrow_shaped.scale_to_pixels;
-        painter_detail::fillTextShadow(arrow_run, style);
+            DrawGlyphRunData arrow_run;
+            arrow_run.rect = {arrow_x, arrow_y, arrow_shaped.width_units * scale, text_h_px};
+            arrow_run.color = makeColorFromCss(style.color);
+            arrow_run.font_size = font_size;
+            arrow_run.font_family = style.font_family;
+            arrow_run.font_weight = style.font_weight;
+            arrow_run.font_style = style.font_style;
+            arrow_run.font_paths = arrow_shaped.font_paths;
+            arrow_run.font_path = arrow_shaped.font_path;
+            arrow_run.baseline_x = arrow_x;
+            arrow_run.baseline_y = arrow_baseline_y;
+            arrow_run.units_per_em = arrow_shaped.units_per_em;
+            arrow_run.scale_to_pixels = arrow_shaped.scale_to_pixels;
+            painter_detail::fillTextShadow(arrow_run, style);
 
-        for (const auto& sg : arrow_shaped.glyphs) {
-            GlyphInstance inst{sg.glyph_id, sg.pen_x_units, sg.pen_y_units,
-                              sg.font_path_index, sg.units_per_em};
-            arrow_run.glyphs.push_back(inst);
+            for (const auto& sg : arrow_shaped.glyphs) {
+                GlyphInstance inst{sg.glyph_id, sg.pen_x_units, sg.pen_y_units,
+                                  sg.font_path_index, sg.units_per_em};
+                arrow_run.glyphs.push_back(inst);
+            }
+            builder.addGlyphRun(std::move(arrow_run));
         }
-        builder.addGlyphRun(std::move(arrow_run));
     }
+
 }
 
 void renderSelectDropdown(

@@ -400,13 +400,37 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
         }},
 
         // Appearance
-        {"appearance", [](const std::string& val, ComputedStyle& style) { style.appearance = val; }},
-        {"-webkit-appearance", [](const std::string& val, ComputedStyle& style) { style.appearance = val; }},
+        {"appearance", [](const std::string& val, ComputedStyle& style) {
+            std::string v = val;
+            std::transform(v.begin(), v.end(), v.begin(), [](unsigned char c) {
+                return static_cast<char>(std::tolower(c));
+            });
+            style.appearance = v;
+        }},
+        {"-webkit-appearance", [](const std::string& val, ComputedStyle& style) {
+            std::string v = val;
+            std::transform(v.begin(), v.end(), v.begin(), [](unsigned char c) {
+                return static_cast<char>(std::tolower(c));
+            });
+            style.appearance = v;
+        }},
 
         // Table properties
-        {"border-collapse", [](const std::string& val, ComputedStyle& style) { style.border_collapse = val; }},
+        {"border-collapse", [](const std::string& val, ComputedStyle& style) {
+            std::string v = val;
+            std::transform(v.begin(), v.end(), v.begin(), [](unsigned char c) {
+                return static_cast<char>(std::tolower(c));
+            });
+            style.border_collapse = v;
+        }},
         {"border-spacing", [](const std::string& val, ComputedStyle& style) { style.border_spacing = parseFloatHelper(val); }},
-        {"table-layout", [](const std::string& val, ComputedStyle& style) { style.table_layout = val; }},
+        {"table-layout", [](const std::string& val, ComputedStyle& style) {
+            std::string v = val;
+            std::transform(v.begin(), v.end(), v.begin(), [](unsigned char c) {
+                return static_cast<char>(std::tolower(c));
+            });
+            style.table_layout = v;
+        }},
 
         // Transform
         {"transform", [](const std::string& val, ComputedStyle& style) { CSSParser::parseTransform(val, style); }},

@@ -691,8 +691,9 @@ void Painter::paintTextAndInput(const dom::DOMNodePtr& node,
         renderTextareaPlaceholder(node, layout_node, style, bl, bt, br, bb, text_shaper_, builder);
     }
 
-    // Select 元素特殊渲染 (skip if appearance: none)
-    if (tag == "select" && style.appearance != "none") {
+    // Select 元素特殊渲染
+    // appearance:none 只影响“默认外观”（例如箭头），不应影响交互与下拉列表。
+    if (tag == "select") {
         renderSelect(node, layout_node, style, bl, bt, br, bb, text_shaper_, builder);
         if (auto* st = dong::dom::getSelectState(node)) {
             if (st->isOpen()) {
@@ -709,6 +710,7 @@ void Painter::paintTextAndInput(const dom::DOMNodePtr& node,
             }
         }
     }
+
 
 }
 

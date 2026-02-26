@@ -205,6 +205,12 @@ private:
                                  LayoutNode* layout,
                                  const dom::ComputedStyle& style);
 
+    // When a post-pass changes a block's height (e.g. table layout), Yoga's sibling positions
+    // can leave large gaps. Compact subsequent normal-flow siblings back to the minimal
+    // non-overlapping positions.
+    void compactNormalFlowSiblingsAfter(const dom::DOMNodePtr& start_node);
+
+
     // Incremental layout helpers
     bool calculateLayoutIncremental(dom::DOMNodePtr dom_node, YGNode* yoga_node,
                                     float parent_x, float parent_y);

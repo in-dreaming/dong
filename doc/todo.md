@@ -48,10 +48,10 @@
 
 ### 常见 UI 兼容性（仍偏高 ROI）
 
-- [ ] `object-position` 属性（已有 `object-fit` 但缺此项）
-- [ ] `appearance` 属性（`none` 去除默认控件样式）
-- [ ] `border-collapse` / `border-spacing` 属性
-- [ ] `table-layout` 属性（`fixed` / `auto`，如果 table 体系需要完整支持）
+- [x] `object-position` 属性（已有 `object-fit` 但缺此项）- 已接入图片绘制管线，支持关键字与百分比；测试用例：`test_object_position.html`
+- [x] `appearance` 属性（`none` 去除默认控件样式）- 支持 `appearance`/`-webkit-appearance`，`none` 时跳过 checkbox/radio 选中标记与 select 下拉箭头；测试用例：`test_appearance_none.html`
+- [x] `border-collapse` / `border-spacing` 属性 - Table 布局后处理支持 `collapse/separate` 与 spacing；测试用例：`test_table_layout.html`
+- [x] `table-layout` 属性（`fixed` / `auto`，如果 table 体系需要完整支持）- 支持 `fixed/auto` 的基础列宽策略；测试用例：`test_table_layout.html`
 
 ---
 

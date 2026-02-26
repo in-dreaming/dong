@@ -3,6 +3,8 @@
 
 #include "layout_engine.hpp"
 #include "../core/log.h"
+#include "../core/string_utils.h"
+#include "../render/text_shaper.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -57,6 +59,80 @@ void collectCells(const dom::DOMNodePtr& row_node,
     }
 }
 
+struct RowBlock {
+    dom::DOMNodePtr group; // nullptr means rows are direct children of <table>
+    std::vector<dom::DOMNodePtr> rows;
+};
+
+// Forward declaration (used by helpers below)
+void updateLayoutRect(LayoutNode* ln, float x, float y, float w, float h);
+
+
+std::vector<RowBlock> collectRowBlocks(const dom::DOMNodePtr& table_node) {
+    std::vector<RowBlock> blocks;
+
+    for (const auto& child : table_node->getChildren()) {
+        if (!child || child->getType() != dom::DOMNode::NodeType::ELEMENT) continue;
+
+        const auto& display = child->getComputedStyle().display;
+        if (isTableRowDisplay(display)) {
+            RowBlock b;
+            b.rows.push_back(child);
+            blocks.push_back(std::move(b));
+            continue;
+        }
+
+        if (isTableRowGroupDisplay(display)) {
+            RowBlock b;
+            b.group = child;
+            for (const auto& row_child : child->getChildren()) {
+                if (!row_child || row_child->getType() != dom::DOMNode::NodeType::ELEMENT) continue;
+                if (isTableRowDisplay(row_child->getComputedStyle().display)) {
+                    b.rows.push_back(row_child);
+                }
+            }
+            if (!b.rows.empty()) {
+                blocks.push_back(std::move(b));
+            }
+        }
+    }
+
+    return blocks;
+}
+
+float computeRowHeightPx(Engine* engine, const std::vector<dom::DOMNodePtr>& cells) {
+    float row_h = 0.0f;
+    for (const auto& cell : cells) {
+        const auto* cl = engine->getLayout(cell);
+        if (!cl) continue;
+        row_h = std::max(row_h, cl->layout.dimensions[1]);
+    }
+    return row_h;
+}
+
+float positionCellsInRowAbs(Engine* engine,
+                            const std::vector<dom::DOMNodePtr>& cells,
+                            const std::vector<float>& col_widths,
+                            float row_x,
+                            float row_y,
+                            float spacing,
+                            float row_h) {
+    float cur_x = row_x;
+    for (size_t c = 0; c < cells.size() && c < col_widths.size(); ++c) {
+        auto* cell_ln = engine->getLayoutMutable(cells[c]);
+        if (!cell_ln) continue;
+        updateLayoutRect(cell_ln, cur_x, row_y, col_widths[c], row_h);
+        cur_x += col_widths[c] + spacing;
+    }
+
+    if (!cells.empty() && spacing > 0.0f) {
+        cur_x = std::max(row_x, cur_x - spacing);
+    }
+
+    return std::max(0.0f, cur_x - row_x);
+}
+
+
 size_t getMaxColumns(const std::vector<dom::DOMNodePtr>& rows) {
     size_t max_cols = 0;
     for (const auto& row : rows) {
@@ -66,6 +142,7 @@ size_t getMaxColumns(const std::vector<dom::DOMNodePtr>& rows) {
     }
     return max_cols;
 }
+
 
 // Update a LayoutNode's position and dimensions consistently
 void updateLayoutRect(LayoutNode* ln, float x, float y, float w, float h) {
@@ -77,6 +154,96 @@ void updateLayoutRect(LayoutNode* ln, float x, float y, float w, float h) {
     ln->y = y;
     ln->width = w;
     ln->height = h;
+}
+
+void appendTextRecursive(const dom::DOMNodePtr& node, std::string& out) {
+    if (!node) return;
+    if (node->getType() == dom::DOMNode::NodeType::TEXT) {
+        out.append(node->getTextContent());
+        return;
+    }
+    for (const auto& ch : node->getChildren()) {
+        appendTextRecursive(ch, out);
+    }
+}
+
+std::string collectCellText(const dom::DOMNodePtr& cell) {
+    std::string raw;
+    for (const auto& ch : cell->getChildren()) {
+        appendTextRecursive(ch, raw);
+    }
+    return ::dong::collapseWhitespace(raw);
+}
+
+float measureTextWidthPx(const std::string& text, const dom::ComputedStyle& style) {
+    using ::dong::render::TextMeasureCache;
+    using ::dong::render::TextMeasureCacheKey;
+    using ::dong::render::TextMeasureResult;
+    using ::dong::render::TextShaper;
+    using ::dong::render::TextShapeRequest;
+    using ::dong::render::ShapedText;
+
+    if (text.empty()) return 0.0f;
+
+    const float font_size = (style.font_size > 0.0f && std::isfinite(style.font_size)) ? style.font_size : 16.0f;
+
+    TextMeasureCacheKey key{
+        text,
+        style.font_family,
+        style.font_weight,
+        style.font_style,
+        font_size,
+        style.letter_spacing_em,
+        style.word_spacing_px
+    };
+
+    TextMeasureResult cached;
+    auto& cache = TextMeasureCache::instance();
+    if (cache.lookup(key, cached) && cached.valid) {
+        return cached.content_width_px;
+    }
+
+    TextShaper shaper;
+    TextShapeRequest req{text, style.font_family, style.font_weight, style.font_style, font_size};
+    ShapedText shaped;
+    if (!shaper.shape(req, shaped) || shaped.glyphs.empty() || shaped.scale_to_pixels <= 0.0f) {
+        return 0.0f;
+    }
+
+    float width_px = shaped.width_units * shaped.scale_to_pixels;
+    if (width_px < 0.0f || !std::isfinite(width_px)) width_px = 0.0f;
+
+    TextMeasureResult r;
+    r.content_width_px = width_px;
+    r.line_height_px = shaped.line_height_units * shaped.scale_to_pixels;
+    r.scale_to_pixels = shaped.scale_to_pixels;
+    r.ascent_units = shaped.ascent_units;
+    r.descent_units = shaped.descent_units;
+    r.line_height_units = shaped.line_height_units;
+    r.glyph_count = shaped.glyphs.size();
+    r.valid = true;
+    cache.insert(key, r);
+
+    return width_px;
+}
+
+float measureCellPreferredWidth(const dom::DOMNodePtr& cell) {
+    if (!cell) return 0.0f;
+    const auto& cs = cell->getComputedStyle();
+
+    float pad_l = cs.padding_left.isPixel() ? cs.padding_left.value : 0.0f;
+    float pad_r = cs.padding_right.isPixel() ? cs.padding_right.value : 0.0f;
+
+    float border = 0.0f;
+    if (cs.border_style != "none" && cs.border_style != "hidden") {
+        border = std::max(0.0f, cs.border_width);
+    }
+
+    const std::string text = collectCellText(cell);
+    const float text_w = measureTextWidthPx(text, cs);
+
+    const float w = text_w + pad_l + pad_r + border * 2.0f;
+    return (w > 0.0f && std::isfinite(w)) ? w : 0.0f;
 }
 
 } // anonymous namespace
@@ -143,32 +310,48 @@ void Engine::computeColumnWidths(
         return;
     }
 
-    // Auto: use Yoga cell widths as basis, then distribute remaining
+    // Auto: approximate column widths from cell preferred widths (text + padding + borders).
+    // Yoga doesn't implement CSS tables; its computed widths for <td>/<th> are often unusable here.
     for (const auto& row : rows) {
         std::vector<dom::DOMNodePtr> cells;
         collectCells(row, cells);
         for (size_t c = 0; c < cells.size() && c < num_cols; ++c) {
-            const auto* cell_ln = getLayout(cells[c]);
-            if (cell_ln) {
-                col_widths[c] = std::max(col_widths[c], cell_ln->layout.dimensions[0]);
-            }
+            col_widths[c] = std::max(col_widths[c], measureCellPreferredWidth(cells[c]));
         }
     }
 
     float total_cell_w = 0.0f;
     for (size_t c = 0; c < num_cols; ++c) total_cell_w += col_widths[c];
-    float remaining = avail - total_spacing - total_cell_w;
 
-    if (remaining > 0.0f && total_cell_w > 0.0f) {
+    const float target = avail - total_spacing;
+    if (target <= 0.0f || !std::isfinite(target)) {
+        return;
+    }
+
+    if (total_cell_w <= 0.0f || !std::isfinite(total_cell_w)) {
+        const float col_w = target / static_cast<float>(num_cols);
+        for (size_t c = 0; c < num_cols; ++c) col_widths[c] = std::max(0.0f, col_w);
+        return;
+    }
+
+    if (total_cell_w < target) {
+        const float remaining = target - total_cell_w;
         for (size_t c = 0; c < num_cols; ++c) {
             col_widths[c] += remaining * (col_widths[c] / total_cell_w);
         }
+        return;
+    }
+
+    // Shrink-to-fit: scale down proportionally.
+    const float scale = target / total_cell_w;
+    for (size_t c = 0; c < num_cols; ++c) {
+        col_widths[c] = std::max(0.0f, col_widths[c] * scale);
     }
 }
 
 void Engine::positionTableCells(
     const dom::DOMNodePtr& table_node,
-    const std::vector<dom::DOMNodePtr>& rows,
+    const std::vector<dom::DOMNodePtr>& /*rows*/,
     const std::vector<float>& col_widths,
     float spacing, bool /*is_collapse*/) {
 
@@ -178,52 +361,62 @@ void Engine::positionTableCells(
     const auto& ts = table_node->getComputedStyle();
     const float table_x = table_ln->layout.position[0];
     const float table_y = table_ln->layout.position[1];
-    const float bw = ts.border_width;
+
+    const float bw = std::max(0.0f, ts.border_width);
     const float pt_l = ts.padding_left.isPixel() ? ts.padding_left.value : 0.0f;
     const float pt_t = ts.padding_top.isPixel() ? ts.padding_top.value : 0.0f;
+    const float pt_b = ts.padding_bottom.isPixel() ? ts.padding_bottom.value : 0.0f;
 
+    // Our LayoutNode coordinates are absolute (see layout extraction in layout_engine.cpp).
+    // Table post-pass must therefore write absolute positions for rows/cells as well.
+
+    const float content_x = table_x + bw + pt_l + spacing;
     float cur_y = table_y + bw + pt_t + spacing;
 
-    for (const auto& row : rows) {
-        auto* row_ln = getLayoutMutable(row);
-        if (!row_ln) continue;
+    const auto blocks = collectRowBlocks(table_node);
 
-        std::vector<dom::DOMNodePtr> cells;
-        collectCells(row, cells);
+    for (const auto& block : blocks) {
+        LayoutNode* group_ln = nullptr;
+        const float group_start_y = cur_y;
+        float group_w = 0.0f;
 
-        // Determine row height from tallest cell
-        float row_h = 0.0f;
-        for (const auto& cell : cells) {
-            const auto* cl = getLayout(cell);
-            if (cl) row_h = std::max(row_h, cl->layout.dimensions[1]);
+        if (block.group) {
+            group_ln = getLayoutMutable(block.group);
         }
 
-        // Position each cell
-        float cur_x = table_x + bw + pt_l + spacing;
-        for (size_t c = 0; c < cells.size() && c < col_widths.size(); ++c) {
-            auto* cell_ln = getLayoutMutable(cells[c]);
-            if (!cell_ln) continue;
-            updateLayoutRect(cell_ln, cur_x, cur_y, col_widths[c], row_h);
-            cur_x += col_widths[c] + spacing;
+        for (const auto& row : block.rows) {
+            auto* row_ln = getLayoutMutable(row);
+            if (!row_ln) continue;
+
+            std::vector<dom::DOMNodePtr> cells;
+            collectCells(row, cells);
+
+            const float row_h = computeRowHeightPx(this, cells);
+            const float row_w = positionCellsInRowAbs(this, cells, col_widths, content_x, cur_y, spacing, row_h);
+
+            updateLayoutRect(row_ln, content_x, cur_y, row_w, row_h);
+
+            group_w = std::max(group_w, row_w);
+            cur_y += row_h + spacing;
         }
 
-        // Update row
-        float row_w = cur_x - (table_x + bw + pt_l);
-        updateLayoutRect(row_ln, table_x + bw + pt_l, cur_y, row_w, row_h);
-        cur_y += row_h + spacing;
+        if (block.group && group_ln) {
+            // Exclude the trailing spacing after the last row from row-group's own height.
+            const float end_y = (cur_y > group_start_y) ? (cur_y - spacing) : group_start_y;
+            const float group_h = std::max(0.0f, end_y - group_start_y);
+            updateLayoutRect(group_ln, content_x, group_start_y, group_w, group_h);
+        }
     }
 
-    // Update row-group layouts (thead/tbody/tfoot)
-    updateRowGroupLayouts(table_node);
-
     // Update table height to fit rows
-    const float pt_b = ts.padding_bottom.isPixel() ? ts.padding_bottom.value : 0.0f;
-    float new_h = cur_y - table_y + bw + pt_b;
+    const float new_h = cur_y - table_y + bw + pt_b;
     if (new_h > table_ln->layout.dimensions[1]) {
         table_ln->layout.dimensions[1] = new_h;
         table_ln->height = new_h;
     }
 }
+
+
 
 // Declared but not in the header (file-local helper called from positionTableCells)
 void Engine::updateRowGroupLayouts(const dom::DOMNodePtr& table_node) {
@@ -251,4 +444,58 @@ void Engine::updateRowGroupLayouts(const dom::DOMNodePtr& table_node) {
     }
 }
 
+void Engine::compactNormalFlowSiblingsAfter(const dom::DOMNodePtr& start_node) {
+    if (!start_node) return;
+    auto parent = start_node->getParent();
+    if (!parent || parent->getType() != dom::DOMNode::NodeType::ELEMENT) return;
+
+    auto it_prev = layout_cache.find(start_node.get());
+    if (it_prev == layout_cache.end() || !it_prev->second) return;
+
+    LayoutNode* prev_layout = it_prev->second.get();
+    float prev_mb = 0.0f;
+    {
+        const auto& cs = start_node->getComputedStyle();
+        prev_mb = cs.margin_bottom.isPixel() ? cs.margin_bottom.value : 0.0f;
+    }
+
+    bool after = false;
+    for (const auto& child : parent->getChildren()) {
+        if (!child) continue;
+        if (child.get() == start_node.get()) {
+            after = true;
+            continue;
+        }
+        if (!after) continue;
+
+        if (child->getType() != dom::DOMNode::NodeType::ELEMENT) {
+            continue;
+        }
+
+        const auto& cs = child->getComputedStyle();
+        if (cs.display == "none" || cs.position == "absolute" || cs.position == "fixed") {
+            continue;
+        }
+
+        auto it = layout_cache.find(child.get());
+        if (it == layout_cache.end() || !it->second) {
+            continue;
+        }
+
+        LayoutNode* ln = it->second.get();
+        const float mt = cs.margin_top.isPixel() ? cs.margin_top.value : 0.0f;
+        const float expected_y = prev_layout->y + prev_layout->height + prev_mb + mt;
+        const float shift = expected_y - ln->y;
+
+        if (std::abs(shift) > 0.1f) {
+            shiftSubtreeY(child, shift);
+        }
+
+        // Use updated values after potential shift.
+        prev_layout = it->second.get();
+        prev_mb = cs.margin_bottom.isPixel() ? cs.margin_bottom.value : 0.0f;
+    }
+}
+
 } // namespace dong::layout
+

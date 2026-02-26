@@ -58,6 +58,16 @@ using dong::render::TextMeasureCache;
 using dong::collapseWhitespace;
 using dong::collapseSpacesPreserveNewlines;
 
+bool isTableLikeDisplay(const std::string& display) {
+    return display == "table" || display == "inline-table" ||
+           display == "table-row" || display == "table-cell" ||
+           display == "table-row-group" || display == "table-header-group" ||
+           display == "table-footer-group" ||
+           display == "table-column-group" || display == "table-column" ||
+           display == "table-caption";
+}
+
+
 // 璁＄畻鍏冪礌鐨勫唴鍦ㄦ枃鏈搴︼紙鍖呭惈 padding锛夛紝鐢ㄤ簬鎸夐挳绛?inline-block 鍏冪礌鐨勮嚜閫傚簲瀹藉害
 // 绗﹀悎 CSS 鏍囧噯锛歸idth: auto 鏃讹紝鍏冪礌瀹藉害 = 鍐呭瀹藉害 + padding + border
 float computeIntrinsicTextWidth(const dom::DOMNodePtr& node) {
@@ -4129,8 +4139,10 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
             }
         }
 
-        if (style.display != "flex" && style.display != "inline-flex") {
+        if (style.display != "flex" && style.display != "inline-flex" &&
+            !isTableLikeDisplay(style.display)) {
         // 检查是否需要调整子元素的 Y 坐标
+
         // 背景：我们在第二遍/第三遍里可能会"补齐"某些容器（尤其是含 IFC 后代）的高度，
         // 但 Yoga 已经给出了兄弟元素的 Y。如果不把后续兄弟整体下移，会出现
         // "后一个 block 覆盖前一个（因为绘制顺序在后）"的现象。

@@ -348,15 +348,15 @@ void applyRuleProperties(const ComputedStyle& rs, ComputedStyle& computed) {
                !rs.clear.empty() && rs.clear != "none");
 
     // Appearance
-    APPLY_PROP("appearance", computed.appearance = rs.appearance,
+    APPLY_PROP("appearance", computed.appearance = rs.appearance; computed.markExplicitlySet("appearance"),
                !rs.appearance.empty() && rs.appearance != "auto");
 
     // Table properties
-    APPLY_PROP("border-collapse", computed.border_collapse = rs.border_collapse,
+    APPLY_PROP("border-collapse", computed.border_collapse = rs.border_collapse; computed.markExplicitlySet("border-collapse"),
                !rs.border_collapse.empty() && rs.border_collapse != "separate");
-    APPLY_PROP("border-spacing", computed.border_spacing = rs.border_spacing,
+    APPLY_PROP("border-spacing", computed.border_spacing = rs.border_spacing; computed.markExplicitlySet("border-spacing"),
                rs.border_spacing != 2.0f);
-    APPLY_PROP("table-layout", computed.table_layout = rs.table_layout,
+    APPLY_PROP("table-layout", computed.table_layout = rs.table_layout; computed.markExplicitlySet("table-layout"),
                !rs.table_layout.empty() && rs.table_layout != "auto");
 
     #undef APPLY_PROP
