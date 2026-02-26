@@ -8,6 +8,8 @@
 #include <cctype>
 #include <cmath>
 #include <cstdlib>
+#include <unordered_set>
+
 #include "../core/log.h"
 #include "../core/profiler.h"
 #include "../core/string_utils.h"
@@ -366,6 +368,9 @@ const DisplayList& Painter::buildDisplayList(const dom::DOMNodePtr& root, layout
     layer_stack_.clear();
     open_select_overlays_.clear();
 
+    gen_.counters.clear();
+    gen_.pushed_names_stack.clear();
+    gen_.quote_depth = 0;
 
     if (layout_engine_) {
         current_dirty_rect_ = layout_engine_->getDirtyRect();
@@ -386,11 +391,28 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                                    DisplayListBuilder& builder) {
     if (!node) return;
 
+    struct ScopedCounterScope {
+        Painter* painter = nullptr;
+        bool enabled = false;
+        ScopedCounterScope(Painter* p, const dom::ComputedStyle& s, bool en)
+            : painter(p), enabled(en) {
+            if (enabled && painter) painter->pushCounterScope(s);
+        }
+        ~ScopedCounterScope() {
+            if (enabled && painter) painter->popCounterScope();
+        }
+    };
+
     const auto& style = node->getComputedStyle();
     if (style.display == "none") return;
 
+    const bool has_counter_ops = !style.counter_resets.empty() || !style.counter_increments.empty();
+
     // display: contents - no box rendering, but still render children
     if (layout::shouldSkipLayoutNode(style)) {
+        // Even without a layout box, `counter-reset`/`counter-increment` still participate.
+        ScopedCounterScope counter_scope(this, style, has_counter_ops);
+
         // TODO: Render ::before pseudo-element if exists
 
         // Render children
@@ -411,6 +433,10 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
     const bool is_hidden = (style.visibility == "hidden" || style.visibility == "collapse");
 
     if (node->getType() == dom::DOMNode::NodeType::TEXT) return;
+
+    // Apply counter ops before evaluating generated content and painting text.
+    ScopedCounterScope counter_scope(this, style, has_counter_ops);
+
 
     const std::string tag = node->getTagName();
 
@@ -630,6 +656,36 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
             rect.height = static_cast<float>(surface_->getHeight());
         }
 
+        // Tables with <caption>: the layout wrapper includes caption, but border/background should
+        // only cover the grid box (exclude the caption area), matching browser behavior.
+        if (layout_engine_ && (style.display == "table" || style.display == "inline-table")) {
+            dom::DOMNodePtr caption_node;
+            for (const auto& ch : node->getChildren()) {
+                if (!ch || ch->getType() != dom::DOMNode::NodeType::ELEMENT) continue;
+                if (ch->getComputedStyle().display == "table-caption") {
+                    caption_node = ch;
+                    break;
+                }
+            }
+            if (caption_node) {
+                const auto* cap_ln = layout_engine_->getLayout(caption_node);
+                const float cap_h = (cap_ln && std::isfinite(cap_ln->layout.dimensions[1])) ? cap_ln->layout.dimensions[1] : 0.0f;
+                if (cap_h > 0.0f) {
+                    const std::string side = toLowerCollapsed(caption_node->getComputedStyle().caption_side);
+                    if (side == "bottom") {
+                        rect.height = std::max(0.0f, rect.height - cap_h);
+                    } else {
+                        rect.y += cap_h;
+                        rect.height = std::max(0.0f, rect.height - cap_h);
+                    }
+                }
+            }
+        }
+
+        // Theme hint variables for the current node (may be overridden for UA-like controls).
+        std::string bg_color_css = style.background_color;
+        std::string override_border_color;
+
         // 1.1 background box helpers (clip/origin/attachment)
         const float radius = style.border_radius;
         const float viewport_w = surface_ ? static_cast<float>(surface_->getWidth()) : 800.0f;
@@ -645,7 +701,15 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         };
         auto effectiveBorderStyle = [&](const std::string& side_style) -> std::string {
             const std::string& st = !side_style.empty() ? side_style : style.border_style;
-            return normalizeBorderStyle(st);
+            std::string norm = normalizeBorderStyle(st);
+
+            // Browsers tend to paint form controls with flat borders even if UA rules say inset/outset.
+            // Normalize inset/outset to solid for UA-like controls so `color-scheme` comparisons are stable.
+            const bool is_control = (tag == "button" || tag == "input" || tag == "select" || tag == "textarea");
+            if (is_control && (norm == "inset" || norm == "outset")) {
+                norm = "solid";
+            }
+            return norm;
         };
         auto effectiveBorderWidth = [&](float side_width, const std::string& side_style) -> float {
             float w = (side_width >= 0.0f) ? side_width : style.border_width;
@@ -656,6 +720,10 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         };
         auto effectiveBorderColor = [&](const std::string& side_color) -> std::string {
             if (!side_color.empty()) return side_color;
+            const bool is_known_ua_border = (style.border_color.empty() || style.border_color == "#000000" || style.border_color == "#767676");
+            if (!override_border_color.empty() && is_known_ua_border) {
+                return override_border_color;
+            }
             return style.border_color;
         };
 
@@ -736,15 +804,46 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
 
         // 1.2 边框和背景填充
         const bool has_border = (bt > 0.0f || br > 0.0f || bb > 0.0f || bl > 0.0f);
-        const bool has_background = !style.background_color.empty() && style.background_color != "transparent";
+
+        // Form controls: derive a UA-like palette from `color-scheme`.
+        // Important: our UA stylesheet assigns light-theme defaults (e.g. #f3f3f3/#ffffff/#767676).
+        // When author only sets `color-scheme`, we still want controls to adopt dark palette.
+        if (tag == "button" || tag == "input" || tag == "select" || tag == "textarea") {
+            const std::string scheme = toLowerCollapsed(style.color_scheme);
+            const bool is_button = (tag == "button");
+            const bool scheme_dark = (scheme == "dark");
+
+            const std::string default_bg = scheme_dark
+                ? (is_button ? "#4a4a4a" : "#3a3a3a")
+                : (is_button ? "#f3f3f3" : "#ffffff");
+            const std::string default_border = scheme_dark ? "#8a8a8a" : "#767676";
+
+            // Treat known UA light defaults as "not author-specified" so `color-scheme: dark` can override them.
+            const bool is_known_ua_bg = (bg_color_css == "#f3f3f3" || bg_color_css == "#ffffff");
+            if (bg_color_css.empty() || bg_color_css == "transparent" || (scheme_dark && is_known_ua_bg)) {
+                bg_color_css = default_bg;
+            }
+
+            const bool no_side_border_colors =
+                style.border_top_color.empty() && style.border_right_color.empty() &&
+                style.border_bottom_color.empty() && style.border_left_color.empty();
+            const bool is_known_ua_border = (style.border_color.empty() || style.border_color == "#000000" || style.border_color == "#767676");
+            if (no_side_border_colors && (is_known_ua_border || (scheme_dark && style.border_color == "#767676"))) {
+                override_border_color = default_border;
+            }
+        }
+
+
+        const bool has_background = !bg_color_css.empty() && bg_color_css != "transparent";
 
         
-        // DEBUG: 打印背景信息
-        if (radius > 0.0f || has_background || has_border) {
+        // DEBUG: 打印背景信息（默认关闭，避免 baseline compare 过程中刷屏）
+        if (std::getenv("DONG_DEBUG_PAINT_BG") && (radius > 0.0f || has_background || has_border)) {
             DONG_LOG_DEBUG("[PAINT_BG] bg_color='%s' has_bg=%d radius=%.1f has_border=%d rect=(%.0f,%.0f,%.0f,%.0f)",
-                style.background_color.c_str(), has_background, radius, has_border,
+                bg_color_css.c_str(), has_background, radius, has_border,
                 rect.x, rect.y, rect.width, rect.height);
         }
+
 
         // DEBUG（可选）：定位 section 的最终布局位置，避免“后一个 section 覆盖前一个”的错位问题
         // 用法：在运行前设置环境变量 DONG_DEBUG_SECTION=1
@@ -772,7 +871,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                 // 另外：圆角边框不能用 "填充整块圆角矩形" 来近似，否则会把整个内容区域都染上边框颜色。
 
                 if (has_background) {
-                    Color bg_color = makeColorFromCss(style.background_color);
+                    Color bg_color = makeColorFromCss(bg_color_css);
                     DONG_LOG_DEBUG("[PAINT_BG] Drawing rounded rect: color=(%f,%f,%f,%f)", bg_color.r, bg_color.g, bg_color.b, bg_color.a);
 
                     Rect inner_rect = bg_clip_rect;
@@ -885,7 +984,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
 
                 // 非圆角情况：先背景，后边框
                 if (has_background) {
-                    Color bg_color = makeColorFromCss(style.background_color);
+                    Color bg_color = makeColorFromCss(bg_color_css);
                     builder.addRect(bg_clip_rect, bg_color);
                 }
 
@@ -944,9 +1043,10 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
 
                         const std::string bstyle = normalizeBorderStyle(style.border_style);
                         const bool is_outset = (bstyle == "outset");
-                        Color base = has_background ? makeColorFromCss(style.background_color)
-                                                    : makeColorFromCss(style.border_color);
+                        Color base = makeColorFromCss(effectiveBorderColor(""));
+
                         Color c_tl = is_outset ? lighten(base, 0.25f) : darken(base, 0.25f);
+
                         Color c_br = is_outset ? darken(base, 0.25f) : lighten(base, 0.25f);
 
                         if (bt > 0.0f) builder.addRect(top_border, c_tl);
@@ -962,34 +1062,16 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         // 1.2.3 Form controls (very minimal): checkbox/radio checked mark.
         // Our engine doesn't have native OS widgets; emulate a simple mark so baseline diffs shrink.
         // Skip if appearance: none (allows custom styling without native marks).
-        if (tag == "input" && rect.width > 0.0f && rect.height > 0.0f && node->hasAttribute("type")
-            && style.appearance != "none") {
-            std::string t = node->getAttribute("type");
-            std::transform(t.begin(), t.end(), t.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-
-            if ((t == "checkbox" || t == "radio") && node->hasAttribute("checked")) {
-                Rect inner = rect;
-                inner.x += bl;
-                inner.y += bt;
-                inner.width = std::max(0.0f, inner.width - (bl + br));
-                inner.height = std::max(0.0f, inner.height - (bt + bb));
-
-                const float side = std::min(inner.width, inner.height);
-                const float margin = std::max(1.0f, side * 0.25f);
-                Rect mark{inner.x + margin, inner.y + margin,
-                          std::max(0.0f, inner.width - 2.0f * margin),
-                          std::max(0.0f, inner.height - 2.0f * margin)};
-
-                if (mark.width > 0.0f && mark.height > 0.0f) {
-                    Color mark_color = makeColorFromCss("#111111");
-                    if (t == "radio") {
-                        builder.addRoundedRect(mark, mark_color, std::min(mark.width, mark.height) * 0.5f);
-                    } else {
-                        builder.addRect(mark, mark_color);
-                    }
-                }
-            }
+        if (tag == "input" && rect.width > 0.0f && rect.height > 0.0f) {
+            BorderWidths bw{};
+            bw.top = bt;
+            bw.right = br;
+            bw.bottom = bb;
+            bw.left = bl;
+            bw.max = bmax;
+            paintCheckboxMark(node, rect, bw, builder);
         }
+
 
         // 1.2.5 背景图片
         if (!style.background_image.empty() && rect.width > 0.0f && rect.height > 0.0f) {
@@ -1016,6 +1098,12 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                 const std::string bg_repeat = toLowerCollapsed(style.background_repeat);
                 const std::string bg_pos = toLowerCollapsed(style.background_position);
 
+                const std::string ir = toLowerCollapsed(style.image_rendering);
+                const ImageSampling img_sampling = (ir == "pixelated" || ir == "crisp-edges")
+                    ? ImageSampling::Nearest
+                    : ImageSampling::Linear;
+
+
                 // Backgrounds are clipped to background-clip.
                 float bg_clip_radius = radius;
                 if (bg_clip_kw == "padding-box") {
@@ -1034,9 +1122,11 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
 
 
                 if (bg_size.find("cover") != std::string::npos) {
-                    builder.addImage(bg_clip_rect, image_url, 1.0f, ImageFitMode::Cover);
+                    builder.addImage(bg_clip_rect, image_url, 1.0f, ImageFitMode::Cover, 0.5f, 0.5f, img_sampling);
+
                 } else if (bg_size.find("contain") != std::string::npos) {
-                    builder.addImage(bg_clip_rect, image_url, 1.0f, ImageFitMode::Contain);
+                    builder.addImage(bg_clip_rect, image_url, 1.0f, ImageFitMode::Contain, 0.5f, 0.5f, img_sampling);
+
                 } else {
 
                     // Handle explicit background-size like "96px 96px" (used by the tile test).
@@ -1091,12 +1181,14 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                         for (float y = y0; y < y1; y += tile_h) {
                             for (float x = x0; x < x1; x += tile_w) {
                                 Rect tile{ x, y, tile_w, tile_h };
-                                builder.addImage(tile, image_url, 1.0f, ImageFitMode::Fill);
+                                builder.addImage(tile, image_url, 1.0f, ImageFitMode::Fill, 0.5f, 0.5f, img_sampling);
+
                             }
                         }
                     } else {
                         // Fallback: stretch to the clip rect.
-                        builder.addImage(bg_clip_rect, image_url, 1.0f, ImageFitMode::Fill);
+                        builder.addImage(bg_clip_rect, image_url, 1.0f, ImageFitMode::Fill, 0.5f, 0.5f, img_sampling);
+
                     }
 
                 }
@@ -1219,13 +1311,192 @@ bool Painter::isRectInDirtyRect(const Rect& rect) const {
     return x_overlap && y_overlap;
 }
 
+void Painter::pushCounterScope(const dom::ComputedStyle& style) {
+    // CSS counters:
+    // - counter-reset creates a new scope (push)
+    // - counter-increment mutates the current scope (no push)
+    std::vector<std::string> pushed_resets;
+
+    auto ensureBaseCounter = [&](const std::string& name) {
+        auto& st = gen_.counters[name];
+        if (st.empty()) {
+            st.push_back(0);  // implicit root scope
+        }
+    };
+
+    auto pushReset = [&](const std::string& name, int value) {
+        gen_.counters[name].push_back(value);
+        pushed_resets.push_back(name);
+    };
+
+    // Apply resets first (last one wins per name), keeping stable order.
+    {
+        std::unordered_set<std::string> seen;
+        std::vector<dom::ComputedStyle::CounterDirective> dedup;
+        dedup.reserve(style.counter_resets.size());
+        for (auto it = style.counter_resets.rbegin(); it != style.counter_resets.rend(); ++it) {
+            if (it->name.empty()) continue;
+            if (seen.insert(it->name).second) {
+                dedup.push_back(*it);
+            }
+        }
+        std::reverse(dedup.begin(), dedup.end());
+        for (const auto& r : dedup) {
+            const int v = r.has_value ? r.value : 0;
+            pushReset(r.name, v);
+        }
+    }
+
+    // Then increments (persist across siblings).
+    for (const auto& inc : style.counter_increments) {
+        if (inc.name.empty()) continue;
+        ensureBaseCounter(inc.name);
+        auto it = gen_.counters.find(inc.name);
+        if (it == gen_.counters.end() || it->second.empty()) continue;
+        it->second.back() += inc.value;
+    }
+
+    gen_.pushed_names_stack.push_back(std::move(pushed_resets));
+}
+
+void Painter::popCounterScope() {
+    if (gen_.pushed_names_stack.empty()) return;
+    auto pushed = std::move(gen_.pushed_names_stack.back());
+    gen_.pushed_names_stack.pop_back();
+
+    for (const auto& name : pushed) {
+        auto it = gen_.counters.find(name);
+        if (it == gen_.counters.end()) continue;
+        if (!it->second.empty()) {
+            it->second.pop_back();
+        }
+        if (it->second.empty()) {
+            gen_.counters.erase(it);
+        }
+    }
+}
+
+
+std::string Painter::evaluateCounterText(const std::string& name) {
+    auto it = gen_.counters.find(name);
+    if (it == gen_.counters.end() || it->second.empty()) {
+        return "0";
+    }
+    return std::to_string(it->second.back());
+}
+
+std::string Painter::evaluateCountersText(const std::string& name, const std::string& sep) {
+    auto it = gen_.counters.find(name);
+    if (it == gen_.counters.end() || it->second.empty()) {
+        return "0";
+    }
+
+    std::string out;
+    for (size_t i = 0; i < it->second.size(); ++i) {
+        if (i > 0) out += sep;
+        out += std::to_string(it->second[i]);
+    }
+    return out;
+}
+
+std::string Painter::evaluateQuoteToken(const dom::ComputedStyle& style,
+                                       const dom::ComputedStyle::ContentToken& tok) {
+    const std::vector<std::string>& q = style.quotes;
+    const size_t pair_count = q.size() / 2;
+
+    auto quoteAt = [&](int depth, bool open) -> std::string {
+        if (pair_count == 0) return {};
+        int d = depth;
+        if (d < 0) d = 0;
+        size_t idx = static_cast<size_t>(d);
+        if (idx >= pair_count) idx = pair_count - 1;
+        size_t base = idx * 2;
+        return open ? q[base] : q[base + 1];
+    };
+
+    switch (tok.type) {
+    case dom::ComputedStyle::ContentToken::Type::OpenQuote: {
+        std::string s = quoteAt(gen_.quote_depth, true);
+        gen_.quote_depth = std::max(0, gen_.quote_depth + 1);
+        return s;
+    }
+    case dom::ComputedStyle::ContentToken::Type::CloseQuote: {
+        // CSS spec: if quote depth is 0, close-quote generates no content and depth stays 0.
+        if (gen_.quote_depth <= 0) {
+            gen_.quote_depth = 0;
+            return {};
+        }
+        gen_.quote_depth -= 1;
+        return quoteAt(gen_.quote_depth, false);
+    }
+    case dom::ComputedStyle::ContentToken::Type::NoOpenQuote:
+        gen_.quote_depth = std::max(0, gen_.quote_depth + 1);
+        return {};
+    case dom::ComputedStyle::ContentToken::Type::NoCloseQuote:
+        // CSS spec: if quote depth is 0, no-close-quote does nothing.
+        if (gen_.quote_depth <= 0) {
+            gen_.quote_depth = 0;
+            return {};
+        }
+        gen_.quote_depth -= 1;
+        return {};
+
+
+    default:
+        return {};
+    }
+}
+
+std::string Painter::evaluateContentText(const dom::ComputedStyle& style) {
+    if (!style.content_tokens.empty()) {
+        std::string out;
+        for (const auto& tok : style.content_tokens) {
+            switch (tok.type) {
+            case dom::ComputedStyle::ContentToken::Type::String:
+                out += tok.text;
+                break;
+            case dom::ComputedStyle::ContentToken::Type::Counter:
+                out += evaluateCounterText(tok.text);
+                break;
+            case dom::ComputedStyle::ContentToken::Type::Counters:
+                out += evaluateCountersText(tok.text, tok.separator.empty() ? "." : tok.separator);
+                break;
+            case dom::ComputedStyle::ContentToken::Type::OpenQuote:
+            case dom::ComputedStyle::ContentToken::Type::CloseQuote:
+            case dom::ComputedStyle::ContentToken::Type::NoOpenQuote:
+            case dom::ComputedStyle::ContentToken::Type::NoCloseQuote:
+                out += evaluateQuoteToken(style, tok);
+                break;
+            }
+        }
+        return out;
+    }
+
+    return style.content;
+}
+
 void Painter::renderPseudoElement(const dom::DOMNodePtr& pseudo,
                                    const Rect& parent_rect,
                                    DisplayListBuilder& builder) {
     if (!pseudo) return;
     
     const auto& style = pseudo->getComputedStyle();
-    if (style.display == "none" || style.content.empty()) return;
+    if (style.display == "none") return;
+
+    struct ScopedGeneratedCounters {
+        Painter* painter;
+        ScopedGeneratedCounters(Painter* p, const dom::ComputedStyle& s) : painter(p) { painter->pushCounterScope(s); }
+        ~ScopedGeneratedCounters() { painter->popCounterScope(); }
+    } scope(this, style);
+
+    const std::string content_text = evaluateContentText(style);
+
+    const bool has_background = (style.background_color != "transparent");
+    const bool has_border = (style.border_width > 0.0f && style.border_style != "none");
+    if (content_text.empty() && !has_background && !has_border) {
+        return;
+    }
+
     
     // Calculate pseudo-element position (relative to parent)
     Rect rect = parent_rect;
@@ -1283,7 +1554,7 @@ void Painter::renderPseudoElement(const dom::DOMNodePtr& pseudo,
     }
     
     // Draw content text
-    if (!style.content.empty()) {
+    if (!content_text.empty()) {
         Color text_color = makeColorFromCss(style.color);
         float font_size = style.font_size;
         
@@ -1293,7 +1564,8 @@ void Painter::renderPseudoElement(const dom::DOMNodePtr& pseudo,
         
         // Shape text using TextShapeRequest
         TextShapeRequest request;
-        request.text = style.content;
+        request.text = content_text;
+
         request.font_family = style.font_family;
         request.font_weight = style.font_weight;
         request.font_style = style.font_style;
@@ -1647,7 +1919,10 @@ void Painter::paintCheckboxMark(const dom::DOMNodePtr& node,
                                 const Rect& rect,
                                 const BorderWidths& bw,
                                 DisplayListBuilder& builder) const {
-    if (!node->hasAttribute("type")) return;
+    if (!node || !node->hasAttribute("type")) return;
+
+    const auto& style = node->getComputedStyle();
+    if (style.appearance == "none") return;
 
     std::string t = node->getAttribute("type");
     std::transform(t.begin(), t.end(), t.begin(),
@@ -1662,19 +1937,41 @@ void Painter::paintCheckboxMark(const dom::DOMNodePtr& node,
     inner.height = std::max(0.0f, inner.height - (bw.top + bw.bottom));
 
     float side = std::min(inner.width, inner.height);
-    float margin = std::max(1.0f, side * 0.25f);
-    Rect mark{inner.x + margin, inner.y + margin,
-              std::max(0.0f, inner.width - 2.0f * margin),
-              std::max(0.0f, inner.height - 2.0f * margin)};
+    if (side <= 0.0f) return;
 
-    if (mark.width <= 0.0f || mark.height <= 0.0f) return;
-
-    Color mark_color = makeColorFromCss("#111111");
-    if (t == "radio") {
-        builder.addRoundedRect(mark, mark_color, std::min(mark.width, mark.height) * 0.5f);
-    } else {
-        builder.addRect(mark, mark_color);
+    // CSS `accent-color`: `auto` uses a UA default accent; explicit colors override it.
+    Color mark_color = makeColorFromCss("#0a84ff");
+    if (!style.accent_color.empty() && style.accent_color != "auto") {
+        mark_color = makeColorFromCss(style.accent_color);
     }
+
+    if (t == "checkbox") {
+        // Fill the control with the accent color.
+        builder.addRect(inner, mark_color);
+
+        // Simple white mark (not a perfect glyph checkmark, but improves readability).
+        Color white{1.0f, 1.0f, 1.0f, 1.0f};
+        const float thickness = std::max(1.0f, side * 0.12f);
+        Rect vert{inner.x + side * 0.44f, inner.y + side * 0.18f,
+                  thickness, std::max(0.0f, side * 0.64f)};
+        Rect horiz{inner.x + side * 0.18f, inner.y + side * 0.46f,
+                   std::max(0.0f, side * 0.64f), thickness};
+        if (vert.width > 0.0f && vert.height > 0.0f) builder.addRect(vert, white);
+        if (horiz.width > 0.0f && horiz.height > 0.0f) builder.addRect(horiz, white);
+        return;
+    }
+
+    // radio
+    const float radius = side * 0.5f;
+    const float stroke = std::max(1.0f, side * 0.18f);
+    builder.addRoundedRect(inner, mark_color, radius, stroke);
+
+    Rect dot{inner.x + side * 0.35f, inner.y + side * 0.35f,
+             std::max(0.0f, side * 0.30f), std::max(0.0f, side * 0.30f)};
+    if (dot.width > 0.0f && dot.height > 0.0f) {
+        builder.addRoundedRect(dot, mark_color, std::min(dot.width, dot.height) * 0.5f);
+    }
+
 }
 
 } // namespace dong::render

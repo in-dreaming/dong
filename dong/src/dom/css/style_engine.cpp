@@ -29,7 +29,79 @@ LayoutMode deriveLayoutModeFromDisplay(const ComputedStyle& style) {
     return LayoutMode::Block;
 }
 
+// Logical properties (margin/padding/border-inline/block).
+// Note: we currently only map for horizontal-tb writing mode.
+static bool isRTL(const ComputedStyle& style) {
+    return style.direction == "rtl";
+}
+
+static void applyLogicalMarginsAndPaddings(ComputedStyle& style) {
+    const bool rtl = isRTL(style);
+    // Inline axis
+    if (style.margin_inline_start.isSet()) {
+        (rtl ? style.margin_right : style.margin_left) = style.margin_inline_start;
+    }
+    if (style.margin_inline_end.isSet()) {
+        (rtl ? style.margin_left : style.margin_right) = style.margin_inline_end;
+    }
+    if (style.padding_inline_start.isSet()) {
+        (rtl ? style.padding_right : style.padding_left) = style.padding_inline_start;
+    }
+    if (style.padding_inline_end.isSet()) {
+        (rtl ? style.padding_left : style.padding_right) = style.padding_inline_end;
+    }
+
+    // Block axis
+    if (style.margin_block_start.isSet()) style.margin_top = style.margin_block_start;
+    if (style.margin_block_end.isSet()) style.margin_bottom = style.margin_block_end;
+    if (style.padding_block_start.isSet()) style.padding_top = style.padding_block_start;
+    if (style.padding_block_end.isSet()) style.padding_bottom = style.padding_block_end;
+}
+
+static void applyLogicalBorders(ComputedStyle& style) {
+    const bool rtl = isRTL(style);
+
+    auto apply_side = [&](bool to_right,
+                          float width, const std::string& color, const std::string& st) {
+        if (width >= 0.0f) {
+            if (to_right) style.border_right_width = width;
+            else style.border_left_width = width;
+        }
+        if (!color.empty()) {
+            if (to_right) style.border_right_color = color;
+            else style.border_left_color = color;
+        }
+        if (!st.empty()) {
+            if (to_right) style.border_right_style = st;
+            else style.border_left_style = st;
+        }
+    };
+
+    // Inline start/end
+    if (style.border_inline_start_width >= 0.0f || !style.border_inline_start_color.empty() || !style.border_inline_start_style.empty()) {
+        apply_side(rtl, style.border_inline_start_width, style.border_inline_start_color, style.border_inline_start_style);
+    }
+    if (style.border_inline_end_width >= 0.0f || !style.border_inline_end_color.empty() || !style.border_inline_end_style.empty()) {
+        apply_side(!rtl, style.border_inline_end_width, style.border_inline_end_color, style.border_inline_end_style);
+    }
+
+    // Block start/end map to top/bottom.
+    if (style.border_block_start_width >= 0.0f) style.border_top_width = style.border_block_start_width;
+    if (!style.border_block_start_color.empty()) style.border_top_color = style.border_block_start_color;
+    if (!style.border_block_start_style.empty()) style.border_top_style = style.border_block_start_style;
+
+    if (style.border_block_end_width >= 0.0f) style.border_bottom_width = style.border_block_end_width;
+    if (!style.border_block_end_color.empty()) style.border_bottom_color = style.border_block_end_color;
+    if (!style.border_block_end_style.empty()) style.border_bottom_style = style.border_block_end_style;
+}
+
+static void applyLogicalProperties(ComputedStyle& style) {
+    applyLogicalMarginsAndPaddings(style);
+    applyLogicalBorders(style);
+}
+
 // ── Sub-functions for applyRuleProperties (declared before the caller) ──
+
 
 void applyRuleTextProperties(const ComputedStyle& rs, ComputedStyle& computed) {
     if (rs.font_size != 16.0f) { computed.font_size = rs.font_size; computed.markExplicitlySet("font-size"); }
@@ -269,10 +341,18 @@ void applyRuleProperties(const ComputedStyle& rs, ComputedStyle& computed) {
                !rs.object_fit.empty() && rs.object_fit != "fill");
     APPLY_PROP("object-position", computed.object_position = rs.object_position,
                !rs.object_position.empty() && rs.object_position != "50% 50%");
+    APPLY_PROP("image-rendering", computed.image_rendering = rs.image_rendering,
+               !rs.image_rendering.empty() && rs.image_rendering != "auto");
     APPLY_PROP("background-gradient", computed.background_gradients = rs.background_gradients,
                !rs.background_gradients.empty());
 
+    // Color scheme hint (UA/form control theming)
+    APPLY_PROP("color-scheme",
+               computed.color_scheme = rs.color_scheme; computed.markExplicitlySet("color-scheme"),
+               rs.isExplicitlySet("color-scheme"));
+
     applyRuleTextProperties(rs, computed);
+
 
     // Display / position
     if (!rs.display.empty() && (!computed.isImportant("display") || rs.isImportant("display"))) {
@@ -287,7 +367,16 @@ void applyRuleProperties(const ComputedStyle& rs, ComputedStyle& computed) {
     applyRuleBorderProperties(rs, computed);
     applyRuleOverflowProperties(rs, computed);
 
+    // List styling (affects ::marker auto-generation)
+    APPLY_PROP("list-style-type",
+               computed.list_style_type = rs.list_style_type; computed.markExplicitlySet("list-style-type"),
+               rs.isExplicitlySet("list-style-type") || rs.isExplicitlySet("list-style"));
+    APPLY_PROP("list-style-position",
+               computed.list_style_position = rs.list_style_position; computed.markExplicitlySet("list-style-position"),
+               rs.isExplicitlySet("list-style-position") || rs.isExplicitlySet("list-style"));
+
     // Outline
+
     APPLY_PROP("outline-width", computed.outline_width = rs.outline_width,
                rs.outline_width != 0.0f);
     APPLY_PROP("outline-color", computed.outline_color = rs.outline_color,
@@ -347,9 +436,14 @@ void applyRuleProperties(const ComputedStyle& rs, ComputedStyle& computed) {
     APPLY_PROP("clear", computed.clear = rs.clear,
                !rs.clear.empty() && rs.clear != "none");
 
+    // Form control theming
+    APPLY_PROP("accent-color", computed.accent_color = rs.accent_color; computed.markExplicitlySet("accent-color"),
+               !rs.accent_color.empty() && rs.accent_color != "auto");
+
     // Appearance
     APPLY_PROP("appearance", computed.appearance = rs.appearance; computed.markExplicitlySet("appearance"),
                !rs.appearance.empty() && rs.appearance != "auto");
+
 
     // Table properties
     APPLY_PROP("border-collapse", computed.border_collapse = rs.border_collapse; computed.markExplicitlySet("border-collapse"),
@@ -358,6 +452,24 @@ void applyRuleProperties(const ComputedStyle& rs, ComputedStyle& computed) {
                rs.border_spacing != 2.0f);
     APPLY_PROP("table-layout", computed.table_layout = rs.table_layout; computed.markExplicitlySet("table-layout"),
                !rs.table_layout.empty() && rs.table_layout != "auto");
+    APPLY_PROP("caption-side", computed.caption_side = rs.caption_side; computed.markExplicitlySet("caption-side"),
+               !rs.caption_side.empty() && rs.caption_side != "top");
+
+    // Counters / generated content
+
+    APPLY_PROP("counter-reset",
+               computed.counter_resets = rs.counter_resets; computed.markExplicitlySet("counter-reset"),
+               rs.isExplicitlySet("counter-reset"));
+    APPLY_PROP("counter-increment",
+               computed.counter_increments = rs.counter_increments; computed.markExplicitlySet("counter-increment"),
+               rs.isExplicitlySet("counter-increment"));
+    APPLY_PROP("quotes",
+               computed.quotes = rs.quotes; computed.has_quotes = rs.has_quotes; computed.markExplicitlySet("quotes"),
+               rs.isExplicitlySet("quotes"));
+    APPLY_PROP("content",
+               computed.content_raw = rs.content_raw; computed.content_tokens = rs.content_tokens; computed.content = rs.content;
+               computed.markExplicitlySet("content"),
+               rs.isExplicitlySet("content"));
 
     #undef APPLY_PROP
 }
@@ -380,7 +492,13 @@ void applyImportantPropertiesOnly(const ComputedStyle& rs, ComputedStyle& comput
     APPLY_IF_IMPORTANT("background-image", computed.background_image = rs.background_image,
                        !rs.background_image.empty());
 
+    // Color scheme hint (UA/form control theming)
+    APPLY_IF_IMPORTANT("color-scheme",
+                       computed.color_scheme = rs.color_scheme; computed.markExplicitlySet("color-scheme"),
+                       !rs.color_scheme.empty());
+
     // Display / position
+
     if (!rs.display.empty() && rs.isImportant("display")) {
         computed.display = rs.display;
         computed.layout_mode = deriveLayoutModeFromDisplay(computed);
@@ -513,6 +631,7 @@ const std::unordered_map<std::string_view, TagStyleHandler> kTagDefaultHandlers 
 
     // Table elements
     {"table", [](ComputedStyle& s) { s.setDisplay("table"); }},
+    {"caption", [](ComputedStyle& s) { s.setDisplay("table-caption"); }},
     {"tr", [](ComputedStyle& s) { s.setDisplay("table-row"); }},
     {"td", [](ComputedStyle& s) { s.setDisplay("table-cell"); }},
     {"th", [](ComputedStyle& s) { s.setDisplay("table-cell"); }},
@@ -650,16 +769,22 @@ input[type="checkbox"], input[type="radio"] {
   margin-left: 0;
   border-width: 1px;
   border-style: solid;
-  border-color: #767676;
-  background-color: #ffffff;
   border-radius: 2px;
   box-sizing: border-box;
+}
+
+
+/* Table defaults (match common browser UA behavior). */
+caption {
+  display: table-caption;
+  text-align: center;
 }
 
 /* [hidden] attribute support - must use !important to override author styles */
 [hidden] {
   display: none !important;
 }
+
 
 /* Disabled elements - visual feedback and pointer-events */
 button[disabled], input[disabled], select[disabled], textarea[disabled] {
@@ -788,7 +913,11 @@ void StyleEngine::computeStyles(DOMNodePtr node) {
         applyImportantPropertiesOnly(rule.style, computed);
     }
 
+    // Resolve logical properties (margin/padding/border-inline/block) after cascade.
+    applyLogicalProperties(computed);
+
     // Hide certain elements
+
 
     static const std::unordered_set<std::string> kAlwaysHiddenTags = {
         "head", "style", "script", "meta", "title", "link"
@@ -821,7 +950,11 @@ void StyleEngine::recomputeNodeStyle(DOMNodePtr node) {
     applyMatchingRules(node);
     inheritFromParent(node);
     applyInlineStyleAttributeIfAny(node);
+
+    applyLogicalProperties(node->getComputedStyle());
+
     node->getComputedStyle().layout_mode = deriveLayoutModeFromDisplay(node->getComputedStyle());
+
     node->getComputedStyle().updateBFCFlag();
 }
 
@@ -886,6 +1019,11 @@ void StyleEngine::processGlobalKeywords(DOMNodePtr node, DOMNodePtr parent) {
         else if (prop == "word-break") computed.word_break = kInitial.word_break;
         else if (prop == "overflow-wrap") computed.overflow_wrap = kInitial.overflow_wrap;
         else if (prop == "tab-size") computed.tab_size = kInitial.tab_size;
+        else if (prop == "quotes") {
+            computed.quotes = kInitial.quotes;
+            computed.has_quotes = kInitial.has_quotes;
+        }
+
 
         // Non-inheritable properties used by tests
         else if (prop == "border") {
@@ -935,7 +1073,10 @@ void StyleEngine::processGlobalKeywords(DOMNodePtr node, DOMNodePtr parent) {
         "text-align", "line-height", "letter-spacing", "word-spacing",
         "white-space", "direction", "cursor", "visibility",
         "text-indent", "text-transform", "word-break", "overflow-wrap", "tab-size",
-        "border-collapse", "border-spacing"
+        "border-collapse", "border-spacing",
+        "quotes",
+        "color-scheme"
+
     };
 
     // Process each global keyword property
@@ -982,7 +1123,12 @@ void StyleEngine::copyPropertyFromParent(const std::string& prop,
     else if (prop == "word-break") child_style.word_break = parent_style.word_break;
     else if (prop == "overflow-wrap") child_style.overflow_wrap = parent_style.overflow_wrap;
     else if (prop == "tab-size") child_style.tab_size = parent_style.tab_size;
+    else if (prop == "quotes") {
+        child_style.quotes = parent_style.quotes;
+        child_style.has_quotes = parent_style.has_quotes;
+    }
     else if (prop == "border-collapse") child_style.border_collapse = parent_style.border_collapse;
+
     else if (prop == "border-spacing") child_style.border_spacing = parent_style.border_spacing;
     // Non-inheritable properties
     else if (prop == "border") {
@@ -1018,7 +1164,13 @@ void StyleEngine::copyPropertyFromParent(const std::string& prop,
         child_style.padding_left = parent_style.padding_left;
     }
     else if (prop == "background-color") child_style.background_color = parent_style.background_color;
+    else if (prop == "accent-color") child_style.accent_color = parent_style.accent_color;
+    else if (prop == "color-scheme") child_style.color_scheme = parent_style.color_scheme;
+    else if (prop == "caption-side") child_style.caption_side = parent_style.caption_side;
+
     else if (prop == "width") child_style.width = parent_style.width;
+
+
     else if (prop == "height") child_style.height = parent_style.height;
     else if (prop == "display") {
         child_style.display = parent_style.display;
@@ -1068,6 +1220,18 @@ void StyleEngine::inheritFromParent(DOMNodePtr node) {
     // Table properties (inherited per CSS spec)
     if (!computed.isExplicitlySet("border-collapse")) computed.border_collapse = parent_style.border_collapse;
     if (!computed.isExplicitlySet("border-spacing")) computed.border_spacing = parent_style.border_spacing;
+
+    // `color-scheme` is not strictly inheritable per spec, but it affects UA/form control
+    // rendering for descendants. Treat it as inheritable so container schemes work.
+    if (!computed.isExplicitlySet("color-scheme")) computed.color_scheme = parent_style.color_scheme;
+
+
+    // Generated content properties
+    // `quotes` is inheritable; counters are not.
+    if (!computed.isExplicitlySet("quotes")) {
+        computed.quotes = parent_style.quotes;
+        computed.has_quotes = parent_style.has_quotes;
+    }
 }
 
 bool StyleEngine::matches(const std::string& selector, DOMNodePtr node) {
@@ -1320,125 +1484,162 @@ std::string StyleEngine::extractSelectorComponent(const std::string& selector, s
     return component;
 }
 
+static bool hasGeneratedContent(const ComputedStyle& style) {
+    if (!style.isExplicitlySet("content")) {
+        return false;
+    }
+    // `content: none/normal` clears content_raw/tokens.
+    if (!style.content_raw.empty()) return true;
+    if (!style.content_tokens.empty()) return true;
+    // Back-compat: literal-only string content may end up here.
+    return !style.content.empty();
+}
+
 void StyleEngine::processPseudoElements(DOMNodePtr node) {
     if (!node || node->getType() != DOMNode::NodeType::ELEMENT) return;
 
-    // Check for ::before rules
-    bool has_before = false;
-    bool has_after = false;
-    bool has_marker = false;
-    bool has_placeholder = false;
-    ComputedStyle before_style;
-    ComputedStyle after_style;
-    ComputedStyle marker_style;
-    ComputedStyle placeholder_style;
+    // Pseudo-element cascade must respect specificity + source order.
+    // The previous implementation applied rules in discovery order, which is wrong for cases like:
+    //   ol.nested ol > li::before  (more specific)
+    //   .q::before                (less specific but later)
+    // Browsers keep the more specific rule.
+
+    struct PseudoRuleRef {
+        const CSSRule* rule = nullptr;
+    };
+
+    auto extractBaseSelector = [&](const std::string& selector, const char* pseudo_a, const char* pseudo_b) -> std::string {
+        size_t pos = selector.find(pseudo_a);
+        if (pos == std::string::npos) pos = selector.find(pseudo_b);
+        if (pos == std::string::npos) return {};
+        return trimWhitespace(selector.substr(0, pos));
+    };
+
+    auto ruleLess = [](const PseudoRuleRef& a, const PseudoRuleRef& b) {
+        if (a.rule->specificity != b.rule->specificity) return a.rule->specificity < b.rule->specificity;
+        return a.rule->source_order < b.rule->source_order;
+    };
+
+    std::vector<PseudoRuleRef> before_rules;
+    std::vector<PseudoRuleRef> after_rules;
+    std::vector<PseudoRuleRef> marker_rules;
+    std::vector<PseudoRuleRef> placeholder_rules;
 
     for (const auto& sheet : stylesheets_) {
         for (const auto& rule : sheet.getRules()) {
-            // Check for ::before
-            if (rule.selector.find("::before") != std::string::npos ||
-                rule.selector.find(":before") != std::string::npos) {
-                // Extract base selector
-                std::string base_selector = rule.selector;
-                size_t pos = base_selector.find("::before");
-                if (pos == std::string::npos) pos = base_selector.find(":before");
-                if (pos != std::string::npos) {
-                    base_selector = base_selector.substr(0, pos);
-                }
-
-                if (matcher_.matches(base_selector, node)) {
-                    has_before = true;
-                    const auto& rs = rule.style;
-                    if (!rs.content.empty() || rs.content == "") {
-                        before_style.content = rs.content;
-                    }
-                    applyRuleProperties(rs, before_style);
+            // ::before
+            if (rule.selector.find("::before") != std::string::npos || rule.selector.find(":before") != std::string::npos) {
+                std::string base_selector = extractBaseSelector(rule.selector, "::before", ":before");
+                if (!base_selector.empty() && matcher_.matches(base_selector, node)) {
+                    before_rules.push_back(PseudoRuleRef{&rule});
                 }
             }
 
-            // Check for ::after
-            if (rule.selector.find("::after") != std::string::npos ||
-                rule.selector.find(":after") != std::string::npos) {
-                std::string base_selector = rule.selector;
-                size_t pos = base_selector.find("::after");
-                if (pos == std::string::npos) pos = base_selector.find(":after");
-                if (pos != std::string::npos) {
-                    base_selector = base_selector.substr(0, pos);
-                }
-
-                if (matcher_.matches(base_selector, node)) {
-                    has_after = true;
-                    const auto& rs = rule.style;
-                    if (!rs.content.empty() || rs.content == "") {
-                        after_style.content = rs.content;
-                    }
-                    applyRuleProperties(rs, after_style);
+            // ::after
+            if (rule.selector.find("::after") != std::string::npos || rule.selector.find(":after") != std::string::npos) {
+                std::string base_selector = extractBaseSelector(rule.selector, "::after", ":after");
+                if (!base_selector.empty() && matcher_.matches(base_selector, node)) {
+                    after_rules.push_back(PseudoRuleRef{&rule});
                 }
             }
 
-            // Check for ::marker (for li elements)
-            if (node->getTagName() == "li" && (
-                rule.selector.find("::marker") != std::string::npos ||
-                rule.selector.find(":marker") != std::string::npos)) {
-                std::string base_selector = rule.selector;
-                size_t pos = base_selector.find("::marker");
-                if (pos == std::string::npos) pos = base_selector.find(":marker");
-                if (pos != std::string::npos) {
-                    base_selector = base_selector.substr(0, pos);
-                }
-
-                if (matcher_.matches(base_selector, node)) {
-                    has_marker = true;
-                    applyRuleProperties(rule.style, marker_style);
+            // ::marker
+            if (node->getTagName() == "li" &&
+                (rule.selector.find("::marker") != std::string::npos || rule.selector.find(":marker") != std::string::npos)) {
+                std::string base_selector = extractBaseSelector(rule.selector, "::marker", ":marker");
+                if (!base_selector.empty() && matcher_.matches(base_selector, node)) {
+                    marker_rules.push_back(PseudoRuleRef{&rule});
                 }
             }
 
-            // Check for ::placeholder (for input and textarea elements)
-            if ((node->getTagName() == "input" || node->getTagName() == "textarea") && (
-                rule.selector.find("::placeholder") != std::string::npos ||
-                rule.selector.find(":placeholder") != std::string::npos)) {
-                std::string base_selector = rule.selector;
-                size_t pos = base_selector.find("::placeholder");
-                if (pos == std::string::npos) pos = base_selector.find(":placeholder");
-                if (pos != std::string::npos) {
-                    base_selector = base_selector.substr(0, pos);
-                }
-
-                if (matcher_.matches(base_selector, node)) {
-                    has_placeholder = true;
-                    applyRuleProperties(rule.style, placeholder_style);
+            // ::placeholder
+            if ((node->getTagName() == "input" || node->getTagName() == "textarea") &&
+                (rule.selector.find("::placeholder") != std::string::npos || rule.selector.find(":placeholder") != std::string::npos)) {
+                std::string base_selector = extractBaseSelector(rule.selector, "::placeholder", ":placeholder");
+                if (!base_selector.empty() && matcher_.matches(base_selector, node)) {
+                    placeholder_rules.push_back(PseudoRuleRef{&rule});
                 }
             }
         }
     }
 
+    auto buildPseudoStyle = [&](const std::vector<PseudoRuleRef>& rules) -> std::pair<bool, ComputedStyle> {
+        if (rules.empty()) return {false, ComputedStyle{}};
+
+        std::vector<PseudoRuleRef> sorted = rules;
+        std::sort(sorted.begin(), sorted.end(), ruleLess);
+
+        // Pseudo-elements inherit from their originating element.
+        ComputedStyle s = node->getComputedStyle();
+        // But counters are not inherited; keep them off the pseudo so we don't double-apply.
+        s.counter_resets.clear();
+        s.counter_increments.clear();
+
+        for (const auto& rr : sorted) {
+            applyRuleProperties(rr.rule->style, s);
+        }
+        return {true, s};
+    };
+
+    bool has_before = false;
+    bool has_after = false;
+    bool has_marker = !marker_rules.empty();
+    bool has_placeholder = !placeholder_rules.empty();
+    ComputedStyle before_style;
+    ComputedStyle after_style;
+
+    {
+        auto r = buildPseudoStyle(before_rules);
+        has_before = r.first;
+        if (has_before) before_style = std::move(r.second);
+    }
+    {
+        auto r = buildPseudoStyle(after_rules);
+        has_after = r.first;
+        if (has_after) after_style = std::move(r.second);
+    }
+
+
     // Create ::before pseudo-element if needed
-    if (has_before && !before_style.content.empty()) {
+    // NOTE: `content` may be token-based (counter()/open-quote/etc) and not reflected in `style.content`.
+    // Use token-aware detection so generated content actually appears.
+    if (has_before && hasGeneratedContent(before_style)) {
+        // Pseudo-elements default to inline in CSS.
+        before_style.setDisplay("inline");
+        applyLogicalProperties(before_style);
         auto pseudo = createPseudoElement(node, "before");
         if (pseudo) {
             pseudo->getComputedStyle() = before_style;
             pseudo->getComputedStyle().is_pseudo_element = true;
             pseudo->getComputedStyle().pseudo_type = "before";
-            pseudo->setTextContent(before_style.content);
+
+            // Best-effort textual representation (rendering uses computed tokens).
+            pseudo->setTextContent(!before_style.content.empty() ? before_style.content : before_style.content_raw);
+
             node->setPseudoBefore(pseudo);
         }
     } else {
         node->setPseudoBefore(nullptr);
     }
 
+
     // Create ::after pseudo-element if needed
-    if (has_after && !after_style.content.empty()) {
+    if (has_after && hasGeneratedContent(after_style)) {
+        // Pseudo-elements default to inline in CSS.
+        after_style.setDisplay("inline");
+        applyLogicalProperties(after_style);
         auto pseudo = createPseudoElement(node, "after");
+
         if (pseudo) {
             pseudo->getComputedStyle() = after_style;
             pseudo->getComputedStyle().is_pseudo_element = true;
             pseudo->getComputedStyle().pseudo_type = "after";
-            pseudo->setTextContent(after_style.content);
             node->setPseudoAfter(pseudo);
         }
     } else {
         node->setPseudoAfter(nullptr);
     }
+
 
     // Create ::marker pseudo-element for li elements.
     // Unlike ::before/::after, ::marker is created automatically for all <li> elements
@@ -1451,8 +1652,13 @@ void StyleEngine::processPseudoElements(DOMNodePtr node) {
             if (pseudo) {
                 pseudo->getComputedStyle() = node_style;
                 if (has_marker) {
-                    applyRuleProperties(marker_style, pseudo->getComputedStyle());
+                    std::vector<PseudoRuleRef> sorted = marker_rules;
+                    std::sort(sorted.begin(), sorted.end(), ruleLess);
+                    for (const auto& rr : sorted) {
+                        applyRuleProperties(rr.rule->style, pseudo->getComputedStyle());
+                    }
                 }
+
                 pseudo->getComputedStyle().is_pseudo_element = true;
                 pseudo->getComputedStyle().pseudo_type = "marker";
                 node->setPseudoMarker(pseudo);
@@ -1473,10 +1679,15 @@ void StyleEngine::processPseudoElements(DOMNodePtr node) {
             if (pseudo) {
                 // Start with parent's styles for inheritance
                 pseudo->getComputedStyle() = node->getComputedStyle();
-                // Apply explicit ::placeholder rules
+                // Apply explicit ::placeholder rules (with proper cascade)
                 if (has_placeholder) {
-                    applyRuleProperties(placeholder_style, pseudo->getComputedStyle());
+                    std::vector<PseudoRuleRef> sorted = placeholder_rules;
+                    std::sort(sorted.begin(), sorted.end(), ruleLess);
+                    for (const auto& rr : sorted) {
+                        applyRuleProperties(rr.rule->style, pseudo->getComputedStyle());
+                    }
                 }
+
                 // Set placeholder text as content
                 pseudo->getComputedStyle().is_pseudo_element = true;
                 pseudo->getComputedStyle().pseudo_type = "placeholder";
@@ -1492,11 +1703,14 @@ void StyleEngine::processPseudoElements(DOMNodePtr node) {
 
 DOMNodePtr StyleEngine::createPseudoElement(DOMNodePtr parent, const std::string& pseudo_type) {
     if (!parent) return nullptr;
-    
-    auto pseudo = std::make_shared<DOMNode>(DOMNode::NodeType::ELEMENT, "::"+pseudo_type);
-    // Inherit from parent
-    inheritFromParent(pseudo);
-    
+
+    auto pseudo = std::make_shared<DOMNode>(DOMNode::NodeType::ELEMENT, "::" + pseudo_type);
+
+    // Pseudo-elements inherit from their originating element.
+    // Note: pseudo nodes are not inserted into the DOM tree's children list, so we cannot
+    // rely on DOMNode::getParent() inside inheritFromParent().
+    pseudo->getComputedStyle() = parent->getComputedStyle();
+
     return pseudo;
 }
 
@@ -1746,7 +1960,10 @@ void StyleEngine::recomputeNodeStyleFull(DOMNodePtr node) {
     inheritFromParent(node);
     applyInlineStyleAttributeIfAny(node);
 
+    applyLogicalProperties(node->getComputedStyle());
+
     static const std::unordered_set<std::string> kAlwaysHiddenTags = {
+
         "head", "style", "script", "meta", "title", "link"
     };
     if (kAlwaysHiddenTags.count(node->getTagName()) > 0) {

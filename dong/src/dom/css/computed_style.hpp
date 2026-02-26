@@ -44,12 +44,27 @@ struct ComputedStyle {
     CSSValue margin_right;
     CSSValue margin_bottom;
     CSSValue margin_left;
+
+    // Logical margins (writing-mode: horizontal-tb only for now)
+    CSSValue margin_inline_start;
+    CSSValue margin_inline_end;
+    CSSValue margin_block_start;
+    CSSValue margin_block_end;
+
     CSSValue padding_top;
     CSSValue padding_right;
     CSSValue padding_bottom;
     CSSValue padding_left;
+
+    // Logical paddings (writing-mode: horizontal-tb only for now)
+    CSSValue padding_inline_start;
+    CSSValue padding_inline_end;
+    CSSValue padding_block_start;
+    CSSValue padding_block_end;
+
     std::string box_sizing = "content-box";
     float aspect_ratio = 0.0f;  // 0 = auto, >0 = width/height ratio
+
 
     // Layout
     std::string display = "block";
@@ -73,6 +88,11 @@ struct ComputedStyle {
     std::string background_origin = "padding-box";
     std::string object_fit = "fill";
     std::string object_position = "50% 50%";
+    std::string image_rendering = "auto"; // auto | pixelated | crisp-edges
+
+    // Color scheme hint for UA/form controls: normal | light | dark
+    // (We treat it as inheritable for control theming.)
+    std::string color_scheme = "normal";
 
     std::vector<CSSGradient> background_gradients;
 
@@ -102,7 +122,22 @@ struct ComputedStyle {
     std::string border_bottom_style;
     std::string border_left_style;
 
+    // Logical borders (writing-mode: horizontal-tb only for now)
+    float border_inline_start_width = -1.0f;
+    float border_inline_end_width = -1.0f;
+    float border_block_start_width = -1.0f;
+    float border_block_end_width = -1.0f;
+    std::string border_inline_start_color;
+    std::string border_inline_end_color;
+    std::string border_block_start_color;
+    std::string border_block_end_color;
+    std::string border_inline_start_style;
+    std::string border_inline_end_style;
+    std::string border_block_start_style;
+    std::string border_block_end_style;
+
     std::string overflow = "visible";
+
 
     std::string overflow_x = "visible";
     std::string overflow_y = "visible";
@@ -224,23 +259,69 @@ struct ComputedStyle {
     std::string clear = "none";
     
     // Pseudo-element content (for ::before/::after)
-    std::string content;  // Empty means no content, "none" disables
+    struct ContentToken {
+        enum class Type {
+            String,
+            Counter,
+            Counters,
+            OpenQuote,
+            CloseQuote,
+            NoOpenQuote,
+            NoCloseQuote,
+        } type = Type::String;
+
+        std::string text;        // String literal, or counter name
+        std::string separator;   // For counters(name, separator)
+    };
+
+    // `content` as authored (normalized, without trailing ';').
+    // Used for parsing/evaluating `counter()` / `open-quote` etc.
+    std::string content_raw;
+
+    // Parsed tokens for `content`.
+    std::vector<ContentToken> content_tokens;
+
+    // Back-compat: when `content` is just a string literal, this holds the decoded result.
+    std::string content;
+
     bool is_pseudo_element = false;
-    std::string pseudo_type;  // "before" or "after"
+    std::string pseudo_type;  // "before" or "after" / "marker" / "placeholder"
+
 
     // List styling
     std::string list_style_type = "none";      // disc, circle, square, decimal, etc.
     std::string list_style_position = "outside"; // outside, inside
     std::string list_style_image = "none";     // For future, always "none" for now
 
+    // CSS counters
+    struct CounterDirective {
+        std::string name;
+        int value = 0; // reset value or increment amount
+        bool has_value = false;
+    };
+
+    std::vector<CounterDirective> counter_resets;
+    std::vector<CounterDirective> counter_increments;
+
+    // Quotes (for open-quote/close-quote)
+    // Stored as alternating open/close strings: [open1, close1, open2, close2, ...]
+    std::vector<std::string> quotes = {"\u201C", "\u201D", "\u2018", "\u2019"};
+    bool has_quotes = false;
+
+    // Form control theming
+    std::string accent_color = "auto";  // auto | <color>
+
     // Appearance (form control styling)
+
     std::string appearance = "auto";  // auto, none
 
     // Table properties
     std::string border_collapse = "separate";  // separate, collapse (inheritable)
     float border_spacing = 2.0f;               // px (inheritable, default 2px)
     std::string table_layout = "auto";         // auto, fixed
+    std::string caption_side = "top";          // top, bottom
     
+
     // Track which properties were explicitly set by CSS rules or inline styles.
     // Used by inheritFromParent() to avoid overriding explicitly set values.
     std::unordered_set<std::string> explicitly_set_properties_;

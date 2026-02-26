@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>test_css_caption_side_simple</title>
+  <style>
+    body { font-family: Arial; margin: 24px; }
+
+    table { border: 2px solid #333; border-collapse: collapse; width: 320px; margin-bottom: 24px; }
+    td, th { border: 1px solid #777; padding: 6px 8px; }
+    caption { padding: 6px 8px; font-weight: bold; background: #f0f0f0; }
+
+    .bottom caption { caption-side: bottom; }
+  </style>
+</head>
+<body>
+  <div>caption-side: top (default)</div>
+  <table>
+    <caption>CAPTION TOP</caption>
+    <tr><th>A</th><th>B</th></tr>
+    <tr><td>1</td><td>2</td></tr>
+  </table>
+
+  <div>caption-side: bottom</div>
+  <table class="bottom">
+    <caption>CAPTION BOTTOM</caption>
+    <tr><th>A</th><th>B</th></tr>
+    <tr><td>1</td><td>2</td></tr>
+  </table>
+</body>
+</html>

@@ -98,6 +98,8 @@ SDLGPUDriver::~SDLGPUDriver() {
         if (image_fs_) SDL_ReleaseGPUShader(dev, image_fs_);
         if (video_yuv_fs_) SDL_ReleaseGPUShader(dev, video_yuv_fs_);
         if (image_sampler_) SDL_ReleaseGPUSampler(dev, image_sampler_);
+        if (image_sampler_nearest_) SDL_ReleaseGPUSampler(dev, image_sampler_nearest_);
+
 
         if (image_atlas_) {
             dong_atlas_destroy(image_atlas_);

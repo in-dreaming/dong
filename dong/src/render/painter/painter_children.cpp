@@ -222,6 +222,9 @@ void Painter::paintChildrenAndOverlays(const dom::DOMNodePtr& node,
                                       DisplayListBuilder& builder) {
     if (!node) return;
 
+
+
+
     // 3.5 渲染 ::marker 伪元素（<li> 的列表标记）
     if (node->getTagName() == "li" && node->getPseudoMarker()) {
         renderMarkerForListItem(node, node_rect, builder);
@@ -229,11 +232,17 @@ void Painter::paintChildrenAndOverlays(const dom::DOMNodePtr& node,
 
     // 4. 渲染 ::before 伪元素
     if (node->hasPseudoElements()) {
-        auto pseudo_before = node->getPseudoBefore();
-        if (pseudo_before) {
-            renderPseudoElement(pseudo_before, node_rect, builder);
+        const std::string inflow = node->getAttribute("__dong_pseudo_before_inflow__");
+        if (inflow != "1") {
+            auto pseudo_before = node->getPseudoBefore();
+            if (pseudo_before) {
+                renderPseudoElement(pseudo_before, node_rect, builder);
+            }
+        } else {
+            node->setAttribute("__dong_pseudo_before_inflow__", "");
         }
     }
+
 
     // <select> 是 replaced control：其子树（<option>/<optgroup>）不走常规递归绘制。
     // 关闭态/打开态由 painter_select 负责渲染。
@@ -426,11 +435,17 @@ void Painter::paintChildrenAndOverlays(const dom::DOMNodePtr& node,
 
     // 6. 渲染 ::after 伪元素
     if (node->hasPseudoElements()) {
-        auto pseudo_after = node->getPseudoAfter();
-        if (pseudo_after) {
-            renderPseudoElement(pseudo_after, node_rect, builder);
+        const std::string inflow = node->getAttribute("__dong_pseudo_after_inflow__");
+        if (inflow != "1") {
+            auto pseudo_after = node->getPseudoAfter();
+            if (pseudo_after) {
+                renderPseudoElement(pseudo_after, node_rect, builder);
+            }
+        } else {
+            node->setAttribute("__dong_pseudo_after_inflow__", "");
         }
     }
+
 
     // 7. 滚动条渲染（在子节点之后绘制，确保滚动条在内容之上）
     static const bool kDisableScrollbars = []() {

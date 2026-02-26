@@ -66,6 +66,11 @@ enum class ImageFitMode : uint8_t {
     Cover,
 };
 
+enum class ImageSampling : uint8_t {
+    Linear,
+    Nearest,
+};
+
 struct DrawImageData {
     Rect rect;
     std::string src;   // 图片资源标识（路径或其它 key）
@@ -73,6 +78,7 @@ struct DrawImageData {
     ImageFitMode fit = ImageFitMode::Fill;
     float position_x = 0.5f;  // object-position X (0.0=left, 0.5=center, 1.0=right)
     float position_y = 0.5f;  // object-position Y (0.0=top, 0.5=center, 1.0=bottom)
+    ImageSampling sampling = ImageSampling::Linear;
 };
 
 
@@ -311,7 +317,8 @@ public:
 
     void addImage(const Rect& rect, const std::string& src, float opacity,
                   ImageFitMode fit = ImageFitMode::Fill,
-                  float pos_x = 0.5f, float pos_y = 0.5f) {
+                  float pos_x = 0.5f, float pos_y = 0.5f,
+                  ImageSampling sampling = ImageSampling::Linear) {
         DisplayItem item{};
         item.type = DisplayItemType::DrawImage;
         item.image.rect = applyTranslate(rect);
@@ -320,6 +327,7 @@ public:
         item.image.fit = fit;
         item.image.position_x = pos_x;
         item.image.position_y = pos_y;
+        item.image.sampling = sampling;
         list_.items.push_back(std::move(item));
     }
 

@@ -31,6 +31,31 @@ bool isTableRowGroupDisplay(const std::string& display) {
            display == "table-footer-group";
 }
 
+static dom::DOMNodePtr findTableCaptionNode(const dom::DOMNodePtr& table_node) {
+    if (!table_node) return nullptr;
+    for (const auto& child : table_node->getChildren()) {
+        if (!child || child->getType() != dom::DOMNode::NodeType::ELEMENT) continue;
+        if (child->getComputedStyle().display == "table-caption") {
+            return child;
+        }
+    }
+    return nullptr;
+}
+
+static bool isCaptionSideBottom(const dom::DOMNodePtr& caption_node) {
+    if (!caption_node) return false;
+    std::string side = ::dong::toLower(caption_node->getComputedStyle().caption_side);
+    return side == "bottom";
+}
+
+static float getNodeLayoutHeightPx(Engine* engine, const dom::DOMNodePtr& node) {
+    if (!engine || !node) return 0.0f;
+    const auto* ln = engine->getLayout(node);
+    if (!ln) return 0.0f;
+    const float h = ln->layout.dimensions[1];
+    return (h > 0.0f && std::isfinite(h)) ? h : 0.0f;
+}
+
 void collectRows(const dom::DOMNodePtr& table_node,
                  std::vector<dom::DOMNodePtr>& rows) {
     for (const auto& child : table_node->getChildren()) {
@@ -364,16 +389,25 @@ void Engine::positionTableCells(
 
     const float bw = std::max(0.0f, ts.border_width);
     const float pt_l = ts.padding_left.isPixel() ? ts.padding_left.value : 0.0f;
+    const float pt_r = ts.padding_right.isPixel() ? ts.padding_right.value : 0.0f;
     const float pt_t = ts.padding_top.isPixel() ? ts.padding_top.value : 0.0f;
     const float pt_b = ts.padding_bottom.isPixel() ? ts.padding_bottom.value : 0.0f;
+
 
     // Our LayoutNode coordinates are absolute (see layout extraction in layout_engine.cpp).
     // Table post-pass must therefore write absolute positions for rows/cells as well.
 
-    const float content_x = table_x + bw + pt_l + spacing;
-    float cur_y = table_y + bw + pt_t + spacing;
-
     const auto blocks = collectRowBlocks(table_node);
+
+    // Caption participates in the table wrapper box, but is *outside* the table border box.
+    // Browsers draw the table border only around the grid box, not including the caption.
+    const dom::DOMNodePtr caption_node = findTableCaptionNode(table_node);
+    const float caption_h = getNodeLayoutHeightPx(this, caption_node);
+    const bool caption_bottom = caption_node ? isCaptionSideBottom(caption_node) : false;
+    const float caption_top_offset = (caption_node && !caption_bottom) ? caption_h : 0.0f;
+
+    const float content_x = table_x + bw + pt_l + spacing;
+    float cur_y = table_y + caption_top_offset + bw + pt_t + spacing;
 
     for (const auto& block : blocks) {
         LayoutNode* group_ln = nullptr;
@@ -408,13 +442,47 @@ void Engine::positionTableCells(
         }
     }
 
-    // Update table height to fit rows
-    const float new_h = cur_y - table_y + bw + pt_b;
-    if (new_h > table_ln->layout.dimensions[1]) {
-        table_ln->layout.dimensions[1] = new_h;
-        table_ln->height = new_h;
+    // Compute the table border-box bottom (grid box only, excluding bottom caption).
+    const float border_box_bottom_y = cur_y + bw + pt_b;
+
+    // Place caption in wrapper (outside the border box).
+    if (caption_node) {
+        auto* caption_ln = getLayoutMutable(caption_node);
+        if (caption_ln) {
+            const float table_w = table_ln->layout.dimensions[0];
+            const float cap_w = std::max(0.0f, table_w);
+            const float cap_x = table_x;
+            const float cap_y = caption_bottom ? border_box_bottom_y : table_y;
+            updateLayoutRect(caption_ln, cap_x, cap_y, cap_w, caption_h);
+        }
     }
+
+    // Update table *wrapper* height: grid border-box + optional top/bottom caption.
+    float wrapper_h = std::max(0.0f, border_box_bottom_y - table_y);
+    if (caption_node && caption_bottom) {
+        wrapper_h += caption_h;
+    }
+
+    // Yoga may over-allocate height for tables in certain flex/block contexts.
+    // For `height: auto` (default), shrink-to-fit content so borders/backgrounds don't
+    // paint a huge empty box.
+    const bool height_auto = ts.height.isAuto() || ts.height.isUnset();
+    const float prev_h = table_ln->layout.dimensions[1];
+    if (height_auto) {
+        table_ln->layout.dimensions[1] = wrapper_h;
+        table_ln->height = wrapper_h;
+    } else if (wrapper_h > prev_h) {
+        // Respect author-specified height/min-height by only expanding.
+        table_ln->layout.dimensions[1] = wrapper_h;
+        table_ln->height = wrapper_h;
+    }
+
+    if (std::isfinite(prev_h) && std::isfinite(table_ln->height) && std::fabs(prev_h - table_ln->height) > 0.1f) {
+        dirty_rect_.expand(table_x, table_y, table_ln->layout.dimensions[0], table_ln->height);
+    }
+
 }
+
 
 
 

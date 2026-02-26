@@ -410,6 +410,23 @@ bool SDLGPUDriver::initialize() {
         return false;
     }
 
+    // Nearest sampler for `image-rendering: pixelated/crisp-edges`.
+    SDL_GPUSamplerCreateInfo sampler_info_nearest = sampler_info;
+    sampler_info_nearest.mag_filter = SDL_GPU_FILTER_NEAREST;
+    sampler_info_nearest.min_filter = SDL_GPU_FILTER_NEAREST;
+    sampler_info_nearest.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_NEAREST;
+
+    image_sampler_nearest_ = SDL_CreateGPUSampler(dev, &sampler_info_nearest);
+    if (!image_sampler_nearest_) {
+        DONG_LOG_ERROR("SDLGPUDriver::initialize: failed to create nearest image sampler: %s", SDL_GetError());
+        SDL_ReleaseGPUSampler(dev, image_sampler_);
+        image_sampler_ = nullptr;
+        dong_atlas_destroy(image_atlas_);
+        image_atlas_ = nullptr;
+        return false;
+    }
+
+
     // MSDF 文字渲染着色器和管线
     text_vs_ = shader_manager_->loadShaderFromHLSLFile(
         "dong_text_vs",

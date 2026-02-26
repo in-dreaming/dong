@@ -3,7 +3,9 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <unordered_map>
 #include "../dom/dom/dom_node.hpp"
+
 
 
 #include "../layout/layout_engine.hpp"
@@ -38,6 +40,22 @@ private:
     LayerTree layer_tree_;
     std::vector<int> layer_stack_;
     TextShaper text_shaper_;
+
+    // Generated content (counter()/counters()/open-quote/close-quote)
+    struct GeneratedContentState {
+        std::unordered_map<std::string, std::vector<int>> counters;
+        std::vector<std::vector<std::string>> pushed_names_stack;
+        int quote_depth = 0;
+    } gen_;
+
+    void pushCounterScope(const dom::ComputedStyle& style);
+    void popCounterScope();
+    std::string evaluateContentText(const dom::ComputedStyle& style);
+    std::string evaluateCounterText(const std::string& name);
+    std::string evaluateCountersText(const std::string& name, const std::string& sep);
+    std::string evaluateQuoteToken(const dom::ComputedStyle& style,
+                                  const dom::ComputedStyle::ContentToken& tok);
+
 
     struct OpenSelectOverlay {
         dom::DOMNodePtr node;

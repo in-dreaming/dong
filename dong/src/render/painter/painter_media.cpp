@@ -96,6 +96,17 @@ MediaFitInfo extractMediaFitInfo(const dom::ComputedStyle& style) {
     return info;
 }
 
+ImageSampling extractImageSampling(const dom::ComputedStyle& style) {
+    using painter_detail::collapseWhitespace;
+    using painter_detail::toLowerCopy;
+
+    const std::string v = toLowerCopy(collapseWhitespace(style.image_rendering));
+    if (v == "pixelated" || v == "crisp-edges") {
+        return ImageSampling::Nearest;
+    }
+    return ImageSampling::Linear;
+}
+
 } // anonymous namespace
 
 void Painter::paintMediaElements(const dom::DOMNodePtr& node,
@@ -129,7 +140,8 @@ void Painter::paintMediaElements(const dom::DOMNodePtr& node,
             img_clip = builder.pushClipRect(rect);
         }
 
-        builder.addImage(rect, src, 1.0f, mfi.fit, mfi.pos_x, mfi.pos_y);
+        builder.addImage(rect, src, 1.0f, mfi.fit, mfi.pos_x, mfi.pos_y, extractImageSampling(style));
+
         return;
     }
 
@@ -166,7 +178,8 @@ void Painter::paintVideoElement(const dom::DOMNodePtr& node,
         if (mfi.fit == ImageFitMode::Cover) {
             frame_clip = builder.pushClipRect(rect);
         }
-        builder.addImage(rect, frame_src, 1.0f, mfi.fit, mfi.pos_x, mfi.pos_y);
+        builder.addImage(rect, frame_src, 1.0f, mfi.fit, mfi.pos_x, mfi.pos_y, extractImageSampling(style));
+
     } else {
         std::string poster = node->getAttribute("poster");
         if (!poster.empty()) {
@@ -178,7 +191,8 @@ void Painter::paintVideoElement(const dom::DOMNodePtr& node,
             if (mfi.fit == ImageFitMode::Cover) {
                 poster_clip = builder.pushClipRect(rect);
             }
-            builder.addImage(rect, poster, 1.0f, mfi.fit, mfi.pos_x, mfi.pos_y);
+            builder.addImage(rect, poster, 1.0f, mfi.fit, mfi.pos_x, mfi.pos_y, extractImageSampling(style));
+
         } else {
             paintVideoPlaceholder(rect, builder);
         }
@@ -208,3 +222,4 @@ void Painter::paintVideoPlaceholder(const Rect& rect, DisplayListBuilder& builde
 }
 
 } // namespace dong::render
+

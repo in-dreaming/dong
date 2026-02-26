@@ -1486,21 +1486,27 @@ void SDLGPUDriver::executeDrawImage(ExecuteContext& ctx, const GPUCommand& cmd) 
     SDL_PushGPUVertexUniformData(ctx.cmd_buf, 0, &u, sizeof(u));
     SDL_PushGPUFragmentUniformData(ctx.cmd_buf, 0, &u, sizeof(u));
 
+    SDL_GPUSampler* sampler = image_sampler_;
+    if (cmd.image_sampling == ImageSampling::Nearest && image_sampler_nearest_) {
+        sampler = image_sampler_nearest_;
+    }
+
     if (is_video_yuv) {
         SDL_GPUTextureSamplerBinding bindings[3] = {};
         bindings[0].texture = src_texture; // Y
-        bindings[0].sampler = image_sampler_;
+        bindings[0].sampler = sampler;
         bindings[1].texture = video_tex_u;
-        bindings[1].sampler = image_sampler_;
+        bindings[1].sampler = sampler;
         bindings[2].texture = video_tex_v;
-        bindings[2].sampler = image_sampler_;
+        bindings[2].sampler = sampler;
         SDL_BindGPUFragmentSamplers(ctx.pass, 0, bindings, 3);
     } else {
         SDL_GPUTextureSamplerBinding binding{};
         binding.texture = src_texture;
-        binding.sampler = image_sampler_;
+        binding.sampler = sampler;
         SDL_BindGPUFragmentSamplers(ctx.pass, 0, &binding, 1);
     }
+
 
     ctx.pipeline_state.image_sampler_bound = true;
     ctx.pipeline_state.text_sampler_bound = false;

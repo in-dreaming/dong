@@ -190,6 +190,8 @@ private:
     // Image atlas
     DongImageAtlas* image_atlas_ = nullptr;
     SDL_GPUSampler* image_sampler_ = nullptr;
+    SDL_GPUSampler* image_sampler_nearest_ = nullptr;
+
 
     // Layer render target pool
     struct LayerRenderTarget {

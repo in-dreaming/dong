@@ -64,7 +64,9 @@ struct GPUCommand {
     ImageFitMode image_fit = ImageFitMode::Fill;
     float image_position_x = 0.5f;  // object-position X
     float image_position_y = 0.5f;  // object-position Y
+    ImageSampling image_sampling = ImageSampling::Linear;
     float opacity = 1.0f;  // 图片整体透明度
+
 
     float layer_opacity = 1.0f; // 图层合成透明度（BeginIsolatedLayer）
     uint64_t layer_id = 0;      // 图层的稳定 ID，用于跨帧缓存
@@ -383,6 +385,8 @@ public:
                 cmd.image_fit = item.image.fit;
                 cmd.image_position_x = item.image.position_x;
                 cmd.image_position_y = item.image.position_y;
+                cmd.image_sampling = item.image.sampling;
+
                 cmd.sort_key = make_sort_key(cmd.type, cmd);
                 out.commands.push_back(cmd);
                 image_count++;

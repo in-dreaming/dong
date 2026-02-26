@@ -1,0 +1,39 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>test_css_color_scheme</title>
+  <style>
+    body { font-family: Arial; margin: 24px; }
+    .grid { display: flex; gap: 24px; }
+    .panel { width: 360px; padding: 16px; border: 1px solid #aaa; border-radius: 8px; }
+    .title { font-weight: bold; margin-bottom: 10px; }
+    .row { display: flex; gap: 10px; align-items: center; margin: 10px 0; }
+    input[type="text"] { width: 180px; }
+    textarea { width: 240px; height: 70px; }
+
+    /* Only set color-scheme; do not set explicit background/text colors. */
+    .dark { color-scheme: dark; }
+    .light { color-scheme: light; }
+  </style>
+</head>
+<body>
+  <div class="grid">
+    <div class="panel light">
+      <div class="title">color-scheme: light</div>
+      <div class="row"><button>Button</button><input type="checkbox" checked /><input type="radio" checked /></div>
+      <div class="row"><input type="text" value="text input" /></div>
+      <div class="row"><textarea>textarea</textarea></div>
+      <div class="row">Plain text</div>
+    </div>
+
+    <div class="panel dark">
+      <div class="title">color-scheme: dark</div>
+      <div class="row"><button>Button</button><input type="checkbox" checked /><input type="radio" checked /></div>
+      <div class="row"><input type="text" value="text input" /></div>
+      <div class="row"><textarea>textarea</textarea></div>
+      <div class="row">Plain text</div>
+    </div>
+  </div>
+</body>
+</html>

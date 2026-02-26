@@ -1,0 +1,38 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>test_css_resize_textarea</title>
+  <style>
+    body { font-family: Arial; margin: 24px; }
+    .row { display: flex; gap: 24px; }
+    .col { width: 320px; }
+    .label { font-size: 14px; color: #333; margin-bottom: 6px; }
+    textarea {
+      width: 260px;
+      height: 120px;
+      border: 1px solid #777;
+      padding: 6px;
+      font-size: 14px;
+      line-height: 18px;
+      background: #fff;
+    }
+    textarea.resizable { resize: both; overflow: auto; }
+    textarea.none { resize: none; overflow: auto; }
+  </style>
+</head>
+<body>
+  <div class="row">
+    <div class="col">
+      <div class="label">resize: both (should show handle)</div>
+      <textarea class="resizable">resize both
+second line</textarea>
+    </div>
+    <div class="col">
+      <div class="label">resize: none (no handle)</div>
+      <textarea class="none">resize none
+second line</textarea>
+    </div>
+  </div>
+</body>
+</html>
