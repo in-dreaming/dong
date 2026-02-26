@@ -194,7 +194,9 @@ struct ComputedStyle {
     std::string white_space = "normal";
     std::string word_break = "normal";
     std::string overflow_wrap = "normal";
+    std::string hyphens = "manual";  // none | manual | auto
     std::string vertical_align = "baseline";
+
     std::string direction = "ltr";
     std::string unicode_bidi = "normal";
     float text_indent = 0.0f;
@@ -314,6 +316,8 @@ struct ComputedStyle {
     // Appearance (form control styling)
 
     std::string appearance = "auto";  // auto, none
+    std::string resize = "none";      // none | both | horizontal | vertical
+
 
     // Table properties
     std::string border_collapse = "separate";  // separate, collapse (inheritable)

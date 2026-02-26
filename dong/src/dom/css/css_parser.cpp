@@ -462,6 +462,16 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
         {"word-break", [](const std::string& val, ComputedStyle& style) { style.word_break = val; }},
         {"overflow-wrap", [](const std::string& val, ComputedStyle& style) { style.overflow_wrap = val; }},
         {"word-wrap", [](const std::string& val, ComputedStyle& style) { style.overflow_wrap = val; }},
+        {"hyphens", [](const std::string& val, ComputedStyle& style) {
+            std::string v = val;
+            std::transform(v.begin(), v.end(), v.begin(), [](unsigned char c) {
+                return static_cast<char>(std::tolower(c));
+            });
+            if (v == "none" || v == "manual" || v == "auto") {
+                style.hyphens = v;
+            }
+        }},
+
         {"vertical-align", [](const std::string& val, ComputedStyle& style) { style.vertical_align = val; }},
         {"direction", [](const std::string& val, ComputedStyle& style) { style.direction = val; }},
         {"unicode-bidi", [](const std::string& val, ComputedStyle& style) { style.unicode_bidi = val; }},
@@ -575,6 +585,16 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
             });
             style.appearance = v;
         }},
+        {"resize", [](const std::string& val, ComputedStyle& style) {
+            std::string v = val;
+            std::transform(v.begin(), v.end(), v.begin(), [](unsigned char c) {
+                return static_cast<char>(std::tolower(c));
+            });
+            if (v == "none" || v == "both" || v == "horizontal" || v == "vertical") {
+                style.resize = v;
+            }
+        }},
+
 
         // Table properties
         {"border-collapse", [](const std::string& val, ComputedStyle& style) {

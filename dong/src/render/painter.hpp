@@ -171,7 +171,14 @@ private:
                            const Rect& rect,
                            const BorderWidths& bw,
                            DisplayListBuilder& builder) const;
+
+    // 阶段 7: textarea resize handle（仅绘制可视把手，不做交互拖拽）
+    void paintTextareaResizeHandle(const dom::DOMNodePtr& node,
+                                   const Rect& rect,
+                                   const BorderWidths& bw,
+                                   DisplayListBuilder& builder) const;
 };
+
 
 using PainterPtr = std::unique_ptr<Painter>;
 

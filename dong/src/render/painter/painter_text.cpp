@@ -124,7 +124,7 @@ static Color resolveTextColorForNode(const dom::DOMNodePtr& node,
     const std::string tag = node ? node->getTagName() : std::string();
     const bool is_control = (tag == "button" || tag == "input" || tag == "textarea" || tag == "select");
     if (is_control && !style.isExplicitlySet("color") && toLowerCopy(style.color_scheme) == "dark") {
-        return makeColorFromCss("#f5f5f5");
+        return makeColorFromCss("#e8eaed");
     }
     return makeColorFromCss(style.color);
 }
@@ -222,7 +222,8 @@ void emitInlineTextRun(const std::string& text,
     DrawGlyphRunData run;
     run.rect = {state.x + state.pad_left + state.cumulative_x,
                 state.baseline_y - ascent * scale, text_width, state.line_height_px};
-    run.color = makeColorFromCss(!cs.color.empty() ? cs.color : container_style.color);
+    run.color = cs.isExplicitlySet("color") ? makeColorFromCss(cs.color) : state.text_color;
+
     run.font_size = font_size;
     run.font_family = family;
     run.font_weight = weight;
@@ -831,13 +832,51 @@ struct FullTextRenderCtx {
     DisplayListBuilder& builder;
 };
 
+// U+00AD SOFT HYPHEN in UTF-8: 0xC2 0xAD
+inline bool containsSoftHyphen(std::string_view s) {
+    for (size_t i = 0; i + 1 < s.size(); ++i) {
+        if (static_cast<unsigned char>(s[i]) == 0xC2 && static_cast<unsigned char>(s[i + 1]) == 0xAD) {
+            return true;
+        }
+    }
+    return false;
+}
+
+inline std::string stripSoftHyphens(std::string_view s) {
+    if (!containsSoftHyphen(s)) return std::string(s);
+    std::string out;
+    out.reserve(s.size());
+    for (size_t i = 0; i < s.size();) {
+        if (i + 1 < s.size() && static_cast<unsigned char>(s[i]) == 0xC2 && static_cast<unsigned char>(s[i + 1]) == 0xAD) {
+            i += 2;
+            continue;
+        }
+        out.push_back(s[i++]);
+    }
+    return out;
+}
+
+inline bool hyphensManualEnabled(const dom::ComputedStyle& style) {
+    const std::string v = toLowerCopy(collapseWhitespace(style.hyphens));
+    return v == "manual";
+}
+
+inline void stripLeadingSoftHyphensInPlace(std::string& s) {
+    while (s.size() >= 2 && static_cast<unsigned char>(s[0]) == 0xC2 && static_cast<unsigned char>(s[1]) == 0xAD) {
+        s.erase(0, 2);
+    }
+}
+
 // Emit one shaped line at the given line_index.
 void emitFullTextLine(const std::string& line_text, int line_index,
                       const FullTextRenderCtx& ctx) {
-    if (line_text.empty()) return;
 
-    TextShapeRequest req{line_text, ctx.style.font_family, ctx.style.font_weight,
+    const std::string visible = stripSoftHyphens(line_text);
+    if (visible.empty()) return;
+
+    TextShapeRequest req{visible, ctx.style.font_family, ctx.style.font_weight,
                          ctx.style.font_style, ctx.font_size};
+
     ShapedText shaped;
     if (!ctx.shaper.shape(req, shaped) || shaped.glyphs.empty()) return;
 
@@ -877,8 +916,11 @@ void emitFullTextLine(const std::string& line_text, int line_index,
 // Measure text width in pixels using the current shaping context.
 float measureTextWidthPx(std::string_view text, const FullTextRenderCtx& ctx) {
     if (text.empty()) return 0.0f;
-    TextShapeRequest req{std::string(text), ctx.style.font_family, ctx.style.font_weight,
+    const std::string visible = stripSoftHyphens(text);
+    if (visible.empty()) return 0.0f;
+    TextShapeRequest req{visible, ctx.style.font_family, ctx.style.font_weight,
                          ctx.style.font_style, ctx.font_size};
+
     ShapedText shaped;
     if (!ctx.shaper.shape(req, shaped) || shaped.glyphs.empty()) return 0.0f;
     return shaped.width_units * ctx.scale;
@@ -927,7 +969,38 @@ void emitLongWordWrapped(std::string_view word,
     }
 }
 
+bool splitWordAtSoftHyphenToFit(std::string_view raw_word,
+                               const FullTextRenderCtx& ctx,
+                               std::string& out_line,
+                               std::string& out_rest_raw) {
+    if (!containsSoftHyphen(raw_word)) return false;
+
+    // Try breakpoints from right to left so we pick the longest prefix that fits.
+    for (size_t pos = raw_word.size(); pos-- > 0;) {
+        if (pos + 1 >= raw_word.size()) continue;
+        if (static_cast<unsigned char>(raw_word[pos]) != 0xC2 || static_cast<unsigned char>(raw_word[pos + 1]) != 0xAD) {
+            continue;
+        }
+
+
+        const std::string prefix = stripSoftHyphens(raw_word.substr(0, pos));
+        if (prefix.empty()) continue;
+
+        std::string candidate = prefix;
+        candidate.push_back('-');
+        if (measureTextWidthPx(candidate, ctx) <= ctx.inner_width) {
+            out_line = std::move(candidate);
+            out_rest_raw.assign(raw_word.substr(pos + 2));
+            stripLeadingSoftHyphensInPlace(out_rest_raw);
+            return !out_rest_raw.empty();
+        }
+    }
+
+    return false;
+}
+
 // Wrap a single segment (no '\n') into multiple visual lines, emitting each.
+
 // Returns the number of visual lines emitted.
 int wrapAndEmitSegment(const std::string& segment, int start_line_index,
                        const FullTextRenderCtx& ctx) {
@@ -941,8 +1014,40 @@ int wrapAndEmitSegment(const std::string& segment, int start_line_index,
         return 1;
     }
 
+    const bool allow_manual_hyphens = hyphensManualEnabled(ctx.style);
+
     int lines_emitted = 0;
     std::string current;
+
+    auto emitWordStartingNewLine = [&](std::string raw_word) {
+        stripLeadingSoftHyphensInPlace(raw_word);
+        std::string disp = stripSoftHyphens(raw_word);
+        if (disp.empty()) return;
+
+        if (measureTextWidthPx(disp, ctx) <= ctx.inner_width) {
+            current = std::move(disp);
+            return;
+        }
+
+        if (allow_manual_hyphens) {
+            std::string line;
+            std::string rest;
+            while (splitWordAtSoftHyphenToFit(raw_word, ctx, line, rest) && lines_emitted <= 500) {
+                emitFullTextLine(line, start_line_index + lines_emitted, ctx);
+                ++lines_emitted;
+                raw_word = rest;
+                disp = stripSoftHyphens(raw_word);
+                if (disp.empty()) return;
+                if (measureTextWidthPx(disp, ctx) <= ctx.inner_width) {
+                    current = std::move(disp);
+                    return;
+                }
+            }
+        }
+
+        // Fallback: split long word by width.
+        emitLongWordWrapped(disp, start_line_index, lines_emitted, ctx);
+    };
 
     size_t i = 0;
     while (i < segment.size() && lines_emitted <= 500) {
@@ -950,21 +1055,22 @@ int wrapAndEmitSegment(const std::string& segment, int start_line_index,
         if (i >= segment.size()) break;
         size_t j = i;
         while (j < segment.size() && segment[j] != ' ' && segment[j] != '\t') ++j;
-        std::string_view word(segment.data() + i, j - i);
+        std::string_view word_view(segment.data() + i, j - i);
         i = j;
 
+        std::string raw_word(word_view);
+        stripLeadingSoftHyphensInPlace(raw_word);
+        const std::string word_disp = stripSoftHyphens(raw_word);
+        if (word_disp.empty()) continue;
+
         if (current.empty()) {
-            if (measureTextWidthPx(word, ctx) <= ctx.inner_width) {
-                current.assign(word.begin(), word.end());
-            } else {
-                emitLongWordWrapped(word, start_line_index, lines_emitted, ctx);
-            }
+            emitWordStartingNewLine(std::move(raw_word));
             continue;
         }
 
         std::string candidate = current;
         candidate.push_back(' ');
-        candidate.append(word.begin(), word.end());
+        candidate.append(word_disp);
 
         if (measureTextWidthPx(candidate, ctx) <= ctx.inner_width) {
             current = std::move(candidate);
@@ -972,16 +1078,13 @@ int wrapAndEmitSegment(const std::string& segment, int start_line_index,
         }
 
         flushWrappedLine(current, start_line_index, lines_emitted, ctx);
-        if (measureTextWidthPx(word, ctx) <= ctx.inner_width) {
-            current.assign(word.begin(), word.end());
-        } else {
-            emitLongWordWrapped(word, start_line_index, lines_emitted, ctx);
-        }
+        emitWordStartingNewLine(std::move(raw_word));
     }
 
     flushWrappedLine(current, start_line_index, lines_emitted, ctx);
     return lines_emitted;
 }
+
 
 
 

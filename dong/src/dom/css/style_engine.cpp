@@ -135,8 +135,11 @@ void applyRuleTextProperties(const ComputedStyle& rs, ComputedStyle& computed) {
         { computed.word_break = rs.word_break; computed.markExplicitlySet("word-break"); }
     if (!rs.overflow_wrap.empty() && rs.overflow_wrap != "normal")
         { computed.overflow_wrap = rs.overflow_wrap; computed.markExplicitlySet("overflow-wrap"); }
+    if (rs.isExplicitlySet("hyphens"))
+        { computed.hyphens = rs.hyphens; computed.markExplicitlySet("hyphens"); }
     if (!rs.vertical_align.empty() && rs.vertical_align != "baseline")
         computed.vertical_align = rs.vertical_align;
+
     if (!rs.direction.empty() && rs.direction != "ltr") { computed.direction = rs.direction; computed.markExplicitlySet("direction"); }
     if (rs.text_indent != 0.0f) { computed.text_indent = rs.text_indent; computed.markExplicitlySet("text-indent"); }
     if (rs.webkit_line_clamp != 0) computed.webkit_line_clamp = rs.webkit_line_clamp;
@@ -443,9 +446,12 @@ void applyRuleProperties(const ComputedStyle& rs, ComputedStyle& computed) {
     // Appearance
     APPLY_PROP("appearance", computed.appearance = rs.appearance; computed.markExplicitlySet("appearance"),
                !rs.appearance.empty() && rs.appearance != "auto");
+    APPLY_PROP("resize", computed.resize = rs.resize; computed.markExplicitlySet("resize"),
+               !rs.resize.empty() && rs.resize != "none");
 
 
     // Table properties
+
     APPLY_PROP("border-collapse", computed.border_collapse = rs.border_collapse; computed.markExplicitlySet("border-collapse"),
                !rs.border_collapse.empty() && rs.border_collapse != "separate");
     APPLY_PROP("border-spacing", computed.border_spacing = rs.border_spacing; computed.markExplicitlySet("border-spacing"),
@@ -717,38 +723,35 @@ li {
 button, input, select, textarea {
   display: inline-block;
   box-sizing: border-box;
+  color: #202124;
 }
 
-
+/* Approximate Chromium default form control styling (headless baseline). */
 button {
-  padding: 2px 6px;
-  background-color: #f3f3f3;
+  padding: 1px 6px;
+  background-color: #f1f3f4;
   white-space: nowrap;
 
-  border-width: 2px;
-  border-style: outset;
-  border-color: #767676;
+  border-width: 1px;
+  border-style: solid;
+  border-color: #dadce0;
   border-radius: 2px;
   cursor: pointer;
 }
-button:active {
-
-  border-style: inset;
-}
 
 input, select, textarea {
-  padding: 2px 4px;
+  padding: 1px 4px;
   background-color: #ffffff;
-  border-width: 2px;
-  border-style: inset;
-  border-color: #767676;
+  border-width: 1px;
+  border-style: solid;
+  border-color: #dadce0;
   border-radius: 2px;
   min-height: 24px;
 }
 
-/* Default focus style for inputs (matches browser default outline) */
+/* Default focus style for inputs (matches Chromium default outline) */
 input:focus, select:focus, textarea:focus {
-  outline: 2px solid #4A90E2;
+  outline: 2px solid #1a73e8;
   outline-offset: 1px;
 }
 
@@ -767,11 +770,21 @@ input[type="checkbox"], input[type="radio"] {
   margin-right: 4px;
   margin-bottom: 0;
   margin-left: 0;
+  background-color: #ffffff;
   border-width: 1px;
   border-style: solid;
-  border-radius: 2px;
+  border-color: #5f6368;
   box-sizing: border-box;
 }
+
+input[type="checkbox"] {
+  border-radius: 2px;
+}
+
+input[type="radio"] {
+  border-radius: 50%;
+}
+
 
 
 /* Table defaults (match common browser UA behavior). */
@@ -1072,7 +1085,8 @@ void StyleEngine::processGlobalKeywords(DOMNodePtr node, DOMNodePtr parent) {
         "color", "font-family", "font-size", "font-weight", "font-style",
         "text-align", "line-height", "letter-spacing", "word-spacing",
         "white-space", "direction", "cursor", "visibility",
-        "text-indent", "text-transform", "word-break", "overflow-wrap", "tab-size",
+        "text-indent", "text-transform", "word-break", "overflow-wrap", "hyphens", "tab-size",
+
         "border-collapse", "border-spacing",
         "quotes",
         "color-scheme"
@@ -1122,7 +1136,9 @@ void StyleEngine::copyPropertyFromParent(const std::string& prop,
     else if (prop == "text-transform") child_style.text_transform = parent_style.text_transform;
     else if (prop == "word-break") child_style.word_break = parent_style.word_break;
     else if (prop == "overflow-wrap") child_style.overflow_wrap = parent_style.overflow_wrap;
+    else if (prop == "hyphens") child_style.hyphens = parent_style.hyphens;
     else if (prop == "tab-size") child_style.tab_size = parent_style.tab_size;
+
     else if (prop == "quotes") {
         child_style.quotes = parent_style.quotes;
         child_style.has_quotes = parent_style.has_quotes;
@@ -1211,7 +1227,9 @@ void StyleEngine::inheritFromParent(DOMNodePtr node) {
     if (!computed.isExplicitlySet("text-transform")) computed.text_transform = parent_style.text_transform;
     if (!computed.isExplicitlySet("word-break")) computed.word_break = parent_style.word_break;
     if (!computed.isExplicitlySet("overflow-wrap")) computed.overflow_wrap = parent_style.overflow_wrap;
+    if (!computed.isExplicitlySet("hyphens")) computed.hyphens = parent_style.hyphens;
     if (!computed.isExplicitlySet("tab-size")) computed.tab_size = parent_style.tab_size;
+
 
     // List styling properties (inherited per CSS spec)
     if (!computed.isExplicitlySet("list-style-type")) computed.list_style_type = parent_style.list_style_type;

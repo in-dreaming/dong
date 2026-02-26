@@ -720,7 +720,17 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         };
         auto effectiveBorderColor = [&](const std::string& side_color) -> std::string {
             if (!side_color.empty()) return side_color;
-            const bool is_known_ua_border = (style.border_color.empty() || style.border_color == "#000000" || style.border_color == "#767676");
+
+            // We don't currently track cascade origin (UA vs author). For form-control theming,
+            // treat the known UA defaults as "not author specified" so `color-scheme: dark`
+            // can override them.
+            const bool is_known_ua_border =
+                style.border_color.empty() ||
+                style.border_color == "#000000" ||
+                style.border_color == "#767676" ||  // legacy UA value
+                style.border_color == "#dadce0" ||  // Chromium-like light border
+                style.border_color == "#5f6368";    // Chromium-like checkbox/radio border
+
             if (!override_border_color.empty() && is_known_ua_border) {
                 return override_border_color;
             }
@@ -806,20 +816,24 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         const bool has_border = (bt > 0.0f || br > 0.0f || bb > 0.0f || bl > 0.0f);
 
         // Form controls: derive a UA-like palette from `color-scheme`.
-        // Important: our UA stylesheet assigns light-theme defaults (e.g. #f3f3f3/#ffffff/#767676).
-        // When author only sets `color-scheme`, we still want controls to adopt dark palette.
+        // Important: our UA stylesheet is light-themed; when author only sets `color-scheme`,
+        // controls should still adopt a dark palette similar to Chromium.
         if (tag == "button" || tag == "input" || tag == "select" || tag == "textarea") {
             const std::string scheme = toLowerCollapsed(style.color_scheme);
             const bool is_button = (tag == "button");
             const bool scheme_dark = (scheme == "dark");
 
             const std::string default_bg = scheme_dark
-                ? (is_button ? "#4a4a4a" : "#3a3a3a")
-                : (is_button ? "#f3f3f3" : "#ffffff");
-            const std::string default_border = scheme_dark ? "#8a8a8a" : "#767676";
+                ? (is_button ? "#3c4043" : "#303134")
+                : (is_button ? "#f1f3f4" : "#ffffff");
+            const std::string default_border = scheme_dark ? "#5f6368" : "#dadce0";
 
             // Treat known UA light defaults as "not author-specified" so `color-scheme: dark` can override them.
-            const bool is_known_ua_bg = (bg_color_css == "#f3f3f3" || bg_color_css == "#ffffff");
+            const bool is_known_ua_bg =
+                (bg_color_css == "#ffffff" ||
+                 bg_color_css == "#f3f3f3" ||  // legacy UA value
+                 bg_color_css == "#f1f3f4");  // Chromium-like light button
+
             if (bg_color_css.empty() || bg_color_css == "transparent" || (scheme_dark && is_known_ua_bg)) {
                 bg_color_css = default_bg;
             }
@@ -827,11 +841,19 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
             const bool no_side_border_colors =
                 style.border_top_color.empty() && style.border_right_color.empty() &&
                 style.border_bottom_color.empty() && style.border_left_color.empty();
-            const bool is_known_ua_border = (style.border_color.empty() || style.border_color == "#000000" || style.border_color == "#767676");
-            if (no_side_border_colors && (is_known_ua_border || (scheme_dark && style.border_color == "#767676"))) {
+
+            const bool is_known_ua_border =
+                style.border_color.empty() ||
+                style.border_color == "#000000" ||
+                style.border_color == "#767676" ||  // legacy UA value
+                style.border_color == "#dadce0" ||  // Chromium-like light border
+                style.border_color == "#5f6368";    // checkbox/radio border
+
+            if (scheme_dark && no_side_border_colors && is_known_ua_border) {
                 override_border_color = default_border;
             }
         }
+
 
 
         const bool has_background = !bg_color_css.empty() && bg_color_css != "transparent";
@@ -1072,8 +1094,19 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
             paintCheckboxMark(node, rect, bw, builder);
         }
 
+        if (tag == "textarea" && rect.width > 0.0f && rect.height > 0.0f) {
+            BorderWidths bw{};
+            bw.top = bt;
+            bw.right = br;
+            bw.bottom = bb;
+            bw.left = bl;
+            bw.max = bmax;
+            paintTextareaResizeHandle(node, rect, bw, builder);
+        }
+
 
         // 1.2.5 背景图片
+
         if (!style.background_image.empty() && rect.width > 0.0f && rect.height > 0.0f) {
 
             // 解析 url(...) 格式
@@ -1939,26 +1972,42 @@ void Painter::paintCheckboxMark(const dom::DOMNodePtr& node,
     float side = std::min(inner.width, inner.height);
     if (side <= 0.0f) return;
 
+    // Clamp border radius for mark painting.
+    const float max_r = std::min(rect.width, rect.height) * 0.5f;
+    const float rr = std::clamp(std::max(0.0f, style.border_radius), 0.0f, max_r);
+
     // CSS `accent-color`: `auto` uses a UA default accent; explicit colors override it.
-    Color mark_color = makeColorFromCss("#0a84ff");
+    // Approximate Chromium baseline default accent (environment-dependent; tuned to our Playwright baseline).
+    Color mark_color = makeColorFromCss("#258292");
     if (!style.accent_color.empty() && style.accent_color != "auto") {
         mark_color = makeColorFromCss(style.accent_color);
     }
 
     if (t == "checkbox") {
-        // Fill the control with the accent color.
-        builder.addRect(inner, mark_color);
+        // Fill the control with the accent color. Paint over the border as Chromium does.
+        builder.addRoundedRect(rect, mark_color, rr);
 
-        // Simple white mark (not a perfect glyph checkmark, but improves readability).
+
+        // White checkmark (staircase approximation) to resemble browser checkbox glyph.
         Color white{1.0f, 1.0f, 1.0f, 1.0f};
-        const float thickness = std::max(1.0f, side * 0.12f);
-        Rect vert{inner.x + side * 0.44f, inner.y + side * 0.18f,
-                  thickness, std::max(0.0f, side * 0.64f)};
-        Rect horiz{inner.x + side * 0.18f, inner.y + side * 0.46f,
-                   std::max(0.0f, side * 0.64f), thickness};
-        if (vert.width > 0.0f && vert.height > 0.0f) builder.addRect(vert, white);
-        if (horiz.width > 0.0f && horiz.height > 0.0f) builder.addRect(horiz, white);
+        const float px = std::max(1.0f, std::floor(side * 0.10f));
+        const float step = px;
+
+        const float x0 = inner.x;
+        const float y0 = inner.y;
+
+        // Two legs of the check: down-left -> up-right.
+        const float pts[][2] = {
+            {0.22f, 0.55f}, {0.28f, 0.62f}, {0.34f, 0.69f},
+            {0.40f, 0.62f}, {0.48f, 0.54f}, {0.58f, 0.44f}, {0.68f, 0.34f}
+        };
+        for (const auto& p : pts) {
+            Rect r{x0 + side * p[0], y0 + side * p[1], px, px};
+            if (r.width > 0.0f && r.height > 0.0f) builder.addRect(r, white);
+        }
+        (void)step;
         return;
+
     }
 
     // radio
@@ -1974,4 +2023,52 @@ void Painter::paintCheckboxMark(const dom::DOMNodePtr& node,
 
 }
 
+void Painter::paintTextareaResizeHandle(const dom::DOMNodePtr& node,
+                                       const Rect& rect,
+                                       const BorderWidths& bw,
+                                       DisplayListBuilder& builder) const {
+    if (!node) return;
+
+    const auto& style = node->getComputedStyle();
+    if (style.appearance == "none") return;
+
+    const std::string r = toLowerCollapsed(style.resize);
+    if (r == "none") return;
+
+    // Only show the gripper when the box is scrollable (matches textarea common behavior).
+    const std::string ov = toLowerCollapsed(style.overflow);
+    if (ov == "visible") return;
+
+    Rect inner = rect;
+    inner.x += bw.left;
+    inner.y += bw.top;
+    inner.width = std::max(0.0f, inner.width - (bw.left + bw.right));
+    inner.height = std::max(0.0f, inner.height - (bw.top + bw.bottom));
+    if (inner.width <= 0.0f || inner.height <= 0.0f) return;
+
+    const float max_size = 16.0f;
+    const float size = std::min(max_size, std::min(inner.width, inner.height));
+    if (size < 8.0f) return;
+
+    const bool scheme_dark = (toLowerCollapsed(style.color_scheme) == "dark");
+    Color c = makeColorFromCss(scheme_dark ? "#c9c9c9" : "#8a8a8a");
+    c.a = 1.0f;
+
+    const float pad = 2.0f;
+    const float step = 2.0f;
+    const float px = 2.0f;
+
+    // Draw a simple diagonal gripper using 2px squares (3 diagonals), tuned for visibility.
+    for (int k = 0; k < 3; ++k) {
+        const float offset = static_cast<float>(k) * 4.0f;
+        for (float t = 0.0f; t < size - offset; t += step) {
+            const float x = inner.x + inner.width - pad - offset - t;
+            const float y = inner.y + inner.height - pad - t;
+            builder.addRect(Rect{x, y, px, px}, c);
+        }
+    }
+
+}
+
 } // namespace dong::render
+
