@@ -13,11 +13,14 @@ namespace dong::dom {
 enum class EventType {
     CLICK,
     DOUBLE_CLICK,
+
+    // Mouse events
     MOUSE_MOVE,
     MOUSE_DOWN,
     MOUSE_UP,
     MOUSE_ENTER,
     MOUSE_LEAVE,
+
     // Pointer events (unified mouse/touch/pen)
     POINTER_DOWN,
     POINTER_UP,
@@ -27,19 +30,35 @@ enum class EventType {
     POINTER_OVER,
     POINTER_OUT,
     POINTER_CANCEL,
+
     // Keyboard events
     KEY_DOWN,
     KEY_UP,
     KEY_PRESS,
+
+    // Focus / form
     FOCUS,
     BLUR,
     CHANGE,
     INPUT,
+    BEFORE_INPUT,
     SUBMIT,
+
+    // Clipboard
+    COPY,
+    CUT,
+    PASTE,
+
+    // Layout / lifecycle
     SCROLL,
     RESIZE,
     WHEEL,
     DOM_CONTENT_LOADED,
+
+    // HTML-specific
+    TOGGLE,
+
+    // Fallback
     CUSTOM
 };
 
@@ -98,9 +117,14 @@ struct Event {
     // Custom data
     std::unordered_map<std::string, std::string> data;
 
+    // Web Event flags
+    bool is_trusted = false;   // Event.isTrusted
+    bool repeat = false;       // KeyboardEvent.repeat
+
     bool stopped = false;
     bool prevented = false;
     bool stopped_immediate = false;  // For stopImmediatePropagation()
+
 
     void stopPropagation() { stopped = true; }
     void preventDefault() { prevented = true; }
@@ -152,12 +176,15 @@ private:
     std::unordered_map<std::string, EventType> event_type_map = {
         {"click", EventType::CLICK},
         {"dblclick", EventType::DOUBLE_CLICK},
+
+        // Mouse
         {"mousemove", EventType::MOUSE_MOVE},
         {"mousedown", EventType::MOUSE_DOWN},
         {"mouseup", EventType::MOUSE_UP},
         {"mouseenter", EventType::MOUSE_ENTER},
         {"mouseleave", EventType::MOUSE_LEAVE},
-        // Pointer events
+
+        // Pointer
         {"pointerdown", EventType::POINTER_DOWN},
         {"pointerup", EventType::POINTER_UP},
         {"pointermove", EventType::POINTER_MOVE},
@@ -166,19 +193,33 @@ private:
         {"pointerover", EventType::POINTER_OVER},
         {"pointerout", EventType::POINTER_OUT},
         {"pointercancel", EventType::POINTER_CANCEL},
-        // Keyboard events
+
+        // Keyboard
         {"keydown", EventType::KEY_DOWN},
         {"keyup", EventType::KEY_UP},
         {"keypress", EventType::KEY_PRESS},
+
+        // Focus / form
         {"focus", EventType::FOCUS},
         {"blur", EventType::BLUR},
         {"change", EventType::CHANGE},
+        {"beforeinput", EventType::BEFORE_INPUT},
         {"input", EventType::INPUT},
         {"submit", EventType::SUBMIT},
+
+        // Clipboard
+        {"copy", EventType::COPY},
+        {"cut", EventType::CUT},
+        {"paste", EventType::PASTE},
+
+        // Layout / lifecycle
         {"scroll", EventType::SCROLL},
         {"resize", EventType::RESIZE},
         {"wheel", EventType::WHEEL},
         {"DOMContentLoaded", EventType::DOM_CONTENT_LOADED},
+
+        // HTML-specific
+        {"toggle", EventType::TOGGLE},
     };
 };
 

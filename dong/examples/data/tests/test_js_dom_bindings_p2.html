@@ -1,0 +1,119 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    html, body { margin: 0; background: #000; }
+    #status { position: absolute; left: 20px; top: 20px; width: 220px; height: 64px; background: #ff0000; }
+    .hidden { position: absolute; left: -2000px; top: -2000px; }
+  </style>
+</head>
+<body>
+  <div id="status"></div>
+
+  <script>
+    const status = document.getElementById('status');
+    const stageColors = {
+      0: '#ff0000',
+      1: '#ff00ff',
+      2: '#00ffff',
+      3: '#ffff00',
+      31: '#00ff88',
+      32: '#0088ff',
+      4: '#ff8800',
+      5: '#8888ff',
+      9: '#00ff00',
+    };
+
+
+    let stage = 0;
+    function mark(s) {
+      stage = s;
+      status.style.background = stageColors[s] || '#ff0000';
+    }
+
+    function setOK(ok) {
+      status.style.background = ok ? stageColors[9] : (stageColors[stage] || '#ff0000');
+    }
+
+    try {
+      mark(1);
+      // Element.childElementCount / replaceChildren / insertAdjacentElement / insertAdjacentText
+      const host = document.createElement('div');
+      host.className = 'hidden';
+      host.style.fontSize = '0px';
+      document.body.appendChild(host);
+
+      const a = document.createElement('div');
+      const b = document.createElement('div');
+      host.appendChild(a);
+      host.appendChild(b);
+      if (host.childElementCount !== 2) throw new Error('childElementCount initial != 2');
+
+      const c = document.createElement('div');
+      host.replaceChildren(c);
+      if (host.childElementCount !== 1) throw new Error('replaceChildren did not replace');
+
+      mark(2);
+      const pre = document.createElement('div');
+      host.insertAdjacentElement('afterbegin', pre);
+      host.insertAdjacentText('beforeend', 'T');
+      if (host.childElementCount !== 2) throw new Error('insertAdjacentElement did not add');
+
+      mark(3);
+      // Document.elementFromPoint: create a visible hit target.
+      const hitTarget = document.createElement('div');
+      hitTarget.setAttribute('id', 'hit');
+
+      hitTarget.style.position = 'absolute';
+      hitTarget.style.left = '300px';
+      hitTarget.style.top = '20px';
+      hitTarget.style.width = '40px';
+      hitTarget.style.height = '40px';
+      hitTarget.style.background = '#00aaff';
+      document.body.appendChild(hitTarget);
+
+      const hit = document.elementFromPoint(310, 30);
+      if (!hit) {
+        mark(31);
+        throw new Error('elementFromPoint returned null');
+      }
+      if (hit.getAttribute('id') !== 'hit') {
+        mark(32);
+        throw new Error('elementFromPoint wrong id');
+      }
+
+
+
+      mark(4);
+      // Form: elements / checkValidity / setCustomValidity
+      const form = document.createElement('form');
+      form.className = 'hidden';
+      const input = document.createElement('input');
+      input.setAttribute('required', '');
+      input.value = '';
+      form.appendChild(input);
+      document.body.appendChild(form);
+
+      if (!form.elements || form.elements.length < 1) throw new Error('form.elements missing');
+
+      mark(5);
+      if (form.checkValidity() !== false) throw new Error('form.checkValidity should be false when required empty');
+
+      input.value = 'ok';
+      if (form.checkValidity() !== true) throw new Error('form.checkValidity should be true after value');
+
+      input.setCustomValidity('bad');
+      if (form.checkValidity() !== false) throw new Error('customValidity should make invalid');
+
+      input.setCustomValidity('');
+      if (form.checkValidity() !== true) throw new Error('clearing customValidity should restore valid');
+
+      setOK(true);
+    } catch (e) {
+      setOK(false);
+    }
+
+  </script>
+</body>
+</html>

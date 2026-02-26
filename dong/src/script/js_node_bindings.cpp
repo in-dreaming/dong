@@ -17,6 +17,37 @@ static dong::script::JSBindings* getBindingsFromCtx(JSContext* ctx) {
     return static_cast<dong::script::JSBindings*>(JS_GetContextOpaque(ctx));
 }
 
+// Minimal Event method helpers for native-created events (used by form.submit())
+static JSValue node_event_preventDefault(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc; (void)argv;
+    JS_SetPropertyStr(ctx, (JSValue)this_val, "defaultPrevented", JS_TRUE);
+    return JS_UNDEFINED;
+}
+
+static JSValue node_event_stopPropagation(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc; (void)argv;
+    JS_SetPropertyStr(ctx, (JSValue)this_val, "cancelBubble", JS_TRUE);
+    return JS_UNDEFINED;
+}
+
+static JSValue node_event_stopImmediatePropagation(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc; (void)argv;
+    JS_SetPropertyStr(ctx, (JSValue)this_val, "cancelBubble", JS_TRUE);
+    JS_SetPropertyStr(ctx, (JSValue)this_val, "__stoppedImmediate", JS_TRUE);
+    return JS_UNDEFINED;
+}
+
+static void installBasicEventMethods(JSContext* ctx, JSValue ev) {
+    JS_SetPropertyStr(ctx, ev, "defaultPrevented", JS_FALSE);
+    JS_SetPropertyStr(ctx, ev, "cancelBubble", JS_FALSE);
+    JS_SetPropertyStr(ctx, ev, "preventDefault",
+        JS_NewCFunction(ctx, node_event_preventDefault, "preventDefault", 0));
+    JS_SetPropertyStr(ctx, ev, "stopPropagation",
+        JS_NewCFunction(ctx, node_event_stopPropagation, "stopPropagation", 0));
+    JS_SetPropertyStr(ctx, ev, "stopImmediatePropagation",
+        JS_NewCFunction(ctx, node_event_stopImmediatePropagation, "stopImmediatePropagation", 0));
+}
+
 namespace dong::script {
 
 // ============================================================
@@ -270,6 +301,95 @@ static dom::DOMNodePtr convertToNode(JSContext* ctx, JSValueConst val, dong::dom
     return nullptr;
 }
 
+static void removeAllChildren(const dom::DOMNodePtr& node) {
+    if (!node) return;
+    while (true) {
+        auto first = node->getFirstChild();
+        if (!first) break;
+        node->removeChild(first);
+    }
+}
+
+static JSValue elem_replaceChildren(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_UNDEFINED;
+
+    auto* bindings = getBindingsFromCtx(ctx);
+    if (!bindings || !bindings->dom_manager_) return JS_UNDEFINED;
+
+    removeAllChildren(node);
+
+    for (int i = 0; i < argc; ++i) {
+        auto newNode = convertToNode(ctx, argv[i], bindings->dom_manager_);
+        if (newNode) {
+            node->appendChild(newNode);
+        }
+    }
+
+    return JS_UNDEFINED;
+}
+
+static JSValue elem_insertAdjacentElement(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    if (argc < 2) return JS_NULL;
+
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    auto element = JSBindings::getNodeOpaque(ctx, argv[1]);
+    if (!node || !element) return JS_NULL;
+
+    const char* pos = JS_ToCString(ctx, argv[0]);
+    if (!pos) return JS_NULL;
+
+    node->insertAdjacentElement(pos, element);
+    JS_FreeCString(ctx, pos);
+
+    return JS_DupValue(ctx, argv[1]);
+}
+
+static JSValue elem_insertAdjacentText(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    if (argc < 2) return JS_UNDEFINED;
+
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_UNDEFINED;
+
+    const char* pos = JS_ToCString(ctx, argv[0]);
+    const char* text = JS_ToCString(ctx, argv[1]);
+    if (!pos || !text) {
+        if (pos) JS_FreeCString(ctx, pos);
+        if (text) JS_FreeCString(ctx, text);
+        return JS_UNDEFINED;
+    }
+
+    node->insertAdjacentText(pos, text);
+
+    JS_FreeCString(ctx, pos);
+    JS_FreeCString(ctx, text);
+    return JS_UNDEFINED;
+}
+
+static JSValue elem_setPointerCapture(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc; (void)argv;
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_UNDEFINED;
+    dom::DOMNode::setPointerCapture(node);
+    return JS_UNDEFINED;
+}
+
+static JSValue elem_releasePointerCapture(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc; (void)argv;
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_UNDEFINED;
+    dom::DOMNode::releasePointerCapture(node);
+    return JS_UNDEFINED;
+}
+
+static JSValue elem_click(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc; (void)argv;
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_UNDEFINED;
+    node->click();
+    return JS_UNDEFINED;
+}
+
 static JSValue elem_before(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     auto node = JSBindings::getNodeOpaque(ctx, this_val);
     if (!node) return JS_UNDEFINED;
@@ -481,28 +601,20 @@ static JSValue elem_dispatchEvent(JSContext* ctx, JSValueConst this_val, int arg
     auto node = JSBindings::getNodeOpaque(ctx, this_val);
     if (!node) return JS_FALSE;
 
-    // Read type from the event object
-    JSValue type_val = JS_GetPropertyStr(ctx, argv[0], "type");
-    const char* type = JS_ToCString(ctx, type_val);
-    JS_FreeValue(ctx, type_val);
-    if (!type) return JS_FALSE;
-
     auto* bindings = getBindingsFromCtx(ctx);
-    if (bindings) {
-        uint64_t nid = bindings->getNodeIdFor(node);
-        if (!nid) {
-            // Ensure the node has an ID
-            JSValue tmp = bindings->createJSElement(ctx, node);
-            JS_FreeValue(ctx, tmp);
-            nid = bindings->getNodeIdFor(node);
-        }
-        if (nid) {
-            bindings->dispatchSimpleEvent(nid, type);
-        }
-    }
+    if (!bindings) return JS_FALSE;
 
-    JS_FreeCString(ctx, type);
-    return JS_TRUE;
+    uint64_t nid = bindings->getNodeIdFor(node);
+    if (!nid) {
+        // Ensure the node has an ID
+        JSValue tmp = bindings->createJSElement(ctx, node);
+        JS_FreeValue(ctx, tmp);
+        nid = bindings->getNodeIdFor(node);
+    }
+    if (!nid) return JS_FALSE;
+
+    const bool ok = bindings->dispatchEventObject(nid, argv[0]);
+    return JS_NewBool(ctx, ok);
 }
 
 // ============================================================
@@ -860,6 +972,287 @@ static JSValue input_setName(JSContext* ctx, JSValueConst this_val, int argc, JS
     return JS_UNDEFINED;
 }
 
+// ============================================================
+// Input/Textarea selection + validity
+// ============================================================
+
+static dong::dom::InputElementState* getInputStateOrNull(const dong::dom::DOMNodePtr& node) {
+    return dong::dom::getInputState(node);
+}
+
+static JSValue input_select(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc; (void)argv;
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_UNDEFINED;
+    auto* state = getInputStateOrNull(node);
+    if (!state) return JS_UNDEFINED;
+    state->selectAll();
+    return JS_UNDEFINED;
+}
+
+static JSValue input_setSelectionRange(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    if (argc < 2) return JS_UNDEFINED;
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_UNDEFINED;
+    auto* state = getInputStateOrNull(node);
+    if (!state) return JS_UNDEFINED;
+
+    int64_t start = 0;
+    int64_t end = 0;
+    if (JS_ToInt64(ctx, &start, argv[0]) != 0) return JS_UNDEFINED;
+    if (JS_ToInt64(ctx, &end, argv[1]) != 0) return JS_UNDEFINED;
+
+    if (start < 0) start = 0;
+    if (end < 0) end = 0;
+
+    state->setSelection(static_cast<size_t>(start), static_cast<size_t>(end));
+    state->setCursorPosition(static_cast<size_t>(end));
+    return JS_UNDEFINED;
+}
+
+static JSValue input_getSelectionStart(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc; (void)argv;
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    auto* state = getInputStateOrNull(node);
+    return JS_NewInt32(ctx, state ? static_cast<int32_t>(state->getSelectionStart()) : 0);
+}
+
+static JSValue input_getSelectionEnd(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc; (void)argv;
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    auto* state = getInputStateOrNull(node);
+    return JS_NewInt32(ctx, state ? static_cast<int32_t>(state->getSelectionEnd()) : 0);
+}
+
+static JSValue input_setSelectionStart(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_UNDEFINED;
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    auto* state = getInputStateOrNull(node);
+    if (!state) return JS_UNDEFINED;
+
+    int64_t start = 0;
+    if (JS_ToInt64(ctx, &start, argv[0]) != 0) return JS_UNDEFINED;
+    if (start < 0) start = 0;
+
+    state->setSelection(static_cast<size_t>(start), static_cast<size_t>(start));
+    state->setCursorPosition(static_cast<size_t>(start));
+    return JS_UNDEFINED;
+}
+
+static JSValue input_setSelectionEnd(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_UNDEFINED;
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    auto* state = getInputStateOrNull(node);
+    if (!state) return JS_UNDEFINED;
+
+    int64_t end = 0;
+    if (JS_ToInt64(ctx, &end, argv[0]) != 0) return JS_UNDEFINED;
+    if (end < 0) end = 0;
+
+    state->setSelection(static_cast<size_t>(end), static_cast<size_t>(end));
+    state->setCursorPosition(static_cast<size_t>(end));
+    return JS_UNDEFINED;
+}
+
+static bool inputIsRequiredAndEmpty(const dong::dom::DOMNodePtr& node, dong::dom::InputElementState* state) {
+    if (!node || !node->hasAttribute("required")) return false;
+
+    const std::string type = node->getAttribute("type");
+    if (type == "checkbox" || type == "radio") {
+        return !node->hasAttribute("checked");
+    }
+
+    const std::string value = state ? state->getValue() : node->getAttribute("value");
+    return value.empty();
+}
+
+static JSValue input_checkValidity(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc; (void)argv;
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_TRUE;
+
+    auto* state = getInputStateOrNull(node);
+    if (state && state->hasCustomError()) {
+        return JS_FALSE;
+    }
+
+    if (inputIsRequiredAndEmpty(node, state)) {
+        return JS_FALSE;
+    }
+
+    return JS_TRUE;
+}
+
+static JSValue input_setCustomValidity(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_UNDEFINED;
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_UNDEFINED;
+
+    auto* state = getInputStateOrNull(node);
+    if (!state) return JS_UNDEFINED;
+
+    const char* msg = JS_ToCString(ctx, argv[0]);
+    if (!msg) return JS_UNDEFINED;
+    state->setCustomValidity(msg);
+    JS_FreeCString(ctx, msg);
+    return JS_UNDEFINED;
+}
+
+static JSValue input_getReadOnly(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc; (void)argv;
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_FALSE;
+    return JS_NewBool(ctx, node->hasAttribute("readonly"));
+}
+
+static JSValue input_setReadOnly(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_UNDEFINED;
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_UNDEFINED;
+
+    if (JS_ToBool(ctx, argv[0])) {
+        node->setAttribute("readonly", "");
+    } else {
+        node->removeAttribute("readonly");
+    }
+    return JS_UNDEFINED;
+}
+
+// ============================================================
+// HTMLFormElement bindings (minimal)
+// ============================================================
+
+static void collectFormControls(const dong::dom::DOMNodePtr& node, std::vector<dong::dom::DOMNodePtr>& out) {
+    if (!node) return;
+
+    for (const auto& ch : node->getChildren()) {
+        if (!ch) continue;
+        if (ch->getType() == dong::dom::DOMNode::NodeType::ELEMENT) {
+            const std::string& tag = ch->getTagName();
+            if (tag == "input" || tag == "textarea" || tag == "select" || tag == "button") {
+                out.push_back(ch);
+            }
+        }
+        collectFormControls(ch, out);
+    }
+}
+
+static bool checkControlValidity(const dong::dom::DOMNodePtr& node) {
+    if (!node) return true;
+
+    const std::string& tag = node->getTagName();
+    if (tag == "input" || tag == "textarea") {
+        auto* st = dong::dom::getInputState(node);
+        if (st && st->hasCustomError()) return false;
+        return !inputIsRequiredAndEmpty(node, st);
+    }
+
+    if (tag == "select") {
+        if (!node->hasAttribute("required")) return true;
+        auto* st = dong::dom::getSelectState(node);
+        if (st) {
+            return !st->getSelectedValue().empty();
+        }
+        return !node->getAttribute("value").empty();
+    }
+
+    return true;
+}
+
+static JSValue form_getElements(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc; (void)argv;
+    auto form = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!form) return JS_NewArray(ctx);
+
+    auto* bindings = getBindingsFromCtx(ctx);
+    if (!bindings) return JS_NewArray(ctx);
+
+    std::vector<dong::dom::DOMNodePtr> controls;
+    controls.reserve(16);
+    collectFormControls(form, controls);
+
+    JSValue arr = JS_NewArray(ctx);
+    for (size_t i = 0; i < controls.size(); ++i) {
+        JS_SetPropertyUint32(ctx, arr, static_cast<uint32_t>(i), bindings->createJSElement(ctx, controls[i]));
+    }
+    return arr;
+}
+
+static JSValue form_submit(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc; (void)argv;
+    auto form = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!form) return JS_UNDEFINED;
+
+    auto* bindings = getBindingsFromCtx(ctx);
+    if (!bindings) return JS_UNDEFINED;
+
+    uint64_t nid = bindings->getNodeIdFor(form);
+    if (!nid) {
+        JSValue tmp = bindings->createJSElement(ctx, form);
+        JS_FreeValue(ctx, tmp);
+        nid = bindings->getNodeIdFor(form);
+    }
+    if (!nid) return JS_UNDEFINED;
+
+    JSValue ev = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, ev, "type", JS_NewString(ctx, "submit"));
+    JS_SetPropertyStr(ctx, ev, "bubbles", JS_TRUE);
+    JS_SetPropertyStr(ctx, ev, "cancelable", JS_TRUE);
+    JS_SetPropertyStr(ctx, ev, "isTrusted", JS_FALSE);
+    installBasicEventMethods(ctx, ev);
+
+
+    (void)bindings->dispatchEventObject(nid, ev);
+    JS_FreeValue(ctx, ev);
+    return JS_UNDEFINED;
+}
+
+static JSValue form_reset(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc; (void)argv;
+    auto form = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!form) return JS_UNDEFINED;
+
+    std::vector<dong::dom::DOMNodePtr> controls;
+    collectFormControls(form, controls);
+
+    for (auto& c : controls) {
+        if (!c) continue;
+        const std::string& tag = c->getTagName();
+        if (tag == "input" || tag == "textarea") {
+            if (auto* st = dong::dom::getInputState(c)) {
+                st->setValue("");
+                st->clearSelection();
+                c->setAttribute("value", "");
+            }
+        } else if (tag == "select") {
+            if (auto* st = dong::dom::getSelectState(c)) {
+                st->syncFromDOM(c);
+                st->selectOption(0);
+                st->applySelectionToDOM(c);
+                c->markLayoutDirty();
+            }
+        }
+    }
+
+    return JS_UNDEFINED;
+}
+
+static JSValue form_checkValidity(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc; (void)argv;
+    auto form = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!form) return JS_TRUE;
+
+    std::vector<dong::dom::DOMNodePtr> controls;
+    collectFormControls(form, controls);
+
+    for (auto& c : controls) {
+        if (!checkControlValidity(c)) {
+            return JS_FALSE;
+        }
+    }
+    return JS_TRUE;
+}
+
 // Select element - selectedIndex
 static JSValue select_getSelectedIndex(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     (void)argc; (void)argv;
@@ -1129,6 +1522,21 @@ void bindElementProperties(JSContext* ctx, JSValue elem, const dom::DOMNodePtr& 
         JS_NewCFunction(ctx, elem_remove, "remove", 0));
     JS_SetPropertyStr(ctx, elem, "dispatchEvent",
         JS_NewCFunction(ctx, elem_dispatchEvent, "dispatchEvent", 1));
+
+    // Element convenience methods
+    JS_SetPropertyStr(ctx, elem, "click",
+        JS_NewCFunction(ctx, elem_click, "click", 0));
+    JS_SetPropertyStr(ctx, elem, "replaceChildren",
+        JS_NewCFunction(ctx, elem_replaceChildren, "replaceChildren", 0));
+    JS_SetPropertyStr(ctx, elem, "insertAdjacentElement",
+        JS_NewCFunction(ctx, elem_insertAdjacentElement, "insertAdjacentElement", 2));
+    JS_SetPropertyStr(ctx, elem, "insertAdjacentText",
+        JS_NewCFunction(ctx, elem_insertAdjacentText, "insertAdjacentText", 2));
+    JS_SetPropertyStr(ctx, elem, "setPointerCapture",
+        JS_NewCFunction(ctx, elem_setPointerCapture, "setPointerCapture", 1));
+    JS_SetPropertyStr(ctx, elem, "releasePointerCapture",
+        JS_NewCFunction(ctx, elem_releasePointerCapture, "releasePointerCapture", 1));
+
     JS_SetPropertyStr(ctx, elem, "hasAttribute",
         JS_NewCFunction(ctx, elem_hasAttribute, "hasAttribute", 1));
     JS_SetPropertyStr(ctx, elem, "removeAttribute",
@@ -1309,25 +1717,37 @@ void bindHTMLElementProperties(JSContext* ctx, JSValue elem, const dom::DOMNodeP
     if (!node) return;
 
     const std::string& tag = node->getTagName();
+
     if (tag == "input" || tag == "textarea") {
         DEFINE_GETTER_SETTER(ctx, elem, "value", input_getValue, input_setValue);
         DEFINE_GETTER_SETTER(ctx, elem, "checked", input_getChecked, input_setChecked);
         DEFINE_GETTER_SETTER(ctx, elem, "disabled", input_getDisabled, input_setDisabled);
         DEFINE_GETTER_SETTER(ctx, elem, "type", input_getType, input_setType);
         DEFINE_GETTER_SETTER(ctx, elem, "name", input_getName, input_setName);
+
+        DEFINE_GETTER_SETTER(ctx, elem, "readOnly", input_getReadOnly, input_setReadOnly);
+        DEFINE_GETTER_SETTER(ctx, elem, "selectionStart", input_getSelectionStart, input_setSelectionStart);
+        DEFINE_GETTER_SETTER(ctx, elem, "selectionEnd", input_getSelectionEnd, input_setSelectionEnd);
+
+        JS_SetPropertyStr(ctx, elem, "select", JS_NewCFunction(ctx, input_select, "select", 0));
+        JS_SetPropertyStr(ctx, elem, "setSelectionRange", JS_NewCFunction(ctx, input_setSelectionRange, "setSelectionRange", 2));
+        JS_SetPropertyStr(ctx, elem, "checkValidity", JS_NewCFunction(ctx, input_checkValidity, "checkValidity", 0));
+        JS_SetPropertyStr(ctx, elem, "setCustomValidity", JS_NewCFunction(ctx, input_setCustomValidity, "setCustomValidity", 1));
     } else if (tag == "select") {
-        // Select element bindings
         DEFINE_GETTER_SETTER(ctx, elem, "value", input_getValue, input_setValue);
         DEFINE_GETTER_SETTER(ctx, elem, "disabled", input_getDisabled, input_setDisabled);
         DEFINE_GETTER_SETTER(ctx, elem, "name", input_getName, input_setName);
         DEFINE_GETTER_SETTER(ctx, elem, "selectedIndex", select_getSelectedIndex, select_setSelectedIndex);
         DEFINE_GETTER(ctx, elem, "options", select_getOptions);
+    } else if (tag == "form") {
+        DEFINE_GETTER(ctx, elem, "elements", form_getElements);
+        JS_SetPropertyStr(ctx, elem, "submit", JS_NewCFunction(ctx, form_submit, "submit", 0));
+        JS_SetPropertyStr(ctx, elem, "reset", JS_NewCFunction(ctx, form_reset, "reset", 0));
+        JS_SetPropertyStr(ctx, elem, "checkValidity", JS_NewCFunction(ctx, form_checkValidity, "checkValidity", 0));
     } else if (tag == "a") {
-        // Anchor element bindings
         DEFINE_GETTER_SETTER(ctx, elem, "href", anchor_getHref, anchor_setHref);
         DEFINE_GETTER_SETTER(ctx, elem, "target", anchor_getTarget, anchor_setTarget);
     } else if (tag == "img") {
-        // Image element bindings
         DEFINE_GETTER_SETTER(ctx, elem, "src", img_getSrc, img_setSrc);
         DEFINE_GETTER_SETTER(ctx, elem, "alt", img_getAlt, img_setAlt);
         DEFINE_GETTER(ctx, elem, "naturalWidth", img_getNaturalWidth);
@@ -1335,6 +1755,8 @@ void bindHTMLElementProperties(JSContext* ctx, JSValue elem, const dom::DOMNodeP
         DEFINE_GETTER(ctx, elem, "complete", img_getComplete);
     }
 }
+
+
 
 void initializeNodeConstants(JSContext* ctx) {
     JSValue global = JS_GetGlobalObject(ctx);

@@ -63,8 +63,12 @@ public:
     // Calculate layout for DOM tree
     void calculateLayout(dom::DOMNodePtr root, float width, float height);
 
+    float getViewportWidth() const { return viewport_width_; }
+    float getViewportHeight() const { return viewport_height_; }
+
     // Get layout info for a node
     const LayoutNode* getLayout(dom::DOMNodePtr node) const;
+
 
     // Get mutable layout info (for post-layout passes like table layout)
     LayoutNode* getLayoutMutable(dom::DOMNodePtr node);

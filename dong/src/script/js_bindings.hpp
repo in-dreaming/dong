@@ -14,6 +14,11 @@ namespace dong::dom {
 class FocusManager;
 }
 
+namespace dong::layout {
+class Engine;
+}
+
+
 #include "quickjs_compat.h"
 
 
@@ -22,7 +27,11 @@ namespace dong::script {
 // JavaScript 绑定层 - 提供 JavaScript 访问 DOM 和事件系统的接口
 class JSBindings {
 public:
-    JSBindings(ScriptEngine* engine, dom::Manager* dom_manager, dom::EventDispatcher* event_dispatcher, dom::FocusManager* focus_manager = nullptr);
+    JSBindings(ScriptEngine* engine,
+               dom::Manager* dom_manager,
+               dong::layout::Engine* layout_engine,
+               dom::EventDispatcher* event_dispatcher,
+               dom::FocusManager* focus_manager = nullptr);
     ~JSBindings();
 
     // 初始化所有内置 API
@@ -40,8 +49,10 @@ public:
     // Public access to managers for callbacks
     ScriptEngine* engine_;
     dom::Manager* dom_manager_;
+    dong::layout::Engine* layout_engine_;
     dom::EventDispatcher* event_dispatcher_;
     dom::FocusManager* focus_manager_;
+
 
     // Start time for performance.now()
     std::chrono::steady_clock::time_point script_start_time_;
@@ -72,15 +83,24 @@ public:
     // Event bridge helpers
     void registerEventListener(uint64_t node_id, const std::string& type, JSValueConst handler);
     void removeEventListener(uint64_t node_id, const std::string& type, JSValueConst handler);
-    void dispatchMouseEvent(uint64_t node_id, const char* type, int32_t x, int32_t y, int32_t button);
-    void dispatchKeyEvent(uint64_t node_id, const char* type, uint32_t key_code);
+    void dispatchMouseEvent(uint64_t node_id, const char* type, int32_t x, int32_t y, int32_t button,
+                            bool is_trusted, uint64_t related_node_id = 0);
+    void dispatchKeyEvent(uint64_t node_id, const char* type, uint32_t key_code,
+                          bool is_trusted, bool repeat = false,
+                          bool alt_key = false, bool ctrl_key = false, bool shift_key = false, bool meta_key = false);
+
+
 
     // Generic event dispatch for non-input events (e.g. media events).
     void dispatchSimpleEvent(uint64_t node_id, const char* type);
     void dispatchMediaEvent(uint64_t node_id, const char* type, double current_time, double duration, const char* message = nullptr);
 
+    // BeforeInput event dispatch (cancelable; may prevent default)
+    bool dispatchBeforeInputEvent(uint64_t node_id, const char* input_type, const char* data = nullptr);
+
     // Input event dispatch with inputType and data properties
     void dispatchInputEvent(uint64_t node_id, const char* input_type, const char* data = nullptr);
+
 
     // Composition event dispatch (compositionstart/update/end) with data property
     void dispatchCompositionEvent(uint64_t node_id, const char* type, const char* data);
@@ -93,12 +113,31 @@ public:
     // Bridge between JS listeners and C++ DOM EventDispatcher
     void ensureEventBridgeForNode(const dom::DOMNodePtr& node, const std::string& type, uint64_t node_id);
 
+    // Dispatch a JS-provided event object (used by Element.dispatchEvent)
+    // Returns true if the event was NOT canceled (i.e. !defaultPrevented).
+    bool dispatchEventObject(uint64_t node_id, JSValueConst event_obj);
+
+
     // DOM lifecycle
     void resetForNewDOM();
     
 private:
+    void dispatchEventToChain(const dom::DOMNodePtr& target,
+                              const std::string& type,
+                              JSValue event);
+
+    bool dispatchCancelableEventToChain(const dom::DOMNodePtr& target,
+                                       const std::string& type,
+                                       JSValue event);
+
     // Track C++ bridge listener IDs to avoid duplicate registration
     std::unordered_map<void*, std::unordered_map<std::string, uint64_t>> event_bridge_ids_;
+
+
+    // For MouseEvent.movementX/Y
+    bool has_last_mouse_pos_ = false;
+    int32_t last_mouse_x_ = 0;
+    int32_t last_mouse_y_ = 0;
 
     // Static helper for storing node pointers
     static void setNodeOpaque(JSContext* ctx, JSValue val, dom::DOMNodePtr node);

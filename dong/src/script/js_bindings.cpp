@@ -1,6 +1,7 @@
 ﻿#include "js_bindings.hpp"
 #include "js_node_bindings.hpp"
 #include "js_observer_bindings.hpp"
+#include "../layout/layout_engine.hpp"
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -899,8 +900,107 @@ static JSValue doc_querySelectorAll(JSContext* ctx, JSValueConst this_val, int a
 }
 
 // ============================================================
+// Document: elementFromPoint / hasFocus / scrollingElement
+// ============================================================
+
+namespace {
+
+dong::dom::DOMNodePtr hitTestRecursiveForDocument(const dong::dom::DOMNodePtr& node,
+                                                  dong::layout::Engine* layout_engine,
+                                                  int32_t x,
+                                                  int32_t y) {
+    if (!node || !layout_engine) return nullptr;
+
+    const auto* layout = layout_engine->getLayout(node);
+    if (!layout) return nullptr;
+
+    const float lx = layout->x;
+    const float ly = layout->y;
+    const float w = layout->width;
+    const float h = layout->height;
+
+    const bool in_bounds = (x >= lx && x <= lx + w && y >= ly && y <= ly + h);
+
+    // Important: even if a parent box doesn't contain the point, a positioned child can.
+    // So we traverse children first without an early "out of bounds" reject.
+    const auto& children = node->getChildren();
+    for (auto it = children.rbegin(); it != children.rend(); ++it) {
+        auto child_hit = hitTestRecursiveForDocument(*it, layout_engine, x, y);
+        if (child_hit) {
+            return child_hit;
+        }
+    }
+
+    return in_bounds ? node : nullptr;
+
+}
+
+} // namespace
+
+static JSValue doc_elementFromPoint(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val;
+    auto bindings = getBindingsFromContext(ctx);
+    if (!bindings || !bindings->dom_manager_ || !bindings->layout_engine_) return JS_NULL;
+    if (argc < 2) return JS_NULL;
+
+    int32_t x = 0;
+    int32_t y = 0;
+    if (JS_ToInt32(ctx, &x, argv[0]) != 0) return JS_NULL;
+    if (JS_ToInt32(ctx, &y, argv[1]) != 0) return JS_NULL;
+
+    auto root = bindings->dom_manager_->getRoot();
+    if (!root) return JS_NULL;
+
+    // Flush layout on demand, to match browser behavior.
+    // We currently can't cheaply query "any dirty node" from here, so do a conservative flush.
+    const float vw = bindings->layout_engine_->getViewportWidth();
+    const float vh = bindings->layout_engine_->getViewportHeight();
+    if (vw > 0.0f && vh > 0.0f) {
+        bindings->layout_engine_->calculateLayout(root, vw, vh);
+        root->clearLayoutDirtyRecursive();
+    }
+
+
+    auto hit = hitTestRecursiveForDocument(root, bindings->layout_engine_, x, y);
+
+    while (hit && hit->getType() != dong::dom::DOMNode::NodeType::ELEMENT) {
+        hit = hit->getParent();
+    }
+
+    if (!hit) return JS_NULL;
+    return bindings->createJSElement(ctx, hit);
+}
+
+static JSValue doc_hasFocus(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val; (void)argc; (void)argv;
+    auto bindings = getBindingsFromContext(ctx);
+    if (!bindings || !bindings->focus_manager_) return JS_FALSE;
+    return JS_NewBool(ctx, bindings->focus_manager_->getFocusedElement() != nullptr);
+}
+
+static JSValue doc_getScrollingElement(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val; (void)argc; (void)argv;
+    auto bindings = getBindingsFromContext(ctx);
+    if (!bindings || !bindings->dom_manager_) return JS_NULL;
+
+    // Prefer <html>, fallback to <body>.
+    auto html_nodes = bindings->dom_manager_->getElementsByTagName("html");
+    if (!html_nodes.empty() && html_nodes[0]) {
+        return bindings->createJSElement(ctx, html_nodes[0]);
+    }
+
+    auto body_nodes = bindings->dom_manager_->getElementsByTagName("body");
+    if (!body_nodes.empty() && body_nodes[0]) {
+        return bindings->createJSElement(ctx, body_nodes[0]);
+    }
+
+    return JS_NULL;
+}
+
+// ============================================================
 // 銆愮己鍙?銆慏OM 鍒涘缓 API
 // ============================================================
+
 
 static JSValue doc_createElement(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     auto bindings = getBindingsFromContext(ctx);
@@ -1426,7 +1526,42 @@ static JSValue elem_setClassName(JSContext* ctx, JSValueConst this_val, int argc
     return JS_UNDEFINED;
 }
 
+// id getter/setter
+static JSValue elem_getId(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc; (void)argv;
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_NewString(ctx, "");
+    std::string id = node->getAttribute("id");
+    return JS_NewString(ctx, id.c_str());
+}
+
+static JSValue elem_setId(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_UNDEFINED;
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_UNDEFINED;
+
+    const char* id = JS_ToCString(ctx, argv[0]);
+    if (!id) return JS_UNDEFINED;
+
+    if (id[0]) {
+        node->setAttribute("id", id);
+    } else {
+        node->removeAttribute("id");
+    }
+
+    JS_FreeCString(ctx, id);
+
+    // Trigger style recomputation (#id selectors)
+    auto* bindings = getBindingsFromContext(ctx);
+    if (bindings && bindings->dom_manager_) {
+        bindings->dom_manager_->recomputeNodeStyle(node);
+    }
+
+    return JS_UNDEFINED;
+}
+
 // classList 支持 - 从 __element__ 取节点
+
 static JSValue elem_classList_add(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     if (argc < 1) return JS_UNDEFINED;
 
@@ -1673,6 +1808,8 @@ static JSValue event_constructor(JSContext* ctx, JSValueConst this_val, int argc
     JS_SetPropertyStr(ctx, event, "defaultPrevented", JS_FALSE);
     JS_SetPropertyStr(ctx, event, "cancelBubble", JS_FALSE);
     JS_SetPropertyStr(ctx, event, "timeStamp", JS_NewInt32(ctx, 0));
+    JS_SetPropertyStr(ctx, event, "isTrusted", JS_FALSE);
+
 
     // Event methods
     JS_SetPropertyStr(ctx, event, "preventDefault",
@@ -1692,11 +1829,16 @@ static JSValue mouse_event_constructor(JSContext* ctx, JSValueConst this_val, in
     // MouseEvent-specific properties
     JS_SetPropertyStr(ctx, event, "clientX", JS_NewInt32(ctx, 0));
     JS_SetPropertyStr(ctx, event, "clientY", JS_NewInt32(ctx, 0));
+    JS_SetPropertyStr(ctx, event, "pageX", JS_NewInt32(ctx, 0));
+    JS_SetPropertyStr(ctx, event, "pageY", JS_NewInt32(ctx, 0));
+    JS_SetPropertyStr(ctx, event, "movementX", JS_NewInt32(ctx, 0));
+    JS_SetPropertyStr(ctx, event, "movementY", JS_NewInt32(ctx, 0));
     JS_SetPropertyStr(ctx, event, "screenX", JS_NewInt32(ctx, 0));
     JS_SetPropertyStr(ctx, event, "screenY", JS_NewInt32(ctx, 0));
     JS_SetPropertyStr(ctx, event, "button", JS_NewInt32(ctx, 0));
     JS_SetPropertyStr(ctx, event, "buttons", JS_NewInt32(ctx, 0));
-    
+    JS_SetPropertyStr(ctx, event, "relatedTarget", JS_NULL);
+
     return event;
 }
 
@@ -1708,7 +1850,9 @@ static JSValue keyboard_event_constructor(JSContext* ctx, JSValueConst this_val,
     JS_SetPropertyStr(ctx, event, "code", JS_NewString(ctx, ""));
     JS_SetPropertyStr(ctx, event, "keyCode", JS_NewInt32(ctx, 0));
     JS_SetPropertyStr(ctx, event, "charCode", JS_NewInt32(ctx, 0));
+    JS_SetPropertyStr(ctx, event, "repeat", JS_FALSE);
     JS_SetPropertyStr(ctx, event, "ctrlKey", JS_FALSE);
+
     JS_SetPropertyStr(ctx, event, "shiftKey", JS_FALSE);
     JS_SetPropertyStr(ctx, event, "altKey", JS_FALSE);
     JS_SetPropertyStr(ctx, event, "metaKey", JS_FALSE);
@@ -1720,9 +1864,16 @@ static JSValue keyboard_event_constructor(JSContext* ctx, JSValueConst this_val,
 // JSBindings Implementation
 // ============================================================
 
-JSBindings::JSBindings(ScriptEngine* engine, dom::Manager* dom_manager,
-                       dom::EventDispatcher* event_dispatcher, dom::FocusManager* focus_manager)
-    : engine_(engine), dom_manager_(dom_manager), event_dispatcher_(event_dispatcher), focus_manager_(focus_manager),
+JSBindings::JSBindings(ScriptEngine* engine,
+                       dom::Manager* dom_manager,
+                       dong::layout::Engine* layout_engine,
+                       dom::EventDispatcher* event_dispatcher,
+                       dom::FocusManager* focus_manager)
+    : engine_(engine),
+      dom_manager_(dom_manager),
+      layout_engine_(layout_engine),
+      event_dispatcher_(event_dispatcher),
+      focus_manager_(focus_manager),
       script_start_time_(std::chrono::steady_clock::now()) {
     // Set context opaque to this JSBindings instance for per-context lookup
     if (engine_ && engine_->getContext()) {
@@ -1913,7 +2064,19 @@ void JSBindings::initializeDocumentAPI() {
         JS_NewCFunction(ctx, doc_querySelector, "querySelector", 1));
     JS_SetPropertyStr(ctx, document, "querySelectorAll",
         JS_NewCFunction(ctx, doc_querySelectorAll, "querySelectorAll", 1));
-    
+
+    // elementFromPoint / hasFocus / scrollingElement
+    JS_SetPropertyStr(ctx, document, "elementFromPoint",
+        JS_NewCFunction(ctx, doc_elementFromPoint, "elementFromPoint", 2));
+    JS_SetPropertyStr(ctx, document, "hasFocus",
+        JS_NewCFunction(ctx, doc_hasFocus, "hasFocus", 0));
+
+    JSAtom scrolling_atom = JS_NewAtom(ctx, "scrollingElement");
+    JSValue scrolling_getter = JS_NewCFunction(ctx, doc_getScrollingElement, "get scrollingElement", 0);
+    JS_DefinePropertyGetSet(ctx, document, scrolling_atom, scrolling_getter, JS_UNDEFINED,
+        JS_PROP_ENUMERABLE | JS_PROP_CONFIGURABLE);
+    JS_FreeAtom(ctx, scrolling_atom);
+
     // DOM 鍒涘缓 API
     JS_SetPropertyStr(ctx, document, "createElement",
         JS_NewCFunction(ctx, doc_createElement, "createElement", 1));
@@ -2032,10 +2195,17 @@ JSValue JSBindings::createJSElement(JSContext* ctx, const dom::DOMNodePtr& node)
     // Expose properties and methods
     // Properties
     JS_SetPropertyStr(ctx, elem, "tagName", JS_NewString(ctx, node->getTagName().c_str()));
-    JS_SetPropertyStr(ctx, elem, "id", 
-        JS_NewString(ctx, node->hasAttribute("id") ? node->getAttribute("id").c_str() : ""));
-    
+
+    // id - use getter/setter for dynamic access
+    JSAtom id_atom = JS_NewAtom(ctx, "id");
+    JSValue id_getter = JS_NewCFunction(ctx, elem_getId, "get id", 0);
+    JSValue id_setter = JS_NewCFunction(ctx, elem_setId, "set id", 1);
+    JS_DefinePropertyGetSet(ctx, elem, id_atom, id_getter, id_setter,
+        JS_PROP_ENUMERABLE | JS_PROP_CONFIGURABLE);
+    JS_FreeAtom(ctx, id_atom);
+
     // className - use getter/setter for dynamic access
+
     JSAtom className_atom = JS_NewAtom(ctx, "className");
     JSValue getter = JS_NewCFunction(ctx, elem_getClassName, "get className", 0);
     JSValue setter = JS_NewCFunction(ctx, elem_setClassName, "set className", 1);
@@ -2263,11 +2433,16 @@ void JSBindings::ensureEventBridgeForNode(const dom::DOMNodePtr& node, const std
     if (type == "click" || type == "mousedown" || type == "mouseup" || type == "mousemove" ||
         type == "mouseenter" || type == "mouseleave" || type == "mouseover" || type == "mouseout") {
         callback = [this, node_id, type](const dom::Event& ev) {
-            this->dispatchMouseEvent(node_id, type.c_str(), ev.mouse_x, ev.mouse_y, ev.mouse_button);
+            uint64_t related_id = 0;
+            if (ev.related_target) {
+                related_id = this->getNodeIdFor(ev.related_target);
+            }
+            this->dispatchMouseEvent(node_id, type.c_str(), ev.mouse_x, ev.mouse_y, ev.mouse_button, ev.is_trusted, related_id);
         };
     } else if (type == "keydown" || type == "keyup" || type == "keypress") {
         callback = [this, node_id, type](const dom::Event& ev) {
-            this->dispatchKeyEvent(node_id, type.c_str(), ev.key_code);
+            this->dispatchKeyEvent(node_id, type.c_str(), ev.key_code, ev.is_trusted, ev.repeat,
+                                  ev.alt_key, ev.ctrl_key, ev.shift_key, ev.meta_key);
         };
     } else if (type == "focus" || type == "blur") {
         // FocusEvent with relatedTarget support
@@ -2301,310 +2476,382 @@ void JSBindings::ensureEventBridgeForNode(const dom::DOMNodePtr& node, const std
     }
 }
 
-void JSBindings::dispatchMouseEvent(uint64_t node_id, const char* type, int32_t x, int32_t y, int32_t button) {
-    if (!engine_) return;
+namespace {
+
+bool jsGetBoolProp(JSContext* ctx, JSValueConst obj, const char* name, bool default_value) {
+    JSValue v = JS_GetPropertyStr(ctx, obj, name);
+    if (JS_IsUndefined(v)) {
+        JS_FreeValue(ctx, v);
+        return default_value;
+    }
+    const bool r = JS_ToBool(ctx, v) != 0;
+    JS_FreeValue(ctx, v);
+    return r;
+}
+
+void mapKeyCodeToStrings(uint32_t key_code, std::string& key_str, std::string& code_str) {
+    key_str.clear();
+    code_str.clear();
+
+    if (key_code >= 32 && key_code < 127) {
+        key_str = std::string(1, (char)key_code);
+        if (key_code >= 'a' && key_code <= 'z') {
+            code_str = std::string("Key") + (char)(key_code - 32);
+        } else if (key_code >= 'A' && key_code <= 'Z') {
+            code_str = std::string("Key") + (char)key_code;
+        } else if (key_code >= '0' && key_code <= '9') {
+            code_str = std::string("Digit") + (char)key_code;
+        } else if (key_code == ' ') {
+            key_str = " ";
+            code_str = "Space";
+        } else {
+            code_str = key_str;
+        }
+        return;
+    }
+
+    if (key_code == 13) { key_str = "Enter"; code_str = "Enter"; return; }
+    if (key_code == 27) { key_str = "Escape"; code_str = "Escape"; return; }
+    if (key_code == 8) { key_str = "Backspace"; code_str = "Backspace"; return; }
+    if (key_code == 9) { key_str = "Tab"; code_str = "Tab"; return; }
+    if (key_code == 127) { key_str = "Delete"; code_str = "Delete"; return; }
+
+    if (key_code == 0x40000050) { key_str = "ArrowLeft"; code_str = "ArrowLeft"; return; }
+    if (key_code == 0x4000004F) { key_str = "ArrowRight"; code_str = "ArrowRight"; return; }
+    if (key_code == 0x40000052) { key_str = "ArrowUp"; code_str = "ArrowUp"; return; }
+    if (key_code == 0x40000051) { key_str = "ArrowDown"; code_str = "ArrowDown"; return; }
+}
+
+} // namespace
+
+void JSBindings::dispatchEventToChain(const dom::DOMNodePtr& target,
+                                     const std::string& type,
+                                     JSValue event) {
+    if (!engine_ || !target) return;
     JSContext* ctx = engine_->getContext();
     if (!ctx) return;
 
-    auto node_it = listeners_.find(node_id);
-    if (node_it == listeners_.end()) {
-        return;
-    }
-    auto& type_map = node_it->second;
-    auto type_it = type_map.find(type);
-    if (type_it == type_map.end()) {
-        return;
+    const bool bubbles = jsGetBoolProp(ctx, event, "bubbles", true);
+
+    // Set target once.
+    {
+        JSValue target_js = createJSElement(ctx, target);
+        JS_SetPropertyStr(ctx, event, "target", target_js);
     }
 
-    auto& funcs = type_it->second;
-
-    for (auto& fn : funcs) {
-        if (!JS_IsFunction(ctx, fn)) {
-            continue;
+    dom::DOMNodePtr current = target;
+    while (current) {
+        const bool stop_immediate = jsGetBoolProp(ctx, event, "__stoppedImmediate", false);
+        if (stop_immediate) {
+            break;
         }
 
-        JSValue ev = JS_NewObject(ctx);
-        JS_SetPropertyStr(ctx, ev, "type", JS_NewString(ctx, type));
-        JS_SetPropertyStr(ctx, ev, "clientX", JS_NewInt32(ctx, x));
-        JS_SetPropertyStr(ctx, ev, "clientY", JS_NewInt32(ctx, y));
-        JS_SetPropertyStr(ctx, ev, "button", JS_NewInt32(ctx, button));
-        JS_SetPropertyStr(ctx, ev, "bubbles", JS_TRUE);
-        JS_SetPropertyStr(ctx, ev, "cancelable", JS_TRUE);
+        JSValue current_js = createJSElement(ctx, current);
+        JSValue this_val = JS_DupValue(ctx, current_js);
+        JS_SetPropertyStr(ctx, event, "currentTarget", current_js);
 
-        // offsetX/offsetY: relative to target element's bounding rect
-        JSValue this_val = JS_UNDEFINED;
-        auto dom_it = id_to_node_.find(node_id);
-        if (dom_it != id_to_node_.end()) {
-            auto rect = dom_it->second->getBoundingClientRect();
-            JS_SetPropertyStr(ctx, ev, "offsetX", JS_NewFloat64(ctx, x - rect.x));
-            JS_SetPropertyStr(ctx, ev, "offsetY", JS_NewFloat64(ctx, y - rect.y));
+        uint64_t current_id = getNodeIdFor(current);
+        if (current_id != 0) {
+            auto node_it = listeners_.find(current_id);
+            if (node_it != listeners_.end()) {
+                auto& type_map = node_it->second;
+                auto type_it = type_map.find(type);
+                if (type_it != type_map.end()) {
+                    auto& funcs = type_it->second;
+                    for (auto& fn : funcs) {
+                        if (!JS_IsFunction(ctx, fn)) continue;
 
-            JSValue target = createJSElement(ctx, dom_it->second);
-            JSValue current_target = JS_DupValue(ctx, target);
-            this_val = JS_DupValue(ctx, target);
-            JS_SetPropertyStr(ctx, ev, "target", target);
-            JS_SetPropertyStr(ctx, ev, "currentTarget", current_target);
-        } else {
-            JS_SetPropertyStr(ctx, ev, "offsetX", JS_NewInt32(ctx, 0));
-            JS_SetPropertyStr(ctx, ev, "offsetY", JS_NewInt32(ctx, 0));
-        }
+                        JSValue ret = JS_Call(ctx, fn, this_val, 1, &event);
+                        if (JS_IsException(ret)) {
+                            JSValue exc = JS_GetException(ctx);
+                            const char* err = JS_ToCString(ctx, exc);
+                            if (err) {
+                                std::fprintf(stderr, "[JSBindings] event(%s) error: %s\n", type.c_str(), err);
+                                JS_FreeCString(ctx, err);
+                            }
+                            JS_FreeValue(ctx, exc);
+                        }
+                        JS_FreeValue(ctx, ret);
 
-        // Modifier keys (default false)
-        JS_SetPropertyStr(ctx, ev, "altKey", JS_FALSE);
-        JS_SetPropertyStr(ctx, ev, "ctrlKey", JS_FALSE);
-        JS_SetPropertyStr(ctx, ev, "shiftKey", JS_FALSE);
-        JS_SetPropertyStr(ctx, ev, "metaKey", JS_FALSE);
-
-        // PointerEvent properties (for compatibility with PointerEvent API)
-        // These properties make mouse events compatible with pointer event handlers
-        JS_SetPropertyStr(ctx, ev, "pointerId", JS_NewInt32(ctx, 0));  // Mouse is always pointer 0
-        JS_SetPropertyStr(ctx, ev, "pointerType", JS_NewString(ctx, "mouse"));
-        JS_SetPropertyStr(ctx, ev, "pressure", JS_NewFloat64(ctx, button != 0 ? 0.5 : 0.0));  // 0.5 when button pressed, 0 otherwise
-        JS_SetPropertyStr(ctx, ev, "isPrimary", JS_TRUE);  // Mouse is always primary pointer
-
-        // Event methods
-        JS_SetPropertyStr(ctx, ev, "preventDefault",
-            JS_NewCFunction(ctx, event_preventDefault, "preventDefault", 0));
-        JS_SetPropertyStr(ctx, ev, "stopPropagation",
-            JS_NewCFunction(ctx, event_stopPropagation, "stopPropagation", 0));
-        JS_SetPropertyStr(ctx, ev, "stopImmediatePropagation",
-            JS_NewCFunction(ctx, event_stopImmediatePropagation, "stopImmediatePropagation", 0));
-
-        JSValue ret = JS_Call(ctx, fn, this_val, 1, &ev);
-        if (JS_IsException(ret)) {
-            JSValue exc = JS_GetException(ctx);
-            const char* err = JS_ToCString(ctx, exc);
-            if (err) {
-                DONG_LOG_ERROR("[JSBindings] mouse event error: %s", err);
-                JS_FreeCString(ctx, err);
+                        if (jsGetBoolProp(ctx, event, "__stoppedImmediate", false)) {
+                            break;
+                        }
+                    }
+                }
             }
-            JS_FreeValue(ctx, exc);
-        }
-        JS_FreeValue(ctx, ret);
-        if (!JS_IsUndefined(this_val)) {
-            JS_FreeValue(ctx, this_val);
         }
 
-        // Check if stopImmediatePropagation was called
-        JSValue stopped_immediate = JS_GetPropertyStr(ctx, ev, "__stoppedImmediate");
-        bool should_stop = JS_ToBool(ctx, stopped_immediate);
-        JS_FreeValue(ctx, stopped_immediate);
+        JS_FreeValue(ctx, this_val);
 
-        JS_FreeValue(ctx, ev);
-
-        if (should_stop) {
-            break;  // Stop calling remaining listeners
+        if (!bubbles) {
+            break;
         }
+
+        if (jsGetBoolProp(ctx, event, "cancelBubble", false)) {
+            break;
+        }
+
+        current = current->getParent();
     }
 }
 
-void JSBindings::dispatchKeyEvent(uint64_t node_id, const char* type, uint32_t key_code) {
+bool JSBindings::dispatchCancelableEventToChain(const dom::DOMNodePtr& target,
+                                              const std::string& type,
+                                              JSValue event) {
+    dispatchEventToChain(target, type, event);
+    return jsGetBoolProp(engine_->getContext(), event, "defaultPrevented", false);
+}
+
+void JSBindings::dispatchMouseEvent(uint64_t node_id, const char* type, int32_t x, int32_t y, int32_t button,
+                                  bool is_trusted, uint64_t related_node_id) {
     if (!engine_) return;
     JSContext* ctx = engine_->getContext();
     if (!ctx) return;
+    if (!type || !type[0]) return;
 
-    auto node_it = listeners_.find(node_id);
-    if (node_it == listeners_.end()) return;
-    auto& type_map = node_it->second;
-    auto type_it = type_map.find(type);
-    if (type_it == type_map.end()) return;
-
-    auto& funcs = type_it->second;
-
-    for (auto& fn : funcs) {
-        if (!JS_IsFunction(ctx, fn)) continue;
-
-        JSValue ev = JS_NewObject(ctx);
-        JS_SetPropertyStr(ctx, ev, "type", JS_NewString(ctx, type));
-        JS_SetPropertyStr(ctx, ev, "keyCode", JS_NewInt32(ctx, (int32_t)key_code));
-        JS_SetPropertyStr(ctx, ev, "charCode", JS_NewInt32(ctx, (int32_t)key_code));
-        JS_SetPropertyStr(ctx, ev, "which", JS_NewInt32(ctx, (int32_t)key_code));
-        JS_SetPropertyStr(ctx, ev, "bubbles", JS_TRUE);
-        JS_SetPropertyStr(ctx, ev, "cancelable", JS_TRUE);
-
-        // Map key_code to standard 'key' and 'code' strings
-        std::string key_str;
-        std::string code_str;
-        if (key_code >= 32 && key_code < 127) {
-            key_str = std::string(1, (char)key_code);
-            if (key_code >= 'a' && key_code <= 'z') {
-                code_str = std::string("Key") + (char)(key_code - 32);
-            } else if (key_code >= 'A' && key_code <= 'Z') {
-                code_str = std::string("Key") + (char)key_code;
-            } else if (key_code >= '0' && key_code <= '9') {
-                code_str = std::string("Digit") + (char)key_code;
-            } else if (key_code == ' ') {
-                key_str = " ";
-                code_str = "Space";
-            } else {
-                code_str = key_str;
-            }
-        } else if (key_code == 13) {
-            key_str = "Enter"; code_str = "Enter";
-        } else if (key_code == 27) {
-            key_str = "Escape"; code_str = "Escape";
-        } else if (key_code == 8) {
-            key_str = "Backspace"; code_str = "Backspace";
-        } else if (key_code == 9) {
-            key_str = "Tab"; code_str = "Tab";
-        } else if (key_code == 127) {
-            key_str = "Delete"; code_str = "Delete";
-        } else if (key_code == 0x40000050) {
-            key_str = "ArrowLeft"; code_str = "ArrowLeft";
-        } else if (key_code == 0x4000004F) {
-            key_str = "ArrowRight"; code_str = "ArrowRight";
-        } else if (key_code == 0x40000052) {
-            key_str = "ArrowUp"; code_str = "ArrowUp";
-        } else if (key_code == 0x40000051) {
-            key_str = "ArrowDown"; code_str = "ArrowDown";
-        }
-
-        JS_SetPropertyStr(ctx, ev, "key", JS_NewString(ctx, key_str.c_str()));
-        JS_SetPropertyStr(ctx, ev, "code", JS_NewString(ctx, code_str.c_str()));
-
-        // Modifier keys
-        JS_SetPropertyStr(ctx, ev, "altKey", JS_FALSE);
-        JS_SetPropertyStr(ctx, ev, "ctrlKey", JS_FALSE);
-        JS_SetPropertyStr(ctx, ev, "shiftKey", JS_FALSE);
-        JS_SetPropertyStr(ctx, ev, "metaKey", JS_FALSE);
-
-        // Event methods
-        JS_SetPropertyStr(ctx, ev, "preventDefault",
-            JS_NewCFunction(ctx, event_preventDefault, "preventDefault", 0));
-        JS_SetPropertyStr(ctx, ev, "stopPropagation",
-            JS_NewCFunction(ctx, event_stopPropagation, "stopPropagation", 0));
-
-        JSValue this_val = JS_UNDEFINED;
-        auto dom_it = id_to_node_.find(node_id);
-        if (dom_it != id_to_node_.end()) {
-            JSValue target = createJSElement(ctx, dom_it->second);
-            JSValue current_target = JS_DupValue(ctx, target);
-            this_val = JS_DupValue(ctx, target);
-            JS_SetPropertyStr(ctx, ev, "target", target);
-            JS_SetPropertyStr(ctx, ev, "currentTarget", current_target);
-        }
-
-        JSValue ret = JS_Call(ctx, fn, this_val, 1, &ev);
-        if (JS_IsException(ret)) {
-            JSValue exc = JS_GetException(ctx);
-            const char* err = JS_ToCString(ctx, exc);
-            if (err) {
-                std::fprintf(stderr, "[JSBindings] key event error: %s\\n", err);
-                JS_FreeCString(ctx, err);
-            }
-            JS_FreeValue(ctx, exc);
-        }
-        JS_FreeValue(ctx, ret);
-        if (!JS_IsUndefined(this_val)) {
-            JS_FreeValue(ctx, this_val);
-        }
-        JS_FreeValue(ctx, ev);
+    auto dom_it = id_to_node_.find(node_id);
+    if (dom_it == id_to_node_.end() || !dom_it->second) {
+        return;
     }
+
+    const dom::DOMNodePtr target_node = dom_it->second;
+
+    const int32_t movement_x = has_last_mouse_pos_ ? (x - last_mouse_x_) : 0;
+    const int32_t movement_y = has_last_mouse_pos_ ? (y - last_mouse_y_) : 0;
+    has_last_mouse_pos_ = true;
+    last_mouse_x_ = x;
+    last_mouse_y_ = y;
+
+    JSValue ev = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, ev, "type", JS_NewString(ctx, type));
+    JS_SetPropertyStr(ctx, ev, "bubbles", JS_TRUE);
+    JS_SetPropertyStr(ctx, ev, "cancelable", JS_TRUE);
+    JS_SetPropertyStr(ctx, ev, "isTrusted", JS_NewBool(ctx, is_trusted));
+
+    JS_SetPropertyStr(ctx, ev, "clientX", JS_NewInt32(ctx, x));
+    JS_SetPropertyStr(ctx, ev, "clientY", JS_NewInt32(ctx, y));
+    JS_SetPropertyStr(ctx, ev, "pageX", JS_NewInt32(ctx, x));
+    JS_SetPropertyStr(ctx, ev, "pageY", JS_NewInt32(ctx, y));
+    JS_SetPropertyStr(ctx, ev, "movementX", JS_NewInt32(ctx, movement_x));
+    JS_SetPropertyStr(ctx, ev, "movementY", JS_NewInt32(ctx, movement_y));
+
+    JS_SetPropertyStr(ctx, ev, "button", JS_NewInt32(ctx, button));
+
+    // offsetX/offsetY: relative to target element's bounding rect
+    {
+        auto rect = target_node->getBoundingClientRect();
+        JS_SetPropertyStr(ctx, ev, "offsetX", JS_NewFloat64(ctx, x - rect.x));
+        JS_SetPropertyStr(ctx, ev, "offsetY", JS_NewFloat64(ctx, y - rect.y));
+    }
+
+    if (related_node_id != 0) {
+        auto rel_it = id_to_node_.find(related_node_id);
+        if (rel_it != id_to_node_.end() && rel_it->second) {
+            JS_SetPropertyStr(ctx, ev, "relatedTarget", createJSElement(ctx, rel_it->second));
+        } else {
+            JS_SetPropertyStr(ctx, ev, "relatedTarget", JS_NULL);
+        }
+    } else {
+        JS_SetPropertyStr(ctx, ev, "relatedTarget", JS_NULL);
+    }
+
+    // Modifier keys (default false)
+    JS_SetPropertyStr(ctx, ev, "altKey", JS_FALSE);
+    JS_SetPropertyStr(ctx, ev, "ctrlKey", JS_FALSE);
+    JS_SetPropertyStr(ctx, ev, "shiftKey", JS_FALSE);
+    JS_SetPropertyStr(ctx, ev, "metaKey", JS_FALSE);
+
+    // PointerEvent compatibility
+    JS_SetPropertyStr(ctx, ev, "pointerId", JS_NewInt32(ctx, 0));
+    JS_SetPropertyStr(ctx, ev, "pointerType", JS_NewString(ctx, "mouse"));
+    JS_SetPropertyStr(ctx, ev, "pressure", JS_NewFloat64(ctx, button != 0 ? 0.5 : 0.0));
+    JS_SetPropertyStr(ctx, ev, "isPrimary", JS_TRUE);
+
+    // Event methods
+    JS_SetPropertyStr(ctx, ev, "preventDefault",
+        JS_NewCFunction(ctx, event_preventDefault, "preventDefault", 0));
+    JS_SetPropertyStr(ctx, ev, "stopPropagation",
+        JS_NewCFunction(ctx, event_stopPropagation, "stopPropagation", 0));
+    JS_SetPropertyStr(ctx, ev, "stopImmediatePropagation",
+        JS_NewCFunction(ctx, event_stopImmediatePropagation, "stopImmediatePropagation", 0));
+
+    dispatchEventToChain(target_node, type, ev);
+    JS_FreeValue(ctx, ev);
+}
+
+void JSBindings::dispatchKeyEvent(uint64_t node_id, const char* type, uint32_t key_code,
+                                bool is_trusted, bool repeat,
+                                bool alt_key, bool ctrl_key, bool shift_key, bool meta_key) {
+    if (!engine_) return;
+    JSContext* ctx = engine_->getContext();
+    if (!ctx) return;
+    if (!type || !type[0]) return;
+
+    auto dom_it = id_to_node_.find(node_id);
+    if (dom_it == id_to_node_.end() || !dom_it->second) {
+        return;
+    }
+
+    const dom::DOMNodePtr target_node = dom_it->second;
+
+    std::string key_str;
+    std::string code_str;
+    mapKeyCodeToStrings(key_code, key_str, code_str);
+
+    JSValue ev = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, ev, "type", JS_NewString(ctx, type));
+    JS_SetPropertyStr(ctx, ev, "bubbles", JS_TRUE);
+    JS_SetPropertyStr(ctx, ev, "cancelable", JS_TRUE);
+    JS_SetPropertyStr(ctx, ev, "isTrusted", JS_NewBool(ctx, is_trusted));
+
+    JS_SetPropertyStr(ctx, ev, "keyCode", JS_NewInt32(ctx, (int32_t)key_code));
+    JS_SetPropertyStr(ctx, ev, "charCode", JS_NewInt32(ctx, (int32_t)key_code));
+    JS_SetPropertyStr(ctx, ev, "which", JS_NewInt32(ctx, (int32_t)key_code));
+    JS_SetPropertyStr(ctx, ev, "key", JS_NewString(ctx, key_str.c_str()));
+    JS_SetPropertyStr(ctx, ev, "code", JS_NewString(ctx, code_str.c_str()));
+    JS_SetPropertyStr(ctx, ev, "repeat", JS_NewBool(ctx, repeat));
+
+    // Modifier keys
+    JS_SetPropertyStr(ctx, ev, "altKey", JS_NewBool(ctx, alt_key));
+    JS_SetPropertyStr(ctx, ev, "ctrlKey", JS_NewBool(ctx, ctrl_key));
+    JS_SetPropertyStr(ctx, ev, "shiftKey", JS_NewBool(ctx, shift_key));
+    JS_SetPropertyStr(ctx, ev, "metaKey", JS_NewBool(ctx, meta_key));
+
+
+    // Event methods
+    JS_SetPropertyStr(ctx, ev, "preventDefault",
+        JS_NewCFunction(ctx, event_preventDefault, "preventDefault", 0));
+    JS_SetPropertyStr(ctx, ev, "stopPropagation",
+        JS_NewCFunction(ctx, event_stopPropagation, "stopPropagation", 0));
+    JS_SetPropertyStr(ctx, ev, "stopImmediatePropagation",
+        JS_NewCFunction(ctx, event_stopImmediatePropagation, "stopImmediatePropagation", 0));
+
+    dispatchEventToChain(target_node, type, ev);
+    JS_FreeValue(ctx, ev);
 }
 
 void JSBindings::dispatchSimpleEvent(uint64_t node_id, const char* type) {
     if (!engine_) return;
-    if (!type || !type[0]) return;
-
     JSContext* ctx = engine_->getContext();
     if (!ctx) return;
+    if (!type || !type[0]) return;
 
-    auto node_it = listeners_.find(node_id);
-    if (node_it == listeners_.end()) return;
-    auto& type_map = node_it->second;
-    auto type_it = type_map.find(type);
-    if (type_it == type_map.end()) return;
-
-    auto& funcs = type_it->second;
-    for (auto& fn : funcs) {
-        if (!JS_IsFunction(ctx, fn)) continue;
-
-        JSValue ev = JS_NewObject(ctx);
-        JS_SetPropertyStr(ctx, ev, "type", JS_NewString(ctx, type));
-        JS_SetPropertyStr(ctx, ev, "bubbles", JS_TRUE);
-        JS_SetPropertyStr(ctx, ev, "cancelable", JS_TRUE);
-
-        JSValue this_val = JS_UNDEFINED;
-        auto dom_it = id_to_node_.find(node_id);
-        if (dom_it != id_to_node_.end()) {
-            JSValue target = createJSElement(ctx, dom_it->second);
-            JSValue current_target = JS_DupValue(ctx, target);
-            this_val = JS_DupValue(ctx, target);
-            JS_SetPropertyStr(ctx, ev, "target", target);
-            JS_SetPropertyStr(ctx, ev, "currentTarget", current_target);
-        }
-
-        JSValue ret = JS_Call(ctx, fn, this_val, 1, &ev);
-        if (JS_IsException(ret)) {
-            JSValue exc = JS_GetException(ctx);
-            const char* err = JS_ToCString(ctx, exc);
-            if (err) {
-                std::fprintf(stderr, "[JSBindings] event(%s) error: %s\n", type, err);
-                JS_FreeCString(ctx, err);
-            }
-            JS_FreeValue(ctx, exc);
-        }
-        JS_FreeValue(ctx, ret);
-        if (!JS_IsUndefined(this_val)) {
-            JS_FreeValue(ctx, this_val);
-        }
-        JS_FreeValue(ctx, ev);
+    auto dom_it = id_to_node_.find(node_id);
+    if (dom_it == id_to_node_.end() || !dom_it->second) {
+        return;
     }
+
+    const dom::DOMNodePtr target_node = dom_it->second;
+
+    JSValue ev = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, ev, "type", JS_NewString(ctx, type));
+    JS_SetPropertyStr(ctx, ev, "bubbles", JS_TRUE);
+    JS_SetPropertyStr(ctx, ev, "cancelable", JS_TRUE);
+    JS_SetPropertyStr(ctx, ev, "isTrusted", JS_TRUE);
+
+    // Event methods
+    JS_SetPropertyStr(ctx, ev, "preventDefault",
+        JS_NewCFunction(ctx, event_preventDefault, "preventDefault", 0));
+    JS_SetPropertyStr(ctx, ev, "stopPropagation",
+        JS_NewCFunction(ctx, event_stopPropagation, "stopPropagation", 0));
+    JS_SetPropertyStr(ctx, ev, "stopImmediatePropagation",
+        JS_NewCFunction(ctx, event_stopImmediatePropagation, "stopImmediatePropagation", 0));
+
+    dispatchEventToChain(target_node, type, ev);
+    JS_FreeValue(ctx, ev);
+}
+
+bool JSBindings::dispatchEventObject(uint64_t node_id, JSValueConst event_obj) {
+    if (!engine_) return true;
+    JSContext* ctx = engine_->getContext();
+    if (!ctx) return true;
+
+    auto dom_it = id_to_node_.find(node_id);
+    if (dom_it == id_to_node_.end() || !dom_it->second) {
+        return true;
+    }
+
+    // Require a string 'type'
+    JSValue type_val = JS_GetPropertyStr(ctx, event_obj, "type");
+    const char* type_cstr = JS_ToCString(ctx, type_val);
+    JS_FreeValue(ctx, type_val);
+    if (!type_cstr || !type_cstr[0]) {
+        if (type_cstr) JS_FreeCString(ctx, type_cstr);
+        return true;
+    }
+
+    // Spec: Event.isTrusted is always false for dispatchEvent.
+    JS_SetPropertyStr(ctx, (JSValue)event_obj, "isTrusted", JS_FALSE);
+
+    const std::string type(type_cstr);
+    JS_FreeCString(ctx, type_cstr);
+
+    JSValue ev = JS_DupValue(ctx, event_obj);
+    const bool prevented = dispatchCancelableEventToChain(dom_it->second, type, ev);
+    JS_FreeValue(ctx, ev);
+
+    return !prevented;
+}
+
+bool JSBindings::dispatchBeforeInputEvent(uint64_t node_id, const char* input_type, const char* data) {
+    if (!engine_) return false;
+    JSContext* ctx = engine_->getContext();
+    if (!ctx) return false;
+    if (!input_type || !input_type[0]) return false;
+
+    auto dom_it = id_to_node_.find(node_id);
+    if (dom_it == id_to_node_.end() || !dom_it->second) {
+        return false;
+    }
+
+    JSValue ev = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, ev, "type", JS_NewString(ctx, "beforeinput"));
+    JS_SetPropertyStr(ctx, ev, "bubbles", JS_TRUE);
+    JS_SetPropertyStr(ctx, ev, "cancelable", JS_TRUE);
+    JS_SetPropertyStr(ctx, ev, "isTrusted", JS_TRUE);
+    JS_SetPropertyStr(ctx, ev, "inputType", JS_NewString(ctx, input_type));
+    JS_SetPropertyStr(ctx, ev, "data", data ? JS_NewString(ctx, data) : JS_NULL);
+
+    // Event methods
+    JS_SetPropertyStr(ctx, ev, "preventDefault",
+        JS_NewCFunction(ctx, event_preventDefault, "preventDefault", 0));
+    JS_SetPropertyStr(ctx, ev, "stopPropagation",
+        JS_NewCFunction(ctx, event_stopPropagation, "stopPropagation", 0));
+    JS_SetPropertyStr(ctx, ev, "stopImmediatePropagation",
+        JS_NewCFunction(ctx, event_stopImmediatePropagation, "stopImmediatePropagation", 0));
+
+    const bool prevented = dispatchCancelableEventToChain(dom_it->second, "beforeinput", ev);
+    JS_FreeValue(ctx, ev);
+    return prevented;
 }
 
 void JSBindings::dispatchInputEvent(uint64_t node_id, const char* input_type, const char* data) {
     if (!engine_) return;
-    if (!input_type || !input_type[0]) return;
-
     JSContext* ctx = engine_->getContext();
     if (!ctx) return;
+    if (!input_type || !input_type[0]) return;
 
-    auto node_it = listeners_.find(node_id);
-    if (node_it == listeners_.end()) return;
-    auto& type_map = node_it->second;
-    auto type_it = type_map.find("input");
-    if (type_it == type_map.end()) return;
-
-    auto& funcs = type_it->second;
-    for (auto& fn : funcs) {
-        if (!JS_IsFunction(ctx, fn)) continue;
-
-        // Create InputEvent object with inputType and data properties
-        JSValue ev = JS_NewObject(ctx);
-        JS_SetPropertyStr(ctx, ev, "type", JS_NewString(ctx, "input"));
-        JS_SetPropertyStr(ctx, ev, "bubbles", JS_TRUE);
-        JS_SetPropertyStr(ctx, ev, "cancelable", JS_FALSE);  // InputEvent is not cancelable
-
-        // InputEvent specific properties
-        JS_SetPropertyStr(ctx, ev, "inputType", JS_NewString(ctx, input_type));
-        JS_SetPropertyStr(ctx, ev, "data", data ? JS_NewString(ctx, data) : JS_NULL);
-
-        JSValue this_val = JS_UNDEFINED;
-        auto dom_it = id_to_node_.find(node_id);
-        if (dom_it != id_to_node_.end()) {
-            JSValue target = createJSElement(ctx, dom_it->second);
-            JSValue current_target = JS_DupValue(ctx, target);
-            this_val = JS_DupValue(ctx, target);
-            JS_SetPropertyStr(ctx, ev, "target", target);
-            JS_SetPropertyStr(ctx, ev, "currentTarget", current_target);
-        }
-
-        JSValue ret = JS_Call(ctx, fn, this_val, 1, &ev);
-        if (JS_IsException(ret)) {
-            JSValue exc = JS_GetException(ctx);
-            const char* err = JS_ToCString(ctx, exc);
-            if (err) {
-                std::fprintf(stderr, "[JSBindings] InputEvent error: %s\n", err);
-                JS_FreeCString(ctx, err);
-            }
-            JS_FreeValue(ctx, exc);
-        }
-        JS_FreeValue(ctx, ret);
-        if (!JS_IsUndefined(this_val)) {
-            JS_FreeValue(ctx, this_val);
-        }
-        JS_FreeValue(ctx, ev);
+    auto dom_it = id_to_node_.find(node_id);
+    if (dom_it == id_to_node_.end() || !dom_it->second) {
+        return;
     }
+
+    JSValue ev = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, ev, "type", JS_NewString(ctx, "input"));
+    JS_SetPropertyStr(ctx, ev, "bubbles", JS_TRUE);
+    JS_SetPropertyStr(ctx, ev, "cancelable", JS_FALSE);
+    JS_SetPropertyStr(ctx, ev, "isTrusted", JS_TRUE);
+
+    JS_SetPropertyStr(ctx, ev, "inputType", JS_NewString(ctx, input_type));
+    JS_SetPropertyStr(ctx, ev, "data", data ? JS_NewString(ctx, data) : JS_NULL);
+
+    JS_SetPropertyStr(ctx, ev, "stopPropagation",
+        JS_NewCFunction(ctx, event_stopPropagation, "stopPropagation", 0));
+    JS_SetPropertyStr(ctx, ev, "stopImmediatePropagation",
+        JS_NewCFunction(ctx, event_stopImmediatePropagation, "stopImmediatePropagation", 0));
+
+    dispatchEventToChain(dom_it->second, "input", ev);
+    JS_FreeValue(ctx, ev);
 }
 
 void JSBindings::dispatchCompositionEvent(uint64_t node_id, const char* type, const char* data) {

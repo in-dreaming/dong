@@ -1,0 +1,53 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    html, body { margin: 0; background: #000; }
+    #status { position: absolute; left: 20px; top: 20px; width: 220px; height: 64px; background: #ff0000; }
+    #parent { position: absolute; left: -2000px; top: -2000px; font-size: 0px; }
+  </style>
+</head>
+<body>
+  <div id="status"></div>
+  <div id="parent"><div id="child"></div></div>
+
+  <script>
+    function setOK(ok) {
+      document.getElementById('status').style.background = ok ? '#00ff00' : '#ff0000';
+    }
+
+    try {
+      const parent = document.getElementById('parent');
+      const child = document.getElementById('child');
+
+      let parentHits = 0;
+      let childHits = 0;
+
+      parent.addEventListener('foo', () => { parentHits++; });
+      child.addEventListener('foo', (e) => {
+        childHits++;
+        e.stopPropagation();
+      });
+
+      const ok1 = child.dispatchEvent(new Event('foo', { bubbles: true, cancelable: true }));
+      if (ok1 !== true) throw new Error('dispatchEvent(foo) should return true when not prevented');
+      if (childHits !== 1) throw new Error('child listener not called');
+      if (parentHits !== 0) throw new Error('stopPropagation did not stop bubbling');
+
+      let trustedOk = false;
+      child.addEventListener('bar', (e) => {
+        if (e.isTrusted === false) trustedOk = true;
+        e.preventDefault();
+      });
+      const ok2 = child.dispatchEvent(new Event('bar', { bubbles: true, cancelable: true }));
+      if (trustedOk !== true) throw new Error('Event.isTrusted should be false for dispatchEvent');
+      if (ok2 !== false) throw new Error('dispatchEvent(bar) should return false when defaultPrevented');
+
+      setOK(true);
+    } catch (e) {
+      setOK(false);
+    }
+  </script>
+</body>
+</html>

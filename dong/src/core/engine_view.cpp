@@ -313,7 +313,13 @@ struct EngineView::Impl {
     int32_t last_mouse_x = 0;
     int32_t last_mouse_y = 0;
 
+    bool mod_ctrl = false;
+    bool mod_shift = false;
+    bool mod_alt = false;
+    bool mod_meta = false;
+
     DOMNodePtr hovered_element;
+
     DOMNodePtr active_element;
 
     // 当前打开的 <select>（用于把下拉框区域的点击正确路由到该 select）
@@ -332,6 +338,7 @@ struct EngineView::Impl {
           js_bindings(std::make_unique<dong::script::JSBindings>(
               script_engine.get(),
               dom_manager.get(),
+              layout_engine.get(),
               event_dispatcher.get(),
               focus_manager.get())) {
         focus_manager->setEventDispatcher(event_dispatcher.get());
@@ -1306,6 +1313,12 @@ struct EngineView::Impl {
         auto target = hitTestElementAt(dom_manager.get(), layout_engine.get(), x, y);
         if (!target) return;
 
+        // Pointer capture (mouse-only): route events to captured element if present.
+        if (auto captured = dong::dom::DOMNode::getPointerCapture()) {
+            target = captured;
+        }
+
+
         dong::dom::EventType ev_type;
         std::string type_str = type ? std::string(type) : std::string();
         if (type_str == "click") {
@@ -1323,6 +1336,8 @@ struct EngineView::Impl {
         dong::dom::Event event = event_dispatcher->createMouseEvent(ev_type, x, y, button);
         event.target = target;
         event.current_target = target;
+        event.is_trusted = true;
+
 
         // Calculate offsetX/offsetY relative to target element
         if (layout_engine) {
@@ -1346,35 +1361,114 @@ struct EngineView::Impl {
     }
 
     void dispatchKeyEvent(const char* type, uint32_t key_code) {
-        if (!script_engine || !js_bindings) return;
-        if (!dom_manager) return;
+        if (!event_dispatcher || !dom_manager) return;
+        if (!type || !type[0]) return;
 
-        auto bodies = dom_manager->getElementsByTagName("body");
         dong::dom::DOMNodePtr target;
-        if (!bodies.empty()) {
-            target = bodies[0];
-        } else {
-            target = dom_manager->getRoot();
+        if (focus_manager) {
+            target = focus_manager->getFocusedElement();
+        }
+        if (!target) {
+            auto bodies = dom_manager->getElementsByTagName("body");
+            target = !bodies.empty() ? bodies[0] : dom_manager->getRoot();
         }
         if (!target) return;
 
-        JSContext* qjs = script_engine->getContext();
-        if (!qjs) return;
-
-        uint64_t node_id = js_bindings->getNodeIdFor(target);
-        if (!node_id) {
-            JSValue tmp = js_bindings->createJSElement(qjs, target);
-            JS_FreeValue(qjs, tmp);
-            node_id = js_bindings->getNodeIdFor(target);
-            if (!node_id) {
-                return;
-            }
+        dong::dom::EventType ev_type;
+        const std::string type_str(type);
+        if (type_str == "keydown") {
+            ev_type = dong::dom::EventType::KEY_DOWN;
+        } else if (type_str == "keyup") {
+            ev_type = dong::dom::EventType::KEY_UP;
+        } else if (type_str == "keypress") {
+            ev_type = dong::dom::EventType::KEY_PRESS;
+        } else {
+            return;
         }
 
-        js_bindings->dispatchKeyEvent(node_id, type, key_code);
+        dong::dom::Event event = event_dispatcher->createKeyEvent(ev_type, key_code);
+        event.target = target;
+        event.current_target = target;
+        event.is_trusted = true;
+        event.repeat = false;
+        event.alt_key = mod_alt;
+        event.ctrl_key = mod_ctrl;
+        event.shift_key = mod_shift;
+        event.meta_key = mod_meta;
+        event_dispatcher->dispatch(event);
+
+    }
+
+    void updateModifierState(uint32_t key_code, bool pressed) {
+        constexpr uint32_t SDLK_LCTRL  = 0x400000E0;
+        constexpr uint32_t SDLK_LSHIFT = 0x400000E1;
+        constexpr uint32_t SDLK_LALT   = 0x400000E2;
+        constexpr uint32_t SDLK_LGUI   = 0x400000E3;
+        constexpr uint32_t SDLK_RCTRL  = 0x400000E4;
+        constexpr uint32_t SDLK_RSHIFT = 0x400000E5;
+        constexpr uint32_t SDLK_RALT   = 0x400000E6;
+        constexpr uint32_t SDLK_RGUI   = 0x400000E7;
+
+        switch (key_code) {
+        case SDLK_LCTRL:
+        case SDLK_RCTRL:
+            mod_ctrl = pressed;
+            break;
+        case SDLK_LSHIFT:
+        case SDLK_RSHIFT:
+            mod_shift = pressed;
+            break;
+        case SDLK_LALT:
+        case SDLK_RALT:
+            mod_alt = pressed;
+            break;
+        case SDLK_LGUI:
+        case SDLK_RGUI:
+            mod_meta = pressed;
+            break;
+        default:
+            break;
+        }
+    }
+
+    void dispatchClipboardEventIfNeeded(uint32_t key_code) {
+        if (!event_dispatcher || !dom_manager) return;
+        if (!mod_ctrl) return;
+
+        dong::dom::EventType ev_type;
+        if (key_code == 'c' || key_code == 'C') {
+            ev_type = dong::dom::EventType::COPY;
+        } else if (key_code == 'x' || key_code == 'X') {
+            ev_type = dong::dom::EventType::CUT;
+        } else if (key_code == 'v' || key_code == 'V') {
+            ev_type = dong::dom::EventType::PASTE;
+        } else {
+            return;
+        }
+
+        dong::dom::DOMNodePtr target;
+        if (focus_manager) {
+            target = focus_manager->getFocusedElement();
+        }
+        if (!target) {
+            auto bodies = dom_manager->getElementsByTagName("body");
+            target = !bodies.empty() ? bodies[0] : dom_manager->getRoot();
+        }
+        if (!target) return;
+
+        dong::dom::Event ev = event_dispatcher->createEvent(ev_type);
+        ev.target = target;
+        ev.current_target = target;
+        ev.is_trusted = true;
+        ev.alt_key = mod_alt;
+        ev.ctrl_key = mod_ctrl;
+        ev.shift_key = mod_shift;
+        ev.meta_key = mod_meta;
+        event_dispatcher->dispatch(ev);
     }
 
     uint64_t ensureNodeIdForJS(const DOMNodePtr& node) {
+
         if (!node || !script_engine || !js_bindings) return 0;
         ensureJSBindingsInitialized();
 
@@ -1764,7 +1858,11 @@ struct EngineView::Impl {
         constexpr uint32_t SDLK_UP = 0x40000052;
         constexpr uint32_t SDLK_DOWN = 0x40000051;
 
+        updateModifierState(key_code, pressed);
+
         if (pressed) {
+            dispatchClipboardEventIfNeeded(key_code);
+
             if (key_code == SDLK_TAB && focus_manager && dom_manager) {
                 focus_manager->moveFocus(dom_manager->getRoot(), false);
                 return;
@@ -1911,13 +2009,21 @@ struct EngineView::Impl {
                         const char* input_type = nullptr;
 
                         if (key_code == SDLK_BACKSPACE) {
+                            input_type = "deleteContentBackward";
+                            if (dispatchBeforeInputForNode(focused, input_type, nullptr)) {
+                                dispatchKeyEvent("keydown", key_code);
+                                return;
+                            }
                             state->deleteBackward();
                             handled = true;
-                            input_type = "deleteContentBackward";
                         } else if (key_code == SDLK_DELETE) {
+                            input_type = "deleteContentForward";
+                            if (dispatchBeforeInputForNode(focused, input_type, nullptr)) {
+                                dispatchKeyEvent("keydown", key_code);
+                                return;
+                            }
                             state->deleteForward();
                             handled = true;
-                            input_type = "deleteContentForward";
                         } else if (key_code == SDLK_LEFT) {
                             state->moveCursor(-1);
                             handled = true;
@@ -1970,9 +2076,14 @@ struct EngineView::Impl {
                     finishComposition(focused, state);
                 }
 
+                if (dispatchBeforeInputForNode(focused, "insertText", text)) {
+                    return;
+                }
+
                 state->insertText(text, focused);
                 focused->setAttribute("value", state->getValue());
                 markNeedsRepaint();
+
 
                 // Dispatch input event with inputType
                 if (js_bindings && script_engine) {
@@ -2030,6 +2141,18 @@ private:
         if (!nid) return;
         js_bindings->dispatchInputEvent(nid, input_type, data);
     }
+
+    bool dispatchBeforeInputForNode(const dong::dom::DOMNodePtr& node,
+                                   const char* input_type,
+                                   const char* data) {
+        if (!js_bindings || !script_engine) return false;
+        ensureJSBindingsInitialized();
+        uint64_t nid = ensureNodeIdForJS(node);
+        if (!nid) return false;
+        if (!js_bindings->hasEventListeners(nid, "beforeinput")) return false;
+        return js_bindings->dispatchBeforeInputEvent(nid, input_type, data);
+    }
+
 
     void beginComposition(const dong::dom::DOMNodePtr& focused,
                           dong::dom::InputElementState* state,

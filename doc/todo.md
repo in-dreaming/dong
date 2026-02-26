@@ -11,50 +11,6 @@
 
 ---
 
-## P0 - 基础功能缺失（影响基本可用性）
-
-### 表单基础可用性
-
-- [x] `<select>` 下拉弹出渲染 - 已实现下拉框展开/收起、选项点击、键盘导航（方向键、Enter、Escape），支持 `selectedIndex`/`value`/`options` 属性，触发 `change` 事件。测试用例：`test_select_keyboard.html`、`test_select_basic.html`
-
----
-
-## P1 - 立刻推进（黄金路线 / 高 ROI）
-
-### 布局/定位正确性（高 ROI）
-
-- [x] `position: sticky` 实现 - 滚动感知定位，支持 sticky positioning containing block，clamp 到包含块 padding box。布局时保留空间，渲染时视觉调整。测试用例：`test_sticky_scroll_top.html`、`test_sticky_scroll_bottom.html`、`test_sticky_parent_clamp.html`、`test_sticky_nested.html`
-- [x] `aspect-ratio` 属性 - 支持宽高比约束，包含 transferred size suggestions、min/max 约束交互、替换元素固有宽高比、Flex/Grid 约束模式。测试用例：`test_aspect_ratio_width_auto_height.html`、`test_aspect_ratio_min_max.html`、`test_aspect_ratio_flex.html`
-- [x] `display: contents` 支持 - 元素在布局中透明化，子元素成为祖父的直接子元素，支持伪元素渲染和事件冒泡穿透。测试用例：`test_display_contents_layout.html`、`test_display_contents_pseudo.html`、`test_display_contents_events.html`
-- [x] `display: flow-root` 支持 - 创建块级格式化上下文（BFC），阻止边距折叠。暂不实现 float 包含（float 未支持）。测试用例：`test_flow_root_margin_collapse.html`
-
-### 滚动体系（高 ROI）
-
-- [x] `overscroll-behavior` 属性（防止滚动链）- 已实现 auto/contain/none 值，支持 overscroll-behavior-x/y 轴向属性，在 sendMouseWheel() 中实现滚动链控制。测试用例：`test_overscroll_behavior_contain.html`、`test_overscroll_behavior_none.html`、`test_overscroll_behavior_axis.html`
-- [x] `scroll-behavior` 属性（可先做简化版 smooth 滚动）- 已实现 auto/smooth 值解析，scrollTo() 中预留平滑滚动钩子（TODO: 动画未实现，当前为即时滚动）。测试用例：`test_scroll_behavior_smooth.html`
-
-### 列表体系闭环（高 ROI，建议成组推进）
-
-- [x] `list-style-type` / `list-style-position` / `list-style` 属性 - 已实现 disc, circle, square, decimal, lower-alpha, upper-alpha, lower-roman, upper-roman 等标记类型，支持 inside/outside 定位，支持 `list-style` 简写属性。测试用例：`test_list_style_types.html`、`test_list_position.html`、`test_list_style_parsing.html`
-- [x] `::marker` 伪元素（列表标记样式）- 已实现 `::marker` 伪元素渲染，支持独立样式设置（color, font-size, font-weight），支持 `<ul>`/`<ol>` 默认标记，支持嵌套列表计数器作用域。测试用例：`test_marker_pseudo.html`、`test_list_markers_basic.html`、`test_list_nested.html`、`test_ol_start.html`
-
-### 伪元素管线（高 ROI）
-
-- [x] `::placeholder` 渲染实现（选择器匹配已有但无渲染）- 已实现 `::placeholder` 伪元素渲染管线，支持 `color`、`font-style`、`font-weight`、`font-size`、`font-family` 属性。无 `::placeholder` 规则时回退到 50% 透明度默认行为。支持 `<input>` 和 `<textarea>` 元素。测试用例：`test_placeholder_pseudo.html`
-
-### 输入法（IME/CJK）事件（高 ROI）
-
-- [x] `compositionstart` / `compositionupdate` / `compositionend` 事件 - 已实现 IME 组合事件完整管线：SDL `TEXT_EDITING` → 组合状态机（start/update/end）→ DOM 事件分发 → JS CompositionEvent。支持 `<input>` 和 `<textarea>`。公共 C API 新增 `dong_engine_send_text_editing()`。测试用例：`test_ime_composition.html`
-
-### 常见 UI 兼容性（仍偏高 ROI）
-
-- [x] `object-position` 属性（已有 `object-fit` 但缺此项）- 已接入图片绘制管线，支持关键字与百分比；测试用例：`test_object_position.html`
-- [x] `appearance` 属性（`none` 去除默认控件样式）- 支持 `appearance`/`-webkit-appearance`，`none` 时跳过 checkbox/radio 选中标记与 select 下拉箭头；测试用例：`test_appearance_none.html`
-- [x] `border-collapse` / `border-spacing` 属性 - Table 布局后处理支持 `collapse/separate` 与 spacing；测试用例：`test_table_layout.html`
-- [x] `table-layout` 属性（`fixed` / `auto`，如果 table 体系需要完整支持）- 支持 `fixed/auto` 的基础列宽策略；测试用例：`test_table_layout.html`
-
----
-
 ## P2 - 健康推进（中 ROI / 影响高级场景）
 
 ### CSS 属性
@@ -127,14 +83,15 @@
 
 ### JS DOM 绑定
 
-- [ ] Element: `childElementCount`, `replaceChildren()`, `insertAdjacentElement()`/`insertAdjacentText()`
-- [ ] Element: `setPointerCapture()`/`releasePointerCapture()`, `click()`
-- [ ] HTMLFormElement: `elements`, `submit()`/`reset()`, `checkValidity()`
-- [ ] HTMLInputElement: `select()`, `setSelectionRange()`, `selectionStart`/`selectionEnd`, `checkValidity()`/`setCustomValidity()`
-- [ ] HTMLTextAreaElement: `disabled`/`readOnly`, `selectionStart`/`selectionEnd`
-- [ ] Document: `elementFromPoint()`, `hasFocus()`, `scrollingElement`
+- [x] Element: `childElementCount`, `replaceChildren()`, `insertAdjacentElement()`/`insertAdjacentText()`
+- [x] Element: `setPointerCapture()`/`releasePointerCapture()`, `click()`
+- [x] HTMLFormElement: `elements`, `submit()`/`reset()`, `checkValidity()`
+- [x] HTMLInputElement: `select()`, `setSelectionRange()`, `selectionStart`/`selectionEnd`, `checkValidity()`/`setCustomValidity()`
+- [x] HTMLTextAreaElement: `disabled`/`readOnly`, `selectionStart`/`selectionEnd`
+- [x] Document: `elementFromPoint()`, `hasFocus()`, `scrollingElement`
 
 ### CSSOM
+
 
 - [ ] `CSSStyleDeclaration.cssText`
 - [ ] `CSS.supports()` JS 绑定（草案声称支持但未绑定）
@@ -142,14 +99,15 @@
 
 ### 事件
 
-- [ ] `toggle` 事件（`<details>`）
-- [ ] `copy` / `cut` / `paste` 事件
-- [ ] `beforeinput` 事件
-- [ ] MouseEvent: `pageX`/`pageY`, `movementX`/`movementY`, `relatedTarget`
-- [ ] KeyboardEvent: `repeat`
-- [ ] Event: `isTrusted`
+- [x] `toggle` 事件（`<details>`）
+- [x] `copy` / `cut` / `paste` 事件
+- [x] `beforeinput` 事件
+- [x] MouseEvent: `pageX`/`pageY`, `movementX`/`movementY`, `relatedTarget`
+- [x] KeyboardEvent: `repeat`
+- [x] Event: `isTrusted`
 
 ### Web API
+
 
 - [ ] `structuredClone()`
 - [ ] `FormData`

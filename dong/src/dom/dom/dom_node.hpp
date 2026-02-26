@@ -244,6 +244,12 @@ public:
     static void setFocusManager(class FocusManager* fm) { s_focus_manager_ = fm; }
     static void setEventDispatcher(class EventDispatcher* ed) { s_event_dispatcher_ = ed; }
 
+    // Pointer capture (minimal, mouse-only for now)
+    static void setPointerCapture(const DOMNodePtr& element);
+    static void releasePointerCapture(const DOMNodePtr& element);
+    static DOMNodePtr getPointerCapture();
+
+
     // Runtime interaction states for pseudo-classes (:hover/:active/:focus/:focus-visible)
     bool isHovered() const { return hovered_; }
     bool isActive() const { return active_; }
@@ -340,6 +346,9 @@ protected:
     // Static pointers to FocusManager and EventDispatcher (set by View)
     static class FocusManager* s_focus_manager_;
     static class EventDispatcher* s_event_dispatcher_;
+
+    // Pointer capture (mouse-only)
+    static DOMNodeWeakPtr s_pointer_capture_;
 };
 
 } // namespace dong::dom

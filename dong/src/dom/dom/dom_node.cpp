@@ -19,6 +19,8 @@ namespace dong::dom {
 // Static member definitions
 FocusManager* DOMNode::s_focus_manager_ = nullptr;
 EventDispatcher* DOMNode::s_event_dispatcher_ = nullptr;
+DOMNodeWeakPtr DOMNode::s_pointer_capture_;
+
 
 // ClassList implementation
 ClassList::ClassList(DOMNode* node) : node_(node) {}
@@ -504,12 +506,24 @@ ClassList& DOMNode::getClassList() {
 }
 
 void DOMNode::setAttribute(const std::string& key, const std::string& value) {
+    const bool had_attr = hasAttribute(key);
     attributes_[key] = value;
 
     // Internal attributes used by the renderer should not affect style/layout.
     // (e.g. Painter's transient markers)
     if (key.size() >= 2 && key[0] == '_' && key[1] == '_') {
         return;
+    }
+
+    // <details open> toggles dispatch a 'toggle' event when the open state changes.
+    if (tag_name_ == "details" && key == "open" && !had_attr) {
+        if (s_event_dispatcher_) {
+            Event ev = s_event_dispatcher_->createEvent(EventType::TOGGLE);
+            ev.target = shared_from_this();
+            ev.current_target = shared_from_this();
+            ev.is_trusted = false;
+            s_event_dispatcher_->dispatch(ev);
+        }
     }
 
     markStyleDirty();
@@ -527,11 +541,23 @@ bool DOMNode::hasAttribute(const std::string& key) const {
 }
 
 void DOMNode::removeAttribute(const std::string& key) {
+    const bool had_attr = hasAttribute(key);
     attributes_.erase(key);
 
     // Internal attributes used by the renderer should not affect style/layout.
     if (key.size() >= 2 && key[0] == '_' && key[1] == '_') {
         return;
+    }
+
+    // <details open> toggles dispatch a 'toggle' event when the open state changes.
+    if (tag_name_ == "details" && key == "open" && had_attr) {
+        if (s_event_dispatcher_) {
+            Event ev = s_event_dispatcher_->createEvent(EventType::TOGGLE);
+            ev.target = shared_from_this();
+            ev.current_target = shared_from_this();
+            ev.is_trusted = false;
+            s_event_dispatcher_->dispatch(ev);
+        }
     }
 
     markStyleDirty();
@@ -1280,6 +1306,23 @@ void DOMNode::blur() {
     }
 }
 
+void DOMNode::setPointerCapture(const DOMNodePtr& element) {
+    if (!element) return;
+    s_pointer_capture_ = element;
+}
+
+void DOMNode::releasePointerCapture(const DOMNodePtr& element) {
+    auto cur = s_pointer_capture_.lock();
+    if (!cur) return;
+    if (!element || cur.get() == element.get()) {
+        s_pointer_capture_.reset();
+    }
+}
+
+DOMNodePtr DOMNode::getPointerCapture() {
+    return s_pointer_capture_.lock();
+}
+
 void DOMNode::click() {
     // Dispatch click event
     if (s_event_dispatcher_) {
@@ -1288,9 +1331,10 @@ void DOMNode::click() {
         event.type_name = "click";
         event.target = shared_from_this();
         event.current_target = shared_from_this();
+        event.is_trusted = false;
         s_event_dispatcher_->dispatch(event);
     }
-    
+
     // Also try to focus if focusable
     if (FocusManager::isFocusable(shared_from_this())) {
         focus();

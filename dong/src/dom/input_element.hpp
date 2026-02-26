@@ -52,6 +52,12 @@ public:
     const std::string& getType() const { return type_; }
     void setType(const std::string& type) { type_ = type; }
 
+    // Constraint validation (minimal)
+    void setCustomValidity(const std::string& message) { custom_validity_ = message; }
+    const std::string& getCustomValidity() const { return custom_validity_; }
+    bool hasCustomError() const { return !custom_validity_.empty(); }
+
+
     // IME composition 状态
     bool isComposing() const { return is_composing_; }
     const std::string& getCompositionText() const { return composition_text_; }
@@ -71,6 +77,10 @@ private:
     std::string value_;
     std::string placeholder_;
     std::string type_ = "text";
+
+    // Constraint validation
+    std::string custom_validity_;
+
     size_t cursor_position_ = 0;
     size_t selection_start_ = 0;
     size_t selection_end_ = 0;

@@ -101,11 +101,13 @@ Event EventDispatcher::createEvent(EventType type) {
     switch (type) {
         case EventType::CLICK: event.type_name = "click"; break;
         case EventType::DOUBLE_CLICK: event.type_name = "dblclick"; break;
+
         case EventType::MOUSE_MOVE: event.type_name = "mousemove"; break;
         case EventType::MOUSE_DOWN: event.type_name = "mousedown"; break;
         case EventType::MOUSE_UP: event.type_name = "mouseup"; break;
         case EventType::MOUSE_ENTER: event.type_name = "mouseenter"; break;
         case EventType::MOUSE_LEAVE: event.type_name = "mouseleave"; break;
+
         case EventType::POINTER_DOWN: event.type_name = "pointerdown"; break;
         case EventType::POINTER_UP: event.type_name = "pointerup"; break;
         case EventType::POINTER_MOVE: event.type_name = "pointermove"; break;
@@ -114,14 +116,30 @@ Event EventDispatcher::createEvent(EventType type) {
         case EventType::POINTER_OVER: event.type_name = "pointerover"; break;
         case EventType::POINTER_OUT: event.type_name = "pointerout"; break;
         case EventType::POINTER_CANCEL: event.type_name = "pointercancel"; break;
+
         case EventType::KEY_DOWN: event.type_name = "keydown"; break;
         case EventType::KEY_UP: event.type_name = "keyup"; break;
         case EventType::KEY_PRESS: event.type_name = "keypress"; break;
+
         case EventType::FOCUS: event.type_name = "focus"; break;
         case EventType::BLUR: event.type_name = "blur"; break;
+
         case EventType::CHANGE: event.type_name = "change"; break;
+        case EventType::BEFORE_INPUT: event.type_name = "beforeinput"; break;
         case EventType::INPUT: event.type_name = "input"; break;
         case EventType::SUBMIT: event.type_name = "submit"; break;
+
+        case EventType::COPY: event.type_name = "copy"; break;
+        case EventType::CUT: event.type_name = "cut"; break;
+        case EventType::PASTE: event.type_name = "paste"; break;
+
+        case EventType::SCROLL: event.type_name = "scroll"; break;
+        case EventType::RESIZE: event.type_name = "resize"; break;
+        case EventType::WHEEL: event.type_name = "wheel"; break;
+        case EventType::DOM_CONTENT_LOADED: event.type_name = "DOMContentLoaded"; break;
+
+        case EventType::TOGGLE: event.type_name = "toggle"; break;
+
         case EventType::CUSTOM: event.type_name = "custom"; break;
     }
     
