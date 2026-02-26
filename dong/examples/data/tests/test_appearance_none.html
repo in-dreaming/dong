@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {
+      margin: 20px;
+      font-family: Arial, sans-serif;
+    }
+    .row {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      margin-bottom: 15px;
+    }
+    .label {
+      width: 200px;
+      font-size: 14px;
+      color: #333;
+    }
+
+    /* Custom styled checkbox */
+    .custom-checkbox {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 20px;
+      height: 20px;
+      border: 2px solid #4A90E2;
+      border-radius: 4px;
+      background: #fff;
+    }
+
+    /* Custom styled select */
+    .custom-select {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 200px;
+      padding: 8px 12px;
+      border: 2px solid #4A90E2;
+      border-radius: 4px;
+      background: #f0f8ff;
+      font-size: 14px;
+    }
+
+    /* Custom styled radio */
+    .custom-radio {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 20px;
+      height: 20px;
+      border: 2px solid #E24A4A;
+      border-radius: 50%;
+      background: #fff;
+    }
+
+    /* Default styled controls for comparison */
+    .default {
+      /* no appearance override */
+    }
+  </style>
+</head>
+<body>
+  <h1>appearance: none Test</h1>
+
+  <h2>Checkbox</h2>
+  <div class="row">
+    <div class="label">Default (with native mark):</div>
+    <input type="checkbox" class="default" checked />
+  </div>
+  <div class="row">
+    <div class="label">appearance: none (no native mark):</div>
+    <input type="checkbox" class="custom-checkbox" checked />
+  </div>
+
+  <h2>Radio</h2>
+  <div class="row">
+    <div class="label">Default (with native mark):</div>
+    <input type="radio" class="default" checked />
+  </div>
+  <div class="row">
+    <div class="label">appearance: none (no native mark):</div>
+    <input type="radio" class="custom-radio" checked />
+  </div>
+
+  <h2>Select</h2>
+  <div class="row">
+    <div class="label">Default (with dropdown arrow):</div>
+    <select class="default">
+      <option>Option 1</option>
+      <option>Option 2</option>
+    </select>
+  </div>
+  <div class="row">
+    <div class="label">appearance: none (no dropdown arrow):</div>
+    <select class="custom-select">
+      <option>Option 1</option>
+      <option>Option 2</option>
+    </select>
+  </div>
+</body>
+</html>

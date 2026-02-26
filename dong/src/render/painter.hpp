@@ -67,6 +67,13 @@ private:
                             bool is_hidden,
                             DisplayListBuilder& builder);
 
+    void paintVideoElement(const dom::DOMNodePtr& node,
+                           const layout::LayoutNode* layout_node,
+                           const dom::ComputedStyle& style,
+                           DisplayListBuilder& builder);
+
+    void paintVideoPlaceholder(const Rect& rect, DisplayListBuilder& builder);
+
     void paintTextAndInput(const dom::DOMNodePtr& node,
                            const layout::LayoutNode* layout_node,
                            const std::string& tag,

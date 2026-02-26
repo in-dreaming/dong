@@ -1702,6 +1702,9 @@ void Engine::calculateLayout(dom::DOMNodePtr root, float width, float height) {
     // - margin-left: auto / margin-right: auto alignment
     layoutBlockFormattingContext(layout_root_dom);
 
+    // Table layout post-pass: adjust table/row/cell positioning
+    layoutTableElements(layout_root_dom);
+
     // After Yoga layout, run inline formatting context layout to adjust
     // inline/inline-block children inside suitable containers.
     layoutInlineFormattingContexts(layout_root_dom);
@@ -1733,6 +1736,16 @@ void Engine::calculateLayout(dom::DOMNodePtr root, float width, float height) {
 const LayoutNode* Engine::getLayout(dom::DOMNodePtr node) const {
     if (!node) return nullptr;
     
+    auto it = layout_cache.find(node.get());
+    if (it != layout_cache.end()) {
+        return it->second.get();
+    }
+    return nullptr;
+}
+
+LayoutNode* Engine::getLayoutMutable(dom::DOMNodePtr node) {
+    if (!node) return nullptr;
+
     auto it = layout_cache.find(node.get());
     if (it != layout_cache.end()) {
         return it->second.get();

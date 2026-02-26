@@ -1436,16 +1436,16 @@ void SDLGPUDriver::executeDrawImage(ExecuteContext& ctx, const GPUCommand& cmd) 
             const float scale = (scale_x < scale_y) ? scale_x : scale_y;
             draw_w = img_w * scale;
             draw_h = img_h * scale;
-            const float offset_x = (dst_w - draw_w) * 0.5f;
-            const float offset_y = (dst_h - draw_h) * 0.5f;
+            const float offset_x = (dst_w - draw_w) * cmd.image_position_x;
+            const float offset_y = (dst_h - draw_h) * cmd.image_position_y;
             draw_x = cmd.rect.x + offset_x;
             draw_y = cmd.rect.y + offset_y;
         } else if (cmd.image_fit == ImageFitMode::Cover) {
             const float scale = (scale_x > scale_y) ? scale_x : scale_y;
             draw_w = img_w * scale;
             draw_h = img_h * scale;
-            const float offset_x = (dst_w - draw_w) * 0.5f;
-            const float offset_y = (dst_h - draw_h) * 0.5f;
+            const float offset_x = (dst_w - draw_w) * cmd.image_position_x;
+            const float offset_y = (dst_h - draw_h) * cmd.image_position_y;
             draw_x = cmd.rect.x + offset_x;
             draw_y = cmd.rect.y + offset_y;
         }

@@ -62,6 +62,8 @@ struct GPUCommand {
     // 图片绘制专用字段（仅在 DrawImageQuad 时使用）
     std::string image_src; // 原始图片资源标识（路径）
     ImageFitMode image_fit = ImageFitMode::Fill;
+    float image_position_x = 0.5f;  // object-position X
+    float image_position_y = 0.5f;  // object-position Y
     float opacity = 1.0f;  // 图片整体透明度
 
     float layer_opacity = 1.0f; // 图层合成透明度（BeginIsolatedLayer）
@@ -379,6 +381,8 @@ public:
                 cmd.opacity = item.image.opacity * current_opacity();
                 cmd.image_src = item.image.src;
                 cmd.image_fit = item.image.fit;
+                cmd.image_position_x = item.image.position_x;
+                cmd.image_position_y = item.image.position_y;
                 cmd.sort_key = make_sort_key(cmd.type, cmd);
                 out.commands.push_back(cmd);
                 image_count++;

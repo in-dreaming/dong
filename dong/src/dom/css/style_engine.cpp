@@ -267,6 +267,8 @@ void applyRuleProperties(const ComputedStyle& rs, ComputedStyle& computed) {
                !rs.background_origin.empty() && rs.background_origin != "padding-box");
     APPLY_PROP("object-fit", computed.object_fit = rs.object_fit,
                !rs.object_fit.empty() && rs.object_fit != "fill");
+    APPLY_PROP("object-position", computed.object_position = rs.object_position,
+               !rs.object_position.empty() && rs.object_position != "50% 50%");
     APPLY_PROP("background-gradient", computed.background_gradients = rs.background_gradients,
                !rs.background_gradients.empty());
 
@@ -344,6 +346,18 @@ void applyRuleProperties(const ComputedStyle& rs, ComputedStyle& computed) {
                !rs.float_value.empty() && rs.float_value != "none");
     APPLY_PROP("clear", computed.clear = rs.clear,
                !rs.clear.empty() && rs.clear != "none");
+
+    // Appearance
+    APPLY_PROP("appearance", computed.appearance = rs.appearance,
+               !rs.appearance.empty() && rs.appearance != "auto");
+
+    // Table properties
+    APPLY_PROP("border-collapse", computed.border_collapse = rs.border_collapse,
+               !rs.border_collapse.empty() && rs.border_collapse != "separate");
+    APPLY_PROP("border-spacing", computed.border_spacing = rs.border_spacing,
+               rs.border_spacing != 2.0f);
+    APPLY_PROP("table-layout", computed.table_layout = rs.table_layout,
+               !rs.table_layout.empty() && rs.table_layout != "auto");
 
     #undef APPLY_PROP
 }
@@ -920,7 +934,8 @@ void StyleEngine::processGlobalKeywords(DOMNodePtr node, DOMNodePtr parent) {
         "color", "font-family", "font-size", "font-weight", "font-style",
         "text-align", "line-height", "letter-spacing", "word-spacing",
         "white-space", "direction", "cursor", "visibility",
-        "text-indent", "text-transform", "word-break", "overflow-wrap", "tab-size"
+        "text-indent", "text-transform", "word-break", "overflow-wrap", "tab-size",
+        "border-collapse", "border-spacing"
     };
 
     // Process each global keyword property
@@ -967,6 +982,8 @@ void StyleEngine::copyPropertyFromParent(const std::string& prop,
     else if (prop == "word-break") child_style.word_break = parent_style.word_break;
     else if (prop == "overflow-wrap") child_style.overflow_wrap = parent_style.overflow_wrap;
     else if (prop == "tab-size") child_style.tab_size = parent_style.tab_size;
+    else if (prop == "border-collapse") child_style.border_collapse = parent_style.border_collapse;
+    else if (prop == "border-spacing") child_style.border_spacing = parent_style.border_spacing;
     // Non-inheritable properties
     else if (prop == "border") {
         // Copy the full border shorthand + per-side overrides.
@@ -1047,6 +1064,10 @@ void StyleEngine::inheritFromParent(DOMNodePtr node) {
     // List styling properties (inherited per CSS spec)
     if (!computed.isExplicitlySet("list-style-type")) computed.list_style_type = parent_style.list_style_type;
     if (!computed.isExplicitlySet("list-style-position")) computed.list_style_position = parent_style.list_style_position;
+
+    // Table properties (inherited per CSS spec)
+    if (!computed.isExplicitlySet("border-collapse")) computed.border_collapse = parent_style.border_collapse;
+    if (!computed.isExplicitlySet("border-spacing")) computed.border_spacing = parent_style.border_spacing;
 }
 
 bool StyleEngine::matches(const std::string& selector, DOMNodePtr node) {

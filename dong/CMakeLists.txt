@@ -142,6 +142,7 @@ add_library(dong SHARED
     src/layout/aspect_ratio_resolver.cpp
     src/layout/sticky_positioning.cpp
     src/layout/display_contents.cpp
+    src/layout/table_layout.cpp
     # Script
     src/script/script_engine.cpp
     src/script/js_bindings.cpp
@@ -263,6 +264,7 @@ add_library(dong_render STATIC
     src/layout/aspect_ratio_resolver.cpp
     src/layout/sticky_positioning.cpp
     src/layout/display_contents.cpp
+    src/layout/table_layout.cpp
     # Script
     src/script/script_engine.cpp
     src/script/js_bindings.cpp

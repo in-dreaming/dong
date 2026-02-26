@@ -71,6 +71,8 @@ struct DrawImageData {
     std::string src;   // 图片资源标识（路径或其它 key）
     float opacity = 1.0f;
     ImageFitMode fit = ImageFitMode::Fill;
+    float position_x = 0.5f;  // object-position X (0.0=left, 0.5=center, 1.0=right)
+    float position_y = 0.5f;  // object-position Y (0.0=top, 0.5=center, 1.0=bottom)
 };
 
 
@@ -307,13 +309,17 @@ public:
         list_.items.push_back(std::move(item));
     }
 
-    void addImage(const Rect& rect, const std::string& src, float opacity, ImageFitMode fit = ImageFitMode::Fill) {
+    void addImage(const Rect& rect, const std::string& src, float opacity,
+                  ImageFitMode fit = ImageFitMode::Fill,
+                  float pos_x = 0.5f, float pos_y = 0.5f) {
         DisplayItem item{};
         item.type = DisplayItemType::DrawImage;
         item.image.rect = applyTranslate(rect);
         item.image.src = src;
         item.image.opacity = opacity;
         item.image.fit = fit;
+        item.image.position_x = pos_x;
+        item.image.position_y = pos_y;
         list_.items.push_back(std::move(item));
     }
 

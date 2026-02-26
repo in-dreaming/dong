@@ -66,6 +66,9 @@ public:
     // Get layout info for a node
     const LayoutNode* getLayout(dom::DOMNodePtr node) const;
 
+    // Get mutable layout info (for post-layout passes like table layout)
+    LayoutNode* getLayoutMutable(dom::DOMNodePtr node);
+
     // Update layout when DOM changes
     void markDirty(dom::DOMNodePtr node);
 
@@ -181,6 +184,19 @@ private:
 
     // Sticky positioning layout (position: sticky)
     void layoutStickyElements(dom::DOMNodePtr root);
+
+    // Table layout post-pass
+    void layoutTableElements(dom::DOMNodePtr root);
+    void layoutSingleTable(const dom::DOMNodePtr& table_node);
+    void computeColumnWidths(const dom::DOMNodePtr& table_node,
+                            const std::vector<dom::DOMNodePtr>& rows,
+                            size_t num_cols, bool is_fixed, float spacing,
+                            std::vector<float>& col_widths);
+    void positionTableCells(const dom::DOMNodePtr& table_node,
+                           const std::vector<dom::DOMNodePtr>& rows,
+                           const std::vector<float>& col_widths,
+                           float spacing, bool is_collapse);
+    void updateRowGroupLayouts(const dom::DOMNodePtr& table_node);
 
     // Third-pass sibling Y adjustment helpers
     void shiftSubtreeY(const dom::DOMNodePtr& n, float dy);

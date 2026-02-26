@@ -72,6 +72,7 @@ struct ComputedStyle {
     std::string background_clip = "border-box";
     std::string background_origin = "padding-box";
     std::string object_fit = "fill";
+    std::string object_position = "50% 50%";
 
     std::vector<CSSGradient> background_gradients;
 
@@ -231,6 +232,14 @@ struct ComputedStyle {
     std::string list_style_type = "none";      // disc, circle, square, decimal, etc.
     std::string list_style_position = "outside"; // outside, inside
     std::string list_style_image = "none";     // For future, always "none" for now
+
+    // Appearance (form control styling)
+    std::string appearance = "auto";  // auto, none
+
+    // Table properties
+    std::string border_collapse = "separate";  // separate, collapse (inheritable)
+    float border_spacing = 2.0f;               // px (inheritable, default 2px)
+    std::string table_layout = "auto";         // auto, fixed
     
     // Track which properties were explicitly set by CSS rules or inline styles.
     // Used by inheritFromParent() to avoid overriding explicitly set values.

@@ -118,6 +118,7 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
         {"background-clip", [](const std::string& val, ComputedStyle& style) { style.background_clip = val; }},
         {"background-origin", [](const std::string& val, ComputedStyle& style) { style.background_origin = val; }},
         {"object-fit", [](const std::string& val, ComputedStyle& style) { style.object_fit = val; }},
+        {"object-position", [](const std::string& val, ComputedStyle& style) { style.object_position = val; }},
 
         {"opacity", [](const std::string& val, ComputedStyle& style) {
             float v = parseFloatHelper(val);
@@ -397,6 +398,15 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
                 }
             }
         }},
+
+        // Appearance
+        {"appearance", [](const std::string& val, ComputedStyle& style) { style.appearance = val; }},
+        {"-webkit-appearance", [](const std::string& val, ComputedStyle& style) { style.appearance = val; }},
+
+        // Table properties
+        {"border-collapse", [](const std::string& val, ComputedStyle& style) { style.border_collapse = val; }},
+        {"border-spacing", [](const std::string& val, ComputedStyle& style) { style.border_spacing = parseFloatHelper(val); }},
+        {"table-layout", [](const std::string& val, ComputedStyle& style) { style.table_layout = val; }},
 
         // Transform
         {"transform", [](const std::string& val, ComputedStyle& style) { CSSParser::parseTransform(val, style); }},

@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {
+      margin: 20px;
+      font-family: Arial, sans-serif;
+    }
+    h2 {
+      margin: 20px 0 10px;
+    }
+
+    /* Separate borders (default) */
+    .table-separate {
+      border-collapse: separate;
+      border-spacing: 8px;
+      border: 2px solid #333;
+      width: 400px;
+    }
+    .table-separate td {
+      border: 1px solid #999;
+      padding: 8px;
+      background: #f0f8ff;
+    }
+
+    /* Collapsed borders */
+    .table-collapse {
+      border-collapse: collapse;
+      border: 2px solid #333;
+      width: 400px;
+    }
+    .table-collapse td {
+      border: 1px solid #999;
+      padding: 8px;
+      background: #fff0f0;
+    }
+
+    /* Custom spacing */
+    .table-spacing {
+      border-collapse: separate;
+      border-spacing: 15px;
+      border: 2px solid #333;
+      width: 400px;
+    }
+    .table-spacing td {
+      border: 1px solid #4A90E2;
+      padding: 8px;
+      background: #f0fff0;
+    }
+  </style>
+</head>
+<body>
+  <h1>border-collapse / border-spacing Test</h1>
+
+  <h2>border-collapse: separate (default), border-spacing: 8px</h2>
+  <table class="table-separate">
+    <tr>
+      <td>Cell 1</td>
+      <td>Cell 2</td>
+      <td>Cell 3</td>
+    </tr>
+    <tr>
+      <td>Cell 4</td>
+      <td>Cell 5</td>
+      <td>Cell 6</td>
+    </tr>
+  </table>
+
+  <h2>border-collapse: collapse</h2>
+  <table class="table-collapse">
+    <tr>
+      <td>Cell 1</td>
+      <td>Cell 2</td>
+      <td>Cell 3</td>
+    </tr>
+    <tr>
+      <td>Cell 4</td>
+      <td>Cell 5</td>
+      <td>Cell 6</td>
+    </tr>
+  </table>
+
+  <h2>border-spacing: 15px</h2>
+  <table class="table-spacing">
+    <tr>
+      <td>Cell 1</td>
+      <td>Cell 2</td>
+      <td>Cell 3</td>
+    </tr>
+    <tr>
+      <td>Cell 4</td>
+      <td>Cell 5</td>
+      <td>Cell 6</td>
+    </tr>
+  </table>
+</body>
+</html>

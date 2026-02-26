@@ -961,7 +961,9 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
 
         // 1.2.3 Form controls (very minimal): checkbox/radio checked mark.
         // Our engine doesn't have native OS widgets; emulate a simple mark so baseline diffs shrink.
-        if (tag == "input" && rect.width > 0.0f && rect.height > 0.0f && node->hasAttribute("type")) {
+        // Skip if appearance: none (allows custom styling without native marks).
+        if (tag == "input" && rect.width > 0.0f && rect.height > 0.0f && node->hasAttribute("type")
+            && style.appearance != "none") {
             std::string t = node->getAttribute("type");
             std::transform(t.begin(), t.end(), t.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 
