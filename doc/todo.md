@@ -16,15 +16,16 @@
 ### CSS 属性
 
 - [ ] CSS 逻辑属性（`margin-inline-start`, `padding-block-end`, `border-inline` 等）
-- [ ] `color-scheme` 属性（`light`/`dark`）
-- [ ] `hyphens` 属性
-- [ ] `counter-reset` / `counter-increment` + `counter()`/`counters()` 函数
-- [ ] `quotes` 属性
-- [ ] `image-rendering` 属性（`pixelated`/`crisp-edges`）
+- [x] `color-scheme` 属性（`light`/`dark`）
+- [x] `hyphens` 属性
+- [x] `counter-reset` / `counter-increment` + `counter()`/`counters()` 函数
+- [x] `quotes` 属性
+- [x] `image-rendering` 属性（`pixelated`/`crisp-edges`）
 - [ ] `resize` 属性（textarea 拖拽调整大小）
-- [ ] `caption-side` 属性
+- [x] `caption-side` 属性
 - [ ] `will-change` 属性（建议引擎自动 layer promotion；可 P2 后段再评估）
-- [ ] `accent-color` 属性（表单控件主题色；可 P2 后段）
+- [x] `accent-color` 属性（表单控件主题色；可 P2 后段）
+
 
 ### CSS 值/解析
 
