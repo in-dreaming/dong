@@ -1355,6 +1355,20 @@ static void dock_update_drag(dong_dock_t* dock) {
         }
     }
 
+    // Check if the source is a non-primary single-pane window (detached pane).
+    // If so, move the window to follow the mouse in real-time instead of
+    // treating itself as a drop target.
+    int src_is_detached = 0;
+    dong_dock_window_t* src_win = NULL;
+    if (d->source_window_index >= 0 && d->source_window_index < dock->window_count) {
+        src_win = &dock->windows[d->source_window_index];
+        if (src_win->alive && !src_win->is_primary &&
+            src_win->root && src_win->root->type == DOCK_NODE_LEAF &&
+            src_win->root->pane_count == 1) {
+            src_is_detached = 1;
+        }
+    }
+
     // Hit-test all alive windows
     for (int i = 0; i < dock->window_count; i++) {
         dong_dock_window_t* wn = &dock->windows[i];
@@ -1367,6 +1381,21 @@ static void dock_update_drag(dong_dock_t* dock) {
 
         if (lx < 0 || ly < 0 || lx >= (int32_t)wn->width || ly >= (int32_t)wn->height)
             continue;
+
+        // If hovering our own detached window, move it with the mouse
+        // instead of computing drop zones on itself
+        if (src_is_detached && wn->index == d->source_window_index) {
+            int32_t new_x = (int32_t)gx - d->start_x;
+            int32_t new_y = (int32_t)gy - d->start_y;
+            SDL_SetWindowPosition(wn->sdl_window, new_x, new_y);
+            // No drop target while over own window
+            d->hover_window_index = -1;
+            d->drop_zone = DOCK_DROP_NONE;
+            d->target_w = 0;
+            d->target_h = 0;
+            d->reorder_insert_pos = -1;
+            return;
+        }
 
         // Layout tree for up-to-date hit coordinates
         dock_node_layout(wn->root, 0, 0, wn->width, wn->height);
@@ -1557,10 +1586,18 @@ static void dock_finish_drag(dong_dock_t* dock) {
         src_pane->node = new_leaf;
     } else if (d->drop_zone == DOCK_DROP_NONE || !hover_node ||
         hover_node->type != DOCK_NODE_LEAF || hover_node->pane_count == 0) {
-        // No valid target: detach to new window at global mouse position
-        float gx, gy;
-        SDL_GetGlobalMouseState(&gx, &gy);
-        dong_dock_detach(dock, src_pane, (int32_t)gx - 50, (int32_t)gy - 10, 0, 0);
+        // No valid target.
+        // If source is already a detached single-pane window, it was moved
+        // in real-time by dock_update_drag — just keep it where it is.
+        dong_dock_window_t* sw = &dock->windows[src_pane->window_index];
+        int already_detached = (!sw->is_primary && sw->root &&
+            sw->root->type == DOCK_NODE_LEAF && sw->root->pane_count == 1);
+        if (!already_detached) {
+            // Detach to new window at global mouse position
+            float gx, gy;
+            SDL_GetGlobalMouseState(&gx, &gy);
+            dong_dock_detach(dock, src_pane, (int32_t)gx - 50, (int32_t)gy - 10, 0, 0);
+        }
     } else {
         // Leaf-level drop
         int target_pi = hover_node->pane_indices[hover_node->active_tab];
