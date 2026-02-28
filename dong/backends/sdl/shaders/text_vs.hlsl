@@ -11,7 +11,6 @@ struct VSOutput {
     float4 color : COLOR0;
     float2 pixel : TEXCOORD1;
     float4 params : TEXCOORD2;
-    float4 debug : TEXCOORD3;  // 调试信息
 };
 
 // SDL_GPU 规范：Vertex shader 的 uniform buffer 使用 space1
@@ -63,6 +62,5 @@ VSOutput main(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID) {
     o.color = color;
     o.pixel = transformed;
     o.params = params;
-    o.debug = rect;  // 调试用
     return o;
 }

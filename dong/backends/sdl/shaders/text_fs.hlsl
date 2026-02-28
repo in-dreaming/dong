@@ -27,20 +27,10 @@ struct PSInput {
     float4 color : COLOR0;
     float2 pixel : TEXCOORD1;
     float4 params : TEXCOORD2;
-    float4 debug : TEXCOORD3;
 };
 
 float median(float r, float g, float b) {
     return max(min(r, g), min(max(r, g), b));
-}
-
-float3 toLinear(float3 col, float gam) {
-    return pow(saturate(col), float3(gam, gam, gam));
-}
-
-float3 toSRGB(float3 col, float gam) {
-    float invGamma = 1.0 / gam;
-    return pow(saturate(col), float3(invGamma, invGamma, invGamma));
 }
 
 float sdRoundedClip(float2 pt, float4 rc, float rad) {
@@ -70,47 +60,17 @@ bool discardByClip(float2 px) {
     return false;
 }
 
-// 计算 screenPxRange
-// params.x = 预计算的 screenPxRange（CPU端根据 font_size/msdf_scale 计算）
-// 这是更准确的值，因为CPU知道确切的渲染参数
-float calcScreenPxRange(float2 uv, float precomputed, float unitRange) {
-    // 优先使用CPU预计算的值，因为它基于确切的字体参数
-    // precomputed = atlas_range * (pixel_scale / msdf_scale)
-    
-    // 可选：用 fwidth 进行微调，但保持预计算值的主导地位
-    // 这可以处理缩放变换的情况
-    float2 fw = fwidth(uv);
-    float texSize = max(length(fw), 1e-6);
-    float screenTexSize = 1.0 / texSize;
-    float dynamicRange = unitRange * screenTexSize;
-    
-    // 混合：70% 预计算值 + 30% 动态值
-    // 这样既能保持准确性，又能响应变换
-    float blended = precomputed * 0.7 + dynamicRange * 0.3;
-    
-    // 限制范围：最小2.0（LINEAR 提供更平滑输入，更宽 AA 范围改善小字体边缘），最大8
-    return clamp(blended, 2.0, 8.0);
+// screenPxRange: CPU 预计算 = atlas_range * (pixel_scale / msdf_scale)
+// 直接使用，不混合 fwidth 动态值（fwidth 在三角形边缘有噪声）
+float calcScreenPxRange(float precomputed) {
+    return max(precomputed, 2.0);
 }
 
-// 计算 MSDF 的 opacity
-// With proper pxRange from atlas generation, use clean standard MSDF decoding
+// 标准 MSDF opacity 解码
 float calcMSDFOpacity(float3 msdf, float screenPxRange) {
     float sd = median(msdf.r, msdf.g, msdf.b);
     float screenPxDistance = screenPxRange * (sd - 0.5);
-
-    // Minimal stem darkening for medium text only
-    float stemDarkening = 0.0;
-    if (screenPxRange >= 2.5 && screenPxRange < 4.0) {
-        stemDarkening = 0.04;
-    }
-
-    float opacity = clamp(screenPxDistance + stemDarkening + 0.5, 0.0, 1.0);
-
-    // Light gamma correction for readability
-    const float gamma = 1.6;
-    opacity = pow(opacity, 1.0 / gamma);
-
-    return opacity;
+    return clamp(screenPxDistance + 0.5, 0.0, 1.0);
 }
 
 // 4-tap 超采样：旋转网格采样 MSDF，独立解码后平均 opacity。
@@ -141,8 +101,7 @@ float4 main(PSInput input) : SV_Target0 {
 
     // 计算 screenPxRange
     float precomputedRange = input.params.x;
-    float unitRange = input.params.y;
-    float screenPxRange = calcScreenPxRange(input.uv, precomputedRange, unitRange);
+    float screenPxRange = calcScreenPxRange(precomputedRange);
 
     // 计算 opacity：小字体用 4-tap 超采样消除残余锯齿，大字体用单次采样
     float opacity;

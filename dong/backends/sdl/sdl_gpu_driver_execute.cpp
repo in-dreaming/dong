@@ -1555,7 +1555,6 @@ void SDLGPUDriver::executeDrawText(ExecuteContext& ctx, const GPUCommand& cmd) {
 
     // Get atlas properties from the glyph atlas
     const float atlas_range = glyph_atlas->getGlyphDistanceRange();
-    const float gamma_correction = -2.2f;
     const float pixel_scale = cmd.scale_to_pixels;
 
     if (ctx.pipeline_state.active != PipelineBindingState::ActivePipeline::Text) {
@@ -1700,8 +1699,8 @@ void SDLGPUDriver::executeDrawText(ExecuteContext& ctx, const GPUCommand& cmd) {
 
                 shadow_inst.params[0] = precomputed_px_range;
                 shadow_inst.params[1] = unit_range;
-                shadow_inst.params[2] = msdf_subpixel_enabled_ ? 1.0f : 0.0f;
-                shadow_inst.params[3] = gamma_correction;
+                shadow_inst.params[2] = 0.0f;
+                shadow_inst.params[3] = 0.0f;
 
                 PreparedGlyph pg_shadow{};
                 pg_shadow.instance = shadow_inst;
@@ -1761,8 +1760,8 @@ void SDLGPUDriver::executeDrawText(ExecuteContext& ctx, const GPUCommand& cmd) {
 
         inst.params[0] = px_range_screen;
         inst.params[1] = unit_range;
-        inst.params[2] = msdf_subpixel_enabled_ ? 1.0f : 0.0f;
-        inst.params[3] = gamma_correction;
+        inst.params[2] = 0.0f;
+        inst.params[3] = 0.0f;
 
         PreparedGlyph pg{};
         pg.instance = inst;

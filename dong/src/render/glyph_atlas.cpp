@@ -867,10 +867,17 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
     const double range = static_cast<double>(glyph_distance_range_);
     
     msdfgen::Bitmap<float, 3> msdf(msdf_size, msdf_size);
-    // 关键：msdfgen::Bitmap 构造函数不初始化内存，必须手动清零
-    // 否则字形边界外的区域会包含垃圾数据，导致渲染时出现细线/噪点
-    // 使用 operator float*() 获取像素指针
-    std::memset(static_cast<float*>(msdf), 0, sizeof(float) * 3 * msdf_size * msdf_size);
+    // 初始化为 -range（明确"在字形外部"）
+    // memset(0) 会让 raw distance=0.0 编码为 0.5（边缘），导致字形边界外出现伪影
+    // -range 编码为 -range/range + 0.5 = -1.0 + 0.5 = -0.5 → clamp 到 0.0（完全透明）
+    {
+        const float neg_range = static_cast<float>(-range);
+        float* data = static_cast<float*>(msdf);
+        const int total = msdf_size * msdf_size * 3;
+        for (int i = 0; i < total; ++i) {
+            data[i] = neg_range;
+        }
+    }
     
     double width = bounds.r - bounds.l;
     double height = bounds.t - bounds.b;
