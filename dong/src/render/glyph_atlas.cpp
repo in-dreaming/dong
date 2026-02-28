@@ -10,7 +10,6 @@
 // MSDF 生成库
 #include <msdfgen/msdfgen.h>
 #include <msdfgen/core/edge-coloring.h>
-#include <msdfgen/core/rasterization.h>
 #include <msdfgen/ext/import-font.h>
 
 // FreeType
@@ -843,7 +842,7 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
 
     // 规范化并着色边缘
     shape.normalize();
-    msdfgen::edgeColoringSimple(shape, 3.0);
+    msdfgen::edgeColoringByDistance(shape, 3.0);
 
     // 计算边界（design units），仅用于确定 MSDF 投影区域
     // 注意：真正用于排版/基线对齐的字形度量（bearing/width/height）
@@ -925,10 +924,11 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
 
     DONG_LOG_DEBUG("[MSDF] glyph=%u translate: tx=%.2f ty=%.2f", glyph_id, translate.x, translate.y);
 
-    msdfgen::generateMSDF(msdf, shape, range, scale, translate);
-    // 使用官方的 distanceSignCorrection 统一 MSDF 的符号约定，使填充区域
-    // 在所有字体/字重下都保持一致，避免粗体等 glyph 出现"内部/外部符号反转"。
-    msdfgen::distanceSignCorrection(msdf, shape, msdfgen::Vector2(scale, scale), translate);
+    msdfgen::ErrorCorrectionConfig errorConfig(
+        msdfgen::ErrorCorrectionConfig::EDGE_PRIORITY,
+        msdfgen::ErrorCorrectionConfig::ALWAYS_CHECK_DISTANCE
+    );
+    msdfgen::generateMSDF(msdf, shape, range, scale, translate, errorConfig);
 
     // 调试：检查 MSDF 纹理中特定位置的距离值（仅在需要时启用）
     // 注意：msdfgen 使用数学坐标系，y=0 在底部
