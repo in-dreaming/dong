@@ -14,10 +14,45 @@
 #include "quickjs_compat.h"
 
 
+// Active JSBindings for current view operation (single-threaded).
+// In shared-JS mode, multiple JSBindings share one JSContext, so
+// we can't rely solely on JS_GetContextOpaque. Before any view operation
+// (tick, loadHTML, input, evalScript), the EngineView sets this to the
+// correct JSBindings for that view.
+static dong::script::JSBindings* s_active_bindings = nullptr;
+
 // Helper to get JSBindings from context opaque data
 static dong::script::JSBindings* getBindingsFromContext(JSContext* ctx) {
+    // In shared-JS mode, prefer the explicitly activated bindings.
+    if (s_active_bindings) return s_active_bindings;
     if (!ctx) return nullptr;
     return static_cast<dong::script::JSBindings*>(JS_GetContextOpaque(ctx));
+}
+
+// ---- Per-view document binding support ----
+// In shared-JS mode, a per-view document object stores a pointer to the
+// JSBindings that owns it via an internal "__db" property.  When a doc_*
+// callback is invoked on such an object, we read the pointer from this_val
+// so the correct DOM tree is accessed regardless of which view is "active".
+
+static void setDocBindings(JSContext* ctx, JSValue doc, dong::script::JSBindings* bindings) {
+    JS_SetPropertyStr(ctx, doc, "__db",
+                      JS_NewInt64(ctx, reinterpret_cast<int64_t>(bindings)));
+}
+
+// Resolve JSBindings for a doc_* callback.  Checks this_val (the document
+// object the method was called on) first; falls back to context-level lookup.
+static dong::script::JSBindings* getBindingsForDoc(JSContext* ctx, JSValueConst this_val) {
+    JSValue v = JS_GetPropertyStr(ctx, this_val, "__db");
+    if (JS_IsNumber(v)) {
+        int64_t ptr = 0;
+        JS_ToInt64(ctx, &ptr, v);
+        JS_FreeValue(ctx, v);
+        if (ptr) return reinterpret_cast<dong::script::JSBindings*>(ptr);
+    } else {
+        JS_FreeValue(ctx, v);
+    }
+    return getBindingsFromContext(ctx);
 }
 
 static bool debugScriptEval() {
@@ -128,6 +163,10 @@ static JSValue js_prompt(JSContext* ctx, JSValueConst this_val, int argc, JSValu
 } // extern "C"
 
 namespace dong::script {
+
+// Forward declarations for multi-view support
+static void ensureDongViewsObject(JSContext* ctx);
+static JSValue js_dong_getView(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 
 namespace {
 
@@ -742,8 +781,8 @@ JSValue createStyleProxy(JSContext* ctx, JSValueConst element, const dom::DOMNod
 // ============================================================
 
 static JSValue doc_getHead(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-    (void)argc; (void)argv; (void)this_val;
-    auto bindings = getBindingsFromContext(ctx);
+    (void)argc; (void)argv;
+    auto bindings = getBindingsForDoc(ctx, this_val);
     if (!bindings) return JS_NULL;
 
     auto dom_mgr = bindings->dom_manager_;
@@ -757,8 +796,8 @@ static JSValue doc_getHead(JSContext* ctx, JSValueConst this_val, int argc, JSVa
 }
 
 static JSValue doc_getActiveElement(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-    (void)argc; (void)argv; (void)this_val;
-    auto bindings = getBindingsFromContext(ctx);
+    (void)argc; (void)argv;
+    auto bindings = getBindingsForDoc(ctx, this_val);
     if (!bindings) return JS_NULL;
 
     auto focus_mgr = bindings->focus_manager_;
@@ -771,7 +810,7 @@ static JSValue doc_getActiveElement(JSContext* ctx, JSValueConst this_val, int a
 }
 
 static JSValue doc_getElementById(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-    auto bindings = getBindingsFromContext(ctx);
+    auto bindings = getBindingsForDoc(ctx, this_val);
     if (!bindings || argc < 1) return JS_NULL;
 
     const bool dbg = debugScriptEval();
@@ -804,7 +843,7 @@ static JSValue doc_getElementById(JSContext* ctx, JSValueConst this_val, int arg
 }
 
 static JSValue doc_getElementsByTagName(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-    auto bindings = getBindingsFromContext(ctx);
+    auto bindings = getBindingsForDoc(ctx, this_val);
     if (!bindings || argc < 1) return JS_NewArray(ctx);
     
     const char* tag = JS_ToCString(ctx, argv[0]);
@@ -826,7 +865,7 @@ static JSValue doc_getElementsByTagName(JSContext* ctx, JSValueConst this_val, i
 }
 
 static JSValue doc_getElementsByClassName(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-    auto bindings = getBindingsFromContext(ctx);
+    auto bindings = getBindingsForDoc(ctx, this_val);
     if (!bindings || argc < 1) return JS_NewArray(ctx);
     
     const char* cls = JS_ToCString(ctx, argv[0]);
@@ -848,7 +887,7 @@ static JSValue doc_getElementsByClassName(JSContext* ctx, JSValueConst this_val,
 }
 
 static JSValue doc_querySelector(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-    auto bindings = getBindingsFromContext(ctx);
+    auto bindings = getBindingsForDoc(ctx, this_val);
     if (!bindings || argc < 1) return JS_NULL;
 
     const char* selector = JS_ToCString(ctx, argv[0]);
@@ -872,7 +911,7 @@ static JSValue doc_querySelector(JSContext* ctx, JSValueConst this_val, int argc
 }
 
 static JSValue doc_querySelectorAll(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-    auto bindings = getBindingsFromContext(ctx);
+    auto bindings = getBindingsForDoc(ctx, this_val);
     if (!bindings || argc < 1) return JS_NewArray(ctx);
 
     const char* selector = JS_ToCString(ctx, argv[0]);
@@ -938,8 +977,7 @@ dong::dom::DOMNodePtr hitTestRecursiveForDocument(const dong::dom::DOMNodePtr& n
 } // namespace
 
 static JSValue doc_elementFromPoint(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-    (void)this_val;
-    auto bindings = getBindingsFromContext(ctx);
+    auto bindings = getBindingsForDoc(ctx, this_val);
     if (!bindings || !bindings->dom_manager_ || !bindings->layout_engine_) return JS_NULL;
     if (argc < 2) return JS_NULL;
 
@@ -972,15 +1010,15 @@ static JSValue doc_elementFromPoint(JSContext* ctx, JSValueConst this_val, int a
 }
 
 static JSValue doc_hasFocus(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-    (void)this_val; (void)argc; (void)argv;
-    auto bindings = getBindingsFromContext(ctx);
+    (void)argc; (void)argv;
+    auto bindings = getBindingsForDoc(ctx, this_val);
     if (!bindings || !bindings->focus_manager_) return JS_FALSE;
     return JS_NewBool(ctx, bindings->focus_manager_->getFocusedElement() != nullptr);
 }
 
 static JSValue doc_getScrollingElement(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-    (void)this_val; (void)argc; (void)argv;
-    auto bindings = getBindingsFromContext(ctx);
+    (void)argc; (void)argv;
+    auto bindings = getBindingsForDoc(ctx, this_val);
     if (!bindings || !bindings->dom_manager_) return JS_NULL;
 
     // Prefer <html>, fallback to <body>.
@@ -1003,7 +1041,7 @@ static JSValue doc_getScrollingElement(JSContext* ctx, JSValueConst this_val, in
 
 
 static JSValue doc_createElement(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-    auto bindings = getBindingsFromContext(ctx);
+    auto bindings = getBindingsForDoc(ctx, this_val);
     if (!bindings || argc < 1) return JS_NULL;
     
     const char* tag = JS_ToCString(ctx, argv[0]);
@@ -1023,7 +1061,7 @@ static JSValue doc_createElement(JSContext* ctx, JSValueConst this_val, int argc
 }
 
 static JSValue doc_createTextNode(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-    auto bindings = getBindingsFromContext(ctx);
+    auto bindings = getBindingsForDoc(ctx, this_val);
     if (!bindings || argc < 1) return JS_NULL;
     
     const char* text = JS_ToCString(ctx, argv[0]);
@@ -1883,9 +1921,15 @@ JSBindings::JSBindings(ScriptEngine* engine,
 
 JSBindings::~JSBindings() {
     resetForNewDOM();
-    // Clear context opaque
+    // Clear context opaque only if it still points to us
     if (engine_ && engine_->getContext()) {
-        JS_SetContextOpaque(engine_->getContext(), nullptr);
+        if (JS_GetContextOpaque(engine_->getContext()) == this) {
+            JS_SetContextOpaque(engine_->getContext(), nullptr);
+        }
+    }
+    // Clear active bindings if it's us
+    if (s_active_bindings == this) {
+        s_active_bindings = nullptr;
     }
 }
 
@@ -2139,6 +2183,25 @@ void JSBindings::initializeDocumentAPI() {
 
     // JS_SetPropertyStr takes ownership of 'document'
     JS_SetPropertyStr(ctx, global, "document", document);
+
+    // window = globalThis (standard Web compat)
+    JS_SetPropertyStr(ctx, global, "window", JS_DupValue(ctx, global));
+
+    // document.defaultView = window (= globalThis)
+    JS_SetPropertyStr(ctx, document, "defaultView", JS_DupValue(ctx, global));
+
+    // Initialize dong.views namespace + dong.getView()
+    ensureDongViewsObject(ctx);
+
+    // If this view has a name, also register it on dong.views
+    if (!view_name_.empty()) {
+        JSValue dong_obj = JS_GetPropertyStr(ctx, global, "dong");
+        JSValue views = JS_GetPropertyStr(ctx, dong_obj, "views");
+        JS_SetPropertyStr(ctx, views, view_name_.c_str(), JS_DupValue(ctx, global));
+        JS_FreeValue(ctx, views);
+        JS_FreeValue(ctx, dong_obj);
+    }
+
     JS_FreeValue(ctx, global);
 }
 
@@ -3103,6 +3166,144 @@ void JSBindings::setNodeOpaque(JSContext* ctx, JSValue val, dom::DOMNodePtr node
     }
 
     JS_SetPropertyStr(ctx, val, "__node_id__", JS_NewInt64(ctx, static_cast<int64_t>(id)));
+}
+
+void JSBindings::setActiveBindings(JSBindings* bindings) {
+    s_active_bindings = bindings;
+}
+
+// ============================================================
+// Multi-view: dong.getView(name) / dong.views registry
+// ============================================================
+
+// C callback for dong.getView(name) — retrieves a named view's window object.
+static JSValue js_dong_getView(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_UNDEFINED;
+    const char* name = JS_ToCString(ctx, argv[0]);
+    if (!name) return JS_UNDEFINED;
+
+    // Look up dong.views[name]
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue dong_obj = JS_GetPropertyStr(ctx, global, "dong");
+    if (JS_IsUndefined(dong_obj) || JS_IsNull(dong_obj)) {
+        JS_FreeValue(ctx, dong_obj);
+        JS_FreeValue(ctx, global);
+        JS_FreeCString(ctx, name);
+        return JS_UNDEFINED;
+    }
+    JSValue views = JS_GetPropertyStr(ctx, dong_obj, "views");
+    JSValue result = JS_UNDEFINED;
+    if (!JS_IsUndefined(views) && !JS_IsNull(views)) {
+        result = JS_GetPropertyStr(ctx, views, name);
+    }
+    JS_FreeValue(ctx, views);
+    JS_FreeValue(ctx, dong_obj);
+    JS_FreeValue(ctx, global);
+    JS_FreeCString(ctx, name);
+    return result;
+}
+
+// Ensure the global `dong` object and `dong.views` sub-object exist.
+static void ensureDongViewsObject(JSContext* ctx) {
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue dong_obj = JS_GetPropertyStr(ctx, global, "dong");
+    if (JS_IsUndefined(dong_obj) || JS_IsNull(dong_obj)) {
+        JS_FreeValue(ctx, dong_obj);
+        dong_obj = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, dong_obj, "views", JS_NewObject(ctx));
+        JS_SetPropertyStr(ctx, dong_obj, "getView",
+            JS_NewCFunction(ctx, js_dong_getView, "getView", 1));
+        JS_SetPropertyStr(ctx, global, "dong", dong_obj);
+    } else {
+        JSValue views = JS_GetPropertyStr(ctx, dong_obj, "views");
+        if (JS_IsUndefined(views) || JS_IsNull(views)) {
+            JS_FreeValue(ctx, views);
+            JS_SetPropertyStr(ctx, dong_obj, "views", JS_NewObject(ctx));
+        } else {
+            JS_FreeValue(ctx, views);
+        }
+        JS_FreeValue(ctx, dong_obj);
+    }
+    JS_FreeValue(ctx, global);
+}
+
+void JSBindings::registerAsNamedView() {
+    if (!engine_ || view_name_.empty()) return;
+
+    JSContext* ctx = engine_->getContext();
+    if (!ctx) return;
+
+    // Ensure dong.views exists
+    ensureDongViewsObject(ctx);
+
+    // Build the per-view document object (same as initializeDocumentAPI but on a new object)
+    JSValue doc = JS_NewObject(ctx);
+
+    // Store owning JSBindings pointer so doc_* callbacks resolve the correct DOM
+    setDocBindings(ctx, doc, this);
+
+    JS_SetPropertyStr(ctx, doc, "getElementById",
+        JS_NewCFunction(ctx, doc_getElementById, "getElementById", 1));
+    JS_SetPropertyStr(ctx, doc, "getElementsByTagName",
+        JS_NewCFunction(ctx, doc_getElementsByTagName, "getElementsByTagName", 1));
+    JS_SetPropertyStr(ctx, doc, "getElementsByClassName",
+        JS_NewCFunction(ctx, doc_getElementsByClassName, "getElementsByClassName", 1));
+    JS_SetPropertyStr(ctx, doc, "querySelector",
+        JS_NewCFunction(ctx, doc_querySelector, "querySelector", 1));
+    JS_SetPropertyStr(ctx, doc, "querySelectorAll",
+        JS_NewCFunction(ctx, doc_querySelectorAll, "querySelectorAll", 1));
+    JS_SetPropertyStr(ctx, doc, "elementFromPoint",
+        JS_NewCFunction(ctx, doc_elementFromPoint, "elementFromPoint", 2));
+    JS_SetPropertyStr(ctx, doc, "hasFocus",
+        JS_NewCFunction(ctx, doc_hasFocus, "hasFocus", 0));
+    JS_SetPropertyStr(ctx, doc, "createElement",
+        JS_NewCFunction(ctx, doc_createElement, "createElement", 1));
+    JS_SetPropertyStr(ctx, doc, "createTextNode",
+        JS_NewCFunction(ctx, doc_createTextNode, "createTextNode", 1));
+    JS_SetPropertyStr(ctx, doc, "addEventListener",
+        JS_NewCFunction(ctx, elem_addEventListener, "addEventListener", 2));
+    JS_SetPropertyStr(ctx, doc, "removeEventListener",
+        JS_NewCFunction(ctx, elem_removeEventListener, "removeEventListener", 2));
+
+    // Document object references
+    if (dom_manager_) {
+        auto body_nodes = dom_manager_->getElementsByTagName("body");
+        if (!body_nodes.empty()) {
+            JS_SetPropertyStr(ctx, doc, "body", createJSElement(ctx, body_nodes[0]));
+            setNodeOpaque(ctx, doc, body_nodes[0]);
+        }
+        auto html_nodes = dom_manager_->getElementsByTagName("html");
+        if (!html_nodes.empty()) {
+            JS_SetPropertyStr(ctx, doc, "documentElement", createJSElement(ctx, html_nodes[0]));
+        }
+    }
+
+    // Build the per-view window object
+    JSValue win = JS_NewObject(ctx);
+
+    // window.document = doc
+    JS_SetPropertyStr(ctx, win, "document", JS_DupValue(ctx, doc));
+
+    // window.getComputedStyle
+    JS_SetPropertyStr(ctx, win, "getComputedStyle",
+        JS_NewCFunction(ctx, window_getComputedStyle, "getComputedStyle", 1));
+
+    // document.defaultView = window (circular ref)
+    JS_SetPropertyStr(ctx, doc, "defaultView", JS_DupValue(ctx, win));
+
+    // Register on dong.views[name]
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue dong_obj = JS_GetPropertyStr(ctx, global, "dong");
+    JSValue views = JS_GetPropertyStr(ctx, dong_obj, "views");
+    JS_SetPropertyStr(ctx, views, view_name_.c_str(), JS_DupValue(ctx, win));
+    JS_FreeValue(ctx, views);
+    JS_FreeValue(ctx, dong_obj);
+    JS_FreeValue(ctx, global);
+
+    JS_FreeValue(ctx, win);
+    JS_FreeValue(ctx, doc);
+
+    DONG_LOG_INFO("[JSBindings] Registered named view '%s' on dong.views", view_name_.c_str());
 }
 
 } // namespace dong::script

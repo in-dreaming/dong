@@ -46,6 +46,18 @@ public:
     // 获取 ScriptEngine
     ScriptEngine* getEngine() const { return engine_; }
 
+    // Set the view name for multi-view JS access (dong.getView(name))
+    void setViewName(const std::string& name) { view_name_ = name; }
+    const std::string& getViewName() const { return view_name_; }
+
+    // Register this view's window/document on the dong.views JS registry.
+    // Call after initialize() and loadHTML() for secondary views in shared-JS mode.
+    void registerAsNamedView();
+
+    // Set the thread-local active JSBindings (for shared-JS mode).
+    // Must be called before any view operation (tick, input, etc.).
+    static void setActiveBindings(JSBindings* bindings);
+
     // Public access to managers for callbacks
     ScriptEngine* engine_;
     dom::Manager* dom_manager_;
@@ -138,6 +150,9 @@ private:
     bool has_last_mouse_pos_ = false;
     int32_t last_mouse_x_ = 0;
     int32_t last_mouse_y_ = 0;
+
+    // View name for multi-view registry (dong.getView(name))
+    std::string view_name_;
 
     // Static helper for storing node pointers
     static void setNodeOpaque(JSContext* ctx, JSValue val, dom::DOMNodePtr node);

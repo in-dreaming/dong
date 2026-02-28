@@ -14,6 +14,8 @@ add_library(dong_appcore SHARED
     src/app.c
     src/scene3d.c
     src/overlay.c
+    src/dock.c
+    src/dock_split.c
 )
 
 target_include_directories(dong_appcore PUBLIC

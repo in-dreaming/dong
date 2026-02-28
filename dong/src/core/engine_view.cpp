@@ -235,6 +235,7 @@ struct EngineView::Impl {
     std::string html;
     std::string resource_root;
     std::string cached_cursor;
+    std::string view_name;
 
 
     std::unique_ptr<dong::dom::Manager> dom_manager;
@@ -244,7 +245,8 @@ struct EngineView::Impl {
 
     std::unique_ptr<dong::dom::EventDispatcher> event_dispatcher;
     std::unique_ptr<dong::dom::FocusManager> focus_manager;
-    std::unique_ptr<dong::script::ScriptEngine> script_engine;
+    std::unique_ptr<dong::script::ScriptEngine> owned_script_engine;  // null when sharing
+    dong::script::ScriptEngine* script_engine = nullptr;              // always valid
     std::unique_ptr<dong::script::JSBindings> js_bindings;
 
     const dong_plugin_vtable_t* plugin = nullptr;
@@ -334,21 +336,55 @@ struct EngineView::Impl {
           painter(std::make_unique<dong::render::Painter>(render_surface.get())),
           event_dispatcher(std::make_unique<dong::dom::EventDispatcher>()),
           focus_manager(std::make_unique<dong::dom::FocusManager>()),
-          script_engine(std::make_unique<dong::script::ScriptEngine>()),
+          owned_script_engine(std::make_unique<dong::script::ScriptEngine>()),
+          script_engine(owned_script_engine.get()),
           js_bindings(std::make_unique<dong::script::JSBindings>(
-              script_engine.get(),
+              script_engine,
               dom_manager.get(),
               layout_engine.get(),
               event_dispatcher.get(),
               focus_manager.get())) {
         focus_manager->setEventDispatcher(event_dispatcher.get());
-        dong::dom::DOMNode::setFocusManager(focus_manager.get());
-        dong::dom::DOMNode::setEventDispatcher(event_dispatcher.get());
+        activateViewContext();
+        ctx.initialize();
+    }
+
+    // Shared-JS constructor: uses an external ScriptEngine (not owned by this Impl).
+    Impl(uint32_t w, uint32_t h, dong::script::ScriptEngine* shared_se)
+
+        : width(w), height(h),
+          dom_manager(std::make_unique<dong::dom::Manager>()),
+          layout_engine(std::make_unique<dong::layout::Engine>()),
+          render_surface(std::make_unique<dong::render::CPUBufferSurface>(w, h)),
+          painter(std::make_unique<dong::render::Painter>(render_surface.get())),
+          event_dispatcher(std::make_unique<dong::dom::EventDispatcher>()),
+          focus_manager(std::make_unique<dong::dom::FocusManager>()),
+          owned_script_engine(nullptr),
+          script_engine(shared_se),
+          js_bindings(std::make_unique<dong::script::JSBindings>(
+              script_engine,
+              dom_manager.get(),
+              layout_engine.get(),
+              event_dispatcher.get(),
+              focus_manager.get())) {
+        focus_manager->setEventDispatcher(event_dispatcher.get());
+        activateViewContext();
         ctx.initialize();
     }
 
     ~Impl() {
         ctx.shutdown();
+    }
+
+    // Set the global DOMNode statics to this view's managers.
+    // Must be called before any operation that triggers DOM events/focus.
+    // Safe because everything is single-threaded.
+    void activateViewContext() {
+        dong::dom::DOMNode::setFocusManager(focus_manager.get());
+        dong::dom::DOMNode::setEventDispatcher(event_dispatcher.get());
+        if (js_bindings) {
+            dong::script::JSBindings::setActiveBindings(js_bindings.get());
+        }
     }
 
     void ensureJSBindingsInitialized() {
@@ -988,6 +1024,7 @@ struct EngineView::Impl {
     }
 
     bool loadHTML(const char* html_content) {
+        activateViewContext();
 
         if (!html_content || !dom_manager) {
             return false;
@@ -1026,7 +1063,7 @@ struct EngineView::Impl {
 
         // Execute <script> tags (inline or src)
         DONG_LOG_INFO("[EngineView] Script execution starting, script_engine=%p, dom_manager=%p",
-                      (void*)script_engine.get(), (void*)dom_manager.get());
+                      (void*)script_engine, (void*)dom_manager.get());
         if (script_engine && dom_manager) {
             const char* disable_scripts_env = std::getenv("DONG_DISABLE_SCRIPTS");
             const bool scripts_disabled = (disable_scripts_env && disable_scripts_env[0] != '\0' && std::strcmp(disable_scripts_env, "0") != 0);
@@ -1098,6 +1135,11 @@ struct EngineView::Impl {
             }
         } else {
             DONG_LOG_WARN("[EngineView] Cannot execute scripts: script_engine or dom_manager is null");
+        }
+
+        // In shared-JS mode, register this view's window/document on dong.views
+        if (!view_name.empty() && js_bindings) {
+            js_bindings->registerAsNamedView();
         }
 
         return true;
@@ -1272,6 +1314,7 @@ struct EngineView::Impl {
     }
 
     bool tick() {
+        activateViewContext();
         static int frame_count = 0;
 
         DONG_LOG_DEBUG("[tick] Frame %d starting", frame_count++);
@@ -1494,6 +1537,7 @@ struct EngineView::Impl {
     }
 
     void sendMouseMove(int32_t x, int32_t y) {
+        activateViewContext();
         last_mouse_x = x;
         last_mouse_y = y;
         updateHoverState(x, y);
@@ -1648,6 +1692,7 @@ struct EngineView::Impl {
 
 
     void sendMouseButton(int32_t button, bool pressed) {
+        activateViewContext();
         updateHoverState(last_mouse_x, last_mouse_y);
 
         if (pressed) {
@@ -1772,6 +1817,7 @@ struct EngineView::Impl {
 
 
     void sendMouseWheel(float delta_x, float delta_y) {
+        activateViewContext();
         constexpr float kScrollSpeed = 20.0f;
         float scroll_dx = delta_x * kScrollSpeed;
         float scroll_dy = delta_y * kScrollSpeed;
@@ -1849,6 +1895,7 @@ struct EngineView::Impl {
     }
 
     void sendKey(uint32_t key_code, bool pressed) {
+        activateViewContext();
         constexpr uint32_t SDLK_TAB = 9;
         constexpr uint32_t SDLK_RETURN = 13;
         constexpr uint32_t SDLK_BACKSPACE = 8;
@@ -2056,6 +2103,7 @@ struct EngineView::Impl {
     }
 
     void sendText(const char* text) {
+        activateViewContext();
         if (!text || !text[0]) return;
 
         dong::dom::DOMNodePtr focused;
@@ -2098,6 +2146,7 @@ struct EngineView::Impl {
     }
 
     void sendTextEditing(const char* text, int32_t cursor, int32_t selection_length) {
+        activateViewContext();
         dong::dom::DOMNodePtr focused;
         if (focus_manager) {
             focused = focus_manager->getFocusedElement();
@@ -2191,6 +2240,7 @@ private:
 public:
 
     bool evalScript(const char* code) {
+        activateViewContext();
         if (!code || !script_engine) {
             return false;
         }
@@ -2201,6 +2251,10 @@ public:
 
 EngineView::EngineView(uint32_t width, uint32_t height)
     : impl_(std::make_unique<Impl>(width, height)) {}
+
+EngineView::EngineView(uint32_t width, uint32_t height,
+                       dong::script::ScriptEngine* shared_script_engine)
+    : impl_(std::make_unique<Impl>(width, height, shared_script_engine)) {}
 
 EngineView::~EngineView() = default;
 
@@ -2304,6 +2358,19 @@ const void* EngineView::getCommandList() const {
 
 void EngineView::invalidateCommands() {
     if (impl_) impl_->markNeedsRepaint();
+}
+
+void EngineView::setViewName(const char* name) {
+    if (impl_ && name) {
+        impl_->view_name = name;
+        if (impl_->js_bindings) {
+            impl_->js_bindings->setViewName(name);
+        }
+    }
+}
+
+dong::script::ScriptEngine* EngineView::getScriptEngine() const {
+    return impl_ ? impl_->script_engine : nullptr;
 }
 
 } // namespace dong
