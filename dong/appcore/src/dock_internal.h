@@ -17,17 +17,17 @@ extern "C" {
 // Title bar / tab bar constants
 // =============================================================================
 
-#define DOCK_TITLE_BAR_HEIGHT  80
+#define DOCK_TITLE_BAR_HEIGHT  36
 #define DOCK_TAB_MIN_WIDTH     80
 #define DOCK_TAB_MAX_WIDTH     240
-#define DOCK_TAB_PAD           6
+#define DOCK_TAB_PAD           4
 #define DOCK_DRAG_THRESHOLD    8
 #define DOCK_DROP_EDGE_FRAC    0.25f
 #define DOCK_FOCUS_BORDER_W    2
 
 // Window control button constants
-#define DOCK_BTN_SIZE          32
-#define DOCK_BTN_PAD           12
+#define DOCK_BTN_SIZE          24
+#define DOCK_BTN_PAD           6
 #define DOCK_RESIZE_BORDER     6
 
 // Window-edge detection band for window-level drops
@@ -82,6 +82,7 @@ typedef struct {
     dock_drag_state_t state;
     int source_pane_index;      // Pane being dragged
     int source_window_index;    // Window it came from
+    int source_tab_index;       // Tab index within its leaf at drag start
     int32_t start_x, start_y;  // Mouse position at drag start (window-local)
     int32_t start_global_x, start_global_y; // Global mouse at drag start
     int32_t current_x, current_y; // Current mouse position (window-local)
@@ -90,6 +91,8 @@ typedef struct {
     // Computed target for rendering drop indicators
     int32_t target_x, target_y;
     uint32_t target_w, target_h;
+    // Tab reorder within same leaf
+    int reorder_insert_pos;     // -1 = not reordering, else insertion index
 } dock_drag_t;
 
 // =============================================================================

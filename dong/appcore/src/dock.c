@@ -516,7 +516,9 @@ DONG_APPCORE_API dong_dock_t* dong_dock_create(const dong_dock_config_t* config)
     // Init drag state
     dock->drag.state = DOCK_DRAG_NONE;
     dock->drag.source_pane_index = -1;
+    dock->drag.source_tab_index = -1;
     dock->drag.hover_window_index = -1;
+    dock->drag.reorder_insert_pos = -1;
 
     // Init divider drag state
     dock->divider.state = DOCK_DIV_IDLE;
@@ -1155,14 +1157,23 @@ static void dock_render_title_texture(dong_dock_t* dock, dong_dock_pane_t* pane)
 
     size_t len = strlen(pane->title);
     if (len > 32) len = 32; // clamp to reasonable length
-    uint32_t tw = (uint32_t)(len * 16);  // 2x scale: 8px * 2 = 16px per char
-    uint32_t th = 32;                     // 2x scale: 16px * 2 = 32px
+    uint32_t tw = (uint32_t)(len * 8);   // 1x scale: 8px per char
+    uint32_t th = 16;                     // 1x scale: 16px height
     if (tw == 0) return;
 
-    // Render to RGBA buffer at 2x scale
+    // Render to RGBA buffer at 1x scale
     uint32_t buf_size = tw * th * 4;
-    uint8_t* buf = (uint8_t*)calloc(1, buf_size);
+    uint8_t* buf = (uint8_t*)malloc(buf_size);
     if (!buf) return;
+
+    // Fill with transparent (will be blitted over already-drawn tab bg)
+    // Use matching background so blit (which has no alpha blend) looks clean
+    for (uint32_t i = 0; i < tw * th; i++) {
+        buf[i * 4 + 0] = 0x3c; // R  (matches tex_tab_active #3c3c3c)
+        buf[i * 4 + 1] = 0x3c; // G
+        buf[i * 4 + 2] = 0x3c; // B
+        buf[i * 4 + 3] = 0xff; // A
+    }
 
     for (size_t ci = 0; ci < len; ci++) {
         unsigned char ch = (unsigned char)pane->title[ci];
@@ -1173,18 +1184,13 @@ static void dock_render_title_texture(dong_dock_t* dock, dong_dock_pane_t* pane)
             uint8_t bits = glyph[row];
             for (int col = 0; col < 8; col++) {
                 if (bits & (0x80 >> col)) {
-                    // Write 2x2 block for each source pixel
-                    for (int dy = 0; dy < 2; dy++) {
-                        for (int dx = 0; dx < 2; dx++) {
-                            uint32_t px = (uint32_t)(ci * 16 + col * 2 + dx);
-                            uint32_t py = (uint32_t)(row * 2 + dy);
-                            uint32_t off = (py * tw + px) * 4;
-                            buf[off + 0] = 0xCC; // R (light gray)
-                            buf[off + 1] = 0xCC; // G
-                            buf[off + 2] = 0xCC; // B
-                            buf[off + 3] = 0xFF; // A
-                        }
-                    }
+                    uint32_t px = (uint32_t)(ci * 8 + col);
+                    uint32_t py = (uint32_t)row;
+                    uint32_t off = (py * tw + px) * 4;
+                    buf[off + 0] = 0xCC; // R (light gray)
+                    buf[off + 1] = 0xCC; // G
+                    buf[off + 2] = 0xCC; // B
+                    buf[off + 3] = 0xFF; // A
                 }
             }
         }
@@ -1425,6 +1431,36 @@ static void dock_update_drag(dong_dock_t* dock) {
             d->current_x = lx;
             d->current_y = ly;
             d->drop_zone = dock_compute_drop_zone(hover, lx, ly);
+
+            // Check for tab reorder within same leaf
+            dock_node_t* src_leaf = NULL;
+            if (d->source_pane_index >= 0 &&
+                d->source_window_index == wn->index) {
+                src_leaf = dock_node_find_leaf(wn->root, d->source_pane_index);
+            }
+            if (src_leaf == hover && hover->pane_count > 1 &&
+                d->drop_zone == DOCK_DROP_TAB)
+            {
+                // Compute insertion position from mouse X
+                uint32_t tab_w = dock_tab_width(hover);
+                int32_t rel_x = lx - hover->x - DOCK_TAB_PAD;
+                int insert_pos;
+                if (rel_x < 0) {
+                    insert_pos = 0;
+                } else {
+                    insert_pos = (rel_x + (int32_t)(tab_w + DOCK_TAB_PAD) / 2)
+                                 / (int32_t)(tab_w + DOCK_TAB_PAD);
+                    if (insert_pos > hover->pane_count)
+                        insert_pos = hover->pane_count;
+                }
+                d->reorder_insert_pos = insert_pos;
+                // Suppress normal drop indicator for reorder
+                d->target_w = 0;
+                d->target_h = 0;
+                return;
+            }
+
+            d->reorder_insert_pos = -1;
             dock_compute_drop_rect(hover, d->drop_zone,
                 &d->target_x, &d->target_y, &d->target_w, &d->target_h);
             return;
@@ -1436,6 +1472,7 @@ static void dock_update_drag(dong_dock_t* dock) {
     d->drop_zone = DOCK_DROP_NONE;
     d->target_w = 0;
     d->target_h = 0;
+    d->reorder_insert_pos = -1;
 }
 
 // Convert drop zone to dock edge
@@ -1466,6 +1503,7 @@ static void dock_finish_drag(dong_dock_t* dock) {
         // Never exceeded threshold, treat as simple click (already handled)
         d->state = DOCK_DRAG_NONE;
         d->source_pane_index = -1;
+        d->reorder_insert_pos = -1;
         return;
     }
 
@@ -1473,6 +1511,7 @@ static void dock_finish_drag(dong_dock_t* dock) {
     if (src_pi < 0 || src_pi >= dock->pane_count || !dock->panes[src_pi].alive) {
         d->state = DOCK_DRAG_NONE;
         d->source_pane_index = -1;
+        d->reorder_insert_pos = -1;
         return;
     }
 
@@ -1529,7 +1568,32 @@ static void dock_finish_drag(dong_dock_t* dock) {
             dock->windows[src_pane->window_index].root, src_pi);
 
         if (src_leaf == hover_node) {
-            // Dropping on same leaf → no-op (TAB or edge split on self)
+            // Same leaf: reorder tabs if insertion position differs
+            if (d->reorder_insert_pos >= 0 && hover_node->pane_count > 1) {
+                // Find current index of dragged pane in this leaf
+                int cur = -1;
+                for (int i = 0; i < hover_node->pane_count; i++) {
+                    if (hover_node->pane_indices[i] == src_pi) { cur = i; break; }
+                }
+                int insert = d->reorder_insert_pos;
+                // Adjust: if inserting after the current position, the removal
+                // shifts indices down, so target becomes insert-1
+                if (cur >= 0 && insert != cur && insert != cur + 1) {
+                    // Remove from current position
+                    int pi_val = hover_node->pane_indices[cur];
+                    if (insert > cur) insert--; // adjust for removal shift
+                    // Shift elements
+                    if (cur < insert) {
+                        for (int i = cur; i < insert; i++)
+                            hover_node->pane_indices[i] = hover_node->pane_indices[i + 1];
+                    } else {
+                        for (int i = cur; i > insert; i--)
+                            hover_node->pane_indices[i] = hover_node->pane_indices[i - 1];
+                    }
+                    hover_node->pane_indices[insert] = pi_val;
+                    hover_node->active_tab = insert;
+                }
+            }
         } else if (target_pi >= 0 && target_pi < dock->pane_count &&
                    dock->panes[target_pi].alive) {
             dong_dock_pane_t* target_pane = &dock->panes[target_pi];
@@ -1541,9 +1605,11 @@ static void dock_finish_drag(dong_dock_t* dock) {
     // Reset drag state
     d->state = DOCK_DRAG_NONE;
     d->source_pane_index = -1;
+    d->source_tab_index = -1;
     d->drop_zone = DOCK_DROP_NONE;
     d->target_w = 0;
     d->target_h = 0;
+    d->reorder_insert_pos = -1;
 }
 
 // =============================================================================
@@ -1789,6 +1855,7 @@ DONG_APPCORE_API int dong_dock_poll_events(dong_dock_t* dock) {
                             dock->drag.state = DOCK_DRAG_PENDING;
                             dock->drag.source_pane_index = pi;
                             dock->drag.source_window_index = win->index;
+                            dock->drag.source_tab_index = tab_idx;
                             dock->drag.start_x = mx;
                             dock->drag.start_y = my;
                             dock->drag.current_x = mx;
@@ -1814,6 +1881,7 @@ DONG_APPCORE_API int dong_dock_poll_events(dong_dock_t* dock) {
                             dock->drag.state = DOCK_DRAG_PENDING;
                             dock->drag.source_pane_index = pi;
                             dock->drag.source_window_index = win->index;
+                            dock->drag.source_tab_index = 0;
                             dock->drag.start_x = mx;
                             dock->drag.start_y = my;
                             dock->drag.current_x = mx;
@@ -2078,6 +2146,34 @@ static void dock_blit_drop_indicator(dong_dock_t* dock,
                     dock->drag.target_w, dock->drag.target_h);
 }
 
+// Blit tab reorder insertion indicator (vertical line between tabs)
+static void dock_blit_reorder_indicator(dong_dock_t* dock,
+    SDL_GPUCommandBuffer* cmd, SDL_GPUTexture* swapchain,
+    dong_dock_window_t* win)
+{
+    if (dock->drag.state != DOCK_DRAG_ACTIVE) return;
+    if (dock->drag.reorder_insert_pos < 0) return;
+    if (dock->drag.hover_window_index != win->index) return;
+
+    int src_pi = dock->drag.source_pane_index;
+    if (src_pi < 0 || src_pi >= dock->pane_count) return;
+
+    dock_node_t* leaf = dock_node_find_leaf(win->root, src_pi);
+    if (!leaf || leaf->type != DOCK_NODE_LEAF || leaf->pane_count <= 1) return;
+
+    uint32_t tab_w = dock_tab_width(leaf);
+    int pos = dock->drag.reorder_insert_pos;
+
+    // X position of the insertion line
+    int32_t ix = leaf->x + DOCK_TAB_PAD + (int32_t)(pos * (tab_w + DOCK_TAB_PAD))
+                 - (int32_t)(DOCK_TAB_PAD / 2);
+    int32_t iy = leaf->y + 2;
+    uint32_t ih = DOCK_TITLE_BAR_HEIGHT - 4;
+
+    dock_blit_solid(cmd, dock->tex_focus_border, swapchain,
+                    ix, iy, 3, ih);
+}
+
 // Blit focus border around the focused pane's leaf node
 static void dock_blit_focus_border(dong_dock_t* dock,
     SDL_GPUCommandBuffer* cmd, SDL_GPUTexture* swapchain,
@@ -2180,6 +2276,9 @@ DONG_APPCORE_API void dong_dock_render(dong_dock_t* dock) {
 
         // Drop indicator (during drag)
         dock_blit_drop_indicator(dock, cmd, swapchain, wn);
+
+        // Tab reorder indicator (during same-leaf drag)
+        dock_blit_reorder_indicator(dock, cmd, swapchain, wn);
 
         SDL_SubmitGPUCommandBuffer(cmd);
     }
