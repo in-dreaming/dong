@@ -11,13 +11,89 @@
 
 #include "../display_list.hpp" // Color, DrawGlyphRunData
 #include "../../dom/css/computed_style.hpp"
+#include "../../dom/dom/dom_node.hpp"
 #include "../../core/string_utils.h"
 
 namespace dong::render::painter_detail {
 
 using dong::collapseWhitespace;
 
+// ============================================================================
+// OKLab/OKLCH Color Space Conversion (CSS Color Module Level 4)
+// ============================================================================
+
+// Convert OKLCH to OKLab
+// L in [0,1], C in [0,0.4], H in [0,360]
+inline void oklchToOklab(float L, float C, float H_deg, float& a_out, float& b_out) {
+    // Convert H to radians and compute chroma components
+    float H_rad = H_deg * (3.14159265358979323846f / 180.0f);
+    a_out = C * std::cos(H_rad);
+    b_out = C * std::sin(H_rad);
+}
+
+// Convert OKLab to XYZ D65
+// L in [0,1], a in [-0.4,0.4], b in [-0.4,0.4]
+inline void oklabToXyz(float L, float a, float b, float& X, float& Y, float& Z) {
+    // Step 1: Inverse M (from OKLab to LMS)
+    float l_ = +0.8189330101f * L + 0.3618667424f * a - 0.1288597137f * b;
+    float m_ = +0.0329845436f * L + 0.9293118715f * a + 0.0361456387f * b;
+    float s_ = +0.0482003018f * L + 0.2643662691f * a + 0.6338517070f * b;
+
+    // Step 2: Nonlinear LMS transformation (cubic)
+    float l = l_ * l_ * l_;
+    float m = m_ * m_ * m_;
+    float s = s_ * s_ * s_;
+
+    // Step 3: Inverse M^-1 (from LMS to XYZ D65)
+    X = +1.2268798733741557f * l - 0.5578149965554813f * m + 0.2813910501772158f * s;
+    Y = -0.04058017842328059f * l + 1.1122868293970594f * m - 0.07161169866196901f * s;
+    Z = -0.0763812845057069f * l - 0.4214819784180127f * m + 1.5861632204197934f * s;
+}
+
+// Convert XYZ D65 to linear sRGB
+inline void xyzToLinearSrgb(float X, float Y, float Z, float& R, float& G, float& B) {
+    // D65 to linear RGB matrix
+    float r_lin = +3.2404542f * X - 1.5371385f * Y - 0.4985314f * Z;
+    float g_lin = -0.9692660f * X + 1.8760108f * Y + 0.0415560f * Z;
+    float b_lin = +0.0556434f * X - 0.2040259f * Y + 1.0572252f * Z;
+
+    R = r_lin;
+    G = g_lin;
+    B = b_lin;
+}
+
+// Convert linear sRGB to sRGB (gamma correction)
+inline float linearToSrgb(float c) {
+    if (c <= 0.0031308f) {
+        return 12.92f * c;
+    } else {
+        return 1.055f * std::pow(c, 1.0f / 2.4f) - 0.055f;
+    }
+}
+
+// Convert OKLab to sRGB (0-255 range)
+inline void oklabToSrgb(float L, float a, float b, uint8_t& r8, uint8_t& g8, uint8_t& b8) {
+    float X, Y, Z;
+    oklabToXyz(L, a, b, X, Y, Z);
+
+    float R_lin, G_lin, B_lin;
+    xyzToLinearSrgb(X, Y, Z, R_lin, G_lin, B_lin);
+
+    auto clampToByte = [](float v) -> uint8_t {
+        if (v < 0.0f) return 0;
+        if (v > 255.0f) return 255;
+        return static_cast<uint8_t>(std::round(v));
+    };
+
+    r8 = clampToByte(linearToSrgb(R_lin) * 255.0f);
+    g8 = clampToByte(linearToSrgb(G_lin) * 255.0f);
+    b8 = clampToByte(linearToSrgb(B_lin) * 255.0f);
+}
+
+// ============================================================================
 // CSS 颜色解析器：支持 #rgb/#rgba/#rrggbb/#rrggbbaa 与 rgb()/rgba() 子集
+// 以及 oklab()/oklch() 颜色函数
+// ============================================================================
 inline void parseCssColor(const std::string& css, uint8_t& r, uint8_t& g, uint8_t& b, uint8_t& a) {
     auto clampToByte = [](int v) -> uint8_t {
         if (v < 0) return 0;
@@ -168,6 +244,189 @@ inline void parseCssColor(const std::string& css, uint8_t& r, uint8_t& g, uint8_
         }
     }
 
+    // oklab(L a b) or oklab(L a b / alpha)
+    // L: 0-1, a/b: approximately -0.4 to 0.4
+    if (startsWith(s, "oklab(")) {
+        size_t lparen = s.find('(');
+        size_t rparen = s.rfind(')');
+        if (lparen != std::string::npos && rparen != std::string::npos && rparen > lparen + 1) {
+            std::string args = s.substr(lparen + 1, rparen - lparen - 1);
+
+            // Check for slash (alpha separator)
+            size_t slash_pos = args.find('/');
+            bool has_alpha = (slash_pos != std::string::npos);
+
+            std::string color_args;
+            std::string alpha_arg;
+
+            if (has_alpha) {
+                color_args = args.substr(0, slash_pos);
+                alpha_arg = args.substr(slash_pos + 1);
+            } else {
+                color_args = args;
+                alpha_arg = "1";
+            }
+
+            // Parse L, a, b values (comma or space separated)
+            std::vector<float> components;
+            std::string current;
+            for (char c : color_args) {
+                if (c == ',' || c == ' ') {
+                    if (!current.empty()) {
+                        try {
+                            components.push_back(std::stof(current));
+                        } catch (...) {
+                            components.push_back(0.0f);
+                        }
+                        current.clear();
+                    }
+                } else {
+                    current.push_back(c);
+                }
+            }
+            if (!current.empty()) {
+                try {
+                    components.push_back(std::stof(current));
+                } catch (...) {
+                    components.push_back(0.0f);
+                }
+            }
+
+            if (components.size() >= 3) {
+                float L_val = components[0];
+                float a_val = components[1];
+                float b_val = components[2];
+
+                // Parse alpha
+                float alpha_val = 1.0f;
+                std::string alpha_trimmed = alpha_arg;
+                while (!alpha_trimmed.empty() && std::isspace(static_cast<unsigned char>(alpha_trimmed.back()))) {
+                    alpha_trimmed.pop_back();
+                }
+                alpha_trimmed.erase(0, alpha_trimmed.find_first_not_of(" \t\n\r"));
+                if (!alpha_trimmed.empty() && alpha_trimmed.back() == '%') {
+                    alpha_trimmed.pop_back();
+                    try {
+                        alpha_val = std::stof(alpha_trimmed) / 100.0f;
+                    } catch (...) {
+                        alpha_val = 1.0f;
+                    }
+                } else if (!alpha_trimmed.empty()) {
+                    try {
+                        alpha_val = std::stof(alpha_trimmed);
+                    } catch (...) {
+                        alpha_val = 1.0f;
+                    }
+                }
+
+                // Clamp values
+                L_val = std::max(0.0f, std::min(1.0f, L_val));
+                alpha_val = std::max(0.0f, std::min(1.0f, alpha_val));
+
+                // Convert OKLab to sRGB
+                oklabToSrgb(L_val, a_val, b_val, r, g, b);
+                a = clampToByte(static_cast<int>(alpha_val * 255.0f));
+                return;
+            }
+        }
+    }
+
+    // oklch(L C H) or oklch(L C H / alpha)
+    // L: 0-1, C: 0-0.4, H: 0-360 degrees
+    if (startsWith(s, "oklch(")) {
+        size_t lparen = s.find('(');
+        size_t rparen = s.rfind(')');
+        if (lparen != std::string::npos && rparen != std::string::npos && rparen > lparen + 1) {
+            std::string args = s.substr(lparen + 1, rparen - lparen - 1);
+
+            // Check for slash (alpha separator)
+            size_t slash_pos = args.find('/');
+            bool has_alpha = (slash_pos != std::string::npos);
+
+            std::string color_args;
+            std::string alpha_arg;
+
+            if (has_alpha) {
+                color_args = args.substr(0, slash_pos);
+                alpha_arg = args.substr(slash_pos + 1);
+            } else {
+                color_args = args;
+                alpha_arg = "1";
+            }
+
+            // Parse L, C, H values (comma or space separated)
+            std::vector<float> components;
+            std::string current;
+            for (char c : color_args) {
+                if (c == ',' || c == ' ') {
+                    if (!current.empty()) {
+                        try {
+                            components.push_back(std::stof(current));
+                        } catch (...) {
+                            components.push_back(0.0f);
+                        }
+                        current.clear();
+                    }
+                } else {
+                    current.push_back(c);
+                }
+            }
+            if (!current.empty()) {
+                try {
+                    components.push_back(std::stof(current));
+                } catch (...) {
+                    components.push_back(0.0f);
+                }
+            }
+
+            if (components.size() >= 3) {
+                float L_val = components[0];
+                float C_val = components[1];
+                float H_val = components[2];
+
+                // Parse alpha
+                float alpha_val = 1.0f;
+                std::string alpha_trimmed = alpha_arg;
+                while (!alpha_trimmed.empty() && std::isspace(static_cast<unsigned char>(alpha_trimmed.back()))) {
+                    alpha_trimmed.pop_back();
+                }
+                alpha_trimmed.erase(0, alpha_trimmed.find_first_not_of(" \t\n\r"));
+                if (!alpha_trimmed.empty() && alpha_trimmed.back() == '%') {
+                    alpha_trimmed.pop_back();
+                    try {
+                        alpha_val = std::stof(alpha_trimmed) / 100.0f;
+                    } catch (...) {
+                        alpha_val = 1.0f;
+                    }
+                } else if (!alpha_trimmed.empty()) {
+                    try {
+                        alpha_val = std::stof(alpha_trimmed);
+                    } catch (...) {
+                        alpha_val = 1.0f;
+                    }
+                }
+
+                // Clamp values
+                L_val = std::max(0.0f, std::min(1.0f, L_val));
+                C_val = std::max(0.0f, C_val);  // Chroma is never negative
+                alpha_val = std::max(0.0f, std::min(1.0f, alpha_val));
+
+                // Normalize hue to [0, 360)
+                H_val = std::fmod(H_val, 360.0f);
+                if (H_val < 0.0f) H_val += 360.0f;
+
+                // Convert OKLCH to OKLab
+                float a_val, b_val;
+                oklchToOklab(L_val, C_val, H_val, a_val, b_val);
+
+                // Convert OKLab to sRGB
+                oklabToSrgb(L_val, a_val, b_val, r, g, b);
+                a = clampToByte(static_cast<int>(alpha_val * 255.0f));
+                return;
+            }
+        }
+    }
+
     if (s == "white")      { r = g = b = 255; a = 255; return; }
     if (s == "black")      { r = g = b = 0;   a = 255; return; }
     if (s == "red")        { r = 255; g = 0;   b = 0;   a = 255; return; }
@@ -175,6 +434,157 @@ inline void parseCssColor(const std::string& css, uint8_t& r, uint8_t& g, uint8_
     if (s == "blue")       { r = 0;   g = 0;   b = 255; a = 255; return; }
     if (s == "gray" || s == "grey") { r = g = b = 128; a = 255; return; }
     if (s == "lightgray" || s == "lightgrey") { r = g = b = 211; a = 255; return; }
+
+    // color-mix(in <colorspace>, <color> <percentage>?, <color> <percentage>?)
+    // Supports srgb color space mixing
+    if (startsWith(s, "color-mix(")) {
+        size_t lparen = s.find('(');
+        size_t rparen = s.rfind(')');
+        if (lparen != std::string::npos && rparen != std::string::npos && rparen > lparen + 1) {
+            std::string args = s.substr(lparen + 1, rparen - lparen - 1);
+
+            // Split arguments: "in <colorspace>, <color1> <p1>?, <color2> <p2>?"
+            std::vector<std::string> parts;
+            std::string current;
+            int paren_depth = 0;
+            for (char c : args) {
+                if (c == '(') {
+                    ++paren_depth;
+                    current.push_back(c);
+                } else if (c == ')') {
+                    --paren_depth;
+                    current.push_back(c);
+                } else if (c == ',' && paren_depth == 0) {
+                    if (!current.empty()) {
+                        parts.push_back(current);
+                        current.clear();
+                    }
+                } else {
+                    current.push_back(c);
+                }
+            }
+            if (!current.empty()) parts.push_back(current);
+
+            // Need at least: color space, first color, second color
+            if (parts.size() >= 3) {
+                // Parse "in <colorspace>"
+                std::string colorspace = parts[0];
+                colorspace.erase(0, colorspace.find_first_not_of(" \t\n\r"));
+                colorspace.erase(colorspace.find_last_not_of(" \t\n\r") + 1);
+                // Remove "in" prefix
+                if (startsWith(colorspace, "in ")) {
+                    colorspace = colorspace.substr(3);
+                    colorspace.erase(0, colorspace.find_first_not_of(" \t\n\r"));
+                }
+
+                // Only support srgb for now
+                if (colorspace == "srgb") {
+                    // Parse first color and optional percentage
+                    std::string color1_part = parts[1];
+                    color1_part.erase(0, color1_part.find_first_not_of(" \t\n\r"));
+                    color1_part.erase(color1_part.find_last_not_of(" \t\n\r") + 1);
+
+                    // Extract percentage if present
+                    std::string color1_str;
+                    float color1_pct = 50.0f;  // default 50%
+
+                    size_t last_space = color1_part.find_last_of(' ');
+                    if (last_space != std::string::npos) {
+                        std::string potential_pct = color1_part.substr(last_space + 1);
+                        potential_pct.erase(0, potential_pct.find_first_not_of(" \t\n\r"));
+                        if (potential_pct.back() == '%') {
+                            potential_pct.pop_back();
+                            try {
+                                color1_pct = std::stof(potential_pct);
+                                color1_str = color1_part.substr(0, last_space);
+                            } catch (...) {
+                                color1_str = color1_part;
+                            }
+                        } else {
+                            color1_str = color1_part;
+                        }
+                    } else {
+                        color1_str = color1_part;
+                    }
+
+                    // Parse second color and optional percentage
+                    std::string color2_part = parts[2];
+                    color2_part.erase(0, color2_part.find_first_not_of(" \t\n\r"));
+                    color2_part.erase(color2_part.find_last_not_of(" \t\n\r") + 1);
+
+                    std::string color2_str;
+                    float color2_pct = 100.0f - color1_pct;  // default to complement
+
+                    last_space = color2_part.find_last_of(' ');
+                    if (last_space != std::string::npos) {
+                        std::string potential_pct = color2_part.substr(last_space + 1);
+                        potential_pct.erase(0, potential_pct.find_first_not_of(" \t\n\r"));
+                        if (potential_pct.back() == '%') {
+                            potential_pct.pop_back();
+                            try {
+                                color2_pct = std::stof(potential_pct);
+                                color2_str = color2_part.substr(0, last_space);
+                            } catch (...) {
+                                color2_str = color2_part;
+                            }
+                        } else {
+                            color2_str = color2_part;
+                        }
+                    } else {
+                        color2_str = color2_part;
+                    }
+
+                    // Clamp percentages
+                    if (color1_pct < 0.0f) color1_pct = 0.0f;
+                    if (color1_pct > 100.0f) color1_pct = 100.0f;
+                    if (color2_pct < 0.0f) color2_pct = 0.0f;
+                    if (color2_pct > 100.0f) color2_pct = 100.0f;
+
+                    // Normalize so they sum to 100%
+                    float total = color1_pct + color2_pct;
+                    if (total > 0) {
+                        color1_pct /= total;
+                    } else {
+                        color1_pct = 0.5f;
+                        color2_pct = 0.5f;
+                    }
+
+                    // Parse both colors to RGBA
+                    uint8_t r1 = 0, g1 = 0, b1 = 0, a1 = 255;
+                    uint8_t r2 = 0, g2 = 0, b2 = 0, a2 = 255;
+
+                    parseCssColor(color1_str, r1, g1, b1, a1);
+                    parseCssColor(color2_str, r2, g2, b2, a2);
+
+                    // Mix in srgb space (linear interpolation of pre-multiplied alpha)
+                    // First convert to float
+                    float r1f = r1 / 255.0f, g1f = g1 / 255.0f, b1f = b1 / 255.0f, a1f = a1 / 255.0f;
+                    float r2f = r2 / 255.0f, g2f = g2 / 255.0f, b2f = b2 / 255.0f, a2f = a2 / 255.0f;
+
+                    // Pre-multiply RGB by alpha
+                    float r1p = r1f * a1f, g1p = g1f * a1f, b1p = b1f * a1f;
+                    float r2p = r2f * a2f, g2p = g2f * a2f, b2p = b2f * a2f;
+
+                    // Linear interpolation
+                    float rp = r1p * (1.0f - color1_pct) + r2p * color1_pct;
+                    float gp = g1p * (1.0f - color1_pct) + g2p * color1_pct;
+                    float bp = b1p * (1.0f - color1_pct) + b2p * color1_pct;
+                    float ap = a1f * (1.0f - color1_pct) + a2f * color1_pct;
+
+                    // Un-pre-multiply (if alpha > 0)
+                    if (ap > 0.0001f) {
+                        r = clampToByte(static_cast<int>((rp / ap) * 255.0f));
+                        g = clampToByte(static_cast<int>((gp / ap) * 255.0f));
+                        b = clampToByte(static_cast<int>((bp / ap) * 255.0f));
+                    } else {
+                        r = g = b = 0;
+                    }
+                    a = clampToByte(static_cast<int>(ap * 255.0f));
+                    return;
+                }
+            }
+        }
+    }
 }
 
 inline Color makeColorFromCss(const std::string& css) {
@@ -188,7 +598,30 @@ inline Color makeColorFromCss(const std::string& css) {
     return c;
 }
 
-inline void fillTextShadow(DrawGlyphRunData& glyph_run, const dong::dom::ComputedStyle& style) {
+inline void fillTextShadow(DrawGlyphRunData& glyph_run, const dong::dom::ComputedStyle& style, const dong::dom::DOMNodePtr& node = nullptr) {
+    // Check for ::selection pseudo-element styles first
+    if (node) {
+        auto selection_pseudo = node->getPseudoSelection();
+        if (selection_pseudo && (
+            selection_pseudo->getComputedStyle().text_shadow_offset_x != 0.0f ||
+            selection_pseudo->getComputedStyle().text_shadow_offset_y != 0.0f ||
+            selection_pseudo->getComputedStyle().text_shadow_blur != 0.0f ||
+            !selection_pseudo->getComputedStyle().text_shadow_color.empty())) {
+
+            glyph_run.has_text_shadow = true;
+            glyph_run.text_shadow_offset_x = selection_pseudo->getComputedStyle().text_shadow_offset_x;
+            glyph_run.text_shadow_offset_y = selection_pseudo->getComputedStyle().text_shadow_offset_y;
+            glyph_run.text_shadow_blur = selection_pseudo->getComputedStyle().text_shadow_blur;
+            if (!selection_pseudo->getComputedStyle().text_shadow_color.empty()) {
+                glyph_run.text_shadow_color = makeColorFromCss(selection_pseudo->getComputedStyle().text_shadow_color);
+            } else {
+                glyph_run.text_shadow_color = Color{0.0f, 0.0f, 0.0f, 1.0f};
+            }
+            return;
+        }
+    }
+
+    // Fall back to regular style if no ::selection pseudo-element or no text-shadow in it
     if (style.text_shadow_offset_x != 0.0f || style.text_shadow_offset_y != 0.0f ||
         style.text_shadow_blur != 0.0f || !style.text_shadow_color.empty()) {
         glyph_run.has_text_shadow = true;

@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Turkish i/İ Language Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 16px;
+            margin: 20px;
+            line-height: 1.5;
+        }
+        .test-case {
+            margin: 30px 0;
+            padding: 15px;
+            border: 2px solid #ccc;
+            border-radius: 8px;
+            background-color: #f9f9f9;
+        }
+        .lang-info {
+            font-weight: bold;
+            font-size: 18px;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .text-sample {
+            font-size: 24px;
+            font-weight: bold;
+            margin: 15px 0;
+            padding: 10px;
+            background-color: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .comparison {
+            display: flex;
+            justify-content: space-around;
+            margin: 20px 0;
+        }
+        .language-box {
+            text-align: center;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background-color: white;
+        }
+        .language-label {
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #666;
+        }
+        .character-grid {
+            font-size: 32px;
+            font-weight: bold;
+            line-height: 1.2;
+        }
+        .character-pair {
+            margin: 5px 0;
+        }
+        .character-label {
+            font-size: 12px;
+            color: #999;
+            margin-top: 2px;
+        }
+        .explanation {
+            font-size: 14px;
+            color: #666;
+            margin-top: 15px;
+            line-height: 1.4;
+        }
+        .highlight {
+            background-color: #fffacd;
+            padding: 2px 4px;
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Turkish i/İ Language Test</h1>
+    <p>This test demonstrates how the lang attribute affects Turkish character shaping, particularly the distinction between dotted i (i) and dotless i (ı), and dotted I (İ) and dotless I (I).</p>
+
+    <!-- Test Case 1: Turkish language context -->
+    <div class="test-case" lang="tr">
+        <div class="lang-info">Turkish: lang="tr"</div>
+
+        <div class="comparison">
+            <div class="language-box">
+                <div class="language-label">Turkish (tr)</div>
+                <div class="character-grid">
+                    <div class="character-pair">
+                        <div>i İ</div>
+                        <div class="character-label">dotted i, dotted I</div>
+                    </div>
+                    <div class="character-pair">
+                        <div>ı I</div>
+                        <div class="character-label">dotless i, dotless I</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="language-box">
+                <div class="language-label">English (en)</div>
+                <div class="character-grid">
+                    <div class="character-pair">
+                        <div>i I</div>
+                        <div class="character-label">dotted i, dotless I</div>
+                    </div>
+                    <div class="character-pair">
+                        <div>ı İ</div>
+                        <div class="character-label">dotless i, dotted I</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="text-sample">
+            Turkish text example: "İstanbul'da ılık bir iklim var."
+        </div>
+
+        <div class="explanation">
+            In Turkish language context (<span class="highlight">lang="tr"</span>), the text shaping engine should:
+            <ul>
+                <li>Use dotted i (i) and dotted I (İ) as separate characters</li>
+                <li>Use dotless i (ı) and dotless I (I) as separate characters</li>
+                <li>Maintain proper case conversion: i → İ, I → ı</li>
+                <li>Apply Turkish-specific typographic rules</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Test Case 2: English language context -->
+    <div class="test-case" lang="en">
+        <div class="lang-info">English: lang="en"</div>
+
+        <div class="text-sample">
+            English text example: "Istanbul has a mild climate."
+        </div>
+
+        <div class="explanation">
+            In English language context (<span class="highlight">lang="en"</span>), the text shaping engine should:
+            <ul>
+                <li>Use standard Latin character set</li>
+                <li>Treat i/I as case pairs without Turkish-specific rules</li>
+                <li>Apply English typographic conventions</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Test Case 3: Mixed language content -->
+    <div class="test-case">
+        <div class="lang-info">Mixed language content</div>
+
+        <div class="text-sample">
+            <span lang="en">English: "I like Istanbul."</span><br>
+            <span lang="tr">Turkish: "İstanbul'u seviyorum."</span><br>
+            <span lang="en">Back to English: "The city is beautiful."</span>
+        </div>
+
+        <div class="explanation">
+            When mixing languages, each span with its own <span class="highlight">lang</span> attribute should receive appropriate text shaping:
+            <ul>
+                <li>English spans use standard Latin shaping</li>
+                <li>Turkish spans use Turkish-specific shaping</li>
+                <li>Language inheritance works correctly for nested elements</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Test Case 4: Case sensitivity demonstration -->
+    <div class="test-case" lang="tr">
+        <div class="lang-info">Turkish case sensitivity test</div>
+
+        <div class="text-sample">
+            Lowercase: i → İ (dotted I)<br>
+            Uppercase: I → ı (dotless i)
+        </div>
+
+        <div class="explanation">
+            This demonstrates the Turkish-specific case conversion rules that should be applied when <span class="highlight">lang="tr"</span> is set:
+            <ul>
+                <li>Lowercase i converts to uppercase İ (dotted)</li>
+                <li>Uppercase I converts to lowercase ı (dotless)</li>
+                <li>This differs from English where i/I are simple case pairs</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // Verify language attributes and demonstrate case conversion
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log("Turkish i/İ Language Test Loaded");
+
+            // Check all elements with lang attributes
+            const elements = document.querySelectorAll('[lang]');
+            elements.forEach(element => {
+                const lang = element.getAttribute('lang');
+                const text = element.textContent.trim().substring(0, 50);
+                console.log(`Element with lang="${lang}": ${text}...`);
+            });
+
+            // Demonstrate Turkish case conversion
+            function demonstrateCaseConversion() {
+                const turkishText = "istanbul";
+                const englishText = "istanbul";
+
+                console.log("Case conversion demonstration:");
+                console.log(`Turkish (lang="tr") uppercase: "${turkishText}" → "${turkishText.toLocaleUpperCase('tr-TR')}"`);
+                console.log(`English (lang="en") uppercase: "${englishText}" → "${englishText.toLocaleUpperCase('en-US')}"`);
+            }
+
+            demonstrateCaseConversion();
+        });
+    </script>
+</body>
+</html>

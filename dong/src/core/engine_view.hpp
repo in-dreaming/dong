@@ -48,6 +48,9 @@ public:
     void sendText(const char* text);
     void sendTextEditing(const char* text, int32_t cursor, int32_t selection_length);
 
+    // URL fragment management for :target pseudo-class
+    void setCurrentFragment(const std::string& fragment);
+
     // Script
     bool evalScript(const char* code);
 

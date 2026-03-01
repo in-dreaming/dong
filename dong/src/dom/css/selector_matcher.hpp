@@ -71,6 +71,7 @@ private:
     bool matchesNthChild(const std::string& arg, DOMNodePtr node);
     bool matchesNthLastChild(const std::string& arg, DOMNodePtr node);
     bool matchesNthOfType(const std::string& arg, DOMNodePtr node);
+    bool matchesNthLastOfType(const std::string& arg, DOMNodePtr node);
     bool matchesNot(const std::string& arg, DOMNodePtr node);
     bool matchesIs(const std::string& arg, DOMNodePtr node);
     bool matchesWhere(const std::string& arg, DOMNodePtr node);

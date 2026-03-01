@@ -9,6 +9,7 @@
 namespace dong::dom {
 
 inline constexpr float kSelectOptionHeight = 30.0f;
+inline constexpr float kSelectOptgroupHeight = 35.0f;  // optgroup 标题略高
 inline constexpr float kSelectDropdownMaxHeight = 240.0f; // 8 options * 30px
 
 // Simple point structure for coordinates
@@ -25,10 +26,18 @@ struct Rect {
     float height = 0.0f;
 };
 
+// 选项类型标识符
+enum class SelectItemType : uint8_t {
+    Option,      // 普通 <option> 元素
+    Optgroup,    // <optgroup> 分组标题
+};
+
 struct OptionData {
     std::string value;
     std::string display_text;
     bool disabled = false;
+    SelectItemType type = SelectItemType::Option;
+    std::string optgroup_label;  // 所属 optgroup 的 label，空表示不属于任何分组
 };
 
 /**
@@ -78,6 +87,12 @@ public:
 
     // 访问选项
     const std::vector<OptionData>& getOptions() const { return options_; }
+
+    // 计算指定类型项目的高度
+    static float getItemHeight(SelectItemType type) {
+        if (type == SelectItemType::Optgroup) return kSelectOptgroupHeight;
+        return kSelectOptionHeight;
+    }
 
 private:
     bool is_open_ = false;

@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>visibility: collapse - Table tbody</title>
+<style>
+table {
+    border-collapse: collapse;
+    border: 2px solid black;
+}
+
+td {
+    border: 1px solid gray;
+    padding: 10px;
+    background: lightgreen;
+}
+
+.collapsed-tbody {
+    visibility: collapse;
+}
+
+.highlight {
+    background: lightcoral;
+}
+</style>
+</head>
+<body>
+<h1>visibility: collapse on table tbody</h1>
+<p>For table tbody, visibility: collapse should hide all rows in that tbody and their space.</p>
+
+<table>
+  <tbody>
+    <tr><td>Body 1, Row 1, Cell 1</td><td>Body 1, Row 1, Cell 2</td></tr>
+    <tr><td>Body 1, Row 2, Cell 1</td><td>Body 1, Row 2, Cell 2</td></tr>
+  </tbody>
+  <tbody class="collapsed-tbody">
+    <tr><td>Body 2 (collapsed), Row 1, Cell 1</td><td>Body 2 (collapsed), Row 1, Cell 2</td></tr>
+    <tr><td>Body 2 (collapsed), Row 2, Cell 1</td><td>Body 2 (collapsed), Row 2, Cell 2</td></tr>
+  </tbody>
+  <tbody>
+    <tr class="highlight"><td>Body 3, Row 1, Cell 1</td><td>Body 3, Row 1, Cell 2</td></tr>
+  </tbody>
+</table>
+</body>
+</html>

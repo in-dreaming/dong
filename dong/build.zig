@@ -904,7 +904,10 @@ fn buildHarfBuzz(
     // Some workspaces ship only prebuilt libs under zig-out/.
     // If sources are missing, fall back to the prebuilt archive and ensure it is
     // installed to zig-out/lib (CMake links from there).
-    if (!fileExists(hb_amalgamation)) {
+    std.debug.print("Checking file: {s}\n", .{hb_amalgamation});
+    const file_exists = fileExists(hb_amalgamation);
+    std.debug.print("File exists: {}\n", .{file_exists});
+    if (!file_exists) {
         const prebuilt = b.step("harfbuzz_prebuilt", "Use prebuilt harfbuzz from zig-out/");
         prebuilt.dependOn(&freetype_artifact.step);
 
@@ -1104,6 +1107,7 @@ fn buildDongCore(
             "src/dom/dom_manager.cpp",
             "src/dom/event_system.cpp",
             "src/dom/focus_manager.cpp",
+            "src/dom/drag_manager.cpp",
             "src/dom/input_element.cpp",
             "src/dom/select_element.cpp",
             "src/dom/css/css_value.cpp",

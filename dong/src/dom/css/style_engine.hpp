@@ -124,6 +124,9 @@ private:
     // Viewport for media queries
     float viewport_width_ = 800.0f;
     float viewport_height_ = 600.0f;
+
+    // Environment variables for env() function
+    CSSEnvironment env_variables_;
     
     // Apply matching rules to node
     void applyMatchingRules(DOMNodePtr node);
@@ -153,6 +156,19 @@ private:
     
     // Selector matching helpers (delegated to SelectorMatcher)
     bool matchesSelector(const std::string& selector, DOMNodePtr node);
+
+    // Layer cascade support
+    struct LayerContext {
+        std::vector<LayerRule> layers; // 所有层（按声明顺序）
+        std::unordered_map<std::string, int> layer_order_map; // 层名到优先级的映射
+    };
+
+    LayerContext layer_context_;
+
+    // Layer cascade methods
+    void processLayerRules(const std::vector<LayerRule>& layer_rules);
+    void sortRulesWithLayerPriority(std::vector<CSSRule>& rules);
+    int getLayerPriority(const std::string& layer_name) const;
     
     // Specificity calculation
     int calculateSpecificity(const std::string& selector);
@@ -172,10 +188,18 @@ private:
     std::string extractSelectorComponent(const std::string& selector, size_t& pos);
     
     // 优化策略3：从选择器中提取索引键
-    void extractIndexKeys(const std::string& selector, 
-                          std::string& out_tag, 
+    void extractIndexKeys(const std::string& selector,
+                          std::string& out_tag,
                           std::vector<std::string>& out_classes,
                           std::string& out_id);
+
+    // Light-dark() function resolution
+    void resolveLightDarkFunctions(DOMNodePtr node);
+    std::string resolveLightDarkColor(const std::string& light_dark_value, const std::string& color_scheme);
+
+    // env() function resolution
+    void resolveEnvFunctions(DOMNodePtr node);
+    CSSValue resolveEnvValue(const CSSValue& env_value, const CSSEnvironment& env) const;
 };
 
 } // namespace dong::dom

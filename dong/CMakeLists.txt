@@ -125,13 +125,16 @@ add_library(dong SHARED
     src/dom/dom_manager.cpp
     src/dom/event_system.cpp
     src/dom/focus_manager.cpp
+    src/dom/drag_manager.cpp
     src/dom/input_element.cpp
     src/dom/select_element.cpp
+    src/dom/details_element.cpp
     src/dom/css/css_value.cpp
     src/dom/css/css_parser.cpp
     src/dom/css/computed_style.cpp
     src/dom/css/selector_matcher.cpp
     src/dom/css/style_engine.cpp
+    src/dom/css/css_environment.cpp
     src/dom/dom/dom_node.cpp
     src/dom/dom/observer.cpp
     src/dom/html/html_parser.cpp
@@ -247,13 +250,16 @@ add_library(dong_render STATIC
     src/dom/dom_manager.cpp
     src/dom/event_system.cpp
     src/dom/focus_manager.cpp
+    src/dom/drag_manager.cpp
     src/dom/input_element.cpp
     src/dom/select_element.cpp
+    src/dom/details_element.cpp
     src/dom/css/css_value.cpp
     src/dom/css/css_parser.cpp
     src/dom/css/computed_style.cpp
     src/dom/css/selector_matcher.cpp
     src/dom/css/style_engine.cpp
+    src/dom/css/css_environment.cpp
     src/dom/dom/dom_node.cpp
     src/dom/dom/observer.cpp
     src/dom/html/html_parser.cpp

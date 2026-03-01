@@ -213,6 +213,8 @@ struct ComputedStyle {
     std::string flex_direction = "row";
     std::string flex_wrap = "nowrap";
     std::string justify_content = "flex-start";
+    std::string justify_items = "stretch";
+    std::string justify_self = "auto";
     std::string align_items = "stretch";
     std::string align_content = "stretch";
     std::string align_self = "auto";
@@ -309,6 +311,7 @@ struct ComputedStyle {
     // Stored as alternating open/close strings: [open1, close1, open2, close2, ...]
     std::vector<std::string> quotes = {"\u201C", "\u201D", "\u2018", "\u2019"};
     bool has_quotes = false;
+    bool quotes_auto = false;  // True when quotes: auto (resolves to language-specific quotes)
 
     // Form control theming
     std::string accent_color = "auto";  // auto | <color>
@@ -317,11 +320,13 @@ struct ComputedStyle {
 
     std::string appearance = "auto";  // auto, none
     std::string resize = "none";      // none | both | horizontal | vertical
+    std::string will_change = "auto"; // auto | <animatable-feature>#
 
 
     // Table properties
     std::string border_collapse = "separate";  // separate, collapse (inheritable)
-    float border_spacing = 2.0f;               // px (inheritable, default 2px)
+    float border_spacing_x = 2.0f;             // px (inheritable, default 2px horizontal)
+    float border_spacing_y = 2.0f;             // px (inheritable, default 2px vertical)
     std::string table_layout = "auto";         // auto, fixed
     std::string caption_side = "top";          // top, bottom
     

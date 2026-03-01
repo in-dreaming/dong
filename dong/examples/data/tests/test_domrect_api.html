@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Test DOMRect API</title>
+    <style>
+        body { padding: 20px; font-family: Arial, sans-serif; }
+        .test-case { margin: 20px 0; padding: 10px; border: 1px solid #ccc; }
+        .pass { background-color: #d4edda; border-color: #c3e6cb; }
+        .fail { background-color: #f8d7da; border-color: #f5c6cb; }
+        pre { background: #f5f5f5; padding: 10px; border-radius: 4px; }
+        .test-box {
+            width: 200px;
+            height: 100px;
+            margin: 10px 0;
+            background: #f0f0f0;
+            border: 2px solid #333;
+        }
+    </style>
+</head>
+<body>
+    <h1>DOMRect API Tests</h1>
+    <div id="test-results"></div>
+
+    <div id="container" style="position: relative; margin-top: 50px; padding: 20px; border: 1px dashed #999;">
+        <div id="testBox1" class="test-box" style="position: absolute; top: 50px; left: 100px; width: 150px; height: 80px;">
+            Box 1
+        </div>
+        <div id="testBox2" class="test-box" style="margin-top: 20px;">
+            Box 2
+        </div>
+    </div>
+
+    <script>
+        const results = document.getElementById('test-results');
+
+        function assert(condition, message) {
+            const div = document.createElement('div');
+            div.className = 'test-case ' + (condition ? 'pass' : 'fail');
+            div.innerHTML = `<strong>${condition ? 'PASS' : 'FAIL'}</strong>: ${message}<pre>${condition ? '✓' : '✗'}</pre>`;
+            results.appendChild(div);
+        }
+
+        // Test 1: DOMRect constructor exists
+        const rect = new DOMRect();
+        assert(typeof rect !== 'undefined', 'DOMRect can be created');
+        assert(typeof rect.x === 'number', 'DOMRect has x property');
+        assert(typeof rect.y === 'number', 'DOMRect has y property');
+        assert(typeof rect.width === 'number', 'DOMRect has width property');
+        assert(typeof rect.height === 'number', 'DOMRect has height property');
+
+        // Test 2: Default DOMRect values
+        assert(rect.x === 0, 'Default x is 0');
+        assert(rect.y === 0, 'Default y is 0');
+        assert(rect.width === 0, 'Default width is 0');
+        assert(rect.height === 0, 'Default height is 0');
+        assert(rect.top === 0, 'Default top is 0');
+        assert(rect.right === 0, 'Default right is 0');
+        assert(rect.bottom === 0, 'Default bottom is 0');
+        assert(rect.left === 0, 'Default left is 0');
+
+        // Test 3: DOMRect constructor with parameters
+        const rect2 = new DOMRect(10, 20, 100, 50);
+        assert(rect2.x === 10, 'DOMRect x is 10');
+        assert(rect2.y === 20, 'DOMRect y is 20');
+        assert(rect2.width === 100, 'DOMRect width is 100');
+        assert(rect2.height === 50, 'DOMRect height is 50');
+
+        // Test 4: DOMRect computed properties (top, right, bottom, left)
+        assert(rect2.top === 20, 'DOMRect top equals y');
+        assert(rect2.left === 10, 'DOMRect left equals x');
+        assert(rect2.right === 110, 'DOMRect right equals x + width');
+        assert(rect2.bottom === 70, 'DOMRect bottom equals y + height');
+
+        // Test 5: DOMRect with negative coordinates
+        const rect3 = new DOMRect(-50, -30, 200, 150);
+        assert(rect3.x === -50, 'DOMRect negative x');
+        assert(rect3.y === -30, 'DOMRect negative y');
+        assert(rect3.left === -50, 'DOMRect left equals x with negative');
+        assert(rect3.top === -30, 'DOMRect top equals y with negative');
+        assert(rect3.right === 150, 'DOMRect right computed correctly with negative x');
+        assert(rect3.bottom === 120, 'DOMRect bottom computed correctly with negative y');
+
+        // Test 6: getBoundingClientRect() method exists
+        const box1 = document.getElementById('testBox1');
+        assert(typeof box1.getBoundingClientRect === 'function', 'Element has getBoundingClientRect method');
+
+        // Test 7: getBoundingClientRect() returns DOMRect-like object
+        const boxRect = box1.getBoundingClientRect();
+        assert(typeof boxRect === 'object' && boxRect !== null, 'getBoundingClientRect returns object');
+        assert(typeof boxRect.x === 'number', 'getBoundingClientRect result has x');
+        assert(typeof boxRect.y === 'number', 'getBoundingClientRect result has y');
+        assert(typeof boxRect.width === 'number', 'getBoundingClientRect result has width');
+        assert(typeof boxRect.height === 'number', 'getBoundingClientRect result has height');
+        assert(typeof boxRect.top === 'number', 'getBoundingClientRect result has top');
+        assert(typeof boxRect.right === 'number', 'getBoundingClientRect result has right');
+        assert(typeof boxRect.bottom === 'number', 'getBoundingClientRect result has bottom');
+        assert(typeof boxRect.left === 'number', 'getBoundingClientRect result has left');
+
+        // Test 8: getBoundingClientRect() computed properties
+        const expectedRight = boxRect.x + boxRect.width;
+        const expectedBottom = boxRect.y + boxRect.height;
+        assert(boxRect.top === boxRect.y, 'getBoundingClientRect top equals y');
+        assert(boxRect.left === boxRect.x, 'getBoundingClientRect left equals x');
+        assert(Math.abs(boxRect.right - expectedRight) < 0.01, 'getBoundingClientRect right equals x + width');
+        assert(Math.abs(boxRect.bottom - expectedBottom) < 0.01, 'getBoundingClientRect bottom equals y + height');
+
+        // Test 9: getBoundingClientRect() on multiple elements
+        const box2 = document.getElementById('testBox2');
+        const box2Rect = box2.getBoundingClientRect();
+        assert(box2Rect !== boxRect, 'getBoundingClientRect returns different objects for different elements');
+        assert(box2Rect.height > 0, 'Second element has positive height');
+        assert(box2Rect.width > 0, 'Second element has positive width');
+
+        // Test 10: getBoundingClientRect() on body
+        const bodyRect = document.body.getBoundingClientRect();
+        assert(bodyRect !== null, 'getBoundingClientRect works on body');
+        assert(bodyRect.height > 0, 'Body has positive height');
+        assert(bodyRect.width > 0, 'Body has positive width');
+
+        // Test 11: getBoundingClientRect() on documentElement (html)
+        const docRect = document.documentElement.getBoundingClientRect();
+        assert(docRect !== null, 'getBoundingClientRect works on documentElement');
+
+        // Test 12: DOMRect size relationship
+        const rect4 = new DOMRect(5, 10, 200, 300);
+        assert(rect4.right - rect4.left === rect4.width, 'right - left equals width');
+        assert(rect4.bottom - rect4.top === rect4.height, 'bottom - top equals height');
+        assert(rect4.right === 205, 'computed right is correct');
+        assert(rect4.bottom === 310, 'computed bottom is correct');
+
+        results.innerHTML += '<p><strong>All tests completed!</strong></p>';
+    </script>
+</body>
+</html>

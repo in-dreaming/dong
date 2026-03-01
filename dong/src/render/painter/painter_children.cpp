@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "../list_marker.hpp"
+#include "../../dom/details_element.hpp"
 
 namespace dong::render {
 
@@ -167,7 +168,7 @@ void Painter::renderMarkerForListItem(const dom::DOMNodePtr& node,
 
     // Position: "outside" places marker left of the li content, "inside" prepends.
     const bool is_outside = (style.list_style_position != "inside");
-    constexpr float kMarkerGap = 8.0f; // gap between marker and content
+    const float kMarkerGap = 8.0f; // gap between marker and content
     float marker_x, marker_y;
 
     if (is_outside) {
@@ -214,6 +215,55 @@ void Painter::renderMarkerForListItem(const dom::DOMNodePtr& node,
     builder.addGlyphRun(glyph_run);
 }
 
+void Painter::renderDisclosureTriangle(const dom::DOMNodePtr& node,
+                                      const Rect& node_rect,
+                                      bool is_open,
+                                      DisplayListBuilder& builder) {
+    if (!node) return;
+
+    const auto& style = node->getComputedStyle();
+
+    // 计算三角指示器的位置和大小
+    const float triangle_size = 8.0f; // 三角指示器的大小
+    const float triangle_margin = 4.0f; // 与边框的距离
+
+    // 三角指示器位于details元素的左上角
+    float triangle_x = node_rect.x + triangle_margin;
+    float triangle_y = node_rect.y + triangle_margin;
+
+    // 获取颜色
+    Color triangle_color = painter_detail::makeColorFromCss(style.color);
+
+    // 根据open状态确定三角的方向
+    if (is_open) {
+        // 打开状态：向下三角（使用多个小矩形近似三角形）
+        for (int i = 0; i < triangle_size; i++) {
+            float width = triangle_size - i * 2;
+            if (width <= 0) break;
+            float y = triangle_y + i;
+            Rect rect;
+            rect.x = triangle_x + i;
+            rect.y = y;
+            rect.width = width;
+            rect.height = 1.0f;
+            builder.addRect(rect, triangle_color);
+        }
+    } else {
+        // 关闭状态：向右三角（使用多个小矩形近似三角形）
+        for (int i = 0; i < triangle_size; i++) {
+            float height = triangle_size - i * 2;
+            if (height <= 0) break;
+            float x = triangle_x + i;
+            Rect rect;
+            rect.x = x;
+            rect.y = triangle_y + i;
+            rect.width = 1.0f;
+            rect.height = height;
+            builder.addRect(rect, triangle_color);
+        }
+    }
+}
+
 void Painter::paintChildrenAndOverlays(const dom::DOMNodePtr& node,
                                       const layout::LayoutNode* layout_node,
                                       const Rect& node_rect,
@@ -255,6 +305,41 @@ void Painter::paintChildrenAndOverlays(const dom::DOMNodePtr& node,
             }
         }
         return;
+    }
+
+    // <details> 元素：根据 open 属性控制子内容显示/隐藏
+    if (node->getTagName() == "details") {
+        // 获取 details 状态
+        auto* details_state = dom::getDetailsState(node);
+        if (!details_state) {
+            // 如果没有状态对象，则创建并同步
+            details_state = dom::getDetailsState(node);
+        }
+
+        // 渲染三角指示器
+        renderDisclosureTriangle(node, node_rect, details_state->isOpen(), builder);
+
+        // 如果 details 是关闭状态，则不渲染除 summary 外的子内容
+        if (!details_state->isOpen()) {
+            // 只渲染 summary 元素
+            for (const auto& child : node->getChildren()) {
+                if (child && child->getType() == dom::DOMNode::NodeType::ELEMENT &&
+                    child->getTagName() == "summary") {
+                    const layout::LayoutNode* child_layout = layout_engine_ ? layout_engine_->getLayout(child) : nullptr;
+                    buildDisplayListNode(child, child_layout, builder);
+                }
+            }
+
+            // 渲染 ::after 伪元素
+            if (node->hasPseudoElements()) {
+                auto pseudo_after = node->getPseudoAfter();
+                if (pseudo_after) {
+                    renderPseudoElement(pseudo_after, node_rect, builder);
+                }
+            }
+            return;
+        }
+        // 如果 details 是打开状态，则继续正常渲染所有子内容
     }
 
     // 5. 递归子节点（按 z-index 排序）
@@ -479,9 +564,9 @@ void Painter::paintChildrenAndOverlays(const dom::DOMNodePtr& node,
 
         // 只有当内容高度大于可视高度时才显示滚动条
         if (content_height > visible_height + 1.0f) {
-            constexpr float kScrollbarWidth = 8.0f;
-            constexpr float kScrollbarMinThumbHeight = 20.0f;
-            constexpr float kScrollbarPadding = 2.0f;
+            const float kScrollbarWidth = 8.0f;
+            const float kScrollbarMinThumbHeight = 20.0f;
+            const float kScrollbarPadding = 2.0f;
 
             // 滚动条轨道位置（在 client 区域右侧）
             Rect track_rect{};
@@ -504,7 +589,7 @@ void Painter::paintChildrenAndOverlays(const dom::DOMNodePtr& node,
             float scroll_position = node->getScrollY();
             float max_scroll = content_height - visible_height;
             float scroll_ratio = (max_scroll > 0.0f) ? (scroll_position / max_scroll) : 0.0f;
-            scroll_ratio = std::clamp(scroll_ratio, 0.0f, 1.0f);
+            scroll_ratio = std::max(0.0f, std::min(scroll_ratio, 1.0f));
 
             float thumb_y = track_rect.y + (track_rect.height - thumb_height) * scroll_ratio;
 

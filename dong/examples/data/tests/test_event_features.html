@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  body { font-size: 16px; padding: 20px; }
+  #target { padding: 20px; background: lightyellow; border: 2px solid orange; min-height: 60px; }
+  #input-target { padding: 10px; margin: 10px 0; background: lightblue; border: 1px solid blue; }
+  #result { margin-top: 20px; padding: 10px; background: #eee; white-space: pre; font-family: monospace; }
+</style>
+</head>
+<body>
+  <h1>事件功能测试</h1>
+
+  <div id="target" tabindex="0">点击这里测试鼠标事件属性</div>
+  <input id="input-target" type="text" placeholder="在此输入文本测试键盘和输入事件">
+  <div id="result"></div>
+
+  <script>
+    var r = '';
+    var target = document.getElementById('target');
+    var inputTarget = document.getElementById('input-target');
+    var result = document.getElementById('result');
+
+    // 测试 MouseEvent 属性
+    target.addEventListener('mousemove', function(e) {
+      r += 'mousemove 事件:\n';
+      r += '  pageX=' + e.pageX + ', pageY=' + e.pageY + '\n';
+      r += '  movementX=' + e.movementX + ', movementY=' + e.movementY + '\n';
+      r += '  clientX=' + e.clientX + ', clientY=' + e.clientY + '\n';
+      r += '  isTrusted=' + e.isTrusted + '\n';
+      result.textContent = r;
+    });
+
+    target.addEventListener('mouseenter', function(e) {
+      r += 'mouseenter 事件:\n';
+      r += '  relatedTarget=' + (e.relatedTarget ? e.relatedTarget.id : 'null') + '\n';
+      r += '  isTrusted=' + e.isTrusted + '\n';
+      result.textContent = r;
+    });
+
+    target.addEventListener('mouseleave', function(e) {
+      r += 'mouseleave 事件:\n';
+      r += '  relatedTarget=' + (e.relatedTarget ? e.relatedTarget.id : 'null') + '\n';
+      r += '  isTrusted=' + e.isTrusted + '\n';
+      result.textContent = r;
+    });
+
+    // 测试 KeyboardEvent 属性
+    inputTarget.addEventListener('keydown', function(e) {
+      r += 'keydown 事件:\n';
+      r += '  key=' + e.key + ', code=' + e.code + '\n';
+      r += '  repeat=' + e.repeat + '\n';
+      r += '  isTrusted=' + e.isTrusted + '\n';
+      result.textContent = r;
+    });
+
+    inputTarget.addEventListener('keyup', function(e) {
+      r += 'keyup 事件:\n';
+      r += '  key=' + e.key + ', code=' + e.code + '\n';
+      r += '  repeat=' + e.repeat + '\n';
+      r += '  isTrusted=' + e.isTrusted + '\n';
+      result.textContent = r;
+    });
+
+    // 测试 beforeinput 事件
+    inputTarget.addEventListener('beforeinput', function(e) {
+      r += 'beforeinput 事件:\n';
+      r += '  inputType=' + e.inputType + '\n';
+      r += '  data=' + e.data + '\n';
+      r += '  isTrusted=' + e.isTrusted + '\n';
+      r += '  cancelable=' + e.cancelable + '\n';
+      result.textContent = r;
+
+      // 测试 preventDefault()
+      if (e.inputType === 'insertText' && e.data === 'test') {
+        e.preventDefault();
+        r += '  (阻止了 "test" 文本输入)\n';
+        result.textContent = r;
+      }
+    });
+
+    // 测试 input 事件
+    inputTarget.addEventListener('input', function(e) {
+      r += 'input 事件:\n';
+      r += '  inputType=' + e.inputType + '\n';
+      r += '  data=' + e.data + '\n';
+      r += '  isTrusted=' + e.isTrusted + '\n';
+      result.textContent = r;
+    });
+
+    // 测试剪贴板事件
+    inputTarget.addEventListener('copy', function(e) {
+      r += 'copy 事件:\n';
+      r += '  isTrusted=' + e.isTrusted + '\n';
+      if (e.clipboardData) {
+        r += '  clipboardData 存在: true\n';
+      }
+      result.textContent = r;
+    });
+
+    inputTarget.addEventListener('cut', function(e) {
+      r += 'cut 事件:\n';
+      r += '  isTrusted=' + e.isTrusted + '\n';
+      if (e.clipboardData) {
+        r += '  clipboardData 存在: true\n';
+      }
+      result.textContent = r;
+    });
+
+    inputTarget.addEventListener('paste', function(e) {
+      r += 'paste 事件:\n';
+      r += '  isTrusted=' + e.isTrusted + '\n';
+      if (e.clipboardData) {
+        r += '  clipboardData 存在: true\n';
+      }
+      result.textContent = r;
+    });
+
+    r += '事件功能测试已加载\n';
+    r += '测试说明:\n';
+    r += '- 在黄色区域移动鼠标测试 pageX/pageY, movementX/movementY\n';
+    r += '- 在输入框中输入文本测试键盘事件和输入事件\n';
+    r += '- 长按按键测试 repeat 属性\n';
+    r += '- 尝试输入 "test" 测试 beforeinput 的 preventDefault()\n';
+    r += '- 使用 Ctrl+C/X/V 测试剪贴板事件\n';
+    result.textContent = r;
+    console.log('事件功能测试已加载');
+  </script>
+</body>
+</html>

@@ -1,6 +1,7 @@
 #include "select_element.hpp"
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <memory>
 #include <unordered_map>
 
@@ -30,7 +31,8 @@ size_t clampIndex(size_t i, size_t n) {
 
 std::optional<size_t> findFirstEnabled(const std::vector<OptionData>& options) {
     for (size_t i = 0; i < options.size(); ++i) {
-        if (!options[i].disabled) return i;
+        // 跳过 optgroup 标题和 disabled 的 option
+        if (options[i].type == SelectItemType::Option && !options[i].disabled) return i;
     }
     return std::nullopt;
 }
@@ -65,10 +67,22 @@ void SelectElementState::open() {
     const size_t sel = clampIndex(selected_index_, options_.size());
     hover_index_ = static_cast<int>(sel);
 
-    // Ensure selected option is visible in the dropdown viewport.
-    const float viewport_h = std::min(static_cast<float>(options_.size()) * kSelectOptionHeight, kSelectDropdownMaxHeight);
-    const float top = static_cast<float>(sel) * kSelectOptionHeight;
-    const float bottom = top + kSelectOptionHeight;
+    // 计算选中选项的 Y 位置（考虑不同项目类型的高度）
+    float selected_y = 0.0f;
+    float content_h = 0.0f;
+    for (size_t i = 0; i < options_.size(); ++i) {
+        const float item_h = (options_[i].type == SelectItemType::Optgroup) ? kSelectOptgroupHeight : kSelectOptionHeight;
+        content_h += item_h;
+        if (i < sel) {
+            selected_y += item_h;
+        }
+    }
+
+    const float(selected_h) = (options_[sel].type == SelectItemType::Optgroup) ? kSelectOptgroupHeight : kSelectOptionHeight;
+    const float top = selected_y;
+    const float bottom = selected_y + selected_h;
+
+    const float viewport_h = std::min(content_h, kSelectDropdownMaxHeight);
 
     if (top < scroll_offset_) {
         scroll_offset_ = top;
@@ -111,10 +125,21 @@ void SelectElementState::scrollBy(float dy_px, float viewport_height_px) {
         return;
     }
 
-    const float content_h = static_cast<float>(options_.size()) * kSelectOptionHeight;
+    // 计算实际内容高度（考虑 optgroup 的高度）
+    float content_h = 0.0f;
+    for (const auto& opt : options_) {
+        if (opt.type == SelectItemType::Optgroup) {
+            content_h += kSelectOptgroupHeight;
+        } else {
+            content_h += kSelectOptionHeight;
+        }
+    }
+
     const float max_scroll = std::max(0.0f, content_h - std::max(0.0f, viewport_height_px));
 
-    scroll_offset_ = std::clamp(scroll_offset_ + dy_px, 0.0f, max_scroll);
+    // 使用 std::min/std::max 自定义 clamp 实现（兼容 C++11）
+    const float new_offset = scroll_offset_ + dy_px;
+    scroll_offset_ = (new_offset < 0.0f) ? 0.0f : ((new_offset > max_scroll) ? max_scroll : new_offset);
 }
 
 void SelectElementState::syncFromDOM(const DOMNodePtr& node) {
@@ -127,38 +152,62 @@ void SelectElementState::syncFromDOM(const DOMNodePtr& node) {
     std::optional<size_t> selected_by_value;
     std::optional<size_t> selected_by_attr;
 
-    // 遍历子节点，提取 <option> 元素
-    const auto& children = node->getChildren();
-    for (const auto& child : children) {
-        if (!child) continue;
-        if (child->getType() != DOMNode::NodeType::ELEMENT) continue;
-        if (child->getTagName() != "option") continue;
+    // 递归遍历子节点，提取 <option> 和 <optgroup> 元素
+    // 使用 std::function 避免直接 lambda 递归导致的编译器问题（C++11 兼容性）
+    std::function<void(const std::vector<DOMNodePtr>&, const std::string&)> traverseChildren =
+        [&](const std::vector<DOMNodePtr>& children, const std::string& current_optgroup_label) {
+            for (const auto& child : children) {
+                if (!child) continue;
+                if (child->getType() != DOMNode::NodeType::ELEMENT) continue;
+                const std::string& tag_name = child->getTagName();
 
-        OptionData opt;
+                if (tag_name == "optgroup") {
+                    // 处理 optgroup - 先添加分组标题
+                    const std::string optgroup_label = child->hasAttribute("label") ?
+                        child->getAttribute("label") : "";
+                    if (!optgroup_label.empty()) {
+                        OptionData header;
+                        header.type = SelectItemType::Optgroup;
+                        header.display_text = optgroup_label;
+                        header.disabled = child->hasAttribute("disabled");
+                        header.optgroup_label = optgroup_label;
+                        options_.push_back(std::move(header));
+                    }
+                    // 递归处理 optgroup 的子元素
+                    traverseChildren(child->getChildren(), optgroup_label);
+                } else if (tag_name == "option") {
+                    // 处理 option
+                    OptionData opt;
+                    opt.type = SelectItemType::Option;
+                    opt.optgroup_label = current_optgroup_label;
 
-        // 提取 value 属性，如果没有则使用显示文本
-        if (child->hasAttribute("value")) {
-            opt.value = child->getAttribute("value");
-        } else {
-            opt.value = child->getTextContent();
-        }
+                    // 提取 value 属性，如果没有则使用显示文本
+                    if (child->hasAttribute("value")) {
+                        opt.value = child->getAttribute("value");
+                    } else {
+                        opt.value = child->getTextContent();
+                    }
 
-        // 提取显示文本
-        opt.display_text = child->getTextContent();
+                    // 提取显示文本
+                    opt.display_text = child->getTextContent();
 
-        // 提取 disabled 属性
-        opt.disabled = child->hasAttribute("disabled");
+                    // 提取 disabled 属性
+                    opt.disabled = child->hasAttribute("disabled");
 
-        const size_t idx = options_.size();
-        if (!selected_by_attr && child->hasAttribute("selected")) {
-            selected_by_attr = idx;
-        }
-        if (!selected_by_value && !value_attr.empty() && opt.value == value_attr) {
-            selected_by_value = idx;
-        }
+                    const size_t idx = options_.size();
+                    if (!selected_by_attr && child->hasAttribute("selected")) {
+                        selected_by_attr = idx;
+                    }
+                    if (!selected_by_value && !value_attr.empty() && opt.value == value_attr) {
+                        selected_by_value = idx;
+                    }
 
-        options_.push_back(std::move(opt));
-    }
+                    options_.push_back(std::move(opt));
+                }
+            }
+        };
+
+    traverseChildren(node->getChildren(), "");
 
     if (options_.empty()) {
         selected_index_ = 0;
@@ -176,8 +225,8 @@ void SelectElementState::syncFromDOM(const DOMNodePtr& node) {
     }
     resolved = clampIndex(resolved, options_.size());
 
-    // 如果选中的 option 是 disabled，回退到第一个可用项
-    if (options_[resolved].disabled) {
+    // 如果选中的 option 是 disabled 或是 optgroup 标题，回退到第一个可用项
+    if (options_[resolved].disabled || options_[resolved].type != SelectItemType::Option) {
         if (auto first = findFirstEnabled(options_)) {
             resolved = *first;
         }
@@ -233,7 +282,8 @@ bool SelectElementState::handleClick(const Point& pos, const Rect& dropdown_boun
     const size_t idx = static_cast<size_t>(std::floor(y_in_content / kSelectOptionHeight));
     if (idx >= options_.size()) return true;
 
-    if (!options_[idx].disabled) {
+    // optgroup 标题不可选中，disabled 的 option 也不可选中
+    if (options_[idx].type == SelectItemType::Option && !options_[idx].disabled) {
         selectOption(idx);
         close();
         return true;
@@ -275,7 +325,8 @@ bool SelectElementState::handleKeyDown(uint32_t key_code) {
         const int next_i = static_cast<int>(idx) + dir;
         if (next_i < 0 || next_i >= static_cast<int>(options_.size())) break;
         idx = static_cast<size_t>(next_i);
-        if (!options_[idx].disabled) {
+        // 跳过 optgroup 标题和 disabled 的 option
+        if (options_[idx].type == SelectItemType::Option && !options_[idx].disabled) {
             if (move_hover) {
                 hover_index_ = static_cast<int>(idx);
             } else {

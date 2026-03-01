@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  body { font-size: 16px; padding: 20px; }
+  #target { padding: 20px; background: lightyellow; border: 2px solid orange; min-height: 60px; }
+  #result { margin-top: 20px; padding: 10px; background: #eee; white-space: pre; font-family: monospace; }
+</style>
+</head>
+<body>
+  <div id="target">Move and click here</div>
+  <div id="result"></div>
+  <script>
+    var r = '';
+    var target = document.getElementById('target');
+
+    target.addEventListener('mousemove', function(e) {
+      r += 'mousemove:\n';
+      r += '  clientX=' + e.clientX + ' clientY=' + e.clientY + '\n';
+      r += '  pageX=' + e.pageX + ' pageY=' + e.pageY + '\n';
+      r += '  movementX=' + e.movementX + ' movementY=' + e.movementY + '\n';
+      r += '  isTrusted=' + e.isTrusted + '\n';
+      document.getElementById('result').textContent = r;
+    });
+
+    target.addEventListener('click', function(e) {
+      r += 'click:\n';
+      r += '  clientX=' + e.clientX + ' clientY=' + e.clientY + '\n';
+      r += '  pageX=' + e.pageX + ' pageY=' + e.pageY + '\n';
+      r += '  offsetX=' + e.offsetX + ' offsetY=' + e.offsetY + '\n';
+      r += '  button=' + e.button + '\n';
+      r += '  isTrusted=' + e.isTrusted + '\n';
+      document.getElementById('result').textContent = r;
+    });
+
+    target.addEventListener('mouseenter', function(e) {
+      r += 'mouseenter:\n';
+      r += '  type=' + e.type + '\n';
+      r += '  relatedTarget=' + (e.relatedTarget ? e.relatedTarget.tagName : 'null') + '\n';
+      r += '  isTrusted=' + e.isTrusted + '\n';
+      document.getElementById('result').textContent = r;
+    });
+
+    target.addEventListener('mouseleave', function(e) {
+      r += 'mouseleave:\n';
+      r += '  type=' + e.type + '\n';
+      r += '  relatedTarget=' + (e.relatedTarget ? e.relatedTarget.tagName : 'null') + '\n';
+      r += '  isTrusted=' + e.isTrusted + '\n';
+      document.getElementById('result').textContent = r;
+    });
+
+    r += 'MouseEvent extended properties test loaded\n';
+    r += 'Move mouse over the box to see movementX/movementY\n';
+    r += 'Click to see pageX/pageY coordinates\n';
+    r += 'Hover in/out to see relatedTarget\n';
+    r += 'All events include isTrusted flag\n';
+    document.getElementById('result').textContent = r;
+    console.log('MouseEvent extended test loaded');
+  </script>
+</body>
+</html>

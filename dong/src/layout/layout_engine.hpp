@@ -194,12 +194,12 @@ private:
     void layoutSingleTable(const dom::DOMNodePtr& table_node);
     void computeColumnWidths(const dom::DOMNodePtr& table_node,
                             const std::vector<dom::DOMNodePtr>& rows,
-                            size_t num_cols, bool is_fixed, float spacing,
+                            size_t num_cols, bool is_fixed, float spacing_x,
                             std::vector<float>& col_widths);
     void positionTableCells(const dom::DOMNodePtr& table_node,
                            const std::vector<dom::DOMNodePtr>& rows,
                            const std::vector<float>& col_widths,
-                           float spacing, bool is_collapse);
+                           float spacing_x, float spacing_y, bool is_collapse);
     void updateRowGroupLayouts(const dom::DOMNodePtr& table_node);
 
     // Third-pass sibling Y adjustment helpers

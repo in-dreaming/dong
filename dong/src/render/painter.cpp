@@ -10,6 +10,8 @@
 #include <cstdlib>
 #include <unordered_set>
 
+#include "painter/painter_style_utils.hpp"
+
 #include "../core/log.h"
 #include "../core/profiler.h"
 #include "../core/string_utils.h"
@@ -22,10 +24,122 @@ namespace {
 
 using dong::collapseWhitespace;
 using dong::toLower;
+using painter_detail::makeColorFromCss;
 
 // Helper to lowercase + collapse whitespace
 inline std::string toLowerCollapsed(const std::string& s) {
     return toLower(collapseWhitespace(s));
+}
+
+inline bool shouldPromoteLayerForWillChange(const std::string& will_change_raw) {
+    const std::string value = toLowerCollapsed(will_change_raw);
+    if (value.empty() || value == "auto" || value == "none") {
+        return false;
+    }
+    size_t start = 0;
+    while (start < value.size()) {
+        size_t comma = value.find(',', start);
+        std::string token = value.substr(start, comma == std::string::npos ? std::string::npos : comma - start);
+        token = collapseWhitespace(token);
+        if (!token.empty() && token != "auto" && token != "none") {
+            return true;
+        }
+        if (comma == std::string::npos) {
+            break;
+        }
+        start = comma + 1;
+    }
+    return false;
+}
+
+// Helper function to get language-specific quotes (same as in css_parser.cpp)
+// Returns quotes for given language code (e.g., "en", "fr", "de")
+// If language not found, returns default English quotes
+inline std::vector<std::string> getQuotesForLanguage(const std::string& lang) {
+    std::string lower_lang = collapseWhitespace(lang);
+    std::transform(lower_lang.begin(), lower_lang.end(), lower_lang.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+    // Language-specific quote pairs
+    static const std::unordered_map<std::string, std::vector<std::string>> kLanguageQuotes = {
+        // Default/English
+        {"", {"\u201C", "\u201D", "\u2018", "\u2019"}},
+        {"en", {"\u201C", "\u201D", "\u2018", "\u2019"}},
+
+        // French
+        {"fr", {"\u00AB", "\u00BB", "\u2039", "\u203A"}},
+
+        // German
+        {"de", {"\u201E", "\u201C", "\u201A", "\u2018"}},
+
+        // Spanish/Catalan
+        {"es", {"\u00AB", "\u00BB", "\u2039", "\u203A"}},
+        {"ca", {"\u00AB", "\u00BB", "\u2039", "\u203A"}},
+
+        // Italian
+        {"it", {"\u00AB", "\u00BB", "\u2039", "\u203A"}},
+
+        // Russian/Ukrainian
+        {"ru", {"\u00AB", "\u00BB", "\u201E", "\u201C"}},
+        {"uk", {"\u00AB", "\u00BB", "\u201E", "\u201C"}},
+
+        // Chinese (simplified and traditional both use corner brackets)
+        {"zh", {"\u300C", "\u300D", "\u300E", "\u300F"}},
+
+        // Japanese (same as Chinese)
+        {"ja", {"\u300C", "\u300D", "\u300E", "\u300F"}},
+
+        // Korean (also uses corner brackets)
+        {"ko", {"\u300C", "\u300D", "\u300E", "\u300F"}},
+
+        // Greek
+        {"el", {"\u00AB", "\u00BB", "\u2018", "\u2019"}},
+
+        // Hungarian
+        {"hu", {"\u201E", "\u201D", "\u00BB", "\u00AB"}},
+
+        // Polish
+        {"pl", {"\u201E", "\u201D", "\u00AB", "\u00BB"}},
+
+        // Czech
+        {"cs", {"\u201E", "\u201C", "\u201A", "\u2018"}},
+
+        // Slovak
+        {"sk", {"\u201E", "\u201C", "\u201A", "\u2018"}},
+
+        // Swedish
+        {"sv", {"\u201D", "\u201D", "\u2019", "\u2019"}},
+
+        // Finnish
+        {"fi", {"\u201D", "\u201D", "\u2019", "\u2019"}},
+
+        // Danish (same as Swedish/Finnish)
+        {"da", {"\u201D", "\u201D", "\u2019", "\u2019"}},
+
+        // Norwegian
+        {"no", {"\u00AB", "\u00BB", "\u2039", "\u203A"}},
+        {"nb", {"\u00AB", "\u00BB", "\u2039", "\u203A"}},  // Norwegian Bokmål
+        {"nn", {"\u00AB", "\u00BB", "\u2039", "\u203A"}},  // Norwegian Nynorsk
+    };
+
+    // Look for exact language match
+    auto it = kLanguageQuotes.find(lower_lang);
+    if (it != kLanguageQuotes.end()) {
+        return it->second;
+    }
+
+    // Check for primary language code (before any hyphen, e.g., "en-US" -> "en")
+    size_t hyphen_pos = lower_lang.find('-');
+    if (hyphen_pos != std::string::npos) {
+        std::string primary = lower_lang.substr(0, hyphen_pos);
+        it = kLanguageQuotes.find(primary);
+        if (it != kLanguageQuotes.end()) {
+            return it->second;
+        }
+    }
+
+    // Default to English quotes
+    return kLanguageQuotes.at("en");
 }
 
 enum class BorderSide {
@@ -278,16 +392,6 @@ static void parseCssColor(const std::string& css, uint8_t& r, uint8_t& g, uint8_
     // 其它情况保留默认浅灰，方便后续调试定位未实现的颜色格�?
 }
 
-static Color makeColorFromCss(const std::string& css) {
-    uint8_t r8 = 255, g8 = 255, b8 = 255, a8 = 255;
-    parseCssColor(css, r8, g8, b8, a8);
-    Color c;
-    c.r = r8 / 255.0f;
-    c.g = g8 / 255.0f;
-    c.b = b8 / 255.0f;
-    c.a = a8 / 255.0f;
-    return c;
-}
 
 // 辅助函数：根据 ComputedStyle 填充 DrawGlyphRunData 的 text-shadow 属性
 static void fillTextShadow(DrawGlyphRunData& glyph_run, const dong::dom::ComputedStyle& style) {
@@ -1433,8 +1537,16 @@ std::string Painter::evaluateCountersText(const std::string& name, const std::st
 }
 
 std::string Painter::evaluateQuoteToken(const dom::ComputedStyle& style,
-                                       const dom::ComputedStyle::ContentToken& tok) {
-    const std::vector<std::string>& q = style.quotes;
+                                       const dom::ComputedStyle::ContentToken& tok,
+                                       const dom::DOMNodePtr& node) {
+    // Determine quotes: use style.quotes, or resolve quotes: auto from lang attribute
+    std::vector<std::string> q = style.quotes;
+    if (style.quotes_auto && q.empty() && node) {
+        // Resolve quotes: auto based on element's lang attribute
+        std::string lang = node->getEffectiveLang();
+        q = getQuotesForLanguage(lang);
+    }
+
     const size_t pair_count = q.size() / 2;
 
     auto quoteAt = [&](int depth, bool open) -> std::string {
@@ -1480,7 +1592,7 @@ std::string Painter::evaluateQuoteToken(const dom::ComputedStyle& style,
     }
 }
 
-std::string Painter::evaluateContentText(const dom::ComputedStyle& style) {
+std::string Painter::evaluateContentText(const dom::ComputedStyle& style, const dom::DOMNodePtr& node) {
     if (!style.content_tokens.empty()) {
         std::string out;
         for (const auto& tok : style.content_tokens) {
@@ -1498,7 +1610,7 @@ std::string Painter::evaluateContentText(const dom::ComputedStyle& style) {
             case dom::ComputedStyle::ContentToken::Type::CloseQuote:
             case dom::ComputedStyle::ContentToken::Type::NoOpenQuote:
             case dom::ComputedStyle::ContentToken::Type::NoCloseQuote:
-                out += evaluateQuoteToken(style, tok);
+                out += evaluateQuoteToken(style, tok, node);
                 break;
             }
         }
@@ -1522,7 +1634,7 @@ void Painter::renderPseudoElement(const dom::DOMNodePtr& pseudo,
         ~ScopedGeneratedCounters() { painter->popCounterScope(); }
     } scope(this, style);
 
-    const std::string content_text = evaluateContentText(style);
+    const std::string content_text = evaluateContentText(style, pseudo);
 
     const bool has_background = (style.background_color != "transparent");
     const bool has_border = (style.border_width > 0.0f && style.border_style != "none");
@@ -1685,6 +1797,7 @@ Painter::LayerDecision Painter::decideLayerNeeds(const dom::DOMNodePtr& node,
 
     bool force_isolation = (node->getAttribute("__dong_isolate") == "1" ||
                             node->getAttribute("__dong_isolate") == "true");
+    const bool will_change_promote = shouldPromoteLayerForWillChange(style.will_change);
 
     float builder_tx = builder.getTranslateX();
     float builder_ty = builder.getTranslateY();
@@ -1692,10 +1805,10 @@ Painter::LayerDecision Painter::decideLayerNeeds(const dom::DOMNodePtr& node,
     Rect layer_bounds = computeLayerBounds(node_rect, has_layout_rect, builder_tx, builder_ty);
 
     decision.has_isolation = (style.isolation_isolate || decision.is_scroll_container ||
-                             has_transform || force_isolation) &&
+                             has_transform || force_isolation || will_change_promote) &&
                              layer_bounds.width > 0.0f && layer_bounds.height > 0.0f;
 
-    decision.needs_layer = decision.has_isolation || decision.clamped_opacity < 0.999f || has_transform;
+    decision.needs_layer = decision.has_isolation || decision.clamped_opacity < 0.999f || has_transform || will_change_promote;
 
     if (decision.needs_layer) {
         decision.content_dirty = node->isLayoutDirty() || decision.is_scroll_container;
@@ -2051,23 +2164,120 @@ void Painter::paintTextareaResizeHandle(const dom::DOMNodePtr& node,
     if (size < 8.0f) return;
 
     const bool scheme_dark = (toLowerCollapsed(style.color_scheme) == "dark");
-    Color c = makeColorFromCss(scheme_dark ? "#c9c9c9" : "#8a8a8a");
+    Color c = makeColorFromCss(scheme_dark ? "#c9c9c9" : "#808080");
     c.a = 1.0f;
 
-    const float pad = 2.0f;
-    const float step = 2.0f;
-    const float px = 2.0f;
+    const float pad = 1.0f;
+    const float px = 1.0f;
 
-    // Draw a simple diagonal gripper using 2px squares (3 diagonals), tuned for visibility.
-    for (int k = 0; k < 3; ++k) {
-        const float offset = static_cast<float>(k) * 4.0f;
-        for (float t = 0.0f; t < size - offset; t += step) {
-            const float x = inner.x + inner.width - pad - offset - t;
-            const float y = inner.y + inner.height - pad - t;
-            builder.addRect(Rect{x, y, px, px}, c);
+    const float right = inner.x + inner.width - pad;
+    const float bottom = inner.y + inner.height - pad;
+
+    // Draw native-like subtle grip: one primary diagonal + two faint short echoes.
+    const float insets[3] = {0.0f, 2.0f, 4.0f};
+    const int lengths[3] = {4, 2, 1};
+    const float alphas[3] = {0.95f, 0.35f, 0.12f};
+
+    for (int line = 0; line < 3; ++line) {
+        const float inset = insets[line];
+        const float x0 = right - inset - 4.0f;
+        const float y0 = bottom - inset;
+        Color lc = c;
+        lc.a *= alphas[line];
+        for (int i = 0; i < lengths[line]; ++i) {
+            const float x = x0 + static_cast<float>(i);
+            const float y = y0 - static_cast<float>(i);
+            if (x >= inner.x && y >= inner.y) {
+                builder.addRect(Rect{x, y, px, px}, lc);
+            }
         }
     }
 
+}
+
+void Painter::renderAltText(const Rect& rect, const std::string& alt_text, const dom::ComputedStyle& style, DisplayListBuilder& builder) {
+    using painter_detail::makeColorFromCss;
+
+    // Draw a light gray background for broken image placeholder
+    Color bg_color = makeColorFromCss("#f0f0f0");
+    builder.addRect(rect, bg_color);
+
+    // Draw a border around the placeholder
+    Color border_color = makeColorFromCss("#cccccc");
+    const float border_width = 1.0f;
+    builder.addRect(Rect{rect.x, rect.y, rect.width, border_width}, border_color); // top
+    builder.addRect(Rect{rect.x, rect.y + rect.height - border_width, rect.width, border_width}, border_color); // bottom
+    builder.addRect(Rect{rect.x, rect.y, border_width, rect.height}, border_color); // left
+    builder.addRect(Rect{rect.x + rect.width - border_width, rect.y, border_width, rect.height}, border_color); // right
+
+    // Calculate text area (with padding)
+    const float padding = 8.0f;
+    Rect text_rect{
+        rect.x + padding,
+        rect.y + padding,
+        rect.width - 2.0f * padding,
+        rect.height - 2.0f * padding
+    };
+
+    if (text_rect.width <= 0.0f || text_rect.height <= 0.0f) return;
+
+    // Use a smaller font size for alt text
+    float font_size = std::min(style.font_size, 12.0f);
+    if (font_size <= 0.0f) font_size = 12.0f;
+
+    // Render the alt text
+    std::string processed_text = alt_text;
+
+    // Truncate text if too long
+    const size_t max_chars = 50;
+    if (processed_text.length() > max_chars) {
+        processed_text = processed_text.substr(0, max_chars - 3) + "...";
+    }
+
+    // Use text shaper to render the alt text
+    if (!processed_text.empty()) {
+        // Create text shape request
+        TextShapeRequest req{
+            processed_text,
+            style.font_family,
+            style.font_weight,
+            style.font_style,
+            font_size
+        };
+
+        ShapedText shaped;
+        if (text_shaper_.shape(req, shaped) && !shaped.glyphs.empty()) {
+            float scale = shaped.scale_to_pixels;
+            float text_width = shaped.width_units * scale;
+            float text_height = shaped.line_height_units * scale;
+            float ascent = shaped.ascent_units * scale;
+
+            // Center the text within the rectangle
+            float text_x = text_rect.x + (text_rect.width - text_width) / 2.0f;
+            float text_y = text_rect.y + (text_rect.height - text_height) / 2.0f;
+
+            DrawGlyphRunData glyph_run;
+            glyph_run.rect = Rect{text_x, text_y, text_width, text_height};
+            glyph_run.baseline_x = text_x;
+            glyph_run.baseline_y = text_y + ascent;
+
+            // Convert ShapedGlyph to GlyphInstance
+            for (const auto& shaped_glyph : shaped.glyphs) {
+                GlyphInstance glyph;
+                glyph.glyph_id = shaped_glyph.glyph_id;
+                glyph.pen_x_units = shaped_glyph.pen_x_units;
+                glyph.pen_y_units = shaped_glyph.pen_y_units;
+                glyph.font_path_index = shaped_glyph.font_path_index;
+                glyph.units_per_em = shaped_glyph.units_per_em;
+                glyph_run.glyphs.push_back(glyph);
+            }
+
+            glyph_run.font_family = style.font_family;
+            glyph_run.font_size = font_size;
+            glyph_run.color = makeColorFromCss("#666666"); // Gray text color
+            builder.addGlyphRun(glyph_run);
+        }
+    }
 }
 
 } // namespace dong::render

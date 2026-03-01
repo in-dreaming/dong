@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>CSS @layer Nested Rules Test</title>
+    <style>
+        /* 层内嵌套其他@规则测试 */
+        @layer framework {
+            div { color: blue; }
+
+            /* 层内嵌套@media规则 */
+            @media (min-width: 600px) {
+                div { color: green; }
+            }
+
+            /* 层内嵌套@keyframes */
+            @keyframes slide {
+                from { transform: translateX(0); }
+                to { transform: translateX(100px); }
+            }
+        }
+
+        @layer theme {
+            div { color: red; }
+        }
+
+        /* 未分层规则 */
+        div { color: orange; }
+    </style>
+</head>
+<body>
+    <div>This text should be orange (unlayered > theme > framework)</div>
+</body>
+</html>

@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>CSS Quotes - Basic Functionality</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: white;
+        }
+
+        /* Default quotes (English style curly quotes) */
+        q {
+            color: #333;
+        }
+
+        /* Custom quotes - guillemets */
+        .french q {
+            quotes: "« " " »";
+            color: #0066cc;
+        }
+
+        /* Nested quotes - two levels */
+        .nested q {
+            quotes: "(&#34; "&#34;) "`" "'";
+            color: #009900;
+        }
+
+        /* No quotes */
+        .no-quotes q {
+            quotes: none;
+            color: #cc6600;
+        }
+
+        /* Pseudo-element with open-quote/close-quote */
+        .manual {
+            quotes: "«" "»" "‹" "›";
+        }
+        .manual::before {
+            content: open-quote open-quote;
+        }
+        .manual::after {
+            content: close-quote close-quote;
+        }
+
+        .section-title {
+            margin-top: 20px;
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <h1>CSS Quotes Test</h1>
+
+    <div class="section-title">Default quotes (English)</div>
+    <p>This is a paragraph with <q>quoted text</q> inside.</p>
+
+    <div class="section-title">Nested default quotes</div>
+    <p>This paragraph has <q>outer quote with <q>inner quote</q> inside.</q></p>
+
+    <div class="section-title">Custom quotes (French guillemets)</div>
+    <div class="french">
+        <p>This paragraph has <q>quoted text</q> with French style guillemets.</p>
+        <p>Nested <q>outer <q>inner</q> text</q> should use level 2 guillemets.</p>
+    </div>
+
+    <div class="section-title">Nested custom quotes (two styles)</div>
+    <div class="nested">
+        <p>Here is an example with <q>outer quote and <q>inner quote</q> inside.</q></p>
+    </div>
+
+    <div class="section-title">No quotes</div>
+    <div class="no-quotes">
+        <p>This paragraph has <q>no quotation marks</q> displayed.</p>
+    </div>
+
+    <div class="section-title">Manual quote insertion (pseudo-elements)</div>
+    <p class="manual">This text has manually inserted quotes via pseudo-elements.</p>
+</body>
+</html>

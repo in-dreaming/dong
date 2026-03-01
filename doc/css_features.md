@@ -269,6 +269,39 @@ li::marker {
 
 ---
 
+## CSS Rules & At-rules（CSS规则与@规则）
+
+### @layer ✅
+
+**状态**: 已实现
+
+**规范**: CSS Cascading and Inheritance Level 5
+
+**功能描述**:
+- **层声明语法**：`@layer name { ... }`（命名层）、`@layer { ... }`（匿名层）、`@layer name;`（预声明层）、`@layer name1, name2;`（多层级联声明）
+- **级联优先级**：未分层样式 > 后声明的层 > 先声明的层
+- **层内规则处理**：支持层内嵌套其他@规则（@media、@keyframes等）
+- **层优先级与specificity结合**：层优先级高于specificity，层内规则按传统级联排序
+
+**实现细节**:
+- **解析器扩展**：`src/dom/css/css_parser.cpp` 中的 `parseLayerRules()` 函数
+- **层数据结构**：`LayerRule` 结构存储层名、规则列表、声明顺序
+- **级联引擎**：`src/dom/css/style_engine.cpp` 中的 `sortRulesWithLayerPriority()` 函数
+- **优先级映射**：`layer_order_map` 维护层名到优先级的映射
+
+**测试用例**:
+- `test_css_layer_basic.html` - 基本层优先级测试
+- `test_css_layer_priority.html` - 层声明顺序测试
+- `test_css_layer_anonymous.html` - 匿名层测试
+- `test_css_layer_nested.html` - 层内嵌套规则测试
+- `test_css_layer_specificity.html` - 层优先级与specificity结合测试
+
+**已知限制**:
+- 暂不支持层导入（`@import url(...) layer(name);`）
+- 暂不支持层条件规则（`@layer name when (condition) { ... }`）
+
+---
+
 ## 实现架构
 
 ### 核心原则

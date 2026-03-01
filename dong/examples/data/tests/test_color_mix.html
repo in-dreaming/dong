@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CSS color-mix() Function Test</title>
+    <style>
+        body {
+            margin: 20px;
+            font-family: Arial, sans-serif;
+            background: #f0f0f0;
+        }
+        h1 {
+            margin-bottom: 20px;
+        }
+        .test-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+            gap: 15px;
+        }
+        .box {
+            width: 200px;
+            height: 100px;
+            border: 1px solid #ccc;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            color: white;
+            text-shadow: 1px 1px 2px black;
+        }
+        .label {
+            width: 300px;
+            font-size: 14px;
+        }
+        .expected {
+            width: 150px;
+            font-size: 12px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <h1>CSS color-mix() Function Test</h1>
+
+    <!-- Basic 50/50 mix -->
+    <div class="test-row">
+        <div class="label">color-mix(in srgb, red, blue)</div>
+        <div class="box" style="background: color-mix(in srgb, red, blue);">Purple</div>
+        <div class="expected">#800080 (50% mix)</div>
+    </div>
+
+    <!-- Different percentages -->
+    <div class="test-row">
+        <div class="label">color-mix(in srgb, red 75%, blue)</div>
+        <div class="box" style="background: color-mix(in srgb, red 75%, blue);">75% Red</div>
+        <div class="expected">#bf0040</div>
+    </div>
+
+    <div class="test-row">
+        <div class="label">color-mix(in srgb, red 25%, blue)</div>
+        <div class="box" style="background: color-mix(in srgb, red 25%, blue);">25% Red</div>
+        <div class="expected">#4000bf</div>
+    </div>
+
+    <!-- Both colors have percentages -->
+    <div class="test-row">
+        <div class="label">color-mix(in srgb, red 30%, blue 70%)</div>
+        <div class="box" style="background: color-mix(in srgb, red 30%, blue 70%);">30% Red, 70% Blue</div>
+        <div class="expected">#4d00b2</div>
+    </div>
+
+    <!-- With white -->
+    <div class="test-row">
+        <div class="label">color-mix(in srgb, red, white)</div>
+        <div class="box" style="background: color-mix(in srgb, red, white);">Pink</div>
+        <div class="expected">#ff8080</div>
+    </div>
+
+    <div class="test-row">
+        <div class="label">color-mix(in srgb, black, white)</div>
+        <div class="box" style="background: color-mix(in srgb, black, white);">Gray</div>
+        <div class="expected">#808080</div>
+    </div>
+
+    <!-- With hex colors -->
+    <div class="test-row">
+        <div class="label">color-mix(in srgb, #ff0000, #0000ff)</div>
+        <div class="box" style="background: color-mix(in srgb, #ff0000, #0000ff);">Hex</div>
+        <div class="expected">#800080</div>
+    </div>
+
+    <!-- With rgba colors (alpha mixing) -->
+    <div class="test-row">
+        <div class="label">color-mix(in srgb, rgba(255,0,0,0.5), rgba(0,0,255,0.5))</div>
+        <div class="box" style="background: color-mix(in srgb, rgba(255,0,0,0.5), rgba(0,0,255,0.5));">Alpha</div>
+        <div class="expected">rgba(128,0,128,0.5)</div>
+    </div>
+
+    <div class="test-row">
+        <div class="label">color-mix(in srgb, rgba(255,0,0,1), rgba(0,0,255,0))</div>
+        <div class="box" style="background: color-mix(in srgb, rgba(255,0,0,1), rgba(0,0,255,0));">One transparent</div>
+        <div class="expected">rgba(128,0,128,0.5)</div>
+    </div>
+
+    <!-- Grayscale mixing -->
+    <div class="test-row">
+        <div class="label">color-mix(in srgb, #ffff00, #00ffff)</div>
+        <div class="box" style="background: color-mix(in srgb, #ffff00, #00ffff);">Yellow+Cyan</div>
+        <div class="expected">#80ff80</div>
+    </div>
+
+    <!-- Edge case: 0% -->
+    <div class="test-row">
+        <div class="label">color-mix(in srgb, red 0%, blue)</div>
+        <div class="box" style="background: color-mix(in srgb, red 0%, blue);">0% Red</div>
+        <div class="expected">#0000ff (pure blue)</div>
+    </div>
+
+    <!-- Edge case: 100% -->
+    <div class="test-row">
+        <div class="label">color-mix(in srgb, red 100%, blue)</div>
+        <div class="box" style="background: color-mix(in srgb, red 100%, blue);">100% Red</div>
+        <div class="expected">#ff0000 (pure red)</div>
+    </div>
+
+    <!-- Multiple colors for gradient effect -->
+    <div style="margin-top: 30px;">
+        <h2>Gradient-like Mixing</h2>
+        <div style="display: flex; gap: 0;">
+            <div style="width: 50px; height: 50px; background: color-mix(in srgb, red 100%, blue);"></div>
+            <div style="width: 50px; height: 50px; background: color-mix(in srgb, red 90%, blue);"></div>
+            <div style="width: 50px; height: 50px; background: color-mix(in srgb, red 80%, blue);"></div>
+            <div style="width: 50px; height: 50px; background: color-mix(in srgb, red 70%, blue);"></div>
+            <div style="width: 50px; height: 50px; background: color-mix(in srgb, red 60%, blue);"></div>
+            <div style="width: 50px; height: 50px; background: color-mix(in srgb, red 50%, blue);"></div>
+            <div style="width: 50px; height: 50px; background: color-mix(in srgb, red 40%, blue);"></div>
+            <div style="width: 50px; height: 50px; background: color-mix(in srgb, red 30%, blue);"></div>
+            <div style="width: 50px; height: 50px; background: color-mix(in srgb, red 20%, blue);"></div>
+            <div style="width: 50px; height: 50px; background: color-mix(in srgb, red 10%, blue);"></div>
+            <div style="width: 50px; height: 50px; background: color-mix(in srgb, red 0%, blue);"></div>
+        </div>
+    </div>
+</body>
+</html>

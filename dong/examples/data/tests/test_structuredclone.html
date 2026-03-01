@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Test structuredClone API</title>
+    <style>
+        body { padding: 20px; font-family: Arial, sans-serif; }
+        .test-case { margin: 20px 0; padding: 10px; border: 1px solid #ccc; }
+        .pass { background-color: #d4edda; border-color: #c3e6cb; }
+        .fail { background-color: #f8d7da; border-color: #f5c6cb; }
+        pre { background: #f5f5f5; padding: 10px; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <h1>structuredClone() API Tests</h1>
+    <div id="test-results"></div>
+
+    <script>
+        const results = document.getElementById('test-results');
+
+        function assert(condition, message) {
+            const div = document.createElement('div');
+            div.className = 'test-case ' + (condition ? 'pass' : 'fail');
+            div.innerHTML = `<strong>${condition ? 'PASS' : 'FAIL'}</strong>: ${message}<pre>${condition ? '✓' : '✗'}</pre>`;
+            results.appendChild(div);
+        }
+
+        // Test 1: Clone primitive values
+        assert(JSON.stringify(structuredClone(null)) === 'null', 'Clone null');
+        assert(structuredClone(true) === true, 'Clone true');
+        assert(structuredClone(false) === false, 'Clone false');
+        assert(structuredClone(42) === 42, 'Clone number');
+        assert(structuredClone('hello') === 'hello', 'Clone string');
+
+        // Test 2: Clone array
+        const arr = [1, 2, 3];
+        const clonedArr = structuredClone(arr);
+        assert(Array.isArray(clonedArr), 'Cloned value is array');
+        assert(clonedArr.length === 3, 'Cloned array has correct length');
+        assert(clonedArr[0] === 1 && clonedArr[1] === 2 && clonedArr[2] === 3, 'Cloned array has correct values');
+        assert(clonedArr !== arr, 'Cloned array is different reference');
+
+        // Test 3: Clone nested array
+        const nestedArr = [[1, 2], [3, 4]];
+        const clonedNested = structuredClone(nestedArr);
+        assert(clonedNested[0][0] === 1, 'Nested array clone works');
+        assert(clonedNested !== nestedArr, 'Nested array is different reference');
+        assert(clonedNested[0] !== nestedArr[0], 'Nested inner array is different reference');
+
+        // Test 4: Clone object
+        const obj = { a: 1, b: 'hello', c: true };
+        const clonedObj = structuredClone(obj);
+        assert(typeof clonedObj === 'object' && clonedObj !== null, 'Cloned value is object');
+        assert(clonedObj.a === 1, 'Cloned object property a');
+        assert(clonedObj.b === 'hello', 'Cloned object property b');
+        assert(clonedObj.c === true, 'Cloned object property c');
+        assert(clonedObj !== obj, 'Cloned object is different reference');
+
+        // Test 5: Clone nested object
+        const nestedObj = { outer: { inner: { value: 42 } } };
+        const clonedNestedObj = structuredClone(nestedObj);
+        assert(clonedNestedObj.outer.inner.value === 42, 'Nested object clone works');
+        assert(clonedNestedObj !== nestedObj, 'Nested object is different reference');
+        assert(clonedNestedObj.outer !== nestedObj.outer, 'Nested inner object is different reference');
+
+        // Test 6: Clone object with array
+        const objWithArr = { items: [1, 2, 3], name: 'test' };
+        const clonedObjWithArr = structuredClone(objWithArr);
+        assert(clonedObjWithArr.items[0] === 1, 'Object with array property cloned');
+        assert(clonedObjWithArr.items !== objWithArr.items, 'Array property is different reference');
+
+        // Test 7: Clone array with objects
+        const arrWithObj = [{ id: 1, name: 'a' }, { id: 2, name: 'b' }];
+        const clonedArrWithObj = structuredClone(arrWithObj);
+        assert(clonedArrWithObj[0].id === 1, 'Array with object element cloned');
+        assert(clonedArrWithObj[0] !== arrWithObj[0], 'Object element is different reference');
+
+        // Test 8: Clone handles special values
+        assert(structuredClone(0) === 0, 'Clone zero');
+        assert(structuredClone(-0) === 0, 'Clone negative zero');
+        assert(structuredClone(1.5) === 1.5, 'Clone float');
+
+        // Test 9: Clone empty structures
+        assert(Array.isArray(structuredClone([])) && structuredClone([]).length === 0, 'Clone empty array');
+        assert(Object.keys(structuredClone({})).length === 0, 'Clone empty object');
+
+        // Test 10: Clone with special property names
+        const specialKeys = { '': 'empty', 'key with spaces': 'value', 'key-with-dash': 'value2' };
+        const clonedSpecial = structuredClone(specialKeys);
+        assert(clonedSpecial[''] === 'empty', 'Clone empty key property');
+        assert(clonedSpecial['key with spaces'] === 'value', 'Clone key with spaces');
+
+        results.innerHTML += '<p><strong>All tests completed!</strong></p>';
+    </script>
+</body>
+</html>

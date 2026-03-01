@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>CSS Counters - Counter Styles and Number Formats</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: white;
+            counter-reset: decimal-counter lower-alpha-counter upper-alpha-counter
+                          lower-roman-counter upper-roman-counter;
+        }
+
+        /* Test different counter styles */
+        .decimal {
+            counter-increment: decimal-counter;
+            margin: 5px 0;
+            padding: 5px;
+            background: #f0f8ff;
+        }
+
+        .decimal::before {
+            content: counter(decimal-counter, decimal) ". ";
+            font-weight: bold;
+            color: #0066cc;
+        }
+
+        .lower-alpha {
+            counter-increment: lower-alpha-counter;
+            margin: 5px 0;
+            padding: 5px;
+            background: #f0fff0;
+        }
+
+        .lower-alpha::before {
+            content: counter(lower-alpha-counter, lower-alpha) ". ";
+            font-weight: bold;
+            color: #009900;
+        }
+
+        .upper-alpha {
+            counter-increment: upper-alpha-counter;
+            margin: 5px 0;
+            padding: 5px;
+            background: #fff8f0;
+        }
+
+        .upper-alpha::before {
+            content: counter(upper-alpha-counter, upper-alpha) ". ";
+            font-weight: bold;
+            color: #cc6600;
+        }
+
+        .lower-roman {
+            counter-increment: lower-roman-counter;
+            margin: 5px 0;
+            padding: 5px;
+            background: #f8f0ff;
+        }
+
+        .lower-roman::before {
+            content: counter(lower-roman-counter, lower-roman) ". ";
+            font-weight: bold;
+            color: #9900cc;
+        }
+
+        .upper-roman {
+            counter-increment: upper-roman-counter;
+            margin: 5px 0;
+            padding: 5px;
+            background: #fff0f8;
+        }
+
+        .upper-roman::before {
+            content: counter(upper-roman-counter, upper-roman) ". ";
+            font-weight: bold;
+            color: #cc0066;
+        }
+
+        /* Test counters() function with different separators */
+        .nested {
+            counter-reset: level1;
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid #ccc;
+        }
+
+        .level1 {
+            counter-reset: level2;
+            counter-increment: level1;
+            margin-left: 20px;
+            padding: 5px;
+            background: #f5f5f5;
+        }
+
+        .level1::before {
+            content: counters(level1, "-", decimal) ". ";
+            font-weight: bold;
+            color: #006699;
+        }
+
+        .level2 {
+            counter-increment: level2;
+            margin-left: 40px;
+            padding: 5px;
+            background: #f0f0f0;
+        }
+
+        .level2::before {
+            content: counters(level1, "-", decimal) "." counter(level2, decimal) " ";
+            color: #669900;
+        }
+
+        /* Test counters() with different styles */
+        .roman-nested {
+            counter-reset: roman-level1;
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid #cc9966;
+            background: #fff8f0;
+        }
+
+        .roman-level1 {
+            counter-reset: roman-level2;
+            counter-increment: roman-level1;
+            margin-left: 20px;
+            padding: 5px;
+        }
+
+        .roman-level1::before {
+            content: counters(roman-level1, ".", upper-roman) " ";
+            font-weight: bold;
+            color: #cc6600;
+        }
+
+        .roman-level2 {
+            counter-increment: roman-level2;
+            margin-left: 40px;
+            padding: 5px;
+        }
+
+        .roman-level2::before {
+            content: counters(roman-level1, ".", upper-roman) "." counter(roman-level2, lower-alpha) " ";
+            color: #996600;
+        }
+
+        /* Test mixed counter styles in same content */
+        .mixed {
+            counter-reset: mixed-counter1 mixed-counter2 mixed-counter3;
+            margin: 10px 0;
+            padding: 10px;
+            border: 2px dashed #999;
+        }
+
+        .mixed-item {
+            counter-increment: mixed-counter1 mixed-counter2 mixed-counter3;
+            margin: 5px 0;
+            padding: 5px;
+            background: #f8f8f8;
+        }
+
+        .mixed-item::before {
+            content: "[" counter(mixed-counter1, decimal) "] ["
+                     counter(mixed-counter2, lower-alpha) "] ["
+                     counter(mixed-counter3, upper-roman) "] ";
+            font-weight: bold;
+            color: #333;
+        }
+
+        /* Test counter() without style parameter (default decimal) */
+        .default-style {
+            counter-reset: default-counter;
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid #66cc99;
+            background: #f0fff8;
+        }
+
+        .default-item {
+            counter-increment: default-counter;
+            margin: 5px 0;
+            padding: 5px;
+        }
+
+        .default-item::before {
+            content: counter(default-counter) ". ";
+            font-weight: bold;
+            color: #009966;
+        }
+
+        /* Test counters() with empty separator */
+        .empty-separator {
+            counter-reset: empty-counter;
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid #cc99cc;
+            background: #fff0ff;
+        }
+
+        .empty-level {
+            counter-reset: empty-subcounter;
+            counter-increment: empty-counter;
+            margin-left: 20px;
+            padding: 5px;
+        }
+
+        .empty-level::before {
+            content: counters(empty-counter, "") " ";
+            font-weight: bold;
+            color: #cc00cc;
+        }
+
+        .empty-sublevel {
+            counter-increment: empty-subcounter;
+            margin-left: 40px;
+            padding: 5px;
+        }
+
+        .empty-sublevel::before {
+            content: counters(empty-counter, "") counter(empty-subcounter) " ";
+            color: #990099;
+        }
+    </style>
+</head>
+<body>
+    <h1>Counter Styles and Number Formats Test</h1>
+
+    <h2>Basic Counter Styles</h2>
+    <div class="decimal">Decimal counter</div>
+    <div class="decimal">Decimal counter</div>
+    <div class="decimal">Decimal counter</div>
+
+    <div class="lower-alpha">Lower alpha counter</div>
+    <div class="lower-alpha">Lower alpha counter</div>
+    <div class="lower-alpha">Lower alpha counter</div>
+
+    <div class="upper-alpha">Upper alpha counter</div>
+    <div class="upper-alpha">Upper alpha counter</div>
+    <div class="upper-alpha">Upper alpha counter</div>
+
+    <div class="lower-roman">Lower roman counter</div>
+    <div class="lower-roman">Lower roman counter</div>
+    <div class="lower-roman">Lower roman counter</div>
+
+    <div class="upper-roman">Upper roman counter</div>
+    <div class="upper-roman">Upper roman counter</div>
+    <div class="upper-roman">Upper roman counter</div>
+
+    <h2>Nested Counters with Different Separators</h2>
+    <div class="nested">
+        <div class="level1">Level 1</div>
+        <div class="level2">Level 2</div>
+        <div class="level2">Level 2</div>
+        <div class="level1">Level 1</div>
+        <div class="level2">Level 2</div>
+    </div>
+
+    <div class="roman-nested">
+        <div class="roman-level1">Roman Level 1</div>
+        <div class="roman-level2">Roman Level 2</div>
+        <div class="roman-level2">Roman Level 2</div>
+        <div class="roman-level1">Roman Level 1</div>
+        <div class="roman-level2">Roman Level 2</div>
+    </div>
+
+    <h2>Mixed Counter Styles</h2>
+    <div class="mixed">
+        <div class="mixed-item">Mixed counter item</div>
+        <div class="mixed-item">Mixed counter item</div>
+        <div class="mixed-item">Mixed counter item</div>
+    </div>
+
+    <h2>Default Style (no style parameter)</h2>
+    <div class="default-style">
+        <div class="default-item">Default style item</div>
+        <div class="default-item">Default style item</div>
+        <div class="default-item">Default style item</div>
+    </div>
+
+    <h2>Empty Separator Test</h2>
+    <div class="empty-separator">
+        <div class="empty-level">Empty separator level</div>
+        <div class="empty-sublevel">Empty separator sublevel</div>
+        <div class="empty-sublevel">Empty separator sublevel</div>
+        <div class="empty-level">Empty separator level</div>
+        <div class="empty-sublevel">Empty separator sublevel</div>
+    </div>
+</body>
+</html>

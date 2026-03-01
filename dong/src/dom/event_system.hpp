@@ -58,6 +58,15 @@ enum class EventType {
     // HTML-specific
     TOGGLE,
 
+    // Drag & Drop
+    DRAG_START,
+    DRAG,
+    DRAG_ENTER,
+    DRAG_LEAVE,
+    DRAG_OVER,
+    DROP,
+    DRAG_END,
+
     // Fallback
     CUSTOM
 };
@@ -112,6 +121,7 @@ struct Event {
     float delta_z = 0.0f;
 
     // Input event data
+    std::string input_type;      // The input type for 'beforeinput' events (e.g., "insertText", "deleteContentBackward")
     std::string input_data;      // The inserted text for 'input' events
     
     // Custom data
@@ -120,6 +130,9 @@ struct Event {
     // Web Event flags
     bool is_trusted = false;   // Event.isTrusted
     bool repeat = false;       // KeyboardEvent.repeat
+
+    // Drag & Drop specific data
+    std::string data_transfer;  // Simplified data transfer (for Phase 1)
 
     bool stopped = false;
     bool prevented = false;
@@ -220,6 +233,15 @@ private:
 
         // HTML-specific
         {"toggle", EventType::TOGGLE},
+
+        // Drag & Drop
+        {"dragstart", EventType::DRAG_START},
+        {"drag", EventType::DRAG},
+        {"dragenter", EventType::DRAG_ENTER},
+        {"dragleave", EventType::DRAG_LEAVE},
+        {"dragover", EventType::DRAG_OVER},
+        {"drop", EventType::DROP},
+        {"dragend", EventType::DRAG_END},
     };
 };
 

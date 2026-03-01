@@ -656,6 +656,14 @@ float computeIntrinsicTextHeight(const dom::DOMNodePtr& node, float parent_conte
     return result;
 }
 
+// Compute average character width for font metrics (used by textarea cols attribute)
+// Returns approximately 0.5em which is the CSS spec value for average character width
+float computeAverageCharWidth(const dom::ComputedStyle& style) {
+    float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
+    // CSS spec: average character width = 0.5em
+    return font_size * 0.5f;
+}
+
 // Collapse vertical margins between two sibling block-like elements so that
 
 // the gap between them is closer to CSS's max(margin-bottom, margin-top)
@@ -2303,6 +2311,60 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
             if (min_h > 0.0f && std::isfinite(min_h)) {
                 YGNodeStyleSetMinHeight(yoga_node, min_h);
             }
+        }
+    }
+
+    // textarea 是 multiline text input，使用 rows/cols 属性设置默认尺寸
+    // rows: 控制默认高度（行数 × 行高），默认值为 2
+    // cols: 控制默认宽度（列数 × 平均字符宽度），默认值为 20
+    // 只在没有显式设置 CSS width/height 时使用 rows/cols 计算
+    if (tag == "textarea") {
+        float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
+        float line_height = computeIntrinsicTextHeight(dom_node);
+        float avg_char_width = computeAverageCharWidth(style);
+
+        // 解析 rows 属性（默认值 2）
+        int rows = 2;
+        if (dom_node->hasAttribute("rows")) {
+            try {
+                rows = std::stoi(dom_node->getAttribute("rows"));
+            } catch (...) {
+                // Invalid value, use default
+            }
+        }
+        rows = std::max(1, rows); // Minimum 1 row
+
+        // 解析 cols 属性（默认值 20）
+        int cols = 20;
+        if (dom_node->hasAttribute("cols")) {
+            try {
+                cols = std::stoi(dom_node->getAttribute("cols"));
+            } catch (...) {
+                // Invalid value, use default
+            }
+        }
+        cols = std::max(1, cols); // Minimum 1 col
+
+        // padding 和 border 需要加入计算（textarea 默认 box-sizing: border-box）
+        float pad_top = style.padding_top.isPixel() ? style.padding_top.value : 0.0f;
+        float pad_bottom = style.padding_bottom.isPixel() ? style.padding_bottom.value : 0.0f;
+        float pad_left = style.padding_left.isPixel() ? style.padding_left.value : 0.0f;
+        float pad_right = style.padding_right.isPixel() ? style.padding_right.value : 0.0f;
+
+        float border_w = style.border_width > 0.0f ? style.border_width : 0.0f;
+
+        // 只在没有显式 CSS width 时使用 cols 计算
+        if (style.width.isAuto() && !style.isExplicitlySet("width") && !style.isExplicitlySet("min-width")) {
+            float content_width = static_cast<float>(cols) * avg_char_width;
+            float total_width = content_width + pad_left + pad_right + border_w * 2.0f;
+            YGNodeStyleSetWidth(yoga_node, total_width);
+        }
+
+        // 只在没有显式 CSS height 时使用 rows 计算
+        if (style.height.isAuto() && !style.isExplicitlySet("height") && !style.isExplicitlySet("min-height")) {
+            float content_height = static_cast<float>(rows) * line_height;
+            float total_height = content_height + pad_top + pad_bottom + border_w * 2.0f;
+            YGNodeStyleSetHeight(yoga_node, total_height);
         }
     }
 

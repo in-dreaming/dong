@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Image Alt Text Rendering Test</title>
+    <style>
+        body {
+            font-family: system-ui;
+            margin: 20px;
+            background: #f5f5f5;
+        }
+        .test-case {
+            margin: 20px 0;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        .test-description {
+            color: #666;
+            margin-bottom: 10px;
+        }
+        .image-container {
+            display: inline-block;
+            margin: 10px;
+            vertical-align: top;
+        }
+        .expected {
+            color: #28a745;
+            font-weight: bold;
+        }
+        .broken {
+            color: #dc3545;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>Image Alt Text Rendering Test</h1>
+
+    <div class="test-case">
+        <div class="test-title">Test 1: Broken image with alt text</div>
+        <div class="test-description">
+            This image has a broken src URL but provides descriptive alt text.
+            <span class="expected">Expected:</span> Should display a gray placeholder with the alt text "A beautiful sunset over mountains".
+        </div>
+        <div class="image-container">
+            <img src="broken-image.jpg" alt="A beautiful sunset over mountains" width="200" height="150">
+        </div>
+    </div>
+
+    <div class="test-case">
+        <div class="test-title">Test 2: Broken image with long alt text</div>
+        <div class="test-description">
+            This image has very long alt text that should be truncated.
+            <span class="expected">Expected:</span> Should display truncated alt text with "..." at the end.
+        </div>
+        <div class="image-container">
+            <img src="another-broken-image.png" alt="This is a very long description of an image that contains many details about the content and should be properly truncated when displayed as alt text in the broken image placeholder" width="180" height="120">
+        </div>
+    </div>
+
+    <div class="test-case">
+        <div class="test-title">Test 3: Broken image without alt text</div>
+        <div class="test-description">
+            This image has no alt text and a broken src.
+            <span class="expected">Expected:</span> Should display a gray placeholder without any text.
+        </div>
+        <div class="image-container">
+            <img src="no-alt-image.gif" width="160" height="100">
+        </div>
+    </div>
+
+    <div class="test-case">
+        <div class="test-title">Test 4: Working image (control test)</div>
+        <div class="test-description">
+            This image should load normally and not show alt text.
+            <span class="expected">Expected:</span> Should display the actual image, not the alt text.
+        </div>
+        <div class="image-container">
+            <img src="test_images/checkerboard.png" alt="This alt text should not be visible" width="200" height="150">
+        </div>
+    </div>
+
+    <div class="test-case">
+        <div class="test-title">Test 5: Image with special characters in alt text</div>
+        <div class="test-description">
+            This tests alt text with special characters and symbols.
+            <span class="expected">Expected:</span> Should properly render special characters in the alt text.
+        </div>
+        <div class="image-container">
+            <img src="broken-special.jpg" alt="Image with symbols: © ® ™ € £ ¥ § ¶ • – — … " width="220" height="140">
+        </div>
+    </div>
+
+    <div class="test-case">
+        <div class="test-title">Test 6: Empty alt text</div>
+        <div class="test-description">
+            This image has empty alt text (accessibility best practice for decorative images).
+            <span class="expected">Expected:</span> Should display a gray placeholder without any text.
+        </div>
+        <div class="image-container">
+            <img src="decorative-broken.jpg" alt="" width="150" height="100">
+        </div>
+    </div>
+
+    <div class="test-case">
+        <div class="test-title">Test 7: Styled broken images</div>
+        <div class="test-description">
+            These images have CSS styling applied to test if styles affect alt text rendering.
+            <span class="expected">Expected:</span> Alt text should be visible regardless of CSS styling.
+        </div>
+        <div class="image-container">
+            <img src="styled-broken-1.jpg" alt="Styled image 1" width="120" height="80" style="border: 2px solid red; border-radius: 10px;">
+        </div>
+        <div class="image-container">
+            <img src="styled-broken-2.jpg" alt="Styled image 2" width="120" height="80" style="background: linear-gradient(45deg, #ff6b6b, #4ecdc4); padding: 5px;">
+        </div>
+    </div>
+
+    <script>
+        // Add some visual indicators for broken images
+        document.addEventListener('DOMContentLoaded', function() {
+            const images = document.querySelectorAll('img');
+            images.forEach(img => {
+                img.addEventListener('error', function() {
+                    this.style.outline = '2px dashed #dc3545';
+                    this.title = 'Image failed to load';
+                });
+                img.addEventListener('load', function() {
+                    this.style.outline = '2px solid #28a745';
+                    this.title = 'Image loaded successfully';
+                });
+            });
+        });
+    </script>
+</body>
+</html>

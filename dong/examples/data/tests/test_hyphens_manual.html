@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>CSS Hyphens - Manual Mode</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: white;
+        }
+
+        .container {
+            margin-top: 20px;
+        }
+
+        .section-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .narrow-box {
+            width: 150px;
+            background: #f0f0f0;
+            padding: 10px;
+            border: 1px solid #ccc;
+            margin-bottom: 15px;
+        }
+
+        /* hyphens: none - no break at hyphen or soft hyphen */
+        .hyphens-none {
+            hyphens: none;
+        }
+
+        /* hyphens: manual - break at soft hyphen or explicit hyphen */
+        .hyphens-manual {
+            hyphens: manual;
+        }
+
+        /* Explicit markup with &shy; (soft hyphen) */
+        .soft-hyphen {
+            hyphens: manual;
+        }
+
+        /* Regular text with explicit hyphens for line break */
+        .explicit-hyphen {
+            hyphens: manual;
+        }
+    </style>
+</head>
+<body>
+    <h1>CSS Hyphens Test</h1>
+
+    <div class="section-title">hyphens: none</div>
+    <div class="container">
+        <div class="narrow-box hyphens-none">
+            This is a very long word that should not break into pieces when displayed in this narrow box container element.
+        </div>
+        <div class="narrow-box hyphens-none">
+            Supercalifragilisticexpialidocious is a very long word that should not break.
+        </div>
+    </div>
+
+    <div class="section-title">hyphens: manual (no soft hyphen)</div>
+    <div class="container">
+        <div class="narrow-box hyphens-manual">
+            This is a very long text that wraps naturally at word boundaries.
+        </div>
+        <div class="narrow-box hyphens-manual">
+            well-known and self-consciously should break at hyphens but nowhere else.
+        </div>
+    </div>
+
+    <div class="section-title">hyphens: manual (with &shy; soft hyphen)</div>
+    <div class="container">
+        <div class="narrow-box soft-hyphen">
+            This text has a&shy;soft&shy;hy&shy;phen that allows breaking here.
+        </div>
+        <div class="narrow-box soft-hyphen">
+            Super&shy;cali&shy;fragi&shy;lis&shy;tic&shy;expi&shy;ali&shy;do&shy;cious has many soft hyphens.
+        </div>
+    </div>
+
+    <div class="section-title">hyphens: manual (with explicit hyphens for line break)</div>
+    <div class="container">
+        <div class="narrow-box explicit-hyphen">
+            well-known self-consciously mother-in-law state-of-the-art have hyphens that allow breaks.
+        </div>
+        <div class="narrow-box explicit-hyphen">
+            check-in check-out well-being ever-lasting are compound words with hyphens.
+        </div>
+    </div>
+</body>
+</html>

@@ -31,6 +31,10 @@ float CSSValue::resolvePixels(float parent_size, float root_font_size,
                 return calc_expr->evaluate(parent_size, root_font_size, viewport_width, viewport_height);
             }
             return 0.0f;
+        case Unit::ENV:
+            // env() values are resolved during style computation, not here
+            // This should never be called for ENV values
+            return 0.0f;
         case Unit::AUTO:
         case Unit::INHERIT:
         case Unit::UNSET:

@@ -182,17 +182,29 @@ void renderSelectDropdown(
     float select_h = std::max(0.0f, layout->layout.dimensions[1] - bt - bb);
 
     const float option_height = dom::kSelectOptionHeight;
+    const float optgroup_height = dom::kSelectOptgroupHeight;
     const float max_dropdown_h = dom::kSelectDropdownMaxHeight;
 
     const size_t option_count = state->getOptionCount();
     if (option_count == 0) return;
 
+    // 计算下拉菜单的总内容高度
+    float content_h = 0.0f;
+    const auto& options = state->getOptions();
+    for (const auto& opt : options) {
+        if (opt.type == dom::SelectItemType::Optgroup) {
+            content_h += optgroup_height;
+        } else {
+            content_h += option_height;
+        }
+    }
+
     float dropdown_x = select_x;
     float dropdown_y = select_y + select_h;
     float dropdown_w = select_w;
-    float dropdown_h = std::min(static_cast<float>(option_count) * option_height, max_dropdown_h);
+    float dropdown_h = std::min(content_h, max_dropdown_h);
 
-    Color dropdown_bg = {1.0f, 1.0f, 1.0f, 1.0f};
+    Color dropdown_bg = {1.0f, 1.0f, 1.0f};
     builder.addRect(Rect{dropdown_x, dropdown_y, dropdown_w, dropdown_h}, dropdown_bg);
 
     Color border_color = {0.7f, 0.7f, 0.7f, 1.0f};
@@ -202,81 +214,151 @@ void renderSelectDropdown(
     builder.addRect(Rect{dropdown_x, dropdown_y + dropdown_h - border_w, dropdown_w, border_w}, border_color);
     builder.addRect(Rect{dropdown_x, dropdown_y, border_w, dropdown_h}, border_color);
 
-    const auto& options = state->getOptions();
     const size_t selected_index = state->getSelectedIndex();
     const int hover_index = state->getHoverIndex();
 
     const float scroll = std::max(0.0f, state->getScrollOffset());
-    const size_t first_index = static_cast<size_t>(scroll / option_height);
-    const float y_offset = std::fmod(scroll, option_height);
 
-    const int visible_count = static_cast<int>(std::ceil(dropdown_h / option_height)) + 1;
-    const size_t end_index = std::min(option_count, first_index + static_cast<size_t>(std::max(visible_count, 0)));
+    // 找到第一个可见项目的索引和偏移
+    size_t first_index = 0;
+    float y_offset = 0.0f;
+    float y_accum = 0.0f;
+    for (size_t i = 0; i < options.size(); ++i) {
+        const float item_h = (options[i].type == dom::SelectItemType::Optgroup) ? optgroup_height : option_height;
+        if (y_accum + item_h > scroll) {
+            first_index = i;
+            y_offset = scroll - y_accum;
+            break;
+        }
+        y_accum += item_h;
+    }
 
     const float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
+    float current_y = dropdown_y - y_offset;
 
-    for (size_t i = first_index; i < end_index; ++i) {
+    for (size_t i = first_index; i < options.size(); ++i) {
         const auto& opt = options[i];
 
-        const float opt_y = dropdown_y + static_cast<float>(i - first_index) * option_height - y_offset;
-        if (opt_y + option_height < dropdown_y || opt_y > dropdown_y + dropdown_h) {
+        const float item_h = (opt.type == dom::SelectItemType::Optgroup) ? optgroup_height : option_height;
+        const float item_y = current_y;
+
+        if (item_y + item_h < dropdown_y || item_y > dropdown_y + dropdown_h) {
+            current_y += item_h;
             continue;
         }
 
-        Rect opt_rect = {dropdown_x, opt_y, dropdown_w, option_height};
+        Rect opt_rect = {dropdown_x, item_y, dropdown_w, item_h};
 
-        if (static_cast<int>(i) == hover_index && !opt.disabled) {
-            Color hover_bg = {0.92f, 0.92f, 0.92f, 1.0f};
-            builder.addRect(opt_rect, hover_bg);
-        } else if (i == selected_index) {
-            Color selected_bg = {0.89f, 0.95f, 0.99f, 1.0f};
-            builder.addRect(opt_rect, selected_bg);
-        }
+        if (opt.type == dom::SelectItemType::Optgroup) {
+            // 渲染 optgroup 标题（不可点击，使用粗体和不同背景）
+            Color optgroup_bg = {0.95f, 0.97f, 1.0f, 1.0f};
+            builder.addRect(opt_rect, optgroup_bg);
 
-        if (!opt.display_text.empty()) {
-            TextShapeRequest req{opt.display_text, style.font_family, style.font_weight, style.font_style, font_size};
-            ShapedText shaped;
-            if (shaper.shape(req, shaped) && !shaped.glyphs.empty()) {
-                float scale = shaped.scale_to_pixels;
-                float ascent = shaped.ascent_units > 0.0f ? shaped.ascent_units : font_size / scale;
-                float line_h = shaped.line_height_units;
-                if (line_h <= 0.0f) line_h = font_size / scale;
-                float descent_abs = shaped.descent_units < 0.0f ? -shaped.descent_units : 0.0f;
-                float extra = std::max(line_h - (ascent + descent_abs), 0.0f);
-                float baseline_off = (extra * 0.5f + ascent) * scale;
-                float text_h_px = line_h * scale;
+            // 绘制分隔线
+            Color separator_color = {0.85f, 0.87f, 0.9f, 1.0f};
+            builder.addRect(Rect{dropdown_x, item_y + item_h - 1.0f, dropdown_w, 1.0f}, separator_color);
 
-                float text_y = opt_y + (option_height - text_h_px) * 0.5f;
-                float baseline_y = text_y + baseline_off;
-                float text_x = dropdown_x + 8.0f;
+            if (!opt.display_text.empty()) {
+                // 使用粗体字
+                std::string optgroup_font_weight = "700";  // bold
+                TextShapeRequest req{opt.display_text, style.font_family, optgroup_font_weight, style.font_style, font_size};
+                ShapedText shaped;
+                if (shaper.shape(req, shaped) && !shaped.glyphs.empty()) {
+                    float scale = shaped.scale_to_pixels;
+                    float ascent = shaped.ascent_units > 0.0f ? shaped.ascent_units : font_size / scale;
+                    float line_h = shaped.line_height_units;
+                    if (line_h <= 0.0f) line_h = font_size / scale;
+                    float descent_abs = shaped.descent_units < 0.0f ? -shaped.descent_units : 0.0f;
+                    float extra = std::max(line_h - (ascent + descent_abs), 0.0f);
+                    float baseline_off = (extra * 0.5f + ascent) * scale;
+                    float text_h_px = line_h * scale;
 
-                DrawGlyphRunData run;
-                run.rect = {text_x, text_y, shaped.width_units * scale, text_h_px};
-                run.color = opt.disabled ? Color{0.6f, 0.6f, 0.6f, 1.0f} : makeColorFromCss(style.color);
-                run.font_size = font_size;
-                run.font_family = style.font_family;
-                run.font_weight = style.font_weight;
-                run.font_style = style.font_style;
-                run.font_paths = shaped.font_paths;
-                run.font_path = shaped.font_path;
-                run.baseline_x = text_x;
-                run.baseline_y = baseline_y;
-                run.units_per_em = shaped.units_per_em;
-                run.scale_to_pixels = shaped.scale_to_pixels;
-                painter_detail::fillTextShadow(run, style);
+                    float text_y = item_y + (item_h - text_h_px) * 0.5f;
+                    float baseline_y = text_y + baseline_off;
+                    float text_x = dropdown_x + 8.0f;  // 与 option 左对齐
 
-                for (const auto& sg : shaped.glyphs) {
-                    GlyphInstance inst{sg.glyph_id, sg.pen_x_units, sg.pen_y_units,
-                                      sg.font_path_index, sg.units_per_em};
-                    run.glyphs.push_back(inst);
+                    DrawGlyphRunData run;
+                    run.rect = {text_x, text_y, shaped.width_units * scale, text_h_px};
+                    run.color = opt.disabled ? Color{0.5f, 0.5f, 0.55f, 1.0f} : Color{0.35f, 0.4f, 0.5f, 1.0f};  // 深色文本
+                    run.font_size = font_size;
+                    run.font_family = style.font_family;
+                    run.font_weight = optgroup_font_weight;
+                    run.font_style = style.font_style;
+                    run.font_paths = shaped.font_paths;
+                    run.font_path = shaped.font_path;
+                    run.baseline_x = text_x;
+                    run.baseline_y = baseline_y;
+                    run.units_per_em = shaped.units_per_em;
+                    run.scale_to_pixels = shaped.scale_to_pixels;
+                    painter_detail::fillTextShadow(run, style);
+
+                    for (const auto& sg : shaped.glyphs) {
+                        GlyphInstance inst{sg.glyph_id, sg.pen_x_units, sg.pen_y_units,
+                                          sg.font_path_index, sg.units_per_em};
+                        run.glyphs.push_back(inst);
+                    }
+                    builder.addGlyphRun(std::move(run));
                 }
-                builder.addGlyphRun(std::move(run));
+            }
+        } else {
+            // 渲染普通 option
+            if (static_cast<int>(i) == hover_index && !opt.disabled) {
+                Color hover_bg = {0.92f, 0.92f, 0.92f, 1.0f};
+                builder.addRect(opt_rect, hover_bg);
+            } else if (i == selected_index) {
+                Color selected_bg = {0.89f, 0.95f, 0.99f, 1.0f};
+                builder.addRect(opt_rect, selected_bg);
+            }
+
+            if (!opt.display_text.empty()) {
+                // 根据是否在 optgroup 中设置缩进
+                float indent = opt.optgroup_label.empty() ? 0.0f : 15.0f;
+
+                TextShapeRequest req{opt.display_text, style.font_family, style.font_weight, style.font_style, font_size};
+                ShapedText shaped;
+                if (shaper.shape(req, shaped) && !shaped.glyphs.empty()) {
+                    float scale = shaped.scale_to_pixels;
+                    float ascent = shaped.ascent_units > 0.0f ? shaped.ascent_units : font_size / scale;
+                    float line_h = shaped.line_height_units;
+                    if (line_h <= 0.0f) line_h = font_size / scale;
+                    float descent_abs = shaped.descent_units < 0.0f ? -shaped.descent_units : 0.0f;
+                    float extra = std::max(line_h - (ascent + descent_abs), 0.0f);
+                    float baseline_off = (extra * 0.5f + ascent) * scale;
+                    float text_h_px = line_h * scale;
+
+                    float text_y = item_y + (item_h - text_h_px) * 0.5f;
+                    float baseline_y = text_y + baseline_off;
+                    float text_x = dropdown_x + 8.0f + indent;
+
+                    DrawGlyphRunData run;
+                    run.rect = {text_x, text_y, shaped.width_units * scale, text_h_px};
+                    run.color = opt.disabled ? Color{0.6f, 0.6f, 0.6f, 1.0f} : makeColorFromCss(style.color);
+                    run.font_size = font_size;
+                    run.font_family = style.font_family;
+                    run.font_weight = style.font_weight;
+                    run.font_style = style.font_style;
+                    run.font_paths = shaped.font_paths;
+                    run.font_path = shaped.font_path;
+                    run.baseline_x = text_x;
+                    run.baseline_y = baseline_y;
+                    run.units_per_em = shaped.units_per_em;
+                    run.scale_to_pixels = shaped.scale_to_pixels;
+                    painter_detail::fillTextShadow(run, style);
+
+                    for (const auto& sg : shaped.glyphs) {
+                        GlyphInstance inst{sg.glyph_id, sg.pen_x_units, sg.pen_y_units,
+                                          sg.font_path_index, sg.units_per_em};
+                        run.glyphs.push_back(inst);
+                    }
+                    builder.addGlyphRun(std::move(run));
+                }
             }
         }
+
+        current_y += item_h;
     }
 
     // Simple scroll thumb when content exceeds viewport
-    const float content_h = static_cast<float>(option_count) * option_height;
     if (content_h > dropdown_h + 0.5f) {
         const float track_w = 4.0f;
         const float track_x = dropdown_x + dropdown_w - track_w - 2.0f;

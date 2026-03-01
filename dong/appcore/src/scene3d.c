@@ -1191,6 +1191,20 @@ static void send_mouse_move_to_screen(dong_scene3d_t* scene, int idx, int32_t x,
     }
 }
 
+static void send_mouse_move_to_screen_force(dong_scene3d_t* scene, int idx, int32_t x, int32_t y) {
+    if (idx < 0 || idx >= scene->screen_count) return;
+    dong_screen3d_t* scr = scene->screens[idx];
+    if (!scr || !scr->engine) return;
+
+    scr->mouse_x = x;
+    scr->mouse_y = y;
+    dong_engine_send_mouse_move(scr->engine, x, y);
+    scene->last_sent_mouse_screen = idx;
+    scene->last_sent_mouse_x = x;
+    scene->last_sent_mouse_y = y;
+    scr->dirty = 1;
+}
+
 
 static void update_hover_from_mouse(dong_scene3d_t* scene, int32_t mx, int32_t my, uint32_t w, uint32_t h) {
     if (!scene || w == 0 || h == 0) return;
@@ -1249,7 +1263,8 @@ static void handle_left_down(dong_scene3d_t* scene) {
         scene->pressed_x = scr->mouse_x;
         scene->pressed_y = scr->mouse_y;
 
-        send_mouse_move_to_screen(scene, scene->pressed_idx, scene->pressed_x, scene->pressed_y);
+        // 与 dong_app 2D 路径保持一致：按下前总是同步一次 mousemove，确保 hit-test 坐标新鲜。
+        send_mouse_move_to_screen_force(scene, scene->pressed_idx, scene->pressed_x, scene->pressed_y);
         if (scr->engine) {
             dong_engine_send_mouse_button(scr->engine, SDL_BUTTON_LEFT, 1);
         }
@@ -1272,7 +1287,8 @@ static void handle_left_up(dong_scene3d_t* scene) {
         const int32_t upx = (scene->pressed_idx >= 0) ? scene->pressed_x : scr->mouse_x;
         const int32_t upy = (scene->pressed_idx >= 0) ? scene->pressed_y : scr->mouse_y;
 
-        send_mouse_move_to_screen(scene, target, upx, upy);
+        // 与 dong_app 2D 路径保持一致：抬起前总是同步 mousemove。
+        send_mouse_move_to_screen_force(scene, target, upx, upy);
         if (scr->engine) {
             dong_engine_send_mouse_button(scr->engine, SDL_BUTTON_LEFT, 0);
         }
@@ -1290,6 +1306,9 @@ static void handle_wheel(dong_scene3d_t* scene, float dx, float dy) {
 
     dong_screen3d_t* scr = scene->screens[scene->hovered_idx];
     if (!scr || !scr->engine) return;
+
+    // 与 2D app 路径对齐：滚轮前先同步当前位置，避免滚动命中目标错误。
+    send_mouse_move_to_screen_force(scene, scene->hovered_idx, scr->mouse_x, scr->mouse_y);
 
     const float kWheelMultiplier = 3.0f;
     // dong_app 已经对 SDL wheel 做了方向校正，这里保持一致即可。
@@ -1319,17 +1338,24 @@ static void update_camera_key_state_scancode(dong_scene3d_t* scene, uint32_t sca
     }
 }
 
+static uint32_t normalize_ascii_keycode(uint32_t key) {
+    if (key >= 'A' && key <= 'Z') {
+        return key + ('a' - 'A');
+    }
+    return key;
+}
+
 static void update_camera_key_state_fallback_keycode(dong_scene3d_t* scene, uint32_t key, int down) {
     if (!scene) return;
 
     const int v = down ? 1 : 0;
-    switch (key) {
-        case SDLK_W: scene->key_w = v; break;
-        case SDLK_A: scene->key_a = v; break;
-        case SDLK_S: scene->key_s = v; break;
-        case SDLK_D: scene->key_d = v; break;
-        case SDLK_Q: scene->key_q = v; break;
-        case SDLK_E: scene->key_e = v; break;
+    switch (normalize_ascii_keycode(key)) {
+        case 'w': scene->key_w = v; break;
+        case 'a': scene->key_a = v; break;
+        case 's': scene->key_s = v; break;
+        case 'd': scene->key_d = v; break;
+        case 'q': scene->key_q = v; break;
+        case 'e': scene->key_e = v; break;
         case SDLK_SPACE: scene->key_space = v; break;
         case SDLK_LCTRL: scene->key_lctrl = v; break;
         case SDLK_RCTRL: scene->key_rctrl = v; break;

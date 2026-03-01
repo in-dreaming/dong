@@ -219,6 +219,11 @@ static void app_update_cursor(dong_app_impl_t* app) {
         return;
     }
 
+    // 当上层接管事件回调（如 Scene3D）时，cursor 由回调逻辑决定，避免被默认 engine 覆盖。
+    if (app->event_callback) {
+        return;
+    }
+
     const char* css_cursor = dong_engine_get_cursor_at(app->engine, app->mouse_x, app->mouse_y);
     app_apply_cursor(css_cursor);
 }
@@ -428,6 +433,9 @@ DONG_APPCORE_API dong_app_t* dong_app_create(const dong_app_config_t* config) {
         free(app);
         return NULL;
     }
+
+    // Enable text input by default so HTML input/textarea works without extra setup.
+    SDL_StartTextInput(app->window);
 
     app->gpu_device = SDL_CreateGPUDevice(
         SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_DXIL | SDL_GPU_SHADERFORMAT_MSL,

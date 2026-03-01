@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Details/Summary Basic</title>
+    <style>
+        details {
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        summary {
+            cursor: pointer;
+            font-weight: bold;
+            padding: 5px;
+            background-color: #f0f0f0;
+        }
+        .content {
+            padding: 10px;
+            background-color: #fff;
+        }
+    </style>
+</head>
+<body>
+    <h1>Test Details/Summary Basic</h1>
+
+    <!-- Test 1: Basic details/summary with open attribute -->
+    <details open>
+        <summary>Expanded Details (open attribute)</summary>
+        <div class="content">This content should be visible because open attribute is set.</div>
+    </details>
+
+    <!-- Test 2: Basic details/summary without open -->
+    <details>
+        <summary>Closed Details (no open attribute)</summary>
+        <div class="content">This content should be hidden because no open attribute.</div>
+    </details>
+
+    <!-- Test 3: Details without summary -->
+    <details open>
+        <div class="content">Details without summary child - content should be visible.</div>
+    </details>
+
+    <!-- Test 4: Nested details -->
+    <details>
+        <summary>Parent Details</summary>
+        <div class="content">
+            This is parent content.
+            <details>
+                <summary>Nested Details</summary>
+                <div class="content">This is nested content.</div>
+            </details>
+        </div>
+    </details>
+</body>
+</html>

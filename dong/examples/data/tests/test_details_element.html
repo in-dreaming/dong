@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  body { font-size: 18px; padding: 20px; }
+  details {
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 10px;
+    margin: 10px 0;
+  }
+  summary {
+    font-weight: bold;
+    cursor: pointer;
+    user-select: none;
+  }
+  summary:hover { background: #f5f5f5; }
+  .content { padding: 10px; margin-top: 10px; }
+  #result { margin-top: 20px; padding: 10px; background: #eee; white-space: pre; }
+</style>
+</head>
+<body>
+  <h1>Details Element Test</h1>
+
+  <!-- 测试用例1：默认关闭的details -->
+  <details id="details1">
+    <summary>点击展开/折叠内容</summary>
+    <div class="content">
+      <p>这是details元素的隐藏内容。当details关闭时，这部分内容应该不可见。</p>
+      <p>点击summary元素可以切换展开/折叠状态。</p>
+    </div>
+  </details>
+
+  <!-- 测试用例2：默认打开的details -->
+  <details id="details2" open>
+    <summary>默认打开的内容</summary>
+    <div class="content">
+      <p>这个details元素默认是打开的。</p>
+      <p>内容应该一开始就可见。</p>
+    </div>
+  </details>
+
+  <!-- 测试用例3：嵌套details -->
+  <details id="details3">
+    <summary>嵌套details测试</summary>
+    <div class="content">
+      <p>外层details的内容</p>
+      <details>
+        <summary>内层details</summary>
+        <div class="content">
+          <p>内层details的内容</p>
+        </div>
+      </details>
+    </div>
+  </details>
+
+  <div id="result"></div>
+
+  <script>
+    var log = '';
+    var details1 = document.getElementById('details1');
+    var details2 = document.getElementById('details2');
+    var details3 = document.getElementById('details3');
+
+    // 测试初始状态
+    log += 'details1.open initial: ' + (details1.open === false ? 'PASS' : 'FAIL') + '\n';
+    log += 'details2.open initial: ' + (details2.open === true ? 'PASS' : 'FAIL') + '\n';
+    log += 'details3.open initial: ' + (details3.open === false ? 'PASS' : 'FAIL') + '\n';
+
+    // 添加toggle事件监听器
+    details1.addEventListener('toggle', function() {
+      log += 'details1 toggle: open=' + details1.open + '\n';
+      updateResult();
+    });
+
+    details2.addEventListener('toggle', function() {
+      log += 'details2 toggle: open=' + details2.open + '\n';
+      updateResult();
+    });
+
+    details3.addEventListener('toggle', function() {
+      log += 'details3 toggle: open=' + details3.open + '\n';
+      updateResult();
+    });
+
+    // 测试JavaScript控制
+    log += '\\n=== JavaScript控制测试 ===\\n';
+
+    // 测试open属性设置
+    details1.open = true;
+    log += 'details1.open after JS set true: ' + (details1.open === true ? 'PASS' : 'FAIL') + '\n';
+
+    details1.open = false;
+    log += 'details1.open after JS set false: ' + (details1.open === false ? 'PASS' : 'FAIL') + '\n';
+
+    // 测试toggle()方法（如果实现）
+    if (typeof details1.toggle === 'function') {
+      details1.toggle();
+      log += 'details1.toggle() called: open=' + details1.open + '\\n';
+      details1.toggle();
+      log += 'details1.toggle() called again: open=' + details1.open + '\\n';
+    }
+
+    // 测试CSS伪类选择器
+    log += '\\n=== CSS伪类选择器测试 ===\\n';
+
+    // 检查:open伪类
+    var details1Styles = window.getComputedStyle(details1);
+    var details2Styles = window.getComputedStyle(details2);
+
+    // 注意：这里只是测试伪类是否被识别，实际样式可能因实现而异
+    log += 'details1 :open伪类: ' + (details1.open ? '应该匹配' : '不应该匹配') + '\\n';
+    log += 'details2 :open伪类: ' + (details2.open ? '应该匹配' : '不应该匹配') + '\\n';
+
+    function updateResult() {
+      document.getElementById('result').textContent = log;
+    }
+
+    updateResult();
+    console.log('Details element test loaded');
+  </script>
+</body>
+</html>

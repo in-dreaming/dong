@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Form Validation - Pattern Attribute Test</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; }
+        input { margin: 5px; padding: 5px; border: 1px solid #ccc; }
+        input:valid { border-color: green; background-color: #f0fff0; }
+        input:invalid { border-color: red; background-color: #fff0f0; }
+        .test-case { margin: 10px 0; padding: 10px; border: 1px solid #ddd; }
+        .result { margin-top: 5px; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>Pattern Attribute Validation Test</h1>
+
+    <div class="test-case">
+        <h3>1. Email Pattern Validation</h3>
+        <input type="text" pattern="[a-z0-9._%+-]+@[a-z0-9.-]+\\.[a-z]{2,}$"
+               placeholder="Enter email" value="test@example.com">
+        <div class="result">Should be valid (green border)</div>
+    </div>
+
+    <div class="test-case">
+        <h3>2. Phone Number Pattern</h3>
+        <input type="text" pattern="\\d{3}-\\d{3}-\\d{4}"
+               placeholder="Format: 123-456-7890" value="123-456-7890">
+        <div class="result">Should be valid (green border)</div>
+    </div>
+
+    <div class="test-case">
+        <h3>3. Zip Code Pattern</h3>
+        <input type="text" pattern="\\d{5}(-\\d{4})?"
+               placeholder="Format: 12345 or 12345-6789" value="12345">
+        <div class="result">Should be valid (green border)</div>
+    </div>
+
+    <div class="test-case">
+        <h3>4. Invalid Pattern Test</h3>
+        <input type="text" pattern="[A-Z]{3}"
+               placeholder="Must be 3 uppercase letters" value="abc">
+        <div class="result">Should be invalid (red border)</div>
+    </div>
+
+    <div class="test-case">
+        <h3>5. Pattern with Required</h3>
+        <input type="text" pattern="\\d+" required
+               placeholder="Required number only" value="">
+        <div class="result">Should be invalid (empty + required)</div>
+    </div>
+
+    <script>
+        // Test JavaScript API
+        document.addEventListener('DOMContentLoaded', function() {
+            const inputs = document.querySelectorAll('input');
+            inputs.forEach((input, index) => {
+                console.log(`Input ${index + 1}:`, {
+                    value: input.value,
+                    pattern: input.pattern,
+                    valid: input.checkValidity(),
+                    validity: input.validity
+                });
+            });
+        });
+    </script>
+</body>
+</html>

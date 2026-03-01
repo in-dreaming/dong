@@ -295,7 +295,8 @@ void Engine::layoutSingleTable(const dom::DOMNodePtr& table_node) {
 
     const auto& style = table_node->getComputedStyle();
     const bool is_collapse = (style.border_collapse == "collapse");
-    const float spacing = is_collapse ? 0.0f : style.border_spacing;
+    const float spacing_x = is_collapse ? 0.0f : style.border_spacing_x;
+    const float spacing_y = is_collapse ? 0.0f : style.border_spacing_y;
     const bool is_fixed = (style.table_layout == "fixed");
 
     std::vector<dom::DOMNodePtr> rows;
@@ -306,14 +307,14 @@ void Engine::layoutSingleTable(const dom::DOMNodePtr& table_node) {
     if (num_cols == 0) return;
 
     std::vector<float> col_widths(num_cols, 0.0f);
-    computeColumnWidths(table_node, rows, num_cols, is_fixed, spacing, col_widths);
-    positionTableCells(table_node, rows, col_widths, spacing, is_collapse);
+    computeColumnWidths(table_node, rows, num_cols, is_fixed, spacing_x, col_widths);
+    positionTableCells(table_node, rows, col_widths, spacing_x, spacing_y, is_collapse);
 }
 
 void Engine::computeColumnWidths(
     const dom::DOMNodePtr& table_node,
     const std::vector<dom::DOMNodePtr>& rows,
-    size_t num_cols, bool is_fixed, float spacing,
+    size_t num_cols, bool is_fixed, float spacing_x,
     std::vector<float>& col_widths) {
 
     auto* table_ln = getLayoutMutable(table_node);
@@ -325,7 +326,7 @@ void Engine::computeColumnWidths(
     const float pt_l = ts.padding_left.isPixel() ? ts.padding_left.value : 0.0f;
     const float pt_r = ts.padding_right.isPixel() ? ts.padding_right.value : 0.0f;
     const float avail = table_width - bw * 2.0f - pt_l - pt_r;
-    const float total_spacing = spacing * static_cast<float>(num_cols + 1);
+    const float total_spacing = spacing_x * static_cast<float>(num_cols + 1);
 
     if (is_fixed && table_width > 0.0f) {
         float col_w = std::max(0.0f, (avail - total_spacing) / static_cast<float>(num_cols));
@@ -378,7 +379,7 @@ void Engine::positionTableCells(
     const dom::DOMNodePtr& table_node,
     const std::vector<dom::DOMNodePtr>& /*rows*/,
     const std::vector<float>& col_widths,
-    float spacing, bool /*is_collapse*/) {
+    float spacing_x, float spacing_y, bool /*is_collapse*/) {
 
     auto* table_ln = getLayoutMutable(table_node);
     if (!table_ln) return;
@@ -406,8 +407,8 @@ void Engine::positionTableCells(
     const bool caption_bottom = caption_node ? isCaptionSideBottom(caption_node) : false;
     const float caption_top_offset = (caption_node && !caption_bottom) ? caption_h : 0.0f;
 
-    const float content_x = table_x + bw + pt_l + spacing;
-    float cur_y = table_y + caption_top_offset + bw + pt_t + spacing;
+    const float content_x = table_x + bw + pt_l + spacing_x;
+    float cur_y = table_y + caption_top_offset + bw + pt_t + spacing_y;
 
     for (const auto& block : blocks) {
         LayoutNode* group_ln = nullptr;
@@ -426,17 +427,17 @@ void Engine::positionTableCells(
             collectCells(row, cells);
 
             const float row_h = computeRowHeightPx(this, cells);
-            const float row_w = positionCellsInRowAbs(this, cells, col_widths, content_x, cur_y, spacing, row_h);
+            const float row_w = positionCellsInRowAbs(this, cells, col_widths, content_x, cur_y, spacing_x, row_h);
 
             updateLayoutRect(row_ln, content_x, cur_y, row_w, row_h);
 
             group_w = std::max(group_w, row_w);
-            cur_y += row_h + spacing;
+            cur_y += row_h + spacing_y;
         }
 
         if (block.group && group_ln) {
             // Exclude the trailing spacing after the last row from row-group's own height.
-            const float end_y = (cur_y > group_start_y) ? (cur_y - spacing) : group_start_y;
+            const float end_y = (cur_y > group_start_y) ? (cur_y - spacing_y) : group_start_y;
             const float group_h = std::max(0.0f, end_y - group_start_y);
             updateLayoutRect(group_ln, content_x, group_start_y, group_w, group_h);
         }

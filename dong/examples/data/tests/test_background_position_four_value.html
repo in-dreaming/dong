@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>CSS background-position 四值语法测试</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: Arial, sans-serif;
+      background: #f5f5f5;
+    }
+
+    .container {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 20px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .test-case {
+      background: white;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      height: 200px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .test-case::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="%23e0e0e0"/><circle cx="50" cy="50" r="40" fill="%234CAF50" opacity="0.7"/></svg>');
+      background-repeat: no-repeat;
+      background-size: 80px 80px;
+      opacity: 0.8;
+    }
+
+    .label {
+      position: relative;
+      z-index: 1;
+      font-weight: bold;
+      margin-bottom: 10px;
+      color: #333;
+    }
+
+    .code {
+      position: relative;
+      z-index: 1;
+      font-family: monospace;
+      font-size: 12px;
+      color: #666;
+      background: #f8f8f8;
+      padding: 8px;
+      border-radius: 4px;
+      margin-top: 10px;
+    }
+
+    /* 1-value syntax */
+    .case1::before { background-position: center; }
+    .case2::before { background-position: left; }
+    .case3::before { background-position: right; }
+    .case4::before { background-position: top; }
+    .case5::before { background-position: bottom; }
+    .case6::before { background-position: 25%; }
+
+    /* 2-value syntax */
+    .case7::before { background-position: left top; }
+    .case8::before { background-position: right bottom; }
+    .case9::before { background-position: center center; }
+    .case10::before { background-position: 20% 80%; }
+    .case11::before { background-position: 10px 30px; }
+
+    /* 3-value syntax */
+    .case12::before { background-position: right 10px top; }
+    .case13::before { background-position: left 20px bottom; }
+    .case14::before { background-position: top 15px center; }
+    .case15::before { background-position: bottom 25px left; }
+
+    /* 4-value syntax */
+    .case16::before { background-position: right 10px bottom 20px; }
+    .case17::before { background-position: left 15px top 25px; }
+    .case18::before { background-position: center 5px center 10px; }
+
+    /* Edge cases */
+    .case19::before { background-position: right 0px bottom 0px; }
+    .case20::before { background-position: left 50% top 50%; }
+  </style>
+</head>
+<body>
+  <h1>CSS background-position 四值语法测试</h1>
+
+  <div class="container">
+
+    <!-- 1-value syntax -->
+    <div class="test-case case1">
+      <div class="label">1-value: center</div>
+      <div class="code">background-position: center;</div>
+    </div>
+
+    <div class="test-case case2">
+      <div class="label">1-value: left</div>
+      <div class="code">background-position: left;</div>
+    </div>
+
+    <div class="test-case case3">
+      <div class="label">1-value: right</div>
+      <div class="code">background-position: right;</div>
+    </div>
+
+    <div class="test-case case4">
+      <div class="label">1-value: top</div>
+      <div class="code">background-position: top;</div>
+    </div>
+
+    <div class="test-case case5">
+      <div class="label">1-value: bottom</div>
+      <div class="code">background-position: bottom;</div>
+    </div>
+
+    <div class="test-case case6">
+      <div class="label">1-value: 25%</div>
+      <div class="code">background-position: 25%;</div>
+    </div>
+
+    <!-- 2-value syntax -->
+    <div class="test-case case7">
+      <div class="label">2-value: left top</div>
+      <div class="code">background-position: left top;</div>
+    </div>
+
+    <div class="test-case case8">
+      <div class="label">2-value: right bottom</div>
+      <div class="code">background-position: right bottom;</div>
+    </div>
+
+    <div class="test-case case9">
+      <div class="label">2-value: center center</div>
+      <div class="code">background-position: center center;</div>
+    </div>
+
+    <div class="test-case case10">
+      <div class="label">2-value: 20% 80%</div>
+      <div class="code">background-position: 20% 80%;</div>
+    </div>
+
+    <div class="test-case case11">
+      <div class="label">2-value: 10px 30px</div>
+      <div class="code">background-position: 10px 30px;</div>
+    </div>
+
+    <!-- 3-value syntax -->
+    <div class="test-case case12">
+      <div class="label">3-value: right 10px top</div>
+      <div class="code">background-position: right 10px top;</div>
+    </div>
+
+    <div class="test-case case13">
+      <div class="label">3-value: left 20px bottom</div>
+      <div class="code">background-position: left 20px bottom;</div>
+    </div>
+
+    <div class="test-case case14">
+      <div class="label">3-value: top 15px center</div>
+      <div class="code">background-position: top 15px center;</div>
+    </div>
+
+    <div class="test-case case15">
+      <div class="label">3-value: bottom 25px left</div>
+      <div class="code">background-position: bottom 25px left;</div>
+    </div>
+
+    <!-- 4-value syntax -->
+    <div class="test-case case16">
+      <div class="label">4-value: right 10px bottom 20px</div>
+      <div class="code">background-position: right 10px bottom 20px;</div>
+    </div>
+
+    <div class="test-case case17">
+      <div class="label">4-value: left 15px top 25px</div>
+      <div class="code">background-position: left 15px top 25px;</div>
+    </div>
+
+    <div class="test-case case18">
+      <div class="label">4-value: center 5px center 10px</div>
+      <div class="code">background-position: center 5px center 10px;</div>
+    </div>
+
+    <!-- Edge cases -->
+    <div class="test-case case19">
+      <div class="label">Edge case: right 0px bottom 0px</div>
+      <div class="code">background-position: right 0px bottom 0px;</div>
+    </div>
+
+    <div class="test-case case20">
+      <div class="label">Edge case: left 50% top 50%</div>
+      <div class="code">background-position: left 50% top 50%;</div>
+    </div>
+
+  </div>
+
+</body>
+</html>

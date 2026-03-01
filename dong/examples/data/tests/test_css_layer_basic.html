@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>CSS @layer Basic Test</title>
+    <style>
+        /* 基本层优先级测试 */
+        @layer base, theme;
+
+        @layer theme {
+            div { color: blue; }
+        }
+
+        @layer base {
+            div { color: red; }
+        }
+
+        /* 未分层规则优先级最高 */
+        div { color: green; }
+    </style>
+</head>
+<body>
+    <div>This text should be green (unlayered > theme > base)</div>
+</body>
+</html>

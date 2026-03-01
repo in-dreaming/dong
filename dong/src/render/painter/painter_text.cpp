@@ -126,7 +126,25 @@ static Color resolveTextColorForNode(const dom::DOMNodePtr& node,
     if (is_control && !style.isExplicitlySet("color") && toLowerCopy(style.color_scheme) == "dark") {
         return makeColorFromCss("#e8eaed");
     }
+
+    // Check for ::selection pseudo-element styles
+    auto selection_pseudo = node ? node->getPseudoSelection() : nullptr;
+    if (selection_pseudo && !selection_pseudo->getComputedStyle().color.empty()) {
+        return makeColorFromCss(selection_pseudo->getComputedStyle().color);
+    }
+
     return makeColorFromCss(style.color);
+}
+
+static std::string resolveBackgroundColorForNode(const dom::DOMNodePtr& node,
+                                                 const dom::ComputedStyle& style) {
+    // Check for ::selection pseudo-element styles
+    auto selection_pseudo = node ? node->getPseudoSelection() : nullptr;
+    if (selection_pseudo && !selection_pseudo->getComputedStyle().background_color.empty()) {
+        return selection_pseudo->getComputedStyle().background_color;
+    }
+
+    return style.background_color;
 }
 
 MixedPathState initMixedPath(const dom::DOMNodePtr& node,
@@ -150,6 +168,7 @@ MixedPathState initMixedPath(const dom::DOMNodePtr& node,
 
     // Compute baseline
     TextShapeRequest req{"X", style.font_family, style.font_weight, style.font_style, s.container_font_size};
+    req.lang = node->getEffectiveLang();  // Set language from DOM node
     ShapedText shaped;
     if (shaper.shape(req, shaped)) {
         float scale = shaped.scale_to_pixels;
@@ -176,6 +195,7 @@ MixedPathState initMixedPath(const dom::DOMNodePtr& node,
 // Measure the pixel width of a single space character in the container's font.
 float measureSpaceWidth(const dom::ComputedStyle& style, float font_size, TextShaper& shaper) {
     TextShapeRequest req{" ", style.font_family, style.font_weight, style.font_style, font_size};
+    req.lang = "";  // Use default language for space measurement
     ShapedText shaped;
     if (shaper.shape(req, shaped) && !shaped.glyphs.empty()) {
         return shaped.width_units * shaped.scale_to_pixels;
@@ -203,7 +223,8 @@ void emitInlineTextRun(const std::string& text,
                        const dom::ComputedStyle& container_style,
                        MixedPathState& state,
                        TextShaper& shaper,
-                       DisplayListBuilder& builder) {
+                       DisplayListBuilder& builder,
+                       const dom::DOMNodePtr& node = nullptr) {
     if (text.empty()) return;
 
     float font_size = cs.font_size > 0.0f ? cs.font_size : state.container_font_size;
@@ -212,6 +233,7 @@ void emitInlineTextRun(const std::string& text,
     std::string style  = cs.font_style.empty()  ? container_style.font_style  : cs.font_style;
 
     TextShapeRequest req{text, family, weight, style, font_size};
+    req.lang = node ? node->getEffectiveLang() : "";  // Set language from DOM node if available
     ShapedText shaped;
     if (!shaper.shape(req, shaped) || shaped.glyphs.empty()) return;
 
@@ -234,7 +256,7 @@ void emitInlineTextRun(const std::string& text,
     run.baseline_y = state.baseline_y;
     run.units_per_em = shaped.units_per_em;
     run.scale_to_pixels = shaped.scale_to_pixels;
-    fillTextShadow(run, cs);
+    fillTextShadow(run, cs, node);
 
     for (const auto& sg : shaped.glyphs) {
         run.glyphs.push_back({sg.glyph_id, sg.pen_x_units, sg.pen_y_units,
@@ -287,7 +309,7 @@ void renderInlineChildren(const dom::DOMNodePtr& node,
                     container_style, state.container_font_size, shaper);
             }
             emitInlineTextRun(text, effective_style, container_style,
-                              state, shaper, builder);
+                              state, shaper, builder, gc);
             // Trailing space compensation
             bool raw_ends_with_space = std::isspace(static_cast<unsigned char>(raw.back()));
             if (raw_ends_with_space) {
@@ -330,17 +352,18 @@ void renderInlineSubtree(const dom::DOMNodePtr& node,
 
     // Background rect spanning all rendered content of this inline element.
     float content_width = state.cumulative_x - start_x;
+    std::string bg_color = resolveBackgroundColorForNode(node, effective_style);
     if (content_width > 0.0f
-        && !effective_style.background_color.empty()
-        && effective_style.background_color != "transparent") {
+        && !bg_color.empty()
+        && bg_color != "transparent") {
         Rect r{state.x + state.pad_left + start_x - pad_l,
                state.baseline_y - state.ascent_px,
                content_width + pad_l + pad_r, state.line_height_px};
         if (effective_style.border_radius > 0.0f)
-            builder.addRoundedRect(r, makeColorFromCss(effective_style.background_color),
+            builder.addRoundedRect(r, makeColorFromCss(bg_color),
                                    effective_style.border_radius);
         else
-            builder.addRect(r, makeColorFromCss(effective_style.background_color));
+            builder.addRect(r, makeColorFromCss(bg_color));
     }
 
     state.cumulative_x += pad_r;
@@ -372,6 +395,7 @@ void drawTextChildAtPosition(const dom::DOMNodePtr& child,
 
     TextShapeRequest req{text, container_style.font_family, container_style.font_weight,
                          container_style.font_style, container_font_size};
+    req.lang = child->getEffectiveLang();  // Set language from DOM node
     ShapedText shaped;
     if (!shaper.shape(req, shaped) || shaped.glyphs.empty()) return;
 
@@ -406,7 +430,7 @@ void drawTextChildAtPosition(const dom::DOMNodePtr& child,
     run.baseline_y = baseline_y;
     run.units_per_em = shaped.units_per_em;
     run.scale_to_pixels = shaped.scale_to_pixels;
-    fillTextShadow(run, container_style);
+    fillTextShadow(run, container_style, child);
 
     for (const auto& sg : shaped.glyphs) {
         GlyphInstance inst{sg.glyph_id, sg.pen_x_units, sg.pen_y_units,
@@ -447,6 +471,7 @@ void drawTextChild(const dom::DOMNodePtr& child,
     if (!text.empty()) {
         TextShapeRequest req{text, container_style.font_family, container_style.font_weight,
                              container_style.font_style, state.container_font_size};
+        req.lang = child->getEffectiveLang();  // Set language from DOM node
         ShapedText shaped;
         if (shaper.shape(req, shaped) && !shaped.glyphs.empty()) {
             state.cumulative_x += shaped.width_units * shaped.scale_to_pixels;
@@ -544,8 +569,10 @@ void emitInputGlyphRun(const std::string& text,
                        const std::string& font_style,
                        const dom::ComputedStyle& style,
                        TextShaper& shaper,
-                       DisplayListBuilder& builder) {
+                       DisplayListBuilder& builder,
+                       const dom::DOMNodePtr& node = nullptr) {
     TextShapeRequest req{text, font_family, font_weight, font_style, font_size};
+    req.lang = node ? node->getEffectiveLang() : "";  // Set language from DOM node if available
     ShapedText shaped;
     if (!shaper.shape(req, shaped) || shaped.glyphs.empty()) return;
 
@@ -575,7 +602,7 @@ void emitInputGlyphRun(const std::string& text,
     run.baseline_y = baseline_y;
     run.units_per_em = shaped.units_per_em;
     run.scale_to_pixels = shaped.scale_to_pixels;
-    fillTextShadow(run, style);
+    fillTextShadow(run, style, node);
 
     for (const auto& sg : shaped.glyphs) {
         GlyphInstance inst{sg.glyph_id, sg.pen_x_units, sg.pen_y_units,
@@ -619,7 +646,7 @@ void renderInput(const dom::DOMNodePtr& node,
 
     emitInputGlyphRun(text, x, y, w, h, pad_l,
                       color, font_size, font_family, font_weight, font_style,
-                      style, shaper, builder);
+                      style, shaper, builder, node);
 }
 
 // ========== Textarea placeholder 渲染 ==========
@@ -830,6 +857,7 @@ struct FullTextRenderCtx {
     const dom::ComputedStyle& style;
     TextShaper& shaper;
     DisplayListBuilder& builder;
+    const dom::DOMNodePtr& node;
 };
 
 // U+00AD SOFT HYPHEN in UTF-8: 0xC2 0xAD
@@ -876,13 +904,102 @@ void emitFullTextLine(const std::string& line_text, int line_index,
 
     TextShapeRequest req{visible, ctx.style.font_family, ctx.style.font_weight,
                          ctx.style.font_style, ctx.font_size};
+    req.lang = ctx.node ? ctx.node->getEffectiveLang() : "";  // Set language from DOM node if available
 
     ShapedText shaped;
     if (!ctx.shaper.shape(req, shaped) || shaped.glyphs.empty()) return;
 
     float line_width = shaped.width_units * ctx.scale;
     float line_x = ctx.x + ctx.pad_l;
-    if (ctx.text_align == "center") {
+
+    // Handle text-align: justify
+    if (ctx.text_align == "justify") {
+        // Count words in the line to distribute extra space
+        std::vector<std::string> words;
+        std::string word;
+        for (char c : visible) {
+            if (c == ' ') {
+                if (!word.empty()) {
+                    words.push_back(word);
+                    word.clear();
+                }
+            } else {
+                word += c;
+            }
+        }
+        if (!word.empty()) {
+            words.push_back(word);
+        }
+
+        // Last line detection: if this is the last line (or only line with single word), use left alignment
+        // For now, we'll treat all lines as non-last lines for simplicity
+        // In a complete implementation, we'd need to know the total line count
+        bool is_last_line = false; // TODO: Implement proper last line detection
+
+        // If there's only one word or this is the last line, use left alignment
+        if (words.size() <= 1 || is_last_line) {
+            // Last line or single word - left align
+            line_x += 0.0f;
+        } else {
+            // Multiple words - distribute extra space
+            float extra_space = ctx.inner_width - line_width;
+            if (extra_space > 0) {
+                float space_per_gap = extra_space / (words.size() - 1);
+
+                // Create new glyph run with adjusted spacing
+                DrawGlyphRunData run;
+                run.rect = {line_x, 0, ctx.inner_width, ctx.effective_line_height}; // Will be set properly below
+                run.color = ctx.text_color;
+                run.font_size = ctx.font_size;
+                run.font_family = ctx.style.font_family;
+                run.font_weight = ctx.style.font_weight;
+                run.font_style = ctx.style.font_style;
+                run.font_paths = shaped.font_paths;
+                run.font_path = shaped.font_path;
+                run.units_per_em = shaped.units_per_em;
+                run.scale_to_pixels = shaped.scale_to_pixels;
+                fillTextShadow(run, ctx.style, ctx.node);
+
+                // Distribute glyphs with adjusted spacing
+                float current_x = 0.0f;
+                for (size_t i = 0; i < words.size(); i++) {
+                    // Shape the current word
+                    TextShapeRequest word_req{words[i], ctx.style.font_family, ctx.style.font_weight,
+                                            ctx.style.font_style, ctx.font_size};
+                    ShapedText word_shaped;
+                    if (ctx.shaper.shape(word_req, word_shaped) && !word_shaped.glyphs.empty()) {
+                        float word_width = word_shaped.width_units * ctx.scale;
+
+                        // Add word glyphs at current position
+                        for (const auto& sg : word_shaped.glyphs) {
+                            GlyphInstance adjusted_glyph{sg.glyph_id,
+                                                       sg.pen_x_units + (current_x / ctx.scale),
+                                                       sg.pen_y_units,
+                                                       sg.font_path_index,
+                                                       sg.units_per_em};
+                            run.glyphs.push_back(adjusted_glyph);
+                        }
+
+                        current_x += word_width;
+
+                        // Add space between words (except after last word)
+                        if (i < words.size() - 1) {
+                            current_x += space_per_gap;
+                        }
+                    }
+                }
+
+                float baseline_y = ctx.y + ctx.pad_t + ctx.baseline_offset
+                               + static_cast<float>(line_index) * ctx.effective_line_height;
+                run.rect = {line_x, baseline_y - ctx.ascent_px, ctx.inner_width, ctx.effective_line_height};
+                run.baseline_x = line_x;
+                run.baseline_y = baseline_y;
+
+                ctx.builder.addGlyphRun(std::move(run));
+                return;
+            }
+        }
+    } else if (ctx.text_align == "center") {
         line_x += std::max(0.0f, (ctx.inner_width - line_width) * 0.5f);
     } else if (ctx.text_align == "right") {
         line_x += std::max(0.0f, ctx.inner_width - line_width);
@@ -904,7 +1021,7 @@ void emitFullTextLine(const std::string& line_text, int line_index,
     run.baseline_y = baseline_y;
     run.units_per_em = shaped.units_per_em;
     run.scale_to_pixels = shaped.scale_to_pixels;
-    fillTextShadow(run, ctx.style);
+    fillTextShadow(run, ctx.style, ctx.node);
 
     for (const auto& sg : shaped.glyphs) {
         run.glyphs.push_back({sg.glyph_id, sg.pen_x_units, sg.pen_y_units,
@@ -920,6 +1037,7 @@ float measureTextWidthPx(std::string_view text, const FullTextRenderCtx& ctx) {
     if (visible.empty()) return 0.0f;
     TextShapeRequest req{visible, ctx.style.font_family, ctx.style.font_weight,
                          ctx.style.font_style, ctx.font_size};
+    req.lang = ctx.node ? ctx.node->getEffectiveLang() : "";  // Set language from DOM node if available
 
     ShapedText shaped;
     if (!ctx.shaper.shape(req, shaped) || shaped.glyphs.empty()) return 0.0f;
@@ -1045,7 +1163,6 @@ int wrapAndEmitSegment(const std::string& segment, int start_line_index,
             }
         }
 
-        // Fallback: split long word by width.
         emitLongWordWrapped(disp, start_line_index, lines_emitted, ctx);
     };
 
@@ -1091,7 +1208,7 @@ int wrapAndEmitSegment(const std::string& segment, int start_line_index,
 // Determine whether newlines in text should produce forced line breaks.
 bool preservesNewlines(const std::string& white_space) {
     return white_space == "pre-wrap" || white_space == "pre"
-        || white_space == "pre-line";
+        || white_space == "pre-line" || white_space == "break-spaces";
 }
 
 std::string prepareTextForRender(const std::string& raw,
@@ -1211,7 +1328,8 @@ void emitShapedRun(const ShapedText& shaped,
                    float line_height_px,
                    float font_size,
                    const Color& color,
-                   DisplayListBuilder& builder) {
+                   DisplayListBuilder& builder,
+                   const dom::DOMNodePtr& node = nullptr) {
     DrawGlyphRunData run;
     run.rect = {x, baseline_y - ascent_px, width_px, line_height_px};
     run.color = color;
@@ -1225,7 +1343,7 @@ void emitShapedRun(const ShapedText& shaped,
     run.baseline_y = baseline_y;
     run.units_per_em = shaped.units_per_em;
     run.scale_to_pixels = shaped.scale_to_pixels;
-    fillTextShadow(run, style);
+    fillTextShadow(run, style, node);
 
     for (const auto& sg : shaped.glyphs) {
         run.glyphs.push_back({sg.glyph_id, sg.pen_x_units, sg.pen_y_units,
@@ -1340,16 +1458,16 @@ bool renderFullTextWithAffixes(const dom::DOMNodePtr& node,
     float cursor_x = line_x;
     if (ok_before) {
         Color c = makeColorFromCss(before_style->color);
-        emitShapedRun(shaped_before, *before_style, cursor_x, baseline_y, a_before, w_before, line_height_px, fs_before, c, builder);
+        emitShapedRun(shaped_before, *before_style, cursor_x, baseline_y, a_before, w_before, line_height_px, fs_before, c, builder, node);
         cursor_x += w_before;
     }
     if (ok_main) {
-        emitShapedRun(shaped_main, style, cursor_x, baseline_y, a_main, w_main, line_height_px, fs_main, main_color, builder);
+        emitShapedRun(shaped_main, style, cursor_x, baseline_y, a_main, w_main, line_height_px, fs_main, main_color, builder, node);
         cursor_x += w_main;
     }
     if (ok_after) {
         Color c = makeColorFromCss(after_style->color);
-        emitShapedRun(shaped_after, *after_style, cursor_x, baseline_y, a_after, w_after, line_height_px, fs_after, c, builder);
+        emitShapedRun(shaped_after, *after_style, cursor_x, baseline_y, a_after, w_after, line_height_px, fs_after, c, builder, node);
     }
 
     return true;
@@ -1370,7 +1488,7 @@ void renderFullText(const dom::DOMNodePtr& node,
         text = collapseWhitespace(text);
     } else if (white_space == "pre-line") {
         text = painter_detail::collapseSpacesPreserveNewlines(text);
-    } else if (white_space == "pre-wrap") {
+    } else if (white_space == "pre-wrap" || white_space == "break-spaces") {
         text = painter_detail::collapseSpacesPreserveNewlines(text);
     }
     // "pre" keeps text as-is (no collapse)
@@ -1437,7 +1555,7 @@ void renderFullText(const dom::DOMNodePtr& node,
     FullTextRenderCtx ctx{x, y, pad_l, pad_t, inner_width,
                           baseline_offset, effective_line_height, ascent_px,
                           font_size, scale, text_color,
-                          style.text_align, style, shaper, builder};
+                          style.text_align, style, shaper, builder, node};
 
     // Path 1: text has forced newlines from pre-wrap / pre / pre-line
     if (has_forced_newlines) {

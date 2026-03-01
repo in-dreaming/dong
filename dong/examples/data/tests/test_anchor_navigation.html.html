@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Anchor Navigation Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .nav-links {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .nav-links a {
+            display: block;
+            margin: 5px 0;
+            color: #007bff;
+            text-decoration: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+        }
+
+        .nav-links a:hover {
+            background: #f0f8ff;
+        }
+
+        .section {
+            margin: 100px 0;
+            padding: 40px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            min-height: 400px;
+        }
+
+        .section h2 {
+            margin-top: 0;
+            color: #333;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 10px;
+        }
+
+        .section p {
+            line-height: 1.6;
+            color: #666;
+        }
+
+        /* :target伪类样式 - 当元素是当前URL fragment的目标时应用 */
+        .section:target {
+            border-color: #007bff;
+            background: #f0f8ff;
+            box-shadow: 0 0 15px rgba(0,123,255,0.3);
+        }
+
+        .section:target h2 {
+            color: #007bff;
+        }
+
+        /* 为被锚点导航到的元素添加动画效果 */
+        .section:target {
+            animation: highlight 2s ease-in-out;
+        }
+
+        @keyframes highlight {
+            0% { background: #f0f8ff; }
+            50% { background: #e6f7ff; }
+            100% { background: #f0f8ff; }
+        }
+
+        .test-info {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 20px 0;
+            border-left: 4px solid #007bff;
+        }
+
+        .test-info h3 {
+            margin-top: 0;
+            color: #007bff;
+        }
+
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Anchor Navigation Test</h1>
+
+        <div class="test-info">
+            <h3>测试说明</h3>
+            <p>这个测试验证锚点导航功能：</p>
+            <ul>
+                <li>点击右侧导航链接应该滚动到对应的章节</li>
+                <li>被导航到的章节应该应用:target伪类样式</li>
+                <li>URL fragment应该更新以反映当前目标</li>
+            </ul>
+        </div>
+
+        <div class="nav-links">
+            <h3>快速导航</h3>
+            <a href="#section1">Section 1</a>
+            <a href="#section2">Section 2</a>
+            <a href="#section3">Section 3</a>
+            <a href="#section4">Section 4</a>
+        </div>
+
+        <div id="section1" class="section">
+            <h2>Section 1: Introduction</h2>
+            <p>This is the first section. Click on "Section 1" in the navigation to test anchor navigation.</p>
+            <p>When this section becomes the target, it should have a blue border and highlighted background.</p>
+            <div class="status" id="status1">等待测试...</div>
+        </div>
+
+        <div id="section2" class="section">
+            <h2>Section 2: Features</h2>
+            <p>This section demonstrates the features of anchor navigation.</p>
+            <p>The :target pseudo-class should apply styles when this section is navigated to.</p>
+            <div class="status" id="status2">等待测试...</div>
+        </div>
+
+        <div id="section3" class="section">
+            <h2>Section 3: Implementation</h2>
+            <p>This section shows how anchor navigation is implemented.</p>
+            <p>Clicking links with href="#id" should scroll to elements with matching id.</p>
+            <div class="status" id="status3">等待测试...</div>
+        </div>
+
+        <div id="section4" class="section">
+            <h2>Section 4: Testing</h2>
+            <p>This section is for testing the complete anchor navigation functionality.</p>
+            <p>All navigation links should work correctly and update the URL fragment.</p>
+            <div class="status" id="status4">等待测试...</div>
+        </div>
+
+        <div class="test-info">
+            <h3>测试结果</h3>
+            <div id="testResults">
+                <p>点击导航链接开始测试...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 测试脚本
+        document.addEventListener('DOMContentLoaded', function() {
+            const sections = ['section1', 'section2', 'section3', 'section4'];
+            const testResults = document.getElementById('testResults');
+
+            // 监听hashchange事件来检测fragment变化
+            window.addEventListener('hashchange', function() {
+                const currentHash = window.location.hash.substring(1);
+                updateTestStatus(currentHash);
+            });
+
+            // 更新测试状态
+            function updateTestStatus(currentSection) {
+                sections.forEach(sectionId => {
+                    const statusEl = document.getElementById('status' + sectionId.substring(7));
+                    if (sectionId === currentSection) {
+                        statusEl.textContent = '✓ 当前目标';
+                        statusEl.className = 'status success';
+                    } else {
+                        statusEl.textContent = '等待测试...';
+                        statusEl.className = 'status';
+                    }
+                });
+
+                // 更新测试结果
+                if (currentSection) {
+                    testResults.innerHTML = `
+                        <p>✅ 测试通过！</p>
+                        <p>当前目标: <strong>${currentSection}</strong></p>
+                        <p>URL fragment: <code>#${currentSection}</code></p>
+                        <p>:target伪类样式已正确应用</p>
+                    `;
+                }
+            }
+
+            // 初始状态
+            const initialHash = window.location.hash.substring(1);
+            if (initialHash) {
+                updateTestStatus(initialHash);
+            }
+        });
+    </script>
+</body>
+</html>

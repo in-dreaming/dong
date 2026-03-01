@@ -283,6 +283,8 @@ void applyRuleFlexbox(const ComputedStyle& rs, ComputedStyle& computed) {
     if (rs.flex_grow != 0.0f) computed.flex_grow = rs.flex_grow;
     if (rs.flex_shrink != 1.0f) computed.flex_shrink = rs.flex_shrink;
     if (rs.flex_basis.isSet() && !rs.flex_basis.isAuto()) computed.flex_basis = rs.flex_basis;
+    // For flex-basis: content, map to AUTO for Yoga to use content-driven sizing
+    if (rs.flex_basis.isContent()) computed.flex_basis = CSSValue(0.0f, CSSValue::Unit::AUTO);
     if (rs.order != 0) computed.order = rs.order;
     if (rs.gap > 0.0f) {
         computed.gap = rs.gap;
@@ -448,14 +450,16 @@ void applyRuleProperties(const ComputedStyle& rs, ComputedStyle& computed) {
                !rs.appearance.empty() && rs.appearance != "auto");
     APPLY_PROP("resize", computed.resize = rs.resize; computed.markExplicitlySet("resize"),
                !rs.resize.empty() && rs.resize != "none");
+    APPLY_PROP("will-change", computed.will_change = rs.will_change; computed.markExplicitlySet("will-change"),
+               !rs.will_change.empty() && rs.will_change != "auto");
 
 
     // Table properties
 
     APPLY_PROP("border-collapse", computed.border_collapse = rs.border_collapse; computed.markExplicitlySet("border-collapse"),
                !rs.border_collapse.empty() && rs.border_collapse != "separate");
-    APPLY_PROP("border-spacing", computed.border_spacing = rs.border_spacing; computed.markExplicitlySet("border-spacing"),
-               rs.border_spacing != 2.0f);
+    APPLY_PROP("border-spacing", computed.border_spacing_x = rs.border_spacing_x; computed.border_spacing_y = rs.border_spacing_y; computed.markExplicitlySet("border-spacing"),
+               rs.border_spacing_x != 2.0f || rs.border_spacing_y != 2.0f);
     APPLY_PROP("table-layout", computed.table_layout = rs.table_layout; computed.markExplicitlySet("table-layout"),
                !rs.table_layout.empty() && rs.table_layout != "auto");
     APPLY_PROP("caption-side", computed.caption_side = rs.caption_side; computed.markExplicitlySet("caption-side"),
@@ -538,6 +542,15 @@ void applyInlineStyleAttributeIfAny(DOMNodePtr node) {
 
     // Inline style has the highest precedence in author styles.
     CSSParser::parseInlineStyle(style_str, node->getComputedStyle());
+}
+
+void applyDirAttributeIfAny(DOMNodePtr node) {
+    // Apply dir attribute to CSS direction property
+    // The dir attribute maps to the direction CSS property
+    if (!node) return;
+
+    auto& computed = node->getComputedStyle();
+    computed.direction = node->getEffectiveDirection();
 }
 
 using TagStyleHandler = void(*)(ComputedStyle&);
@@ -943,10 +956,22 @@ void StyleEngine::computeStyles(DOMNodePtr node) {
     if (node->hasAttribute("hidden")) {
         node->getComputedStyle().display = "none";
     }
+
+    // [dir] attribute mapping to CSS direction property
+    // Only apply if direction is not explicitly set by CSS
+    if (node->hasAttribute("dir") && !computed.isExplicitlySet("direction")) {
+        auto& comp_style = node->getComputedStyle();
+        comp_style.direction = node->getEffectiveDirection();
+        comp_style.markExplicitlySet("direction");
+    }
+
     node->getComputedStyle().layout_mode = deriveLayoutModeFromDisplay(node->getComputedStyle());
 
     // Update BFC flag based on computed style properties
     node->getComputedStyle().updateBFCFlag();
+
+    // Resolve light-dark() functions based on color-scheme
+    resolveLightDarkFunctions(node);
 
     // Process pseudo-elements (::before/::after)
     processPseudoElements(node);
@@ -966,6 +991,14 @@ void StyleEngine::recomputeNodeStyle(DOMNodePtr node) {
 
     applyLogicalProperties(node->getComputedStyle());
 
+    // [dir] attribute mapping to CSS direction property
+    // Only apply if direction is not explicitly set by CSS
+    auto& computed = node->getComputedStyle();
+    if (node->hasAttribute("dir") && !computed.isExplicitlySet("direction")) {
+        computed.direction = node->getEffectiveDirection();
+        computed.markExplicitlySet("direction");
+    }
+
     node->getComputedStyle().layout_mode = deriveLayoutModeFromDisplay(node->getComputedStyle());
 
     node->getComputedStyle().updateBFCFlag();
@@ -984,14 +1017,8 @@ void StyleEngine::applyMatchingRules(DOMNodePtr node) {
         }
     }
 
-    // Sort by specificity, then by source order
-    std::sort(matching_rules.begin(), matching_rules.end(),
-        [](const CSSRule& a, const CSSRule& b) {
-            if (a.specificity != b.specificity) {
-                return a.specificity < b.specificity;
-            }
-            return a.source_order < b.source_order;
-        });
+    // Sort with layer priority, then specificity, then source order
+    sortRulesWithLayerPriority(matching_rules);
 
     auto& computed = node->getComputedStyle();
     for (const auto& rule : matching_rules) {
@@ -1145,7 +1172,7 @@ void StyleEngine::copyPropertyFromParent(const std::string& prop,
     }
     else if (prop == "border-collapse") child_style.border_collapse = parent_style.border_collapse;
 
-    else if (prop == "border-spacing") child_style.border_spacing = parent_style.border_spacing;
+    else if (prop == "border-spacing") { child_style.border_spacing_x = parent_style.border_spacing_x; child_style.border_spacing_y = parent_style.border_spacing_y; }
     // Non-inheritable properties
     else if (prop == "border") {
         // Copy the full border shorthand + per-side overrides.
@@ -1237,7 +1264,7 @@ void StyleEngine::inheritFromParent(DOMNodePtr node) {
 
     // Table properties (inherited per CSS spec)
     if (!computed.isExplicitlySet("border-collapse")) computed.border_collapse = parent_style.border_collapse;
-    if (!computed.isExplicitlySet("border-spacing")) computed.border_spacing = parent_style.border_spacing;
+    if (!computed.isExplicitlySet("border-spacing")) { computed.border_spacing_x = parent_style.border_spacing_x; computed.border_spacing_y = parent_style.border_spacing_y; }
 
     // `color-scheme` is not strictly inheritable per spec, but it affects UA/form control
     // rendering for descendants. Treat it as inheritable so container schemes work.
@@ -1542,6 +1569,7 @@ void StyleEngine::processPseudoElements(DOMNodePtr node) {
     std::vector<PseudoRuleRef> after_rules;
     std::vector<PseudoRuleRef> marker_rules;
     std::vector<PseudoRuleRef> placeholder_rules;
+    std::vector<PseudoRuleRef> selection_rules;
 
     for (const auto& sheet : stylesheets_) {
         for (const auto& rule : sheet.getRules()) {
@@ -1578,6 +1606,14 @@ void StyleEngine::processPseudoElements(DOMNodePtr node) {
                     placeholder_rules.push_back(PseudoRuleRef{&rule});
                 }
             }
+
+            // ::selection
+            if (rule.selector.find("::selection") != std::string::npos || rule.selector.find(":selection") != std::string::npos) {
+                std::string base_selector = extractBaseSelector(rule.selector, "::selection", ":selection");
+                if (!base_selector.empty() && matcher_.matches(base_selector, node)) {
+                    selection_rules.push_back(PseudoRuleRef{&rule});
+                }
+            }
         }
     }
 
@@ -1603,8 +1639,10 @@ void StyleEngine::processPseudoElements(DOMNodePtr node) {
     bool has_after = false;
     bool has_marker = !marker_rules.empty();
     bool has_placeholder = !placeholder_rules.empty();
+    bool has_selection = !selection_rules.empty();
     ComputedStyle before_style;
     ComputedStyle after_style;
+    ComputedStyle selection_style;
 
     {
         auto r = buildPseudoStyle(before_rules);
@@ -1615,6 +1653,11 @@ void StyleEngine::processPseudoElements(DOMNodePtr node) {
         auto r = buildPseudoStyle(after_rules);
         has_after = r.first;
         if (has_after) after_style = std::move(r.second);
+    }
+    {
+        auto r = buildPseudoStyle(selection_rules);
+        has_selection = r.first;
+        if (has_selection) selection_style = std::move(r.second);
     }
 
 
@@ -1716,6 +1759,21 @@ void StyleEngine::processPseudoElements(DOMNodePtr node) {
         } else {
             node->setPseudoPlaceholder(nullptr);
         }
+    }
+
+    // Create ::selection pseudo-element for text selection styling
+    // ::selection is automatically created for all elements that support text selection
+    if (has_selection) {
+        auto pseudo = createPseudoElement(node, "selection");
+        if (pseudo) {
+            // Start with parent's styles for inheritance
+            pseudo->getComputedStyle() = selection_style;
+            pseudo->getComputedStyle().is_pseudo_element = true;
+            pseudo->getComputedStyle().pseudo_type = "selection";
+            node->setPseudoSelection(pseudo);
+        }
+    } else {
+        node->setPseudoSelection(nullptr);
     }
 }
 
@@ -1935,14 +1993,8 @@ void StyleEngine::applyMatchingRulesIndexed(DOMNodePtr node) {
         }
     }
     
-    // 按 specificity 和 source order 排序
-    std::sort(matching_rules.begin(), matching_rules.end(),
-        [](const CSSRule& a, const CSSRule& b) {
-            if (a.specificity != b.specificity) {
-                return a.specificity < b.specificity;
-            }
-            return a.source_order < b.source_order;
-        });
+    // 按层优先级、specificity 和 source order 排序
+    sortRulesWithLayerPriority(matching_rules);
     
     // 应用规则（使用共享的属性应用函数）
     auto& computed = node->getComputedStyle();
@@ -1993,8 +2045,220 @@ void StyleEngine::recomputeNodeStyleFull(DOMNodePtr node) {
         node->getComputedStyle().display = "none";
     }
 
+    // [dir] attribute mapping to CSS direction property
+    // Only apply if direction is not explicitly set by CSS
+    auto& computed = node->getComputedStyle();
+    if (node->hasAttribute("dir") && !computed.isExplicitlySet("direction")) {
+        computed.direction = node->getEffectiveDirection();
+        computed.markExplicitlySet("direction");
+    }
+
     node->getComputedStyle().layout_mode = deriveLayoutModeFromDisplay(node->getComputedStyle());
     processPseudoElements(node);
+}
+
+void StyleEngine::resolveLightDarkFunctions(DOMNodePtr node) {
+    if (!node) return;
+
+    auto& style = node->getComputedStyle();
+
+    // Get the color scheme for this element (inherited from parent if not explicitly set)
+    std::string color_scheme = style.color_scheme;
+    if (color_scheme.empty() || color_scheme == "normal") {
+        // If no color scheme is set, default to light
+        color_scheme = "light";
+    }
+
+    // Resolve light-dark() functions in color properties
+    if (style.color.find("light-dark(") == 0) {
+        style.color = resolveLightDarkColor(style.color, color_scheme);
+    }
+    if (style.background_color.find("light-dark(") == 0) {
+        style.background_color = resolveLightDarkColor(style.background_color, color_scheme);
+    }
+    if (style.border_color.find("light-dark(") == 0) {
+        style.border_color = resolveLightDarkColor(style.border_color, color_scheme);
+    }
+    if (style.border_top_color.find("light-dark(") == 0) {
+        style.border_top_color = resolveLightDarkColor(style.border_top_color, color_scheme);
+    }
+    if (style.border_right_color.find("light-dark(") == 0) {
+        style.border_right_color = resolveLightDarkColor(style.border_right_color, color_scheme);
+    }
+    if (style.border_bottom_color.find("light-dark(") == 0) {
+        style.border_bottom_color = resolveLightDarkColor(style.border_bottom_color, color_scheme);
+    }
+    if (style.border_left_color.find("light-dark(") == 0) {
+        style.border_left_color = resolveLightDarkColor(style.border_left_color, color_scheme);
+    }
+    if (style.outline_color.find("light-dark(") == 0) {
+        style.outline_color = resolveLightDarkColor(style.outline_color, color_scheme);
+    }
+    if (style.text_decoration_color.find("light-dark(") == 0) {
+        style.text_decoration_color = resolveLightDarkColor(style.text_decoration_color, color_scheme);
+    }
+    if (style.text_shadow_color.find("light-dark(") == 0) {
+        style.text_shadow_color = resolveLightDarkColor(style.text_shadow_color, color_scheme);
+    }
+    if (style.caret_color.find("light-dark(") == 0) {
+        style.caret_color = resolveLightDarkColor(style.caret_color, color_scheme);
+    }
+    if (style.accent_color.find("light-dark(") == 0) {
+        style.accent_color = resolveLightDarkColor(style.accent_color, color_scheme);
+    }
+}
+
+void StyleEngine::resolveEnvFunctions(DOMNodePtr node) {
+    if (!node) return;
+
+    auto& style = node->getComputedStyle();
+
+    // Resolve env() functions in all CSS properties that support them
+    // This is a simplified implementation - in a real system, we would need to
+    // check each property value for env() function calls and resolve them
+
+    // For now, we'll implement a basic version that checks for env() in common properties
+    // In a complete implementation, we would need to parse each property value
+    // and replace env() function calls with their resolved values
+
+    // TODO: Implement comprehensive env() resolution for all CSS properties
+    // This would require parsing each property value string and replacing
+    // env() function calls with their computed values from env_variables_
+}
+
+std::string StyleEngine::resolveLightDarkColor(const std::string& light_dark_value, const std::string& color_scheme) {
+    // Parse light-dark(light-color, dark-color) function
+    size_t start = light_dark_value.find('(');
+    size_t end = light_dark_value.rfind(')');
+    if (start == std::string::npos || end == std::string::npos || end <= start) {
+        return light_dark_value; // Invalid format, return as-is
+    }
+
+    std::string args = light_dark_value.substr(start + 1, end - start - 1);
+
+    // Split arguments by comma (handling nested parentheses)
+    std::vector<std::string> parts;
+    std::string current;
+    int paren_depth = 0;
+
+    for (char c : args) {
+        if (c == '(') paren_depth++;
+        else if (c == ')') paren_depth--;
+
+        if (c == ',' && paren_depth == 0) {
+            std::string trimmed = current;
+            trimmed.erase(0, trimmed.find_first_not_of(" \t\n\r"));
+            size_t last_pos = trimmed.find_last_not_of(" \t\n\r");
+            if (last_pos != std::string::npos) trimmed = trimmed.substr(0, last_pos + 1);
+            if (!trimmed.empty()) parts.push_back(trimmed);
+            current.clear();
+        } else {
+            current += c;
+        }
+    }
+
+    if (!current.empty()) {
+        std::string trimmed = current;
+        trimmed.erase(0, trimmed.find_first_not_of(" \t\n\r"));
+        size_t last_pos = trimmed.find_last_not_of(" \t\n\r");
+        if (last_pos != std::string::npos) trimmed = trimmed.substr(0, last_pos + 1);
+        if (!trimmed.empty()) parts.push_back(trimmed);
+    }
+
+    // Should have exactly 2 arguments: light-color and dark-color
+    if (parts.size() != 2) {
+        return light_dark_value; // Invalid number of arguments, return as-is
+    }
+
+    // Choose color based on color-scheme
+    if (color_scheme.find("dark") != std::string::npos) {
+        return parts[1]; // Use dark color
+    } else {
+        return parts[0]; // Use light color (default)
+    }
+}
+
+CSSValue StyleEngine::resolveEnvValue(const CSSValue& env_value, const CSSEnvironment& env) const {
+    if (env_value.unit != CSSValue::Unit::ENV) {
+        return env_value; // Not an env() value, return as-is
+    }
+
+    // Get the environment variable value
+    CSSValue env_var_value = env.get(env_value.env_name, CSSValue());
+
+    // If environment variable exists and is valid, return it
+    if (env_var_value.isSet() && !env_var_value.isUnset()) {
+        return env_var_value;
+    }
+
+    // If no environment variable found, use fallback value if provided
+    if (env_value.env_fallback && env_value.env_fallback->isSet()) {
+        return *env_value.env_fallback;
+    }
+
+    // No environment variable and no fallback, return zero pixels
+    return CSSValue(0.0f, CSSValue::Unit::PIXEL);
+}
+
+// Layer cascade implementation
+void StyleEngine::processLayerRules(const std::vector<LayerRule>& layer_rules) {
+    // 处理层规则，建立层优先级映射
+    layer_context_.layers.clear();
+    layer_context_.layer_order_map.clear();
+
+    // 添加所有层规则
+    for (const auto& layer : layer_rules) {
+        layer_context_.layers.push_back(layer);
+
+        // 为每个层名建立优先级映射
+        if (!layer.name.empty()) {
+            layer_context_.layer_order_map[layer.name] = layer.declaration_order;
+        }
+    }
+
+    // 按声明顺序排序层（后声明的层优先级更高）
+    std::sort(layer_context_.layers.begin(), layer_context_.layers.end(),
+        [](const LayerRule& a, const LayerRule& b) {
+            return a.declaration_order < b.declaration_order;
+        });
+}
+
+int StyleEngine::getLayerPriority(const std::string& layer_name) const {
+    // 未分层规则的优先级最高（返回最大值）
+    if (layer_name.empty()) {
+        return INT_MAX;
+    }
+
+    // 查找层的优先级
+    auto it = layer_context_.layer_order_map.find(layer_name);
+    if (it != layer_context_.layer_order_map.end()) {
+        return it->second;
+    }
+
+    // 未知层（可能是预声明但未定义的层），优先级最低
+    return -1;
+}
+
+void StyleEngine::sortRulesWithLayerPriority(std::vector<CSSRule>& rules) {
+    // 按层优先级、specificity、source_order排序
+    std::sort(rules.begin(), rules.end(),
+        [this](const CSSRule& a, const CSSRule& b) {
+            // 首先按层优先级排序
+            int layer_priority_a = getLayerPriority(a.layer_name);
+            int layer_priority_b = getLayerPriority(b.layer_name);
+
+            if (layer_priority_a != layer_priority_b) {
+                return layer_priority_a > layer_priority_b; // 高优先级在前
+            }
+
+            // 层优先级相同，按specificity排序
+            if (a.specificity != b.specificity) {
+                return a.specificity > b.specificity; // 高specificity在前
+            }
+
+            // specificity相同，按source_order排序
+            return a.source_order < b.source_order; // 先声明的在前
+        });
 }
 
 } // namespace dong::dom

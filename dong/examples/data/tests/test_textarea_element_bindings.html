@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test TextArea Element Bindings</title>
+    <style>
+        body { font-family: Arial; margin: 20px; }
+        .test { margin: 10px 0; padding: 10px; border: 1px solid #ccc; }
+        .pass { background: #d4edda; }
+        .fail { background: #f8d7da; }
+    </style>
+</head>
+<body>
+    <h1>TextArea Element Bindings Test</h1>
+
+    <div class="test">
+        <h3>HTMLTextAreaElement.disabled property</h3>
+        <textarea id="disabledTextarea">This is a textarea</textarea>
+        <script>
+            const textarea = document.getElementById('disabledTextarea');
+
+            // Test disabled property
+            console.log('Initial disabled state:', textarea.disabled);
+
+            // Set disabled
+            textarea.disabled = true;
+            console.log('After setting disabled=true:', textarea.disabled);
+
+            // Set disabled back to false
+            textarea.disabled = false;
+            console.log('After setting disabled=false:', textarea.disabled);
+
+            if (textarea.disabled === false) {
+                console.log('✓ disabled property works');
+                document.write('<p class="pass">✓ disabled property can be get and set</p>');
+            } else {
+                console.log('✗ disabled property failed');
+                document.write('<p class="fail">✗ disabled property failed</p>');
+            }
+        </script>
+    </div>
+
+    <div class="test">
+        <h3>HTMLTextAreaElement.readOnly property</h3>
+        <textarea id="readonlyTextarea">This is a readonly textarea</textarea>
+        <script>
+            const readonlyTextarea = document.getElementById('readonlyTextarea');
+
+            // Test readOnly property
+            console.log('Initial readOnly state:', readonlyTextarea.readOnly);
+
+            // Set readOnly
+            readonlyTextarea.readOnly = true;
+            console.log('After setting readOnly=true:', readonlyTextarea.readOnly);
+
+            // Set readOnly back to false
+            readonlyTextarea.readOnly = false;
+            console.log('After setting readOnly=false:', readonlyTextarea.readOnly);
+
+            if (readonlyTextarea.readOnly === false) {
+                console.log('✓ readOnly property works');
+                document.write('<p class="pass">✓ readOnly property can be get and set</p>');
+            } else {
+                console.log('✗ readOnly property failed');
+                document.write('<p class="fail">✗ readOnly property failed</p>');
+            }
+        </script>
+    </div>
+
+    <div class="test">
+        <h3>HTMLTextAreaElement.selectionStart/selectionEnd properties</h3>
+        <textarea id="selectionTextarea">Test selection properties in textarea</textarea>
+        <script>
+            const selectionTextarea = document.getElementById('selectionTextarea');
+
+            // Test selection properties
+            console.log('Initial selectionStart:', selectionTextarea.selectionStart, 'selectionEnd:', selectionTextarea.selectionEnd);
+
+            // Set selection range
+            selectionTextarea.selectionStart = 5;
+            selectionTextarea.selectionEnd = 15;
+
+            console.log('After setting - selectionStart:', selectionTextarea.selectionStart, 'selectionEnd:', selectionTextarea.selectionEnd);
+
+            if (selectionTextarea.selectionStart === 5 && selectionTextarea.selectionEnd === 15) {
+                console.log('✓ selectionStart/selectionEnd properties work');
+                document.write('<p class="pass">✓ selectionStart/selectionEnd properties can be get and set</p>');
+            } else {
+                console.log('✗ selectionStart/selectionEnd properties failed');
+                document.write('<p class="fail">✗ selectionStart/selectionEnd properties failed</p>');
+            }
+        </script>
+    </div>
+
+    <div class="test">
+        <h3>HTMLTextAreaElement.select() method</h3>
+        <textarea id="selectTextarea">Select all text in this textarea</textarea>
+        <script>
+            const selectTextarea = document.getElementById('selectTextarea');
+
+            // Test select() method
+            selectTextarea.select();
+
+            console.log('select() method called');
+            console.log('selectionStart:', selectTextarea.selectionStart, 'selectionEnd:', selectTextarea.selectionEnd);
+
+            if (selectTextarea.selectionStart === 0 && selectTextarea.selectionEnd === selectTextarea.value.length) {
+                console.log('✓ select() method works');
+                document.write('<p class="pass">✓ select() method selects all text in textarea</p>');
+            } else {
+                console.log('✗ select() method failed');
+                document.write('<p class="fail">✗ select() method failed</p>');
+            }
+        </script>
+    </div>
+
+    <div class="test">
+        <h3>HTMLTextAreaElement.setSelectionRange() method</h3>
+        <textarea id="setRangeTextarea">Set selection range from 10 to 20</textarea>
+        <script>
+            const setRangeTextarea = document.getElementById('setRangeTextarea');
+
+            // Test setSelectionRange() method
+            setRangeTextarea.setSelectionRange(10, 20);
+
+            console.log('setSelectionRange(10, 20) called');
+            console.log('selectionStart:', setRangeTextarea.selectionStart, 'selectionEnd:', setRangeTextarea.selectionEnd);
+
+            if (setRangeTextarea.selectionStart === 10 && setRangeTextarea.selectionEnd === 20) {
+                console.log('✓ setSelectionRange() method works');
+                document.write('<p class="pass">✓ setSelectionRange() method sets correct selection range</p>');
+            } else {
+                console.log('✗ setSelectionRange() method failed');
+                document.write('<p class="fail">✗ setSelectionRange() method failed</p>');
+            }
+        </script>
+    </div>
+
+</body>
+</html>

@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CSS.supports() Test</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; }
+        .test { margin: 10px 0; padding: 10px; border: 1px solid #ccc; }
+        .pass { background: #d4edda; color: #155724; }
+        .fail { background: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+    <h1>CSS.supports() Test</h1>
+
+    <div class="test">
+        <h2>Test 1: CSS.supports(property, value) - basic properties</h2>
+        <script>
+            const tests = [
+                { property: 'color', value: 'red', expected: true, desc: 'color: red' },
+                { property: 'background-color', value: '#fff', expected: true, desc: 'background-color: #fff' },
+                { property: 'font-size', value: '16px', expected: true, desc: 'font-size: 16px' },
+                { property: 'display', value: 'block', expected: true, desc: 'display: block' },
+                { property: 'display', value: 'grid', expected: false, desc: 'display: grid (unsupported)' },
+                { property: 'position', value: 'sticky', expected: true, desc: 'position: sticky' },
+                { property: 'aspect-ratio', value: '16/9', expected: true, desc: 'aspect-ratio: 16/9' },
+                { property: 'list-style-type', value: 'disc', expected: true, desc: 'list-style-type: disc' },
+                { property: 'list-style-type', value: 'decimal', expected: true, desc: 'list-style-type: decimal' }
+            ];
+
+            let allPassed = true;
+            let results = '';
+
+            tests.forEach(test => {
+                const result = CSS.supports(test.property, test.value);
+                const passed = result === test.expected;
+
+                if (passed) {
+                    results += `<div class="pass">✓ PASS: CSS.supports("${test.property}", "${test.value}") = ${result}</div>`;
+                } else {
+                    results += `<div class="fail">✗ FAIL: CSS.supports("${test.property}", "${test.value}") = ${result} (expected ${test.expected})</div>`;
+                    allPassed = false;
+                }
+            });
+
+            document.write(results);
+            if (allPassed) {
+                document.write('<div class="pass">✓ All property-value tests passed!</div>');
+            }
+        </script>
+    </div>
+
+    <div class="test">
+        <h2>Test 2: CSS.supports(conditionText) - condition syntax</h2>
+        <script>
+            const conditionTests = [
+                { condition: '(color: red)', expected: true, desc: 'color: red condition' },
+                { condition: '(display: block)', expected: true, desc: 'display: block condition' },
+                { condition: '(display: grid)', expected: false, desc: 'display: grid condition (unsupported)' },
+                { condition: '(position: sticky)', expected: true, desc: 'position: sticky condition' },
+                { condition: '(aspect-ratio: 16/9)', expected: true, desc: 'aspect-ratio condition' },
+                { condition: '(list-style-type: disc)', expected: true, desc: 'list-style-type condition' },
+                { condition: '(min-width: 100px)', expected: true, desc: 'min-width condition' },
+                { condition: '(max-width: 800px)', expected: true, desc: 'max-width condition' }
+            ];
+
+            let allConditionPassed = true;
+            let conditionResults = '';
+
+            conditionTests.forEach(test => {
+                const result = CSS.supports(test.condition);
+                const passed = result === test.expected;
+
+                if (passed) {
+                    conditionResults += `<div class="pass">✓ PASS: CSS.supports("${test.condition}") = ${result}</div>`;
+                } else {
+                    conditionResults += `<div class="fail">✗ FAIL: CSS.supports("${test.condition}") = ${result} (expected ${test.expected})</div>`;
+                    allConditionPassed = false;
+                }
+            });
+
+            document.write(conditionResults);
+            if (allConditionPassed) {
+                document.write('<div class="pass">✓ All condition tests passed!</div>');
+            }
+        </script>
+    </div>
+
+    <div class="test">
+        <h2>Test 3: CSS.supports() - edge cases</h2>
+        <script>
+            const edgeCases = [
+                { property: '', value: '', expected: false, desc: 'empty property and value' },
+                { property: 'invalid-property', value: 'any-value', expected: false, desc: 'invalid property name' },
+                { condition: '', expected: false, desc: 'empty condition' },
+                { condition: 'invalid-syntax', expected: false, desc: 'invalid condition syntax' },
+                { condition: '(color: red', expected: false, desc: 'unclosed parentheses' },
+                { condition: 'color: red)', expected: false, desc: 'unopened parentheses' }
+            ];
+
+            let allEdgePassed = true;
+            let edgeResults = '';
+
+            edgeCases.forEach(test => {
+                let result;
+                if (test.property !== undefined) {
+                    result = CSS.supports(test.property, test.value);
+                } else {
+                    result = CSS.supports(test.condition);
+                }
+                const passed = result === test.expected;
+
+                if (passed) {
+                    edgeResults += `<div class="pass">✓ PASS: Edge case "${test.desc}" = ${result}</div>`;
+                } else {
+                    edgeResults += `<div class="fail">✗ FAIL: Edge case "${test.desc}" = ${result} (expected ${test.expected})</div>`;
+                    allEdgePassed = false;
+                }
+            });
+
+            document.write(edgeResults);
+            if (allEdgePassed) {
+                document.write('<div class="pass">✓ All edge case tests passed!</div>');
+            }
+        </script>
+    </div>
+
+    <div class="test">
+        <h2>Test 4: CSS.supports() - CSS global object</h2>
+        <script>
+            const cssObjectTests = [
+                { test: 'typeof CSS', expected: 'object', desc: 'CSS is an object' },
+                { test: 'typeof CSS.supports', expected: 'function', desc: 'CSS.supports is a function' },
+                { test: 'CSS.supports.name', expected: 'supports', desc: 'Function name is "supports"' },
+                { test: 'CSS.supports.length', expected: 1, desc: 'Function length is 1 (overloads handled internally)' }
+            ];
+
+            let allObjectTestsPassed = true;
+            let objectResults = '';
+
+            cssObjectTests.forEach(test => {
+                let result;
+                try {
+                    result = eval(test.test);
+                } catch (e) {
+                    result = 'error';
+                }
+                const passed = result === test.expected;
+
+                if (passed) {
+                    objectResults += `<div class="pass">✓ PASS: ${test.test} = ${result}</div>`;
+                } else {
+                    objectResults += `<div class="fail">✗ FAIL: ${test.test} = ${result} (expected ${test.expected})</div>`;
+                    allObjectTestsPassed = false;
+                }
+            });
+
+            document.write(objectResults);
+            if (allObjectTestsPassed) {
+                document.write('<div class="pass">✓ All CSS object tests passed!</div>');
+            }
+        </script>
+    </div>
+</body>
+</html>

@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Test FormData Name Serialization</title>
+    <style>
+        body { padding: 20px; font-family: Arial, sans-serif; }
+        .test-section { margin: 30px 0; padding: 15px; border: 1px solid #ccc; border-left: 4px solid #007bff; }
+        .test-result { margin: 10px 0; padding: 8px; background: #f8f9fa; border-radius: 4px; }
+        .pass { color: #28a745; }
+        .fail { color: #dc3545; }
+        pre { background: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto; }
+        form { margin: 10px 0; }
+        input, select, textarea, button { margin: 5px; padding: 5px; }
+    </style>
+</head>
+<body>
+    <h1>FormData Name Serialization Tests</h1>
+    <div id="test-results"></div>
+
+    <!-- Test Form 1: Basic name attributes -->
+    <form id="form1">
+        <input type="text" name="username" value="alice">
+        <input type="password" name="password" value="secret">
+        <input type="email" name="email" value="alice@example.com">
+    </form>
+
+    <!-- Test Form 2: Checkbox serialization -->
+    <form id="form2">
+        <input type="checkbox" name="agree" value="yes" checked>
+        <input type="checkbox" name="newsletter" value="1" checked>
+        <input type="checkbox" name="notifications" checked>
+        <input type="checkbox" name="optional">
+    </form>
+
+    <!-- Test Form 3: Radio serialization -->
+    <form id="form3">
+        <input type="radio" name="gender" value="male" checked>
+        <input type="radio" name="gender" value="female">
+        <input type="radio" name="gender" value="other">
+    </form>
+
+    <!-- Test Form 4: Select elements -->
+    <form id="form4">
+        <select name="country">
+            <option value="us">United States</option>
+            <option value="uk" selected>United Kingdom</option>
+            <option value="ca">Canada</option>
+        </select>
+        <select name="city">
+            <option value="nyc">New York</option>
+            <option value="london" selected>London</option>
+        </select>
+    </form>
+
+    <!-- Test Form 5: Textarea -->
+    <form id="form5">
+        <textarea name="message">Hello World!</textarea>
+    </form>
+
+    <!-- Test Form 6: Disabled controls -->
+    <form id="form6">
+        <input type="text" name="disabled_field" value="should_not_appear" disabled>
+        <input type="text" name="enabled_field" value="should_appear">
+    </form>
+
+    <!-- Test Form 7: Controls without name -->
+    <form id="form7">
+        <input type="text" value="no_name_field" name="named_field">
+        <input type="text" value="unnamed_field">
+        <input type="text" name="another_named_field" value="another_value">
+    </form>
+
+    <!-- Test Form 8: Mixed controls -->
+    <form id="form8">
+        <input type="text" name="user_id" value="123">
+        <input type="checkbox" name="active" value="true" checked>
+        <select name="role">
+            <option value="admin">Admin</option>
+            <option value="user" selected>User</option>
+        </select>
+        <textarea name="notes">Some notes</textarea>
+    </form>
+
+    <!-- Test Form 9: Multiple checkboxes with same name -->
+    <form id="form9">
+        <input type="checkbox" name="colors" value="red" checked>
+        <input type="checkbox" name="colors" value="green" checked>
+        <input type="checkbox" name="colors" value="blue">
+    </form>
+
+    <!-- Test Form 10: Input types -->
+    <form id="form10">
+        <input type="hidden" name="csrf" value="abc123">
+        <input type="text" name="search" value="test">
+        <input type="number" name="count" value="42">
+        <input type="tel" name="phone" value="1234567890">
+    </form>
+
+    <!-- Test Form 11: Checkbox without value attribute -->
+    <form id="form11">
+        <input type="checkbox" name="checkbox_no_value" checked>
+        <input type="radio" name="radio_no_value" checked>
+        <input type="checkbox" name="checkbox_with_value" value="custom" checked>
+    </form>
+
+    <!-- Test Form 12: Empty values -->
+    <form id="form12">
+        <input type="text" name="empty_text" value="">
+        <input type="text" name="text_with_value" value="hello">
+        <textarea name="empty_textarea"></textarea>
+    </form>
+
+    <script>
+        const results = document.getElementById('test-results');
+        let passCount = 0;
+        let totalCount = 0;
+
+        function addTestSection(title, testFn) {
+            const section = document.createElement('div');
+            section.className = 'test-section';
+
+            const h3 = document.createElement('h3');
+            h3.textContent = title;
+            section.appendChild(h3);
+
+            const resultDiv = document.createElement('div');
+            resultDiv.id = 'result-' + title.replace(/\s+/g, '-');
+            section.appendChild(resultDiv);
+
+            results.appendChild(section);
+
+            const result = testFn();
+
+            const resultElement = document.getElementById(resultDiv.id);
+            resultElement.innerHTML = result.html;
+
+            if (result.pass) {
+                passCount++;
+            }
+            totalCount++;
+        }
+
+        function formatFormData(formData) {
+            const entries = formData.entries();
+            const obj = {};
+            for (const [key, value] of entries) {
+                if (obj[key]) {
+                    if (!Array.isArray(obj[key])) {
+                        obj[key] = [obj[key]];
+                    }
+                    obj[key].push(value);
+                } else {
+                    obj[key] = value;
+                }
+            }
+            return JSON.stringify(obj, null, 2);
+        }
+
+        function assert(condition, message) {
+            return {
+                pass: condition,
+                html: `<div class="test-result ${condition ? 'pass' : 'fail'}">
+                    <strong>${condition ? 'PASS' : 'FAIL'}</strong>: ${message}
+                </div>`
+            };
+        }
+
+        function assertFormDataContains(formData, key, value) {
+            const all = formData.getAll(key);
+            return {
+                pass: all.includes(value),
+                html: `<div class="test-result ${all.includes(value) ? 'pass' : 'fail'}">
+                    <strong>${all.includes(value) ? 'PASS' : 'FAIL'}</strong>: FormData contains ${key}=${JSON.stringify(value)} (found: ${JSON.stringify(all)})
+                </div>`
+            };
+        }
+
+        function assertFormDataNotContains(formData, key) {
+            const all = formData.getAll(key);
+            return {
+                pass: all.length === 0,
+                html: `<div class="test-result ${all.length === 0 ? 'pass' : 'fail'}">
+                    <strong>${all.length === 0 ? 'PASS' : 'FAIL'}</strong>: FormData does NOT contain key "${key}" (found: ${JSON.stringify(all)})
+                </div>`
+            };
+        }
+
+        function assertFormDataCount(formData, count) {
+            const entries = formData.entries();
+            let actualCount = 0;
+            for (const entry of entries) actualCount++;
+            return {
+                pass: actualCount === count,
+                html: `<div class="test-result ${actualCount === count ? 'pass' : 'fail'}">
+                    <strong>${actualCount === count ? 'PASS' : 'FAIL'}</strong>: Expected ${count} entries, got ${actualCount}
+                    <pre>${formatFormData(formData)}</pre>
+                </div>`
+            };
+        }
+
+        // Test 1: Basic name attributes
+        addTestSection('Test 1: Basic name attributes', () => {
+            const form = document.getElementById('form1');
+            const fd = new FormData(form);
+            let html = '';
+            html += assertFormDataContains(fd, 'username', 'alice').html;
+            html += assertFormDataContains(fd, 'password', 'secret').html;
+            html += assertFormDataContains(fd, 'email', 'alice@example.com').html;
+            html += assertFormDataCount(fd, 3).html;
+            return { pass: true, html };
+        });
+
+        // Test 2: Checkbox serialization with explicit values
+        addTestSection('Test 2: Checkbox serialization', () => {
+            const form = document.getElementById('form2');
+            const fd = new FormData(form);
+            let html = '';
+            html += assertFormDataContains(fd, 'agree', 'yes').html;
+            html += assertFormDataContains(fd, 'newsletter', '1').html;
+            html += assertFormDataContains(fd, 'notifications', 'on').html;
+            html += assertFormDataNotContains(fd, 'optional').html;
+            html += assertFormDataCount(fd, 3).html;
+            return { pass: true, html };
+        });
+
+        // Test 3: Radio serialization
+        addTestSection('Test 3: Radio serialization', () => {
+            const form = document.getElementById('form3');
+            const fd = new FormData(form);
+            let html = '';
+            html += assertFormDataContains(fd, 'gender', 'male').html;
+            html += assertFormDataCount(fd, 1).html;
+            return { pass: true, html };
+        });
+
+        // Test 4: Select elements
+        addTestSection('Test 4: Select elements', () => {
+            const form = document.getElementById('form4');
+            const fd = new FormData(form);
+            let html = '';
+            html += assertFormDataContains(fd, 'country', 'uk').html;
+            html += assertFormDataContains(fd, 'city', 'london').html;
+            html += assertFormDataCount(fd, 2).html;
+            return { pass: true, html };
+        });
+
+        // Test 5: Textarea
+        addTestSection('Test 5: Textarea', () => {
+            const form = document.getElementById('form5');
+            const fd = new FormData(form);
+            let html = '';
+            html += assertFormDataContains(fd, 'message', 'Hello World!').html;
+            html += assertFormDataCount(fd, 1).html;
+            return { pass: true, html };
+        });
+
+        // Test 6: Disabled controls
+        addTestSection('Test 6: Disabled controls', () => {
+            const form = document.getElementById('form6');
+            const fd = new FormData(form);
+            let html = '';
+            html += assertFormDataNotContains(fd, 'disabled_field').html;
+            html += assertFormDataContains(fd, 'enabled_field', 'should_appear').html;
+            html += assertFormDataCount(fd, 1).html;
+            return { pass: true, html };
+        });
+
+        // Test 7: Controls without name
+        addTestSection('Test 7: Controls without name', () => {
+            const form = document.getElementById('form7');
+            const fd = new FormData(form);
+            let html = '';
+            html += assertFormDataContains(fd, 'named_field', 'no_name_field').html;
+            html += assertFormDataContains(fd, 'another_named_field', 'another_value').html;
+            html += assertFormDataCount(fd, 2).html;
+            return { pass: true, html };
+        });
+
+        // Test 8: Mixed controls
+        addTestSection('Test 8: Mixed controls', () => {
+            const form = document.getElementById('form8');
+            const fd = new FormData(form);
+            let html = '';
+            html += assertFormDataContains(fd, 'user_id', '123').html;
+            html += assertFormDataContains(fd, 'active', 'true').html;
+            html += assertFormDataContains(fd, 'role', 'user').html;
+            html += assertFormDataContains(fd, 'notes', 'Some notes').html;
+            html += assertFormDataCount(fd, 4).html;
+            return { pass: true, html };
+        });
+
+        // Test 9: Multiple checkboxes with same name
+        addTestSection('Test 9: Multiple checkboxes with same name', () => {
+            const form = document.getElementById('form9');
+            const fd = new FormData(form);
+            let html = '';
+            const colors = fd.getAll('colors');
+            const hasRed = colors.includes('red');
+            const hasGreen = colors.includes('green');
+            const hasBlue = colors.includes('blue');
+            const count = colors.length;
+            html += `<div class="test-result ${hasRed ? 'pass' : 'fail'}"><strong>${hasRed ? 'PASS' : 'FAIL'}</strong>: Contains 'red'</div>`;
+            html += `<div class="test-result ${hasGreen ? 'pass' : 'fail'}"><strong>${hasGreen ? 'PASS' : 'FAIL'}</strong>: Contains 'green'</div>`;
+            html += `<div class="test-result ${!hasBlue ? 'pass' : 'fail'}"><strong>${!hasBlue ? 'PASS' : 'FAIL'}</strong>: Does NOT contain 'blue' (unchecked)</div>`;
+            html += `<div class="test-result ${count === 2 ? 'pass' : 'fail'}"><strong>${count === 2 ? 'PASS' : 'FAIL'}</strong>: Found ${count} values (expected 2)</div>`;
+            return { pass: hasRed && hasGreen && !hasBlue && count === 2, html };
+        });
+
+        // Test 10: Input types
+        addTestSection('Test 10: Input types', () => {
+            const form = document.getElementById('form10');
+            const fd = new FormData(form);
+            let html = '';
+            html += assertFormDataContains(fd, 'csrf', 'abc123').html;
+            html += assertFormDataContains(fd, 'search', 'test').html;
+            html += assertFormDataContains(fd, 'count', '42').html;
+            html += assertFormDataContains(fd, 'phone', '1234567890').html;
+            html += assertFormDataCount(fd, 4).html;
+            return { pass: true, html };
+        });
+
+        // Test 11: Checkbox without value attribute defaults to "on"
+        addTestSection('Test 11: Checkbox without value attribute', () => {
+            const form = document.getElementById('form11');
+            const fd = new FormData(form);
+            let html = '';
+            html += assertFormDataContains(fd, 'checkbox_no_value', 'on').html;
+            html += assertFormDataContains(fd, 'radio_no_value', 'on').html;
+            html += assertFormDataContains(fd, 'checkbox_with_value', 'custom').html;
+            html += assertFormDataCount(fd, 3).html;
+            return { pass: true, html };
+        });
+
+        // Test 12: Empty values
+        addTestSection('Test 12: Empty values', () => {
+            const form = document.getElementById('form12');
+            const fd = new FormData(form);
+            let html = '';
+            html += assertFormDataContains(fd, 'empty_text', '').html;
+            html += assertFormDataContains(fd, 'text_with_value', 'hello').html;
+            html += assertFormDataContains(fd, 'empty_textarea', '').html;
+            html += assertFormDataCount(fd, 3).html;
+            return { pass: true, html };
+        });
+
+        // Summary
+        const summaryDiv = document.createElement('div');
+        summaryDiv.className = 'test-section';
+        summaryDiv.style.backgroundColor = passCount === totalCount ? '#d4edda' : '#fff3cd';
+        summaryDiv.innerHTML = `
+            <h2>Test Summary</h2>
+            <p><strong>Passed:</strong> ${passCount} / ${totalCount}</p>
+            <p><strong>Status:</strong> ${passCount === totalCount ? 'ALL TESTS PASSED' : 'SOME TESTS FAILED'}</p>
+        `;
+        results.appendChild(summaryDiv);
+    </script>
+</body>
+</html>

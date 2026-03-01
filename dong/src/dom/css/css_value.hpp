@@ -26,12 +26,16 @@ struct CSSValue {
         VMIN,
         VMAX,
         CH,
-        CALC  // Value is a calc() expression
+        CALC,  // Value is a calc() expression
+        ENV,   // Value is an env() function call
+        CONTENT  // Value is the 'content' keyword (e.g., for flex-basis)
     };
 
     float value = 0.0f;
     Unit unit = Unit::UNSET;
     std::shared_ptr<CSSCalcExpression> calc_expr;  // For calc() values
+    std::string env_name;                          // For ENV values: environment variable name
+    std::shared_ptr<CSSValue> env_fallback;         // For ENV values: fallback value if env not found
 
     CSSValue() = default;
     CSSValue(float v, Unit u) : value(v), unit(u) {}
@@ -42,7 +46,8 @@ struct CSSValue {
     bool isPixel() const { return unit == Unit::PIXEL; }
     bool isCalc() const { return unit == Unit::CALC && calc_expr != nullptr; }
     bool isSet() const { return unit != Unit::UNSET; }
-    
+    bool isContent() const { return unit == Unit::CONTENT; }
+
     // Resolve to pixels given context
     float resolvePixels(float parent_size, float root_font_size, float viewport_width, float viewport_height) const;
 };
@@ -77,12 +82,37 @@ public:
     bool has(const std::string& name) const;
     void remove(const std::string& name);
     void clear();
-    
+
     // Resolve var() references in a value
     std::string resolveVarReferences(const std::string& value) const;
-    
+
 private:
     std::unordered_map<std::string, std::string> variables_;
+};
+
+// CSS environment variables storage (for env() function)
+class CSSEnvironment {
+public:
+    // Set environment variable value
+    void set(const std::string& name, float value, const std::string& unit = "px");
+
+    // Get environment variable value as CSSValue
+    CSSValue get(const std::string& name, const CSSValue& fallback) const;
+
+    // Check if environment variable exists
+    bool has(const std::string& name) const;
+
+    // Remove environment variable
+    void remove(const std::string& name);
+
+    // Clear all environment variables
+    void clear();
+
+    // Set safe area inset values
+    void setSafeAreaInsets(float top, float right, float bottom, float left);
+
+private:
+    std::unordered_map<std::string, CSSValue> env_variables_;
 };
 
 // box-shadow description

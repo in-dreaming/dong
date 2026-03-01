@@ -105,8 +105,14 @@ public:
     // Composition event dispatch (compositionstart/update/end) with data property
     void dispatchCompositionEvent(uint64_t node_id, const char* type, const char* data);
 
+    // Clipboard event dispatch (copy/cut/paste) with clipboardData property
+    void dispatchClipboardEvent(uint64_t node_id, const char* type, const char* data = nullptr);
+
     // Focus event dispatch with relatedTarget property
     void dispatchFocusEvent(uint64_t node_id, const char* type, uint64_t related_node_id);
+
+    // Drag & Drop event dispatch with data transfer support
+    void dispatchDragDropEvent(uint64_t node_id, const char* type, int32_t x, int32_t y, const std::string& data_transfer, bool is_trusted);
 
     bool hasEventListeners(uint64_t node_id, const char* type) const;
 

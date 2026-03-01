@@ -19,6 +19,7 @@ namespace dong::dom {
 // Static member definitions
 FocusManager* DOMNode::s_focus_manager_ = nullptr;
 EventDispatcher* DOMNode::s_event_dispatcher_ = nullptr;
+std::string DOMNode::s_current_fragment_ = "";
 DOMNodeWeakPtr DOMNode::s_pointer_capture_;
 
 
@@ -592,6 +593,189 @@ std::vector<std::string> DOMNode::getAttributeNames() const {
         names.push_back(key);
     }
     return names;
+}
+
+std::string DOMNode::getEffectiveLang() const {
+    // Check if this element has a lang attribute
+    auto it = attributes_.find("lang");
+    if (it != attributes_.end() && !it->second.empty()) {
+        // Normalize the lang tag: "en-US" -> "en-us" (lowercase language, lowercase country)
+        std::string lang = it->second;
+        std::transform(lang.begin(), lang.end(), lang.begin(),
+                       [](unsigned char c) { return std::tolower(c); });
+        return lang;
+    }
+
+    // Inherit from parent (recursively)
+    if (auto p = parent_.lock()) {
+        return p->getEffectiveLang();
+    }
+
+    // No lang attribute in any ancestor, return empty string
+    return "";
+}
+
+// Helper function to detect direction from text content
+// Returns direction of first strong directional character (L or R type)
+static std::string detectTextDirection(const std::string& text) {
+    // RFC 9386: Bidi character classes
+    // R: Right-to-Left letters (Arabic, Hebrew)
+    // AL: Arabic Letter (strong RTL)
+    // L: Left-to-Right letters
+    //
+    // These ranges are simplified but cover the most common characters.
+    // For full accuracy, we would use the full Unicode bidi database.
+    for (size_t i = 0; i < text.length(); ) {
+        unsigned char ch = static_cast<unsigned char>(text[i]);
+
+        // Handle multi-byte UTF-8 sequences
+        uint32_t codepoint = 0;
+        int bytes = 0;
+        if ((ch & 0x80) == 0) {
+            // 1-byte ASCII
+            codepoint = ch;
+            bytes = 1;
+        } else if ((ch & 0xE0) == 0xC0) {
+            // 2-byte sequence
+            if (i + 1 < text.length()) {
+                codepoint = ((ch & 0x1F) << 6) | (text[i + 1] & 0x3F);
+                bytes = 2;
+            } else {
+                break;
+            }
+        } else if ((ch & 0xF0) == 0xE0) {
+            // 3-byte sequence
+            if (i + 2 < text.length()) {
+                codepoint = ((ch & 0x0F) << 12) | ((text[i + 1] & 0x3F) << 6) | (text[i + 2] & 0x3F);
+                bytes = 3;
+            } else {
+                break;
+            }
+        } else if ((ch & 0xF8) == 0xF0) {
+            // 4-byte sequence
+            if (i + 3 < text.length()) {
+                codepoint = ((ch & 0x07) << 18) | ((text[i + 1] & 0x3F) << 12) |
+                           ((text[i + 2] & 0x3F) << 6) | (text[i + 3] & 0x3F);
+                bytes = 4;
+            } else {
+                break;
+            }
+        } else {
+            i++;
+            continue;
+        }
+
+        // RTL characters (simplified ranges)
+        // Hebrew: U+0590-U+05FF
+        if (codepoint >= 0x0590 && codepoint <= 0x05FF) {
+            return "rtl";
+        }
+        // Arabic: U+0600-U+06FF
+        if (codepoint >= 0x0600 && codepoint <= 0x06FF) {
+            return "rtl";
+        }
+        // Arabic Extended-A: U+0750-U+077F
+        if (codepoint >= 0x0750 && codepoint <= 0x077F) {
+            return "rtl";
+        }
+        // Arabic Presentation Forms: U+FB50-U+FDFF, U+FE70-U+FEFF
+        if (codepoint >= 0xFB50 && codepoint <= 0xFDFF) {
+            return "rtl";
+        }
+        if (codepoint >= 0xFE70 && codepoint <= 0xFEFF) {
+            return "rtl";
+        }
+        // Syriac: U+0700-U+074F
+        if (codepoint >= 0x0700 && codepoint <= 0x074F) {
+            return "rtl";
+        }
+        // Thaana: U+0780-U+07BF
+        if (codepoint >= 0x0780 && codepoint <= 0x07BF) {
+            return "rtl";
+        }
+        // N'Ko: U+07C0-U+07FF
+        if (codepoint >= 0x07C0 && codepoint <= 0x07FF) {
+            return "rtl";
+        }
+        // LTR characters (Latin, Greek, Cyrillic, etc.)
+        // Basic Latin: U+0041-U+005A, U+0061-U+007A
+        if ((codepoint >= 0x0041 && codepoint <= 0x005A) ||
+            (codepoint >= 0x0061 && codepoint <= 0x007A)) {
+            return "ltr";
+        }
+        // Greek: U+0370-U+03FF
+        if (codepoint >= 0x0370 && codepoint <= 0x03FF) {
+            return "ltr";
+        }
+        // Cyrillic: U+0400-U+04FF
+        if (codepoint >= 0x0400 && codepoint <= 0x04FF) {
+            return "ltr";
+        }
+        // Armenian: U+0530-U+058F
+        if (codepoint >= 0x0530 && codepoint <= 0x058F) {
+            return "ltr";
+        }
+        // Georgian: U+10A0-U+10FF
+        if (codepoint >= 0x10A0 && codepoint <= 0x10FF) {
+            return "ltr";
+        }
+        // CJK: U+4E00-U+9FFF (CJK Unified Ideographs)
+        if (codepoint >= 0x4E00 && codepoint <= 0x9FFF) {
+            return "ltr";
+        }
+        // Hiragana: U+3040-U+309F
+        if (codepoint >= 0x3040 && codepoint <= 0x309F) {
+            return "ltr";
+        }
+        // Katakana: U+30A0-U+30FF
+        if (codepoint >= 0x30A0 && codepoint <= 0x30FF) {
+            return "ltr";
+        }
+        // Hangul: U+AC00-U+D7AF
+        if (codepoint >= 0xAC00 && codepoint <= 0xD7AF) {
+            return "ltr";
+        }
+
+        i += bytes;
+    }
+
+    // No strong directional character found, return "ltr" as default
+    return "ltr";
+}
+
+std::string DOMNode::getEffectiveDirection() const {
+    // Check if this element has a dir attribute
+    auto it = attributes_.find("dir");
+    if (it != attributes_.end() && !it->second.empty()) {
+        std::string dir = it->second;
+        std::transform(dir.begin(), dir.end(), dir.begin(),
+                       [](unsigned char c) { return std::tolower(c); });
+
+        if (dir == "ltr" || dir == "rtl") {
+            return dir;
+        } else if (dir == "auto") {
+            // For dir=auto, detect direction from text content
+            // Get all text content from this node and its descendants
+            std::string text_content = "";
+            for (const auto& child : children_) {
+                if (child->getType() == NodeType::TEXT) {
+                    text_content += child->getTextContent();
+                } else if (child->getType() == NodeType::ELEMENT) {
+                    text_content += child->getTextContent();
+                }
+            }
+            return detectTextDirection(text_content);
+        }
+        // Invalid dir value, treat as if not set
+    }
+
+    // Inherit from parent (direction is inherited)
+    if (auto p = parent_.lock()) {
+        return p->getEffectiveDirection();
+    }
+
+    // No dir attribute in any ancestor, return default "ltr"
+    return "ltr";
 }
 
 std::string DOMNode::getInnerHTML() const {

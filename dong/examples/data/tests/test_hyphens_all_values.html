@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>CSS Hyphens - All Values</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: white;
+        }
+
+        .section-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+
+        .narrow {
+            width: 180px;
+            background: #f0f0f0;
+            padding: 10px;
+            border: 1px solid #ccc;
+            margin-bottom: 15px;
+        }
+
+        .medium {
+            width: 250px;
+            background: #f0f0f0;
+            padding: 10px;
+            border: 1px solid #ccc;
+            margin-bottom: 15px;
+        }
+
+        /* hyphens: none */
+        hyphens: none {
+            hyphens: none;
+        }
+
+        /* hyphens: manual */
+        hyphens: manual {
+            hyphens: manual;
+        }
+
+        /* hyphens: auto */
+        hyphens: auto {
+            hyphens: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>CSS Hyphens - All Values Test</h1>
+
+    <div class="section-title">hyphens: none</div>
+    <div class="narrow" style="hyphens: none;">
+        This text should not break at hyphens or soft hyphens because hyphens is set to none.
+    </div>
+    <div class="narrow" style="hyphens: none;">
+        well-known state-of-the-art self-consciously are words with hyphens that should not break.
+    </div>
+
+    <div class="section-title">hyphens: manual</div>
+    <div class="narrow" style="hyphens: manual;">
+        This text should break naturally at word boundaries only.
+    </div>
+    <div class="narrow" style="hyphens: manual;">
+        well-known state-of-the-art self-consciously can break at explicit hyphens.
+    </div>
+    <div class="narrow" style="hyphens: manual;">
+        This has a&shy;soft&shy;hy&shy;phen that breaks when needed.
+    </div>
+
+    <div class="section-title">hyphens: auto</div>
+    <div class="narrow" style="hyphens: auto;">
+        With hyphens auto, the implementation may break words at syllables.
+    </div>
+    <div class="narrow" style="hyphens: auto;">
+        well-known state-of-the-art self-consciously can break at explicit hyphens even with auto.
+    </div>
+    <div class="medium" style="hyphens: auto;">
+        The implementation of hyphens auto may vary. Text should wrap with some form of hyphenation support enabled, but exact behavior depends on the hyphenation dictionary and algorithm.
+    </div>
+</body>
+</html>

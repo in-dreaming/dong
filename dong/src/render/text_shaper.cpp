@@ -25,6 +25,20 @@ namespace {
 // Approximate CSS `line-height: normal` as ~1.2 * font-size.
 constexpr float kDefaultLineHeightMultiplier = 1.2f;
 
+// Helper function to set language on HarfBuzz buffer
+void setHbLanguage(hb_buffer_t* buffer, const std::string& lang) {
+    if (lang.empty()) {
+        return;  // Use default language guessing
+    }
+
+    // HarfBuzz expects BCP 47 language tags (e.g., "en-US", "tr")
+    // The lang attribute already follows BCP 47 format
+    hb_language_t hb_lang = hb_language_from_string(lang.c_str(), -1);
+    if (hb_lang != HB_LANGUAGE_INVALID) {
+        hb_buffer_set_language(buffer, hb_lang);
+    }
+}
+
 struct Utf8DecodeResult {
     uint32_t codepoint = 0;
     uint8_t length = 0;
@@ -340,7 +354,8 @@ bool shapeSpan(const std::string& text,
                uint32_t primary_units_per_em,
                float& pen_x_units,
                float& pen_y_units,
-               std::vector<ShapedGlyph>& out_glyphs) {
+               std::vector<ShapedGlyph>& out_glyphs,
+               const std::string& lang = "") {
     if (!font_info || !font_info->hb_font) {
         return false;
     }
@@ -351,6 +366,9 @@ bool shapeSpan(const std::string& text,
     const int span_len = static_cast<int>(byte_end - byte_start);
     hb_buffer_t* buffer = getThreadLocalHbBuffer();
     addUtf8SpanToHbBuffer(buffer, text.c_str() + byte_start, span_len);
+
+    // Set language for HarfBuzz shaping
+    setHbLanguage(buffer, lang);
 
     hb_shape(font_info->hb_font, buffer, nullptr, 0);
 
@@ -455,7 +473,8 @@ void shapeByFontSegments(const std::string& text,
                          uint32_t primary_units_per_em,
                          float& pen_x_units,
                          float& pen_y_units,
-                         std::vector<ShapedGlyph>& out_glyphs) {
+                         std::vector<ShapedGlyph>& out_glyphs,
+                         const std::string& lang = "") {
     size_t seg_start = 0;
     size_t i = 0;
 
@@ -471,7 +490,7 @@ void shapeByFontSegments(const std::string& text,
         if (choice.path != seg_choice.path) {
             if (i > seg_start) {
                 (void)shapeSpan(text, seg_start, i, seg_choice.info, seg_font_index, primary_units_per_em,
-                                pen_x_units, pen_y_units, out_glyphs);
+                                pen_x_units, pen_y_units, out_glyphs, lang);
             }
             seg_start = i;
             seg_choice = choice;
@@ -483,7 +502,7 @@ void shapeByFontSegments(const std::string& text,
 
     if (i > seg_start) {
         (void)shapeSpan(text, seg_start, i, seg_choice.info, seg_font_index, primary_units_per_em,
-                        pen_x_units, pen_y_units, out_glyphs);
+                        pen_x_units, pen_y_units, out_glyphs, lang);
     }
 }
 
@@ -545,7 +564,7 @@ bool TextShaper::shape(const TextShapeRequest& request, ShapedText& out_text) {
     const std::vector<std::string>& cjk_fallbacks = getCJKFallbackFonts();
     FontChooser chooser(primary_font_path, primary_font, cjk_fallbacks, out_text.font_paths);
 
-    shapeByFontSegments(request.text, chooser, primary_font->units_per_em, pen_x_units, pen_y_units, out_text.glyphs);
+    shapeByFontSegments(request.text, chooser, primary_font->units_per_em, pen_x_units, pen_y_units, out_text.glyphs, request.lang);
 
     applyPrimaryFontMetrics(primary_font, primary_font_path, out_text);
 

@@ -2,15 +2,19 @@
 #include "js_node_bindings.hpp"
 #include "js_observer_bindings.hpp"
 #include "../layout/layout_engine.hpp"
+#include "../dom/details_element.hpp"
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
 #include <cctype>
 #include <algorithm>
+#include <unordered_set>
 #include "../core/log.h"
 #include "../dom/css/style_engine.hpp"
 #include "../dom/focus_manager.hpp"
+#include "../dom/input_element.hpp"
+#include "../dom/select_element.hpp"
 #include "quickjs_compat.h"
 
 
@@ -24,11 +28,17 @@ static bool debugScriptEval() {
     return std::getenv("DONG_DEBUG_SCRIPT_EVAL") != nullptr;
 }
 
+// (Removed global forward declarations - these functions are now declared below)
+
 // ============================================================
 // Console API Implementation - extern "C" for QuickJS callbacks
 // ============================================================
 
 extern "C" {
+
+// Forward declarations for CSSOM API functions
+static JSValue css_supports(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue window_matchMedia(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 
 static JSValue console_log(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     (void)this_val;
@@ -125,9 +135,556 @@ static JSValue js_prompt(JSContext* ctx, JSValueConst this_val, int argc, JSValu
     return JS_NULL;
 }
 
+// ============================================================
+// structuredClone API - Deep clone values
+// ============================================================
+
+static JSValue structuredClone_impl(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue js_structuredClone(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val;
+    if (argc < 1) {
+        JS_ThrowTypeError(ctx, "structuredClone requires at least one argument");
+        return JS_UNDEFINED;
+    }
+    return structuredClone_impl(ctx, this_val, argc, argv);
+}
+
+// Internal recursive clone implementation
+static JSValue structuredClone_impl(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val; (void)argc;
+
+    JSValue value = argv[0];
+    int tag = JS_VALUE_GET_TAG(value);
+
+    // Handle primitives
+    if (tag == JS_TAG_NULL) return JS_NULL;
+    if (tag == JS_TAG_BOOL) return JS_DupValue(ctx, value);
+    if (tag == JS_TAG_INT || tag == JS_TAG_FLOAT64) return JS_DupValue(ctx, value);
+    if (JS_IsString(value)) return JS_DupValue(ctx, value);
+
+    // Handle array
+    if (JS_IsArray(ctx, value)) {
+        JSValue arr = JS_NewArray(ctx);
+
+        // Get length property
+        JSValue lenVal = JS_GetPropertyStr(ctx, value, "length");
+        uint32_t len = 0;
+        JS_ToUint32(ctx, &len, lenVal);
+        JS_FreeValue(ctx, lenVal);
+
+        for (uint32_t i = 0; i < len; i++) {
+            JSValue elem = JS_GetPropertyUint32(ctx, value, i);
+            JSValue cloned = structuredClone_impl(ctx, this_val, 1, &elem);
+            JS_SetPropertyUint32(ctx, arr, i, cloned);
+            JS_FreeValue(ctx, elem);
+        }
+        return arr;
+    }
+
+    // Handle plain objects
+    if (JS_IsObject(value)) {
+        // Check if it's a function or special object (we skip these)
+        if (JS_IsFunction(ctx, value)) {
+            JS_ThrowTypeError(ctx, "structuredClone() cannot clone functions");
+            return JS_UNDEFINED;
+        }
+
+        JSValue obj = JS_NewObject(ctx);
+
+        // Iterate over properties
+        JSPropertyEnum* props = nullptr;
+        uint32_t prop_count = 0;
+        if (JS_GetOwnPropertyNames(ctx, &props, &prop_count, value, JS_GPN_ENUM_ONLY | JS_GPN_STRING_MASK) == 0) {
+            for (uint32_t i = 0; i < prop_count; i++) {
+                JSValue prop_val = JS_GetPropertyInternal(ctx, value, props[i].atom, value, 0);
+                JSValue cloned = structuredClone_impl(ctx, this_val, 1, &prop_val);
+                JS_SetPropertyInternal(ctx, obj, props[i].atom, cloned, obj, JS_PROP_THROW);
+                JS_FreeValue(ctx, prop_val);
+                JS_FreeAtom(ctx, props[i].atom);
+            }
+            JS_FreePropertyEnum(ctx, props, prop_count);
+        }
+        return obj;
+    }
+
+    // For unsupported types, return as-is (simplified for this implementation)
+    return JS_DupValue(ctx, value);
+}
+
+// ============================================================
+// DOMRect API
+// ============================================================
+
+static JSValue domrect_constructor(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+
+static JSValue domrect_constructor(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val;
+
+    JSValue obj = JS_NewObject(ctx);
+
+    double x = 0, y = 0, width = 0, height = 0;
+    if (argc > 0) JS_ToFloat64(ctx, &x, argv[0]);
+    if (argc > 1) JS_ToFloat64(ctx, &y, argv[1]);
+    if (argc > 2) JS_ToFloat64(ctx, &width, argv[2]);
+    if (argc > 3) JS_ToFloat64(ctx, &height, argv[3]);
+
+    double right = x + width;
+    double bottom = y + height;
+
+    JS_SetPropertyStr(ctx, obj, "x", JS_NewFloat64(ctx, x));
+    JS_SetPropertyStr(ctx, obj, "y", JS_NewFloat64(ctx, y));
+    JS_SetPropertyStr(ctx, obj, "width", JS_NewFloat64(ctx, width));
+    JS_SetPropertyStr(ctx, obj, "height", JS_NewFloat64(ctx, height));
+    JS_SetPropertyStr(ctx, obj, "top", JS_NewFloat64(ctx, y));
+    JS_SetPropertyStr(ctx, obj, "right", JS_NewFloat64(ctx, right));
+    JS_SetPropertyStr(ctx, obj, "bottom", JS_NewFloat64(ctx, bottom));
+    JS_SetPropertyStr(ctx, obj, "left", JS_NewFloat64(ctx, x));
+
+    return obj;
+}
+
+// ============================================================
+// FormData API
+// ============================================================
+
+static JSValue formdata_constructor(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int flags);
+static JSValue formdata_append(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue formdata_get(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue formdata_getAll(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue formdata_has(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue formdata_delete(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue formdata_set(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue formdata_entries(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue formdata_keys(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue formdata_values(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+
+// Helper function to collect form controls for FormData serialization
+static void collectFormControlsForFormData(const dong::dom::DOMNodePtr& node, std::vector<dong::dom::DOMNodePtr>& out) {
+    if (!node) return;
+
+    for (const auto& ch : node->getChildren()) {
+        if (!ch) continue;
+        if (ch->getType() == dong::dom::DOMNode::NodeType::ELEMENT) {
+            const std::string& tag = ch->getTagName();
+            // Only collect elements that can have a name attribute and contribute to form data
+            if (tag == "input" || tag == "textarea" || tag == "select" || tag == "button") {
+                out.push_back(ch);
+            }
+        }
+        collectFormControlsForFormData(ch, out);
+    }
+}
+
+// Helper function to serialize a form control for FormData
+static bool serializeFormControl(const dong::dom::DOMNodePtr& control,
+                                 std::vector<std::pair<std::string, std::string>>& entries) {
+    if (!control) return false;
+
+    // Skip disabled controls
+    if (control->hasAttribute("disabled")) {
+        return false;
+    }
+
+    // Skip controls without a name attribute
+    if (!control->hasAttribute("name")) {
+        return false;
+    }
+
+    const std::string& name = control->getAttribute("name");
+    const std::string& tag = control->getTagName();
+
+    if (tag == "input") {
+        // Get input type
+        std::string input_type = "text";
+        if (control->hasAttribute("type")) {
+            input_type = control->getAttribute("type");
+        }
+
+        // For checkbox and radio, only serialize if checked
+        if (input_type == "checkbox" || input_type == "radio") {
+            if (!control->hasAttribute("checked")) {
+                return false; // Not checked, don't serialize
+            }
+        }
+
+        // Get the value, default to "on" for checkbox/radio without explicit value
+        std::string value;
+        if (input_type == "checkbox" || input_type == "radio") {
+            if (control->hasAttribute("value")) {
+                value = control->getAttribute("value");
+            } else {
+                value = "on";
+            }
+        } else if (input_type == "file") {
+            // File input not yet supported, just send the filename
+            value = ""; // Would normally send the file data
+        } else {
+            if (control->hasAttribute("value")) {
+                value = control->getAttribute("value");
+            } else if (auto* st = dong::dom::getInputState(control)) {
+                value = st->getValue();
+            } else {
+                value = "";
+            }
+        }
+
+        entries.push_back({name, value});
+        return true;
+    }
+
+    if (tag == "textarea") {
+        std::string value;
+        if (auto* st = dong::dom::getInputState(control)) {
+            value = st->getValue();
+        } else if (control->hasAttribute("value")) {
+            value = control->getAttribute("value");
+        } else {
+            // Get text content from textarea
+            value = control->getTextContent();
+        }
+        entries.push_back({name, value});
+        return true;
+    }
+
+    if (tag == "select") {
+        if (auto* st = dong::dom::getSelectState(control)) {
+            std::string value = st->getSelectedValue();
+            entries.push_back({name, value});
+            return true;
+        } else if (control->hasAttribute("value")) {
+            entries.push_back({name, control->getAttribute("value")});
+            return true;
+        }
+    }
+
+    // button element with type="submit" or type="button"
+    // Only include if it was clicked (not implemented here)
+    // For now, exclude button elements from automatic serialization
+
+    return false;
+}
+
+// Opaque object to store form data
+struct FormDataStorage {
+    std::vector<std::pair<std::string, std::string>> entries;
+};
+
+static JSValue formdata_constructor(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val;
+
+    JSValue obj = JS_NewObject(ctx);
+
+    // Create storage
+    auto* storage = new FormDataStorage();
+    JS_SetOpaque(obj, storage);
+
+    // Handle form element argument if argc > 0
+    if (argc > 0) {
+        auto form = dong::script::JSBindings::getNodeOpaque(ctx, argv[0]);
+        if (form && form->getTagName() == "form") {
+            // Collect all form controls
+            std::vector<dong::dom::DOMNodePtr> controls;
+            controls.reserve(32);
+            collectFormControlsForFormData(form, controls);
+
+            // Serialize each control
+            for (const auto& control : controls) {
+                serializeFormControl(control, storage->entries);
+            }
+        }
+    }
+
+    JS_SetPropertyStr(ctx, obj, "append",
+        JS_NewCFunction(ctx, formdata_append, "append", 2));
+    JS_SetPropertyStr(ctx, obj, "get",
+        JS_NewCFunction(ctx, formdata_get, "get", 1));
+    JS_SetPropertyStr(ctx, obj, "getAll",
+        JS_NewCFunction(ctx, formdata_getAll, "getAll", 1));
+    JS_SetPropertyStr(ctx, obj, "has",
+        JS_NewCFunction(ctx, formdata_has, "has", 1));
+    JS_SetPropertyStr(ctx, obj, "delete",
+        JS_NewCFunction(ctx, formdata_delete, "delete", 1));
+    JS_SetPropertyStr(ctx, obj, "set",
+        JS_NewCFunction(ctx, formdata_set, "set", 2));
+    JS_SetPropertyStr(ctx, obj, "entries",
+        JS_NewCFunction(ctx, formdata_entries, "entries", 0));
+    JS_SetPropertyStr(ctx, obj, "keys",
+        JS_NewCFunction(ctx, formdata_keys, "keys", 0));
+    JS_SetPropertyStr(ctx, obj, "values",
+        JS_NewCFunction(ctx, formdata_values, "values", 0));
+
+    return obj;
+}
+
+static JSValue formdata_append(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_UNDEFINED;
+
+    auto* storage = static_cast<FormDataStorage*>(JS_GetOpaque((JSValue)this_val, 0));
+    if (!storage) return JS_UNDEFINED;
+
+    const char* name = JS_ToCString(ctx, argv[0]);
+    if (!name) return JS_UNDEFINED;
+
+    const char* value = "";
+    if (argc > 1) {
+        value = JS_ToCString(ctx, argv[1]);
+        if (!value) {
+            JS_FreeCString(ctx, name);
+            return JS_UNDEFINED;
+        }
+    }
+
+    storage->entries.push_back({name, value ? value : ""});
+
+    JS_FreeCString(ctx, name);
+    if (value) JS_FreeCString(ctx, value);
+
+    return JS_UNDEFINED;
+}
+
+static JSValue formdata_get(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_NULL;
+
+    auto* storage = static_cast<FormDataStorage*>(JS_GetOpaque((JSValue)this_val, 0));
+    if (!storage) return JS_NULL;
+
+    const char* name = JS_ToCString(ctx, argv[0]);
+    if (!name) return JS_NULL;
+
+    for (const auto& entry : storage->entries) {
+        if (entry.first == name) {
+            JS_FreeCString(ctx, name);
+            return JS_NewString(ctx, entry.second.c_str());
+        }
+    }
+
+    JS_FreeCString(ctx, name);
+    return JS_NULL;
+}
+
+static JSValue formdata_getAll(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_NewArray(ctx);
+
+    auto* storage = static_cast<FormDataStorage*>(JS_GetOpaque((JSValue)this_val, 0));
+    if (!storage) return JS_NewArray(ctx);
+
+    const char* name = JS_ToCString(ctx, argv[0]);
+    if (!name) return JS_NewArray(ctx);
+
+    JSValue arr = JS_NewArray(ctx);
+    uint32_t idx = 0;
+    for (const auto& entry : storage->entries) {
+        if (entry.first == name) {
+            JS_SetPropertyUint32(ctx, arr, idx++, JS_NewString(ctx, entry.second.c_str()));
+        }
+    }
+
+    JS_FreeCString(ctx, name);
+    return arr;
+}
+
+static JSValue formdata_has(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_FALSE;
+
+    auto* storage = static_cast<FormDataStorage*>(JS_GetOpaque((JSValue)this_val, 0));
+    if (!storage) return JS_FALSE;
+
+    const char* name = JS_ToCString(ctx, argv[0]);
+    if (!name) return JS_FALSE;
+
+    for (const auto& entry : storage->entries) {
+        if (entry.first == name) {
+            JS_FreeCString(ctx, name);
+            return JS_TRUE;
+        }
+    }
+
+    JS_FreeCString(ctx, name);
+    return JS_FALSE;
+}
+
+static JSValue formdata_delete(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_UNDEFINED;
+
+    auto* storage = static_cast<FormDataStorage*>(JS_GetOpaque((JSValue)this_val, 0));
+    if (!storage) return JS_UNDEFINED;
+
+    const char* name = JS_ToCString(ctx, argv[0]);
+    if (!name) return JS_UNDEFINED;
+
+    auto it = std::remove_if(storage->entries.begin(), storage->entries.end(),
+        [name](const auto& entry) { return entry.first == name; });
+    storage->entries.erase(it, storage->entries.end());
+
+    JS_FreeCString(ctx, name);
+    return JS_UNDEFINED;
+}
+
+static JSValue formdata_set(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_UNDEFINED;
+
+    auto* storage = static_cast<FormDataStorage*>(JS_GetOpaque((JSValue)this_val, 0));
+    if (!storage) return JS_UNDEFINED;
+
+    const char* name = JS_ToCString(ctx, argv[0]);
+    if (!name) return JS_UNDEFINED;
+
+    const char* value = "";
+    if (argc > 1) {
+        value = JS_ToCString(ctx, argv[1]);
+        if (!value) {
+            JS_FreeCString(ctx, name);
+            return JS_UNDEFINED;
+        }
+    }
+
+    // Remove all existing entries with this name
+    formdata_delete(ctx, this_val, 1, argv);
+
+    // Add new entry
+    storage->entries.push_back({name, value ? value : ""});
+
+    JS_FreeCString(ctx, name);
+    if (value) JS_FreeCString(ctx, value);
+
+    return JS_UNDEFINED;
+}
+
+static JSValue formdata_entries(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc; (void)argv;
+    auto* storage = static_cast<FormDataStorage*>(JS_GetOpaque((JSValue)this_val, 0));
+    if (!storage) return JS_NewArray(ctx);
+
+    JSValue arr = JS_NewArray(ctx);
+    for (uint32_t i = 0; i < storage->entries.size(); i++) {
+        JSValue entry = JS_NewArray(ctx);
+        JS_SetPropertyUint32(ctx, entry, 0, JS_NewString(ctx, storage->entries[i].first.c_str()));
+        JS_SetPropertyUint32(ctx, entry, 1, JS_NewString(ctx, storage->entries[i].second.c_str()));
+        JS_SetPropertyUint32(ctx, arr, i, entry);
+    }
+    return arr;
+}
+
+static JSValue formdata_keys(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc; (void)argv;
+    auto* storage = static_cast<FormDataStorage*>(JS_GetOpaque((JSValue)this_val, 0));
+    if (!storage) return JS_NewArray(ctx);
+
+    JSValue arr = JS_NewArray(ctx);
+    for (uint32_t i = 0; i < storage->entries.size(); i++) {
+        JS_SetPropertyUint32(ctx, arr, i, JS_NewString(ctx, storage->entries[i].first.c_str()));
+    }
+    return arr;
+}
+
+static JSValue formdata_values(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc; (void)argv;
+    auto* storage = static_cast<FormDataStorage*>(JS_GetOpaque((JSValue)this_val, 0));
+    if (!storage) return JS_NewArray(ctx);
+
+    JSValue arr = JS_NewArray(ctx);
+    for (uint32_t i = 0; i < storage->entries.size(); i++) {
+        JS_SetPropertyUint32(ctx, arr, i, JS_NewString(ctx, storage->entries[i].second.c_str()));
+    }
+    return arr;
+}
+
+// ============================================================
+// DOMParser API
+// ============================================================
+
+static JSValue domparser_constructor(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue domparser_parseFromString(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+
+static JSValue domparser_constructor(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val; (void)argc; (void)argv;
+
+    JSValue obj = JS_NewObject(ctx);
+
+    JS_SetPropertyStr(ctx, obj, "parseFromString",
+        JS_NewCFunction(ctx, domparser_parseFromString, "parseFromString", 2));
+
+    return obj;
+}
+
+static JSValue domparser_parseFromString(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    if (argc < 2) {
+        JS_ThrowTypeError(ctx, "parseFromString requires 2 arguments");
+        return JS_UNDEFINED;
+    }
+
+    const char* str = JS_ToCString(ctx, argv[0]);
+    const char* mimeType = JS_ToCString(ctx, argv[1]);
+
+    if (!str || !mimeType) {
+        if (str) JS_FreeCString(ctx, str);
+        if (mimeType) JS_FreeCString(ctx, mimeType);
+        JS_ThrowTypeError(ctx, "Invalid arguments to parseFromString");
+        return JS_UNDEFINED;
+    }
+
+    // Only support text/html for now
+    if (std::string(mimeType) != "text/html") {
+        JS_FreeCString(ctx, str);
+        JS_FreeCString(ctx, mimeType);
+        JS_ThrowTypeError(ctx, "Unsupported MIME type: %s", mimeType);
+        return JS_UNDEFINED;
+    }
+
+    // Get JSBindings from context
+    auto bindings = static_cast<dong::script::JSBindings*>(JS_GetContextOpaque(ctx));
+    if (!bindings || !bindings->dom_manager_) {
+        JS_FreeCString(ctx, str);
+        JS_FreeCString(ctx, mimeType);
+        return JS_NULL;
+    }
+
+    // Parse HTML
+    using dong::dom::HTMLParser;
+    HTMLParser parser;
+    auto root = parser.parse(std::string(str));
+
+    JS_FreeCString(ctx, str);
+    JS_FreeCString(ctx, mimeType);
+
+    if (!root) {
+        return JS_NULL;
+    }
+
+    // Return as document-like object (simplified - return root element)
+    JSValue doc = JS_NewObject(ctx);
+
+    // Add document properties
+    JSAtom body_atom = JS_NewAtom(ctx, "body");
+    JSAtom documentElement_atom = JS_NewAtom(ctx, "documentElement");
+
+    // Find body element using DOMNode method
+    auto body_elems = bindings->dom_manager_->getElementsByTagName("body");
+    if (!body_elems.empty() && body_elems[0]) {
+        JSValue body = bindings->createJSElement(ctx, body_elems[0]);
+        JS_SetProperty(ctx, doc, body_atom, body);
+    }
+
+    // Set documentElement to root (or html element)
+    auto html_elems = bindings->dom_manager_->getElementsByTagName("html");
+    if (!html_elems.empty() && html_elems[0]) {
+        JSValue doc_elem = bindings->createJSElement(ctx, html_elems[0]);
+        JS_SetProperty(ctx, doc, documentElement_atom, doc_elem);
+    }
+
+    JS_FreeAtom(ctx, body_atom);
+    JS_FreeAtom(ctx, documentElement_atom);
+
+    return doc;
+}
+
 } // extern "C"
 
 namespace dong::script {
+
+// CSS API initialization functions
+void initializeCSSAPI(JSContext* ctx);
+void initializeWindowCSSAPI(JSContext* ctx);
 
 namespace {
 
@@ -699,6 +1256,144 @@ JSValue createStyleProxy(JSContext* ctx, JSValueConst element, const dom::DOMNod
 
         return JS_NewString(c, old_value.c_str());
     }, "removeProperty", 1));
+
+    // cssText getter - returns serialized inline styles
+    JSValue cssText_getter = JS_NewCFunction(ctx, [](JSContext* c, JSValueConst this_val, int argc, JSValueConst* argv) {
+        (void)argc; (void)argv;
+        JSValue element = JS_GetPropertyStr(c, this_val, "__element__");
+        if (JS_IsUndefined(element)) {
+            JS_FreeValue(c, element);
+            return JS_NewString(c, "");
+        }
+        auto node = JSBindings::getNodeOpaque(c, element);
+        JS_FreeValue(c, element);
+        if (!node) {
+            return JS_NewString(c, "");
+        }
+
+        // Build cssText from inline styles
+        std::string css_text;
+        for (const auto& [prop, val] : node->getInlineStyles()) {
+            if (!val.empty()) {
+                css_text += prop + ":" + val + ";";
+            }
+        }
+        return JS_NewString(c, css_text.c_str());
+    }, "get cssText", 0);
+
+    // cssText setter - parses and sets inline styles
+    JSValue cssText_setter = JS_NewCFunction(ctx, [](JSContext* c, JSValueConst this_val, int argc, JSValueConst* argv) {
+        if (argc < 1) {
+            return JS_UNDEFINED;
+        }
+
+        const char* css_text = JS_ToCString(c, argv[0]);
+        if (!css_text) {
+            return JS_UNDEFINED;
+        }
+
+        JSValue element = JS_GetPropertyStr(c, this_val, "__element__");
+        if (JS_IsUndefined(element)) {
+            JS_FreeCString(c, css_text);
+            JS_FreeValue(c, element);
+            return JS_UNDEFINED;
+        }
+        auto node = JSBindings::getNodeOpaque(c, element);
+        JS_FreeValue(c, element);
+        if (!node) {
+            JS_FreeCString(c, css_text);
+            return JS_UNDEFINED;
+        }
+
+        // Clear existing inline styles
+        auto inline_styles = node->getInlineStyles();
+        for (const auto& [prop, val] : inline_styles) {
+            node->setInlineStyleProperty(prop, "");
+        }
+
+        // Parse and set new styles
+        std::string text(css_text);
+        size_t pos = 0;
+        while (pos < text.length()) {
+            // Skip whitespace and semicolons
+            while (pos < text.length() && (text[pos] == ' ' || text[pos] == '\t' || text[pos] == '\n' ||
+                                          text[pos] == '\r' || text[pos] == ';')) {
+                pos++;
+            }
+            if (pos >= text.length()) break;
+
+            // Extract property name
+            size_t prop_end = text.find(':', pos);
+            if (prop_end == std::string::npos) break;
+
+            std::string prop = text.substr(pos, prop_end - pos);
+            // Trim property name
+            size_t prop_start = prop.find_first_not_of(" \t");
+            size_t prop_trim_end = prop.find_last_not_of(" \t");
+            if (prop_start == std::string::npos) {
+                pos = prop_end + 1;
+                continue;
+            }
+            prop = prop.substr(prop_start, prop_trim_end - prop_start + 1);
+
+            pos = prop_end + 1;
+
+            // Skip whitespace after colon
+            while (pos < text.length() && (text[pos] == ' ' || text[pos] == '\t')) {
+                pos++;
+            }
+
+            // Extract value up to semicolon or end
+            size_t value_start = pos;
+            while (pos < text.length() && text[pos] != ';') {
+                if (text[pos] == '"' || text[pos] == '\'') {
+                    char quote = text[pos];
+                    pos++;
+                    while (pos < text.length() && text[pos] != quote) {
+                        if (text[pos] == '\\') pos++; // Skip escaped characters
+                        pos++;
+                    }
+                    if (pos < text.length()) pos++; // Skip closing quote
+                } else {
+                    pos++;
+                }
+            }
+
+            std::string val = text.substr(value_start, pos - value_start);
+            // Trim value
+            size_t val_trim_end = val.find_last_not_of(" \t");
+            if (val_trim_end != std::string::npos) {
+                val = val.substr(0, val_trim_end + 1);
+            }
+
+            // Trim !important suffix
+            size_t important_pos = val.find("!important");
+            if (important_pos != std::string::npos) {
+                val = val.substr(0, important_pos);
+                val_trim_end = val.find_last_not_of(" \t");
+                if (val_trim_end != std::string::npos) {
+                    val = val.substr(0, val_trim_end + 1);
+                }
+                val += " !important";
+            }
+
+            // Set the property
+            node->setInlineStyleProperty(prop, val);
+
+            pos++;
+        }
+
+        JS_FreeCString(c, css_text);
+        return JS_UNDEFINED;
+    }, "set cssText", 1);
+
+    // Register cssText as a getter/setter property
+    {
+        JSAtom cssText_atom = JS_NewAtom(ctx, "cssText");
+        JS_DefinePropertyGetSet(ctx, target, cssText_atom, cssText_getter, cssText_setter,
+            JS_PROP_ENUMERABLE | JS_PROP_CONFIGURABLE);
+        JS_FreeAtom(ctx, cssText_atom);
+    }
 
     JSValue handler = JS_NewObject(ctx);
     JS_SetPropertyStr(ctx, handler, "get", JS_NewCFunction(ctx, style_proxy_get, "style_get", 3));
@@ -1446,6 +2141,56 @@ static JSValue video_getDuration(JSContext* ctx, JSValueConst this_val, int argc
 }
 
 // ============================================================
+// HTMLDetailsElement.open property
+// ============================================================
+
+static JSValue details_getOpen(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc; (void)argv;
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_FALSE;
+    if (node->getTagName() != "details") return JS_FALSE;
+
+    auto* state = dong::dom::getDetailsState(node);
+    if (state) {
+        return JS_NewBool(ctx, state->isOpen());
+    }
+    // Fallback to checking open attribute
+    return JS_NewBool(ctx, node->hasAttribute("open"));
+}
+
+static JSValue details_setOpen(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc;
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_UNDEFINED;
+    if (node->getTagName() != "details") return JS_UNDEFINED;
+
+    bool new_open = false;
+    if (JS_ToBool(ctx, argv[0]) == 1) {
+        new_open = true;
+    }
+
+    auto* state = dong::dom::getDetailsState(node);
+    if (state) {
+        bool was_open = state->isOpen();
+        if (was_open != new_open) {
+            state->setOpen(new_open);
+            state->applyOpenStateToDOM(node);
+            // Toggle event is dispatched when open state changes
+            // Note: This doesn't dispatch the event here since it's called from JS
+            // The engine will handle dispatching, or we could dispatch here
+        }
+    } else {
+        if (new_open) {
+            node->setAttribute("open", "");
+        } else {
+            node->removeAttribute("open");
+        }
+    }
+
+    return JS_UNDEFINED;
+}
+
+// ============================================================
 // 样式修改 API - element.style.*
 // ============================================================
 
@@ -1898,9 +2643,11 @@ void JSBindings::initialize() {
     initializeElementAPI();
     initializeEventAPI();
 
-    // Initialize Node constants (Node.ELEMENT_NODE, etc.)
+    // Initialize CSS API: CSS.supports() and window.matchMedia()
     JSContext* ctx = engine_->getContext();
     if (ctx) {
+        initializeCSSAPI(ctx);
+        initializeWindowCSSAPI(ctx);
         initializeNodeConstants(ctx);
         initializeObserverAPI(ctx, this);
     }
@@ -2001,6 +2748,22 @@ void JSBindings::initializeConsoleAPI() {
     JS_SetPropertyStr(ctx, global, "prompt",
         JS_NewCFunction(ctx, js_prompt, "prompt", 2));
 
+    // structuredClone global function
+    JS_SetPropertyStr(ctx, global, "structuredClone",
+        JS_NewCFunction(ctx, js_structuredClone, "structuredClone", 1));
+
+    // DOMRect global constructor
+    JS_SetPropertyStr(ctx, global, "DOMRect",
+        JS_NewCFunction2(ctx, domrect_constructor, "DOMRect", 4, JS_CFUNC_constructor, 0));
+
+    // FormData global constructor (accepts optional form argument)
+    JS_SetPropertyStr(ctx, global, "FormData",
+        JS_NewCFunction2(ctx, formdata_constructor, "FormData", 1, JS_CFUNC_constructor, 0));
+
+    // DOMParser global constructor
+    JS_SetPropertyStr(ctx, global, "DOMParser",
+        JS_NewCFunction2(ctx, domparser_constructor, "DOMParser", 0, JS_CFUNC_constructor, 0));
+
     JS_FreeValue(ctx, global);
 }
 
@@ -2022,6 +2785,349 @@ static JSValue performance_now(JSContext* ctx, JSValueConst this_val, int argc, 
     double ms = duration.count() / 1000.0;
 
     return JS_NewFloat64(ctx, ms);
+}
+
+// ============================================================
+// CSSOM API: CSS.supports() and window.matchMedia()
+// ============================================================
+
+// List of CSS properties known to be supported by Dong
+static bool isCssPropertySupported(const std::string& property) {
+    static const std::unordered_set<std::string> supported_properties = {
+        // Display
+        "display", "visibility", "opacity",
+
+        // Box model
+        "width", "height", "min-width", "max-width", "min-height", "max-height",
+        "margin", "margin-top", "margin-right", "margin-bottom", "margin-left",
+        "padding", "padding-top", "padding-right", "padding-bottom", "padding-left",
+        "border", "border-width", "border-color", "border-style", "border-radius",
+        "border-top", "border-right", "border-bottom", "border-left",
+        "border-top-width", "border-right-width", "border-bottom-width", "border-left-width",
+        "border-top-color", "border-right-color", "border-bottom-color", "border-left-color",
+        "border-top-style", "border-right-style", "border-bottom-style", "border-left-style",
+        "box-sizing", "outline", "outline-width", "outline-color", "outline-style", "outline-offset",
+
+        // Logical properties
+        "margin-inline", "margin-inline-start", "margin-inline-end",
+        "margin-block", "margin-block-start", "margin-block-end",
+        "padding-inline", "padding-inline-start", "padding-inline-end",
+        "padding-block", "padding-block-start", "padding-block-end",
+        "border-inline", "border-inline-start", "border-inline-end",
+        "border-block", "border-block-start", "border-block-end",
+        "inset-inline", "inset-inline-start", "inset-inline-end",
+        "inset-block", "inset-block-start", "inset-block-end",
+
+        // Positioning
+        "position", "top", "right", "bottom", "left",
+        "z-index", "overflow", "overflow-x", "overflow-y",
+        "float", "clear",
+
+        // Flexbox
+        "flex", "flex-direction", "flex-wrap", "flex-flow",
+        "justify-content", "align-items", "align-content", "align-self", "place-items", "place-content", "place-self",
+        "flex-grow", "flex-shrink", "flex-basis", "order",
+        "gap", "row-gap", "column-gap",
+
+        // Typography
+        "font", "font-family", "font-size", "font-weight", "font-style",
+        "font-variant", "line-height", "letter-spacing", "word-spacing",
+        "text-align", "text-decoration", "text-transform", "text-overflow",
+        "white-space", "word-break", "text-indent",
+
+        // Color
+        "color", "background", "background-color", "background-image",
+        "background-repeat", "background-position", "background-size",
+        "background-attachment", "background-clip", "background-origin",
+
+        // Lists
+        "list-style", "list-style-type", "list-style-position", "list-style-image",
+
+        // Tables
+        "border-collapse", "border-spacing", "caption-side",
+
+        // Cursor
+        "cursor", "pointer-events", "user-select",
+
+        // Tables
+        "table-layout",
+
+        // Misc
+        "aspect-ratio", "content-visibility", "contain",
+        "color-scheme", "accent-color", "hyphens",
+        "counter-reset", "counter-increment",
+        "quotes", "image-rendering", "resize", "will-change", "writing-mode"
+    };
+
+    // Normalize property name (lowercase, without vendor prefix check)
+    std::string prop = property;
+    std::transform(prop.begin(), prop.end(), prop.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+
+    return supported_properties.count(prop) > 0;
+}
+
+static JSValue css_supports(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val;
+
+    if (argc < 1) {
+        return JS_FALSE;
+    }
+
+    // Overload 1: CSS.supports(property, value)
+    if (argc >= 2 && !JS_IsUndefined(argv[1])) {
+        const char* property = JS_ToCString(ctx, argv[0]);
+        const char* value = JS_ToCString(ctx, argv[1]);
+
+        bool supported = false;
+        if (property && value) {
+            // Check if property is supported
+            if (isCssPropertySupported(property)) {
+                // For now, assume all basic values are supported for supported properties
+                // This is a simplified check - a production implementation would validate
+                // the specific value syntax for each property
+                supported = true;
+
+                // Additional checks for specific value types
+                std::string val_str(value);
+                std::transform(val_str.begin(), val_str.end(), val_str.begin(), [](unsigned char c) {
+                    return static_cast<char>(std::tolower(c));
+                });
+
+                // Reject obviously invalid/unsupported values
+                if (val_str.find("grid") != std::string::npos) {
+                    supported = false;  // Grid layout not supported
+                }
+                if (val_str.find("content-visibility: auto") != std::string::npos ||
+                    val_str.find("content-visibility:hidden") != std::string::npos) {
+                    supported = false;  // Content visibility not fully supported
+                }
+            }
+        }
+
+        if (property) JS_FreeCString(ctx, property);
+        if (value) JS_FreeCString(ctx, value);
+
+        return JS_NewBool(ctx, supported);
+    }
+
+    // Overload 2: CSS.supports(conditionText)
+    // Example: CSS.supports("(display: grid)")
+    const char* condition_text = JS_ToCString(ctx, argv[0]);
+    bool supported = false;
+
+    if (condition_text) {
+        std::string cond(condition_text);
+        std::transform(cond.begin(), cond.end(), cond.begin(), [](unsigned char c) {
+            return static_cast<char>(std::tolower(c));
+        });
+
+        // Check for (property: value) pattern
+        size_t paren_start = cond.find('(');
+        size_t paren_end = cond.rfind(')');
+        size_t colon = cond.find(':');
+
+        if (paren_start != std::string::npos && paren_end != std::string::npos &&
+            colon > paren_start && colon < paren_end) {
+
+            std::string prop = cond.substr(paren_start + 1, colon - paren_start - 1);
+            std::string val = cond.substr(colon + 1, paren_end - colon - 1);
+
+            // Trim whitespace
+            auto trim = [](std::string s) {
+                size_t start = s.find_first_not_of(" \t");
+                size_t end = s.find_last_not_of(" \t");
+                return (start == std::string::npos) ? "" : s.substr(start, end - start + 1);
+            };
+            prop = trim(prop);
+            val = trim(val);
+
+            supported = isCssPropertySupported(prop);
+
+            // Check if value is valid
+            if (supported && !val.empty()) {
+                std::transform(val.begin(), val.end(), val.begin(), [](unsigned char c) {
+                    return static_cast<char>(std::tolower(c));
+                });
+
+                // Reject obviously invalid/unsupported values
+                if (val.find("grid") != std::string::npos) {
+                    supported = false;
+                }
+            }
+        }
+
+        JS_FreeCString(ctx, condition_text);
+    }
+
+    return JS_NewBool(ctx, supported);
+}
+
+JSValue window_matchMedia(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val;
+
+    if (argc < 1) {
+        return JS_ThrowTypeError(ctx, "matchMedia requires a query parameter");
+    }
+
+    const char* query = JS_ToCString(ctx, argv[0]);
+    if (!query) {
+        return JS_ThrowTypeError(ctx, "matchMedia requires a query parameter");
+    }
+
+    auto bindings = getBindingsFromContext(ctx);
+    bool matches = false;
+
+    if (bindings && bindings->dom_manager_) {
+        std::string query_str(query);
+        std::transform(query_str.begin(), query_str.end(), query_str.begin(), [](unsigned char c) {
+            return static_cast<char>(std::tolower(c));
+        });
+
+        // Note: In a production implementation, you'd need:
+        // 1. A way to access the view width/height
+        // 2. System color scheme detection
+        // For now, we provide basic support:
+
+        // (prefers-color-scheme: light) - assume true
+        if (query_str.find("(prefers-color-scheme: light)") != std::string::npos) {
+            matches = true;
+        }
+        // (prefers-color-scheme: dark) - assume false for now
+        else if (query_str.find("(prefers-color-scheme: dark)") != std::string::npos) {
+            matches = false;
+        }
+        // (prefers-reduced-motion: reduce) - assume false
+        else if (query_str.find("(prefers-reduced-motion: reduce)") != std::string::npos) {
+            matches = false;
+        }
+        // (orientation: portrait) - assume true (typical for mobile)
+        else if (query_str.find("(orientation: portrait)") != std::string::npos) {
+            matches = true;
+        }
+        // (orientation: landscape) - assume false
+        else if (query_str.find("(orientation: landscape)") != std::string::npos) {
+            matches = false;
+        }
+        // (min-width: <value>) - parse and check if matches default width
+        else if (query_str.find("(min-width:") != std::string::npos) {
+            // Extract width value (simplified - assumes px units)
+            size_t width_start = query_str.find("(min-width:") + 11;
+            size_t width_end = query_str.find(')', width_start);
+            if (width_end != std::string::npos) {
+                std::string width_str = query_str.substr(width_start, width_end - width_start);
+                // Basic parsing for "100px" format
+                size_t px_pos = width_str.find("px");
+                if (px_pos != std::string::npos) {
+                    width_str = width_str.substr(0, px_pos);
+                }
+                int min_width = std::stoi(width_str);
+                // Assume default viewport width of 800px
+                matches = (800 >= min_width);
+            }
+        }
+        // (max-width: <value>) - parse and check if matches default width
+        else if (query_str.find("(max-width:") != std::string::npos) {
+            // Extract width value
+            size_t width_start = query_str.find("(max-width:") + 11;
+            size_t width_end = query_str.find(')', width_start);
+            if (width_end != std::string::npos) {
+                std::string width_str = query_str.substr(width_start, width_end - width_start);
+                size_t px_pos = width_str.find("px");
+                if (px_pos != std::string::npos) {
+                    width_str = width_str.substr(0, px_pos);
+                }
+                int max_width = std::stoi(width_str);
+                // Assume default viewport width of 800px
+                matches = (800 <= max_width);
+            }
+        }
+        // (min-height: <value>) - parse and check if matches default height
+        else if (query_str.find("(min-height:") != std::string::npos) {
+            size_t height_start = query_str.find("(min-height:") + 12;
+            size_t height_end = query_str.find(')', height_start);
+            if (height_end != std::string::npos) {
+                std::string height_str = query_str.substr(height_start, height_end - height_start);
+                size_t px_pos = height_str.find("px");
+                if (px_pos != std::string::npos) {
+                    height_str = height_str.substr(0, px_pos);
+                }
+                int min_height = std::stoi(height_str);
+                // Assume default viewport height of 600px
+                matches = (600 >= min_height);
+            }
+        }
+        // (max-height: <value>) - parse and check if matches default height
+        else if (query_str.find("(max-height:") != std::string::npos) {
+            size_t height_start = query_str.find("(max-height:") + 12;
+            size_t height_end = query_str.find(')', height_start);
+            if (height_end != std::string::npos) {
+                std::string height_str = query_str.substr(height_start, height_end - height_start);
+                size_t px_pos = height_str.find("px");
+                if (px_pos != std::string::npos) {
+                    height_str = height_str.substr(0, px_pos);
+                }
+                int max_height = std::stoi(height_str);
+                // Assume default viewport height of 600px
+                matches = (600 <= max_height);
+            }
+        }
+        // Default: unsupported queries return false
+    }
+
+    // Create MediaQueryList object with matches property
+    JSValue mql = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, mql, "media", JS_NewString(ctx, query));
+    JS_SetPropertyStr(ctx, mql, "matches", JS_NewBool(ctx, matches));
+
+    // Store the query for potential future updates
+    JS_SetPropertyStr(ctx, mql, "__query__", JS_NewString(ctx, query));
+
+    // Add onchange property (for future implementation of change events)
+    JS_SetPropertyStr(ctx, mql, "onchange", JS_UNDEFINED);
+
+    // Add addEventListener and removeEventListener methods
+    JS_SetPropertyStr(ctx, mql, "addEventListener", JS_NewCFunction(ctx, [](JSContext* c, JSValueConst this_val, int argc, JSValueConst* a_argv) {
+        (void)this_val; (void)argc; (void)a_argv;
+        // For now, just log that listener was added (real change detection requires viewport tracking)
+        return JS_UNDEFINED;
+    }, "addEventListener", 2));
+
+    JS_SetPropertyStr(ctx, mql, "removeEventListener", JS_NewCFunction(ctx, [](JSContext* c, JSValueConst this_val, int argc, JSValueConst* a_argv) {
+        (void)this_val; (void)argc; (void)a_argv;
+        return JS_UNDEFINED;
+    }, "removeEventListener", 2));
+
+    JS_FreeCString(ctx, query);
+
+    return mql;
+}
+
+void initializeCSSAPI(JSContext* ctx) {
+    if (!ctx) return;
+
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue css = JS_NewObject(ctx);
+
+    // CSS.supports(property, value)
+    JS_SetPropertyStr(ctx, css, "supports",
+        JS_NewCFunction(ctx, css_supports, "supports", 2));
+
+    JS_SetPropertyStr(ctx, global, "CSS", css);
+    JS_FreeValue(ctx, global);
+}
+
+void initializeWindowCSSAPI(JSContext* ctx) {
+    if (!ctx) return;
+
+    JSValue global = JS_GetGlobalObject(ctx);
+
+    // window.matchMedia(query)
+    JS_SetPropertyStr(ctx, global, "matchMedia",
+        JS_NewCFunction(ctx, window_matchMedia, "matchMedia", 1));
+
+    JS_FreeValue(ctx, global);
 }
 
 void JSBindings::initializePerformanceAPI() {
@@ -2272,8 +3378,18 @@ JSValue JSBindings::createJSElement(JSContext* ctx, const dom::DOMNodePtr& node)
         JS_DefinePropertyGetSet(ctx, elem, dur_atom, dur_getter, JS_UNDEFINED,
             JS_PROP_ENUMERABLE | JS_PROP_CONFIGURABLE);
         JS_FreeAtom(ctx, dur_atom);
+        // Define open property for <details> elements
+        if (node->getTagName() == "details") {
+            JSValue open_getter = JS_NewCFunction(ctx, details_getOpen, "get open", 0);
+            JSValue open_setter = JS_NewCFunction(ctx, details_setOpen, "set open", 1);
+            JS_SetPropertyStr(ctx, elem, "open",
+                JS_NewObjectProto(ctx, open_getter));
+            JS_DefinePropertyGetSet(ctx, elem, JS_NewAtom(ctx, "open"), open_getter, open_setter,
+                JS_PROP_ENUMERABLE | JS_PROP_CONFIGURABLE);
+        }
+
     }
-    
+
     // Methods
     JS_SetPropertyStr(ctx, elem, "getAttribute",
         JS_NewCFunction(ctx, elem_getAttribute, "getAttribute", 1));
@@ -2463,6 +3579,20 @@ void JSBindings::ensureEventBridgeForNode(const dom::DOMNodePtr& node, const std
         callback = [this, node_id, type](const dom::Event& ev) {
             this->dispatchCompositionEvent(node_id, type.c_str(), ev.input_data.c_str());
         };
+    } else if (type == "copy" || type == "cut" || type == "paste") {
+        callback = [this, node_id, type](const dom::Event& ev) {
+            this->dispatchClipboardEvent(node_id, type.c_str(), ev.input_data.c_str());
+        };
+    } else if (type == "beforeinput") {
+        callback = [this, node_id](const dom::Event& ev) {
+            this->dispatchBeforeInputEvent(node_id, ev.input_type.c_str(), ev.input_data.c_str());
+        };
+    } else if (type == "dragstart" || type == "drag" || type == "dragend" || type == "drop" ||
+               type == "dragenter" || type == "dragleave" || type == "dragover") {
+        // Drag & Drop events with data transfer support
+        callback = [this, node_id, type](const dom::Event& ev) {
+            this->dispatchDragDropEvent(node_id, type.c_str(), ev.mouse_x, ev.mouse_y, ev.data_transfer, ev.is_trusted);
+        };
     } else {
         // Unknown event type - still create a simple bridge
         callback = [this, node_id, type](const dom::Event&) {
@@ -2622,6 +3752,27 @@ void JSBindings::dispatchMouseEvent(uint64_t node_id, const char* type, int32_t 
     last_mouse_x_ = x;
     last_mouse_y_ = y;
 
+    // Calculate pageX/pageY by adding scroll offset from document root
+    // pageX = clientX + scrollX, pageY = clientY + scrollY
+    float scroll_x = 0.0f;
+    float scroll_y = 0.0f;
+    if (dom_manager_) {
+        auto root = dom_manager_->getRoot();
+        if (root) {
+            // Use the document/body element's scroll offset
+            auto bodies = dom_manager_->getElementsByTagName("body");
+            if (!bodies.empty()) {
+                scroll_x = bodies[0]->getScrollX();
+                scroll_y = bodies[0]->getScrollY();
+            } else {
+                scroll_x = root->getScrollX();
+                scroll_y = root->getScrollY();
+            }
+        }
+    }
+    const int32_t page_x = static_cast<int32_t>(x + scroll_x);
+    const int32_t page_y = static_cast<int32_t>(y + scroll_y);
+
     JSValue ev = JS_NewObject(ctx);
     JS_SetPropertyStr(ctx, ev, "type", JS_NewString(ctx, type));
     JS_SetPropertyStr(ctx, ev, "bubbles", JS_TRUE);
@@ -2630,8 +3781,8 @@ void JSBindings::dispatchMouseEvent(uint64_t node_id, const char* type, int32_t 
 
     JS_SetPropertyStr(ctx, ev, "clientX", JS_NewInt32(ctx, x));
     JS_SetPropertyStr(ctx, ev, "clientY", JS_NewInt32(ctx, y));
-    JS_SetPropertyStr(ctx, ev, "pageX", JS_NewInt32(ctx, x));
-    JS_SetPropertyStr(ctx, ev, "pageY", JS_NewInt32(ctx, y));
+    JS_SetPropertyStr(ctx, ev, "pageX", JS_NewInt32(ctx, page_x));
+    JS_SetPropertyStr(ctx, ev, "pageY", JS_NewInt32(ctx, page_y));
     JS_SetPropertyStr(ctx, ev, "movementX", JS_NewInt32(ctx, movement_x));
     JS_SetPropertyStr(ctx, ev, "movementY", JS_NewInt32(ctx, movement_y));
 
@@ -2717,6 +3868,61 @@ void JSBindings::dispatchKeyEvent(uint64_t node_id, const char* type, uint32_t k
     JS_SetPropertyStr(ctx, ev, "shiftKey", JS_NewBool(ctx, shift_key));
     JS_SetPropertyStr(ctx, ev, "metaKey", JS_NewBool(ctx, meta_key));
 
+
+    // Event methods
+    JS_SetPropertyStr(ctx, ev, "preventDefault",
+        JS_NewCFunction(ctx, event_preventDefault, "preventDefault", 0));
+    JS_SetPropertyStr(ctx, ev, "stopPropagation",
+        JS_NewCFunction(ctx, event_stopPropagation, "stopPropagation", 0));
+    JS_SetPropertyStr(ctx, ev, "stopImmediatePropagation",
+        JS_NewCFunction(ctx, event_stopImmediatePropagation, "stopImmediatePropagation", 0));
+
+    dispatchEventToChain(target_node, type, ev);
+    JS_FreeValue(ctx, ev);
+}
+
+void JSBindings::dispatchDragDropEvent(uint64_t node_id, const char* type, int32_t x, int32_t y, const std::string& data_transfer, bool is_trusted) {
+    if (!engine_) return;
+    JSContext* ctx = engine_->getContext();
+    if (!ctx) return;
+    if (!type || !type[0]) return;
+
+    auto dom_it = id_to_node_.find(node_id);
+    if (dom_it == id_to_node_.end() || !dom_it->second) {
+        return;
+    }
+
+    const dom::DOMNodePtr target_node = dom_it->second;
+
+    JSValue ev = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, ev, "type", JS_NewString(ctx, type));
+    JS_SetPropertyStr(ctx, ev, "bubbles", JS_TRUE);
+    JS_SetPropertyStr(ctx, ev, "cancelable", JS_TRUE);
+    JS_SetPropertyStr(ctx, ev, "isTrusted", JS_NewBool(ctx, is_trusted));
+
+    // Mouse position properties
+    JS_SetPropertyStr(ctx, ev, "clientX", JS_NewInt32(ctx, x));
+    JS_SetPropertyStr(ctx, ev, "clientY", JS_NewInt32(ctx, y));
+    JS_SetPropertyStr(ctx, ev, "pageX", JS_NewInt32(ctx, x));
+    JS_SetPropertyStr(ctx, ev, "pageY", JS_NewInt32(ctx, y));
+
+    // Data transfer property (simplified for Phase 1)
+    JSValue data_transfer_obj = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, data_transfer_obj, "data", JS_NewString(ctx, data_transfer.c_str()));
+    JS_SetPropertyStr(ctx, ev, "dataTransfer", data_transfer_obj);
+
+    // Calculate offsetX/offsetY relative to target element
+    if (layout_engine_) {
+        auto layout_node = layout_engine_->getLayout(target_node);
+        if (layout_node) {
+            float elem_x = layout_node->x;
+            float elem_y = layout_node->y;
+            int32_t offset_x = x - static_cast<int32_t>(elem_x);
+            int32_t offset_y = y - static_cast<int32_t>(elem_y);
+            JS_SetPropertyStr(ctx, ev, "offsetX", JS_NewInt32(ctx, offset_x));
+            JS_SetPropertyStr(ctx, ev, "offsetY", JS_NewInt32(ctx, offset_y));
+        }
+    }
 
     // Event methods
     JS_SetPropertyStr(ctx, ev, "preventDefault",
@@ -3010,6 +4216,71 @@ void JSBindings::dispatchMediaEvent(uint64_t node_id, const char* type, double c
         }
         JS_FreeValue(ctx, ret);
         JS_FreeValue(ctx, ev);
+    }
+}
+
+void JSBindings::dispatchClipboardEvent(uint64_t node_id, const char* type, const char* data) {
+    if (!engine_) return;
+    if (!type || !type[0]) return;
+
+    JSContext* ctx = engine_->getContext();
+    if (!ctx) return;
+
+    auto node_it = listeners_.find(node_id);
+    if (node_it == listeners_.end()) return;
+    auto& type_map = node_it->second;
+    auto type_it = type_map.find(type);
+    if (type_it == type_map.end()) return;
+
+    auto& funcs = type_it->second;
+    for (auto& fn : funcs) {
+        if (!JS_IsFunction(ctx, fn)) continue;
+
+        // Create ClipboardEvent-like object with clipboardData property
+        JSValue ev = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, ev, "type", JS_NewString(ctx, type));
+        JS_SetPropertyStr(ctx, ev, "bubbles", JS_TRUE);
+        JS_SetPropertyStr(ctx, ev, "cancelable", JS_TRUE);
+        JS_SetPropertyStr(ctx, ev, "isTrusted", JS_TRUE);
+
+        // Set modifier keys
+        JS_SetPropertyStr(ctx, ev, "altKey", JS_FALSE);
+        JS_SetPropertyStr(ctx, ev, "ctrlKey", JS_TRUE);  // Clipboard events typically use Ctrl
+        JS_SetPropertyStr(ctx, ev, "shiftKey", JS_FALSE);
+        JS_SetPropertyStr(ctx, ev, "metaKey", JS_FALSE);
+
+        // Create simplified clipboardData object
+        // In a full implementation, this would be a DataTransfer object
+        JSValue clipboard_data = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, clipboard_data, "text/plain",
+            data ? JS_NewString(ctx, data) : JS_NewString(ctx, ""));
+
+        // Add getData/setData methods for clipboardData
+        // These provide a simplified API matching the Clipboard DataTransfer interface
+        JS_SetPropertyStr(ctx, ev, "clipboardData", clipboard_data);
+
+        // Event methods
+        JS_SetPropertyStr(ctx, ev, "preventDefault",
+            JS_NewCFunction(ctx, event_preventDefault, "preventDefault", 0));
+        JS_SetPropertyStr(ctx, ev, "stopPropagation",
+            JS_NewCFunction(ctx, event_stopPropagation, "stopPropagation", 0));
+        JS_SetPropertyStr(ctx, ev, "stopImmediatePropagation",
+            JS_NewCFunction(ctx, event_stopImmediatePropagation, "stopImmediatePropagation", 0));
+
+        // Set target and currentTarget
+        auto dom_it = id_to_node_.find(node_id);
+        if (dom_it != id_to_node_.end()) {
+            JSValue target = createJSElement(ctx, dom_it->second);
+            JS_SetPropertyStr(ctx, ev, "target", target);
+            JS_SetPropertyStr(ctx, ev, "currentTarget", JS_DupValue(ctx, target));
+        }
+
+        const bool prevented = dispatchCancelableEventToChain(dom_it->second, type, ev);
+        JS_FreeValue(ctx, ev);
+
+        // If not prevented and this is a paste event with data, the actual paste would happen here
+        // This is a placeholder for future clipboard integration
+        (void)prevented;
     }
 }
 

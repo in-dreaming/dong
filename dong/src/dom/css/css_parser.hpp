@@ -13,6 +13,7 @@ struct CSSRule {
     ComputedStyle style;
     int specificity = 0;
     int source_order = 0;
+    std::string layer_name; // 所属层名（空字符串表示未分层）
 };
 
 // @keyframes rule
@@ -35,6 +36,18 @@ struct FontFaceRule {
     std::string weight = "normal";
 };
 
+// @layer rule
+struct LayerRule {
+    std::string name;        // 层名称（空字符串表示匿名层）
+    std::vector<CSSRule> rules; // 层内的CSS规则
+    int declaration_order = 0;  // 声明顺序（用于优先级排序）
+    bool is_predeclared = false; // 是否为预声明层（没有规则）
+
+    LayerRule() = default;
+    LayerRule(const std::string& name_, int order_, bool predeclared = false)
+        : name(name_), declaration_order(order_), is_predeclared(predeclared) {}
+};
+
 // CSS Parser - parses CSS text into rules
 class CSSParser {
 public:
@@ -51,6 +64,9 @@ public:
     
     // Parse @font-face rules
     std::vector<FontFaceRule> parseFontFaceRules(const std::string& css);
+
+    // Parse @layer rules
+    std::vector<LayerRule> parseLayerRules(const std::string& css);
     
     // Parse inline style string
     static void parseInlineStyle(const std::string& style_str, ComputedStyle& style);
@@ -92,6 +108,9 @@ public:
     static void parseTextShadow(const std::string& value, ComputedStyle& style);
     static void parseTransform(const std::string& value, ComputedStyle& style);
 
+    // background-position parsing with support for 3-value and 4-value syntax
+    static std::string parseBackgroundPosition(const std::string& value);
+
 private:
     int rule_order_counter_ = 0;
     std::unordered_map<std::string, KeyframesRule> keyframes_map_;
@@ -109,7 +128,7 @@ private:
     static void parseFlexShorthand(const std::string& value, ComputedStyle& style);
     static void parseBackgroundShorthand(const std::string& value, ComputedStyle& style);
     static void parseFontShorthand(const std::string& value, ComputedStyle& style);
-    
+
     // calc() parsing helpers
     static std::shared_ptr<CSSCalcExpression> parseCalcExpression(const std::string& expr, size_t& pos);
     static std::shared_ptr<CSSCalcExpression> parseCalcTerm(const std::string& expr, size_t& pos);

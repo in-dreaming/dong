@@ -57,6 +57,24 @@ public:
     const std::string& getCustomValidity() const { return custom_validity_; }
     bool hasCustomError() const { return !custom_validity_.empty(); }
 
+    // Pattern validation
+    void setPattern(const std::string& pattern) { pattern_ = pattern; }
+    const std::string& getPattern() const { return pattern_; }
+    bool hasPattern() const { return !pattern_.empty(); }
+    bool matchesPattern(const std::string& value) const;
+
+    // Range validation
+    void setMin(const std::string& min) { min_ = min; }
+    void setMax(const std::string& max) { max_ = max; }
+    void setStep(const std::string& step) { step_ = step; }
+    const std::string& getMin() const { return min_; }
+    const std::string& getMax() const { return max_; }
+    const std::string& getStep() const { return step_; }
+    bool hasMin() const { return !min_.empty(); }
+    bool hasMax() const { return !max_.empty(); }
+    bool hasStep() const { return !step_.empty(); }
+    bool isInRange(const std::string& value) const;
+
 
     // IME composition 状态
     bool isComposing() const { return is_composing_; }
@@ -80,6 +98,10 @@ private:
 
     // Constraint validation
     std::string custom_validity_;
+    std::string pattern_;
+    std::string min_;
+    std::string max_;
+    std::string step_;
 
     size_t cursor_position_ = 0;
     size_t selection_start_ = 0;

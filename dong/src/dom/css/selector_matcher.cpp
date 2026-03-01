@@ -1,12 +1,66 @@
 #include "selector_matcher.hpp"
 #include "../dom/dom_node.hpp"
+#include "../details_element.hpp"
+#include "../input_element.hpp"
+#include "../select_element.hpp"
 
 
 #include <algorithm>
 #include <sstream>
 #include <cctype>
+#include <functional>
 
 namespace dong::dom {
+
+// Helper function to check if an element is valid
+static bool isElementValid(const DOMNodePtr& node) {
+    if (!node) return true;
+
+    const std::string& tag = node->getTagName();
+
+    // For input and textarea elements
+    if (tag == "input" || tag == "textarea") {
+        auto* state = dong::dom::getInputState(node);
+
+        // Check custom validity
+        if (state && state->hasCustomError()) return false;
+
+        // Check required field
+        if (node->hasAttribute("required")) {
+            std::string value = state ? state->getValue() : node->getAttribute("value");
+            if (value.empty()) return false;
+        }
+
+        // Check pattern validation
+        if (state && state->hasPattern()) {
+            std::string value = state->getValue();
+            if (!state->matchesPattern(value)) return false;
+        }
+
+        // Check range validation
+        if (state && (state->hasMin() || state->hasMax() || state->hasStep())) {
+            std::string value = state->getValue();
+            if (!state->isInRange(value)) return false;
+        }
+
+        return true;
+    }
+
+    // For select elements
+    if (tag == "select") {
+        if (node->hasAttribute("required")) {
+            auto* state = dong::dom::getSelectState(node);
+            if (state) {
+                return !state->getSelectedValue().empty();
+            }
+            return !node->getAttribute("value").empty();
+        }
+        return true;
+    }
+
+    // For other elements, assume valid
+    return true;
+}
 
 std::string SelectorMatcher::trimWhitespace(const std::string& str) {
     size_t first = str.find_first_not_of(" \t\n\r");
@@ -395,6 +449,8 @@ bool SelectorMatcher::matchesPseudoClass(const std::string& pseudo, DOMNodePtr n
         return matchesNthLastChild(arg, node);
     } else if (name == "nth-of-type") {
         return matchesNthOfType(arg, node);
+    } else if (name == "nth-last-of-type") {
+        return matchesNthLastOfType(arg, node);
     } else if (name == "first-of-type") {
         auto parent = node->getParent();
         if (!parent) return false;
@@ -475,10 +531,73 @@ bool SelectorMatcher::matchesPseudoClass(const std::string& pseudo, DOMNodePtr n
             return value.empty();
         }
         return false;
+    } else if (name == "indeterminate") {
+        // :indeterminate matches checkboxes/radios in indeterminate state
+        // Checkbox: has indeterminate attribute
+        // Radio: no radio in group is selected
+        std::string tag = node->getTagName();
+        if (tag == "input") {
+            std::string type = node->getAttribute("type");
+            if (type == "checkbox") {
+                return node->hasAttribute("indeterminate");
+            } else if (type == "radio") {
+                // For radio groups, check if no radio in group is selected
+                std::string name = node->getAttribute("name");
+                if (name.empty()) return false;
+
+                auto parent = node->getParent();
+                if (!parent) return false;
+
+                // Check if any radio in same group is checked
+                bool found_checked = false;
+                std::vector<DOMNodePtr> nodes_to_check;
+                nodes_to_check.push_back(parent);
+
+                while (!nodes_to_check.empty()) {
+                    auto current = nodes_to_check.back();
+                    nodes_to_check.pop_back();
+
+                    for (const auto& child : current->getChildren()) {
+                        if (child->getTagName() == "input") {
+                            std::string child_type = child->getAttribute("type");
+                            std::string child_name = child->getAttribute("name");
+                            if (child_type == "radio" && child_name == name && child->hasAttribute("checked")) {
+                                found_checked = true;
+                                break;
+                            }
+                        }
+                        nodes_to_check.push_back(child);
+                    }
+                    if (found_checked) break;
+                }
+                return !found_checked;
+            }
+        }
+        return false;
+    }
+    // Directional pseudo-class (:dir())
+    else if (name == "dir") {
+        // :dir(ltr) or :dir(rtl) matches based on the element's resolved direction
+        // The direction is inherited, so this uses the getEffectiveDirection() method
+        std::string effective_dir = node->getEffectiveDirection();
+        return arg == effective_dir;
     }
     // Link pseudo-classes
     else if (name == "link") {
         return node->getTagName() == "a" && node->hasAttribute("href");
+    } else if (name == "any-link") {
+        // :any-link matches any element that would be matched by :link or :visited
+        // This includes <a>, <area>, <link> elements with href attribute
+        std::string tag = node->getTagName();
+        return (tag == "a" || tag == "area" || tag == "link") && node->hasAttribute("href");
+    } else if (name == "target") {
+        // :target matches the element whose ID matches the URL fragment identifier
+        if (node->hasAttribute("id")) {
+            std::string id = node->getAttribute("id");
+            std::string current_fragment = DOMNode::getCurrentFragment();
+            return id == current_fragment;
+        }
+        return false;
     }
     // Focus/interaction pseudo-classes (runtime state)
     else if (name == "hover") {
@@ -506,22 +625,21 @@ bool SelectorMatcher::matchesPseudoClass(const std::string& pseudo, DOMNodePtr n
         return checkDescendants(node);
     }
 
-    // Valid/invalid (simplified)
+    // Valid/invalid pseudo-classes
     else if (name == "valid") {
-        // Simplified: check if required fields have values
-        if (node->hasAttribute("required")) {
-            std::string value = node->getAttribute("value");
-            return !value.empty();
-        }
-        return true;
+        return isElementValid(node);
     } else if (name == "invalid") {
-        if (node->hasAttribute("required")) {
-            std::string value = node->getAttribute("value");
-            return value.empty();
-        }
-        return false;
+        return !isElementValid(node);
     }
-    
+    // :open / :closed pseudo-classes for <details> element
+    else if (name == "open") {
+        // :open matches <details> elements with the open attribute
+        return node->getTagName() == "details" && node->hasAttribute("open");
+    } else if (name == "closed") {
+        // :closed matches <details> elements without the open attribute
+        return node->getTagName() == "details" && !node->hasAttribute("open");
+    }
+
     return false;
 }
 
@@ -688,13 +806,13 @@ bool SelectorMatcher::matchesNthLastChild(const std::string& arg, DOMNodePtr nod
 bool SelectorMatcher::matchesNthOfType(const std::string& arg, DOMNodePtr node) {
     auto parent = node->getParent();
     if (!parent) return false;
-    
+
     auto [a, b] = parseNthExpression(arg);
-    
+
     const auto& children = parent->getChildren();
     std::string tag = node->getTagName();
     int index = 1;
-    
+
     for (const auto& child : children) {
         if (child->getTagName() == tag) {
             if (child == node) {
@@ -704,6 +822,39 @@ bool SelectorMatcher::matchesNthOfType(const std::string& arg, DOMNodePtr node) 
                 return (index - b) % a == 0 && (index - b) / a >= 0;
             }
             ++index;
+        }
+    }
+    return false;
+}
+
+bool SelectorMatcher::matchesNthLastOfType(const std::string& arg, DOMNodePtr node) {
+    auto parent = node->getParent();
+    if (!parent) return false;
+
+    auto [a, b] = parseNthExpression(arg);
+
+    const auto& children = parent->getChildren();
+    std::string tag = node->getTagName();
+
+    // First count total elements of same type
+    int total = 0;
+    for (const auto& child : children) {
+        if (child->getTagName() == tag) {
+            ++total;
+        }
+    }
+
+    // Now find the reverse index
+    int reverse_index = 0;
+    for (auto it = children.rbegin(); it != children.rend(); ++it) {
+        if ((*it)->getTagName() == tag) {
+            ++reverse_index;
+            if (*it == node) {
+                if (a == 0) {
+                    return reverse_index == b;
+                }
+                return (reverse_index - b) % a == 0 && (reverse_index - b) / a >= 0;
+            }
         }
     }
     return false;
@@ -833,5 +984,6 @@ DOMNodePtr SelectorMatcher::closest(const std::string& selector, DOMNodePtr elem
     }
     return nullptr;
 }
+
 
 } // namespace dong::dom

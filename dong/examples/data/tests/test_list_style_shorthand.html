@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>List Style Shorthand Property Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+
+        /* Test various list-style shorthand combinations */
+        .test1 { list-style: disc; }
+        .test2 { list-style: circle inside; }
+        .test3 { list-style: square outside; }
+        .test4 { list-style: decimal; }
+        .test5 { list-style: none; }
+        .test6 { list-style: lower-alpha inside; }
+        .test7 { list-style: upper-roman outside; }
+        .test8 { list-style: inside disc; } /* Reverse order */
+        .test9 { list-style: outside; } /* Position only */
+        .test10 { list-style: decimal none; } /* Should use decimal, ignore none */
+
+        /* Individual properties for comparison */
+        .compare1 { list-style-type: disc; list-style-position: outside; }
+        .compare2 { list-style-type: circle; list-style-position: inside; }
+    </style>
+</head>
+<body>
+    <h1>List Style Shorthand Property Test</h1>
+
+    <h2>Test 1: list-style: disc (type only)</h2>
+    <ul class="test1">
+        <li>Should have disc marker, outside position</li>
+    </ul>
+
+    <h2>Test 2: list-style: circle inside (type + position)</h2>
+    <ul class="test2">
+        <li>Should have circle marker, inside position</li>
+    </ul>
+
+    <h2>Test 3: list-style: square outside (type + position)</h2>
+    <ul class="test3">
+        <li>Should have square marker, outside position</li>
+    </ul>
+
+    <h2>Test 4: list-style: decimal (numeric type)</h2>
+    <ul class="test4">
+        <li>Should have decimal marker (1., 2., etc.)</li>
+    </ul>
+
+    <h2>Test 5: list-style: none (no marker)</h2>
+    <ul class="test5">
+        <li>Should have no visible marker</li>
+    </ul>
+
+    <h2>Test 6: list-style: lower-alpha inside (alpha + position)</h2>
+    <ul class="test6">
+        <li>Should have lowercase alpha marker (a., b., etc.), inside position</li>
+    </ul>
+
+    <h2>Test 7: list-style: upper-roman outside (roman + position)</h2>
+    <ul class="test7">
+        <li>Should have uppercase roman marker (I., II., etc.), outside position</li>
+    </ul>
+
+    <h2>Test 8: list-style: inside disc (reverse order)</h2>
+    <ul class="test8">
+        <li>Should have disc marker, inside position (order shouldn't matter)</li>
+    </ul>
+
+    <h2>Test 9: list-style: outside (position only)</h2>
+    <ul class="test9">
+        <li>Should have default disc marker, outside position</li>
+    </ul>
+
+    <h2>Test 10: list-style: decimal none (type + none)</h2>
+    <ul class="test10">
+        <li>Should have decimal marker (none should be ignored when type specified)</li>
+    </ul>
+
+    <h2>Comparison: Individual properties</h2>
+    <h3>list-style-type: disc; list-style-position: outside</h3>
+    <ul class="compare1">
+        <li>Should match Test 1</li>
+    </ul>
+
+    <h3>list-style-type: circle; list-style-position: inside</h3>
+    <ul class="compare2">
+        <li>Should match Test 2</li>
+    </ul>
+</body>
+</html>

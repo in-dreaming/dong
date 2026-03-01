@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<style>
+  body {
+    font: 16px sans-serif;
+    line-height: 1.5;
+    padding: 20px;
+  }
+  .test {
+    margin-bottom: 20px;
+    padding: 10px;
+    border: 1px solid #ccc;
+  }
+  .test h2 {
+    margin-top: 0;
+    font-size: 14px;
+    color: #666;
+  }
+  /* Reset quotes to auto for language tests */
+  * { quotes: auto; }
+</style>
+</head>
+<body>
+  <div class="test">
+    <h2>quotes: auto nested levels</h2>
+    <p lang="en">
+      Level 0 <q>Level 1 <q>Level 2</q> back to 1</q> back to 0
+    </p>
+  </div>
+
+  <div class="test">
+    <h2>Turkish language quotes</h2>
+    <p lang="tr">
+      Türkçe tırnak: <q>Merhaba</q> <q>dünya</q>
+    </p>
+  </div>
+</body>
+</html>

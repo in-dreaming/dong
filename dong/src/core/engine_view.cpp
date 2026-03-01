@@ -14,6 +14,8 @@
 #include "../dom/focus_manager.hpp"
 #include "../dom/input_element.hpp"
 #include "../dom/select_element.hpp"
+#include "../dom/details_element.hpp"
+#include "../dom/drag_manager.hpp"
 #include "../layout/layout_engine.hpp"
 
 #include "../render/render_surface.hpp"
@@ -33,6 +35,7 @@
 #include <filesystem>
 #include <cctype>
 #include <algorithm>
+#include <cmath>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -53,6 +56,10 @@ DOMNodePtr hitTestRecursive(const DOMNodePtr& node, dong::layout::Engine* layout
 
     const auto* layout = layout_engine->getLayout(node);
     if (!layout) return nullptr;
+
+    if (node->getAttribute("data-dong-native-tooltip") == "1") {
+        return nullptr;
+    }
 
     float lx = layout->x;
     float ly = layout->y;
@@ -100,6 +107,76 @@ DOMNodePtr findScrollContainerAt(dong::dom::Manager* dom_mgr, dong::layout::Engi
     }
 
     return nullptr;
+}
+
+std::string toLowerTrim(std::string s) {
+    auto not_space = [](unsigned char c) { return !std::isspace(c); };
+    s.erase(s.begin(), std::find_if(s.begin(), s.end(), not_space));
+    s.erase(std::find_if(s.rbegin(), s.rend(), not_space).base(), s.end());
+    std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    return s;
+}
+
+float effectiveBorderWidth(const dong::dom::ComputedStyle& style, float side_width, const std::string& side_style) {
+    float w = side_width >= 0.0f ? side_width : style.border_width;
+    if (w < 0.0f) w = 0.0f;
+    std::string st = side_style.empty() ? style.border_style : side_style;
+    st = toLowerTrim(st);
+    if (st == "none" || st == "hidden") {
+        return 0.0f;
+    }
+    return w;
+}
+
+bool computeTextareaResizeHandleRect(dong::layout::Engine* layout_engine,
+                                     const DOMNodePtr& textarea,
+                                     float& out_x, float& out_y,
+                                     float& out_w, float& out_h) {
+    if (!layout_engine || !textarea || textarea->getTagName() != "textarea") return false;
+    const auto* layout = layout_engine->getLayout(textarea);
+    if (!layout) return false;
+
+    const auto& style = textarea->getComputedStyle();
+    const std::string mode = toLowerTrim(style.resize);
+    if (mode == "none") return false;
+
+    out_x = layout->x;
+    out_y = layout->y;
+    out_w = layout->width;
+    out_h = layout->height;
+    if (out_w <= 0.0f || out_h <= 0.0f) return false;
+
+    const float bw_l = effectiveBorderWidth(style, style.border_left_width, style.border_left_style);
+    const float bw_r = effectiveBorderWidth(style, style.border_right_width, style.border_right_style);
+    const float bw_t = effectiveBorderWidth(style, style.border_top_width, style.border_top_style);
+    const float bw_b = effectiveBorderWidth(style, style.border_bottom_width, style.border_bottom_style);
+
+    const float inner_x = out_x + bw_l;
+    const float inner_y = out_y + bw_t;
+    const float inner_w = std::max(0.0f, out_w - bw_l - bw_r);
+    const float inner_h = std::max(0.0f, out_h - bw_t - bw_b);
+    if (inner_w <= 0.0f || inner_h <= 0.0f) return false;
+
+    const float size = std::min(16.0f, std::min(inner_w, inner_h));
+    if (size < 8.0f) return false;
+
+    out_x = inner_x + inner_w - size;
+    out_y = inner_y + inner_h - size;
+    out_w = size;
+    out_h = size;
+    return true;
+}
+
+bool isPointInside(float px, float py, float rx, float ry, float rw, float rh) {
+    return px >= rx && px <= rx + rw && py >= ry && py <= ry + rh;
+}
+
+std::string toPx(float v) {
+    int iv = static_cast<int>(std::round(v));
+    if (iv < 1) iv = 1;
+    return std::to_string(iv) + "px";
 }
 
 bool isAbsolutePath(const std::string& p) {
@@ -244,6 +321,7 @@ struct EngineView::Impl {
 
     std::unique_ptr<dong::dom::EventDispatcher> event_dispatcher;
     std::unique_ptr<dong::dom::FocusManager> focus_manager;
+    std::unique_ptr<dong::drag::DragManager> drag_manager;
     std::unique_ptr<dong::script::ScriptEngine> script_engine;
     std::unique_ptr<dong::script::JSBindings> js_bindings;
 
@@ -313,17 +391,41 @@ struct EngineView::Impl {
     int32_t last_mouse_x = 0;
     int32_t last_mouse_y = 0;
 
+    // Modifier keys
     bool mod_ctrl = false;
     bool mod_shift = false;
     bool mod_alt = false;
     bool mod_meta = false;
 
+    // Track pressed keys for KeyboardEvent.repeat detection
+    std::unordered_set<uint32_t> pressed_keys;
+
     DOMNodePtr hovered_element;
 
     DOMNodePtr active_element;
 
+    // 当前拖放目标元素
+    DOMNodePtr drop_target;
+
     // 当前打开的 <select>（用于把下拉框区域的点击正确路由到该 select）
     DOMNodePtr open_select_element;
+
+    struct TextareaResizeState {
+        bool active = false;
+        DOMNodePtr node;
+        int32_t start_mouse_x = 0;
+        int32_t start_mouse_y = 0;
+        float start_width = 0.0f;
+        float start_height = 0.0f;
+        std::string mode = "none";
+    };
+    TextareaResizeState textarea_resize;
+
+    DOMNodePtr native_tooltip_node;
+    DOMNodePtr native_tooltip_target;
+
+    // 当前URL fragment（用于:target伪类匹配）
+    std::string current_fragment;
 
     Impl(uint32_t w, uint32_t h)
 
@@ -334,6 +436,7 @@ struct EngineView::Impl {
           painter(std::make_unique<dong::render::Painter>(render_surface.get())),
           event_dispatcher(std::make_unique<dong::dom::EventDispatcher>()),
           focus_manager(std::make_unique<dong::dom::FocusManager>()),
+          drag_manager(std::make_unique<dong::drag::DragManager>()),
           script_engine(std::make_unique<dong::script::ScriptEngine>()),
           js_bindings(std::make_unique<dong::script::JSBindings>(
               script_engine.get(),
@@ -957,16 +1060,128 @@ struct EngineView::Impl {
         }
     }
 
+    void hideNativeTooltip() {
+        if (!native_tooltip_node) return;
+        native_tooltip_node->setInlineStyleProperty("display", "none");
+        native_tooltip_target.reset();
+        markNeedsRepaint();
+    }
+
+    DOMNodePtr ensureNativeTooltipNode() {
+        if (native_tooltip_node) return native_tooltip_node;
+        auto tooltip = std::make_shared<dong::dom::DOMNode>(dong::dom::DOMNode::NodeType::ELEMENT, "div");
+        tooltip->setAttribute("data-dong-native-tooltip", "1");
+        tooltip->setInlineStyleProperty("position", "fixed");
+        tooltip->setInlineStyleProperty("left", "0px");
+        tooltip->setInlineStyleProperty("top", "0px");
+        tooltip->setInlineStyleProperty("max-width", "320px");
+        tooltip->setInlineStyleProperty("padding", "6px 8px");
+        tooltip->setInlineStyleProperty("border-radius", "4px");
+        tooltip->setInlineStyleProperty("background", "rgba(30,30,30,0.92)");
+        tooltip->setInlineStyleProperty("color", "#ffffff");
+        tooltip->setInlineStyleProperty("font-size", "12px");
+        tooltip->setInlineStyleProperty("line-height", "1.3");
+        tooltip->setInlineStyleProperty("white-space", "pre-wrap");
+        tooltip->setInlineStyleProperty("pointer-events", "none");
+        tooltip->setInlineStyleProperty("z-index", "2147483647");
+        tooltip->setInlineStyleProperty("display", "none");
+        auto bodies = dom_manager ? dom_manager->getElementsByTagName("body") : std::vector<DOMNodePtr>{};
+        auto parent = !bodies.empty() ? bodies[0] : (dom_manager ? dom_manager->getRoot() : nullptr);
+        if (parent) {
+            parent->appendChild(tooltip);
+            native_tooltip_node = tooltip;
+        }
+        return native_tooltip_node;
+    }
+
+    void updateNativeTooltip(const DOMNodePtr& hit, int32_t x, int32_t y) {
+        if (!hit) {
+            hideNativeTooltip();
+            return;
+        }
+        if (native_tooltip_node && hit.get() == native_tooltip_node.get()) {
+            return;
+        }
+        const std::string title = hit->getAttribute("title");
+        if (title.empty()) {
+            hideNativeTooltip();
+            return;
+        }
+
+        auto tooltip = ensureNativeTooltipNode();
+        if (!tooltip) return;
+        if (!native_tooltip_target || native_tooltip_target.get() != hit.get() || tooltip->getTextContent() != title) {
+            tooltip->setTextContent(title);
+            native_tooltip_target = hit;
+        }
+
+        const float px = std::clamp(static_cast<float>(x + 12), 0.0f, std::max(0.0f, static_cast<float>(width - 160)));
+        const float py = std::clamp(static_cast<float>(y + 18), 0.0f, std::max(0.0f, static_cast<float>(height - 40)));
+        tooltip->setInlineStyleProperty("left", toPx(px));
+        tooltip->setInlineStyleProperty("top", toPx(py));
+        tooltip->setInlineStyleProperty("display", "block");
+        markNeedsRepaint();
+    }
+
+    bool updateTextareaResizeDrag(int32_t x, int32_t y) {
+        if (!textarea_resize.active || !textarea_resize.node) return false;
+        const float dx = static_cast<float>(x - textarea_resize.start_mouse_x);
+        const float dy = static_cast<float>(y - textarea_resize.start_mouse_y);
+        float nw = textarea_resize.start_width;
+        float nh = textarea_resize.start_height;
+        if (textarea_resize.mode == "both" || textarea_resize.mode == "horizontal") nw = std::max(40.0f, nw + dx);
+        if (textarea_resize.mode == "both" || textarea_resize.mode == "vertical") nh = std::max(30.0f, nh + dy);
+        if (textarea_resize.mode == "both" || textarea_resize.mode == "horizontal") textarea_resize.node->setInlineStyleProperty("width", toPx(nw));
+        if (textarea_resize.mode == "both" || textarea_resize.mode == "vertical") textarea_resize.node->setInlineStyleProperty("height", toPx(nh));
+        markNeedsRepaint();
+        return true;
+    }
+
+    bool beginTextareaResize(int32_t button) {
+        if (button != 1 || !layout_engine) return false;
+        auto hit = hitElementAt(last_mouse_x, last_mouse_y);
+        if (!hit || hit->getTagName() != "textarea" || hit->hasAttribute("disabled")) return false;
+        const auto mode = toLowerTrim(hit->getComputedStyle().resize);
+        if (mode != "both" && mode != "horizontal" && mode != "vertical") return false;
+
+        float hx = 0, hy = 0, hw = 0, hh = 0;
+        if (!computeTextareaResizeHandleRect(layout_engine.get(), hit, hx, hy, hw, hh)) return false;
+        if (!isPointInside(static_cast<float>(last_mouse_x), static_cast<float>(last_mouse_y), hx, hy, hw, hh)) return false;
+
+        const auto* layout = layout_engine->getLayout(hit);
+        if (!layout) return false;
+
+        textarea_resize.active = true;
+        textarea_resize.node = hit;
+        textarea_resize.start_mouse_x = last_mouse_x;
+        textarea_resize.start_mouse_y = last_mouse_y;
+        textarea_resize.start_width = layout->width;
+        textarea_resize.start_height = layout->height;
+        textarea_resize.mode = mode;
+        setActiveElement(hit);
+        hideNativeTooltip();
+        return true;
+    }
+
+    bool endTextareaResize(int32_t button, bool pressed) {
+        if (!textarea_resize.active || button != 1 || pressed) return false;
+        textarea_resize.active = false;
+        textarea_resize.node.reset();
+        textarea_resize.mode = "none";
+        clearActiveElement();
+        markNeedsRepaint();
+        return true;
+    }
+
     void updateHoverState(int32_t x, int32_t y) {
         auto hit = hitElementAt(x, y);
-        if (hit == hovered_element) return;
-
-        // Clear old chain
-        setHoverChain(hovered_element, false);
-        hovered_element = hit;
-        // Set new chain
-        setHoverChain(hovered_element, true);
-        markNeedsRepaint();
+        if (hit != hovered_element) {
+            setHoverChain(hovered_element, false);
+            hovered_element = hit;
+            setHoverChain(hovered_element, true);
+            markNeedsRepaint();
+        }
+        updateNativeTooltip(hovered_element, x, y);
     }
 
     void setActiveElement(const DOMNodePtr& hit) {
@@ -1000,6 +1215,11 @@ struct EngineView::Impl {
         // DOM 重载后，必须清空全局 select 状态（避免悬空 key 被复用）。
         dong::dom::clearAllSelectStates();
         open_select_element.reset();
+        hovered_element.reset();
+        active_element.reset();
+        native_tooltip_node.reset();
+        native_tooltip_target.reset();
+        textarea_resize = TextareaResizeState{};
 
         if (js_bindings) {
             js_bindings->resetForNewDOM();
@@ -1157,7 +1377,17 @@ struct EngineView::Impl {
 
         markNeedsRepaint();
         return true;
+    }
 
+    void setCurrentFragment(const std::string& fragment) {
+        current_fragment = fragment;
+        // 更新全局的fragment状态，以便:target伪类可以匹配新的目标元素
+        dong::dom::DOMNode::setCurrentFragment(fragment);
+        // 标记样式需要重新计算
+        if (dom_manager) {
+            // 重新计算所有节点的样式，以便:target伪类可以匹配新的目标元素
+            dom_manager->recomputeNodeStyle(dom_manager->getRoot());
+        }
     }
 
     double tickUpdateWallTimeSec() {
@@ -1360,6 +1590,154 @@ struct EngineView::Impl {
         event_dispatcher->dispatch(event);
     }
 
+    void dispatchDragStartEvent(const dong::dom::DOMNodePtr& source, int32_t x, int32_t y) {
+        if (!script_engine || !js_bindings || !event_dispatcher) return;
+        if (!source) return;
+
+        dong::dom::Event event = event_dispatcher->createEvent(dong::dom::EventType::DRAG_START);
+        event.target = source;
+        event.current_target = source;
+        event.mouse_x = x;
+        event.mouse_y = y;
+        event.is_trusted = true;
+
+        // Set drag data from DragManager
+        if (drag_manager) {
+            event.data_transfer = drag_manager->getDragData();
+        }
+
+        // Calculate offsetX/offsetY relative to source element
+        if (layout_engine) {
+            auto layout_node = layout_engine->getLayout(source);
+            if (layout_node) {
+                float elem_x = layout_node->x;
+                float elem_y = layout_node->y;
+                event.offset_x = static_cast<int32_t>(x - elem_x);
+                event.offset_y = static_cast<int32_t>(y - elem_y);
+            } else {
+                // Fallback: offset == global position
+                event.offset_x = x;
+                event.offset_y = y;
+            }
+        } else {
+            event.offset_x = x;
+            event.offset_y = y;
+        }
+
+        event_dispatcher->dispatch(event);
+    }
+
+    void dispatchDragEvent(const dong::dom::DOMNodePtr& source, int32_t x, int32_t y) {
+        if (!script_engine || !js_bindings || !event_dispatcher) return;
+        if (!source) return;
+
+        dong::dom::Event event = event_dispatcher->createEvent(dong::dom::EventType::DRAG);
+        event.target = source;
+        event.current_target = source;
+        event.mouse_x = x;
+        event.mouse_y = y;
+        event.is_trusted = true;
+
+        // Set drag data from DragManager
+        if (drag_manager) {
+            event.data_transfer = drag_manager->getDragData();
+        }
+
+        // Calculate offsetX/offsetY relative to source element
+        if (layout_engine) {
+            auto layout_node = layout_engine->getLayout(source);
+            if (layout_node) {
+                float elem_x = layout_node->x;
+                float elem_y = layout_node->y;
+                event.offset_x = static_cast<int32_t>(x - elem_x);
+                event.offset_y = static_cast<int32_t>(y - elem_y);
+            } else {
+                // Fallback: offset == global position
+                event.offset_x = x;
+                event.offset_y = y;
+            }
+        } else {
+            event.offset_x = x;
+            event.offset_y = y;
+        }
+
+        event_dispatcher->dispatch(event);
+    }
+
+    void dispatchDragEndEvent(const dong::dom::DOMNodePtr& source, int32_t x, int32_t y) {
+        if (!script_engine || !js_bindings || !event_dispatcher) return;
+        if (!source) return;
+
+        dong::dom::Event event = event_dispatcher->createEvent(dong::dom::EventType::DRAG_END);
+        event.target = source;
+        event.current_target = source;
+        event.mouse_x = x;
+        event.mouse_y = y;
+        event.is_trusted = true;
+
+        // Set drag data from DragManager
+        if (drag_manager) {
+            event.data_transfer = drag_manager->getDragData();
+        }
+
+        // Calculate offsetX/offsetY relative to source element
+        if (layout_engine) {
+            auto layout_node = layout_engine->getLayout(source);
+            if (layout_node) {
+                float elem_x = layout_node->x;
+                float elem_y = layout_node->y;
+                event.offset_x = static_cast<int32_t>(x - elem_x);
+                event.offset_y = static_cast<int32_t>(y - elem_y);
+            } else {
+                // Fallback: offset == global position
+                event.offset_x = x;
+                event.offset_y = y;
+            }
+        } else {
+            event.offset_x = x;
+            event.offset_y = y;
+        }
+
+        event_dispatcher->dispatch(event);
+    }
+
+    void dispatchDropEvent(const dong::dom::DOMNodePtr& target, int32_t x, int32_t y) {
+        if (!script_engine || !js_bindings || !event_dispatcher) return;
+        if (!target) return;
+
+        dong::dom::Event event = event_dispatcher->createEvent(dong::dom::EventType::DROP);
+        event.target = target;
+        event.current_target = target;
+        event.mouse_x = x;
+        event.mouse_y = y;
+        event.is_trusted = true;
+
+        // Set drag data from DragManager
+        if (drag_manager) {
+            event.data_transfer = drag_manager->getDragData();
+        }
+
+        // Calculate offsetX/offsetY relative to target element
+        if (layout_engine) {
+            auto layout_node = layout_engine->getLayout(target);
+            if (layout_node) {
+                float elem_x = layout_node->x;
+                float elem_y = layout_node->y;
+                event.offset_x = static_cast<int32_t>(x - elem_x);
+                event.offset_y = static_cast<int32_t>(y - elem_y);
+            } else {
+                // Fallback: offset == global position
+                event.offset_x = x;
+                event.offset_y = y;
+            }
+        } else {
+            event.offset_x = x;
+            event.offset_y = y;
+        }
+
+        event_dispatcher->dispatch(event);
+    }
+
     void dispatchKeyEvent(const char* type, uint32_t key_code) {
         if (!event_dispatcher || !dom_manager) return;
         if (!type || !type[0]) return;
@@ -1386,11 +1764,14 @@ struct EngineView::Impl {
             return;
         }
 
+        // Check if this is a repeat (key was already pressed)
+        bool is_repeat = (pressed_keys.count(key_code) > 0) && (type_str == "keydown");
+
         dong::dom::Event event = event_dispatcher->createKeyEvent(ev_type, key_code);
         event.target = target;
         event.current_target = target;
         event.is_trusted = true;
-        event.repeat = false;
+        event.repeat = is_repeat;
         event.alt_key = mod_alt;
         event.ctrl_key = mod_ctrl;
         event.shift_key = mod_shift;
@@ -1408,6 +1789,13 @@ struct EngineView::Impl {
         constexpr uint32_t SDLK_RSHIFT = 0x400000E5;
         constexpr uint32_t SDLK_RALT   = 0x400000E6;
         constexpr uint32_t SDLK_RGUI   = 0x400000E7;
+
+        // Track pressed keys for repeat detection
+        if (pressed) {
+            pressed_keys.insert(key_code);
+        } else {
+            pressed_keys.erase(key_code);
+        }
 
         switch (key_code) {
         case SDLK_LCTRL:
@@ -1435,13 +1823,13 @@ struct EngineView::Impl {
         if (!event_dispatcher || !dom_manager) return;
         if (!mod_ctrl) return;
 
-        dong::dom::EventType ev_type;
+        std::string event_type;
         if (key_code == 'c' || key_code == 'C') {
-            ev_type = dong::dom::EventType::COPY;
+            event_type = "copy";
         } else if (key_code == 'x' || key_code == 'X') {
-            ev_type = dong::dom::EventType::CUT;
+            event_type = "cut";
         } else if (key_code == 'v' || key_code == 'V') {
-            ev_type = dong::dom::EventType::PASTE;
+            event_type = "paste";
         } else {
             return;
         }
@@ -1456,6 +1844,25 @@ struct EngineView::Impl {
         }
         if (!target) return;
 
+        // Get selected text for copy/cut events
+        std::string clipboard_data;
+        if ((event_type == "copy" || event_type == "cut") && dong::dom::isEditableElement(target)) {
+            auto* state = dong::dom::getInputState(target);
+            if (state) {
+                clipboard_data = state->getSelectedText();
+            }
+        }
+
+        // Dispatch C++ event for internal handling
+        dong::dom::EventType ev_type;
+        if (event_type == "copy") {
+            ev_type = dong::dom::EventType::COPY;
+        } else if (event_type == "cut") {
+            ev_type = dong::dom::EventType::CUT;
+        } else {
+            ev_type = dong::dom::EventType::PASTE;
+        }
+
         dong::dom::Event ev = event_dispatcher->createEvent(ev_type);
         ev.target = target;
         ev.current_target = target;
@@ -1465,6 +1872,16 @@ struct EngineView::Impl {
         ev.shift_key = mod_shift;
         ev.meta_key = mod_meta;
         event_dispatcher->dispatch(ev);
+
+        // Dispatch JS event with clipboardData property
+        if (js_bindings && script_engine) {
+            ensureJSBindingsInitialized();
+            uint64_t nid = ensureNodeIdForJS(target);
+            if (nid) {
+                js_bindings->dispatchClipboardEvent(nid, event_type.c_str(),
+                    clipboard_data.empty() ? nullptr : clipboard_data.c_str());
+            }
+        }
     }
 
     uint64_t ensureNodeIdForJS(const DOMNodePtr& node) {
@@ -1496,8 +1913,33 @@ struct EngineView::Impl {
     void sendMouseMove(int32_t x, int32_t y) {
         last_mouse_x = x;
         last_mouse_y = y;
+
+        if (updateTextareaResizeDrag(x, y)) {
+            dispatchMouseEvent("mousemove", x, y, 0);
+            return;
+        }
+
         updateHoverState(x, y);
         updateOpenSelectHover(x, y);
+
+        if (drag_manager) {
+            if (drag_manager->hasPotentialDrag()) {
+                drag_manager->updateDrag(x, y);
+                if (drag_manager->isDragging()) {
+                    auto source = drag_manager->getDragSource();
+                    if (source) {
+                        dispatchDragStartEvent(source, x, y);
+                    }
+                }
+            } else if (drag_manager->isDragging()) {
+                drag_manager->updateDrag(x, y);
+                auto source = drag_manager->getDragSource();
+                if (source) {
+                    dispatchDragEvent(source, x, y);
+                }
+            }
+        }
+
         dispatchMouseEvent("mousemove", x, y, 0);
     }
 
@@ -1648,15 +2090,48 @@ struct EngineView::Impl {
 
 
     void sendMouseButton(int32_t button, bool pressed) {
+        if (endTextareaResize(button, pressed)) {
+            return;
+        }
+
+        if (pressed && beginTextareaResize(button)) {
+            return;
+        }
+
         updateHoverState(last_mouse_x, last_mouse_y);
 
+        if (!pressed && drag_manager && drag_manager->isDragging()) {
+            auto source = drag_manager->getDragSource();
+            drop_target = hitElementAt(last_mouse_x, last_mouse_y);
+
+            if (source) {
+                if (drop_target && drop_target != source) {
+                    dispatchDropEvent(drop_target, last_mouse_x, last_mouse_y);
+                }
+                dispatchDragEndEvent(source, last_mouse_x, last_mouse_y);
+            }
+
+            drag_manager->endDrag(last_mouse_x, last_mouse_y);
+            drop_target.reset();
+            markNeedsRepaint();
+        } else if (!pressed && drag_manager && drag_manager->hasPotentialDrag()) {
+            drag_manager->endDrag(last_mouse_x, last_mouse_y);
+        }
+
         if (pressed) {
+            hideNativeTooltip();
             // Select 下拉框不在 DOM/layout hit-test 中：如果当前有打开的 select，优先把点击路由过去。
             if (handleOpenSelectMouseDown(last_mouse_x, last_mouse_y, button)) {
                 return;
             }
 
             auto hit = hitElementAt(last_mouse_x, last_mouse_y);
+
+            // Handle drag start for draggable elements (left button only)
+            if (drag_manager && button == 1 && hit && hit->hasAttribute("draggable") &&
+                hit->getAttribute("draggable") == "true") {
+                drag_manager->beginDrag(hit, last_mouse_x, last_mouse_y);
+            }
 
             // Select element click handling (BEFORE general click handling)
             // 兼容：如果 hit 到的是 <option>，将其归一化到父 <select>。
@@ -1763,6 +2238,50 @@ struct EngineView::Impl {
                         clicked->setAttribute("checked", "");
                         markNeedsRepaint();
                         dispatchSimpleEventForNode(clicked, "change");
+                    }
+                }
+            }
+
+            // Handle <summary> click - toggle parent <details>
+            if (clicked && dong::dom::isSummaryElement(clicked) && button == 1) {
+                // Find parent details element
+                auto parent = clicked->getParent();
+                auto details_element = DOMNodePtr();
+                while (parent) {
+                    if (dong::dom::isDetailsElement(parent)) {
+                        details_element = parent;
+                        break;
+                    }
+                    parent = parent->getParent();
+                }
+
+                if (details_element) {
+                    auto* state = dong::dom::getDetailsState(details_element);
+                    if (state) {
+                        state->toggle();
+                        state->applyOpenStateToDOM(details_element);
+                        // Dispatch toggle event
+                        dispatchSimpleEventForNode(details_element, "toggle");
+                        markNeedsRepaint();
+                        return;  // Don't let this click continue to general handling
+                    }
+                }
+            }
+
+            // Handle <a> anchor click - scroll to target element
+            if (clicked && clicked->getTagName() == "a" && clicked->hasAttribute("href") && button == 1) {
+                std::string href = clicked->getAttribute("href");
+                if (!href.empty() && href[0] == '#') {
+                    std::string target_id = href.substr(1);
+                    if (!target_id.empty()) {
+                        auto target_element = dom_manager->getElementById(target_id);
+                        if (target_element) {
+                            // Scroll to target element
+                            target_element->scrollIntoView(true);
+                            // Update URL fragment for :target pseudo-class
+                            setCurrentFragment(target_id);
+                            markNeedsRepaint();
+                        }
                     }
                 }
             }
@@ -2288,6 +2807,10 @@ void EngineView::sendKey(uint32_t key_code, bool pressed) {
 
 void EngineView::sendText(const char* text) {
     if (impl_) impl_->sendText(text);
+}
+
+void EngineView::setCurrentFragment(const std::string& fragment) {
+    if (impl_) impl_->setCurrentFragment(fragment);
 }
 
 void EngineView::sendTextEditing(const char* text, int32_t cursor, int32_t selection_length) {

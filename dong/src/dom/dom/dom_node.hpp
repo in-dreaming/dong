@@ -108,6 +108,13 @@ public:
     std::vector<std::string> getAttributeNames() const;
     const std::unordered_map<std::string, std::string>& getAttributes() const { return attributes_; }
 
+    // lang attribute inheritance - get effective lang (inherited from ancestors)
+    std::string getEffectiveLang() const;
+
+    // dir attribute - get effective direction (ltr/rtl)
+    // dir="auto" detects direction from first strong directional character in text content
+    std::string getEffectiveDirection() const;
+
     // Text content
     std::string getTextContent() const;
     const std::string& getRawTextContent() const { return text_content_; }
@@ -137,19 +144,22 @@ public:
     // Style
     void setInlineStyleProperty(const std::string& property, const std::string& value);
     std::string getInlineStyleProperty(const std::string& property) const;
+    const std::unordered_map<std::string, std::string>& getInlineStyles() const { return inline_styles_; }
     ComputedStyle& getComputedStyle() { return computed_style_; }
     const ComputedStyle& getComputedStyle() const { return computed_style_; }
     
-    // Pseudo-elements (::before/::after/::marker/::placeholder)
+    // Pseudo-elements (::before/::after/::marker/::placeholder/::selection)
     DOMNodePtr getPseudoBefore() const { return pseudo_before_; }
     DOMNodePtr getPseudoAfter() const { return pseudo_after_; }
     DOMNodePtr getPseudoMarker() const { return pseudo_marker_; }
     DOMNodePtr getPseudoPlaceholder() const { return pseudo_placeholder_; }
+    DOMNodePtr getPseudoSelection() const { return pseudo_selection_; }
     void setPseudoBefore(DOMNodePtr node) { pseudo_before_ = node; }
     void setPseudoAfter(DOMNodePtr node) { pseudo_after_ = node; }
     void setPseudoMarker(DOMNodePtr node) { pseudo_marker_ = node; }
     void setPseudoPlaceholder(DOMNodePtr node) { pseudo_placeholder_ = node; }
-    bool hasPseudoElements() const { return pseudo_before_ || pseudo_after_ || pseudo_marker_ || pseudo_placeholder_; }
+    void setPseudoSelection(DOMNodePtr node) { pseudo_selection_ = node; }
+    bool hasPseudoElements() const { return pseudo_before_ || pseudo_after_ || pseudo_marker_ || pseudo_placeholder_ || pseudo_selection_; }
     bool isPseudoElement() const { return computed_style_.is_pseudo_element; }
 
     // Layout
@@ -243,6 +253,12 @@ public:
     // Static accessors for focus manager and event dispatcher (set by View)
     static void setFocusManager(class FocusManager* fm) { s_focus_manager_ = fm; }
     static void setEventDispatcher(class EventDispatcher* ed) { s_event_dispatcher_ = ed; }
+
+    // Set current URL fragment for :target pseudo-class matching
+    static void setCurrentFragment(const std::string& fragment) { s_current_fragment_ = fragment; }
+
+    // Get current URL fragment for :target pseudo-class matching
+    static const std::string& getCurrentFragment() { return s_current_fragment_; }
 
     // Pointer capture (minimal, mouse-only for now)
     static void setPointerCapture(const DOMNodePtr& element);
@@ -340,12 +356,16 @@ protected:
     DOMNodePtr pseudo_after_;
     DOMNodePtr pseudo_marker_;
     DOMNodePtr pseudo_placeholder_;
+    DOMNodePtr pseudo_selection_;
 
     std::unique_ptr<ClassList> class_list_;
     
     // Static pointers to FocusManager and EventDispatcher (set by View)
     static class FocusManager* s_focus_manager_;
     static class EventDispatcher* s_event_dispatcher_;
+
+    // Current URL fragment for :target pseudo-class matching
+    static std::string s_current_fragment_;
 
     // Pointer capture (mouse-only)
     static DOMNodeWeakPtr s_pointer_capture_;

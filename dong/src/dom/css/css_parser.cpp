@@ -1,5 +1,6 @@
 #include "css_parser.hpp"
 #include "../../core/profiler.h"
+#include "../../core/string_utils.h"
 #include <algorithm>
 #include <sstream>
 #include <cctype>
@@ -33,6 +34,20 @@ inline std::vector<std::string> parseQuotesList(const std::string& val);
 inline std::vector<ComputedStyle::ContentToken> parseContentTokens(const std::string& val,
                                                                    std::string& out_literal_only);
 
+// Logical property shorthand helpers forward declarations
+inline void parseMarginInlineShorthandHelper(const std::string& value, ComputedStyle& style);
+inline void parseMarginBlockShorthandHelper(const std::string& value, ComputedStyle& style);
+inline void parsePaddingInlineShorthandHelper(const std::string& value, ComputedStyle& style);
+inline void parsePaddingBlockShorthandHelper(const std::string& value, ComputedStyle& style);
+inline void parseBorderInlineShorthandHelper(const std::string& value, ComputedStyle& style);
+inline void parseBorderBlockShorthandHelper(const std::string& value, ComputedStyle& style);
+inline void parseInsetInlineShorthandHelper(const std::string& value, ComputedStyle& style);
+inline void parseInsetBlockShorthandHelper(const std::string& value, ComputedStyle& style);
+
+// Place shorthand property helpers forward declarations
+inline void parsePlaceItemsShorthandHelper(const std::string& value, ComputedStyle& style);
+inline void parsePlaceContentShorthandHelper(const std::string& value, ComputedStyle& style);
+inline void parsePlaceSelfShorthandHelper(const std::string& value, ComputedStyle& style);
 
 // Property handler function type
 using PropertyHandler = void(*)(const std::string& val, ComputedStyle& style);
@@ -191,7 +206,7 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
         {"background", [](const std::string& val, ComputedStyle& style) { parseBackgroundShorthandHelper(val, style); }},
         {"background-size", [](const std::string& val, ComputedStyle& style) { style.background_size = val; }},
         {"background-repeat", [](const std::string& val, ComputedStyle& style) { style.background_repeat = val; }},
-        {"background-position", [](const std::string& val, ComputedStyle& style) { style.background_position = val; }},
+        {"background-position", [](const std::string& val, ComputedStyle& style) { style.background_position = CSSParser::parseBackgroundPosition(val); }},
         {"background-attachment", [](const std::string& val, ComputedStyle& style) { style.background_attachment = val; }},
         {"background-clip", [](const std::string& val, ComputedStyle& style) { style.background_clip = val; }},
         {"background-origin", [](const std::string& val, ComputedStyle& style) { style.background_origin = val; }},
@@ -498,9 +513,14 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
             }
         }},
         {"justify-content", [](const std::string& val, ComputedStyle& style) { style.justify_content = val; }},
+        {"justify-items", [](const std::string& val, ComputedStyle& style) { style.justify_items = val; }},
+        {"justify-self", [](const std::string& val, ComputedStyle& style) { style.justify_self = val; }},
         {"align-items", [](const std::string& val, ComputedStyle& style) { style.align_items = val; }},
         {"align-content", [](const std::string& val, ComputedStyle& style) { style.align_content = val; }},
         {"align-self", [](const std::string& val, ComputedStyle& style) { style.align_self = val; }},
+        {"place-items", [](const std::string& val, ComputedStyle& style) { parsePlaceItemsShorthandHelper(val, style); }},
+        {"place-content", [](const std::string& val, ComputedStyle& style) { parsePlaceContentShorthandHelper(val, style); }},
+        {"place-self", [](const std::string& val, ComputedStyle& style) { parsePlaceSelfShorthandHelper(val, style); }},
         {"flex", [](const std::string& val, ComputedStyle& style) { parseFlexShorthandHelper(val, style); }},
         {"flex-grow", [](const std::string& val, ComputedStyle& style) { style.flex_grow = parseFloatHelper(val); }},
         {"flex-shrink", [](const std::string& val, ComputedStyle& style) { style.flex_shrink = parseFloatHelper(val); }},
@@ -543,13 +563,25 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
         {"list-style", [](const std::string& val, ComputedStyle& style) {
             std::istringstream iss(val);
             std::string part;
+
+            // Reset all list-style properties first
+            style.list_style_type = "none";
+            style.list_style_position = "outside";
+            style.list_style_image = "none";
+
             while (iss >> part) {
                 if (part == "inside" || part == "outside") {
                     style.list_style_position = part;
-                } else if (part != "none") {
-                    style.list_style_type = part;
-                } else {
+                } else if (part == "none") {
+                    // "none" sets both type and image to none
                     style.list_style_type = "none";
+                    style.list_style_image = "none";
+                } else if (part.find("url(") == 0) {
+                    // list-style-image (url(...))
+                    style.list_style_image = part;
+                } else {
+                    // list-style-type (disc, circle, square, decimal, etc.)
+                    style.list_style_type = part;
                 }
             }
         }},
@@ -594,6 +626,12 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
                 style.resize = v;
             }
         }},
+        {"will-change", [](const std::string& val, ComputedStyle& style) {
+            style.will_change = trimWhitespace(val);
+            if (style.will_change.empty()) {
+                style.will_change = "auto";
+            }
+        }},
 
 
         // Table properties
@@ -621,7 +659,22 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
             }
         }},
 
-        {"border-spacing", [](const std::string& val, ComputedStyle& style) { style.border_spacing = parseFloatHelper(val); }},
+        {"border-spacing", [](const std::string& val, ComputedStyle& style) {
+            // border-spacing: <length> | <length> <length>
+            // Single value: both horizontal and vertical
+            // Two values: horizontal, vertical
+            std::string v = trimWhitespace(val);
+            size_t space_pos = v.find(' ');
+            if (space_pos != std::string::npos) {
+                float h = parseFloatHelper(v.substr(0, space_pos));
+                float vertical = parseFloatHelper(v.substr(space_pos + 1));
+                style.border_spacing_x = h;
+                style.border_spacing_y = vertical;
+            } else {
+                style.border_spacing_x = parseFloatHelper(v);
+                style.border_spacing_y = style.border_spacing_x;
+            }
+        }},
         {"table-layout", [](const std::string& val, ComputedStyle& style) {
             std::string v = val;
             std::transform(v.begin(), v.end(), v.begin(), [](unsigned char c) {
@@ -760,7 +813,17 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
         }},
         {"quotes", [](const std::string& val, ComputedStyle& style) {
             style.has_quotes = true;
-            style.quotes = parseQuotesList(val);
+            std::string lower_val = val;
+            std::transform(lower_val.begin(), lower_val.end(), lower_val.begin(),
+                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            if (lower_val == "auto") {
+                style.quotes_auto = true;
+                // Empty vector as placeholder - will be resolved later
+                style.quotes.clear();
+            } else {
+                style.quotes_auto = false;
+                style.quotes = parseQuotesList(val);
+            }
         }},
         {"content", [](const std::string& val, ComputedStyle& style) {
             style.content_raw = val;
@@ -776,7 +839,6 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
             style.content_tokens = parseContentTokens(val, literal_only);
             style.content = literal_only;
         }},
-
     };
     return handlers;
 }
@@ -1036,16 +1098,118 @@ inline std::vector<ComputedStyle::CounterDirective> parseCounterDirectiveList(co
     return out;
 }
 
+// Helper function to get language-specific quotes
+// Returns quotes for given language code (e.g., "en", "fr", "de")
+// If language not found, returns default English quotes
+inline std::vector<std::string> getQuotesForLanguage(const std::string& lang) {
+    std::string lower_lang = trimWhitespace(lang);
+    std::transform(lower_lang.begin(), lower_lang.end(), lower_lang.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+    // Language-specific quote pairs
+    static const std::unordered_map<std::string, std::vector<std::string>> kLanguageQuotes = {
+        // Default/English
+        {"", {"\u201C", "\u201D", "\u2018", "\u2019"}},
+        {"en", {"\u201C", "\u201D", "\u2018", "\u2019"}},
+
+        // French
+        {"fr", {"\u00AB", "\u00BB", "\u2039", "\u203A"}},
+
+        // German
+        {"de", {"\u201E", "\u201C", "\u201A", "\u2018"}},
+
+        // Spanish/Catalan
+        {"es", {"\u00AB", "\u00BB", "\u2039", "\u203A"}},
+        {"ca", {"\u00AB", "\u00BB", "\u2039", "\u203A"}},
+
+        // Italian
+        {"it", {"\u00AB", "\u00BB", "\u2039", "\u203A"}},
+
+        // Russian/Ukrainian
+        {"ru", {"\u00AB", "\u00BB", "\u201E", "\u201C"}},
+        {"uk", {"\u00AB", "\u00BB", "\u201E", "\u201C"}},
+
+        // Chinese (simplified and traditional both use corner brackets)
+        {"zh", {"\u300C", "\u300D", "\u300E", "\u300F"}},
+
+        // Japanese (same as Chinese)
+        {"ja", {"\u300C", "\u300D", "\u300E", "\u300F"}},
+
+        // Korean (also uses corner brackets)
+        {"ko", {"\u300C", "\u300D", "\u300E", "\u300F"}},
+
+        // Greek
+        {"el", {"\u00AB", "\u00BB", "\u2018", "\u2019"}},
+
+        // Hungarian
+        {"hu", {"\u201E", "\u201D", "\u00BB", "\u00AB"}},
+
+        // Polish
+        {"pl", {"\u201E", "\u201D", "\u00AB", "\u00BB"}},
+
+        // Czech
+        {"cs", {"\u201E", "\u201C", "\u201A", "\u2018"}},
+
+        // Slovak
+        {"sk", {"\u201E", "\u201C", "\u201A", "\u2018"}},
+
+        // Swedish
+        {"sv", {"\u201D", "\u201D", "\u2019", "\u2019"}},
+
+        // Finnish
+        {"fi", {"\u201D", "\u201D", "\u2019", "\u2019"}},
+
+        // Danish (same as Swedish/Finnish)
+        {"da", {"\u201D", "\u201D", "\u2019", "\u2019"}},
+
+        // Norwegian
+        {"no", {"\u00AB", "\u00BB", "\u2039", "\u203A"}},
+        {"nb", {"\u00AB", "\u00BB", "\u2039", "\u203A"}},  // Norwegian Bokmål
+        {"nn", {"\u00AB", "\u00BB", "\u2039", "\u203A"}},  // Norwegian Nynorsk
+    };
+
+    // Look for exact language match
+    auto it = kLanguageQuotes.find(lower_lang);
+    if (it != kLanguageQuotes.end()) {
+        return it->second;
+    }
+
+    // Check for primary language code (before any hyphen, e.g., "en-US" -> "en")
+    size_t hyphen_pos = lower_lang.find('-');
+    if (hyphen_pos != std::string::npos) {
+        std::string primary = lower_lang.substr(0, hyphen_pos);
+        it = kLanguageQuotes.find(primary);
+        if (it != kLanguageQuotes.end()) {
+            return it->second;
+        }
+    }
+
+    // Default to English quotes
+    return kLanguageQuotes.at("");
+}
+
 inline std::vector<std::string> parseQuotesList(const std::string& val) {
-    std::vector<std::string> out;
     std::string_view sv(val);
     size_t i = 0;
     skipWs(sv, i);
 
-    if (toLowerAscii(std::string(sv.substr(i))) == "none") {
-        return out;
+    // Check for "auto" or "none"
+    std::string lower = toLowerAscii(std::string(sv.substr(i)));
+
+    if (lower == "none") {
+        return {};  // Empty vector means no quotes
     }
 
+    if (lower == "auto") {
+        // Return empty vector with special marker to resolve at rendering time
+        // We use a single empty string as a marker
+        std::vector<std::string> marker;
+        marker.push_back("");  // Empty string indicates "auto"
+        return marker;
+    }
+
+    // Parse custom quote pairs
+    std::vector<std::string> out;
     while (i < sv.size()) {
         bool ok = false;
         std::string s = parseQuotedStringToken(sv, i, ok);
@@ -1429,6 +1593,174 @@ inline void parseFontShorthandHelper(const std::string& value, ComputedStyle& st
     }
 }
 
+// Logical property shorthand helpers implementation
+inline void parseMarginInlineShorthandHelper(const std::string& value, ComputedStyle& style) {
+    std::istringstream iss(value);
+    std::vector<std::string> parts;
+    std::string part;
+    while (iss >> part) parts.push_back(part);
+
+    if (parts.size() == 1) {
+        auto v = CSSParser::parseValue(parts[0]);
+        style.margin_left = style.margin_right = v;
+    } else if (parts.size() >= 2) {
+        style.margin_left = CSSParser::parseValue(parts[0]);
+        style.margin_right = CSSParser::parseValue(parts[1]);
+    }
+}
+
+inline void parseMarginBlockShorthandHelper(const std::string& value, ComputedStyle& style) {
+    std::istringstream iss(value);
+    std::vector<std::string> parts;
+    std::string part;
+    while (iss >> part) parts.push_back(part);
+
+    if (parts.size() == 1) {
+        auto v = CSSParser::parseValue(parts[0]);
+        style.margin_top = style.margin_bottom = v;
+    } else if (parts.size() >= 2) {
+        style.margin_top = CSSParser::parseValue(parts[0]);
+        style.margin_bottom = CSSParser::parseValue(parts[1]);
+    }
+}
+
+inline void parsePaddingInlineShorthandHelper(const std::string& value, ComputedStyle& style) {
+    std::istringstream iss(value);
+    std::vector<std::string> parts;
+    std::string part;
+    while (iss >> part) parts.push_back(part);
+
+    if (parts.size() == 1) {
+        auto v = CSSParser::parseValue(parts[0]);
+        style.padding_left = style.padding_right = v;
+    } else if (parts.size() >= 2) {
+        style.padding_left = CSSParser::parseValue(parts[0]);
+        style.padding_right = CSSParser::parseValue(parts[1]);
+    }
+}
+
+inline void parsePaddingBlockShorthandHelper(const std::string& value, ComputedStyle& style) {
+    std::istringstream iss(value);
+    std::vector<std::string> parts;
+    std::string part;
+    while (iss >> part) parts.push_back(part);
+
+    if (parts.size() == 1) {
+        auto v = CSSParser::parseValue(parts[0]);
+        style.padding_top = style.padding_bottom = v;
+    } else if (parts.size() >= 2) {
+        style.padding_top = CSSParser::parseValue(parts[0]);
+        style.padding_bottom = CSSParser::parseValue(parts[1]);
+    }
+}
+
+inline void parseBorderInlineShorthandHelper(const std::string& value, ComputedStyle& style) {
+    ComputedStyle tmp;
+    parseBorderShorthandHelper(value, tmp);
+    style.border_left_width = tmp.border_width;
+    style.border_left_color = tmp.border_color;
+    style.border_left_style = tmp.border_style;
+    style.border_right_width = tmp.border_width;
+    style.border_right_color = tmp.border_color;
+    style.border_right_style = tmp.border_style;
+}
+
+inline void parseBorderBlockShorthandHelper(const std::string& value, ComputedStyle& style) {
+    ComputedStyle tmp;
+    parseBorderShorthandHelper(value, tmp);
+    style.border_top_width = tmp.border_width;
+    style.border_top_color = tmp.border_color;
+    style.border_top_style = tmp.border_style;
+    style.border_bottom_width = tmp.border_width;
+    style.border_bottom_color = tmp.border_color;
+    style.border_bottom_style = tmp.border_style;
+}
+
+inline void parseInsetInlineShorthandHelper(const std::string& value, ComputedStyle& style) {
+    std::istringstream iss(value);
+    std::vector<std::string> parts;
+    std::string part;
+    while (iss >> part) parts.push_back(part);
+
+    if (parts.size() == 1) {
+        auto v = CSSParser::parseValue(parts[0]);
+        style.left = style.right = v;
+    } else if (parts.size() >= 2) {
+        style.left = CSSParser::parseValue(parts[0]);
+        style.right = CSSParser::parseValue(parts[1]);
+    }
+}
+
+inline void parseInsetBlockShorthandHelper(const std::string& value, ComputedStyle& style) {
+    std::istringstream iss(value);
+    std::vector<std::string> parts;
+    std::string part;
+    while (iss >> part) parts.push_back(part);
+
+    if (parts.size() == 1) {
+        auto v = CSSParser::parseValue(parts[0]);
+        style.top = style.bottom = v;
+    } else if (parts.size() >= 2) {
+        style.top = CSSParser::parseValue(parts[0]);
+        style.bottom = CSSParser::parseValue(parts[1]);
+    }
+}
+
+// Place shorthand property implementations
+inline void parsePlaceItemsShorthandHelper(const std::string& value, ComputedStyle& style) {
+    std::istringstream iss(value);
+    std::vector<std::string> parts;
+    std::string part;
+    while (iss >> part) parts.push_back(part);
+
+    if (parts.size() == 1) {
+        // Single value: applies to both align-items and justify-items
+        style.align_items = parts[0];
+        style.justify_items = parts[0];
+    } else if (parts.size() == 2) {
+        // Two values: first is align-items, second is justify-items
+        style.align_items = parts[0];
+        style.justify_items = parts[1];
+    }
+    // Invalid number of values: ignore
+}
+
+inline void parsePlaceContentShorthandHelper(const std::string& value, ComputedStyle& style) {
+    std::istringstream iss(value);
+    std::vector<std::string> parts;
+    std::string part;
+    while (iss >> part) parts.push_back(part);
+
+    if (parts.size() == 1) {
+        // Single value: applies to both align-content and justify-content
+        style.align_content = parts[0];
+        style.justify_content = parts[0];
+    } else if (parts.size() == 2) {
+        // Two values: first is align-content, second is justify-content
+        style.align_content = parts[0];
+        style.justify_content = parts[1];
+    }
+    // Invalid number of values: ignore
+}
+
+inline void parsePlaceSelfShorthandHelper(const std::string& value, ComputedStyle& style) {
+    std::istringstream iss(value);
+    std::vector<std::string> parts;
+    std::string part;
+    while (iss >> part) parts.push_back(part);
+
+    if (parts.size() == 1) {
+        // Single value: applies to both align-self and justify-self
+        style.align_self = parts[0];
+        style.justify_self = parts[0];
+    } else if (parts.size() == 2) {
+        // Two values: first is align-self, second is justify-self
+        style.align_self = parts[0];
+        style.justify_self = parts[1];
+    }
+    // Invalid number of values: ignore
+}
+
 } // anonymous namespace
 
 std::string CSSParser::removeComments(const std::string& css) {
@@ -1518,12 +1850,15 @@ CSSValue CSSParser::parseValue(const std::string& value) {
     v.erase(0, v.find_first_not_of(" \t\n\r"));
     size_t last = v.find_last_not_of(" \t\n\r");
     if (last != std::string::npos) v = v.substr(0, last + 1);
-    
+
     if (v == "auto") {
         return CSSValue(0.0f, CSSValue::Unit::AUTO);
     }
     if (v == "inherit") {
         return CSSValue(0.0f, CSSValue::Unit::INHERIT);
+    }
+    if (v == "content") {
+        return CSSValue(0.0f, CSSValue::Unit::CONTENT);
     }
     
     // Check for calc()
@@ -1585,7 +1920,49 @@ CSSValue CSSParser::parseValue(const std::string& value) {
             }
         }
     }
-    
+
+    // Check for env()
+    if (v.find("env(") == 0) {
+        size_t end = v.rfind(')');
+        if (end != std::string::npos) {
+            std::string args = v.substr(4, end - 4);
+
+            // Parse env() arguments: env(name) or env(name, fallback)
+            size_t comma_pos = args.find(',');
+            std::string env_name;
+            std::string fallback_value;
+
+            if (comma_pos != std::string::npos) {
+                // env(name, fallback)
+                env_name = args.substr(0, comma_pos);
+                fallback_value = args.substr(comma_pos + 1);
+
+                // Trim whitespace
+                env_name.erase(0, env_name.find_first_not_of(" \t\n\r"));
+                env_name.erase(env_name.find_last_not_of(" \t\n\r") + 1);
+                fallback_value.erase(0, fallback_value.find_first_not_of(" \t\n\r"));
+                fallback_value.erase(fallback_value.find_last_not_of(" \t\n\r") + 1);
+            } else {
+                // env(name)
+                env_name = args;
+                env_name.erase(0, env_name.find_first_not_of(" \t\n\r"));
+                env_name.erase(env_name.find_last_not_of(" \t\n\r") + 1);
+            }
+
+            // Create ENV value
+            CSSValue result;
+            result.unit = CSSValue::Unit::ENV;
+            result.env_name = env_name;
+
+            // Parse fallback value if provided
+            if (!fallback_value.empty()) {
+                result.env_fallback = std::make_shared<CSSValue>(parseValue(fallback_value));
+            }
+
+            return result;
+        }
+    }
+
     float num = parseFloat(v);
     
     if (v.find('%') != std::string::npos) {
@@ -1803,8 +2180,54 @@ std::string CSSParser::parseColor(const std::string& value) {
     size_t last = v.find_last_not_of(" \t\n\r");
     if (last != std::string::npos) v = v.substr(0, last + 1);
     
-    // Already a valid color format
-    if (v[0] == '#' || v.find("rgb") == 0 || v.find("hsl") == 0) {
+    // Check for light-dark() function
+    if (v.find("light-dark(") == 0) {
+        // Parse light-dark(light-color, dark-color) function
+        size_t start = v.find('(');
+        size_t end = v.rfind(')');
+        if (start != std::string::npos && end != std::string::npos && end > start) {
+            std::string args = v.substr(start + 1, end - start - 1);
+
+            // Split arguments by comma (handling nested parentheses)
+            std::vector<std::string> parts;
+            std::string current;
+            int paren_depth = 0;
+
+            for (char c : args) {
+                if (c == '(') paren_depth++;
+                else if (c == ')') paren_depth--;
+
+                if (c == ',' && paren_depth == 0) {
+                    std::string trimmed = current;
+                    trimmed.erase(0, trimmed.find_first_not_of(" \t\n\r"));
+                    size_t last_pos = trimmed.find_last_not_of(" \t\n\r");
+                    if (last_pos != std::string::npos) trimmed = trimmed.substr(0, last_pos + 1);
+                    if (!trimmed.empty()) parts.push_back(trimmed);
+                    current.clear();
+                } else {
+                    current += c;
+                }
+            }
+
+            if (!current.empty()) {
+                std::string trimmed = current;
+                trimmed.erase(0, trimmed.find_first_not_of(" \t\n\r"));
+                size_t last_pos = trimmed.find_last_not_of(" \t\n\r");
+                if (last_pos != std::string::npos) trimmed = trimmed.substr(0, last_pos + 1);
+                if (!trimmed.empty()) parts.push_back(trimmed);
+            }
+
+            // Should have exactly 2 arguments: light-color and dark-color
+            if (parts.size() == 2) {
+                // Return the light-dark function as-is for later resolution
+                return v;
+            }
+        }
+    }
+
+    // Already a valid color format (including oklab/oklch)
+    if (v[0] == '#' || v.find("rgb") == 0 || v.find("hsl") == 0 || v.find("color-mix") == 0 ||
+        v.find("oklab") == 0 || v.find("oklch") == 0) {
         return v;
     }
     
@@ -2259,7 +2682,34 @@ std::vector<CSSRule> CSSParser::parse(const std::string& css) {
     
     size_t pos = 0;
     while (pos < css_clean.length()) {
-        // Skip @-rules for now (handled separately)
+        // Handle @layer rules separately
+        if (css_clean[pos] == '@' && css_clean.substr(pos, 6) == "@layer") {
+            size_t brace = css_clean.find('{', pos);
+            size_t semicolon = css_clean.find(';', pos);
+
+            // Find the end of the @layer rule
+            size_t end = pos;
+            if (brace != std::string::npos && (semicolon == std::string::npos || brace < semicolon)) {
+                // @layer with rules: @layer name { ... }
+                int depth = 1;
+                end = brace + 1;
+                while (end < css_clean.length() && depth > 0) {
+                    if (css_clean[end] == '{') ++depth;
+                    else if (css_clean[end] == '}') --depth;
+                    ++end;
+                }
+            } else if (semicolon != std::string::npos) {
+                // @layer predeclaration: @layer name; or @layer name1, name2;
+                end = semicolon + 1;
+            } else {
+                // Invalid syntax, skip to next character
+                end = pos + 1;
+            }
+            pos = end;
+            continue;
+        }
+
+        // Skip other @-rules (handled separately)
         if (css_clean[pos] == '@') {
             size_t brace = css_clean.find('{', pos);
             if (brace != std::string::npos) {
@@ -3047,6 +3497,202 @@ void CSSParser::parseTransform(const std::string& value, ComputedStyle& style) {
         
         pos = rparen + 1;
     }
+}
+
+// Parse CSS background-position value with support for 1-value, 2-value, 3-value, and 4-value syntax
+// Examples:
+// - "center" -> "50% 50%"
+// - "left top" -> "0% 0%"
+// - "right 10px" -> "calc(100% - 10px) 50%"
+// - "right 10px bottom 20px" -> "calc(100% - 10px) calc(100% - 20px)"
+std::string CSSParser::parseBackgroundPosition(const std::string& value) {
+    if (value.empty()) return "0% 0%";
+
+    std::istringstream iss(value);
+    std::vector<std::string> tokens;
+    std::string token;
+
+    while (iss >> token) {
+        tokens.push_back(token);
+    }
+
+    // Handle different number of tokens
+    if (tokens.size() == 1) {
+        // Single value: center, left, right, top, bottom, percentage, length
+        std::string first = tokens[0];
+
+        if (first == "center") return "50% 50%";
+        if (first == "left") return "0% 50%";
+        if (first == "right") return "100% 50%";
+        if (first == "top") return "50% 0%";
+        if (first == "bottom") return "50% 100%";
+
+        // Single percentage or length: apply to both axes
+        return first + " " + first;
+    }
+    else if (tokens.size() == 2) {
+        // Two values: horizontal vertical
+        std::string first = tokens[0];
+        std::string second = tokens[1];
+
+        // Convert keywords to percentages
+        if (first == "left") first = "0%";
+        else if (first == "right") first = "100%";
+        else if (first == "center") first = "50%";
+
+        if (second == "top") second = "0%";
+        else if (second == "bottom") second = "100%";
+        else if (second == "center") second = "50%";
+
+        return first + " " + second;
+    }
+    else if (tokens.size() == 3) {
+        // Three values: edge offset vertical
+        std::string edge = tokens[0];
+        std::string offset = tokens[1];
+        std::string vertical = tokens[2];
+
+        if (edge == "left" || edge == "right") {
+            // Horizontal edge with offset, then vertical position
+            std::string horizontal;
+            if (edge == "left") horizontal = offset;
+            else horizontal = "calc(100% - " + offset + ")";
+
+            if (vertical == "top") vertical = "0%";
+            else if (vertical == "bottom") vertical = "100%";
+            else if (vertical == "center") vertical = "50%";
+
+            return horizontal + " " + vertical;
+        }
+        else if (edge == "top" || edge == "bottom") {
+            // Vertical edge with offset, then horizontal position
+            std::string vertical;
+            if (edge == "top") vertical = offset;
+            else vertical = "calc(100% - " + offset + ")";
+
+            if (tokens[2] == "left") tokens[2] = "0%";
+            else if (tokens[2] == "right") tokens[2] = "100%";
+            else if (tokens[2] == "center") tokens[2] = "50%";
+
+            return tokens[2] + " " + vertical;
+        }
+    }
+    else if (tokens.size() == 4) {
+        // Four values: horizontal-edge horizontal-offset vertical-edge vertical-offset
+        std::string horizEdge = tokens[0];
+        std::string horizOffset = tokens[1];
+        std::string vertEdge = tokens[2];
+        std::string vertOffset = tokens[3];
+
+        std::string horizontal, vertical;
+
+        if (horizEdge == "left") horizontal = horizOffset;
+        else if (horizEdge == "right") horizontal = "calc(100% - " + horizOffset + ")";
+        else if (horizEdge == "center") horizontal = "calc(50% + " + horizOffset + ")";
+
+        if (vertEdge == "top") vertical = vertOffset;
+        else if (vertEdge == "bottom") vertical = "calc(100% - " + vertOffset + ")";
+        else if (vertEdge == "center") vertical = "calc(50% + " + vertOffset + ")";
+
+        return horizontal + " " + vertical;
+    }
+
+    // Fallback for invalid syntax
+    return "0% 0%";
+}
+
+std::vector<LayerRule> CSSParser::parseLayerRules(const std::string& css) {
+    std::vector<LayerRule> result;
+    std::string css_clean = removeComments(css);
+
+    size_t pos = 0;
+    int layer_order_counter = 0;
+
+    while (pos < css_clean.length()) {
+        // 查找@layer声明
+        size_t layer_start = css_clean.find("@layer", pos);
+        if (layer_start == std::string::npos) break;
+
+        size_t name_start = layer_start + 6; // "@layer"的长度
+
+        // 跳过空白字符
+        while (name_start < css_clean.length() &&
+               std::isspace(static_cast<unsigned char>(css_clean[name_start]))) {
+            ++name_start;
+        }
+
+        if (name_start >= css_clean.length()) break;
+
+        // 检查是否有开括号（表示带规则的层）
+        size_t brace_open = css_clean.find('{', name_start);
+        size_t semicolon = css_clean.find(';', name_start);
+
+        // 处理预声明层（@layer name; 或 @layer name1, name2;）
+        if (semicolon != std::string::npos && (brace_open == std::string::npos || semicolon < brace_open)) {
+            std::string layer_names = css_clean.substr(name_start, semicolon - name_start);
+            layer_names = trimWhitespace(layer_names);
+
+            // 解析多个层名（逗号分隔）
+            size_t comma_pos = 0;
+            size_t comma_next = layer_names.find(',', comma_pos);
+
+            while (true) {
+                std::string layer_name;
+                if (comma_next == std::string::npos) {
+                    layer_name = trimWhitespace(layer_names.substr(comma_pos));
+                } else {
+                    layer_name = trimWhitespace(layer_names.substr(comma_pos, comma_next - comma_pos));
+                }
+
+                if (!layer_name.empty()) {
+                    LayerRule layer(layer_name, layer_order_counter++, true);
+                    result.push_back(layer);
+                }
+
+                if (comma_next == std::string::npos) break;
+                comma_pos = comma_next + 1;
+                comma_next = layer_names.find(',', comma_pos);
+            }
+
+            pos = semicolon + 1;
+            continue;
+        }
+
+        // 处理带规则的层（@layer name { ... } 或 @layer { ... }）
+        if (brace_open != std::string::npos) {
+            // 提取层名（匿名层为空字符串）
+            std::string layer_name;
+            if (name_start < brace_open) {
+                layer_name = trimWhitespace(css_clean.substr(name_start, brace_open - name_start));
+            }
+
+            // 查找匹配的闭括号
+            int depth = 1;
+            size_t end = brace_open + 1;
+            while (end < css_clean.length() && depth > 0) {
+                if (css_clean[end] == '{') ++depth;
+                else if (css_clean[end] == '}') --depth;
+                ++end;
+            }
+
+            if (depth > 0) break; // 括号不匹配
+
+            std::string content = css_clean.substr(brace_open + 1, end - brace_open - 2);
+
+            // 解析层内的CSS规则
+            LayerRule layer(layer_name, layer_order_counter++, false);
+            CSSParser inner_parser;
+            layer.rules = inner_parser.parse(content);
+
+            result.push_back(layer);
+            pos = end;
+        } else {
+            // 无效语法，跳过
+            pos = name_start + 1;
+        }
+    }
+
+    return result;
 }
 
 } // namespace dong::dom

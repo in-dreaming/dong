@@ -1,6 +1,8 @@
 ﻿#include "font_resolver.hpp"
 #include "font_finder.hpp"
 #include "../core/log.h"
+#include "../../third_party/freetype/include/freetype/freetype.h"
+#include "../../third_party/freetype/include/freetype/tttables.h"
 
 #include <algorithm>
 #include <cctype>
@@ -12,6 +14,9 @@
 namespace dong::render {
 
 namespace {
+
+// Forward declaration (defined later in this file)
+std::string findClosestWeightFont(const std::vector<std::string>& candidates, int requested_weight);
 
 // Ensure font finder is initialized (lazy init)
 void ensureFontFinderInitialized() {
@@ -227,17 +232,6 @@ const std::vector<std::string> kCJKFallbackFonts = {
 #endif
 };
 
-std::string findExistingFont(const std::vector<std::string>& candidates) {
-    namespace fs = std::filesystem;
-    for (const auto& path : candidates) {
-        std::error_code ec;
-        if (!path.empty() && fs::exists(path, ec) && !ec) {
-            return path;
-        }
-    }
-    return {};
-}
-
 // Normalize CSS font-weight to numeric 100-900, unknown values fallback to 400
 int normalizeFontWeight(const std::string& css_weight) {
     std::string trimmed = trimWhitespace(css_weight);
@@ -275,50 +269,129 @@ int normalizeFontWeight(const std::string& css_weight) {
     return value;
 }
 
-// Bold-variant file paths for common font families.
+// Weight-based file paths for common font families.
+// Returns candidates based on actual weight value (100-900), not just bold vs regular.
+// Each entry is checked for existence at runtime; missing paths are silently
+// skipped by findExistingFont().
+void appendWeightedCandidatesForFamily(const std::string& canonical_family,
+                                       int numeric_weight,
+                                       std::vector<std::string>& out) {
+    // Inter family - has multiple weights available
+    auto appendInterWeights = [&] {
+        switch (numeric_weight) {
+            case 100:
+                out.push_back("C:/Windows/Fonts/Inter-Thin.ttf");
+                out.push_back("/Library/Fonts/Inter-Thin.ttf");
+                out.push_back("/usr/share/fonts/truetype/inter/Inter-Thin.ttf");
+                break;
+            case 200:
+                out.push_back("C:/Windows/Fonts/Inter-ExtraLight.ttf");
+                out.push_back("/Library/Fonts/Inter-ExtraLight.ttf");
+                out.push_back("/usr/share/fonts/truetype/inter/Inter-ExtraLight.ttf");
+                break;
+            case 300:
+                out.push_back("C:/Windows/Fonts/Inter-Light.ttf");
+                out.push_back("/Library/Fonts/Inter-Light.ttf");
+                out.push_back("/usr/share/fonts/truetype/inter/Inter-Light.ttf");
+                break;
+            case 400:
+            default:
+                out.push_back("C:/Windows/Fonts/Inter-Regular.ttf");
+                out.push_back("/Library/Fonts/Inter-Regular.ttf");
+                out.push_back("/usr/share/fonts/truetype/inter/Inter-Regular.ttf");
+                break;
+            case 500:
+                out.push_back("C:/Windows/Fonts/Inter-Medium.ttf");
+                out.push_back("/Library/Fonts/Inter-Medium.ttf");
+                out.push_back("/usr/share/fonts/truetype/inter/Inter-Medium.ttf");
+                break;
+            case 600:
+                out.push_back("C:/Windows/Fonts/Inter-SemiBold.ttf");
+                out.push_back("/Library/Fonts/Inter-SemiBold.ttf");
+                out.push_back("/usr/share/fonts/truetype/inter/Inter-SemiBold.ttf");
+                break;
+            case 700:
+                out.push_back("C:/Windows/Fonts/Inter-Bold.ttf");
+                out.push_back("/Library/Fonts/Inter-Bold.ttf");
+                out.push_back("/usr/share/fonts/truetype/inter/Inter-Bold.ttf");
+                break;
+            case 800:
+                out.push_back("C:/Windows/Fonts/Inter-ExtraBold.ttf");
+                out.push_back("/Library/Fonts/Inter-ExtraBold.ttf");
+                out.push_back("/usr/share/fonts/truetype/inter/Inter-ExtraBold.ttf");
+                break;
+            case 900:
+                out.push_back("C:/Windows/Fonts/Inter-Black.ttf");
+                out.push_back("/Library/Fonts/Inter-Black.ttf");
+                out.push_back("/usr/share/fonts/truetype/inter/Inter-Black.ttf");
+                break;
+        }
+    };
+
+    // Sans-serif families
+    if (canonical_family == "-apple-system" || canonical_family == "sans-serif"
+        || canonical_family == "system-ui" || canonical_family == "blinkmacsystemfont"
+        || canonical_family == "arial") {
+        appendInterWeights();
+        // Fallback to Arial weights when Inter not available
+        if (numeric_weight >= 700) {
+            // Bold weights
+            out.push_back("/System/Library/Fonts/Supplemental/Arial Bold.ttf");
+            out.push_back("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf");
+            out.push_back("C:/Windows/Fonts/arialbd.ttf");
+        } else {
+            // Regular weights
+            out.push_back("/System/Library/Fonts/Supplemental/Arial.ttf");
+            out.push_back("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf");
+            out.push_back("C:/Windows/Fonts/arial.ttf");
+        }
+    } else if (canonical_family == "helvetica") {
+        appendInterWeights();
+        out.push_back("/System/Library/Fonts/Helvetica.ttc");
+        out.push_back("/System/Library/Fonts/Supplemental/Arial.ttf");
+        out.push_back("C:/Windows/Fonts/arial.ttf");
+    } else if (canonical_family == "inter") {
+        appendInterWeights();
+    } else if (canonical_family == "segoe ui") {
+        if (numeric_weight >= 700) {
+            out.push_back("C:/Windows/Fonts/segoeuib.ttf");
+        } else {
+            out.push_back("C:/Windows/Fonts/segoeui.ttf");
+        }
+        // Fallback
+        out.push_back("C:/Windows/Fonts/arialbd.ttf");
+        out.push_back("C:/Windows/Fonts/arial.ttf");
+    } else if (canonical_family == "serif" || canonical_family == "times"
+               || canonical_family == "times new roman") {
+        if (numeric_weight >= 700) {
+            out.push_back("/System/Library/Fonts/Supplemental/Times New Roman Bold.ttf");
+            out.push_back("/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf");
+            out.push_back("C:/Windows/Fonts/timesbd.ttf");
+        } else {
+            out.push_back("/System/Library/Fonts/Supplemental/Times New Roman.ttf");
+            out.push_back("/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf");
+            out.push_back("C:/Windows/Fonts/times.ttf");
+        }
+    } else if (canonical_family == "monospace" || canonical_family == "courier"
+               || canonical_family == "courier new") {
+        if (numeric_weight >= 700) {
+            out.push_back("/System/Library/Fonts/Supplemental/Courier New Bold.ttf");
+            out.push_back("/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf");
+            out.push_back("C:/Windows/Fonts/consolab.ttf");
+        } else {
+            out.push_back("/System/Library/Fonts/Supplemental/Courier New.ttf");
+            out.push_back("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf");
+            out.push_back("C:/Windows/Fonts/consola.ttf");
+        }
+    }
+}
+
+// Bold-variant file paths for common font families (kept for fallback compatibility)
 // Each entry is checked for existence at runtime; missing paths are silently
 // skipped by findExistingFont().
 void appendBoldCandidatesForFamily(const std::string& canonical_family,
                                    std::vector<std::string>& out) {
-    // Inter Bold (preferred for sans-serif families when Inter is installed)
-    auto pushInterBold = [&] {
-        out.push_back("C:/Windows/Fonts/Inter-Bold.ttf");
-        out.push_back("/Library/Fonts/Inter-Bold.ttf");
-        out.push_back("/usr/share/fonts/truetype/inter/Inter-Bold.ttf");
-    };
-
-    if (canonical_family == "-apple-system" || canonical_family == "sans-serif"
-        || canonical_family == "system-ui" || canonical_family == "blinkmacsystemfont") {
-        pushInterBold();
-        out.push_back("/System/Library/Fonts/Supplemental/Arial Bold.ttf");
-        out.push_back("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf");
-        out.push_back("C:/Windows/Fonts/arialbd.ttf");
-    } else if (canonical_family == "arial") {
-        pushInterBold();
-        out.push_back("/System/Library/Fonts/Supplemental/Arial Bold.ttf");
-        out.push_back("C:/Windows/Fonts/arialbd.ttf");
-        out.push_back("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf");
-    } else if (canonical_family == "helvetica") {
-        pushInterBold();
-        out.push_back("/System/Library/Fonts/Helvetica.ttc");
-        out.push_back("/System/Library/Fonts/Supplemental/Arial Bold.ttf");
-        out.push_back("C:/Windows/Fonts/arialbd.ttf");
-    } else if (canonical_family == "inter") {
-        pushInterBold();
-    } else if (canonical_family == "segoe ui") {
-        out.push_back("C:/Windows/Fonts/segoeuib.ttf");
-        out.push_back("C:/Windows/Fonts/arialbd.ttf");
-    } else if (canonical_family == "serif" || canonical_family == "times"
-               || canonical_family == "times new roman") {
-        out.push_back("/System/Library/Fonts/Supplemental/Times New Roman Bold.ttf");
-        out.push_back("/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf");
-        out.push_back("C:/Windows/Fonts/timesbd.ttf");
-    } else if (canonical_family == "monospace" || canonical_family == "courier"
-               || canonical_family == "courier new") {
-        out.push_back("/System/Library/Fonts/Supplemental/Courier New Bold.ttf");
-        out.push_back("/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf");
-        out.push_back("C:/Windows/Fonts/consolab.ttf");
-    }
+    appendWeightedCandidatesForFamily(canonical_family, 700, out);
 }
 
 // Append more refined candidate paths based on family + weight (e.g. prefer Bold font files for bold weight),
@@ -328,17 +401,43 @@ void appendCandidatesForFamilyAndWeight(const std::string& canonical_family,
                                         std::vector<std::string>& out) {
     auto it = kFontCandidates.find(canonical_family);
 
-    const bool is_bold = numeric_weight >= 600;
-    if (is_bold) {
-        // For bold, prefer Bold variant font files before falling back to
-        // the generic (Regular) candidate list.
-        appendBoldCandidatesForFamily(canonical_family, out);
-    }
+    // Use weight-specific candidates for better font matching
+    // This handles all weights (100-900) properly, not just a binary bold/regular split
+    appendWeightedCandidatesForFamily(canonical_family, numeric_weight, out);
 
     // Generic candidates (including SF/Helvetica/Arial etc), always as fallback
     if (it != kFontCandidates.end()) {
         out.insert(out.end(), it->second.begin(), it->second.end());
     }
+}
+
+std::string findExistingFont(const std::vector<std::string>& candidates, int requested_weight = 400) {
+    if (candidates.empty()) {
+        return {};
+    }
+
+    namespace fs = std::filesystem;
+
+    // First collect all existing font files
+    std::vector<std::string> existing_fonts;
+    for (const auto& path : candidates) {
+        std::error_code ec;
+        if (!path.empty() && fs::exists(path, ec) && !ec) {
+            existing_fonts.push_back(path);
+        }
+    }
+
+    if (existing_fonts.empty()) {
+        return {};
+    }
+
+    // Use closest weight matching for proper font selection, even for weight==400
+    // This ensures we select the correct font when multiple fonts exist
+    if (existing_fonts.size() == 1) {
+        return existing_fonts[0];
+    }
+
+    return findClosestWeightFont(existing_fonts, requested_weight);
 }
 
 } // namespace
@@ -459,7 +558,7 @@ std::string resolveFontPath(const std::string& requested_family,
         appendCandidatesForFamilyAndWeight("sans-serif", numeric_weight, candidate_paths);
     }
 
-    std::string result = findExistingFont(candidate_paths);
+    std::string result = findExistingFont(candidate_paths, numeric_weight);
     if (result.empty()) {
         DONG_LOG_ERROR("[FontResolver] Failed to find any font for '%s', weight=%d", requested_family.c_str(), numeric_weight);
     } else {
@@ -484,45 +583,55 @@ void appendCandidatesForFamilyWeightStyle(const std::string& canonical_family,
                                          int numeric_weight,
                                          bool italic_or_oblique,
                                          std::vector<std::string>& out) {
-    const bool is_bold = numeric_weight >= 600;
+    // Always use weight-specific candidates first (handles 100-900)
+    appendWeightedCandidatesForFamily(canonical_family, numeric_weight, out);
 
-    if (!italic_or_oblique) {
-        // 仍然优先按“真实家族名”的常见文件名补充（避免被 Inter 等替代字体抢先匹配）
+    // Then add style-specific candidates
+    if (italic_or_oblique) {
+        // italic / oblique
         if (canonical_family == "arial") {
-            out.push_back(is_bold ? "C:/Windows/Fonts/arialbd.ttf" : "C:/Windows/Fonts/arial.ttf");
+            if (numeric_weight >= 600) {
+                out.push_back("C:/Windows/Fonts/arialbi.ttf");
+            } else {
+                out.push_back("C:/Windows/Fonts/ariali.ttf");
+            }
         } else if (canonical_family == "segoe ui") {
-            out.push_back(is_bold ? "C:/Windows/Fonts/segoeuib.ttf" : "C:/Windows/Fonts/segoeui.ttf");
+            if (numeric_weight >= 600) {
+                out.push_back("C:/Windows/Fonts/segoeuiz.ttf");
+            } else {
+                out.push_back("C:/Windows/Fonts/segoeuii.ttf");
+            }
+        } else if (canonical_family == "sans-serif" || canonical_family == "-apple-system") {
+            // Common sans-serif italic variants
+            out.push_back("C:/Windows/Fonts/segoeuiz.ttf");
+            out.push_back("C:/Windows/Fonts/segoeuii.ttf");
+            out.push_back("C:/Windows/Fonts/arialbi.ttf");
+            out.push_back("C:/Windows/Fonts/ariali.ttf");
         }
 
-        appendCandidatesForFamilyAndWeight(canonical_family, numeric_weight, out);
-        return;
+        // Linux: DejaVu italic variants
+        if (numeric_weight >= 600) {
+            out.push_back("/usr/share/fonts/truetype/dejavu/DejaVuSans-BoldOblique.ttf");
+            out.push_back("/usr/share/fonts/truetype/dejavu/DejaVuSerif-BoldItalic.ttf");
+        } else {
+            out.push_back("/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf");
+            out.push_back("/usr/share/fonts/truetype/dejavu/DejaVuSerif-Italic.ttf");
+        }
+
+        // macOS: Arial/Times italic variants
+        if (numeric_weight >= 600) {
+            out.push_back("/System/Library/Fonts/Supplemental/Arial Bold Italic.ttf");
+            out.push_back("/System/Library/Fonts/Supplemental/Times New Roman Bold Italic.ttf");
+        } else {
+            out.push_back("/System/Library/Fonts/Supplemental/Arial Italic.ttf");
+            out.push_back("/System/Library/Fonts/Supplemental/Times New Roman Italic.ttf");
+        }
+
+        // Always add fallbacks for style matching when italic not available
+        if (canonical_family == "arial") {
+            out.push_back(numeric_weight >= 600 ? "C:/Windows/Fonts/arialbd.ttf" : "C:/Windows/Fonts/arial.ttf");
+        }
     }
-
-    // italic / oblique
-    if (canonical_family == "arial") {
-        out.push_back(is_bold ? "C:/Windows/Fonts/arialbi.ttf" : "C:/Windows/Fonts/ariali.ttf");
-        // fallback: 如果系统没有 italic 文件，至少保证能选到 regular/bold
-        out.push_back(is_bold ? "C:/Windows/Fonts/arialbd.ttf" : "C:/Windows/Fonts/arial.ttf");
-    } else if (canonical_family == "segoe ui") {
-        out.push_back(is_bold ? "C:/Windows/Fonts/segoeuiz.ttf" : "C:/Windows/Fonts/segoeuii.ttf");
-        out.push_back(is_bold ? "C:/Windows/Fonts/segoeuib.ttf" : "C:/Windows/Fonts/segoeui.ttf");
-    } else if (canonical_family == "sans-serif" || canonical_family == "-apple-system") {
-        // 常见 sans-serif 的倾斜版本优先级（Windows 优先 Segoe/Arial）
-        out.push_back(is_bold ? "C:/Windows/Fonts/segoeuiz.ttf" : "C:/Windows/Fonts/segoeuii.ttf");
-        out.push_back(is_bold ? "C:/Windows/Fonts/arialbi.ttf" : "C:/Windows/Fonts/ariali.ttf");
-        out.push_back(is_bold ? "C:/Windows/Fonts/arialbd.ttf" : "C:/Windows/Fonts/arial.ttf");
-    }
-
-    // Linux: DejaVu 常见倾斜文件名
-    out.push_back(is_bold ? "/usr/share/fonts/truetype/dejavu/DejaVuSans-BoldOblique.ttf" : "/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf");
-    out.push_back(is_bold ? "/usr/share/fonts/truetype/dejavu/DejaVuSerif-BoldItalic.ttf" : "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Italic.ttf");
-
-    // macOS: Arial/Times 常见文件名（补充，找不到会自动忽略）
-    out.push_back(is_bold ? "/System/Library/Fonts/Supplemental/Arial Bold Italic.ttf" : "/System/Library/Fonts/Supplemental/Arial Italic.ttf");
-    out.push_back(is_bold ? "/System/Library/Fonts/Supplemental/Times New Roman Bold Italic.ttf" : "/System/Library/Fonts/Supplemental/Times New Roman Italic.ttf");
-
-    // 最后再把 weight-only 的候选加进来，保证可用
-    appendCandidatesForFamilyAndWeight(canonical_family, numeric_weight, out);
 }
 
 } // namespace
@@ -569,7 +678,7 @@ std::string resolveFontPath(const std::string& requested_family,
         appendCandidatesForFamilyWeightStyle("sans-serif", numeric_weight, true, candidate_paths);
     }
 
-    return findExistingFont(candidate_paths);
+    return findExistingFont(candidate_paths, numeric_weight);
 }
 
 std::string resolveFontPath(const std::string& requested_family) {
@@ -599,26 +708,151 @@ const std::vector<std::string>& getCJKFallbackFonts() {
     return cached_result;
 }
 
-// FreeType library instance (for checking character support)
-// Note: using static variable here, real projects should consider better lifecycle management
-#include <ft2build.h>
-#include FT_FREETYPE_H
-
 namespace {
 
 // Lazy-initialized FreeType library
 FT_Library getFTLibrary() {
     static FT_Library library = nullptr;
     static bool initialized = false;
-    
+
     if (!initialized) {
         if (FT_Init_FreeType(&library) != 0) {
             library = nullptr;
         }
         initialized = true;
     }
-    
+
     return library;
+}
+
+// Extract the actual weight (100-900) from a font file using FreeType
+int getFontFileWeight(const std::string& font_path) {
+    FT_Library library = getFTLibrary();
+    if (!library) {
+        return 400; // Default to normal
+    }
+
+    FT_Face face = nullptr;
+    if (FT_New_Face(library, font_path.c_str(), 0, &face) != 0) {
+        return 400;
+    }
+
+    int weight = 400; // Default fallback
+    bool has_os2_weight = false;
+
+    // Try to get usWeightClass from OS/2 table (most reliable, authoritative)
+    FT_ULong os2_offset = 0;
+    FT_ULong os2_length = 0;
+    if (FT_Load_Sfnt_Table(face, FT_MAKE_TAG('O', 'S', '/', '2'), 0, nullptr, &os2_length) == 0) {
+        std::vector<uint8_t> os2_table(os2_length);
+        if (FT_Load_Sfnt_Table(face, FT_MAKE_TAG('O', 'S', '/', '2'), 0, os2_table.data(), &os2_length) == 0) {
+            // usWeightClass is at offset 4 (2 bytes, big-endian)
+            if (os2_length >= 6) {
+                uint16_t weightClass = static_cast<uint16_t>(os2_table[4]) << 8 | os2_table[5];
+                // Validate weightClass is in expected range for OS/2
+                if (weightClass >= 100 && weightClass <= 900) {
+                    weight = weightClass;
+                    has_os2_weight = true;
+                }
+            }
+        }
+    }
+
+    // If OS/2 weightClass not available, try style flags and style_name as fallback
+    if (!has_os2_weight) {
+        // Fallback to style flags first
+        if (face->style_flags & FT_STYLE_FLAG_BOLD) {
+            weight = 700;
+        }
+
+        // Check style name for weight hints (only if OS/2 weight not available)
+        std::string style_name = face->style_name ? face->style_name : "";
+        std::transform(style_name.begin(), style_name.end(), style_name.begin(),
+                       [](unsigned char c) { return std::tolower(c); });
+
+        if (style_name.find("thin") != std::string::npos) {
+            weight = 100;
+        } else if (style_name.find("extralight") != std::string::npos || style_name.find("extra light") != std::string::npos) {
+            weight = 200;
+        } else if (style_name.find("light") != std::string::npos) {
+            weight = 300;
+        } else if (style_name.find("medium") != std::string::npos) {
+            weight = 500;
+        } else if (style_name.find("semibold") != std::string::npos || style_name.find("semi bold") != std::string::npos) {
+            weight = 600;
+        } else if (style_name.find("bold") != std::string::npos) {
+            weight = 700;
+        } else if (style_name.find("extrabold") != std::string::npos || style_name.find("extra bold") != std::string::npos) {
+            weight = 800;
+        } else if (style_name.find("black") != std::string::npos || style_name.find("heavy") != std::string::npos) {
+            weight = 900;
+        }
+    }
+
+    FT_Done_Face(face);
+
+    // Clamp to valid range
+    if (weight < 100) weight = 100;
+    if (weight > 900) weight = 900;
+
+    return weight;
+}
+
+// Find the font with the closest actual weight to the requested weight
+std::string findClosestWeightFont(const std::vector<std::string>& candidates, int requested_weight) {
+    if (candidates.empty()) {
+        return {};
+    }
+
+    struct WeightedCandidate {
+        std::string path;
+        int actual_weight;
+        int distance;
+    };
+
+    std::vector<WeightedCandidate> weighted_candidates;
+
+    // Extract actual weights from existing font files
+    for (const auto& path : candidates) {
+        namespace fs = std::filesystem;
+        std::error_code ec;
+        if (fs::exists(path, ec) && !ec) {
+            int actual_weight = getFontFileWeight(path);
+            int distance = std::abs(actual_weight - requested_weight);
+            weighted_candidates.push_back({path, actual_weight, distance});
+        }
+    }
+
+    if (weighted_candidates.empty()) {
+        // No existing font files found, return first candidate (will be checked later)
+        return candidates[0];
+    }
+
+    // Sort by distance (closest first), then by actual weight (prefer higher weight for tie)
+    std::sort(weighted_candidates.begin(), weighted_candidates.end(),
+              [requested_weight](const WeightedCandidate& a, const WeightedCandidate& b) {
+                  if (a.distance != b.distance) {
+                      return a.distance < b.distance;
+                  }
+                  // For ties, prefer the weight on the same side of the requested weight
+                  // If both are on the same side, prefer the closer one (already handled by distance)
+                  // If one is above and one is below, prefer the heavier one (CSS spec)
+                  if ((a.actual_weight >= requested_weight) && (b.actual_weight < requested_weight)) {
+                      return true;
+                  }
+                  if ((b.actual_weight >= requested_weight) && (a.actual_weight < requested_weight)) {
+                      return false;
+                  }
+                  return a.actual_weight > b.actual_weight;
+              });
+
+    DONG_LOG_INFO("[FontResolver] Requested weight %d, selected '%s' (actual weight %d, distance %d)",
+                  requested_weight,
+                  weighted_candidates[0].path.c_str(),
+                  weighted_candidates[0].actual_weight,
+                  weighted_candidates[0].distance);
+
+    return weighted_candidates[0].path;
 }
 
 // Check if font supports specified Unicode codepoint
@@ -627,15 +861,15 @@ bool fontSupportsCodepoint(const ::std::string& font_path, uint32_t codepoint) {
     if (!library) {
         return false;
     }
-    
+
     FT_Face face = nullptr;
     if (FT_New_Face(library, font_path.c_str(), 0, &face) != 0) {
         return false;
     }
-    
+
     FT_UInt glyph_index = FT_Get_Char_Index(face, codepoint);
     FT_Done_Face(face);
-    
+
     return glyph_index != 0;
 }
 

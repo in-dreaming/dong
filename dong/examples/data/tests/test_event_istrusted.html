@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  body { font-size: 16px; padding: 20px; }
+  #target { padding: 20px; background: lightyellow; border: 2px solid orange; min-height: 60px; }
+  #result { margin-top: 20px; padding: 10px; background: #eee; white-space: pre; font-family: monospace; }
+</style>
+</head>
+<body>
+  <h1>Event.isTrusted 属性测试</h1>
+
+  <div id="target" tabindex="0">点击这里测试事件信任属性</div>
+  <div id="result"></div>
+
+  <script>
+    var r = '';
+    var target = document.getElementById('target');
+    var result = document.getElementById('result');
+
+    // 测试各种事件类型的 isTrusted 属性
+    target.addEventListener('click', function(e) {
+      r += 'click 事件:\n';
+      r += '  type=' + e.type + '\n';
+      r += '  isTrusted=' + e.isTrusted + ' (用户触发=true, 脚本触发=false)\n';
+      r += '  bubbles=' + e.bubbles + ', cancelable=' + e.cancelable + '\n';
+      result.textContent = r;
+    });
+
+    target.addEventListener('mousedown', function(e) {
+      r += 'mousedown 事件:\n';
+      r += '  type=' + e.type + '\n';
+      r += '  isTrusted=' + e.isTrusted + '\n';
+      r += '  button=' + e.button + '\n';
+      result.textContent = r;
+    });
+
+    target.addEventListener('keydown', function(e) {
+      r += 'keydown 事件:\n';
+      r += '  type=' + e.type + '\n';
+      r += '  isTrusted=' + e.isTrusted + '\n';
+      r += '  key=' + e.key + ', code=' + e.code + '\n';
+      result.textContent = r;
+    });
+
+    target.addEventListener('focus', function(e) {
+      r += 'focus 事件:\n';
+      r += '  type=' + e.type + '\n';
+      r += '  isTrusted=' + e.isTrusted + '\n';
+      result.textContent = r;
+    });
+
+    // 测试脚本触发的事件（isTrusted=false）
+    function testScriptTriggeredEvent() {
+      r += '\n=== 脚本触发事件测试 ===\n';
+
+      // 创建并分发 click 事件
+      var clickEvent = new Event('click', { bubbles: true, cancelable: true });
+      r += '脚本创建的事件: isTrusted=' + clickEvent.isTrusted + '\n';
+
+      // 创建并分发自定义事件
+      var customEvent = new CustomEvent('custom', { detail: { test: 'data' } });
+      r += '自定义事件: isTrusted=' + customEvent.isTrusted + '\n';
+
+      result.textContent = r;
+    }
+
+    // 测试 dispatchEvent 方法
+    target.addEventListener('custom', function(e) {
+      r += 'custom 事件 (通过 dispatchEvent 触发):\n';
+      r += '  type=' + e.type + '\n';
+      r += '  isTrusted=' + e.isTrusted + '\n';
+      r += '  detail=' + JSON.stringify(e.detail) + '\n';
+      result.textContent = r;
+    });
+
+    r += 'Event.isTrusted 属性测试已加载\n';
+    r += '测试说明:\n';
+    r += '- 点击黄色区域测试用户触发的事件 (isTrusted=true)\n';
+    r += '- 按 Tab 键聚焦测试键盘事件\n';
+    r += '- 脚本触发的事件 isTrusted=false\n';
+    r += '- dispatchEvent() 触发的事件 isTrusted=false\n';
+    r += '\n点击下方按钮测试脚本触发事件:\n';
+    r += '<button onclick="testScriptTriggeredEvent()">测试脚本事件</button>\n';
+    result.innerHTML = r;
+    console.log('Event.isTrusted 属性测试已加载');
+  </script>
+</body>
+</html>

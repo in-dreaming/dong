@@ -17,6 +17,22 @@ static dong::script::JSBindings* getBindingsFromCtx(JSContext* ctx) {
     return static_cast<dong::script::JSBindings*>(JS_GetContextOpaque(ctx));
 }
 
+// Helper function to create a DOMRect-like object
+static JSValue createDOMRect(JSContext* ctx, double x, double y, double width, double height) {
+    JSValue obj = JS_NewObject(ctx);
+    double right = x + width;
+    double bottom = y + height;
+    JS_SetPropertyStr(ctx, obj, "x", JS_NewFloat64(ctx, x));
+    JS_SetPropertyStr(ctx, obj, "y", JS_NewFloat64(ctx, y));
+    JS_SetPropertyStr(ctx, obj, "width", JS_NewFloat64(ctx, width));
+    JS_SetPropertyStr(ctx, obj, "height", JS_NewFloat64(ctx, height));
+    JS_SetPropertyStr(ctx, obj, "top", JS_NewFloat64(ctx, y));
+    JS_SetPropertyStr(ctx, obj, "right", JS_NewFloat64(ctx, right));
+    JS_SetPropertyStr(ctx, obj, "bottom", JS_NewFloat64(ctx, bottom));
+    JS_SetPropertyStr(ctx, obj, "left", JS_NewFloat64(ctx, x));
+    return obj;
+}
+
 // Minimal Event method helpers for native-created events (used by form.submit())
 static JSValue node_event_preventDefault(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     (void)argc; (void)argv;
@@ -563,28 +579,10 @@ static JSValue elem_getBoundingClientRect(JSContext* ctx, JSValueConst this_val,
     (void)argc; (void)argv;
     auto node = JSBindings::getNodeOpaque(ctx, this_val);
     if (!node) {
-        JSValue obj = JS_NewObject(ctx);
-        JS_SetPropertyStr(ctx, obj, "x", JS_NewFloat64(ctx, 0));
-        JS_SetPropertyStr(ctx, obj, "y", JS_NewFloat64(ctx, 0));
-        JS_SetPropertyStr(ctx, obj, "width", JS_NewFloat64(ctx, 0));
-        JS_SetPropertyStr(ctx, obj, "height", JS_NewFloat64(ctx, 0));
-        JS_SetPropertyStr(ctx, obj, "top", JS_NewFloat64(ctx, 0));
-        JS_SetPropertyStr(ctx, obj, "right", JS_NewFloat64(ctx, 0));
-        JS_SetPropertyStr(ctx, obj, "bottom", JS_NewFloat64(ctx, 0));
-        JS_SetPropertyStr(ctx, obj, "left", JS_NewFloat64(ctx, 0));
-        return obj;
+        return createDOMRect(ctx, 0, 0, 0, 0);
     }
     auto rect = node->getBoundingClientRect();
-    JSValue obj = JS_NewObject(ctx);
-    JS_SetPropertyStr(ctx, obj, "x", JS_NewFloat64(ctx, rect.x));
-    JS_SetPropertyStr(ctx, obj, "y", JS_NewFloat64(ctx, rect.y));
-    JS_SetPropertyStr(ctx, obj, "width", JS_NewFloat64(ctx, rect.width));
-    JS_SetPropertyStr(ctx, obj, "height", JS_NewFloat64(ctx, rect.height));
-    JS_SetPropertyStr(ctx, obj, "top", JS_NewFloat64(ctx, rect.top));
-    JS_SetPropertyStr(ctx, obj, "right", JS_NewFloat64(ctx, rect.right));
-    JS_SetPropertyStr(ctx, obj, "bottom", JS_NewFloat64(ctx, rect.bottom));
-    JS_SetPropertyStr(ctx, obj, "left", JS_NewFloat64(ctx, rect.left));
-    return obj;
+    return createDOMRect(ctx, rect.x, rect.y, rect.width, rect.height);
 }
 
 static JSValue elem_remove(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
@@ -1080,6 +1078,22 @@ static JSValue input_checkValidity(JSContext* ctx, JSValueConst this_val, int ar
         return JS_FALSE;
     }
 
+    // Pattern validation
+    if (state && state->hasPattern()) {
+        const std::string value = state->getValue();
+        if (!state->matchesPattern(value)) {
+            return JS_FALSE;
+        }
+    }
+
+    // Range validation
+    if (state && (state->hasMin() || state->hasMax() || state->hasStep())) {
+        const std::string value = state->getValue();
+        if (!state->isInRange(value)) {
+            return JS_FALSE;
+        }
+    }
+
     return JS_TRUE;
 }
 
@@ -1144,7 +1158,21 @@ static bool checkControlValidity(const dong::dom::DOMNodePtr& node) {
     if (tag == "input" || tag == "textarea") {
         auto* st = dong::dom::getInputState(node);
         if (st && st->hasCustomError()) return false;
-        return !inputIsRequiredAndEmpty(node, st);
+        if (inputIsRequiredAndEmpty(node, st)) return false;
+
+        // Pattern validation
+        if (st && st->hasPattern()) {
+            const std::string value = st->getValue();
+            if (!st->matchesPattern(value)) return false;
+        }
+
+        // Range validation
+        if (st && (st->hasMin() || st->hasMax() || st->hasStep())) {
+            const std::string value = st->getValue();
+            if (!st->isInRange(value)) return false;
+        }
+
+        return true;
     }
 
     if (tag == "select") {

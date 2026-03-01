@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>CSS Counters - Basic Functionality</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: white;
+        }
+
+        /* Basic counter reset and increment */
+        body {
+            counter-reset: section;
+        }
+
+        h2 {
+            counter-increment: section;
+            color: #333;
+        }
+
+        h2::before {
+            content: "Section " counter(section) ": ";
+            font-weight: bold;
+            color: #0066cc;
+        }
+
+        /* Nested counters */
+        ol {
+            counter-reset: item;
+            margin-left: 20px;
+        }
+
+        li {
+            counter-increment: item;
+            margin: 5px 0;
+        }
+
+        li::before {
+            content: counter(item) ". ";
+            font-weight: bold;
+            color: #009900;
+        }
+
+        /* Multiple counters */
+        .chapter {
+            counter-reset: subsection;
+            margin-top: 30px;
+            border-top: 1px solid #ccc;
+            padding-top: 10px;
+        }
+
+        .subsection {
+            counter-increment: subsection;
+            margin-left: 20px;
+        }
+
+        .subsection::before {
+            content: counter(section) "." counter(subsection) " ";
+            font-weight: bold;
+            color: #cc6600;
+        }
+    </style>
+</head>
+<body>
+    <h1>CSS Counters Basic Test</h1>
+
+    <h2>Introduction</h2>
+    <p>This demonstrates basic counter functionality.</p>
+
+    <h2>Features</h2>
+    <ol>
+        <li>Simple ordered list with counter</li>
+        <li>Nested counter demonstration</li>
+        <li>Multiple counter interaction</li>
+    </ol>
+
+    <div class="chapter">
+        <h2>Chapter Content</h2>
+
+        <div class="subsection">First subsection</div>
+        <div class="subsection">Second subsection</div>
+        <div class="subsection">Third subsection</div>
+    </div>
+
+    <h2>Conclusion</h2>
+    <p>Counters provide automatic numbering for content.</p>
+</body>
+</html>

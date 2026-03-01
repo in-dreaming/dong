@@ -139,10 +139,17 @@ Event EventDispatcher::createEvent(EventType type) {
         case EventType::DOM_CONTENT_LOADED: event.type_name = "DOMContentLoaded"; break;
 
         case EventType::TOGGLE: event.type_name = "toggle"; break;
+        case EventType::DRAG_START: event.type_name = "dragstart"; break;
+        case EventType::DRAG: event.type_name = "drag"; break;
+        case EventType::DRAG_ENTER: event.type_name = "dragenter"; break;
+        case EventType::DRAG_LEAVE: event.type_name = "dragleave"; break;
+        case EventType::DRAG_OVER: event.type_name = "dragover"; break;
+        case EventType::DROP: event.type_name = "drop"; break;
+        case EventType::DRAG_END: event.type_name = "dragend"; break;
 
         case EventType::CUSTOM: event.type_name = "custom"; break;
     }
-    
+
     return event;
 }
 

@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Input Element Bindings</title>
+    <style>
+        body { font-family: Arial; margin: 20px; }
+        .test { margin: 10px 0; padding: 10px; border: 1px solid #ccc; }
+        .pass { background: #d4edda; }
+        .fail { background: #f8d7da; }
+    </style>
+</head>
+<body>
+    <h1>Input Element Bindings Test</h1>
+
+    <div class="test">
+        <h3>HTMLInputElement.select() method</h3>
+        <input type="text" id="selectInput" value="Select this text">
+        <script>
+            const input = document.getElementById('selectInput');
+
+            // Test select() method
+            input.select();
+
+            console.log('select() method called');
+
+            // Check if selection range is set
+            if (input.selectionStart === 0 && input.selectionEnd === input.value.length) {
+                console.log('✓ select() method works');
+                document.write('<p class="pass">✓ select() method selects all text</p>');
+            } else {
+                console.log('✗ select() method failed');
+                document.write('<p class="fail">✗ select() method failed</p>');
+            }
+        </script>
+    </div>
+
+    <div class="test">
+        <h3>HTMLInputElement.setSelectionRange() method</h3>
+        <input type="text" id="selectionRangeInput" value="Select range from 5 to 10">
+        <script>
+            const rangeInput = document.getElementById('selectionRangeInput');
+
+            // Test setSelectionRange() method
+            rangeInput.setSelectionRange(5, 10);
+
+            console.log('setSelectionRange(5, 10) called');
+            console.log('selectionStart:', rangeInput.selectionStart, 'selectionEnd:', rangeInput.selectionEnd);
+
+            if (rangeInput.selectionStart === 5 && rangeInput.selectionEnd === 10) {
+                console.log('✓ setSelectionRange() method works');
+                document.write('<p class="pass">✓ setSelectionRange() method sets correct selection range</p>');
+            } else {
+                console.log('✗ setSelectionRange() method failed');
+                document.write('<p class="fail">✗ setSelectionRange() method failed</p>');
+            }
+        </script>
+    </div>
+
+    <div class="test">
+        <h3>HTMLInputElement.selectionStart/selectionEnd properties</h3>
+        <input type="text" id="selectionPropsInput" value="Test selection properties">
+        <script>
+            const propsInput = document.getElementById('selectionPropsInput');
+
+            // Test getting selection properties
+            console.log('Initial selectionStart:', propsInput.selectionStart, 'selectionEnd:', propsInput.selectionEnd);
+
+            // Test setting selection properties
+            propsInput.selectionStart = 2;
+            propsInput.selectionEnd = 8;
+
+            console.log('After setting - selectionStart:', propsInput.selectionStart, 'selectionEnd:', propsInput.selectionEnd);
+
+            if (propsInput.selectionStart === 2 && propsInput.selectionEnd === 8) {
+                console.log('✓ selectionStart/selectionEnd properties work');
+                document.write('<p class="pass">✓ selectionStart/selectionEnd properties can be get and set</p>');
+            } else {
+                console.log('✗ selectionStart/selectionEnd properties failed');
+                document.write('<p class="fail">✗ selectionStart/selectionEnd properties failed</p>');
+            }
+        </script>
+    </div>
+
+    <div class="test">
+        <h3>HTMLInputElement.checkValidity() method</h3>
+        <input type="text" id="validityInput" required value="">
+        <input type="text" id="validityInput2" required value="valid">
+        <script>
+            const validityInput = document.getElementById('validityInput');
+            const validityInput2 = document.getElementById('validityInput2');
+
+            // Test invalid input
+            const result1 = validityInput.checkValidity();
+            console.log('Invalid input check:', result1);
+
+            // Test valid input
+            const result2 = validityInput2.checkValidity();
+            console.log('Valid input check:', result2);
+
+            if (result1 === false && result2 === true) {
+                console.log('✓ checkValidity() method works');
+                document.write('<p class="pass">✓ checkValidity() method returns correct validity state</p>');
+            } else {
+                console.log('✗ checkValidity() method failed');
+                document.write('<p class="fail">✗ checkValidity() method failed</p>');
+            }
+        </script>
+    </div>
+
+    <div class="test">
+        <h3>HTMLInputElement.setCustomValidity() method</h3>
+        <input type="text" id="customValidityInput">
+        <script>
+            const customInput = document.getElementById('customValidityInput');
+
+            // Test setCustomValidity()
+            customInput.setCustomValidity('Custom error message');
+
+            const result1 = customInput.checkValidity();
+            console.log('After setting custom error:', result1);
+
+            // Clear custom error
+            customInput.setCustomValidity('');
+
+            const result2 = customInput.checkValidity();
+            console.log('After clearing custom error:', result2);
+
+            if (result1 === false && result2 === true) {
+                console.log('✓ setCustomValidity() method works');
+                document.write('<p class="pass">✓ setCustomValidity() method sets and clears custom validity</p>');
+            } else {
+                console.log('✗ setCustomValidity() method failed');
+                document.write('<p class="fail">✗ setCustomValidity() method failed</p>');
+            }
+        </script>
+    </div>
+
+</body>
+</html>

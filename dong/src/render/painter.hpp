@@ -50,11 +50,12 @@ private:
 
     void pushCounterScope(const dom::ComputedStyle& style);
     void popCounterScope();
-    std::string evaluateContentText(const dom::ComputedStyle& style);
+    std::string evaluateContentText(const dom::ComputedStyle& style, const dom::DOMNodePtr& node = nullptr);
     std::string evaluateCounterText(const std::string& name);
     std::string evaluateCountersText(const std::string& name, const std::string& sep);
     std::string evaluateQuoteToken(const dom::ComputedStyle& style,
-                                  const dom::ComputedStyle::ContentToken& tok);
+                                  const dom::ComputedStyle::ContentToken& tok,
+                                  const dom::DOMNodePtr& node);
 
 
     struct OpenSelectOverlay {
@@ -92,6 +93,8 @@ private:
 
     void paintVideoPlaceholder(const Rect& rect, DisplayListBuilder& builder);
 
+    void renderAltText(const Rect& rect, const std::string& alt_text, const dom::ComputedStyle& style, DisplayListBuilder& builder);
+
     void paintTextAndInput(const dom::DOMNodePtr& node,
                            const layout::LayoutNode* layout_node,
                            const std::string& tag,
@@ -115,6 +118,12 @@ private:
     void renderMarkerForListItem(const dom::DOMNodePtr& node,
                                  const Rect& node_rect,
                                  DisplayListBuilder& builder);
+
+    // 渲染 disclosure triangle for details element
+    void renderDisclosureTriangle(const dom::DOMNodePtr& node,
+                                  const Rect& node_rect,
+                                  bool is_open,
+                                  DisplayListBuilder& builder);
 
 
     // 脏矩形优化

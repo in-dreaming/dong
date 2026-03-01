@@ -361,4 +361,100 @@ bool isEditableElement(const DOMNodePtr& node) {
     return false;
 }
 
+// Pattern validation implementation
+bool InputElementState::matchesPattern(const std::string& value) const {
+    if (pattern_.empty()) return true;
+    if (value.empty()) return false;
+
+    // Simple regex pattern matching (basic implementation)
+    // TODO: Implement full ECMA-262 regex support
+    // For now, support basic wildcards: .* for any characters, ^ for start, $ for end
+
+    std::string regex_pattern = pattern_;
+
+    // Convert simple wildcard patterns to regex
+    // Replace .* with .* in regex (already correct)
+    // Ensure pattern is anchored if it starts with ^ or ends with $
+
+    try {
+        // Simple substring matching for now
+        // Full regex implementation would require a regex library
+        if (regex_pattern.find("^") == 0 && regex_pattern.rfind("$") == regex_pattern.length() - 1) {
+            // Exact match required
+            std::string exact_pattern = regex_pattern.substr(1, regex_pattern.length() - 2);
+            return value == exact_pattern;
+        } else if (regex_pattern.find("^") == 0) {
+            // Starts with
+            std::string starts_pattern = regex_pattern.substr(1);
+            return value.find(starts_pattern) == 0;
+        } else if (regex_pattern.rfind("$") == regex_pattern.length() - 1) {
+            // Ends with
+            std::string ends_pattern = regex_pattern.substr(0, regex_pattern.length() - 1);
+            return value.length() >= ends_pattern.length() &&
+                   value.substr(value.length() - ends_pattern.length()) == ends_pattern;
+        } else {
+            // Contains
+            return value.find(regex_pattern) != std::string::npos;
+        }
+    } catch (...) {
+        // If pattern parsing fails, treat as invalid
+        return false;
+    }
+}
+
+// Range validation implementation
+bool InputElementState::isInRange(const std::string& value) const {
+    if (value.empty()) return true;
+
+    // For numeric types
+    if (type_ == "number" || type_ == "range") {
+        try {
+            double num_value = std::stod(value);
+
+            // Check min constraint
+            if (!min_.empty()) {
+                double min_val = std::stod(min_);
+                if (num_value < min_val) return false;
+            }
+
+            // Check max constraint
+            if (!max_.empty()) {
+                double max_val = std::stod(max_);
+                if (num_value > max_val) return false;
+            }
+
+            // Check step constraint
+            if (!step_.empty() && step_ != "any") {
+                double step_val = std::stod(step_);
+                if (step_val > 0) {
+                    if (!min_.empty()) {
+                        double min_val = std::stod(min_);
+                        double remainder = std::fmod(num_value - min_val, step_val);
+                        // Allow for floating point precision issues
+                        if (std::abs(remainder) > 1e-10 && std::abs(remainder - step_val) > 1e-10) {
+                            return false;
+                        }
+                    }
+                }
+            }
+
+            return true;
+        } catch (...) {
+            // Invalid number format
+            return false;
+        }
+    }
+
+    // For date/time types (simplified implementation)
+    if (type_ == "date" || type_ == "time" || type_ == "datetime-local") {
+        // Simple string comparison for date/time ranges
+        if (!min_.empty() && value < min_) return false;
+        if (!max_.empty() && value > max_) return false;
+        return true;
+    }
+
+    // For other input types, range validation doesn't apply
+    return true;
+}
+
 } // namespace dong::dom
