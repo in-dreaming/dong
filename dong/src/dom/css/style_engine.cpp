@@ -714,6 +714,10 @@ html, body {
   background-color: #ffffff;
 }
 
+body {
+  margin: 8px;
+}
+
 /* Basic block spacing to better match browser defaults. */
 h1 {
   margin: 0.67em 0;
@@ -849,9 +853,60 @@ void StyleEngine::applyDefaultStylesRecursive(DOMNodePtr node) {
 void StyleEngine::addStylesheet(const std::string& css) {
 
     Stylesheet sheet;
+    
+    // Parse unlayered rules (parse() skips @layer blocks)
     auto rules = parseCSS(css);
     for (const auto& rule : rules) {
-        sheet.addRule(rule.selector, rule.style, rule.specificity, rule.source_order);
+        // Rules from parse() have empty layer_name = unlayered (highest priority)
+        sheet.getRulesMutable().push_back(rule);
+    }
+    
+    // Parse @layer rules and integrate them with proper layer names
+    auto layer_rules = parser_.parseLayerRules(css);
+    if (!layer_rules.empty()) {
+        // Assign unique names to anonymous layers
+        for (auto& layer : layer_rules) {
+            if (layer.name.empty() && !layer.is_predeclared) {
+                layer.name = "__anon_" + std::to_string(anon_layer_counter_++);
+            }
+        }
+        
+        // Build predeclared order map from this CSS's predeclarations.
+        // @layer base, theme; means base=0 (lower priority), theme=1 (higher priority).
+        std::unordered_map<std::string, int> predeclared_order;
+        for (const auto& layer : layer_rules) {
+            if (layer.is_predeclared && !layer.name.empty()) {
+                predeclared_order[layer.name] = layer.declaration_order;
+            }
+        }
+
+        // Merge layer ordering into layer_context_ (append, not replace).
+        // If a layer was predeclared, use its predeclared order (not the definition counter order),
+        // so @layer base, theme; followed by @layer theme {...} @layer base {...} keeps base < theme.
+        for (const auto& layer : layer_rules) {
+            if (!layer.name.empty() && !layer.is_predeclared) {
+                int order = layer.declaration_order;
+                auto pred_it = predeclared_order.find(layer.name);
+                if (pred_it != predeclared_order.end()) {
+                    order = pred_it->second;
+                }
+                // Only insert if not already in map (first declaration wins per CSS spec)
+                if (layer_context_.layer_order_map.find(layer.name) == layer_context_.layer_order_map.end()) {
+                    layer_context_.layer_order_map[layer.name] = order;
+                    layer_context_.layers.push_back(layer);
+                }
+            }
+        }
+        
+        // Add rules from each layer with layer_name set
+        for (const auto& layer : layer_rules) {
+            if (!layer.is_predeclared) {
+                for (auto rule : layer.rules) {
+                    rule.layer_name = layer.name;
+                    sheet.getRulesMutable().push_back(rule);
+                }
+            }
+        }
     }
     
     // Parse and add keyframes
@@ -907,20 +962,29 @@ void StyleEngine::computeStyles(DOMNodePtr node) {
     std::vector<CSSRule> matching_rules;
     for (const auto& sheet : stylesheets_) {
         for (const auto& rule : sheet.getRules()) {
+            // Skip pseudo-element rules (::before, ::after, etc.) — they are applied
+            // exclusively via processPseudoElements(), not to the originating element.
+            if (rule.selector.find("::before") != std::string::npos ||
+                rule.selector.find(":before") != std::string::npos ||
+                rule.selector.find("::after") != std::string::npos ||
+                rule.selector.find(":after") != std::string::npos ||
+                rule.selector.find("::marker") != std::string::npos ||
+                rule.selector.find(":marker") != std::string::npos ||
+                rule.selector.find("::placeholder") != std::string::npos ||
+                rule.selector.find(":placeholder") != std::string::npos ||
+                rule.selector.find("::selection") != std::string::npos) {
+                continue;
+            }
             if (matcher_.matches(rule.selector, node)) {
                 matching_rules.push_back(rule);
             }
         }
     }
 
-    // Sort by specificity, then by source order
-    std::sort(matching_rules.begin(), matching_rules.end(),
-        [](const CSSRule& a, const CSSRule& b) {
-            if (a.specificity != b.specificity) {
-                return a.specificity < b.specificity;
-            }
-            return a.source_order < b.source_order;
-        });
+    // Sort by layer priority, then specificity, then source order
+    sortRulesWithLayerPriority(matching_rules);
+
+
 
     // Apply all properties from matching rules
     auto& computed = node->getComputedStyle();
@@ -1011,6 +1075,18 @@ void StyleEngine::applyMatchingRules(DOMNodePtr node) {
 
     for (const auto& sheet : stylesheets_) {
         for (const auto& rule : sheet.getRules()) {
+            // Skip pseudo-element rules — applied via processPseudoElements().
+            if (rule.selector.find("::before") != std::string::npos ||
+                rule.selector.find(":before") != std::string::npos ||
+                rule.selector.find("::after") != std::string::npos ||
+                rule.selector.find(":after") != std::string::npos ||
+                rule.selector.find("::marker") != std::string::npos ||
+                rule.selector.find(":marker") != std::string::npos ||
+                rule.selector.find("::placeholder") != std::string::npos ||
+                rule.selector.find(":placeholder") != std::string::npos ||
+                rule.selector.find("::selection") != std::string::npos) {
+                continue;
+            }
             if (matcher_.matches(rule.selector, node)) {
                 matching_rules.push_back(rule);
             }
@@ -1985,9 +2061,19 @@ void StyleEngine::applyMatchingRulesIndexed(DOMNodePtr node) {
     // 收集实际匹配的规则
     std::vector<CSSRule> matching_rules;
     matching_rules.reserve(candidate_indices.size());
-    
+
     for (size_t idx : candidate_indices) {
         const CSSRule& rule = all_rules_[idx];
+        // Skip pseudo-element rules — applied via processPseudoElements().
+        if (rule.selector.find("::before") != std::string::npos ||
+            rule.selector.find(":before") != std::string::npos ||
+            rule.selector.find("::after") != std::string::npos ||
+            rule.selector.find(":after") != std::string::npos ||
+            rule.selector.find("::marker") != std::string::npos ||
+            rule.selector.find("::placeholder") != std::string::npos ||
+            rule.selector.find("::selection") != std::string::npos) {
+            continue;
+        }
         if (matcher_.matches(rule.selector, node)) {
             matching_rules.push_back(rule);
         }
@@ -1995,7 +2081,7 @@ void StyleEngine::applyMatchingRulesIndexed(DOMNodePtr node) {
     
     // 按层优先级、specificity 和 source order 排序
     sortRulesWithLayerPriority(matching_rules);
-    
+
     // 应用规则（使用共享的属性应用函数）
     auto& computed = node->getComputedStyle();
     for (const auto& rule : matching_rules) {
@@ -2006,25 +2092,34 @@ void StyleEngine::applyMatchingRulesIndexed(DOMNodePtr node) {
 // 优化策略3：增量样式计算 - 只重算 dirty 节点
 void StyleEngine::computeStylesIncremental(DOMNodePtr node) {
     DONG_PROFILE_FUNCTION();
-    
+    computeStylesIncrementalImpl(node, /*ancestor_dirty*/false);
+}
+
+void StyleEngine::computeStylesIncrementalImpl(DOMNodePtr node, bool ancestor_dirty) {
     if (!node) return;
 
     const bool self_dirty = node->isStyleDirty();
     const bool subtree_dirty = node->isStyleSubtreeDirty();
+    const bool needs_recompute = self_dirty || ancestor_dirty;
 
-    if (self_dirty) {
+    if (needs_recompute) {
         recomputeNodeStyleFull(node);
     }
 
-    // Only recurse into children if subtree has dirty nodes
-    if (self_dirty || subtree_dirty) {
+    const bool child_ancestor_dirty = ancestor_dirty || self_dirty;
+
+    // Recurse when:
+    // - this node (or an ancestor) was recomputed (inheritance + ancestor selectors)
+    // - we know there are dirty nodes somewhere in the subtree
+    if (child_ancestor_dirty || subtree_dirty) {
         for (const auto& child : node->getChildren()) {
-            computeStylesIncremental(child);
+            computeStylesIncrementalImpl(child, child_ancestor_dirty);
         }
     }
 }
 
 void StyleEngine::recomputeNodeStyleFull(DOMNodePtr node) {
+
     applyDefaultStyleForNode(node);
     applyMatchingRulesIndexed(node);
     inheritFromParent(node);
@@ -2240,24 +2335,22 @@ int StyleEngine::getLayerPriority(const std::string& layer_name) const {
 }
 
 void StyleEngine::sortRulesWithLayerPriority(std::vector<CSSRule>& rules) {
-    // 按层优先级、specificity、source_order排序
+    // CSS cascade application order: apply low priority first, then higher priority overrides.
+    // Therefore we sort by (layer_priority asc, specificity asc, source_order asc) and apply in-order.
     std::sort(rules.begin(), rules.end(),
         [this](const CSSRule& a, const CSSRule& b) {
-            // 首先按层优先级排序
-            int layer_priority_a = getLayerPriority(a.layer_name);
-            int layer_priority_b = getLayerPriority(b.layer_name);
+            const int layer_priority_a = getLayerPriority(a.layer_name);
+            const int layer_priority_b = getLayerPriority(b.layer_name);
 
             if (layer_priority_a != layer_priority_b) {
-                return layer_priority_a > layer_priority_b; // 高优先级在前
+                return layer_priority_a < layer_priority_b;
             }
 
-            // 层优先级相同，按specificity排序
             if (a.specificity != b.specificity) {
-                return a.specificity > b.specificity; // 高specificity在前
+                return a.specificity < b.specificity;
             }
 
-            // specificity相同，按source_order排序
-            return a.source_order < b.source_order; // 先声明的在前
+            return a.source_order < b.source_order;
         });
 }
 

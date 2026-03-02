@@ -717,6 +717,8 @@ std::string camelToCss(const std::string& property) {
     return css;
 }
 
+std::string getComputedStyleValue(const dom::ComputedStyle& style, const std::string& css_prop);
+
 std::string jsValueToString(JSContext* ctx, JSValueConst value) {
     JSValue str = JS_ToString(ctx, value);
     if (JS_IsException(str)) {
@@ -730,6 +732,35 @@ std::string jsValueToString(JSContext* ctx, JSValueConst value) {
     }
     JS_FreeValue(ctx, str);
     return result;
+}
+
+std::string formatCssLengthPx(float value) {
+    if (std::fabs(value - std::round(value)) < 0.001f) {
+        return std::to_string(static_cast<int>(std::round(value))) + "px";
+    }
+    std::ostringstream oss;
+    oss << value << "px";
+    return oss.str();
+}
+
+std::string getStyleValueForJS(const dom::DOMNodePtr& node, const std::string& css_prop) {
+    if (!node) return "";
+
+    std::string inline_value = node->getInlineStyleProperty(css_prop);
+    if (!inline_value.empty()) {
+        return inline_value;
+    }
+
+    const auto& style = node->getComputedStyle();
+    if (css_prop == "padding") {
+        return formatCssLengthPx(style.padding_top.resolvePixels(0.0f, 16.0f, 800.0f, 600.0f));
+    }
+    if (css_prop == "border-width") {
+        const float width = style.border_top_width >= 0.0f ? style.border_top_width : style.border_width;
+        return formatCssLengthPx(width);
+    }
+
+    return getComputedStyleValue(style, css_prop);
 }
 
 std::string getComputedStyleValue(const dom::ComputedStyle& style, const std::string& css_prop) {
@@ -998,15 +1029,27 @@ JSValue window_getComputedStyle(JSContext* ctx, JSValueConst this_val, int argc,
         return JS_NULL;
     }
 
+    auto bindings = getBindingsFromContext(ctx);
+    if (bindings && bindings->layout_engine_ && bindings->dom_manager_) {
+        auto root = bindings->dom_manager_->getRoot();
+        const float vw = bindings->layout_engine_->getViewportWidth();
+        const float vh = bindings->layout_engine_->getViewportHeight();
+        if (root && vw > 0.0f && vh > 0.0f) {
+            bindings->layout_engine_->calculateLayout(root, vw, vh);
+            root->clearLayoutDirtyRecursive();
+        }
+    }
+
     JSValue obj = JS_NewObject(ctx);
     JS_SetPropertyStr(ctx, obj, "__element__", element);
     JS_SetPropertyStr(ctx, obj, "getPropertyValue",
         JS_NewCFunction(ctx, computed_style_getPropertyValue, "getPropertyValue", 1));
 
-    // Seed a few common properties for easier inspection.
-    JS_SetPropertyStr(ctx, obj, "display", JS_NewString(ctx, node->getComputedStyle().display.c_str()));
-    JS_SetPropertyStr(ctx, obj, "color", JS_NewString(ctx, node->getComputedStyle().color.c_str()));
-    JS_SetPropertyStr(ctx, obj, "backgroundColor", JS_NewString(ctx, node->getComputedStyle().background_color.c_str()));
+    JS_SetPropertyStr(ctx, obj, "display", JS_NewString(ctx, getStyleValueForJS(node, "display").c_str()));
+    JS_SetPropertyStr(ctx, obj, "color", JS_NewString(ctx, getStyleValueForJS(node, "color").c_str()));
+    JS_SetPropertyStr(ctx, obj, "backgroundColor", JS_NewString(ctx, getStyleValueForJS(node, "background-color").c_str()));
+    JS_SetPropertyStr(ctx, obj, "padding", JS_NewString(ctx, getStyleValueForJS(node, "padding").c_str()));
+    JS_SetPropertyStr(ctx, obj, "borderWidth", JS_NewString(ctx, getStyleValueForJS(node, "border-width").c_str()));
 
     if (dbg) {
         DONG_LOG_INFO("[JS] window.getComputedStyle(...) -> object");
@@ -1275,7 +1318,7 @@ JSValue createStyleProxy(JSContext* ctx, JSValueConst element, const dom::DOMNod
         std::string css_text;
         for (const auto& [prop, val] : node->getInlineStyles()) {
             if (!val.empty()) {
-                css_text += prop + ":" + val + ";";
+                css_text += prop + ": " + val + ";";
             }
         }
         return JS_NewString(c, css_text.c_str());
@@ -1733,6 +1776,40 @@ static JSValue doc_createTextNode(JSContext* ctx, JSValueConst this_val, int arg
     if (!node) return JS_NULL;
     
     return bindings->createJSElement(ctx, node);
+}
+
+static JSValue doc_write(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val;
+    auto bindings = getBindingsFromContext(ctx);
+    if (!bindings || !bindings->dom_manager_) return JS_UNDEFINED;
+
+    std::string html;
+    html.reserve(128);
+    for (int i = 0; i < argc; ++i) {
+        const char* part = JS_ToCString(ctx, argv[i]);
+        if (!part) continue;
+        html.append(part);
+        JS_FreeCString(ctx, part);
+    }
+
+    if (html.empty()) return JS_UNDEFINED;
+
+    auto script_node = bindings->getCurrentExecutingScript();
+    if (script_node) {
+        script_node->insertAdjacentHTML("beforebegin", html);
+        script_node->markStyleDirty();
+        script_node->markLayoutDirty();
+        return JS_UNDEFINED;
+    }
+
+    auto body_nodes = bindings->dom_manager_->getElementsByTagName("body");
+    if (!body_nodes.empty() && body_nodes[0]) {
+        body_nodes[0]->insertAdjacentHTML("beforeend", html);
+        body_nodes[0]->markStyleDirty();
+        body_nodes[0]->markLayoutDirty();
+    }
+
+    return JS_UNDEFINED;
 }
 
 // ============================================================
@@ -2730,6 +2807,9 @@ void JSBindings::initializeConsoleAPI() {
     JSValue global = JS_GetGlobalObject(ctx);
     JSValue console = JS_NewObject(ctx);
 
+    JS_SetPropertyStr(ctx, global, "window", JS_DupValue(ctx, global));
+    JS_SetPropertyStr(ctx, global, "self", JS_DupValue(ctx, global));
+
     JS_SetPropertyStr(ctx, console, "log",
         JS_NewCFunction(ctx, console_log, "log", 1));
     JS_SetPropertyStr(ctx, console, "warn",
@@ -2990,8 +3070,14 @@ JSValue window_matchMedia(JSContext* ctx, JSValueConst this_val, int argc, JSVal
         // 2. System color scheme detection
         // For now, we provide basic support:
 
+        // Complex queries are not supported yet.
+        if (query_str.find(',') != std::string::npos ||
+            query_str.find(" and ") != std::string::npos ||
+            query_str.find(" or ") != std::string::npos) {
+            matches = false;
+        }
         // (prefers-color-scheme: light) - assume true
-        if (query_str.find("(prefers-color-scheme: light)") != std::string::npos) {
+        else if (query_str.find("(prefers-color-scheme: light)") != std::string::npos) {
             matches = true;
         }
         // (prefers-color-scheme: dark) - assume false for now
@@ -3112,7 +3198,7 @@ void initializeCSSAPI(JSContext* ctx) {
 
     // CSS.supports(property, value)
     JS_SetPropertyStr(ctx, css, "supports",
-        JS_NewCFunction(ctx, css_supports, "supports", 2));
+        JS_NewCFunction(ctx, css_supports, "supports", 1));
 
     JS_SetPropertyStr(ctx, global, "CSS", css);
     JS_FreeValue(ctx, global);
@@ -3170,6 +3256,8 @@ void JSBindings::initializeDocumentAPI() {
         JS_NewCFunction(ctx, doc_querySelector, "querySelector", 1));
     JS_SetPropertyStr(ctx, document, "querySelectorAll",
         JS_NewCFunction(ctx, doc_querySelectorAll, "querySelectorAll", 1));
+    JS_SetPropertyStr(ctx, document, "write",
+        JS_NewCFunction(ctx, doc_write, "write", 1));
 
     // elementFromPoint / hasFocus / scrollingElement
     JS_SetPropertyStr(ctx, document, "elementFromPoint",

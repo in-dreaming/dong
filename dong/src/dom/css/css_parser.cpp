@@ -1308,21 +1308,38 @@ inline std::vector<ComputedStyle::ContentToken> parseContentTokens(const std::st
                 }
                 t.text = counter_name;
 
+                bool separator_set = false;
                 if (t.type == ComputedStyle::ContentToken::Type::Counters) {
-                    // separator (optional)
+                    // separator (required 2nd arg for counters())
                     if (consumeChar(sv, i, ',')) {
                         bool ok = false;
                         std::string sep = parseQuotedStringToken(sv, i, ok);
                         if (ok) {
                             t.separator = sep;
+                            separator_set = true;
                         }
                     }
-                    if (t.separator.empty()) {
-                        t.separator = ".";
+                    if (!separator_set) {
+                        t.separator = "."; // default separator
+                    }
+                    // Optional style param (3rd arg for counters())
+                    if (consumeChar(sv, i, ',')) {
+                        std::string style_ident = parseIdentToken(sv, i);
+                        if (!style_ident.empty()) {
+                            t.style = style_ident;
+                        }
+                    }
+                } else {
+                    // counter(): optional style param (2nd arg)
+                    if (consumeChar(sv, i, ',')) {
+                        std::string style_ident = parseIdentToken(sv, i);
+                        if (!style_ident.empty()) {
+                            t.style = style_ident;
+                        }
                     }
                 }
 
-                // Ignore rest of args / style param
+                // Skip any remaining args
                 consumeUntilMatchingParen(sv, i);
 
                 tokens.push_back(std::move(t));
@@ -2682,6 +2699,12 @@ std::vector<CSSRule> CSSParser::parse(const std::string& css) {
     
     size_t pos = 0;
     while (pos < css_clean.length()) {
+        // Skip leading whitespace
+        while (pos < css_clean.length() && std::isspace(static_cast<unsigned char>(css_clean[pos]))) {
+            ++pos;
+        }
+        if (pos >= css_clean.length()) break;
+
         // Handle @layer rules separately
         if (css_clean[pos] == '@' && css_clean.substr(pos, 6) == "@layer") {
             size_t brace = css_clean.find('{', pos);
@@ -3527,13 +3550,21 @@ std::string CSSParser::parseBackgroundPosition(const std::string& value) {
         if (first == "top") return "50% 0%";
         if (first == "bottom") return "50% 100%";
 
-        // Single percentage or length: apply to both axes
-        return first + " " + first;
+        // Single percentage or length: horizontal, vertical defaults to center per CSS
+        return first + " 50%";
     }
     else if (tokens.size() == 2) {
-        // Two values: horizontal vertical
+        // Two values: horizontal vertical (order-insensitive for keyword pairs like "top left")
         std::string first = tokens[0];
         std::string second = tokens[1];
+
+        auto isHorizontalKeyword = [](const std::string& t) {
+            return t == "left" || t == "right" || t == "center";
+        };
+        // If written as "top left" etc, swap to horizontal vertical order.
+        if ((tokens[0] == "top" || tokens[0] == "bottom") && isHorizontalKeyword(tokens[1])) {
+            std::swap(first, second);
+        }
 
         // Convert keywords to percentages
         if (first == "left") first = "0%";

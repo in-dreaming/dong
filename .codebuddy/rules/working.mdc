@@ -6,6 +6,13 @@ updatedAt: 2026-02-22T15:35:27.479Z
 provider: 
 ---
 
-注意
-- 完成的任务需要标注完成。
-- 需要在/dong/examples/data/tests下添加测试用例。使用dong/scripts/tools/run_baseline_compare.py进行基准对比验证feature实现是否正确。
+当前工作：
+对htmls.md的case挨个执行一下事项
+1.分析对比图，分析对应case存在的错误。
+2.解决问题，验证，如有问题继续修复、验证，直到解决
+3.将修复后的从/htmls.md中删除,并添加到/htmls_fixed.md中
+
+注意：
+1.使用对比工具(dong/scripts/tools/run_baseline_compare.py)可以将html使用基准html渲染器和dong渲染器渲染到对比图片。
+2.使用skill：baseline-render-diff-analysis ， 可以分析对应case存在的问题。
+3.如果需要grid，则修改html(grid to flex)，yoga目前不支持grid。

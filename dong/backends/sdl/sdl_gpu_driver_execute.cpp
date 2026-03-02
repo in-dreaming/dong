@@ -1358,6 +1358,18 @@ void SDLGPUDriver::executeDrawImage(ExecuteContext& ctx, const GPUCommand& cmd) 
         return;
     }
 
+    if (const char* dv = std::getenv("DONG_DEBUG_IMAGE_DRAW")) {
+        if (dv[0] && dv[0] != '0') {
+            std::fprintf(stderr,
+                         "[DrawImage] src='%s' sampling=%u fit=%u rect=(%.1f,%.1f,%.1f,%.1f)\n",
+                         cmd.image_src.c_str(),
+                         (unsigned)cmd.image_sampling,
+                         (unsigned)cmd.image_fit,
+                         cmd.rect.x, cmd.rect.y, cmd.rect.width, cmd.rect.height);
+            std::fflush(stderr);
+        }
+    }
+
     // Resolve texture source:
     // - "video://..." : external dynamic texture uploaded by View
     // - otherwise      : static image in atlas
@@ -1452,15 +1464,50 @@ void SDLGPUDriver::executeDrawImage(ExecuteContext& ctx, const GPUCommand& cmd) 
         // Fill: keep cmd.rect as-is.
     }
 
+    // Pixelated / crisp-edges should look stable: snap to device pixels when using nearest.
+    // This matches how browsers tend to rasterize image content on whole pixels, and avoids
+    // half-pixel placement causing visible shifts when scaling pixel art.
+    if (cmd.image_sampling == ImageSampling::Nearest) {
+        draw_x = std::round(draw_x);
+        draw_y = std::round(draw_y);
+    }
+
     u.rect[0] = draw_x;
     u.rect[1] = draw_y;
     u.rect[2] = draw_w;
     u.rect[3] = draw_h;
 
-    u.uv_rect[0] = entry.u0;
-    u.uv_rect[1] = entry.v0;
-    u.uv_rect[2] = entry.u1;
-    u.uv_rect[3] = entry.v1;
+    float u0 = entry.u0;
+    float v0 = entry.v0;
+    float u1 = entry.u1;
+    float v1 = entry.v1;
+
+    // For atlas textures, apply a half-texel inset so sampling happens at texel centers.
+    // - **Nearest**: improves pixel-art / integer scaling stability (avoids edge rounding sampling shifts)
+    // - **Linear** : also reduces bleeding from neighboring atlas entries
+    const bool is_atlas_image = (cmd.image_src.rfind("video://", 0) != 0);
+    if (is_atlas_image && image_atlas_) {
+        const float atlas_w = (float)image_atlas_->config.width;
+        const float atlas_h = (float)image_atlas_->config.height;
+        if (atlas_w > 0.0f && atlas_h > 0.0f) {
+            const float half_u = 0.5f / atlas_w;
+            const float half_v = 0.5f / atlas_h;
+            // Only inset if the region is large enough.
+            if (u1 - u0 > 2.0f * half_u) {
+                u0 += half_u;
+                u1 -= half_u;
+            }
+            if (v1 - v0 > 2.0f * half_v) {
+                v0 += half_v;
+                v1 -= half_v;
+            }
+        }
+    }
+
+    u.uv_rect[0] = u0;
+    u.uv_rect[1] = v0;
+    u.uv_rect[2] = u1;
+    u.uv_rect[3] = v1;
 
     ctx.writeViewport(u.viewport);
     writeTransform(u.transform, ctx.getCurrentTransform());

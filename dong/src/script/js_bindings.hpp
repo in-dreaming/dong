@@ -8,6 +8,7 @@
 #include "script_engine.hpp"
 #include "../dom/dom_manager.hpp"
 #include "../dom/event_system.hpp"
+#include "../dom/dom/dom_node.hpp"
 
 // Forward declarations
 namespace dong::dom {
@@ -126,6 +127,11 @@ public:
 
     // DOM lifecycle
     void resetForNewDOM();
+
+    // Document.write support: current executing <script>
+    void setCurrentExecutingScript(const dom::DOMNodePtr& script_node) { current_executing_script_ = script_node; }
+    void clearCurrentExecutingScript() { current_executing_script_.reset(); }
+    dom::DOMNodePtr getCurrentExecutingScript() const { return current_executing_script_.lock(); }
     
 private:
     void dispatchEventToChain(const dom::DOMNodePtr& target,
@@ -139,6 +145,8 @@ private:
     // Track C++ bridge listener IDs to avoid duplicate registration
     std::unordered_map<void*, std::unordered_map<std::string, uint64_t>> event_bridge_ids_;
 
+    // Current executing script element for document.write insertion point
+    dom::DOMNodeWeakPtr current_executing_script_;
 
     // For MouseEvent.movementX/Y
     bool has_last_mouse_pos_ = false;

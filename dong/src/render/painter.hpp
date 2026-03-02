@@ -51,8 +51,8 @@ private:
     void pushCounterScope(const dom::ComputedStyle& style);
     void popCounterScope();
     std::string evaluateContentText(const dom::ComputedStyle& style, const dom::DOMNodePtr& node = nullptr);
-    std::string evaluateCounterText(const std::string& name);
-    std::string evaluateCountersText(const std::string& name, const std::string& sep);
+    std::string evaluateCounterText(const std::string& name, const std::string& style = "decimal");
+    std::string evaluateCountersText(const std::string& name, const std::string& sep, const std::string& style = "decimal");
     std::string evaluateQuoteToken(const dom::ComputedStyle& style,
                                   const dom::ComputedStyle::ContentToken& tok,
                                   const dom::DOMNodePtr& node);

@@ -223,28 +223,33 @@ void DOMNode::appendChild(DOMNodePtr child) {
 
 void DOMNode::insertBefore(DOMNodePtr newChild, DOMNodePtr refChild) {
     if (!newChild) return;
-    
+
     if (!refChild) {
         appendChild(newChild);
         return;
     }
-    
+
     // Remove from old parent
     if (auto old_parent = newChild->parent_.lock()) {
         old_parent->removeChild(newChild);
     }
-    
+
     auto it = std::find(children_.begin(), children_.end(), refChild);
-    if (it != children_.end()) {
-        children_.insert(it, newChild);
-        newChild->parent_ = std::static_pointer_cast<DOMNode>(shared_from_this());
-
-        if (newChild->type_ == NodeType::ELEMENT) {
-            markStyleDirty();
-        }
-
-        markLayoutDirty();
+    if (it == children_.end()) {
+        // Be robust: if the reference child isn't found, fall back to append.
+        // This prevents silent drops in APIs like insertAdjacentHTML/document.write.
+        appendChild(newChild);
+        return;
     }
+
+    children_.insert(it, newChild);
+    newChild->parent_ = std::static_pointer_cast<DOMNode>(shared_from_this());
+
+    if (newChild->type_ == NodeType::ELEMENT) {
+        markStyleDirty();
+    }
+
+    markLayoutDirty();
 }
 
 

@@ -89,6 +89,90 @@ static std::string resolvePath(const std::string& base, const std::string& relat
 }
 
 // =============================================================================
+// data: URL helpers (minimal; supports data:image/*;base64,...)
+// =============================================================================
+
+static int base64Value(unsigned char c) {
+    if (c >= 'A' && c <= 'Z') return static_cast<int>(c - 'A');
+    if (c >= 'a' && c <= 'z') return static_cast<int>(c - 'a') + 26;
+    if (c >= '0' && c <= '9') return static_cast<int>(c - '0') + 52;
+    if (c == '+') return 62;
+    if (c == '/') return 63;
+    return -1;
+}
+
+static bool decodeBase64ToBytes(const std::string& in, std::vector<uint8_t>& out) {
+    out.clear();
+    int vals[4] = {0, 0, 0, 0};
+    int val_count = 0;
+
+    for (unsigned char c : in) {
+        if (std::isspace(c)) continue;
+        if (c == '=') break;
+
+        int v = base64Value(c);
+        if (v < 0) {
+            return false;
+        }
+        vals[val_count++] = v;
+        if (val_count == 4) {
+            out.push_back(static_cast<uint8_t>((vals[0] << 2) | (vals[1] >> 4)));
+            out.push_back(static_cast<uint8_t>(((vals[1] & 0x0F) << 4) | (vals[2] >> 2)));
+            out.push_back(static_cast<uint8_t>(((vals[2] & 0x03) << 6) | vals[3]));
+            val_count = 0;
+        }
+    }
+
+    if (val_count == 2) {
+        out.push_back(static_cast<uint8_t>((vals[0] << 2) | (vals[1] >> 4)));
+    } else if (val_count == 3) {
+        out.push_back(static_cast<uint8_t>((vals[0] << 2) | (vals[1] >> 4)));
+        out.push_back(static_cast<uint8_t>(((vals[1] & 0x0F) << 4) | (vals[2] >> 2)));
+    }
+
+    return !out.empty();
+}
+
+static bool decodeDataImageBase64(const std::string& url,
+                                 std::string& out_mime,
+                                 std::vector<uint8_t>& out_bytes) {
+    out_mime.clear();
+    out_bytes.clear();
+
+    if (url.rfind("data:", 0) != 0) {
+        return false;
+    }
+
+    const size_t comma = url.find(',');
+    if (comma == std::string::npos || comma <= 5) {
+        return false;
+    }
+
+    std::string meta = url.substr(5, comma - 5);
+    std::string data = url.substr(comma + 1);
+
+    // Normalize meta to lowercase for scheme parsing
+    std::string meta_lower = meta;
+    std::transform(meta_lower.begin(), meta_lower.end(), meta_lower.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+
+    const size_t semi = meta_lower.find(';');
+    out_mime = (semi == std::string::npos) ? meta_lower : meta_lower.substr(0, semi);
+    if (out_mime.empty()) {
+        return false;
+    }
+    if (out_mime.rfind("image/", 0) != 0) {
+        return false;
+    }
+    if (meta_lower.find(";base64") == std::string::npos) {
+        return false;
+    }
+
+    return decodeBase64ToBytes(data, out_bytes);
+}
+
+// =============================================================================
 // Image Loading via Platform IImageDecoder
 // =============================================================================
 
@@ -106,9 +190,47 @@ bool ResourceManager::getImagePixelsRGBA(const std::string& file_path,
     }
 
     // Reject unsupported URL schemes
-    if (path.rfind("http://", 0) == 0 || path.rfind("https://", 0) == 0 || path.rfind("data:", 0) == 0) {
+    if (path.rfind("http://", 0) == 0 || path.rfind("https://", 0) == 0) {
         DONG_LOG_WARN("[ResourceManager] unsupported image URL: %s", path.c_str());
         return false;
+    }
+
+    // data: URLs (supported subset: data:image/*;base64,...)
+    if (path.rfind("data:", 0) == 0) {
+        DongPlatform* platform = dong_platform_get();
+        DongImageDecoder* decoder = dong_platform_get_image_decoder(platform);
+        if (!decoder) {
+            DONG_LOG_WARN("[ResourceManager] no image decoder registered");
+            return false;
+        }
+
+        std::string mime;
+        std::vector<uint8_t> bytes;
+        if (!decodeDataImageBase64(path, mime, bytes)) {
+            DONG_LOG_WARN("[ResourceManager] unsupported image URL: %s", path.c_str());
+            return false;
+        }
+
+        DongDecodedImage image = {};
+        DongImageDecoderResult decode_result = dong_image_decode(decoder, bytes.data(), bytes.size(), &image);
+        if (decode_result != DONG_IMAGE_OK) {
+            DONG_LOG_ERROR("[ResourceManager] failed to decode data URL image (error=%d)", (int)decode_result);
+            return false;
+        }
+
+        if (image.format != DONG_IMAGE_FORMAT_RGBA8) {
+            DONG_LOG_WARN("[ResourceManager] unexpected image format %s, expected RGBA8 (data URL)",
+                          dong_image_format_name(image.format));
+            dong_image_free(decoder, &image);
+            return false;
+        }
+
+        out_width = image.width;
+        out_height = image.height;
+        out_pixels.resize(image.data_size);
+        std::memcpy(out_pixels.data(), image.data, image.data_size);
+        dong_image_free(decoder, &image);
+        return true;
     }
 
     // Normalize file:// URLs

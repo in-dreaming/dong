@@ -215,10 +215,17 @@ static DongAtlasResult sdl_atlas_alloc(DongImageAtlas* base_atlas,
     out_entry->y = y;
     out_entry->width = width;   // Original requested size
     out_entry->height = height;
-    out_entry->u0 = (float)x / (float)page->width;
-    out_entry->v0 = (float)y / (float)page->height;
-    out_entry->u1 = (float)(x + width) / (float)page->width;
-    out_entry->v1 = (float)(y + height) / (float)page->height;
+
+    // Return raw UVs that cover the full allocated sub-rect.
+    // NOTE: Half-texel insets (to avoid linear-filter bleeding) must be applied at draw time,
+    // based on the sampling mode, otherwise `Nearest` sampling will shift pixel alignment.
+    const float tex_w = (float)page->width;
+    const float tex_h = (float)page->height;
+
+    out_entry->u0 = (float)x / tex_w;
+    out_entry->v0 = (float)y / tex_h;
+    out_entry->u1 = (float)(x + width) / tex_w;
+    out_entry->v1 = (float)(y + height) / tex_h;
 
     return DONG_ATLAS_OK;
 }

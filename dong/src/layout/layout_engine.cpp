@@ -770,7 +770,7 @@ static bool computeInlineMetricsForNode(const dom::DOMNodePtr& node,
     const bool tag_prefers_text =
         tag == "h1" || tag == "h2" || tag == "h3" || tag == "h4" ||
         tag == "h5" || tag == "h6" || tag == "p" || tag == "span" ||
-        tag == "button" || tag == "code" || tag == "div" || tag == "footer";
+        tag == "a" || tag == "button" || tag == "code" || tag == "div" || tag == "footer";
 
     // Special handling for input elements: use placeholder or value attribute for text metrics
     if (tag == "input") {
@@ -909,6 +909,56 @@ static bool computeInlineMetricsForNode(const dom::DOMNodePtr& node,
     out_metrics.line_height_px = line_height_units * scale;
     out_metrics.baseline_from_content_top_px = (top_leading_units + ascent_units) * scale;
     return true;
+}
+
+static float estimateShrinkToFitWidthFromText(const dom::DOMNodePtr& node) {
+    if (!node) {
+        return 0.0f;
+    }
+
+    const auto& style = node->getComputedStyle();
+    const float pad_l = style.padding_left.isPixel() ? style.padding_left.value : 0.0f;
+    const float pad_r = style.padding_right.isPixel() ? style.padding_right.value : 0.0f;
+    float border_w = style.border_width;
+    if (border_w < 0.0f) {
+        border_w = 0.0f;
+    }
+
+    struct StackItem {
+        dom::DOMNodePtr n;
+        int depth;
+    };
+
+    std::vector<StackItem> stack;
+    stack.reserve(32);
+    for (const auto& ch : node->getChildren()) {
+        if (ch && ch->getType() == dom::DOMNode::NodeType::ELEMENT) {
+            stack.push_back({ch, 3});
+        }
+    }
+
+    float max_child_total = 0.0f;
+    while (!stack.empty()) {
+        StackItem it = stack.back();
+        stack.pop_back();
+        if (!it.n) continue;
+
+        const float child_w = computeIntrinsicTextWidth(it.n);
+        if (child_w > 0.0f && std::isfinite(child_w)) {
+            max_child_total = std::max(max_child_total, child_w);
+            continue;
+        }
+
+        if (it.depth <= 0) continue;
+        for (const auto& g : it.n->getChildren()) {
+            if (g && g->getType() == dom::DOMNode::NodeType::ELEMENT) {
+                stack.push_back({g, it.depth - 1});
+            }
+        }
+    }
+
+    const float w = max_child_total + pad_l + pad_r + border_w * 2.0f;
+    return (w > 0.0f && std::isfinite(w)) ? w : 0.0f;
 }
 
 static bool computeInlineMetricsForTextNode(const dom::DOMNodePtr& node,
@@ -2087,6 +2137,19 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
         }
     }
 
+    // Best-effort shrink-to-fit for positioned boxes (absolute/fixed) with width:auto.
+    // This helps patterns like `position: fixed; top:20px; right:20px;` to size to content.
+    if ((style.position == "absolute" || style.position == "fixed") && style.width.isAuto()) {
+        const bool has_left = style.left.isPixel() || style.left.isPercent();
+        const bool has_right = style.right.isPixel() || style.right.isPercent();
+        if (!(has_left && has_right)) {
+            const float w = estimateShrinkToFitWidthFromText(dom_node);
+            if (w > 0.0f) {
+                YGNodeStyleSetWidth(yoga_node, w);
+            }
+        }
+    }
+
     mapComputedStylesToYoga(style, yoga_node, parent_content_w, parent_content_h);
 
     // Block-flow inside overflow containers should be allowed to exceed the scrollport.
@@ -2795,12 +2858,12 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
         YGNodeStyleSetOverflow(yoga_node, YGOverflowVisible);
     }
 
-    // Set position type and offsets (relative/absolute)
-    if (style.position == "absolute") {
+    // Set position type and offsets (relative/absolute/fixed)
+    // - absolute/fixed: out of normal flow => Yoga absolute
+    // - static/relative: in flow => Yoga relative (offsets handled via top/right/bottom/left)
+    if (style.position == "absolute" || style.position == "fixed") {
         YGNodeStyleSetPositionType(yoga_node, YGPositionTypeAbsolute);
     } else {
-        // static/relative/fixed 鐩墠缁熶竴鏄犲皠涓?Yoga 鐨?relative锛?
-        // 浣嗛€氳繃浣嶇疆灞炴€э紙top/right/bottom/left锛夊疄鐜?relative 鍋忕Щ銆?
         YGNodeStyleSetPositionType(yoga_node, YGPositionTypeRelative);
     }
 
@@ -2817,6 +2880,7 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
     setPositionIfNeeded(YGEdgeRight, style.right);
     setPositionIfNeeded(YGEdgeBottom, style.bottom);
     setPositionIfNeeded(YGEdgeLeft, style.left);
+
 
     // Set dimensions
     // Note: Yoga uses border-box model internally. When CSS box-sizing is content-box,
@@ -2952,7 +3016,7 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
     // when we don't have intrinsic content measurement.
     //
     // IMPORTANT: Do not apply this fallback to:
-    // - position:absolute elements (should use intrinsic/shrink-to-fit sizing)
+    // - position:absolute / position:fixed elements (should use intrinsic/shrink-to-fit sizing)
     // - inline-block elements (should size to content, not stretch to 100%)
     // Otherwise Yoga will give them a 100% width box, which breaks the
     // expected CSS semantics.
@@ -2960,6 +3024,7 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
     if (!has_explicit_width &&
         style.layout_mode == dom::LayoutMode::Block &&
         style.position != "absolute" &&
+        style.position != "fixed" &&
         !is_inline_block) {
         YGNodeStyleSetWidthPercent(yoga_node, 100.0f);
     }
@@ -3381,6 +3446,9 @@ void Engine::collectInlineItems(const dom::DOMNodePtr& container,
         item.node = child;
         item.margin_left = parsePixelValue(child_style.margin_left, ctx.content_w);
         item.margin_right = parsePixelValue(child_style.margin_right, ctx.content_w);
+        // Per CSS2.1, percentage margins (including vertical margins) resolve against the containing block width.
+        item.margin_top = parsePixelValue(child_style.margin_top, ctx.content_w);
+        item.margin_bottom = parsePixelValue(child_style.margin_bottom, ctx.content_w);
 
         float pad_l = child_style.padding_left.isPixel() ? child_style.padding_left.value : 0.0f;
         float pad_r = child_style.padding_right.isPixel() ? child_style.padding_right.value : 0.0f;
@@ -3486,8 +3554,9 @@ void Engine::breakIntoLines(std::vector<InlineItem>& items,
         current_line.item_indices.push_back(i);
         current_line_used_w += total_w;
 
-        if (item.baseline_from_border_top > current_line.max_baseline_from_border_top) {
-            current_line.max_baseline_from_border_top = item.baseline_from_border_top;
+        const float baseline_contrib = item.margin_top + item.baseline_from_border_top;
+        if (baseline_contrib > current_line.max_baseline_from_border_top) {
+            current_line.max_baseline_from_border_top = baseline_contrib;
         }
         if (item.line_height_px > current_line.max_line_height_px) {
             current_line.max_line_height_px = item.line_height_px;
@@ -3533,14 +3602,18 @@ void Engine::layoutLineItems(std::vector<InlineItem>& items,
             // Calculate Y based on vertical-align
             const std::string& va = item.vertical_align;
             if (va == "top") {
-                new_y = current_line_top;
+                // Align margin-box top to line top.
+                new_y = current_line_top + item.margin_top;
             } else if (va == "bottom") {
-                new_y = current_line_top + line.max_line_height_px - item.preferred_height;
+                // Align margin-box bottom to line bottom.
+                new_y = current_line_top + line.max_line_height_px - item.margin_bottom - item.preferred_height;
             } else if (va == "middle") {
-                float line_center = current_line_top + line.max_line_height_px * 0.5f;
-                new_y = line_center - item.preferred_height * 0.5f;
+                // Center the margin-box within the line box.
+                const float margin_box_h = item.line_height_px;
+                const float margin_box_top = current_line_top + (line.max_line_height_px - margin_box_h) * 0.5f;
+                new_y = margin_box_top + item.margin_top;
             } else {
-                // baseline (default)
+                // baseline (default): baseline_y is computed in the line box coordinate system.
                 new_y = baseline_y - item.baseline_from_border_top;
             }
 
@@ -3548,6 +3621,8 @@ void Engine::layoutLineItems(std::vector<InlineItem>& items,
                                   (child_layout->width != item.preferred_width) ||
                                   (child_layout->height != item.preferred_height);
 
+            // Track the Y delta before updating so we can shift the subtree.
+            const float old_y = child_layout->y;
             child_layout->x = new_x;
             child_layout->y = new_y;
             child_layout->width = item.preferred_width;
@@ -3560,6 +3635,16 @@ void Engine::layoutLineItems(std::vector<InlineItem>& items,
             if (layout_changed) {
                 dirty_rect_.expand(child_layout->x, child_layout->y,
                                    child_layout->width, child_layout->height);
+                // Shift the inline-block item's subtree by the Y delta so
+                // children keep their position relative to the item.
+                const float dy = new_y - old_y;
+                if (dy != 0.0f && item.node) {
+                    for (const auto& child_node : item.node->getChildren()) {
+                        if (child_node) {
+                            shiftSubtreeY(child_node, dy);
+                        }
+                    }
+                }
             }
         }
         current_line_top += line.max_line_height_px;
@@ -3760,12 +3845,23 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
 
                 struct InlineItem {
                     dom::DOMNodePtr node;
+
+                    // Margins: horizontal affects line breaking; vertical affects line height/placement.
                     float margin_left = 0.0f;
                     float margin_right = 0.0f;
+                    float margin_top = 0.0f;
+                    float margin_bottom = 0.0f;
+
+                    // Preferred border-box size.
                     float preferred_width = 0.0f;
                     float preferred_height = 0.0f;
+
+                    // Baseline measured from border-box top.
                     float baseline_from_border_top = 0.0f;
+
+                    // Contribution to line box height (margin-box height).
                     float line_height_px = 0.0f;
+
                     float offset_x_in_content = 0.0f;
                     std::string vertical_align = "baseline"; // baseline, top, middle, bottom
                     bool is_line_break = false; // true for <br> elements
@@ -3843,6 +3939,8 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
 
                     item.margin_left = parsePixelValue(child_style.margin_left, content_w);
                     item.margin_right = parsePixelValue(child_style.margin_right, content_w);
+                    item.margin_top = parsePixelValue(child_style.margin_top, content_w);
+                    item.margin_bottom = parsePixelValue(child_style.margin_bottom, content_w);
 
                     float pad_l = child_style.padding_left.isPixel() ? child_style.padding_left.value : 0.0f;
                     float pad_r = child_style.padding_right.isPixel() ? child_style.padding_right.value : 0.0f;
@@ -3906,7 +4004,8 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
 
                     item.preferred_width = width_px;
                     item.preferred_height = height_px;
-                    item.line_height_px = height_px;  // 浣跨敤鍏冪礌楂樺害浣滀负琛岄珮璐＄尞
+                    // Inline-block contributes its margin-box height to the line box height.
+                    item.line_height_px = height_px + item.margin_top + item.margin_bottom;
                     
                     // baseline 璁＄畻锛氭湁鏂囨湰鏃朵娇鐢ㄦ枃鏈?baseline锛屽惁鍒欎娇鐢ㄥ簳閮ㄥ榻愯繎浼?
                     if (has_text_metrics) {
@@ -3969,8 +4068,11 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
                         current_line.item_indices.push_back(i);
                         current_line_used_w += total_w;
 
-                        if (item.baseline_from_border_top > current_line.max_baseline_from_border_top) {
-                            current_line.max_baseline_from_border_top = item.baseline_from_border_top;
+                        // Baseline offset is measured from line-top to baseline.
+                        // For inline/inline-block, margin-top contributes to this offset.
+                        const float baseline_contrib = item.margin_top + item.baseline_from_border_top;
+                        if (baseline_contrib > current_line.max_baseline_from_border_top) {
+                            current_line.max_baseline_from_border_top = baseline_contrib;
                         }
                         if (item.line_height_px > current_line.max_line_height_px) {
                             current_line.max_line_height_px = item.line_height_px;
@@ -4004,20 +4106,21 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
                             float new_x = content_x + item.offset_x_in_content;
                             float new_y = 0.0f;
 
-                            // 鏍规嵁 vertical-align 璁＄畻 Y 鍧愭爣
+                            // Calculate Y based on vertical-align.
                             const std::string& va = item.vertical_align;
                             if (va == "top") {
-                                // 椤堕儴瀵归綈锛氬厓绱犻《閮ㄤ笌琛岄《閮ㄥ榻?
-                                new_y = current_line_top;
+                                // Align margin-box top to line top.
+                                new_y = current_line_top + item.margin_top;
                             } else if (va == "bottom") {
-                                // 搴曢儴瀵归綈锛氬厓绱犲簳閮ㄤ笌琛屽簳閮ㄥ榻?
-                                new_y = current_line_top + line.max_line_height_px - item.preferred_height;
+                                // Align margin-box bottom to line bottom.
+                                new_y = current_line_top + line.max_line_height_px - item.margin_bottom - item.preferred_height;
                             } else if (va == "middle") {
-                                // 涓棿瀵归綈锛氬厓绱犱腑蹇冧笌琛屼腑蹇冨榻?
-                                float line_center = current_line_top + line.max_line_height_px * 0.5f;
-                                new_y = line_center - item.preferred_height * 0.5f;
+                                // Center the margin-box within the line box.
+                                const float margin_box_h = item.line_height_px;
+                                const float margin_box_top = current_line_top + (line.max_line_height_px - margin_box_h) * 0.5f;
+                                new_y = margin_box_top + item.margin_top;
                             } else {
-                                // baseline锛堥粯璁わ級锛氬厓绱?baseline 涓庤 baseline 瀵归綈
+                                // baseline (default): line.max_baseline_from_border_top already includes margin-top.
                                 new_y = baseline_y - item.baseline_from_border_top;
                             }
 
@@ -4025,6 +4128,8 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
                                                   (child_layout->width != item.preferred_width) ||
                                                   (child_layout->height != item.preferred_height);
 
+                            // Track the Y delta before updating so we can shift the subtree.
+                            const float old_y = child_layout->y;
                             child_layout->x = new_x;
                             child_layout->y = new_y;
                             child_layout->width = item.preferred_width;
@@ -4041,6 +4146,17 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
                                                    child_layout->y,
                                                    child_layout->width,
                                                    child_layout->height);
+                                // Shift the inline-block item's subtree by the Y delta so
+                                // children (e.g. a block child inside an inline-block) keep
+                                // their position relative to the item after IFC repositioning.
+                                const float dy = new_y - old_y;
+                                if (dy != 0.0f && item.node) {
+                                    for (const auto& child_node : item.node->getChildren()) {
+                                        if (child_node) {
+                                            shiftSubtreeY(child_node, dy);
+                                        }
+                                    }
+                                }
                             }
                         }
 
@@ -4263,6 +4379,57 @@ void Engine::shiftSubtreeY(const dom::DOMNodePtr& n, float dy) {
     }
 }
 
+void Engine::shiftSubtreeXY(const dom::DOMNodePtr& n, float dx, float dy, bool skip_fixed_descendants) {
+    if (!n) return;
+    if (dx == 0.0f && dy == 0.0f) return;
+
+    auto apply_shift = [&](const dom::DOMNodePtr& node) {
+        auto it = layout_cache.find(node.get());
+        if (it != layout_cache.end() && it->second) {
+            LayoutNode* ln = it->second.get();
+            ln->x += dx;
+            ln->y += dy;
+            ln->layout.position[0] = ln->x;
+            ln->layout.position[1] = ln->y;
+            dirty_rect_.expand(ln->x, ln->y, ln->width, ln->height);
+        }
+    };
+
+    std::vector<dom::DOMNodePtr> stack;
+    stack.reserve(32);
+    stack.push_back(n);
+
+    while (!stack.empty()) {
+        dom::DOMNodePtr cur = stack.back();
+        stack.pop_back();
+        if (!cur) continue;
+
+        if (cur->getType() == dom::DOMNode::NodeType::TEXT) {
+            apply_shift(cur);
+            continue;
+        }
+        if (cur->getType() != dom::DOMNode::NodeType::ELEMENT) {
+            continue;
+        }
+
+        const auto& cs = cur->getComputedStyle();
+        if (cs.display == "none") {
+            continue;
+        }
+        if (skip_fixed_descendants && cur.get() != n.get() && cs.position == "fixed") {
+            continue;
+        }
+
+        apply_shift(cur);
+
+        for (const auto& ch : cur->getChildren()) {
+            if (ch) {
+                stack.push_back(ch);
+            }
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // shiftAnonWrapperY: Shift an anonymous wrapper and all its children by dy.
 // ---------------------------------------------------------------------------
@@ -4475,6 +4642,10 @@ void Engine::layoutPositionedElements(dom::DOMNodePtr root) {
     if (!root) {
         return;
     }
+    if (std::getenv("DONG_DEBUG_FIXED")) {
+        std::fprintf(stderr, "[FixedDebug] layoutPositionedElements called\n");
+        std::fflush(stderr);
+    }
 
     std::function<void(const dom::DOMNodePtr&)> walk;
     walk = [this, root, &walk](const dom::DOMNodePtr& node) {
@@ -4556,18 +4727,26 @@ void Engine::layoutPositionedElements(dom::DOMNodePtr root) {
             }
         }
 
-        // Handle position: absolute
-        if (style.position == "absolute") {
-            // Find containing block: nearest ancestor with position != static.
+        // Handle position: absolute / fixed
+        // - absolute: containing block is nearest ancestor with position != static
+        // - fixed: containing block is the viewport (layout root)
+        if (style.position == "absolute" || style.position == "fixed") {
             dom::DOMNodePtr containing_block = nullptr;
-            dom::DOMNodePtr current = node->getParent();
-            while (current) {
-                const auto& cs = current->getComputedStyle();
-                if (cs.position != "static") {
-                    containing_block = current;
-                    break;
+
+            if (style.position == "absolute") {
+                // Find containing block: nearest ancestor with position != static.
+                dom::DOMNodePtr current = node->getParent();
+                while (current) {
+                    const auto& cs = current->getComputedStyle();
+                    if (cs.position != "static") {
+                        containing_block = current;
+                        break;
+                    }
+                    current = current->getParent();
                 }
-                current = current->getParent();
+            } else {
+                // fixed: viewport
+                containing_block = root;
             }
 
             if (!containing_block) {
@@ -4582,11 +4761,59 @@ void Engine::layoutPositionedElements(dom::DOMNodePtr root) {
                 LayoutNode* layout = it_layout->second.get();
                 LayoutNode* cb_layout = it_cb_layout->second.get();
 
-                const auto& cb_style = containing_block->getComputedStyle();
                 const auto& abs_style = node->getComputedStyle();
 
-                std::string debug_class = node->getAttribute("class");
-                bool debug_is_abs_badge = debug_class.find("abs-badge") != std::string::npos;
+                if (std::getenv("DONG_DEBUG_FIXED")) {
+                    const std::string cls = node->getAttribute("class");
+                    const std::string id = node->getAttribute("id");
+                    if (abs_style.position == "fixed") {
+                        std::fprintf(stderr,
+                                     "[FixedDebug] tag=%s id=%s class=%s top=(%d,%.1f) right=(%d,%.1f) bottom=(%d,%.1f) left=(%d,%.1f) cb=(%.1f,%.1f,%.1f,%.1f) layout=(%.1f,%.1f,%.1f,%.1f)\n",
+                                     node->getTagName().c_str(), id.c_str(), cls.c_str(),
+                                     (int)abs_style.top.unit, abs_style.top.value,
+                                     (int)abs_style.right.unit, abs_style.right.value,
+                                     (int)abs_style.bottom.unit, abs_style.bottom.value,
+                                     (int)abs_style.left.unit, abs_style.left.value,
+                                     cb_layout->x, cb_layout->y, cb_layout->width, cb_layout->height,
+                                     layout->x, layout->y, layout->width, layout->height);
+
+                        if (cls.find("nav-links") != std::string::npos) {
+                            int shown = 0;
+                            for (const auto& ch : node->getChildren()) {
+                                if (!ch) continue;
+                                if (++shown > 8) break;
+                                const int ty = (int)ch->getType();
+                                if (ch->getType() == dom::DOMNode::NodeType::ELEMENT) {
+                                    std::fprintf(stderr, "  child[%d] ELEMENT tag=%s class=%s\n",
+                                                 shown, ch->getTagName().c_str(), ch->getAttribute("class").c_str());
+
+                                    int sub_shown = 0;
+                                    for (const auto& sub : ch->getChildren()) {
+                                        if (!sub) continue;
+                                        if (++sub_shown > 4) break;
+                                        const int sub_ty = (int)sub->getType();
+                                        if (sub->getType() == dom::DOMNode::NodeType::TEXT) {
+                                            std::fprintf(stderr, "    -> sub[%d] TEXT raw=\"%s\"\n",
+                                                         sub_shown, sub->getRawTextContent().c_str());
+                                        } else if (sub->getType() == dom::DOMNode::NodeType::ELEMENT) {
+                                            std::fprintf(stderr, "    -> sub[%d] ELEMENT tag=%s\n",
+                                                         sub_shown, sub->getTagName().c_str());
+                                        } else {
+                                            std::fprintf(stderr, "    -> sub[%d] type=%d\n", sub_shown, sub_ty);
+                                        }
+                                    }
+                                } else if (ch->getType() == dom::DOMNode::NodeType::TEXT) {
+                                    std::fprintf(stderr, "  child[%d] TEXT raw=\"%s\"\n",
+                                                 shown, ch->getRawTextContent().c_str());
+                                } else {
+                                    std::fprintf(stderr, "  child[%d] type=%d\n", shown, ty);
+                                }
+                            }
+                        }
+
+                        std::fflush(stderr);
+                    }
+                }
 
                 float cb_x = cb_layout->x;
                 float cb_y = cb_layout->y;
@@ -4596,58 +4823,28 @@ void Engine::layoutPositionedElements(dom::DOMNodePtr root) {
                 if (cb_w <= 0.0f || cb_h <= 0.0f) {
                     // Degenerate containing block, keep existing layout.
                 } else {
-                    // 鑻?absolute 鐩掑瓙鐨?CSS width/height 涓?auto锛堟湭鏄惧紡鎸囧畾锛夛紝
-                    // 鍒欐棤璁?Yoga 缁欏嚭鐨勫昂瀵镐负浣曪紝閮藉熀浜庢枃鏈唴瀹瑰仛涓€娆?intrinsic sizing锛?
-                    // 瀹藉害 = 鏂囨湰鍐呭瀹?+ 姘村钩 padding + border锛?
-                    // 楂樺害 = 涓€琛屾枃鏈楂?+ 鍨傜洿 padding + border銆?
                     const bool abs_width_auto = abs_style.width.isAuto();
                     const bool abs_height_auto = abs_style.height.isAuto();
-                    if (abs_width_auto || abs_height_auto ||
-                        layout->width <= 0.0f || layout->height <= 0.0f) {
-                        InlineMetrics metrics{};
-                        if (computeInlineMetricsForNode(node, metrics, abs_style.font_size)) {
-                            float pad_t = abs_style.padding_top.isPixel() ? abs_style.padding_top.value : 0.0f;
-                            float pad_b = abs_style.padding_bottom.isPixel() ? abs_style.padding_bottom.value : 0.0f;
-                            float border_w = abs_style.border_width;
-                            if (border_w < 0.0f) {
-                                border_w = 0.0f;
-                            }
-                            // 绗﹀悎 CSS 鏍囧噯锛氫娇鐢ㄥ寘鍚?padding 鐨勫畬鏁村搴?
-                            float box_w_intrinsic = metrics.total_width_px + border_w * 2.0f;
-                            float box_h_intrinsic = metrics.line_height_px + pad_t + pad_b + border_w * 2.0f;
 
-                            if (debug_is_abs_badge) {
-                                DONG_LOG_DEBUG("[LayoutEngine] ABS badge intrinsic: content_w=%.2f total_w=%.2f line_h=%.2f pad_l=%.1f pad_r=%.1f pad_t=%.1f pad_b=%.1f border=%.1f -> box_w=%.2f box_h=%.2f (width_auto=%d height_auto=%d before: w=%.2f h=%.2f)",
-                                        metrics.content_width_px, metrics.total_width_px, metrics.line_height_px,
-                                        metrics.padding_left_px, metrics.padding_right_px, pad_t, pad_b, border_w,
-                                        box_w_intrinsic, box_h_intrinsic,
-                                        abs_width_auto ? 1 : 0, abs_height_auto ? 1 : 0,
-                                        layout->width, layout->height);
-                            }
-
-                            if (box_w_intrinsic > 0.0f && box_h_intrinsic > 0.0f) {
-                                if (abs_width_auto || layout->width <= 0.0f) {
-                                    layout->width = box_w_intrinsic;
-                                }
-                                if (abs_height_auto || layout->height <= 0.0f) {
-                                    layout->height = box_h_intrinsic;
-                                }
-                                layout->layout.dimensions[0] = layout->width;
-                                layout->layout.dimensions[1] = layout->height;
-
-                                if (debug_is_abs_badge) {
-                                    DONG_LOG_DEBUG("[LayoutEngine] ABS badge final size: w=%.2f h=%.2f",
-                                            layout->width, layout->height);
-                                }
-                            }
-                        } else if (debug_is_abs_badge) {
-                            DONG_LOG_DEBUG("[LayoutEngine] ABS badge intrinsic metrics FAILED (font_size=%.1f)",
-                                    abs_style.font_size);
+                    // Shrink-to-fit width for positioned boxes when width is auto and not stretched by left+right.
+                    // Avoid using children layout extents here: it is circular (depends on chosen width) and can
+                    // incorrectly expand to the full containing-block width for block children.
+                    const bool has_left_spec = style.left.isPixel() || style.left.isPercent();
+                    const bool has_right_spec = style.right.isPixel() || style.right.isPercent();
+                    if (abs_width_auto && !(has_left_spec && has_right_spec)) {
+                        const float w = estimateShrinkToFitWidthFromText(node);
+                        if (w > 0.0f) {
+                            layout->width = w;
+                            layout->layout.dimensions[0] = layout->width;
                         }
-                    } else if (debug_is_abs_badge) {
-                        DONG_LOG_DEBUG("[LayoutEngine] ABS badge intrinsic sizing skipped (width_auto=%d height_auto=%d layout_w=%.2f layout_h=%.2f)",
-                                abs_width_auto ? 1 : 0, abs_height_auto ? 1 : 0,
-                                layout->width, layout->height);
+                    }
+
+                    // If Yoga produced a degenerate size, apply a minimal fallback.
+                    if ((layout->width <= 0.0f || layout->height <= 0.0f) && (abs_width_auto || abs_height_auto)) {
+                        if (layout->width <= 0.0f) layout->width = 1.0f;
+                        if (layout->height <= 0.0f) layout->height = 1.0f;
+                        layout->layout.dimensions[0] = layout->width;
+                        layout->layout.dimensions[1] = layout->height;
                     }
 
                     // In CSS锛屽寘鍚潡閫氬父鏄?padding box銆傝繖閲屽厛鍩轰簬 border box锛屽悗缁彲瑙嗛渶瑕佸姞涓?padding銆?
@@ -4671,14 +4868,6 @@ void Engine::layoutPositionedElements(dom::DOMNodePtr root) {
                     float top_px = has_top ? computeOffsetPx(style.top, cb_h) : 0.0f;
                     float bottom_px = has_bottom ? computeOffsetPx(style.bottom, cb_h) : 0.0f;
 
-                    if (debug_is_abs_badge) {
-                        DONG_LOG_DEBUG("[LayoutEngine] ABS badge offsets: has_left=%d has_right=%d has_top=%d has_bottom=%d left_px=%.1f right_px=%.1f top_px=%.1f bottom_px=%.1f cb=(%.1f,%.1f,%.1f,%.1f) box=(%.1f,%.1f)",
-                                has_left ? 1 : 0, has_right ? 1 : 0,
-                                has_top ? 1 : 0, has_bottom ? 1 : 0,
-                                left_px, right_px, top_px, bottom_px,
-                                cb_x, cb_y, cb_w, cb_h,
-                                layout->width, layout->height);
-                    }
 
                     float box_w = layout->width;
                     float box_h = layout->height;
@@ -4708,15 +4897,10 @@ void Engine::layoutPositionedElements(dom::DOMNodePtr root) {
                     float new_x = cb_x + offset_x_local;
                     float new_y = cb_y + offset_y_local;
 
-                    bool layout_changed = (layout->x != new_x) || (layout->y != new_y);
-
-                    layout->x = new_x;
-                    layout->y = new_y;
-                    layout->layout.position[0] = new_x;
-                    layout->layout.position[1] = new_y;
-
-                    if (layout_changed) {
-                        dirty_rect_.expand(new_x, new_y, layout->width, layout->height);
+                    const float dx = new_x - layout->x;
+                    const float dy = new_y - layout->y;
+                    if (dx != 0.0f || dy != 0.0f) {
+                        shiftSubtreeXY(node, dx, dy, /*skip_fixed_descendants*/ true);
                     }
                 }
             }

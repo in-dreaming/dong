@@ -53,9 +53,12 @@ float4 main(PSInput input) : SV_Target0 {
         discard;
     }
     float4 tex = imageTexture.Sample(imageSampler, input.uv);
+
     // Use uniform tint instead of interpolated varying to avoid backend linkage issues.
-    // 直接在 sRGB 空间做 tint 乘法（简化处理）
-    float3 tinted = tex.rgb * uTint.rgb;
-    float alpha = tex.a * uTint.a;
-    return float4(tinted, alpha);
+    // IMPORTANT: Our decoded images are stored as premultiplied alpha.
+    // Keep output premultiplied, and apply tint in premult space.
+    float4 tint;
+    tint.rgb = uTint.rgb * uTint.a;
+    tint.a = uTint.a;
+    return float4(tex.rgb * tint.rgb, tex.a * tint.a);
 }

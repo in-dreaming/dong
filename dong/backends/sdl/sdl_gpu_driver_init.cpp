@@ -299,8 +299,10 @@ bool SDLGPUDriver::initialize() {
     SDL_GPUColorTargetDescription color_desc2{};
     color_desc2.format = render_target_format_;
     // 启用 alpha 混合，支持半透明图片
+    // NOTE: The image fragment shader outputs premultiplied alpha.
+    // Use premultiplied-alpha blending to match browser behavior and avoid linear-filter halos.
     color_desc2.blend_state.enable_blend = true;
-    color_desc2.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+    color_desc2.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
     color_desc2.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
     color_desc2.blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
     color_desc2.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;

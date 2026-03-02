@@ -22,6 +22,7 @@
 #include <vector>
 #include <algorithm>
 #include <cstring>
+#include <cstdio>
 #include <utility>
 #include <unordered_map>
 #include <unordered_set>
@@ -139,6 +140,16 @@ bool SDLGPUDriver::ensureImageInAtlas(const std::string& src, ImageAtlasEntry& o
     auto it = image_atlas_entries_.find(src);
     if (it != image_atlas_entries_.end()) {
         out_entry = it->second;
+
+        if (const char* dv = std::getenv("DONG_DEBUG_ATLAS_ENTRY")) {
+            if (dv[0] && dv[0] != '0') {
+                DONG_LOG_INFO("[AtlasEntry][HIT] src='%s' size=%ux%u uv=(%.6f,%.6f)-(%.6f,%.6f)",
+                              src.c_str(),
+                              out_entry.width, out_entry.height,
+                              out_entry.u0, out_entry.v0, out_entry.u1, out_entry.v1);
+            }
+        }
+
         return true;
     }
 
@@ -340,6 +351,23 @@ bool SDLGPUDriver::ensureImageInAtlas(const std::string& src, ImageAtlasEntry& o
     entry.v0 = atlas_entry.v0;
     entry.u1 = atlas_entry.u1;
     entry.v1 = atlas_entry.v1;
+
+    if (const char* dv = std::getenv("DONG_DEBUG_ATLAS_ENTRY")) {
+        if (dv[0] && dv[0] != '0') {
+            const float atlas_w_f = image_atlas_ ? (float)image_atlas_->config.width : 0.0f;
+            const float atlas_h_f = image_atlas_ ? (float)image_atlas_->config.height : 0.0f;
+            const float exp_u0 = (atlas_w_f > 0.0f) ? ((float)atlas_entry.x / atlas_w_f) : 0.0f;
+            const float exp_v0 = (atlas_h_f > 0.0f) ? ((float)atlas_entry.y / atlas_h_f) : 0.0f;
+            std::fprintf(stderr,
+                         "[AtlasEntry][MISS] src='%s' size=%ux%u xy=(%u,%u) uv=(%.6f,%.6f)-(%.6f,%.6f) expected_uv0=(%.6f,%.6f)\n",
+                         src.c_str(),
+                         img_w, img_h,
+                         atlas_entry.x, atlas_entry.y,
+                         entry.u0, entry.v0, entry.u1, entry.v1,
+                         exp_u0, exp_v0);
+            std::fflush(stderr);
+        }
+    }
 
     image_atlas_entries_[src] = entry;
     out_entry = entry;

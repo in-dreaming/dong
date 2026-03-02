@@ -140,12 +140,23 @@ private:
     // IFC helper structures and functions (refactored from layoutInlineFormattingContexts)
     struct InlineItem {
         dom::DOMNodePtr node;
+
+        // Margins: horizontal affects line breaking; vertical affects line height/placement.
         float margin_left = 0.0f;
         float margin_right = 0.0f;
+        float margin_top = 0.0f;
+        float margin_bottom = 0.0f;
+
+        // Preferred border-box size.
         float preferred_width = 0.0f;
         float preferred_height = 0.0f;
+
+        // Baseline measured from border-box top.
         float baseline_from_border_top = 0.0f;
+
+        // Contribution to line box height (margin-box height).
         float line_height_px = 0.0f;
+
         float offset_x_in_content = 0.0f;
         std::string vertical_align = "baseline";
         bool is_line_break = false;
@@ -204,6 +215,7 @@ private:
 
     // Third-pass sibling Y adjustment helpers
     void shiftSubtreeY(const dom::DOMNodePtr& n, float dy);
+    void shiftSubtreeXY(const dom::DOMNodePtr& n, float dx, float dy, bool skip_fixed_descendants);
     void shiftAnonWrapperY(const AnonBlockInfo& ab, float dy);
     void adjustSiblingYPositions(const dom::DOMNodePtr& node,
                                  LayoutNode* layout,

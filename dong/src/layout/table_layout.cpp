@@ -349,6 +349,37 @@ void Engine::computeColumnWidths(
     float total_cell_w = 0.0f;
     for (size_t c = 0; c < num_cols; ++c) total_cell_w += col_widths[c];
 
+    // For table-layout: auto without an explicit width, the table should shrink-to-fit its
+    // content rather than expand to fill the parent. Only shrink (never grow) columns.
+    const bool has_explicit_width = !ts.width.isAuto() && !ts.width.isUnset();
+    if (!has_explicit_width) {
+        // Shrink columns only if content exceeds available space.
+        if (total_cell_w <= 0.0f || !std::isfinite(total_cell_w)) {
+            // No content measurement: use a minimal fallback width per column.
+            for (size_t c = 0; c < num_cols; ++c) {
+                if (col_widths[c] <= 0.0f) col_widths[c] = 30.0f;
+            }
+            return;
+        }
+
+        const float content_table_w = total_cell_w + total_spacing + bw * 2.0f + pt_l + pt_r;
+        if (content_table_w < table_width) {
+            // Shrink the table to fit its content.
+            table_ln->layout.dimensions[0] = content_table_w;
+            table_ln->width = content_table_w;
+        } else if (total_cell_w > avail - total_spacing && avail > total_spacing) {
+            // Content wider than available: shrink columns proportionally.
+            const float target = avail - total_spacing;
+            const float scale = target / total_cell_w;
+            for (size_t c = 0; c < num_cols; ++c) {
+                col_widths[c] = std::max(0.0f, col_widths[c] * scale);
+            }
+        }
+        // Otherwise col_widths already hold preferred widths — use them as-is.
+        return;
+    }
+
+    // Explicit width: distribute columns to fill the specified table width.
     const float target = avail - total_spacing;
     if (target <= 0.0f || !std::isfinite(target)) {
         return;

@@ -137,6 +137,11 @@ private:
     // Inherit properties from parent
     void inheritFromParent(DOMNodePtr node);
 
+    // Incremental style computation helper.
+    // If an ancestor style was recomputed, descendants must also be recomputed because
+    // selector matching and inheritance may change (e.g. body[data-x] .child).
+    void computeStylesIncrementalImpl(DOMNodePtr node, bool ancestor_dirty);
+
     // Process CSS global keywords (inherit, initial, unset)
     void processGlobalKeywords(DOMNodePtr node, DOMNodePtr parent);
 
@@ -164,6 +169,7 @@ private:
     };
 
     LayerContext layer_context_;
+    int anon_layer_counter_ = 0; // Counter for generating unique anonymous layer names
 
     // Layer cascade methods
     void processLayerRules(const std::vector<LayerRule>& layer_rules);

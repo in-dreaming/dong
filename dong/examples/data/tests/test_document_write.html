@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>document.write</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 20px; background: #ffffff; }
+
+    .case {
+      position: relative;
+      width: 320px;
+      height: 90px;
+      border: 2px solid #000000;
+      margin: 0 0 16px 0;
+      background: #f0f0f0;
+    }
+
+    .marker {
+      position: absolute;
+      left: 10px;
+      top: 10px;
+      width: 24px;
+      height: 24px;
+      background: #000000;
+    }
+
+    .marker.b { top: 50px; }
+
+    #result {
+      width: 24px;
+      height: 24px;
+      border: 2px solid #000000;
+      background: #ff0000; /* FAIL */
+    }
+
+    body[data-pass="1"] #result {
+      background: #00ff00; /* PASS */
+    }
+  </style>
+</head>
+<body>
+  <div id="case1" class="case">
+    <script>
+      document.write('<div id="m1" class="marker"></div>');
+    </script>
+  </div>
+
+  <div id="case2" class="case">
+    <script>
+      document.write('<div id="m2" class="marker"></div>');
+      document.write('<div id="m3" class="marker b"></div>');
+    </script>
+  </div>
+
+  <div id="result"></div>
+
+  <script>
+    const m1 = document.getElementById('m1');
+    const m2 = document.getElementById('m2');
+    const m3 = document.getElementById('m3');
+    const c2 = document.getElementById('case2');
+
+    const pass = !!m1 && !!m2 && !!m3 && !!c2 && c2.contains(m2) && c2.contains(m3);
+    document.body.setAttribute('data-pass', pass ? '1' : '0');
+  </script>
+</body>
+</html>

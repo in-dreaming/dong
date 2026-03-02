@@ -276,6 +276,7 @@ struct ComputedStyle {
 
         std::string text;        // String literal, or counter name
         std::string separator;   // For counters(name, separator)
+        std::string style;       // Counter style: decimal, lower-alpha, upper-alpha, lower-roman, upper-roman
     };
 
     // `content` as authored (normalized, without trailing ';').

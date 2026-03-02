@@ -1443,10 +1443,16 @@ bool renderFullTextWithAffixes(const dom::DOMNodePtr& node,
     // If main is empty and both affixes failed to shape, nothing to do.
     if (!ok_before && !ok_main && !ok_after) return true;
 
+    // If main text failed to shape but we have affixes, fall back so the main text
+    // gets rendered by renderFullText while the prefix is rendered via renderPseudoElement.
+    if (!ok_main && (ok_before || ok_after)) return false;
+
     const float total_width = w_before + w_main + w_after;
-    if (!nowrap && inner_width > 0.0f && total_width > inner_width) {
-        return false;  // would need wrapping to match baseline
-    }
+    // NOTE: We intentionally do NOT bail out when total_width > inner_width here.
+    // The inner_width from Yoga layout can be unreliable for block elements (may reflect
+    // content-width rather than container-width). Rendering both runs without wrapping is
+    // always better than silently dropping the main text. Multi-line wrapping of mixed-style
+    // runs is not supported in this path anyway.
 
     float line_x = x + pad_l;
     if (style.text_align == "center") {

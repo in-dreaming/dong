@@ -1,4 +1,5 @@
 #include "painter.hpp"
+#include "list_marker.hpp"
 #include <cstring>
 #include <iostream>
 #include <cstdint>
@@ -29,6 +30,101 @@ using painter_detail::makeColorFromCss;
 // Helper to lowercase + collapse whitespace
 inline std::string toLowerCollapsed(const std::string& s) {
     return toLower(collapseWhitespace(s));
+}
+
+inline std::vector<std::string> splitCssTokensOutsideParen(const std::string& value) {
+    std::vector<std::string> tokens;
+    std::string current;
+    int paren_depth = 0;
+    for (char c : value) {
+        if (c == '(') {
+            ++paren_depth;
+            current.push_back(c);
+            continue;
+        }
+        if (c == ')') {
+            paren_depth = std::max(0, paren_depth - 1);
+            current.push_back(c);
+            continue;
+        }
+        if (std::isspace(static_cast<unsigned char>(c)) && paren_depth == 0) {
+            if (!current.empty()) {
+                tokens.push_back(current);
+                current.clear();
+            }
+            continue;
+        }
+        current.push_back(c);
+    }
+    if (!current.empty()) {
+        tokens.push_back(current);
+    }
+    return tokens;
+}
+
+inline bool parsePxToken(const std::string& token, float& out) {
+    std::string v = token;
+    if (v.size() >= 2 && v.substr(v.size() - 2) == "px") {
+        v = v.substr(0, v.size() - 2);
+    }
+    char* end = nullptr;
+    out = std::strtof(v.c_str(), &end);
+    return end != v.c_str() && *end == '\0';
+}
+
+inline float resolveBackgroundAxisOffset(const std::string& token, float area_size, float image_size, float default_percent) {
+    const float free_space = std::max(0.0f, area_size - image_size);
+
+    if (token.empty()) {
+        return free_space * default_percent;
+    }
+    if (token == "left" || token == "top") return 0.0f;
+    if (token == "center") return free_space * 0.5f;
+    if (token == "right" || token == "bottom") return free_space;
+
+    if (token.back() == '%') {
+        const float pct = std::strtof(token.c_str(), nullptr);
+        return free_space * (pct / 100.0f);
+    }
+
+    if (token.rfind("calc(", 0) == 0 && token.back() == ')') {
+        const std::string expr = collapseWhitespace(token.substr(5, token.size() - 6));
+        size_t percent_pos = expr.find('%');
+        if (percent_pos != std::string::npos) {
+            float pct = std::strtof(expr.substr(0, percent_pos).c_str(), nullptr);
+            float px = 0.0f;
+            size_t minus = expr.find('-', percent_pos + 1);
+            size_t plus = expr.find('+', percent_pos + 1);
+            if (minus != std::string::npos) {
+                parsePxToken(collapseWhitespace(expr.substr(minus + 1)), px);
+                px = -px;
+            } else if (plus != std::string::npos) {
+                parsePxToken(collapseWhitespace(expr.substr(plus + 1)), px);
+            }
+            return free_space * (pct / 100.0f) + px;
+        }
+    }
+
+    float px = 0.0f;
+    if (parsePxToken(token, px)) {
+        return px;
+    }
+
+    return free_space * default_percent;
+}
+
+inline Rect resolveBackgroundImageRect(const Rect& origin_rect,
+                                       const std::string& bg_pos,
+                                       float image_w,
+                                       float image_h) {
+    const auto tokens = splitCssTokensOutsideParen(bg_pos);
+    const std::string x_token = tokens.empty() ? std::string{} : tokens[0];
+    const std::string y_token = tokens.size() > 1 ? tokens[1] : std::string{};
+
+    const float offset_x = resolveBackgroundAxisOffset(x_token, origin_rect.width, image_w, 0.0f);
+    const float offset_y = resolveBackgroundAxisOffset(y_token, origin_rect.height, image_h, 0.0f);
+
+    return Rect{origin_rect.x + offset_x, origin_rect.y + offset_y, image_w, image_h};
 }
 
 inline bool shouldPromoteLayerForWillChange(const std::string& will_change_raw) {
@@ -1300,32 +1396,44 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
 
                     // We only implement the subset used by tests:
                     // - cover/contain: centered
-                    // - explicit size + repeat: tile from top-left
-                    (void)bg_pos;
+                    // - explicit size + repeat: tile with background-position offset
+                    // - explicit size + no-repeat: place a single image rect using background-position
 
-                    if (repeat && tile_w > 0.0f && tile_h > 0.0f) {
-                        auto alignStart = [](float clip_start, float origin_start, float step) -> float {
-                            if (step <= 0.0f) return clip_start;
-                            const float n = std::floor((clip_start - origin_start) / step);
-                            return origin_start + n * step;
-                        };
+                    if (tile_w > 0.0f && tile_h > 0.0f) {
+                        if (repeat) {
+                            auto alignStart = [](float clip_start, float origin_start, float step) -> float {
+                                if (step <= 0.0f) return clip_start;
+                                const float n = std::floor((clip_start - origin_start) / step);
+                                return origin_start + n * step;
+                            };
 
-                        const float x0 = alignStart(bg_clip_rect.x, bg_origin_rect.x, tile_w);
-                        const float y0 = alignStart(bg_clip_rect.y, bg_origin_rect.y, tile_h);
-                        const float x1 = bg_clip_rect.x + bg_clip_rect.width;
-                        const float y1 = bg_clip_rect.y + bg_clip_rect.height;
+                            const auto tokens = splitCssTokensOutsideParen(bg_pos);
+                            const std::string x_token = tokens.empty() ? std::string{} : tokens[0];
+                            const std::string y_token = tokens.size() > 1 ? tokens[1] : std::string{};
+                            const float off_x = resolveBackgroundAxisOffset(x_token, bg_origin_rect.width, tile_w, 0.0f);
+                            const float off_y = resolveBackgroundAxisOffset(y_token, bg_origin_rect.height, tile_h, 0.0f);
 
-                        for (float y = y0; y < y1; y += tile_h) {
-                            for (float x = x0; x < x1; x += tile_w) {
-                                Rect tile{ x, y, tile_w, tile_h };
-                                builder.addImage(tile, image_url, 1.0f, ImageFitMode::Fill, 0.5f, 0.5f, img_sampling);
+                            const float origin_x = bg_origin_rect.x + off_x;
+                            const float origin_y = bg_origin_rect.y + off_y;
 
+                            const float x0 = alignStart(bg_clip_rect.x, origin_x, tile_w);
+                            const float y0 = alignStart(bg_clip_rect.y, origin_y, tile_h);
+                            const float x1 = bg_clip_rect.x + bg_clip_rect.width;
+                            const float y1 = bg_clip_rect.y + bg_clip_rect.height;
+
+                            for (float y = y0; y < y1; y += tile_h) {
+                                for (float x = x0; x < x1; x += tile_w) {
+                                    Rect tile{ x, y, tile_w, tile_h };
+                                    builder.addImage(tile, image_url, 1.0f, ImageFitMode::Fill, 0.5f, 0.5f, img_sampling);
+                                }
                             }
+                        } else {
+                            Rect img_rect = resolveBackgroundImageRect(bg_origin_rect, bg_pos, tile_w, tile_h);
+                            builder.addImage(img_rect, image_url, 1.0f, ImageFitMode::Fill, 0.5f, 0.5f, img_sampling);
                         }
                     } else {
                         // Fallback: stretch to the clip rect.
                         builder.addImage(bg_clip_rect, image_url, 1.0f, ImageFitMode::Fill, 0.5f, 0.5f, img_sampling);
-
                     }
 
                 }
@@ -1514,15 +1622,31 @@ void Painter::popCounterScope() {
 }
 
 
-std::string Painter::evaluateCounterText(const std::string& name) {
+// Format a counter integer value using the given CSS counter style
+static std::string formatCounterValue(int val, const std::string& style) {
+    if (style == "lower-alpha" || style == "lower-latin") {
+        return dong::toAlphabetic(val, false);
+    } else if (style == "upper-alpha" || style == "upper-latin") {
+        return dong::toAlphabetic(val, true);
+    } else if (style == "lower-roman") {
+        return dong::toRoman(val, false);
+    } else if (style == "upper-roman") {
+        return dong::toRoman(val, true);
+    } else {
+        // decimal (default) and anything else
+        return std::to_string(val);
+    }
+}
+
+std::string Painter::evaluateCounterText(const std::string& name, const std::string& style) {
     auto it = gen_.counters.find(name);
     if (it == gen_.counters.end() || it->second.empty()) {
         return "0";
     }
-    return std::to_string(it->second.back());
+    return formatCounterValue(it->second.back(), style);
 }
 
-std::string Painter::evaluateCountersText(const std::string& name, const std::string& sep) {
+std::string Painter::evaluateCountersText(const std::string& name, const std::string& sep, const std::string& style) {
     auto it = gen_.counters.find(name);
     if (it == gen_.counters.end() || it->second.empty()) {
         return "0";
@@ -1531,7 +1655,7 @@ std::string Painter::evaluateCountersText(const std::string& name, const std::st
     std::string out;
     for (size_t i = 0; i < it->second.size(); ++i) {
         if (i > 0) out += sep;
-        out += std::to_string(it->second[i]);
+        out += formatCounterValue(it->second[i], style);
     }
     return out;
 }
@@ -1601,10 +1725,10 @@ std::string Painter::evaluateContentText(const dom::ComputedStyle& style, const 
                 out += tok.text;
                 break;
             case dom::ComputedStyle::ContentToken::Type::Counter:
-                out += evaluateCounterText(tok.text);
+                out += evaluateCounterText(tok.text, tok.style);
                 break;
             case dom::ComputedStyle::ContentToken::Type::Counters:
-                out += evaluateCountersText(tok.text, tok.separator.empty() ? "." : tok.separator);
+                out += evaluateCountersText(tok.text, tok.separator, tok.style);
                 break;
             case dom::ComputedStyle::ContentToken::Type::OpenQuote:
             case dom::ComputedStyle::ContentToken::Type::CloseQuote:

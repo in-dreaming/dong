@@ -13,6 +13,27 @@
 #include <SDL3/SDL.h>
 
 // =============================================================================
+// Premultiplied-alpha helper
+// =============================================================================
+
+static void premultiply_rgba8(unsigned char* pixels, int width, int height) {
+    if (!pixels || width <= 0 || height <= 0) return;
+    const size_t count = (size_t)width * (size_t)height;
+    for (size_t i = 0; i < count; ++i) {
+        unsigned char* p = pixels + i * 4;
+        const unsigned char a = p[3];
+        if (a == 255) continue;
+        if (a == 0) {
+            p[0] = p[1] = p[2] = 0;
+            continue;
+        }
+        p[0] = (unsigned char)((p[0] * a + 127) / 255);
+        p[1] = (unsigned char)((p[1] * a + 127) / 255);
+        p[2] = (unsigned char)((p[2] * a + 127) / 255);
+    }
+}
+
+// =============================================================================
 // stb_image integration
 // =============================================================================
 
@@ -208,6 +229,10 @@ static DongImageDecoderResult sdl_decode(DongImageDecoder* decoder, const void* 
         stbi_image_free(pixels);
         return DONG_IMAGE_ERR_DECODE_FAILED;
     }
+
+    // Store decoded images as premultiplied alpha.
+    // This avoids halo artifacts when sampling with linear filtering.
+    premultiply_rgba8(pixels, width, height);
 
     out_image->data = pixels;
     out_image->data_size = (size_t)width * (size_t)height * 4;

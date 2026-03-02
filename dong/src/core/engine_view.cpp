@@ -1286,7 +1286,13 @@ struct EngineView::Impl {
                 DONG_LOG_INFO("[EngineView] Script code length: %zu bytes", code.length());
                 if (!code.empty()) {
                     DONG_LOG_INFO("[EngineView] Executing script...");
+                    if (js_bindings) {
+                        js_bindings->setCurrentExecutingScript(script);
+                    }
                     script_engine->eval(code);
+                    if (js_bindings) {
+                        js_bindings->clearCurrentExecutingScript();
+                    }
                     DONG_LOG_INFO("[EngineView] Script execution completed");
                 }
             }
@@ -1319,6 +1325,10 @@ struct EngineView::Impl {
         } else {
             DONG_LOG_WARN("[EngineView] Cannot execute scripts: script_engine or dom_manager is null");
         }
+
+        // Ensure the first rendered frame reflects DOM/style mutations from scripts.
+        // This is especially important for document.write and attribute-driven selectors.
+        flushStyleLayoutAfterScripts();
 
         return true;
     }
@@ -1424,6 +1434,35 @@ struct EngineView::Impl {
         if (!script_engine) return;
         DONG_PROFILE_SCOPE_CAT("Script::processTasks", "script");
         script_engine->processPendingTasks();
+    }
+
+    void flushStyleLayoutAfterScripts() {
+        if (!dom_manager) return;
+        auto root = dom_manager->getRoot();
+        if (!root) return;
+
+        bool did_work = false;
+
+        if (root->isStyleDirty() || root->isStyleSubtreeDirty()) {
+            if (auto* se = dom_manager->getStyleEngine()) {
+                DONG_PROFILE_SCOPE_CAT("Style::compute", "style");
+                se->computeStylesIncremental(root);
+                did_work = true;
+            }
+            root->clearStyleDirtyRecursive();
+        }
+
+        if (layout_engine && root->isLayoutDirty()) {
+            DONG_PROFILE_SCOPE_CAT("Layout::calculate", "layout");
+            layout_engine->calculateLayout(root, static_cast<float>(width), static_cast<float>(height));
+            root->clearLayoutDirtyRecursive();
+            did_work = true;
+        }
+
+        if (painter && layout_engine && did_work) {
+            painter->buildDisplayList(root, layout_engine.get());
+            markNeedsRepaint();
+        }
     }
 
     void tickComputeStylesIfNeeded() {
