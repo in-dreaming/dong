@@ -25,6 +25,10 @@ extern "C" {
 #define DOCK_DROP_EDGE_FRAC    0.25f
 #define DOCK_FOCUS_BORDER_W    2
 
+// Per-tab close button constants
+#define DOCK_TAB_CLOSE_SIZE    14
+#define DOCK_TAB_CLOSE_PAD     4
+
 // Window control button constants
 #define DOCK_BTN_SIZE          24
 #define DOCK_BTN_PAD           6
@@ -35,7 +39,8 @@ extern "C" {
 
 // Divider hit-test constants
 #define DOCK_DIVIDER_HALF_W    4   // ±4px hit zone from divider center
-#define DOCK_DIVIDER_THICKNESS 2   // Visual divider line thickness
+#define DOCK_DIVIDER_THICKNESS 4   // Visual divider line thickness
+#define DOCK_MIN_PANE_SIZE     120 // Minimum pane dimension in pixels
 
 // =============================================================================
 // Divider drag state
@@ -54,6 +59,27 @@ typedef struct {
     uint64_t last_click_time;  // For double-click detection (ms)
     struct dock_node_t* last_click_node; // Node clicked last time (for double-click)
 } dock_divider_drag_t;
+
+// =============================================================================
+// Hover state (for visual feedback)
+// =============================================================================
+
+typedef enum {
+    DOCK_HOVER_NONE,
+    DOCK_HOVER_TAB,            // Hovering a tab (not over its close button)
+    DOCK_HOVER_TAB_CLOSE,      // Hovering a tab's close button
+    DOCK_HOVER_WIN_CLOSE,      // Hovering window close button
+    DOCK_HOVER_WIN_MAXIMIZE,   // Hovering window maximize button
+    DOCK_HOVER_WIN_MINIMIZE,   // Hovering window minimize button
+    DOCK_HOVER_DIVIDER,        // Hovering a split divider
+} dock_hover_type_t;
+
+typedef struct {
+    dock_hover_type_t type;
+    int window_index;          // Which window
+    struct dock_node_t* node;  // Which leaf or split node
+    int tab_index;             // Which tab (for TAB / TAB_CLOSE)
+} dock_hover_t;
 
 // =============================================================================
 // Drag state
@@ -197,9 +223,15 @@ struct dong_dock_t {
     SDL_GPUTexture* tex_btn_maximize;   // #555555
     SDL_GPUTexture* tex_btn_minimize;   // #555555
     SDL_GPUTexture* tex_btn_hover;      // #444444 (hover highlight)
+    SDL_GPUTexture* tex_divider;        // #555555 (divider default)
+    SDL_GPUTexture* tex_divider_hover;  // #0078d4 (divider hover/drag)
+    SDL_GPUTexture* tex_close_hover_bg; // #c42b1c80 (tab close hover bg)
 
     // Drag state
     dock_drag_t drag;
+
+    // Hover state (for visual feedback)
+    dock_hover_t hover;
 
     // Divider drag state
     dock_divider_drag_t divider;

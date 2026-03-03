@@ -111,10 +111,6 @@ static SDL_HitTestResult SDLCALL dock_hit_test_callback(
     if (at_top)                return SDL_HITTEST_RESIZE_TOP;
     if (at_bottom)             return SDL_HITTEST_RESIZE_BOTTOM;
 
-    // Ensure layout is up-to-date for hit-testing
-    if (dw->root)
-        dock_node_layout(dw->root, 0, 0, dw->width, dw->height);
-
     // Check if over a split divider → NORMAL (let SDL deliver mouse events)
     if (dw->root) {
         dock_node_t* div_hit = dock_node_hit_test_divider(dw->root, mx, my);
@@ -180,19 +176,12 @@ static dock_node_t* dock_find_title_bar_draggable(
         }
 
         // Check if over a tab → NORMAL (let SDL handle tab click/drag)
+        // Per-tab close buttons are inside the tab rect, so this covers them too.
         int32_t local_x = mx - node->x - DOCK_TAB_PAD;
         uint32_t tab_w = dock_tab_width(node);
         if (tab_w > 0 && local_x >= 0) {
             int tab_idx = local_x / (int32_t)(tab_w + DOCK_TAB_PAD);
             if (tab_idx < node->pane_count) return NULL; // over a tab
-        }
-
-        // Check if over per-leaf close button
-        int32_t btn_x = node->x + (int32_t)node->w - DOCK_BTN_PAD - DOCK_BTN_SIZE;
-        int32_t btn_y = node->y + (DOCK_TITLE_BAR_HEIGHT - DOCK_BTN_SIZE) / 2;
-        if (mx >= btn_x && mx < btn_x + DOCK_BTN_SIZE &&
-            my >= btn_y && my < btn_y + DOCK_BTN_SIZE) {
-            return NULL; // over leaf close button
         }
 
         // Check if over window-level buttons (top-right corner of window)
@@ -512,6 +501,15 @@ DONG_APPCORE_API dong_dock_t* dong_dock_create(const dong_dock_config_t* config)
     dock->tex_btn_maximize   = dock_create_solid_texture(dev, 0x55, 0x55, 0x55, 0xff);
     dock->tex_btn_minimize   = dock_create_solid_texture(dev, 0x55, 0x55, 0x55, 0xff);
     dock->tex_btn_hover      = dock_create_solid_texture(dev, 0x44, 0x44, 0x44, 0xff);
+    dock->tex_divider        = dock_create_solid_texture(dev, 0x55, 0x55, 0x55, 0xff);
+    dock->tex_divider_hover  = dock_create_solid_texture(dev, 0x00, 0x78, 0xd4, 0xff);
+    dock->tex_close_hover_bg = dock_create_solid_texture(dev, 0xc4, 0x2b, 0x1c, 0xff);
+
+    // Init hover state
+    dock->hover.type = DOCK_HOVER_NONE;
+    dock->hover.window_index = -1;
+    dock->hover.node = NULL;
+    dock->hover.tab_index = -1;
 
     // Init drag state
     dock->drag.state = DOCK_DRAG_NONE;
@@ -609,6 +607,12 @@ DONG_APPCORE_API void dong_dock_destroy(dong_dock_t* dock) {
         SDL_ReleaseGPUTexture(dock->gpu_device, dock->tex_btn_minimize);
     if (dock->tex_btn_hover)
         SDL_ReleaseGPUTexture(dock->gpu_device, dock->tex_btn_hover);
+    if (dock->tex_divider)
+        SDL_ReleaseGPUTexture(dock->gpu_device, dock->tex_divider);
+    if (dock->tex_divider_hover)
+        SDL_ReleaseGPUTexture(dock->gpu_device, dock->tex_divider_hover);
+    if (dock->tex_close_hover_bg)
+        SDL_ReleaseGPUTexture(dock->gpu_device, dock->tex_close_hover_bg);
 
     dong_sdl_platform_shutdown();
 
@@ -1593,10 +1597,27 @@ static void dock_finish_drag(dong_dock_t* dock) {
         int already_detached = (!sw->is_primary && sw->root &&
             sw->root->type == DOCK_NODE_LEAF && sw->root->pane_count == 1);
         if (!already_detached) {
-            // Detach to new window at global mouse position
+            // Detach to new window at global mouse position.
+            // Use start_x/start_y as cursor offset within the new window
+            // so the tab appears anchored where the user grabbed it.
             float gx, gy;
             SDL_GetGlobalMouseState(&gx, &gy);
-            dong_dock_detach(dock, src_pane, (int32_t)gx - 50, (int32_t)gy - 10, 0, 0);
+            int32_t det_x = (int32_t)gx - d->start_x;
+            int32_t det_y = (int32_t)gy - d->start_y;
+
+            // Reasonable detach window size: use source pane content size,
+            // clamped to [320x240, 800x600]
+            uint32_t det_w = 0, det_h = 0;
+            if (src_pane->tex_w > 0 && src_pane->tex_h > 0) {
+                det_w = src_pane->tex_w;
+                det_h = src_pane->tex_h + DOCK_TITLE_BAR_HEIGHT;
+            }
+            if (det_w < 320) det_w = 320;
+            if (det_h < 240) det_h = 240;
+            if (det_w > 800) det_w = 800;
+            if (det_h > 600) det_h = 600;
+
+            dong_dock_detach(dock, src_pane, det_x, det_y, det_w, det_h);
         }
     } else {
         // Leaf-level drop
@@ -1737,13 +1758,22 @@ DONG_APPCORE_API int dong_dock_poll_events(dong_dock_t* dock) {
                     dock_node_t* dn = dock->divider.node;
                     if (dn) {
                         float new_ratio;
+                        uint32_t dim; // total dimension along split axis
                         if (dn->type == DOCK_NODE_SPLIT_H) {
                             new_ratio = (float)(mx - dn->x) / (float)dn->w;
+                            dim = dn->w;
                         } else {
                             new_ratio = (float)(my - dn->y) / (float)dn->h;
+                            dim = dn->h;
                         }
-                        if (new_ratio < 0.05f) new_ratio = 0.05f;
-                        if (new_ratio > 0.95f) new_ratio = 0.95f;
+                        // Clamp: both children must be >= DOCK_MIN_PANE_SIZE
+                        float min_ratio = (dim > 0)
+                            ? (float)DOCK_MIN_PANE_SIZE / (float)dim : 0.05f;
+                        float max_ratio = 1.0f - min_ratio;
+                        if (min_ratio > 0.45f) min_ratio = 0.45f; // failsafe
+                        if (max_ratio < 0.55f) max_ratio = 0.55f;
+                        if (new_ratio < min_ratio) new_ratio = min_ratio;
+                        if (new_ratio > max_ratio) new_ratio = max_ratio;
                         dn->ratio = new_ratio;
                     }
                     continue; // consume
@@ -1805,6 +1835,73 @@ DONG_APPCORE_API int dong_dock_poll_events(dong_dock_t* dock) {
             }
 
             dock_node_t* hit = win->root ? dock_node_hit_test(win->root, mx, my) : NULL;
+
+            // --- Update hover state on mouse move ---
+            if (ev.type == DONG_APP_EVENT_MOUSE_MOVE &&
+                dock->drag.state == DOCK_DRAG_NONE &&
+                dock->divider.state != DOCK_DIV_DRAGGING)
+            {
+                dock->hover.type = DOCK_HOVER_NONE;
+                dock->hover.window_index = win->index;
+                dock->hover.node = NULL;
+                dock->hover.tab_index = -1;
+
+                // Check divider hover
+                dock_node_t* div_hit = win->root
+                    ? dock_node_hit_test_divider(win->root, mx, my) : NULL;
+                if (div_hit) {
+                    dock->hover.type = DOCK_HOVER_DIVIDER;
+                    dock->hover.node = div_hit;
+                } else if (hit && hit->pane_count > 0 && (my - hit->y) < DOCK_TITLE_BAR_HEIGHT) {
+                    // In title bar — check window buttons first
+                    int32_t by_btn = (DOCK_TITLE_BAR_HEIGHT - DOCK_BTN_SIZE) / 2;
+                    int32_t bx_btn = (int32_t)win->width - DOCK_BTN_PAD - DOCK_BTN_SIZE;
+                    if (mx >= bx_btn && mx < bx_btn + DOCK_BTN_SIZE &&
+                        my >= by_btn && my < by_btn + DOCK_BTN_SIZE) {
+                        dock->hover.type = DOCK_HOVER_WIN_CLOSE;
+                    } else {
+                        bx_btn -= (DOCK_BTN_SIZE + DOCK_BTN_PAD);
+                        if (mx >= bx_btn && mx < bx_btn + DOCK_BTN_SIZE &&
+                            my >= by_btn && my < by_btn + DOCK_BTN_SIZE) {
+                            dock->hover.type = DOCK_HOVER_WIN_MAXIMIZE;
+                        } else {
+                            bx_btn -= (DOCK_BTN_SIZE + DOCK_BTN_PAD);
+                            if (mx >= bx_btn && mx < bx_btn + DOCK_BTN_SIZE &&
+                                my >= by_btn && my < by_btn + DOCK_BTN_SIZE) {
+                                dock->hover.type = DOCK_HOVER_WIN_MINIMIZE;
+                            }
+                        }
+                    }
+
+                    // Check per-tab areas (if not over a window button)
+                    if (dock->hover.type == DOCK_HOVER_NONE) {
+                        uint32_t tab_w = dock_tab_width(hit);
+                        if (tab_w > 0) {
+                            for (int t = 0; t < hit->pane_count; t++) {
+                                int32_t tx = hit->x + DOCK_TAB_PAD + (int32_t)(t * (tab_w + DOCK_TAB_PAD));
+                                int32_t ty_tab = hit->y + 2;
+                                uint32_t th = DOCK_TITLE_BAR_HEIGHT - 4;
+                                if (mx >= tx && mx < tx + (int32_t)tab_w &&
+                                    my >= ty_tab && my < ty_tab + (int32_t)th) {
+                                    // Inside this tab — check close button
+                                    int32_t cbx = tx + (int32_t)tab_w - DOCK_TAB_CLOSE_PAD - DOCK_TAB_CLOSE_SIZE;
+                                    int32_t cby = ty_tab + (int32_t)(th - DOCK_TAB_CLOSE_SIZE) / 2;
+                                    if (mx >= cbx && mx < cbx + DOCK_TAB_CLOSE_SIZE &&
+                                        my >= cby && my < cby + DOCK_TAB_CLOSE_SIZE) {
+                                        dock->hover.type = DOCK_HOVER_TAB_CLOSE;
+                                    } else {
+                                        dock->hover.type = DOCK_HOVER_TAB;
+                                    }
+                                    dock->hover.node = hit;
+                                    dock->hover.tab_index = t;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             if (hit && hit->pane_count > 0) {
                 int32_t local_y = my - hit->y;
 
@@ -1857,19 +1954,26 @@ DONG_APPCORE_API int dong_dock_poll_events(dong_dock_t* dock) {
                             }
                         }
 
-                        // Check per-leaf close button
+                        // Check per-tab close buttons
                         {
-                            int32_t bx = hit->x + (int32_t)hit->w - DOCK_BTN_PAD - DOCK_BTN_SIZE;
-                            int32_t by = hit->y + (DOCK_TITLE_BAR_HEIGHT - DOCK_BTN_SIZE) / 2;
-                            if (mx >= bx && mx < bx + DOCK_BTN_SIZE &&
-                                my >= by && my < by + DOCK_BTN_SIZE) {
-                                // Close active tab in this leaf
-                                int pi = hit->pane_indices[hit->active_tab];
-                                if (pi >= 0 && pi < dock->pane_count &&
-                                    dock->panes[pi].alive) {
-                                    dong_dock_remove_pane(dock, &dock->panes[pi]);
+                            uint32_t tab_w = dock_tab_width(hit);
+                            if (tab_w > 0) {
+                                for (int t = 0; t < hit->pane_count; t++) {
+                                    int32_t tx = hit->x + DOCK_TAB_PAD + (int32_t)(t * (tab_w + DOCK_TAB_PAD));
+                                    int32_t ty = hit->y + 2;
+                                    uint32_t th = DOCK_TITLE_BAR_HEIGHT - 4;
+                                    int32_t cbx = tx + (int32_t)tab_w - DOCK_TAB_CLOSE_PAD - DOCK_TAB_CLOSE_SIZE;
+                                    int32_t cby = ty + (int32_t)(th - DOCK_TAB_CLOSE_SIZE) / 2;
+                                    if (mx >= cbx && mx < cbx + DOCK_TAB_CLOSE_SIZE &&
+                                        my >= cby && my < cby + DOCK_TAB_CLOSE_SIZE) {
+                                        int pi = hit->pane_indices[t];
+                                        if (pi >= 0 && pi < dock->pane_count &&
+                                            dock->panes[pi].alive) {
+                                            dong_dock_remove_pane(dock, &dock->panes[pi]);
+                                        }
+                                        goto title_bar_handled;
+                                    }
                                 }
-                                continue;
                             }
                         }
 
@@ -1933,6 +2037,7 @@ DONG_APPCORE_API int dong_dock_poll_events(dong_dock_t* dock) {
                             }
                         }
                     }
+                    title_bar_handled:
                     continue; // title bar clicks don't go to engine
                 }
 
@@ -2031,7 +2136,8 @@ static void dock_render_tree(dong_dock_t* dock, dock_node_t* node) {
 
 // Blit all visible panes to swapchain
 static void dock_blit_tree(dock_node_t* node, dong_dock_t* dock,
-                            SDL_GPUCommandBuffer* cmd, SDL_GPUTexture* swapchain) {
+                            SDL_GPUCommandBuffer* cmd, SDL_GPUTexture* swapchain,
+                            dong_dock_window_t* win) {
     if (!node) return;
 
     if (node->type == DOCK_NODE_LEAF) {
@@ -2052,20 +2158,63 @@ static void dock_blit_tree(dock_node_t* node, dong_dock_t* dock,
             int32_t ty = node->y + 2;
             uint32_t th = DOCK_TITLE_BAR_HEIGHT - 4;
 
-            SDL_GPUTexture* tab_tex = (t == node->active_tab)
-                ? dock->tex_tab_active
-                : dock->tex_tab_bg;
+            // Choose tab background: active > dragging(dim) > hover > default
+            int is_drag_source = (dock->drag.state == DOCK_DRAG_ACTIVE &&
+                                  pi == dock->drag.source_pane_index);
+            int is_hovered = (dock->hover.node == node && dock->hover.tab_index == t &&
+                              (dock->hover.type == DOCK_HOVER_TAB ||
+                               dock->hover.type == DOCK_HOVER_TAB_CLOSE));
+            SDL_GPUTexture* tab_tex;
+            if (is_drag_source)
+                tab_tex = dock->tex_tab_bg;  // dimmed: same as bar bg
+            else if (t == node->active_tab)
+                tab_tex = dock->tex_tab_active;
+            else if (is_hovered)
+                tab_tex = dock->tex_btn_hover;
+            else
+                tab_tex = dock->tex_tab_bg;
             dock_blit_solid(cmd, tab_tex, swapchain, tx, ty, tab_w, th);
 
+            // Per-tab close button (right edge of tab)
+            // Skip if overlapping window-level buttons area (top-right corner)
+            {
+                int32_t cbx = tx + (int32_t)tab_w - DOCK_TAB_CLOSE_PAD - DOCK_TAB_CLOSE_SIZE;
+                int32_t cby = ty + (int32_t)(th - DOCK_TAB_CLOSE_SIZE) / 2;
+
+                // Window buttons occupy rightmost ~(3*(BTN_SIZE+BTN_PAD)+BTN_PAD) px at y=0
+                int skip_close = 0;
+                if (node->y == 0) {
+                    int32_t win_btn_left = (int32_t)win->width
+                        - 3 * (DOCK_BTN_SIZE + DOCK_BTN_PAD) - DOCK_BTN_PAD;
+                    if (cbx + DOCK_TAB_CLOSE_SIZE > win_btn_left)
+                        skip_close = 1;
+                }
+
+                if (!skip_close && !is_drag_source) {
+                    // Highlight close button on hover
+                    int close_hovered = (dock->hover.node == node &&
+                                         dock->hover.tab_index == t &&
+                                         dock->hover.type == DOCK_HOVER_TAB_CLOSE);
+                    SDL_GPUTexture* close_tex = close_hovered
+                        ? dock->tex_close_hover_bg
+                        : dock->tex_btn_close;
+                    dock_blit_solid(cmd, close_tex, swapchain,
+                                    cbx, cby, DOCK_TAB_CLOSE_SIZE, DOCK_TAB_CLOSE_SIZE);
+                }
+            }
+
             // Blit title text centered vertically in the tab
+            // Leave room for close button on the right
+            // Skip text for drag source tab (dimmed)
             dong_dock_pane_t* tab_pane = &dock->panes[pi];
-            if (tab_pane->alive) {
+            if (tab_pane->alive && !is_drag_source) {
                 dock_render_title_texture(dock, tab_pane);
                 if (tab_pane->title_tex && tab_pane->title_tex_w > 0) {
                     uint32_t text_w = tab_pane->title_tex_w;
                     uint32_t text_h = tab_pane->title_tex_h;
-                    // Clamp text width to tab width with small padding
-                    if (text_w > tab_w - 4) text_w = tab_w - 4;
+                    // Clamp text to tab width minus close button area
+                    uint32_t max_text_w = tab_w - DOCK_TAB_CLOSE_SIZE - DOCK_TAB_CLOSE_PAD - 4;
+                    if (text_w > max_text_w) text_w = max_text_w;
                     int32_t text_x = tx + 2;
                     int32_t text_y = ty + (int32_t)(th - text_h) / 2;
 
@@ -2084,14 +2233,6 @@ static void dock_blit_tree(dock_node_t* node, dong_dock_t* dock,
                     SDL_BlitGPUTexture(cmd, &tblit);
                 }
             }
-        }
-
-        // --- Per-leaf close button (right edge of title bar) ---
-        {
-            int32_t bx = node->x + (int32_t)node->w - DOCK_BTN_PAD - DOCK_BTN_SIZE;
-            int32_t by = node->y + (DOCK_TITLE_BAR_HEIGHT - DOCK_BTN_SIZE) / 2;
-            dock_blit_solid(cmd, dock->tex_btn_close, swapchain,
-                            bx, by, DOCK_BTN_SIZE, DOCK_BTN_SIZE);
         }
 
         // --- Pane content (below title bar) ---
@@ -2120,8 +2261,8 @@ static void dock_blit_tree(dock_node_t* node, dong_dock_t* dock,
         return;
     }
 
-    dock_blit_tree(node->children[0], dock, cmd, swapchain);
-    dock_blit_tree(node->children[1], dock, cmd, swapchain);
+    dock_blit_tree(node->children[0], dock, cmd, swapchain, win);
+    dock_blit_tree(node->children[1], dock, cmd, swapchain, win);
 }
 
 // Blit window-level min/max/close buttons at top-right corner
@@ -2131,19 +2272,26 @@ static void dock_blit_window_buttons(dong_dock_t* dock,
 {
     int32_t by = (DOCK_TITLE_BAR_HEIGHT - DOCK_BTN_SIZE) / 2;
     int32_t bx = (int32_t)win->width - DOCK_BTN_PAD - DOCK_BTN_SIZE;
+    int is_hover_win = (dock->hover.window_index == win->index);
 
     // Close button (rightmost, red)
-    dock_blit_solid(cmd, dock->tex_btn_close, swapchain,
+    SDL_GPUTexture* close_tex = (is_hover_win && dock->hover.type == DOCK_HOVER_WIN_CLOSE)
+        ? dock->tex_close_hover_bg : dock->tex_btn_close;
+    dock_blit_solid(cmd, close_tex, swapchain,
                     bx, by, DOCK_BTN_SIZE, DOCK_BTN_SIZE);
     bx -= (DOCK_BTN_SIZE + DOCK_BTN_PAD);
 
     // Maximize button
-    dock_blit_solid(cmd, dock->tex_btn_maximize, swapchain,
+    SDL_GPUTexture* max_tex = (is_hover_win && dock->hover.type == DOCK_HOVER_WIN_MAXIMIZE)
+        ? dock->tex_btn_hover : dock->tex_btn_maximize;
+    dock_blit_solid(cmd, max_tex, swapchain,
                     bx, by, DOCK_BTN_SIZE, DOCK_BTN_SIZE);
     bx -= (DOCK_BTN_SIZE + DOCK_BTN_PAD);
 
     // Minimize button
-    dock_blit_solid(cmd, dock->tex_btn_minimize, swapchain,
+    SDL_GPUTexture* min_tex = (is_hover_win && dock->hover.type == DOCK_HOVER_WIN_MINIMIZE)
+        ? dock->tex_btn_hover : dock->tex_btn_minimize;
+    dock_blit_solid(cmd, min_tex, swapchain,
                     bx, by, DOCK_BTN_SIZE, DOCK_BTN_SIZE);
 }
 
@@ -2152,14 +2300,21 @@ static void dock_blit_dividers(dock_node_t* node, dong_dock_t* dock,
                                 SDL_GPUCommandBuffer* cmd, SDL_GPUTexture* swapchain) {
     if (!node || node->type == DOCK_NODE_LEAF) return;
 
+    // Choose divider color: hover/dragging = accent, default = gray
+    int is_active = (dock->divider.state == DOCK_DIV_DRAGGING && dock->divider.node == node) ||
+                    (dock->hover.type == DOCK_HOVER_DIVIDER && dock->hover.node == node);
+    SDL_GPUTexture* div_tex = is_active ? dock->tex_divider_hover : dock->tex_divider;
+
     // Render this node's divider
     if (node->type == DOCK_NODE_SPLIT_H) {
-        int32_t dx = node->children[0]->x + (int32_t)node->children[0]->w - 1;
-        dock_blit_solid(cmd, dock->tex_tab_active, swapchain,
+        int32_t dx = node->children[0]->x + (int32_t)node->children[0]->w
+                     - (int32_t)(DOCK_DIVIDER_THICKNESS / 2);
+        dock_blit_solid(cmd, div_tex, swapchain,
                         dx, node->y, DOCK_DIVIDER_THICKNESS, node->h);
     } else { // SPLIT_V
-        int32_t dy = node->children[0]->y + (int32_t)node->children[0]->h - 1;
-        dock_blit_solid(cmd, dock->tex_tab_active, swapchain,
+        int32_t dy = node->children[0]->y + (int32_t)node->children[0]->h
+                     - (int32_t)(DOCK_DIVIDER_THICKNESS / 2);
+        dock_blit_solid(cmd, div_tex, swapchain,
                         node->x, dy, node->w, DOCK_DIVIDER_THICKNESS);
     }
 
@@ -2209,6 +2364,88 @@ static void dock_blit_reorder_indicator(dong_dock_t* dock,
 
     dock_blit_solid(cmd, dock->tex_focus_border, swapchain,
                     ix, iy, 3, ih);
+}
+
+// Blit drag ghost: a small tab-like rectangle at the mouse position during active drag
+static void dock_blit_drag_ghost(dong_dock_t* dock,
+    SDL_GPUCommandBuffer* cmd, SDL_GPUTexture* swapchain,
+    dong_dock_window_t* win)
+{
+    if (dock->drag.state != DOCK_DRAG_ACTIVE) return;
+    int src_pi = dock->drag.source_pane_index;
+    if (src_pi < 0 || src_pi >= dock->pane_count) return;
+    dong_dock_pane_t* pane = &dock->panes[src_pi];
+    if (!pane->alive) return;
+
+    // For detached windows being moved, don't render ghost
+    if (dock->drag.source_window_index >= 0 &&
+        dock->drag.source_window_index < dock->window_count) {
+        dong_dock_window_t* sw = &dock->windows[dock->drag.source_window_index];
+        if (sw->alive && !sw->is_primary && sw->root &&
+            sw->root->type == DOCK_NODE_LEAF && sw->root->pane_count == 1)
+            return;
+    }
+
+    // Only render on the window the mouse is over (or source window if none)
+    int target_wi = dock->drag.hover_window_index;
+    if (target_wi < 0) target_wi = dock->drag.source_window_index;
+    if (target_wi != win->index) return;
+
+    // Ghost position: convert global mouse to window-local
+    float gx, gy;
+    SDL_GetGlobalMouseState(&gx, &gy);
+    int wx, wy;
+    SDL_GetWindowPosition(win->sdl_window, &wx, &wy);
+    int32_t ghost_x = (int32_t)gx - wx - 40; // offset left of cursor
+    int32_t ghost_y = (int32_t)gy - wy - 10;  // slightly above cursor
+    uint32_t ghost_w = 120;
+    uint32_t ghost_h = DOCK_TITLE_BAR_HEIGHT - 4;
+
+    // Clamp to window bounds
+    if (ghost_x < 0) ghost_x = 0;
+    if (ghost_y < 0) ghost_y = 0;
+    if (ghost_x + (int32_t)ghost_w > (int32_t)win->width)
+        ghost_x = (int32_t)win->width - (int32_t)ghost_w;
+    if (ghost_y + (int32_t)ghost_h > (int32_t)win->height)
+        ghost_y = (int32_t)win->height - (int32_t)ghost_h;
+
+    // Ghost tab background
+    dock_blit_solid(cmd, dock->tex_tab_active, swapchain,
+                    ghost_x, ghost_y, ghost_w, ghost_h);
+
+    // Ghost border (1px accent color frame)
+    dock_blit_solid(cmd, dock->tex_focus_border, swapchain,
+                    ghost_x, ghost_y, ghost_w, 1);
+    dock_blit_solid(cmd, dock->tex_focus_border, swapchain,
+                    ghost_x, ghost_y + (int32_t)ghost_h - 1, ghost_w, 1);
+    dock_blit_solid(cmd, dock->tex_focus_border, swapchain,
+                    ghost_x, ghost_y, 1, ghost_h);
+    dock_blit_solid(cmd, dock->tex_focus_border, swapchain,
+                    ghost_x + (int32_t)ghost_w - 1, ghost_y, 1, ghost_h);
+
+    // Ghost title text
+    dock_render_title_texture(dock, pane);
+    if (pane->title_tex && pane->title_tex_w > 0) {
+        uint32_t text_w = pane->title_tex_w;
+        uint32_t text_h = pane->title_tex_h;
+        if (text_w > ghost_w - 8) text_w = ghost_w - 8;
+        int32_t text_x = ghost_x + 4;
+        int32_t text_y = ghost_y + (int32_t)(ghost_h - text_h) / 2;
+
+        SDL_GPUBlitInfo tblit;
+        SDL_zero(tblit);
+        tblit.source.texture = pane->title_tex;
+        tblit.source.w       = text_w;
+        tblit.source.h       = text_h;
+        tblit.destination.texture = swapchain;
+        tblit.destination.x  = (uint32_t)text_x;
+        tblit.destination.y  = (uint32_t)text_y;
+        tblit.destination.w  = text_w;
+        tblit.destination.h  = text_h;
+        tblit.load_op        = SDL_GPU_LOADOP_LOAD;
+        tblit.filter         = SDL_GPU_FILTER_NEAREST;
+        SDL_BlitGPUTexture(cmd, &tblit);
+    }
 }
 
 // Blit focus border around the focused pane's leaf node
@@ -2300,7 +2537,7 @@ DONG_APPCORE_API void dong_dock_render(dong_dock_t* dock) {
         }
 
         // Blit panes
-        dock_blit_tree(wn->root, dock, cmd, swapchain);
+        dock_blit_tree(wn->root, dock, cmd, swapchain, wn);
 
         // Blit divider lines between split children
         dock_blit_dividers(wn->root, dock, cmd, swapchain);
@@ -2316,6 +2553,9 @@ DONG_APPCORE_API void dong_dock_render(dong_dock_t* dock) {
 
         // Tab reorder indicator (during same-leaf drag)
         dock_blit_reorder_indicator(dock, cmd, swapchain, wn);
+
+        // Drag ghost (floating tab at mouse during active drag)
+        dock_blit_drag_ghost(dock, cmd, swapchain, wn);
 
         SDL_SubmitGPUCommandBuffer(cmd);
     }

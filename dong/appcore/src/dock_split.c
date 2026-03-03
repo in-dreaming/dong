@@ -304,6 +304,11 @@ void dock_node_layout(dock_node_t* node, int32_t x, int32_t y, uint32_t w, uint3
 
     if (node->type == DOCK_NODE_SPLIT_H) {
         uint32_t left_w = (uint32_t)(w * node->ratio);
+        // Enforce minimum pane size
+        if (left_w < DOCK_MIN_PANE_SIZE && w > 2 * DOCK_MIN_PANE_SIZE)
+            left_w = DOCK_MIN_PANE_SIZE;
+        if (w > left_w && (w - left_w) < DOCK_MIN_PANE_SIZE && w > 2 * DOCK_MIN_PANE_SIZE)
+            left_w = w - DOCK_MIN_PANE_SIZE;
         if (left_w < 1) left_w = 1;
         if (left_w > w - 1) left_w = w - 1;
         uint32_t right_w = w - left_w;
@@ -312,6 +317,11 @@ void dock_node_layout(dock_node_t* node, int32_t x, int32_t y, uint32_t w, uint3
         dock_node_layout(node->children[1], x + (int32_t)left_w, y, right_w, h);
     } else { // SPLIT_V
         uint32_t top_h = (uint32_t)(h * node->ratio);
+        // Enforce minimum pane size
+        if (top_h < DOCK_MIN_PANE_SIZE && h > 2 * DOCK_MIN_PANE_SIZE)
+            top_h = DOCK_MIN_PANE_SIZE;
+        if (h > top_h && (h - top_h) < DOCK_MIN_PANE_SIZE && h > 2 * DOCK_MIN_PANE_SIZE)
+            top_h = h - DOCK_MIN_PANE_SIZE;
         if (top_h < 1) top_h = 1;
         if (top_h > h - 1) top_h = h - 1;
         uint32_t bottom_h = h - top_h;
