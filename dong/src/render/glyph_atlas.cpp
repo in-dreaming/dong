@@ -10,7 +10,6 @@
 // MSDF 生成库
 #include <msdfgen/msdfgen.h>
 #include <msdfgen/core/edge-coloring.h>
-#include <msdfgen/core/rasterization.h>
 #include <msdfgen/ext/import-font.h>
 
 // FreeType
@@ -841,7 +840,9 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
         return true;
     }
 
-    // 规范化并着色边缘
+    // 规范化并着色边缘。
+    // edgeColoringByDistance 在部分复杂轮廓字形上会触发上游着色器内部非法颜色状态并崩溃，
+    // 这里统一使用稳定的 Simple 策略，保证所有字形生成路径可用。
     shape.normalize();
     msdfgen::edgeColoringSimple(shape, 3.0);
 
@@ -868,10 +869,17 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
     const double range = static_cast<double>(glyph_distance_range_);
     
     msdfgen::Bitmap<float, 3> msdf(msdf_size, msdf_size);
-    // 关键：msdfgen::Bitmap 构造函数不初始化内存，必须手动清零
-    // 否则字形边界外的区域会包含垃圾数据，导致渲染时出现细线/噪点
-    // 使用 operator float*() 获取像素指针
-    std::memset(static_cast<float*>(msdf), 0, sizeof(float) * 3 * msdf_size * msdf_size);
+    // 初始化为 -range（明确"在字形外部"）
+    // memset(0) 会让 raw distance=0.0 编码为 0.5（边缘），导致字形边界外出现伪影
+    // -range 编码为 -range/range + 0.5 = -1.0 + 0.5 = -0.5 → clamp 到 0.0（完全透明）
+    {
+        const float neg_range = static_cast<float>(-range);
+        float* data = static_cast<float*>(msdf);
+        const int total = msdf_size * msdf_size * 3;
+        for (int i = 0; i < total; ++i) {
+            data[i] = neg_range;
+        }
+    }
     
     double width = bounds.r - bounds.l;
     double height = bounds.t - bounds.b;
@@ -925,10 +933,11 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
 
     DONG_LOG_DEBUG("[MSDF] glyph=%u translate: tx=%.2f ty=%.2f", glyph_id, translate.x, translate.y);
 
-    msdfgen::generateMSDF(msdf, shape, range, scale, translate);
-    // 使用官方的 distanceSignCorrection 统一 MSDF 的符号约定，使填充区域
-    // 在所有字体/字重下都保持一致，避免粗体等 glyph 出现"内部/外部符号反转"。
-    msdfgen::distanceSignCorrection(msdf, shape, msdfgen::Vector2(scale, scale), translate);
+    msdfgen::ErrorCorrectionConfig errorConfig(
+        msdfgen::ErrorCorrectionConfig::EDGE_PRIORITY,
+        msdfgen::ErrorCorrectionConfig::ALWAYS_CHECK_DISTANCE
+    );
+    msdfgen::generateMSDF(msdf, shape, range, scale, translate, errorConfig);
 
     // 调试：检查 MSDF 纹理中特定位置的距离值（仅在需要时启用）
     // 注意：msdfgen 使用数学坐标系，y=0 在底部

@@ -358,6 +358,55 @@ static int get_solo_screen_idx(void) {
     return env_i32_or_default("DONG_SCENE3D_SOLO_SCREEN", -1);
 }
 
+static int upload_buffer_data(SDL_GPUDevice* dev,
+                              SDL_GPUBuffer* dst_buffer,
+                              const void* src_data,
+                              uint32_t size,
+                              const char* debug_name) {
+    if (!dev || !dst_buffer || !src_data || size == 0) return 0;
+
+    SDL_GPUTransferBufferCreateInfo tbi = {0};
+    tbi.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+    tbi.size = size;
+    SDL_GPUTransferBuffer* tb = SDL_CreateGPUTransferBuffer(dev, &tbi);
+    if (!tb) {
+        printf("[Scene3D] Failed to create upload transfer buffer for %s (%s)\n", debug_name, SDL_GetError());
+        return 0;
+    }
+
+    void* mapped = SDL_MapGPUTransferBuffer(dev, tb, 0);
+    if (!mapped) {
+        printf("[Scene3D] Failed to map upload transfer buffer for %s (%s)\n", debug_name, SDL_GetError());
+        SDL_ReleaseGPUTransferBuffer(dev, tb);
+        return 0;
+    }
+    memcpy(mapped, src_data, size);
+    SDL_UnmapGPUTransferBuffer(dev, tb);
+
+    SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(dev);
+    if (!cmd) {
+        printf("[Scene3D] Failed to acquire command buffer for %s upload (%s)\n", debug_name, SDL_GetError());
+        SDL_ReleaseGPUTransferBuffer(dev, tb);
+        return 0;
+    }
+
+    SDL_GPUCopyPass* cp = SDL_BeginGPUCopyPass(cmd);
+    if (!cp) {
+        printf("[Scene3D] Failed to begin copy pass for %s upload (%s)\n", debug_name, SDL_GetError());
+        SDL_CancelGPUCommandBuffer(cmd);
+        SDL_ReleaseGPUTransferBuffer(dev, tb);
+        return 0;
+    }
+
+    SDL_GPUTransferBufferLocation src = {tb, 0};
+    SDL_GPUBufferRegion dst = {dst_buffer, 0, size};
+    SDL_UploadToGPUBuffer(cp, &src, &dst, 0);
+    SDL_EndGPUCopyPass(cp);
+    SDL_SubmitGPUCommandBuffer(cmd);
+    SDL_ReleaseGPUTransferBuffer(dev, tb);
+    return 1;
+}
+
 static int write_bmp24(const char* filename, uint32_t width, uint32_t height, const uint8_t* rgba_data, int input_is_bgra) {
     if (!filename || !filename[0] || !rgba_data || width == 0 || height == 0) return 0;
     (void)input_is_bgra;
@@ -2177,22 +2226,9 @@ static int create_pipelines(dong_scene3d_t* scene) {
         return 0;
     }
 
-    SDL_GPUTransferBufferCreateInfo tbi = {0};
-    tbi.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-    tbi.size = sizeof(quad);
-    SDL_GPUTransferBuffer* tb = SDL_CreateGPUTransferBuffer(scene->device, &tbi);
-    void* ptr = SDL_MapGPUTransferBuffer(scene->device, tb, 0);
-    memcpy(ptr, quad, sizeof(quad));
-    SDL_UnmapGPUTransferBuffer(scene->device, tb);
-
-    SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(scene->device);
-    SDL_GPUCopyPass* cp = SDL_BeginGPUCopyPass(cmd);
-    SDL_GPUTransferBufferLocation src = {tb, 0};
-    SDL_GPUBufferRegion dst = {scene->quad_vb, 0, sizeof(quad)};
-    SDL_UploadToGPUBuffer(cp, &src, &dst, 0);
-    SDL_EndGPUCopyPass(cp);
-    SDL_SubmitGPUCommandBuffer(cmd);
-    SDL_ReleaseGPUTransferBuffer(scene->device, tb);
+    if (!upload_buffer_data(scene->device, scene->quad_vb, quad, (uint32_t)sizeof(quad), "scene quad")) {
+        return 0;
+    }
 
     // Shaders
     SDL_GPUShader* vs = compile_shader(scene->device, SDL_GPU_SHADERSTAGE_VERTEX, VS_TEXTURED,
@@ -2273,23 +2309,15 @@ static int create_pipelines(dong_scene3d_t* scene) {
     hud_vbi.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
     hud_vbi.size = sizeof(hud_quad);
     scene->hud_quad_vb = SDL_CreateGPUBuffer(scene->device, &hud_vbi);
+    if (!scene->hud_quad_vb) {
+        printf("[Scene3D] Warning: Failed to create HUD quad vertex buffer (%s)\n", SDL_GetError());
+        return 1;  // Keep 3D pipeline alive, HUD is optional.
+    }
 
-    SDL_GPUTransferBufferCreateInfo hud_tbi = {0};
-    hud_tbi.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-    hud_tbi.size = sizeof(hud_quad);
-    SDL_GPUTransferBuffer* hud_tb = SDL_CreateGPUTransferBuffer(scene->device, &hud_tbi);
-    void* hud_ptr = SDL_MapGPUTransferBuffer(scene->device, hud_tb, 0);
-    memcpy(hud_ptr, hud_quad, sizeof(hud_quad));
-    SDL_UnmapGPUTransferBuffer(scene->device, hud_tb);
-
-    SDL_GPUCommandBuffer* hud_cmd = SDL_AcquireGPUCommandBuffer(scene->device);
-    SDL_GPUCopyPass* hud_cp = SDL_BeginGPUCopyPass(hud_cmd);
-    SDL_GPUTransferBufferLocation hud_src = {hud_tb, 0};
-    SDL_GPUBufferRegion hud_dst = {scene->hud_quad_vb, 0, sizeof(hud_quad)};
-    SDL_UploadToGPUBuffer(hud_cp, &hud_src, &hud_dst, 0);
-    SDL_EndGPUCopyPass(hud_cp);
-    SDL_SubmitGPUCommandBuffer(hud_cmd);
-    SDL_ReleaseGPUTransferBuffer(scene->device, hud_tb);
+    if (!upload_buffer_data(scene->device, scene->hud_quad_vb, hud_quad, (uint32_t)sizeof(hud_quad), "HUD quad")) {
+        printf("[Scene3D] Warning: Failed to upload HUD quad buffer\n");
+        return 1;  // Keep 3D pipeline alive, HUD is optional.
+    }
 
     // HUD shaders
     SDL_GPUShader* hud_vs = compile_shader(scene->device, SDL_GPU_SHADERSTAGE_VERTEX, VS_HUD,

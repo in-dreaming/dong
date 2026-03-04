@@ -279,4 +279,70 @@ uint32_t dong_get_api_version(void) {
     return DONG_API_VERSION;
 }
 
+dong_result_t dong_engine_create_shared_js(
+    const dong_engine_desc_t* desc,
+    dong_engine_t* script_source,
+    const char* view_name,
+    dong_engine_t** out_engine) {
+
+    if (!desc || !script_source || !view_name || !out_engine) {
+        return DONG_ERR_INVALID_ARG;
+    }
+    *out_engine = nullptr;
+
+    if (desc->api_version != DONG_API_VERSION) {
+        return DONG_ERR_VERSION_MISMATCH;
+    }
+
+    if (!script_source->view) {
+        return DONG_ERR_INVALID_ARG;
+    }
+
+    auto* shared_se = script_source->view->getScriptEngine();
+    if (!shared_se) {
+        return DONG_ERR_INTERNAL;
+    }
+
+    const uint32_t w = desc->width > 0 ? desc->width : 960;
+    const uint32_t h = desc->height > 0 ? desc->height : 540;
+
+    try {
+        auto* engine = new dong_engine_t();
+        engine->plugin = desc->plugin ? desc->plugin : script_source->plugin;
+        engine->plugin_user = desc->plugin ? desc->plugin_user : script_source->plugin_user;
+        engine->width = w;
+        engine->height = h;
+
+        engine->view = std::make_unique<dong::EngineView>(w, h, shared_se);
+        if (!engine->view || !engine->view->isInitialized()) {
+            delete engine;
+            return DONG_ERR_INTERNAL;
+        }
+
+        engine->view->setViewName(view_name);
+
+        if (engine->plugin) {
+            engine->view->setPlugin(engine->plugin, engine->plugin_user);
+        }
+
+        if (desc->html) {
+            (void)engine->view->loadHTML(desc->html);
+        }
+
+        if (pluginCanLog(engine->plugin)) {
+            char msg[256];
+            std::snprintf(msg, sizeof(msg),
+                          "Engine created (shared-js, %ux%u, view='%s')",
+                          engine->width, engine->height, view_name);
+            pluginLog(engine->plugin, engine->plugin_user, DONG_LOG_INFO, msg);
+        }
+
+        *out_engine = engine;
+        return DONG_OK;
+    } catch (...) {
+        *out_engine = nullptr;
+        return DONG_ERR_INTERNAL;
+    }
+}
+
 } // extern "C"

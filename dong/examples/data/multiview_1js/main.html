@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            padding: 16px;
+            background-color: #1e293b;
+            color: #e2e8f0;
+            font-family: Arial, sans-serif;
+        }
+        h2 { font-size: 20px; color: #38bdf8; margin: 0 0 16px 0; }
+        .btn-row { display: flex; gap: 10px; margin-bottom: 12px; }
+        button {
+            padding: 10px 20px;
+            background-color: #3b82f6;
+            color: #fff;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        #status {
+            margin-top: 12px;
+            padding: 10px;
+            background-color: #0f172a;
+            border-radius: 6px;
+            font-size: 13px;
+            color: #94a3b8;
+        }
+        input {
+            width: 100%;
+            padding: 10px;
+            background-color: #0f172a;
+            color: #e2e8f0;
+            border-radius: 6px;
+            font-size: 14px;
+            margin-bottom: 12px;
+        }
+    </style>
+</head>
+<body>
+    <h2>Control Panel (main)</h2>
+    <div class="btn-row">
+        <button id="btn-hello">Say Hello</button>
+        <button id="btn-time">Show Time</button>
+        <button id="btn-clear">Clear</button>
+    </div>
+    <input id="msg-input" type="text" placeholder="Type a message for display view..." />
+    <div id="status">Ready.</div>
+</body>
+</html>

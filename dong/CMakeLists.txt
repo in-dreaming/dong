@@ -521,6 +521,21 @@ if(BUILD_EXAMPLES)
         if(EXISTS "${CMAKE_SOURCE_DIR}/examples/3d_screens_simple/main.c")
             add_appcore_example(3d_screens_simple "examples/3d_screens_simple/main.c")
         endif()
+
+        # Multi-view shared JS demo (needs direct SDL + backend access for offscreen compositing)
+        if(EXISTS "${CMAKE_SOURCE_DIR}/examples/multiview_1js.cpp")
+            add_appcore_example(multiview_1js "examples/multiview_1js.cpp")
+            target_include_directories(multiview_1js PRIVATE
+                "${CMAKE_SOURCE_DIR}/backends/sdl"
+                "${SDL3_PREFIX}/include"
+            )
+        endif()
+
+        # Dock demo (multi-window docking system)
+        if(EXISTS "${CMAKE_SOURCE_DIR}/examples/dock_demo.c")
+            add_appcore_example(dock_demo "examples/dock_demo.c")
+            target_include_directories(dock_demo PRIVATE "${SDL3_PREFIX}/include")
+        endif()
     endif()
 
     # Feature test runner
@@ -604,6 +619,12 @@ if(BUILD_EXAMPLES)
         endif()
         if(TARGET 3d_screens_simple)
             list(APPEND EXAMPLE_TARGETS 3d_screens_simple)
+        endif()
+        if(TARGET multiview_1js)
+            list(APPEND EXAMPLE_TARGETS multiview_1js)
+        endif()
+        if(TARGET dock_demo)
+            list(APPEND EXAMPLE_TARGETS dock_demo)
         endif()
     endif()
 

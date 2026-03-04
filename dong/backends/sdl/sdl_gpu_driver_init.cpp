@@ -482,10 +482,11 @@ bool SDLGPUDriver::initialize() {
     text_sampler_info.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
     text_sampler_info.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
     text_sampler_info.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
-    // 关键：MSDF 必须使用 NEAREST 采样！
-    // Linear 过滤会插值 MSDF 的距离值，导致边缘模糊
-    text_sampler_info.mag_filter = SDL_GPU_FILTER_NEAREST;
-    text_sampler_info.min_filter = SDL_GPU_FILTER_NEAREST;
+    // MSDF 使用 LINEAR 采样：线性插值距离值产生有效的中间距离，
+    // median(r,g,b) 运算后结果正确。Atlas 已有 2px padding 防止采样到相邻 glyph。
+    // LINEAR 消除了高缩小比 (128-384px → 13-24px) 下的 minification 锯齿。
+    text_sampler_info.mag_filter = SDL_GPU_FILTER_LINEAR;
+    text_sampler_info.min_filter = SDL_GPU_FILTER_LINEAR;
     text_sampler_info.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_NEAREST;
 
     text_sampler_ = SDL_CreateGPUSampler(dev, &text_sampler_info);

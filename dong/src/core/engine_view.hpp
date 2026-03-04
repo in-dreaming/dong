@@ -2,9 +2,13 @@
 
 #include <cstdint>
 #include <memory>
+#include <string>
 
 #include "dong_plugin_api.h"
 
+namespace dong::script {
+class ScriptEngine;
+}
 
 namespace dong {
 
@@ -13,6 +17,12 @@ namespace dong {
 class EngineView {
 public:
     EngineView(uint32_t width, uint32_t height);
+
+    // Create a view that shares another view's ScriptEngine (multi-view-1-JS).
+    // The shared_script_engine must outlive this view.
+    EngineView(uint32_t width, uint32_t height,
+               dong::script::ScriptEngine* shared_script_engine);
+
     ~EngineView();
 
     EngineView(const EngineView&) = delete;
@@ -53,6 +63,12 @@ public:
 
     // Script
     bool evalScript(const char* code);
+
+    // Set a name for this view (used by dong.getView(name) in JS).
+    void setViewName(const char* name);
+
+    // Get the raw ScriptEngine pointer (for sharing with other views).
+    dong::script::ScriptEngine* getScriptEngine() const;
 
     // Rendering
     const void* getCommandList() const;

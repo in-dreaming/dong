@@ -96,6 +96,24 @@ DONG_API dong_result_t dong_engine_send_text_editing(dong_engine_t* engine, cons
 DONG_API dong_result_t dong_engine_eval_script(dong_engine_t* engine, const char* code);
 
 // =============================================================================
+// Multi-View Shared JS
+// =============================================================================
+
+// Create an engine that shares the JavaScript environment (JSRuntime+JSContext)
+// with an existing engine. The new engine has its own DOM/Layout/Render but runs
+// JS in the same context as script_source.
+//
+// In JS, the default `window`/`document` globals point to script_source's DOM.
+// The new view is accessible via `dong.getView(view_name).document`.
+//
+// script_source must outlive the returned engine.
+DONG_API dong_result_t dong_engine_create_shared_js(
+    const dong_engine_desc_t* desc,
+    dong_engine_t* script_source,
+    const char* view_name,
+    dong_engine_t** out_engine);
+
+// =============================================================================
 // Rendering (GPU command list access)
 // =============================================================================
 

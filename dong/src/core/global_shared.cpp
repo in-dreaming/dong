@@ -96,8 +96,8 @@ bool GlobalShared::initInternal(DongGPUDriver* driver) {
     };
     
     const TierConfig tiers[] = {
-        {128u,  7.0f},   // 9-14px
-        {192u,  9.0f},   // 14-22px
+        {128u,  16.0f},  // 9-14px: large range for high downscaling ratio (Godot uses 14.0)
+        {192u,  14.0f},  // 14-22px
         {256u,  11.0f},  // 22-36px
         {384u,  12.0f},  // 36px+
     };
