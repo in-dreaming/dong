@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdio>
 #include <cstdlib>
+#include <filesystem>
 #include <sstream>
 #include <string>
 
@@ -135,22 +137,31 @@ void Painter::paintMediaElements(const dom::DOMNodePtr& node,
 
         const auto mfi = extractMediaFitInfo(style);
 
-        // Check if image file exists (simple file existence check)
+        // Check if the image file actually exists on disk.
+        // Data URLs are always treated as valid (they don't need file access).
         bool image_exists = false;
         if (!src.empty()) {
-            // Simple check: if src starts with "test_" or contains "broken", treat as broken image
-            // In a real implementation, this would check file existence via platform API
-            image_exists = (src.find("broken") == std::string::npos &&
-                          src.find("test_broken") == std::string::npos);
+            if (src.rfind("data:", 0) == 0) {
+                // data: URL – always exists
+                image_exists = true;
+            } else {
+                // Resolve the path relative to the resource root if needed
+                namespace fs = std::filesystem;
+                fs::path p(src);
+                if (!p.is_absolute() && !resource_root_.empty()) {
+                    p = fs::path(resource_root_) / p;
+                }
+                std::error_code ec;
+                image_exists = fs::exists(p, ec);
+            }
         }
 
-        // If image failed to load, render alt text
+        // If image failed to load, render broken image placeholder
         if (!image_exists) {
             std::string alt_text = node->getAttribute("alt");
-            if (!alt_text.empty()) {
-                renderAltText(rect, alt_text, style, builder);
-                return;
-            }
+            // Always render a placeholder (with or without alt text)
+            renderAltText(rect, alt_text, style, builder);
+            return;
         }
 
         DisplayListBuilder::ScopedClip img_clip;

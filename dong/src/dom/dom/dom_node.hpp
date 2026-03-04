@@ -145,6 +145,10 @@ public:
     void setInlineStyleProperty(const std::string& property, const std::string& value);
     std::string getInlineStyleProperty(const std::string& property) const;
     const std::unordered_map<std::string, std::string>& getInlineStyles() const { return inline_styles_; }
+    // Returns a serialized cssText with properties in declaration order.
+    std::string getInlineStyleCssText() const;
+    // Called by the HTML parser to set the raw style attribute string (preserves order).
+    void setInlineStyleAttrString(const std::string& s) { inline_style_attr_ = s; }
     ComputedStyle& getComputedStyle() { return computed_style_; }
     const ComputedStyle& getComputedStyle() const { return computed_style_; }
     
@@ -304,6 +308,7 @@ protected:
     std::string text_content_;
     std::unordered_map<std::string, std::string> attributes_;
     std::unordered_map<std::string, std::string> inline_styles_;
+    std::string inline_style_attr_; // Raw style attribute string (preserves declaration order)
     ComputedStyle computed_style_;
     bool layout_dirty_ = true;
     bool style_dirty_ = true;

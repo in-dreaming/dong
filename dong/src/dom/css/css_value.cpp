@@ -32,8 +32,10 @@ float CSSValue::resolvePixels(float parent_size, float root_font_size,
             }
             return 0.0f;
         case Unit::ENV:
-            // env() values are resolved during style computation, not here
-            // This should never be called for ENV values
+            // Resolve via fallback (safe-area-inset vars are 0 on desktop when no fallback)
+            if (env_fallback) {
+                return env_fallback->resolvePixels(parent_size, root_font_size, viewport_width, viewport_height);
+            }
             return 0.0f;
         case Unit::AUTO:
         case Unit::INHERIT:

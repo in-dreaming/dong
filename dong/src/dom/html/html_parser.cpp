@@ -93,52 +93,78 @@ DOMNodePtr HTMLParser::parseFragment(const std::string& html, DOMNodePtr context
     if (!temp_doc) {
         return nullptr;
     }
-    
-    // Wrap in body to ensure proper parsing
-    std::string wrapped = "<body>" + html + "</body>";
-    
+
+    // Determine the context tag so we can pick the right wrapper.
+    // When parsing innerHTML for table parts, we must wrap in the appropriate
+    // table ancestor so the HTML5 parser recognises the content as valid.
+    // Without this, <td>/<th>/<tr> content gets foster-parented to <body>.
+    std::string ctx_tag;
+    if (context) {
+        ctx_tag = context->getTagName();
+    }
+
+    std::string wrapped;
+    std::string extract_tag;     // the element whose children we want
+    if (ctx_tag == "tr") {
+        // Fragment is a list of <td>/<th> cells
+        wrapped = "<table><tbody><tr>" + html + "</tr></tbody></table>";
+        extract_tag = "tr";
+    } else if (ctx_tag == "tbody" || ctx_tag == "thead" || ctx_tag == "tfoot") {
+        // Fragment is a list of <tr> rows
+        wrapped = "<table>" + html + "</table>";
+        extract_tag = ctx_tag;
+    } else if (ctx_tag == "table") {
+        wrapped = "<table>" + html + "</table>";
+        extract_tag = "table";
+    } else {
+        // Default: body context
+        wrapped = "<body>" + html + "</body>";
+        extract_tag = "body";
+    }
+
     lxb_status_t status = lxb_html_document_parse(
         temp_doc,
         reinterpret_cast<const uint8_t*>(wrapped.c_str()),
         wrapped.length()
     );
-    
+
     if (status != LXB_STATUS_OK) {
         lxb_html_document_destroy(temp_doc);
         return nullptr;
     }
-    
+
     lxb_dom_node_t* root = lxb_dom_interface_node(temp_doc);
     if (!root) {
         lxb_html_document_destroy(temp_doc);
         return nullptr;
     }
-    
+
     // Find body and extract its children
     auto dom_root = lexborNodeToDOMNode(root);
-    
+
     // Create a document fragment to hold the children
     auto fragment = std::make_shared<DOMNode>(DOMNode::NodeType::DOCUMENT_FRAGMENT);
-    
-    // Find body element and move its children to fragment
-    std::function<void(DOMNodePtr)> findBody = [&](DOMNodePtr node) {
-        if (node->getTagName() == "body") {
+
+    // Find the target element and move its children to fragment
+    std::function<bool(DOMNodePtr)> findTarget = [&](DOMNodePtr node) -> bool {
+        if (node->getTagName() == extract_tag) {
             for (const auto& child : node->getChildren()) {
                 fragment->appendChild(child->cloneNode(true));
             }
-            return;
+            return true;
         }
         for (const auto& child : node->getChildren()) {
-            findBody(child);
+            if (findTarget(child)) return true;
         }
+        return false;
     };
-    
+
     if (dom_root) {
-        findBody(dom_root);
+        findTarget(dom_root);
     }
-    
+
     lxb_html_document_destroy(temp_doc);
-    
+
     return fragment;
 }
 
@@ -229,28 +255,33 @@ void HTMLParser::parseInlineStyles(DOMNodePtr node) {
 
     if (node->hasAttribute("style")) {
         std::string style_str = node->getAttribute("style");
-        
+
+        // Store the raw attribute string so cssText can return it in declaration order.
+        node->setInlineStyleAttrString(style_str);
+
         size_t pos = 0;
         while (pos < style_str.length()) {
             size_t semicolon = style_str.find(';', pos);
             if (semicolon == std::string::npos) semicolon = style_str.length();
-            
+
             std::string declaration = style_str.substr(pos, semicolon - pos);
             pos = semicolon + 1;
-            
+
             size_t colon = declaration.find(':');
             if (colon == std::string::npos) continue;
-            
+
             std::string property = declaration.substr(0, colon);
             std::string value = declaration.substr(colon + 1);
-            
+
             property.erase(0, property.find_first_not_of(" \t"));
             property.erase(property.find_last_not_of(" \t") + 1);
             value.erase(0, value.find_first_not_of(" \t"));
             value.erase(value.find_last_not_of(" \t") + 1);
-            
+
             node->setInlineStyleProperty(property, value);
         }
+        // Restore the raw attr string since setInlineStyleProperty clears it.
+        node->setInlineStyleAttrString(style_str);
     }
 
     for (const auto& child : node->getChildren()) {

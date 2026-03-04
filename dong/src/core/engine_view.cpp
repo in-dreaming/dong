@@ -38,6 +38,7 @@
 #include <cmath>
 #include <unordered_map>
 #include <unordered_set>
+#include <chrono>
 
 
 
@@ -1318,6 +1319,7 @@ struct EngineView::Impl {
                     }
                     if (nid) {
                         js_bindings->dispatchSimpleEvent(nid, "DOMContentLoaded");
+                        js_bindings->dispatchSimpleEvent(nid, "load");
                     }
                 }
             }
@@ -1434,6 +1436,16 @@ struct EngineView::Impl {
         if (!script_engine) return;
         DONG_PROFILE_SCOPE_CAT("Script::processTasks", "script");
         script_engine->processPendingTasks();
+
+        // Fire any due setTimeout / setInterval callbacks
+        if (js_bindings) {
+            auto now = std::chrono::steady_clock::now();
+            double elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+                now - js_bindings->script_start_time_).count() / 1e6;
+            js_bindings->tickTimers(elapsed);
+            // Flush any style/layout dirtied by timer callbacks
+            flushStyleLayoutAfterScripts();
+        }
     }
 
     void flushStyleLayoutAfterScripts() {
@@ -2769,6 +2781,11 @@ bool EngineView::isInitialized() const {
 void EngineView::setResourceRoot(const char* root) {
     if (!impl_) return;
     impl_->resource_root = root ? root : "";
+
+    // Propagate to the Painter so it can resolve image paths for broken-image detection.
+    if (impl_->painter) {
+        impl_->painter->setResourceRoot(impl_->resource_root);
+    }
 
     DongPlatform* platform = dong_platform_get();
     DongGPUDriver* driver = platform ? dong_platform_get_gpu_driver(platform) : nullptr;

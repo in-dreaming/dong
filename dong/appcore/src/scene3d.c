@@ -1349,20 +1349,19 @@ static void update_camera_key_state_fallback_keycode(dong_scene3d_t* scene, uint
     if (!scene) return;
 
     const int v = down ? 1 : 0;
-    switch (normalize_ascii_keycode(key)) {
-        case 'w': scene->key_w = v; break;
-        case 'a': scene->key_a = v; break;
-        case 's': scene->key_s = v; break;
-        case 'd': scene->key_d = v; break;
-        case 'q': scene->key_q = v; break;
-        case 'e': scene->key_e = v; break;
-        case SDLK_SPACE: scene->key_space = v; break;
-        case SDLK_LCTRL: scene->key_lctrl = v; break;
-        case SDLK_RCTRL: scene->key_rctrl = v; break;
-        case SDLK_LSHIFT: scene->key_lshift = v; break;
-        case SDLK_RSHIFT: scene->key_rshift = v; break;
-        default: break;
-    }
+    const uint32_t normalized = normalize_ascii_keycode(key);
+
+    if (normalized == 'w' || key == SDLK_W) { scene->key_w = v; return; }
+    if (normalized == 'a' || key == SDLK_A) { scene->key_a = v; return; }
+    if (normalized == 's' || key == SDLK_S) { scene->key_s = v; return; }
+    if (normalized == 'd' || key == SDLK_D) { scene->key_d = v; return; }
+    if (normalized == 'q' || key == SDLK_Q) { scene->key_q = v; return; }
+    if (normalized == 'e' || key == SDLK_E) { scene->key_e = v; return; }
+    if (key == SDLK_SPACE) { scene->key_space = v; return; }
+    if (key == SDLK_LCTRL) { scene->key_lctrl = v; return; }
+    if (key == SDLK_RCTRL) { scene->key_rctrl = v; return; }
+    if (key == SDLK_LSHIFT) { scene->key_lshift = v; return; }
+    if (key == SDLK_RSHIFT) { scene->key_rshift = v; return; }
 }
 
 static int is_camera_shift_down(const dong_scene3d_t* scene) {
@@ -1489,11 +1488,11 @@ DONG_APPCORE_API void dong_scene3d_process_event(dong_scene3d_t* scene, const do
                         event->key.repeat);
             }
 
-            if (event->key.scancode) {
+            if (event->key.scancode && event->key.scancode != SDL_SCANCODE_UNKNOWN) {
                 update_camera_key_state_scancode(scene, event->key.scancode, down);
-            } else {
-                update_camera_key_state_fallback_keycode(scene, event->key.key_code, down);
             }
+            // 兼容不同后端/平台的 keycode 语义差异：始终做一次 keycode 回退更新。
+            update_camera_key_state_fallback_keycode(scene, event->key.key_code, down);
 
             handle_key(scene, event->key.key_code, down);
             break;
@@ -1746,9 +1745,52 @@ static int update_screens_scheduled(dong_scene3d_t* scene) {
     return updates_this_frame;
 }
 
+static void sync_camera_keys_from_keyboard_state(dong_scene3d_t* scene) {
+    if (!scene) return;
+
+    int key_count = 0;
+    const bool* ks = SDL_GetKeyboardState(&key_count);
+    if (!ks || key_count <= 0) return;
+
+    scene->key_w = (SDL_SCANCODE_W < key_count && ks[SDL_SCANCODE_W]) ? 1 : 0;
+    scene->key_a = (SDL_SCANCODE_A < key_count && ks[SDL_SCANCODE_A]) ? 1 : 0;
+    scene->key_s = (SDL_SCANCODE_S < key_count && ks[SDL_SCANCODE_S]) ? 1 : 0;
+    scene->key_d = (SDL_SCANCODE_D < key_count && ks[SDL_SCANCODE_D]) ? 1 : 0;
+    scene->key_q = (SDL_SCANCODE_Q < key_count && ks[SDL_SCANCODE_Q]) ? 1 : 0;
+    scene->key_e = (SDL_SCANCODE_E < key_count && ks[SDL_SCANCODE_E]) ? 1 : 0;
+    scene->key_space = (SDL_SCANCODE_SPACE < key_count && ks[SDL_SCANCODE_SPACE]) ? 1 : 0;
+    scene->key_lctrl = (SDL_SCANCODE_LCTRL < key_count && ks[SDL_SCANCODE_LCTRL]) ? 1 : 0;
+    scene->key_rctrl = (SDL_SCANCODE_RCTRL < key_count && ks[SDL_SCANCODE_RCTRL]) ? 1 : 0;
+    scene->key_lshift = (SDL_SCANCODE_LSHIFT < key_count && ks[SDL_SCANCODE_LSHIFT]) ? 1 : 0;
+    scene->key_rshift = (SDL_SCANCODE_RSHIFT < key_count && ks[SDL_SCANCODE_RSHIFT]) ? 1 : 0;
+}
+
+static void sync_hover_and_capture_from_runtime_mouse(dong_scene3d_t* scene) {
+    if (!scene || !scene->window) return;
+
+    float mx = 0.0f, my = 0.0f;
+    const SDL_MouseButtonFlags mouse_buttons = SDL_GetMouseState(&mx, &my);
+    const int right_down = (mouse_buttons & SDL_BUTTON_RMASK) ? 1 : 0;
+
+    if (right_down != scene->right_mouse_down) {
+        scene->right_mouse_down = right_down;
+        set_fps_input_mode(scene, right_down);
+        scene->dirty = 1;
+    }
+
+    if (!scene->right_mouse_down) {
+        uint32_t w = 0, h = 0;
+        dong_app_get_size(scene->app, &w, &h);
+        update_hover_from_mouse(scene, (int32_t)mx, (int32_t)my, w, h);
+    }
+}
+
 // Update
 DONG_APPCORE_API void dong_scene3d_update(dong_scene3d_t* scene, float dt) {
     if (!scene) return;
+
+    sync_hover_and_capture_from_runtime_mouse(scene);
+    sync_camera_keys_from_keyboard_state(scene);
 
     const float old_cam_x = scene->cam_x;
     const float old_cam_y = scene->cam_y;

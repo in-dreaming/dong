@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
+#include <unordered_map>
 #include <vector>
 
 #include "../list_marker.hpp"
@@ -177,6 +178,10 @@ void Painter::renderMarkerForListItem(const dom::DOMNodePtr& node,
         float pl = style.padding_left.isPixel() ? style.padding_left.value : 0.0f;
         float bl = std::max(0.0f, style.border_left_width >= 0.0f ? style.border_left_width : style.border_width);
         marker_x = node_rect.x + bl + pl;
+        // Store the inside marker width so the li text renderer can offset its start position.
+        char buf[32];
+        std::snprintf(buf, sizeof(buf), "%.2f", marker_width + kMarkerGap);
+        node->setAttribute("__inside_marker_width__", buf);
     }
     float pt = style.padding_top.isPixel() ? style.padding_top.value : 0.0f;
     float bt = std::max(0.0f, style.border_top_width >= 0.0f ? style.border_top_width : style.border_width);
@@ -433,6 +438,14 @@ void Painter::paintChildrenAndOverlays(const dom::DOMNodePtr& node,
         std::vector<dom::DOMNodePtr> deferred_sticky;
         deferred_sticky.reserve(children.size());
 
+        // CSS counter-reset sibling scoping (CSS Lists Level 3):
+        // A counter-reset on element E creates an instance covering E and all
+        // following siblings. When a later sibling F resets the SAME counter,
+        // F's instance REPLACES E's (scope of E ends at F). We implement this by
+        // popping the previous sibling-level instance before pushing the new one.
+        // All sibling-level pushes are popped after the sibling list is done.
+        std::unordered_map<std::string, int> sibling_pushed;  // name → count pushed at this level
+
         for (const auto& child : children) {
             if (!child || child->getType() != dom::DOMNode::NodeType::ELEMENT) {
                 continue;
@@ -441,6 +454,23 @@ void Painter::paintChildrenAndOverlays(const dom::DOMNodePtr& node,
             if (child->getAttribute("__inline_rendered__") == "1") {
                 child->setAttribute("__inline_rendered__", "");  // 清除标记
                 continue;
+            }
+
+            // For each counter-reset in this child, if a previous sibling already
+            // pushed that counter at this level, pop it first (replace semantics).
+            if (!child->getComputedStyle().counter_resets.empty()) {
+                for (const auto& r : child->getComputedStyle().counter_resets) {
+                    if (r.name.empty()) continue;
+                    auto it = sibling_pushed.find(r.name);
+                    if (it != sibling_pushed.end() && it->second > 0) {
+                        popCounterResetByName(r.name);
+                        it->second -= 1;
+                    }
+                }
+                pushCounterResetsOnly(child->getComputedStyle());
+                for (const auto& r : child->getComputedStyle().counter_resets) {
+                    if (!r.name.empty()) sibling_pushed[r.name]++;
+                }
             }
 
             if (should_defer_sticky(child)) {
@@ -455,6 +485,13 @@ void Painter::paintChildrenAndOverlays(const dom::DOMNodePtr& node,
         for (const auto& child : deferred_sticky) {
             const layout::LayoutNode* child_layout = layout_engine_ ? layout_engine_->getLayout(child) : nullptr;
             buildDisplayListNode(child, child_layout, builder);
+        }
+
+        // Pop all remaining sibling-level counter-reset scopes.
+        for (auto& kv : sibling_pushed) {
+            for (int i = 0; i < kv.second; ++i) {
+                popCounterResetByName(kv.first);
+            }
         }
     } else {
         // 收集需要绘制的子元素及其 z-index

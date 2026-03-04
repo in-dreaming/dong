@@ -348,6 +348,9 @@ struct ComputedStyle {
     void markExplicitlySet(const std::string& prop) {
         explicitly_set_properties_.insert(prop);
     }
+    void clearExplicitlySet() {
+        explicitly_set_properties_.clear();
+    }
 
     // Check if a property has a global keyword
     bool hasGlobalKeyword(const std::string& prop) const {

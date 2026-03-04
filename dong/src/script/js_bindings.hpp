@@ -5,6 +5,7 @@
 #include <vector>
 #include <string>
 #include <chrono>
+#include <map>
 #include "script_engine.hpp"
 #include "../dom/dom_manager.hpp"
 #include "../dom/event_system.hpp"
@@ -127,6 +128,22 @@ public:
 
     // DOM lifecycle
     void resetForNewDOM();
+
+    // Timer API (setTimeout / clearTimeout / setInterval / clearInterval)
+    // Called each tick with current wall-clock time in seconds.
+    void tickTimers(double current_time_sec);
+
+    struct TimerEntry {
+        uint32_t id = 0;
+        double fire_at = 0.0;  // absolute time in seconds
+        double interval = -1.0; // -1 = one-shot, else repeat period
+        JSValue callback = JS_UNDEFINED;
+        bool cancelled = false;
+    };
+
+    // Timer state (public so JS binding functions can access)
+    std::map<uint32_t, TimerEntry> timers_;
+    uint32_t next_timer_id_ = 1;
 
     // Document.write support: current executing <script>
     void setCurrentExecutingScript(const dom::DOMNodePtr& script_node) { current_executing_script_ = script_node; }

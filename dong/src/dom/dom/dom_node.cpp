@@ -991,6 +991,8 @@ void DOMNode::setInlineStyleProperty(const std::string& property, const std::str
     } else {
         inline_styles_[key] = value;
     }
+    // Invalidate cached attribute string since CSSOM changed the properties.
+    inline_style_attr_.clear();
 
     if (inline_styles_.empty()) {
         attributes_.erase("style");
@@ -1026,6 +1028,22 @@ std::string DOMNode::getInlineStyleProperty(const std::string& property) const {
         return "";
     }
     return it->second;
+}
+
+std::string DOMNode::getInlineStyleCssText() const {
+    // If we have the original attribute string (from HTML parsing), return it directly.
+    // This preserves the declaration order and whitespace the author wrote.
+    if (!inline_style_attr_.empty()) {
+        return inline_style_attr_;
+    }
+    // CSSOM-modified styles: serialize in map order (not ideal but consistent).
+    std::string result;
+    for (const auto& entry : inline_styles_) {
+        if (entry.second.empty()) continue;
+        if (!result.empty()) result += " ";
+        result += entry.first + ": " + entry.second + ";";
+    }
+    return result;
 }
 
 void DOMNode::markLayoutDirty() {

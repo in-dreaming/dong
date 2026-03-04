@@ -8,6 +8,14 @@
 
 namespace dong {
 
+// Returns true for ASCII whitespace only (space, tab, newline, CR, FF, VT).
+// Must NOT use std::isspace() which is locale-aware and may treat 0xa0
+// (second byte of some UTF-8 sequences like U+683C 格) as whitespace,
+// corrupting multi-byte characters.
+inline bool isAsciiWhitespace(char c) {
+    return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v';
+}
+
 // Collapse consecutive whitespace into single space, trim leading/trailing
 inline std::string collapseWhitespace(const std::string& input) {
     if (input.empty()) return "";
@@ -15,7 +23,7 @@ inline std::string collapseWhitespace(const std::string& input) {
     output.reserve(input.size());
     bool in_space = false;
     for (char c : input) {
-        if (std::isspace(static_cast<unsigned char>(c))) {
+        if (isAsciiWhitespace(c)) {
             if (!in_space) {
                 output.push_back(' ');
                 in_space = true;
@@ -42,7 +50,7 @@ inline std::string collapseWhitespaceKeepTrailing(const std::string& input) {
     output.reserve(input.size());
     bool in_space = false;
     for (char c : input) {
-        if (std::isspace(static_cast<unsigned char>(c))) {
+        if (isAsciiWhitespace(c)) {
             if (!in_space) {
                 output.push_back(' ');
                 in_space = true;

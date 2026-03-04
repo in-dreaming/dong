@@ -412,6 +412,35 @@ public:
     const DisplayList& get() const { return list_; }
     DisplayList&& take() { return std::move(list_); }
 
+    // Returns the current number of items in the display list.
+    // Use this to record an insertion point before emitting child items.
+    size_t getItemCount() const { return list_.items.size(); }
+
+    // Insert a rect at position `index` (0-based).  Items at `index` and beyond
+    // are shifted one position to the right.  Use this to emit a background rect
+    // before glyph runs that were already pushed to the list.
+    void insertRectAt(size_t index, const Rect& rect, const Color& color) {
+        DisplayItem item{};
+        item.type = DisplayItemType::DrawRect;
+        item.rect.rect = applyTranslate(rect);
+        item.rect.color = color;
+        auto it = list_.items.begin() + static_cast<ptrdiff_t>(
+            std::min(index, list_.items.size()));
+        list_.items.insert(it, std::move(item));
+    }
+
+    void insertRoundedRectAt(size_t index, const Rect& rect, const Color& color, float radius) {
+        DisplayItem item{};
+        item.type = DisplayItemType::DrawRoundedRect;
+        item.rounded_rect.rect = applyTranslate(rect);
+        item.rounded_rect.color = color;
+        item.rounded_rect.radius = radius;
+        item.rounded_rect.stroke_width = 0.0f;
+        auto it = list_.items.begin() + static_cast<ptrdiff_t>(
+            std::min(index, list_.items.size()));
+        list_.items.insert(it, std::move(item));
+    }
+
 private:
     void popLayer() {
         if (layer_depth_ <= 0) {

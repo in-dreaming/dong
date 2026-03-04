@@ -196,7 +196,11 @@ float computeIntrinsicTextWidth(const dom::DOMNodePtr& node) {
     float border_w = style.border_width > 0.0f ? style.border_width : 0.0f;
 
     float result = content_width + pad_left + pad_right + border_w * 2.0f;
-    
+
+    // Add 1px safety margin to prevent text from wrapping at the exact measurement boundary.
+    // The painter and layout may use slightly different glyph advance measurements.
+    if (result > 0.0f && result < 10000.0f) result += 1.0f;
+
     if (result > 10000.0f || result < 0.0f || !std::isfinite(result)) {
         return 0.0f;
     }
@@ -404,7 +408,7 @@ float computeIntrinsicTextHeight(const dom::DOMNodePtr& node, float parent_conte
     std::string ws = style.white_space;
     std::transform(ws.begin(), ws.end(), ws.begin(),
                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    bool ws_preserves_newlines = (ws == "pre-wrap" || ws == "pre" || ws == "pre-line");
+    bool ws_preserves_newlines = (ws == "pre-wrap" || ws == "pre" || ws == "pre-line" || ws == "break-spaces");
 
     std::string text;
     if (ws_preserves_newlines) {
@@ -695,11 +699,19 @@ void collapseVerticalMarginBetweenSiblings(const dom::DOMNodePtr& prev_node,
     float prev_mb = 0.0f;
     if (prev_style.margin_bottom.isPixel()) {
         prev_mb = prev_style.margin_bottom.value;
+    } else if (prev_style.margin_bottom.unit == dom::CSSValue::Unit::EM) {
+        prev_mb = prev_style.margin_bottom.value * prev_style.font_size;
+    } else if (prev_style.margin_bottom.unit == dom::CSSValue::Unit::REM) {
+        prev_mb = prev_style.margin_bottom.value * 16.0f; // fallback root font size
     }
 
     float curr_mt = 0.0f;
     if (curr_style.margin_top.isPixel()) {
         curr_mt = curr_style.margin_top.value;
+    } else if (curr_style.margin_top.unit == dom::CSSValue::Unit::EM) {
+        curr_mt = curr_style.margin_top.value * curr_style.font_size;
+    } else if (curr_style.margin_top.unit == dom::CSSValue::Unit::REM) {
+        curr_mt = curr_style.margin_top.value * 16.0f; // fallback root font size
     }
 
     if (prev_mb <= 0.0f || curr_mt <= 0.0f) {
@@ -1298,6 +1310,7 @@ Engine::~Engine() {
     }
 
     anon_blocks_.clear();
+    pseudo_before_phantom_nodes_.clear();
     layout_cache.clear();
 
     if (yoga_config) {
@@ -1372,6 +1385,7 @@ void Engine::calculateLayout(dom::DOMNodePtr root, float width, float height) {
         ab.yoga_node = nullptr;
     }
     anon_blocks_.clear();
+    pseudo_before_phantom_nodes_.clear();
 
     DONG_LOG_DEBUG("[Layout] clearing layout_cache entries=%zu", layout_cache.size());
     layout_cache.clear();
@@ -1696,6 +1710,13 @@ void Engine::calculateLayout(dom::DOMNodePtr root, float width, float height) {
                         ++dom_children_iter; // consume the matched node
                     }
                 } else {
+                    // Check if this Yoga child is a phantom node (for ::before spacing).
+                    // Phantom nodes don't correspond to any DOM element - skip them.
+                    if (pseudo_before_phantom_nodes_.count(child_yoga)) {
+                        ++yoga_child_index;
+                        continue;
+                    }
+
                     // Regular DOM child: find the next element in the DOM children
                     dom::DOMNodePtr child_dom;
                     while (dom_children_iter != dom_children_end) {
@@ -1966,8 +1987,50 @@ void Engine::buildChildYogaNodes(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
         inline_run.clear();
     };
 
+    // If the block has an inline ::before with content and only block children,
+    // inject a phantom Yoga node to reserve space for the ::before text line.
+    // This prevents the first block child from overlapping with the ::before content.
+    if (parent_is_block_like && !needs_anon_wrapping) {
+        auto pseudo_before = dom_node->getPseudoBefore();
+        if (pseudo_before) {
+            const auto& ps = pseudo_before->getComputedStyle();
+            const bool is_inline_pseudo = (ps.display == "inline" || ps.display == "inline-block" || ps.display.empty());
+            const bool has_content = !ps.content_raw.empty() || !ps.content_tokens.empty();
+            if (is_inline_pseudo && has_content) {
+                // Check that children are block-only (no inline/mixed children)
+                bool has_block_children = false;
+                for (const auto& child : dom_node->getChildren()) {
+                    if (child && child->getType() == dom::DOMNode::NodeType::ELEMENT) {
+                        const auto& cs = child->getComputedStyle();
+                        if (cs.display != "none" && !isInlineLevelDisplay(cs.display) &&
+                            cs.position != "absolute" && cs.position != "fixed") {
+                            has_block_children = true;
+                            break;
+                        }
+                    }
+                }
+                if (has_block_children) {
+                    float before_fs = ps.font_size > 0.0f ? ps.font_size : parent_style.font_size;
+                    if (before_fs <= 0.0f) before_fs = 16.0f;
+                    float phantom_height = before_fs * 1.4f;
+
+                    InlineMetrics metrics{};
+                    if (computeInlineMetricsForNode(dom_node, metrics, before_fs) && metrics.line_height_px > 0.0f) {
+                        phantom_height = metrics.line_height_px;
+                    }
+
+                    YGNode* phantom = YGNodeNewWithConfig(yoga_config);
+                    if (phantom) {
+                        YGNodeStyleSetHeight(phantom, phantom_height);
+                        YGNodeInsertChild(yoga_node, phantom, 0);
+                        pseudo_before_phantom_nodes_.insert(phantom);
+                    }
+                }
+            }
+        }
+    }
+
     if (needs_anon_wrapping) {
-        // Mixed content: group consecutive inline-level children into anonymous blocks
         std::vector<dom::DOMNodePtr> current_inline_run;
 
         for (const auto& child : dom_node->getChildren()) {
@@ -2140,8 +2203,8 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
     // Best-effort shrink-to-fit for positioned boxes (absolute/fixed) with width:auto.
     // This helps patterns like `position: fixed; top:20px; right:20px;` to size to content.
     if ((style.position == "absolute" || style.position == "fixed") && style.width.isAuto()) {
-        const bool has_left = style.left.isPixel() || style.left.isPercent();
-        const bool has_right = style.right.isPixel() || style.right.isPercent();
+        const bool has_left = style.left.isSet() && !style.left.isAuto();
+        const bool has_right = style.right.isSet() && !style.right.isAuto();
         if (!(has_left && has_right)) {
             const float w = estimateShrinkToFitWidthFromText(dom_node);
             if (w > 0.0f) {
@@ -2151,6 +2214,60 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
     }
 
     mapComputedStylesToYoga(style, yoga_node, parent_content_w, parent_content_h);
+
+    // flex-basis: content — override with computed intrinsic width now that dom_node is available
+    if (style.flex_basis.isContent()) {
+        float content_w = computeIntrinsicTextWidth(dom_node);
+        float pad_h = style.padding_left.value + style.padding_right.value;
+        float intrinsic = content_w + pad_h;
+        if (intrinsic > 0.0f && std::isfinite(intrinsic)) {
+            YGNodeStyleSetFlexBasis(yoga_node, intrinsic);
+        }
+    }
+
+    // align-self: apply from own style (mapComputedStylesToYoga has no align-self support)
+    {
+        const auto& as = style.align_self;
+        if (as == "flex-start" || as == "start") {
+            YGNodeStyleSetAlignSelf(yoga_node, YGAlignFlexStart);
+        } else if (as == "flex-end" || as == "end") {
+            YGNodeStyleSetAlignSelf(yoga_node, YGAlignFlexEnd);
+        } else if (as == "center") {
+            YGNodeStyleSetAlignSelf(yoga_node, YGAlignCenter);
+        } else if (as == "stretch") {
+            YGNodeStyleSetAlignSelf(yoga_node, YGAlignStretch);
+        } else if (as == "baseline") {
+            YGNodeStyleSetAlignSelf(yoga_node, YGAlignBaseline);
+        }
+        // "auto" (default): do nothing, inherits from parent align-items
+    }
+
+    // justify-items: when parent specifies justify-items != stretch, shrink child to intrinsic width.
+    // In flex-row (grid approximation), justify-items controls inline-axis sizing of grid items.
+    // We simulate this by setting the child width to its intrinsic content size.
+    if (auto parent = dom_node->getParent()) {
+        if (parent->getType() == dom::DOMNode::NodeType::ELEMENT) {
+            const auto& ps = parent->getComputedStyle();
+            const bool parent_is_flex = (ps.layout_mode == dom::LayoutMode::Flex);
+            const bool parent_justify_non_stretch =
+                !ps.justify_items.empty() &&
+                ps.justify_items != "stretch" &&
+                ps.justify_items != "normal";
+            if (parent_is_flex && parent_justify_non_stretch && style.width.isAuto()) {
+                float intrinsic_w = computeIntrinsicTextWidth(dom_node);
+                float pad_h = style.padding_left.value + style.padding_right.value;
+                float w = intrinsic_w + pad_h;
+                if (w > 0.0f && std::isfinite(w)) {
+                    YGNodeStyleSetWidth(yoga_node, w);
+                    // Center via auto margins when justify-items: center
+                    if (ps.justify_items == "center") {
+                        YGNodeStyleSetMarginAuto(yoga_node, YGEdgeLeft);
+                        YGNodeStyleSetMarginAuto(yoga_node, YGEdgeRight);
+                    }
+                }
+            }
+        }
+    }
 
     // Block-flow inside overflow containers should be allowed to exceed the scrollport.
     // Because we approximate block layout using Yoga's flex column model, the default
@@ -2512,10 +2629,59 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
                 const float pad_b = style.padding_bottom.isPixel() ? style.padding_bottom.value : 0.0f;
                 const float border_w = style.border_width > 0.0f ? style.border_width : 0.0f;
 
+                // Set min-width (or width) based on flex context:
+                // - For non-flex items or flex-shrink:0 items: set min-width = full text width
+                //   so the item is at least as wide as its text content.
+                // - For flex items that can shrink (flex-shrink != 0): set min-width to the
+                //   longest single-word width (min-content size). This allows the flex algorithm
+                //   to shrink the item and wrap text at word boundaries, while preventing it from
+                //   collapsing to zero width and causing text overflow into sibling items.
+                const bool can_shrink = parent_is_flex && (style.flex_shrink != 0.0f);
+                const bool is_flex_no_shrink = parent_is_flex && (style.flex_shrink == 0.0f);
                 if (style.width.isAuto()) {
-                    const float min_w = content_width_px + pad_l + pad_r + border_w * 2.0f;
-                    if (min_w > 0.0f && min_w < 100000.0f && std::isfinite(min_w)) {
-                        YGNodeStyleSetMinWidth(yoga_node, min_w);
+                    const float nat_w = content_width_px + pad_l + pad_r + border_w * 2.0f;
+                    if (nat_w > 0.0f && nat_w < 100000.0f && std::isfinite(nat_w)) {
+                        if (!can_shrink) {
+                            // Non-flex or flex-shrink:0 — use full text width as min-width
+                            YGNodeStyleSetMinWidth(yoga_node, nat_w);
+                            // For flex-shrink:0 items also set width (+ 2px rounding buffer)
+                            if (is_flex_no_shrink) {
+                                YGNodeStyleSetWidth(yoga_node, nat_w + 2.0f);
+                            }
+                        } else {
+                            // Flex item that can shrink — set flex-basis to full text width so
+                            // Yoga knows its natural size, and min-width to longest-word width
+                            // so the item can shrink (wrap text at spaces) but not below one word.
+                            float longest_word_width_px = 0.0f;
+                            float word_start_x = shaped.glyphs.front().pen_x_units;
+                            float word_end_x = word_start_x;
+                            for (size_t gi = 0; gi < shaped.glyphs.size(); ++gi) {
+                                const auto& g = shaped.glyphs[gi];
+                                bool is_space = (g.cluster < text.size() && text[g.cluster] == ' ');
+                                if (is_space) {
+                                    float w = (word_end_x - word_start_x) * scale;
+                                    if (w > longest_word_width_px) longest_word_width_px = w;
+                                    // Next word starts after this space
+                                    if (gi + 1 < shaped.glyphs.size()) {
+                                        word_start_x = shaped.glyphs[gi + 1].pen_x_units;
+                                        word_end_x = word_start_x;
+                                    }
+                                } else {
+                                    float x_end = g.pen_x_units + g.advance_x_units;
+                                    if (x_end > word_end_x) word_end_x = x_end;
+                                }
+                            }
+                            // Last word
+                            float w = (word_end_x - word_start_x) * scale;
+                            if (w > longest_word_width_px) longest_word_width_px = w;
+
+                            const float min_w = longest_word_width_px + pad_l + pad_r + border_w * 2.0f;
+                            if (min_w > 0.0f && min_w < 100000.0f && std::isfinite(min_w)) {
+                                YGNodeStyleSetMinWidth(yoga_node, min_w);
+                            }
+                            // Set flex-basis to full text width so Yoga proportionally shrinks.
+                            YGNodeStyleSetFlexBasis(yoga_node, nat_w);
+                        }
                     }
                 }
 
@@ -2841,6 +3007,23 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
         YGNodeStyleSetAlignItems(yoga_node, YGAlignStretch);
     }
 
+    // Set align-content (controls flex-line distribution when flex-wrap is used)
+    if (!style.align_content.empty() && style.align_content != "normal") {
+        const auto& ac = style.align_content;
+        if (ac == "flex-start" || ac == "start") {
+            YGNodeStyleSetAlignContent(yoga_node, YGAlignFlexStart);
+        } else if (ac == "flex-end" || ac == "end") {
+            YGNodeStyleSetAlignContent(yoga_node, YGAlignFlexEnd);
+        } else if (ac == "center") {
+            YGNodeStyleSetAlignContent(yoga_node, YGAlignCenter);
+        } else if (ac == "space-between") {
+            YGNodeStyleSetAlignContent(yoga_node, YGAlignSpaceBetween);
+        } else if (ac == "space-around") {
+            YGNodeStyleSetAlignContent(yoga_node, YGAlignSpaceAround);
+        } else if (ac == "stretch") {
+            YGNodeStyleSetAlignContent(yoga_node, YGAlignStretch);
+        }
+    }
 
     // Set gap for flex containers
     if (style.gap > 0.0f) {
@@ -2867,19 +3050,7 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
         YGNodeStyleSetPositionType(yoga_node, YGPositionTypeRelative);
     }
 
-    auto setPositionIfNeeded = [&](YGEdge edge, const dom::CSSValue& v) {
-        using Unit = dom::CSSValue::Unit;
-        if (v.unit == Unit::PIXEL) {
-            YGNodeStyleSetPosition(yoga_node, edge, v.value);
-        } else if (v.unit == Unit::PERCENT) {
-            YGNodeStyleSetPositionPercent(yoga_node, edge, v.value);
-        }
-    };
-
-    setPositionIfNeeded(YGEdgeTop, style.top);
-    setPositionIfNeeded(YGEdgeRight, style.right);
-    setPositionIfNeeded(YGEdgeBottom, style.bottom);
-    setPositionIfNeeded(YGEdgeLeft, style.left);
+    // Position offsets are applied later after resolve_length_px_for_layout is defined.
 
 
     // Set dimensions
@@ -2931,13 +3102,47 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
         using Unit = dom::CSSValue::Unit;
         if (v.unit == Unit::PIXEL) return v.value;
         if (v.unit == Unit::PERCENT) return percent_base_px * v.value / 100.0f;
+        if (v.unit == Unit::EM) return v.value * style.font_size;
+        if (v.unit == Unit::REM) return v.value * root_font_size_;
         if (is_viewport_unit(v.unit)) return resolve_viewport_px(v);
+        if (v.unit == Unit::ENV) {
+            // safe-area-inset-* vars are typically 0 on desktop; resolve via fallback
+            if (v.env_fallback) {
+                const dom::CSSValue& fb = *v.env_fallback;
+                if (fb.unit == Unit::PIXEL) return fb.value;
+                if (fb.unit == Unit::EM) return fb.value * style.font_size;
+                if (fb.unit == Unit::REM) return fb.value * root_font_size_;
+                if (fb.unit == Unit::PERCENT) return percent_base_px * fb.value / 100.0f;
+                if (is_viewport_unit(fb.unit)) return resolve_viewport_px(fb);
+            }
+            return 0.0f;
+        }
         if (v.unit == Unit::CALC) {
             // Best-effort: treat parent_size as the percent base (works for calc(% +/- px)).
             return v.resolvePixels(percent_base_px, root_font_size_, viewport_width_, viewport_height_);
         }
         return 0.0f;
     };
+
+    // Apply position offsets (top/right/bottom/left)
+    {
+        auto setPositionIfNeeded = [&](YGEdge edge, const dom::CSSValue& v) {
+            using Unit = dom::CSSValue::Unit;
+            if (v.unit == Unit::PIXEL) {
+                YGNodeStyleSetPosition(yoga_node, edge, v.value);
+            } else if (v.unit == Unit::PERCENT) {
+                YGNodeStyleSetPositionPercent(yoga_node, edge, v.value);
+            } else if (v.unit == Unit::ENV || v.unit == Unit::EM || v.unit == Unit::REM ||
+                       is_viewport_unit(v.unit) || v.unit == Unit::CALC) {
+                float px = resolve_length_px_for_layout(v, 0.0f);
+                YGNodeStyleSetPosition(yoga_node, edge, px);
+            }
+        };
+        setPositionIfNeeded(YGEdgeTop, style.top);
+        setPositionIfNeeded(YGEdgeRight, style.right);
+        setPositionIfNeeded(YGEdgeBottom, style.bottom);
+        setPositionIfNeeded(YGEdgeLeft, style.left);
+    }
 
     if (style.width.isPixel()) {
         float width_for_yoga = style.width.value;
@@ -3033,63 +3238,38 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
     // Note: margin: auto is handled differently depending on context:
     // - In flex containers: Yoga's YGNodeStyleSetMarginAuto handles it correctly
     // - In block formatting context: layoutBlockFormattingContext() handles it after Yoga layout
-    if (style.margin_top.isPixel()) {
-        YGNodeStyleSetMargin(yoga_node, YGEdgeTop, style.margin_top.value);
-    } else if (style.margin_top.isPercent()) {
-        YGNodeStyleSetMarginPercent(yoga_node, YGEdgeTop, style.margin_top.value);
-    } else if (style.margin_top.isAuto()) {
-        // margin-top: auto - in flex context, this enables vertical centering
-        YGNodeStyleSetMarginAuto(yoga_node, YGEdgeTop);
-    }
-
-    if (style.margin_right.isPixel()) {
-        YGNodeStyleSetMargin(yoga_node, YGEdgeRight, style.margin_right.value);
-    } else if (style.margin_right.isPercent()) {
-        YGNodeStyleSetMarginPercent(yoga_node, YGEdgeRight, style.margin_right.value);
-    } else if (style.margin_right.isAuto()) {
-        // margin-right: auto - in flex context, pushes element to the left
-        YGNodeStyleSetMarginAuto(yoga_node, YGEdgeRight);
-    }
-
-    if (style.margin_bottom.isPixel()) {
-        YGNodeStyleSetMargin(yoga_node, YGEdgeBottom, style.margin_bottom.value);
-    } else if (style.margin_bottom.isPercent()) {
-        YGNodeStyleSetMarginPercent(yoga_node, YGEdgeBottom, style.margin_bottom.value);
-    } else if (style.margin_bottom.isAuto()) {
-        // margin-bottom: auto - in flex context, this enables vertical centering
-        YGNodeStyleSetMarginAuto(yoga_node, YGEdgeBottom);
-    }
-
-    if (style.margin_left.isPixel()) {
-        YGNodeStyleSetMargin(yoga_node, YGEdgeLeft, style.margin_left.value);
-    } else if (style.margin_left.isPercent()) {
-        YGNodeStyleSetMarginPercent(yoga_node, YGEdgeLeft, style.margin_left.value);
-    } else if (style.margin_left.isAuto()) {
-        // margin-left: auto - in flex context, pushes element to the right
-        YGNodeStyleSetMarginAuto(yoga_node, YGEdgeLeft);
-    }
+    auto set_margin_edge = [&](YGEdge edge, const dom::CSSValue& v) {
+        if (v.isPixel() || v.unit == dom::CSSValue::Unit::EM || v.unit == dom::CSSValue::Unit::REM ||
+            is_viewport_unit(v.unit) || v.unit == dom::CSSValue::Unit::CALC ||
+            v.unit == dom::CSSValue::Unit::ENV) {
+            float px = resolve_length_px_for_layout(v, 0.0f);
+            YGNodeStyleSetMargin(yoga_node, edge, px);
+        } else if (v.isPercent()) {
+            YGNodeStyleSetMarginPercent(yoga_node, edge, v.value);
+        } else if (v.isAuto()) {
+            YGNodeStyleSetMarginAuto(yoga_node, edge);
+        }
+    };
+    set_margin_edge(YGEdgeTop, style.margin_top);
+    set_margin_edge(YGEdgeRight, style.margin_right);
+    set_margin_edge(YGEdgeBottom, style.margin_bottom);
+    set_margin_edge(YGEdgeLeft, style.margin_left);
 
     // Set padding
-    if (style.padding_top.isPixel()) {
-        YGNodeStyleSetPadding(yoga_node, YGEdgeTop, style.padding_top.value);
-    } else if (style.padding_top.isPercent()) {
-        YGNodeStyleSetPaddingPercent(yoga_node, YGEdgeTop, style.padding_top.value);
-    }
-    if (style.padding_right.isPixel()) {
-        YGNodeStyleSetPadding(yoga_node, YGEdgeRight, style.padding_right.value);
-    } else if (style.padding_right.isPercent()) {
-        YGNodeStyleSetPaddingPercent(yoga_node, YGEdgeRight, style.padding_right.value);
-    }
-    if (style.padding_bottom.isPixel()) {
-        YGNodeStyleSetPadding(yoga_node, YGEdgeBottom, style.padding_bottom.value);
-    } else if (style.padding_bottom.isPercent()) {
-        YGNodeStyleSetPaddingPercent(yoga_node, YGEdgeBottom, style.padding_bottom.value);
-    }
-    if (style.padding_left.isPixel()) {
-        YGNodeStyleSetPadding(yoga_node, YGEdgeLeft, style.padding_left.value);
-    } else if (style.padding_left.isPercent()) {
-        YGNodeStyleSetPaddingPercent(yoga_node, YGEdgeLeft, style.padding_left.value);
-    }
+    auto set_padding_edge = [&](YGEdge edge, const dom::CSSValue& v) {
+        if (v.isPixel() || v.unit == dom::CSSValue::Unit::EM || v.unit == dom::CSSValue::Unit::REM ||
+            is_viewport_unit(v.unit) || v.unit == dom::CSSValue::Unit::CALC ||
+            v.unit == dom::CSSValue::Unit::ENV) {
+            float px = resolve_length_px_for_layout(v, 0.0f);
+            YGNodeStyleSetPadding(yoga_node, edge, px);
+        } else if (v.isPercent()) {
+            YGNodeStyleSetPaddingPercent(yoga_node, edge, v.value);
+        }
+    };
+    set_padding_edge(YGEdgeTop, style.padding_top);
+    set_padding_edge(YGEdgeRight, style.padding_right);
+    set_padding_edge(YGEdgeBottom, style.padding_bottom);
+    set_padding_edge(YGEdgeLeft, style.padding_left);
 
     // Set flex grow/shrink
     float flex_grow = style.flex_grow;
@@ -3133,9 +3313,12 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
         YGNodeStyleSetFlexBasis(yoga_node, flex_basis.value);
     } else if (flex_basis.isPercent()) {
         YGNodeStyleSetFlexBasisPercent(yoga_node, flex_basis.value);
+    } else if (flex_basis.isContent()) {
+        // flex-basis: content: handled by the caller which has access to dom_node
+        // Leave flex-basis as auto here; the caller will override with intrinsic width
+        YGNodeStyleSetFlexBasisAuto(yoga_node);
     } else {
-        // flex-basis: auto 鏃讹紝Yoga 浼氫娇鐢?width/height 灞炴€т綔涓哄熀鍑?
-        // 杩欐槸绗﹀悎 CSS 鏍囧噯鐨勮涓?
+        // flex-basis: auto: Yoga will use the width/height property as the base size.
         YGNodeStyleSetFlexBasisAuto(yoga_node);
     }
 
@@ -3719,6 +3902,13 @@ float Engine::propagateIFCHeights(const dom::DOMNodePtr& node) {
     LayoutNode* layout = it->second.get();
 
     if (style.position == "absolute" || style.position == "fixed") return 0.0f;
+
+    // Table heights are managed by layoutTableElements post-pass.
+    // Don't propagate child heights into tables as collapsed tbodys may report
+    // their unreduced Yoga heights and grow the table incorrectly.
+    if (style.display == "table" || style.display == "inline-table") {
+        return layout->y + layout->height;
+    }
 
     float max_child_bottom = 0.0f;
     for (const auto& child : node->getChildren()) {
@@ -4686,10 +4876,10 @@ void Engine::layoutPositionedElements(dom::DOMNodePtr root) {
                     }
                 }
 
-                bool has_left = style.left.isPixel() || style.left.isPercent();
-                bool has_right = style.right.isPixel() || style.right.isPercent();
-                bool has_top = style.top.isPixel() || style.top.isPercent();
-                bool has_bottom = style.bottom.isPixel() || style.bottom.isPercent();
+                bool has_left = style.left.isSet() && !style.left.isAuto();
+                bool has_right = style.right.isSet() && !style.right.isAuto();
+                bool has_top = style.top.isSet() && !style.top.isAuto();
+                bool has_bottom = style.bottom.isSet() && !style.bottom.isAuto();
 
                 float offset_x = 0.0f;
                 float offset_y = 0.0f;
@@ -4829,8 +5019,8 @@ void Engine::layoutPositionedElements(dom::DOMNodePtr root) {
                     // Shrink-to-fit width for positioned boxes when width is auto and not stretched by left+right.
                     // Avoid using children layout extents here: it is circular (depends on chosen width) and can
                     // incorrectly expand to the full containing-block width for block children.
-                    const bool has_left_spec = style.left.isPixel() || style.left.isPercent();
-                    const bool has_right_spec = style.right.isPixel() || style.right.isPercent();
+                    const bool has_left_spec = style.left.isSet() && !style.left.isAuto();
+                    const bool has_right_spec = style.right.isSet() && !style.right.isAuto();
                     if (abs_width_auto && !(has_left_spec && has_right_spec)) {
                         const float w = estimateShrinkToFitWidthFromText(node);
                         if (w > 0.0f) {
@@ -4848,29 +5038,61 @@ void Engine::layoutPositionedElements(dom::DOMNodePtr root) {
                     }
 
                     // In CSS锛屽寘鍚潡閫氬父鏄?padding box銆傝繖閲屽厛鍩轰簬 border box锛屽悗缁彲瑙嗛渶瑕佸姞涓?padding銆?
-                    auto computeOffsetPx = [this](const dom::CSSValue& v, float parent_size) -> float {
+                    // Resolve any length value (px, %, env, calc, em, rem, vw/vh, etc.) to pixels.
+                    auto computeOffsetPx = [this](const auto& self, const dom::CSSValue& v, float parent_size) -> float {
+                        using Unit = dom::CSSValue::Unit;
                         if (v.isPixel()) {
                             return v.value;
                         }
                         if (v.isPercent()) {
                             return parsePercentValue(v, parent_size);
                         }
+                        if (v.unit == Unit::EM || v.unit == Unit::REM ||
+                            v.unit == Unit::VW || v.unit == Unit::VH ||
+                            v.unit == Unit::VMIN || v.unit == Unit::VMAX) {
+                            return v.resolvePixels(parent_size, root_font_size_, viewport_width_, viewport_height_);
+                        }
+                        if (v.isEnv()) {
+                            if (v.env_fallback) {
+                                return self(self, *v.env_fallback, parent_size);
+                            }
+                            return 0.0f;
+                        }
+                        if (v.isCalc()) {
+                            return v.resolvePixels(parent_size, root_font_size_, viewport_width_, viewport_height_);
+                        }
                         return 0.0f;
                     };
 
-                    bool has_left = style.left.isPixel() || style.left.isPercent();
-                    bool has_right = style.right.isPixel() || style.right.isPercent();
-                    bool has_top = style.top.isPixel() || style.top.isPercent();
-                    bool has_bottom = style.bottom.isPixel() || style.bottom.isPercent();
+                    // A side is "specified" if it has an explicit, non-auto value.
+                    bool has_left = style.left.isSet() && !style.left.isAuto();
+                    bool has_right = style.right.isSet() && !style.right.isAuto();
+                    bool has_top = style.top.isSet() && !style.top.isAuto();
+                    bool has_bottom = style.bottom.isSet() && !style.bottom.isAuto();
 
-                    float left_px = has_left ? computeOffsetPx(style.left, cb_w) : 0.0f;
-                    float right_px = has_right ? computeOffsetPx(style.right, cb_w) : 0.0f;
-                    float top_px = has_top ? computeOffsetPx(style.top, cb_h) : 0.0f;
-                    float bottom_px = has_bottom ? computeOffsetPx(style.bottom, cb_h) : 0.0f;
+                    float left_px = has_left ? computeOffsetPx(computeOffsetPx, style.left, cb_w) : 0.0f;
+                    float right_px = has_right ? computeOffsetPx(computeOffsetPx, style.right, cb_w) : 0.0f;
+                    float top_px = has_top ? computeOffsetPx(computeOffsetPx, style.top, cb_h) : 0.0f;
+                    float bottom_px = has_bottom ? computeOffsetPx(computeOffsetPx, style.bottom, cb_h) : 0.0f;
 
 
                     float box_w = layout->width;
                     float box_h = layout->height;
+
+                    // CSS absolute positioning: when both opposing sides are specified and
+                    // the size is auto, the element stretches to fill the containing block.
+                    if (abs_width_auto && has_left && has_right) {
+                        box_w = cb_w - left_px - right_px;
+                        if (box_w < 0.0f) box_w = 0.0f;
+                        layout->width = box_w;
+                        layout->layout.dimensions[0] = box_w;
+                    }
+                    if (abs_height_auto && has_top && has_bottom) {
+                        box_h = cb_h - top_px - bottom_px;
+                        if (box_h < 0.0f) box_h = 0.0f;
+                        layout->height = box_h;
+                        layout->layout.dimensions[1] = box_h;
+                    }
 
                     float offset_x_local = 0.0f;
                     float offset_y_local = 0.0f;

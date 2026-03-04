@@ -100,6 +100,20 @@ static void applyLogicalProperties(ComputedStyle& style) {
     applyLogicalBorders(style);
 }
 
+// Resolve logical text-align values based on direction.
+// Must be called after direction is fully determined.
+static void resolveTextAlignForDirection(ComputedStyle& style) {
+    const bool rtl = (style.direction == "rtl");
+    if (style.text_align == "start") {
+        style.text_align = rtl ? "right" : "left";
+    } else if (style.text_align == "end") {
+        style.text_align = rtl ? "left" : "right";
+    } else if (!style.isExplicitlySet("text-align") && rtl) {
+        // text-align was not explicitly set; CSS default "start" resolves to "right" for RTL.
+        style.text_align = "right";
+    }
+}
+
 // ── Sub-functions for applyRuleProperties (declared before the caller) ──
 
 
@@ -207,6 +221,20 @@ void applyRuleBorderProperties(const ComputedStyle& rs, ComputedStyle& computed)
     if (!rs.border_right_style.empty()) computed.border_right_style = rs.border_right_style;
     if (!rs.border_bottom_style.empty()) computed.border_bottom_style = rs.border_bottom_style;
     if (!rs.border_left_style.empty()) computed.border_left_style = rs.border_left_style;
+
+    // Logical border properties cascade
+    if (rs.border_inline_start_width >= 0.0f) computed.border_inline_start_width = rs.border_inline_start_width;
+    if (!rs.border_inline_start_color.empty()) computed.border_inline_start_color = rs.border_inline_start_color;
+    if (!rs.border_inline_start_style.empty()) computed.border_inline_start_style = rs.border_inline_start_style;
+    if (rs.border_inline_end_width >= 0.0f) computed.border_inline_end_width = rs.border_inline_end_width;
+    if (!rs.border_inline_end_color.empty()) computed.border_inline_end_color = rs.border_inline_end_color;
+    if (!rs.border_inline_end_style.empty()) computed.border_inline_end_style = rs.border_inline_end_style;
+    if (rs.border_block_start_width >= 0.0f) computed.border_block_start_width = rs.border_block_start_width;
+    if (!rs.border_block_start_color.empty()) computed.border_block_start_color = rs.border_block_start_color;
+    if (!rs.border_block_start_style.empty()) computed.border_block_start_style = rs.border_block_start_style;
+    if (rs.border_block_end_width >= 0.0f) computed.border_block_end_width = rs.border_block_end_width;
+    if (!rs.border_block_end_color.empty()) computed.border_block_end_color = rs.border_block_end_color;
+    if (!rs.border_block_end_style.empty()) computed.border_block_end_style = rs.border_block_end_style;
 }
 
 void applyRuleOverflowProperties(const ComputedStyle& rs, ComputedStyle& computed) {
@@ -283,8 +311,6 @@ void applyRuleFlexbox(const ComputedStyle& rs, ComputedStyle& computed) {
     if (rs.flex_grow != 0.0f) computed.flex_grow = rs.flex_grow;
     if (rs.flex_shrink != 1.0f) computed.flex_shrink = rs.flex_shrink;
     if (rs.flex_basis.isSet() && !rs.flex_basis.isAuto()) computed.flex_basis = rs.flex_basis;
-    // For flex-basis: content, map to AUTO for Yoga to use content-driven sizing
-    if (rs.flex_basis.isContent()) computed.flex_basis = CSSValue(0.0f, CSSValue::Unit::AUTO);
     if (rs.order != 0) computed.order = rs.order;
     if (rs.gap > 0.0f) {
         computed.gap = rs.gap;
@@ -474,7 +500,7 @@ void applyRuleProperties(const ComputedStyle& rs, ComputedStyle& computed) {
                computed.counter_increments = rs.counter_increments; computed.markExplicitlySet("counter-increment"),
                rs.isExplicitlySet("counter-increment"));
     APPLY_PROP("quotes",
-               computed.quotes = rs.quotes; computed.has_quotes = rs.has_quotes; computed.markExplicitlySet("quotes"),
+               computed.quotes = rs.quotes; computed.has_quotes = rs.has_quotes; computed.quotes_auto = rs.quotes_auto; computed.markExplicitlySet("quotes"),
                rs.isExplicitlySet("quotes"));
     APPLY_PROP("content",
                computed.content_raw = rs.content_raw; computed.content_tokens = rs.content_tokens; computed.content = rs.content;
@@ -544,6 +570,40 @@ void applyInlineStyleAttributeIfAny(DOMNodePtr node) {
     CSSParser::parseInlineStyle(style_str, node->getComputedStyle());
 }
 
+// Apply HTML presentational attributes that map to CSS properties.
+// These have lower priority than author styles (inline or external),
+// so they are applied BEFORE inline styles in the cascade.
+void applyPresentationalAttributesIfAny(DOMNodePtr node) {
+    if (!node) return;
+    const std::string& tag = node->getTagName();
+    auto& cs = node->getComputedStyle();
+
+    // <img width="N" height="N"> → CSS width/height (if no CSS width/height already set)
+    if (tag == "img" || tag == "video" || tag == "canvas") {
+        if (!cs.isExplicitlySet("width") && node->hasAttribute("width")) {
+            const std::string& w = node->getAttribute("width");
+            if (!w.empty()) {
+                // Parse as integer pixels
+                try {
+                    float px = std::stof(w);
+                    cs.width = CSSValue(px, CSSValue::Unit::PIXEL);
+                    cs.markExplicitlySet("width");
+                } catch (...) {}
+            }
+        }
+        if (!cs.isExplicitlySet("height") && node->hasAttribute("height")) {
+            const std::string& h = node->getAttribute("height");
+            if (!h.empty()) {
+                try {
+                    float px = std::stof(h);
+                    cs.height = CSSValue(px, CSSValue::Unit::PIXEL);
+                    cs.markExplicitlySet("height");
+                } catch (...) {}
+            }
+        }
+    }
+}
+
 void applyDirAttributeIfAny(DOMNodePtr node) {
     // Apply dir attribute to CSS direction property
     // The dir attribute maps to the direction CSS property
@@ -603,13 +663,13 @@ const std::unordered_map<std::string_view, TagStyleHandler> kTagDefaultHandlers 
     {"wbr", [](ComputedStyle& s) { s.setDisplay("inline"); }},
     {"label", [](ComputedStyle& s) { s.setDisplay("inline"); }},
 
-    // Headings
+    // Headings - sizes match browser defaults (based on 16px base)
     {"h1", [](ComputedStyle& s) { s.setDisplay("block"); s.font_weight = "bold"; s.font_size = 32.0f; s.markExplicitlySet("font-weight"); s.markExplicitlySet("font-size"); }},
-    {"h2", [](ComputedStyle& s) { s.setDisplay("block"); s.font_weight = "bold"; s.font_size = 28.0f; s.markExplicitlySet("font-weight"); s.markExplicitlySet("font-size"); }},
-    {"h3", [](ComputedStyle& s) { s.setDisplay("block"); s.font_weight = "bold"; s.font_size = 24.0f; s.markExplicitlySet("font-weight"); s.markExplicitlySet("font-size"); }},
-    {"h4", [](ComputedStyle& s) { s.setDisplay("block"); s.font_weight = "bold"; s.font_size = 20.0f; s.markExplicitlySet("font-weight"); s.markExplicitlySet("font-size"); }},
-    {"h5", [](ComputedStyle& s) { s.setDisplay("block"); s.font_weight = "bold"; s.font_size = 18.0f; s.markExplicitlySet("font-weight"); s.markExplicitlySet("font-size"); }},
-    {"h6", [](ComputedStyle& s) { s.setDisplay("block"); s.font_weight = "bold"; s.font_size = 16.0f; s.markExplicitlySet("font-weight"); s.markExplicitlySet("font-size"); }},
+    {"h2", [](ComputedStyle& s) { s.setDisplay("block"); s.font_weight = "bold"; s.font_size = 24.0f; s.markExplicitlySet("font-weight"); s.markExplicitlySet("font-size"); }},
+    {"h3", [](ComputedStyle& s) { s.setDisplay("block"); s.font_weight = "bold"; s.font_size = 18.72f; s.markExplicitlySet("font-weight"); s.markExplicitlySet("font-size"); }},
+    {"h4", [](ComputedStyle& s) { s.setDisplay("block"); s.font_weight = "bold"; s.font_size = 16.0f; s.markExplicitlySet("font-weight"); s.markExplicitlySet("font-size"); }},
+    {"h5", [](ComputedStyle& s) { s.setDisplay("block"); s.font_weight = "bold"; s.font_size = 13.28f; s.markExplicitlySet("font-weight"); s.markExplicitlySet("font-size"); }},
+    {"h6", [](ComputedStyle& s) { s.setDisplay("block"); s.font_weight = "bold"; s.font_size = 10.72f; s.markExplicitlySet("font-weight"); s.markExplicitlySet("font-size"); }},
 
     // List elements
     {"ul", [](ComputedStyle& s) { s.setDisplay("block"); s.list_style_type = "disc"; }},
@@ -721,6 +781,26 @@ body {
 /* Basic block spacing to better match browser defaults. */
 h1 {
   margin: 0.67em 0;
+}
+
+h2 {
+  margin: 0.83em 0;
+}
+
+h3 {
+  margin: 1em 0;
+}
+
+h4 {
+  margin: 1.33em 0;
+}
+
+h5 {
+  margin: 1.67em 0;
+}
+
+h6 {
+  margin: 2.33em 0;
 }
 
 p {
@@ -995,6 +1075,9 @@ void StyleEngine::computeStyles(DOMNodePtr node) {
     // Inherit from parent
     inheritFromParent(node);
 
+    // Presentational HTML attributes (e.g. img width/height) — lower priority than inline styles.
+    applyPresentationalAttributesIfAny(node);
+
     // Inline style overrides author rules
     applyInlineStyleAttributeIfAny(node);
 
@@ -1021,6 +1104,15 @@ void StyleEngine::computeStyles(DOMNodePtr node) {
         node->getComputedStyle().display = "none";
     }
 
+    // <details> hiding: non-<summary> children of a closed <details> are hidden.
+    if (auto parent = node->getParent()) {
+        if (parent->getTagName() == "details" &&
+            !parent->hasAttribute("open") &&
+            node->getTagName() != "summary") {
+            node->getComputedStyle().display = "none";
+        }
+    }
+
     // [dir] attribute mapping to CSS direction property
     // Only apply if direction is not explicitly set by CSS
     if (node->hasAttribute("dir") && !computed.isExplicitlySet("direction")) {
@@ -1028,6 +1120,9 @@ void StyleEngine::computeStyles(DOMNodePtr node) {
         comp_style.direction = node->getEffectiveDirection();
         comp_style.markExplicitlySet("direction");
     }
+
+    // Resolve logical text-align (start/end) based on final direction.
+    resolveTextAlignForDirection(node->getComputedStyle());
 
     node->getComputedStyle().layout_mode = deriveLayoutModeFromDisplay(node->getComputedStyle());
 
@@ -1066,6 +1161,9 @@ void StyleEngine::recomputeNodeStyle(DOMNodePtr node) {
     node->getComputedStyle().layout_mode = deriveLayoutModeFromDisplay(node->getComputedStyle());
 
     node->getComputedStyle().updateBFCFlag();
+
+    // Resolve light-dark() functions based on color-scheme
+    resolveLightDarkFunctions(node);
 }
 
 
@@ -1138,6 +1236,7 @@ void StyleEngine::processGlobalKeywords(DOMNodePtr node, DOMNodePtr parent) {
         else if (prop == "quotes") {
             computed.quotes = kInitial.quotes;
             computed.has_quotes = kInitial.has_quotes;
+            computed.quotes_auto = kInitial.quotes_auto;
         }
 
 
@@ -1245,6 +1344,7 @@ void StyleEngine::copyPropertyFromParent(const std::string& prop,
     else if (prop == "quotes") {
         child_style.quotes = parent_style.quotes;
         child_style.has_quotes = parent_style.has_quotes;
+        child_style.quotes_auto = parent_style.quotes_auto;
     }
     else if (prop == "border-collapse") child_style.border_collapse = parent_style.border_collapse;
 
@@ -1312,7 +1412,30 @@ void StyleEngine::inheritFromParent(DOMNodePtr node) {
     if (!computed.isExplicitlySet("color")) computed.color = parent_style.color;
     if (!computed.isExplicitlySet("font-family")) computed.font_family = parent_style.font_family;
     if (!computed.isExplicitlySet("font-size")) computed.font_size = parent_style.font_size;
-    if (!computed.isExplicitlySet("font-weight")) computed.font_weight = parent_style.font_weight;
+    if (!computed.isExplicitlySet("font-weight")) {
+        computed.font_weight = parent_style.font_weight;
+    } else {
+        // Resolve bolder/lighter relative to parent weight (CSS spec §20.1)
+        const std::string& cw = computed.font_weight;
+        if (cw == "bolder" || cw == "lighter") {
+            int parent_w = 400;
+            const std::string& pw = parent_style.font_weight;
+            if (pw == "normal") parent_w = 400;
+            else if (pw == "bold") parent_w = 700;
+            else { try { parent_w = std::stoi(pw); } catch (...) { parent_w = 400; } }
+            int resolved_w;
+            if (cw == "bolder") {
+                if (parent_w < 350) resolved_w = 400;
+                else if (parent_w < 550) resolved_w = 700;
+                else resolved_w = 900;
+            } else {
+                if (parent_w < 550) resolved_w = 100;
+                else if (parent_w < 750) resolved_w = 400;
+                else resolved_w = 700;
+            }
+            computed.font_weight = std::to_string(resolved_w);
+        }
+    }
     if (!computed.isExplicitlySet("font-style")) computed.font_style = parent_style.font_style;
     if (!computed.isExplicitlySet("text-align")) computed.text_align = parent_style.text_align;
     if (!computed.has_line_height) {
@@ -1352,6 +1475,7 @@ void StyleEngine::inheritFromParent(DOMNodePtr node) {
     if (!computed.isExplicitlySet("quotes")) {
         computed.quotes = parent_style.quotes;
         computed.has_quotes = parent_style.has_quotes;
+        computed.quotes_auto = parent_style.quotes_auto;
     }
 }
 
@@ -1704,6 +1828,10 @@ void StyleEngine::processPseudoElements(DOMNodePtr node) {
         // But counters are not inherited; keep them off the pseudo so we don't double-apply.
         s.counter_resets.clear();
         s.counter_increments.clear();
+        // Clear inherited explicitly_set_properties_ so that only the pseudo rule's own
+        // properties are considered explicitly set. This prevents inherited background-color
+        // etc. from blocking inline rendering of ::before/::after content.
+        s.clearExplicitlySet();
 
         for (const auto& rr : sorted) {
             applyRuleProperties(rr.rule->style, s);
@@ -1736,6 +1864,32 @@ void StyleEngine::processPseudoElements(DOMNodePtr node) {
         if (has_selection) selection_style = std::move(r.second);
     }
 
+    // UA stylesheet: <q> elements get open-quote/close-quote pseudo-elements by default.
+    // If no explicit ::before/::after rule is defined for a <q> element, inject UA defaults.
+    if (node->getTagName() == "q") {
+        if (!has_before) {
+            before_style = node->getComputedStyle();
+            before_style.clearExplicitlySet();
+            before_style.counter_resets.clear();
+            before_style.counter_increments.clear();
+            ComputedStyle::ContentToken t;
+            t.type = ComputedStyle::ContentToken::Type::OpenQuote;
+            before_style.content_tokens = {t};
+            before_style.markExplicitlySet("content");
+            has_before = true;
+        }
+        if (!has_after) {
+            after_style = node->getComputedStyle();
+            after_style.clearExplicitlySet();
+            after_style.counter_resets.clear();
+            after_style.counter_increments.clear();
+            ComputedStyle::ContentToken t;
+            t.type = ComputedStyle::ContentToken::Type::CloseQuote;
+            after_style.content_tokens = {t};
+            after_style.markExplicitlySet("content");
+            has_after = true;
+        }
+    }
 
     // Create ::before pseudo-element if needed
     // NOTE: `content` may be token-based (counter()/open-quote/etc) and not reflected in `style.content`.
@@ -2140,6 +2294,17 @@ void StyleEngine::recomputeNodeStyleFull(DOMNodePtr node) {
         node->getComputedStyle().display = "none";
     }
 
+    // <details> hiding: non-<summary> children of a closed <details> are hidden from layout.
+    // This matches the UA stylesheet rule:
+    //   details:not([open]) > *:not(summary) { display: none; }
+    if (auto parent = node->getParent()) {
+        if (parent && parent->getTagName() == "details" &&
+            !parent->hasAttribute("open") &&
+            node->getTagName() != "summary") {
+            node->getComputedStyle().display = "none";
+        }
+    }
+
     // [dir] attribute mapping to CSS direction property
     // Only apply if direction is not explicitly set by CSS
     auto& computed = node->getComputedStyle();
@@ -2148,7 +2313,15 @@ void StyleEngine::recomputeNodeStyleFull(DOMNodePtr node) {
         computed.markExplicitlySet("direction");
     }
 
+    // Resolve logical text-align (start/end) based on final direction.
+    resolveTextAlignForDirection(node->getComputedStyle());
+
     node->getComputedStyle().layout_mode = deriveLayoutModeFromDisplay(node->getComputedStyle());
+    node->getComputedStyle().updateBFCFlag();
+
+    // Resolve light-dark() functions based on color-scheme
+    resolveLightDarkFunctions(node);
+
     processPseudoElements(node);
 }
 
@@ -2265,12 +2438,10 @@ std::string StyleEngine::resolveLightDarkColor(const std::string& light_dark_val
         return light_dark_value; // Invalid number of arguments, return as-is
     }
 
-    // Choose color based on color-scheme
-    if (color_scheme.find("dark") != std::string::npos) {
-        return parts[1]; // Use dark color
-    } else {
-        return parts[0]; // Use light color (default)
-    }
+    // Choose color based on color-scheme, then normalize through parseColor
+    // so named colors (yellow, purple, etc.) become their canonical form
+    const std::string& chosen = (color_scheme.find("dark") != std::string::npos) ? parts[1] : parts[0];
+    return CSSParser::parseColor(chosen);
 }
 
 CSSValue StyleEngine::resolveEnvValue(const CSSValue& env_value, const CSSEnvironment& env) const {

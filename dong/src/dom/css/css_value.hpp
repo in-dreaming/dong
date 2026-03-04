@@ -45,6 +45,7 @@ struct CSSValue {
     bool isPercent() const { return unit == Unit::PERCENT; }
     bool isPixel() const { return unit == Unit::PIXEL; }
     bool isCalc() const { return unit == Unit::CALC && calc_expr != nullptr; }
+    bool isEnv() const { return unit == Unit::ENV; }
     bool isSet() const { return unit != Unit::UNSET; }
     bool isContent() const { return unit == Unit::CONTENT; }
 

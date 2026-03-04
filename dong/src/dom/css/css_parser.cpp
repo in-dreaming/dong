@@ -565,24 +565,43 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
             std::string part;
 
             // Reset all list-style properties first
-            style.list_style_type = "none";
             style.list_style_position = "outside";
             style.list_style_image = "none";
+            // type starts as unset; we track whether an explicit type keyword was found
+            std::string found_type;
+            bool found_none = false;
+            bool found_position = false;
 
             while (iss >> part) {
                 if (part == "inside" || part == "outside") {
                     style.list_style_position = part;
+                    found_position = true;
                 } else if (part == "none") {
-                    // "none" sets both type and image to none
-                    style.list_style_type = "none";
-                    style.list_style_image = "none";
+                    found_none = true;
                 } else if (part.find("url(") == 0) {
-                    // list-style-image (url(...))
                     style.list_style_image = part;
                 } else {
-                    // list-style-type (disc, circle, square, decimal, etc.)
-                    style.list_style_type = part;
+                    // list-style-type keyword (disc, circle, square, decimal, etc.)
+                    found_type = part;
                 }
+            }
+
+            // CSS spec: "none" in the shorthand sets type=none AND image=none ONLY
+            // when no explicit type keyword is present.  When a type keyword co-exists
+            // with "none", the type keyword wins and "none" only clears the image.
+            // E.g. "list-style: decimal none" → type=decimal, image=none.
+            // When only a position is given (e.g. "list-style: outside"), the type
+            // defaults to "disc" (the UA default) rather than "none".
+            if (!found_type.empty()) {
+                style.list_style_type = found_type;
+                // found_none alongside a type keyword → only clears image (already done)
+            } else if (found_none) {
+                style.list_style_type = "none";
+            } else if (found_position) {
+                // Only a position keyword: type defaults to disc
+                style.list_style_type = "disc";
+            } else {
+                style.list_style_type = "none";
             }
         }},
 
@@ -649,13 +668,18 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
             std::transform(v.begin(), v.end(), v.begin(), [](unsigned char c) {
                 return static_cast<char>(std::tolower(c));
             });
-            // Accept the subset used by tests.
-            if (v.find("dark") != std::string::npos) {
+            // Per CSS spec, for "light dark" or "dark light", the first listed scheme is preferred.
+            size_t light_pos = v.find("light");
+            size_t dark_pos = v.find("dark");
+            if (light_pos == std::string::npos && dark_pos == std::string::npos) {
+                style.color_scheme = "normal";
+            } else if (light_pos == std::string::npos) {
                 style.color_scheme = "dark";
-            } else if (v.find("light") != std::string::npos) {
+            } else if (dark_pos == std::string::npos) {
                 style.color_scheme = "light";
             } else {
-                style.color_scheme = "normal";
+                // Both present: prefer whichever appears first
+                style.color_scheme = (light_pos < dark_pos) ? "light" : "dark";
             }
         }},
 
@@ -1363,10 +1387,19 @@ inline std::vector<ComputedStyle::ContentToken> parseContentTokens(const std::st
 
 // Helper wrappers that call CSSParser static methods (for use in dispatch table)
 inline void parseMarginShorthandHelper(const std::string& value, ComputedStyle& style) {
-    std::istringstream iss(value);
+    // Use paren-depth-aware tokenization so env(name, fallback) is kept as one token
     std::vector<std::string> parts;
     std::string part;
-    while (iss >> part) parts.push_back(part);
+    int paren_depth = 0;
+    for (size_t i = 0; i < value.size(); ++i) {
+        char c = value[i];
+        if (c == '(') { ++paren_depth; part += c; }
+        else if (c == ')') { --paren_depth; part += c; }
+        else if ((c == ' ' || c == '\t' || c == '\n' || c == '\r') && paren_depth == 0) {
+            if (!part.empty()) { parts.push_back(part); part.clear(); }
+        } else { part += c; }
+    }
+    if (!part.empty()) parts.push_back(part);
     
     if (parts.size() == 1) {
         auto v = CSSParser::parseValue(parts[0]);
@@ -1387,10 +1420,19 @@ inline void parseMarginShorthandHelper(const std::string& value, ComputedStyle& 
 }
 
 inline void parsePaddingShorthandHelper(const std::string& value, ComputedStyle& style) {
-    std::istringstream iss(value);
+    // Use paren-depth-aware tokenization so env(name, fallback) is kept as one token
     std::vector<std::string> parts;
     std::string part;
-    while (iss >> part) parts.push_back(part);
+    int paren_depth = 0;
+    for (size_t i = 0; i < value.size(); ++i) {
+        char c = value[i];
+        if (c == '(') { ++paren_depth; part += c; }
+        else if (c == ')') { --paren_depth; part += c; }
+        else if ((c == ' ' || c == '\t' || c == '\n' || c == '\r') && paren_depth == 0) {
+            if (!part.empty()) { parts.push_back(part); part.clear(); }
+        } else { part += c; }
+    }
+    if (!part.empty()) parts.push_back(part);
     
     if (parts.size() == 1) {
         auto v = CSSParser::parseValue(parts[0]);
@@ -1546,7 +1588,8 @@ inline void parseBackgroundShorthandHelper(const std::string& value, ComputedSty
             style.background_image = part;
         } else if (part == "repeat" || part == "no-repeat" || part == "repeat-x" || part == "repeat-y") {
             style.background_repeat = part;
-        } else if (part == "cover" || part == "contain" || part.find('%') != std::string::npos) {
+        } else if (part.find("color-mix(") == std::string::npos &&
+                   (part == "cover" || part == "contain" || part.find('%') != std::string::npos)) {
             style.background_size = part;
         } else {
             style.background_color = CSSParser::parseColor(part);
@@ -2146,9 +2189,9 @@ std::shared_ptr<CSSCalcExpression> CSSParser::parseCalcTerm(const std::string& e
 std::shared_ptr<CSSCalcExpression> CSSParser::parseCalcFactor(const std::string& expr, size_t& pos) {
     // Skip whitespace
     while (pos < expr.size() && std::isspace(static_cast<unsigned char>(expr[pos]))) ++pos;
-    
+
     if (pos >= expr.size()) return nullptr;
-    
+
     // Check for parenthesized expression
     if (expr[pos] == '(') {
         ++pos;
@@ -2158,30 +2201,51 @@ std::shared_ptr<CSSCalcExpression> CSSParser::parseCalcFactor(const std::string&
         if (pos < expr.size()) ++pos;
         return inner;
     }
-    
+
+    // Check for env() inside calc
+    if (pos + 4 <= expr.size() && expr.substr(pos, 4) == "env(") {
+        // Find matching closing paren (depth-aware)
+        size_t start = pos;
+        int depth = 0;
+        while (pos < expr.size()) {
+            if (expr[pos] == '(') ++depth;
+            else if (expr[pos] == ')') {
+                --depth;
+                if (depth == 0) { ++pos; break; }
+            }
+            ++pos;
+        }
+        std::string env_token = expr.substr(start, pos - start);
+        CSSValue val = parseValue(env_token);
+        auto result = std::make_shared<CSSCalcExpression>();
+        result->op = CSSCalcExpression::Op::VALUE;
+        result->value = val;
+        return result;
+    }
+
     // Parse value with unit
     size_t start = pos;
     bool has_digit = false;
-    
+
     // Handle negative sign
     if (pos < expr.size() && expr[pos] == '-') ++pos;
-    
+
     // Parse number
     while (pos < expr.size() && (std::isdigit(static_cast<unsigned char>(expr[pos])) || expr[pos] == '.')) {
         has_digit = true;
         ++pos;
     }
-    
+
     if (!has_digit) return nullptr;
-    
+
     // Parse unit
     size_t unit_start = pos;
     while (pos < expr.size() && std::isalpha(static_cast<unsigned char>(expr[pos]))) ++pos;
     if (pos < expr.size() && expr[pos] == '%') ++pos;
-    
+
     std::string value_str = expr.substr(start, pos - start);
     CSSValue val = parseValue(value_str);
-    
+
     auto result = std::make_shared<CSSCalcExpression>();
     result->op = CSSCalcExpression::Op::VALUE;
     result->value = val;
@@ -2284,6 +2348,14 @@ std::string CSSParser::parseColor(const std::string& value) {
         {"lightgray", "#d3d3d3"},
         {"lightgreen", "#90ee90"},
         {"lightyellow", "#ffffe0"},
+        {"lightpink", "#ffb6c1"},
+        {"lightcoral", "#f08080"},
+        {"lightsalmon", "#ffa07a"},
+        {"lightseagreen", "#20b2aa"},
+        {"lightskyblue", "#87cefa"},
+        {"lightslategray", "#778899"},
+        {"lightslategrey", "#778899"},
+        {"lightsteelblue", "#b0c4de"},
         {"darkblue", "#00008b"},
         {"darkgray", "#a9a9a9"},
         {"darkgreen", "#006400"},

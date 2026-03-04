@@ -1,10 +1,11 @@
-﻿#pragma once
+#pragma once
 
 #include "../dom/dom/dom_node.hpp"
 
 
 #include <memory>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 // Forward declare Yoga types
@@ -95,6 +96,10 @@ private:
         std::vector<dom::DOMNodePtr> children;
     };
     std::vector<AnonBlockInfo> anon_blocks_;
+
+    // Phantom Yoga nodes injected for inline ::before pseudo-elements in block containers.
+    // These reserve vertical space so block children don't overlap the ::before text.
+    std::unordered_set<YGNode*> pseudo_before_phantom_nodes_;
 
     // Viewport size for resolving vw/vh units during Yoga style mapping
     float viewport_width_ = 0.0f;

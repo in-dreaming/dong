@@ -64,6 +64,8 @@ void collectRows(const dom::DOMNodePtr& table_node,
         if (isTableRowDisplay(display)) {
             rows.push_back(child);
         } else if (isTableRowGroupDisplay(display)) {
+            // Skip collapsed row groups (visibility: collapse removes their space)
+            if (child->getComputedStyle().visibility == "collapse") continue;
             for (const auto& row_child : child->getChildren()) {
                 if (!row_child || row_child->getType() != dom::DOMNode::NodeType::ELEMENT) continue;
                 if (isTableRowDisplay(row_child->getComputedStyle().display)) {
@@ -91,6 +93,7 @@ struct RowBlock {
 
 // Forward declaration (used by helpers below)
 void updateLayoutRect(LayoutNode* ln, float x, float y, float w, float h);
+void shiftLayoutRecursive(Engine* engine, const dom::DOMNodePtr& node, float dx, float dy);
 
 
 std::vector<RowBlock> collectRowBlocks(const dom::DOMNodePtr& table_node) {
@@ -125,16 +128,6 @@ std::vector<RowBlock> collectRowBlocks(const dom::DOMNodePtr& table_node) {
     return blocks;
 }
 
-float computeRowHeightPx(Engine* engine, const std::vector<dom::DOMNodePtr>& cells) {
-    float row_h = 0.0f;
-    for (const auto& cell : cells) {
-        const auto* cl = engine->getLayout(cell);
-        if (!cl) continue;
-        row_h = std::max(row_h, cl->layout.dimensions[1]);
-    }
-    return row_h;
-}
-
 float positionCellsInRowAbs(Engine* engine,
                             const std::vector<dom::DOMNodePtr>& cells,
                             const std::vector<float>& col_widths,
@@ -146,7 +139,17 @@ float positionCellsInRowAbs(Engine* engine,
     for (size_t c = 0; c < cells.size() && c < col_widths.size(); ++c) {
         auto* cell_ln = engine->getLayoutMutable(cells[c]);
         if (!cell_ln) continue;
+        // Compute position delta before overwriting, so we can shift descendants.
+        const float old_x = cell_ln->layout.position[0];
+        const float old_y = cell_ln->layout.position[1];
         updateLayoutRect(cell_ln, cur_x, row_y, col_widths[c], row_h);
+        // Propagate position delta to all descendants. This is necessary when Yoga
+        // computed incorrect (often 0) heights for cells (e.g. JS-created rows) and
+        // the table post-pass overrides cell positions. Without this, descendants
+        // keep their Yoga-derived absolute positions and render at the wrong location.
+        const float dx = cur_x - old_x;
+        const float dy = row_y - old_y;
+        shiftLayoutRecursive(engine, cells[c], dx, dy);
         cur_x += col_widths[c] + spacing;
     }
 
@@ -179,6 +182,24 @@ void updateLayoutRect(LayoutNode* ln, float x, float y, float w, float h) {
     ln->y = y;
     ln->width = w;
     ln->height = h;
+}
+
+// Shift all descendant LayoutNodes by (dx, dy). Used after the table post-pass
+// repositions a cell to propagate the delta to child nodes whose absolute
+// coordinates were computed by extractLayoutRecursive before the cell was moved.
+void shiftLayoutRecursive(Engine* engine, const dom::DOMNodePtr& node, float dx, float dy) {
+    if (!node || (dx == 0.0f && dy == 0.0f)) return;
+    for (const auto& child : node->getChildren()) {
+        if (!child) continue;
+        auto* ln = engine->getLayoutMutable(child);
+        if (ln) {
+            ln->layout.position[0] += dx;
+            ln->layout.position[1] += dy;
+            ln->x += dx;
+            ln->y += dy;
+        }
+        shiftLayoutRecursive(engine, child, dx, dy);
+    }
 }
 
 void appendTextRecursive(const dom::DOMNodePtr& node, std::string& out) {
@@ -269,6 +290,62 @@ float measureCellPreferredWidth(const dom::DOMNodePtr& cell) {
 
     const float w = text_w + pad_l + pad_r + border * 2.0f;
     return (w > 0.0f && std::isfinite(w)) ? w : 0.0f;
+}
+
+// Estimate a cell's intrinsic height based on its text content and font metrics.
+// Used as a fallback when Yoga reports 0 height for table cells (e.g. JS-created rows).
+float measureCellPreferredHeight(const dom::DOMNodePtr& cell) {
+    if (!cell) return 0.0f;
+    const auto& cs = cell->getComputedStyle();
+
+    // Use the cell's font size (or the first descendant element with text).
+    float font_size = (cs.font_size > 0.0f && std::isfinite(cs.font_size)) ? cs.font_size : 16.0f;
+
+    float pad_t = cs.padding_top.isPixel() ? cs.padding_top.value : 0.0f;
+    float pad_b = cs.padding_bottom.isPixel() ? cs.padding_bottom.value : 0.0f;
+
+    float border = 0.0f;
+    if (cs.border_style != "none" && cs.border_style != "hidden") {
+        border = std::max(0.0f, cs.border_width);
+    }
+
+    // Check if the cache already has line_height_px for this cell's text.
+    const std::string text = collectCellText(cell);
+    float line_height = font_size * 1.2f; // "line-height: normal" approximation
+    if (!text.empty()) {
+        ::dong::render::TextMeasureCacheKey key;
+        key.text = text;
+        key.font_family = cs.font_family;
+        key.font_weight = cs.font_weight;
+        key.font_style = cs.font_style;
+        key.font_size = font_size;
+        key.letter_spacing_em = cs.letter_spacing_em;
+        key.word_spacing_px = cs.word_spacing_px;
+        ::dong::render::TextMeasureResult cached;
+        if (::dong::render::TextMeasureCache::instance().lookup(key, cached) && cached.valid && cached.line_height_px > 0.0f) {
+            line_height = std::max(line_height, cached.line_height_px);
+        }
+    }
+
+    const float h = line_height + pad_t + pad_b + border * 2.0f;
+    return (h > 0.0f && std::isfinite(h)) ? h : font_size * 1.2f;
+}
+
+float computeRowHeightPx(Engine* engine, const std::vector<dom::DOMNodePtr>& cells) {
+    float row_h = 0.0f;
+    for (const auto& cell : cells) {
+        const auto* cl = engine->getLayout(cell);
+        if (!cl) continue;
+        row_h = std::max(row_h, cl->layout.dimensions[1]);
+    }
+    // Fallback: when Yoga reports 0 height for all cells (e.g. JS-created table rows),
+    // estimate height from cell text content and font metrics.
+    if (row_h <= 0.0f) {
+        for (const auto& cell : cells) {
+            row_h = std::max(row_h, measureCellPreferredHeight(cell));
+        }
+    }
+    return row_h;
 }
 
 } // anonymous namespace
@@ -450,6 +527,34 @@ void Engine::positionTableCells(
             group_ln = getLayoutMutable(block.group);
         }
 
+        // Skip collapsed row groups: visibility:collapse on tbody/thead/tfoot removes space.
+        const bool group_is_collapsed = block.group &&
+            block.group->getComputedStyle().visibility == "collapse";
+        if (group_is_collapsed) {
+            // Zero-out the group layout so it doesn't contribute to rendering or height propagation.
+            if (group_ln) {
+                updateLayoutRect(group_ln, group_ln->layout.position[0], cur_y, group_ln->layout.dimensions[0], 0.0f);
+            }
+            // Also zero-out all rows and their cells in this group so propagateHeights
+            // doesn't see their original Yoga y-positions and grow the table height back.
+            for (const auto& row : block.rows) {
+                auto* row_ln = getLayoutMutable(row);
+                if (row_ln) {
+                    updateLayoutRect(row_ln, row_ln->layout.position[0], cur_y, row_ln->layout.dimensions[0], 0.0f);
+                    // Zero out cells too.
+                    std::vector<dom::DOMNodePtr> cells;
+                    collectCells(row, cells);
+                    for (const auto& cell : cells) {
+                        auto* cell_ln = getLayoutMutable(cell);
+                        if (cell_ln) {
+                            updateLayoutRect(cell_ln, cell_ln->layout.position[0], cur_y, cell_ln->layout.dimensions[0], 0.0f);
+                        }
+                    }
+                }
+            }
+            continue;  // Don't advance cur_y
+        }
+
         for (const auto& row : block.rows) {
             auto* row_ln = getLayoutMutable(row);
             if (!row_ln) continue;
@@ -457,7 +562,7 @@ void Engine::positionTableCells(
             std::vector<dom::DOMNodePtr> cells;
             collectCells(row, cells);
 
-            const float row_h = computeRowHeightPx(this, cells);
+            float row_h = computeRowHeightPx(this, cells);
             const float row_w = positionCellsInRowAbs(this, cells, col_widths, content_x, cur_y, spacing_x, row_h);
 
             updateLayoutRect(row_ln, content_x, cur_y, row_w, row_h);

@@ -117,6 +117,7 @@ struct MixedPathState {
     float ascent_px = 0.0f;
     float line_height_px = 0.0f;
     Color text_color;
+    Painter* painter = nullptr;  // For evaluating generated content (open-quote, close-quote, etc.)
 };
 
 static Color resolveTextColorForNode(const dom::DOMNodePtr& node,
@@ -160,6 +161,15 @@ MixedPathState initMixedPath(const dom::DOMNodePtr& node,
     float width = std::max(0.0f, layout->layout.dimensions[0] - bl - br);
     s.pad_left = style.padding_left.isPixel() ? style.padding_left.value : 0.0f;
     float pad_right = style.padding_right.isPixel() ? style.padding_right.value : 0.0f;
+    // For list-style-position: inside, shift text start past the marker.
+    if (node && node->getTagName() == "li") {
+        const std::string& imw_str = node->getAttribute("__inside_marker_width__");
+        if (!imw_str.empty()) {
+            float imw = std::stof(imw_str);
+            s.pad_left += imw;
+            node->setAttribute("__inside_marker_width__", "");
+        }
+    }
     s.inner_width = std::max(0.0f, width - s.pad_left - pad_right);
     s.pad_top = style.padding_top.isPixel() ? style.padding_top.value : 0.0f;
     s.container_font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
@@ -348,9 +358,45 @@ void renderInlineSubtree(const dom::DOMNodePtr& node,
     if (merged.font_style.empty())  merged.font_style  = container_style.font_style;
     if (merged.color.empty())       merged.color       = container_style.color;
 
+    // Record insertion point for the background rect BEFORE rendering children.
+    // This ensures the background is drawn behind the glyphs (painter's algorithm).
+    const size_t bg_insert_index = builder.getItemCount();
+
+    // Render ::before generated content inline (e.g. open-quote for <q>)
+    if (state.painter) {
+        auto pseudo_before = node->getPseudoBefore();
+        if (pseudo_before) {
+            const auto& ps = pseudo_before->getComputedStyle();
+            if (!ps.content_tokens.empty() || !ps.content.empty()) {
+                // Pass the originating element (node) for lang-based quote resolution
+                std::string before_text = state.painter->evaluateContentText(ps, node);
+                if (!before_text.empty()) {
+                    emitInlineTextRun(before_text, merged, container_style, state, shaper, builder, pseudo_before);
+                    node->setAttribute("__dong_pseudo_before_inflow__", "1");
+                }
+            }
+        }
+    }
+
     renderInlineChildren(node, merged, container_style, state, shaper, builder);
 
-    // Background rect spanning all rendered content of this inline element.
+    // Render ::after generated content inline (e.g. close-quote for <q>)
+    if (state.painter) {
+        auto pseudo_after = node->getPseudoAfter();
+        if (pseudo_after) {
+            const auto& ps = pseudo_after->getComputedStyle();
+            if (!ps.content_tokens.empty() || !ps.content.empty()) {
+                // Pass the originating element (node) for lang-based quote resolution
+                std::string after_text = state.painter->evaluateContentText(ps, node);
+                if (!after_text.empty()) {
+                    emitInlineTextRun(after_text, merged, container_style, state, shaper, builder, pseudo_after);
+                    node->setAttribute("__dong_pseudo_after_inflow__", "1");
+                }
+            }
+        }
+    }
+
+    // Insert the background rect at the saved index so it renders BEHIND the glyphs.
     float content_width = state.cumulative_x - start_x;
     std::string bg_color = resolveBackgroundColorForNode(node, effective_style);
     if (content_width > 0.0f
@@ -360,10 +406,10 @@ void renderInlineSubtree(const dom::DOMNodePtr& node,
                state.baseline_y - state.ascent_px,
                content_width + pad_l + pad_r, state.line_height_px};
         if (effective_style.border_radius > 0.0f)
-            builder.addRoundedRect(r, makeColorFromCss(bg_color),
-                                   effective_style.border_radius);
+            builder.insertRoundedRectAt(bg_insert_index, r, makeColorFromCss(bg_color),
+                                        effective_style.border_radius);
         else
-            builder.addRect(r, makeColorFromCss(bg_color));
+            builder.insertRectAt(bg_insert_index, r, makeColorFromCss(bg_color));
     }
 
     state.cumulative_x += pad_r;
@@ -499,8 +545,10 @@ void renderMixedPath(const dom::DOMNodePtr& node,
                      float bl, float bt, float br, float bb,
                      TextShaper& shaper,
                      layout::Engine* engine,
-                     DisplayListBuilder& builder) {
+                     DisplayListBuilder& builder,
+                     Painter* painter = nullptr) {
     MixedPathState state = initMixedPath(node, layout, style, bl, bt, br, bb, shaper);
+    state.painter = painter;
 
     for (const auto& child : node->getChildren()) {
         if (!child) continue;
@@ -725,7 +773,7 @@ void Painter::paintTextAndInput(const dom::DOMNodePtr& node,
         auto path = determinePath(analysis, tag, style);
 
         if (path == TextRenderPath::Mixed) {
-            renderMixedPath(node, layout_node, style, bl, bt, br, bb, text_shaper_, layout_engine_, builder);
+            renderMixedPath(node, layout_node, style, bl, bt, br, bb, text_shaper_, layout_engine_, builder, this);
         } else if (path == TextRenderPath::FullText) {
             std::string raw_text;
             if (analysis.raw_text_len > 0) {
@@ -748,9 +796,13 @@ void Painter::paintTextAndInput(const dom::DOMNodePtr& node,
 
             auto shouldInlineAffix = [](const dom::ComputedStyle& ps) {
                 if (ps.display != "inline" && ps.display != "inline-block") return false;
-                const bool has_bg = (!ps.background_color.empty() && ps.background_color != "transparent");
-                const bool has_border = (ps.border_width > 0.0f && ps.border_style != "none");
-                return !has_bg && !has_border;
+                // Only block inlining when background/border are EXPLICITLY set on the pseudo element
+                // (not inherited from the parent). Pseudo elements inherit parent styles but inline
+                // rendering should not be blocked by inherited background colors.
+                const bool has_explicit_bg = ps.isExplicitlySet("background-color") || ps.isExplicitlySet("background");
+                const bool has_explicit_border = ps.isExplicitlySet("border") || ps.isExplicitlySet("border-width") ||
+                                                 ps.isExplicitlySet("border-style");
+                return !has_explicit_bg && !has_explicit_border;
             };
 
             if (pseudo_before) {
@@ -792,6 +844,28 @@ void Painter::paintTextAndInput(const dom::DOMNodePtr& node,
             }
 
             renderFullText(node, layout_node, style, raw_text, bl, bt, br, bb, text_shaper_, builder);
+        } else if (path == TextRenderPath::None) {
+            // Block-only children: if a ::before inline affix exists, render it as a standalone
+            // header line at the top of this element's content box.
+            auto pseudo_before = node->getPseudoBefore();
+            if (pseudo_before) {
+                const auto& ps = pseudo_before->getComputedStyle();
+                const bool is_inline = (ps.display == "inline" || ps.display == "inline-block" || ps.display.empty());
+                if (is_inline) {
+                    std::string before_raw = evaluateContentText(ps);
+                    if (!before_raw.empty()) {
+                        // Render the ::before as a standalone line using the affix path with empty main text.
+                        const bool ok = renderFullTextWithAffixes(node, layout_node, style, "",
+                                                                  before_raw, &ps,
+                                                                  "", nullptr,
+                                                                  bl, bt, br, bb,
+                                                                  text_shaper_, builder);
+                        if (ok) {
+                            node->setAttribute("__dong_pseudo_before_inflow__", "1");
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -1218,7 +1292,7 @@ std::string prepareTextForRender(const std::string& raw,
     std::string white_space = toLowerCopy(collapseWhitespace(style.white_space));
     if (white_space == "normal" || white_space == "nowrap") {
         text = collapseWhitespace(text);
-    } else if (white_space == "pre-line" || white_space == "pre-wrap") {
+    } else if (white_space == "pre-line" || white_space == "pre-wrap" || white_space == "break-spaces") {
         text = painter_detail::collapseSpacesPreserveNewlines(text);
     }
 
@@ -1392,6 +1466,18 @@ bool renderFullTextWithAffixes(const dom::DOMNodePtr& node,
     float pad_l = style.padding_left.isPixel() ? style.padding_left.value : 0.0f;
     float pad_r = style.padding_right.isPixel() ? style.padding_right.value : 0.0f;
     float pad_t = style.padding_top.isPixel() ? style.padding_top.value : 0.0f;
+
+    // For list-style-position: inside, the marker was already drawn at pad_l offset.
+    // Shift the text start to the right of the marker.
+    if (node && node->getTagName() == "li") {
+        const std::string& imw_str = node->getAttribute("__inside_marker_width__");
+        if (!imw_str.empty()) {
+            float imw = std::stof(imw_str);
+            pad_l += imw;
+            node->setAttribute("__inside_marker_width__", "");
+        }
+    }
+
     float inner_width = std::max(0.0f, width - pad_l - pad_r);
 
     Color main_color = resolveTextColorForNode(node, style);
@@ -1443,9 +1529,9 @@ bool renderFullTextWithAffixes(const dom::DOMNodePtr& node,
     // If main is empty and both affixes failed to shape, nothing to do.
     if (!ok_before && !ok_main && !ok_after) return true;
 
-    // If main text failed to shape but we have affixes, fall back so the main text
-    // gets rendered by renderFullText while the prefix is rendered via renderPseudoElement.
-    if (!ok_main && (ok_before || ok_after)) return false;
+    // If main text was non-empty but failed to shape (e.g. font missing), fall back.
+    // When main_text is empty, it's intentional (pure ::before/::after element) — render affixes alone.
+    if (!ok_main && !main_text.empty() && (ok_before || ok_after)) return false;
 
     const float total_width = w_before + w_main + w_after;
     // NOTE: We intentionally do NOT bail out when total_width > inner_width here.
@@ -1520,6 +1606,18 @@ void renderFullText(const dom::DOMNodePtr& node,
     float pad_l = style.padding_left.isPixel() ? style.padding_left.value : 0.0f;
     float pad_r = style.padding_right.isPixel() ? style.padding_right.value : 0.0f;
     float pad_t = style.padding_top.isPixel() ? style.padding_top.value : 0.0f;
+
+    // For list-style-position: inside, the marker was already drawn at pad_l offset.
+    // Shift the text start to the right of the marker.
+    if (node && node->getTagName() == "li") {
+        const std::string& imw_str = node->getAttribute("__inside_marker_width__");
+        if (!imw_str.empty()) {
+            float imw = std::stof(imw_str);
+            pad_l += imw;
+            // clear after use so it doesn't persist across frames
+            node->setAttribute("__inside_marker_width__", "");
+        }
+    }
 
     float inner_width = std::max(0.0f, width - pad_l - pad_r);
 

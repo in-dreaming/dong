@@ -369,10 +369,23 @@ struct FormDataStorage {
     std::vector<std::pair<std::string, std::string>> entries;
 };
 
+static JSClassID g_formdata_class_id = 0;
+
+static void formdata_finalizer(JSRuntime* rt, JSValue val) {
+    auto* storage = static_cast<FormDataStorage*>(JS_GetOpaque(val, g_formdata_class_id));
+    delete storage;
+}
+
+static JSClassDef g_formdata_class_def = {
+    "FormData",
+    .finalizer = formdata_finalizer,
+};
+
 static JSValue formdata_constructor(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     (void)this_val;
 
-    JSValue obj = JS_NewObject(ctx);
+    JSValue obj = JS_NewObjectClass(ctx, g_formdata_class_id);
+    if (JS_IsException(obj)) return obj;
 
     // Create storage
     auto* storage = new FormDataStorage();
@@ -419,7 +432,7 @@ static JSValue formdata_constructor(JSContext* ctx, JSValueConst this_val, int a
 static JSValue formdata_append(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     if (argc < 1) return JS_UNDEFINED;
 
-    auto* storage = static_cast<FormDataStorage*>(JS_GetOpaque((JSValue)this_val, 0));
+    auto* storage = static_cast<FormDataStorage*>(JS_GetOpaque((JSValue)this_val, g_formdata_class_id));
     if (!storage) return JS_UNDEFINED;
 
     const char* name = JS_ToCString(ctx, argv[0]);
@@ -445,7 +458,7 @@ static JSValue formdata_append(JSContext* ctx, JSValueConst this_val, int argc, 
 static JSValue formdata_get(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     if (argc < 1) return JS_NULL;
 
-    auto* storage = static_cast<FormDataStorage*>(JS_GetOpaque((JSValue)this_val, 0));
+    auto* storage = static_cast<FormDataStorage*>(JS_GetOpaque((JSValue)this_val, g_formdata_class_id));
     if (!storage) return JS_NULL;
 
     const char* name = JS_ToCString(ctx, argv[0]);
@@ -465,7 +478,7 @@ static JSValue formdata_get(JSContext* ctx, JSValueConst this_val, int argc, JSV
 static JSValue formdata_getAll(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     if (argc < 1) return JS_NewArray(ctx);
 
-    auto* storage = static_cast<FormDataStorage*>(JS_GetOpaque((JSValue)this_val, 0));
+    auto* storage = static_cast<FormDataStorage*>(JS_GetOpaque((JSValue)this_val, g_formdata_class_id));
     if (!storage) return JS_NewArray(ctx);
 
     const char* name = JS_ToCString(ctx, argv[0]);
@@ -486,7 +499,7 @@ static JSValue formdata_getAll(JSContext* ctx, JSValueConst this_val, int argc, 
 static JSValue formdata_has(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     if (argc < 1) return JS_FALSE;
 
-    auto* storage = static_cast<FormDataStorage*>(JS_GetOpaque((JSValue)this_val, 0));
+    auto* storage = static_cast<FormDataStorage*>(JS_GetOpaque((JSValue)this_val, g_formdata_class_id));
     if (!storage) return JS_FALSE;
 
     const char* name = JS_ToCString(ctx, argv[0]);
@@ -506,7 +519,7 @@ static JSValue formdata_has(JSContext* ctx, JSValueConst this_val, int argc, JSV
 static JSValue formdata_delete(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     if (argc < 1) return JS_UNDEFINED;
 
-    auto* storage = static_cast<FormDataStorage*>(JS_GetOpaque((JSValue)this_val, 0));
+    auto* storage = static_cast<FormDataStorage*>(JS_GetOpaque((JSValue)this_val, g_formdata_class_id));
     if (!storage) return JS_UNDEFINED;
 
     const char* name = JS_ToCString(ctx, argv[0]);
@@ -523,7 +536,7 @@ static JSValue formdata_delete(JSContext* ctx, JSValueConst this_val, int argc, 
 static JSValue formdata_set(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     if (argc < 1) return JS_UNDEFINED;
 
-    auto* storage = static_cast<FormDataStorage*>(JS_GetOpaque((JSValue)this_val, 0));
+    auto* storage = static_cast<FormDataStorage*>(JS_GetOpaque((JSValue)this_val, g_formdata_class_id));
     if (!storage) return JS_UNDEFINED;
 
     const char* name = JS_ToCString(ctx, argv[0]);
@@ -552,7 +565,7 @@ static JSValue formdata_set(JSContext* ctx, JSValueConst this_val, int argc, JSV
 
 static JSValue formdata_entries(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     (void)argc; (void)argv;
-    auto* storage = static_cast<FormDataStorage*>(JS_GetOpaque((JSValue)this_val, 0));
+    auto* storage = static_cast<FormDataStorage*>(JS_GetOpaque((JSValue)this_val, g_formdata_class_id));
     if (!storage) return JS_NewArray(ctx);
 
     JSValue arr = JS_NewArray(ctx);
@@ -567,7 +580,7 @@ static JSValue formdata_entries(JSContext* ctx, JSValueConst this_val, int argc,
 
 static JSValue formdata_keys(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     (void)argc; (void)argv;
-    auto* storage = static_cast<FormDataStorage*>(JS_GetOpaque((JSValue)this_val, 0));
+    auto* storage = static_cast<FormDataStorage*>(JS_GetOpaque((JSValue)this_val, g_formdata_class_id));
     if (!storage) return JS_NewArray(ctx);
 
     JSValue arr = JS_NewArray(ctx);
@@ -579,7 +592,7 @@ static JSValue formdata_keys(JSContext* ctx, JSValueConst this_val, int argc, JS
 
 static JSValue formdata_values(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     (void)argc; (void)argv;
-    auto* storage = static_cast<FormDataStorage*>(JS_GetOpaque((JSValue)this_val, 0));
+    auto* storage = static_cast<FormDataStorage*>(JS_GetOpaque((JSValue)this_val, g_formdata_class_id));
     if (!storage) return JS_NewArray(ctx);
 
     JSValue arr = JS_NewArray(ctx);
@@ -639,7 +652,7 @@ static JSValue domparser_parseFromString(JSContext* ctx, JSValueConst this_val, 
         return JS_NULL;
     }
 
-    // Parse HTML
+    // Parse HTML into standalone document (no connection to live DOM)
     using dong::dom::HTMLParser;
     HTMLParser parser;
     auto root = parser.parse(std::string(str));
@@ -651,29 +664,49 @@ static JSValue domparser_parseFromString(JSContext* ctx, JSValueConst this_val, 
         return JS_NULL;
     }
 
-    // Return as document-like object (simplified - return root element)
+    // Build a document-like JS object wrapping the parsed tree.
     JSValue doc = JS_NewObject(ctx);
 
-    // Add document properties
-    JSAtom body_atom = JS_NewAtom(ctx, "body");
-    JSAtom documentElement_atom = JS_NewAtom(ctx, "documentElement");
+    // Helper to search the parsed tree (no dom_manager available)
+    std::function<dong::dom::DOMNodePtr(const dong::dom::DOMNodePtr&, const std::string&)> findByTag;
+    findByTag = [&](const dong::dom::DOMNodePtr& node, const std::string& tag) -> dong::dom::DOMNodePtr {
+        if (!node) return nullptr;
+        if (node->getType() == dong::dom::DOMNode::NodeType::ELEMENT) {
+            std::string name = node->getTagName();
+            // Lowercase comparison
+            std::transform(name.begin(), name.end(), name.begin(), ::tolower);
+            if (name == tag) return node;
+        }
+        for (auto& child : node->getChildren()) {
+            auto found = findByTag(child, tag);
+            if (found) return found;
+        }
+        return nullptr;
+    };
 
-    // Find body element using DOMNode method
-    auto body_elems = bindings->dom_manager_->getElementsByTagName("body");
-    if (!body_elems.empty() && body_elems[0]) {
-        JSValue body = bindings->createJSElement(ctx, body_elems[0]);
-        JS_SetProperty(ctx, doc, body_atom, body);
+    // document.documentElement = <html>
+    auto html_node = findByTag(root, "html");
+    if (!html_node) html_node = root; // fallback
+    JSValue doc_elem = bindings->createJSElement(ctx, html_node);
+    JS_SetPropertyStr(ctx, doc, "documentElement", doc_elem);
+
+    // document.body = <body>
+    auto body_node = findByTag(root, "body");
+    if (body_node) {
+        JSValue body_js = bindings->createJSElement(ctx, body_node);
+        JS_SetPropertyStr(ctx, doc, "body", body_js);
+    } else {
+        JS_SetPropertyStr(ctx, doc, "body", JS_NULL);
     }
 
-    // Set documentElement to root (or html element)
-    auto html_elems = bindings->dom_manager_->getElementsByTagName("html");
-    if (!html_elems.empty() && html_elems[0]) {
-        JSValue doc_elem = bindings->createJSElement(ctx, html_elems[0]);
-        JS_SetProperty(ctx, doc, documentElement_atom, doc_elem);
+    // document.head = <head>
+    auto head_node = findByTag(root, "head");
+    if (head_node) {
+        JSValue head_js = bindings->createJSElement(ctx, head_node);
+        JS_SetPropertyStr(ctx, doc, "head", head_js);
+    } else {
+        JS_SetPropertyStr(ctx, doc, "head", JS_NULL);
     }
-
-    JS_FreeAtom(ctx, body_atom);
-    JS_FreeAtom(ctx, documentElement_atom);
 
     return doc;
 }
@@ -1314,14 +1347,8 @@ JSValue createStyleProxy(JSContext* ctx, JSValueConst element, const dom::DOMNod
             return JS_NewString(c, "");
         }
 
-        // Build cssText from inline styles
-        std::string css_text;
-        for (const auto& [prop, val] : node->getInlineStyles()) {
-            if (!val.empty()) {
-                css_text += prop + ": " + val + ";";
-            }
-        }
-        return JS_NewString(c, css_text.c_str());
+        // Build cssText from inline styles, preserving declaration order when possible
+        return JS_NewString(c, node->getInlineStyleCssText().c_str());
     }, "get cssText", 0);
 
     // cssText setter - parses and sets inline styles
@@ -1425,6 +1452,9 @@ JSValue createStyleProxy(JSContext* ctx, JSValueConst element, const dom::DOMNod
 
             pos++;
         }
+
+        // Store the raw cssText string so the getter can return it in declaration order.
+        node->setInlineStyleAttrString(std::string(css_text));
 
         JS_FreeCString(c, css_text);
         return JS_UNDEFINED;
@@ -1717,21 +1747,27 @@ static JSValue doc_hasFocus(JSContext* ctx, JSValueConst this_val, int argc, JSV
 }
 
 static JSValue doc_getScrollingElement(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-    (void)this_val; (void)argc; (void)argv;
+    (void)argc; (void)argv;
+    // Return document.documentElement so that (scrollingElement === document.documentElement) is true.
+    // this_val is the document object.
+    JSValue doc_elem = JS_GetPropertyStr(ctx, this_val, "documentElement");
+    if (!JS_IsUndefined(doc_elem) && !JS_IsNull(doc_elem)) {
+        return doc_elem; // caller owns the ref
+    }
+    JS_FreeValue(ctx, doc_elem);
+
+    // Fallback: create a new element wrapper (identity check will fail but at least it returns something)
     auto bindings = getBindingsFromContext(ctx);
     if (!bindings || !bindings->dom_manager_) return JS_NULL;
 
-    // Prefer <html>, fallback to <body>.
     auto html_nodes = bindings->dom_manager_->getElementsByTagName("html");
     if (!html_nodes.empty() && html_nodes[0]) {
         return bindings->createJSElement(ctx, html_nodes[0]);
     }
-
     auto body_nodes = bindings->dom_manager_->getElementsByTagName("body");
     if (!body_nodes.empty() && body_nodes[0]) {
         return bindings->createJSElement(ctx, body_nodes[0]);
     }
-
     return JS_NULL;
 }
 
@@ -2798,12 +2834,94 @@ void JSBindings::scanAndRegisterInlineEventHandlers() {
     DONG_LOG_INFO("[JSBindings] DOM scan completed, found %d elements with inline event handlers", found_count);
 }
 
+// ============================================================
+// Timer API: setTimeout / clearTimeout / setInterval / clearInterval
+// ============================================================
+
+static JSValue js_setTimeout(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val;
+    auto bindings = getBindingsFromContext(ctx);
+    if (!bindings || argc < 1) return JS_NewInt32(ctx, 0);
+
+    if (!JS_IsFunction(ctx, argv[0])) return JS_NewInt32(ctx, 0);
+
+    double delay_ms = 0.0;
+    if (argc >= 2) JS_ToFloat64(ctx, &delay_ms, argv[1]);
+    if (delay_ms < 0.0) delay_ms = 0.0;
+
+    JSBindings::TimerEntry entry;
+    entry.id = bindings->next_timer_id_++;
+    entry.interval = -1.0; // one-shot
+    entry.callback = JS_DupValue(ctx, argv[0]);
+    entry.cancelled = false;
+
+    auto now = std::chrono::steady_clock::now();
+    double elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+        now - bindings->script_start_time_).count() / 1e6;
+    entry.fire_at = elapsed + delay_ms / 1000.0;
+
+    uint32_t id = entry.id;
+    bindings->timers_[id] = std::move(entry);
+    return JS_NewInt32(ctx, static_cast<int32_t>(id));
+}
+
+static JSValue js_clearTimeout(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val;
+    auto bindings = getBindingsFromContext(ctx);
+    if (!bindings || argc < 1) return JS_UNDEFINED;
+
+    int32_t id = 0;
+    JS_ToInt32(ctx, &id, argv[0]);
+    auto it = bindings->timers_.find(static_cast<uint32_t>(id));
+    if (it != bindings->timers_.end()) {
+        it->second.cancelled = true;
+    }
+    return JS_UNDEFINED;
+}
+
+static JSValue js_setInterval(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val;
+    auto bindings = getBindingsFromContext(ctx);
+    if (!bindings || argc < 1) return JS_NewInt32(ctx, 0);
+
+    if (!JS_IsFunction(ctx, argv[0])) return JS_NewInt32(ctx, 0);
+
+    double interval_ms = 0.0;
+    if (argc >= 2) JS_ToFloat64(ctx, &interval_ms, argv[1]);
+    if (interval_ms < 4.0) interval_ms = 4.0; // match browser minimum
+
+    JSBindings::TimerEntry entry;
+    entry.id = bindings->next_timer_id_++;
+    entry.interval = interval_ms / 1000.0;
+    entry.callback = JS_DupValue(ctx, argv[0]);
+    entry.cancelled = false;
+
+    auto now = std::chrono::steady_clock::now();
+    double elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+        now - bindings->script_start_time_).count() / 1e6;
+    entry.fire_at = elapsed + entry.interval;
+
+    uint32_t id = entry.id;
+    bindings->timers_[id] = std::move(entry);
+    return JS_NewInt32(ctx, static_cast<int32_t>(id));
+}
+
+static JSValue js_clearInterval(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    return js_clearTimeout(ctx, this_val, argc, argv);
+}
+
 void JSBindings::initializeConsoleAPI() {
     if (!engine_) return;
 
     JSContext* ctx = engine_->getContext();
     if (!ctx) return;
-    
+
+    // Register FormData class (needs JSRuntime, done once here)
+    if (g_formdata_class_id == 0) {
+        JS_NewClassID(&g_formdata_class_id);
+        JS_NewClass(JS_GetRuntime(ctx), g_formdata_class_id, &g_formdata_class_def);
+    }
+
     JSValue global = JS_GetGlobalObject(ctx);
     JSValue console = JS_NewObject(ctx);
 
@@ -2831,6 +2949,22 @@ void JSBindings::initializeConsoleAPI() {
     // structuredClone global function
     JS_SetPropertyStr(ctx, global, "structuredClone",
         JS_NewCFunction(ctx, js_structuredClone, "structuredClone", 1));
+
+    // Timer API
+    JS_SetPropertyStr(ctx, global, "setTimeout",
+        JS_NewCFunction(ctx, js_setTimeout, "setTimeout", 2));
+    JS_SetPropertyStr(ctx, global, "clearTimeout",
+        JS_NewCFunction(ctx, js_clearTimeout, "clearTimeout", 1));
+    JS_SetPropertyStr(ctx, global, "setInterval",
+        JS_NewCFunction(ctx, js_setInterval, "setInterval", 2));
+    JS_SetPropertyStr(ctx, global, "clearInterval",
+        JS_NewCFunction(ctx, js_clearInterval, "clearInterval", 1));
+
+    // window.addEventListener / removeEventListener (delegates to document/body)
+    JS_SetPropertyStr(ctx, global, "addEventListener",
+        JS_NewCFunction(ctx, elem_addEventListener, "addEventListener", 2));
+    JS_SetPropertyStr(ctx, global, "removeEventListener",
+        JS_NewCFunction(ctx, elem_removeEventListener, "removeEventListener", 2));
 
     // DOMRect global constructor
     JS_SetPropertyStr(ctx, global, "DOMRect",
@@ -3088,13 +3222,17 @@ JSValue window_matchMedia(JSContext* ctx, JSValueConst this_val, int argc, JSVal
         else if (query_str.find("(prefers-reduced-motion: reduce)") != std::string::npos) {
             matches = false;
         }
-        // (orientation: portrait) - assume true (typical for mobile)
+        // (orientation: portrait) - height >= width
         else if (query_str.find("(orientation: portrait)") != std::string::npos) {
-            matches = true;
+            float vw = bindings->layout_engine_ ? bindings->layout_engine_->getViewportWidth() : 800.0f;
+            float vh = bindings->layout_engine_ ? bindings->layout_engine_->getViewportHeight() : 600.0f;
+            matches = (vh >= vw);
         }
-        // (orientation: landscape) - assume false
+        // (orientation: landscape) - width > height
         else if (query_str.find("(orientation: landscape)") != std::string::npos) {
-            matches = false;
+            float vw = bindings->layout_engine_ ? bindings->layout_engine_->getViewportWidth() : 800.0f;
+            float vh = bindings->layout_engine_ ? bindings->layout_engine_->getViewportHeight() : 600.0f;
+            matches = (vw > vh);
         }
         // (min-width: <value>) - parse and check if matches default width
         else if (query_str.find("(min-width:") != std::string::npos) {
@@ -3328,6 +3466,8 @@ void JSBindings::initializeDocumentAPI() {
         auto body_nodes = dom_manager_->getElementsByTagName("body");
         if (!body_nodes.empty()) {
             setNodeOpaque(ctx, document, body_nodes[0]);
+            // Also set on global (window) so window.addEventListener works
+            setNodeOpaque(ctx, global, body_nodes[0]);
         }
     }
 
@@ -3466,16 +3606,17 @@ JSValue JSBindings::createJSElement(JSContext* ctx, const dom::DOMNodePtr& node)
         JS_DefinePropertyGetSet(ctx, elem, dur_atom, dur_getter, JS_UNDEFINED,
             JS_PROP_ENUMERABLE | JS_PROP_CONFIGURABLE);
         JS_FreeAtom(ctx, dur_atom);
-        // Define open property for <details> elements
-        if (node->getTagName() == "details") {
-            JSValue open_getter = JS_NewCFunction(ctx, details_getOpen, "get open", 0);
-            JSValue open_setter = JS_NewCFunction(ctx, details_setOpen, "set open", 1);
-            JS_SetPropertyStr(ctx, elem, "open",
-                JS_NewObjectProto(ctx, open_getter));
-            JS_DefinePropertyGetSet(ctx, elem, JS_NewAtom(ctx, "open"), open_getter, open_setter,
-                JS_PROP_ENUMERABLE | JS_PROP_CONFIGURABLE);
-        }
 
+    }
+
+    // Define open property for <details> elements
+    if (node->getTagName() == "details") {
+        JSAtom open_atom = JS_NewAtom(ctx, "open");
+        JSValue open_getter = JS_NewCFunction(ctx, details_getOpen, "get open", 0);
+        JSValue open_setter = JS_NewCFunction(ctx, details_setOpen, "set open", 1);
+        JS_DefinePropertyGetSet(ctx, elem, open_atom, open_getter, open_setter,
+            JS_PROP_ENUMERABLE | JS_PROP_CONFIGURABLE);
+        JS_FreeAtom(ctx, open_atom);
     }
 
     // Methods
@@ -4420,9 +4561,77 @@ void JSBindings::resetForNewDOM() {
     event_bridge_ids_.clear();
     id_to_node_.clear();
     node_to_id_.clear();
+
+    // Cancel all pending timers
+    if (engine_) {
+        JSContext* ctx = engine_->getContext();
+        if (ctx) {
+            for (auto& [id, entry] : timers_) {
+                JS_FreeValue(ctx, entry.callback);
+            }
+        }
+    }
+    timers_.clear();
 }
 
-// Static helper methods
+void JSBindings::tickTimers(double current_time_sec) {
+    if (!engine_) return;
+    JSContext* ctx = engine_->getContext();
+    if (!ctx) return;
+
+    // Collect timers that are due (avoid modifying map while iterating)
+    std::vector<uint32_t> due_ids;
+    for (auto& [id, entry] : timers_) {
+        if (!entry.cancelled && current_time_sec >= entry.fire_at) {
+            due_ids.push_back(id);
+        }
+    }
+
+    for (uint32_t id : due_ids) {
+        auto it = timers_.find(id);
+        if (it == timers_.end()) continue;
+        auto& entry = it->second;
+        if (entry.cancelled) {
+            JS_FreeValue(ctx, entry.callback);
+            timers_.erase(it);
+            continue;
+        }
+
+        JSValue cb = JS_DupValue(ctx, entry.callback);
+
+        if (entry.interval >= 0.0) {
+            // Repeating: reschedule before calling (so callback can clearInterval)
+            entry.fire_at = current_time_sec + entry.interval;
+        } else {
+            // One-shot: remove before calling (so callback can safely re-register)
+            JS_FreeValue(ctx, entry.callback);
+            timers_.erase(it);
+        }
+
+        JSValue result = JS_Call(ctx, cb, JS_UNDEFINED, 0, nullptr);
+        JS_FreeValue(ctx, cb);
+        if (JS_IsException(result)) {
+            JSValue ex = JS_GetException(ctx);
+            auto* err_str = JS_ToCString(ctx, ex);
+            DONG_LOG_ERROR("[Timer] Exception in timer callback: %s", err_str ? err_str : "(unknown)");
+            if (err_str) JS_FreeCString(ctx, err_str);
+            JS_FreeValue(ctx, ex);
+        }
+        JS_FreeValue(ctx, result);
+    }
+
+    // Purge cancelled one-shots
+    for (auto it = timers_.begin(); it != timers_.end(); ) {
+        if (it->second.cancelled) {
+            JS_FreeValue(ctx, it->second.callback);
+            it = timers_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+
 dom::DOMNodePtr JSBindings::getNodeOpaque(JSContext* ctx, JSValue val) {
     auto bindings = getBindingsFromContext(ctx);
     if (!bindings) return nullptr;

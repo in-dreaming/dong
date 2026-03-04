@@ -23,6 +23,10 @@ public:
     const std::string& getValue() const { return value_; }
     void setValue(const std::string& value);
 
+    // 默认值（HTML defaultValue，用于 form.reset()）
+    const std::string& getDefaultValue() const { return default_value_; }
+    void setDefaultValue(const std::string& value) { default_value_ = value; }
+
     // 光标位置（UTF-8 字符索引）
     size_t getCursorPosition() const { return cursor_position_; }
     void setCursorPosition(size_t pos);
@@ -93,6 +97,7 @@ public:
 
 private:
     std::string value_;
+    std::string default_value_;  // original HTML value for form reset
     std::string placeholder_;
     std::string type_ = "text";
 

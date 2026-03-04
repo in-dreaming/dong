@@ -1,6 +1,7 @@
 ﻿#include "input_element.hpp"
 #include <algorithm>
 #include <unordered_map>
+#include <regex>
 
 namespace dong::dom {
 
@@ -329,13 +330,27 @@ InputElementState* getInputState(DOMNodePtr node) {
         auto state = std::make_unique<InputElementState>();
         // 从 DOM 属性初始化
         if (node->hasAttribute("value")) {
-            state->setValue(node->getAttribute("value"));
+            std::string val = node->getAttribute("value");
+            state->setValue(val);
+            state->setDefaultValue(val);
         }
         if (node->hasAttribute("placeholder")) {
             state->setPlaceholder(node->getAttribute("placeholder"));
         }
         if (node->hasAttribute("type")) {
             state->setType(node->getAttribute("type"));
+        }
+        if (node->hasAttribute("pattern")) {
+            state->setPattern(node->getAttribute("pattern"));
+        }
+        if (node->hasAttribute("min")) {
+            state->setMin(node->getAttribute("min"));
+        }
+        if (node->hasAttribute("max")) {
+            state->setMax(node->getAttribute("max"));
+        }
+        if (node->hasAttribute("step")) {
+            state->setStep(node->getAttribute("step"));
         }
         auto* ptr = state.get();
         g_input_states[key] = std::move(state);
@@ -366,38 +381,13 @@ bool InputElementState::matchesPattern(const std::string& value) const {
     if (pattern_.empty()) return true;
     if (value.empty()) return false;
 
-    // Simple regex pattern matching (basic implementation)
-    // TODO: Implement full ECMA-262 regex support
-    // For now, support basic wildcards: .* for any characters, ^ for start, $ for end
-
-    std::string regex_pattern = pattern_;
-
-    // Convert simple wildcard patterns to regex
-    // Replace .* with .* in regex (already correct)
-    // Ensure pattern is anchored if it starts with ^ or ends with $
-
+    // CSS pattern attribute implicitly anchors: must match full string
+    // Use ECMAScript regex (same as JS regex used in CSS pattern attribute)
     try {
-        // Simple substring matching for now
-        // Full regex implementation would require a regex library
-        if (regex_pattern.find("^") == 0 && regex_pattern.rfind("$") == regex_pattern.length() - 1) {
-            // Exact match required
-            std::string exact_pattern = regex_pattern.substr(1, regex_pattern.length() - 2);
-            return value == exact_pattern;
-        } else if (regex_pattern.find("^") == 0) {
-            // Starts with
-            std::string starts_pattern = regex_pattern.substr(1);
-            return value.find(starts_pattern) == 0;
-        } else if (regex_pattern.rfind("$") == regex_pattern.length() - 1) {
-            // Ends with
-            std::string ends_pattern = regex_pattern.substr(0, regex_pattern.length() - 1);
-            return value.length() >= ends_pattern.length() &&
-                   value.substr(value.length() - ends_pattern.length()) == ends_pattern;
-        } else {
-            // Contains
-            return value.find(regex_pattern) != std::string::npos;
-        }
+        std::regex re(pattern_, std::regex::ECMAScript);
+        return std::regex_match(value, re);
     } catch (...) {
-        // If pattern parsing fails, treat as invalid
+        // Invalid regex pattern: treat value as invalid
         return false;
     }
 }

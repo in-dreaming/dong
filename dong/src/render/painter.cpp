@@ -596,10 +596,17 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         bool enabled = false;
         ScopedCounterScope(Painter* p, const dom::ComputedStyle& s, bool en)
             : painter(p), enabled(en) {
-            if (enabled && painter) painter->pushCounterScope(s);
+            // CSS counter-reset scopes extend to following siblings (not just
+            // the element's own subtree). Resets are pushed by the *parent*
+            // sibling loop via pushCounterResetsOnly(). Here we only apply
+            // counter-increment so that the increment is visible to the
+            // element's own generated content and children.
+            if (enabled && painter && !s.counter_increments.empty()) {
+                painter->applyCounterIncrementsOnly(s);
+            }
         }
         ~ScopedCounterScope() {
-            if (enabled && painter) painter->popCounterScope();
+            // Nothing to pop: resets are managed by the parent sibling loop.
         }
     };
 
@@ -1621,6 +1628,64 @@ void Painter::popCounterScope() {
     }
 }
 
+void Painter::pushCounterResetsOnly(const dom::ComputedStyle& style) {
+    // Push only the counter-reset directives (no increments).
+    // Used by sibling loops so that an element's counter-reset is visible
+    // to all following siblings within the same parent (CSS spec).
+    std::vector<std::string> pushed_resets;
+
+    std::unordered_set<std::string> seen;
+    std::vector<dom::ComputedStyle::CounterDirective> dedup;
+    dedup.reserve(style.counter_resets.size());
+    for (auto it = style.counter_resets.rbegin(); it != style.counter_resets.rend(); ++it) {
+        if (it->name.empty()) continue;
+        if (seen.insert(it->name).second) {
+            dedup.push_back(*it);
+        }
+    }
+    std::reverse(dedup.begin(), dedup.end());
+    for (const auto& r : dedup) {
+        const int v = r.has_value ? r.value : 0;
+        gen_.counters[r.name].push_back(v);
+        pushed_resets.push_back(r.name);
+    }
+
+    gen_.pushed_names_stack.push_back(std::move(pushed_resets));
+}
+
+void Painter::applyCounterIncrementsOnly(const dom::ComputedStyle& style) {
+    // Apply only the counter-increment directives (no push/pop of scopes).
+    for (const auto& inc : style.counter_increments) {
+        if (inc.name.empty()) continue;
+        auto& st = gen_.counters[inc.name];
+        if (st.empty()) {
+            st.push_back(0);
+        }
+        st.back() += inc.value;
+    }
+}
+
+void Painter::popCounterResetByName(const std::string& name) {
+    // Pop the most recently pushed instance of a specific counter.
+    // Used when a later sibling replaces an earlier sibling's counter-reset scope.
+    auto it = gen_.counters.find(name);
+    if (it == gen_.counters.end() || it->second.empty()) return;
+    it->second.pop_back();
+    if (it->second.empty()) {
+        gen_.counters.erase(it);
+    }
+    // Also remove the name from the most recent pushed_names_stack entry that has it.
+    for (int i = static_cast<int>(gen_.pushed_names_stack.size()) - 1; i >= 0; --i) {
+        auto& names = gen_.pushed_names_stack[i];
+        for (auto nit = names.begin(); nit != names.end(); ++nit) {
+            if (*nit == name) {
+                names.erase(nit);
+                return;
+            }
+        }
+    }
+}
+
 
 // Format a counter integer value using the given CSS counter style
 static std::string formatCounterValue(int val, const std::string& style) {
@@ -2376,8 +2441,13 @@ void Painter::renderAltText(const Rect& rect, const std::string& alt_text, const
             float text_height = shaped.line_height_units * scale;
             float ascent = shaped.ascent_units * scale;
 
-            // Center the text within the rectangle
-            float text_x = text_rect.x + (text_rect.width - text_width) / 2.0f;
+            // Left-align if text is wider than the box; center-align otherwise.
+            float text_x;
+            if (text_width > text_rect.width) {
+                text_x = text_rect.x;  // left-align, text may clip
+            } else {
+                text_x = text_rect.x + (text_rect.width - text_width) / 2.0f;
+            }
             float text_y = text_rect.y + (text_rect.height - text_height) / 2.0f;
 
             DrawGlyphRunData glyph_run;
@@ -2398,8 +2468,16 @@ void Painter::renderAltText(const Rect& rect, const std::string& alt_text, const
 
             glyph_run.font_family = style.font_family;
             glyph_run.font_size = font_size;
+            glyph_run.font_paths = shaped.font_paths;
+            glyph_run.font_path = shaped.font_path;
+            glyph_run.units_per_em = shaped.units_per_em;
+            glyph_run.scale_to_pixels = shaped.scale_to_pixels;
             glyph_run.color = makeColorFromCss("#666666"); // Gray text color
+
+            // Clip the glyph run to the text_rect so it doesn't overflow the placeholder box.
+            auto clip = builder.pushClipRect(text_rect);
             builder.addGlyphRun(glyph_run);
+            // clip is released when 'clip' goes out of scope
         }
     }
 }

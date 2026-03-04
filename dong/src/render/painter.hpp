@@ -25,15 +25,24 @@ public:
     // 构建 DisplayList（从 DOM/Layout 遍历生成）
     const DisplayList& buildDisplayList(const dom::DOMNodePtr& root, layout::Engine* layout_engine);
 
+    // Set the resource root directory used to resolve relative image paths.
+    void setResourceRoot(const std::string& root) { resource_root_ = root; }
+    const std::string& getResourceRoot() const { return resource_root_; }
+
     // 访问最近一帧构建好的 DisplayList / LayerTree
     const DisplayList& getDisplayList() const { return display_list_builder_.get(); }
     const LayerTree& getLayerTree() const { return layer_tree_; }
+
+    // Evaluate generated content text for a pseudo-element style.
+    // Called from inline rendering helpers (e.g. for open-quote/close-quote in <q>).
+    std::string evaluateContentText(const dom::ComputedStyle& style, const dom::DOMNodePtr& node = nullptr);
 
 private:
     RenderSurface* surface_;
     layout::Engine* layout_engine_;
     layout::DirtyRect current_dirty_rect_;
     bool use_dirty_rect_ = false; // 先关闭基于 DirtyRect 的裁剪，避免与后续图层缓存行为冲突
+    std::string resource_root_;  // Base directory for resolving relative image paths
 
     // DisplayList / LayerTree 构建器
     DisplayListBuilder display_list_builder_;
@@ -50,7 +59,14 @@ private:
 
     void pushCounterScope(const dom::ComputedStyle& style);
     void popCounterScope();
-    std::string evaluateContentText(const dom::ComputedStyle& style, const dom::DOMNodePtr& node = nullptr);
+    // Push only the counter-reset portion (no increments). Used by the sibling
+    // iteration loop so that a counter-reset on element E is visible to E's
+    // following siblings (CSS spec: counter-reset scope covers following siblings).
+    void pushCounterResetsOnly(const dom::ComputedStyle& style);
+    void applyCounterIncrementsOnly(const dom::ComputedStyle& style);
+    // Pop the last pushed instance of a specific counter (used when a later sibling
+    // resets the same counter, replacing the previous sibling-level instance).
+    void popCounterResetByName(const std::string& name);
     std::string evaluateCounterText(const std::string& name, const std::string& style = "decimal");
     std::string evaluateCountersText(const std::string& name, const std::string& sep, const std::string& style = "decimal");
     std::string evaluateQuoteToken(const dom::ComputedStyle& style,

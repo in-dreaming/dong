@@ -882,11 +882,11 @@ static JSValue input_setValue(JSContext* ctx, JSValueConst this_val, int argc, J
         return JS_UNDEFINED;
     }
 
-    node->setAttribute("value", val);
     auto* state = dom::getInputState(node);
     if (state) {
         state->setValue(val);
     }
+    node->setAttribute("value", val);
     JS_FreeCString(ctx, val);
     node->markLayoutDirty();
     return JS_UNDEFINED;
@@ -1004,7 +1004,6 @@ static JSValue input_setSelectionRange(JSContext* ctx, JSValueConst this_val, in
     if (end < 0) end = 0;
 
     state->setSelection(static_cast<size_t>(start), static_cast<size_t>(end));
-    state->setCursorPosition(static_cast<size_t>(end));
     return JS_UNDEFINED;
 }
 
@@ -1032,8 +1031,10 @@ static JSValue input_setSelectionStart(JSContext* ctx, JSValueConst this_val, in
     if (JS_ToInt64(ctx, &start, argv[0]) != 0) return JS_UNDEFINED;
     if (start < 0) start = 0;
 
-    state->setSelection(static_cast<size_t>(start), static_cast<size_t>(start));
-    state->setCursorPosition(static_cast<size_t>(start));
+    size_t end = state->getSelectionEnd();
+    size_t s = static_cast<size_t>(start);
+    if (s > end) end = s;
+    state->setSelection(s, end);
     return JS_UNDEFINED;
 }
 
@@ -1047,8 +1048,10 @@ static JSValue input_setSelectionEnd(JSContext* ctx, JSValueConst this_val, int 
     if (JS_ToInt64(ctx, &end, argv[0]) != 0) return JS_UNDEFINED;
     if (end < 0) end = 0;
 
-    state->setSelection(static_cast<size_t>(end), static_cast<size_t>(end));
-    state->setCursorPosition(static_cast<size_t>(end));
+    size_t start = state->getSelectionStart();
+    size_t e = static_cast<size_t>(end);
+    if (e < start) start = e;
+    state->setSelection(start, e);
     return JS_UNDEFINED;
 }
 
@@ -1248,9 +1251,15 @@ static JSValue form_reset(JSContext* ctx, JSValueConst this_val, int argc, JSVal
         const std::string& tag = c->getTagName();
         if (tag == "input" || tag == "textarea") {
             if (auto* st = dong::dom::getInputState(c)) {
-                st->setValue("");
+                // Restore default value: for textarea use text content, for input use defaultValue
+                std::string default_val;
+                if (tag == "textarea") {
+                    default_val = c->getTextContent();
+                } else {
+                    default_val = st->getDefaultValue();
+                }
+                st->setValue(default_val);
                 st->clearSelection();
-                c->setAttribute("value", "");
             }
         } else if (tag == "select") {
             if (auto* st = dong::dom::getSelectState(c)) {
