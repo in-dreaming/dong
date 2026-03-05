@@ -29,10 +29,10 @@ fn loadBuildConfig(allocator: std.mem.Allocator) BuildConfig {
     };
     defer env_file.close();
 
-    var buf_reader = std.io.bufferedReader(env_file.reader());
+    var reader = env_file.deprecatedReader();
     var line_buf: [1024]u8 = undefined;
 
-    while (buf_reader.reader().readUntilDelimiterOrEof(&line_buf, '\n') catch null) |line| {
+    while (reader.readUntilDelimiterOrEof(&line_buf, '\n') catch null) |line| {
         const trimmed_line = if (line.len > 0 and line[line.len - 1] == '\r')
             line[0 .. line.len - 1]
         else
@@ -138,6 +138,18 @@ fn getPlatformInfo(b: *std.Build, target: std.Build.ResolvedTarget) PlatformInfo
 // =============================================================================
 // Build Options
 // =============================================================================
+
+fn createRootModule(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+) *std.Build.Module {
+    return b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+    });
+}
+
 const BuildOptions = struct {
     enable_ffmpeg: bool,
     enable_sdl: bool,
@@ -181,7 +193,6 @@ pub fn build(b: *std.Build) void {
 
     const platform = getPlatformInfo(b, target);
     const options = getBuildOptions(b, platform);
-
 
     // Load build configuration
     var config = loadBuildConfig(b.allocator);
@@ -242,34 +253,28 @@ pub fn build(b: *std.Build) void {
     // ==========================================================================
     const msdfgen = buildMsdfgen(b, target, deps_optimize, platform, freetype);
 
-
     // ==========================================================================
     // SDL3 via CMake (shared) - too complex for initial pure Zig migration
     // ==========================================================================
     const sdl3_build_dir = "third_party/sdl/build-zig";
     const sdl3_prefix = "zig-out/sdl3";
 
-    var sdl3_cmake_args = std.ArrayList([]const u8).init(b.allocator);
+    var sdl3_cmake_args = std.array_list.Managed([]const u8).init(b.allocator);
     sdl3_cmake_args.appendSlice(&.{
-        "cmake", "-S", "third_party/sdl", "-B", sdl3_build_dir,
-        b.fmt("-DCMAKE_BUILD_TYPE={s}", .{cmake_build_type}),
-        "-DSDL_TEST=OFF",
-        "-DSDL_STATIC=OFF",
-        "-DSDL_SHARED=ON",
-        "-DSDL_TESTS=OFF",
+        "cmake",                                              "-S",             "third_party/sdl",  "-B",              sdl3_build_dir,
+        b.fmt("-DCMAKE_BUILD_TYPE={s}", .{cmake_build_type}), "-DSDL_TEST=OFF", "-DSDL_STATIC=OFF", "-DSDL_SHARED=ON", "-DSDL_TESTS=OFF",
         "-DSDL_EXAMPLES=OFF",
     }) catch unreachable;
 
     if (platform.is_windows) {
         sdl3_cmake_args.appendSlice(&.{
-            "-G", "Ninja",
-            "-DCMAKE_C_COMPILER=clang-cl",
-            "-DCMAKE_CXX_COMPILER=clang-cl",
+            "-G",                                            "Ninja",
+            "-DCMAKE_C_COMPILER=clang-cl",                   "-DCMAKE_CXX_COMPILER=clang-cl",
             "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL",
         }) catch unreachable;
     } else if (platform.is_linux) {
         sdl3_cmake_args.appendSlice(&.{
-            "-G", "Ninja",
+            "-G",                          "Ninja",
             "-DSDL_UNIX_CONSOLE_BUILD=ON",
         }) catch unreachable;
     }
@@ -319,7 +324,6 @@ pub fn build(b: *std.Build) void {
         const msdfgen_step = b.step("msdfgen", "Build msdfgen only");
         msdfgen_step.dependOn(msdfgen);
 
-
         const dong_core_step = b.step("dong-core", "Build Dong Core only");
         dong_core_step.dependOn(&dong_core.step);
 
@@ -353,19 +357,16 @@ pub fn build(b: *std.Build) void {
     else
         "-DDXC_LIB_PATH=";
 
-    var dong_cmake_args = std.ArrayList([]const u8).init(b.allocator);
+    var dong_cmake_args = std.array_list.Managed([]const u8).init(b.allocator);
     dong_cmake_args.appendSlice(&.{
-        "cmake", "-S", ".", "-B", cmake_build_dir,
-        b.fmt("-DCMAKE_BUILD_TYPE={s}", .{cmake_build_type}),
-        vulkan_sdk_cmake_arg,
-        dxc_lib_cmake_arg,
+        "cmake",                                              "-S",                 ".",               "-B", cmake_build_dir,
+        b.fmt("-DCMAKE_BUILD_TYPE={s}", .{cmake_build_type}), vulkan_sdk_cmake_arg, dxc_lib_cmake_arg,
     }) catch unreachable;
 
     if (platform.is_windows) {
         dong_cmake_args.appendSlice(&.{
-            "-G", "Ninja",
-            "-DCMAKE_C_COMPILER=clang-cl",
-            "-DCMAKE_CXX_COMPILER=clang-cl",
+            "-G",                                            "Ninja",
+            "-DCMAKE_C_COMPILER=clang-cl",                   "-DCMAKE_CXX_COMPILER=clang-cl",
             "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL",
         }) catch unreachable;
     } else if (platform.is_linux) {
@@ -462,7 +463,6 @@ pub fn build(b: *std.Build) void {
     const msdfgen_step = b.step("msdfgen", "Build msdfgen only");
     msdfgen_step.dependOn(msdfgen);
 
-
     const sdl3_step = b.step("sdl3", "Build SDL3 only");
     sdl3_step.dependOn(&sdl3_cmake_install.step);
 
@@ -551,21 +551,20 @@ fn buildQuickJS(
     optimize: std.builtin.OptimizeMode,
     platform: PlatformInfo,
 ) *std.Build.Step.InstallArtifact {
-    const quickjs = b.addStaticLibrary(.{
+    const quickjs = b.addLibrary(.{
         .name = "quickjs",
-        .target = target,
-        .optimize = optimize,
+        .linkage = .static,
+        .root_module = createRootModule(b, target, optimize),
     });
 
     const quickjs_src = "third_party/quickjs";
     const quickjs_compat = "third_party/quickjs_make/compat";
 
-    var c_flags = std.ArrayList([]const u8).init(b.allocator);
+    var c_flags = std.array_list.Managed([]const u8).init(b.allocator);
     c_flags.appendSlice(&.{
         "-std=gnu11", // Use GNU C extensions for inline assembly support
         "-D_GNU_SOURCE",
     }) catch unreachable;
-
 
     if (platform.is_windows) {
         // Zig's MSVC-targeted clang invocation may pass flags that clang considers
@@ -576,7 +575,6 @@ fn buildQuickJS(
             // Ensure alloca() is available on Windows.
             "-include",
             quickjs_compat ++ "/alloca.h",
-
         }) catch unreachable;
     }
 
@@ -592,7 +590,6 @@ fn buildQuickJS(
         },
         .flags = c_flags_slice,
     });
-
 
     quickjs.addIncludePath(b.path(quickjs_src));
     quickjs.linkLibC();
@@ -622,16 +619,16 @@ fn buildLexbor(
     optimize: std.builtin.OptimizeMode,
     platform: PlatformInfo,
 ) *std.Build.Step.InstallArtifact {
-    const lexbor = b.addStaticLibrary(.{
+    const lexbor = b.addLibrary(.{
         .name = "lexbor_static",
-        .target = target,
-        .optimize = optimize,
+        .linkage = .static,
+        .root_module = createRootModule(b, target, optimize),
     });
 
     const lexbor_src = "third_party/lexbor/source";
 
     // Collect all lexbor source files
-    var sources = std.ArrayList([]const u8).init(b.allocator);
+    var sources = std.array_list.Managed([]const u8).init(b.allocator);
 
     // Core modules to include
     const modules = [_][]const u8{
@@ -728,10 +725,10 @@ fn buildYoga(
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
 ) *std.Build.Step.InstallArtifact {
-    const yoga = b.addStaticLibrary(.{
+    const yoga = b.addLibrary(.{
         .name = "yogacore",
-        .target = target,
-        .optimize = optimize,
+        .linkage = .static,
+        .root_module = createRootModule(b, target, optimize),
     });
 
     const yoga_src = "third_party/yoga";
@@ -780,17 +777,17 @@ fn buildFreeType(
     optimize: std.builtin.OptimizeMode,
     platform: PlatformInfo,
 ) *std.Build.Step.InstallArtifact {
-    const freetype = b.addStaticLibrary(.{
+    const freetype = b.addLibrary(.{
         .name = "freetype",
-        .target = target,
-        .optimize = optimize,
+        .linkage = .static,
+        .root_module = createRootModule(b, target, optimize),
     });
 
     const ft_src = "third_party/freetype/src";
     const ft_include = "third_party/freetype/include";
 
     // FreeType uses a single-file-per-module compilation approach
-    var sources = std.ArrayList([]const u8).init(b.allocator);
+    var sources = std.array_list.Managed([]const u8).init(b.allocator);
 
     // Base module files
     sources.appendSlice(&.{
@@ -891,7 +888,6 @@ fn fileExists(rel_path: []const u8) bool {
 }
 
 fn buildHarfBuzz(
-
     b: *std.Build,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
@@ -939,11 +935,10 @@ fn buildHarfBuzz(
         @panic("harfbuzz sources missing (third_party/harfbuzz) and no prebuilt libharfbuzz.a found under zig-out");
     }
 
-
-    const harfbuzz = b.addStaticLibrary(.{
+    const harfbuzz = b.addLibrary(.{
         .name = "harfbuzz",
-        .target = target,
-        .optimize = optimize,
+        .linkage = .static,
+        .root_module = createRootModule(b, target, optimize),
     });
 
     // HarfBuzz provides an amalgamation file for easier building
@@ -974,7 +969,6 @@ fn buildHarfBuzz(
 
     return &b.addInstallArtifact(harfbuzz, .{}).step;
 }
-
 
 // =============================================================================
 // msdfgen Build
@@ -1017,11 +1011,10 @@ fn buildMsdfgen(
         @panic("msdfgen sources missing (third_party/msdfgen) and no usable prebuilt archive found under zig-out");
     }
 
-
-    const msdfgen = b.addStaticLibrary(.{
+    const msdfgen = b.addLibrary(.{
         .name = "msdfgen",
-        .target = target,
-        .optimize = optimize,
+        .linkage = .static,
+        .root_module = createRootModule(b, target, optimize),
     });
 
     // Core sources
@@ -1070,7 +1063,6 @@ fn buildMsdfgen(
     return &b.addInstallArtifact(msdfgen, .{}).step;
 }
 
-
 // =============================================================================
 // Dong Core Build (Pure Zig)
 // =============================================================================
@@ -1086,10 +1078,10 @@ fn buildDongCore(
     harfbuzz_step: *std.Build.Step,
     msdfgen_step: *std.Build.Step,
 ) *std.Build.Step.InstallArtifact {
-    const dong_core = b.addStaticLibrary(.{
+    const dong_core = b.addLibrary(.{
         .name = "dong_core",
-        .target = target,
-        .optimize = optimize,
+        .linkage = .static,
+        .root_module = createRootModule(b, target, optimize),
     });
 
     // Core C++ sources
@@ -1180,7 +1172,6 @@ fn buildDongCore(
         dong_core.addIncludePath(b.path("zig-out/msdfgen/include"));
     }
 
-
     dong_core.linkLibCpp();
     dong_core.linkLibC();
 
@@ -1203,7 +1194,6 @@ fn buildDongCore(
     dong_core.step.dependOn(harfbuzz_step);
     dong_core.step.dependOn(msdfgen_step);
 
-
     return b.addInstallArtifact(dong_core, .{});
 }
 
@@ -1218,10 +1208,10 @@ fn buildSDLBackend(
     config: BuildConfig,
     dong_core_artifact: *std.Build.Step.InstallArtifact,
 ) *std.Build.Step.InstallArtifact {
-    const sdl_backend = b.addStaticLibrary(.{
+    const sdl_backend = b.addLibrary(.{
         .name = "dong_sdl_backend",
-        .target = target,
-        .optimize = optimize,
+        .linkage = .static,
+        .root_module = createRootModule(b, target, optimize),
     });
 
     // SDL backend sources
@@ -1280,7 +1270,6 @@ fn buildSDLBackend(
     } else {
         sdl_backend.addIncludePath(b.path("zig-out/msdfgen/include"));
     }
-
 
     // DXC include path (can be absolute or relative)
     if (std.fs.path.isAbsolute(config.dxc_include_path)) {
@@ -1346,7 +1335,8 @@ fn ensureDxc(b: *std.Build, platform: PlatformInfo, config: *BuildConfig) ?*std.
     const download_step = b.addSystemCommand(&.{
         "powershell",
         "-NoProfile",
-        "-ExecutionPolicy", "Bypass",
+        "-ExecutionPolicy",
+        "Bypass",
         "-Command",
         b.fmt(
             \\$ErrorActionPreference = 'Stop'
@@ -1379,4 +1369,3 @@ fn ensureDxc(b: *std.Build, platform: PlatformInfo, config: *BuildConfig) ?*std.
 
     return &download_step.step;
 }
-
