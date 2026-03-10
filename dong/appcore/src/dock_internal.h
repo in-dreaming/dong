@@ -38,7 +38,7 @@ extern "C" {
 #define DOCK_WIN_EDGE_BAND     40
 
 // Divider hit-test constants
-#define DOCK_DIVIDER_HALF_W    4   // ±4px hit zone from divider center
+#define DOCK_DIVIDER_HALF_W    4   // 卤4px hit zone from divider center
 #define DOCK_DIVIDER_THICKNESS 4   // Visual divider line thickness
 #define DOCK_MIN_PANE_SIZE     120 // Minimum pane dimension in pixels
 
@@ -255,6 +255,48 @@ static inline void dock_leaf_content_rect(const dock_node_t* leaf,
     *ch = (leaf->h > (uint32_t)DOCK_TITLE_BAR_HEIGHT)
         ? leaf->h - DOCK_TITLE_BAR_HEIGHT : 1;
 }
+
+// =============================================================================
+// =============================================================================
+// Dock drag helpers (dock_drag.c)
+// =============================================================================
+
+uint32_t dock_tab_width(const dock_node_t* node);
+void dock_update_drag(dong_dock_t* dock);
+void dock_finish_drag(dong_dock_t* dock);
+
+// Dock window helpers (dock_window.c)
+// =============================================================================
+
+int dock_alloc_pane_slot(dong_dock_t* dock);
+int dock_alloc_window_slot(dong_dock_t* dock);
+dong_dock_window_t* dock_find_window_by_sdl_id(dong_dock_t* dock, SDL_WindowID wid);
+void dock_window_remove_pane_index(dong_dock_t* dock, dong_dock_window_t* win, int pane_index);
+SDL_HitTestResult SDLCALL dock_hit_test_callback(
+    SDL_Window* win, const SDL_Point* area, void* data);
+
+// Dock pane orchestration helpers (dock_pane.c)
+// =============================================================================
+
+dong_dock_pane_t* dock_add_pane_impl(
+    dong_dock_t* dock, const dong_dock_pane_config_t* config);
+dong_dock_pane_t* dock_split_impl(
+    dong_dock_t* dock, dong_dock_pane_t* neighbor,
+    dong_dock_edge_t edge, float ratio,
+    const dong_dock_pane_config_t* config);
+
+// Dock lifecycle helpers (dock_lifecycle.c)
+// =============================================================================
+
+dong_engine_t* dock_create_engine(dong_dock_t* dock,
+                                  uint32_t w, uint32_t h,
+                                  dong_engine_t* shared_js,
+                                  const char* view_name);
+
+// Dock title rendering (dock_title.c)
+// =============================================================================
+
+void dock_render_title_texture(dong_dock_t* dock, dong_dock_pane_t* pane);
 
 // =============================================================================
 // Split tree functions (dock_split.c)

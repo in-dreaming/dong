@@ -15,6 +15,16 @@ add_library(dong_appcore SHARED
     src/scene3d.c
     src/overlay.c
     src/dock.c
+    src/dock_title.c
+    src/dock_events.c
+    src/dock_drag.c
+    src/dock_window.c
+    src/dock_lifecycle.c
+    src/dock_render.c
+    src/dock_api_misc.c
+    src/dock_layout_io.c
+    src/dock_pane.c
+    src/dock_pane_api.c
     src/dock_split.c
 )
 
@@ -74,3 +84,4 @@ install(DIRECTORY include/
     DESTINATION include/dong/appcore
     FILES_MATCHING PATTERN "*.h"
 )
+

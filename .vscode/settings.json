@@ -46,5 +46,6 @@
     // 禁用 Code Runner 对特定文件的自动运行
     "code-runner.ignoreSelection": true,
     "code-runner.fileDirectoryAsCwd": false,
-    "codingcopilot.enableCompletionLanguage": {}
+    "codingcopilot.enableCompletionLanguage": {},
+    "cmake.sourceDirectory": "D:/mix/agents/game/indr/dong/dong"
 }

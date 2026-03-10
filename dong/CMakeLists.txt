@@ -131,9 +131,18 @@ add_library(dong SHARED
     src/dom/details_element.cpp
     src/dom/css/css_value.cpp
     src/dom/css/css_parser.cpp
+    src/dom/css/css_property_handlers.cpp
+    src/dom/css/css_value_parser.cpp
+    src/dom/css/css_shorthand_parser.cpp
+    src/dom/css/css_function_parser.cpp
+    src/dom/css/css_at_rule_parser.cpp
     src/dom/css/computed_style.cpp
     src/dom/css/selector_matcher.cpp
     src/dom/css/style_engine.cpp
+    src/dom/css/style_engine_apply.cpp
+    src/dom/css/style_engine_cascade.cpp
+    src/dom/css/style_engine_inheritance.cpp
+    src/dom/css/style_engine_pseudo.cpp
     src/dom/css/css_environment.cpp
     src/dom/dom/dom_node.cpp
     src/dom/dom/observer.cpp
@@ -256,9 +265,18 @@ add_library(dong_render STATIC
     src/dom/details_element.cpp
     src/dom/css/css_value.cpp
     src/dom/css/css_parser.cpp
+    src/dom/css/css_property_handlers.cpp
+    src/dom/css/css_value_parser.cpp
+    src/dom/css/css_shorthand_parser.cpp
+    src/dom/css/css_function_parser.cpp
+    src/dom/css/css_at_rule_parser.cpp
     src/dom/css/computed_style.cpp
     src/dom/css/selector_matcher.cpp
     src/dom/css/style_engine.cpp
+    src/dom/css/style_engine_apply.cpp
+    src/dom/css/style_engine_cascade.cpp
+    src/dom/css/style_engine_inheritance.cpp
+    src/dom/css/style_engine_pseudo.cpp
     src/dom/css/css_environment.cpp
     src/dom/dom/dom_node.cpp
     src/dom/dom/observer.cpp
