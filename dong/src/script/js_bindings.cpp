@@ -282,7 +282,7 @@ static JSValue domrect_constructor(JSContext* ctx, JSValueConst this_val, int ar
 // FormData API
 // ============================================================
 
-static JSValue formdata_constructor(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int flags);
+static JSValue formdata_constructor(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 static JSValue formdata_append(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 static JSValue formdata_get(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 static JSValue formdata_getAll(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
@@ -412,8 +412,8 @@ static void formdata_finalizer(JSRuntime* rt, JSValue val) {
 }
 
 static JSClassDef g_formdata_class_def = {
-    "FormData",
-    .finalizer = formdata_finalizer,
+    /* class_name */ "FormData",
+    /* finalizer */ formdata_finalizer,
 };
 
 static JSValue formdata_constructor(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {

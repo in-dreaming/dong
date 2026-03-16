@@ -2,6 +2,7 @@
 
 #include "../dom/dom/dom_node.hpp"
 #include <memory>
+#include <cmath>
 
 namespace dong::layout {
 

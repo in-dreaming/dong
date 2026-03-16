@@ -34,7 +34,12 @@ endif()
 # Configuration
 # =============================================================================
 set(VULKAN_SDK_PATH "$ENV{VULKAN_SDK}" CACHE PATH "Vulkan SDK path")
-set(DXC_LIB_PATH "third_party/dxc/lib/x64" CACHE PATH "DXC library path")
+# DXC path: Windows uses lib/x64, Linux uses lib
+if(WIN32)
+    set(DXC_LIB_PATH "third_party/dxc/lib/x64" CACHE PATH "DXC library path")
+else()
+    set(DXC_LIB_PATH "third_party/dxc/lib" CACHE PATH "DXC library path")
+endif()
 set(DXC_INCLUDE_PATH "third_party/dxc/include" CACHE PATH "DXC include path")
 
 # =============================================================================
@@ -74,6 +79,7 @@ else()
 endif()
 
 add_library(lexbor STATIC ${LEXBOR_SOURCES})
+set_target_properties(lexbor PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(lexbor PUBLIC third_party/lexbor/source)
 # LEXBOR_STATIC must be PUBLIC so that consumers of lexbor also see it
 # Otherwise LXB_API expands to __declspec(dllimport) causing link warnings and crashes
@@ -103,6 +109,7 @@ add_library(yoga STATIC
     third_party/yoga/yoga/node/Node.cpp
 )
 target_include_directories(yoga PUBLIC third_party/yoga)
+set_target_properties(yoga PROPERTIES POSITION_INDEPENDENT_CODE ON)
 # Yoga requires C++20
 set_target_properties(yoga PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
 if(NOT MSVC)
@@ -301,6 +308,8 @@ add_library(dong_render STATIC
     third_party/SDL_shadercross/src/SDL_shadercross.c
 )
 
+set_target_properties(dong_render PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
 target_include_directories(dong_render PUBLIC
     include
     src
@@ -328,7 +337,12 @@ if(VULKAN_SDK_PATH)
     endif()
 endif()
 
-target_compile_definitions(dong_render PRIVATE SDL_SHADERCROSS_DXC DONG_USE_SDL_IMAGE DONG_SDL_SHADER_DIR=\"${CMAKE_SOURCE_DIR}/src/render/sdl_render/shaders\" MSDFGEN_PUBLIC= MSDFGEN_EXT_PUBLIC=)
+target_compile_definitions(dong_render PRIVATE DONG_USE_SDL_IMAGE DONG_SDL_SHADER_DIR=\"${CMAKE_SOURCE_DIR}/src/render/sdl_render/shaders\" MSDFGEN_PUBLIC= MSDFGEN_EXT_PUBLIC=)
+
+# DXC only on Windows/macOS
+if(WIN32 OR APPLE)
+    target_compile_definitions(dong_render PRIVATE SDL_SHADERCROSS_DXC)
+endif()
 
 target_link_libraries(dong_render PUBLIC dong quickjs lexbor yoga)
 
@@ -428,9 +442,11 @@ if(BUILD_EXAMPLES)
         endif()
         target_link_libraries(${name} PRIVATE spirv-cross-c-shared)
         
-        # DXC
-        target_link_directories(${name} PRIVATE ${DXC_LIB_PATH})
-        target_link_libraries(${name} PRIVATE dxcompiler)
+        # DXC (Windows/macOS only)
+        if(WIN32 OR APPLE)
+            target_link_directories(${name} PRIVATE ${DXC_LIB_PATH})
+            target_link_libraries(${name} PRIVATE dxcompiler)
+        endif()
         
         # Platform libraries
         if(WIN32)
@@ -441,6 +457,9 @@ if(BUILD_EXAMPLES)
                 "-framework CoreGraphics"
                 "-framework CoreText"
             )
+        else()
+            # Linux: link ubsan and stdc++ for Zig Debug builds
+            target_link_libraries(${name} PRIVATE ubsan stdc++)
         endif()
     endfunction()
 
@@ -486,9 +505,11 @@ if(BUILD_EXAMPLES)
                 target_link_libraries(${name} PRIVATE spirv-cross-c-shared)
             endif()
 
-            # DXC library (needed by dong_render via SDL_shadercross)
-            target_link_directories(${name} PRIVATE ${DXC_LIB_PATH})
-            target_link_libraries(${name} PRIVATE dxcompiler)
+            # DXC library (needed by dong_render via SDL_shadercross on Windows/macOS)
+            if(WIN32 OR APPLE)
+                target_link_directories(${name} PRIVATE ${DXC_LIB_PATH})
+                target_link_libraries(${name} PRIVATE dxcompiler)
+            endif()
 
             # Platform libraries
             if(WIN32)
@@ -499,6 +520,9 @@ if(BUILD_EXAMPLES)
                     "-framework CoreGraphics"
                     "-framework CoreText"
                 )
+            else()
+                # Linux: link ubsan and stdc++ for Zig Debug builds
+                target_link_libraries(${name} PRIVATE ubsan stdc++)
             endif()
         endfunction()
 
@@ -563,8 +587,13 @@ if(BUILD_EXAMPLES)
             endif()
         endif()
         target_link_libraries(run_feature_tests PRIVATE spirv-cross-c-shared)
-        target_link_directories(run_feature_tests PRIVATE ${DXC_LIB_PATH})
-        target_link_libraries(run_feature_tests PRIVATE dxcompiler)
+        
+        # DXC only on Windows/macOS
+        if(WIN32 OR APPLE)
+            target_link_directories(run_feature_tests PRIVATE ${DXC_LIB_PATH})
+            target_link_libraries(run_feature_tests PRIVATE dxcompiler)
+        endif()
+        
         if(WIN32)
             target_link_libraries(run_feature_tests PRIVATE user32 gdi32 ole32 shell32 advapi32)
         elseif(APPLE)
@@ -573,6 +602,9 @@ if(BUILD_EXAMPLES)
                 "-framework CoreGraphics"
                 "-framework CoreText"
             )
+        else()
+            # Linux: link ubsan and stdc++ for Zig Debug builds
+            target_link_libraries(run_feature_tests PRIVATE ubsan stdc++)
         endif()
         
         # Install run_feature_tests to bin directory

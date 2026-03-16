@@ -41,10 +41,12 @@ target_link_libraries(dong_appcore PUBLIC SDL3)
 # SDL_ShaderCross for HLSL compilation
 target_include_directories(dong_appcore PRIVATE "${CMAKE_SOURCE_DIR}/third_party/SDL_shadercross/include")
 
-# DXC library path for shader compilation
-set(DXC_LIB_PATH "${CMAKE_SOURCE_DIR}/third_party/dxc/lib/x64" CACHE PATH "DXC library path")
-target_link_directories(dong_appcore PRIVATE ${DXC_LIB_PATH})
-target_link_libraries(dong_appcore PRIVATE dxcompiler)
+# DXC library path for shader compilation (Windows/macOS only)
+if(WIN32 OR APPLE)
+    set(DXC_LIB_PATH "${CMAKE_SOURCE_DIR}/third_party/dxc/lib/x64" CACHE PATH "DXC library path")
+    target_link_directories(dong_appcore PRIVATE ${DXC_LIB_PATH})
+    target_link_libraries(dong_appcore PRIVATE dxcompiler)
+endif()
 
 # Vulkan SDK for SPIRV cross
 set(VULKAN_SDK_PATH "$ENV{VULKAN_SDK}" CACHE PATH "Vulkan SDK path")
@@ -61,6 +63,11 @@ endif()
 # Link to SDL backend for Platform injection + GPU execution
 # Keep dong_render for legacy dong_view-based Scene3D/Overlay (will be removed once fully migrated).
 target_link_libraries(dong_appcore PUBLIC dong dong_sdl_backend dong_render)
+
+# Linux: link ubsan and stdc++ for Zig Debug builds
+if(UNIX AND NOT APPLE)
+    target_link_libraries(dong_appcore PRIVATE ubsan stdc++)
+endif()
 
 
 # Install
