@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+body { font-family: sans-serif; padding: 20px; }
+button { padding: 8px 16px; margin: 5px; cursor: pointer; }
+#log { margin-top: 10px; padding: 10px; border: 1px solid #ccc; min-height: 50px; }
+</style>
+</head>
+<body>
+<h2>Clipboard API Test</h2>
+<button id="write-btn">Write "hello" to clipboard</button>
+<button id="read-btn">Read from clipboard</button>
+<div id="log"></div>
+
+<script>
+const log = document.getElementById('log');
+function addLog(msg) {
+    log.textContent += msg + '\n';
+}
+
+document.getElementById('write-btn').addEventListener('click', function() {
+    navigator.clipboard.writeText('hello').then(function() {
+        addLog('writeText: success');
+    });
+});
+
+document.getElementById('read-btn').addEventListener('click', function() {
+    navigator.clipboard.readText().then(function(text) {
+        addLog('readText: "' + text + '"');
+    });
+});
+
+addLog('Clipboard API ready');
+</script>
+</body>
+</html>

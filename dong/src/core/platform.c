@@ -170,6 +170,7 @@ typedef struct DongPlatformImpl {
     DongFileSystem* file_system;
     DongLogger* logger;
     DongImageDecoder* image_decoder;
+    DongClipboard* clipboard;
 } DongPlatformImpl;
 
 // Global singleton storage
@@ -270,6 +271,18 @@ DONG_PLATFORM_API DongImageDecoder* dong_platform_get_image_decoder(DongPlatform
     if (!platform) return NULL;
     DongPlatformImpl* impl = platform_to_impl(platform);
     return impl->image_decoder;
+}
+
+DONG_PLATFORM_API void dong_platform_set_clipboard(DongPlatform* platform, DongClipboard* clipboard) {
+    if (!platform) return;
+    DongPlatformImpl* impl = platform_to_impl(platform);
+    impl->clipboard = clipboard;
+}
+
+DONG_PLATFORM_API DongClipboard* dong_platform_get_clipboard(DongPlatform* platform) {
+    if (!platform) return NULL;
+    DongPlatformImpl* impl = platform_to_impl(platform);
+    return impl->clipboard;
 }
 
 #ifdef __cplusplus

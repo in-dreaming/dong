@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+body { font-family: sans-serif; padding: 20px; }
+#editor {
+    border: 2px solid #333;
+    padding: 16px;
+    min-height: 100px;
+    margin: 10px 0;
+    font-size: 16px;
+    line-height: 1.5;
+}
+#log { margin-top: 10px; padding: 10px; border: 1px solid #ccc; min-height: 200px; font-family: monospace; font-size: 12px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<h2>ContentEditable Auto Test</h2>
+
+<div id="editor" contenteditable="true">Hello World Test</div>
+
+<div id="log"></div>
+
+<script>
+var log = document.getElementById('log');
+var editor = document.getElementById('editor');
+
+function addLog(msg) {
+    log.textContent += msg + '\n';
+    console.log('[CE-TEST] ' + msg);
+}
+
+// Auto test immediately (no setTimeout for render test)
+(function() {
+    addLog('=== Starting auto test ===');
+
+    // Focus the editor first
+    editor.focus();
+    addLog('editor focused: ' + (document.activeElement === editor));
+    addLog('Initial textContent: ' + editor.textContent);
+
+    // Step 2: Select All then Bold
+    addLog('--- Executing selectAll ---');
+    var result = document.execCommand('selectAll');
+    addLog('selectAll result: ' + result);
+
+    addLog('--- Executing bold ---');
+    result = document.execCommand('bold');
+    addLog('bold result: ' + result);
+    addLog('After bold innerHTML: ' + editor.innerHTML);
+
+    // Step 4: Try selectAll again
+    addLog('--- Executing selectAll again ---');
+    result = document.execCommand('selectAll');
+    addLog('selectAll result: ' + result);
+
+    // Step 5: Italic
+    addLog('--- Executing italic ---');
+    result = document.execCommand('italic');
+    addLog('italic result: ' + result);
+    addLog('After italic innerHTML: ' + editor.innerHTML);
+
+    // Step 6: selectAll then underline
+    addLog('--- Executing selectAll then underline ---');
+    result = document.execCommand('selectAll');
+    addLog('selectAll result: ' + result);
+    result = document.execCommand('underline');
+    addLog('underline result: ' + result);
+    addLog('After underline innerHTML: ' + editor.innerHTML);
+
+    // Step 7: Toggle bold off
+    addLog('--- Toggle bold off ---');
+    result = document.execCommand('selectAll');
+    result = document.execCommand('bold');
+    addLog('bold toggle result: ' + result);
+    addLog('After bold toggle innerHTML: ' + editor.innerHTML);
+
+    addLog('=== Auto test complete ===');
+})();
+</script>
+</body>
+</html>

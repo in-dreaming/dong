@@ -7,6 +7,7 @@
 #include "dong_platform.h"
 #include "dong_gpu_driver.h"
 #include "dong_file_system.h"
+#include "dong_clipboard.h"
 
 #include "../dom/dom_manager.hpp"
 #include "../dom/style_engine.hpp"
@@ -15,12 +16,18 @@
 #include "../dom/input_element.hpp"
 #include "../dom/select_element.hpp"
 #include "../dom/details_element.hpp"
+#include "../dom/dialog_element.hpp"
+#include "../dom/contenteditable.hpp"
+#include "../dom/editing_commands.hpp"
+#include "../dom/selection.hpp"
+#include "../dom/text_hit_testing.hpp"
 #include "../dom/drag_manager.hpp"
 #include "../layout/layout_engine.hpp"
 
 #include "../render/render_surface.hpp"
 #include "../render/painter.hpp"
 #include "../render/gpu_ir.hpp"
+#include "../render/text_shaper.hpp"
 #include "../script/script_engine.hpp"
 #include "../script/js_bindings.hpp"
 
@@ -55,6 +62,9 @@ DOMNodePtr hitTestRecursive(const DOMNodePtr& node, dong::layout::Engine* layout
                             int32_t x, int32_t y) {
     if (!node || !layout_engine) return nullptr;
 
+    // Skip inert subtrees
+    if (node->hasAttribute("inert")) return nullptr;
+
     const auto* layout = layout_engine->getLayout(node);
     if (!layout) return nullptr;
 
@@ -70,6 +80,19 @@ DOMNodePtr hitTestRecursive(const DOMNodePtr& node, dong::layout::Engine* layout
     bool in_bounds = (x >= lx && x <= lx + w && y >= ly && y <= ly + h);
 
     if (!in_bounds) {
+        // Even if this node is out of bounds, check children with position:absolute/fixed
+        // since they can be positioned outside their parent's layout bounds.
+        const auto& children = node->getChildren();
+        for (auto it = children.rbegin(); it != children.rend(); ++it) {
+            if (!*it) continue;
+            const auto& cs = (*it)->getComputedStyle();
+            if (cs.position == "absolute" || cs.position == "fixed") {
+                auto child_hit = hitTestRecursive(*it, layout_engine, x, y);
+                if (child_hit) {
+                    return child_hit;
+                }
+            }
+        }
         return nullptr;
     }
 
@@ -386,6 +409,37 @@ struct EngineView::Impl {
     bool commands_dirty = true;
     bool js_bindings_initialized = false;
 
+    // Top-layer: modal dialogs rendered above everything
+    std::vector<dong::dom::DOMNodePtr> top_layer;
+
+    // Selection for contenteditable
+    std::unique_ptr<dong::dom::Selection> selection;
+
+    // ContentEditable drag selection state
+    bool ce_drag_active_ = false;
+    DOMNodePtr ce_drag_editable_root_;
+
+    // Input/textarea drag selection state
+    bool input_drag_active_ = false;
+    DOMNodePtr input_drag_node_;
+    size_t input_drag_anchor_ = 0;  // char index at mousedown
+
+    // Caret blink state
+    double caret_blink_time_ = 0.0;
+    bool caret_visible_ = true;
+    static constexpr double CARET_BLINK_INTERVAL = 0.5;
+
+    // Double-click detection
+    int click_count_ = 0;
+    double last_click_time_ = 0.0;
+    int32_t last_click_x_ = 0;
+    int32_t last_click_y_ = 0;
+    static constexpr double DOUBLE_CLICK_TIME = 0.4;
+    static constexpr int32_t DOUBLE_CLICK_DIST = 5;
+
+    // Text shaper for hit testing (independent of painter's shaper)
+    dong::render::TextShaper text_shaper_hit_;
+
     bool video_dom_scanned = false;
     bool video_dom_has_any = false;
     double last_wall_time_sec = 0.0;
@@ -448,6 +502,8 @@ struct EngineView::Impl {
               layout_engine.get(),
               event_dispatcher.get(),
               focus_manager.get())) {
+        selection = std::make_unique<dong::dom::Selection>();
+        js_bindings->selection_ = selection.get();
         focus_manager->setEventDispatcher(event_dispatcher.get());
         activateViewContext();
         ctx.initialize();
@@ -472,6 +528,8 @@ struct EngineView::Impl {
               layout_engine.get(),
               event_dispatcher.get(),
               focus_manager.get())) {
+        selection = std::make_unique<dong::dom::Selection>();
+        js_bindings->selection_ = selection.get();
         focus_manager->setEventDispatcher(event_dispatcher.get());
         activateViewContext();
         ctx.initialize();
@@ -509,6 +567,176 @@ struct EngineView::Impl {
         if (render_surface) {
             render_surface->markDirty();
         }
+    }
+
+    void resetCaretBlink() {
+        caret_blink_time_ = 0.0;
+        caret_visible_ = true;
+    }
+
+    // Measure the pixel width of a string using the hit-test shaper.
+    float measureTextWidthHit(const std::string& text, const dom::ComputedStyle& style, float font_size) {
+        if (text.empty()) return 0.0f;
+        dong::render::TextShapeRequest req;
+        req.text = text;
+        req.font_family = style.font_family;
+        req.font_size = font_size;
+        req.font_weight = style.font_weight;
+        req.font_style = style.font_style;
+        dong::render::ShapedText shaped;
+        if (text_shaper_hit_.shape(req, shaped) && shaped.units_per_em > 0) {
+            return shaped.width_units * (font_size / static_cast<float>(shaped.units_per_em));
+        }
+        return text.size() * font_size * 0.6f;
+    }
+
+    // Get the line height used for rendering text in an input/textarea.
+    float getInputLineHeight(const dom::ComputedStyle& style, float font_size) {
+        dong::render::TextShapeRequest mreq{"X", style.font_family, style.font_weight, style.font_style, font_size};
+        dong::render::ShapedText mshaped;
+        if (text_shaper_hit_.shape(mreq, mshaped) && mshaped.scale_to_pixels > 0.0f) {
+            float scale = mshaped.scale_to_pixels;
+            float lh_units = mshaped.line_height_units;
+            if (style.line_height > 0.0f) {
+                if (style.line_height_is_unitless)
+                    lh_units = (style.line_height * font_size) / std::max(scale, 1e-3f);
+                else
+                    lh_units = style.line_height / std::max(scale, 1e-3f);
+            }
+            if (lh_units <= 0.0f) lh_units = font_size / std::max(scale, 1e-3f);
+            return lh_units * scale;
+        }
+        return font_size * 1.2f;
+    }
+
+    // Binary search for the character offset in a single line string closest to click_x.
+    // Returns char index within the line (0-based).
+    size_t binarySearchCharInLine(const std::string& line, float click_x,
+                                   const dom::ComputedStyle& style, float font_size) {
+        if (line.empty() || click_x <= 0.0f) return 0;
+
+        // Count UTF-8 chars in line
+        size_t char_count = 0;
+        for (size_t i = 0; i < line.size(); ) {
+            unsigned char c = line[i];
+            if ((c & 0x80) == 0) i += 1;
+            else if ((c & 0xE0) == 0xC0) i += 2;
+            else if ((c & 0xF0) == 0xE0) i += 3;
+            else i += 4;
+            char_count++;
+        }
+
+        auto byteOffInLine = [&](size_t ci) -> size_t {
+            size_t bo = 0, cc = 0;
+            while (bo < line.size() && cc < ci) {
+                unsigned char c = line[bo];
+                if ((c & 0x80) == 0) bo += 1;
+                else if ((c & 0xE0) == 0xC0) bo += 2;
+                else if ((c & 0xF0) == 0xE0) bo += 3;
+                else bo += 4;
+                cc++;
+            }
+            return bo;
+        };
+
+        size_t lo = 0, hi = char_count;
+        while (lo < hi) {
+            size_t mid = (lo + hi) / 2;
+            std::string prefix = line.substr(0, byteOffInLine(mid));
+            float mid_width = measureTextWidthHit(prefix, style, font_size);
+            if (mid_width < click_x)
+                lo = mid + 1;
+            else
+                hi = mid;
+        }
+
+        // Snap to nearest boundary
+        if (lo > 0) {
+            float w_lo = measureTextWidthHit(line.substr(0, byteOffInLine(lo)), style, font_size);
+            float w_prev = measureTextWidthHit(line.substr(0, byteOffInLine(lo - 1)), style, font_size);
+            if (click_x < (w_prev + w_lo) * 0.5f)
+                return lo - 1;
+        }
+        return lo;
+    }
+
+    // Hit-test mouse coordinates to find the character index in an input/textarea value.
+    // For single-line input: only X matters.
+    // For textarea: Y selects the line, X selects the column.
+    size_t hitTestInputCharOffset(const DOMNodePtr& node, int32_t mouse_x, int32_t mouse_y) {
+        if (!node || !layout_engine) return 0;
+
+        auto* state = dong::dom::getInputState(node);
+        if (!state) return 0;
+
+        const std::string& value = state->getValue();
+        if (value.empty()) return 0;
+
+        auto* layout_node = layout_engine->getLayout(node);
+        if (!layout_node) return 0;
+
+        const auto& style = node->getComputedStyle();
+        float bl = style.border_left_width >= 0.0f ? style.border_left_width : 0.0f;
+        float bt = style.border_top_width >= 0.0f ? style.border_top_width : 0.0f;
+        float pad_l = style.padding_left.isPixel() ? style.padding_left.value : 0.0f;
+        float pad_t = style.padding_top.isPixel() ? style.padding_top.value : 0.0f;
+        float text_origin_x = layout_node->layout.position[0] + bl + pad_l;
+        float text_origin_y = layout_node->layout.position[1] + bt + pad_t;
+        float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
+
+        bool is_textarea = (node->getTagName() == "textarea");
+
+        if (is_textarea && value.find('\n') != std::string::npos) {
+            // Multiline textarea: determine line from Y, then char from X
+            float line_height = getInputLineHeight(style, font_size);
+            float click_y = static_cast<float>(mouse_y) - text_origin_y;
+            float click_x = static_cast<float>(mouse_x) - text_origin_x;
+
+            // Split value by newlines
+            std::vector<std::string> lines;
+            size_t start = 0;
+            while (start <= value.size()) {
+                size_t pos = value.find('\n', start);
+                if (pos == std::string::npos) {
+                    lines.push_back(value.substr(start));
+                    break;
+                }
+                lines.push_back(value.substr(start, pos - start));
+                start = pos + 1;
+            }
+
+            // Determine which line was clicked
+            int line_idx = static_cast<int>(click_y / line_height);
+            if (line_idx < 0) line_idx = 0;
+            if (line_idx >= static_cast<int>(lines.size())) line_idx = static_cast<int>(lines.size()) - 1;
+
+            // Count chars before this line (including \n separators)
+            size_t chars_before = 0;
+            for (int i = 0; i < line_idx; i++) {
+                // Count UTF-8 chars in lines[i]
+                for (size_t j = 0; j < lines[i].size(); ) {
+                    unsigned char c = lines[i][j];
+                    if ((c & 0x80) == 0) j += 1;
+                    else if ((c & 0xE0) == 0xC0) j += 2;
+                    else if ((c & 0xF0) == 0xE0) j += 3;
+                    else j += 4;
+                    chars_before++;
+                }
+                chars_before++; // for the '\n'
+            }
+
+            // Binary search within the line
+            size_t col = binarySearchCharInLine(lines[line_idx], click_x, style, font_size);
+            return chars_before + col;
+        }
+
+        // Single-line path (input or textarea without newlines)
+        float click_x = static_cast<float>(mouse_x) - text_origin_x;
+
+        // For single-line input, center text vertically — use content_h for vertical centering
+        // but only X matters for char offset
+        size_t char_count = state->charCount();
+        return binarySearchCharInLine(value, click_x, style, font_size);
     }
 
     void setPlugin(const dong_plugin_vtable_t* new_plugin, void* new_plugin_user) {
@@ -1279,6 +1507,17 @@ struct EngineView::Impl {
                     layout_engine->calculateLayout(root2, static_cast<float>(width), static_cast<float>(height));
                     root2->clearLayoutDirtyRecursive();
                 }
+                {
+                    auto fe = focus_manager ? focus_manager->getFocusedElement() : nullptr;
+                    if (fe && fe->isContentEditable() && !dong::dom::isInputElement(fe))
+                        painter->setEditingState(dong::dom::ContentEditableState::findEditableRoot(fe), selection.get(), caret_visible_);
+                    else
+                        painter->setEditingState(nullptr, nullptr);
+                    if (fe && dong::dom::isInputElement(fe))
+                        painter->setInputEditingState(fe, caret_visible_);
+                    else
+                        painter->setInputEditingState(nullptr, false);
+                }
                 painter->buildDisplayList(root2, layout_engine.get());
             }
         }
@@ -1453,6 +1692,40 @@ struct EngineView::Impl {
         return current_time;
     }
 
+    double prev_tick_time_ = 0.0;
+
+    void tickUpdateCaretBlink(double current_time) {
+        double delta_time = (prev_tick_time_ > 0.0) ? (current_time - prev_tick_time_) : 0.016;
+        prev_tick_time_ = current_time;
+
+        // Check if we need caret blinking (contenteditable collapsed selection OR focused input)
+        bool needs_blink = false;
+        if (selection && selection->getRangeCount() > 0 && selection->isCollapsed()) {
+            needs_blink = true;
+        }
+        if (focus_manager) {
+            auto fe = focus_manager->getFocusedElement();
+            if (fe && dong::dom::isInputElement(fe)) {
+                auto* state = dong::dom::getInputState(fe);
+                if (state && !state->hasSelection()) {
+                    needs_blink = true;
+                }
+            }
+        }
+
+        if (needs_blink) {
+            caret_blink_time_ += delta_time;
+            if (caret_blink_time_ >= CARET_BLINK_INTERVAL) {
+                caret_blink_time_ -= CARET_BLINK_INTERVAL;
+                caret_visible_ = !caret_visible_;
+                markNeedsRepaint();
+            }
+        } else {
+            caret_visible_ = true;
+            caret_blink_time_ = 0.0;
+        }
+    }
+
     void tickAdvanceSmoothScroll(double current_time) {
         if (!dom_manager) return;
         auto root_for_scroll = dom_manager->getRoot();
@@ -1515,6 +1788,17 @@ struct EngineView::Impl {
         }
 
         if (painter && layout_engine && did_work) {
+            {
+                auto fe = focus_manager ? focus_manager->getFocusedElement() : nullptr;
+                if (fe && fe->isContentEditable() && !dong::dom::isInputElement(fe))
+                    painter->setEditingState(dong::dom::ContentEditableState::findEditableRoot(fe), selection.get(), caret_visible_);
+                else
+                    painter->setEditingState(nullptr, nullptr);
+                if (fe && dong::dom::isInputElement(fe))
+                    painter->setInputEditingState(fe, caret_visible_);
+                else
+                    painter->setInputEditingState(nullptr, false);
+            }
             painter->buildDisplayList(root, layout_engine.get());
             markNeedsRepaint();
         }
@@ -1544,6 +1828,37 @@ struct EngineView::Impl {
         markNeedsRepaint();
     }
 
+    void tickSyncDialogTopLayer() {
+        if (!dom_manager) return;
+        auto root = dom_manager->getRoot();
+        if (!root) return;
+
+        // Rebuild top_layer from DOM: find all <dialog> with open modal state
+        top_layer.clear();
+        std::function<void(const dong::dom::DOMNodePtr&)> scan = [&](const dong::dom::DOMNodePtr& node) {
+            if (!node) return;
+            if (node->getTagName() == "dialog") {
+                auto* state = dong::dom::getDialogState(node);
+                if (state && state->isOpen() && state->isModal()) {
+                    top_layer.push_back(node);
+                }
+            }
+            for (const auto& child : node->getChildren()) {
+                scan(child);
+            }
+        };
+        scan(root);
+
+        // Update focus trap to topmost modal
+        if (focus_manager) {
+            focus_manager->setModalDialogRoot(
+                top_layer.empty() ? nullptr : top_layer.back());
+        }
+        // Update DOMNode static for isInert() modal awareness
+        dong::dom::DOMNode::setModalDialogRoot(
+            top_layer.empty() ? nullptr : top_layer.back());
+    }
+
     void tickGenerateCommandsIfNeeded() {
         const bool gpu_ready = true;
         if (!(use_gpu && commands_dirty && gpu_ready && dom_manager && layout_engine && painter)) return;
@@ -1553,6 +1868,17 @@ struct EngineView::Impl {
         auto root = dom_manager->getRoot();
         if (!root) return;
 
+        {
+            auto fe = focus_manager ? focus_manager->getFocusedElement() : nullptr;
+            if (fe && fe->isContentEditable() && !dong::dom::isInputElement(fe))
+                painter->setEditingState(dong::dom::ContentEditableState::findEditableRoot(fe), selection.get());
+            else
+                painter->setEditingState(nullptr, nullptr);
+            if (fe && dong::dom::isInputElement(fe))
+                painter->setInputEditingState(fe, caret_visible_);
+            else
+                painter->setInputEditingState(nullptr, false);
+        }
         painter->buildDisplayList(root, layout_engine.get());
         const auto& dl = painter->getDisplayList();
         DONG_LOG_DEBUG("[tick] DisplayList items: %zu", dl.items.size());
@@ -1604,6 +1930,9 @@ struct EngineView::Impl {
 
         const double current_time = tickUpdateWallTimeSec();
 
+        // Update caret blink for contenteditable
+        tickUpdateCaretBlink(current_time);
+
         DONG_LOG_DEBUG("[tick] step: smooth_scroll");
         tickAdvanceSmoothScroll(current_time);
 
@@ -1618,6 +1947,9 @@ struct EngineView::Impl {
 
         DONG_LOG_DEBUG("[tick] step: layout");
         tickComputeLayoutIfNeeded();
+
+        // Sync dialog top-layer: track open modal dialogs
+        tickSyncDialogTopLayer();
 
         DONG_LOG_DEBUG("[tick] step: render_build");
         tickGenerateCommandsIfNeeded();
@@ -1977,10 +2309,97 @@ struct EngineView::Impl {
                     clipboard_data.empty() ? nullptr : clipboard_data.c_str());
             }
         }
+
+        // Contenteditable clipboard operations
+        if (target && target->isContentEditable() && !dong::dom::isInputElement(target)) {
+            if (event_type == "copy" || event_type == "cut") {
+                if (selection && !selection->isCollapsed()) {
+                    std::string selected_text = selection->toString();
+                    DongClipboard* cb = dong_platform_get_clipboard(dong_platform_get());
+                    if (cb && !selected_text.empty()) {
+                        dong_clipboard_set_text(cb, selected_text.c_str());
+                    }
+                    if (event_type == "cut") {
+                        auto* range = selection->getRangeAt(0);
+                        if (range) {
+                            range->deleteContents();
+                            selection->collapse(range->getStartContainer(), range->getStartOffset());
+                        }
+                        target->markLayoutDirty();
+                        resetCaretBlink();
+                        markNeedsRepaint();
+                    }
+                }
+            } else if (event_type == "paste") {
+                DongClipboard* cb = dong_platform_get_clipboard(dong_platform_get());
+                if (cb) {
+                    char* text = dong_clipboard_get_text(cb);
+                    if (text) {
+                        auto editable_root = dong::dom::ContentEditableState::findEditableRoot(target);
+                        if (editable_root && selection) {
+                            dong::dom::ContentEditableState::insertText(editable_root, *selection, text);
+                            target->markLayoutDirty();
+                            resetCaretBlink();
+                            markNeedsRepaint();
+                        }
+                        free(text);
+                    }
+                }
+            }
+        }
+
+        // Input/textarea clipboard operations
+        if (target && dong::dom::isInputElement(target)) {
+            auto* state = dong::dom::getInputState(target);
+            if (state) {
+                if (event_type == "copy" || event_type == "cut") {
+                    if (state->hasSelection()) {
+                        std::string selected = state->getSelectedText();
+                        DongClipboard* cb = dong_platform_get_clipboard(dong_platform_get());
+                        if (cb && !selected.empty()) {
+                            dong_clipboard_set_text(cb, selected.c_str());
+                        }
+                        if (event_type == "cut" && !target->hasAttribute("readonly")) {
+                            state->deleteSelection();
+                            target->setAttribute("value", state->getValue());
+                            if (target->getTagName() == "textarea") {
+                                target->setTextContent(state->getValue());
+                                target->markLayoutDirty();
+                            }
+                            resetCaretBlink();
+                            markNeedsRepaint();
+                        }
+                    }
+                } else if (event_type == "paste" && !target->hasAttribute("readonly")) {
+                    DongClipboard* cb = dong_platform_get_clipboard(dong_platform_get());
+                    if (cb) {
+                        char* text = dong_clipboard_get_text(cb);
+                        if (text && text[0]) {
+                            state->insertText(text, target);
+                            target->setAttribute("value", state->getValue());
+                            if (target->getTagName() == "textarea") {
+                                target->setTextContent(state->getValue());
+                                target->markLayoutDirty();
+                            }
+                            resetCaretBlink();
+                            markNeedsRepaint();
+
+                            if (js_bindings && script_engine) {
+                                ensureJSBindingsInitialized();
+                                uint64_t nid = js_bindings->getNodeIdFor(target);
+                                if (nid) {
+                                    js_bindings->dispatchInputEvent(nid, "insertFromPaste", text);
+                                }
+                            }
+                            free(text);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     uint64_t ensureNodeIdForJS(const DOMNodePtr& node) {
-
         if (!node || !script_engine || !js_bindings) return 0;
         ensureJSBindingsInitialized();
 
@@ -2037,6 +2456,29 @@ struct EngineView::Impl {
         }
 
         dispatchMouseEvent("mousemove", x, y, 0);
+
+        // Contenteditable drag-to-select
+        if (ce_drag_active_ && ce_drag_editable_root_ && selection && layout_engine) {
+            auto hit = dong::dom::TextHitTester::hitTestAt(ce_drag_editable_root_, layout_engine.get(), x, y, &text_shaper_hit_);
+            if (hit.found) {
+                selection->extend(hit.text_node, hit.char_offset);
+                markNeedsRepaint();
+            }
+        }
+
+        // Input/textarea drag-to-select
+        if (input_drag_active_ && input_drag_node_ && layout_engine) {
+            auto* state = dong::dom::getInputState(input_drag_node_);
+            if (state) {
+                size_t current_idx = hitTestInputCharOffset(input_drag_node_, x, y);
+                if (current_idx != input_drag_anchor_) {
+                    state->setSelection(input_drag_anchor_, current_idx);
+                } else {
+                    state->setCursorPosition(current_idx);
+                }
+                markNeedsRepaint();
+            }
+        }
     }
 
 
@@ -2266,6 +2708,71 @@ struct EngineView::Impl {
             setActiveElement(hit);
             dispatchMouseEvent("mousedown", last_mouse_x, last_mouse_y, button);
 
+            DONG_LOG_WARN("[CE-Mouse] mousedown: hit=%s ce=%d sel_ranges=%u sel_collapsed=%d",
+                          hit->getTagName().c_str(), (int)hit->isContentEditable(),
+                          selection ? selection->getRangeCount() : 0,
+                          selection ? (int)selection->isCollapsed() : -1);
+
+            // Start drag selection for contenteditable on mousedown
+            // Check both currently-focused element AND the click target itself.
+            // On the first click, focused might not be the editable yet (focus moves in mouseup).
+            if (focus_manager && layout_engine && selection && hit) {
+                dong::dom::DOMNodePtr editable_root;
+
+                // Try 1: currently focused element
+                auto focused = focus_manager->getFocusedElement();
+                if (focused && focused->isContentEditable() && !dong::dom::isInputElement(focused)) {
+                    editable_root = dong::dom::ContentEditableState::findEditableRoot(focused);
+                    // Verify click is inside this editable root
+                    if (editable_root && !(hit == editable_root || editable_root->contains(hit))) {
+                        editable_root.reset(); // click was outside, not for this editable
+                    }
+                }
+
+                // Try 2: hit target itself or its ancestors might be contenteditable
+                if (!editable_root && hit->isContentEditable() && !dong::dom::isInputElement(hit)) {
+                    editable_root = dong::dom::ContentEditableState::findEditableRoot(hit);
+                }
+
+                if (editable_root) {
+                    auto text_hit = dong::dom::TextHitTester::hitTestAt(editable_root, layout_engine.get(), last_mouse_x, last_mouse_y, &text_shaper_hit_);
+                    if (text_hit.found) {
+                        const std::string& txt = text_hit.text_node->getRawTextContent();
+                        std::string before = txt.substr(0, std::min((uint32_t)txt.size(), text_hit.char_offset));
+                        std::string after = text_hit.char_offset < txt.size() ? txt.substr(text_hit.char_offset) : "";
+                        DONG_LOG_WARN("[CE-Mouse]   collapse off=%u text_size=%zu before=\"%s\" | after=\"%s\"",
+                                       text_hit.char_offset, txt.size(), before.c_str(), after.c_str());
+                        selection->collapse(text_hit.text_node, text_hit.char_offset);
+                    } else {
+                        DONG_LOG_WARN("[CE-Mouse]   collapse to root (no text hit)");
+                        selection->collapse(editable_root, 0);
+                    }
+                    ce_drag_active_ = true;
+                    ce_drag_editable_root_ = editable_root;
+                    // Track last editable root so execCommand works after focus loss
+                    if (js_bindings) {
+                        js_bindings->last_editable_root_ = editable_root;
+                    }
+                    resetCaretBlink();
+                    markNeedsRepaint();
+                }
+            }
+
+            // Start input/textarea cursor positioning and drag selection on mousedown
+            if (focus_manager && layout_engine && hit && dong::dom::isInputElement(hit) && button == 1) {
+                auto* state = dong::dom::getInputState(hit);
+                if (state && !hit->hasAttribute("readonly") && !hit->hasAttribute("disabled")) {
+                    size_t char_idx = hitTestInputCharOffset(hit, last_mouse_x, last_mouse_y);
+                    state->setCursorPosition(char_idx);
+                    hit->setAttribute("value", state->getValue());
+                    input_drag_active_ = true;
+                    input_drag_node_ = hit;
+                    input_drag_anchor_ = char_idx;
+                    resetCaretBlink();
+                    markNeedsRepaint();
+                }
+            }
+
             // Dispatch contextmenu event on right-click (button 2)
             if (button == 2) {
                 dispatchMouseEvent("contextmenu", last_mouse_x, last_mouse_y, button);
@@ -2276,10 +2783,50 @@ struct EngineView::Impl {
 
         dispatchMouseEvent("mouseup", last_mouse_x, last_mouse_y, button);
 
+        // End contenteditable drag selection
+        ce_drag_active_ = false;
+        ce_drag_editable_root_.reset();
+
+        // End input/textarea drag selection
+        input_drag_active_ = false;
+        input_drag_node_.reset();
+
         if (focus_manager && dom_manager && layout_engine) {
             auto clicked = hitTestElementAt(dom_manager.get(), layout_engine.get(), last_mouse_x, last_mouse_y);
             if (clicked) {
                 focus_manager->focusOnClick(clicked);
+
+                // Double/triple-click handling for contenteditable
+                auto focused = focus_manager->getFocusedElement();
+                if (focused && focused->isContentEditable() && !dong::dom::isInputElement(focused)) {
+                    auto editable_root = dong::dom::ContentEditableState::findEditableRoot(focused);
+                    if (editable_root && selection) {
+                        // Double-click / triple-click detection
+                        double now = last_wall_time_sec;
+                        if (now - last_click_time_ < DOUBLE_CLICK_TIME &&
+                            std::abs(last_mouse_x - last_click_x_) < DOUBLE_CLICK_DIST &&
+                            std::abs(last_mouse_y - last_click_y_) < DOUBLE_CLICK_DIST) {
+                            click_count_++;
+                        } else {
+                            click_count_ = 1;
+                        }
+                        last_click_time_ = now;
+                        last_click_x_ = last_mouse_x;
+                        last_click_y_ = last_mouse_y;
+
+                        if (click_count_ == 2) {
+                            // Double-click: select word
+                            dong::dom::ContentEditableState::selectWordAtCaret(editable_root, *selection);
+                            resetCaretBlink();
+                            markNeedsRepaint();
+                        } else if (click_count_ >= 3) {
+                            // Triple-click: select all
+                            selection->selectAllChildren(editable_root);
+                            resetCaretBlink();
+                            markNeedsRepaint();
+                        }
+                    }
+                }
             }
         }
 
@@ -2482,6 +3029,39 @@ struct EngineView::Impl {
         if (pressed) {
             dispatchClipboardEventIfNeeded(key_code);
 
+            // Escape closes topmost modal dialog
+            constexpr uint32_t SDLK_ESCAPE_DIALOG = 27;
+            if (key_code == SDLK_ESCAPE_DIALOG && !top_layer.empty()) {
+                auto dialog = top_layer.back();
+                auto* state = dong::dom::getDialogState(dialog);
+                if (state && state->isOpen() && state->isModal()) {
+                    // Dispatch cancel event (cancelable)
+                    if (event_dispatcher) {
+                        dong::dom::Event cancel_evt = event_dispatcher->createEvent(dong::dom::EventType::CANCEL);
+                        cancel_evt.target = dialog;
+                        cancel_evt.current_target = dialog;
+                        event_dispatcher->dispatch(cancel_evt);
+                        if (!cancel_evt.prevented) {
+                            state->close("");
+                            dialog->removeAttribute("open");
+                            dialog->markStyleDirty();
+                            dialog->markLayoutDirty();
+                            top_layer.pop_back();
+                            focus_manager->setModalDialogRoot(
+                                top_layer.empty() ? nullptr : top_layer.back());
+
+                            // Dispatch close event
+                            dong::dom::Event close_evt = event_dispatcher->createEvent(dong::dom::EventType::CLOSE);
+                            close_evt.target = dialog;
+                            close_evt.current_target = dialog;
+                            event_dispatcher->dispatch(close_evt);
+                        }
+                    }
+                    markNeedsRepaint();
+                    return;
+                }
+            }
+
             if (key_code == SDLK_TAB && focus_manager && dom_manager) {
                 focus_manager->moveFocus(dom_manager->getRoot(), false);
                 return;
@@ -2643,19 +3223,141 @@ struct EngineView::Impl {
                             }
                             state->deleteForward();
                             handled = true;
-                        } else if (key_code == SDLK_LEFT) {
-                            state->moveCursor(-1);
+                        } else if (key_code == SDLK_RETURN && focused->getTagName() == "textarea") {
+                            // Textarea Enter: insert newline
+                            input_type = "insertLineBreak";
+                            if (dispatchBeforeInputForNode(focused, input_type, "\n")) {
+                                dispatchKeyEvent("keydown", key_code);
+                                return;
+                            }
+                            state->insertText("\n", focused);
                             handled = true;
-                        } else if (key_code == SDLK_RIGHT) {
-                            state->moveCursor(1);
+                        } else if (key_code == SDLK_LEFT || key_code == SDLK_RIGHT) {
+                            if (mod_shift) {
+                                // Shift+Arrow: extend selection
+                                size_t cursor = state->getCursorPosition();
+                                size_t new_pos = (key_code == SDLK_RIGHT)
+                                    ? std::min(cursor + 1, state->charCount())
+                                    : (cursor > 0 ? cursor - 1 : 0);
+                                if (state->hasSelection()) {
+                                    // Extend existing selection
+                                    size_t sel_start = state->getSelectionStart();
+                                    size_t sel_end = state->getSelectionEnd();
+                                    // Determine which end to move
+                                    if (cursor == sel_end) {
+                                        state->setSelection(sel_start, new_pos);
+                                    } else {
+                                        state->setSelection(new_pos, sel_end);
+                                    }
+                                } else {
+                                    // Start new selection
+                                    state->setSelection(cursor, new_pos);
+                                }
+                                handled = true;
+                            } else {
+                                // Arrow without shift: if selection exists, move to edge
+                                if (state->hasSelection()) {
+                                    size_t pos = (key_code == SDLK_LEFT) ? state->getSelectionStart() : state->getSelectionEnd();
+                                    state->setCursorPosition(pos);
+                                } else {
+                                    state->moveCursor(key_code == SDLK_RIGHT ? 1 : -1);
+                                }
+                                handled = true;
+                            }
+                        } else if (key_code == 0x4000004A /* SDLK_HOME */) {
+                            state->setCursorPosition(0);
+                            handled = true;
+                        } else if (key_code == 0x4000004D /* SDLK_END */) {
+                            state->setCursorPosition(state->charCount());
+                            handled = true;
+                        } else if ((key_code == 0x40000052 /* SDLK_UP */ || key_code == 0x40000051 /* SDLK_DOWN */) && focused->getTagName() == "textarea") {
+                            // Up/Down arrow for textarea multiline navigation
+                            const std::string& val = state->getValue();
+                            size_t cursor = state->getCursorPosition();
+                            // Split value into lines and find current line/col
+                            std::vector<std::string> lines;
+                            {
+                                std::string::size_type start = 0;
+                                for (;;) {
+                                    auto pos = val.find('\n', start);
+                                    if (pos == std::string::npos) {
+                                        lines.push_back(val.substr(start));
+                                        break;
+                                    }
+                                    lines.push_back(val.substr(start, pos - start));
+                                    start = pos + 1;
+                                }
+                            }
+                            // Convert char index to (line, col)
+                            int cur_line = 0;
+                            size_t chars_before = 0;
+                            for (size_t li = 0; li < lines.size(); li++) {
+                                // Count UTF-8 chars in this line
+                                size_t line_chars = 0;
+                                for (size_t bi = 0; bi < lines[li].size(); ) {
+                                    unsigned char c = (unsigned char)lines[li][bi];
+                                    if (c < 0x80) bi += 1;
+                                    else if (c < 0xE0) bi += 2;
+                                    else if (c < 0xF0) bi += 3;
+                                    else bi += 4;
+                                    line_chars++;
+                                }
+                                if (cursor <= chars_before + line_chars) {
+                                    cur_line = (int)li;
+                                    break;
+                                }
+                                chars_before += line_chars + 1; // +1 for '\n'
+                                cur_line = (int)li;
+                            }
+                            size_t cur_col = cursor - chars_before;
+
+                            int target_line = (key_code == 0x40000052) ? cur_line - 1 : cur_line + 1;
+                            if (target_line >= 0 && target_line < (int)lines.size()) {
+                                // Count chars in target line
+                                size_t target_line_chars = 0;
+                                for (size_t bi = 0; bi < lines[target_line].size(); ) {
+                                    unsigned char c = (unsigned char)lines[target_line][bi];
+                                    if (c < 0x80) bi += 1;
+                                    else if (c < 0xE0) bi += 2;
+                                    else if (c < 0xF0) bi += 3;
+                                    else bi += 4;
+                                    target_line_chars++;
+                                }
+                                size_t target_col = std::min(cur_col, target_line_chars);
+                                // Convert (target_line, target_col) back to global char index
+                                size_t global_idx = 0;
+                                for (int li = 0; li < target_line; li++) {
+                                    size_t lc = 0;
+                                    for (size_t bi = 0; bi < lines[li].size(); ) {
+                                        unsigned char c = (unsigned char)lines[li][bi];
+                                        if (c < 0x80) bi += 1;
+                                        else if (c < 0xE0) bi += 2;
+                                        else if (c < 0xF0) bi += 3;
+                                        else bi += 4;
+                                        lc++;
+                                    }
+                                    global_idx += lc + 1; // +1 for '\n'
+                                }
+                                global_idx += target_col;
+                                state->setCursorPosition(global_idx);
+                                handled = true;
+                            }
+                        } else if (mod_ctrl && (key_code == 'a' || key_code == 'A')) {
+                            state->selectAll();
                             handled = true;
                         }
 
                         if (handled) {
                             focused->setAttribute("value", state->getValue());
+                            // For textarea, also sync child text node for rendering
+                            if (focused->getTagName() == "textarea") {
+                                focused->setTextContent(state->getValue());
+                                focused->markLayoutDirty();
+                            }
+                            resetCaretBlink();
                             markNeedsRepaint();
 
-                            // Dispatch input event for delete operations
+                            // Dispatch input event for delete/insert operations
                             if (input_type && js_bindings && script_engine) {
                                 ensureJSBindingsInitialized();
                                 uint64_t nid = js_bindings->getNodeIdFor(focused);
@@ -2663,6 +3365,48 @@ struct EngineView::Impl {
                                     js_bindings->dispatchInputEvent(nid, input_type, nullptr);
                                 }
                             }
+                            dispatchKeyEvent("keydown", key_code);
+                            return;
+                        }
+                    }
+                }
+            }
+
+            // Handle contenteditable keyboard (Backspace, Delete, Enter, Arrow keys, Home/End, Ctrl+A)
+            if (focus_manager && dom_manager) {
+                auto focused = focus_manager->getFocusedElement();
+                if (focused && focused->isContentEditable() && !dong::dom::isInputElement(focused)) {
+                    auto editable_root = dong::dom::ContentEditableState::findEditableRoot(focused);
+                    if (editable_root && selection) {
+                        constexpr uint32_t SDLK_HOME = 0x4000004A;
+                        constexpr uint32_t SDLK_END  = 0x4000004D;
+
+                        bool ce_handled = false;
+                        if (key_code == SDLK_BACKSPACE) {
+                            ce_handled = dong::dom::ContentEditableState::deleteBackward(editable_root, *selection);
+                        } else if (key_code == SDLK_DELETE) {
+                            ce_handled = dong::dom::ContentEditableState::deleteForward(editable_root, *selection);
+                        } else if (key_code == SDLK_RETURN) {
+                            ce_handled = dong::dom::ContentEditableState::insertParagraph(editable_root, *selection);
+                        } else if (key_code == SDLK_LEFT || key_code == SDLK_RIGHT) {
+                            int dir = (key_code == SDLK_RIGHT) ? 1 : -1;
+                            if (mod_shift) {
+                                ce_handled = dong::dom::ContentEditableState::extendSelection(editable_root, *selection, dir);
+                            } else {
+                                ce_handled = dong::dom::ContentEditableState::moveCaret(editable_root, *selection, dir);
+                            }
+                        } else if (key_code == SDLK_HOME || key_code == SDLK_END) {
+                            ce_handled = dong::dom::ContentEditableState::moveCaretToLineEdge(editable_root, *selection, key_code == SDLK_END);
+                        } else if (mod_ctrl && (key_code == 'a' || key_code == 'A')) {
+                            // Ctrl+A: select all content
+                            selection->selectAllChildren(editable_root);
+                            ce_handled = true;
+                        }
+                        if (ce_handled) {
+                            resetCaretBlink();
+                            markNeedsRepaint();
+                            dispatchKeyEvent("keydown", key_code);
+                            return;
                         }
                     }
                 }
@@ -2702,6 +3446,12 @@ struct EngineView::Impl {
 
                 state->insertText(text, focused);
                 focused->setAttribute("value", state->getValue());
+                // For textarea, also sync child text node for rendering
+                if (focused->getTagName() == "textarea") {
+                    focused->setTextContent(state->getValue());
+                    focused->markLayoutDirty();
+                }
+                resetCaretBlink();
                 markNeedsRepaint();
 
 
@@ -2713,6 +3463,16 @@ struct EngineView::Impl {
                         js_bindings->dispatchInputEvent(nid, "insertText", text);
                     }
                 }
+            }
+        }
+
+        // Handle contenteditable text input
+        if (focused && focused->isContentEditable() && !dong::dom::isInputElement(focused)) {
+            auto editable_root = dong::dom::ContentEditableState::findEditableRoot(focused);
+            if (editable_root && selection) {
+                dong::dom::ContentEditableState::insertText(editable_root, *selection, text);
+                resetCaretBlink();
+                markNeedsRepaint();
             }
         }
     }

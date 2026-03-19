@@ -7,6 +7,7 @@
 #include "dong_platform.h"
 #include "dong_gpu_driver.h"
 #include "dong_surface.h"
+#include "dong_clipboard.h"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_gpu.h>
@@ -947,6 +948,52 @@ static const DongSurfaceFactoryVTable g_sdl_factory_vtable = {
 };
 
 // =============================================================================
+// SDL Clipboard Implementation
+// =============================================================================
+
+typedef struct DongSDLClipboardImpl {
+    DongClipboard base;
+} DongSDLClipboardImpl;
+
+static char* sdl_clipboard_get_text(DongClipboard* cb) {
+    (void)cb;
+    char* text = SDL_GetClipboardText();
+    if (!text || !text[0]) {
+        SDL_free(text);
+        return NULL;
+    }
+    // Copy to malloc'd buffer (caller expects free()-able memory)
+    size_t len = strlen(text);
+    char* result = (char*)malloc(len + 1);
+    if (result) {
+        memcpy(result, text, len + 1);
+    }
+    SDL_free(text);
+    return result;
+}
+
+static int sdl_clipboard_set_text(DongClipboard* cb, const char* text) {
+    (void)cb;
+    if (!text) return 0;
+    return SDL_SetClipboardText(text) ? 1 : 0;
+}
+
+static int sdl_clipboard_has_text(DongClipboard* cb) {
+    (void)cb;
+    return SDL_HasClipboardText() ? 1 : 0;
+}
+
+static const DongClipboardVTable g_sdl_clipboard_vtable = {
+    .get_text = sdl_clipboard_get_text,
+    .set_text = sdl_clipboard_set_text,
+    .has_text = sdl_clipboard_has_text,
+};
+
+static DongSDLClipboardImpl g_sdl_clipboard = {
+    .base = { .vtable = &g_sdl_clipboard_vtable, .user_data = NULL },
+};
+
+// =============================================================================
 // Public API Implementation
 // =============================================================================
 
@@ -1015,6 +1062,9 @@ DONG_SDL_PLATFORM_API int dong_sdl_platform_init(void* sdl_device, void* sdl_win
     if (decoder) {
         dong_platform_set_image_decoder(platform, decoder);
     }
+
+    // Register clipboard
+    dong_platform_set_clipboard(platform, (DongClipboard*)&g_sdl_clipboard);
 
     return (driver && factory && decoder) ? 1 : 0;
 }

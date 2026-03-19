@@ -1914,6 +1914,27 @@ void Engine::buildChildYogaNodes(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
     const bool parent_is_block_like = (parent_style.layout_mode == dom::LayoutMode::Block);
     const bool needs_anon_wrapping = parent_is_block_like && hasMixedBlockInlineChildren(dom_node);
 
+    if (dom_node->isContentEditable() && dom_node->getTagName() == "div") {
+        DONG_LOG_WARN("[YOGA-CE] tag=%s children=%zu anon_wrap=%d parent_block=%d display=%s",
+                      dom_node->getTagName().c_str(), dom_node->getChildren().size(),
+                      (int)needs_anon_wrapping, (int)parent_is_block_like, parent_style.display.c_str());
+        for (size_t ci = 0; ci < dom_node->getChildren().size(); ++ci) {
+            const auto& ch = dom_node->getChildren()[ci];
+            if (!ch) continue;
+            if (ch->getType() == dom::DOMNode::NodeType::TEXT) {
+                DONG_LOG_WARN("[YOGA-CE]   [%zu] TEXT len=%zu", ci, ch->getRawTextContent().size());
+            } else if (ch->getType() == dom::DOMNode::NodeType::ELEMENT) {
+                const auto& cs = ch->getComputedStyle();
+                DONG_LOG_WARN("[YOGA-CE]   [%zu] <%s> display=%s layout_mode=%d style_attr=\"%s\"",
+                              ci, ch->getTagName().c_str(), cs.display.c_str(), (int)cs.layout_mode,
+                              ch->hasAttribute("style") ? ch->getAttribute("style").c_str() : "");
+            }
+        }
+        if (needs_anon_wrapping) {
+            DONG_LOG_WARN("[YOGA-CE] *** ANON WRAPPING DETECTED FOR CE DIV! THIS LIKELY CAUSES EXTRA LINE! ***");
+        }
+    }
+
     dom::DOMNodePtr prev_element_child;
     YGNode* prev_child_yoga = nullptr;
 
@@ -2092,6 +2113,13 @@ void Engine::buildChildYogaNodes(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
         for (const auto& child : dom_node->getChildren()) {
             if (child && child->getType() == dom::DOMNode::NodeType::ELEMENT) {
                 const auto& cs = child->getComputedStyle();
+
+                // Skip inline-level elements — they participate in IFC
+                // (Inline Formatting Context) alongside text nodes and should
+                // NOT get their own Yoga node as a block child.
+                if (isInlineLevelDisplay(cs.display)) {
+                    continue;
+                }
 
                 // display: contents - skip this node, promote children
                 if (shouldSkipLayoutNode(cs)) {
@@ -3768,10 +3796,11 @@ void Engine::layoutLineItems(std::vector<InlineItem>& items,
             auto it_child_layout = layout_cache.find(item.node.get());
 
             if (it_child_layout == layout_cache.end() || !it_child_layout->second) {
-                // Create synthetic layout entries for text nodes
-                if (item.node && item.node->getType() == dom::DOMNode::NodeType::TEXT) {
-                    auto& text_layout = layout_cache[item.node.get()];
-                    text_layout = std::make_unique<LayoutNode>();
+                // Create synthetic layout entries for text nodes and inline elements
+                // without existing layout (e.g. dynamically created <span> from editing)
+                if (item.node) {
+                    auto& new_layout = layout_cache[item.node.get()];
+                    new_layout = std::make_unique<LayoutNode>();
                     it_child_layout = layout_cache.find(item.node.get());
                 } else {
                     continue;
@@ -4001,6 +4030,28 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
             if (it_container != layout_cache.end() && it_container->second) {
                 LayoutNode* container_layout = it_container->second.get();
                 const auto& container_style = node->getComputedStyle();
+
+                // Debug: dump IFC state for contenteditable containers
+                bool is_ce = node->isContentEditable();
+                if (is_ce) {
+                    DONG_LOG_WARN("[IFC-CE] tag=%s children=%zu yoga_h=%.1f yoga_w=%.1f",
+                                  node->getTagName().c_str(), node->getChildren().size(),
+                                  container_layout->height, container_layout->width);
+                    for (size_t ci = 0; ci < node->getChildren().size(); ++ci) {
+                        const auto& ch = node->getChildren()[ci];
+                        if (!ch) continue;
+                        if (ch->getType() == dom::DOMNode::NodeType::TEXT) {
+                            std::string raw = ch->getRawTextContent();
+                            std::string collapsed = collapseWhitespace(raw);
+                            DONG_LOG_WARN("[IFC-CE]   [%zu] TEXT raw_len=%zu collapsed=\"%s\"",
+                                          ci, raw.size(), collapsed.c_str());
+                        } else if (ch->getType() == dom::DOMNode::NodeType::ELEMENT) {
+                            const auto& cs = ch->getComputedStyle();
+                            DONG_LOG_WARN("[IFC-CE]   [%zu] <%s> display=%s layout_mode=%d",
+                                          ci, ch->getTagName().c_str(), cs.display.c_str(), (int)cs.layout_mode);
+                        }
+                    }
+                }
 
                 float container_x = container_layout->x;
                 float container_y = container_layout->y;
@@ -4273,6 +4324,16 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
                         lines.push_back(current_line);
                     }
 
+                    if (is_ce) {
+                        DONG_LOG_WARN("[IFC-CE] items=%zu lines=%zu content_w=%.1f",
+                                      items.size(), lines.size(), content_w);
+                        for (size_t li = 0; li < lines.size(); ++li) {
+                            const auto& ln = lines[li];
+                            DONG_LOG_WARN("[IFC-CE]   line[%zu] items=%zu max_lh=%.1f",
+                                          li, ln.item_indices.size(), ln.max_line_height_px);
+                        }
+                    }
+
                     float current_line_top = content_y;
                     for (const LineInfo& line : lines) {
                         float baseline_y = current_line_top + line.max_baseline_from_border_top;
@@ -4281,11 +4342,11 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
                             InlineItem& item = items[idx];
                             auto it_child_layout = layout_cache.find(item.node.get());
                             if (it_child_layout == layout_cache.end() || !it_child_layout->second) {
-                                // Text nodes don't get layout_cache entries from Yoga.
-                                // Create synthetic entries so the painter can use IFC positions.
-                                if (item.node && item.node->getType() == dom::DOMNode::NodeType::TEXT) {
-                                    auto& text_layout = layout_cache[item.node.get()];
-                                    text_layout = std::make_unique<LayoutNode>();
+                                // Create synthetic layout entries for nodes without existing
+                                // layout (text nodes, dynamically created inline elements).
+                                if (item.node) {
+                                    auto& new_layout = layout_cache[item.node.get()];
+                                    new_layout = std::make_unique<LayoutNode>();
                                     it_child_layout = layout_cache.find(item.node.get());
                                 } else {
                                     continue;
@@ -4356,6 +4417,12 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
                     // 更新容器高度：IFC 容器的高度应该包含所有行的高度
                     // 计算内容区域的总高度
                     float total_content_height = current_line_top - content_y;
+                    if (is_ce) {
+                        DONG_LOG_WARN("[IFC-CE] total_content_h=%.1f pad_top=%.1f pad_bot=%.1f yoga_h=%.1f",
+                                      total_content_height, pad_top,
+                                      container_style.padding_bottom.isPixel() ? container_style.padding_bottom.value : 0.0f,
+                                      container_layout->height);
+                    }
                     if (total_content_height > 0.0f) {
                         float pad_bottom = container_style.padding_bottom.isPixel() ? container_style.padding_bottom.value : 0.0f;
                         float new_container_height = pad_top + total_content_height + pad_bottom;
@@ -5081,13 +5148,19 @@ void Engine::layoutPositionedElements(dom::DOMNodePtr root) {
 
                     // CSS absolute positioning: when both opposing sides are specified and
                     // the size is auto, the element stretches to fill the containing block.
-                    if (abs_width_auto && has_left && has_right) {
+                    // Exception: when both margins on the axis are auto, keep content size
+                    // and center via margin:auto (CSS2 §10.3.7 / §10.6.4).
+                    const bool ml_auto_chk = abs_style.margin_left.isAuto();
+                    const bool mr_auto_chk = abs_style.margin_right.isAuto();
+                    const bool mt_auto_chk = abs_style.margin_top.isAuto();
+                    const bool mb_auto_chk = abs_style.margin_bottom.isAuto();
+                    if (abs_width_auto && has_left && has_right && !(ml_auto_chk && mr_auto_chk)) {
                         box_w = cb_w - left_px - right_px;
                         if (box_w < 0.0f) box_w = 0.0f;
                         layout->width = box_w;
                         layout->layout.dimensions[0] = box_w;
                     }
-                    if (abs_height_auto && has_top && has_bottom) {
+                    if (abs_height_auto && has_top && has_bottom && !(mt_auto_chk && mb_auto_chk)) {
                         box_h = cb_h - top_px - bottom_px;
                         if (box_h < 0.0f) box_h = 0.0f;
                         layout->height = box_h;
@@ -5114,6 +5187,22 @@ void Engine::layoutPositionedElements(dom::DOMNodePtr root) {
                         offset_y_local = cb_h - bottom_px - box_h;
                     } else {
                         offset_y_local = layout->y - cb_y;
+                    }
+
+                    // CSS margin:auto centering for absolutely/fixed positioned elements.
+                    // When both margins on an axis are auto, center the element within the CB.
+                    const bool ml_auto = abs_style.margin_left.isAuto();
+                    const bool mr_auto = abs_style.margin_right.isAuto();
+                    const bool mt_auto = abs_style.margin_top.isAuto();
+                    const bool mb_auto = abs_style.margin_bottom.isAuto();
+
+                    if (ml_auto && mr_auto) {
+                        offset_x_local = (cb_w - box_w) / 2.0f;
+                        if (offset_x_local < 0.0f) offset_x_local = 0.0f;
+                    }
+                    if (mt_auto && mb_auto && has_top && has_bottom) {
+                        offset_y_local = (cb_h - box_h) / 2.0f;
+                        if (offset_y_local < 0.0f) offset_y_local = 0.0f;
                     }
 
                     float new_x = cb_x + offset_x_local;

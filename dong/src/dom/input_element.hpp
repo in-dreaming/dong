@@ -95,6 +95,11 @@ public:
     // 取消 IME 组合：撤销组合区间文本，恢复光标
     void cancelComposition();
 
+    // Public UTF-8 helpers for rendering/hit-testing
+    size_t utf8ByteOffsetForCursor() const { return utf8ByteOffset(cursor_position_); }
+    size_t utf8ByteOffsetAt(size_t char_index) const { return utf8ByteOffset(char_index); }
+    size_t charCount() const { return utf8CharCount(); }
+
 private:
     std::string value_;
     std::string default_value_;  // original HTML value for form reset

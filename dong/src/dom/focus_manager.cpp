@@ -78,6 +78,9 @@ bool FocusManager::isFocusable(const DOMNodePtr& element) {
     if (!element) return false;
     if (element->getType() != DOMNode::NodeType::ELEMENT) return false;
 
+    // Inert elements and their descendants are not focusable
+    if (element->isInert()) return false;
+
     const std::string& tag = element->getTagName();
     
     // 原生可聚焦元素
@@ -171,9 +174,12 @@ void FocusManager::moveFocus(DOMNodePtr root, bool reverse) {
     // 通过 Tab 键移动焦点，设置为键盘聚焦
     keyboard_focus_ = true;
 
+    // If modal dialog is active, restrict focus to dialog subtree
+    DOMNodePtr focus_root = modal_dialog_root_ ? modal_dialog_root_ : root;
+
     // 收集所有可聚焦元素
     std::vector<DOMNodePtr> focusable;
-    collectFocusableElements(root, focusable);
+    collectFocusableElements(focus_root, focusable);
 
     if (focusable.empty()) {
         blur();
@@ -254,6 +260,9 @@ void FocusManager::setFocusChangeCallback(FocusChangeCallback callback) {
 
 void FocusManager::collectFocusableElements(DOMNodePtr node, std::vector<DOMNodePtr>& out) {
     if (!node) return;
+
+    // Skip entire inert subtrees
+    if (node->hasAttribute("inert")) return;
 
     if (isFocusable(node)) {
         out.push_back(node);

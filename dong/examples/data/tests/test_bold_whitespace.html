@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+body { font-family: sans-serif; padding: 20px; }
+.editor {
+    border: 2px solid #333;
+    padding: 16px;
+    min-height: 100px;
+    margin: 10px 0;
+    font-size: 16px;
+    line-height: 1.5;
+}
+</style>
+</head>
+<body>
+<h2>Bold Layout Debug - Whitespace Test</h2>
+
+<p>A: Single line (no newlines in text nodes) - my previous test</p>
+<div class="editor" contenteditable="true">Hello, this is an editable area. Try typing <span style="display:inline; font-weight:bold;">here</span>!</div>
+
+<p>B: Multi-line HTML (text nodes have \n from formatting) - matches dynamic case</p>
+<div class="editor" contenteditable="true">
+    Hello, this is an editable area. Try typing <span style="display:inline; font-weight:bold;">here</span>!
+</div>
+
+<p>C: Original unmodified (no bold, multi-line)</p>
+<div class="editor" contenteditable="true">
+    Hello, this is an editable area. Try typing here!
+</div>
+</body>
+</html>

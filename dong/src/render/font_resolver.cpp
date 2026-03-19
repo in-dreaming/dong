@@ -583,12 +583,9 @@ void appendCandidatesForFamilyWeightStyle(const std::string& canonical_family,
                                          int numeric_weight,
                                          bool italic_or_oblique,
                                          std::vector<std::string>& out) {
-    // Always use weight-specific candidates first (handles 100-900)
-    appendWeightedCandidatesForFamily(canonical_family, numeric_weight, out);
-
-    // Then add style-specific candidates
     if (italic_or_oblique) {
-        // italic / oblique
+        // When italic/oblique is requested, add italic-specific fonts FIRST
+        // so they are preferred over regular-weight fonts by findExistingFont.
         if (canonical_family == "arial") {
             if (numeric_weight >= 600) {
                 out.push_back("C:/Windows/Fonts/arialbi.ttf");
@@ -602,11 +599,14 @@ void appendCandidatesForFamilyWeightStyle(const std::string& canonical_family,
                 out.push_back("C:/Windows/Fonts/segoeuii.ttf");
             }
         } else if (canonical_family == "sans-serif" || canonical_family == "-apple-system") {
-            // Common sans-serif italic variants
-            out.push_back("C:/Windows/Fonts/segoeuiz.ttf");
-            out.push_back("C:/Windows/Fonts/segoeuii.ttf");
-            out.push_back("C:/Windows/Fonts/arialbi.ttf");
-            out.push_back("C:/Windows/Fonts/ariali.ttf");
+            // Common sans-serif italic variants - weight-appropriate first
+            if (numeric_weight >= 600) {
+                out.push_back("C:/Windows/Fonts/segoeuiz.ttf");
+                out.push_back("C:/Windows/Fonts/arialbi.ttf");
+            } else {
+                out.push_back("C:/Windows/Fonts/segoeuii.ttf");
+                out.push_back("C:/Windows/Fonts/ariali.ttf");
+            }
         }
 
         // Linux: DejaVu italic variants
@@ -626,11 +626,14 @@ void appendCandidatesForFamilyWeightStyle(const std::string& canonical_family,
             out.push_back("/System/Library/Fonts/Supplemental/Arial Italic.ttf");
             out.push_back("/System/Library/Fonts/Supplemental/Times New Roman Italic.ttf");
         }
+    }
 
-        // Always add fallbacks for style matching when italic not available
-        if (canonical_family == "arial") {
-            out.push_back(numeric_weight >= 600 ? "C:/Windows/Fonts/arialbd.ttf" : "C:/Windows/Fonts/arial.ttf");
-        }
+    // Weight-specific candidates as fallback (or primary for non-italic)
+    appendWeightedCandidatesForFamily(canonical_family, numeric_weight, out);
+
+    // For italic: add regular-weight fonts as final fallback when no italic font exists
+    if (italic_or_oblique && canonical_family == "arial") {
+        out.push_back(numeric_weight >= 600 ? "C:/Windows/Fonts/arialbd.ttf" : "C:/Windows/Fonts/arial.ttf");
     }
 }
 

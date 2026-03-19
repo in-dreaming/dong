@@ -242,6 +242,7 @@ void emitInlineTextRun(const std::string& text,
     std::string weight = cs.font_weight.empty() ? container_style.font_weight : cs.font_weight;
     std::string style  = cs.font_style.empty()  ? container_style.font_style  : cs.font_style;
 
+
     TextShapeRequest req{text, family, weight, style, font_size};
     req.lang = node ? node->getEffectiveLang() : "";  // Set language from DOM node if available
     ShapedText shaped;
@@ -255,6 +256,7 @@ void emitInlineTextRun(const std::string& text,
     run.rect = {state.x + state.pad_left + state.cumulative_x,
                 state.baseline_y - ascent * scale, text_width, state.line_height_px};
     run.color = cs.isExplicitlySet("color") ? makeColorFromCss(cs.color) : state.text_color;
+    Color run_color = run.color;  // Save before move
 
     run.font_size = font_size;
     run.font_family = family;
@@ -273,6 +275,30 @@ void emitInlineTextRun(const std::string& text,
                               sg.font_path_index, sg.units_per_em});
     }
     builder.addGlyphRun(std::move(run));
+
+    // text-decoration rendering (underline, line-through, overline)
+    const std::string& text_dec = cs.text_decoration;
+    if (!text_dec.empty() && text_dec != "none") {
+        float dec_thickness = cs.text_decoration_thickness > 0.0f ? cs.text_decoration_thickness : std::max(1.0f, font_size / 14.0f);
+        Color dec_color = !cs.text_decoration_color.empty()
+            ? makeColorFromCss(cs.text_decoration_color) : run_color;
+
+        float line_x = state.x + state.pad_left + state.cumulative_x;
+
+        if (text_dec.find("underline") != std::string::npos) {
+            float underline_y = state.baseline_y + font_size * 0.15f;
+            builder.addRect({line_x, underline_y, text_width, dec_thickness}, dec_color);
+        }
+        if (text_dec.find("line-through") != std::string::npos) {
+            float strike_y = state.baseline_y - font_size * 0.3f;
+            builder.addRect({line_x, strike_y, text_width, dec_thickness}, dec_color);
+        }
+        if (text_dec.find("overline") != std::string::npos) {
+            float overline_y = state.baseline_y - ascent * scale + dec_thickness;
+            builder.addRect({line_x, overline_y, text_width, dec_thickness}, dec_color);
+        }
+    }
+
     state.cumulative_x += text_width;
 }
 
@@ -571,6 +597,11 @@ void renderMixedPath(const dom::DOMNodePtr& node,
             drawTextChild(child, state, style, shaper, builder);
         }
     }
+
+    if (node->isContentEditable() && node->getTagName() == "div") {
+        DONG_LOG_WARN("[MIXED-CE] final cumulative_x=%.1f baseline_y=%.1f inner_width=%.1f line_h=%.1f",
+                      state.cumulative_x, state.baseline_y, state.inner_width, state.line_height_px);
+    }
 }
 
 // ========== Placeholder 样式解析 ==========
@@ -771,6 +802,12 @@ void Painter::paintTextAndInput(const dom::DOMNodePtr& node,
         ContentAnalysis analysis = analyzeChildren(node);
 
         auto path = determinePath(analysis, tag, style);
+
+        if (node->isContentEditable()) {
+            DONG_LOG_WARN("[PAINT-CE] tag=%s path=%d children=%zu has_text=%d has_inline_elem=%d",
+                          tag.c_str(), (int)path, node->getChildren().size(),
+                          (int)analysis.has_text_child, (int)analysis.has_inline_element_child);
+        }
 
         if (path == TextRenderPath::Mixed) {
             renderMixedPath(node, layout_node, style, bl, bt, br, bb, text_shaper_, layout_engine_, builder, this);
@@ -1102,9 +1139,29 @@ void emitFullTextLine(const std::string& line_text, int line_index,
                               sg.font_path_index, sg.units_per_em});
     }
     ctx.builder.addGlyphRun(std::move(run));
-}
 
-// Measure text width in pixels using the current shaping context.
+    // text-decoration rendering for FullText path
+    const std::string& text_dec = ctx.style.text_decoration;
+    if (!text_dec.empty() && text_dec != "none") {
+        float dec_thickness = ctx.style.text_decoration_thickness > 0.0f
+            ? ctx.style.text_decoration_thickness : std::max(1.0f, ctx.font_size / 14.0f);
+        Color dec_color = !ctx.style.text_decoration_color.empty()
+            ? makeColorFromCss(ctx.style.text_decoration_color) : ctx.text_color;
+
+        if (text_dec.find("underline") != std::string::npos) {
+            float underline_y = baseline_y + ctx.font_size * 0.15f;
+            ctx.builder.addRect({line_x, underline_y, line_width, dec_thickness}, dec_color);
+        }
+        if (text_dec.find("line-through") != std::string::npos) {
+            float strike_y = baseline_y - ctx.font_size * 0.3f;
+            ctx.builder.addRect({line_x, strike_y, line_width, dec_thickness}, dec_color);
+        }
+        if (text_dec.find("overline") != std::string::npos) {
+            float overline_y = baseline_y - ctx.ascent_px + dec_thickness;
+            ctx.builder.addRect({line_x, overline_y, line_width, dec_thickness}, dec_color);
+        }
+    }
+}
 float measureTextWidthPx(std::string_view text, const FullTextRenderCtx& ctx) {
     if (text.empty()) return 0.0f;
     const std::string visible = stripSoftHyphens(text);

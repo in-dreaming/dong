@@ -55,6 +55,19 @@ void EventDispatcher::removeEventListener(DOMNodePtr target, const std::string& 
 void EventDispatcher::dispatch(const Event& orig_event) {
     if (!orig_event.target) return;
 
+    // Inert elements do not receive user-interaction events
+    if (orig_event.target->isInert()) {
+        // Allow lifecycle events (scroll, resize, DOMContentLoaded) through
+        switch (orig_event.type) {
+            case EventType::SCROLL:
+            case EventType::RESIZE:
+            case EventType::DOM_CONTENT_LOADED:
+                break;
+            default:
+                return;
+        }
+    }
+
     // Create mutable copy to update current_target
     Event event = orig_event;
 
@@ -139,6 +152,8 @@ Event EventDispatcher::createEvent(EventType type) {
         case EventType::DOM_CONTENT_LOADED: event.type_name = "DOMContentLoaded"; break;
 
         case EventType::TOGGLE: event.type_name = "toggle"; break;
+        case EventType::CLOSE: event.type_name = "close"; break;
+        case EventType::CANCEL: event.type_name = "cancel"; break;
         case EventType::DRAG_START: event.type_name = "dragstart"; break;
         case EventType::DRAG: event.type_name = "drag"; break;
         case EventType::DRAG_ENTER: event.type_name = "dragenter"; break;

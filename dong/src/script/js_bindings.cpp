@@ -1,6 +1,11 @@
 ﻿#include "js_bindings.hpp"
 #include "js_node_bindings.hpp"
 #include "js_observer_bindings.hpp"
+#include "js_clipboard_bindings.hpp"
+#include "js_selection_bindings.hpp"
+#include "../dom/editing_commands.hpp"
+#include "../dom/contenteditable.hpp"
+#include "../dom/selection.hpp"
 #include "../layout/layout_engine.hpp"
 #include "../dom/details_element.hpp"
 #include <cstdio>
@@ -2806,6 +2811,8 @@ void JSBindings::initialize() {
         initializeWindowCSSAPI(ctx);
         initializeNodeConstants(ctx);
         initializeObserverAPI(ctx, this);
+        initializeClipboardAPI(ctx);
+        initializeSelectionAPI(ctx, this);
     }
 }
 
@@ -3413,6 +3420,63 @@ void JSBindings::initializePerformanceAPI() {
     JS_FreeValue(ctx, global);
 }
 
+// Shared static C function for document.execCommand binding
+static JSValue js_doc_execCommand(JSContext* c, JSValueConst this_val, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_FALSE;
+    const char* cmd = JS_ToCString(c, argv[0]);
+    if (!cmd) return JS_FALSE;
+    std::string command(cmd);
+    JS_FreeCString(c, cmd);
+
+    std::string value;
+    if (argc >= 3) {
+        const char* val = JS_ToCString(c, argv[2]);
+        if (val) {
+            value = val;
+            JS_FreeCString(c, val);
+        }
+    }
+
+    auto* bindings = static_cast<dong::script::JSBindings*>(JS_GetContextOpaque(c));
+    if (!bindings) { DONG_LOG_WARN("[JS] execCommand(%s): no bindings", command.c_str()); return JS_FALSE; }
+
+    auto* fm = bindings->focus_manager_;
+    if (!fm) { DONG_LOG_WARN("[JS] execCommand(%s): no focus_manager", command.c_str()); return JS_FALSE; }
+    auto focused = fm->getFocusedElement();
+
+    DONG_LOG_WARN("[JS] execCommand(%s): focused=%s ce=%d",
+                  command.c_str(),
+                  focused ? focused->getTagName().c_str() : "null",
+                  focused ? (int)focused->isContentEditable() : -1);
+
+    dong::dom::DOMNodePtr editable_root;
+    if (focused && focused->isContentEditable()) {
+        editable_root = dong::dom::ContentEditableState::findEditableRoot(focused);
+    }
+    if (!editable_root && bindings->last_editable_root_) {
+        editable_root = bindings->last_editable_root_;
+    }
+    if (!editable_root) { DONG_LOG_WARN("[JS] execCommand(%s): NO editable_root", command.c_str()); return JS_FALSE; }
+
+    if (!bindings->selection_) return JS_FALSE;
+    dong::dom::Selection& sel = *bindings->selection_;
+    DONG_LOG_WARN("[JS] execCommand(%s): editable_root=%s sel.rangeCount=%u sel.collapsed=%d",
+            command.c_str(), editable_root->getTagName().c_str(),
+            sel.getRangeCount(), (int)sel.isCollapsed());
+    bool result = dong::dom::execCommand(editable_root, sel, command, value);
+    DONG_LOG_WARN("[JS] execCommand(%s): result=%d", command.c_str(), (int)result);
+    return JS_NewBool(c, result);
+}
+
+// Shared static C function for document.queryCommandSupported binding
+static JSValue js_doc_queryCommandSupported(JSContext* c, JSValueConst this_val, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_FALSE;
+    const char* cmd = JS_ToCString(c, argv[0]);
+    if (!cmd) return JS_FALSE;
+    std::string command(cmd);
+    JS_FreeCString(c, cmd);
+    return JS_NewBool(c, dong::dom::queryCommandSupported(command));
+}
 void JSBindings::initializeDocumentAPI() {
     if (!engine_) return;
 
@@ -3503,6 +3567,14 @@ void JSBindings::initializeDocumentAPI() {
         JS_NewCFunction(ctx, elem_addEventListener, "addEventListener", 2));
     JS_SetPropertyStr(ctx, document, "removeEventListener",
         JS_NewCFunction(ctx, elem_removeEventListener, "removeEventListener", 2));
+
+    // document.execCommand(command, showUI, value)
+    JS_SetPropertyStr(ctx, document, "execCommand",
+        JS_NewCFunction(ctx, js_doc_execCommand, "execCommand", 3));
+
+    // document.queryCommandSupported(command)
+    JS_SetPropertyStr(ctx, document, "queryCommandSupported",
+        JS_NewCFunction(ctx, js_doc_queryCommandSupported, "queryCommandSupported", 1));
 
     // Give document a __node_id__ if body exists, so event listeners can be registered
     if (dom_manager_) {
@@ -4831,6 +4903,12 @@ void JSBindings::registerAsNamedView() {
         JS_NewCFunction(ctx, elem_addEventListener, "addEventListener", 2));
     JS_SetPropertyStr(ctx, doc, "removeEventListener",
         JS_NewCFunction(ctx, elem_removeEventListener, "removeEventListener", 2));
+
+    // document.execCommand / queryCommandSupported (shared implementation)
+    JS_SetPropertyStr(ctx, doc, "execCommand",
+        JS_NewCFunction(ctx, js_doc_execCommand, "execCommand", 3));
+    JS_SetPropertyStr(ctx, doc, "queryCommandSupported",
+        JS_NewCFunction(ctx, js_doc_queryCommandSupported, "queryCommandSupported", 1));
 
     // Document object references
     if (dom_manager_) {

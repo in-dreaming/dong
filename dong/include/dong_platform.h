@@ -45,6 +45,7 @@ typedef struct DongImageDecoder DongImageDecoder;
 #include "dong_file_system.h"
 #include "dong_logger.h"
 #include "dong_image_decoder.h"
+#include "dong_clipboard.h"
 
 
 // Platform singleton (opaque)
@@ -82,6 +83,9 @@ DONG_PLATFORM_API void dong_platform_set_logger(DongPlatform* platform, DongLogg
 // Register ImageDecoder implementation.
 DONG_PLATFORM_API void dong_platform_set_image_decoder(DongPlatform* platform, DongImageDecoder* decoder);
 
+// Register Clipboard implementation.
+DONG_PLATFORM_API void dong_platform_set_clipboard(DongPlatform* platform, DongClipboard* clipboard);
+
 // =============================================================================
 // Subsystem Access
 // =============================================================================
@@ -101,6 +105,9 @@ DONG_PLATFORM_API DongLogger* dong_platform_get_logger(DongPlatform* platform);
 // Get registered ImageDecoder (may be NULL if not registered).
 DONG_PLATFORM_API DongImageDecoder* dong_platform_get_image_decoder(DongPlatform* platform);
 
+// Get registered Clipboard (may be NULL if not registered).
+DONG_PLATFORM_API DongClipboard* dong_platform_get_clipboard(DongPlatform* platform);
+
 // =============================================================================
 // Convenience Macros (C++)
 // =============================================================================
@@ -112,6 +119,7 @@ DONG_PLATFORM_API DongImageDecoder* dong_platform_get_image_decoder(DongPlatform
 #define DONG_FS()             dong_platform_get_file_system(dong_platform_get())
 #define DONG_LOGGER()         dong_platform_get_logger(dong_platform_get())
 #define DONG_IMAGE_DECODER()  dong_platform_get_image_decoder(dong_platform_get())
+#define DONG_CLIPBOARD()      dong_platform_get_clipboard(dong_platform_get())
 #endif
 
 #ifdef __cplusplus

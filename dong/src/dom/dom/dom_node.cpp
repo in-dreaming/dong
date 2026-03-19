@@ -21,6 +21,7 @@ FocusManager* DOMNode::s_focus_manager_ = nullptr;
 EventDispatcher* DOMNode::s_event_dispatcher_ = nullptr;
 std::string DOMNode::s_current_fragment_ = "";
 DOMNodeWeakPtr DOMNode::s_pointer_capture_;
+DOMNodePtr DOMNode::s_modal_dialog_root_;
 
 
 // ClassList implementation
@@ -1497,7 +1498,8 @@ DOMNodePtr DOMNode::closest(const std::string& selector) {
 
 void DOMNode::focus() {
     if (!s_focus_manager_) return;
-    
+    if (isInert()) return;
+
     // Only focus if element is focusable
     if (FocusManager::isFocusable(shared_from_this())) {
         s_focus_manager_->setFocus(shared_from_this());
@@ -1506,7 +1508,7 @@ void DOMNode::focus() {
 
 void DOMNode::blur() {
     if (!s_focus_manager_) return;
-    
+
     // Only blur if this element has focus
     if (s_focus_manager_->hasFocus(shared_from_this())) {
         s_focus_manager_->blur();
@@ -1546,6 +1548,40 @@ void DOMNode::click() {
     if (FocusManager::isFocusable(shared_from_this())) {
         focus();
     }
+}
+
+bool DOMNode::isInert() const {
+    // Check explicit inert attribute in ancestor chain
+    auto current = const_cast<DOMNode*>(this)->shared_from_this();
+    while (current) {
+        if (current->hasAttribute("inert")) {
+            return true;
+        }
+        current = current->getParent();
+    }
+
+    // If a modal dialog is active, everything outside it is implicitly inert
+    if (s_modal_dialog_root_) {
+        auto self = const_cast<DOMNode*>(this)->shared_from_this();
+        if (self != s_modal_dialog_root_ && !s_modal_dialog_root_->contains(self)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool DOMNode::isContentEditable() const {
+    auto current = const_cast<DOMNode*>(this)->shared_from_this();
+    while (current) {
+        if (current->hasAttribute("contenteditable")) {
+            std::string val = current->getAttribute("contenteditable");
+            if (val == "false") return false;
+            return true;
+        }
+        current = current->getParent();
+    }
+    return false;
 }
 
 void DOMNode::print(int depth) const {

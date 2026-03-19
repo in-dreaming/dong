@@ -58,6 +58,10 @@ enum class EventType {
     // HTML-specific
     TOGGLE,
 
+    // Dialog events
+    CLOSE,
+    CANCEL,
+
     // Drag & Drop
     DRAG_START,
     DRAG,
@@ -233,6 +237,8 @@ private:
 
         // HTML-specific
         {"toggle", EventType::TOGGLE},
+        {"close", EventType::CLOSE},
+        {"cancel", EventType::CANCEL},
 
         // Drag & Drop
         {"dragstart", EventType::DRAG_START},

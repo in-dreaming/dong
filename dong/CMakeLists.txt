@@ -129,6 +129,12 @@ add_library(dong SHARED
     src/dom/input_element.cpp
     src/dom/select_element.cpp
     src/dom/details_element.cpp
+    src/dom/dialog_element.cpp
+    src/dom/range.cpp
+    src/dom/selection.cpp
+    src/dom/text_hit_testing.cpp
+    src/dom/contenteditable.cpp
+    src/dom/editing_commands.cpp
     src/dom/css/css_value.cpp
     src/dom/css/css_parser.cpp
     src/dom/css/css_property_handlers.cpp
@@ -160,12 +166,16 @@ add_library(dong SHARED
     src/script/js_bindings.cpp
     src/script/js_node_bindings.cpp
     src/script/js_observer_bindings.cpp
+    src/script/js_clipboard_bindings.cpp
+    src/script/js_selection_bindings.cpp
     # Render
     src/render/painter.cpp
     src/render/painter_select_overlays.cpp
     src/render/painter/painter_media.cpp
     src/render/painter/painter_text.cpp
     src/render/painter/painter_children.cpp
+    src/render/painter/painter_backdrop.cpp
+    src/render/painter/painter_caret.cpp
     src/render/render_surface.cpp
     src/render/resource_manager.cpp
     src/render/font_resolver.cpp
@@ -263,6 +273,12 @@ add_library(dong_render STATIC
     src/dom/input_element.cpp
     src/dom/select_element.cpp
     src/dom/details_element.cpp
+    src/dom/dialog_element.cpp
+    src/dom/range.cpp
+    src/dom/selection.cpp
+    src/dom/text_hit_testing.cpp
+    src/dom/contenteditable.cpp
+    src/dom/editing_commands.cpp
     src/dom/css/css_value.cpp
     src/dom/css/css_parser.cpp
     src/dom/css/css_property_handlers.cpp
@@ -294,12 +310,16 @@ add_library(dong_render STATIC
     src/script/js_bindings.cpp
     src/script/js_node_bindings.cpp
     src/script/js_observer_bindings.cpp
+    src/script/js_clipboard_bindings.cpp
+    src/script/js_selection_bindings.cpp
     # Render
     src/render/painter.cpp
     src/render/painter_select_overlays.cpp
     src/render/painter/painter_media.cpp
     src/render/painter/painter_text.cpp
     src/render/painter/painter_children.cpp
+    src/render/painter/painter_backdrop.cpp
+    src/render/painter/painter_caret.cpp
     src/render/render_surface.cpp
     src/render/resource_manager.cpp
     # NOTE: SDL-specific render files have been migrated to backends/sdl/

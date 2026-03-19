@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+body { font-family: sans-serif; padding: 10px; }
+#editor {
+    border: 2px solid #333;
+    padding: 16px;
+    min-height: 60px;
+    margin: 10px 0;
+    font-size: 16px;
+}
+#log { margin-top: 10px; padding: 10px; border: 1px solid #ccc; min-height: 200px; font-family: monospace; font-size: 11px; white-space: pre-wrap; overflow-y: auto; }
+</style>
+</head>
+<body>
+<h3>CE Interactive Simulation</h3>
+
+<div>
+    <button id="btnBold" onclick="document.execCommand('bold')">Bold</button>
+    <button id="btnItalic" onclick="document.execCommand('italic')">Italic</button>
+    <button id="btnUnderline" onclick="document.execCommand('underline')">Underline</button>
+</div>
+
+<div id="editor" contenteditable="true">Hello World Test</div>
+
+<div id="log"></div>
+
+<script>
+var log = document.getElementById('log');
+var editor = document.getElementById('editor');
+
+function addLog(msg) {
+    log.textContent += msg + '\n';
+    console.log('[SIM] ' + msg);
+}
+
+(function() {
+    addLog('=== Test: Simulating what happens when user clicks buttons ===');
+
+    // Simulate: user clicks in editor (focus it)
+    editor.focus();
+    addLog('1. editor.focus() done');
+
+    // Simulate: user selects all text via JS
+    document.execCommand('selectAll');
+    addLog('2. selectAll done');
+
+    // Simulate: user clicks Bold button
+    // In real flow: mousedown on button, mouseup on button, click on button
+    // The onclick fires: document.execCommand('bold')
+    addLog('3. About to call document.execCommand("bold")...');
+    var r1 = document.execCommand('bold');
+    addLog('   bold result: ' + r1 + ' innerHTML: ' + editor.innerHTML);
+
+    // Now simulate what happens when user re-selects and clicks Italic:
+    // - Focus moves back to editor (user clicks editor)
+    editor.focus();
+    addLog('4. Re-focused editor');
+
+    // - User selects all text again
+    document.execCommand('selectAll');
+    addLog('5. selectAll again');
+
+    // - User clicks Italic button (focus moves to button)
+    addLog('6. About to call document.execCommand("italic")...');
+    var r2 = document.execCommand('italic');
+    addLog('   italic result: ' + r2 + ' innerHTML: ' + editor.innerHTML);
+
+    // Now what if the user doesn't re-select? Just clicks italic directly:
+    // After bold, the selection was updated by wrapSelectionWithStyle
+    editor.innerHTML = 'Hello World Test';
+    editor.focus();
+    document.execCommand('selectAll');
+    addLog('7. Fresh start: selectAll');
+    var r3 = document.execCommand('bold');
+    addLog('8. bold: ' + r3 + ' innerHTML: ' + editor.innerHTML);
+    // DON'T re-select, just try italic
+    addLog('9. About to italic WITHOUT re-selectAll...');
+    var r4 = document.execCommand('italic');
+    addLog('   italic result: ' + r4 + ' innerHTML: ' + editor.innerHTML);
+
+    addLog('=== Done ===');
+})();
+</script>
+</body>
+</html>

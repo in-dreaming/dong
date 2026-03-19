@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+body { font-family: sans-serif; padding: 20px; }
+#editor {
+    border: 2px solid #333;
+    padding: 16px;
+    min-height: 100px;
+    margin: 10px 0;
+    font-size: 16px;
+    line-height: 1.5;
+}
+</style>
+</head>
+<body>
+<h2>Bold Layout Debug Test</h2>
+
+<div id="editor" contenteditable="true">Hello, this is an editable area. Try typing here!</div>
+
+<div id="log"></div>
+
+<script>
+var editor = document.getElementById('editor');
+var log = document.getElementById('log');
+
+// Select "here" (characters 44-48 in the simplified text)
+// The text is: "Hello, this is an editable area. Try typing here!"
+// "here" starts at index 44
+var sel = window.getSelection();
+var textNode = editor.firstChild;
+if (textNode) {
+    var range = document.createRange();
+    range.setStart(textNode, 44);
+    range.setEnd(textNode, 48);
+    sel.removeAllRanges();
+    sel.addRange(range);
+
+    // Execute bold
+    var result = document.execCommand('bold');
+    log.textContent = 'Bold result: ' + result;
+}
+</script>
+</body>
+</html>

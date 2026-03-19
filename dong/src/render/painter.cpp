@@ -1,5 +1,7 @@
 #include "painter.hpp"
 #include "list_marker.hpp"
+#include "../dom/dialog_element.hpp"
+#include "../dom/selection.hpp"
 #include <cstring>
 #include <iostream>
 #include <cstdint>
@@ -12,6 +14,38 @@
 #include <unordered_set>
 
 #include "painter/painter_style_utils.hpp"
+
+// Forward declaration from painter_backdrop.cpp
+namespace dong::render {
+void paintDialogBackdrop(DisplayListBuilder& builder, float viewport_width, float viewport_height,
+                         const dong::dom::DOMNodePtr& backdrop_pseudo);
+} // namespace dong::render
+
+// Forward declaration from painter_caret.cpp
+namespace dong::render {
+void paintContentEditableCaret(const dom::DOMNodePtr& focused_editable,
+                               const dom::Selection& selection,
+                               layout::Engine* layout_engine,
+                               TextShaper& shaper,
+                               DisplayListBuilder& builder,
+                               bool caret_visible);
+
+void paintSelectionHighlight(const dom::DOMNodePtr& focused_editable,
+                              const dom::Selection& selection,
+                              layout::Engine* layout_engine,
+                              TextShaper& shaper,
+                              DisplayListBuilder& builder);
+
+void paintInputCaret(const dom::DOMNodePtr& input_node,
+                     layout::Engine* layout_engine,
+                     TextShaper& shaper,
+                     DisplayListBuilder& builder);
+
+void paintInputSelectionHighlight(const dom::DOMNodePtr& input_node,
+                                   layout::Engine* layout_engine,
+                                   TextShaper& shaper,
+                                   DisplayListBuilder& builder);
+} // namespace dong::render
 
 #include "../core/log.h"
 #include "../core/profiler.h"
@@ -558,6 +592,17 @@ Painter::Painter(RenderSurface* surface)
 Painter::~Painter() {
 }
 
+void Painter::setEditingState(const dom::DOMNodePtr& focused, const dom::Selection* sel, bool caret_visible) {
+    focused_editable_ = focused;
+    editing_selection_ = sel;
+    caret_visible_ = caret_visible;
+}
+
+void Painter::setInputEditingState(const dom::DOMNodePtr& focused_input, bool caret_visible) {
+    focused_input_ = focused_input;
+    input_caret_visible_ = caret_visible;
+}
+
 const DisplayList& Painter::buildDisplayList(const dom::DOMNodePtr& root, layout::Engine* layout_engine) {
     DONG_PROFILE_FUNCTION();
     
@@ -566,6 +611,7 @@ const DisplayList& Painter::buildDisplayList(const dom::DOMNodePtr& root, layout
     display_list_builder_.clear();
     layer_tree_.clear();
     layer_stack_.clear();
+    top_layer_modals_.clear();
     open_select_overlays_.clear();
 
     gen_.counters.clear();
@@ -577,9 +623,38 @@ const DisplayList& Painter::buildDisplayList(const dom::DOMNodePtr& root, layout
         const auto* layout_root = layout_engine_->getLayout(root);
         if (layout_root) {
             buildDisplayListNode(root, layout_root, display_list_builder_);
+
+            // Paint top-layer modal dialogs (backdrop + dialog) on top of all normal content
+            for (const auto& modal_node : top_layer_modals_) {
+                float vw = surface_ ? static_cast<float>(surface_->getWidth()) : 800.0f;
+                float vh = surface_ ? static_cast<float>(surface_->getHeight()) : 600.0f;
+                dong::render::paintDialogBackdrop(display_list_builder_, vw, vh, modal_node->getPseudoBackdrop());
+                auto* modal_layout = layout_engine_->getLayout(modal_node);
+                if (modal_layout) {
+                    buildDisplayListNode(modal_node, modal_layout, display_list_builder_);
+                }
+            }
+
             paintSelectDropdownOverlays(display_list_builder_);
         }
 
+        // Paint contenteditable selection highlight and caret on top of all content
+        if (focused_editable_ && editing_selection_ && editing_selection_->getRangeCount() > 0) {
+            if (!editing_selection_->isCollapsed()) {
+                paintSelectionHighlight(focused_editable_, *editing_selection_, layout_engine_, text_shaper_, display_list_builder_);
+            }
+            if (caret_visible_ && editing_selection_->isCollapsed()) {
+                paintContentEditableCaret(focused_editable_, *editing_selection_, layout_engine_, text_shaper_, display_list_builder_, true);
+            }
+        }
+
+        // Paint input/textarea selection highlight and caret on top of all content
+        if (focused_input_ && layout_engine_) {
+            paintInputSelectionHighlight(focused_input_, layout_engine_, text_shaper_, display_list_builder_);
+            if (input_caret_visible_) {
+                paintInputCaret(focused_input_, layout_engine_, text_shaper_, display_list_builder_);
+            }
+        }
     }
 
     layout_engine_ = nullptr;
@@ -612,6 +687,24 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
 
     const auto& style = node->getComputedStyle();
     if (style.display == "none") return;
+
+    // Defer modal dialogs to top-layer rendering pass (painted after all normal content)
+    if (node->getTagName() == "dialog") {
+        auto* dstate = dong::dom::getDialogState(node);
+        if (dstate && dstate->isOpen() && dstate->isModal()) {
+            // Only defer if we're in the normal traversal (not the top-layer pass).
+            // Detect top-layer pass by checking if this node is already in top_layer_modals_.
+            bool in_top_layer_pass = false;
+            for (const auto& m : top_layer_modals_) {
+                if (m.get() == node.get()) { in_top_layer_pass = true; break; }
+            }
+            if (!in_top_layer_pass) {
+                top_layer_modals_.push_back(node);
+                return;  // Skip painting now; will be painted in top-layer pass
+            }
+            // If we're in the top-layer pass, continue to paint the dialog normally
+        }
+    }
 
     const bool has_counter_ops = !style.counter_resets.empty() || !style.counter_increments.empty();
 
@@ -702,6 +795,11 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
 
     DisplayListBuilder::ScopedLayer opacity_scope;
     float clamped_opacity = std::clamp(style.opacity, 0.0f, 1.0f);
+
+    // Inert elements are visually dimmed (50% opacity)
+    if (node->hasAttribute("inert")) {
+        clamped_opacity *= 0.5f;
+    }
 
     // layer bounds 用于 isolated layer 的采样与合成，需要落在“最终屏幕坐标系”中。
     // 注意：滚动是通过 DisplayListBuilder 的 translate 实现的，因此这里必须把 translate 计入 bounds。

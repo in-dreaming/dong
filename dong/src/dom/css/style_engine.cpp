@@ -1,6 +1,7 @@
 #include "style_engine.hpp"
 #include "style_engine_internal.hpp"
 #include "../dom/dom_node.hpp"
+#include "../dialog_element.hpp"
 #include "../../render/list_marker.hpp"
 
 #include "../../core/log.h"
@@ -155,7 +156,7 @@ const std::unordered_map<std::string_view, TagStyleHandler> kTagDefaultHandlers 
     {"button", [](ComputedStyle& s) { s.setDisplay("inline-block"); }},
     {"input", [](ComputedStyle& s) { s.setDisplay("inline-block"); }},
     {"select", [](ComputedStyle& s) { s.setDisplay("inline-block"); }},
-    {"textarea", [](ComputedStyle& s) { s.setDisplay("inline-block"); }},
+    {"textarea", [](ComputedStyle& s) { s.setDisplay("inline-block"); s.white_space = "pre-wrap"; s.markExplicitlySet("white-space"); }},
 
     // Media elements (inline-block)
     {"img", [](ComputedStyle& s) { s.setDisplay("inline-block"); }},
@@ -527,7 +528,8 @@ void StyleEngine::computeStyles(DOMNodePtr node) {
                 rule.selector.find(":marker") != std::string::npos ||
                 rule.selector.find("::placeholder") != std::string::npos ||
                 rule.selector.find(":placeholder") != std::string::npos ||
-                rule.selector.find("::selection") != std::string::npos) {
+                rule.selector.find("::selection") != std::string::npos ||
+                rule.selector.find("::backdrop") != std::string::npos) {
                 continue;
             }
             if (matcher_.matches(rule.selector, node)) {
@@ -588,6 +590,86 @@ void StyleEngine::computeStyles(DOMNodePtr node) {
         }
     }
 
+    // <dialog> element: hidden unless open attribute is present
+    if (node->getTagName() == "dialog") {
+        if (!node->hasAttribute("open")) {
+            node->getComputedStyle().display = "none";
+        } else {
+            // Default dialog styles (only when not explicitly styled)
+            auto& cs = node->getComputedStyle();
+
+            // Check if this is a modal dialog
+            auto* state = dong::dom::getDialogState(node);
+            bool is_modal = state && state->isModal();
+
+            if (is_modal) {
+                // Modal dialogs are positioned fixed, centered
+                if (!cs.isExplicitlySet("position")) {
+                    cs.position = "fixed";
+                }
+                if (!cs.isExplicitlySet("top")) {
+                    cs.top = CSSValue(0.0f, CSSValue::Unit::PIXEL);
+                }
+                // Note: do NOT set left/right to 0 — Yoga doesn't support width:fit-content,
+                // so setting all four edges causes the dialog to stretch to full viewport.
+                // Instead, rely on margin:auto for horizontal centering.
+                if (!cs.isExplicitlySet("bottom")) {
+                    cs.bottom = CSSValue(0.0f, CSSValue::Unit::PIXEL);
+                }
+                if (!cs.isExplicitlySet("margin")) {
+                    cs.margin_top = CSSValue(0.0f, CSSValue::Unit::AUTO);
+                    cs.margin_right = CSSValue(0.0f, CSSValue::Unit::AUTO);
+                    cs.margin_bottom = CSSValue(0.0f, CSSValue::Unit::AUTO);
+                    cs.margin_left = CSSValue(0.0f, CSSValue::Unit::AUTO);
+                }
+                if (!cs.isExplicitlySet("max-width")) {
+                    // calc(100% - 2em) equivalent: leave some margin
+                    cs.max_width = CSSValue(90.0f, CSSValue::Unit::PERCENT);
+                }
+                if (!cs.isExplicitlySet("max-height")) {
+                    cs.max_height = CSSValue(90.0f, CSSValue::Unit::PERCENT);
+                }
+            } else {
+                // Non-modal: block display, centered horizontally
+                if (!cs.isExplicitlySet("display")) {
+                    cs.display = "block";
+                }
+                if (!cs.isExplicitlySet("margin")) {
+                    cs.margin_top = CSSValue(1.0f, CSSValue::Unit::EM);
+                    cs.margin_bottom = CSSValue(1.0f, CSSValue::Unit::EM);
+                    cs.margin_left = CSSValue(0.0f, CSSValue::Unit::AUTO);
+                    cs.margin_right = CSSValue(0.0f, CSSValue::Unit::AUTO);
+                }
+            }
+
+            if (!cs.isExplicitlySet("border-style")) {
+                cs.border_style = "solid";
+                cs.border_top_style = "solid";
+                cs.border_right_style = "solid";
+                cs.border_bottom_style = "solid";
+                cs.border_left_style = "solid";
+            }
+            if (!cs.isExplicitlySet("border-width")) {
+                cs.border_width = 1.0f;
+                cs.border_top_width = 1.0f;
+                cs.border_right_width = 1.0f;
+                cs.border_bottom_width = 1.0f;
+                cs.border_left_width = 1.0f;
+            }
+            if (!cs.isExplicitlySet("border-color")) {
+                cs.border_top_color = "#000000"; cs.border_right_color = "#000000";
+                cs.border_bottom_color = "#000000"; cs.border_left_color = "#000000";
+            }
+            if (!cs.isExplicitlySet("padding")) {
+                cs.padding_top = CSSValue(16.0f, CSSValue::Unit::PIXEL); cs.padding_right = CSSValue(16.0f, CSSValue::Unit::PIXEL);
+                cs.padding_bottom = CSSValue(16.0f, CSSValue::Unit::PIXEL); cs.padding_left = CSSValue(16.0f, CSSValue::Unit::PIXEL);
+            }
+            if (!cs.isExplicitlySet("background-color") && cs.background_color == "transparent") {
+                cs.background_color = "#FFFFFF";
+            }
+        }
+    }
+
     // [dir] attribute mapping to CSS direction property
     // Only apply if direction is not explicitly set by CSS
     if (node->hasAttribute("dir") && !computed.isExplicitlySet("direction")) {
@@ -624,6 +706,82 @@ void StyleEngine::recomputeNodeStyle(DOMNodePtr node) {
     applyInlineStyleAttributeIfAny(node);
 
     style_engine_internal::applyLogicalProperties(node->getComputedStyle());
+
+    // Hidden elements
+    static const std::unordered_set<std::string> kAlwaysHiddenTags = {
+        "head", "style", "script", "meta", "title", "link"
+    };
+    if (kAlwaysHiddenTags.count(node->getTagName()) > 0) {
+        node->getComputedStyle().display = "none";
+    }
+    if (node->hasAttribute("hidden")) {
+        node->getComputedStyle().display = "none";
+    }
+
+    // <details> hiding
+    if (auto parent = node->getParent()) {
+        if (parent->getTagName() == "details" &&
+            !parent->hasAttribute("open") &&
+            node->getTagName() != "summary") {
+            node->getComputedStyle().display = "none";
+        }
+    }
+
+    // <dialog> element: hidden unless open attribute is present
+    if (node->getTagName() == "dialog") {
+        if (!node->hasAttribute("open")) {
+            node->getComputedStyle().display = "none";
+        } else {
+            auto& cs = node->getComputedStyle();
+            auto* state = dong::dom::getDialogState(node);
+            bool is_modal = state && state->isModal();
+
+            if (is_modal) {
+                if (!cs.isExplicitlySet("position")) cs.position = "fixed";
+                if (!cs.isExplicitlySet("top")) cs.top = CSSValue(0.0f, CSSValue::Unit::PIXEL);
+                if (!cs.isExplicitlySet("left")) cs.left = CSSValue(0.0f, CSSValue::Unit::PIXEL);
+                if (!cs.isExplicitlySet("right")) cs.right = CSSValue(0.0f, CSSValue::Unit::PIXEL);
+                if (!cs.isExplicitlySet("bottom")) cs.bottom = CSSValue(0.0f, CSSValue::Unit::PIXEL);
+                if (!cs.isExplicitlySet("margin")) {
+                    cs.margin_top = CSSValue(0.0f, CSSValue::Unit::AUTO);
+                    cs.margin_right = CSSValue(0.0f, CSSValue::Unit::AUTO);
+                    cs.margin_bottom = CSSValue(0.0f, CSSValue::Unit::AUTO);
+                    cs.margin_left = CSSValue(0.0f, CSSValue::Unit::AUTO);
+                }
+                if (!cs.isExplicitlySet("max-width")) cs.max_width = CSSValue(90.0f, CSSValue::Unit::PERCENT);
+                if (!cs.isExplicitlySet("max-height")) cs.max_height = CSSValue(90.0f, CSSValue::Unit::PERCENT);
+            } else {
+                if (!cs.isExplicitlySet("display")) cs.display = "block";
+                if (!cs.isExplicitlySet("margin")) {
+                    cs.margin_top = CSSValue(1.0f, CSSValue::Unit::EM);
+                    cs.margin_bottom = CSSValue(1.0f, CSSValue::Unit::EM);
+                    cs.margin_left = CSSValue(0.0f, CSSValue::Unit::AUTO);
+                    cs.margin_right = CSSValue(0.0f, CSSValue::Unit::AUTO);
+                }
+            }
+            if (!cs.isExplicitlySet("border-style")) {
+                cs.border_style = "solid";
+                cs.border_top_style = "solid"; cs.border_right_style = "solid";
+                cs.border_bottom_style = "solid"; cs.border_left_style = "solid";
+            }
+            if (!cs.isExplicitlySet("border-width")) {
+                cs.border_width = 1.0f;
+                cs.border_top_width = 1.0f; cs.border_right_width = 1.0f;
+                cs.border_bottom_width = 1.0f; cs.border_left_width = 1.0f;
+            }
+            if (!cs.isExplicitlySet("border-color")) {
+                cs.border_top_color = "#000000"; cs.border_right_color = "#000000";
+                cs.border_bottom_color = "#000000"; cs.border_left_color = "#000000";
+            }
+            if (!cs.isExplicitlySet("padding")) {
+                cs.padding_top = CSSValue(16.0f, CSSValue::Unit::PIXEL); cs.padding_right = CSSValue(16.0f, CSSValue::Unit::PIXEL);
+                cs.padding_bottom = CSSValue(16.0f, CSSValue::Unit::PIXEL); cs.padding_left = CSSValue(16.0f, CSSValue::Unit::PIXEL);
+            }
+            if (!cs.isExplicitlySet("background-color") && cs.background_color == "transparent") {
+                cs.background_color = "#FFFFFF";
+            }
+        }
+    }
 
     // [dir] attribute mapping to CSS direction property
     // Only apply if direction is not explicitly set by CSS

@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+body { font-family: sans-serif; padding: 20px; }
+button { padding: 8px 16px; margin: 5px; cursor: pointer; }
+dialog { border: 2px solid #333; padding: 20px; }
+#log { margin-top: 10px; padding: 10px; border: 1px solid #ccc; min-height: 50px; }
+</style>
+</head>
+<body>
+<h2>Dialog Show (Non-Modal) Test</h2>
+
+<button id="open-btn">Open Dialog (non-modal)</button>
+<button id="normal-btn" onclick="addLog('Normal button clicked (still works!)')">Normal Button</button>
+
+<dialog id="my-dialog">
+    <h3>Non-Modal Dialog</h3>
+    <p>This dialog does NOT block the rest of the page.</p>
+    <button id="close-btn">Close</button>
+</dialog>
+
+<div id="log"></div>
+
+<script>
+var dialog = document.getElementById('my-dialog');
+var log = document.getElementById('log');
+
+function addLog(msg) {
+    log.textContent += msg + '\n';
+}
+
+document.getElementById('open-btn').addEventListener('click', function() {
+    dialog.show();
+    addLog('Dialog shown (non-modal)');
+});
+
+document.getElementById('close-btn').addEventListener('click', function() {
+    dialog.close();
+    addLog('Dialog closed');
+});
+
+addLog('Non-modal dialog test ready');
+</script>
+</body>
+</html>

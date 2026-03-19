@@ -152,18 +152,20 @@ public:
     ComputedStyle& getComputedStyle() { return computed_style_; }
     const ComputedStyle& getComputedStyle() const { return computed_style_; }
     
-    // Pseudo-elements (::before/::after/::marker/::placeholder/::selection)
+    // Pseudo-elements (::before/::after/::marker/::placeholder/::selection/::backdrop)
     DOMNodePtr getPseudoBefore() const { return pseudo_before_; }
     DOMNodePtr getPseudoAfter() const { return pseudo_after_; }
     DOMNodePtr getPseudoMarker() const { return pseudo_marker_; }
     DOMNodePtr getPseudoPlaceholder() const { return pseudo_placeholder_; }
     DOMNodePtr getPseudoSelection() const { return pseudo_selection_; }
+    DOMNodePtr getPseudoBackdrop() const { return pseudo_backdrop_; }
     void setPseudoBefore(DOMNodePtr node) { pseudo_before_ = node; }
     void setPseudoAfter(DOMNodePtr node) { pseudo_after_ = node; }
     void setPseudoMarker(DOMNodePtr node) { pseudo_marker_ = node; }
     void setPseudoPlaceholder(DOMNodePtr node) { pseudo_placeholder_ = node; }
     void setPseudoSelection(DOMNodePtr node) { pseudo_selection_ = node; }
-    bool hasPseudoElements() const { return pseudo_before_ || pseudo_after_ || pseudo_marker_ || pseudo_placeholder_ || pseudo_selection_; }
+    void setPseudoBackdrop(DOMNodePtr node) { pseudo_backdrop_ = node; }
+    bool hasPseudoElements() const { return pseudo_before_ || pseudo_after_ || pseudo_marker_ || pseudo_placeholder_ || pseudo_selection_ || pseudo_backdrop_; }
     bool isPseudoElement() const { return computed_style_.is_pseudo_element; }
 
     // Layout
@@ -253,6 +255,17 @@ public:
     void focus();
     void blur();
     void click();
+
+    // Inert: returns true if this element or any ancestor has the "inert" attribute,
+    // or if a modal dialog is active and this element is outside it.
+    bool isInert() const;
+
+    // ContentEditable: returns true if this element or any ancestor has contenteditable="true"
+    bool isContentEditable() const;
+
+    // Modal dialog root tracking (set by EngineView when modal dialog is active)
+    static void setModalDialogRoot(DOMNodePtr root) { s_modal_dialog_root_ = root; }
+    static DOMNodePtr getModalDialogRoot() { return s_modal_dialog_root_; }
     
     // Static accessors for focus manager and event dispatcher (set by View)
     static void setFocusManager(class FocusManager* fm) { s_focus_manager_ = fm; }
@@ -362,6 +375,7 @@ protected:
     DOMNodePtr pseudo_marker_;
     DOMNodePtr pseudo_placeholder_;
     DOMNodePtr pseudo_selection_;
+    DOMNodePtr pseudo_backdrop_;
 
     std::unique_ptr<ClassList> class_list_;
     
@@ -374,6 +388,9 @@ protected:
 
     // Pointer capture (mouse-only)
     static DOMNodeWeakPtr s_pointer_capture_;
+
+    // Modal dialog root (for implicit inert)
+    static DOMNodePtr s_modal_dialog_root_;
 };
 
 } // namespace dong::dom

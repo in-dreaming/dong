@@ -161,6 +161,8 @@ void InputElementState::setSelection(size_t start, size_t end) {
     if (selection_start_ > selection_end_) {
         std::swap(selection_start_, selection_end_);
     }
+    // Keep cursor at the end of the selection for keyboard navigation
+    cursor_position_ = selection_end_;
 }
 
 void InputElementState::clearSelection() {

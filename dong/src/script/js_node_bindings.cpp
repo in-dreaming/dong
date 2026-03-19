@@ -3,6 +3,7 @@
 #include "../core/log.h"
 #include "../dom/input_element.hpp"
 #include "../dom/select_element.hpp"
+#include "../dom/dialog_element.hpp"
 
 #include <string>
 #include <algorithm>
@@ -1790,7 +1791,134 @@ void bindHTMLElementProperties(JSContext* ctx, JSValue elem, const dom::DOMNodeP
         DEFINE_GETTER(ctx, elem, "naturalWidth", img_getNaturalWidth);
         DEFINE_GETTER(ctx, elem, "naturalHeight", img_getNaturalHeight);
         DEFINE_GETTER(ctx, elem, "complete", img_getComplete);
+    } else if (tag == "dialog") {
+        // dialog.open getter/setter
+        auto dialog_getOpen = [](JSContext* c, JSValueConst this_val, int, JSValueConst*) -> JSValue {
+            auto node = dong::script::JSBindings::getNodeOpaque(c, this_val);
+            if (!node) return JS_FALSE;
+            return JS_NewBool(c, node->hasAttribute("open"));
+        };
+        auto dialog_setOpen = [](JSContext* c, JSValueConst this_val, int argc, JSValueConst* argv) -> JSValue {
+            auto node = dong::script::JSBindings::getNodeOpaque(c, this_val);
+            if (!node || argc < 1) return JS_UNDEFINED;
+            if (JS_ToBool(c, argv[0])) {
+                node->setAttribute("open", "");
+            } else {
+                node->removeAttribute("open");
+            }
+            return JS_UNDEFINED;
+        };
+        DEFINE_GETTER_SETTER(ctx, elem, "open", dialog_getOpen, dialog_setOpen);
+
+        // dialog.returnValue getter/setter
+        auto dialog_getReturnValue = [](JSContext* c, JSValueConst this_val, int, JSValueConst*) -> JSValue {
+            auto node = dong::script::JSBindings::getNodeOpaque(c, this_val);
+            if (!node) return JS_NewString(c, "");
+            auto* state = dong::dom::getDialogState(node);
+            return JS_NewString(c, state ? state->getReturnValue().c_str() : "");
+        };
+        auto dialog_setReturnValue = [](JSContext* c, JSValueConst this_val, int argc, JSValueConst* argv) -> JSValue {
+            auto node = dong::script::JSBindings::getNodeOpaque(c, this_val);
+            if (!node || argc < 1) return JS_UNDEFINED;
+            auto* state = dong::dom::getDialogState(node);
+            if (state) {
+                const char* val = JS_ToCString(c, argv[0]);
+                // Note: we store via close(), but for setter we just need to store the value
+                // This is a simplification - in full spec, returnValue is a separate property
+                (void)val;
+                if (val) JS_FreeCString(c, val);
+            }
+            return JS_UNDEFINED;
+        };
+        DEFINE_GETTER_SETTER(ctx, elem, "returnValue", dialog_getReturnValue, dialog_setReturnValue);
+
+        // dialog.show()
+        auto dialog_show = [](JSContext* c, JSValueConst this_val, int, JSValueConst*) -> JSValue {
+            auto node = dong::script::JSBindings::getNodeOpaque(c, this_val);
+            if (!node) return JS_UNDEFINED;
+            auto* state = dong::dom::getDialogState(node);
+            if (state && !state->isOpen()) {
+                state->show();
+                node->setAttribute("open", "");
+                node->markStyleDirty();
+                node->markLayoutDirty();
+            }
+            return JS_UNDEFINED;
+        };
+        JS_SetPropertyStr(ctx, elem, "show", JS_NewCFunction(ctx, dialog_show, "show", 0));
+
+        // dialog.showModal()
+        auto dialog_showModal = [](JSContext* c, JSValueConst this_val, int, JSValueConst*) -> JSValue {
+            auto node = dong::script::JSBindings::getNodeOpaque(c, this_val);
+            if (!node) return JS_UNDEFINED;
+            auto* state = dong::dom::getDialogState(node);
+            if (state && !state->isOpen()) {
+                state->showModal();
+                node->setAttribute("open", "");
+                node->markStyleDirty();
+                node->markLayoutDirty();
+            }
+            return JS_UNDEFINED;
+        };
+        JS_SetPropertyStr(ctx, elem, "showModal", JS_NewCFunction(ctx, dialog_showModal, "showModal", 0));
+
+        // dialog.close(returnValue)
+        auto dialog_close = [](JSContext* c, JSValueConst this_val, int argc, JSValueConst* argv) -> JSValue {
+            auto node = dong::script::JSBindings::getNodeOpaque(c, this_val);
+            if (!node) return JS_UNDEFINED;
+            auto* state = dong::dom::getDialogState(node);
+            if (state && state->isOpen()) {
+                std::string rv;
+                if (argc > 0) {
+                    const char* s = JS_ToCString(c, argv[0]);
+                    if (s) { rv = s; JS_FreeCString(c, s); }
+                }
+                state->close(rv);
+                node->removeAttribute("open");
+                node->markStyleDirty();
+                node->markLayoutDirty();
+            }
+            return JS_UNDEFINED;
+        };
+        JS_SetPropertyStr(ctx, elem, "close", JS_NewCFunction(ctx, dialog_close, "close", 1));
     }
+
+    // contentEditable getter/setter (applies to all elements)
+    auto ce_get = [](JSContext* c, JSValueConst this_val, int, JSValueConst*) -> JSValue {
+        auto node = dong::script::JSBindings::getNodeOpaque(c, this_val);
+        if (!node) return JS_NewString(c, "inherit");
+        if (node->hasAttribute("contenteditable")) {
+            std::string val = node->getAttribute("contenteditable");
+            if (val == "false") return JS_NewString(c, "false");
+            return JS_NewString(c, "true");
+        }
+        return JS_NewString(c, "inherit");
+    };
+    auto ce_set = [](JSContext* c, JSValueConst this_val, int argc, JSValueConst* argv) -> JSValue {
+        auto node = dong::script::JSBindings::getNodeOpaque(c, this_val);
+        if (!node || argc < 1) return JS_UNDEFINED;
+        const char* val = JS_ToCString(c, argv[0]);
+        if (!val) return JS_UNDEFINED;
+        std::string v(val);
+        JS_FreeCString(c, val);
+        if (v == "true" || v == "") {
+            node->setAttribute("contenteditable", "true");
+        } else if (v == "false") {
+            node->setAttribute("contenteditable", "false");
+        } else if (v == "inherit") {
+            node->removeAttribute("contenteditable");
+        }
+        return JS_UNDEFINED;
+    };
+    DEFINE_GETTER_SETTER(ctx, elem, "contentEditable", ce_get, ce_set);
+
+    // isContentEditable getter (readonly)
+    auto ice_get = [](JSContext* c, JSValueConst this_val, int, JSValueConst*) -> JSValue {
+        auto node = dong::script::JSBindings::getNodeOpaque(c, this_val);
+        if (!node) return JS_FALSE;
+        return JS_NewBool(c, node->isContentEditable());
+    };
+    DEFINE_GETTER(ctx, elem, "isContentEditable", ice_get);
 }
 
 

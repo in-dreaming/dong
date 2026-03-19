@@ -14,6 +14,7 @@
 // Forward declarations
 namespace dong::dom {
 class FocusManager;
+class Selection;
 }
 
 namespace dong::layout {
@@ -66,6 +67,8 @@ public:
     dong::layout::Engine* layout_engine_;
     dom::EventDispatcher* event_dispatcher_;
     dom::FocusManager* focus_manager_;
+    dom::Selection* selection_ = nullptr;
+    dom::DOMNodePtr last_editable_root_;  // Last focused contenteditable root (for execCommand after focus loss)
 
 
     // Start time for performance.now()

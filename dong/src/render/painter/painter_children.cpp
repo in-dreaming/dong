@@ -456,6 +456,15 @@ void Painter::paintChildrenAndOverlays(const dom::DOMNodePtr& node,
                 continue;
             }
 
+            // Debug: detect if inline child is NOT being skipped in a CE container
+            if (node->isContentEditable() && child->getTagName() == "span" &&
+                child->getComputedStyle().display == "inline") {
+                DONG_LOG_WARN("[CHILDREN-CE] *** INLINE SPAN NOT SKIPPED! tag=%s display=%s inline_rendered=%s ***",
+                              child->getTagName().c_str(),
+                              child->getComputedStyle().display.c_str(),
+                              child->getAttribute("__inline_rendered__").c_str());
+            }
+
             // For each counter-reset in this child, if a previous sibling already
             // pushed that counter at this level, pop it first (replace semantics).
             if (!child->getComputedStyle().counter_resets.empty()) {

@@ -46,6 +46,7 @@ void StyleEngine::processPseudoElements(DOMNodePtr node) {
     std::vector<PseudoRuleRef> marker_rules;
     std::vector<PseudoRuleRef> placeholder_rules;
     std::vector<PseudoRuleRef> selection_rules;
+    std::vector<PseudoRuleRef> backdrop_rules;
 
     for (const auto& sheet : stylesheets_) {
         for (const auto& rule : sheet.getRules()) {
@@ -88,6 +89,15 @@ void StyleEngine::processPseudoElements(DOMNodePtr node) {
                 std::string base_selector = extractBaseSelector(rule.selector, "::selection", ":selection");
                 if (!base_selector.empty() && matcher_.matches(base_selector, node)) {
                     selection_rules.push_back(PseudoRuleRef{&rule});
+                }
+            }
+
+            // ::backdrop (for <dialog> elements)
+            if (node->getTagName() == "dialog" &&
+                rule.selector.find("::backdrop") != std::string::npos) {
+                std::string base_selector = extractBaseSelector(rule.selector, "::backdrop", "::backdrop");
+                if (!base_selector.empty() && matcher_.matches(base_selector, node)) {
+                    backdrop_rules.push_back(PseudoRuleRef{&rule});
                 }
             }
         }
@@ -281,6 +291,23 @@ void StyleEngine::processPseudoElements(DOMNodePtr node) {
     } else {
         node->setPseudoSelection(nullptr);
     }
+
+    // Create ::backdrop pseudo-element for <dialog> elements.
+    // ::backdrop doesn't need `content` — it's automatically generated for modal dialogs.
+    if (node->getTagName() == "dialog" && !backdrop_rules.empty()) {
+        auto [has_backdrop_style, backdrop_style] = buildPseudoStyle(backdrop_rules);
+        if (has_backdrop_style) {
+            auto pseudo = createPseudoElement(node, "backdrop");
+            if (pseudo) {
+                pseudo->getComputedStyle() = backdrop_style;
+                pseudo->getComputedStyle().is_pseudo_element = true;
+                pseudo->getComputedStyle().pseudo_type = "backdrop";
+                node->setPseudoBackdrop(pseudo);
+            }
+        }
+    } else if (node->getTagName() == "dialog") {
+        node->setPseudoBackdrop(nullptr);
+    }
 }
 
 DOMNodePtr StyleEngine::createPseudoElement(DOMNodePtr parent, const std::string& pseudo_type) {
@@ -296,6 +323,6 @@ DOMNodePtr StyleEngine::createPseudoElement(DOMNodePtr parent, const std::string
     return pseudo;
 }
 
-// 优化策略3：重建规则索�?
+// 优化策略3：重建规则索�?
 
 } // namespace dong::dom

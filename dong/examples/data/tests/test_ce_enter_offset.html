@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+body {
+    font-family: sans-serif;
+    font-size: 16px;
+    padding: 20px;
+    background: #f0f0f0;
+}
+.editable {
+    min-height: 40px;
+    padding: 10px;
+    border: 2px solid #888;
+    border-radius: 4px;
+    font-size: 16px;
+    line-height: 1.4;
+    background: white;
+    margin-bottom: 10px;
+}
+.editable:focus {
+    border-color: #4488ff;
+    outline: none;
+}
+label { display: block; margin-bottom: 5px; font-weight: bold; }
+#log {
+    padding: 8px;
+    background: #111;
+    color: #0f0;
+    font-family: monospace;
+    font-size: 12px;
+    height: 120px;
+    overflow: auto;
+    white-space: pre;
+}
+</style>
+</head>
+<body>
+<h3>CE Enter Key Offset Bug Test</h3>
+
+<label>Click before "Try" then press Enter:</label>
+<div class="editable" contenteditable="true" id="e1">这是一个测试ea. Try something here</div>
+
+<label>Pure English baseline:</label>
+<div class="editable" contenteditable="true" id="e2">This is a test ea. Try something here</div>
+
+<div id="log">Ready. Click before "T" in "Try", then press Enter.
+Watch if the split happens at the correct position.</div>
+
+<script>
+var log = document.getElementById('log');
+function addLog(msg) {
+    log.textContent += '\n' + msg;
+    log.scrollTop = log.scrollHeight;
+}
+</script>
+</body>
+</html>

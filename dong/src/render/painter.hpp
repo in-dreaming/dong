@@ -6,6 +6,10 @@
 #include <unordered_map>
 #include "../dom/dom/dom_node.hpp"
 
+namespace dong::dom {
+class Selection;
+}
+
 
 
 #include "../layout/layout_engine.hpp"
@@ -29,6 +33,12 @@ public:
     void setResourceRoot(const std::string& root) { resource_root_ = root; }
     const std::string& getResourceRoot() const { return resource_root_; }
 
+    // Set editing state for contenteditable caret/selection rendering
+    void setEditingState(const dom::DOMNodePtr& focused, const dom::Selection* sel, bool caret_visible = true);
+
+    // Set editing state for input/textarea caret/selection rendering
+    void setInputEditingState(const dom::DOMNodePtr& focused_input, bool caret_visible);
+
     // 访问最近一帧构建好的 DisplayList / LayerTree
     const DisplayList& getDisplayList() const { return display_list_builder_.get(); }
     const LayerTree& getLayerTree() const { return layer_tree_; }
@@ -44,10 +54,21 @@ private:
     bool use_dirty_rect_ = false; // 先关闭基于 DirtyRect 的裁剪，避免与后续图层缓存行为冲突
     std::string resource_root_;  // Base directory for resolving relative image paths
 
+    // Editing state for contenteditable caret/selection rendering
+    dom::DOMNodePtr focused_editable_;
+    const dom::Selection* editing_selection_ = nullptr;
+    bool caret_visible_ = true;
+
+    // Editing state for input/textarea caret/selection rendering
+    dom::DOMNodePtr focused_input_;
+    bool input_caret_visible_ = false;
+
     // DisplayList / LayerTree 构建器
     DisplayListBuilder display_list_builder_;
     LayerTree layer_tree_;
     std::vector<int> layer_stack_;
+    // Top-layer modal dialogs deferred from normal tree traversal
+    std::vector<dom::DOMNodePtr> top_layer_modals_;
     TextShaper text_shaper_;
 
     // Generated content (counter()/counters()/open-quote/close-quote)

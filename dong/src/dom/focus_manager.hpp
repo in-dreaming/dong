@@ -83,11 +83,19 @@ public:
     void setKeyboardFocus(bool is_keyboard) { keyboard_focus_ = is_keyboard; }
     bool isKeyboardFocus() const { return keyboard_focus_; }
 
+    /**
+     * Modal dialog focus trap: restrict Tab cycling to within a dialog subtree.
+     * Pass nullptr to clear the trap.
+     */
+    void setModalDialogRoot(DOMNodePtr dialog) { modal_dialog_root_ = dialog; }
+    DOMNodePtr getModalDialogRoot() const { return modal_dialog_root_; }
+
 private:
     DOMNodePtr focused_element_;
     EventDispatcher* event_dispatcher_ = nullptr;
     FocusChangeCallback focus_change_callback_;
     bool keyboard_focus_ = false; // 焦点是否通过键盘获得
+    DOMNodePtr modal_dialog_root_; // Focus trap root for modal dialog
 
     // 收集所有可聚焦元素（按 tab 顺序）
     void collectFocusableElements(DOMNodePtr node, std::vector<DOMNodePtr>& out);

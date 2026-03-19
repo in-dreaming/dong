@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+body { font-family: sans-serif; padding: 20px; }
+.section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; }
+button { padding: 8px 16px; margin: 5px; cursor: pointer; }
+input { padding: 6px; margin: 5px; }
+a { color: blue; margin: 5px; }
+#log { margin-top: 10px; padding: 10px; border: 1px solid #ccc; min-height: 50px; }
+</style>
+</head>
+<body>
+<h2>Inert Attribute Test</h2>
+
+<div class="section">
+    <h3>Normal (interactive)</h3>
+    <button id="normal-btn" onclick="addLog('normal button clicked')">Normal Button</button>
+    <input id="normal-input" type="text" placeholder="Normal input">
+    <a href="#" id="normal-link" onclick="addLog('normal link clicked'); return false;">Normal Link</a>
+</div>
+
+<div class="section" inert>
+    <h3>Inert Section (should be dimmed, non-interactive)</h3>
+    <button id="inert-btn" onclick="addLog('ERROR: inert button clicked!')">Inert Button</button>
+    <input id="inert-input" type="text" placeholder="Inert input (should not focus)">
+    <a href="#" id="inert-link" onclick="addLog('ERROR: inert link clicked!'); return false;">Inert Link</a>
+</div>
+
+<div id="log"></div>
+
+<script>
+function addLog(msg) {
+    var log = document.getElementById('log');
+    log.textContent += msg + '\n';
+}
+addLog('Inert test ready. Try clicking buttons and tabbing.');
+</script>
+</body>
+</html>
