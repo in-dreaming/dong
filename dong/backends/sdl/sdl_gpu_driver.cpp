@@ -40,6 +40,7 @@
 #include FT_FREETYPE_H
 
 #include "dong_image_atlas.h"
+#include "../../src/render/slug/slug_font_cache.hpp"
 
 namespace dong {
 namespace render {

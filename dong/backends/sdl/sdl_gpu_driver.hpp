@@ -11,6 +11,9 @@
 
 #include <SDL3/SDL_gpu.h>
 
+#include "../../src/render/text_renderer_mode.hpp"
+#include "../../src/render/text_renderer_selector.hpp"
+
 // Forward declaration for ImageAtlas
 struct DongImageAtlas;
 
@@ -19,6 +22,10 @@ typedef struct DongGPUDriver DongGPUDriver;
 
 // SDL types (backend internal use)
 struct SDL_Window;
+
+namespace dong::render::slug {
+class SlugFontCache;
+}
 
 namespace dong {
 namespace sdl_backend {
@@ -243,11 +250,23 @@ private:
     bool ensureImageInAtlas(const std::string& src, ImageAtlasEntry& out_entry);
 
 
-    // Text rendering
+    // Text rendering (MSDF)
     SDL_GPUShader* text_vs_ = nullptr;
     SDL_GPUShader* text_fs_ = nullptr;
     SDL_GPUGraphicsPipeline* text_pipeline_ = nullptr;
     SDL_GPUSampler* text_sampler_ = nullptr;
+
+    // Text rendering (Slug)
+    SDL_GPUShader* slug_text_vs_ = nullptr;
+    SDL_GPUShader* slug_text_fs_ = nullptr;
+    SDL_GPUGraphicsPipeline* slug_text_pipeline_ = nullptr;
+    SDL_GPUSampler* slug_curve_sampler_ = nullptr;
+    SDL_GPUTexture* slug_curve_texture_ = nullptr;
+    SDL_GPUTexture* slug_band_texture_ = nullptr;
+    uint32_t slug_curve_texture_height_ = 0;
+    uint32_t slug_band_texture_height_ = 0;
+    std::unique_ptr<slug::SlugFontCache> slug_font_cache_;
+    TextRendererSelector text_renderer_selector_;
 
     struct GlyphAtlasTier {
         uint32_t bitmap_px = 0;
@@ -292,6 +311,18 @@ private:
     void executeDrawGradient(ExecuteContext& ctx, const GPUCommand& cmd);
     void executeDrawImage(ExecuteContext& ctx, const GPUCommand& cmd);
     void executeDrawText(ExecuteContext& ctx, const GPUCommand& cmd);
+    void executeDrawTextMsdf(ExecuteContext& ctx, const GPUCommand& cmd);
+    void executeDrawTextSlug(ExecuteContext& ctx, const GPUCommand& cmd);
+
+    // Slug initialization and resource management
+    bool initSlugPipeline();
+    void prepareSlugResources(const GPUCommandList& commands);
+    void uploadSlugTextures();
+    void uploadSlugTextureData(SDL_GPUDevice* dev, SDL_GPUTexture* texture,
+                               const void* data, uint32_t width, uint32_t height,
+                               uint32_t texel_size);
+    void uploadSlugBandTextureData(SDL_GPUDevice* dev, SDL_GPUTexture* texture,
+                                    const void* data, uint32_t width, uint32_t height);
 };
 
 // Factory function (backend internal)

@@ -19,6 +19,10 @@
 // ImageAtlas
 #include "dong_image_atlas.h"
 
+#include "../../src/render/slug/slug_font_cache.hpp"
+#include "../../src/render/slug/slug_vertex_builder.hpp"
+#include "../../src/render/slug/slug_types.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -1562,6 +1566,349 @@ void SDLGPUDriver::executeDrawImage(ExecuteContext& ctx, const GPUCommand& cmd) 
 }
 
 void SDLGPUDriver::executeDrawText(ExecuteContext& ctx, const GPUCommand& cmd) {
+    if (!ctx.pass || cmd.glyphs.empty()) return;
+
+    // Resolve text renderer mode for this glyph run
+    auto selection = text_renderer_selector_.resolve(cmd.text_renderer_mode);
+
+    if (selection.resolved == TextRendererMode::Slug && slug_text_pipeline_) {
+        executeDrawTextSlug(ctx, cmd);
+    } else {
+        executeDrawTextMsdf(ctx, cmd);
+    }
+
+    if (selection.fallback_used) {
+        DONG_LOG_DEBUG("[DrawText] Fallback from %s to %s: %s",
+                       textRendererModeToString(selection.requested),
+                       textRendererModeToString(selection.resolved),
+                       selection.reason ? selection.reason : "unknown");
+    }
+}
+
+void SDLGPUDriver::executeDrawTextSlug(ExecuteContext& ctx, const GPUCommand& cmd) {
+    if (!ctx.pass || !slug_text_pipeline_ || !slug_font_cache_ ||
+        !slug_curve_texture_ || !slug_band_texture_ || !slug_curve_sampler_) {
+        DONG_LOG_WARN("[DrawTextSlug] SKIP: missing resources (pass=%p pipe=%p cache=%p curve=%p band=%p sampler=%p)",
+                      (void*)ctx.pass, (void*)slug_text_pipeline_, (void*)slug_font_cache_.get(),
+                      (void*)slug_curve_texture_, (void*)slug_band_texture_, (void*)slug_curve_sampler_);
+        return;
+    }
+    if (cmd.glyphs.empty()) return;
+
+    // Resolve font path
+    std::string resolved_primary;
+    const std::string* default_font_path = nullptr;
+    if (!cmd.font_paths.empty()) {
+        default_font_path = &cmd.font_paths[0];
+    } else if (!cmd.font_path.empty()) {
+        default_font_path = &cmd.font_path;
+    } else {
+        resolved_primary = resolveFontPath(cmd.font_family, cmd.font_weight, cmd.font_style);
+        default_font_path = &resolved_primary;
+    }
+    if (!default_font_path || default_font_path->empty()) return;
+
+    const float font_size = cmd.font_size > 0.0f ? cmd.font_size : 16.0f;
+    const float scale_to_px = cmd.scale_to_pixels;
+
+    // Build per-glyph parameters
+    std::vector<slug::SlugGlyphParams> glyph_params;
+    glyph_params.reserve(cmd.glyphs.size());
+
+    for (const auto& glyph : cmd.glyphs) {
+        if (glyph.glyph_id == 0) continue;
+
+        const std::string* glyph_font = default_font_path;
+        if (!cmd.font_paths.empty() && glyph.font_path_index < cmd.font_paths.size()) {
+            glyph_font = &cmd.font_paths[glyph.font_path_index];
+        }
+
+        const auto* prepared = slug_font_cache_->getGlyph(*glyph_font, glyph.glyph_id);
+        if (!prepared) continue;
+
+        // Slug glyph data is in em-space [0,1] (already normalized by UPM),
+        // so the scale from em-space to screen pixels is simply font_size.
+        // Note: scale_to_px = font_size/UPM is for design-unit coords,
+        // but Slug's bbox/curves are already in em-space (divided by UPM).
+        float slug_scale = font_size;
+        if (glyph.units_per_em > 0 && glyph.units_per_em != cmd.units_per_em) {
+            slug_scale = font_size;  // em-space is already UPM-normalized
+        }
+
+        // Glyph position: pen position in screen coords
+        const float pen_x = glyph.pen_x_units * scale_to_px + cmd.baseline_x;
+        const float pen_y = glyph.pen_y_units * scale_to_px + cmd.baseline_y;
+
+        slug::SlugGlyphParams p;
+        p.prepared = prepared;
+        p.pos_x = pen_x;
+        p.pos_y = pen_y;
+        p.scale = slug_scale;
+        p.color_r = cmd.color.r;
+        p.color_g = cmd.color.g;
+        p.color_b = cmd.color.b;
+        p.color_a = cmd.color.a;
+        glyph_params.push_back(p);
+    }
+
+    if (glyph_params.empty()) return;
+
+    // Build vertex/index mesh
+    auto mesh = slug::buildSlugMesh(glyph_params.data(),
+                                     static_cast<uint32_t>(glyph_params.size()));
+    if (mesh.vertices.empty() || mesh.indices.empty()) return;
+
+    DONG_LOG_DEBUG("[DrawTextSlug] Mesh: %zu verts, %zu indices, %u glyphs",
+                   mesh.vertices.size(), mesh.indices.size(), mesh.glyph_count);
+
+    SDL_GPUDevice* dev = ctx.dev;
+    if (!dev) return;
+
+    // Upload vertex buffer
+    const uint32_t vb_size = static_cast<uint32_t>(mesh.vertices.size() * sizeof(slug::SlugVertex));
+    const uint32_t ib_size = static_cast<uint32_t>(mesh.indices.size() * sizeof(uint16_t));
+
+    SDL_GPUBufferCreateInfo vb_info{};
+    vb_info.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
+    vb_info.size = vb_size;
+    SDL_GPUBuffer* vertex_buffer = SDL_CreateGPUBuffer(dev, &vb_info);
+    if (!vertex_buffer) {
+        DONG_LOG_ERROR("[DrawTextSlug] Failed to create vertex buffer");
+        return;
+    }
+
+    SDL_GPUBufferCreateInfo ib_info{};
+    ib_info.usage = SDL_GPU_BUFFERUSAGE_INDEX;
+    ib_info.size = ib_size;
+    SDL_GPUBuffer* index_buffer = SDL_CreateGPUBuffer(dev, &ib_info);
+    if (!index_buffer) {
+        SDL_ReleaseGPUBuffer(dev, vertex_buffer);
+        DONG_LOG_ERROR("[DrawTextSlug] Failed to create index buffer");
+        return;
+    }
+
+    // Transfer vertex data
+    SDL_GPUTransferBufferCreateInfo xfer_vb_info{};
+    xfer_vb_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+    xfer_vb_info.size = vb_size;
+    SDL_GPUTransferBuffer* xfer_vb = SDL_CreateGPUTransferBuffer(dev, &xfer_vb_info);
+
+    SDL_GPUTransferBufferCreateInfo xfer_ib_info{};
+    xfer_ib_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+    xfer_ib_info.size = ib_size;
+    SDL_GPUTransferBuffer* xfer_ib = SDL_CreateGPUTransferBuffer(dev, &xfer_ib_info);
+
+    if (!xfer_vb || !xfer_ib) {
+        if (xfer_vb) SDL_ReleaseGPUTransferBuffer(dev, xfer_vb);
+        if (xfer_ib) SDL_ReleaseGPUTransferBuffer(dev, xfer_ib);
+        SDL_ReleaseGPUBuffer(dev, vertex_buffer);
+        SDL_ReleaseGPUBuffer(dev, index_buffer);
+        return;
+    }
+
+    void* vb_map = SDL_MapGPUTransferBuffer(dev, xfer_vb, false);
+    void* ib_map = SDL_MapGPUTransferBuffer(dev, xfer_ib, false);
+    if (vb_map) std::memcpy(vb_map, mesh.vertices.data(), vb_size);
+    if (ib_map) std::memcpy(ib_map, mesh.indices.data(), ib_size);
+    SDL_UnmapGPUTransferBuffer(dev, xfer_vb);
+    SDL_UnmapGPUTransferBuffer(dev, xfer_ib);
+
+    // End current render pass to do copy pass
+    SDL_EndGPURenderPass(ctx.pass);
+    ctx.pass = nullptr;
+
+    SDL_GPUCopyPass* copy = SDL_BeginGPUCopyPass(ctx.cmd_buf);
+    if (copy) {
+        SDL_GPUTransferBufferLocation vb_src{};
+        vb_src.transfer_buffer = xfer_vb;
+        vb_src.offset = 0;
+        SDL_GPUBufferRegion vb_dst{};
+        vb_dst.buffer = vertex_buffer;
+        vb_dst.offset = 0;
+        vb_dst.size = vb_size;
+        SDL_UploadToGPUBuffer(copy, &vb_src, &vb_dst, false);
+
+        SDL_GPUTransferBufferLocation ib_src{};
+        ib_src.transfer_buffer = xfer_ib;
+        ib_src.offset = 0;
+        SDL_GPUBufferRegion ib_dst{};
+        ib_dst.buffer = index_buffer;
+        ib_dst.offset = 0;
+        ib_dst.size = ib_size;
+        SDL_UploadToGPUBuffer(copy, &ib_src, &ib_dst, false);
+
+        SDL_EndGPUCopyPass(copy);
+    }
+
+    SDL_ReleaseGPUTransferBuffer(dev, xfer_vb);
+    SDL_ReleaseGPUTransferBuffer(dev, xfer_ib);
+
+    // Re-begin render pass
+    RenderTargetState& rt = ctx.render_target_stack.back();
+    SDL_GPUColorTargetInfo color_target{};
+    color_target.texture = rt.texture;
+    color_target.load_op = SDL_GPU_LOADOP_LOAD;
+    color_target.store_op = SDL_GPU_STOREOP_STORE;
+
+    ctx.pass = SDL_BeginGPURenderPass(ctx.cmd_buf, &color_target, 1, nullptr);
+    if (!ctx.pass) {
+        SDL_ReleaseGPUBuffer(dev, vertex_buffer);
+        SDL_ReleaseGPUBuffer(dev, index_buffer);
+        return;
+    }
+
+    SDL_GPUViewport viewport{};
+    viewport.x = 0.0f;
+    viewport.y = 0.0f;
+    viewport.w = static_cast<float>(rt.width);
+    viewport.h = static_cast<float>(rt.height);
+    viewport.min_depth = 0.0f;
+    viewport.max_depth = 1.0f;
+    SDL_SetGPUViewport(ctx.pass, &viewport);
+    ctx.applyScissor(ctx.pass);
+    ctx.pipeline_state.reset();
+
+    // Build MVP matrix for 2D orthographic projection
+    const float* transform = ctx.getCurrentTransform();
+    auto [vw, vh] = ctx.currentViewport();
+
+    // Construct full MVP: transform -> NDC
+    // The transform maps to screen coords, then we convert to NDC
+    struct SlugVertexUniforms {
+        float slug_matrix[4][4];
+        float slug_viewport[4];
+        float clip_rects[4][4];
+        float clip_radii[4];
+        float clip_meta[4];
+    };
+
+    SlugVertexUniforms vu{};
+
+    // Build 4x4 MVP matrix from 2D affine transform + orthographic projection
+    // Screen coords -> NDC: x_ndc = (x / vw) * 2 - 1, y_ndc = 1 - (y / vh) * 2
+    // Combined with affine transform [a b tx; c d ty]:
+    //   screen_x = a*x + b*y + tx
+    //   screen_y = c*x + d*y + ty
+    // Then to NDC:
+    //   ndc_x = (screen_x / vw) * 2 - 1 = (2a/vw)*x + (2b/vw)*y + (2tx/vw - 1)
+    //   ndc_y = 1 - (screen_y / vh) * 2 = (-2c/vh)*x + (-2d/vh)*y + (1 - 2ty/vh)
+
+    const float a = transform[0], b = transform[1], tx = transform[2];
+    const float c = transform[3], d = transform[4], ty = transform[5];
+
+    // Row 0 (x): ndc_x = (2a/vw)*x + (2b/vw)*y + 0*z + (2tx/vw - 1)
+    vu.slug_matrix[0][0] = 2.0f * a / vw;
+    vu.slug_matrix[0][1] = 2.0f * b / vw;
+    vu.slug_matrix[0][2] = 0.0f;
+    vu.slug_matrix[0][3] = 2.0f * tx / vw - 1.0f;
+
+    // Row 1 (y): ndc_y = (-2c/vh)*x + (-2d/vh)*y + 0*z + (1 - 2ty/vh)
+    vu.slug_matrix[1][0] = -2.0f * c / vh;
+    vu.slug_matrix[1][1] = -2.0f * d / vh;
+    vu.slug_matrix[1][2] = 0.0f;
+    vu.slug_matrix[1][3] = 1.0f - 2.0f * ty / vh;
+
+    // Row 2 (z): identity z passthrough
+    vu.slug_matrix[2][0] = 0.0f;
+    vu.slug_matrix[2][1] = 0.0f;
+    vu.slug_matrix[2][2] = 1.0f;
+    vu.slug_matrix[2][3] = 0.0f;
+
+    // Row 3 (w): w=1 for all vertices
+    vu.slug_matrix[3][0] = 0.0f;
+    vu.slug_matrix[3][1] = 0.0f;
+    vu.slug_matrix[3][2] = 0.0f;
+    vu.slug_matrix[3][3] = 1.0f;
+
+    vu.slug_viewport[0] = vw;
+    vu.slug_viewport[1] = vh;
+    vu.slug_viewport[2] = 0.0f;
+    vu.slug_viewport[3] = 0.0f;
+
+    // Fill clip data
+    ClipUniformBlock clip_block{};
+    ctx.fillClipUniform(clip_block);
+    for (int i = 0; i < 4; i++) {
+        for (int j = 0; j < 4; j++) {
+            vu.clip_rects[i][j] = clip_block.clip_rects[i][j];
+        }
+        vu.clip_radii[i] = clip_block.clip_radii[i];
+    }
+    for (int i = 0; i < 4; i++) {
+        vu.clip_meta[i] = clip_block.clip_meta[i];
+    }
+
+    // Fragment uniforms (clip data)
+    struct SlugFragUniforms {
+        float viewport[4];
+        float clip_rects[4][4];
+        float clip_radii[4];
+        float clip_meta[4];
+        float texture_sizes[4]; // x=curveTexW, y=curveTexH, z=bandTexW, w=bandTexH
+    };
+
+    SlugFragUniforms fu{};
+    fu.viewport[0] = vw;
+    fu.viewport[1] = vh;
+    fu.viewport[2] = 0.0f;
+    fu.viewport[3] = 0.0f;
+    for (int i = 0; i < 4; i++) {
+        for (int j = 0; j < 4; j++) {
+            fu.clip_rects[i][j] = clip_block.clip_rects[i][j];
+        }
+        fu.clip_radii[i] = clip_block.clip_radii[i];
+    }
+    for (int i = 0; i < 4; i++) {
+        fu.clip_meta[i] = clip_block.clip_meta[i];
+    }
+    // Fill texture sizes for SampleLevel-based texel fetch
+    fu.texture_sizes[0] = static_cast<float>(slug_font_cache_->getCurveTextureWidth());
+    fu.texture_sizes[1] = static_cast<float>(slug_curve_texture_height_);
+    fu.texture_sizes[2] = static_cast<float>(slug_font_cache_->getBandTextureWidth());
+    fu.texture_sizes[3] = static_cast<float>(slug_band_texture_height_);
+
+    // Bind pipeline
+    SDL_BindGPUGraphicsPipeline(ctx.pass, slug_text_pipeline_);
+
+    // Push uniforms
+    SDL_PushGPUVertexUniformData(ctx.cmd_buf, 0, &vu, sizeof(vu));
+    SDL_PushGPUFragmentUniformData(ctx.cmd_buf, 0, &fu, sizeof(fu));
+
+    // Bind vertex and index buffers
+    SDL_GPUBufferBinding vb_binding{};
+    vb_binding.buffer = vertex_buffer;
+    vb_binding.offset = 0;
+    SDL_BindGPUVertexBuffers(ctx.pass, 0, &vb_binding, 1);
+
+    SDL_GPUBufferBinding ib_binding{};
+    ib_binding.buffer = index_buffer;
+    ib_binding.offset = 0;
+    SDL_BindGPUIndexBuffer(ctx.pass, &ib_binding, SDL_GPU_INDEXELEMENTSIZE_16BIT);
+
+    // Bind textures
+    SDL_GPUTextureSamplerBinding tex_bindings[2]{};
+    tex_bindings[0].texture = slug_curve_texture_;
+    tex_bindings[0].sampler = slug_curve_sampler_;
+    tex_bindings[1].texture = slug_band_texture_;
+    tex_bindings[1].sampler = slug_curve_sampler_;
+    SDL_BindGPUFragmentSamplers(ctx.pass, 0, tex_bindings, 2);
+
+    // Draw indexed
+    SDL_DrawGPUIndexedPrimitives(ctx.pass,
+                                  static_cast<Uint32>(mesh.indices.size()),
+                                  1, 0, 0, 0);
+
+    // Release GPU buffers after draw (they're consumed this frame)
+    SDL_ReleaseGPUBuffer(dev, vertex_buffer);
+    SDL_ReleaseGPUBuffer(dev, index_buffer);
+
+    DONG_LOG_DEBUG("[DrawTextSlug] Drew %u glyphs (%zu vertices, %zu indices)",
+                   mesh.glyph_count,
+                   mesh.vertices.size(),
+                   mesh.indices.size());
+}
+
+void SDLGPUDriver::executeDrawTextMsdf(ExecuteContext& ctx, const GPUCommand& cmd) {
     // Note: When GlobalShared glyph atlas is enabled, `glyph_atlas_tiers_` is intentionally empty.
     // We must not early-return on that; atlas selection is handled by getGlyphAtlasForFontSize().
     if (!ctx.pass || !text_pipeline_ || cmd.glyphs.empty()) {

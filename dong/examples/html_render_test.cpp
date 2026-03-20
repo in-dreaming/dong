@@ -798,6 +798,26 @@ int main(int argc, char* argv[]) {
     }
 
 
+    // Apply text renderer mode from environment variable
+    if (const char* tr_env = std::getenv("DONG_TEXT_RENDERER")) {
+        std::string tr_val(tr_env);
+        while (!tr_val.empty() && (tr_val.back() == ' ' || tr_val.back() == '\t'))
+            tr_val.pop_back();
+        std::transform(tr_val.begin(), tr_val.end(), tr_val.begin(),
+                       [](unsigned char c){ return static_cast<char>(std::tolower(c)); });
+
+        dong_text_renderer_mode_t tr_mode = DONG_TEXT_RENDERER_AUTO;
+        if (tr_val == "slug") {
+            tr_mode = DONG_TEXT_RENDERER_SLUG;
+        } else if (tr_val == "msdf") {
+            tr_mode = DONG_TEXT_RENDERER_MSDF;
+        }
+        dong_engine_set_text_renderer_mode(engine, tr_mode);
+        SDL_Log("[Config] Text renderer mode: %s (from DONG_TEXT_RENDERER='%s')",
+                tr_mode == DONG_TEXT_RENDERER_SLUG ? "Slug" :
+                tr_mode == DONG_TEXT_RENDERER_MSDF ? "MSDF" : "Auto", tr_val.c_str());
+    }
+
     if (dong_engine_load_html(engine, html_content.c_str()) != DONG_OK) {
         SDL_Log("ERROR: Failed to load HTML");
         dong_engine_destroy(engine);

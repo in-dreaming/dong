@@ -12,6 +12,9 @@
 #include "../../src/render/resource_manager.hpp"
 #include "../../src/render/glyph_atlas.hpp"
 #include "../../src/render/font_resolver.hpp"
+#include "../../src/render/slug/slug_font_cache.hpp"
+#include "../../src/render/slug/slug_types.hpp"
+#include "../../src/render/text_renderer_selector.hpp"
 #include "../../src/core/log.h"
 #include "../../src/core/profiler.h"
 
@@ -124,6 +127,11 @@ void SDLGPUDriver::prepareResources(const GPUCommandList& commands) {
     // WORKAROUND: SDL3 waitForGPU() causes deadlock in upload context
     // Instead, we rely on command buffer submission order to ensure uploads complete before draws
     // The GPU will execute uploads before subsequent render passes
+
+    // Prepare Slug resources (if Slug mode is active for any command)
+    if (slug_font_cache_ && slug_text_pipeline_) {
+        prepareSlugResources(commands);
+    }
 
     DONG_LOG_DEBUG("[prepareResources] END frame=%llu", frame_index_ + 1);
 }
@@ -579,6 +587,291 @@ bool SDLGPUDriver::uploadTextureSubrectRGBA(SDL_GPUTexture* texture,
     return true;
 }
 
+// =============================================================================
+// Slug texture upload helpers
+// =============================================================================
+
+void SDLGPUDriver::uploadSlugTextureData(SDL_GPUDevice* dev,
+                                          SDL_GPUTexture* texture,
+                                          const void* data,
+                                          uint32_t width,
+                                          uint32_t height,
+                                          uint32_t texel_size) {
+    if (!dev || !texture || !data || width == 0 || height == 0) return;
+
+    const uint32_t row_bytes = width * texel_size;
+    const uint64_t total_bytes = static_cast<uint64_t>(row_bytes) * height;
+
+    UploadBuffer upload = acquireUploadBuffer(dev, static_cast<uint32_t>(total_bytes));
+    if (!upload.buf) {
+        DONG_LOG_ERROR("[SlugUpload] Failed to acquire upload buffer (%llu bytes)",
+                       static_cast<unsigned long long>(total_bytes));
+        return;
+    }
+
+    auto* transfer = static_cast<SDL_GPUTransferBuffer*>(upload.buf);
+    void* mapped = SDL_MapGPUTransferBuffer(dev, transfer, false);
+    if (!mapped) {
+        free_upload_buffers_.push_back(upload);
+        return;
+    }
+
+    std::memcpy(mapped, data, static_cast<size_t>(total_bytes));
+    SDL_UnmapGPUTransferBuffer(dev, transfer);
+
+    bool temp_cmd = false;
+    SDL_GPUCommandBuffer* cmd = acquireCommandBufferForUploads(dev, temp_cmd);
+    if (!cmd) {
+        free_upload_buffers_.push_back(upload);
+        return;
+    }
+
+    SDL_GPUCopyPass* copy_pass = SDL_BeginGPUCopyPass(cmd);
+    if (!copy_pass) {
+        free_upload_buffers_.push_back(upload);
+        if (temp_cmd) submitStandaloneUploadCommandBuffer(dev, cmd);
+        return;
+    }
+
+    SDL_GPUTextureTransferInfo src_info{};
+    src_info.transfer_buffer = transfer;
+    src_info.offset = 0;
+    src_info.pixels_per_row = width;
+    src_info.rows_per_layer = height;
+
+    SDL_GPUTextureRegion dst_info{};
+    dst_info.texture = texture;
+    dst_info.x = 0;
+    dst_info.y = 0;
+    dst_info.w = width;
+    dst_info.h = height;
+    dst_info.d = 1;
+
+    SDL_UploadToGPUTexture(copy_pass, &src_info, &dst_info, false);
+    SDL_EndGPUCopyPass(copy_pass);
+
+    frame_upload_buffers_.push_back(upload);
+    if (temp_cmd) submitStandaloneUploadCommandBuffer(dev, cmd);
+}
+
+void SDLGPUDriver::uploadSlugBandTextureData(SDL_GPUDevice* dev,
+                                               SDL_GPUTexture* texture,
+                                               const void* data,
+                                               uint32_t width,
+                                               uint32_t height) {
+    if (!dev || !texture || !data || width == 0 || height == 0) return;
+
+    // BandTexel is 4 bytes (2 × uint16), but band texture format is R32G32B32A32_UINT.
+    // We need to expand BandTexel (2×uint16) into uint4 (4×uint32) for each texel.
+    const auto* band_texels = static_cast<const slug::BandTexel*>(data);
+    const uint32_t texel_count = width * height;
+
+    // Each GPU texel is 4 × uint32 = 16 bytes
+    const uint32_t gpu_texel_size = 16;
+    const uint64_t total_bytes = static_cast<uint64_t>(gpu_texel_size) * texel_count;
+
+    UploadBuffer upload = acquireUploadBuffer(dev, static_cast<uint32_t>(total_bytes));
+    if (!upload.buf) {
+        DONG_LOG_ERROR("[SlugUpload] Failed to acquire band upload buffer (%llu bytes)",
+                       static_cast<unsigned long long>(total_bytes));
+        return;
+    }
+
+    auto* transfer = static_cast<SDL_GPUTransferBuffer*>(upload.buf);
+    void* mapped = SDL_MapGPUTransferBuffer(dev, transfer, false);
+    if (!mapped) {
+        free_upload_buffers_.push_back(upload);
+        return;
+    }
+
+    // Expand BandTexel (uint16[2]) -> float[4].
+    // Store integer values as actual floats (e.g. 5 -> 5.0f).
+    // Shader reads via uint(texel.x) to recover the original integer values.
+    auto* dst = static_cast<float*>(mapped);
+    for (uint32_t i = 0; i < texel_count; i++) {
+        dst[i * 4 + 0] = static_cast<float>(band_texels[i].u[0]);
+        dst[i * 4 + 1] = static_cast<float>(band_texels[i].u[1]);
+        dst[i * 4 + 2] = 0.0f;
+        dst[i * 4 + 3] = 0.0f;
+    }
+    SDL_UnmapGPUTransferBuffer(dev, transfer);
+
+    bool temp_cmd = false;
+    SDL_GPUCommandBuffer* cmd = acquireCommandBufferForUploads(dev, temp_cmd);
+    if (!cmd) {
+        free_upload_buffers_.push_back(upload);
+        return;
+    }
+
+    SDL_GPUCopyPass* copy_pass = SDL_BeginGPUCopyPass(cmd);
+    if (!copy_pass) {
+        free_upload_buffers_.push_back(upload);
+        if (temp_cmd) submitStandaloneUploadCommandBuffer(dev, cmd);
+        return;
+    }
+
+    SDL_GPUTextureTransferInfo src_info{};
+    src_info.transfer_buffer = transfer;
+    src_info.offset = 0;
+    src_info.pixels_per_row = width;
+    src_info.rows_per_layer = height;
+
+    SDL_GPUTextureRegion dst_info{};
+    dst_info.texture = texture;
+    dst_info.x = 0;
+    dst_info.y = 0;
+    dst_info.w = width;
+    dst_info.h = height;
+    dst_info.d = 1;
+
+    SDL_UploadToGPUTexture(copy_pass, &src_info, &dst_info, false);
+    SDL_EndGPUCopyPass(copy_pass);
+
+    frame_upload_buffers_.push_back(upload);
+    if (temp_cmd) submitStandaloneUploadCommandBuffer(dev, cmd);
+}
+
+// =============================================================================
+// Slug resource preparation and texture upload
+// =============================================================================
+
+void SDLGPUDriver::prepareSlugResources(const GPUCommandList& commands) {
+    if (!slug_font_cache_) return;
+
+    uint32_t text_cmd_count = 0;
+    uint32_t slug_cmd_count = 0;
+
+    // Collect all glyphs that need Slug preparation
+    for (const auto& cmd : commands.commands) {
+        if (cmd.type != GPUCommandType::DrawText) continue;
+        if (cmd.glyphs.empty()) continue;
+        text_cmd_count++;
+
+        // Only prepare for Slug-mode commands
+        auto selection = text_renderer_selector_.resolve(cmd.text_renderer_mode);
+        DONG_LOG_DEBUG("[SlugPrepare] cmd text_renderer_mode=%d resolved=%d slug_available=%d",
+                       static_cast<int>(cmd.text_renderer_mode),
+                       static_cast<int>(selection.resolved),
+                       text_renderer_selector_.isSlugAvailable() ? 1 : 0);
+        if (selection.resolved != TextRendererMode::Slug) continue;
+        slug_cmd_count++;
+
+        std::string resolved_primary;
+        const std::string* font_path = nullptr;
+        if (!cmd.font_paths.empty()) {
+            font_path = &cmd.font_paths[0];
+        } else if (!cmd.font_path.empty()) {
+            font_path = &cmd.font_path;
+        } else {
+            resolved_primary = resolveFontPath(cmd.font_family, cmd.font_weight, cmd.font_style);
+            font_path = &resolved_primary;
+        }
+        if (!font_path || font_path->empty()) continue;
+
+        for (const auto& glyph : cmd.glyphs) {
+            if (glyph.glyph_id == 0) continue;
+            const std::string* glyph_font = font_path;
+            if (!cmd.font_paths.empty() && glyph.font_path_index < cmd.font_paths.size()) {
+                glyph_font = &cmd.font_paths[glyph.font_path_index];
+            }
+            slug_font_cache_->prepareGlyph(*glyph_font, glyph.glyph_id);
+        }
+    }
+
+    DONG_LOG_INFO("[SlugPrepare] text_cmds=%u slug_cmds=%u", text_cmd_count, slug_cmd_count);
+
+    // Upload textures if dirty
+    if (slug_font_cache_->isCurveTextureDirty() || slug_font_cache_->isBandTextureDirty()) {
+        uploadSlugTextures();
+    }
+}
+
+void SDLGPUDriver::uploadSlugTextures() {
+    if (!gpu_device_ || !gpu_device_->isInitialized() || !slug_font_cache_) return;
+
+    SDL_GPUDevice* dev = gpu_device_->getHandle();
+    if (!dev) return;
+
+    // Upload curve texture (RGBA32_FLOAT)
+    if (slug_font_cache_->isCurveTextureDirty()) {
+        const auto& data = slug_font_cache_->getCurveTextureData();
+        const uint32_t width = slug_font_cache_->getCurveTextureWidth();
+        const uint32_t height = slug_font_cache_->getCurveTextureHeight();
+
+        if (height > 0 && !data.empty()) {
+            if (!slug_curve_texture_ || slug_curve_texture_height_ < height) {
+                if (slug_curve_texture_) {
+                    SDL_ReleaseGPUTexture(dev, slug_curve_texture_);
+                }
+                uint32_t alloc_h = std::max(height, slug_curve_texture_height_ * 2u);
+                alloc_h = std::max(alloc_h, 64u);
+
+                SDL_GPUTextureCreateInfo tex_info{};
+                tex_info.type = SDL_GPU_TEXTURETYPE_2D;
+                tex_info.format = SDL_GPU_TEXTUREFORMAT_R32G32B32A32_FLOAT;
+                tex_info.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+                tex_info.width = width;
+                tex_info.height = alloc_h;
+                tex_info.layer_count_or_depth = 1;
+                tex_info.num_levels = 1;
+                tex_info.sample_count = SDL_GPU_SAMPLECOUNT_1;
+
+                slug_curve_texture_ = SDL_CreateGPUTexture(dev, &tex_info);
+                if (!slug_curve_texture_) {
+                    DONG_LOG_ERROR("[SlugResources] Failed to create curve texture: %s", SDL_GetError());
+                    return;
+                }
+                slug_curve_texture_height_ = alloc_h;
+                DONG_LOG_INFO("[SlugResources] Created curve texture %ux%u", width, alloc_h);
+            }
+
+            uploadSlugTextureData(dev, slug_curve_texture_, data.data(),
+                                  width, height, sizeof(slug::CurveTexel));
+        }
+    }
+
+    // Upload band texture (RGBA32_UINT)
+    if (slug_font_cache_->isBandTextureDirty()) {
+        const auto& data = slug_font_cache_->getBandTextureData();
+        const uint32_t width = slug_font_cache_->getBandTextureWidth();
+        const uint32_t height = slug_font_cache_->getBandTextureHeight();
+
+        if (height > 0 && !data.empty()) {
+            if (!slug_band_texture_ || slug_band_texture_height_ < height) {
+                if (slug_band_texture_) {
+                    SDL_ReleaseGPUTexture(dev, slug_band_texture_);
+                }
+                uint32_t alloc_h = std::max(height, slug_band_texture_height_ * 2u);
+                alloc_h = std::max(alloc_h, 64u);
+
+                SDL_GPUTextureCreateInfo tex_info{};
+                tex_info.type = SDL_GPU_TEXTURETYPE_2D;
+                tex_info.format = SDL_GPU_TEXTUREFORMAT_R32G32B32A32_FLOAT;
+                tex_info.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+                tex_info.width = width;
+                tex_info.height = alloc_h;
+                tex_info.layer_count_or_depth = 1;
+                tex_info.num_levels = 1;
+                tex_info.sample_count = SDL_GPU_SAMPLECOUNT_1;
+
+                slug_band_texture_ = SDL_CreateGPUTexture(dev, &tex_info);
+                if (!slug_band_texture_) {
+                    DONG_LOG_ERROR("[SlugResources] Failed to create band texture: %s", SDL_GetError());
+                    return;
+                }
+                slug_band_texture_height_ = alloc_h;
+                DONG_LOG_INFO("[SlugResources] Created band texture %ux%u", width, alloc_h);
+            }
+
+            uploadSlugBandTextureData(dev, slug_band_texture_, data.data(),
+                                      width, height);
+        }
+    }
+
+    slug_font_cache_->clearDirtyFlags();
+}
+
 } // namespace render
 } // namespace dong
+
 

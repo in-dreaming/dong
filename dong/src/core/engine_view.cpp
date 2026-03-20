@@ -444,6 +444,9 @@ struct EngineView::Impl {
     bool video_dom_has_any = false;
     double last_wall_time_sec = 0.0;
 
+    // Text renderer mode (Auto / MSDF / Slug)
+    dong::render::TextRendererMode text_renderer_mode = dong::render::TextRendererMode::Auto;
+
 
     int32_t last_mouse_x = 0;
     int32_t last_mouse_y = 0;
@@ -1518,6 +1521,7 @@ struct EngineView::Impl {
                     else
                         painter->setInputEditingState(nullptr, false);
                 }
+                painter->setTextRendererMode(text_renderer_mode);
                 painter->buildDisplayList(root2, layout_engine.get());
             }
         }
@@ -1799,6 +1803,7 @@ struct EngineView::Impl {
                 else
                     painter->setInputEditingState(nullptr, false);
             }
+            painter->setTextRendererMode(text_renderer_mode);
             painter->buildDisplayList(root, layout_engine.get());
             markNeedsRepaint();
         }
@@ -1879,6 +1884,7 @@ struct EngineView::Impl {
             else
                 painter->setInputEditingState(nullptr, false);
         }
+        painter->setTextRendererMode(text_renderer_mode);
         painter->buildDisplayList(root, layout_engine.get());
         const auto& dl = painter->getDisplayList();
         DONG_LOG_DEBUG("[tick] DisplayList items: %zu", dl.items.size());
@@ -3712,6 +3718,16 @@ void EngineView::setViewName(const char* name) {
 
 dong::script::ScriptEngine* EngineView::getScriptEngine() const {
     return impl_ ? impl_->script_engine : nullptr;
+}
+
+void EngineView::setTextRendererMode(render::TextRendererMode mode) {
+    if (impl_) {
+        impl_->text_renderer_mode = mode;
+    }
+}
+
+render::TextRendererMode EngineView::getTextRendererMode() const {
+    return impl_ ? impl_->text_renderer_mode : render::TextRendererMode::Auto;
 }
 
 } // namespace dong

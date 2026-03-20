@@ -105,6 +105,9 @@ struct GPUCommand {
     Color text_shadow_color;
     bool has_text_shadow = false;
 
+    // Text renderer mode preference
+    TextRendererMode text_renderer_mode = TextRendererMode::Auto;
+
     // Gradient rendering (DrawGradientQuad only)
     float gradient_angle_deg = 180.0f;
     int gradient_stop_count = 0;
@@ -418,6 +421,7 @@ public:
                 cmd.text_shadow_offset_y = item.glyph_run.text_shadow_offset_y;
                 cmd.text_shadow_blur = item.glyph_run.text_shadow_blur;
                 cmd.text_shadow_color = apply_opacity(item.glyph_run.text_shadow_color, current_opacity());
+                cmd.text_renderer_mode = item.glyph_run.text_renderer_mode;
                 cmd.sort_key = make_sort_key(cmd.type, cmd);
                 out.commands.push_back(cmd);
                 text_count++;

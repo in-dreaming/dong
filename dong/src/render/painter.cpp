@@ -614,6 +614,9 @@ const DisplayList& Painter::buildDisplayList(const dom::DOMNodePtr& root, layout
     top_layer_modals_.clear();
     open_select_overlays_.clear();
 
+    // Propagate text renderer mode preference to the display list builder
+    display_list_builder_.setDefaultTextRendererMode(text_renderer_mode_);
+
     gen_.counters.clear();
     gen_.pushed_names_stack.clear();
     gen_.quote_depth = 0;

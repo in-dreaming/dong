@@ -2,6 +2,7 @@
 #include "dong.h"
 
 #include "core/engine_view.hpp"
+#include "render/text_renderer_mode.hpp"
 
 #include <cstdio>
 #include <memory>
@@ -277,6 +278,26 @@ void dong_engine_invalidate_commands(dong_engine_t* engine) {
 
 uint32_t dong_get_api_version(void) {
     return DONG_API_VERSION;
+}
+
+dong_result_t dong_engine_set_text_renderer_mode(dong_engine_t* engine,
+                                                  dong_text_renderer_mode_t mode) {
+    auto* e = asEngine(engine);
+    if (!e || !e->view) {
+        return DONG_ERR_INVALID_ARG;
+    }
+
+    e->view->setTextRendererMode(static_cast<dong::render::TextRendererMode>(mode));
+    return DONG_OK;
+}
+
+dong_text_renderer_mode_t dong_engine_get_text_renderer_mode(dong_engine_t* engine) {
+    auto* e = asEngine(engine);
+    if (!e || !e->view) {
+        return DONG_TEXT_RENDERER_AUTO;
+    }
+
+    return static_cast<dong_text_renderer_mode_t>(e->view->getTextRendererMode());
 }
 
 dong_result_t dong_engine_create_shared_js(

@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "../core/log.h"
+#include "text_renderer_mode.hpp"
 
 
 namespace dong::render {
@@ -119,6 +120,9 @@ struct DrawGlyphRunData {
     float text_shadow_blur = 0.0f;
     Color text_shadow_color;
     bool has_text_shadow = false;
+
+    // Text renderer backend preference
+    TextRendererMode text_renderer_mode = TextRendererMode::Auto;
 };
 
 struct ClipData {
@@ -347,6 +351,10 @@ public:
         data.rect = applyTranslate(data.rect);
         data.baseline_x += translate_x_;
         data.baseline_y += translate_y_;
+        // Propagate default text renderer mode if not explicitly set
+        if (data.text_renderer_mode == TextRendererMode::Auto) {
+            data.text_renderer_mode = default_text_renderer_mode_;
+        }
         item.glyph_run = std::move(data);
         DONG_LOG_DEBUG("[DisplayListBuilder] addGlyphRun: glyphs=%zu baseline=(%.1f,%.1f) font='%s'",
                       item.glyph_run.glyphs.size(),
@@ -354,6 +362,11 @@ public:
                       item.glyph_run.baseline_y,
                       item.glyph_run.font_family.c_str());
         list_.items.push_back(std::move(item));
+    }
+
+    // Set the default text renderer mode for all subsequent glyph runs.
+    void setDefaultTextRendererMode(TextRendererMode mode) {
+        default_text_renderer_mode_ = mode;
     }
 
     ScopedLayer pushLayer(float opacity,
@@ -479,6 +492,7 @@ private:
     float translate_x_ = 0.0f;
     float translate_y_ = 0.0f;
     std::vector<std::pair<float, float>> translate_stack_;
+    TextRendererMode default_text_renderer_mode_ = TextRendererMode::Auto;
 };
 
 } // namespace dong::render

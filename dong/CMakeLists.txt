@@ -184,6 +184,11 @@ add_library(dong SHARED
     src/render/text_shaper.cpp
     src/render/font_metrics.cpp
     src/render/list_marker.cpp
+    src/render/text_renderer_selector.cpp
+    src/render/slug/slug_outline_loader.cpp
+    src/render/slug/slug_curve_encoder.cpp
+    src/render/slug/slug_band_builder.cpp
+    src/render/slug/slug_font_cache.cpp
 )
 
 target_include_directories(dong PUBLIC
@@ -332,6 +337,11 @@ add_library(dong_render STATIC
     src/render/text_shaper.cpp
     src/render/font_metrics.cpp
     src/render/list_marker.cpp
+    src/render/text_renderer_selector.cpp
+    src/render/slug/slug_outline_loader.cpp
+    src/render/slug/slug_curve_encoder.cpp
+    src/render/slug/slug_band_builder.cpp
+    src/render/slug/slug_font_cache.cpp
 
     # GlyphAtlas (shared by all views via GlobalShared)
     src/render/glyph_atlas.cpp

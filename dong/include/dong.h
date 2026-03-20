@@ -114,6 +114,24 @@ DONG_API dong_result_t dong_engine_create_shared_js(
     dong_engine_t** out_engine);
 
 // =============================================================================
+// Text Renderer Mode
+// =============================================================================
+
+typedef enum dong_text_renderer_mode_t {
+    DONG_TEXT_RENDERER_AUTO = 0,   // Engine picks best available (default: MSDF)
+    DONG_TEXT_RENDERER_MSDF = 1,   // Force MSDF atlas-based rendering
+    DONG_TEXT_RENDERER_SLUG = 2,   // Force Slug analytical rendering (fallback to MSDF)
+} dong_text_renderer_mode_t;
+
+// Set text renderer mode for the engine.
+// Can be called at any time; takes effect on next tick.
+DONG_API dong_result_t dong_engine_set_text_renderer_mode(dong_engine_t* engine,
+                                                          dong_text_renderer_mode_t mode);
+
+// Query current text renderer mode.
+DONG_API dong_text_renderer_mode_t dong_engine_get_text_renderer_mode(dong_engine_t* engine);
+
+// =============================================================================
 // Rendering (GPU command list access)
 // =============================================================================
 

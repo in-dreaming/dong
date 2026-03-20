@@ -11,6 +11,7 @@
 #include "gpu_texture_compressor.hpp"
 #include "../../src/render/glyph_atlas.hpp"
 #include "../../src/render/font_resolver.hpp"
+#include "../../src/render/slug/slug_font_cache.hpp"
 #include "../../src/core/log.h"
 #include "../../src/core/global_shared.hpp"
 
@@ -564,7 +565,123 @@ bool SDLGPUDriver::initialize() {
         gpu_compressor_.reset();
     }
 
+    // Initialize Slug font cache (always created, used when Slug mode is requested)
+    slug_font_cache_ = std::make_unique<slug::SlugFontCache>();
+    DONG_LOG_INFO("SDLGPUDriver: Slug font cache initialized");
+
+    // Try to initialize Slug pipeline (shader compilation + GPU pipeline)
+    if (initSlugPipeline()) {
+        text_renderer_selector_.setSlugAvailable(true);
+        DONG_LOG_INFO("SDLGPUDriver: Slug text pipeline initialized");
+    } else {
+        DONG_LOG_WARN("SDLGPUDriver: Slug pipeline init failed, Slug mode unavailable");
+    }
+
     DONG_LOG_INFO("SDLGPUDriver initialized successfully");
+    return true;
+}
+
+bool SDLGPUDriver::initSlugPipeline() {
+    if (!gpu_device_ || !shader_manager_) return false;
+
+    SDL_GPUDevice* dev = gpu_device_->getHandle();
+    if (!dev) return false;
+
+    auto shader_path = [](const char* filename) -> std::string {
+#ifndef DONG_SDL_SHADER_DIR
+#define DONG_SDL_SHADER_DIR "src/render/sdl_render/shaders"
+#endif
+        std::string base = DONG_SDL_SHADER_DIR;
+        if (!base.empty() && (base.back() == '/' || base.back() == '\\'))
+            return base + filename;
+        return base + "/" + filename;
+    };
+
+    slug_text_vs_ = shader_manager_->loadShaderFromHLSLFile(
+        "dong_slug_text_vs",
+        SDL_GPU_SHADERSTAGE_VERTEX,
+        shader_path("slug_text_vs.hlsl").c_str(),
+        "main"
+    );
+    slug_text_fs_ = shader_manager_->loadShaderFromHLSLFile(
+        "dong_slug_text_fs",
+        SDL_GPU_SHADERSTAGE_FRAGMENT,
+        shader_path("slug_text_fs.hlsl").c_str(),
+        "main"
+    );
+
+    if (!slug_text_vs_ || !slug_text_fs_) {
+        DONG_LOG_WARN("SDLGPUDriver::initSlugPipeline: shader compilation failed");
+        return false;
+    }
+
+    // Create Slug text pipeline with vertex buffer input (5 × float4 attributes)
+    // Vertex layout: SlugVertex = 80 bytes (5 × float4)
+    //   attrib[0] = pos (offset 0)
+    //   attrib[1] = tex (offset 16)
+    //   attrib[2] = jac (offset 32)
+    //   attrib[3] = bnd (offset 48)
+    //   attrib[4] = col (offset 64)
+    SDL_GPUVertexBufferDescription vbuf_desc{};
+    vbuf_desc.slot = 0;
+    vbuf_desc.pitch = 80;  // sizeof(SlugVertex)
+    vbuf_desc.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
+    vbuf_desc.instance_step_rate = 0;
+
+    SDL_GPUVertexAttribute vertex_attrs[5]{};
+    for (int i = 0; i < 5; i++) {
+        vertex_attrs[i].location = static_cast<Uint32>(i);
+        vertex_attrs[i].buffer_slot = 0;
+        vertex_attrs[i].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4;
+        vertex_attrs[i].offset = static_cast<Uint32>(i * 16);
+    }
+
+    SDL_GPUGraphicsPipelineCreateInfo pci{};
+    SDL_GPUColorTargetDescription color_desc{};
+    color_desc.format = render_target_format_;
+    color_desc.blend_state.enable_blend = true;
+    color_desc.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+    color_desc.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    color_desc.blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
+    color_desc.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+    color_desc.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    color_desc.blend_state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
+
+    pci.target_info.num_color_targets = 1;
+    pci.target_info.color_target_descriptions = &color_desc;
+    pci.target_info.has_depth_stencil_target = false;
+
+    pci.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+    pci.vertex_shader = slug_text_vs_;
+    pci.fragment_shader = slug_text_fs_;
+
+    pci.vertex_input_state.num_vertex_buffers = 1;
+    pci.vertex_input_state.vertex_buffer_descriptions = &vbuf_desc;
+    pci.vertex_input_state.num_vertex_attributes = 5;
+    pci.vertex_input_state.vertex_attributes = vertex_attrs;
+
+    slug_text_pipeline_ = SDL_CreateGPUGraphicsPipeline(dev, &pci);
+    if (!slug_text_pipeline_) {
+        DONG_LOG_WARN("SDLGPUDriver::initSlugPipeline: pipeline creation failed: %s",
+                      SDL_GetError());
+        return false;
+    }
+
+    // Create sampler for curve texture (NEAREST — we load exact texels)
+    SDL_GPUSamplerCreateInfo sampler_info{};
+    sampler_info.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    sampler_info.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    sampler_info.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    sampler_info.mag_filter = SDL_GPU_FILTER_NEAREST;
+    sampler_info.min_filter = SDL_GPU_FILTER_NEAREST;
+    sampler_info.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_NEAREST;
+
+    slug_curve_sampler_ = SDL_CreateGPUSampler(dev, &sampler_info);
+    if (!slug_curve_sampler_) {
+        DONG_LOG_WARN("SDLGPUDriver::initSlugPipeline: sampler creation failed");
+        return false;
+    }
+
     return true;
 }
 

@@ -9,6 +9,7 @@
  */
 
 #include "dong_app.h"
+#include "dong.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -112,8 +113,27 @@ int main(int argc, char** argv) {
         fprintf(stderr, "[dong_app] Failed to create application\n");
         return 1;
     }
-
     dong_app_enable_text_input(app, 1);
+
+    // Apply text renderer mode from environment variable
+    {
+        const char* tr_env = getenv("DONG_TEXT_RENDERER");
+        if (tr_env) {
+            dong_engine_t* engine = (dong_engine_t*)dong_app_get_dong_engine(app);
+            if (engine) {
+                dong_text_renderer_mode_t mode = DONG_TEXT_RENDERER_AUTO;
+                if (strcmp(tr_env, "slug") == 0 || strcmp(tr_env, "Slug") == 0 || strcmp(tr_env, "SLUG") == 0) {
+                    mode = DONG_TEXT_RENDERER_SLUG;
+                } else if (strcmp(tr_env, "msdf") == 0 || strcmp(tr_env, "Msdf") == 0 || strcmp(tr_env, "MSDF") == 0) {
+                    mode = DONG_TEXT_RENDERER_MSDF;
+                }
+                dong_engine_set_text_renderer_mode(engine, mode);
+                printf("[dong_app] Text renderer: %s (from DONG_TEXT_RENDERER='%s')\n",
+                       mode == DONG_TEXT_RENDERER_SLUG ? "Slug" :
+                       mode == DONG_TEXT_RENDERER_MSDF ? "MSDF" : "Auto", tr_env);
+            }
+        }
+    }
 
     // Load HTML content (using new simplified API)
 

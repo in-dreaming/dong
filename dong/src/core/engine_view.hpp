@@ -5,6 +5,7 @@
 #include <string>
 
 #include "dong_plugin_api.h"
+#include "../render/text_renderer_mode.hpp"
 
 namespace dong::script {
 class ScriptEngine;
@@ -73,6 +74,10 @@ public:
     // Rendering
     const void* getCommandList() const;
     void invalidateCommands();
+
+    // Text renderer mode configuration
+    void setTextRendererMode(render::TextRendererMode mode);
+    render::TextRendererMode getTextRendererMode() const;
 
 private:
     struct Impl;

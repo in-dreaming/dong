@@ -26,6 +26,19 @@ zig build examples -Doptimize=Debug
 
 **注意：** `interactive_demo` 是通过 `zig build examples` 构建的，不是单独的构建目标。
 
+slug
+```
+启用 Slug
+set DONG_TEXT_RENDERER=slug
+
+强制 MSDF（禁用 Slug）
+set DONG_TEXT_RENDERER=msdf
+
+自动选择（默认 MSDF）
+set DONG_TEXT_RENDERER=auto
+
+```
+
 ## 2. 使用 LLDB/GDB 调试
 
 ### macOS (LLDB)

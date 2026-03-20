@@ -39,6 +39,10 @@ public:
     // Set editing state for input/textarea caret/selection rendering
     void setInputEditingState(const dom::DOMNodePtr& focused_input, bool caret_visible);
 
+    // Text renderer mode preference (propagated to glyph runs)
+    void setTextRendererMode(TextRendererMode mode) { text_renderer_mode_ = mode; }
+    TextRendererMode getTextRendererMode() const { return text_renderer_mode_; }
+
     // 访问最近一帧构建好的 DisplayList / LayerTree
     const DisplayList& getDisplayList() const { return display_list_builder_.get(); }
     const LayerTree& getLayerTree() const { return layer_tree_; }
@@ -70,6 +74,7 @@ private:
     // Top-layer modal dialogs deferred from normal tree traversal
     std::vector<dom::DOMNodePtr> top_layer_modals_;
     TextShaper text_shaper_;
+    TextRendererMode text_renderer_mode_ = TextRendererMode::Auto;
 
     // Generated content (counter()/counters()/open-quote/close-quote)
     struct GeneratedContentState {

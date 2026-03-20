@@ -1158,6 +1158,13 @@ fn buildDongCore(
             "src/render/font_metrics.cpp",
             "src/render/glyph_atlas.cpp",
             "src/render/list_marker.cpp",
+            // Text renderer selection
+            "src/render/text_renderer_selector.cpp",
+            // Slug runtime
+            "src/render/slug/slug_outline_loader.cpp",
+            "src/render/slug/slug_curve_encoder.cpp",
+            "src/render/slug/slug_band_builder.cpp",
+            "src/render/slug/slug_font_cache.cpp",
         },
         .flags = &.{
             "-std=c++20",

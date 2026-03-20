@@ -23,6 +23,7 @@
 #include "dong_app.h"
 #include "dong_scene3d.h"
 #include "dong_overlay.h"
+#include "dong.h"
 #include <SDL3/SDL.h>
 #include <stdio.h>
 #include <string.h>
@@ -219,6 +220,27 @@ int main(int argc, char* argv[]) {
 
     // Automatically arrange screens in a grid
     dong_scene3d_arrange_screens(scene, 4.0f, 2.8f, 5);
+
+    // Apply text renderer mode from environment variable to all screens
+    {
+        const char* tr_env = getenv("DONG_TEXT_RENDERER");
+        if (tr_env) {
+            dong_text_renderer_mode_t mode = DONG_TEXT_RENDERER_AUTO;
+            if (strcmp(tr_env, "slug") == 0 || strcmp(tr_env, "Slug") == 0 || strcmp(tr_env, "SLUG") == 0) {
+                mode = DONG_TEXT_RENDERER_SLUG;
+            } else if (strcmp(tr_env, "msdf") == 0 || strcmp(tr_env, "Msdf") == 0 || strcmp(tr_env, "MSDF") == 0) {
+                mode = DONG_TEXT_RENDERER_MSDF;
+            }
+            for (int i = 0; i < dong_scene3d_get_screen_count(scene); i++) {
+                dong_screen3d_t* scr = dong_scene3d_get_screen(scene, i);
+                dong_engine_t* eng = (dong_engine_t*)dong_screen3d_get_view(scr);
+                if (eng) dong_engine_set_text_renderer_mode(eng, mode);
+            }
+            printf("[Scene3D] Text renderer: %s (from DONG_TEXT_RENDERER='%s')\n",
+                   mode == DONG_TEXT_RENDERER_SLUG ? "Slug" :
+                   mode == DONG_TEXT_RENDERER_MSDF ? "MSDF" : "Auto", tr_env);
+        }
+    }
 
     // Print screen arrangement
     printf("Screen arrangement:\n");
