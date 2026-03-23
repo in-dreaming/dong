@@ -1,4 +1,4 @@
-﻿#include "js_bindings.hpp"
+#include "js_bindings.hpp"
 #include "js_node_bindings.hpp"
 #include "js_observer_bindings.hpp"
 #include "js_clipboard_bindings.hpp"
@@ -2062,6 +2062,15 @@ static JSValue elem_focus(JSContext* ctx, JSValueConst this_val, int argc, JSVal
     auto node = JSBindings::getNodeOpaque(ctx, this_val);
     if (node) {
         node->focus();
+        // Match engine mouse path: mousedown on contenteditable sets last_editable_root_
+        // so document.execCommand still resolves the editing host after focus moves (e.g. toolbar button).
+        auto* bindings = getBindingsFromContext(ctx);
+        if (bindings && node->isContentEditable() && !dong::dom::isInputElement(node)) {
+            auto er = dong::dom::ContentEditableState::findEditableRoot(node);
+            if (er) {
+                bindings->last_editable_root_ = er;
+            }
+        }
     }
     return JS_UNDEFINED;
 }

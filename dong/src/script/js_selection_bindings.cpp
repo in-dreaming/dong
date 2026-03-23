@@ -10,14 +10,13 @@
 
 namespace dong::script {
 
-// Per-view Selection instance (stored via context opaque)
+// Must be EngineView's Selection (bindings->selection_): execCommand, painter, and
+// mouse path all use that instance. A separate static map would leave JS addRange()
+// disconnected from document.execCommand() — bold/formatting would no-op.
 static dong::dom::Selection* getViewSelection(JSContext* ctx) {
     auto* bindings = static_cast<JSBindings*>(JS_GetContextOpaque(ctx));
     if (!bindings) return nullptr;
-    // Selection is stored as user data on the bindings (simplified approach)
-    // We use a static map keyed by JSBindings pointer
-    static std::unordered_map<void*, dong::dom::Selection> s_selections;
-    return &s_selections[bindings];
+    return bindings->selection_;
 }
 
 // ============================================================

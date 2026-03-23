@@ -5,6 +5,12 @@
  *   html_render_test <html_file> [output.bmp] [width] [height] [frames]
  *   html_render_test <html_file> [output.bmp] [width] [height] --frames N [--frame-ms MS] [--no-update]
  *
+ * 两帧对比 + 横向拼接（contenteditable / execCommand 等）:
+ *   html_render_test page.html out.bmp 800 600 2 ^
+ *     --eval-after-frame0-file snippets/ce_bold_after_frame0.js --stitch-horizontal [--stitch-output merged.bmp]
+ * - 第 1 帧：操作前；执行脚本后第 2 帧：操作后；仍写出 out_f000.bmp / out_f001.bmp。
+ * - --stitch-horizontal 额外生成一张宽为 2*width 的拼接图（默认 out_stitched.bmp）。
+ *
  * 说明:
  * - html_file 既支持绝对路径，也支持相对路径；相对路径会优先按“可执行文件目录”解析（便于 zig build 直接运行）。
  * - frames > 1 时会逐帧导出独立 BMP。
@@ -134,6 +140,32 @@ bool writeBMP(const char* filename, uint32_t width, uint32_t height, const uint8
     return true;
 }
 
+// 左右拼接两帧 RGBA（同宽高），输出宽 2*width。
+static bool stitchHorizontalRGBA(uint32_t width, uint32_t height,
+                                 const uint8_t* left, const uint8_t* right,
+                                 std::vector<uint8_t>& out_rgba) {
+    if (!left || !right || width == 0 || height == 0) {
+        return false;
+    }
+    out_rgba.resize(static_cast<size_t>(width) * 2u * static_cast<size_t>(height) * 4u);
+    for (uint32_t y = 0; y < height; ++y) {
+        const size_t row = static_cast<size_t>(y) * static_cast<size_t>(width) * 4u;
+        const size_t dst = static_cast<size_t>(y) * static_cast<size_t>(width) * 2u * 4u;
+        std::memcpy(out_rgba.data() + dst, left + row, static_cast<size_t>(width) * 4u);
+        std::memcpy(out_rgba.data() + dst + static_cast<size_t>(width) * 4u, right + row,
+                    static_cast<size_t>(width) * 4u);
+    }
+    return true;
+}
+
+static fs::path defaultStitchedOutputPath(const std::string& output_file) {
+    fs::path out(output_file);
+    fs::path parent = out.parent_path();
+    const std::string stem = out.stem().string();
+    const std::string ext = out.has_extension() ? out.extension().string() : ".bmp";
+    return parent / fs::path(stem + "_stitched" + ext);
+}
+
 // 读取文件内容
 std::string readFile(const std::string& path) {
     std::ifstream file(path);
@@ -217,6 +249,33 @@ static void ensureParentDir(const fs::path& p) {
     if (!parent.empty()) {
         fs::create_directories(parent, ec);
     }
+}
+
+// Resolve eval script path: HTML 同目录、cwd、可执行目录/data。
+static fs::path resolveScriptPath(const fs::path& html_path, const fs::path& script_ref) {
+    std::error_code ec;
+    if (script_ref.is_absolute() && fs::exists(script_ref, ec)) {
+        return script_ref;
+    }
+    fs::path c1 = html_path.parent_path() / script_ref;
+    if (fs::exists(c1, ec)) {
+        return c1;
+    }
+    if (fs::exists(script_ref, ec)) {
+        return fs::weakly_canonical(script_ref, ec);
+    }
+    if (const char* base = SDL_GetBasePath()) {
+        fs::path exe(base);
+        fs::path c2 = exe / script_ref;
+        if (fs::exists(c2, ec)) {
+            return c2;
+        }
+        fs::path c3 = exe / "data" / script_ref;
+        if (fs::exists(c3, ec)) {
+            return c3;
+        }
+    }
+    return script_ref;
 }
 
 static fs::path resolveExistingPath(const fs::path& html_file) {
@@ -572,6 +631,9 @@ void printUsage(const char* prog) {
     SDL_Log("  --frames N           - Render N frames (overrides positional frames)");
     SDL_Log("  --frame-ms MS        - Sleep MS milliseconds between frames (default: 0)");
     SDL_Log("  --no-update          - Do NOT update scripts/layout between frames");
+    SDL_Log("  --eval-after-frame0-file PATH - After saving frame 0, run JS from file (needs frames>=2)");
+    SDL_Log("  --stitch-horizontal  - After 2 frames, also write left|right BMP (default *_stitched.bmp)");
+    SDL_Log("  --stitch-output PATH - Stitched BMP path (optional)");
 
     SDL_Log("");
     SDL_Log("Test input injection (env vars):");
@@ -621,7 +683,9 @@ int main(int argc, char* argv[]) {
     uint32_t frames = 1;
     uint32_t frame_ms = 0;
     bool do_update = true;
-
+    std::string eval_after_frame0_file;
+    bool stitch_horizontal = false;
+    std::string stitch_output_path;
 
     int positional_index = 0;
     for (int i = 2; i < argc; ++i) {
@@ -655,7 +719,28 @@ int main(int argc, char* argv[]) {
             continue;
         }
 
+        if (a == "--eval-after-frame0-file") {
+            if (i + 1 >= argc) {
+                SDL_Log("ERROR: --eval-after-frame0-file requires a path");
+                return 1;
+            }
+            eval_after_frame0_file = argv[++i];
+            continue;
+        }
 
+        if (a == "--stitch-horizontal") {
+            stitch_horizontal = true;
+            continue;
+        }
+
+        if (a == "--stitch-output") {
+            if (i + 1 >= argc) {
+                SDL_Log("ERROR: --stitch-output requires a path");
+                return 1;
+            }
+            stitch_output_path = argv[++i];
+            continue;
+        }
 
         switch (positional_index) {
             case 0:
@@ -685,6 +770,23 @@ int main(int argc, char* argv[]) {
     }
     if (frames == 0) {
         SDL_Log("ERROR: Invalid frames: 0");
+        return 1;
+    }
+
+    if (!eval_after_frame0_file.empty() && frames == 1) {
+        frames = 2;
+        SDL_Log("[Config] --eval-after-frame0-file: frames set to 2");
+    }
+    if (!eval_after_frame0_file.empty() && frames < 2) {
+        SDL_Log("ERROR: --eval-after-frame0-file requires at least 2 frames");
+        return 1;
+    }
+    if (stitch_horizontal && frames != 2) {
+        SDL_Log("ERROR: --stitch-horizontal requires exactly 2 frames (got %u)", frames);
+        return 1;
+    }
+    if (!eval_after_frame0_file.empty() && !do_update) {
+        SDL_Log("ERROR: --eval-after-frame0-file is incompatible with --no-update");
         return 1;
     }
 
@@ -825,11 +927,35 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    std::string eval_after_frame0_script;
+    if (!eval_after_frame0_file.empty()) {
+        const fs::path sp = resolveScriptPath(html_path, fs::path(eval_after_frame0_file));
+        std::error_code ec;
+        if (!fs::exists(sp, ec)) {
+            SDL_Log("ERROR: eval script not found: %s", sp.string().c_str());
+            dong_engine_destroy(engine);
+            dong_sdl_platform_shutdown();
+            return 1;
+        }
+        eval_after_frame0_script = readFile(sp.string());
+        if (eval_after_frame0_script.empty()) {
+            SDL_Log("ERROR: eval script is empty: %s", sp.string().c_str());
+            dong_engine_destroy(engine);
+            dong_sdl_platform_shutdown();
+            return 1;
+        }
+        SDL_Log("[Eval] after frame 0: %zu bytes from %s",
+                eval_after_frame0_script.size(), sp.string().c_str());
+    }
+
     SDL_GPUTexture* offscreen_texture = nullptr;
     uint32_t offscreen_w = 0;
     uint32_t offscreen_h = 0;
     std::vector<uint8_t> pixels(width * height * 4);
+    std::vector<uint8_t> pixels_frame0;
     const void* cached_cmd_list = nullptr;
+    const bool need_stitch = stitch_horizontal && frames == 2;
+    uint32_t frames_saved = 0;
 
     for (uint32_t fi = 0; fi < frames; ++fi) {
         SDL_Log("[Render] Frame %u: do_update=%d", fi, do_update ? 1 : 0);
@@ -867,13 +993,42 @@ int main(int argc, char* argv[]) {
             SDL_Log("ERROR: Failed to save BMP (frame=%u): %s", fi, out_path.string().c_str());
             break;
         }
+        frames_saved = fi + 1;
+
+        if (need_stitch && fi == 0) {
+            pixels_frame0 = pixels;
+        }
+
+        if (fi == 0 && !eval_after_frame0_script.empty()) {
+            cached_cmd_list = nullptr;
+            if (dong_engine_eval_script(engine, eval_after_frame0_script.c_str()) != DONG_OK) {
+                SDL_Log("WARN: dong_engine_eval_script after frame 0 failed");
+            }
+        }
 
         if (frame_ms > 0 && fi + 1 < frames) {
             SDL_Delay(frame_ms);
         }
     }
 
-    SDL_Log("[Save] Saved %u frame(s)", frames);
+    if (need_stitch && frames_saved == 2 && pixels_frame0.size() == pixels.size()) {
+        std::vector<uint8_t> stitched;
+        if (!stitchHorizontalRGBA(width, height, pixels_frame0.data(), pixels.data(), stitched)) {
+            SDL_Log("ERROR: stitchHorizontalRGBA failed");
+        } else {
+            const fs::path sp = stitch_output_path.empty()
+                                    ? defaultStitchedOutputPath(output_file)
+                                    : fs::path(stitch_output_path);
+            ensureParentDir(sp);
+            if (!writeBMP(sp.string().c_str(), width * 2, height, stitched.data())) {
+                SDL_Log("ERROR: Failed to write stitched BMP: %s", sp.string().c_str());
+            } else {
+                SDL_Log("[Stitch] %s (%ux%u)", sp.string().c_str(), width * 2, height);
+            }
+        }
+    }
+
+    SDL_Log("[Save] Saved %u frame(s)", frames_saved);
 
 
 
