@@ -42,8 +42,11 @@ description: >-
 3. **写 snippet.js**：在 IIFE 里顺序调用 DOM API；若模拟「点工具栏」，在 `execCommand` 前把焦点移到 `button`（与手操一致）。  
 4. **两帧 + 拼接**：  
    `zig build run-html-test -- <html> zig-out/tmp/case.bmp 800 600 2 --eval-after-frame0-file snippets/xxx.js --stitch-horizontal`  
-5. **核对产物**：`*_f000.bmp`（前）、`*_f001.bmp`（后）、`*_stitched.bmp`（并排对比）。  
-6. **若仍不复现**：逐项排除  
+5. **核对产物**：多帧时帧文件为 `<stem>_f0.bmp`、`<stem>_f1.bmp`（两位帧数时 padding 变长）。**`--stitch-horizontal` 且输出参数为具体 `*.bmp` 路径时，拼接图写入该路径**（宽 `2*width`）；否则写入 `<stem>_stitched.bmp`。不要误以为会更新一个不存在的 `<stem>.bmp`（旧行为易让人打开错文件）。  
+6. **自动断言（contenteditable 加粗空行类）**：在 `dong/` 下执行  
+   `python scripts/tools/verify_ce_bold_headless.py --run`  
+   会先跑 `run-html-test`（`test_contenteditable_basic.html` + `snippets/ce_bold_after_frame0.js`），再对 **f1** 在 `#editor` 内容列做行间空白夹层检测；退出码 0 表示通过。  
+7. **若仍不复现**：逐项排除  
    - **视口**：与 `dong_app` 同宽高；  
    - **选区实现**：JS `getSelection()` / `addRange` 是否与引擎内 `Selection` 为同一实例（曾出现「改了 JS 选区但 `execCommand` 读另一份」导致无操作）；  
    - **焦点分支**：`execCommand` 在「焦点在 editor」vs「焦点在 button」时是否走不同 C++ 路径；  

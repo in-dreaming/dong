@@ -6,8 +6,41 @@
 #include "../core/log.h"
 #include <algorithm>
 #include <cctype>
+#include <cstdio>
 #include <vector>
 namespace dong::dom {
+
+// execCommand wraps text in <span style="font-weight:...">. Bold changes font metrics; if we do not
+// pin line-height to the containing block, IFC can use a taller line box than plain text and the
+// contenteditable block (min-height + border) visibly grows after bold — compare headless f0 vs f1.
+//
+// Must use an explicit px value on the span: `line-height: inherit` hits CSSParser's global-keyword
+// branch and never sets ComputedStyle::has_line_height, so layout still keys off bold font metrics.
+static void copyParentLineHeightOntoInlineWrapSpan(const DOMNodePtr& span, const DOMNodePtr& line_metrics_source) {
+    if (!span || !line_metrics_source) {
+        return;
+    }
+    const auto& cs = line_metrics_source->getComputedStyle();
+    const float font_px = cs.font_size > 0.0f ? cs.font_size : 16.0f;
+    // Match layout_engine.cpp: when no usable CSS line-height, line box is at least 1.2 * font-size.
+    const float fallback_px = font_px * 1.2f;
+
+    float line_height_px = fallback_px;
+    if (cs.has_line_height && cs.line_height > 0.0f) {
+        if (cs.line_height_is_unitless) {
+            line_height_px = cs.line_height * font_px;
+        } else {
+            line_height_px = cs.line_height;
+        }
+    } else if (cs.has_line_height && cs.line_height <= 0.0f) {
+        // Parsed `line-height: normal` stores -1; pin to the same minimum as layout_engine.
+        line_height_px = fallback_px;
+    }
+
+    char buf[96];
+    std::snprintf(buf, sizeof(buf), "%.1fpx", static_cast<double>(line_height_px));
+    span->setInlineStyleProperty("line-height", std::string(buf));
+}
 
 EditingCommand parseEditingCommand(const std::string& command) {
     std::string lower;
@@ -162,6 +195,9 @@ static DOMNodePtr wrapTextNodePortion(const DOMNodePtr& text_node,
         // This avoids deeply nested spans like <span bold><span italic>text</span></span>
         // which cause layout/hit-testing issues with inline elements.
         parent->setInlineStyleProperty(css_property, css_value);
+        if (auto gp = parent->getParent()) {
+            copyParentLineHeightOntoInlineWrapSpan(parent, gp);
+        }
         parent->markStyleDirty();
         parent->markLayoutDirty();
         return text_node;
@@ -175,6 +211,7 @@ static DOMNodePtr wrapTextNodePortion(const DOMNodePtr& text_node,
     auto span = std::make_shared<DOMNode>(DOMNode::NodeType::ELEMENT, "span");
     span->setInlineStyleProperty(css_property, css_value);
     span->setInlineStyleProperty("display", "inline");
+    copyParentLineHeightOntoInlineWrapSpan(span, parent);
 
     auto span_text = std::make_shared<DOMNode>(DOMNode::NodeType::TEXT);
     span_text->setTextContent(selected_text);
@@ -228,6 +265,66 @@ static DOMNodePtr wrapTextNodePortion(const DOMNodePtr& text_node,
     parent->markLayoutDirty();
 
     return span_text;
+}
+
+static bool isWhitespaceOnlyString(const std::string& s) {
+    for (char c : s) {
+        if (c != ' ' && c != '\t' && c != '\n' && c != '\r' && c != '\f') {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool hasLineBreakChar(const std::string& s) {
+    for (char c : s) {
+        if (c == '\n' || c == '\r') {
+            return true;
+        }
+    }
+    return false;
+}
+
+// HTML parsing leaves newline+indent TEXT nodes before/after block content. Inserting inline
+// <span> leaves them as siblings; IFC treats embedded newlines as line breaks, yielding an
+// extra empty line after execCommand(bold). Strip only edge TEXT nodes that are whitespace
+// with at least one newline (do not remove space-only indent without \n).
+static void stripNewlineWhitespaceEdgeTextNodes(const DOMNodePtr& editable_root) {
+    if (!editable_root) {
+        return;
+    }
+
+    while (true) {
+        const auto& ch = editable_root->getChildren();
+        if (ch.empty()) {
+            break;
+        }
+        const auto& fc = ch.front();
+        if (!fc || fc->getType() != DOMNode::NodeType::TEXT) {
+            break;
+        }
+        const std::string& t = fc->getRawTextContent();
+        if (!isWhitespaceOnlyString(t) || !hasLineBreakChar(t)) {
+            break;
+        }
+        editable_root->removeChild(fc);
+    }
+
+    while (true) {
+        const auto& ch = editable_root->getChildren();
+        if (ch.empty()) {
+            break;
+        }
+        const auto& lc = ch.back();
+        if (!lc || lc->getType() != DOMNode::NodeType::TEXT) {
+            break;
+        }
+        const std::string& t = lc->getRawTextContent();
+        if (!isWhitespaceOnlyString(t) || !hasLineBreakChar(t)) {
+            break;
+        }
+        editable_root->removeChild(lc);
+    }
 }
 
 // Apply a style to the selected range. Handles single-node and multi-node selections.
@@ -306,6 +403,8 @@ static bool wrapSelectionWithStyle(const DOMNodePtr& editable_root,
         selection.setBaseAndExtent(first_wrapped, first_wrapped_offset,
                                     last_wrapped, last_wrapped_length);
     }
+
+    stripNewlineWhitespaceEdgeTextNodes(editable_root);
 
     editable_root->markStyleDirty();
     editable_root->markLayoutDirty();

@@ -2431,10 +2431,20 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
     // text so Yoga can properly size it. Without this, Yoga leaf nodes (no Yoga children
     // since text nodes aren't represented) collapse to height 0, causing exponential
     // spacing growth in lists (<li>) and other block containers.
+    //
+    // mapComputedStylesToYoga() already applied CSS min-height (absolute px). Do not
+    // overwrite it with a smaller intrinsic text measurement — that caused contenteditable
+    // blocks with direct text to ignore min-height (~51px) while the same block after
+    // execCommand (only <span> children, intrinsic_h==0) kept CSS min-height (~136px).
     if (style.layout_mode == dom::LayoutMode::Block && style.height.isAuto()) {
         float intrinsic_h = computeIntrinsicTextHeight(dom_node, parent_content_w);
         if (intrinsic_h > 0.0f && intrinsic_h < 10000.0f) {
-            YGNodeStyleSetMinHeight(yoga_node, intrinsic_h);
+            float merged = intrinsic_h;
+            const YGValue existing_min = YGNodeStyleGetMinHeight(yoga_node);
+            if (existing_min.unit == YGUnitPoint) {
+                merged = std::max(intrinsic_h, existing_min.value);
+            }
+            YGNodeStyleSetMinHeight(yoga_node, merged);
         }
     }
     

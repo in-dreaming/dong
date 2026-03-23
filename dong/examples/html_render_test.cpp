@@ -9,7 +9,7 @@
  *   html_render_test page.html out.bmp 800 600 2 ^
  *     --eval-after-frame0-file snippets/ce_bold_after_frame0.js --stitch-horizontal [--stitch-output merged.bmp]
  * - 第 1 帧：操作前；执行脚本后第 2 帧：操作后；仍写出 out_f000.bmp / out_f001.bmp。
- * - --stitch-horizontal 额外生成一张宽为 2*width 的拼接图（默认 out_stitched.bmp）。
+ * - --stitch-horizontal 生成宽为 2*width 的拼接图：若输出参数为具体 *.bmp 文件路径，则写入该路径；否则写入 <stem>_stitched.bmp。
  *
  * 说明:
  * - html_file 既支持绝对路径，也支持相对路径；相对路径会优先按“可执行文件目录”解析（便于 zig build 直接运行）。
@@ -164,6 +164,22 @@ static fs::path defaultStitchedOutputPath(const std::string& output_file) {
     const std::string stem = out.stem().string();
     const std::string ext = out.has_extension() ? out.extension().string() : ".bmp";
     return parent / fs::path(stem + "_stitched" + ext);
+}
+
+// Multi-frame writes <stem>_f0.bmp etc.; user often passes the same path they will open.
+// If they pass a concrete file (e.g. ce_pair.bmp), write the stitched before|after there
+// (width*2 x height). Otherwise use <stem>_stitched.bmp (e.g. directory output).
+static fs::path resolveStitchedBMPPath(const std::string& stitch_output_path,
+                                       const std::string& output_file) {
+    if (!stitch_output_path.empty()) {
+        return fs::path(stitch_output_path);
+    }
+    fs::path of(output_file);
+    std::error_code ec;
+    if (of.has_extension() && !fs::is_directory(of, ec)) {
+        return of;
+    }
+    return defaultStitchedOutputPath(output_file);
 }
 
 // 读取文件内容
@@ -632,8 +648,9 @@ void printUsage(const char* prog) {
     SDL_Log("  --frame-ms MS        - Sleep MS milliseconds between frames (default: 0)");
     SDL_Log("  --no-update          - Do NOT update scripts/layout between frames");
     SDL_Log("  --eval-after-frame0-file PATH - After saving frame 0, run JS from file (needs frames>=2)");
-    SDL_Log("  --stitch-horizontal  - After 2 frames, also write left|right BMP (default *_stitched.bmp)");
-    SDL_Log("  --stitch-output PATH - Stitched BMP path (optional)");
+    SDL_Log("  --stitch-horizontal  - After 2 frames, write stitched BMP (2*width): see resolve rules below");
+    SDL_Log("  --stitch-output PATH - Stitched BMP path (optional; overrides default target)");
+    SDL_Log("  Stitched path: if output is a .bmp file (not dir), stitched -> that file; else -> <stem>_stitched.bmp");
 
     SDL_Log("");
     SDL_Log("Test input injection (env vars):");
@@ -822,6 +839,10 @@ int main(int argc, char* argv[]) {
         fs::path last_output_path = getFrameOutputPath(output_file, html_stem, frames - 1, frames);
         SDL_Log("[Output] ...  %s", last_output_path.string().c_str());
     }
+    if (stitch_horizontal && frames == 2) {
+        fs::path sp = resolveStitchedBMPPath(stitch_output_path, output_file);
+        SDL_Log("[Output] Stitched before|after -> %s", sp.string().c_str());
+    }
 
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         SDL_Log("ERROR: SDL_Init failed: %s", SDL_GetError());
@@ -956,6 +977,7 @@ int main(int argc, char* argv[]) {
     const void* cached_cmd_list = nullptr;
     const bool need_stitch = stitch_horizontal && frames == 2;
     uint32_t frames_saved = 0;
+    std::string stitched_file_written;
 
     for (uint32_t fi = 0; fi < frames; ++fi) {
         SDL_Log("[Render] Frame %u: do_update=%d", fi, do_update ? 1 : 0);
@@ -1016,14 +1038,14 @@ int main(int argc, char* argv[]) {
         if (!stitchHorizontalRGBA(width, height, pixels_frame0.data(), pixels.data(), stitched)) {
             SDL_Log("ERROR: stitchHorizontalRGBA failed");
         } else {
-            const fs::path sp = stitch_output_path.empty()
-                                    ? defaultStitchedOutputPath(output_file)
-                                    : fs::path(stitch_output_path);
+            const fs::path sp = resolveStitchedBMPPath(stitch_output_path, output_file);
             ensureParentDir(sp);
             if (!writeBMP(sp.string().c_str(), width * 2, height, stitched.data())) {
                 SDL_Log("ERROR: Failed to write stitched BMP: %s", sp.string().c_str());
             } else {
-                SDL_Log("[Stitch] %s (%ux%u)", sp.string().c_str(), width * 2, height);
+                SDL_Log("[Stitch] %s (%ux%u) left=frame0 right=frame1", sp.string().c_str(),
+                        width * 2, height);
+                stitched_file_written = sp.string();
             }
         }
     }
@@ -1050,6 +1072,11 @@ int main(int argc, char* argv[]) {
     if (frames > 1) {
         fs::path outN = getFrameOutputPath(output_file, html_stem, frames - 1, frames);
         SDL_Log("[Done] Output: %s", outN.string().c_str());
+        if (!stitched_file_written.empty()) {
+            SDL_Log("[Done] Before|after (stitched, open this): %s", stitched_file_written.c_str());
+        } else if (need_stitch) {
+            SDL_Log("[Done] WARN: stitched BMP was not written (check errors above)");
+        }
     }
     return 0;
 }
