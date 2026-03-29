@@ -44,6 +44,11 @@ public:
                                      Selection& selection,
                                      bool to_end);
 
+    // Move caret to previous line (direction=-1) or next line (direction=1)
+    static bool moveCaretVertical(const DOMNodePtr& editable_root,
+                                   Selection& selection,
+                                   int direction);
+
     // Extend selection by one character in direction
     static bool extendSelection(const DOMNodePtr& editable_root,
                                  Selection& selection,

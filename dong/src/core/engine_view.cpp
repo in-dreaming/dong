@@ -2749,9 +2749,42 @@ struct EngineView::Impl {
                         DONG_LOG_WARN("[CE-Mouse]   collapse off=%u text_size=%zu before=\"%s\" | after=\"%s\"",
                                        text_hit.char_offset, txt.size(), before.c_str(), after.c_str());
                         selection->collapse(text_hit.text_node, text_hit.char_offset);
+                        if (auto* r = selection->getRangeAt(0)) {
+                            auto c = r->getStartContainer();
+                            DONG_LOG_WARN("[CE-Mouse]   collapsed(range) off=%u type=%s text=\"%s\"",
+                                          r->getStartOffset(),
+                                          c ? (c->getType() == dong::dom::DOMNode::NodeType::TEXT ? "text" : "elem") : "null",
+                                          (c && c->getType() == dong::dom::DOMNode::NodeType::TEXT) ? c->getRawTextContent().c_str() : "");
+                        }
                     } else {
-                        DONG_LOG_WARN("[CE-Mouse]   collapse to root (no text hit)");
-                        selection->collapse(editable_root, 0);
+                        // Fallback: when text hit fails (often around inline wrappers after execCommand),
+                        // place caret at the end of editable content instead of hard-resetting to root start.
+                        DOMNodePtr last_text;
+                        std::function<void(const DOMNodePtr&)> find_last_text;
+                        find_last_text = [&](const DOMNodePtr& n) {
+                            if (!n) return;
+                            if (n->getType() == dong::dom::DOMNode::NodeType::TEXT) {
+                                last_text = n;
+                                return;
+                            }
+                            for (const auto& c : n->getChildren()) {
+                                find_last_text(c);
+                            }
+                        };
+                        find_last_text(editable_root);
+                        if (last_text) {
+                            const auto end_off = static_cast<uint32_t>(last_text->getRawTextContent().size());
+                            DONG_LOG_WARN("[CE-Mouse]   fallback collapse to last text end off=%u", end_off);
+                            selection->collapse(last_text, end_off);
+                        } else {
+                            // Ensure caret is placeable even when editable subtree is temporarily empty.
+                            auto new_text = std::make_shared<dong::dom::DOMNode>(dong::dom::DOMNode::NodeType::TEXT);
+                            new_text->setTextContent("");
+                            editable_root->appendChild(new_text);
+                            editable_root->markLayoutDirty();
+                            DONG_LOG_WARN("[CE-Mouse]   fallback create empty text node and collapse");
+                            selection->collapse(new_text, 0);
+                        }
                     }
                     ce_drag_active_ = true;
                     ce_drag_editable_root_ = editable_root;
@@ -3023,6 +3056,7 @@ struct EngineView::Impl {
         activateViewContext();
         constexpr uint32_t SDLK_TAB = 9;
         constexpr uint32_t SDLK_RETURN = 13;
+        constexpr uint32_t SDLK_KP_ENTER = 0x40000058;
         constexpr uint32_t SDLK_BACKSPACE = 8;
         constexpr uint32_t SDLK_DELETE = 127;
         constexpr uint32_t SDLK_LEFT = 0x40000050;
@@ -3136,7 +3170,7 @@ struct EngineView::Impl {
                                 }
                                 handled = true;
                             }
-                        } else if (key_code == SDLK_RETURN) {
+                        } else if (key_code == SDLK_RETURN || key_code == SDLK_KP_ENTER) {
                             if (state->isOpen()) {
                                 const int h = state->getHoverIndex();
                                 if (h >= 0) {
@@ -3181,7 +3215,7 @@ struct EngineView::Impl {
 
 
             // Handle Enter key in form inputs
-            if (key_code == SDLK_RETURN && focus_manager && dom_manager) {
+            if ((key_code == SDLK_RETURN || key_code == SDLK_KP_ENTER) && focus_manager && dom_manager) {
                 auto focused = focus_manager->getFocusedElement();
                 if (focused && focused->getTagName() == "input") {
                     // Find parent form element
@@ -3229,7 +3263,7 @@ struct EngineView::Impl {
                             }
                             state->deleteForward();
                             handled = true;
-                        } else if (key_code == SDLK_RETURN && focused->getTagName() == "textarea") {
+                        } else if ((key_code == SDLK_RETURN || key_code == SDLK_KP_ENTER) && focused->getTagName() == "textarea") {
                             // Textarea Enter: insert newline
                             input_type = "insertLineBreak";
                             if (dispatchBeforeInputForNode(focused, input_type, "\n")) {
@@ -3384,6 +3418,30 @@ struct EngineView::Impl {
                 if (focused && focused->isContentEditable() && !dong::dom::isInputElement(focused)) {
                     auto editable_root = dong::dom::ContentEditableState::findEditableRoot(focused);
                     if (editable_root && selection) {
+                        // Stabilize CE keyboard behavior: ensure we always have a valid collapsed range.
+                        if (selection->getRangeCount() == 0) {
+                            dong::dom::DOMNodePtr last_text;
+                            std::function<void(const dong::dom::DOMNodePtr&)> find_last_text;
+                            find_last_text = [&](const dong::dom::DOMNodePtr& n) {
+                                if (!n) return;
+                                if (n->getType() == dong::dom::DOMNode::NodeType::TEXT) {
+                                    last_text = n;
+                                    return;
+                                }
+                                for (const auto& c : n->getChildren()) {
+                                    find_last_text(c);
+                                }
+                            };
+                            find_last_text(editable_root);
+                            if (!last_text) {
+                                last_text = std::make_shared<dong::dom::DOMNode>(dong::dom::DOMNode::NodeType::TEXT);
+                                last_text->setTextContent("");
+                                editable_root->appendChild(last_text);
+                                editable_root->markLayoutDirty();
+                            }
+                            selection->collapse(last_text, static_cast<uint32_t>(last_text->getRawTextContent().size()));
+                        }
+
                         constexpr uint32_t SDLK_HOME = 0x4000004A;
                         constexpr uint32_t SDLK_END  = 0x4000004D;
 
@@ -3392,7 +3450,15 @@ struct EngineView::Impl {
                             ce_handled = dong::dom::ContentEditableState::deleteBackward(editable_root, *selection);
                         } else if (key_code == SDLK_DELETE) {
                             ce_handled = dong::dom::ContentEditableState::deleteForward(editable_root, *selection);
-                        } else if (key_code == SDLK_RETURN) {
+                        } else if (key_code == SDLK_RETURN || key_code == SDLK_KP_ENTER) {
+                            if (auto* r = selection->getRangeAt(0)) {
+                                auto c = r->getStartContainer();
+                                DONG_LOG_WARN("[CE-Key] Enter pre-insert: collapsed=%d off=%u type=%s text=\"%s\"",
+                                              (int)selection->isCollapsed(),
+                                              r->getStartOffset(),
+                                              c ? (c->getType() == dong::dom::DOMNode::NodeType::TEXT ? "text" : "elem") : "null",
+                                              (c && c->getType() == dong::dom::DOMNode::NodeType::TEXT) ? c->getRawTextContent().c_str() : "");
+                            }
                             ce_handled = dong::dom::ContentEditableState::insertParagraph(editable_root, *selection);
                         } else if (key_code == SDLK_LEFT || key_code == SDLK_RIGHT) {
                             int dir = (key_code == SDLK_RIGHT) ? 1 : -1;
@@ -3401,6 +3467,9 @@ struct EngineView::Impl {
                             } else {
                                 ce_handled = dong::dom::ContentEditableState::moveCaret(editable_root, *selection, dir);
                             }
+                        } else if (key_code == SDLK_UP || key_code == SDLK_DOWN) {
+                            int dir = (key_code == SDLK_DOWN) ? 1 : -1;
+                            ce_handled = dong::dom::ContentEditableState::moveCaretVertical(editable_root, *selection, dir);
                         } else if (key_code == SDLK_HOME || key_code == SDLK_END) {
                             ce_handled = dong::dom::ContentEditableState::moveCaretToLineEdge(editable_root, *selection, key_code == SDLK_END);
                         } else if (mod_ctrl && (key_code == 'a' || key_code == 'A')) {

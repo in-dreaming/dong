@@ -557,6 +557,30 @@ static uint32_t parseEnvU32(const char* name, uint32_t default_value) {
     return default_value;
 }
 
+static void injectSyntheticKeys(dong_engine_t* engine, uint32_t frame_index, uint32_t total_frames) {
+    if (!engine) return;
+    if (const char* keys = std::getenv("DONG_TEST_KEYS")) {
+        uint32_t key_frame = (total_frames <= 1) ? 0 : parseEnvU32("DONG_TEST_KEY_FRAME", 1);
+        if (frame_index != key_frame) return;
+
+        // Format: "13;1073741912;..." (SDL key codes)
+        std::string s(keys);
+        size_t start = 0;
+        while (start < s.size()) {
+            size_t end = s.find(';', start);
+            if (end == std::string::npos) end = s.size();
+            std::string token = s.substr(start, end - start);
+            int key = 0;
+            if (std::sscanf(token.c_str(), "%d", &key) == 1 && key > 0) {
+                SDL_Log("[TestKey] Injecting key=%d", key);
+                dong_engine_send_key(engine, static_cast<uint32_t>(key), 1);
+                dong_engine_send_key(engine, static_cast<uint32_t>(key), 0);
+            }
+            start = end + 1;
+        }
+    }
+}
+
 static uint32_t getClickFrameIndex(uint32_t total_frames) {
     // If we only render one frame, inject at frame 0 so one-shot captures can
     // exercise click-driven UI (e.g. select dropdown open state).
@@ -611,6 +635,8 @@ static void injectSyntheticInputs(dong_engine_t* engine, uint32_t frame_index, u
             }
         }
     }
+
+    injectSyntheticKeys(engine, frame_index, total_frames);
 }
 
 static bool executeEngineFrame(dong_engine_t* engine, DongGPUDriver* driver,
@@ -658,6 +684,8 @@ void printUsage(const char* prog) {
     SDL_Log("  DONG_TEST_CLICKS=x1,y1[,...];x2,y2[,...]");
     SDL_Log("  DONG_TEST_CLICK_FRAME=N (default: 1; forced to 0 when frames==1)");
     SDL_Log("  DONG_TEST_WHEEL=x,y,dy (wheel injects on frame_index > 0)");
+    SDL_Log("  DONG_TEST_KEYS=k1[;k2...] (SDL keycodes, keydown+keyup at key frame)");
+    SDL_Log("  DONG_TEST_KEY_FRAME=N (default: 1; forced to 0 when frames==1)");
 
     SDL_Log("");
     SDL_Log("Output rule when frames > 1:");

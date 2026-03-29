@@ -8,9 +8,22 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <functional>
 
 namespace dong::dom {
+
+static bool debugCeHitTestEnabled() {
+    const char* v = std::getenv("DONG_DEBUG_CE_HITTEST");
+    return v && v[0] == '1';
+}
+
+// CE caret hit-testing tends to feel slightly right-shifted in real GUI clicks.
+// Keep a small global left bias so "click before glyph" maps to expected boundary.
+// NOTE: too large bias hurts narrow trailing glyphs (e.g. 't', 'y') at line end.
+static constexpr float kCeCaretLeftBiasPx = 1.0f;
+static constexpr float kCeCaretStartSnapPx = 2.0f;
+static constexpr float kCeCaretEndSnapPx = 1.5f;
 
 // Snap a byte offset to the nearest UTF-8 character boundary (backward).
 static uint32_t utf8SnapBack(const std::string& s, uint32_t offset) {
@@ -264,6 +277,32 @@ TextHitResult TextHitTester::hitTestRecursive(const DOMNodePtr& node,
             // We must use the same collapsed text for binary search, then map back.
             std::string text = dong::collapseWhitespace(raw_text);
 
+            // End-of-text check: click at or near right edge -> cursor after last char.
+            // Do this BEFORE applying the left bias so narrow trailing glyphs
+            // (like 't', 'y') are not skipped by the bias.
+            if (local_x >= tw - kCeCaretEndSnapPx) {
+                result.char_offset = collapsedOffsetToRaw(raw_text, static_cast<uint32_t>(text.size()));
+                if (debugCeHitTestEnabled()) {
+                    DONG_LOG_WARN("[CE-HitTest][FAST-END] x=%d y=%d tlx=%.1f tw=%.1f local_x=%.2f -> off=%u text=\"%s\"",
+                                  x, y, tlx, tw, local_x, result.char_offset, raw_text.c_str());
+                }
+                return result;
+            }
+
+            // Apply a tiny left bias so "click before char" maps to the expected boundary.
+            local_x = std::max(0.0f, local_x - kCeCaretLeftBiasPx);
+
+            // Left-edge snap: clicking very close to glyph run start should place
+            // caret before the first character, not after it.
+            if (local_x <= kCeCaretStartSnapPx) {
+                result.char_offset = collapsedOffsetToRaw(raw_text, 0);
+                if (debugCeHitTestEnabled()) {
+                    DONG_LOG_WARN("[CE-HitTest][FAST] x=%d y=%d tlx=%.1f line=[%.1f,%.1f] local_x=%.2f -> off=%u text=\"%s\"",
+                                  x, y, tlx, line_top, line_bottom, local_x, result.char_offset, raw_text.c_str());
+                }
+                return result;
+            }
+
             if (text.empty() || !shaper) {
                 if (tw > 0.0f && !text.empty()) {
                     float ratio = std::clamp(local_x / tw, 0.0f, 1.0f);
@@ -328,6 +367,10 @@ TextHitResult TextHitTester::hitTestRecursive(const DOMNodePtr& node,
                 uint32_t col_offset = std::min(lo, static_cast<uint32_t>(text.size()));
                 result.char_offset = collapsedOffsetToRaw(raw_text, col_offset);
             }
+            if (debugCeHitTestEnabled()) {
+                DONG_LOG_WARN("[CE-HitTest][FAST] x=%d y=%d tlx=%.1f line=[%.1f,%.1f] local_x=%.2f -> off=%u text=\"%s\"",
+                              x, y, tlx, line_top, line_bottom, local_x, result.char_offset, raw_text.c_str());
+            }
             return result;
         }
 
@@ -355,11 +398,14 @@ TextHitResult TextHitTester::hitTestRecursive(const DOMNodePtr& node,
             return {};
         }
 
+        // Use layout ancestor's style for padding/border since layout comes from it
+        const auto& la_style = layout_ancestor->getComputedStyle();
+        float pad_left = la_style.padding_left.isPixel() ? la_style.padding_left.value : 0.0f;
+        float pad_top = la_style.padding_top.isPixel() ? la_style.padding_top.value : 0.0f;
+        float border_left = la_style.border_left_width >= 0.0f ? la_style.border_left_width : 0.0f;
+        float border_top = la_style.border_top_width >= 0.0f ? la_style.border_top_width : 0.0f;
+
         const auto& style = parent->getComputedStyle();
-        float pad_left = style.padding_left.isPixel() ? style.padding_left.value : 0.0f;
-        float pad_top = style.padding_top.isPixel() ? style.padding_top.value : 0.0f;
-        float border_left = style.border_left_width >= 0.0f ? style.border_left_width : 0.0f;
-        float border_top = style.border_top_width >= 0.0f ? style.border_top_width : 0.0f;
         float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
 
         float content_start_x = lx + border_left + pad_left;
@@ -430,6 +476,28 @@ TextHitResult TextHitTester::hitTestRecursive(const DOMNodePtr& node,
             if (local_x < 0.0f) local_x = 0.0f;
 
             const std::string& text = node->getRawTextContent();
+
+            // End-of-text check: click at or near right edge -> cursor after last char
+            float text_w = text_end_x - text_start_x;
+            if (text_w > 0.0f && local_x >= text_w - kCeCaretEndSnapPx) {
+                result.char_offset = static_cast<uint32_t>(text.size());
+                if (debugCeHitTestEnabled()) {
+                    DONG_LOG_WARN("[CE-HitTest][SLOW-END] x=%d y=%d text_start_x=%.1f local_x=%.2f -> off=%u text=\"%s\"",
+                                  x, y, text_start_x, local_x, result.char_offset, text.c_str());
+                }
+                return result;
+            }
+
+            local_x = std::max(0.0f, local_x - kCeCaretLeftBiasPx);
+
+            if (local_x <= kCeCaretStartSnapPx) {
+                result.char_offset = 0;
+                if (debugCeHitTestEnabled()) {
+                    DONG_LOG_WARN("[CE-HitTest][SLOW] x=%d y=%d text_start_x=%.1f line_y=%.1f local_x=%.2f -> off=%u text=\"%s\"",
+                                  x, y, text_start_x, text_line_y, local_x, result.char_offset, text.c_str());
+                }
+                return result;
+            }
             if (text.empty() || !shaper) {
                 float total_w = text_end_x - text_start_x;
                 if (total_w > 0.0f) {
@@ -491,6 +559,10 @@ TextHitResult TextHitTester::hitTestRecursive(const DOMNodePtr& node,
                 }
                 result.char_offset = std::min(lo, static_cast<uint32_t>(text.size()));
             }
+            if (debugCeHitTestEnabled()) {
+                DONG_LOG_WARN("[CE-HitTest][SLOW] x=%d y=%d text_start_x=%.1f line_y=%.1f local_x=%.2f -> off=%u text=\"%s\"",
+                              x, y, text_start_x, text_line_y, local_x, result.char_offset, text.c_str());
+            }
             return result;
         }
 
@@ -515,9 +587,23 @@ TextHitResult TextHitTester::hitTestRecursive(const DOMNodePtr& node,
         // For contenteditable elements, skip Y upper-bound check because
         // dynamically inserted <br> line breaks may extend content beyond
         // the layout height (Yoga doesn't know about <br> lines).
+        //
+        // For inline wrappers (e.g. execCommand creates <span>), do not do strict
+        // element-box clipping here: inline layout boxes can be narrow/offset and
+        // still contain hittable text descendants. Let text-node hit testing decide.
         bool is_ce = node->isContentEditable();
-        if (x < lx || x > lx + w || y < ly || (!is_ce && y > ly + h)) {
-            return {};
+        bool is_inline_like = false;
+        if (node->getType() == DOMNode::NodeType::ELEMENT) {
+            const auto& cs = node->getComputedStyle();
+            const std::string& d = cs.display;
+            is_inline_like = (d == "inline" || d == "inline-block" || d == "inline-flex" || d == "inline-table");
+        }
+        const bool has_reliable_box = (w > 0.0f && h > 0.0f);
+        const bool strict_clip = !is_ce && !is_inline_like && has_reliable_box;
+        if (strict_clip) {
+            if (x < lx || x > lx + w || y < ly || y > ly + h) {
+                return {};
+            }
         }
     }
 
@@ -528,10 +614,15 @@ TextHitResult TextHitTester::hitTestRecursive(const DOMNodePtr& node,
         if (result.found) return result;
     }
 
-    // If this is a contenteditable element and no child matched,
+    // If this is the contenteditable ROOT element and no child matched,
     // find the nearest text node on the closest line and snap to it.
     // This handles clicks past line ends, in empty space below text, etc.
-    if (node->isContentEditable() && !children.empty()) {
+    // IMPORTANT: only trigger on the actual CE root (has contenteditable attribute),
+    // NOT on descendants that merely inherit contenteditable (like <b>, <span>).
+    // Otherwise inline wrappers would absorb clicks meant for other lines.
+    const bool is_ce_root = node->hasAttribute("contenteditable") &&
+                            node->getAttribute("contenteditable") != "false";
+    if (is_ce_root && !children.empty()) {
         // Collect all text nodes under this CE root
         std::vector<DOMNodePtr> text_nodes;
         std::function<void(const DOMNodePtr&)> collect;
@@ -545,7 +636,9 @@ TextHitResult TextHitTester::hitTestRecursive(const DOMNodePtr& node,
         collect(node);
 
         if (!text_nodes.empty()) {
-            // Compute Y line for each text node, find the one on the closest line to click Y
+            // Compute line + x-distance for each text node and pick the best insertion target.
+            // This fixes cases where clicking in line-2 left blank area incorrectly snaps to
+            // line-1 text, simply because line-mid distance happened to be similar.
             const auto& ce_style = node->getComputedStyle();
             float ce_fs = ce_style.font_size > 0.0f ? ce_style.font_size : 16.0f;
             float ce_lh = computeLineHeight(ce_style, ce_fs);
@@ -554,24 +647,52 @@ TextHitResult TextHitTester::hitTestRecursive(const DOMNodePtr& node,
             float base_y = (layout ? layout->y : 0.0f) + border_top + pad_top;
 
             DOMNodePtr best_node;
-            float best_dist = 1e9f;
-            bool best_is_after = false; // click is after text end on the line
+            float best_line_penalty = 1e9f; // 0 when y is in line box, else distance to line box
+            float best_x_penalty = 1e9f;    // distance to [text_left, text_right]
+            bool best_is_after = false;
 
             for (const auto& tn : text_nodes) {
                 float br_y = computeTextNodeBrLineY(tn, ce_fs);
                 float line_top = base_y + br_y;
-                float line_mid = line_top + ce_lh * 0.5f;
-                float ydist = std::abs(static_cast<float>(y) - line_mid);
-                if (ydist < best_dist) {
-                    best_dist = ydist;
-                    best_node = tn;
-                    // Check if click is to the right of this text node
-                    const auto* tn_layout = layout_engine->getLayout(tn);
-                    if (tn_layout && tn_layout->width > 0) {
-                        best_is_after = (static_cast<float>(x) >= tn_layout->x + tn_layout->width);
-                    } else {
-                        best_is_after = true; // assume after if no layout
+                float line_bottom = line_top + ce_lh;
+                float y_f = static_cast<float>(y);
+                float line_penalty = 0.0f;
+                if (y_f < line_top) {
+                    line_penalty = line_top - y_f;
+                } else if (y_f > line_bottom) {
+                    line_penalty = y_f - line_bottom;
+                }
+
+                const auto* tn_layout = layout_engine->getLayout(tn);
+                float text_left = 0.0f;
+                float text_right = 0.0f;
+                bool has_layout = (tn_layout && tn_layout->width > 0.0f);
+                if (has_layout) {
+                    text_left = tn_layout->x;
+                    text_right = tn_layout->x + tn_layout->width;
+                }
+                float x_f = static_cast<float>(x);
+                float x_penalty = 0.0f;
+                bool is_after = false;
+                if (has_layout) {
+                    if (x_f < text_left) {
+                        x_penalty = text_left - x_f;
+                    } else if (x_f > text_right) {
+                        x_penalty = x_f - text_right;
+                        is_after = true;
                     }
+                } else {
+                    // Unknown layout: deprioritize against nodes with layout.
+                    x_penalty = 1e6f;
+                    is_after = true;
+                }
+
+                if (line_penalty < best_line_penalty ||
+                    (line_penalty == best_line_penalty && x_penalty < best_x_penalty)) {
+                    best_line_penalty = line_penalty;
+                    best_x_penalty = x_penalty;
+                    best_node = tn;
+                    best_is_after = is_after;
                 }
             }
 
@@ -579,12 +700,18 @@ TextHitResult TextHitTester::hitTestRecursive(const DOMNodePtr& node,
                 TextHitResult result;
                 result.text_node = best_node;
                 result.found = true;
+                // For clicks in CE blank area / between inline fragments, compute the
+                // nearest insertion offset in the chosen line text instead of forcing
+                // only begin/end. Keep end-snap when clearly after the node.
                 if (best_is_after) {
-                    // Snap to end of text
                     result.char_offset = static_cast<uint32_t>(best_node->getRawTextContent().size());
                 } else {
-                    // Snap to beginning of text
-                    result.char_offset = 0;
+                    result.char_offset = estimateCharOffset(best_node, layout_engine, x, shaper);
+                }
+                if (debugCeHitTestEnabled()) {
+                    DONG_LOG_WARN("[CE-HitTest][FALLBACK] x=%d y=%d line_pen=%.2f x_pen=%.2f after=%d off=%u text=\"%s\"",
+                                  x, y, best_line_penalty, best_x_penalty, best_is_after ? 1 : 0,
+                                  result.char_offset, best_node->getRawTextContent().c_str());
                 }
                 return result;
             }
@@ -612,6 +739,10 @@ uint32_t TextHitTester::estimateCharOffset(const DOMNodePtr& text_node,
     if (text_layout && text_layout->width > 0) {
         content_x = static_cast<float>(x) - text_layout->x;
         if (content_x < 0.0f) content_x = 0.0f;
+        if (content_x >= text_layout->width - kCeCaretEndSnapPx)
+            return static_cast<uint32_t>(text.size());
+        content_x = std::max(0.0f, content_x - kCeCaretLeftBiasPx);
+        if (content_x <= kCeCaretStartSnapPx) return 0;
     } else {
         const auto* layout = layout_engine->getLayout(parent);
         auto la = parent;
@@ -626,6 +757,8 @@ uint32_t TextHitTester::estimateCharOffset(const DOMNodePtr& text_node,
         float border_left = pstyle.border_left_width >= 0.0f ? pstyle.border_left_width : 0.0f;
         content_x = static_cast<float>(x) - layout->x - border_left - pad_left;
         if (content_x < 0.0f) content_x = 0.0f;
+        content_x = std::max(0.0f, content_x - kCeCaretLeftBiasPx);
+        if (content_x <= kCeCaretStartSnapPx) return 0;
     }
 
     const auto& style = parent->getComputedStyle();

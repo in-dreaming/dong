@@ -355,6 +355,14 @@ void renderInlineChildren(const dom::DOMNodePtr& node,
             prev_was_text = true;
         } else if (gc->getType() == dom::DOMNode::NodeType::ELEMENT) {
             const auto& child_cs = gc->getComputedStyle();
+            if (gc->getTagName() == "br") {
+                // Handle explicit line break inside nested inline subtree
+                // (e.g. <span>foo<br>bar</span>) in Mixed path.
+                state.cumulative_x = 0.0f;
+                state.baseline_y += state.line_height_px;
+                prev_was_text = false;
+                continue;
+            }
             if (child_cs.display == "inline") {
                 renderInlineSubtree(gc, child_cs, container_style,
                                     state, shaper, builder);

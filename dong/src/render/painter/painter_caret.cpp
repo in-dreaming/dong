@@ -101,59 +101,150 @@ static float measureTextWidth(const std::string& text,
     return text.size() * font_size * 0.6f;
 }
 
-// Compute the base X position for a text node, accounting for preceding siblings.
-// Returns the X coordinate where this text node's content starts.
-static float computeTextNodeBaseX(const dom::DOMNodePtr& text_node,
-                                    layout::Engine* layout_engine,
-                                    TextShaper& shaper) {
+static float measureSpaceWidth(const dom::ComputedStyle& style,
+                                float font_size,
+                                TextShaper& shaper) {
+    return measureTextWidth(" ", style, font_size, shaper);
+}
+
+// Simulate the rendering pipeline's cumulative_x computation to find the
+// exact caret X position.  This replaces computeTextNodeBaseX + computeTextXOffset
+// which had whitespace-handling mismatches with the actual text renderer.
+//
+// The renderer: collapseWhitespace(raw) -> trimmed text, then adds separate
+// space gaps for leading/trailing whitespace.  We replicate that logic here
+// so the caret lines up pixel-perfectly with the rendered glyphs.
+static float computeCaretXFromRendering(const dom::DOMNodePtr& text_node,
+                                         uint32_t char_offset,
+                                         layout::Engine* layout_engine,
+                                         TextShaper& shaper) {
     if (!text_node) return 0.0f;
 
-    // FAST PATH: use text node's own layout entry from IFC if available
-    auto* text_layout = layout_engine->getLayout(text_node);
-    if (text_layout && text_layout->width > 0) {
-        return text_layout->x;
+    auto ce_root = text_node->getParent();
+    while (ce_root) {
+        if (ce_root->hasAttribute("contenteditable")) break;
+        auto next = ce_root->getParent();
+        if (!next) break;
+        ce_root = next;
     }
+    if (!ce_root) return 0.0f;
 
-    // SLOW PATH: compute from parent layout + sibling accumulation
-    auto parent = text_node->getParent();
-    if (!parent) return 0.0f;
+    auto* ce_layout = layout_engine->getLayout(ce_root);
+    if (!ce_layout) return 0.0f;
 
-    auto* layout_node = layout_engine->getLayout(parent);
-    auto layout_ancestor = parent;
-    while (!layout_node && layout_ancestor) {
-        layout_ancestor = layout_ancestor->getParent();
-        if (layout_ancestor) {
-            layout_node = layout_engine->getLayout(layout_ancestor);
+    const auto& ce_style = ce_root->getComputedStyle();
+    float pad_left = ce_style.padding_left.isPixel() ? ce_style.padding_left.value : 0.0f;
+    float border_left = ce_style.border_left_width >= 0.0f ? ce_style.border_left_width : 0.0f;
+    float ce_fs = ce_style.font_size > 0.0f ? ce_style.font_size : 16.0f;
+
+    float origin_x = ce_layout->x + border_left + pad_left;
+    float cum_x = 0.0f;
+    bool found = false;
+    float result_x = 0.0f;
+
+    // Advance cum_x for a text node the same way the renderer does.
+    auto advanceText = [&](const std::string& raw,
+                           const dom::ComputedStyle& st,
+                           float fs) {
+        std::string collapsed = dong::collapseWhitespace(raw);
+        if (collapsed.empty()) {
+            if (!raw.empty() && cum_x > 0.0f)
+                cum_x += measureSpaceWidth(st, fs, shaper);
+            return;
         }
-    }
-    if (!layout_node) return 0.0f;
+        if (!raw.empty() && dong::isAsciiWhitespace(raw.front()) && cum_x > 0.0f)
+            cum_x += measureSpaceWidth(st, fs, shaper);
+        cum_x += measureTextWidth(collapsed, st, fs, shaper);
+        if (!raw.empty() && dong::isAsciiWhitespace(raw.back()))
+            cum_x += measureSpaceWidth(st, fs, shaper);
+    };
 
-    const auto& style = parent->getComputedStyle();
-    float pad_left = style.padding_left.isPixel() ? style.padding_left.value : 0.0f;
-    float border_left = style.border_left_width >= 0.0f ? style.border_left_width : 0.0f;
-    float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
+    // Compute caret X within the target text node.
+    auto computeOffsetInNode = [&](const std::string& raw,
+                                    uint32_t off,
+                                    const dom::ComputedStyle& st,
+                                    float fs) -> float {
+        std::string collapsed = dong::collapseWhitespace(raw);
+        bool has_leading = !raw.empty() && dong::isAsciiWhitespace(raw.front()) && cum_x > 0.0f;
+        float leading = has_leading ? measureSpaceWidth(st, fs, shaper) : 0.0f;
 
-    float base_x = layout_node->x + border_left + pad_left;
+        if (off == 0) return 0.0f;
 
-    const auto& siblings = parent->getChildren();
-    if (siblings.size() > 1) {
-        for (const auto& sib : siblings) {
-            if (sib == text_node) break;
-            if (sib->getType() == dom::DOMNode::NodeType::ELEMENT &&
-                sib->getTagName() == "br") {
-                base_x = layout_node->x + border_left + pad_left;
-            } else if (sib->getType() == dom::DOMNode::NodeType::TEXT) {
-                base_x += measureTextWidth(sib->getRawTextContent(), style, font_size, shaper);
+        if (off >= static_cast<uint32_t>(raw.size())) {
+            return leading + measureTextWidth(collapsed, st, fs, shaper);
+        }
+
+        // Map raw byte offset -> collapsed byte offset
+        uint32_t col_pos = 0;
+        bool in_sp = false, started = false;
+        for (uint32_t i = 0; i < off && i < static_cast<uint32_t>(raw.size()); ++i) {
+            if (dong::isAsciiWhitespace(raw[i])) {
+                if (started && !in_sp) col_pos++;
+                in_sp = true;
             } else {
-                auto* sib_layout = layout_engine->getLayout(sib);
-                if (sib_layout) {
-                    base_x += sib_layout->width;
+                started = true;
+                in_sp = false;
+                col_pos++;
+            }
+        }
+        if (col_pos > static_cast<uint32_t>(collapsed.size()))
+            col_pos = static_cast<uint32_t>(collapsed.size());
+
+        std::string prefix = collapsed.substr(0, col_pos);
+        return leading + measureTextWidth(prefix, st, fs, shaper);
+    };
+
+    std::function<bool(const dom::DOMNodePtr&,
+                        const dom::ComputedStyle&, float)> walk;
+    walk = [&](const dom::DOMNodePtr& parent,
+               const dom::ComputedStyle& st, float fs) -> bool {
+        for (const auto& child : parent->getChildren()) {
+            if (found) return true;
+
+            if (child->getType() == dom::DOMNode::NodeType::TEXT) {
+                if (child == text_node) {
+                    found = true;
+                    result_x = origin_x + cum_x +
+                        computeOffsetInNode(child->getRawTextContent(),
+                                            char_offset, st, fs);
+                    return true;
+                }
+                advanceText(child->getRawTextContent(), st, fs);
+            } else if (child->getType() == dom::DOMNode::NodeType::ELEMENT) {
+                if (child->getTagName() == "br") {
+                    cum_x = 0.0f;
+                } else {
+                    const auto& cs = child->getComputedStyle();
+                    float cfs = cs.font_size > 0.0f ? cs.font_size : fs;
+                    if (walk(child, cs, cfs)) return true;
                 }
             }
         }
-    }
+        return false;
+    };
 
-    return base_x;
+    walk(ce_root, ce_style, ce_fs);
+    return found ? result_x : origin_x;
+}
+
+// If a text node is immediately preceded by a <br> in the same parent, its visual
+// line starts from the container line start. In this case IFC text layout x can be
+// stale (still on previous run), so caret/selection should use computed base X.
+static bool hasImmediatePrecedingBr(const dom::DOMNodePtr& text_node) {
+    if (!text_node) return false;
+    auto parent = text_node->getParent();
+    if (!parent) return false;
+    const auto& siblings = parent->getChildren();
+    for (size_t i = 0; i < siblings.size(); ++i) {
+        if (siblings[i] == text_node) {
+            if (i == 0) return false;
+            auto prev = siblings[i - 1];
+            return prev &&
+                   prev->getType() == dom::DOMNode::NodeType::ELEMENT &&
+                   prev->getTagName() == "br";
+        }
+    }
+    return false;
 }
 
 // Compute the line Y offset for a text node by counting <br> elements
@@ -260,29 +351,9 @@ void paintContentEditableCaret(const dom::DOMNodePtr& focused_editable,
     float caret_x, caret_y;
 
     if (container->getType() == dom::DOMNode::NodeType::TEXT) {
-        // Get the container's parent style for text shaping (may differ from CE root style
-        // if text is inside a <span> with bold/italic)
-        auto text_parent = container->getParent();
-        const auto& text_style = text_parent ? text_parent->getComputedStyle() : style;
-        float text_font_size = text_style.font_size > 0.0f ? text_style.font_size : font_size;
-
-        // Try to use text node's own layout entry from IFC (most accurate for X)
-        auto* text_ln = layout_engine->getLayout(container);
-        if (text_ln && text_ln->width > 0) {
-            caret_x = text_ln->x;
-            if (offset > 0) {
-                caret_x += computeTextXOffset(container, offset, text_style, text_font_size, shaper, true);
-            }
-            caret_y = layout_node->y + border_top + pad_top;
-            caret_y += computeTextNodeLineY(container, layout_engine);
-        } else {
-            caret_x = computeTextNodeBaseX(container, layout_engine, shaper);
-            caret_y = layout_node->y + border_top + pad_top;
-            caret_y += computeTextNodeLineY(container, layout_engine);
-            if (offset > 0) {
-                caret_x += computeTextXOffset(container, offset, text_style, text_font_size, shaper);
-            }
-        }
+        caret_x = computeCaretXFromRendering(container, offset, layout_engine, shaper);
+        caret_y = layout_node->y + border_top + pad_top;
+        caret_y += computeTextNodeLineY(container, layout_engine);
     } else {
         float pad_left = style.padding_left.isPixel() ? style.padding_left.value : 0.0f;
         float border_left = style.border_left_width >= 0.0f ? style.border_left_width : 0.0f;
@@ -339,49 +410,20 @@ void paintSelectionHighlight(const dom::DOMNodePtr& focused_editable,
         float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
         float lh = font_size * 1.2f;
 
-        float base_x, by;
-
-        // Find the contenteditable root for Y computation.
-        // We must use the CE root's layout (not an intermediate <span>) because
-        // inline <span> layout Y already includes line offset, which would cause
-        // double counting with computeTextNodeLineY.
         dom::DOMNodePtr ce_root = parent;
         while (ce_root && !ce_root->hasAttribute("contenteditable")) {
             ce_root = ce_root->getParent();
         }
         auto* ce_ln = ce_root ? layout_engine->getLayout(ce_root) : nullptr;
-        if (!ce_ln) {
-            // fallback: walk up to any ancestor with layout
-            auto* ln = layout_engine->getLayout(parent);
-            auto la = parent;
-            while (!ln && la) {
-                la = la->getParent();
-                if (la) ln = layout_engine->getLayout(la);
-            }
-            if (!ln) return;
-            ce_ln = ln;
-            ce_root = la;
-        }
+        if (!ce_ln) return;
 
         const auto& ce_style = ce_root->getComputedStyle();
         float pad_top = ce_style.padding_top.isPixel() ? ce_style.padding_top.value : 0.0f;
         float border_top = ce_style.border_top_width >= 0.0f ? ce_style.border_top_width : 0.0f;
+        float by = ce_ln->y + border_top + pad_top + computeTextNodeLineY(text_node, layout_engine);
 
-        // Use text node's own layout from IFC when available for X
-        auto* text_ln = layout_engine->getLayout(text_node);
-        if (text_ln && text_ln->width > 0) {
-            base_x = text_ln->x;
-        } else {
-            base_x = computeTextNodeBaseX(text_node, layout_engine, shaper);
-        }
-
-        // Y: CE root content area + BR-counted line offset
-        by = ce_ln->y + border_top + pad_top + computeTextNodeLineY(text_node, layout_engine);
-
-        // Use collapsed text shaping when IFC layout is available
-        bool use_collapsed = (text_ln && text_ln->width > 0);
-        float sx = base_x + computeTextXOffset(text_node, from_offset, style, font_size, shaper, use_collapsed);
-        float ex = base_x + computeTextXOffset(text_node, to_offset, style, font_size, shaper, use_collapsed);
+        float sx = computeCaretXFromRendering(text_node, from_offset, layout_engine, shaper);
+        float ex = computeCaretXFromRendering(text_node, to_offset, layout_engine, shaper);
 
         if (ex > sx) {
             Rect rect;

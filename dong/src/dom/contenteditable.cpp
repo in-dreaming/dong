@@ -165,18 +165,106 @@ bool ContentEditableState::deleteBackward(const DOMNodePtr& editable_root,
 
     if (container->getType() == DOMNode::NodeType::TEXT) {
         std::string content = container->getRawTextContent();
-        if (offset == 0 || content.empty()) return false;
 
-        // UTF-8 aware: find start of character before offset
-        uint32_t char_start = utf8PrevCharStart(content, offset);
-        uint32_t char_len = offset - char_start;
-        content.erase(char_start, char_len);
-        container->setTextContent(content);
-        selection.collapse(container, char_start);
+        if (offset > 0 && !content.empty()) {
+            // Normal case: delete character before offset
+            uint32_t char_start = utf8PrevCharStart(content, offset);
+            uint32_t char_len = offset - char_start;
+            content.erase(char_start, char_len);
+            container->setTextContent(content);
+            selection.collapse(container, char_start);
 
-        if (auto parent = container->getParent()) {
-            parent->markLayoutDirty();
+            if (auto parent = container->getParent()) {
+                parent->markLayoutDirty();
+            }
+            return true;
         }
+
+        // offset == 0: try cross-line backspace (merge with previous line)
+        // Walk up from the container to find a <br> preceding the current
+        // inline subtree at the editable root level.
+        auto current = container;
+        while (current->getParent() && current->getParent() != editable_root) {
+            current = current->getParent();
+        }
+        if (!current->getParent()) return false;
+
+        // `current` is now a direct child of editable_root.
+        // Look for a <br> immediately before it.
+        auto prev_sib = current->getPreviousSibling();
+        if (!prev_sib ||
+            prev_sib->getType() != DOMNode::NodeType::ELEMENT ||
+            prev_sib->getTagName() != "br") {
+            // No <br> before us — try deleting from end of previous text node
+            auto prev_text = findPrevTextNode(editable_root, container);
+            if (prev_text) {
+                std::string prev_content = prev_text->getRawTextContent();
+                if (!prev_content.empty()) {
+                    uint32_t char_start = utf8PrevCharStart(prev_content,
+                                          static_cast<uint32_t>(prev_content.size()));
+                    prev_content.erase(char_start);
+                    prev_text->setTextContent(prev_content);
+                    selection.collapse(prev_text, char_start);
+                    editable_root->markLayoutDirty();
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // Found a <br> before `current`. Remove it and merge.
+        auto br_node = prev_sib;
+        auto before_br = br_node->getPreviousSibling();
+
+        editable_root->removeChild(br_node);
+
+        // Try to merge `current` with the element before the <br> if both
+        // are inline elements with the same tag (e.g. two <b> from a split).
+        if (before_br &&
+            before_br->getType() == DOMNode::NodeType::ELEMENT &&
+            current->getType() == DOMNode::NodeType::ELEMENT &&
+            before_br->getTagName() == current->getTagName()) {
+
+            // Find the caret target: the last text node in before_br, at its end
+            auto caret_node = findLastTextNode(before_br);
+            uint32_t caret_off = caret_node
+                ? static_cast<uint32_t>(caret_node->getRawTextContent().size())
+                : 0;
+
+            // Move all children from `current` into `before_br`
+            while (!current->getChildren().empty()) {
+                auto child = current->getChildren().front();
+                current->removeChild(child);
+                before_br->appendChild(child);
+            }
+            editable_root->removeChild(current);
+
+            // Merge adjacent text nodes at the junction
+            if (caret_node) {
+                auto next = caret_node->getNextSibling();
+                if (next && next->getType() == DOMNode::NodeType::TEXT) {
+                    std::string merged = caret_node->getRawTextContent()
+                                       + next->getRawTextContent();
+                    caret_node->setTextContent(merged);
+                    before_br->removeChild(next);
+                }
+                selection.collapse(caret_node, caret_off);
+            } else {
+                selection.collapse(before_br, 0);
+            }
+        } else {
+            // Different elements or text nodes: just place caret at end of
+            // the content before the removed <br>.
+            auto prev_text = findPrevTextNode(editable_root, container);
+            if (prev_text) {
+                selection.collapse(prev_text,
+                    static_cast<uint32_t>(prev_text->getRawTextContent().size()));
+            } else {
+                selection.collapse(container, 0);
+            }
+        }
+
+        editable_root->markLayoutDirty();
         return true;
     }
 
@@ -250,25 +338,91 @@ bool ContentEditableState::insertParagraph(const DOMNodePtr& editable_root,
 
         container->setTextContent(before);
 
-        // Create <br>
-        auto br = std::make_shared<DOMNode>(DOMNode::NodeType::ELEMENT, "br");
-        parent->insertBefore(br, container->getNextSibling());
+        auto after_text = std::make_shared<DOMNode>(DOMNode::NodeType::TEXT);
+        after_text->setTextContent(after);
 
-        // Create text node for the rest
-        if (!after.empty()) {
-            auto after_node = std::make_shared<DOMNode>(DOMNode::NodeType::TEXT);
-            after_node->setTextContent(after);
-            parent->insertBefore(after_node, br->getNextSibling());
-            selection.collapse(after_node, 0);
-        } else {
-            // Place caret after the BR
-            auto after_node = std::make_shared<DOMNode>(DOMNode::NodeType::TEXT);
-            after_node->setTextContent("");
-            parent->insertBefore(after_node, br->getNextSibling());
-            selection.collapse(after_node, 0);
+        if (parent == editable_root) {
+            // Simple case: text node is a direct child of the editable root.
+            auto br = std::make_shared<DOMNode>(DOMNode::NodeType::ELEMENT, "br");
+            parent->insertBefore(br, container->getNextSibling());
+            parent->insertBefore(after_text, br->getNextSibling());
+            selection.collapse(after_text, 0);
+            parent->markLayoutDirty();
+            return true;
         }
 
-        parent->markLayoutDirty();
+        // Text node is inside inline element(s) (e.g. <b>, <strong>, <em>).
+        // Split each inline ancestor up to the editable root so that the <br>
+        // ends up as a direct child of the editable root — matching browser
+        // behavior and keeping caret/hit-testing coordinate math correct.
+        DOMNodePtr split_child = after_text;
+        DOMNodePtr current = container;
+
+        while (current->getParent() && current->getParent() != editable_root) {
+            auto cur_parent = current->getParent();
+
+            auto new_wrapper = cur_parent->cloneNode(false);
+
+            // Move siblings that come after `current` into new_wrapper
+            auto next_sib = current->getNextSibling();
+            while (next_sib) {
+                auto to_move = next_sib;
+                next_sib = to_move->getNextSibling();
+                cur_parent->removeChild(to_move);
+                new_wrapper->appendChild(to_move);
+            }
+
+            // Prepend split_child into new_wrapper
+            if (new_wrapper->getChildren().empty()) {
+                new_wrapper->appendChild(split_child);
+            } else {
+                new_wrapper->insertBefore(split_child, new_wrapper->getFirstChild());
+            }
+
+            split_child = new_wrapper;
+            current = cur_parent;
+        }
+
+        // `current` is now a direct child of editable_root.
+        auto br = std::make_shared<DOMNode>(DOMNode::NodeType::ELEMENT, "br");
+        editable_root->insertBefore(br, current->getNextSibling());
+        editable_root->insertBefore(split_child, br->getNextSibling());
+
+        // Place caret at the first text node inside the split subtree
+        auto caret_target = findFirstTextNode(split_child);
+        if (!caret_target) {
+            caret_target = std::make_shared<DOMNode>(DOMNode::NodeType::TEXT);
+            caret_target->setTextContent("");
+            if (split_child->getType() == DOMNode::NodeType::ELEMENT) {
+                split_child->appendChild(caret_target);
+            } else {
+                editable_root->insertBefore(caret_target, split_child->getNextSibling());
+            }
+        }
+        selection.collapse(caret_target, 0);
+
+        editable_root->markLayoutDirty();
+        return true;
+    }
+
+    // For element containers (caret between child nodes): insert <br> at child offset.
+    if (container->getType() == DOMNode::NodeType::ELEMENT) {
+        const auto& children = container->getChildren();
+
+        auto br = std::make_shared<DOMNode>(DOMNode::NodeType::ELEMENT, "br");
+        if (offset < children.size()) {
+            container->insertBefore(br, children[offset]);
+        } else {
+            container->appendChild(br);
+        }
+
+        // Keep caret placeable after BR by ensuring there is a text node after it.
+        auto after_node = std::make_shared<DOMNode>(DOMNode::NodeType::TEXT);
+        after_node->setTextContent("");
+        container->insertBefore(after_node, br->getNextSibling());
+        selection.collapse(after_node, 0);
+
+        container->markLayoutDirty();
         return true;
     }
 
@@ -518,6 +672,124 @@ bool ContentEditableState::selectWordAtCaret(const DOMNodePtr& editable_root,
     }
 
     selection.setBaseAndExtent(container, word_start, container, word_end);
+    return true;
+}
+
+bool ContentEditableState::moveCaretVertical(const DOMNodePtr& editable_root,
+                                               Selection& selection,
+                                               int direction) {
+    if (!editable_root || selection.getRangeCount() == 0) return false;
+
+    auto* range = selection.getRangeAt(0);
+    if (!range) return false;
+
+    auto container = range->getStartContainer();
+    uint32_t offset = range->getStartOffset();
+    if (!container) return false;
+
+    // Collect text nodes grouped by visual lines (split at <br> in editable root).
+    // Lines are delimited by <br> elements that are direct children of the
+    // editable root.  Text nodes are collected depth-first from each
+    // non-<br> child of the root.
+    struct Line {
+        std::vector<DOMNodePtr> text_nodes;
+    };
+    std::vector<Line> lines;
+    lines.push_back({});
+
+    std::function<void(const DOMNodePtr&)> collect_texts;
+    collect_texts = [&](const DOMNodePtr& n) {
+        if (n->getType() == DOMNode::NodeType::TEXT) {
+            lines.back().text_nodes.push_back(n);
+            return;
+        }
+        for (const auto& c : n->getChildren()) collect_texts(c);
+    };
+
+    for (const auto& child : editable_root->getChildren()) {
+        if (child->getType() == DOMNode::NodeType::ELEMENT &&
+            child->getTagName() == "br") {
+            lines.push_back({});
+        } else {
+            collect_texts(child);
+        }
+    }
+
+    // Find which line the current container is on
+    int cur_line = -1;
+    int cur_text_idx = -1;
+    for (int li = 0; li < static_cast<int>(lines.size()); ++li) {
+        for (int ti = 0; ti < static_cast<int>(lines[li].text_nodes.size()); ++ti) {
+            if (lines[li].text_nodes[ti] == container) {
+                cur_line = li;
+                cur_text_idx = ti;
+                break;
+            }
+        }
+        if (cur_line >= 0) break;
+    }
+    if (cur_line < 0) return false;
+
+    int target_line = cur_line + direction;
+    if (target_line < 0 || target_line >= static_cast<int>(lines.size())) {
+        // At first/last line: move to start/end of content
+        if (direction < 0) {
+            auto first = findFirstTextNode(editable_root);
+            if (first) { selection.collapse(first, 0); return true; }
+        } else {
+            auto last = findLastTextNode(editable_root);
+            if (last) {
+                selection.collapse(last,
+                    static_cast<uint32_t>(last->getRawTextContent().size()));
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Compute proportional position (0.0 = line start, 1.0 = line end).
+    // Using ratio instead of absolute byte offset so the cursor stays at
+    // a similar visual column even when lines have different content widths.
+    uint32_t chars_before = 0;
+    for (int ti = 0; ti < cur_text_idx; ++ti) {
+        chars_before += static_cast<uint32_t>(
+            lines[cur_line].text_nodes[ti]->getRawTextContent().size());
+    }
+    uint32_t line_char_offset = chars_before + offset;
+
+    uint32_t total_current = 0;
+    for (const auto& tn : lines[cur_line].text_nodes) {
+        total_current += static_cast<uint32_t>(tn->getRawTextContent().size());
+    }
+    float ratio = total_current > 0
+        ? static_cast<float>(line_char_offset) / static_cast<float>(total_current)
+        : 0.0f;
+
+    const auto& target = lines[target_line].text_nodes;
+    if (target.empty()) return false;
+
+    uint32_t total_target = 0;
+    for (const auto& tn : target) {
+        total_target += static_cast<uint32_t>(tn->getRawTextContent().size());
+    }
+
+    uint32_t target_offset = static_cast<uint32_t>(ratio * total_target);
+    if (target_offset > total_target) target_offset = total_target;
+
+    // Walk target line's text nodes to place caret at the proportional offset
+    uint32_t remaining = target_offset;
+    for (const auto& tn : target) {
+        uint32_t len = static_cast<uint32_t>(tn->getRawTextContent().size());
+        if (remaining <= len) {
+            selection.collapse(tn, remaining);
+            return true;
+        }
+        remaining -= len;
+    }
+
+    auto& last_tn = target.back();
+    selection.collapse(last_tn,
+        static_cast<uint32_t>(last_tn->getRawTextContent().size()));
     return true;
 }
 

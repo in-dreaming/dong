@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+body { font-family: sans-serif; padding: 20px; }
+#editor {
+    border: 2px solid #333;
+    padding: 16px;
+    min-height: 100px;
+    margin: 10px 0;
+    font-size: 16px;
+    line-height: 1.5;
+}
+#editor:focus {
+    border-color: #0066cc;
+    outline: none;
+}
+#log { margin-top: 10px; padding: 10px; border: 1px solid #ccc; min-height: 50px; font-family: monospace; font-size: 12px; }
+button { margin: 4px; padding: 6px 12px; }
+</style>
+</head>
+<body>
+<h2>ContentEditable Basic Test (Pre-bolded)</h2>
+
+<div>
+    <button onclick="document.execCommand('bold')">Bold</button>
+    <button onclick="document.execCommand('italic')">Italic</button>
+    <button onclick="document.execCommand('underline')">Underline</button>
+    <button onclick="testSelectAll()">Select All</button>
+</div>
+
+<div id="editor" contenteditable="true">
+    Hello, this is an editable area. <span style="font-weight: bold">Try typing here!</span>
+</div>
+
+<div id="log"></div>
+
+<script>
+var log = document.getElementById('log');
+var editor = document.getElementById('editor');
+
+function addLog(msg) {
+    log.textContent += msg + '\n';
+}
+
+// Test isContentEditable
+addLog('editor.isContentEditable: ' + editor.isContentEditable);
+addLog('editor.contentEditable: ' + editor.contentEditable);
+
+// Test queryCommandSupported
+addLog('bold supported: ' + document.queryCommandSupported('bold'));
+addLog('italic supported: ' + document.queryCommandSupported('italic'));
+addLog('undo supported: ' + document.queryCommandSupported('undo'));
+
+function testSelectAll() {
+    document.execCommand('selectAll');
+    addLog('selectAll executed');
+}
+
+editor.addEventListener('input', function(e) {
+    addLog('input event: ' + e.inputType);
+});
+
+addLog('ContentEditable test ready. Click the editor and start typing.');
+</script>
+</body>
+</html>
