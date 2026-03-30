@@ -149,8 +149,6 @@ int main(int argc, char** argv) {
     }
 
     printf("[dong_app] Running...\n");
-
-    // Main loop
     dong_app_run(app, NULL, NULL);
 
     // Cleanup

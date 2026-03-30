@@ -28,6 +28,7 @@
 #include "../render/painter.hpp"
 #include "../render/gpu_ir.hpp"
 #include "../render/text_shaper.hpp"
+#include "../render/overlay_draw.hpp"
 #include "../script/script_engine.hpp"
 #include "../script/js_bindings.hpp"
 
@@ -1851,6 +1852,9 @@ struct EngineView::Impl {
 
     void tickGenerateCommandsIfNeeded() {
         const bool gpu_ready = true;
+        // Also repaint when overlay has new direct-draw items
+        if (dong::render::OverlayDraw::instance().isDirty())
+            commands_dirty = true;
         if (!(use_gpu && commands_dirty && gpu_ready && dom_manager && layout_engine && painter)) return;
 
         DONG_PROFILE_SCOPE_CAT("Render::generateCommands", "render");
@@ -1871,6 +1875,16 @@ struct EngineView::Impl {
         }
         painter->setTextRendererMode(text_renderer_mode);
         painter->buildDisplayList(root, layout_engine.get());
+
+        // Inject overlay items from dong.renderText() (bypasses DOM/layout)
+        {
+            auto& overlay = dong::render::OverlayDraw::instance();
+            if (!overlay.empty()) {
+                painter->appendOverlayItems(overlay.items());
+                overlay.clearDirty();
+            }
+        }
+
         const auto& dl = painter->getDisplayList();
         DONG_LOG_DEBUG("[tick] DisplayList items: %zu", dl.items.size());
 

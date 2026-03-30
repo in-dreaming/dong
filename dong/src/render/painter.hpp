@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <memory>
 #include <string>
@@ -46,6 +46,11 @@ public:
     // 访问最近一帧构建好的 DisplayList / LayerTree
     const DisplayList& getDisplayList() const { return display_list_builder_.get(); }
     const LayerTree& getLayerTree() const { return layer_tree_; }
+
+    // Append pre-built items (e.g. from overlay direct-draw, bypassing DOM/layout).
+    void appendOverlayItems(const std::vector<DisplayItem>& items) {
+        display_list_builder_.appendItems(items);
+    }
 
     // Evaluate generated content text for a pseudo-element style.
     // Called from inline rendering helpers (e.g. for open-quote/close-quote in <q>).

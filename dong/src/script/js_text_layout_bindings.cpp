@@ -1,5 +1,7 @@
 #include "quickjs_compat.h"
 #include "../render/text_layout_core.hpp"
+#include "../render/overlay_draw.hpp"
+#include "../render/text_shaper.hpp"
 #include <string>
 #include <vector>
 #include <cmath>
@@ -228,20 +230,151 @@ static JSValue js_dong_textLayout(JSContext* ctx, JSValueConst, int argc, JSValu
     return result;
 }
 
+// dong.clearOverlay() — clear all direct-draw items
+static JSValue js_dong_clearOverlay(JSContext* ctx, JSValueConst, int, JSValueConst*) {
+    render::OverlayDraw::instance().clear();
+    return JS_UNDEFINED;
+}
+
+static render::Color parseHexColor(const std::string& s, render::Color fallback = {0.2f, 0.2f, 0.2f, 1.0f}) {
+    if (s.size() < 7 || s[0] != '#') return fallback;
+    auto hex2f = [](const char* p) -> float {
+        int v = 0;
+        for (int i = 0; i < 2; i++) {
+            char c = p[i];
+            v = v * 16 + (c >= 'a' ? c - 'a' + 10 : c >= 'A' ? c - 'A' + 10 : c - '0');
+        }
+        return v / 255.0f;
+    };
+    render::Color c;
+    c.r = hex2f(s.c_str() + 1);
+    c.g = hex2f(s.c_str() + 3);
+    c.b = hex2f(s.c_str() + 5);
+    c.a = s.size() >= 9 ? hex2f(s.c_str() + 7) : 1.0f;
+    return c;
+}
+
+// dong.renderText({lines: [{x,y,text}], font: {family,size,weight,style}, color: "#rrggbb"})
+// Bypasses DOM entirely: shapes text via cached TextShaper, merges ALL lines into
+// a SINGLE DrawGlyphRunData to minimize GPU draw calls (1 instead of N).
+static JSValue js_dong_renderText(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
+    if (argc < 1 || !JS_IsObject(argv[0]))
+        return JS_ThrowTypeError(ctx, "renderText: config object required");
+    JSValueConst cfg = argv[0];
+
+    JSValue font_val = JS_GetPropertyStr(ctx, cfg, "font");
+    std::string family = "sans-serif", weight = "normal", style = "normal";
+    float font_size = 16;
+    if (JS_IsObject(font_val)) {
+        family = jsStr(ctx, font_val, "family", "sans-serif");
+        weight = jsStr(ctx, font_val, "weight", "normal");
+        style  = jsStr(ctx, font_val, "style", "normal");
+        font_size = (float)jsNum(ctx, font_val, "size", 16);
+    }
+    JS_FreeValue(ctx, font_val);
+
+    render::Color color = parseHexColor(jsStr(ctx, cfg, "color", "#333333"));
+
+    JSValue lines_val = JS_GetPropertyStr(ctx, cfg, "lines");
+    if (!JS_IsArray(ctx, lines_val)) {
+        JS_FreeValue(ctx, lines_val);
+        return JS_ThrowTypeError(ctx, "renderText: 'lines' array required");
+    }
+
+    // Merge all lines into a single DrawGlyphRunData.
+    // Each line's glyphs are offset by the line's (x, y) position in design units.
+    render::DrawGlyphRunData merged;
+    merged.color = color;
+    merged.font_size = font_size;
+    merged.font_family = family;
+    merged.font_weight = weight;
+    merged.font_style = style;
+    merged.baseline_x = 0;
+    merged.baseline_y = 0;
+
+    float min_x = 1e9f, min_y = 1e9f, max_x = -1e9f, max_y = -1e9f;
+    bool first_shape = true;
+
+    render::TextShaper shaper;
+    int64_t num_lines = jsArrLen(ctx, lines_val);
+    for (int64_t i = 0; i < num_lines; i++) {
+        JSValue line_obj = JS_GetPropertyUint32(ctx, lines_val, (uint32_t)i);
+        float x = (float)jsNum(ctx, line_obj, "x");
+        float y = (float)jsNum(ctx, line_obj, "y");
+        std::string text = jsStr(ctx, line_obj, "text", "");
+        JS_FreeValue(ctx, line_obj);
+
+        if (text.empty()) continue;
+
+        render::TextShapeRequest req;
+        req.text = text;
+        req.font_family = family;
+        req.font_weight = weight;
+        req.font_style = style;
+        req.font_size = font_size;
+
+        render::ShapedText shaped;
+        if (!shaper.shape(req, shaped) || shaped.glyphs.empty()) continue;
+
+        if (first_shape) {
+            merged.font_paths = shaped.font_paths;
+            merged.font_path = shaped.font_path;
+            merged.units_per_em = shaped.units_per_em;
+            merged.scale_to_pixels = shaped.scale_to_pixels;
+            first_shape = false;
+        }
+
+        float ascent = shaped.ascent_units * shaped.scale_to_pixels;
+        float baseline_y = y + ascent;
+        float inv_scale = (merged.scale_to_pixels > 0) ? (1.0f / merged.scale_to_pixels) : 1.0f;
+
+        // Convert pixel-space line origin to design units and offset each glyph
+        float origin_x_units = x * inv_scale;
+        float origin_y_units = baseline_y * inv_scale;
+
+        for (const auto& sg : shaped.glyphs) {
+            render::GlyphInstance gi;
+            gi.glyph_id = sg.glyph_id;
+            gi.pen_x_units = sg.pen_x_units + origin_x_units;
+            gi.pen_y_units = sg.pen_y_units + origin_y_units;
+            gi.font_path_index = sg.font_path_index;
+            gi.units_per_em = sg.units_per_em;
+            merged.glyphs.push_back(gi);
+        }
+
+        float text_width = shaped.width_units * shaped.scale_to_pixels;
+        float text_height = ascent + std::abs(shaped.descent_units * shaped.scale_to_pixels);
+        min_x = std::min(min_x, x);
+        min_y = std::min(min_y, y);
+        max_x = std::max(max_x, x + text_width);
+        max_y = std::max(max_y, y + text_height);
+    }
+    JS_FreeValue(ctx, lines_val);
+
+    if (!merged.glyphs.empty()) {
+        merged.rect = {min_x, min_y, max_x - min_x, max_y - min_y};
+        auto& overlay = render::OverlayDraw::instance();
+        overlay.addGlyphRun(std::move(merged));
+    }
+
+    return JS_UNDEFINED;
+}
+
 void registerTextLayoutAPI(JSContext* ctx) {
     JSValue global = JS_GetGlobalObject(ctx);
     JSValue dong_obj = JS_GetPropertyStr(ctx, global, "dong");
     if (JS_IsUndefined(dong_obj) || JS_IsNull(dong_obj)) {
         JS_FreeValue(ctx, dong_obj);
         dong_obj = JS_NewObject(ctx);
-        JS_SetPropertyStr(ctx, dong_obj, "textLayout",
-                          JS_NewCFunction(ctx, js_dong_textLayout, "textLayout", 1));
-        JS_SetPropertyStr(ctx, global, "dong", dong_obj);
-    } else {
-        JS_SetPropertyStr(ctx, dong_obj, "textLayout",
-                          JS_NewCFunction(ctx, js_dong_textLayout, "textLayout", 1));
-        JS_FreeValue(ctx, dong_obj);
     }
+    JS_SetPropertyStr(ctx, dong_obj, "textLayout",
+                      JS_NewCFunction(ctx, js_dong_textLayout, "textLayout", 1));
+    JS_SetPropertyStr(ctx, dong_obj, "renderText",
+                      JS_NewCFunction(ctx, js_dong_renderText, "renderText", 1));
+    JS_SetPropertyStr(ctx, dong_obj, "clearOverlay",
+                      JS_NewCFunction(ctx, js_dong_clearOverlay, "clearOverlay", 0));
+    JS_SetPropertyStr(ctx, global, "dong", dong_obj);
+    // dong_obj ownership transferred to global
     JS_FreeValue(ctx, global);
 }
 

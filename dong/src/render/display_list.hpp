@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <algorithm>
 #include <cstdint>
@@ -424,6 +424,11 @@ public:
 
     const DisplayList& get() const { return list_; }
     DisplayList&& take() { return std::move(list_); }
+
+    // Append pre-built items (e.g. from overlay direct-draw).
+    void appendItems(const std::vector<DisplayItem>& items) {
+        list_.items.insert(list_.items.end(), items.begin(), items.end());
+    }
 
     // Returns the current number of items in the display list.
     // Use this to record an insertion point before emitting child items.

@@ -466,6 +466,11 @@ DONG_APPCORE_API dong_app_t* dong_app_create(const dong_app_config_t* config) {
 
     app_set_present_mode(app);
 
+    // When vsync is off, prefer non-blocking swapchain acquisition to reduce GPU stalls
+    if (!app->vsync) {
+        SDL_SetEnvironmentVariable(SDL_GetEnvironment(), "DONG_GPU_SWAPCHAIN_NOWAIT", "1", false);
+    }
+
     if (app->enable_dong) {
         (void)app_create_engine(app);
     }
