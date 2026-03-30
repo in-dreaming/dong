@@ -1,4 +1,4 @@
-﻿#include "text_shaper.hpp"
+#include "text_shaper.hpp"
 
 #include "font_metrics.hpp"
 #include "font_resolver.hpp"
@@ -538,6 +538,15 @@ bool TextShaper::shape(const TextShapeRequest& request, ShapedText& out_text) {
         return false;
     }
 
+    ShapedCacheKey cache_key{request.text, request.font_family, request.font_weight,
+                            request.font_style, request.font_size, request.lang};
+    auto& cache = getShapedCache();
+    auto it = cache.find(cache_key);
+    if (it != cache.end()) {
+        out_text = it->second;
+        return true;
+    }
+
     const std::string primary_font_path = resolveFontPath(request.font_family, request.font_weight, request.font_style);
     if (primary_font_path.empty()) {
         DONG_LOG_INFO("TextShaper: failed to resolve font family '%s'", request.font_family.c_str());
@@ -570,8 +579,10 @@ bool TextShaper::shape(const TextShapeRequest& request, ShapedText& out_text) {
 
     out_text.width_units = pen_x_units;
 
-    DONG_LOG_DEBUG("[TextShaper] result: width_units=%.1f line_height_units=%.1f scale=%.6f",
-                   out_text.width_units, out_text.line_height_units, out_text.scale_to_pixels);
+    if (cache.size() >= kMaxShapedCacheEntries) {
+        cache.clear();
+    }
+    cache[cache_key] = out_text;
 
     return true;
 }

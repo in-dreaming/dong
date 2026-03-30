@@ -168,6 +168,7 @@ add_library(dong SHARED
     src/script/js_observer_bindings.cpp
     src/script/js_clipboard_bindings.cpp
     src/script/js_selection_bindings.cpp
+    src/script/js_text_layout_bindings.cpp
     # Render
     src/render/painter.cpp
     src/render/painter_select_overlays.cpp
@@ -184,6 +185,7 @@ add_library(dong SHARED
     src/render/text_shaper.cpp
     src/render/font_metrics.cpp
     src/render/list_marker.cpp
+    src/render/text_layout_core.cpp
     src/render/text_renderer_selector.cpp
     src/render/slug/slug_outline_loader.cpp
     src/render/slug/slug_curve_encoder.cpp
@@ -317,6 +319,7 @@ add_library(dong_render STATIC
     src/script/js_observer_bindings.cpp
     src/script/js_clipboard_bindings.cpp
     src/script/js_selection_bindings.cpp
+    src/script/js_text_layout_bindings.cpp
     # Render
     src/render/painter.cpp
     src/render/painter_select_overlays.cpp
@@ -337,6 +340,7 @@ add_library(dong_render STATIC
     src/render/text_shaper.cpp
     src/render/font_metrics.cpp
     src/render/list_marker.cpp
+    src/render/text_layout_core.cpp
     src/render/text_renderer_selector.cpp
     src/render/slug/slug_outline_loader.cpp
     src/render/slug/slug_curve_encoder.cpp

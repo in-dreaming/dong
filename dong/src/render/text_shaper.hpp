@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <cstdint>
 #include <string>
@@ -53,8 +53,42 @@ public:
     TextShaper() = default;
     ~TextShaper() = default;
 
-    // 对给定文本做 shaping，将结果写入 out_text（design units 空间）
     bool shape(const TextShapeRequest& request, ShapedText& out_text);
+
+    void clearShapedCache() { getShapedCache().clear(); }
+    size_t shapedCacheSize() const { return getShapedCache().size(); }
+
+private:
+    struct ShapedCacheKey {
+        std::string text;
+        std::string font_family;
+        std::string font_weight;
+        std::string font_style;
+        float font_size;
+        std::string lang;
+
+        bool operator==(const ShapedCacheKey& o) const {
+            return text == o.text && font_family == o.font_family &&
+                   font_weight == o.font_weight && font_style == o.font_style &&
+                   font_size == o.font_size && lang == o.lang;
+        }
+    };
+    struct ShapedCacheKeyHash {
+        std::size_t operator()(const ShapedCacheKey& k) const {
+            std::size_t h = std::hash<std::string>{}(k.text);
+            h ^= std::hash<std::string>{}(k.font_family) + 0x9e3779b9 + (h << 6) + (h >> 2);
+            h ^= std::hash<std::string>{}(k.font_weight) + 0x9e3779b9 + (h << 6) + (h >> 2);
+            h ^= std::hash<std::string>{}(k.font_style)  + 0x9e3779b9 + (h << 6) + (h >> 2);
+            h ^= std::hash<float>{}(k.font_size)         + 0x9e3779b9 + (h << 6) + (h >> 2);
+            h ^= std::hash<std::string>{}(k.lang)        + 0x9e3779b9 + (h << 6) + (h >> 2);
+            return h;
+        }
+    };
+    static std::unordered_map<ShapedCacheKey, ShapedText, ShapedCacheKeyHash>& getShapedCache() {
+        static std::unordered_map<ShapedCacheKey, ShapedText, ShapedCacheKeyHash> cache;
+        return cache;
+    }
+    static constexpr size_t kMaxShapedCacheEntries = 2048;
 };
 
 // 优化策略4：文本测量缓存

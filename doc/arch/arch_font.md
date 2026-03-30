@@ -273,3 +273,7 @@ SlugVertex {
 | `backends/sdl/shaders/slug_text_*.hlsl` | Slug GLSL/HLSL Shader |
 | `backends/sdl/sdl_gpu_driver_execute.cpp` | 渲染执行调度 |
 | `backends/sdl/sdl_gpu_driver_init.cpp` | Pipeline 初始化 |
+
+## 9.prepared的启示
+prepared → layout 两阶段缓存架构 和 完备的 Unicode 折行规则
+- 浏览器很多实现多有时代局限，比如静态网页，但目前动态内容越来越多，空间换时间收益更大了。

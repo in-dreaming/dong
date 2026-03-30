@@ -103,8 +103,8 @@ typedef struct dong_app_impl_t {
     int running;
     int vsync;
     int enable_hdr;
-    int hdr_enabled;            // Actual HDR status (may differ from enable_hdr if not supported)
-    float hdr_max_luminance;    // Max luminance in nits
+    int hdr_enabled;
+    float hdr_max_luminance;
 
     uint64_t last_frame_time;
     float delta_time;
@@ -116,6 +116,12 @@ typedef struct dong_app_impl_t {
 
     dong_app_event_callback_t event_callback;
     void* event_callback_user_data;
+
+    // FPS tracking
+    char base_title[256];
+    uint32_t fps_frame_count;
+    uint64_t fps_last_time;
+    float fps_value;
 } dong_app_impl_t;
 
 static void app_set_present_mode(dong_app_impl_t* app) {
@@ -468,6 +474,12 @@ DONG_APPCORE_API dong_app_t* dong_app_create(const dong_app_config_t* config) {
     app->delta_time = 0.016f;
     app->running = 1;
 
+    strncpy(app->base_title, title, sizeof(app->base_title) - 1);
+    app->base_title[sizeof(app->base_title) - 1] = '\0';
+    app->fps_frame_count = 0;
+    app->fps_last_time = app->last_frame_time;
+    app->fps_value = 0.0f;
+
     return (dong_app_t*)app;
 }
 
@@ -563,6 +575,18 @@ DONG_APPCORE_API int dong_app_poll_events(dong_app_t* app_handle) {
     uint64_t freq = SDL_GetPerformanceFrequency();
     app->delta_time = (float)(now - app->last_frame_time) / (float)freq;
     app->last_frame_time = now;
+
+    app->fps_frame_count++;
+    float fps_elapsed = (float)(now - app->fps_last_time) / (float)freq;
+    if (fps_elapsed >= 1.0f) {
+        app->fps_value = (float)app->fps_frame_count / fps_elapsed;
+        app->fps_frame_count = 0;
+        app->fps_last_time = now;
+
+        char title_buf[320];
+        SDL_snprintf(title_buf, sizeof(title_buf), "%s  |  %.1f fps", app->base_title, (double)app->fps_value);
+        SDL_SetWindowTitle(app->window, title_buf);
+    }
 
     app_update_cursor(app);
 

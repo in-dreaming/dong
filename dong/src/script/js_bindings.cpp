@@ -2822,6 +2822,9 @@ void JSBindings::initialize() {
         initializeObserverAPI(ctx, this);
         initializeClipboardAPI(ctx);
         initializeSelectionAPI(ctx, this);
+
+        extern void registerTextLayoutAPI(JSContext* ctx);
+        registerTextLayoutAPI(ctx);
     }
 }
 

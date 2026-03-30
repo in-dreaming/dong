@@ -1351,45 +1351,21 @@ void Engine::calculateLayout(dom::DOMNodePtr root, float width, float height) {
     }
 
     // Rebuild layout tree from scratch each time for now.
-    // NOTE: layout_cache destruction order is unspecified (unordered_map), so we must NOT
-    // free Yoga nodes in LayoutNode destructors. Instead, free whole Yoga trees from roots
-    // using YGNodeFreeRecursive, then clear pointers and clear the cache.
     {
         std::unordered_set<YGNode*> roots;
         roots.reserve(layout_cache.size());
-
         for (auto& kv : layout_cache) {
             if (!kv.second || !kv.second->yoga_node) continue;
             YGNode* n = kv.second->yoga_node;
-            if (YGNodeGetOwner(n) == nullptr) {
-                roots.insert(n);
-            }
+            if (YGNodeGetOwner(n) == nullptr) roots.insert(n);
         }
-
-        DONG_LOG_DEBUG(
-            "[Layout] freeing previous yoga trees roots=%zu cached_nodes=%zu anon_wrappers=%zu",
-            roots.size(), layout_cache.size(), anon_blocks_.size()
-        );
-
-        for (YGNode* r : roots) {
-            YGNodeFreeRecursive(r);
-        }
+        for (YGNode* r : roots) YGNodeFreeRecursive(r);
     }
-
-    for (auto& kv : layout_cache) {
-        if (kv.second) {
-            kv.second->yoga_node = nullptr;
-        }
-    }
-    for (auto& ab : anon_blocks_) {
-        ab.yoga_node = nullptr;
-    }
+    for (auto& kv : layout_cache) { if (kv.second) kv.second->yoga_node = nullptr; }
+    for (auto& ab : anon_blocks_) ab.yoga_node = nullptr;
     anon_blocks_.clear();
     pseudo_before_phantom_nodes_.clear();
-
-    DONG_LOG_DEBUG("[Layout] clearing layout_cache entries=%zu", layout_cache.size());
     layout_cache.clear();
-    DONG_LOG_DEBUG("[Layout] cleared layout_cache");
 
 
     // Prefer the first real element (e.g., <html>) as the Yoga root instead of the #document node
@@ -1414,19 +1390,12 @@ void Engine::calculateLayout(dom::DOMNodePtr root, float width, float height) {
         }
     }
 
-    // Create Yoga tree from the chosen DOM root
-    DONG_LOG_DEBUG("[Layout] createYogaNode root tag=%s", layout_root_dom->getTagName().c_str());
     YGNode* yoga_root = createYogaNode(layout_root_dom);
     if (!yoga_root) return;
-
-    // Set viewport size on Yoga root (now the <html> element in most cases)
     YGNodeStyleSetWidth(yoga_root, width);
     YGNodeStyleSetHeight(yoga_root, height);
 
-    // Calculate layout
-    DONG_LOG_DEBUG("[Layout] YGNodeCalculateLayout begin");
     YGNodeCalculateLayout(yoga_root, width, height, YGDirectionLTR);
-    DONG_LOG_DEBUG("[Layout] YGNodeCalculateLayout done");
 
 
     // Extract layout info back to cache (recursively). Convert Yoga's relative
@@ -1786,25 +1755,12 @@ void Engine::calculateLayout(dom::DOMNodePtr root, float width, float height) {
 
     extractLayoutRecursive(layout_root_dom, yoga_root, 0.0f, 0.0f, 0.0f);
 
-    // After Yoga layout, apply Block Formatting Context adjustments:
-    // - margin: auto horizontal centering
-    // - margin-left: auto / margin-right: auto alignment
     layoutBlockFormattingContext(layout_root_dom);
-
-    // Table layout post-pass: adjust table/row/cell positioning
     layoutTableElements(layout_root_dom);
-
-    // After Yoga layout, run inline formatting context layout to adjust
-    // inline/inline-block children inside suitable containers.
     layoutInlineFormattingContexts(layout_root_dom);
-
-    // Then layout positioned elements (position:absolute) relative to their containing blocks.
     layoutPositionedElements(layout_root_dom);
-
-    // Layout sticky elements (position:sticky) after positioned elements
     layoutStickyElements(layout_root_dom);
 
-    // Ensure the #document node itself still has a layout entry so rendering can start from it
     if (layout_root_dom.get() != root.get()) {
         auto& doc_layout = layout_cache[root.get()];
         if (!doc_layout) {
@@ -1818,8 +1774,9 @@ void Engine::calculateLayout(dom::DOMNodePtr root, float width, float height) {
         doc_layout->layout.position[1] = 0.0f;
         doc_layout->layout.dimensions[0] = width;
         doc_layout->layout.dimensions[1] = height;
-        doc_layout->yoga_node = nullptr; // #document is synthetic; it doesn't have a corresponding Yoga node
+        doc_layout->yoga_node = nullptr;
     }
+
 }
 
 const LayoutNode* Engine::getLayout(dom::DOMNodePtr node) const {

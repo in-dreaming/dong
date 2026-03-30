@@ -1757,13 +1757,11 @@ struct EngineView::Impl {
         DONG_PROFILE_SCOPE_CAT("Script::processTasks", "script");
         script_engine->processPendingTasks();
 
-        // Fire any due setTimeout / setInterval callbacks
         if (js_bindings) {
             auto now = std::chrono::steady_clock::now();
             double elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
                 now - js_bindings->script_start_time_).count() / 1e6;
             js_bindings->tickTimers(elapsed);
-            // Flush any style/layout dirtied by timer callbacks
             flushStyleLayoutAfterScripts();
         }
     }
@@ -1791,20 +1789,7 @@ struct EngineView::Impl {
             did_work = true;
         }
 
-        if (painter && layout_engine && did_work) {
-            {
-                auto fe = focus_manager ? focus_manager->getFocusedElement() : nullptr;
-                if (fe && fe->isContentEditable() && !dong::dom::isInputElement(fe))
-                    painter->setEditingState(dong::dom::ContentEditableState::findEditableRoot(fe), selection.get(), caret_visible_);
-                else
-                    painter->setEditingState(nullptr, nullptr);
-                if (fe && dong::dom::isInputElement(fe))
-                    painter->setInputEditingState(fe, caret_visible_);
-                else
-                    painter->setInputEditingState(nullptr, false);
-            }
-            painter->setTextRendererMode(text_renderer_mode);
-            painter->buildDisplayList(root, layout_engine.get());
+        if (did_work) {
             markNeedsRepaint();
         }
     }
@@ -1889,6 +1874,7 @@ struct EngineView::Impl {
         const auto& dl = painter->getDisplayList();
         DONG_LOG_DEBUG("[tick] DisplayList items: %zu", dl.items.size());
 
+
         int text_count = 0;
         for (const auto& item : dl.items) {
             if (item.type == dong::render::DisplayItemType::DrawGlyphRun) {
@@ -1936,7 +1922,6 @@ struct EngineView::Impl {
 
         const double current_time = tickUpdateWallTimeSec();
 
-        // Update caret blink for contenteditable
         tickUpdateCaretBlink(current_time);
 
         DONG_LOG_DEBUG("[tick] step: smooth_scroll");
@@ -1954,7 +1939,6 @@ struct EngineView::Impl {
         DONG_LOG_DEBUG("[tick] step: layout");
         tickComputeLayoutIfNeeded();
 
-        // Sync dialog top-layer: track open modal dialogs
         tickSyncDialogTopLayer();
 
         DONG_LOG_DEBUG("[tick] step: render_build");

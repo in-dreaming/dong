@@ -1141,6 +1141,7 @@ fn buildDongCore(
             "src/script/js_observer_bindings.cpp",
             "src/script/js_clipboard_bindings.cpp",
             "src/script/js_selection_bindings.cpp",
+            "src/script/js_text_layout_bindings.cpp",
             // Render (platform-agnostic)
             "src/render/painter.cpp",
             "src/render/painter_select_overlays.cpp",
@@ -1159,6 +1160,7 @@ fn buildDongCore(
             "src/render/glyph_atlas.cpp",
             "src/render/list_marker.cpp",
             // Text renderer selection
+            "src/render/text_layout_core.cpp",
             "src/render/text_renderer_selector.cpp",
             // Slug runtime
             "src/render/slug/slug_outline_loader.cpp",

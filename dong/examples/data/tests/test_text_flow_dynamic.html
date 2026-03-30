@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Dynamic Text Flow</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    background: #0f1923;
+    font-family: sans-serif;
+    overflow: hidden;
+    width: 900px;
+    height: 600px;
+}
+#stage { position: relative; width: 900px; height: 600px; }
+
+.col {
+    position: absolute;
+    background: #162231;
+    border: 1px solid #1e3a5f;
+    border-radius: 4px;
+}
+.obs {
+    position: absolute;
+    border-radius: 50%;
+    pointer-events: none;
+}
+.obs-a {
+    background: rgba(229, 69, 56, 0.12);
+    border: 1.5px solid rgba(229, 69, 56, 0.5);
+}
+.obs-b {
+    background: rgba(56, 163, 229, 0.12);
+    border: 1.5px solid rgba(56, 163, 229, 0.5);
+    border-radius: 6px;
+}
+.obs-c {
+    background: rgba(83, 200, 100, 0.12);
+    border: 1.5px solid rgba(83, 200, 100, 0.5);
+}
+.line {
+    position: absolute;
+    color: #c9d1d9;
+    font-size: 14px;
+    line-height: 20px;
+    white-space: nowrap;
+    height: 20px;
+    overflow: hidden;
+}
+.hud {
+    position: absolute;
+    color: #3d5a80;
+    font-size: 11px;
+    white-space: nowrap;
+}
+</style>
+</head>
+<body>
+<div id="stage">
+    <div class="col" style="left:16px; top:40px; width:410px; height:520px;"></div>
+    <div class="col" style="left:440px; top:40px; width:444px; height:520px;"></div>
+
+    <div id="obs-a" class="obs obs-a"></div>
+    <div id="obs-b" class="obs obs-b"></div>
+    <div id="obs-c" class="obs obs-c"></div>
+
+    <div id="lines"></div>
+    <div id="hud" class="hud" style="left:16px; top:8px;"></div>
+</div>
+
+<script>
+(function() {
+    var text =
+        "Typography is the art and technique of arranging type to make written " +
+        "language legible, readable, and appealing when displayed. The arrangement " +
+        "of type involves selecting typefaces, point sizes, line lengths, line " +
+        "spacing, and letter spacing, as well as adjusting the space between " +
+        "pairs of letters. The term typography is also applied to the style, " +
+        "arrangement, and appearance of the letters, numbers, and symbols created " +
+        "by the process. Type design is a closely related craft, sometimes " +
+        "considered part of typography; most typographers do not design typefaces, " +
+        "and some type designers do not consider themselves typographers. " +
+        "Typography is the work of typesetters, compositors, typographers, " +
+        "graphic designers, art directors, manga artists, comic book artists, " +
+        "and now anyone who arranges words, letters, numbers, and symbols for " +
+        "publication, display, or distribution. Until the Digital Age, typography " +
+        "was a specialized occupation. Digitization opened up typography to new " +
+        "generations of previously unrelated designers and lay users. As the " +
+        "capability to create typography has become ubiquitous, the application " +
+        "of principles and best practices developed over generations of skilled " +
+        "workers and professionals has diminished. So at a time when scientific " +
+        "knowledge of how typefaces affect readability has flourished, an " +
+        "understanding of conventional wisdom accumulated since Gutenberg has " +
+        "simultaneously diminished. Yet the craft endures, and each new generation " +
+        "discovers anew the profound satisfaction of placing words upon a page with " +
+        "care, precision, and an eye for beauty that transcends the merely functional.";
+
+    if (typeof dong === 'undefined' || typeof dong.textLayout !== 'function') {
+        document.getElementById('hud').textContent = 'dong.textLayout unavailable';
+        return;
+    }
+
+    // Columns
+    var COL_A = { x: 20, y: 46, width: 402, height: 510 };
+    var COL_B = { x: 444, y: 46, width: 436, height: 510 };
+
+    // Obstacle animation state
+    var obsA = { cx: 200, cy: 200, r: 55 };   // circle, bouncing vertically in col A
+    var obsB = { cx: 650, cy: 250, w: 100, h: 70 };  // rect, moving horizontally in col B
+    var obsC = { cx: 550, cy: 120, r: 30 };   // small circle, sine wave in col B
+
+    var obsADir = 1.2;  // px per tick, vertical
+    var obsBDir = 1.5;  // px per tick, horizontal
+
+    var container = document.getElementById('lines');
+    var hudEl = document.getElementById('hud');
+    var obsAEl = document.getElementById('obs-a');
+    var obsBEl = document.getElementById('obs-b');
+    var obsCEl = document.getElementById('obs-c');
+
+    // DOM pool for line divs
+    var pool = [];
+    var poolUsed = 0;
+
+    function getLineDiv() {
+        if (poolUsed < pool.length) {
+            var d = pool[poolUsed];
+            d.style.display = '';
+            poolUsed++;
+            return d;
+        }
+        var d = document.createElement('div');
+        d.className = 'line';
+        container.appendChild(d);
+        pool.push(d);
+        poolUsed++;
+        return d;
+    }
+
+    function hideUnused() {
+        for (var i = poolUsed; i < pool.length; i++) {
+            pool[i].style.display = 'none';
+        }
+    }
+
+    // FPS tracking
+    var frameCount = 0;
+    var fps = 0;
+    var lastFpsTime = 0;
+    var t = 0;
+
+    function tick() {
+        t++;
+        var now = Date.now();
+        if (lastFpsTime === 0) lastFpsTime = now;
+        frameCount++;
+        if (now - lastFpsTime >= 1000) {
+            fps = frameCount;
+            frameCount = 0;
+            lastFpsTime = now;
+        }
+
+        // Animate obstacle A: bounce vertically in column A
+        obsA.cy += obsADir;
+        if (obsA.cy - obsA.r < COL_A.y || obsA.cy + obsA.r > COL_A.y + COL_A.height) {
+            obsADir = -obsADir;
+            obsA.cy += obsADir;
+        }
+
+        // Animate obstacle B: move horizontally in column B
+        obsB.cx += obsBDir;
+        if (obsB.cx - obsB.w / 2 < COL_B.x || obsB.cx + obsB.w / 2 > COL_B.x + COL_B.width) {
+            obsBDir = -obsBDir;
+            obsB.cx += obsBDir;
+        }
+
+        // Animate obstacle C: sine wave path in column B
+        obsC.cx = COL_B.x + COL_B.width / 2 + Math.sin(t * 0.03) * 150;
+        obsC.cy = COL_B.y + 100 + Math.sin(t * 0.05) * 60;
+
+        // Update visual obstacle elements
+        obsAEl.style.left = Math.round(obsA.cx - obsA.r) + 'px';
+        obsAEl.style.top = Math.round(obsA.cy - obsA.r) + 'px';
+        obsAEl.style.width = (obsA.r * 2) + 'px';
+        obsAEl.style.height = (obsA.r * 2) + 'px';
+
+        var bx = obsB.cx - obsB.w / 2;
+        var by = obsB.cy - obsB.h / 2;
+        obsBEl.style.left = Math.round(bx) + 'px';
+        obsBEl.style.top = Math.round(by) + 'px';
+        obsBEl.style.width = obsB.w + 'px';
+        obsBEl.style.height = obsB.h + 'px';
+
+        obsCEl.style.left = Math.round(obsC.cx - obsC.r) + 'px';
+        obsCEl.style.top = Math.round(obsC.cy - obsC.r) + 'px';
+        obsCEl.style.width = (obsC.r * 2) + 'px';
+        obsCEl.style.height = (obsC.r * 2) + 'px';
+
+        // Layout text with current obstacle positions
+        var result = dong.textLayout({
+            text: text,
+            font: { family: "sans-serif", weight: "normal", style: "normal", size: 14 },
+            lineHeight: 20,
+            columns: [COL_A, COL_B],
+            obstacles: {
+                circles: [
+                    { cx: obsA.cx, cy: obsA.cy, r: obsA.r, hPad: 8, vPad: 2 },
+                    { cx: obsC.cx, cy: obsC.cy, r: obsC.r, hPad: 8, vPad: 2 }
+                ],
+                rects: [
+                    { x: bx, y: by, w: obsB.w, h: obsB.h, hPad: 8, vPad: 2 }
+                ]
+            }
+        });
+
+        // Render lines using DOM pool
+        poolUsed = 0;
+        var totalLines = 0;
+        for (var ci = 0; ci < result.columns.length; ci++) {
+            var col = result.columns[ci];
+            totalLines += col.lines.length;
+            for (var li = 0; li < col.lines.length; li++) {
+                var ln = col.lines[li];
+                var div = getLineDiv();
+                div.style.left = Math.round(ln.x) + 'px';
+                div.style.top = Math.round(ln.y) + 'px';
+                div.style.width = Math.ceil(ln.width + 4) + 'px';
+                div.textContent = ln.text;
+            }
+        }
+        hideUnused();
+
+        hudEl.textContent = 'Dynamic Text Flow | ' + fps + ' fps | ' + totalLines + ' lines | pool: ' + pool.length;
+    }
+
+    setInterval(tick, 16);
+})();
+</script>
+</body>
+</html>

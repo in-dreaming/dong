@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Two-Phase Text Layout</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    background: #0f1923;
+    font-family: sans-serif;
+    overflow: hidden;
+    width: 900px;
+    height: 600px;
+}
+#stage { position: relative; width: 900px; height: 600px; }
+
+.col {
+    position: absolute;
+    background: #162231;
+    border: 1px solid #1e3a5f;
+    border-radius: 4px;
+}
+.obs-circle {
+    position: absolute;
+    border-radius: 50%;
+    background: rgba(229, 69, 56, 0.08);
+    border: 1.5px solid rgba(229, 69, 56, 0.4);
+}
+.obs-rect {
+    position: absolute;
+    background: rgba(83, 52, 131, 0.08);
+    border: 1.5px solid rgba(83, 52, 131, 0.4);
+}
+.line {
+    position: absolute;
+    color: #c9d1d9;
+    font-size: 14px;
+    line-height: 20px;
+    white-space: nowrap;
+    height: 20px;
+}
+.heading {
+    position: absolute;
+    width: 880px;
+    color: #58a6ff;
+    font-size: 13px;
+    font-weight: bold;
+    white-space: nowrap;
+}
+.phase-label {
+    position: absolute;
+    width: 300px;
+    color: #3d5a80;
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+</style>
+</head>
+<body>
+<div id="stage">
+    <!-- Column backgrounds -->
+    <div class="col" style="left:16px; top:50px; width:410px; height:400px;"></div>
+    <div class="col" style="left:440px; top:50px; width:444px; height:400px;"></div>
+
+    <!-- Obstacles (visual only — layout uses their geometry) -->
+    <div class="obs-circle" style="left:145px; top:140px; width:120px; height:120px;"></div>
+    <div class="obs-circle" style="left:620px; top:100px; width:80px; height:80px;"></div>
+    <div class="obs-rect" style="left:580px; top:280px; width:110px; height:80px;"></div>
+
+    <!-- Labels -->
+    <div class="heading" style="left:16px; top:10px;">Two-Phase Text Layout — prepare() once, layoutNextLine() per line</div>
+    <div class="phase-label" style="left:20px; top:36px;">Column A</div>
+    <div class="phase-label" style="left:444px; top:36px;">Column B (cursor continues)</div>
+
+    <div id="lines"></div>
+</div>
+
+<script>
+(function() {
+    var text =
+        "Typography is the art and technique of arranging type to make written " +
+        "language legible, readable, and appealing when displayed. The arrangement " +
+        "of type involves selecting typefaces, point sizes, line lengths, line " +
+        "spacing, and letter spacing, as well as adjusting the space between " +
+        "pairs of letters. The term typography is also applied to the style, " +
+        "arrangement, and appearance of the letters, numbers, and symbols created " +
+        "by the process. Type design is a closely related craft, sometimes " +
+        "considered part of typography; most typographers do not design typefaces, " +
+        "and some type designers do not consider themselves typographers. " +
+        "Typography is the work of typesetters, compositors, typographers, " +
+        "graphic designers, art directors, manga artists, comic book artists, " +
+        "and now anyone who arranges words, letters, numbers, and symbols for " +
+        "publication, display, or distribution. Until the Digital Age, typography " +
+        "was a specialized occupation. Digitization opened up typography to new " +
+        "generations of previously unrelated designers and lay users. As the " +
+        "capability to create typography has become ubiquitous, the application " +
+        "of principles and best practices developed over generations of skilled " +
+        "workers and professionals has diminished. So at a time when scientific " +
+        "knowledge of how typefaces affect readability has flourished, an " +
+        "understanding of conventional wisdom accumulated since Gutenberg has " +
+        "simultaneously diminished. Yet the craft endures, and each new generation " +
+        "discovers anew the profound satisfaction of placing words upon a page with " +
+        "care, precision, and an eye for beauty that transcends the merely functional.";
+
+    if (typeof dong === 'undefined' || typeof dong.textLayout !== 'function') {
+        var el = document.getElementById('lines');
+        if (el) el.textContent = 'dong.textLayout unavailable';
+        return;
+    }
+
+    // Phase 1: prepare() segments text + measures with HarfBuzz (done once in C++)
+    // Phase 2: layoutNextLine() is pure arithmetic on cached widths (per-line variable width)
+    // Both phases happen inside this single call — see text_layout_core.cpp
+    var result = dong.textLayout({
+        text: text,
+        font: { family: "sans-serif", weight: "normal", style: "normal", size: 14 },
+        lineHeight: 20,
+        columns: [
+            { x: 20, y: 56, width: 402, height: 390 },
+            { x: 444, y: 56, width: 436, height: 390 }
+        ],
+        obstacles: {
+            circles: [
+                { cx: 205, cy: 200, r: 60, hPad: 10, vPad: 4 },
+                { cx: 660, cy: 140, r: 40, hPad: 10, vPad: 4 }
+            ],
+            rects: [
+                { x: 580, y: 280, w: 110, h: 80, hPad: 10, vPad: 4 }
+            ]
+        }
+    });
+
+    var container = document.getElementById('lines');
+    var total = 0;
+    for (var ci = 0; ci < result.columns.length; ci++) {
+        var col = result.columns[ci];
+        total += col.lines.length;
+        for (var li = 0; li < col.lines.length; li++) {
+            var ln = col.lines[li];
+            var div = document.createElement('div');
+            div.className = 'line';
+            div.style.left = Math.round(ln.x) + 'px';
+            div.style.top = Math.round(ln.y) + 'px';
+            div.style.width = Math.ceil(ln.width + 4) + 'px';
+            div.textContent = ln.text;
+            container.appendChild(div);
+        }
+    }
+
+    var info = document.createElement('div');
+    info.className = 'phase-label';
+    info.style.left = '20px';
+    info.style.bottom = '8px';
+    info.style.top = '';
+    info.style.color = '#3d5a80';
+    info.textContent = 'A: ' + result.columns[0].lines.length + ' lines | B: ' +
+        (result.columns[1] ? result.columns[1].lines.length : 0) + ' lines | total: ' + total;
+    container.appendChild(info);
+})();
+</script>
+</body>
+</html>
