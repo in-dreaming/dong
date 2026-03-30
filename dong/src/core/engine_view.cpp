@@ -568,6 +568,7 @@ struct EngineView::Impl {
 
     void markNeedsRepaint() {
         commands_dirty = true;
+        dom_display_list_valid_ = false;
         if (render_surface) {
             render_surface->markDirty();
         }
@@ -1850,12 +1851,41 @@ struct EngineView::Impl {
             top_layer.empty() ? nullptr : top_layer.back());
     }
 
+    // Cached DOM display list: reused when only overlay changes (skip-if-clean).
+    std::vector<dong::render::DisplayItem> cached_dom_display_items_;
+    bool dom_display_list_valid_ = false;
+
     void tickGenerateCommandsIfNeeded() {
         const bool gpu_ready = true;
-        // Also repaint when overlay has new direct-draw items
-        if (dong::render::OverlayDraw::instance().isDirty())
-            commands_dirty = true;
-        if (!(use_gpu && commands_dirty && gpu_ready && dom_manager && layout_engine && painter)) return;
+        auto& overlay = dong::render::OverlayDraw::instance();
+
+        // Determine what changed
+        bool overlay_dirty = overlay.isDirty();
+        bool dom_dirty = commands_dirty; // set by markNeedsRepaint from DOM/style/layout changes
+
+        if (overlay_dirty && !dom_dirty && dom_display_list_valid_) {
+            // Fast path: only overlay changed, DOM display list is still valid.
+            // Restore cached DOM items + append new overlay items.
+            DONG_PROFILE_SCOPE_CAT("Render::overlayOnly", "render");
+
+            painter->restoreDisplayList(cached_dom_display_items_);
+            if (!overlay.empty()) {
+                painter->appendOverlayItems(overlay.items());
+                overlay.clearDirty();
+            }
+
+            if (!cached_cmd_list) {
+                cached_cmd_list = std::make_unique<dong::render::GPUCommandList>();
+            }
+            dong::render::GPUCompiler compiler;
+            compiler.compile(painter->getDisplayList(), *cached_cmd_list, &painter->getLayerTree());
+            // commands_dirty stays false; overlay_dirty was the trigger
+            return;
+        }
+
+        if (overlay_dirty)
+            dom_dirty = true; // need full rebuild if no cached DOM list
+        if (!(use_gpu && dom_dirty && gpu_ready && dom_manager && layout_engine && painter)) return;
 
         DONG_PROFILE_SCOPE_CAT("Render::generateCommands", "render");
 
@@ -1876,27 +1906,18 @@ struct EngineView::Impl {
         painter->setTextRendererMode(text_renderer_mode);
         painter->buildDisplayList(root, layout_engine.get());
 
-        // Inject overlay items from dong.renderText() (bypasses DOM/layout)
-        {
-            auto& overlay = dong::render::OverlayDraw::instance();
-            if (!overlay.empty()) {
-                painter->appendOverlayItems(overlay.items());
-                overlay.clearDirty();
-            }
+        // Cache the DOM-only display list for future overlay-only frames
+        cached_dom_display_items_ = painter->getDisplayList().items;
+        dom_display_list_valid_ = true;
+
+        // Inject overlay items
+        if (!overlay.empty()) {
+            painter->appendOverlayItems(overlay.items());
+            overlay.clearDirty();
         }
 
         const auto& dl = painter->getDisplayList();
         DONG_LOG_DEBUG("[tick] DisplayList items: %zu", dl.items.size());
-
-
-        int text_count = 0;
-        for (const auto& item : dl.items) {
-            if (item.type == dong::render::DisplayItemType::DrawGlyphRun) {
-                text_count++;
-                DONG_LOG_DEBUG("[tick]   DrawGlyphRun: glyphs=%zu", item.glyph_run.glyphs.size());
-            }
-        }
-        DONG_LOG_DEBUG("[tick] Total DrawGlyphRun items: %d", text_count);
 
         if (!cached_cmd_list) {
             cached_cmd_list = std::make_unique<dong::render::GPUCommandList>();

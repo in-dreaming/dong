@@ -360,6 +360,43 @@ static JSValue js_dong_renderText(JSContext* ctx, JSValueConst, int argc, JSValu
     return JS_UNDEFINED;
 }
 
+// dong.drawRect({x, y, w, h, color, radius?, strokeWidth?})
+static JSValue js_dong_drawRect(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
+    if (argc < 1 || !JS_IsObject(argv[0]))
+        return JS_ThrowTypeError(ctx, "drawRect: config object required");
+    JSValueConst cfg = argv[0];
+    float x = (float)jsNum(ctx, cfg, "x");
+    float y = (float)jsNum(ctx, cfg, "y");
+    float w = (float)jsNum(ctx, cfg, "w");
+    float h = (float)jsNum(ctx, cfg, "h");
+    render::Color color = parseHexColor(jsStr(ctx, cfg, "color", "#ffffff"));
+    float radius = (float)jsNum(ctx, cfg, "radius", 0);
+    float strokeWidth = (float)jsNum(ctx, cfg, "strokeWidth", 0);
+
+    auto& overlay = render::OverlayDraw::instance();
+    if (radius > 0.01f || strokeWidth > 0.01f) {
+        overlay.addRoundedRect({x, y, w, h}, color, radius, strokeWidth);
+    } else {
+        overlay.addRect({x, y, w, h}, color);
+    }
+    return JS_UNDEFINED;
+}
+
+// dong.drawCircle({cx, cy, r, color, strokeWidth?})
+static JSValue js_dong_drawCircle(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
+    if (argc < 1 || !JS_IsObject(argv[0]))
+        return JS_ThrowTypeError(ctx, "drawCircle: config object required");
+    JSValueConst cfg = argv[0];
+    float cx = (float)jsNum(ctx, cfg, "cx");
+    float cy = (float)jsNum(ctx, cfg, "cy");
+    float r  = (float)jsNum(ctx, cfg, "r");
+    render::Color color = parseHexColor(jsStr(ctx, cfg, "color", "#ffffff"));
+    float strokeWidth = (float)jsNum(ctx, cfg, "strokeWidth", 0);
+
+    render::OverlayDraw::instance().addCircle(cx, cy, r, color, strokeWidth);
+    return JS_UNDEFINED;
+}
+
 void registerTextLayoutAPI(JSContext* ctx) {
     JSValue global = JS_GetGlobalObject(ctx);
     JSValue dong_obj = JS_GetPropertyStr(ctx, global, "dong");
@@ -373,6 +410,10 @@ void registerTextLayoutAPI(JSContext* ctx) {
                       JS_NewCFunction(ctx, js_dong_renderText, "renderText", 1));
     JS_SetPropertyStr(ctx, dong_obj, "clearOverlay",
                       JS_NewCFunction(ctx, js_dong_clearOverlay, "clearOverlay", 0));
+    JS_SetPropertyStr(ctx, dong_obj, "drawRect",
+                      JS_NewCFunction(ctx, js_dong_drawRect, "drawRect", 1));
+    JS_SetPropertyStr(ctx, dong_obj, "drawCircle",
+                      JS_NewCFunction(ctx, js_dong_drawCircle, "drawCircle", 1));
     JS_SetPropertyStr(ctx, global, "dong", dong_obj);
     // dong_obj ownership transferred to global
     JS_FreeValue(ctx, global);

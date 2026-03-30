@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>DOM-Only Rendering (Baseline)</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    background: #0a0e17;
+    font-family: sans-serif;
+    overflow: hidden;
+    width: 960px;
+    height: 600px;
+    color: #c9d1d9;
+}
+
+.topbar {
+    position: absolute;
+    left: 0; top: 0; right: 0; height: 36px;
+    background: #161b22;
+    border-bottom: 1px solid #30363d;
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    font-size: 13px;
+    color: #8b949e;
+}
+.topbar-title {
+    color: #f0f6fc;
+    font-weight: bold;
+    margin-right: 24px;
+}
+.topbar-item { margin-right: 16px; }
+
+.sidebar {
+    position: absolute;
+    left: 0; top: 36px; bottom: 0; width: 180px;
+    background: #0d1117;
+    border-right: 1px solid #21262d;
+    padding: 12px 0;
+}
+.sidebar-item {
+    padding: 6px 16px;
+    font-size: 13px;
+    color: #8b949e;
+}
+.sidebar-item.active {
+    color: #f0f6fc;
+    background: #1f2937;
+    border-left: 2px solid #58a6ff;
+}
+
+.panel {
+    position: absolute;
+    left: 180px; top: 36px; right: 240px; bottom: 0;
+    background: #0d1117;
+}
+.panel-header {
+    padding: 16px 20px 8px;
+    font-size: 18px;
+    font-weight: bold;
+    color: #f0f6fc;
+    white-space: nowrap;
+    width: 400px;
+}
+.panel-desc {
+    padding: 0 20px 12px;
+    font-size: 12px;
+    color: #8b949e;
+    white-space: nowrap;
+    width: 500px;
+}
+
+.status-bar {
+    position: absolute;
+    right: 0; top: 36px; bottom: 0; width: 240px;
+    background: #161b22;
+    border-left: 1px solid #21262d;
+    padding: 16px;
+}
+.status-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    color: #8b949e;
+    letter-spacing: 1px;
+    margin-bottom: 12px;
+    white-space: nowrap;
+    width: 200px;
+}
+.stat-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    font-size: 13px;
+    white-space: nowrap;
+    width: 200px;
+}
+.stat-label { color: #8b949e; }
+.stat-value { color: #f97316; }
+
+#hud {
+    position: absolute;
+    left: 196px; bottom: 8px;
+    font-size: 11px;
+    color: #484f58;
+    white-space: nowrap;
+}
+
+/* Particle (DOM-based) */
+.particle {
+    position: absolute;
+    border-radius: 50%;
+    pointer-events: none;
+}
+
+/* Obstacle (DOM-based) */
+.obstacle {
+    position: absolute;
+    border-radius: 50%;
+    border: 1.5px solid rgba(88, 166, 255, 0.12);
+    background: rgba(88, 166, 255, 0.06);
+    pointer-events: none;
+}
+
+/* Grid line */
+.grid-line {
+    position: absolute;
+    background: rgba(33, 38, 45, 0.25);
+}
+
+/* Text line */
+.text-line {
+    position: absolute;
+    font-size: 13px;
+    color: #b1bac4;
+    white-space: nowrap;
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+    <span class="topbar-title">Dong Engine</span>
+    <span class="topbar-item">DOM-Only Baseline</span>
+    <span class="topbar-item">All via DOM manipulation</span>
+</div>
+
+<div class="sidebar">
+    <div class="sidebar-item active">Dashboard</div>
+    <div class="sidebar-item">Text Flow</div>
+    <div class="sidebar-item">Particles</div>
+    <div class="sidebar-item">Charts</div>
+    <div class="sidebar-item">Settings</div>
+</div>
+
+<div class="panel">
+    <div class="panel-header">DOM-Only Rendering (Baseline)</div>
+    <div class="panel-desc">Everything via DOM — style recalc, layout, paint on EVERY frame</div>
+</div>
+
+<div class="status-bar">
+    <div class="status-title">Performance</div>
+    <div class="stat-row"><span class="stat-label">Mode</span><span class="stat-value">DOM Only</span></div>
+    <div class="stat-row"><span class="stat-label">DOM items</span><span class="stat-value" id="dom-count">0</span></div>
+    <div class="stat-row"><span class="stat-label">Particles</span><span class="stat-value" id="p-count">0</span></div>
+</div>
+
+<div id="hud"></div>
+<div id="dynamic-container"></div>
+
+<script>
+(function() {
+    var W = 960, H = 600;
+    var PANEL_LEFT = 180, PANEL_TOP = 36, PANEL_RIGHT = 720, PANEL_BOTTOM = 600;
+    var container = document.getElementById('dynamic-container');
+
+    // DOM element pools
+    var particlePool = [];
+    var textPool = [];
+    var obstacleEls = [];
+    var gridEls = [];
+    var MAX_PARTICLES = 60;
+
+    // Pre-create particle elements
+    for (var i = 0; i < MAX_PARTICLES; i++) {
+        var el = document.createElement('div');
+        el.className = 'particle';
+        container.appendChild(el);
+        particlePool.push(el);
+    }
+
+    // Pre-create obstacle elements
+    for (var oi = 0; oi < 3; oi++) {
+        var el = document.createElement('div');
+        el.className = 'obstacle';
+        container.appendChild(el);
+        obstacleEls.push(el);
+    }
+
+    // Pre-create grid lines
+    for (var gx = PANEL_LEFT + 60; gx < PANEL_RIGHT; gx += 80) {
+        var el = document.createElement('div');
+        el.className = 'grid-line';
+        el.style.left = gx + 'px';
+        el.style.top = (PANEL_TOP + 60) + 'px';
+        el.style.width = '1px';
+        el.style.height = (PANEL_BOTTOM - PANEL_TOP - 80) + 'px';
+        container.appendChild(el);
+        gridEls.push(el);
+    }
+    for (var gy = PANEL_TOP + 80; gy < PANEL_BOTTOM - 20; gy += 60) {
+        var el = document.createElement('div');
+        el.className = 'grid-line';
+        el.style.left = (PANEL_LEFT + 20) + 'px';
+        el.style.top = gy + 'px';
+        el.style.width = (PANEL_RIGHT - PANEL_LEFT - 40) + 'px';
+        el.style.height = '1px';
+        container.appendChild(el);
+        gridEls.push(el);
+    }
+
+    // Pre-create text line pool
+    var MAX_TEXT_LINES = 40;
+    for (var i = 0; i < MAX_TEXT_LINES; i++) {
+        var el = document.createElement('div');
+        el.className = 'text-line';
+        el.style.display = 'none';
+        container.appendChild(el);
+        textPool.push(el);
+    }
+
+    // Particle data
+    var particles = [];
+    function spawnParticle() {
+        return {
+            x: PANEL_LEFT + 40 + Math.random() * (PANEL_RIGHT - PANEL_LEFT - 80),
+            y: PANEL_BOTTOM - 20,
+            vx: (Math.random() - 0.5) * 2,
+            vy: -1.5 - Math.random() * 2.5,
+            r: 3 + Math.random() * 5,
+            life: 1.0,
+            decay: 0.005 + Math.random() * 0.01,
+            hue: Math.floor(Math.random() * 360)
+        };
+    }
+    for (var i = 0; i < MAX_PARTICLES; i++) {
+        var p = spawnParticle();
+        p.life = Math.random();
+        p.y = PANEL_TOP + 60 + Math.random() * (PANEL_BOTTOM - PANEL_TOP - 120);
+        particles.push(p);
+    }
+
+    function hslToHex(h, s, l) {
+        s /= 100; l /= 100;
+        var a = s * Math.min(l, 1 - l);
+        var f = function(n) {
+            var k = (n + h / 30) % 12;
+            var c = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+            return Math.round(255 * c).toString(16).padStart(2, '0');
+        };
+        return '#' + f(0) + f(8) + f(4);
+    }
+
+    var obs = [
+        { cx: 350, cy: 200, r: 40, speed: 0.8, phase: 0 },
+        { cx: 500, cy: 350, r: 30, speed: 1.2, phase: 2.1 },
+        { cx: 600, cy: 250, r: 25, speed: 0.6, phase: 4.0 }
+    ];
+
+    var text =
+        "In a dual-mode rendering engine, static UI structure lives in the DOM — " +
+        "menus, panels, labels, and interactive elements are described in HTML/CSS " +
+        "and rendered through the retained pipeline. But dynamic content — particles, " +
+        "animated text, real-time visualizations — bypasses the DOM entirely. " +
+        "The immediate-mode overlay API (dong.drawRect, dong.drawCircle, dong.renderText) " +
+        "injects GPU commands directly into the display list, achieving zero DOM tax " +
+        "on animation frames. This is the architecture pretext envisions: free from " +
+        "DOM-based layout constraints, while keeping DOM for what it does best.";
+
+    var frameCount = 0, fps = 0, lastFpsTime = 0;
+    var t = 0;
+
+    function tick() {
+        t++;
+        var now = Date.now();
+        if (lastFpsTime === 0) lastFpsTime = now;
+        frameCount++;
+        if (now - lastFpsTime >= 1000) {
+            fps = frameCount;
+            frameCount = 0;
+            lastFpsTime = now;
+        }
+
+        // ---- Animate particles via DOM ----
+        var alive = 0;
+        for (var i = 0; i < particles.length; i++) {
+            var p = particles[i];
+            p.x += p.vx;
+            p.y += p.vy;
+            p.vy += 0.02;
+            p.life -= p.decay;
+
+            if (p.life <= 0) {
+                particles[i] = spawnParticle();
+                p = particles[i];
+            }
+            alive++;
+
+            var el = particlePool[i];
+            var sz = p.r * p.life * 2;
+            el.style.left = (p.x - sz / 2) + 'px';
+            el.style.top = (p.y - sz / 2) + 'px';
+            el.style.width = sz + 'px';
+            el.style.height = sz + 'px';
+            el.style.background = hslToHex(p.hue, 70, 55);
+            el.style.opacity = p.life;
+        }
+
+        // ---- Animate obstacles via DOM ----
+        var centerX = (PANEL_LEFT + PANEL_RIGHT) / 2;
+        var centerY = (PANEL_TOP + 80 + PANEL_BOTTOM) / 2;
+        for (var oi = 0; oi < obs.length; oi++) {
+            var o = obs[oi];
+            o.cx = centerX + Math.sin(t * 0.02 * o.speed + o.phase) * 160;
+            o.cy = centerY + Math.cos(t * 0.015 * o.speed + o.phase) * 120;
+
+            var el = obstacleEls[oi];
+            el.style.left = (o.cx - o.r) + 'px';
+            el.style.top = (o.cy - o.r) + 'px';
+            el.style.width = (o.r * 2) + 'px';
+            el.style.height = (o.r * 2) + 'px';
+        }
+
+        // ---- Text flow via dong.textLayout + DOM text divs ----
+        var col = {
+            x: PANEL_LEFT + 20,
+            y: PANEL_TOP + 80,
+            width: PANEL_RIGHT - PANEL_LEFT - 40,
+            height: PANEL_BOTTOM - PANEL_TOP - 100
+        };
+
+        var hasTextLayout = (typeof dong !== 'undefined' && typeof dong.textLayout === 'function');
+        var allLines = [];
+
+        if (hasTextLayout) {
+            var result = dong.textLayout({
+                text: text,
+                font: { family: "sans-serif", size: 13 },
+                lineHeight: 19,
+                columns: [col],
+                obstacles: {
+                    circles: obs.map(function(o) {
+                        return { cx: o.cx, cy: o.cy, r: o.r, hPad: 10, vPad: 3 };
+                    })
+                }
+            });
+            for (var ci = 0; ci < result.columns.length; ci++) {
+                var lines = result.columns[ci].lines;
+                for (var li = 0; li < lines.length; li++) {
+                    allLines.push(lines[li]);
+                }
+            }
+        }
+
+        // Update DOM text elements
+        for (var i = 0; i < MAX_TEXT_LINES; i++) {
+            var el = textPool[i];
+            if (i < allLines.length) {
+                el.style.display = '';
+                el.style.left = allLines[i].x + 'px';
+                el.style.top = allLines[i].y + 'px';
+                el.textContent = allLines[i].text;
+            } else {
+                el.style.display = 'none';
+            }
+        }
+
+        var domCount = MAX_PARTICLES + 3 + gridEls.length + Math.min(allLines.length, MAX_TEXT_LINES);
+
+        // ---- Update HUD ----
+        document.getElementById('hud').textContent =
+            fps + ' fps | dom-items: ' + domCount + ' | particles: ' + alive +
+            ' | lines: ' + allLines.length + ' | mode: DOM-only';
+        document.getElementById('dom-count').textContent = domCount;
+        document.getElementById('p-count').textContent = alive;
+    }
+
+    setInterval(tick, 16);
+})();
+</script>
+</body>
+</html>

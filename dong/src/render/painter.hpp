@@ -52,6 +52,12 @@ public:
         display_list_builder_.appendItems(items);
     }
 
+    // Restore a previously cached DOM display list (skip-if-clean optimization).
+    void restoreDisplayList(const std::vector<DisplayItem>& items) {
+        display_list_builder_.clear();
+        display_list_builder_.appendItems(items);
+    }
+
     // Evaluate generated content text for a pseudo-element style.
     // Called from inline rendering helpers (e.g. for open-quote/close-quote in <q>).
     std::string evaluateContentText(const dom::ComputedStyle& style, const dom::DOMNodePtr& node = nullptr);

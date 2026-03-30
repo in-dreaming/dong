@@ -274,6 +274,39 @@ SlugVertex {
 | `backends/sdl/sdl_gpu_driver_execute.cpp` | 渲染执行调度 |
 | `backends/sdl/sdl_gpu_driver_init.cpp` | Pipeline 初始化 |
 
-## 9.prepared的启示
-prepared → layout 两阶段缓存架构 和 完备的 Unicode 折行规则
+## 9. Pretext 启示与 Direct Draw 架构
+
+### 两阶段缓存架构 (prepared → layout)
+- prepared → layout 两阶段缓存架构 和 完备的 Unicode 折行规则
 - 浏览器很多实现多有时代局限，比如静态网页，但目前动态内容越来越多，空间换时间收益更大了。
+
+### Direct Draw API (dong.renderText)
+绕过 DOM/CSS/Layout 管线，直接注入 GPU 渲染命令。
+
+**架构**:
+```
+JS: dong.textLayout() → 纯算术折行 (cached)
+JS: dong.renderText({lines, font, color})
+   → C++: TextShaper::shape() (static cache hit)
+   → 合并所有行为单个 DrawGlyphRunData
+   → OverlayDraw 单例存储
+   → tick 时注入 DisplayList → 单次 GPU draw call
+```
+
+**性能关键决策**:
+1. **合并 glyph runs**: 40 行文字合并为 1 个 DrawGlyphRunData，GPU 从 40 draw calls → 1 (18ms → 2ms)
+2. **Static ShapedText cache**: 跨 TextShaper 实例共享，避免重复 HarfBuzz shaping
+3. **NOWAIT swapchain**: vsync=0 时自动启用非阻塞 swapchain 获取
+
+**性能对比** (900x600 窗口, 40 行动态文字):
+| 方案 | FPS | GPU/frame |
+|------|-----|-----------|
+| DOM + 每行一个 div (原始) | 6 | 82ms |
+| DOM + ShapedText cache | 30-40 | 18ms |
+| Direct Draw (每行一个 glyph run) | 40-50 | 17ms |
+| Direct Draw + 合并 glyph run | 300-480 | 2ms |
+
+**文件**:
+- `src/render/overlay_draw.hpp` — 全局 overlay DisplayItem 存储
+- `src/script/js_text_layout_bindings.cpp` — JS API 实现
+- `src/core/engine_view.cpp` — overlay 注入点
