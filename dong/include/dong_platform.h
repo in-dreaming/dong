@@ -46,6 +46,7 @@ typedef struct DongImageDecoder DongImageDecoder;
 #include "dong_logger.h"
 #include "dong_image_decoder.h"
 #include "dong_clipboard.h"
+#include "dong_http_client.h"
 
 
 // Platform singleton (opaque)
@@ -86,6 +87,9 @@ DONG_PLATFORM_API void dong_platform_set_image_decoder(DongPlatform* platform, D
 // Register Clipboard implementation.
 DONG_PLATFORM_API void dong_platform_set_clipboard(DongPlatform* platform, DongClipboard* clipboard);
 
+// Register HTTP client implementation.
+DONG_PLATFORM_API void dong_platform_set_http_client(DongPlatform* platform, DongHttpClient* client);
+
 // =============================================================================
 // Subsystem Access
 // =============================================================================
@@ -108,6 +112,9 @@ DONG_PLATFORM_API DongImageDecoder* dong_platform_get_image_decoder(DongPlatform
 // Get registered Clipboard (may be NULL if not registered).
 DONG_PLATFORM_API DongClipboard* dong_platform_get_clipboard(DongPlatform* platform);
 
+// Get registered HTTP client (may be NULL if not registered).
+DONG_PLATFORM_API DongHttpClient* dong_platform_get_http_client(DongPlatform* platform);
+
 // =============================================================================
 // Convenience Macros (C++)
 // =============================================================================
@@ -120,6 +127,7 @@ DONG_PLATFORM_API DongClipboard* dong_platform_get_clipboard(DongPlatform* platf
 #define DONG_LOGGER()         dong_platform_get_logger(dong_platform_get())
 #define DONG_IMAGE_DECODER()  dong_platform_get_image_decoder(dong_platform_get())
 #define DONG_CLIPBOARD()      dong_platform_get_clipboard(dong_platform_get())
+#define DONG_HTTP()           dong_platform_get_http_client(dong_platform_get())
 #endif
 
 #ifdef __cplusplus

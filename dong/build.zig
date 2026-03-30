@@ -1141,6 +1141,7 @@ fn buildDongCore(
             "src/script/js_observer_bindings.cpp",
             "src/script/js_clipboard_bindings.cpp",
             "src/script/js_selection_bindings.cpp",
+            "src/script/js_fetch_bindings.cpp",
             "src/script/js_text_layout_bindings.cpp",
             // Render (platform-agnostic)
             "src/render/painter.cpp",
@@ -1151,6 +1152,7 @@ fn buildDongCore(
             "src/render/painter/painter_backdrop.cpp",
             "src/render/painter/painter_caret.cpp",
 
+            "src/core/resource_loader.cpp",
             "src/render/render_surface.cpp",
             "src/render/resource_manager.cpp",
             "src/render/font_resolver.cpp",
@@ -1214,6 +1216,7 @@ fn buildDongCore(
         dong_core.linkSystemLibrary("ole32");
         dong_core.linkSystemLibrary("shell32");
         dong_core.linkSystemLibrary("advapi32");
+        dong_core.linkSystemLibrary("winhttp");
     }
 
     // Dependencies

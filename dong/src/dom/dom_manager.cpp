@@ -1,4 +1,4 @@
-﻿#include "dom_manager.hpp"
+#include "dom_manager.hpp"
 #include "style_engine.hpp"
 
 namespace dong::dom {
@@ -12,14 +12,9 @@ Manager::~Manager() = default;
 bool Manager::loadHTML(const std::string& html) {
     root = parser->parse(html);
     if (root) {
-        // Extract stylesheets from the parsed DOM and add to our persistent StyleEngine.
-        // Important: do a full style pass here so we don't rely on the parser's internal
-        // "initial style" side effects (which may differ across HTML shapes).
         style_engine = std::make_unique<StyleEngine>();
-        parser->extractAndApplyStyles(root, style_engine.get());
+        parser->extractAndApplyStyles(root, style_engine.get(), resource_root_);
         style_engine->computeStyles(root);
-
-        // Handle autofocus attribute - find first element with autofocus and focus it
         handleAutofocus(root);
     }
     return root != nullptr;
@@ -60,7 +55,7 @@ bool Manager::loadHTMLWithCSS(const std::string& html, const std::string& css) {
     root = parser->parseWithCSS(html, css);
     if (root) {
         style_engine = std::make_unique<StyleEngine>();
-        parser->extractAndApplyStyles(root, style_engine.get());
+        parser->extractAndApplyStyles(root, style_engine.get(), resource_root_);
         style_engine->addStylesheet(css);
     }
     return root != nullptr;

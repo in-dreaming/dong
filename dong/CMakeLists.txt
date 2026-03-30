@@ -168,7 +168,10 @@ add_library(dong SHARED
     src/script/js_observer_bindings.cpp
     src/script/js_clipboard_bindings.cpp
     src/script/js_selection_bindings.cpp
+    src/script/js_fetch_bindings.cpp
     src/script/js_text_layout_bindings.cpp
+    # Core utilities
+    src/core/resource_loader.cpp
     # Render
     src/render/painter.cpp
     src/render/painter_select_overlays.cpp
@@ -216,6 +219,9 @@ target_compile_definitions(dong PRIVATE DONG_BUILDING_DLL)
 target_compile_definitions(dong PUBLIC MSDFGEN_PUBLIC= MSDFGEN_EXT_PUBLIC=)
 
 target_link_libraries(dong PUBLIC quickjs lexbor yoga)
+if(WIN32)
+    target_link_libraries(dong PUBLIC winhttp)
+endif()
 
 # Link FreeType, HarfBuzz, msdfgen
 if(WIN32)
@@ -319,7 +325,10 @@ add_library(dong_render STATIC
     src/script/js_observer_bindings.cpp
     src/script/js_clipboard_bindings.cpp
     src/script/js_selection_bindings.cpp
+    src/script/js_fetch_bindings.cpp
     src/script/js_text_layout_bindings.cpp
+    # Core utilities
+    src/core/resource_loader.cpp
     # Render
     src/render/painter.cpp
     src/render/painter_select_overlays.cpp
@@ -692,6 +701,8 @@ if(BUILD_EXAMPLES)
                 PATTERN "*.html"
                 PATTERN "*.js"
                 PATTERN "*.css"
+                PATTERN "*.json"
+                PATTERN "*.txt"
                 PATTERN "*.png"
                 PATTERN "*.mp4"
         )

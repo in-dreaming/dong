@@ -3,6 +3,7 @@
 #include "js_observer_bindings.hpp"
 #include "js_clipboard_bindings.hpp"
 #include "js_selection_bindings.hpp"
+#include "js_fetch_bindings.hpp"
 #include "../dom/editing_commands.hpp"
 #include "../dom/contenteditable.hpp"
 #include "../dom/selection.hpp"
@@ -2822,6 +2823,7 @@ void JSBindings::initialize() {
         initializeObserverAPI(ctx, this);
         initializeClipboardAPI(ctx);
         initializeSelectionAPI(ctx, this);
+        initializeFetchAPI(ctx, this);
 
         extern void registerTextLayoutAPI(JSContext* ctx);
         registerTextLayoutAPI(ctx);

@@ -1,0 +1,14 @@
+/* External stylesheet for test_external_stylesheet_basic.html */
+body { background: #e0ffe0; font-family: sans-serif; padding: 20px; }
+h1 { color: #006600; font-size: 24px; }
+.styled-box {
+    width: 200px;
+    height: 60px;
+    background: #009900;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    margin-top: 10px;
+}

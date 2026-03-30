@@ -31,6 +31,7 @@
 #include "../render/overlay_draw.hpp"
 #include "../script/script_engine.hpp"
 #include "../script/js_bindings.hpp"
+#include "../script/js_fetch_bindings.hpp"
 
 #include <cstdlib>
 #include <cstring>
@@ -1480,6 +1481,8 @@ struct EngineView::Impl {
             return false;
         }
 
+        dom_manager->setResourceRoot(resource_root);
+
         if (!dom_manager->loadHTML(html_content)) {
             return false;
         }
@@ -1495,6 +1498,9 @@ struct EngineView::Impl {
 
         if (js_bindings) {
             js_bindings->resetForNewDOM();
+        }
+        if (script_engine && script_engine->getContext()) {
+            dong::script::resetFetchState(script_engine->getContext());
         }
 
         markNeedsRepaint();
@@ -1758,6 +1764,13 @@ struct EngineView::Impl {
         if (!script_engine) return;
         DONG_PROFILE_SCOPE_CAT("Script::processTasks", "script");
         script_engine->processPendingTasks();
+
+        // Drain completed async fetch requests
+        JSContext* ctx = script_engine->getContext();
+        if (ctx) {
+            dong::script::tickPendingFetches(ctx);
+            script_engine->processPendingTasks();
+        }
 
         if (js_bindings) {
             auto now = std::chrono::steady_clock::now();

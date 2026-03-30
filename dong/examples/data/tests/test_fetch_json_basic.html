@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+body { font-family: sans-serif; padding: 20px; }
+#result { margin-top: 10px; padding: 10px; border: 1px solid #ccc; min-height: 40px; background: #f9f9f9; }
+.pass { color: green; font-weight: bold; }
+.fail { color: red; font-weight: bold; }
+</style>
+</head>
+<body>
+<h2>fetch() JSON Basic Test</h2>
+<div id="result">Loading...</div>
+
+<script>
+var result = document.getElementById('result');
+
+fetch('test_fetch_local.json')
+    .then(function(response) {
+        return response.json();
+    })
+    .then(function(data) {
+        if (data.greeting === 'hello from dong' && data.version === 1 && data.items.length === 3) {
+            result.textContent = 'PASS: greeting=' + data.greeting + ', items=' + data.items.join(',');
+            result.className = 'pass';
+        } else {
+            result.textContent = 'FAIL: unexpected JSON: ' + JSON.stringify(data);
+            result.className = 'fail';
+        }
+    })
+    .catch(function(err) {
+        result.textContent = 'FAIL: ' + err;
+        result.className = 'fail';
+    });
+</script>
+</body>
+</html>

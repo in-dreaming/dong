@@ -1,0 +1,2 @@
+This is a local text file loaded via fetch().
+It should appear in the DOM after the async fetch completes.

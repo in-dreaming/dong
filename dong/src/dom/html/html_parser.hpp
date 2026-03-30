@@ -31,8 +31,10 @@ public:
     // Parse HTML fragment (for innerHTML)
     DOMNodePtr parseFragment(const std::string& html, DOMNodePtr context = nullptr);
     
-    // Extract styles from <style> tags and add to StyleEngine
-    void extractAndApplyStyles(DOMNodePtr node, StyleEngine* style_engine);
+    // Extract styles from <style> tags and <link rel="stylesheet"> and add to StyleEngine.
+    // resource_root is used to resolve relative paths for external stylesheets.
+    void extractAndApplyStyles(DOMNodePtr node, StyleEngine* style_engine,
+                               const std::string& resource_root = {});
 
 private:
     DOMNodePtr lexborNodeToDOMNode(lxb_dom_node_t* lexbor_node);

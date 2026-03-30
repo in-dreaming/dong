@@ -1,0 +1,2 @@
+/* Second external sheet: overrides .box background to green (should win over first) */
+.box { background: green; }

@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+<head>
+<link rel="stylesheet" href="test_external_order_a.css">
+<style>
+body { font-family: sans-serif; padding: 20px; }
+h1 { font-size: 20px; }
+</style>
+<link rel="stylesheet" href="test_external_order_b.css">
+</head>
+<body>
+<h1>Cascade Order Test</h1>
+<div class="box">Should be GREEN (b.css overrides a.css)</div>
+<p>The box above should be green with white text. This verifies that multiple external
+stylesheets and inline styles are applied in DOM order.</p>
+</body>
+</html>

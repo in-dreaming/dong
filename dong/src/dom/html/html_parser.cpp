@@ -2,6 +2,7 @@
 #include "../css/style_engine.hpp"
 #include "../../core/log.h"
 #include "../../core/profiler.h"
+#include "../../core/resource_loader.hpp"
 #include <lexbor/html/html.h>
 #include <lexbor/dom/dom.h>
 #include <lexbor/css/css.h>
@@ -61,17 +62,8 @@ DOMNodePtr HTMLParser::parse(const std::string& html) {
     
     if (dom_root) {
         applyDefaultStyles(dom_root);
-        
-        DONG_LOG_INFO("[HTMLParser::parse] Creating StyleEngine...");
-        auto style_engine = std::make_unique<StyleEngine>();
-        DONG_LOG_INFO("[HTMLParser::parse] Extracting and applying styles...");
-        extractAndApplyStyles(dom_root, style_engine.get());
-        DONG_LOG_INFO("[HTMLParser::parse] Computing styles...");
-        style_engine->computeStyles(dom_root);
-        
-        DONG_LOG_INFO("[HTMLParser::parse] Parsing inline styles...");
         parseInlineStyles(dom_root);
-        DONG_LOG_INFO("[HTMLParser::parse] Done");
+        DONG_LOG_INFO("[HTMLParser::parse] Done (styles deferred to Manager)");
     }
 
     return dom_root;
@@ -297,9 +289,10 @@ void HTMLParser::parseCSSAndApply(DOMNodePtr node, const std::string& css) {
     style_engine->computeStyles(node);
 }
 
-void HTMLParser::extractAndApplyStyles(DOMNodePtr node, StyleEngine* style_engine) {
+void HTMLParser::extractAndApplyStyles(DOMNodePtr node, StyleEngine* style_engine,
+                                       const std::string& resource_root) {
     if (!node || !style_engine) return;
-    
+
     // Look for <style> tags
     if (node->getTagName() == "style") {
         if (node->getChildren().size() > 0) {
@@ -310,26 +303,35 @@ void HTMLParser::extractAndApplyStyles(DOMNodePtr node, StyleEngine* style_engin
                     css_text += child->getTextContent();
                 }
             }
-            
+
             if (!css_text.empty()) {
                 style_engine->addStylesheet(css_text);
             }
         }
     }
-    
+
     // Look for <link rel="stylesheet">
     if (node->getTagName() == "link") {
         std::string rel = node->getAttribute("rel");
         if (rel == "stylesheet") {
-            // TODO: Load external stylesheet
             std::string href = node->getAttribute("href");
-            DONG_LOG_INFO("[HTMLParser] External stylesheet: %s (not loaded)", href.c_str());
+            if (!href.empty()) {
+                auto result = dong::loadTextResource(href, resource_root);
+                if (result.success && !result.content.empty()) {
+                    style_engine->addStylesheet(result.content);
+                    DONG_LOG_INFO("[HTMLParser] Loaded external stylesheet: %s (%zu bytes)",
+                                 href.c_str(), result.content.size());
+                } else {
+                    DONG_LOG_WARN("[HTMLParser] Failed to load stylesheet: %s (%s)",
+                                 href.c_str(), result.error_msg.c_str());
+                }
+            }
         }
     }
-    
-    // Recursively search for style tags
+
+    // Recursively search for style/link tags
     for (const auto& child : node->getChildren()) {
-        extractAndApplyStyles(child, style_engine);
+        extractAndApplyStyles(child, style_engine, resource_root);
     }
 }
 

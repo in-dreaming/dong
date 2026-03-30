@@ -1,0 +1,174 @@
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>Game UI Wireframe - 新手引导活动中心</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #1a1a1a; font-family: 'Microsoft YaHei', sans-serif; color: #eee; overflow: hidden;">
+
+<!-- metadata: {"title":"新手引导活动中心","style_tags":["东方玄幻","MOBA","新手留存系统"],"unmatchedRequirements":["引导过程应支持随时点击屏幕跳过","光标悬停（Hover）在倒计时区域时，图标产生呼吸灯效果","所有可交互按钮需包含明确的 normal, hover, pressed, disabled 四种视觉状态"]} -->
+
+<div id="root_canvas" style="position: relative; width: 1920px; height: 1080px; overflow: hidden; background: #121417; border: 1px solid #333;">
+
+  <!-- 背景装饰层 -->
+  <div id="bg_decoration" style="position: absolute; left: 0px; top: 0px; width: 1920px; height: 1080px; background: rgba(255,255,255,0.02); pointer-events: none;"></div>
+
+  <!-- 顶部状态栏 -->
+  <!-- requirement: 返回按钮：界面左上角的返回箭头，当前点击后弹出提示：“此功能正在开发中”。 -->
+  <!-- reasoning: 遵循游戏UI常规布局，左上角放置返回操作。 -->
+  <div id="back_btn" style="position: absolute; left: 40px; top: 40px; width: 80px; height: 80px; border: 2px solid #555; border-radius: 50%; text-align: center; line-height: 80px; font-size: 40px; background: rgba(0,0,0,0.3);">←</div>
+
+  <!-- requirement: 活动倒计时：界面右上角，单行显示。默认格式为“剩余 D天 H时”。左侧带有时钟图标。 -->
+  <!-- reasoning: 营造紧迫感，提醒玩家活动剩余时间。 -->
+  <div id="countdown_timer" style="position: absolute; left: 1600px; top: 50px; width: 280px; height: 40px; border: 1px solid #444; background: rgba(0,0,0,0.5); border-radius: 20px; padding-left: 15px; line-height: 40px; font-size: 18px; color: #ffcc00;">
+    <span id="timer_icon" style="margin-right: 10px;">🕒</span> 剩余 06天 23时
+  </div>
+
+  <!-- 左侧：活动导航区 -->
+  <!-- requirement: 左侧：活动导航区。纵向排列的导航菜单，通过垂直时间线样式连接。用于切换不同的主题活动系列。 -->
+  <!-- reasoning: 侧边栏导航符合移动端/PC端多活动切换习惯，垂直时间线增加设计感。 -->
+  <div id="nav_sidebar" style="position: absolute; left: 60px; top: 180px; width: 300px; height: 800px;">
+    <div id="timeline_line" style="position: absolute; left: 40px; top: 0px; width: 2px; height: 700px; background: #444;"></div>
+
+    <!-- 选中项 -->
+    <div id="nav_item_1" style="position: absolute; left: 0px; top: 20px; width: 280px; height: 100px; background: rgba(255,204,0,0.1); border-left: 4px solid #ffcc00; padding-left: 60px; line-height: 100px; font-size: 24px; font-weight: bold; color: #ffcc00;">
+      稷下严选
+      <div style="position: absolute; left: 32px; top: 42px; width: 16px; height: 16px; background: #ffcc00; border-radius: 50%;"></div>
+    </div>
+
+    <div id="nav_item_2" style="position: absolute; left: 0px; top: 140px; width: 280px; height: 100px; padding-left: 60px; line-height: 100px; font-size: 22px; color: #888;">
+      藏狐风物图鉴
+      <div style="position: absolute; left: 34px; top: 44px; width: 12px; height: 12px; background: #444; border-radius: 50%;"></div>
+    </div>
+
+    <div id="nav_item_3" style="position: absolute; left: 0px; top: 260px; width: 280px; height: 100px; padding-left: 60px; line-height: 100px; font-size: 22px; color: #888;">
+      未来扩展活动...
+      <div style="position: absolute; left: 34px; top: 44px; width: 12px; height: 12px; background: #444; border-radius: 50%;"></div>
+    </div>
+  </div>
+
+  <!-- 中部：奖励陈列区 -->
+  <div id="reward_display_area" style="position: absolute; left: 400px; top: 120px; width: 900px; height: 900px;">
+
+    <!-- 顶部阶段页签 -->
+    <!-- requirement: 横向的阶段页签，以“DAY X”格式命名。当前阶段页签会显示任务完成进度（如 0/4）。 -->
+    <!-- reasoning: 明确的阶段划分引导玩家按天/按步骤完成任务。 -->
+    <div id="phase_tabs" style="position: absolute; left: 0px; top: 0px; width: 900px; height: 80px;">
+      <div id="tab_day_1" style="position: absolute; left: 0px; top: 0px; width: 180px; height: 60px; background: #333; border-bottom: 4px solid #ffcc00; text-align: center; line-height: 60px; font-weight: bold;">DAY 1 (2/4)</div>
+      <div id="tab_day_2" style="position: absolute; left: 190px; top: 0px; width: 180px; height: 60px; background: #222; text-align: center; line-height: 60px; color: #888;">DAY 2 (0/4)</div>
+      <div id="tab_day_3" style="position: absolute; left: 380px; top: 0px; width: 180px; height: 60px; background: #222; text-align: center; line-height: 60px; color: #888;">DAY 3 🔒</div>
+      <div id="tab_day_7" style="position: absolute; left: 570px; top: 0px; width: 180px; height: 60px; background: #222; text-align: center; line-height: 60px; color: #888;">DAY 7 🔒</div>
+    </div>
+
+    <!-- 奖励卡片网格 -->
+    <!-- requirement: 奖励卡片网格，直观展示各阶段可兑换的道具。 -->
+    <!-- reasoning: 网格布局适合展示多种道具，方便玩家快速浏览。 -->
+    <div id="reward_grid" style="position: absolute; left: 0px; top: 100px; width: 900px; height: 700px;">
+
+      <!-- 已领取状态 -->
+      <!-- requirement: 已领取： 覆盖绿色勾选图标。 -->
+      <div id="reward_card_1" style="position: absolute; left: 0px; top: 0px; width: 200px; height: 280px; border: 1px solid #444; background: rgba(0,0,0,0.2);">
+        <div style="width: 100%; height: 180px; background: rgba(255,255,255,0.05); text-align: center; line-height: 180px;">铭文碎片×500</div>
+        <div style="width: 100%; height: 40px; text-align: center; font-size: 14px; color: #666;">完成对局1场</div>
+        <div style="position: absolute; left: 0; top: 0; width: 200px; height: 280px; background: rgba(0,255,0,0.1); text-align: center; line-height: 280px; font-size: 60px; color: #00ff00;">✓</div>
+      </div>
+
+      <!-- 可领取状态 -->
+      <!-- requirement: 可领取： 正常亮度，无额外图标。 -->
+      <div id="reward_card_2" style="position: absolute; left: 230px; top: 0px; width: 200px; height: 280px; border: 2px solid #ffcc00; background: rgba(255,204,0,0.05);">
+        <div style="width: 100%; height: 180px; background: rgba(255,255,255,0.1); text-align: center; line-height: 180px;">英雄碎片×5</div>
+        <div style="width: 100%; height: 40px; text-align: center; font-size: 14px; color: #ffcc00;">击败小兵20个</div>
+        <div style="position: absolute; left: 25px; top: 230px; width: 150px; height: 36px; background: #ffcc00; color: #000; text-align: center; line-height: 36px; border-radius: 4px; font-weight: bold;">点击领取</div>
+      </div>
+
+      <!-- 未解锁状态 -->
+      <!-- requirement: 未解锁： 卡片置灰，并显示锁形图标。 -->
+      <div id="reward_card_3" style="position: absolute; left: 460px; top: 0px; width: 200px; height: 280px; border: 1px dashed #444; background: rgba(0,0,0,0.4); filter: grayscale(100%);">
+        <div style="width: 100%; height: 180px; text-align: center; line-height: 180px; font-size: 40px;">🔒</div>
+        <div style="width: 100%; height: 40px; text-align: center; font-size: 14px; color: #444;">待解锁</div>
+      </div>
+
+      <!-- 任务关联入口 -->
+      <!-- requirement: 每个奖励卡片下方可注明解锁该奖励所需完成的关联任务名称。此任务名称可作为导航入口。 -->
+      <div id="reward_card_4" style="position: absolute; left: 690px; top: 0px; width: 200px; height: 280px; border: 1px solid #444;">
+        <div style="width: 100%; height: 180px; background: rgba(255,255,255,0.05); text-align: center; line-height: 180px;">金币×888</div>
+        <div style="width: 100%; height: 40px; text-align: center; font-size: 14px; color: #3498db; text-decoration: underline;">前往：参与排位赛</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 右侧：主奖励与操作区 -->
+  <div id="main_reward_panel" style="position: absolute; left: 1350px; top: 120px; width: 500px; height: 880px; background: rgba(255,255,255,0.03); border-left: 1px solid #333; padding: 30px;">
+
+    <!-- 标题区 -->
+    <!-- requirement: 显示当前活动系列的主标题和副标题（如“稷下精选，必做指南”）。 -->
+    <div id="header_group" style="position: relative; width: 440px; height: 100px;">
+      <div id="main_title" style="font-size: 36px; font-weight: bold; color: #fff;">稷下精选，必做指南</div>
+      <div id="sub_title" style="font-size: 18px; color: #888; margin-top: 10px;">完成新手任务，领取强力召唤兽</div>
+
+      <!-- 规则入口 -->
+      <!-- requirement: 点击界面右上角主标题旁的“ⓘ”图标。点击后弹窗显示活动的详细规则。 -->
+      <div id="rule_icon" style="position: absolute; right: 0px; top: 5px; width: 30px; height: 30px; border: 1px solid #888; border-radius: 50%; text-align: center; line-height: 30px; cursor: pointer;">ⓘ</div>
+    </div>
+
+    <!-- 主奖励展示 -->
+    <!-- requirement: 由核心奖励角色（如鲁班6号）的立绘占据。包含奖励名称、奖励类型标签。 -->
+    <!-- reasoning: 视觉重心，通过大尺寸立绘吸引玩家。 -->
+    <div id="hero_preview_container" style="position: relative; width: 440px; height: 500px; margin-top: 40px; background: rgba(0,0,0,0.2); border: 1px solid #444;">
+      <div id="hero_artwork_placeholder" style="width: 100%; height: 100%; text-align: center; line-height: 500px; font-size: 24px; color: #444;">[ 鲁班6号 动态立绘预览 ]</div>
+
+      <div id="reward_info_tag" style="position: absolute; left: 20px; bottom: 80px;">
+        <div id="reward_type" style="display: inline-block; padding: 4px 12px; background: #e74c3c; border-radius: 4px; font-size: 14px; margin-bottom: 8px;">召唤兽</div>
+        <div id="reward_name" style="font-size: 48px; font-weight: bold; text-shadow: 2px 2px 4px #000;">鲁班6号</div>
+      </div>
+    </div>
+
+    <!-- 奖励规则与进度 -->
+    <!-- requirement: 明确展示获取该奖励的条件及当前进度，如“完成任意2个任务可领取 (进度: 1/2)” -->
+    <div id="main_progress_info" style="margin-top: 30px; text-align: center;">
+      <div style="font-size: 18px; color: #ccc;">完成任意2个任务可领取</div>
+      <div style="font-size: 20px; color: #ffcc00; margin-top: 5px; font-weight: bold;">进度: 1 / 2</div>
+      <div id="progress_bar_bg" style="width: 100%; height: 8px; background: #222; border-radius: 4px; margin-top: 15px;">
+        <div id="progress_bar_fill" style="width: 50%; height: 100%; background: #ffcc00; border-radius: 4px;"></div>
+      </div>
+    </div>
+
+    <!-- 核心操作按钮 -->
+    <!-- requirement: 核心操作按钮。根据当前状态显示不同文本（如“激活召唤兽”）。在条件未满足时，应处于 disabled（置灰）状态。 -->
+    <!-- reasoning: 明确的行动点，引导玩家完成最终转化。 -->
+    <div id="main_action_btn" style="position: absolute; left: 30px; bottom: 60px; width: 440px; height: 80px; background: #555; color: #888; text-align: center; line-height: 80px; font-size: 28px; font-weight: bold; border-radius: 10px; cursor: not-allowed;">
+      激活召唤兽
+    </div>
+  </div>
+
+  <!-- 弹窗层：奖励预览 (默认隐藏，此处仅作结构展示) -->
+  <div id="preview_modal" style="position: absolute; left: 0px; top: 0px; width: 1920px; height: 1080px; background: rgba(0,0,0,0.85); display: none; z-index: 100;">
+    <!-- requirement: 所有预览弹窗右上角提供关闭按钮。 -->
+    <div id="modal_close_btn" style="position: absolute; right: 60px; top: 60px; width: 60px; height: 60px; border: 2px solid #fff; border-radius: 50%; text-align: center; line-height: 60px; font-size: 30px;">✕</div>
+
+    <!-- 视频预览区 -->
+    <!-- requirement: 皮肤/英雄/召唤兽类：点击卡片后，弹窗播放该皮肤/英雄的展示视频。 -->
+    <div id="video_player_placeholder" style="position: absolute; left: 360px; top: 140px; width: 1200px; height: 675px; background: #000; border: 2px solid #333; text-align: center; line-height: 675px; font-size: 32px;">
+      [ 视频播放器: hok-lan.mp4 ]
+    </div>
+
+    <!-- 文案区 -->
+    <!-- requirement: 风物/世界观类：点击卡片后，弹窗展示高清原画或一段背景故事文字。 -->
+    <div id="lore_text_container" style="position: absolute; left: 360px; top: 850px; width: 1200px; height: 150px; text-align: center; font-size: 20px; color: #ccc; line-height: 1.6;">
+      “在稷下学院的深处，鲁班大师留下的第六号作品正静静等待着它的新主人。它不仅是机关术的巅峰，更是友谊的象征...”
+    </div>
+  </div>
+
+  <!-- 新手引导遮罩层 (示意) -->
+  <!-- requirement: 引导内容：聚焦于“做什么”和“得什么”。高亮展示第一阶段的核心奖励 -> 指引玩家查看解锁该奖励需完成的任务 -> 指引至核心操作按钮。 -->
+  <div id="tutorial_overlay" style="position: absolute; left: 0px; top: 0px; width: 1920px; height: 1080px; background: rgba(0,0,0,0.6); z-index: 200; display: none;">
+    <div id="tutorial_focus_box" style="position: absolute; left: 1350px; top: 250px; width: 500px; height: 550px; border: 4px solid #ffcc00; box-shadow: 0 0 50px #ffcc00;"></div>
+    <div id="tutorial_dialog" style="position: absolute; left: 900px; top: 400px; width: 400px; height: 200px; background: #fff; color: #000; border-radius: 20px; padding: 30px; font-size: 22px;">
+      首先，让我们看看这次活动的核心奖励：<b>鲁班6号</b>！完成任务即可免费领取。
+      <div style="margin-top: 20px; color: #666; font-size: 16px;">点击任意位置继续...</div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

@@ -161,6 +161,135 @@ static DongLogger g_default_logger = {
 };
 
 // =============================================================================
+// Default HTTP Client
+// =============================================================================
+
+#if defined(_WIN32) || defined(_WIN64)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#include <winhttp.h>
+
+static DongHttpResult default_http_get(DongHttpClient* client, const char* url,
+                                       DongHttpResponse* out) {
+    (void)client;
+    if (!url || !out) return DONG_HTTP_ERR_INVALID_URL;
+
+    // Convert URL to wide string
+    int wlen = MultiByteToWideChar(CP_UTF8, 0, url, -1, NULL, 0);
+    if (wlen <= 0) return DONG_HTTP_ERR_INVALID_URL;
+    wchar_t* wurl = (wchar_t*)malloc(wlen * sizeof(wchar_t));
+    if (!wurl) return DONG_HTTP_ERR_NETWORK;
+    MultiByteToWideChar(CP_UTF8, 0, url, -1, wurl, wlen);
+
+    // Crack URL
+    URL_COMPONENTS uc;
+    memset(&uc, 0, sizeof(uc));
+    uc.dwStructSize = sizeof(uc);
+    wchar_t host_buf[256] = {0};
+    wchar_t path_buf[2048] = {0};
+    uc.lpszHostName = host_buf;
+    uc.dwHostNameLength = 256;
+    uc.lpszUrlPath = path_buf;
+    uc.dwUrlPathLength = 2048;
+    if (!WinHttpCrackUrl(wurl, 0, 0, &uc)) {
+        free(wurl);
+        return DONG_HTTP_ERR_INVALID_URL;
+    }
+    free(wurl);
+
+    HINTERNET session = WinHttpOpen(L"Dong/1.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+                                    WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    if (!session) return DONG_HTTP_ERR_NETWORK;
+
+    HINTERNET conn = WinHttpConnect(session, host_buf, uc.nPort, 0);
+    if (!conn) { WinHttpCloseHandle(session); return DONG_HTTP_ERR_NETWORK; }
+
+    DWORD flags = (uc.nScheme == INTERNET_SCHEME_HTTPS) ? WINHTTP_FLAG_SECURE : 0;
+    HINTERNET req = WinHttpOpenRequest(conn, L"GET", path_buf, NULL,
+                                       WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, flags);
+    if (!req) { WinHttpCloseHandle(conn); WinHttpCloseHandle(session); return DONG_HTTP_ERR_NETWORK; }
+
+    if (!WinHttpSendRequest(req, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
+                            WINHTTP_NO_REQUEST_DATA, 0, 0, 0) ||
+        !WinHttpReceiveResponse(req, NULL)) {
+        WinHttpCloseHandle(req); WinHttpCloseHandle(conn); WinHttpCloseHandle(session);
+        return DONG_HTTP_ERR_NETWORK;
+    }
+
+    // Read status code
+    DWORD status = 0, sz = sizeof(status);
+    WinHttpQueryHeaders(req, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+                        WINHTTP_HEADER_NAME_BY_INDEX, &status, &sz, WINHTTP_NO_HEADER_INDEX);
+    out->status_code = (int)status;
+
+    // Read body
+    size_t total = 0, cap = 4096;
+    char* buf = (char*)malloc(cap);
+    if (!buf) { WinHttpCloseHandle(req); WinHttpCloseHandle(conn); WinHttpCloseHandle(session); return DONG_HTTP_ERR_NETWORK; }
+    for (;;) {
+        DWORD avail = 0;
+        if (!WinHttpQueryDataAvailable(req, &avail) || avail == 0) break;
+        if (total + avail + 1 > cap) {
+            cap = (total + avail + 1) * 2;
+            char* tmp = (char*)realloc(buf, cap);
+            if (!tmp) { free(buf); WinHttpCloseHandle(req); WinHttpCloseHandle(conn); WinHttpCloseHandle(session); return DONG_HTTP_ERR_NETWORK; }
+            buf = tmp;
+        }
+        DWORD nread = 0;
+        WinHttpReadData(req, buf + total, avail, &nread);
+        total += nread;
+    }
+    buf[total] = '\0';
+
+    out->body = buf;
+    out->body_size = total;
+
+    WinHttpCloseHandle(req);
+    WinHttpCloseHandle(conn);
+    WinHttpCloseHandle(session);
+    return DONG_HTTP_OK;
+}
+
+static void default_http_free_response(DongHttpClient* client, DongHttpResponse* resp) {
+    (void)client;
+    if (resp && resp->body) { free(resp->body); resp->body = NULL; resp->body_size = 0; }
+}
+
+static const DongHttpClientVTable g_default_http_vtable = {
+    .get = default_http_get,
+    .free_response = default_http_free_response,
+};
+
+static DongHttpClient g_default_http = {
+    .vtable = &g_default_http_vtable,
+    .user_data = NULL,
+};
+
+#else
+// Non-Windows: stub that returns UNSUPPORTED.
+// Applications should inject their own HTTP client via dong_platform_set_http_client().
+static DongHttpResult stub_http_get(DongHttpClient* client, const char* url,
+                                    DongHttpResponse* out) {
+    (void)client; (void)url; (void)out;
+    return DONG_HTTP_ERR_UNSUPPORTED;
+}
+static void stub_http_free_response(DongHttpClient* client, DongHttpResponse* resp) {
+    (void)client;
+    if (resp && resp->body) { free(resp->body); resp->body = NULL; resp->body_size = 0; }
+}
+static const DongHttpClientVTable g_default_http_vtable = {
+    .get = stub_http_get,
+    .free_response = stub_http_free_response,
+};
+static DongHttpClient g_default_http = {
+    .vtable = &g_default_http_vtable,
+    .user_data = NULL,
+};
+#endif
+
+// =============================================================================
 // Platform Implementation
 // =============================================================================
 
@@ -171,6 +300,7 @@ typedef struct DongPlatformImpl {
     DongLogger* logger;
     DongImageDecoder* image_decoder;
     DongClipboard* clipboard;
+    DongHttpClient* http_client;
 } DongPlatformImpl;
 
 // Global singleton storage
@@ -192,6 +322,7 @@ static void platform_init_defaults(DongPlatformImpl* impl) {
     }
     impl->file_system = &g_default_fs;
     impl->logger = &g_default_logger;
+    impl->http_client = &g_default_http;
 }
 
 // =============================================================================
@@ -283,6 +414,18 @@ DONG_PLATFORM_API DongClipboard* dong_platform_get_clipboard(DongPlatform* platf
     if (!platform) return NULL;
     DongPlatformImpl* impl = platform_to_impl(platform);
     return impl->clipboard;
+}
+
+DONG_PLATFORM_API void dong_platform_set_http_client(DongPlatform* platform, DongHttpClient* client) {
+    if (!platform) return;
+    DongPlatformImpl* impl = platform_to_impl(platform);
+    impl->http_client = client ? client : &g_default_http;
+}
+
+DONG_PLATFORM_API DongHttpClient* dong_platform_get_http_client(DongPlatform* platform) {
+    if (!platform) return NULL;
+    DongPlatformImpl* impl = platform_to_impl(platform);
+    return impl->http_client;
 }
 
 #ifdef __cplusplus

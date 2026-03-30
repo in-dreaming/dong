@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+<head>
+<link rel="stylesheet" href="nonexistent_file_12345.css">
+<style>
+body { font-family: sans-serif; padding: 20px; background: #fffff0; }
+h1 { color: #333; font-size: 20px; }
+.fallback { padding: 10px; background: #ddd; border-radius: 4px; }
+</style>
+</head>
+<body>
+<h1>Missing Stylesheet Graceful Degradation</h1>
+<div class="fallback">This box should still be styled by the inline style (gray background).</div>
+<p>The missing external stylesheet should produce a warning log but not break the page.</p>
+</body>
+</html>

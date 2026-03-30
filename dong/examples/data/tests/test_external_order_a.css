@@ -1,0 +1,2 @@
+/* First external sheet: sets initial colors */
+.box { background: red; color: white; padding: 10px; margin: 5px; width: 200px; text-align: center; }
