@@ -571,7 +571,12 @@ DONG_APPCORE_API int dong_app_poll_events(dong_app_t* app_handle) {
         }
 
         if (ev.type != DONG_APP_EVENT_NONE) {
-            app_forward_event_to_engine(app, &ev);
+            // 若注册了 event_callback（例如 Scene3D 接管输入），不要再把同一事件投递给
+            // dong_app 自带的 engine：该 engine 常为 html=NULL 的占位视图，用窗口坐标做
+            // hit-test 会与 Scene3D 的屏幕局部坐标路由冲突，点击时可能崩溃。
+            if (!app->event_callback) {
+                app_forward_event_to_engine(app, &ev);
+            }
             app_send_event_callback(app, &ev);
         }
     }

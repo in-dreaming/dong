@@ -1277,6 +1277,10 @@ static void update_hover_from_mouse(dong_scene3d_t* scene, int32_t mx, int32_t m
     }
 
     dong_screen3d_t* scr = scene->screens[hovered];
+    if (!scr) {
+        scene->hovered_idx = -1;
+        return;
+    }
     scr->hovered = 1;
 
     const int32_t sx = (int32_t)(u * (float)scr->tex_width);
@@ -1306,6 +1310,11 @@ static void handle_left_down(dong_scene3d_t* scene) {
 
     if (scene->hovered_idx >= 0 && scene->hovered_idx < scene->screen_count) {
         dong_screen3d_t* scr = scene->screens[scene->hovered_idx];
+        if (!scr) {
+            set_focused_screen(scene, -1);
+            scene->pressed_idx = -1;
+            return;
+        }
         set_focused_screen(scene, scene->hovered_idx);
 
         scene->pressed_idx = scene->hovered_idx;
@@ -1333,6 +1342,10 @@ static void handle_left_up(dong_scene3d_t* scene) {
     int target = (scene->pressed_idx >= 0) ? scene->pressed_idx : scene->hovered_idx;
     if (target >= 0 && target < scene->screen_count) {
         dong_screen3d_t* scr = scene->screens[target];
+        if (!scr) {
+            scene->pressed_idx = -1;
+            return;
+        }
         const int32_t upx = (scene->pressed_idx >= 0) ? scene->pressed_x : scr->mouse_x;
         const int32_t upy = (scene->pressed_idx >= 0) ? scene->pressed_y : scr->mouse_y;
 
@@ -1878,7 +1891,13 @@ DONG_APPCORE_API void dong_scene3d_render(dong_scene3d_t* scene) {
     if (sw == 0 || sh == 0) return;
 
     // 无变化时跳过 swapchain 提交：避免 swapchain/backbuffer 的节流把“空转帧率”锁死。
+    // 若不节流主循环，poll/update 会以数十万 FPS 空转，delta_time 极小，HUD FPS 失真，
+    // 且 overlay/脚本每帧被调用过频，易拖垮 CPU 或引发不稳定。
     if (scene->initial_full_update_done && !scene->dirty) {
+        const int idle_ms = env_i32_or_default("DONG_SCENE3D_IDLE_DELAY_MS", 1);
+        if (idle_ms > 0) {
+            SDL_Delay((Uint32)idle_ms);
+        }
         return;
     }
 

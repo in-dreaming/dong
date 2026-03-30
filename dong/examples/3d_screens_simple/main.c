@@ -322,7 +322,7 @@ int main(int argc, char* argv[]) {
         dong_scene3d_update(scene, dt);
 
         // Render 3D scene + HUD overlays (all in one pass)
-        // Note: dong_scene3d_render handles swapchain acquisition and submission internally,e'e'e'eeeee
+        // Note: dong_scene3d_render handles swapchain acquisition and submission internally;
         // so we don't need to call dong_app_present here.
         dong_scene3d_render(scene);
 
