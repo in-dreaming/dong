@@ -170,6 +170,9 @@ add_library(dong SHARED
     src/script/js_selection_bindings.cpp
     src/script/js_fetch_bindings.cpp
     src/script/js_text_layout_bindings.cpp
+    src/script/js_scene_bindings.cpp
+    src/render/scene_graph.cpp
+    src/dom/scene_compiler.cpp
     # Core utilities
     src/core/resource_loader.cpp
     # Render
@@ -327,6 +330,9 @@ add_library(dong_render STATIC
     src/script/js_selection_bindings.cpp
     src/script/js_fetch_bindings.cpp
     src/script/js_text_layout_bindings.cpp
+    src/script/js_scene_bindings.cpp
+    src/render/scene_graph.cpp
+    src/dom/scene_compiler.cpp
     # Core utilities
     src/core/resource_loader.cpp
     # Render

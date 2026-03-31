@@ -58,6 +58,10 @@ public:
         display_list_builder_.appendItems(items);
     }
 
+    void clearDisplayList() {
+        display_list_builder_.clear();
+    }
+
     // Evaluate generated content text for a pseudo-element style.
     // Called from inline rendering helpers (e.g. for open-quote/close-quote in <q>).
     std::string evaluateContentText(const dom::ComputedStyle& style, const dom::DOMNodePtr& node = nullptr);

@@ -1143,7 +1143,10 @@ fn buildDongCore(
             "src/script/js_selection_bindings.cpp",
             "src/script/js_fetch_bindings.cpp",
             "src/script/js_text_layout_bindings.cpp",
+            "src/script/js_scene_bindings.cpp",
+            "src/dom/scene_compiler.cpp",
             // Render (platform-agnostic)
+            "src/render/scene_graph.cpp",
             "src/render/painter.cpp",
             "src/render/painter_select_overlays.cpp",
             "src/render/painter/painter_media.cpp",

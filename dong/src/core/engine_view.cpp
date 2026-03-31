@@ -29,6 +29,8 @@
 #include "../render/gpu_ir.hpp"
 #include "../render/text_shaper.hpp"
 #include "../render/overlay_draw.hpp"
+#include "../render/scene_graph.hpp"
+#include "../dom/scene_compiler.hpp"
 #include "../script/script_engine.hpp"
 #include "../script/js_bindings.hpp"
 #include "../script/js_fetch_bindings.hpp"
@@ -54,7 +56,15 @@
 
 
 
+namespace dong::script {
+    extern render::SceneGraph& getGlobalSceneGraph();
+}
+
 namespace dong {
+
+static render::SceneGraph& getSceneGraph() {
+    return script::getGlobalSceneGraph();
+}
 
 namespace {
 
@@ -1446,6 +1456,7 @@ struct EngineView::Impl {
     }
 
     void updateHoverState(int32_t x, int32_t y) {
+        if (scene_mode_active_) return;
         auto hit = hitElementAt(x, y);
         if (hit != hovered_element) {
             setHoverChain(hovered_element, false);
@@ -1531,6 +1542,17 @@ struct EngineView::Impl {
                 }
                 painter->setTextRendererMode(text_renderer_mode);
                 painter->buildDisplayList(root2, layout_engine.get());
+            }
+        }
+
+        // Try scene graph compilation for absolute-positioned game UIs
+        if (auto root3 = dom_manager->getRoot()) {
+            if (dong::dom::SceneCompiler::canCompile(root3)) {
+                auto& sg = dong::getSceneGraph();
+                if (dong::dom::SceneCompiler::compile(root3, sg)) {
+                    scene_mode_active_ = true;
+                    DONG_LOG_INFO("[EngineView] Scene mode activated (%zu nodes)", sg.nodeCount());
+                }
             }
         }
 
@@ -1782,6 +1804,7 @@ struct EngineView::Impl {
     }
 
     void flushStyleLayoutAfterScripts() {
+        if (scene_mode_active_) return;
         if (!dom_manager) return;
         auto root = dom_manager->getRoot();
         if (!root) return;
@@ -1810,6 +1833,7 @@ struct EngineView::Impl {
     }
 
     void tickComputeStylesIfNeeded() {
+        if (scene_mode_active_) return;
         if (!dom_manager) return;
         auto root = dom_manager->getRoot();
         if (!root) return;
@@ -1823,6 +1847,7 @@ struct EngineView::Impl {
     }
 
     void tickComputeLayoutIfNeeded() {
+        if (scene_mode_active_) return;
         if (!layout_engine || !dom_manager) return;
         auto root = dom_manager->getRoot();
         if (!root || !root->isLayoutDirty()) return;
@@ -1867,37 +1892,51 @@ struct EngineView::Impl {
     // Cached DOM display list: reused when only overlay changes (skip-if-clean).
     std::vector<dong::render::DisplayItem> cached_dom_display_items_;
     bool dom_display_list_valid_ = false;
+    bool scene_mode_active_ = false; // true when scene compiler took over rendering
+    bool commands_regenerated_this_tick_ = false;
+
+    void appendSceneAndOverlay(dong::render::OverlayDraw& overlay) {
+        auto& sg = dong::getSceneGraph();
+        if (!sg.empty()) {
+            const auto& scene_items = sg.buildDisplayItems();
+            if (!scene_items.empty()) {
+                painter->appendOverlayItems(scene_items);
+            }
+        }
+        if (!overlay.empty()) {
+            painter->appendOverlayItems(overlay.items());
+            overlay.clearDirty();
+        }
+    }
 
     void tickGenerateCommandsIfNeeded() {
+        commands_regenerated_this_tick_ = false;
         const bool gpu_ready = true;
         auto& overlay = dong::render::OverlayDraw::instance();
+        auto& sg = dong::getSceneGraph();
 
-        // Determine what changed
         bool overlay_dirty = overlay.isDirty();
-        bool dom_dirty = commands_dirty; // set by markNeedsRepaint from DOM/style/layout changes
+        bool scene_dirty = sg.isDirty();
+        bool dom_dirty = commands_dirty;
 
-        if (overlay_dirty && !dom_dirty && dom_display_list_valid_) {
-            // Fast path: only overlay changed, DOM display list is still valid.
-            // Restore cached DOM items + append new overlay items.
+        // Fast path: only overlay/scene changed, DOM display list still valid
+        if ((overlay_dirty || scene_dirty) && !dom_dirty && dom_display_list_valid_) {
             DONG_PROFILE_SCOPE_CAT("Render::overlayOnly", "render");
 
             painter->restoreDisplayList(cached_dom_display_items_);
-            if (!overlay.empty()) {
-                painter->appendOverlayItems(overlay.items());
-                overlay.clearDirty();
-            }
+            appendSceneAndOverlay(overlay);
 
             if (!cached_cmd_list) {
                 cached_cmd_list = std::make_unique<dong::render::GPUCommandList>();
             }
             dong::render::GPUCompiler compiler;
             compiler.compile(painter->getDisplayList(), *cached_cmd_list, &painter->getLayerTree());
-            // commands_dirty stays false; overlay_dirty was the trigger
+            commands_regenerated_this_tick_ = true;
             return;
         }
 
-        if (overlay_dirty)
-            dom_dirty = true; // need full rebuild if no cached DOM list
+        if (overlay_dirty || scene_dirty)
+            dom_dirty = true;
         if (!(use_gpu && dom_dirty && gpu_ready && dom_manager && layout_engine && painter)) return;
 
         DONG_PROFILE_SCOPE_CAT("Render::generateCommands", "render");
@@ -1917,17 +1956,17 @@ struct EngineView::Impl {
                 painter->setInputEditingState(nullptr, false);
         }
         painter->setTextRendererMode(text_renderer_mode);
-        painter->buildDisplayList(root, layout_engine.get());
 
-        // Cache the DOM-only display list for future overlay-only frames
+        if (scene_mode_active_) {
+            painter->clearDisplayList();
+        } else {
+            painter->buildDisplayList(root, layout_engine.get());
+        }
+
         cached_dom_display_items_ = painter->getDisplayList().items;
         dom_display_list_valid_ = true;
 
-        // Inject overlay items
-        if (!overlay.empty()) {
-            painter->appendOverlayItems(overlay.items());
-            overlay.clearDirty();
-        }
+        appendSceneAndOverlay(overlay);
 
         const auto& dl = painter->getDisplayList();
         DONG_LOG_DEBUG("[tick] DisplayList items: %zu", dl.items.size());
@@ -1939,6 +1978,7 @@ struct EngineView::Impl {
         compiler.compile(painter->getDisplayList(), *cached_cmd_list, &painter->getLayerTree());
         DONG_LOG_DEBUG("[tick] GPU commands: %zu", cached_cmd_list->commands.size());
         commands_dirty = false;
+        commands_regenerated_this_tick_ = true;
     }
 
     void tickUploadVideoFramesIfNeeded() {
@@ -1956,9 +1996,18 @@ struct EngineView::Impl {
             return;
         }
 
-        DONG_LOG_DEBUG("[tick] Executing %zu GPU commands", cached_cmd_list->commands.size());
-        DONG_PROFILE_SCOPE_CAT("GPU::execute", "render");
-        (void)dong_gpu_execute(driver, cached_cmd_list.get());
+        if (commands_regenerated_this_tick_) {
+            DONG_LOG_DEBUG("[tick] Executing %zu GPU commands", cached_cmd_list->commands.size());
+            DONG_PROFILE_SCOPE_CAT("GPU::execute", "render");
+            (void)dong_gpu_execute(driver, cached_cmd_list.get());
+        } else {
+            // Nothing changed: pass empty list to trigger present-only (intermediate → swapchain blit)
+            DONG_PROFILE_SCOPE_CAT("GPU::presentOnly", "render");
+            static dong::render::GPUCommandList empty_list;
+            empty_list.commands.clear();
+            empty_list.sorted_draw_indices.clear();
+            (void)dong_gpu_execute(driver, &empty_list);
+        }
     }
 
     bool tick() {
@@ -2004,6 +2053,17 @@ struct EngineView::Impl {
 
     void dispatchMouseEvent(const char* type, int32_t x, int32_t y, int32_t button) {
         if (!script_engine || !js_bindings || !event_dispatcher) return;
+
+        // Scene graph gets first chance at events
+        {
+            auto& sg = dong::getSceneGraph();
+            if (!sg.empty()) {
+                std::string t = type ? type : "";
+                if (sg.dispatchEvent(t, (float)x, (float)y)) {
+                    return;
+                }
+            }
+        }
 
         auto target = hitTestElementAt(dom_manager.get(), layout_engine.get(), x, y);
         if (!target) return;

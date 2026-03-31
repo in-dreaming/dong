@@ -2827,6 +2827,9 @@ void JSBindings::initialize() {
 
         extern void registerTextLayoutAPI(JSContext* ctx);
         registerTextLayoutAPI(ctx);
+
+        extern void registerSceneGraphAPI(JSContext* ctx);
+        registerSceneGraphAPI(ctx);
     }
 }
 
