@@ -16,7 +16,6 @@ public:
     static bool compile(const DOMNodePtr& root, render::SceneGraph& sg);
 
 private:
-    static render::Color parseCSSColor(const std::string& s);
     static void compileNode(const DOMNodePtr& node, render::SceneGraph& sg,
                             uint32_t parent_id, float parent_x, float parent_y);
 };

@@ -92,6 +92,10 @@ void SceneGraph::setFloat(uint32_t id, const std::string& prop, float value) {
     else if (prop == "width" || prop == "w") n->width = value;
     else if (prop == "height" || prop == "h") n->height = value;
     else if (prop == "borderWidth") n->border_width = value;
+    else if (prop == "borderTopWidth") n->border_top_width = value;
+    else if (prop == "borderRightWidth") n->border_right_width = value;
+    else if (prop == "borderBottomWidth") n->border_bottom_width = value;
+    else if (prop == "borderLeftWidth") n->border_left_width = value;
     else if (prop == "borderRadius") n->border_radius = value;
     else if (prop == "opacity") n->opacity = value;
     else if (prop == "fontSize") n->font_size = value;
@@ -129,6 +133,10 @@ void SceneGraph::setColor(uint32_t id, const std::string& prop, const Color& col
 
     if (prop == "background") n->background_color = color;
     else if (prop == "borderColor") n->border_color = color;
+    else if (prop == "borderTopColor") n->border_top_color = color;
+    else if (prop == "borderRightColor") n->border_right_color = color;
+    else if (prop == "borderBottomColor") n->border_bottom_color = color;
+    else if (prop == "borderLeftColor") n->border_left_color = color;
     else if (prop == "color") n->text_color = color;
     else return;
 
@@ -175,14 +183,57 @@ void SceneGraph::buildNodeItems(SceneNode& node) {
         node.cached_items.push_back(std::move(item));
     }
 
-    // Border
-    if (node.border_width > 0.01f && node.border_color.a > 0.001f) {
-        DisplayItem item{};
-        item.type = DisplayItemType::DrawRoundedRect;
-        Color bc = node.border_color;
-        bc.a *= node.opacity;
-        item.rounded_rect = {bounds, bc, node.border_radius, node.border_width};
-        node.cached_items.push_back(std::move(item));
+    // Border (per-side aware)
+    {
+        auto ew = [&](float side) -> float {
+            return (side >= 0) ? side : std::max(0.0f, node.border_width);
+        };
+        auto ec = [&](const Color& side) -> Color {
+            return (side.a > 0.001f) ? side : node.border_color;
+        };
+        float bt = ew(node.border_top_width);
+        float br = ew(node.border_right_width);
+        float bb = ew(node.border_bottom_width);
+        float bl = ew(node.border_left_width);
+        float bmax = std::max(std::max(bt, bb), std::max(bl, br));
+
+        if (bmax > 0.01f) {
+            Color ct = ec(node.border_top_color);
+            Color cr = ec(node.border_right_color);
+            Color cb = ec(node.border_bottom_color);
+            Color cl = ec(node.border_left_color);
+
+            auto nearEq = [](float a, float b) { return std::fabs(a - b) < 0.01f; };
+            auto colorEq = [](const Color& a, const Color& b) {
+                return std::fabs(a.r - b.r) < 0.004f && std::fabs(a.g - b.g) < 0.004f &&
+                       std::fabs(a.b - b.b) < 0.004f && std::fabs(a.a - b.a) < 0.004f;
+            };
+            bool uniform = nearEq(bt, br) && nearEq(bt, bb) && nearEq(bt, bl) &&
+                           colorEq(ct, cr) && colorEq(ct, cb) && colorEq(ct, cl);
+
+            if (uniform) {
+                DisplayItem item{};
+                item.type = DisplayItemType::DrawRoundedRect;
+                Color bc = ct;
+                bc.a *= node.opacity;
+                item.rounded_rect = {bounds, bc, node.border_radius, bt};
+                node.cached_items.push_back(std::move(item));
+            } else {
+                float inner_h = std::max(0.0f, bounds.height - bt - bb);
+                auto addSide = [&](Rect r, Color c) {
+                    if (c.a <= 0.001f) return;
+                    c.a *= node.opacity;
+                    DisplayItem item{};
+                    item.type = DisplayItemType::DrawRect;
+                    item.rect = {r, c};
+                    node.cached_items.push_back(std::move(item));
+                };
+                if (bt > 0.01f) addSide({bounds.x, bounds.y, bounds.width, bt}, ct);
+                if (bb > 0.01f) addSide({bounds.x, bounds.y + bounds.height - bb, bounds.width, bb}, cb);
+                if (bl > 0.01f) addSide({bounds.x, bounds.y + bt, bl, inner_h}, cl);
+                if (br > 0.01f) addSide({bounds.x + bounds.width - br, bounds.y + bt, br, inner_h}, cr);
+            }
+        }
     }
 
     // Image
@@ -213,9 +264,17 @@ void SceneGraph::buildNodeItems(SceneNode& node) {
                 text_x = node.x + node.width - tw;
             }
 
+            float scale = shaped.scale_to_pixels;
             float lh = node.line_height > 0 ? node.line_height : node.font_size * 1.2f;
-            float ascent = shaped.ascent_units * shaped.scale_to_pixels;
-            float text_y = node.y + (node.height - lh) / 2.0f + ascent;
+            float ascent_u = shaped.ascent_units > 0.0f
+                           ? shaped.ascent_units
+                           : node.font_size / std::max(scale, 1e-3f);
+            float descent_abs_u = shaped.descent_units < 0.0f
+                                ? -shaped.descent_units : 0.0f;
+            float lh_u = lh / std::max(scale, 1e-3f);
+            float extra_u = std::max(lh_u - (ascent_u + descent_abs_u), 0.0f);
+            float baseline_off = (extra_u * 0.5f + ascent_u) * scale;
+            float text_y = node.y + (node.height - lh) / 2.0f + baseline_off;
 
             float inv_scale = shaped.scale_to_pixels > 0 ? (1.0f / shaped.scale_to_pixels) : 1.0f;
             float ox = text_x * inv_scale;

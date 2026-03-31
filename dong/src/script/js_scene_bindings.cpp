@@ -1,5 +1,6 @@
 #include "quickjs_compat.h"
 #include "../render/scene_graph.hpp"
+#include "../render/painter/painter_style_utils.hpp"
 #include <string>
 #include <cstdlib>
 
@@ -42,54 +43,7 @@ static bool jsBool(JSContext* ctx, JSValueConst obj, const char* key, bool fallb
 static render::Color parseColor(const std::string& s,
                                 render::Color fallback = {0, 0, 0, 0}) {
     if (s.empty()) return fallback;
-
-    if (s[0] == '#') {
-        auto hex1f = [](char c) -> float {
-            int v = (c >= 'a' ? c - 'a' + 10 : c >= 'A' ? c - 'A' + 10 : c - '0');
-            return (v * 17) / 255.0f;
-        };
-        auto hex2f = [](const char* p) -> float {
-            int v = 0;
-            for (int i = 0; i < 2; i++) {
-                char c = p[i];
-                v = v * 16 + (c >= 'a' ? c - 'a' + 10 : c >= 'A' ? c - 'A' + 10 : c - '0');
-            }
-            return v / 255.0f;
-        };
-
-        if (s.size() == 4 || s.size() == 5) {
-            render::Color c;
-            c.r = hex1f(s[1]);
-            c.g = hex1f(s[2]);
-            c.b = hex1f(s[3]);
-            c.a = s.size() == 5 ? hex1f(s[4]) : 1.0f;
-            return c;
-        }
-        if (s.size() >= 7) {
-            render::Color c;
-            c.r = hex2f(s.c_str() + 1);
-            c.g = hex2f(s.c_str() + 3);
-            c.b = hex2f(s.c_str() + 5);
-            c.a = s.size() >= 9 ? hex2f(s.c_str() + 7) : 1.0f;
-            return c;
-        }
-    }
-
-    // rgba(r,g,b,a) with 0-255 rgb and 0-1 alpha
-    if (s.rfind("rgba(", 0) == 0) {
-        float r = 0, g = 0, b = 0, a = 1;
-        sscanf(s.c_str(), "rgba(%f,%f,%f,%f)", &r, &g, &b, &a);
-        return {r / 255.0f, g / 255.0f, b / 255.0f, a};
-    }
-
-    // rgb(r,g,b)
-    if (s.rfind("rgb(", 0) == 0) {
-        float r = 0, g = 0, b = 0;
-        sscanf(s.c_str(), "rgb(%f,%f,%f)", &r, &g, &b);
-        return {r / 255.0f, g / 255.0f, b / 255.0f, 1.0f};
-    }
-
-    return fallback;
+    return render::painter_detail::makeColorFromCss(s);
 }
 
 // dong.scene.addNode({name, x, y, w, h, background, border, ...})
@@ -120,6 +74,19 @@ static JSValue js_scene_addNode(JSContext* ctx, JSValueConst, int argc, JSValueC
     node.background_color = parseColor(jsStr(ctx, cfg, "background"));
     node.border_color = parseColor(jsStr(ctx, cfg, "border"));
     node.text_color = parseColor(jsStr(ctx, cfg, "color"), {1, 1, 1, 1});
+
+    node.border_top_width = (float)jsNum(ctx, cfg, "borderTopWidth", -1);
+    node.border_right_width = (float)jsNum(ctx, cfg, "borderRightWidth", -1);
+    node.border_bottom_width = (float)jsNum(ctx, cfg, "borderBottomWidth", -1);
+    node.border_left_width = (float)jsNum(ctx, cfg, "borderLeftWidth", -1);
+    auto btc = jsStr(ctx, cfg, "borderTopColor");
+    auto brc = jsStr(ctx, cfg, "borderRightColor");
+    auto bbc = jsStr(ctx, cfg, "borderBottomColor");
+    auto blc = jsStr(ctx, cfg, "borderLeftColor");
+    if (!btc.empty()) node.border_top_color = parseColor(btc);
+    if (!brc.empty()) node.border_right_color = parseColor(brc);
+    if (!bbc.empty()) node.border_bottom_color = parseColor(bbc);
+    if (!blc.empty()) node.border_left_color = parseColor(blc);
 
     uint32_t parent = (uint32_t)jsNum(ctx, cfg, "parent", UINT32_MAX);
     node.parent = parent;
@@ -162,8 +129,9 @@ static JSValue js_scene_set(JSContext* ctx, JSValueConst, int argc, JSValueConst
         if (vs) {
             std::string val(vs);
             JS_FreeCString(ctx, vs);
-            // If it looks like a color, use setColor
-            if (prop == "background" || prop == "borderColor" || prop == "color") {
+            if (prop == "background" || prop == "borderColor" || prop == "color" ||
+                prop == "borderTopColor" || prop == "borderRightColor" ||
+                prop == "borderBottomColor" || prop == "borderLeftColor") {
                 sg.setColor((uint32_t)id, prop, parseColor(val));
             } else {
                 sg.setString((uint32_t)id, prop, val);

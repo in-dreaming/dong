@@ -24,6 +24,14 @@ struct SceneNode {
     float opacity = 1.0f;
     bool visible = true;
 
+    // Per-side border (-1 = use uniform border_width/border_color)
+    float border_top_width = -1, border_right_width = -1;
+    float border_bottom_width = -1, border_left_width = -1;
+    Color border_top_color{0, 0, 0, 0};
+    Color border_right_color{0, 0, 0, 0};
+    Color border_bottom_color{0, 0, 0, 0};
+    Color border_left_color{0, 0, 0, 0};
+
     std::string text;
     Color text_color{1, 1, 1, 1};
     float font_size = 16;
