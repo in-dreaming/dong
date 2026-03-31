@@ -98,9 +98,11 @@ endif()
 # Define build macro for DLL exports
 target_compile_definitions(dong_sdl_backend PRIVATE
     DONG_SDL_BUILDING_DLL
-    SDL_SHADERCROSS_DXC
     DONG_SDL_SHADER_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/shaders\"
 )
+
+# DXC support on all platforms (Linux has DXC 1.8 installed)
+target_compile_definitions(dong_sdl_backend PRIVATE SDL_SHADERCROSS_DXC)
 
 
 # SDL3 dependency
@@ -157,6 +159,18 @@ elseif(APPLE)
         "-framework CoreGraphics"
         "-framework CoreText"
     )
+else()
+    # Linux: link ubsan and stdc++ for Zig Debug builds
+    target_link_libraries(dong_sdl_backend PRIVATE ubsan stdc++)
+    
+    # DXC library (from third_party/dxc downloaded by build.zig)
+    if(EXISTS "${CMAKE_SOURCE_DIR}/${DXC_LIB_PATH}/libdxcompiler.so")
+        target_link_directories(dong_sdl_backend PRIVATE ${CMAKE_SOURCE_DIR}/${DXC_LIB_PATH})
+        target_link_libraries(dong_sdl_backend PRIVATE dxcompiler)
+        message(STATUS "DXC found for Linux: ${CMAKE_SOURCE_DIR}/${DXC_LIB_PATH}")
+    else()
+        message(WARNING "DXC not found - run 'zig build' first to auto-download DXC")
+    endif()
 endif()
 
 

@@ -209,7 +209,7 @@ pub fn build(b: *std.Build) void {
     }
 
     // ==========================================================================
-    // DXC Auto-download (Windows desktop only)
+    // DXC Auto-download (Windows/Linux desktop)
     // ==========================================================================
     const dxc_step = ensureDxc(b, platform, &config);
 
@@ -278,6 +278,7 @@ pub fn build(b: *std.Build) void {
         sdl3_cmake_args.appendSlice(&.{
             "-G",                          "Ninja",
             "-DSDL_UNIX_CONSOLE_BUILD=ON",
+            "-DCMAKE_BUILD_WITH_INSTALL_RPATH=ON",
         }) catch unreachable;
     }
 
@@ -1675,17 +1676,26 @@ fn buildSDLBackend(
 // DXC Auto-download
 // =============================================================================
 fn ensureDxc(b: *std.Build, platform: PlatformInfo, config: *BuildConfig) ?*std.Build.Step {
-    // DXC is only needed for Windows desktop builds with SDL backend
-    if (!platform.is_windows or !platform.is_native) {
+    // DXC is needed for Windows/Linux desktop builds with SDL backend
+    // macOS uses Metal shaders directly, doesn't need DXC
+    const needs_dxc = (platform.is_windows or platform.is_linux) and platform.is_native;
+    if (!needs_dxc) {
         return null;
     }
 
-    // Check if DXC already exists
-    const dxc_lib_path = config.dxc_lib_path orelse (DXC_DIR ++ "/lib/x64");
-    const dxc_dll_path = DXC_DIR ++ "/bin/x64/dxcompiler.dll";
+    // Platform-specific paths
+    const dxc_lib_path = if (platform.is_windows)
+        config.dxc_lib_path orelse (DXC_DIR ++ "/lib/x64")
+    else
+        config.dxc_lib_path orelse (DXC_DIR ++ "/lib");
+    
+    const dxc_check_path = if (platform.is_windows)
+        DXC_DIR ++ "/bin/x64/dxcompiler.dll"
+    else
+        DXC_DIR ++ "/lib/libdxcompiler.so";
 
     // Check if DXC is already downloaded
-    if (std.fs.cwd().access(dxc_dll_path, .{})) |_| {
+    if (std.fs.cwd().access(dxc_check_path, .{})) |_| {
         std.debug.print("DXC found at: {s}\n", .{DXC_DIR});
         config.dxc_lib_path = dxc_lib_path;
         return null;
@@ -1693,39 +1703,74 @@ fn ensureDxc(b: *std.Build, platform: PlatformInfo, config: *BuildConfig) ?*std.
         std.debug.print("DXC not found, will download...\n", .{});
     }
 
-    // Create download step using PowerShell (Windows)
-    const download_step = b.addSystemCommand(&.{
-        "powershell",
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-Command",
-        b.fmt(
-            \\$ErrorActionPreference = 'Stop'
-            \\$version = '{s}'
-            \\$date = '{s}'
-            \\$outDir = '{s}'
-            \\$zipFile = "$env:TEMP\dxc.zip"
-            \\$url = "https://github.com/microsoft/DirectXShaderCompiler/releases/download/$version/dxc_$date.zip"
-            \\
-            \\Write-Host "Downloading DXC $version..."
-            \\Write-Host "URL: $url"
-            \\
-            \\# Download
-            \\[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-            \\Invoke-WebRequest -Uri $url -OutFile $zipFile -UseBasicParsing
-            \\
-            \\# Extract
-            \\Write-Host "Extracting to $outDir..."
-            \\if (Test-Path $outDir) {{ Remove-Item -Recurse -Force $outDir }}
-            \\Expand-Archive -Path $zipFile -DestinationPath $outDir -Force
-            \\
-            \\# Cleanup
-            \\Remove-Item $zipFile -Force
-            \\
-            \\Write-Host "DXC $version installed to $outDir"
-        , .{ DXC_VERSION, DXC_DATE, DXC_DIR }),
-    });
+    // Create platform-specific download step
+    const download_step = if (platform.is_windows) blk: {
+        // Windows: Use PowerShell
+        break :blk b.addSystemCommand(&.{
+            "powershell",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            b.fmt(
+                \\$ErrorActionPreference = 'Stop'
+                \\$version = '{s}'
+                \\$date = '{s}'
+                \\$outDir = '{s}'
+                \\$zipFile = "$env:TEMP\dxc.zip"
+                \\$url = "https://github.com/microsoft/DirectXShaderCompiler/releases/download/$version/dxc_$date.zip"
+                \\
+                \\Write-Host "Downloading DXC $version..."
+                \\Write-Host "URL: $url"
+                \\
+                \\# Download
+                \\[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+                \\Invoke-WebRequest -Uri $url -OutFile $zipFile -UseBasicParsing
+                \\
+                \\# Extract
+                \\Write-Host "Extracting to $outDir..."
+                \\if (Test-Path $outDir) {{ Remove-Item -Recurse -Force $outDir }}
+                \\Expand-Archive -Path $zipFile -DestinationPath $outDir -Force
+                \\
+                \\# Cleanup
+                \\Remove-Item $zipFile -Force
+                \\
+                \\Write-Host "DXC $version installed to $outDir"
+            , .{ DXC_VERSION, DXC_DATE, DXC_DIR }),
+        });
+    } else blk: {
+        // Linux: Use bash/curl/tar
+        break :blk b.addSystemCommand(&.{
+            "/bin/bash",
+            "-c",
+            b.fmt(
+                \\set -e
+                \\VERSION='{s}'
+                \\DATE='{s}'
+                \\OUT_DIR='{s}'
+                \\TEMP_FILE="/tmp/dxc_linux.tar.gz"
+                \\URL="https://github.com/microsoft/DirectXShaderCompiler/releases/download/$VERSION/linux_dxc_$DATE.x86_64.tar.gz"
+                \\
+                \\echo "Downloading DXC $VERSION for Linux..."
+                \\echo "URL: $URL"
+                \\
+                \\# Download
+                \\curl -L -o "$TEMP_FILE" "$URL"
+                \\
+                \\# Extract
+                \\echo "Extracting to $OUT_DIR..."
+                \\rm -rf "$OUT_DIR"
+                \\mkdir -p "$OUT_DIR"
+                \\tar -xzf "$TEMP_FILE" -C "$OUT_DIR"
+                \\
+                \\# Cleanup
+                \\rm -f "$TEMP_FILE"
+                \\
+                \\echo "DXC $VERSION installed to $OUT_DIR"
+                \\echo "Note: You may need to add $OUT_DIR/lib to LD_LIBRARY_PATH"
+            , .{ DXC_VERSION, DXC_DATE, DXC_DIR }),
+        });
+    };
 
     config.dxc_lib_path = dxc_lib_path;
 
