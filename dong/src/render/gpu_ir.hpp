@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <algorithm>
 #include <vector>
@@ -516,12 +516,23 @@ public:
         }
 
 
-        // 输出统计信息
-        DONG_LOG_DEBUG("GPU Compiler: %d rects, %d round_rects, %d images, %d texts -> %zu GPU commands, %zu draw batches",
+        int shadow_count = 0, gradient_count = 0, clip_count = 0, layer_count = 0;
+        for (const auto& c : out.commands) {
+            if (c.type == GPUCommandType::DrawShadowQuad) ++shadow_count;
+            else if (c.type == GPUCommandType::DrawGradientQuad) ++gradient_count;
+            else if (c.type == GPUCommandType::PushClipRect) ++clip_count;
+            else if (c.type == GPUCommandType::BeginIsolatedLayer) ++layer_count;
+        }
+
+        DONG_LOG_INFO("[GPUCompiler] rect=%d round=%d shadow=%d gradient=%d image=%d text=%d clip=%d layer=%d -> %zu cmds, %zu batches",
                 rect_count,
                 round_rect_count,
+                shadow_count,
+                gradient_count,
                 image_count,
                 text_count,
+                clip_count,
+                layer_count,
                 out.commands.size(),
                 out.draw_batches.size());
     }

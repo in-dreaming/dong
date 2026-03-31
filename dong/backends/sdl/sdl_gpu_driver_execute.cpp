@@ -140,6 +140,7 @@ struct PipelineBindingState {
         Image,
         ImageYUV,
         Text,
+        UberQuad,
     } active = ActivePipeline::None;
 
     bool image_sampler_bound = false;
@@ -221,6 +222,18 @@ struct SDLGPUDriver::ExecuteContext {
     unsigned long long frame_index = 0;
 
     bool aborted = false;
+
+    uint32_t draw_call_count = 0;
+    uint32_t pipeline_switch_count = 0;
+    uint32_t render_pass_count = 0;
+
+    struct UberQuadInstance {
+        float rect[4];
+        float color[4];
+        float params[4];
+    };
+    std::vector<UberQuadInstance> uber_batch;
+    uint32_t uber_batch_draw_count = 0;
 
     ExecuteContext(SDL_GPUCommandBuffer*& in_cmd_buf, SDL_GPUDevice* in_dev, SDL_Window* in_window)
         : cmd_buf(in_cmd_buf), dev(in_dev), window(in_window) {
@@ -1354,6 +1367,132 @@ void SDLGPUDriver::executeDrawGradient(ExecuteContext& ctx, const GPUCommand& cm
     SDL_DrawGPUPrimitives(ctx.pass, 4, 1, 0, 0);
 }
 
+void SDLGPUDriver::flushUberBatch(ExecuteContext& ctx) {
+    if (ctx.uber_batch.empty() || !ctx.pass) {
+        return;
+    }
+
+    for (const auto& inst : ctx.uber_batch) {
+        struct UberQuadUniformData {
+            float rect[4];
+            float color[4];
+            float viewport[4];
+            float transform[8];
+            float params[4];
+            float gradient_params[4];
+            float stop_colors[8][4];
+            float stop_positions[2][4];
+            ClipUniformBlock clip;
+        };
+
+        UberQuadUniformData u{};
+        std::memcpy(u.rect, inst.rect, 16);
+        std::memcpy(u.color, inst.color, 16);
+        ctx.writeViewport(u.viewport);
+        writeTransform(u.transform, ctx.getCurrentTransform());
+        std::memcpy(u.params, inst.params, 16);
+        ctx.fillClipUniform(u.clip);
+
+        if (ctx.pipeline_state.active != PipelineBindingState::ActivePipeline::UberQuad) {
+            SDL_BindGPUGraphicsPipeline(ctx.pass, uber_quad_pipeline_);
+            ctx.pipeline_state.active = PipelineBindingState::ActivePipeline::UberQuad;
+        }
+
+        SDL_PushGPUVertexUniformData(ctx.cmd_buf, 0, &u, sizeof(u));
+        SDL_PushGPUFragmentUniformData(ctx.cmd_buf, 0, &u, sizeof(u));
+        SDL_DrawGPUPrimitives(ctx.pass, 4, 1, 0, 0);
+        ctx.uber_batch_draw_count++;
+    }
+
+    ctx.uber_batch.clear();
+}
+
+void SDLGPUDriver::executeDrawUberQuad(ExecuteContext& ctx, const GPUCommand& cmd, float material_type) {
+    if (!ctx.pass) {
+        return;
+    }
+
+    // Gradient: too much per-instance data for batching, use per-draw uniform path
+    if (material_type == 3.0f) {
+        flushUberBatch(ctx);
+
+        if (!uber_quad_pipeline_) return;
+
+        struct UberQuadUniformData {
+            float rect[4];
+            float color[4];
+            float viewport[4];
+            float transform[8];
+            float params[4];
+            float gradient_params[4];
+            float stop_colors[8][4];
+            float stop_positions[2][4];
+            ClipUniformBlock clip;
+        };
+
+        UberQuadUniformData u{};
+        u.rect[0] = cmd.rect.x;
+        u.rect[1] = cmd.rect.y;
+        u.rect[2] = cmd.rect.width;
+        u.rect[3] = cmd.rect.height;
+
+        writeLinearColor(cmd.color, u.color);
+        ctx.writeViewport(u.viewport);
+        writeTransform(u.transform, ctx.getCurrentTransform());
+
+        u.params[0] = 3.0f;
+        u.params[1] = cmd.radius;
+        u.params[2] = cmd.stroke_width;
+        u.params[3] = cmd.blur;
+
+        float angle_rad = cmd.gradient_angle_deg * 3.14159265358979f / 180.0f;
+        u.gradient_params[0] = angle_rad;
+        u.gradient_params[1] = static_cast<float>(cmd.gradient_stop_count);
+        u.gradient_params[2] = cmd.radius;
+        u.gradient_params[3] = 0.0f;
+
+        for (int i = 0; i < cmd.gradient_stop_count && i < 8; ++i) {
+            writeLinearColor(cmd.gradient_stops[i].color, u.stop_colors[i]);
+            int vec_idx = i / 4;
+            int comp_idx = i % 4;
+            u.stop_positions[vec_idx][comp_idx] = cmd.gradient_stops[i].position;
+        }
+
+        ctx.fillClipUniform(u.clip);
+
+        if (ctx.pipeline_state.active != PipelineBindingState::ActivePipeline::UberQuad) {
+            SDL_BindGPUGraphicsPipeline(ctx.pass, uber_quad_pipeline_);
+            ctx.pipeline_state.active = PipelineBindingState::ActivePipeline::UberQuad;
+        }
+
+        SDL_PushGPUVertexUniformData(ctx.cmd_buf, 0, &u, sizeof(u));
+        SDL_PushGPUFragmentUniformData(ctx.cmd_buf, 0, &u, sizeof(u));
+        SDL_DrawGPUPrimitives(ctx.pass, 4, 1, 0, 0);
+        ctx.uber_batch_draw_count++;
+        return;
+    }
+
+    // Collect into batch
+    ExecuteContext::UberQuadInstance inst{};
+    inst.rect[0] = cmd.rect.x;
+    inst.rect[1] = cmd.rect.y;
+    inst.rect[2] = cmd.rect.width;
+    inst.rect[3] = cmd.rect.height;
+
+    writeLinearColor(cmd.color, inst.color);
+
+    inst.params[0] = material_type;
+    inst.params[1] = cmd.radius;
+    inst.params[2] = cmd.stroke_width;
+    inst.params[3] = cmd.blur;
+
+    ctx.uber_batch.push_back(inst);
+
+    if (ctx.uber_batch.size() >= kMaxUberInstances) {
+        flushUberBatch(ctx);
+    }
+}
+
 void SDLGPUDriver::executeDrawImage(ExecuteContext& ctx, const GPUCommand& cmd) {
     if (!ctx.pass || !image_pipeline_ || !image_sampler_) {
         return;
@@ -2244,42 +2383,53 @@ void SDLGPUDriver::executeDispatchCommand(const GPUCommand& cmd, ExecuteContext&
     switch (cmd.type) {
     case GPUCommandType::BeginFrame:
     case GPUCommandType::EndFrame:
-        // beginFrame/endFrame 由调用方负责
         break;
     case GPUCommandType::BeginPass:
+        if (use_uber_quad_) flushUberBatch(ctx);
         executeBeginPass(ctx);
         break;
     case GPUCommandType::EndPass:
+        if (use_uber_quad_) flushUberBatch(ctx);
         executeEndPass(ctx);
         break;
     case GPUCommandType::PushClipRect:
+        if (use_uber_quad_) flushUberBatch(ctx);
         executePushClipRect(ctx, cmd);
         break;
     case GPUCommandType::PopClip:
+        if (use_uber_quad_) flushUberBatch(ctx);
         executePopClip(ctx);
         break;
     case GPUCommandType::BeginIsolatedLayer:
+        if (use_uber_quad_) flushUberBatch(ctx);
         executeBeginIsolatedLayer(ctx, cmd);
         break;
     case GPUCommandType::EndIsolatedLayer:
+        if (use_uber_quad_) flushUberBatch(ctx);
         executeEndIsolatedLayer(ctx, cmd);
         break;
     case GPUCommandType::DrawInstancedQuads:
-        executeDrawRect(ctx, cmd);
+        if (use_uber_quad_) { executeDrawUberQuad(ctx, cmd, 0.0f); }
+        else { executeDrawRect(ctx, cmd); }
         break;
     case GPUCommandType::DrawRoundedRectQuad:
-        executeDrawRoundedRect(ctx, cmd);
+        if (use_uber_quad_) { executeDrawUberQuad(ctx, cmd, 1.0f); }
+        else { executeDrawRoundedRect(ctx, cmd); }
         break;
     case GPUCommandType::DrawShadowQuad:
-        executeDrawShadow(ctx, cmd);
+        if (use_uber_quad_) { executeDrawUberQuad(ctx, cmd, 2.0f); }
+        else { executeDrawShadow(ctx, cmd); }
         break;
     case GPUCommandType::DrawGradientQuad:
-        executeDrawGradient(ctx, cmd);
+        if (use_uber_quad_) { executeDrawUberQuad(ctx, cmd, 3.0f); }
+        else { executeDrawGradient(ctx, cmd); }
         break;
     case GPUCommandType::DrawImageQuad:
+        if (use_uber_quad_) flushUberBatch(ctx);
         executeDrawImage(ctx, cmd);
         break;
     case GPUCommandType::DrawText:
+        if (use_uber_quad_) flushUberBatch(ctx);
         executeDrawText(ctx, cmd);
         break;
     default:
@@ -2391,9 +2541,43 @@ void SDLGPUDriver::execute(const GPUCommandList& commands) {
         }
     }
 
+    if (use_uber_quad_) {
+        flushUberBatch(ctx);
+    }
+
     if (ctx.pass) {
         SDL_EndGPURenderPass(ctx.pass);
         ctx.pass = nullptr;
+    }
+
+    {
+        uint32_t n_rect = 0, n_round = 0, n_shadow = 0, n_gradient = 0;
+        uint32_t n_image = 0, n_text = 0, n_clip = 0, n_layer = 0;
+        for (const auto& c : commands.commands) {
+            switch (c.type) {
+            case GPUCommandType::DrawInstancedQuads:   ++n_rect; break;
+            case GPUCommandType::DrawRoundedRectQuad:  ++n_round; break;
+            case GPUCommandType::DrawShadowQuad:       ++n_shadow; break;
+            case GPUCommandType::DrawGradientQuad:     ++n_gradient; break;
+            case GPUCommandType::DrawImageQuad:        ++n_image; break;
+            case GPUCommandType::DrawText:             ++n_text; break;
+            case GPUCommandType::PushClipRect:         ++n_clip; break;
+            case GPUCommandType::BeginIsolatedLayer:   ++n_layer; break;
+            default: break;
+            }
+        }
+        uint32_t total_draws = n_rect + n_round + n_shadow + n_gradient + n_image + n_text;
+        if (use_uber_quad_) {
+            DONG_LOG_INFO("[RenderStats] frame=%llu uber_draws=%u (logical: rect=%u round=%u shadow=%u grad=%u) + text=%u img=%u clips=%u layers=%u cmds=%zu",
+                          ctx.frame_index, ctx.uber_batch_draw_count,
+                          n_rect, n_round, n_shadow, n_gradient,
+                          n_text, n_image, n_clip, n_layer, commands.commands.size());
+        } else {
+            DONG_LOG_INFO("[RenderStats] frame=%llu draws=%u (rect=%u round=%u shadow=%u grad=%u img=%u text=%u) clips=%u layers=%u cmds=%zu",
+                          ctx.frame_index, total_draws,
+                          n_rect, n_round, n_shadow, n_gradient, n_image, n_text,
+                          n_clip, n_layer, commands.commands.size());
+        }
     }
 }
 

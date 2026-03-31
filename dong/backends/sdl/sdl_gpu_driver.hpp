@@ -170,6 +170,18 @@ private:
     bool intermediate_valid_ = false;
 
     // Pipelines and shaders
+    SDL_GPUShader* uber_quad_vs_ = nullptr;
+    SDL_GPUShader* uber_quad_fs_ = nullptr;
+    SDL_GPUGraphicsPipeline* uber_quad_pipeline_ = nullptr;
+
+    SDL_GPUShader* uber_quad_instanced_vs_ = nullptr;
+    SDL_GPUShader* uber_quad_instanced_fs_ = nullptr;
+    SDL_GPUGraphicsPipeline* uber_quad_instanced_pipeline_ = nullptr;
+    SDL_GPUBuffer* uber_instance_buffer_ = nullptr;
+    static constexpr uint32_t kMaxUberInstances = 1024;
+
+    bool use_uber_quad_ = false;
+
     SDL_GPUShader* rect_vs_ = nullptr;
     SDL_GPUShader* rect_fs_ = nullptr;
     SDL_GPUGraphicsPipeline* rect_pipeline_ = nullptr;
@@ -309,6 +321,8 @@ private:
     void executeDrawRoundedRect(ExecuteContext& ctx, const GPUCommand& cmd);
     void executeDrawShadow(ExecuteContext& ctx, const GPUCommand& cmd);
     void executeDrawGradient(ExecuteContext& ctx, const GPUCommand& cmd);
+    void executeDrawUberQuad(ExecuteContext& ctx, const GPUCommand& cmd, float material_type);
+    void flushUberBatch(ExecuteContext& ctx);
     void executeDrawImage(ExecuteContext& ctx, const GPUCommand& cmd);
     void executeDrawText(ExecuteContext& ctx, const GPUCommand& cmd);
     void executeDrawTextMsdf(ExecuteContext& ctx, const GPUCommand& cmd);

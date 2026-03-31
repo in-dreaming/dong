@@ -265,6 +265,137 @@ bool SDLGPUDriver::initialize() {
         return false;
     }
 
+    // Uber quad pipeline: unifies rect, round-rect, shadow, gradient via material type dispatch
+    {
+        uber_quad_vs_ = shader_manager_->loadShaderFromHLSLFile(
+            "dong_uber_quad_vs",
+            SDL_GPU_SHADERSTAGE_VERTEX,
+            shader_path("uber_quad_vs.hlsl").c_str(),
+            "main"
+        );
+        uber_quad_fs_ = shader_manager_->loadShaderFromHLSLFile(
+            "dong_uber_quad_fs",
+            SDL_GPU_SHADERSTAGE_FRAGMENT,
+            shader_path("uber_quad_fs.hlsl").c_str(),
+            "main"
+        );
+
+        if (uber_quad_vs_ && uber_quad_fs_) {
+            SDL_GPUGraphicsPipelineCreateInfo uber_ci{};
+            SDL_GPUColorTargetDescription color_desc_uber{};
+            color_desc_uber.format = render_target_format_;
+            color_desc_uber.blend_state.enable_blend = true;
+            color_desc_uber.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+            color_desc_uber.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+            color_desc_uber.blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
+            color_desc_uber.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+            color_desc_uber.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+            color_desc_uber.blend_state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
+
+            uber_ci.target_info.num_color_targets = 1;
+            uber_ci.target_info.color_target_descriptions = &color_desc_uber;
+            uber_ci.target_info.has_depth_stencil_target = false;
+            uber_ci.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLESTRIP;
+            uber_ci.vertex_shader = uber_quad_vs_;
+            uber_ci.fragment_shader = uber_quad_fs_;
+            uber_ci.vertex_input_state.num_vertex_buffers = 0;
+            uber_ci.vertex_input_state.vertex_buffer_descriptions = nullptr;
+            uber_ci.vertex_input_state.num_vertex_attributes = 0;
+            uber_ci.vertex_input_state.vertex_attributes = nullptr;
+
+            uber_quad_pipeline_ = SDL_CreateGPUGraphicsPipeline(dev, &uber_ci);
+            if (uber_quad_pipeline_) {
+                DONG_LOG_INFO("SDLGPUDriver: uber_quad_pipeline created");
+            } else {
+                DONG_LOG_WARN("SDLGPUDriver: uber_quad_pipeline creation failed: %s", SDL_GetError());
+            }
+        } else {
+            DONG_LOG_WARN("SDLGPUDriver: uber_quad shaders not available, uber path disabled");
+        }
+
+        // Instanced uber quad pipeline + instance buffer
+        uber_quad_instanced_vs_ = shader_manager_->loadShaderFromHLSLFile(
+            "dong_uber_quad_instanced_vs",
+            SDL_GPU_SHADERSTAGE_VERTEX,
+            shader_path("uber_quad_instanced_vs.hlsl").c_str(),
+            "main"
+        );
+        uber_quad_instanced_fs_ = shader_manager_->loadShaderFromHLSLFile(
+            "dong_uber_quad_instanced_fs",
+            SDL_GPU_SHADERSTAGE_FRAGMENT,
+            shader_path("uber_quad_instanced_fs.hlsl").c_str(),
+            "main"
+        );
+
+        if (uber_quad_instanced_vs_ && uber_quad_instanced_fs_) {
+            SDL_GPUVertexBufferDescription inst_vbuf_desc{};
+            inst_vbuf_desc.slot = 0;
+            inst_vbuf_desc.pitch = 48; // 3 x float4 = 48 bytes
+            inst_vbuf_desc.input_rate = SDL_GPU_VERTEXINPUTRATE_INSTANCE;
+            inst_vbuf_desc.instance_step_rate = 1;
+
+            SDL_GPUVertexAttribute inst_attrs[3] = {};
+            inst_attrs[0].location = 0;
+            inst_attrs[0].buffer_slot = 0;
+            inst_attrs[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4;
+            inst_attrs[0].offset = 0;   // iRect
+
+            inst_attrs[1].location = 1;
+            inst_attrs[1].buffer_slot = 0;
+            inst_attrs[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4;
+            inst_attrs[1].offset = 16;  // iColor
+
+            inst_attrs[2].location = 2;
+            inst_attrs[2].buffer_slot = 0;
+            inst_attrs[2].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4;
+            inst_attrs[2].offset = 32;  // iParams
+
+            SDL_GPUGraphicsPipelineCreateInfo inst_ci{};
+            SDL_GPUColorTargetDescription color_desc_inst{};
+            color_desc_inst.format = render_target_format_;
+            color_desc_inst.blend_state.enable_blend = true;
+            color_desc_inst.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+            color_desc_inst.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+            color_desc_inst.blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
+            color_desc_inst.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+            color_desc_inst.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+            color_desc_inst.blend_state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
+
+            inst_ci.target_info.num_color_targets = 1;
+            inst_ci.target_info.color_target_descriptions = &color_desc_inst;
+            inst_ci.target_info.has_depth_stencil_target = false;
+            inst_ci.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLESTRIP;
+            inst_ci.vertex_shader = uber_quad_instanced_vs_;
+            inst_ci.fragment_shader = uber_quad_instanced_fs_;
+            inst_ci.vertex_input_state.num_vertex_buffers = 1;
+            inst_ci.vertex_input_state.vertex_buffer_descriptions = &inst_vbuf_desc;
+            inst_ci.vertex_input_state.num_vertex_attributes = 3;
+            inst_ci.vertex_input_state.vertex_attributes = inst_attrs;
+
+            uber_quad_instanced_pipeline_ = SDL_CreateGPUGraphicsPipeline(dev, &inst_ci);
+            if (uber_quad_instanced_pipeline_) {
+                DONG_LOG_INFO("SDLGPUDriver: uber_quad_instanced_pipeline created");
+
+                SDL_GPUBufferCreateInfo buf_ci{};
+                buf_ci.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
+                buf_ci.size = kMaxUberInstances * 48;
+                uber_instance_buffer_ = SDL_CreateGPUBuffer(dev, &buf_ci);
+                if (uber_instance_buffer_) {
+                    DONG_LOG_INFO("SDLGPUDriver: uber_instance_buffer created (%u instances)", kMaxUberInstances);
+                }
+            } else {
+                DONG_LOG_WARN("SDLGPUDriver: uber_quad_instanced_pipeline failed: %s", SDL_GetError());
+            }
+        }
+
+        const char* env = std::getenv("DONG_USE_UBER_QUAD");
+        use_uber_quad_ = (uber_quad_pipeline_ != nullptr) && env && env[0] == '1';
+        if (use_uber_quad_) {
+            DONG_LOG_INFO("SDLGPUDriver: uber_quad rendering ENABLED (instanced=%s)",
+                          uber_quad_instanced_pipeline_ ? "yes" : "no");
+        }
+    }
+
     // 图片绘制着色器：使用 SV_VertexID 生成矩形，并根据 atlas UV 采样
     image_vs_ = shader_manager_->loadShaderFromHLSLFile(
         "dong_image_vs",
