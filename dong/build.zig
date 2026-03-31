@@ -180,6 +180,8 @@ fn getBuildOptions(b: *std.Build, platform: PlatformInfo) BuildOptions {
 pub fn build(b: *std.Build) void {
     var target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+    const install_prefix = b.install_prefix;
+    const host_is_windows = builtin.os.tag == .windows;
 
     // On Windows we build the CMake parts with clang-cl (MSVC ABI). Ensure Zig-built
     // static libs (QuickJS/FreeType/etc.) use the same ABI to avoid link/runtime mismatches.
@@ -335,6 +337,89 @@ pub fn build(b: *std.Build) void {
         std.debug.print("Target: {s}\n", .{platform.target_triple});
         std.debug.print("Building static libraries only.\n", .{});
         std.debug.print("Output: zig-out/lib/\n\n", .{});
+
+        // ==========================================================================
+        // libs-only Packaging (Cross-compile / Mobile integration)
+        // ==========================================================================
+        // In libs-only mode we package only:
+        // - include/ (headers)
+        // - lib/     (static/import libs)
+        //
+        // Note: this respects -p/--prefix because we copy from b.install_prefix.
+        const libs_dist_dir = b.fmt("{s}/dist", .{install_prefix});
+        const libs_package_name = b.fmt("dong_sdk_{s}", .{platform.target_triple});
+        const libs_package_dir = b.fmt("{s}/{s}", .{ libs_dist_dir, libs_package_name });
+
+        const package_libs = b.addSystemCommand(if (host_is_windows) &.{
+            "powershell",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            b.fmt(
+                "& {{ " ++
+                    "$ErrorActionPreference = 'Stop'; " ++
+                    "$pkg = '{s}'; " ++
+                    "if (Test-Path $pkg) {{ Remove-Item -Recurse -Force $pkg }}; " ++
+                    "New-Item -ItemType Directory -Force -Path $pkg | Out-Null; " ++
+                    "Copy-Item -Recurse -Force '{s}\\include' (Join-Path $pkg 'include'); " ++
+                    "Copy-Item -Recurse -Force '{s}\\lib' (Join-Path $pkg 'lib'); " ++
+                    "Write-Host ('Packaged to: ' + $pkg); " ++
+                "}}",
+                .{ libs_package_dir, install_prefix, install_prefix },
+            ),
+        } else &.{
+            "sh",
+            "-c",
+            b.fmt(
+                "set -euo pipefail; " ++
+                    "pkg='{s}'; " ++
+                    "rm -rf \"$pkg\"; mkdir -p \"$pkg\"; " ++
+                    "cp -R '{s}/include' \"$pkg/include\"; " ++
+                    "cp -R '{s}/lib' \"$pkg/lib\"; " ++
+                    "echo \"Packaged to: $pkg\"",
+                .{ libs_package_dir, install_prefix, install_prefix },
+            ),
+        });
+        package_libs.step.dependOn(libs_only_step);
+
+        const package_step = b.step("package", "Package SDK (libs-only) to <prefix>/dist/");
+        package_step.dependOn(&package_libs.step);
+
+        const package_zip_cmd = b.addSystemCommand(if (host_is_windows) &.{
+            "powershell",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            b.fmt(
+                "& {{ " ++
+                    "$ErrorActionPreference = 'Stop'; " ++
+                    "$pkg = '{s}'; " ++
+                    "$zip = '{s}/{s}.zip'; " ++
+                    "if (Test-Path $zip) {{ Remove-Item -Force $zip }}; " ++
+                    "Compress-Archive -Path $pkg -DestinationPath $zip -Force; " ++
+                    "Write-Host ('Zip created: ' + $zip); " ++
+                "}}",
+                .{ libs_package_dir, libs_dist_dir, libs_package_name },
+            ),
+        } else &.{
+            "sh",
+            "-c",
+            b.fmt(
+                "set -euo pipefail; " ++
+                    "pkg='{s}'; dist='{s}'; name='{s}'; " ++
+                    "mkdir -p \"$dist\"; " ++
+                    "rm -f \"$dist/$name.zip\"; " ++
+                    "cd \"$dist\"; zip -r \"$name.zip\" \"$name\"",
+                .{ libs_package_dir, libs_dist_dir, libs_package_name },
+            ),
+        });
+        package_zip_cmd.step.dependOn(&package_libs.step);
+
+        const package_zip_step = b.step("package-zip", "Package SDK (libs-only) to zip under <prefix>/dist/");
+        package_zip_step.dependOn(&package_zip_cmd.step);
+
         return; // Skip CMake build for mobile targets
     }
 
@@ -433,6 +518,93 @@ pub fn build(b: *std.Build) void {
     // ==========================================================================
     const examples_step = b.step("examples", "Build all examples and install to zig-out/bin");
     examples_step.dependOn(&cmake_install.step);
+
+    // ==========================================================================
+    // SDK + Examples Packaging
+    // ==========================================================================
+    // Produces a redistributable folder under zig-out/dist/ that contains:
+    // - include/ (C headers)
+    // - lib/     (import/static libs)
+    // - bin/     (examples + runtime DLLs + data/)
+    //
+    // Note: keep this intentionally simple and PowerShell-based on Windows.
+    const dist_dir = b.fmt("{s}/dist", .{install_prefix});
+    const package_name = b.fmt("dong_sdk_examples_{s}", .{platform.target_triple});
+    const package_dir = b.fmt("{s}/{s}", .{ dist_dir, package_name });
+
+    const package_sdk = b.addSystemCommand(if (host_is_windows) &.{
+        "powershell",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        b.fmt(
+            "& {{ " ++
+                "$ErrorActionPreference = 'Stop'; " ++
+                "$dist = '{s}'; " ++
+                "$pkg = '{s}'; " ++
+                "if (Test-Path $pkg) {{ Remove-Item -Recurse -Force $pkg }}; " ++
+                "New-Item -ItemType Directory -Force -Path $pkg | Out-Null; " ++
+                "Copy-Item -Recurse -Force '{s}\\include' (Join-Path $pkg 'include'); " ++
+                "Copy-Item -Recurse -Force '{s}\\lib' (Join-Path $pkg 'lib'); " ++
+                "$bin = '{s}\\bin'; if (Test-Path $bin) {{ Copy-Item -Recurse -Force $bin (Join-Path $pkg 'bin') }}; " ++
+                "Write-Host ('Packaged to: ' + $pkg); " ++
+            "}}",
+            .{ dist_dir, package_dir, install_prefix, install_prefix, install_prefix },
+        ),
+    } else &.{
+        "sh",
+        "-c",
+        b.fmt(
+            "set -euo pipefail; " ++
+                "dist='{s}'; pkg='{s}'; " ++
+                "rm -rf \"$pkg\"; mkdir -p \"$pkg\"; " ++
+                "cp -R '{s}/include' \"$pkg/include\"; " ++
+                "cp -R '{s}/lib' \"$pkg/lib\"; " ++
+                "if [ -d '{s}/bin' ]; then cp -R '{s}/bin' \"$pkg/bin\"; fi; " ++
+                "echo \"Packaged to: $pkg\"",
+            .{ dist_dir, package_dir, install_prefix, install_prefix, install_prefix, install_prefix, install_prefix },
+        ),
+    });
+    package_sdk.step.dependOn(examples_step);
+
+    const package_step = b.step("package", "Package SDK+examples to zig-out/dist/");
+    package_step.dependOn(&package_sdk.step);
+
+    const package_zip_cmd = b.addSystemCommand(if (host_is_windows) &.{
+        "powershell",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        b.fmt(
+            "& {{ " ++
+                "$ErrorActionPreference = 'Stop'; " ++
+                "$pkg = '{s}'; " ++
+                "$zip = '{s}/{s}.zip'; " ++
+                "if (Test-Path $zip) {{ Remove-Item -Force $zip }}; " ++
+                "Compress-Archive -Path $pkg -DestinationPath $zip -Force; " ++
+                "Write-Host ('Zip created: ' + $zip); " ++
+            "}}",
+            .{ package_dir, dist_dir, package_name },
+        ),
+    } else &.{
+        "sh",
+        "-c",
+        b.fmt(
+            "set -euo pipefail; " ++
+                "pkg='{s}'; dist='{s}'; name='{s}'; " ++
+                "mkdir -p \"$dist\"; " ++
+                "rm -f \"$dist/$name.zip\"; " ++
+                "cd \"$dist\"; " ++
+                "zip -r \"$name.zip\" \"$name\"",
+            .{ package_dir, dist_dir, package_name },
+        ),
+    });
+    package_zip_cmd.step.dependOn(&package_sdk.step);
+
+    const package_zip_step = b.step("package-zip", "Package SDK+examples to zip under zig-out/dist/");
+    package_zip_step.dependOn(&package_zip_cmd.step);
 
     // Individual dependency build steps
     const deps_step = b.step("deps", "Build all third-party dependencies only");
@@ -867,14 +1039,39 @@ fn buildFreeType(
     freetype.addIncludePath(b.path(ft_include));
     freetype.linkLibC();
 
-    // Install FreeType headers for CMake to find
-    b.installDirectory(.{
-        .source_dir = b.path(ft_include),
-        .install_dir = .prefix,
-        .install_subdir = "freetype/include/freetype2",
+    // Install FreeType headers for CMake to find.
+    // CMake expects: <prefix>/freetype/include/freetype2/ft2build.h
+    // We copy them as part of the dependency step (not only "zig build install"),
+    // because the CMake configure/build steps depend on these headers.
+    const ft_dst = b.fmt("{s}/freetype/include/freetype2", .{b.install_prefix});
+    const copy_headers = b.addSystemCommand(if (builtin.os.tag == .windows) &.{
+        "powershell",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        b.fmt(
+            "& {{ " ++
+                "$ErrorActionPreference = 'Stop'; " ++
+                "$src = '{s}'; " ++
+                "$dst = '{s}'; " ++
+                "New-Item -ItemType Directory -Force -Path $dst | Out-Null; " ++
+                "Copy-Item -Recurse -Force (Join-Path $src '*') $dst; " ++
+            "}}",
+            .{ ft_include, ft_dst },
+        ),
+    } else &.{
+        "sh",
+        "-c",
+        b.fmt(
+            "set -euo pipefail; src='{s}'; dst='{s}'; mkdir -p \"$dst\"; cp -R \"$src\"/* \"$dst\"",
+            .{ ft_include, ft_dst },
+        ),
     });
 
-    return b.addInstallArtifact(freetype, .{});
+    const install_artifact = b.addInstallArtifact(freetype, .{});
+    install_artifact.step.dependOn(&copy_headers.step);
+    return install_artifact;
 }
 
 // =============================================================================
@@ -935,6 +1132,58 @@ fn buildHarfBuzz(
         @panic("harfbuzz sources missing (third_party/harfbuzz) and no prebuilt libharfbuzz.a found under zig-out");
     }
 
+    // On Windows native builds, build HarfBuzz via its CMake to avoid libc++ linkage surprises.
+    if (platform.is_windows and platform.is_native and fileExists("third_party/harfbuzz/CMakeLists.txt")) {
+        const build_dir = "third_party/harfbuzz/build-zig";
+        const freetype_inc = "zig-out/freetype/include/freetype2";
+        const freetype_lib = "zig-out/lib/freetype.lib";
+
+        var cfg_args = std.array_list.Managed([]const u8).init(b.allocator);
+        cfg_args.appendSlice(&.{
+            "cmake",
+            "-S",
+            "third_party/harfbuzz",
+            "-B",
+            build_dir,
+            "-G",
+            "Ninja",
+            "-DCMAKE_BUILD_TYPE=Release",
+            "-DCMAKE_C_COMPILER=clang-cl",
+            "-DCMAKE_CXX_COMPILER=clang-cl",
+            "-DHB_HAVE_FREETYPE=ON",
+            "-DHB_BUILD_UTILS=OFF",
+            "-DHB_BUILD_SUBSET=OFF",
+            "-DHB_HAVE_GLIB=OFF",
+            "-DHB_HAVE_ICU=OFF",
+            "-DHB_HAVE_GRAPHITE2=OFF",
+            "-DHB_HAVE_CAIRO=OFF",
+            b.fmt("-DFREETYPE_INCLUDE_DIRS={s}", .{freetype_inc}),
+            b.fmt("-DFREETYPE_LIBRARY={s}", .{freetype_lib}),
+        }) catch unreachable;
+
+        const cmake_cfg = b.addSystemCommand(cfg_args.items);
+        cmake_cfg.step.dependOn(&freetype_artifact.step);
+
+        const cmake_build = b.addSystemCommand(&.{ "cmake", "--build", build_dir, "--config", "Release", "--target", "harfbuzz" });
+        cmake_build.step.dependOn(&cmake_cfg.step);
+
+        const copy_lib = b.addSystemCommand(&.{
+            "powershell",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            "& { $ErrorActionPreference = 'Stop'; " ++
+                "cmake -E copy_if_different 'third_party/harfbuzz/build-zig/harfbuzz.lib' 'zig-out/lib/harfbuzz.lib' | Out-Null }",
+        });
+        copy_lib.step.dependOn(&cmake_build.step);
+
+        const hb_step = b.step("harfbuzz_build", "Build HarfBuzz (CMake, internal)");
+        hb_step.dependOn(&copy_lib.step);
+        hb_step.dependOn(&freetype_artifact.step);
+        return hb_step;
+    }
+
     const harfbuzz = b.addLibrary(.{
         .name = "harfbuzz",
         .linkage = .static,
@@ -961,13 +1210,36 @@ fn buildHarfBuzz(
     harfbuzz.step.dependOn(&freetype_artifact.step);
 
     // Install HarfBuzz headers for CMake to find
-    b.installDirectory(.{
-        .source_dir = b.path(hb_src),
-        .install_dir = .prefix,
-        .install_subdir = "harfbuzz/include/harfbuzz",
+    // CMake expects: <prefix>/harfbuzz/include/harfbuzz/hb-ft.h etc.
+    const hb_dst = b.fmt("{s}/harfbuzz/include/harfbuzz", .{b.install_prefix});
+    const copy_headers = b.addSystemCommand(if (builtin.os.tag == .windows) &.{
+        "powershell",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        b.fmt(
+            "& {{ " ++
+                "$ErrorActionPreference = 'Stop'; " ++
+                "$src = '{s}'; " ++
+                "$dst = '{s}'; " ++
+                "New-Item -ItemType Directory -Force -Path $dst | Out-Null; " ++
+                "Copy-Item -Recurse -Force (Join-Path $src '*') $dst; " ++
+            "}}",
+            .{ hb_src, hb_dst },
+        ),
+    } else &.{
+        "sh",
+        "-c",
+        b.fmt(
+            "set -euo pipefail; src='{s}'; dst='{s}'; mkdir -p \"$dst\"; cp -R \"$src\"/* \"$dst\"",
+            .{ hb_src, hb_dst },
+        ),
     });
 
-    return &b.addInstallArtifact(harfbuzz, .{}).step;
+    const install_artifact = b.addInstallArtifact(harfbuzz, .{});
+    install_artifact.step.dependOn(&copy_headers.step);
+    return &install_artifact.step;
 }
 
 // =============================================================================
@@ -1011,13 +1283,78 @@ fn buildMsdfgen(
         @panic("msdfgen sources missing (third_party/msdfgen) and no usable prebuilt archive found under zig-out");
     }
 
+    const common_flags = &.{
+        "-std=c++11",
+        "-DMSDFGEN_USE_CPP11",
+        "-DMSDFGEN_DISABLE_SVG",
+        "-DMSDFGEN_DISABLE_PNG",
+        "-DMSDFGEN_PUBLIC=",
+        "-DMSDFGEN_EXT_PUBLIC=",
+    };
+
+    // CMake expects split libs on Windows: msdfgen-core.lib + msdfgen-ext.lib.
+    // Build with msdfgen's CMake on Windows to avoid libc++ linkage surprises.
+    if (platform.is_windows and platform.is_native) {
+        const build_dir = "third_party/msdfgen/build-zig";
+        const prefix = "zig-out/msdfgen";
+        const freetype_inc = "zig-out/freetype/include/freetype2";
+        const freetype_lib = "zig-out/lib/freetype.lib";
+
+        var cfg_args = std.array_list.Managed([]const u8).init(b.allocator);
+        cfg_args.appendSlice(&.{
+            "cmake",
+            "-S",
+            "third_party/msdfgen",
+            "-B",
+            build_dir,
+            "-G",
+            "Ninja",
+            "-DCMAKE_BUILD_TYPE=Release",
+            "-DCMAKE_CXX_COMPILER=clang-cl",
+            "-DMSDFGEN_INSTALL=ON",
+            "-DMSDFGEN_USE_VCPKG=OFF",
+            "-DMSDFGEN_BUILD_STANDALONE=OFF",
+            "-DMSDFGEN_USE_SKIA=OFF",
+            "-DMSDFGEN_USE_OPENMP=OFF",
+            "-DMSDFGEN_DISABLE_SVG=ON",
+            "-DMSDFGEN_DISABLE_PNG=ON",
+            "-DMSDFGEN_DYNAMIC_RUNTIME=ON",
+            b.fmt("-DFREETYPE_INCLUDE_DIRS={s}", .{freetype_inc}),
+            b.fmt("-DFREETYPE_LIBRARY={s}", .{freetype_lib}),
+        }) catch unreachable;
+
+        const cmake_cfg = b.addSystemCommand(cfg_args.items);
+        cmake_cfg.step.dependOn(&freetype_artifact.step);
+
+        const cmake_build = b.addSystemCommand(&.{ "cmake", "--build", build_dir, "--config", "Release" });
+        cmake_build.step.dependOn(&cmake_cfg.step);
+
+        const cmake_install = b.addSystemCommand(&.{ "cmake", "--install", build_dir, "--prefix", prefix });
+        cmake_install.step.dependOn(&cmake_build.step);
+
+        const copy_libs = b.addSystemCommand(&.{
+            "powershell",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            "& { $ErrorActionPreference = 'Stop'; " ++
+                "cmake -E copy_if_different 'zig-out/msdfgen/lib/msdfgen-core.lib' 'zig-out/lib/msdfgen-core.lib' | Out-Null; " ++
+                "cmake -E copy_if_different 'zig-out/msdfgen/lib/msdfgen-ext.lib'  'zig-out/lib/msdfgen-ext.lib'  | Out-Null }",
+        });
+        copy_libs.step.dependOn(&cmake_install.step);
+
+        const step = b.step("msdfgen_build", "Build msdfgen (CMake, internal)");
+        step.dependOn(&copy_libs.step);
+        return step;
+    }
+
+    // Non-windows toolchains typically link a single archive libmsdfgen.a.
     const msdfgen = b.addLibrary(.{
         .name = "msdfgen",
         .linkage = .static,
         .root_module = createRootModule(b, target, optimize),
     });
-
-    // Core sources
     msdfgen.addCSourceFiles(.{
         .files = &.{
             msdf_root ++ "/core/Contour.cpp",
@@ -1039,25 +1376,14 @@ fn buildMsdfgen(
             msdf_root ++ "/core/render-sdf.cpp",
             msdf_root ++ "/core/sdf-error-estimation.cpp",
             msdf_root ++ "/core/shape-description.cpp",
-            // Extension sources (font loading)
             msdf_root ++ "/ext/import-font.cpp",
             msdf_root ++ "/ext/resolve-shape-geometry.cpp",
         },
-        .flags = &.{
-            "-std=c++11",
-            "-DMSDFGEN_USE_CPP11",
-            "-DMSDFGEN_DISABLE_SVG",
-            "-DMSDFGEN_DISABLE_PNG",
-            "-DMSDFGEN_PUBLIC=",
-            "-DMSDFGEN_EXT_PUBLIC=",
-        },
+        .flags = common_flags,
     });
-
     msdfgen.addIncludePath(b.path(msdf_root));
     msdfgen.addIncludePath(b.path("third_party/freetype/include"));
     msdfgen.linkLibCpp();
-
-    // Depend on FreeType being built
     msdfgen.step.dependOn(&freetype_artifact.step);
 
     return &b.addInstallArtifact(msdfgen, .{}).step;

@@ -70,50 +70,25 @@ start zig-out/tmp/features/report.html
   - macOS/iOS: 需要macOS SDK，只能在macOS主机上交叉编译
   - Android: 需要Android NDK sysroot（Zig不内置Bionic libc）
   - musl目标: 生成完全静态链接的库，适合容器/嵌入式环境
-  - 
-# 编译
-构建步骤
-  步骤: zig build
-  说明: 完整构建 (依赖 + 主程序 + 示例)
-  构建方法: 混合
-  ────────────────────────────────────────
-  步骤: zig build deps
-  说明: 所有第三方依赖
-  构建方法: 纯Zig + SDL3 CMake
-  ────────────────────────────────────────
-  步骤: zig build quickjs
-  说明: QuickJS
-  构建方法: 纯Zig
-  ────────────────────────────────────────
-  步骤: zig build lexbor
-  说明: Lexbor HTML解析器
-  构建方法: 纯Zig
-  ────────────────────────────────────────
-  步骤: zig build yoga
-  说明: Yoga布局引擎
-  构建方法: 纯Zig
-  ────────────────────────────────────────
-  步骤: zig build freetype
-  说明: FreeType字体库
-  构建方法: 纯Zig
-  ────────────────────────────────────────
-  步骤: zig build harfbuzz
-  说明: HarfBuzz文本整形
-  构建方法: 纯Zig
-  ────────────────────────────────────────
-  步骤: zig build msdfgen
-  说明: msdfgen字形生成
-  构建方法: 纯Zig
-  ────────────────────────────────────────
-  步骤: zig build dong-core
-  说明: Dong核心库
-  构建方法: 纯Zig
-  ────────────────────────────────────────
-  步骤: zig build sdl-backend
-  说明: SDL后端
-  构建方法: 纯Zig
-  ────────────────────────────────────────
-  步骤: zig build sdl3
-  说明: SDL3
-  构建方法: CMake
-  交叉编译支持
+
+# cross package
+
+`package/package-zip` 支持跟随 `-p/--prefix`，可直接对交叉编译前缀做 SDK 打包（libs-only 模式只打包 `include/` + `lib/`）。
+
+示例（Linux x64 glibc）：
+
+```
+zig build -Dtarget=x86_64-linux-gnu -Dlibs-only=true -p zig-out-linux-x64 package
+zig build -Dtarget=x86_64-linux-gnu -Dlibs-only=true -p zig-out-linux-x64 package-zip
+```
+
+输出：
+- `zig-out-linux-x64/dist/dong_sdk_x86_64-linux-gnu/`
+- `zig-out-linux-x64/dist/dong_sdk_x86_64-linux-gnu.zip`
+
+# package
+
+// to package
+zig build package
+// TO zip
+zig build package-zip
