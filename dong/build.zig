@@ -515,6 +515,100 @@ pub fn build(b: *std.Build) void {
     }
 
     // ==========================================================================
+    // React Examples: copy pre-built bundles to zig-out/bin/data/
+    // ==========================================================================
+    const react_copy = b.addSystemCommand(if (host_is_windows) &.{
+        "powershell",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        b.fmt(
+            "& {{ $ErrorActionPreference = 'Stop'; " ++
+                "$examples = @('counter', 'game-ui', 'todo-classic'); " ++
+                "foreach ($ex in $examples) {{ " ++
+                "  $src_b = 'react/dist/' + $ex + '/bundle.js'; " ++
+                "  $src_h = 'react/examples/' + $ex + '/index.html'; " ++
+                "  if ((Test-Path $src_b) -and (Test-Path $src_h)) {{ " ++
+                "    $dst = '{s}/bin/data/react-' + $ex; " ++
+                "    New-Item -ItemType Directory -Force -Path $dst | Out-Null; " ++
+                "    Copy-Item -Force $src_b (Join-Path $dst 'bundle.js'); " ++
+                "    Copy-Item -Force $src_h (Join-Path $dst 'index.html'); " ++
+                "    Write-Host ('  Installed react-' + $ex); " ++
+                "  }} " ++
+                "}} }}",
+            .{install_prefix},
+        ),
+    } else &.{
+        "sh",
+        "-c",
+        b.fmt(
+            "for ex in counter game-ui todo-classic; do " ++
+                "  src_b=\"react/dist/$ex/bundle.js\"; " ++
+                "  src_h=\"react/examples/$ex/index.html\"; " ++
+                "  if [ -f \"$src_b\" ] && [ -f \"$src_h\" ]; then " ++
+                "    dst='{s}/bin/data/react-$ex'; " ++
+                "    mkdir -p \"$dst\"; " ++
+                "    cp \"$src_b\" \"$dst/bundle.js\"; " ++
+                "    cp \"$src_h\" \"$dst/index.html\"; " ++
+                "    echo \"  Installed react-$ex\"; " ++
+                "  fi; " ++
+                "done",
+            .{install_prefix},
+        ),
+    });
+    react_copy.step.dependOn(&cmake_install.step);
+    b.getInstallStep().dependOn(&react_copy.step);
+
+    // "zig build react" — build React bundles from source, then copy to output
+    const react_build_and_install = b.addSystemCommand(if (host_is_windows) &.{
+        "powershell",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        b.fmt(
+            "& {{ $ErrorActionPreference = 'Stop'; " ++
+                "Push-Location react; " ++
+                "if (-not (Test-Path node_modules)) {{ npm install }}; " ++
+                "node build.mjs counter; " ++
+                "node build.mjs game-ui; " ++
+                "node build.mjs todo-classic; " ++
+                "Pop-Location; " ++
+                "$examples = @('counter', 'game-ui', 'todo-classic'); " ++
+                "foreach ($ex in $examples) {{ " ++
+                "  $dst = '{s}/bin/data/react-' + $ex; " ++
+                "  New-Item -ItemType Directory -Force -Path $dst | Out-Null; " ++
+                "  Copy-Item -Force ('react/dist/' + $ex + '/bundle.js') (Join-Path $dst 'bundle.js'); " ++
+                "  Copy-Item -Force ('react/examples/' + $ex + '/index.html') (Join-Path $dst 'index.html'); " ++
+                "  Write-Host ('  Built & installed react-' + $ex); " ++
+                "}} }}",
+            .{install_prefix},
+        ),
+    } else &.{
+        "sh",
+        "-c",
+        b.fmt(
+            "cd react && " ++
+                "[ -d node_modules ] || npm install && " ++
+                "node build.mjs counter && " ++
+                "node build.mjs game-ui && " ++
+                "node build.mjs todo-classic && " ++
+                "cd .. && " ++
+                "for ex in counter game-ui todo-classic; do " ++
+                "  dst='{s}/bin/data/react-$ex'; " ++
+                "  mkdir -p \"$dst\"; " ++
+                "  cp \"react/dist/$ex/bundle.js\" \"$dst/bundle.js\"; " ++
+                "  cp \"react/examples/$ex/index.html\" \"$dst/index.html\"; " ++
+                "  echo \"  Built & installed react-$ex\"; " ++
+                "done",
+            .{install_prefix},
+        ),
+    });
+    const react_step = b.step("react", "Build & install React examples (requires Node.js)");
+    react_step.dependOn(&react_build_and_install.step);
+
+    // ==========================================================================
     // Build Steps
     // ==========================================================================
     const examples_step = b.step("examples", "Build all examples and install to zig-out/bin");

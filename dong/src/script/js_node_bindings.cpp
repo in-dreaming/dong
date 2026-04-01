@@ -248,6 +248,29 @@ static JSValue elem_getChildElementCount(JSContext* ctx, JSValueConst this_val, 
     return JS_NewInt32(ctx, static_cast<int32_t>(node->getChildElementCount()));
 }
 
+static JSValue elem_getOwnerDocument(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc; (void)argv; (void)this_val;
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue doc = JS_GetPropertyStr(ctx, global, "document");
+    JS_FreeValue(ctx, global);
+    return doc;
+}
+
+static JSValue elem_getIsConnected(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc; (void)argv;
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_FALSE;
+    auto current = node;
+    while (current) {
+        if (current->getNodeType() == dong::dom::DOMNode::NodeType::DOCUMENT)
+            return JS_TRUE;
+        auto parent = current->getParent();
+        if (!parent) break;
+        current = parent;
+    }
+    return JS_FALSE;
+}
+
 static JSValue elem_insertBefore(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     if (argc < 2) return JS_UNDEFINED;
     auto parent = JSBindings::getNodeOpaque(ctx, this_val);
@@ -325,6 +348,16 @@ static void removeAllChildren(const dom::DOMNodePtr& node) {
         if (!first) break;
         node->removeChild(first);
     }
+}
+
+static JSValue elem_replaceChild(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    if (argc < 2) return JS_NULL;
+    auto parent = JSBindings::getNodeOpaque(ctx, this_val);
+    auto newChild = JSBindings::getNodeOpaque(ctx, argv[0]);
+    auto oldChild = JSBindings::getNodeOpaque(ctx, argv[1]);
+    if (!parent || !newChild || !oldChild) return JS_NULL;
+    parent->replaceChild(newChild, oldChild);
+    return JS_DupValue(ctx, argv[1]);
 }
 
 static JSValue elem_replaceChildren(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
@@ -1530,6 +1563,8 @@ void bindNodeProperties(JSContext* ctx, JSValue elem, const dom::DOMNodePtr& nod
     DEFINE_GETTER(ctx, elem, "nodeName", elem_getNodeName);
     DEFINE_GETTER(ctx, elem, "nodeValue", elem_getNodeValue);
     DEFINE_GETTER(ctx, elem, "childElementCount", elem_getChildElementCount);
+    DEFINE_GETTER(ctx, elem, "ownerDocument", elem_getOwnerDocument);
+    DEFINE_GETTER(ctx, elem, "isConnected", elem_getIsConnected);
 
     // Node methods
     JS_SetPropertyStr(ctx, elem, "insertBefore",
@@ -1540,6 +1575,8 @@ void bindNodeProperties(JSContext* ctx, JSValue elem, const dom::DOMNodePtr& nod
         JS_NewCFunction(ctx, elem_contains, "contains", 1));
     JS_SetPropertyStr(ctx, elem, "cloneNode",
         JS_NewCFunction(ctx, elem_cloneNode, "cloneNode", 1));
+    JS_SetPropertyStr(ctx, elem, "replaceChild",
+        JS_NewCFunction(ctx, elem_replaceChild, "replaceChild", 2));
 }
 
 void bindElementProperties(JSContext* ctx, JSValue elem, const dom::DOMNodePtr& node, JSBindings* bindings) {

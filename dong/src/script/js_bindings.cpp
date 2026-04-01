@@ -1857,6 +1857,25 @@ static JSValue doc_createTextNode(JSContext* ctx, JSValueConst this_val, int arg
     return bindings->createJSElement(ctx, node);
 }
 
+static JSValue doc_createComment(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    auto bindings = getBindingsForDoc(ctx, this_val);
+    if (!bindings) return JS_NULL;
+
+    std::string comment_text;
+    if (argc >= 1) {
+        const char* text = JS_ToCString(ctx, argv[0]);
+        if (text) {
+            comment_text = text;
+            JS_FreeCString(ctx, text);
+        }
+    }
+
+    auto node = std::make_shared<dong::dom::DOMNode>(dong::dom::DOMNode::NodeType::COMMENT, "");
+    node->setTextContent(comment_text);
+
+    return bindings->createJSElement(ctx, node);
+}
+
 static JSValue doc_write(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     (void)this_val;
     auto bindings = getBindingsFromContext(ctx);
@@ -2977,6 +2996,66 @@ static JSValue js_clearInterval(JSContext* ctx, JSValueConst this_val, int argc,
     return js_clearTimeout(ctx, this_val, argc, argv);
 }
 
+// ============================================================
+// requestAnimationFrame / cancelAnimationFrame
+// ============================================================
+
+static JSValue js_requestAnimationFrame(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val;
+    auto bindings = getBindingsFromContext(ctx);
+    if (!bindings || argc < 1) return JS_NewInt32(ctx, 0);
+    if (!JS_IsFunction(ctx, argv[0])) return JS_NewInt32(ctx, 0);
+
+    JSBindings::RAFEntry entry;
+    entry.id = bindings->next_raf_id_++;
+    entry.callback = JS_DupValue(ctx, argv[0]);
+    bindings->raf_callbacks_.push_back(std::move(entry));
+    return JS_NewInt32(ctx, static_cast<int32_t>(entry.id));
+}
+
+static JSValue js_cancelAnimationFrame(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val;
+    auto bindings = getBindingsFromContext(ctx);
+    if (!bindings || argc < 1) return JS_UNDEFINED;
+
+    int32_t id = 0;
+    JS_ToInt32(ctx, &id, argv[0]);
+    auto& cbs = bindings->raf_callbacks_;
+    for (auto it = cbs.begin(); it != cbs.end(); ++it) {
+        if (it->id == static_cast<uint32_t>(id)) {
+            JS_FreeValue(ctx, it->callback);
+            cbs.erase(it);
+            break;
+        }
+    }
+    return JS_UNDEFINED;
+}
+
+void JSBindings::tickAnimationFrames(double timestamp_ms) {
+    if (!engine_) return;
+    JSContext* ctx = engine_->getContext();
+    if (!ctx) return;
+    if (raf_callbacks_.empty()) return;
+
+    auto callbacks = std::move(raf_callbacks_);
+    raf_callbacks_.clear();
+
+    for (auto& entry : callbacks) {
+        JSValue ts = JS_NewFloat64(ctx, timestamp_ms);
+        JSValue result = JS_Call(ctx, entry.callback, JS_UNDEFINED, 1, &ts);
+        JS_FreeValue(ctx, ts);
+        if (JS_IsException(result)) {
+            JSValue ex = JS_GetException(ctx);
+            auto* err_str = JS_ToCString(ctx, ex);
+            DONG_LOG_ERROR("[rAF] Exception in animation frame callback: %s", err_str ? err_str : "(unknown)");
+            if (err_str) JS_FreeCString(ctx, err_str);
+            JS_FreeValue(ctx, ex);
+        }
+        JS_FreeValue(ctx, result);
+        JS_FreeValue(ctx, entry.callback);
+    }
+}
+
 void JSBindings::initializeConsoleAPI() {
     if (!engine_) return;
 
@@ -3026,6 +3105,12 @@ void JSBindings::initializeConsoleAPI() {
         JS_NewCFunction(ctx, js_setInterval, "setInterval", 2));
     JS_SetPropertyStr(ctx, global, "clearInterval",
         JS_NewCFunction(ctx, js_clearInterval, "clearInterval", 1));
+
+    // requestAnimationFrame / cancelAnimationFrame
+    JS_SetPropertyStr(ctx, global, "requestAnimationFrame",
+        JS_NewCFunction(ctx, js_requestAnimationFrame, "requestAnimationFrame", 1));
+    JS_SetPropertyStr(ctx, global, "cancelAnimationFrame",
+        JS_NewCFunction(ctx, js_cancelAnimationFrame, "cancelAnimationFrame", 1));
 
     // window.addEventListener / removeEventListener (delegates to document/body)
     JS_SetPropertyStr(ctx, global, "addEventListener",
@@ -3538,6 +3623,8 @@ void JSBindings::initializeDocumentAPI() {
         JS_NewCFunction(ctx, doc_createElement, "createElement", 1));
     JS_SetPropertyStr(ctx, document, "createTextNode",
         JS_NewCFunction(ctx, doc_createTextNode, "createTextNode", 1));
+    JS_SetPropertyStr(ctx, document, "createComment",
+        JS_NewCFunction(ctx, doc_createComment, "createComment", 1));
 
     // Document object references
     JSValue body = JS_NewObject(ctx);
@@ -4916,6 +5003,8 @@ void JSBindings::registerAsNamedView() {
         JS_NewCFunction(ctx, doc_createElement, "createElement", 1));
     JS_SetPropertyStr(ctx, doc, "createTextNode",
         JS_NewCFunction(ctx, doc_createTextNode, "createTextNode", 1));
+    JS_SetPropertyStr(ctx, doc, "createComment",
+        JS_NewCFunction(ctx, doc_createComment, "createComment", 1));
     JS_SetPropertyStr(ctx, doc, "addEventListener",
         JS_NewCFunction(ctx, elem_addEventListener, "addEventListener", 2));
     JS_SetPropertyStr(ctx, doc, "removeEventListener",

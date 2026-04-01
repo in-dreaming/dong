@@ -1799,6 +1799,7 @@ struct EngineView::Impl {
             double elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
                 now - js_bindings->script_start_time_).count() / 1e6;
             js_bindings->tickTimers(elapsed);
+            js_bindings->tickAnimationFrames(elapsed * 1000.0);
             flushStyleLayoutAfterScripts();
         }
     }

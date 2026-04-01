@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <memory>
 #include <unordered_map>
@@ -159,6 +159,15 @@ public:
     // Timer state (public so JS binding functions can access)
     std::map<uint32_t, TimerEntry> timers_;
     uint32_t next_timer_id_ = 1;
+
+    // requestAnimationFrame / cancelAnimationFrame
+    struct RAFEntry {
+        uint32_t id = 0;
+        JSValue callback = JS_UNDEFINED;
+    };
+    std::vector<RAFEntry> raf_callbacks_;
+    uint32_t next_raf_id_ = 1;
+    void tickAnimationFrames(double timestamp_ms);
 
     // Document.write support: current executing <script>
     void setCurrentExecutingScript(const dom::DOMNodePtr& script_node) { current_executing_script_ = script_node; }

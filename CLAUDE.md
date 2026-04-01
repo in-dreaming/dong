@@ -27,11 +27,21 @@ zig build harfbuzz           # Build HarfBuzz only
 zig build msdfgen            # Build msdfgen only
 zig build sdl3               # Build SDL3 only (CMake)
 
+# React examples (pre-built bundles copied automatically by zig build)
+zig build react              # Build React bundles from source (requires Node.js)
+
 # Run examples (AppCore-based, recommended)
 # After build, run from zig-out/bin:
 ./minimal_dong_demo          # Minimal demo (~50 lines)
 ./interactive_demo_new       # Interactive demo (~200 lines)
 ./3d_screens_simple          # 3D HTML screens demo (~130 lines)
+
+# Run React examples (set higher script timeout for bundle eval)
+set DONG_SCRIPT_TIMEOUT_MS=10000   # Windows
+export DONG_SCRIPT_TIMEOUT_MS=10000 # Linux/macOS
+./dong_app --html data/react-counter/index.html
+./dong_app --html data/react-game-ui/index.html
+./dong_app --html data/react-todo-classic/index.html
 
 # Development tools
 zig build run-html-test -- <html_file> [output.bmp] [width] [height]
