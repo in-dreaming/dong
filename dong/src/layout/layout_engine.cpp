@@ -2067,14 +2067,17 @@ void Engine::buildChildYogaNodes(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
         flushAnonWrapper(current_inline_run);
     } else {
         // No mixed content: add all children directly (original behavior)
+        const bool parent_is_flex_container = (parent_style.layout_mode == dom::LayoutMode::Flex);
         for (const auto& child : dom_node->getChildren()) {
             if (child && child->getType() == dom::DOMNode::NodeType::ELEMENT) {
                 const auto& cs = child->getComputedStyle();
 
-                // Skip inline-level elements — they participate in IFC
-                // (Inline Formatting Context) alongside text nodes and should
+                // Skip inline-level elements in block formatting contexts —
+                // they participate in IFC alongside text nodes and should
                 // NOT get their own Yoga node as a block child.
-                if (isInlineLevelDisplay(cs.display)) {
+                // However, flex items are ALWAYS included regardless of display
+                // value (CSS spec: flex items are blockified).
+                if (!parent_is_flex_container && isInlineLevelDisplay(cs.display)) {
                     continue;
                 }
 
