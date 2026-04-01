@@ -14,77 +14,6 @@
 
 namespace dong::dom {
 
-namespace {
-
-LayoutMode deriveLayoutModeFromDisplay(const ComputedStyle& style) {
-    const std::string& d = style.display;
-    if (d == "none") {
-        return LayoutMode::None;
-    }
-    if (d == "flex" || d == "inline-flex") {
-        return LayoutMode::Flex;
-    }
-    if (d == "inline" || d == "inline-block") {
-        return LayoutMode::Inline;
-    }
-    return LayoutMode::Block;
-}
-
-void applyInlineStyleAttributeIfAny(DOMNodePtr node) {
-    if (!node) return;
-    if (!node->hasAttribute("style")) return;
-    const std::string style_str = node->getAttribute("style");
-    if (style_str.empty()) return;
-
-    // Inline style has the highest precedence in author styles.
-    CSSParser::parseInlineStyle(style_str, node->getComputedStyle());
-}
-
-// Apply HTML presentational attributes that map to CSS properties.
-// These have lower priority than author styles (inline or external),
-// so they are applied BEFORE inline styles in the cascade.
-void applyPresentationalAttributesIfAny(DOMNodePtr node) {
-    if (!node) return;
-    const std::string& tag = node->getTagName();
-    auto& cs = node->getComputedStyle();
-
-    // <img width="N" height="N"> -> CSS width/height (if no CSS width/height already set)
-    if (tag == "img" || tag == "video" || tag == "canvas") {
-        if (!cs.isExplicitlySet("width") && node->hasAttribute("width")) {
-            const std::string& w = node->getAttribute("width");
-            if (!w.empty()) {
-                // Parse as integer pixels
-                try {
-                    float px = std::stof(w);
-                    cs.width = CSSValue(px, CSSValue::Unit::PIXEL);
-                    cs.markExplicitlySet("width");
-                } catch (...) {}
-            }
-        }
-        if (!cs.isExplicitlySet("height") && node->hasAttribute("height")) {
-            const std::string& h = node->getAttribute("height");
-            if (!h.empty()) {
-                try {
-                    float px = std::stof(h);
-                    cs.height = CSSValue(px, CSSValue::Unit::PIXEL);
-                    cs.markExplicitlySet("height");
-                } catch (...) {}
-            }
-        }
-    }
-}
-
-void applyDirAttributeIfAny(DOMNodePtr node) {
-    // Apply dir attribute to CSS direction property
-    // The dir attribute maps to the direction CSS property
-    if (!node) return;
-
-    auto& computed = node->getComputedStyle();
-    computed.direction = node->getEffectiveDirection();
-}
-
-} // anonymous namespace
-
 // ── Specificity / selector utility functions ──
 
 int StyleEngine::countIdSelectors(const std::string& selector) {
@@ -156,7 +85,6 @@ std::vector<std::string> StyleEngine::splitDeclarations(const std::string& css) 
 
 std::pair<std::string, ComputedStyle> StyleEngine::parseRule(const std::string& rule_str) {
     ComputedStyle style;
-    style.display = "";
     std::string selector;
 
     size_t brace = rule_str.find('{');
@@ -496,7 +424,7 @@ void StyleEngine::recomputeNodeStyleFull(DOMNodePtr node) {
     applyDefaultStyleForNode(node);
     applyMatchingRulesIndexed(node);
     inheritFromParent(node);
-    applyInlineStyleAttributeIfAny(node);
+    style_engine_internal::applyInlineStyleAttributeIfAny(node);
 
     style_engine_internal::applyLogicalProperties(node->getComputedStyle());
 
@@ -505,12 +433,12 @@ void StyleEngine::recomputeNodeStyleFull(DOMNodePtr node) {
         "head", "style", "script", "meta", "title", "link"
     };
     if (kAlwaysHiddenTags.count(node->getTagName()) > 0) {
-        node->getComputedStyle().display = "none";
+        node->getComputedStyle().setDisplay(CSSDisplay::None);
     }
 
     // [hidden] attribute support
     if (node->hasAttribute("hidden")) {
-        node->getComputedStyle().display = "none";
+        node->getComputedStyle().setDisplay(CSSDisplay::None);
     }
 
     // <details> hiding: non-<summary> children of a closed <details> are hidden from layout.
@@ -518,21 +446,21 @@ void StyleEngine::recomputeNodeStyleFull(DOMNodePtr node) {
         if (parent && parent->getTagName() == "details" &&
             !parent->hasAttribute("open") &&
             node->getTagName() != "summary") {
-            node->getComputedStyle().display = "none";
+            node->getComputedStyle().setDisplay(CSSDisplay::None);
         }
     }
 
     // <dialog> element: hidden unless open attribute is present
     if (node->getTagName() == "dialog") {
         if (!node->hasAttribute("open")) {
-            node->getComputedStyle().display = "none";
+            node->getComputedStyle().setDisplay(CSSDisplay::None);
         } else {
             auto& cs = node->getComputedStyle();
             auto* state = dong::dom::getDialogState(node);
             bool is_modal = state && state->isModal();
 
             if (is_modal) {
-                if (!cs.isExplicitlySet("position")) cs.position = "fixed";
+                if (!cs.isExplicitlySet("position")) cs.position = CSSPosition::Fixed;
                 if (!cs.isExplicitlySet("top")) cs.top = CSSValue(0.0f, CSSValue::Unit::PIXEL);
                 if (!cs.isExplicitlySet("bottom")) cs.bottom = CSSValue(0.0f, CSSValue::Unit::PIXEL);
                 // Note: do NOT set left/right to 0 — Yoga doesn't support width:fit-content,
@@ -547,7 +475,7 @@ void StyleEngine::recomputeNodeStyleFull(DOMNodePtr node) {
                 if (!cs.isExplicitlySet("max-width")) cs.max_width = CSSValue(90.0f, CSSValue::Unit::PERCENT);
                 if (!cs.isExplicitlySet("max-height")) cs.max_height = CSSValue(90.0f, CSSValue::Unit::PERCENT);
             } else {
-                if (!cs.isExplicitlySet("display")) cs.display = "block";
+                if (!cs.isExplicitlySet("display")) cs.setDisplay(CSSDisplay::Block);
                 if (!cs.isExplicitlySet("margin")) {
                     cs.margin_top = CSSValue(1.0f, CSSValue::Unit::EM);
                     cs.margin_bottom = CSSValue(1.0f, CSSValue::Unit::EM);
@@ -556,9 +484,9 @@ void StyleEngine::recomputeNodeStyleFull(DOMNodePtr node) {
                 }
             }
             if (!cs.isExplicitlySet("border-style")) {
-                cs.border_style = "solid";
-                cs.border_top_style = "solid"; cs.border_right_style = "solid";
-                cs.border_bottom_style = "solid"; cs.border_left_style = "solid";
+                cs.border_style = CSSBorderStyle::Solid;
+                cs.border_top_style = CSSBorderStyle::Solid; cs.border_right_style = CSSBorderStyle::Solid;
+                cs.border_bottom_style = CSSBorderStyle::Solid; cs.border_left_style = CSSBorderStyle::Solid;
             }
             if (!cs.isExplicitlySet("border-width")) {
                 cs.border_width = 1.0f;
@@ -583,14 +511,14 @@ void StyleEngine::recomputeNodeStyleFull(DOMNodePtr node) {
     // Only apply if direction is not explicitly set by CSS
     auto& computed = node->getComputedStyle();
     if (node->hasAttribute("dir") && !computed.isExplicitlySet("direction")) {
-        computed.direction = node->getEffectiveDirection();
+        computed.direction = directionFromString(node->getEffectiveDirection());
         computed.markExplicitlySet("direction");
     }
 
     // Resolve logical text-align (start/end) based on final direction.
     style_engine_internal::resolveTextAlignForDirection(node->getComputedStyle());
 
-    node->getComputedStyle().layout_mode = deriveLayoutModeFromDisplay(node->getComputedStyle());
+    node->getComputedStyle().layout_mode = deriveLayoutModeFromDisplay(node->getComputedStyle().display);
     node->getComputedStyle().updateBFCFlag();
 
     // Resolve light-dark() functions based on color-scheme
@@ -606,8 +534,8 @@ void StyleEngine::resolveLightDarkFunctions(DOMNodePtr node) {
 
     auto& style = node->getComputedStyle();
 
-    std::string color_scheme = style.color_scheme;
-    if (color_scheme.empty() || color_scheme == "normal") {
+    std::string color_scheme = toString(style.color_scheme);
+    if (style.color_scheme == CSSColorScheme::Normal) {
         color_scheme = "light";
     }
 

@@ -4,7 +4,7 @@
 namespace dong::layout {
 
 inline bool shouldSkipLayoutNode(const dom::ComputedStyle& style) {
-    return style.display == "contents";
+    return style.display == dom::CSSDisplay::Contents;
 }
 
 }  // namespace dong::layout

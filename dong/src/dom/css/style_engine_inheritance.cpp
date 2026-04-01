@@ -7,7 +7,7 @@ namespace dong::dom {
 namespace {
 
 bool isRTL(const ComputedStyle& style) {
-    return style.direction == "rtl";
+    return style.direction == CSSDirection::Rtl;
 }
 
 void applyLogicalMarginsAndPaddingsInternal(ComputedStyle& style) {
@@ -35,7 +35,7 @@ void applyLogicalBordersInternal(ComputedStyle& style) {
     const bool rtl = isRTL(style);
 
     auto apply_side = [&](bool to_right,
-                          float width, const std::string& color, const std::string& st) {
+                          float width, const std::string& color, CSSBorderStyle st) {
         if (width >= 0.0f) {
             if (to_right) style.border_right_width = width;
             else style.border_left_width = width;
@@ -44,26 +44,26 @@ void applyLogicalBordersInternal(ComputedStyle& style) {
             if (to_right) style.border_right_color = color;
             else style.border_left_color = color;
         }
-        if (!st.empty()) {
+        if (st != CSSBorderStyleUnset) {
             if (to_right) style.border_right_style = st;
             else style.border_left_style = st;
         }
     };
 
-    if (style.border_inline_start_width >= 0.0f || !style.border_inline_start_color.empty() || !style.border_inline_start_style.empty()) {
+    if (style.border_inline_start_width >= 0.0f || !style.border_inline_start_color.empty() || style.border_inline_start_style != CSSBorderStyleUnset) {
         apply_side(rtl, style.border_inline_start_width, style.border_inline_start_color, style.border_inline_start_style);
     }
-    if (style.border_inline_end_width >= 0.0f || !style.border_inline_end_color.empty() || !style.border_inline_end_style.empty()) {
+    if (style.border_inline_end_width >= 0.0f || !style.border_inline_end_color.empty() || style.border_inline_end_style != CSSBorderStyleUnset) {
         apply_side(!rtl, style.border_inline_end_width, style.border_inline_end_color, style.border_inline_end_style);
     }
 
     if (style.border_block_start_width >= 0.0f) style.border_top_width = style.border_block_start_width;
     if (!style.border_block_start_color.empty()) style.border_top_color = style.border_block_start_color;
-    if (!style.border_block_start_style.empty()) style.border_top_style = style.border_block_start_style;
+    if (style.border_block_start_style != CSSBorderStyleUnset) style.border_top_style = style.border_block_start_style;
 
     if (style.border_block_end_width >= 0.0f) style.border_bottom_width = style.border_block_end_width;
     if (!style.border_block_end_color.empty()) style.border_bottom_color = style.border_block_end_color;
-    if (!style.border_block_end_style.empty()) style.border_bottom_style = style.border_block_end_style;
+    if (style.border_block_end_style != CSSBorderStyleUnset) style.border_bottom_style = style.border_block_end_style;
 }
 
 } // anonymous namespace
@@ -76,13 +76,13 @@ void applyLogicalProperties(ComputedStyle& style) {
 }
 
 void resolveTextAlignForDirection(ComputedStyle& style) {
-    const bool rtl = (style.direction == "rtl");
-    if (style.text_align == "start") {
-        style.text_align = rtl ? "right" : "left";
-    } else if (style.text_align == "end") {
-        style.text_align = rtl ? "left" : "right";
+    const bool rtl = (style.direction == CSSDirection::Rtl);
+    if (style.text_align == CSSTextAlign::Start) {
+        style.text_align = rtl ? CSSTextAlign::Right : CSSTextAlign::Left;
+    } else if (style.text_align == CSSTextAlign::End) {
+        style.text_align = rtl ? CSSTextAlign::Left : CSSTextAlign::Right;
     } else if (!style.isExplicitlySet("text-align") && rtl) {
-        style.text_align = "right";
+        style.text_align = CSSTextAlign::Right;
     }
 }
 
@@ -94,8 +94,8 @@ void StyleEngine::processGlobalKeywords(DOMNodePtr node, DOMNodePtr parent) {
     auto& computed = node->getComputedStyle();
     const auto& parent_style = parent->getComputedStyle();
 
-    // 全局关键�?initial/unset 的语义必�?覆盖掉已经算出来的�?�?
-    // 不能仅依�?ComputedStyle 的构造默认值，否则会把更早匹配到的规则残留�?computed 里�?
+    // ??????initial/unset ???????????????????
+    // ??????ComputedStyle ???????????????????????computed ???
     static const ComputedStyle kInitial;
 
     auto resetToInitial = [&](const std::string& prop) {
@@ -303,16 +303,23 @@ void StyleEngine::inheritFromParent(DOMNodePtr node) {
     if (!computed.isExplicitlySet("font-weight")) {
         computed.font_weight = parent_style.font_weight;
     } else {
-        // Resolve bolder/lighter relative to parent weight (CSS spec §20.1)
-        const std::string& cw = computed.font_weight;
-        if (cw == "bolder" || cw == "lighter") {
+        // Resolve bolder/lighter relative to parent weight (CSS spec)
+        if (computed.font_weight == CSSFontWeight::Bolder || computed.font_weight == CSSFontWeight::Lighter) {
             int parent_w = 400;
-            const std::string& pw = parent_style.font_weight;
-            if (pw == "normal") parent_w = 400;
-            else if (pw == "bold") parent_w = 700;
-            else { try { parent_w = std::stoi(pw); } catch (...) { parent_w = 400; } }
+            switch (parent_style.font_weight) {
+                case CSSFontWeight::W100: parent_w = 100; break;
+                case CSSFontWeight::W200: parent_w = 200; break;
+                case CSSFontWeight::W300: parent_w = 300; break;
+                case CSSFontWeight::Normal: case CSSFontWeight::W400: parent_w = 400; break;
+                case CSSFontWeight::W500: parent_w = 500; break;
+                case CSSFontWeight::W600: parent_w = 600; break;
+                case CSSFontWeight::Bold: case CSSFontWeight::W700: parent_w = 700; break;
+                case CSSFontWeight::W800: parent_w = 800; break;
+                case CSSFontWeight::W900: parent_w = 900; break;
+                default: parent_w = 400; break;
+            }
             int resolved_w;
-            if (cw == "bolder") {
+            if (computed.font_weight == CSSFontWeight::Bolder) {
                 if (parent_w < 350) resolved_w = 400;
                 else if (parent_w < 550) resolved_w = 700;
                 else resolved_w = 900;
@@ -321,7 +328,7 @@ void StyleEngine::inheritFromParent(DOMNodePtr node) {
                 else if (parent_w < 750) resolved_w = 400;
                 else resolved_w = 700;
             }
-            computed.font_weight = std::to_string(resolved_w);
+            computed.font_weight = fontWeightFromString(std::to_string(resolved_w));
         }
     }
     if (!computed.isExplicitlySet("font-style")) computed.font_style = parent_style.font_style;

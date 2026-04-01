@@ -75,57 +75,65 @@ static bool debugScriptEval() {
 // Console API Implementation - extern "C" for QuickJS callbacks
 // ============================================================
 
+// Macros for common getter/setter patterns to reduce .text bloat
+#define DONG_JS_STRING_GETTER(name, expr) \
+    static JSValue name(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) { \
+        (void)argc; (void)argv; \
+        auto node = dong::script::JSBindings::getNodeOpaque(ctx, this_val); \
+        if (!node) return JS_UNDEFINED; \
+        return JS_NewString(ctx, (expr).c_str()); \
+    }
+
+#define DONG_JS_STRING_SETTER(name, method) \
+    static JSValue name(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) { \
+        (void)this_val; \
+        if (argc < 1) return JS_UNDEFINED; \
+        auto node = dong::script::JSBindings::getNodeOpaque(ctx, this_val); \
+        const char* s = JS_ToCString(ctx, argv[0]); \
+        if (node && s) { node->method(s); node->markLayoutDirty(); } \
+        if (s) JS_FreeCString(ctx, s); \
+        return JS_UNDEFINED; \
+    }
+
+#define DONG_JS_ATTR_GETTER(name, attr) \
+    static JSValue name(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) { \
+        (void)argc; (void)argv; \
+        auto node = dong::script::JSBindings::getNodeOpaque(ctx, this_val); \
+        if (!node) return JS_NewString(ctx, ""); \
+        return JS_NewString(ctx, node->getAttribute(attr).c_str()); \
+    }
+
 extern "C" {
 
 // Forward declarations for CSSOM API functions
 static JSValue css_supports(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue window_matchMedia(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 
-static JSValue console_log(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+static JSValue console_impl(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int level) {
     (void)this_val;
     std::string output;
     for (int i = 0; i < argc; i++) {
         if (i > 0) output += " ";
         const char* str = JS_ToCString(ctx, argv[i]);
-        if (str) {
-            output += str;
-            JS_FreeCString(ctx, str);
-        } else {
-            output += "[object]";
-        }
+        if (str) { output += str; JS_FreeCString(ctx, str); }
+        else { output += "[object]"; }
     }
-    DONG_LOG_INFO("[JS] %s", output.c_str());
+    switch (level) {
+    case 0: DONG_LOG_INFO("[JS] %s", output.c_str()); break;
+    case 1: DONG_LOG_WARN("[JS] %s", output.c_str()); break;
+    default: DONG_LOG_ERROR("[JS] %s", output.c_str()); break;
+    }
     return JS_UNDEFINED;
 }
 
+static JSValue console_log(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    return console_impl(ctx, this_val, argc, argv, 0);
+}
 static JSValue console_warn(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-    (void)this_val;
-    std::string output = "[WARN] ";
-    for (int i = 0; i < argc; i++) {
-        if (i > 0) output += " ";
-        const char* str = JS_ToCString(ctx, argv[i]);
-        if (str) {
-            output += str;
-            JS_FreeCString(ctx, str);
-        }
-    }
-    DONG_LOG_WARN("[JS] %s", output.c_str());
-    return JS_UNDEFINED;
+    return console_impl(ctx, this_val, argc, argv, 1);
 }
-
 static JSValue console_error(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-    (void)this_val;
-    std::string output = "[ERROR] ";
-    for (int i = 0; i < argc; i++) {
-        if (i > 0) output += " ";
-        const char* str = JS_ToCString(ctx, argv[i]);
-        if (str) {
-            output += str;
-            JS_FreeCString(ctx, str);
-        }
-    }
-    DONG_LOG_ERROR("[JS] %s", output.c_str());
-    return JS_UNDEFINED;
+    return console_impl(ctx, this_val, argc, argv, 2);
 }
 
 } // extern "C"
@@ -766,21 +774,6 @@ static JSValue js_dong_getView(JSContext* ctx, JSValueConst this_val, int argc, 
 
 namespace {
 
-// Helper to update layout_mode when display changes
-dom::LayoutMode deriveLayoutModeFromDisplay(const std::string& display) {
-    if (display == "none") {
-        return dom::LayoutMode::None;
-    }
-    if (display == "flex") {
-        return dom::LayoutMode::Flex;
-    }
-    if (display == "inline") {
-        return dom::LayoutMode::Inline;
-    }
-    // block, inline-block, and others are treated as Block
-    return dom::LayoutMode::Block;
-}
-
 std::string camelToCss(const std::string& property) {
     std::string css;
     css.reserve(property.size() * 2);
@@ -842,26 +835,26 @@ std::string getStyleValueForJS(const dom::DOMNodePtr& node, const std::string& c
 }
 
 std::string getComputedStyleValue(const dom::ComputedStyle& style, const std::string& css_prop) {
-    if (css_prop == "display") return style.display;
+    if (css_prop == "display") return dong::dom::toString(style.display);
     if (css_prop == "color") return style.color;
 
     // Backgrounds
     if (css_prop == "background-color") return style.background_color;
     if (css_prop == "background-image") return style.background_image;
     if (css_prop == "background-size") return style.background_size;
-    if (css_prop == "background-repeat") return style.background_repeat;
+    if (css_prop == "background-repeat") return dong::dom::toString(style.background_repeat);
     if (css_prop == "background-position") return style.background_position;
-    if (css_prop == "background-attachment") return style.background_attachment;
-    if (css_prop == "background-clip") return style.background_clip;
-    if (css_prop == "background-origin") return style.background_origin;
+    if (css_prop == "background-attachment") return dong::dom::toString(style.background_attachment);
+    if (css_prop == "background-clip") return dong::dom::toString(style.background_clip);
+    if (css_prop == "background-origin") return dong::dom::toString(style.background_origin);
 
     // Typography
     if (css_prop == "font-size") return std::to_string(style.font_size);
-    if (css_prop == "font-weight") return style.font_weight;
-    if (css_prop == "text-align") return style.text_align;
+    if (css_prop == "font-weight") return dong::dom::toString(style.font_weight);
+    if (css_prop == "text-align") return dong::dom::toString(style.text_align);
 
     // Visual
-    if (css_prop == "position") return style.position;
+    if (css_prop == "position") return dong::dom::toString(style.position);
     if (css_prop == "opacity") return std::to_string(style.opacity);
 
     // Border
@@ -1262,7 +1255,7 @@ JSValue createStyleProxy(JSContext* ctx, JSValueConst element, const dom::DOMNod
     // Seed common properties for easier inspection.
     if (node) {
         const auto& style = node->getComputedStyle();
-        JS_SetPropertyStr(ctx, target, "display", JS_NewString(ctx, style.display.c_str()));
+        JS_SetPropertyStr(ctx, target, "display", JS_NewString(ctx, dong::dom::toString(style.display)));
         JS_SetPropertyStr(ctx, target, "color", JS_NewString(ctx, style.color.c_str()));
         JS_SetPropertyStr(ctx, target, "backgroundColor", JS_NewString(ctx, style.background_color.c_str()));
     }
@@ -1987,59 +1980,13 @@ static JSValue elem_removeChild(JSContext* ctx, JSValueConst this_val, int argc,
     return JS_UNDEFINED;
 }
 
-static JSValue elem_getTextContent(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-    auto node = JSBindings::getNodeOpaque(ctx, this_val);
-    if (!node) return JS_UNDEFINED;
-    
-    std::string text = node->getTextContent();
-    return JS_NewString(ctx, text.c_str());
-}
+DONG_JS_STRING_GETTER(elem_getTextContent, node->getTextContent())
+DONG_JS_STRING_SETTER(elem_setTextContent, setTextContent)
 
-static JSValue elem_setTextContent(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-    if (argc < 1) return JS_UNDEFINED;
+DONG_JS_STRING_GETTER(elem_getInnerHTML, node->getInnerHTML())
+DONG_JS_STRING_SETTER(elem_setInnerHTML, setInnerHTML)
 
-    const char* text = JS_ToCString(ctx, argv[0]);
-    auto node = JSBindings::getNodeOpaque(ctx, this_val);
-
-    if (node && text) {
-        node->setTextContent(text);
-        node->markLayoutDirty();  // 触发重新渲染
-    }
-
-    if (text) JS_FreeCString(ctx, text);
-    return JS_UNDEFINED;
-}
-
-static JSValue elem_getInnerHTML(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-    auto node = JSBindings::getNodeOpaque(ctx, this_val);
-    if (!node) return JS_UNDEFINED;
-
-    std::string html = node->getInnerHTML();
-    return JS_NewString(ctx, html.c_str());
-}
-
-static JSValue elem_setInnerHTML(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-    if (argc < 1) return JS_UNDEFINED;
-
-    const char* html = JS_ToCString(ctx, argv[0]);
-    auto node = JSBindings::getNodeOpaque(ctx, this_val);
-
-    if (node && html) {
-        node->setInnerHTML(html);
-        node->markLayoutDirty();  // 触发重新渲染
-    }
-
-    if (html) JS_FreeCString(ctx, html);
-    return JS_UNDEFINED;
-}
-
-static JSValue elem_getOuterHTML(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-    auto node = JSBindings::getNodeOpaque(ctx, this_val);
-    if (!node) return JS_UNDEFINED;
-
-    std::string html = node->getOuterHTML();
-    return JS_NewString(ctx, html.c_str());
-}
+DONG_JS_STRING_GETTER(elem_getOuterHTML, node->getOuterHTML())
 
 static JSValue elem_setOuterHTML(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     if (argc < 1) return JS_UNDEFINED;
@@ -2193,21 +2140,15 @@ static JSValue elem_getComputedStyle(JSContext* ctx, JSValueConst this_val, int 
     JS_SetPropertyStr(ctx, style_obj, "color", JS_NewString(ctx, style.color.c_str()));
     JS_SetPropertyStr(ctx, style_obj, "backgroundColor", JS_NewString(ctx, style.background_color.c_str()));
     JS_SetPropertyStr(ctx, style_obj, "fontSize", JS_NewFloat64(ctx, style.font_size));
-    JS_SetPropertyStr(ctx, style_obj, "fontWeight", JS_NewString(ctx, style.font_weight.c_str()));
-    JS_SetPropertyStr(ctx, style_obj, "textAlign", JS_NewString(ctx, style.text_align.c_str()));
-    JS_SetPropertyStr(ctx, style_obj, "display", JS_NewString(ctx, style.display.c_str()));
-    JS_SetPropertyStr(ctx, style_obj, "position", JS_NewString(ctx, style.position.c_str()));
+    JS_SetPropertyStr(ctx, style_obj, "fontWeight", JS_NewString(ctx, dong::dom::toString(style.font_weight)));
+    JS_SetPropertyStr(ctx, style_obj, "textAlign", JS_NewString(ctx, dong::dom::toString(style.text_align)));
+    JS_SetPropertyStr(ctx, style_obj, "display", JS_NewString(ctx, dong::dom::toString(style.display)));
+    JS_SetPropertyStr(ctx, style_obj, "position", JS_NewString(ctx, dong::dom::toString(style.position)));
     
     return style_obj;
 }
 
-static JSValue elem_getTagName(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-    auto node = JSBindings::getNodeOpaque(ctx, this_val);
-    if (!node) return JS_UNDEFINED;
-    
-    std::string tag = node->getTagName();
-    return JS_NewString(ctx, tag.c_str());
-}
+DONG_JS_STRING_GETTER(elem_getTagName, node->getTagName())
 
 static JSValue elem_getChildren(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     auto node = JSBindings::getNodeOpaque(ctx, this_val);
@@ -2409,13 +2350,12 @@ static JSValue elem_setStyle(JSContext* ctx, JSValueConst this_val, JSValue styl
     if (strcmp(prop, "color") == 0) style.color = str_val;
     else if (strcmp(prop, "backgroundColor") == 0) style.background_color = str_val;
     else if (strcmp(prop, "fontSize") == 0) style.font_size = (float)num_val;
-    else if (strcmp(prop, "fontWeight") == 0) style.font_weight = str_val;
-    else if (strcmp(prop, "textAlign") == 0) style.text_align = str_val;
+    else if (strcmp(prop, "fontWeight") == 0) style.font_weight = dong::dom::fontWeightFromString(str_val);
+    else if (strcmp(prop, "textAlign") == 0) style.text_align = dong::dom::textAlignFromString(str_val);
     else if (strcmp(prop, "display") == 0) {
-        style.display = str_val;
-        style.layout_mode = deriveLayoutModeFromDisplay(str_val);
+        style.setDisplay(str_val);
     }
-    else if (strcmp(prop, "position") == 0) style.position = str_val;
+    else if (strcmp(prop, "position") == 0) style.position = dong::dom::positionFromString(str_val);
     else if (strcmp(prop, "opacity") == 0) style.opacity = (float)num_val;
     else if (strcmp(prop, "borderRadius") == 0) style.border_radius = (float)num_val;
     else if (strcmp(prop, "borderWidth") == 0) style.border_width = (float)num_val;
@@ -2427,14 +2367,7 @@ static JSValue elem_setStyle(JSContext* ctx, JSValueConst this_val, JSValue styl
 }
 
 // className getter/setter
-static JSValue elem_getClassName(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-    (void)argc;
-    (void)argv;
-    auto node = JSBindings::getNodeOpaque(ctx, this_val);
-    if (!node) return JS_NewString(ctx, "");
-    std::string cls = node->getAttribute("class");
-    return JS_NewString(ctx, cls.c_str());
-}
+DONG_JS_ATTR_GETTER(elem_getClassName, "class")
 
 static JSValue elem_setClassName(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     if (argc < 1) return JS_UNDEFINED;
@@ -2455,14 +2388,7 @@ static JSValue elem_setClassName(JSContext* ctx, JSValueConst this_val, int argc
     return JS_UNDEFINED;
 }
 
-// id getter/setter
-static JSValue elem_getId(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-    (void)argc; (void)argv;
-    auto node = JSBindings::getNodeOpaque(ctx, this_val);
-    if (!node) return JS_NewString(ctx, "");
-    std::string id = node->getAttribute("id");
-    return JS_NewString(ctx, id.c_str());
-}
+DONG_JS_ATTR_GETTER(elem_getId, "id")
 
 static JSValue elem_setId(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     if (argc < 1) return JS_UNDEFINED;

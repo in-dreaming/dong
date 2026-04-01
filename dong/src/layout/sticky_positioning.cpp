@@ -72,9 +72,9 @@ dom::DOMNodePtr findScrollContainer(dom::DOMNodePtr node) {
     dom::DOMNodePtr parent = node->getParentNode();
     while (parent) {
         const dom::ComputedStyle& style = parent->getComputedStyle();
-        bool is_scroll = (style.overflow == "auto" || style.overflow == "scroll" ||
-                         style.overflow_y == "auto" || style.overflow_y == "scroll" ||
-                         style.overflow_x == "auto" || style.overflow_x == "scroll");
+        bool is_scroll = (style.overflow == dom::CSSOverflow::Auto || style.overflow == dom::CSSOverflow::Scroll ||
+                         style.overflow_y == dom::CSSOverflow::Auto || style.overflow_y == dom::CSSOverflow::Scroll ||
+                         style.overflow_x == dom::CSSOverflow::Auto || style.overflow_x == dom::CSSOverflow::Scroll);
 
         if (is_scroll) {
             return parent;

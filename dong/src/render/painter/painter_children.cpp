@@ -51,9 +51,9 @@ float computeScrollContentBottom(const dom::DOMNodePtr& node,
 
 inline float effectiveBorderWidthPx(const dom::ComputedStyle& style,
                                    float side_width,
-                                   const std::string& side_style) {
-    const std::string& st = !side_style.empty() ? side_style : style.border_style;
-    if (st == "none" || st == "hidden") {
+                                   dom::CSSBorderStyle side_style) {
+    dom::CSSBorderStyle st = (side_style != dom::CSSBorderStyleUnset) ? side_style : style.border_style;
+    if (st == dom::CSSBorderStyle::None || st == dom::CSSBorderStyle::Hidden) {
         return 0.0f;
     }
     return (side_width >= 0.0f) ? side_width : std::max(0.0f, style.border_width);
@@ -130,11 +130,11 @@ void Painter::renderMarkerForListItem(const dom::DOMNodePtr& node,
 
     const auto& style = node->getComputedStyle();
     const auto& marker_style = marker_pseudo->getComputedStyle();
-    const std::string& marker_type = style.list_style_type;
-    if (marker_type == "none") return;
+    const auto marker_type = style.list_style_type;
+    if (marker_type == dom::CSSListStyleType::None) return;
 
     int counter = calculateListItemCounter(node);
-    std::string marker_text = generateMarkerText(counter, marker_type);
+    std::string marker_text = generateMarkerText(counter, toString(marker_type));
     if (marker_text.empty()) return;
 
     // Determine marker color (::marker color overrides, else inherit from li)
@@ -144,10 +144,10 @@ void Painter::renderMarkerForListItem(const dom::DOMNodePtr& node,
         ? marker_style.font_size : style.font_size;
     const std::string& font_family = marker_style.isExplicitlySet("font-family")
         ? marker_style.font_family : style.font_family;
-    const std::string& font_weight = marker_style.isExplicitlySet("font-weight")
-        ? marker_style.font_weight : style.font_weight;
-    const std::string& font_style_val = marker_style.isExplicitlySet("font-style")
-        ? marker_style.font_style : style.font_style;
+    const std::string font_weight = toString(marker_style.isExplicitlySet("font-weight")
+        ? marker_style.font_weight : style.font_weight);
+    const std::string font_style_val = toString(marker_style.isExplicitlySet("font-style")
+        ? marker_style.font_style : style.font_style);
 
     // Shape the marker text
     TextShapeRequest request;
@@ -168,7 +168,7 @@ void Painter::renderMarkerForListItem(const dom::DOMNodePtr& node,
     float marker_height = shaped.line_height_units * scale;
 
     // Position: "outside" places marker left of the li content, "inside" prepends.
-    const bool is_outside = (style.list_style_position != "inside");
+    const bool is_outside = (style.list_style_position != dom::CSSListStylePosition::Inside);
     const float kMarkerGap = 8.0f; // gap between marker and content
     float marker_x, marker_y;
 
@@ -364,9 +364,9 @@ void Painter::paintChildrenAndOverlays(const dom::DOMNodePtr& node,
             stderr,
             "[ScrollDbg] id=%s overflow=%s overflow_y=%s scroll_behavior=%s is_scroll_container=%d rect=(x=%.1f,y=%.1f,w=%.1f,h=%.1f)\n",
             node->getAttribute("id").c_str(),
-            dbg_style.overflow.c_str(),
-            dbg_style.overflow_y.c_str(),
-            dbg_style.scroll_behavior.c_str(),
+            toString(dbg_style.overflow),
+            toString(dbg_style.overflow_y),
+            toString(dbg_style.scroll_behavior),
             is_scroll_container ? 1 : 0,
             node_rect.x, node_rect.y, node_rect.width, node_rect.height);
     }
@@ -429,7 +429,7 @@ void Painter::paintChildrenAndOverlays(const dom::DOMNodePtr& node,
 
     auto should_defer_sticky = [](const dom::DOMNodePtr& n) {
         return n && n->getType() == dom::DOMNode::NodeType::ELEMENT &&
-               n->getComputedStyle().position == "sticky";
+               n->getComputedStyle().position == dom::CSSPosition::Sticky;
     };
 
     if (!need_z_sort) {
@@ -458,10 +458,10 @@ void Painter::paintChildrenAndOverlays(const dom::DOMNodePtr& node,
 
             // Debug: detect if inline child is NOT being skipped in a CE container
             if (node->isContentEditable() && child->getTagName() == "span" &&
-                child->getComputedStyle().display == "inline") {
+                child->getComputedStyle().display == dom::CSSDisplay::Inline) {
                 DONG_LOG_WARN("[CHILDREN-CE] *** INLINE SPAN NOT SKIPPED! tag=%s display=%s inline_rendered=%s ***",
                               child->getTagName().c_str(),
-                              child->getComputedStyle().display.c_str(),
+                              toString(child->getComputedStyle().display),
                               child->getAttribute("__inline_rendered__").c_str());
             }
 

@@ -51,10 +51,9 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
     static const std::unordered_map<std::string_view, PropertyHandler> handlers = {
         // Display & Position
         {"display", [](const std::string& val, ComputedStyle& style) { 
-            style.display = val;
-            style.layout_mode = deriveLayoutModeFromDisplay(val);
+            style.setDisplay(val);
         }},
-        {"position", [](const std::string& val, ComputedStyle& style) { style.position = val; }},
+        {"position", [](const std::string& val, ComputedStyle& style) { style.position = positionFromString(val); }},
         
         // Box model - dimensions
         {"width", [](const std::string& val, ComputedStyle& style) { style.width = CSSParser::parseValue(val); }},
@@ -199,14 +198,14 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
         }},
         {"background", [](const std::string& val, ComputedStyle& style) { parseBackgroundShorthandHelper(val, style); }},
         {"background-size", [](const std::string& val, ComputedStyle& style) { style.background_size = val; }},
-        {"background-repeat", [](const std::string& val, ComputedStyle& style) { style.background_repeat = val; }},
+        {"background-repeat", [](const std::string& val, ComputedStyle& style) { style.background_repeat = backgroundRepeatFromString(val); }},
         {"background-position", [](const std::string& val, ComputedStyle& style) { style.background_position = CSSParser::parseBackgroundPosition(val); }},
-        {"background-attachment", [](const std::string& val, ComputedStyle& style) { style.background_attachment = val; }},
-        {"background-clip", [](const std::string& val, ComputedStyle& style) { style.background_clip = val; }},
-        {"background-origin", [](const std::string& val, ComputedStyle& style) { style.background_origin = val; }},
-        {"object-fit", [](const std::string& val, ComputedStyle& style) { style.object_fit = val; }},
+        {"background-attachment", [](const std::string& val, ComputedStyle& style) { style.background_attachment = backgroundAttachmentFromString(val); }},
+        {"background-clip", [](const std::string& val, ComputedStyle& style) { style.background_clip = backgroundBoxFromString(val); }},
+        {"background-origin", [](const std::string& val, ComputedStyle& style) { style.background_origin = backgroundBoxFromString(val); }},
+        {"object-fit", [](const std::string& val, ComputedStyle& style) { style.object_fit = objectFitFromString(val); }},
         {"object-position", [](const std::string& val, ComputedStyle& style) { style.object_position = val; }},
-        {"image-rendering", [](const std::string& val, ComputedStyle& style) { style.image_rendering = val; }},
+        {"image-rendering", [](const std::string& val, ComputedStyle& style) { style.image_rendering = imageRenderingFromString(val); }},
 
 
         {"opacity", [](const std::string& val, ComputedStyle& style) {
@@ -227,7 +226,7 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
         {"border", [](const std::string& val, ComputedStyle& style) { parseBorderShorthandHelper(val, style); }},
         {"border-width", [](const std::string& val, ComputedStyle& style) { style.border_width = parseFloatHelper(val); }},
         {"border-color", [](const std::string& val, ComputedStyle& style) { style.border_color = CSSParser::parseColor(val); }},
-        {"border-style", [](const std::string& val, ComputedStyle& style) { style.border_style = val; }},
+        {"border-style", [](const std::string& val, ComputedStyle& style) { style.border_style = borderStyleFromString(val); }},
 
         // Border (per-side shorthands)
         {"border-top", [](const std::string& val, ComputedStyle& style) {
@@ -318,10 +317,10 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
         {"border-inline-end-color", [](const std::string& val, ComputedStyle& style) { style.border_inline_end_color = CSSParser::parseColor(val); }},
         {"border-block-start-color", [](const std::string& val, ComputedStyle& style) { style.border_block_start_color = CSSParser::parseColor(val); }},
         {"border-block-end-color", [](const std::string& val, ComputedStyle& style) { style.border_block_end_color = CSSParser::parseColor(val); }},
-        {"border-inline-start-style", [](const std::string& val, ComputedStyle& style) { style.border_inline_start_style = val; }},
-        {"border-inline-end-style", [](const std::string& val, ComputedStyle& style) { style.border_inline_end_style = val; }},
-        {"border-block-start-style", [](const std::string& val, ComputedStyle& style) { style.border_block_start_style = val; }},
-        {"border-block-end-style", [](const std::string& val, ComputedStyle& style) { style.border_block_end_style = val; }},
+        {"border-inline-start-style", [](const std::string& val, ComputedStyle& style) { style.border_inline_start_style = borderStyleFromString(val); }},
+        {"border-inline-end-style", [](const std::string& val, ComputedStyle& style) { style.border_inline_end_style = borderStyleFromString(val); }},
+        {"border-block-start-style", [](const std::string& val, ComputedStyle& style) { style.border_block_start_style = borderStyleFromString(val); }},
+        {"border-block-end-style", [](const std::string& val, ComputedStyle& style) { style.border_block_end_style = borderStyleFromString(val); }},
 
         // Border per-side components
 
@@ -333,10 +332,10 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
         {"border-right-color", [](const std::string& val, ComputedStyle& style) { style.border_right_color = CSSParser::parseColor(val); }},
         {"border-bottom-color", [](const std::string& val, ComputedStyle& style) { style.border_bottom_color = CSSParser::parseColor(val); }},
         {"border-left-color", [](const std::string& val, ComputedStyle& style) { style.border_left_color = CSSParser::parseColor(val); }},
-        {"border-top-style", [](const std::string& val, ComputedStyle& style) { style.border_top_style = val; }},
-        {"border-right-style", [](const std::string& val, ComputedStyle& style) { style.border_right_style = val; }},
-        {"border-bottom-style", [](const std::string& val, ComputedStyle& style) { style.border_bottom_style = val; }},
-        {"border-left-style", [](const std::string& val, ComputedStyle& style) { style.border_left_style = val; }},
+        {"border-top-style", [](const std::string& val, ComputedStyle& style) { style.border_top_style = borderStyleFromString(val); }},
+        {"border-right-style", [](const std::string& val, ComputedStyle& style) { style.border_right_style = borderStyleFromString(val); }},
+        {"border-bottom-style", [](const std::string& val, ComputedStyle& style) { style.border_bottom_style = borderStyleFromString(val); }},
+        {"border-left-style", [](const std::string& val, ComputedStyle& style) { style.border_left_style = borderStyleFromString(val); }},
 
         // Border radius
         {"border-radius", [](const std::string& val, ComputedStyle& style) { parseBorderRadiusShorthandHelper(val, style); }},
@@ -354,7 +353,7 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
                 if (std::isdigit(static_cast<unsigned char>(part[0])) || part[0] == '.') {
                     style.outline_width = parseFloatHelper(part);
                 } else if (part == "solid" || part == "dashed" || part == "dotted" || part == "none") {
-                    style.outline_style = part;
+                    style.outline_style = borderStyleFromString(part);
                 } else {
                     style.outline_color = CSSParser::parseColor(part);
                 }
@@ -362,31 +361,33 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
         }},
         {"outline-width", [](const std::string& val, ComputedStyle& style) { style.outline_width = parseFloatHelper(val); }},
         {"outline-color", [](const std::string& val, ComputedStyle& style) { style.outline_color = CSSParser::parseColor(val); }},
-        {"outline-style", [](const std::string& val, ComputedStyle& style) { style.outline_style = val; }},
+        {"outline-style", [](const std::string& val, ComputedStyle& style) { style.outline_style = borderStyleFromString(val); }},
         {"outline-offset", [](const std::string& val, ComputedStyle& style) { style.outline_offset = parseFloatHelper(val); }},
         
         // Overflow & visibility
         {"overflow", [](const std::string& val, ComputedStyle& style) {
-            style.overflow = val;
-            style.overflow_x = val;
-            style.overflow_y = val;
+            auto v = overflowFromString(val);
+            style.overflow = v;
+            style.overflow_x = v;
+            style.overflow_y = v;
         }},
-        {"overflow-x", [](const std::string& val, ComputedStyle& style) { style.overflow_x = val; }},
-        {"overflow-y", [](const std::string& val, ComputedStyle& style) { style.overflow_y = val; }},
+        {"overflow-x", [](const std::string& val, ComputedStyle& style) { style.overflow_x = overflowFromString(val); }},
+        {"overflow-y", [](const std::string& val, ComputedStyle& style) { style.overflow_y = overflowFromString(val); }},
 
         // Scroll behavior
         {"overscroll-behavior", [](const std::string& val, ComputedStyle& style) {
-            style.overscroll_behavior = val;
-            style.overscroll_behavior_x = val;
-            style.overscroll_behavior_y = val;
+            auto v = overscrollBehaviorFromString(val);
+            style.overscroll_behavior = v;
+            style.overscroll_behavior_x = v;
+            style.overscroll_behavior_y = v;
         }},
-        {"overscroll-behavior-x", [](const std::string& val, ComputedStyle& style) { style.overscroll_behavior_x = val; }},
-        {"overscroll-behavior-y", [](const std::string& val, ComputedStyle& style) { style.overscroll_behavior_y = val; }},
-        {"scroll-behavior", [](const std::string& val, ComputedStyle& style) { style.scroll_behavior = val; }},
+        {"overscroll-behavior-x", [](const std::string& val, ComputedStyle& style) { style.overscroll_behavior_x = overscrollBehaviorFromString(val); }},
+        {"overscroll-behavior-y", [](const std::string& val, ComputedStyle& style) { style.overscroll_behavior_y = overscrollBehaviorFromString(val); }},
+        {"scroll-behavior", [](const std::string& val, ComputedStyle& style) { style.scroll_behavior = scrollBehaviorFromString(val); }},
 
-        {"visibility", [](const std::string& val, ComputedStyle& style) { style.visibility = val; }},
-        {"cursor", [](const std::string& val, ComputedStyle& style) { style.cursor = val; }},
-        {"box-sizing", [](const std::string& val, ComputedStyle& style) { style.box_sizing = val; }},
+        {"visibility", [](const std::string& val, ComputedStyle& style) { style.visibility = visibilityFromString(val); }},
+        {"cursor", [](const std::string& val, ComputedStyle& style) { style.cursor = cursorFromString(val); }},
+        {"box-sizing", [](const std::string& val, ComputedStyle& style) { style.box_sizing = boxSizingFromString(val); }},
         {"aspect-ratio", [](const std::string& val, ComputedStyle& style) {
             if (val == "auto") {
                 style.aspect_ratio = 0.0f;
@@ -406,22 +407,22 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
         {"box-shadow", [](const std::string& val, ComputedStyle& style) { CSSParser::parseBoxShadow(val, style); }},
         {"filter", [](const std::string& val, ComputedStyle& style) { style.filters = CSSParser::parseFilter(val); }},
         {"backdrop-filter", [](const std::string& val, ComputedStyle& style) { style.backdrop_filters = CSSParser::parseFilter(val); }},
-        {"mix-blend-mode", [](const std::string& val, ComputedStyle& style) { style.mix_blend_mode = val; }},
-        {"background-blend-mode", [](const std::string& val, ComputedStyle& style) { style.background_blend_mode = val; }},
+        {"mix-blend-mode", [](const std::string& val, ComputedStyle& style) { style.mix_blend_mode = blendModeFromString(val); }},
+        {"background-blend-mode", [](const std::string& val, ComputedStyle& style) { style.background_blend_mode = blendModeFromString(val); }},
         
         // Text & font
         {"font-family", [](const std::string& val, ComputedStyle& style) { style.font_family = val; }},
         {"font-size", [](const std::string& val, ComputedStyle& style) { style.font_size = parseFontSizeHelper(val); }},
-        {"font-weight", [](const std::string& val, ComputedStyle& style) { style.font_weight = val; }},
-        {"font-style", [](const std::string& val, ComputedStyle& style) { style.font_style = val; }},
-        {"font-variant", [](const std::string& val, ComputedStyle& style) { style.font_variant = val; }},
+        {"font-weight", [](const std::string& val, ComputedStyle& style) { style.font_weight = fontWeightFromString(val); }},
+        {"font-style", [](const std::string& val, ComputedStyle& style) { style.font_style = fontStyleFromString(val); }},
+        {"font-variant", [](const std::string& val, ComputedStyle& style) { style.font_variant = fontVariantFromString(val); }},
         {"font", [](const std::string& val, ComputedStyle& style) { parseFontShorthandHelper(val, style); }},
-        {"text-align", [](const std::string& val, ComputedStyle& style) { style.text_align = val; }},
-        {"text-align-last", [](const std::string& val, ComputedStyle& style) { style.text_align_last = val; }},
-        {"text-decoration", [](const std::string& val, ComputedStyle& style) { style.text_decoration = val; }},
-        {"text-decoration-line", [](const std::string& val, ComputedStyle& style) { style.text_decoration = val; }},
+        {"text-align", [](const std::string& val, ComputedStyle& style) { style.text_align = textAlignFromString(val); }},
+        {"text-align-last", [](const std::string& val, ComputedStyle& style) { style.text_align_last = textAlignLastFromString(val); }},
+        {"text-decoration", [](const std::string& val, ComputedStyle& style) { style.text_decoration = textDecorationFromString(val); }},
+        {"text-decoration-line", [](const std::string& val, ComputedStyle& style) { style.text_decoration = textDecorationFromString(val); }},
         {"text-decoration-color", [](const std::string& val, ComputedStyle& style) { style.text_decoration_color = CSSParser::parseColor(val); }},
-        {"text-decoration-style", [](const std::string& val, ComputedStyle& style) { style.text_decoration_style = val; }},
+        {"text-decoration-style", [](const std::string& val, ComputedStyle& style) { style.text_decoration_style = textDecorationStyleFromString(val); }},
         {"text-decoration-thickness", [](const std::string& val, ComputedStyle& style) { style.text_decoration_thickness = parseFloatHelper(val); }},
         {"letter-spacing", [](const std::string& val, ComputedStyle& style) {
             if (val == "normal") {
@@ -465,25 +466,25 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
                 style.line_height_is_unitless = true;
             }
         }},
-        {"text-transform", [](const std::string& val, ComputedStyle& style) { style.text_transform = val; }},
-        {"text-overflow", [](const std::string& val, ComputedStyle& style) { style.text_overflow = val; }},
-        {"white-space", [](const std::string& val, ComputedStyle& style) { style.white_space = val; }},
-        {"word-break", [](const std::string& val, ComputedStyle& style) { style.word_break = val; }},
-        {"overflow-wrap", [](const std::string& val, ComputedStyle& style) { style.overflow_wrap = val; }},
-        {"word-wrap", [](const std::string& val, ComputedStyle& style) { style.overflow_wrap = val; }},
+        {"text-transform", [](const std::string& val, ComputedStyle& style) { style.text_transform = textTransformFromString(val); }},
+        {"text-overflow", [](const std::string& val, ComputedStyle& style) { style.text_overflow = textOverflowFromString(val); }},
+        {"white-space", [](const std::string& val, ComputedStyle& style) { style.white_space = whiteSpaceFromString(val); }},
+        {"word-break", [](const std::string& val, ComputedStyle& style) { style.word_break = wordBreakFromString(val); }},
+        {"overflow-wrap", [](const std::string& val, ComputedStyle& style) { style.overflow_wrap = overflowWrapFromString(val); }},
+        {"word-wrap", [](const std::string& val, ComputedStyle& style) { style.overflow_wrap = overflowWrapFromString(val); }},
         {"hyphens", [](const std::string& val, ComputedStyle& style) {
             std::string v = val;
             std::transform(v.begin(), v.end(), v.begin(), [](unsigned char c) {
                 return static_cast<char>(std::tolower(c));
             });
             if (v == "none" || v == "manual" || v == "auto") {
-                style.hyphens = v;
+                style.hyphens = hyphensFromString(v);
             }
         }},
 
-        {"vertical-align", [](const std::string& val, ComputedStyle& style) { style.vertical_align = val; }},
-        {"direction", [](const std::string& val, ComputedStyle& style) { style.direction = val; }},
-        {"unicode-bidi", [](const std::string& val, ComputedStyle& style) { style.unicode_bidi = val; }},
+        {"vertical-align", [](const std::string& val, ComputedStyle& style) { style.vertical_align = verticalAlignFromString(val); }},
+        {"direction", [](const std::string& val, ComputedStyle& style) { style.direction = directionFromString(val); }},
+        {"unicode-bidi", [](const std::string& val, ComputedStyle& style) { style.unicode_bidi = unicodeBidiFromString(val); }},
         {"text-indent", [](const std::string& val, ComputedStyle& style) { style.text_indent = parseFloatHelper(val); }},
         {"tab-size", [](const std::string& val, ComputedStyle& style) {
             int tab_val = static_cast<int>(parseFloatHelper(val));
@@ -493,25 +494,25 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
         {"text-shadow", [](const std::string& val, ComputedStyle& style) { CSSParser::parseTextShadow(val, style); }},
         
         // Flexbox
-        {"flex-direction", [](const std::string& val, ComputedStyle& style) { style.flex_direction = val; }},
-        {"flex-wrap", [](const std::string& val, ComputedStyle& style) { style.flex_wrap = val; }},
+        {"flex-direction", [](const std::string& val, ComputedStyle& style) { style.flex_direction = flexDirectionFromString(val); }},
+        {"flex-wrap", [](const std::string& val, ComputedStyle& style) { style.flex_wrap = flexWrapFromString(val); }},
         {"flex-flow", [](const std::string& val, ComputedStyle& style) {
             std::istringstream iss(val);
             std::string part;
             while (iss >> part) {
                 if (part == "row" || part == "column" || part == "row-reverse" || part == "column-reverse") {
-                    style.flex_direction = part;
+                    style.flex_direction = flexDirectionFromString(part);
                 } else if (part == "wrap" || part == "nowrap" || part == "wrap-reverse") {
-                    style.flex_wrap = part;
+                    style.flex_wrap = flexWrapFromString(part);
                 }
             }
         }},
-        {"justify-content", [](const std::string& val, ComputedStyle& style) { style.justify_content = val; }},
-        {"justify-items", [](const std::string& val, ComputedStyle& style) { style.justify_items = val; }},
-        {"justify-self", [](const std::string& val, ComputedStyle& style) { style.justify_self = val; }},
-        {"align-items", [](const std::string& val, ComputedStyle& style) { style.align_items = val; }},
-        {"align-content", [](const std::string& val, ComputedStyle& style) { style.align_content = val; }},
-        {"align-self", [](const std::string& val, ComputedStyle& style) { style.align_self = val; }},
+        {"justify-content", [](const std::string& val, ComputedStyle& style) { style.justify_content = justifyContentFromString(val); }},
+        {"justify-items", [](const std::string& val, ComputedStyle& style) { style.justify_items = alignItemsFromString(val); }},
+        {"justify-self", [](const std::string& val, ComputedStyle& style) { style.justify_self = alignSelfFromString(val); }},
+        {"align-items", [](const std::string& val, ComputedStyle& style) { style.align_items = alignItemsFromString(val); }},
+        {"align-content", [](const std::string& val, ComputedStyle& style) { style.align_content = alignContentFromString(val); }},
+        {"align-self", [](const std::string& val, ComputedStyle& style) { style.align_self = alignSelfFromString(val); }},
         {"place-items", [](const std::string& val, ComputedStyle& style) { parsePlaceItemsShorthandHelper(val, style); }},
         {"place-content", [](const std::string& val, ComputedStyle& style) { parsePlaceContentShorthandHelper(val, style); }},
         {"place-self", [](const std::string& val, ComputedStyle& style) { parsePlaceSelfShorthandHelper(val, style); }},
@@ -549,17 +550,17 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
 
         // List styling
         {"list-style-type", [](const std::string& val, ComputedStyle& style) {
-            style.list_style_type = val;
+            style.list_style_type = listStyleTypeFromString(val);
         }},
         {"list-style-position", [](const std::string& val, ComputedStyle& style) {
-            style.list_style_position = val;
+            style.list_style_position = listStylePositionFromString(val);
         }},
         {"list-style", [](const std::string& val, ComputedStyle& style) {
             std::istringstream iss(val);
             std::string part;
 
             // Reset all list-style properties first
-            style.list_style_position = "outside";
+            style.list_style_position = CSSListStylePosition::Outside;
             style.list_style_image = "none";
             // type starts as unset; we track whether an explicit type keyword was found
             std::string found_type;
@@ -568,34 +569,25 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
 
             while (iss >> part) {
                 if (part == "inside" || part == "outside") {
-                    style.list_style_position = part;
+                    style.list_style_position = listStylePositionFromString(part);
                     found_position = true;
                 } else if (part == "none") {
                     found_none = true;
                 } else if (part.find("url(") == 0) {
                     style.list_style_image = part;
                 } else {
-                    // list-style-type keyword (disc, circle, square, decimal, etc.)
                     found_type = part;
                 }
             }
 
-            // CSS spec: "none" in the shorthand sets type=none AND image=none ONLY
-            // when no explicit type keyword is present.  When a type keyword co-exists
-            // with "none", the type keyword wins and "none" only clears the image.
-            // E.g. "list-style: decimal none" 闁?type=decimal, image=none.
-            // When only a position is given (e.g. "list-style: outside"), the type
-            // defaults to "disc" (the UA default) rather than "none".
             if (!found_type.empty()) {
-                style.list_style_type = found_type;
-                // found_none alongside a type keyword 闁?only clears image (already done)
+                style.list_style_type = listStyleTypeFromString(found_type);
             } else if (found_none) {
-                style.list_style_type = "none";
+                style.list_style_type = CSSListStyleType::None;
             } else if (found_position) {
-                // Only a position keyword: type defaults to disc
-                style.list_style_type = "disc";
+                style.list_style_type = CSSListStyleType::Disc;
             } else {
-                style.list_style_type = "none";
+                style.list_style_type = CSSListStyleType::None;
             }
         }},
 
@@ -621,14 +613,14 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
             std::transform(v.begin(), v.end(), v.begin(), [](unsigned char c) {
                 return static_cast<char>(std::tolower(c));
             });
-            style.appearance = v;
+            style.appearance = appearanceFromString(v);
         }},
         {"-webkit-appearance", [](const std::string& val, ComputedStyle& style) {
             std::string v = val;
             std::transform(v.begin(), v.end(), v.begin(), [](unsigned char c) {
                 return static_cast<char>(std::tolower(c));
             });
-            style.appearance = v;
+            style.appearance = appearanceFromString(v);
         }},
         {"resize", [](const std::string& val, ComputedStyle& style) {
             std::string v = val;
@@ -636,7 +628,7 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
                 return static_cast<char>(std::tolower(c));
             });
             if (v == "none" || v == "both" || v == "horizontal" || v == "vertical") {
-                style.resize = v;
+                style.resize = resizeFromString(v);
             }
         }},
         {"will-change", [](const std::string& val, ComputedStyle& style) {
@@ -653,7 +645,7 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
             std::transform(v.begin(), v.end(), v.begin(), [](unsigned char c) {
                 return static_cast<char>(std::tolower(c));
             });
-            style.border_collapse = v;
+            style.border_collapse = borderCollapseFromString(v);
         }},
 
         // Color scheme (UA/form control theming)
@@ -666,14 +658,13 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
             size_t light_pos = v.find("light");
             size_t dark_pos = v.find("dark");
             if (light_pos == std::string::npos && dark_pos == std::string::npos) {
-                style.color_scheme = "normal";
+                style.color_scheme = CSSColorScheme::Normal;
             } else if (light_pos == std::string::npos) {
-                style.color_scheme = "dark";
+                style.color_scheme = CSSColorScheme::Dark;
             } else if (dark_pos == std::string::npos) {
-                style.color_scheme = "light";
+                style.color_scheme = CSSColorScheme::Light;
             } else {
-                // Both present: prefer whichever appears first
-                style.color_scheme = (light_pos < dark_pos) ? "light" : "dark";
+                style.color_scheme = (light_pos < dark_pos) ? CSSColorScheme::Light : CSSColorScheme::Dark;
             }
         }},
 
@@ -698,7 +689,7 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
             std::transform(v.begin(), v.end(), v.begin(), [](unsigned char c) {
                 return static_cast<char>(std::tolower(c));
             });
-            style.table_layout = v;
+            style.table_layout = tableLayoutFromString(v);
         }},
         {"caption-side", [](const std::string& val, ComputedStyle& style) {
             std::string v = val;
@@ -706,7 +697,7 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
                 return static_cast<char>(std::tolower(c));
             });
             if (v == "top" || v == "bottom") {
-                style.caption_side = v;
+                style.caption_side = captionSideFromString(v);
             }
         }},
 
@@ -736,7 +727,7 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
                 style.transform_origin_y = parts.size() > 1 ? parseOrigin(parts[1]) : style.transform_origin_x;
             }
         }},
-        {"transform-style", [](const std::string& val, ComputedStyle& style) { style.transform_style = val; }},
+        {"transform-style", [](const std::string& val, ComputedStyle& style) { style.transform_style = transformStyleFromString(val); }},
         {"perspective", [](const std::string& val, ComputedStyle& style) { style.perspective = parseFloatHelper(val); }},
         {"perspective-origin", [](const std::string& val, ComputedStyle& style) {
             std::istringstream iss(val);
@@ -748,7 +739,7 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
                 style.perspective_origin_y = parts.size() > 1 ? parseFloatHelper(parts[1]) : style.perspective_origin_x;
             }
         }},
-        {"backface-visibility", [](const std::string& val, ComputedStyle& style) { style.backface_visibility = val; }},
+        {"backface-visibility", [](const std::string& val, ComputedStyle& style) { style.backface_visibility = backfaceVisibilityFromString(val); }},
         
         // Transitions
         {"transition", [](const std::string& val, ComputedStyle& style) { style.transitions = CSSParser::parseTransition(val); }},
@@ -814,12 +805,12 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
         
         // Misc
         {"clip-path", [](const std::string& val, ComputedStyle& style) { style.clip_path = val; }},
-        {"pointer-events", [](const std::string& val, ComputedStyle& style) { style.pointer_events = val; }},
-        {"user-select", [](const std::string& val, ComputedStyle& style) { style.user_select = val; }},
-        {"touch-action", [](const std::string& val, ComputedStyle& style) { style.touch_action = val; }},
+        {"pointer-events", [](const std::string& val, ComputedStyle& style) { style.pointer_events = pointerEventsFromString(val); }},
+        {"user-select", [](const std::string& val, ComputedStyle& style) { style.user_select = userSelectFromString(val); }},
+        {"touch-action", [](const std::string& val, ComputedStyle& style) { style.touch_action = touchActionFromString(val); }},
         {"caret-color", [](const std::string& val, ComputedStyle& style) { style.caret_color = CSSParser::parseColor(val); }},
-        {"float", [](const std::string& val, ComputedStyle& style) { style.float_value = val; }},
-        {"clear", [](const std::string& val, ComputedStyle& style) { style.clear = val; }},
+        {"float", [](const std::string& val, ComputedStyle& style) { style.float_value = floatFromString(val); }},
+        {"clear", [](const std::string& val, ComputedStyle& style) { style.clear = clearFromString(val); }},
         {"isolation", [](const std::string& val, ComputedStyle& style) { style.isolation_isolate = (val == "isolate"); }},
 
         // Counters / generated content
@@ -1467,7 +1458,7 @@ inline void parseBorderShorthandHelper(const std::string& value, ComputedStyle& 
             style.border_width = parseFloatHelper(part);
         } else if (part == "solid" || part == "dashed" || part == "dotted" || 
                    part == "double" || part == "none" || part == "hidden") {
-            style.border_style = part;
+            style.border_style = borderStyleFromString(part);
         } else {
             style.border_color = CSSParser::parseColor(part);
         }
@@ -1581,7 +1572,7 @@ inline void parseBackgroundShorthandHelper(const std::string& value, ComputedSty
         if (part.find("url(") != std::string::npos) {
             style.background_image = part;
         } else if (part == "repeat" || part == "no-repeat" || part == "repeat-x" || part == "repeat-y") {
-            style.background_repeat = part;
+            style.background_repeat = backgroundRepeatFromString(part);
         } else if (part.find("color-mix(") == std::string::npos &&
                    (part == "cover" || part == "contain" || part.find('%') != std::string::npos)) {
             style.background_size = part;
@@ -1598,13 +1589,13 @@ inline void parseFontShorthandHelper(const std::string& value, ComputedStyle& st
     
     while (iss >> part) {
         if (part == "italic" || part == "oblique") {
-            style.font_style = part;
+            style.font_style = fontStyleFromString(part);
         } else if (part == "bold" || part == "bolder" || part == "lighter" ||
                    part == "100" || part == "200" || part == "300" || part == "400" ||
                    part == "500" || part == "600" || part == "700" || part == "800" || part == "900") {
-            style.font_weight = part;
+            style.font_weight = fontWeightFromString(part);
         } else if (part == "small-caps") {
-            style.font_variant = part;
+            style.font_variant = fontVariantFromString(part);
         } else if (!found_size) {
             // Try to parse as font-size (handles both numbers and keywords)
             // Check for line-height (e.g., "16px/1.5" or "medium/1.5")
@@ -1768,15 +1759,12 @@ inline void parsePlaceItemsShorthandHelper(const std::string& value, ComputedSty
     while (iss >> part) parts.push_back(part);
 
     if (parts.size() == 1) {
-        // Single value: applies to both align-items and justify-items
-        style.align_items = parts[0];
-        style.justify_items = parts[0];
+        style.align_items = alignItemsFromString(parts[0]);
+        style.justify_items = alignItemsFromString(parts[0]);
     } else if (parts.size() == 2) {
-        // Two values: first is align-items, second is justify-items
-        style.align_items = parts[0];
-        style.justify_items = parts[1];
+        style.align_items = alignItemsFromString(parts[0]);
+        style.justify_items = alignItemsFromString(parts[1]);
     }
-    // Invalid number of values: ignore
 }
 
 inline void parsePlaceContentShorthandHelper(const std::string& value, ComputedStyle& style) {
@@ -1786,15 +1774,12 @@ inline void parsePlaceContentShorthandHelper(const std::string& value, ComputedS
     while (iss >> part) parts.push_back(part);
 
     if (parts.size() == 1) {
-        // Single value: applies to both align-content and justify-content
-        style.align_content = parts[0];
-        style.justify_content = parts[0];
+        style.align_content = alignContentFromString(parts[0]);
+        style.justify_content = justifyContentFromString(parts[0]);
     } else if (parts.size() == 2) {
-        // Two values: first is align-content, second is justify-content
-        style.align_content = parts[0];
-        style.justify_content = parts[1];
+        style.align_content = alignContentFromString(parts[0]);
+        style.justify_content = justifyContentFromString(parts[1]);
     }
-    // Invalid number of values: ignore
 }
 
 inline void parsePlaceSelfShorthandHelper(const std::string& value, ComputedStyle& style) {
@@ -1804,15 +1789,12 @@ inline void parsePlaceSelfShorthandHelper(const std::string& value, ComputedStyl
     while (iss >> part) parts.push_back(part);
 
     if (parts.size() == 1) {
-        // Single value: applies to both align-self and justify-self
-        style.align_self = parts[0];
-        style.justify_self = parts[0];
+        style.align_self = alignSelfFromString(parts[0]);
+        style.justify_self = alignSelfFromString(parts[0]);
     } else if (parts.size() == 2) {
-        // Two values: first is align-self, second is justify-self
-        style.align_self = parts[0];
-        style.justify_self = parts[1];
+        style.align_self = alignSelfFromString(parts[0]);
+        style.justify_self = alignSelfFromString(parts[1]);
     }
-    // Invalid number of values: ignore
 }
 
 } // anonymous namespace

@@ -210,13 +210,11 @@ std::vector<CSSRule> CSSParser::parse(const std::string& css) {
         auto decls = splitDeclarations(declarations);
         ComputedStyle style;
         // Use empty/negative sentinels for "unspecified" so StyleEngine can cascade correctly.
-        style.display = "";
+        // Enum fields rely on isExplicitlySet() tracking instead of empty-string sentinels.
         style.background_color = "";
         style.color = "";
-        style.border_style = "";
         style.border_color = "";
         style.border_width = -1.0f;
-        style.color_scheme = "";
 
 
 

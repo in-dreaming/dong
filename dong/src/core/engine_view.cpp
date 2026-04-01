@@ -98,7 +98,7 @@ DOMNodePtr hitTestRecursive(const DOMNodePtr& node, dong::layout::Engine* layout
         for (auto it = children.rbegin(); it != children.rend(); ++it) {
             if (!*it) continue;
             const auto& cs = (*it)->getComputedStyle();
-            if (cs.position == "absolute" || cs.position == "fixed") {
+            if (cs.position == dom::CSSPosition::Absolute || cs.position == dom::CSSPosition::Fixed) {
                 auto child_hit = hitTestRecursive(*it, layout_engine, x, y);
                 if (child_hit) {
                     return child_hit;
@@ -155,12 +155,11 @@ std::string toLowerTrim(std::string s) {
     return s;
 }
 
-float effectiveBorderWidth(const dong::dom::ComputedStyle& style, float side_width, const std::string& side_style) {
+float effectiveBorderWidth(const dong::dom::ComputedStyle& style, float side_width, dong::dom::CSSBorderStyle side_style) {
     float w = side_width >= 0.0f ? side_width : style.border_width;
     if (w < 0.0f) w = 0.0f;
-    std::string st = side_style.empty() ? style.border_style : side_style;
-    st = toLowerTrim(st);
-    if (st == "none" || st == "hidden") {
+    auto st = (side_style == dong::dom::CSSBorderStyleUnset) ? style.border_style : side_style;
+    if (st == dong::dom::CSSBorderStyle::None || st == dong::dom::CSSBorderStyle::Hidden) {
         return 0.0f;
     }
     return w;
@@ -175,8 +174,8 @@ bool computeTextareaResizeHandleRect(dong::layout::Engine* layout_engine,
     if (!layout) return false;
 
     const auto& style = textarea->getComputedStyle();
-    const std::string mode = toLowerTrim(style.resize);
-    if (mode == "none") return false;
+    const auto mode = style.resize;
+    if (mode == dom::CSSResize::None) return false;
 
     out_x = layout->x;
     out_y = layout->y;
@@ -489,7 +488,7 @@ struct EngineView::Impl {
         int32_t start_mouse_y = 0;
         float start_width = 0.0f;
         float start_height = 0.0f;
-        std::string mode = "none";
+        dom::CSSResize mode = dom::CSSResize::None;
     };
     TextareaResizeState textarea_resize;
 
@@ -597,8 +596,8 @@ struct EngineView::Impl {
         req.text = text;
         req.font_family = style.font_family;
         req.font_size = font_size;
-        req.font_weight = style.font_weight;
-        req.font_style = style.font_style;
+        req.font_weight = dom::toString(style.font_weight);
+        req.font_style = dom::toString(style.font_style);
         dong::render::ShapedText shaped;
         if (text_shaper_hit_.shape(req, shaped) && shaped.units_per_em > 0) {
             return shaped.width_units * (font_size / static_cast<float>(shaped.units_per_em));
@@ -608,7 +607,7 @@ struct EngineView::Impl {
 
     // Get the line height used for rendering text in an input/textarea.
     float getInputLineHeight(const dom::ComputedStyle& style, float font_size) {
-        dong::render::TextShapeRequest mreq{"X", style.font_family, style.font_weight, style.font_style, font_size};
+        dong::render::TextShapeRequest mreq{"X", style.font_family, dom::toString(style.font_weight), dom::toString(style.font_style), font_size};
         dong::render::ShapedText mshaped;
         if (text_shaper_hit_.shape(mreq, mshaped) && mshaped.scale_to_pixels > 0.0f) {
             float scale = mshaped.scale_to_pixels;
@@ -1411,10 +1410,10 @@ struct EngineView::Impl {
         const float dy = static_cast<float>(y - textarea_resize.start_mouse_y);
         float nw = textarea_resize.start_width;
         float nh = textarea_resize.start_height;
-        if (textarea_resize.mode == "both" || textarea_resize.mode == "horizontal") nw = std::max(40.0f, nw + dx);
-        if (textarea_resize.mode == "both" || textarea_resize.mode == "vertical") nh = std::max(30.0f, nh + dy);
-        if (textarea_resize.mode == "both" || textarea_resize.mode == "horizontal") textarea_resize.node->setInlineStyleProperty("width", toPx(nw));
-        if (textarea_resize.mode == "both" || textarea_resize.mode == "vertical") textarea_resize.node->setInlineStyleProperty("height", toPx(nh));
+        if (textarea_resize.mode == dom::CSSResize::Both || textarea_resize.mode == dom::CSSResize::Horizontal) nw = std::max(40.0f, nw + dx);
+        if (textarea_resize.mode == dom::CSSResize::Both || textarea_resize.mode == dom::CSSResize::Vertical) nh = std::max(30.0f, nh + dy);
+        if (textarea_resize.mode == dom::CSSResize::Both || textarea_resize.mode == dom::CSSResize::Horizontal) textarea_resize.node->setInlineStyleProperty("width", toPx(nw));
+        if (textarea_resize.mode == dom::CSSResize::Both || textarea_resize.mode == dom::CSSResize::Vertical) textarea_resize.node->setInlineStyleProperty("height", toPx(nh));
         markNeedsRepaint();
         return true;
     }
@@ -1423,8 +1422,8 @@ struct EngineView::Impl {
         if (button != 1 || !layout_engine) return false;
         auto hit = hitElementAt(last_mouse_x, last_mouse_y);
         if (!hit || hit->getTagName() != "textarea" || hit->hasAttribute("disabled")) return false;
-        const auto mode = toLowerTrim(hit->getComputedStyle().resize);
-        if (mode != "both" && mode != "horizontal" && mode != "vertical") return false;
+        const auto mode = hit->getComputedStyle().resize;
+        if (mode != dom::CSSResize::Both && mode != dom::CSSResize::Horizontal && mode != dom::CSSResize::Vertical) return false;
 
         float hx = 0, hy = 0, hw = 0, hh = 0;
         if (!computeTextareaResizeHandleRect(layout_engine.get(), hit, hx, hy, hw, hh)) return false;
@@ -1449,7 +1448,7 @@ struct EngineView::Impl {
         if (!textarea_resize.active || button != 1 || pressed) return false;
         textarea_resize.active = false;
         textarea_resize.node.reset();
-        textarea_resize.mode = "none";
+        textarea_resize.mode = dom::CSSResize::None;
         clearActiveElement();
         markNeedsRepaint();
         return true;
@@ -2807,10 +2806,12 @@ struct EngineView::Impl {
             setActiveElement(hit);
             dispatchMouseEvent("mousedown", last_mouse_x, last_mouse_y, button);
 
-            DONG_LOG_WARN("[CE-Mouse] mousedown: hit=%s ce=%d sel_ranges=%u sel_collapsed=%d",
-                          hit->getTagName().c_str(), (int)hit->isContentEditable(),
-                          selection ? selection->getRangeCount() : 0,
-                          selection ? (int)selection->isCollapsed() : -1);
+            if (hit) {
+                DONG_LOG_DEBUG("[CE-Mouse] mousedown: hit=%s ce=%d sel_ranges=%u sel_collapsed=%d",
+                              hit->getTagName().c_str(), (int)hit->isContentEditable(),
+                              selection ? selection->getRangeCount() : 0,
+                              selection ? (int)selection->isCollapsed() : -1);
+            }
 
             // Start drag selection for contenteditable on mousedown
             // Check both currently-focused element AND the click target itself.
@@ -3111,8 +3112,8 @@ struct EngineView::Impl {
 
         // Check overscroll-behavior for scroll chaining
         const auto& style = scroll_container->getComputedStyle();
-        bool allow_chain_x = (style.overscroll_behavior_x == "auto");
-        bool allow_chain_y = (style.overscroll_behavior_y == "auto");
+        bool allow_chain_x = (style.overscroll_behavior_x == dom::CSSOverscrollBehavior::Auto);
+        bool allow_chain_y = (style.overscroll_behavior_y == dom::CSSOverscrollBehavior::Auto);
 
         // If scroll was not fully consumed and chaining is allowed, propagate to parent
         bool should_chain_x = !result.consumed_x && allow_chain_x && (scroll_dx != 0.0f);
@@ -3799,9 +3800,9 @@ const char* EngineView::getCursorAt(int32_t x, int32_t y) {
 
     auto current = element;
     while (current) {
-        const auto& cursor = current->getComputedStyle().cursor;
-        if (!cursor.empty() && cursor != "auto") {
-            impl_->cached_cursor = cursor;
+        const auto cursor = current->getComputedStyle().cursor;
+        if (cursor != dom::CSSCursor::Auto) {
+            impl_->cached_cursor = dom::toString(cursor);
             return impl_->cached_cursor.c_str();
         }
         current = current->getParent();

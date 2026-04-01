@@ -4,38 +4,21 @@
 
 namespace dong::dom {
 
-namespace {
-
-LayoutMode deriveLayoutModeFromDisplay(const ComputedStyle& style) {
-    const std::string& d = style.display;
-    if (d == "none") {
-        return LayoutMode::None;
-    }
-    if (d == "flex" || d == "inline-flex") {
-        return LayoutMode::Flex;
-    }
-    if (d == "inline" || d == "inline-block") {
-        return LayoutMode::Inline;
-    }
-    return LayoutMode::Block;
-}
-
-} // anonymous namespace
 
 namespace style_engine_internal {
 
 void applyRuleTextProperties(const ComputedStyle& rs, ComputedStyle& computed) {
     if (rs.font_size != 16.0f) { computed.font_size = rs.font_size; computed.markExplicitlySet("font-size"); }
-    if (!rs.font_weight.empty() && rs.font_weight != "normal") { computed.font_weight = rs.font_weight; computed.markExplicitlySet("font-weight"); }
-    if (!rs.font_style.empty() && rs.font_style != "normal") { computed.font_style = rs.font_style; computed.markExplicitlySet("font-style"); }
+    if (rs.font_weight != CSSFontWeight::Normal) { computed.font_weight = rs.font_weight; computed.markExplicitlySet("font-weight"); }
+    if (rs.font_style != CSSFontStyle::Normal) { computed.font_style = rs.font_style; computed.markExplicitlySet("font-style"); }
     if (!rs.font_family.empty() && rs.font_family != "Arial") { computed.font_family = rs.font_family; computed.markExplicitlySet("font-family"); }
-    if (!rs.font_variant.empty() && rs.font_variant != "normal") computed.font_variant = rs.font_variant;
+    if (rs.font_variant != CSSFontVariant::Normal) computed.font_variant = rs.font_variant;
 
-    if (!rs.text_align.empty() && rs.text_align != "left") { computed.text_align = rs.text_align; computed.markExplicitlySet("text-align"); }
-    if (!rs.text_decoration.empty() && rs.text_decoration != "none")
+    if (rs.text_align != CSSTextAlign::Left) { computed.text_align = rs.text_align; computed.markExplicitlySet("text-align"); }
+    if (rs.text_decoration != CSSTextDecoration::None)
         computed.text_decoration = rs.text_decoration;
     if (!rs.text_decoration_color.empty()) computed.text_decoration_color = rs.text_decoration_color;
-    if (!rs.text_decoration_style.empty() && rs.text_decoration_style != "solid")
+    if (rs.text_decoration_style != CSSTextDecorationStyle::Solid)
         computed.text_decoration_style = rs.text_decoration_style;
     if (rs.text_decoration_thickness != 1.0f)
         computed.text_decoration_thickness = rs.text_decoration_thickness;
@@ -46,22 +29,22 @@ void applyRuleTextProperties(const ComputedStyle& rs, ComputedStyle& computed) {
         computed.line_height = rs.line_height;
         computed.line_height_is_unitless = rs.line_height_is_unitless;
     }
-    if (!rs.text_transform.empty() && rs.text_transform != "none")
+    if (rs.text_transform != CSSTextTransform::None)
         { computed.text_transform = rs.text_transform; computed.markExplicitlySet("text-transform"); }
-    if (!rs.text_overflow.empty() && rs.text_overflow != "clip")
+    if (rs.text_overflow != CSSTextOverflow::Clip)
         computed.text_overflow = rs.text_overflow;
-    if (!rs.white_space.empty() && rs.white_space != "normal")
+    if (rs.white_space != CSSWhiteSpace::Normal)
         { computed.white_space = rs.white_space; computed.markExplicitlySet("white-space"); }
-    if (!rs.word_break.empty() && rs.word_break != "normal")
+    if (rs.word_break != CSSWordBreak::Normal)
         { computed.word_break = rs.word_break; computed.markExplicitlySet("word-break"); }
-    if (!rs.overflow_wrap.empty() && rs.overflow_wrap != "normal")
+    if (rs.overflow_wrap != CSSOverflowWrap::Normal)
         { computed.overflow_wrap = rs.overflow_wrap; computed.markExplicitlySet("overflow-wrap"); }
     if (rs.isExplicitlySet("hyphens"))
         { computed.hyphens = rs.hyphens; computed.markExplicitlySet("hyphens"); }
-    if (!rs.vertical_align.empty() && rs.vertical_align != "baseline")
+    if (rs.vertical_align != CSSVerticalAlign::Baseline)
         computed.vertical_align = rs.vertical_align;
 
-    if (!rs.direction.empty() && rs.direction != "ltr") { computed.direction = rs.direction; computed.markExplicitlySet("direction"); }
+    if (rs.direction != CSSDirection::Ltr) { computed.direction = rs.direction; computed.markExplicitlySet("direction"); }
     if (rs.text_indent != 0.0f) { computed.text_indent = rs.text_indent; computed.markExplicitlySet("text-indent"); }
     if (rs.webkit_line_clamp != 0) computed.webkit_line_clamp = rs.webkit_line_clamp;
 
@@ -114,7 +97,7 @@ void applyRuleBorderRadius(const ComputedStyle& rs, ComputedStyle& computed) {
 void applyRuleBorderProperties(const ComputedStyle& rs, ComputedStyle& computed) {
     if (rs.border_width >= 0.0f) computed.border_width = rs.border_width;
     if (!rs.border_color.empty()) computed.border_color = rs.border_color;
-    if (!rs.border_style.empty()) computed.border_style = rs.border_style;
+    if (rs.isExplicitlySet("border-style") || rs.isExplicitlySet("border")) computed.border_style = rs.border_style;
 
     if (rs.border_top_width >= 0.0f) computed.border_top_width = rs.border_top_width;
     if (rs.border_right_width >= 0.0f) computed.border_right_width = rs.border_right_width;
@@ -124,53 +107,53 @@ void applyRuleBorderProperties(const ComputedStyle& rs, ComputedStyle& computed)
     if (!rs.border_right_color.empty()) computed.border_right_color = rs.border_right_color;
     if (!rs.border_bottom_color.empty()) computed.border_bottom_color = rs.border_bottom_color;
     if (!rs.border_left_color.empty()) computed.border_left_color = rs.border_left_color;
-    if (!rs.border_top_style.empty()) computed.border_top_style = rs.border_top_style;
-    if (!rs.border_right_style.empty()) computed.border_right_style = rs.border_right_style;
-    if (!rs.border_bottom_style.empty()) computed.border_bottom_style = rs.border_bottom_style;
-    if (!rs.border_left_style.empty()) computed.border_left_style = rs.border_left_style;
+    if (rs.border_top_style != CSSBorderStyleUnset) computed.border_top_style = rs.border_top_style;
+    if (rs.border_right_style != CSSBorderStyleUnset) computed.border_right_style = rs.border_right_style;
+    if (rs.border_bottom_style != CSSBorderStyleUnset) computed.border_bottom_style = rs.border_bottom_style;
+    if (rs.border_left_style != CSSBorderStyleUnset) computed.border_left_style = rs.border_left_style;
 
     // Logical border properties cascade
     if (rs.border_inline_start_width >= 0.0f) computed.border_inline_start_width = rs.border_inline_start_width;
     if (!rs.border_inline_start_color.empty()) computed.border_inline_start_color = rs.border_inline_start_color;
-    if (!rs.border_inline_start_style.empty()) computed.border_inline_start_style = rs.border_inline_start_style;
+    if (rs.border_inline_start_style != CSSBorderStyleUnset) computed.border_inline_start_style = rs.border_inline_start_style;
     if (rs.border_inline_end_width >= 0.0f) computed.border_inline_end_width = rs.border_inline_end_width;
     if (!rs.border_inline_end_color.empty()) computed.border_inline_end_color = rs.border_inline_end_color;
-    if (!rs.border_inline_end_style.empty()) computed.border_inline_end_style = rs.border_inline_end_style;
+    if (rs.border_inline_end_style != CSSBorderStyleUnset) computed.border_inline_end_style = rs.border_inline_end_style;
     if (rs.border_block_start_width >= 0.0f) computed.border_block_start_width = rs.border_block_start_width;
     if (!rs.border_block_start_color.empty()) computed.border_block_start_color = rs.border_block_start_color;
-    if (!rs.border_block_start_style.empty()) computed.border_block_start_style = rs.border_block_start_style;
+    if (rs.border_block_start_style != CSSBorderStyleUnset) computed.border_block_start_style = rs.border_block_start_style;
     if (rs.border_block_end_width >= 0.0f) computed.border_block_end_width = rs.border_block_end_width;
     if (!rs.border_block_end_color.empty()) computed.border_block_end_color = rs.border_block_end_color;
-    if (!rs.border_block_end_style.empty()) computed.border_block_end_style = rs.border_block_end_style;
+    if (rs.border_block_end_style != CSSBorderStyleUnset) computed.border_block_end_style = rs.border_block_end_style;
 }
 
 void applyRuleOverflowProperties(const ComputedStyle& rs, ComputedStyle& computed) {
-    if (!rs.overflow.empty() && rs.overflow != "visible") {
+    if (rs.overflow != CSSOverflow::Visible) {
         computed.overflow = rs.overflow;
         computed.overflow_x = rs.overflow;
         computed.overflow_y = rs.overflow;
     }
-    if (!rs.overflow_x.empty() && rs.overflow_x != "visible") computed.overflow_x = rs.overflow_x;
-    if (!rs.overflow_y.empty() && rs.overflow_y != "visible") computed.overflow_y = rs.overflow_y;
+    if (rs.overflow_x != CSSOverflow::Visible) computed.overflow_x = rs.overflow_x;
+    if (rs.overflow_y != CSSOverflow::Visible) computed.overflow_y = rs.overflow_y;
 
     // Scroll behavior properties
-    if (!rs.overscroll_behavior.empty() && rs.overscroll_behavior != "auto") {
+    if (rs.overscroll_behavior != CSSOverscrollBehavior::Auto) {
         computed.overscroll_behavior = rs.overscroll_behavior;
         computed.overscroll_behavior_x = rs.overscroll_behavior;
         computed.overscroll_behavior_y = rs.overscroll_behavior;
     }
-    if (!rs.overscroll_behavior_x.empty() && rs.overscroll_behavior_x != "auto") {
+    if (rs.overscroll_behavior_x != CSSOverscrollBehavior::Auto) {
         computed.overscroll_behavior_x = rs.overscroll_behavior_x;
     }
-    if (!rs.overscroll_behavior_y.empty() && rs.overscroll_behavior_y != "auto") {
+    if (rs.overscroll_behavior_y != CSSOverscrollBehavior::Auto) {
         computed.overscroll_behavior_y = rs.overscroll_behavior_y;
     }
-    if (!rs.scroll_behavior.empty() && rs.scroll_behavior != "auto") {
+    if (rs.scroll_behavior != CSSScrollBehavior::Auto) {
         computed.scroll_behavior = rs.scroll_behavior;
     }
 
-    if (!rs.visibility.empty() && rs.visibility != "visible") { computed.visibility = rs.visibility; computed.markExplicitlySet("visibility"); }
-    if (!rs.cursor.empty() && rs.cursor != "auto") { computed.cursor = rs.cursor; computed.markExplicitlySet("cursor"); }
+    if (rs.visibility != CSSVisibility::Visible) { computed.visibility = rs.visibility; computed.markExplicitlySet("visibility"); }
+    if (rs.cursor != CSSCursor::Auto) { computed.cursor = rs.cursor; computed.markExplicitlySet("cursor"); }
 }
 
 void applyRuleBoxModel(const ComputedStyle& rs, ComputedStyle& computed) {
@@ -204,16 +187,16 @@ void applyRuleBoxModel(const ComputedStyle& rs, ComputedStyle& computed) {
 }
 
 void applyRuleFlexbox(const ComputedStyle& rs, ComputedStyle& computed) {
-    if (!rs.flex_direction.empty() && rs.flex_direction != "row")
+    if (rs.flex_direction != CSSFlexDirection::Row)
         computed.flex_direction = rs.flex_direction;
-    if (!rs.flex_wrap.empty() && rs.flex_wrap != "nowrap") computed.flex_wrap = rs.flex_wrap;
-    if (!rs.justify_content.empty() && rs.justify_content != "flex-start")
+    if (rs.flex_wrap != CSSFlexWrap::Nowrap) computed.flex_wrap = rs.flex_wrap;
+    if (rs.justify_content != CSSJustifyContent::FlexStart)
         computed.justify_content = rs.justify_content;
-    if (!rs.align_items.empty() && rs.align_items != "stretch")
+    if (rs.align_items != CSSAlignItems::Stretch)
         computed.align_items = rs.align_items;
-    if (!rs.align_content.empty() && rs.align_content != "stretch")
+    if (rs.align_content != CSSAlignContent::Stretch)
         computed.align_content = rs.align_content;
-    if (!rs.align_self.empty() && rs.align_self != "auto") computed.align_self = rs.align_self;
+    if (rs.align_self != CSSAlignSelf::Auto) computed.align_self = rs.align_self;
     if (rs.flex != 0.0f) computed.flex = rs.flex;
     if (rs.flex_grow != 0.0f) computed.flex_grow = rs.flex_grow;
     if (rs.flex_shrink != 1.0f) computed.flex_shrink = rs.flex_shrink;
@@ -238,10 +221,10 @@ void applyRuleTransform(const ComputedStyle& rs, ComputedStyle& computed) {
     if (rs.transform_skew_y != 0.0f) computed.transform_skew_y = rs.transform_skew_y;
     if (rs.transform_origin_x != 50.0f) computed.transform_origin_x = rs.transform_origin_x;
     if (rs.transform_origin_y != 50.0f) computed.transform_origin_y = rs.transform_origin_y;
-    if (!rs.transform_style.empty() && rs.transform_style != "flat")
+    if (rs.transform_style != CSSTransformStyle::Flat)
         computed.transform_style = rs.transform_style;
     if (rs.perspective != 0.0f) computed.perspective = rs.perspective;
-    if (!rs.backface_visibility.empty() && rs.backface_visibility != "visible")
+    if (rs.backface_visibility != CSSBackfaceVisibility::Visible)
         computed.backface_visibility = rs.backface_visibility;
 }
 
@@ -266,21 +249,21 @@ void applyRuleProperties(const ComputedStyle& rs, ComputedStyle& computed) {
     APPLY_PROP("background-size", computed.background_size = rs.background_size,
                !rs.background_size.empty() && rs.background_size != "auto");
     APPLY_PROP("background-repeat", computed.background_repeat = rs.background_repeat,
-               !rs.background_repeat.empty() && rs.background_repeat != "repeat");
+               rs.background_repeat != CSSBackgroundRepeat::Repeat);
     APPLY_PROP("background-position", computed.background_position = rs.background_position,
                !rs.background_position.empty() && rs.background_position != "0% 0%");
     APPLY_PROP("background-attachment", computed.background_attachment = rs.background_attachment,
-               !rs.background_attachment.empty() && rs.background_attachment != "scroll");
+               rs.background_attachment != CSSBackgroundAttachment::Scroll);
     APPLY_PROP("background-clip", computed.background_clip = rs.background_clip,
-               !rs.background_clip.empty() && rs.background_clip != "border-box");
+               rs.background_clip != CSSBackgroundBox::BorderBox);
     APPLY_PROP("background-origin", computed.background_origin = rs.background_origin,
-               !rs.background_origin.empty() && rs.background_origin != "padding-box");
+               rs.background_origin != CSSBackgroundBox::PaddingBox);
     APPLY_PROP("object-fit", computed.object_fit = rs.object_fit,
-               !rs.object_fit.empty() && rs.object_fit != "fill");
+               rs.object_fit != CSSObjectFit::Fill);
     APPLY_PROP("object-position", computed.object_position = rs.object_position,
                !rs.object_position.empty() && rs.object_position != "50% 50%");
     APPLY_PROP("image-rendering", computed.image_rendering = rs.image_rendering,
-               !rs.image_rendering.empty() && rs.image_rendering != "auto");
+               rs.image_rendering != CSSImageRendering::Auto);
     APPLY_PROP("background-gradient", computed.background_gradients = rs.background_gradients,
                !rs.background_gradients.empty());
 
@@ -293,13 +276,13 @@ void applyRuleProperties(const ComputedStyle& rs, ComputedStyle& computed) {
 
 
     // Display / position
-    if (!rs.display.empty() && (!computed.isImportant("display") || rs.isImportant("display"))) {
+    if (rs.isExplicitlySet("display") && (!computed.isImportant("display") || rs.isImportant("display"))) {
         computed.display = rs.display;
-        computed.layout_mode = deriveLayoutModeFromDisplay(computed);
+        computed.layout_mode = deriveLayoutModeFromDisplay(computed.display);
         if (rs.isImportant("display")) computed.markImportant("display");
     }
     APPLY_PROP("position", computed.position = rs.position,
-               !rs.position.empty() && rs.position != "static");
+               rs.position != CSSPosition::Static);
 
     applyRuleBorderRadius(rs, computed);
     applyRuleBorderProperties(rs, computed);
@@ -320,13 +303,13 @@ void applyRuleProperties(const ComputedStyle& rs, ComputedStyle& computed) {
     APPLY_PROP("outline-color", computed.outline_color = rs.outline_color,
                !rs.outline_color.empty() && rs.outline_color != "#000000");
     APPLY_PROP("outline-style", computed.outline_style = rs.outline_style,
-               !rs.outline_style.empty() && rs.outline_style != "none");
+               rs.outline_style != CSSBorderStyle::None);
     APPLY_PROP("outline-offset", computed.outline_offset = rs.outline_offset,
                rs.outline_offset != 0.0f);
 
     // Box misc
     APPLY_PROP("box-sizing", computed.box_sizing = rs.box_sizing,
-               !rs.box_sizing.empty() && rs.box_sizing != "content-box");
+               rs.box_sizing != CSSBoxSizing::ContentBox);
     APPLY_PROP("opacity", computed.opacity = rs.opacity,
                rs.opacity != 1.0f);
     APPLY_PROP("isolation", computed.isolation_isolate = true,
@@ -340,9 +323,9 @@ void applyRuleProperties(const ComputedStyle& rs, ComputedStyle& computed) {
     APPLY_PROP("backdrop-filter", computed.backdrop_filters = rs.backdrop_filters,
                !rs.backdrop_filters.empty());
     APPLY_PROP("mix-blend-mode", computed.mix_blend_mode = rs.mix_blend_mode,
-               !rs.mix_blend_mode.empty() && rs.mix_blend_mode != "normal");
+               rs.mix_blend_mode != CSSBlendMode::Normal);
     APPLY_PROP("background-blend-mode", computed.background_blend_mode = rs.background_blend_mode,
-               !rs.background_blend_mode.empty() && rs.background_blend_mode != "normal");
+               rs.background_blend_mode != CSSBlendMode::Normal);
 
     applyRuleBoxModel(rs, computed);
     applyRuleFlexbox(rs, computed);
@@ -360,19 +343,19 @@ void applyRuleProperties(const ComputedStyle& rs, ComputedStyle& computed) {
 
     // Pointer events / interaction
     APPLY_PROP("pointer-events", computed.pointer_events = rs.pointer_events,
-               !rs.pointer_events.empty() && rs.pointer_events != "auto");
+               rs.pointer_events != CSSPointerEvents::Auto);
     APPLY_PROP("user-select", computed.user_select = rs.user_select,
-               !rs.user_select.empty() && rs.user_select != "auto");
+               rs.user_select != CSSUserSelect::Auto);
     APPLY_PROP("touch-action", computed.touch_action = rs.touch_action,
-               !rs.touch_action.empty() && rs.touch_action != "auto");
+               rs.touch_action != CSSTouchAction::Auto);
     APPLY_PROP("caret-color", computed.caret_color = rs.caret_color,
                !rs.caret_color.empty() && rs.caret_color != "auto");
 
     // Float/Clear
     APPLY_PROP("float", computed.float_value = rs.float_value,
-               !rs.float_value.empty() && rs.float_value != "none");
+               rs.float_value != CSSFloat::None);
     APPLY_PROP("clear", computed.clear = rs.clear,
-               !rs.clear.empty() && rs.clear != "none");
+               rs.clear != CSSClear::None);
 
     // Form control theming
     APPLY_PROP("accent-color", computed.accent_color = rs.accent_color; computed.markExplicitlySet("accent-color"),
@@ -380,9 +363,9 @@ void applyRuleProperties(const ComputedStyle& rs, ComputedStyle& computed) {
 
     // Appearance
     APPLY_PROP("appearance", computed.appearance = rs.appearance; computed.markExplicitlySet("appearance"),
-               !rs.appearance.empty() && rs.appearance != "auto");
+               rs.appearance != CSSAppearance::Auto);
     APPLY_PROP("resize", computed.resize = rs.resize; computed.markExplicitlySet("resize"),
-               !rs.resize.empty() && rs.resize != "none");
+               rs.resize != CSSResize::None);
     APPLY_PROP("will-change", computed.will_change = rs.will_change; computed.markExplicitlySet("will-change"),
                !rs.will_change.empty() && rs.will_change != "auto");
 
@@ -390,13 +373,13 @@ void applyRuleProperties(const ComputedStyle& rs, ComputedStyle& computed) {
     // Table properties
 
     APPLY_PROP("border-collapse", computed.border_collapse = rs.border_collapse; computed.markExplicitlySet("border-collapse"),
-               !rs.border_collapse.empty() && rs.border_collapse != "separate");
+               rs.border_collapse != CSSBorderCollapse::Separate);
     APPLY_PROP("border-spacing", computed.border_spacing_x = rs.border_spacing_x; computed.border_spacing_y = rs.border_spacing_y; computed.markExplicitlySet("border-spacing"),
                rs.border_spacing_x != 2.0f || rs.border_spacing_y != 2.0f);
     APPLY_PROP("table-layout", computed.table_layout = rs.table_layout; computed.markExplicitlySet("table-layout"),
-               !rs.table_layout.empty() && rs.table_layout != "auto");
+               rs.table_layout != CSSTableLayout::Auto);
     APPLY_PROP("caption-side", computed.caption_side = rs.caption_side; computed.markExplicitlySet("caption-side"),
-               !rs.caption_side.empty() && rs.caption_side != "top");
+               rs.caption_side != CSSCaptionSide::Top);
 
     // Counters / generated content
 
@@ -438,17 +421,17 @@ void applyImportantPropertiesOnly(const ComputedStyle& rs, ComputedStyle& comput
     // Color scheme hint (UA/form control theming)
     APPLY_IF_IMPORTANT("color-scheme",
                        computed.color_scheme = rs.color_scheme; computed.markExplicitlySet("color-scheme"),
-                       !rs.color_scheme.empty());
+                       rs.isExplicitlySet("color-scheme"));
 
     // Display / position
 
-    if (!rs.display.empty() && rs.isImportant("display")) {
+    if (rs.isExplicitlySet("display") && rs.isImportant("display")) {
         computed.display = rs.display;
-        computed.layout_mode = deriveLayoutModeFromDisplay(computed);
+        computed.layout_mode = deriveLayoutModeFromDisplay(computed.display);
         computed.markImportant("display");
     }
     APPLY_IF_IMPORTANT("position", computed.position = rs.position,
-                       !rs.position.empty() && rs.position != "static");
+                       rs.position != CSSPosition::Static);
 
     // Font properties
     if (rs.font_size != 16.0f && rs.isImportant("font-size")) {
@@ -459,7 +442,7 @@ void applyImportantPropertiesOnly(const ComputedStyle& rs, ComputedStyle& comput
     APPLY_IF_IMPORTANT("font-family", computed.font_family = rs.font_family; computed.markExplicitlySet("font-family"),
                        !rs.font_family.empty() && rs.font_family != "Arial");
     APPLY_IF_IMPORTANT("font-weight", computed.font_weight = rs.font_weight; computed.markExplicitlySet("font-weight"),
-                       !rs.font_weight.empty() && rs.font_weight != "normal");
+                       rs.font_weight != CSSFontWeight::Normal);
 
     // Add more properties as needed...
     // For now, this covers the most common use cases

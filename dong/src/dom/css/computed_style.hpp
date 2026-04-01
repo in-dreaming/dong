@@ -1,6 +1,7 @@
 #pragma once
 
 #include "css_value.hpp"
+#include "css_enums.hpp"
 #include <string>
 #include <vector>
 #include <unordered_map>
@@ -17,18 +18,20 @@ enum class LayoutMode {
     None
 };
 
-// Helper to derive layout_mode from display value
+inline LayoutMode deriveLayoutModeFromDisplay(CSSDisplay display) {
+    switch (display) {
+    case CSSDisplay::None:       return LayoutMode::None;
+    case CSSDisplay::Flex:
+    case CSSDisplay::InlineFlex: return LayoutMode::Flex;
+    case CSSDisplay::Inline:
+    case CSSDisplay::InlineBlock: return LayoutMode::Inline;
+    default:                      return LayoutMode::Block;
+    }
+}
+
+// Overload accepting string for backward compatibility at parse boundaries
 inline LayoutMode deriveLayoutModeFromDisplay(const std::string& display) {
-    if (display == "none") {
-        return LayoutMode::None;
-    }
-    if (display == "flex" || display == "inline-flex") {
-        return LayoutMode::Flex;
-    }
-    if (display == "inline" || display == "inline-block") {
-        return LayoutMode::Inline;
-    }
-    return LayoutMode::Block;
+    return deriveLayoutModeFromDisplay(displayFromString(display));
 }
 
 // Computed style properties
@@ -62,15 +65,15 @@ struct ComputedStyle {
     CSSValue padding_block_start;
     CSSValue padding_block_end;
 
-    std::string box_sizing = "content-box";
+    CSSBoxSizing box_sizing = CSSBoxSizing::ContentBox;
     float aspect_ratio = 0.0f;  // 0 = auto, >0 = width/height ratio
 
 
     // Layout
-    std::string display = "block";
+    CSSDisplay display = CSSDisplay::Block;
     LayoutMode layout_mode = LayoutMode::Block;
     bool creates_block_formatting_context = false;
-    std::string position = "static";
+    CSSPosition position = CSSPosition::Static;
     CSSValue top = CSSValue(0.0f, CSSValue::Unit::AUTO);
     CSSValue right = CSSValue(0.0f, CSSValue::Unit::AUTO);
     CSSValue bottom = CSSValue(0.0f, CSSValue::Unit::AUTO);
@@ -81,18 +84,16 @@ struct ComputedStyle {
     std::string background_color = "transparent";
     std::string background_image;
     std::string background_size = "auto";
-    std::string background_repeat = "repeat";
+    CSSBackgroundRepeat background_repeat = CSSBackgroundRepeat::Repeat;
     std::string background_position = "0% 0%";
-    std::string background_attachment = "scroll";
-    std::string background_clip = "border-box";
-    std::string background_origin = "padding-box";
-    std::string object_fit = "fill";
+    CSSBackgroundAttachment background_attachment = CSSBackgroundAttachment::Scroll;
+    CSSBackgroundBox background_clip = CSSBackgroundBox::BorderBox;
+    CSSBackgroundBox background_origin = CSSBackgroundBox::PaddingBox;
+    CSSObjectFit object_fit = CSSObjectFit::Fill;
     std::string object_position = "50% 50%";
-    std::string image_rendering = "auto"; // auto | pixelated | crisp-edges
+    CSSImageRendering image_rendering = CSSImageRendering::Auto;
 
-    // Color scheme hint for UA/form controls: normal | light | dark
-    // (We treat it as inheritable for control theming.)
-    std::string color_scheme = "normal";
+    CSSColorScheme color_scheme = CSSColorScheme::Normal;
 
     std::vector<CSSGradient> background_gradients;
 
@@ -106,7 +107,7 @@ struct ComputedStyle {
     // Border (shorthand / all-sides)
     std::string border_color = "#000000";
     float border_width = 0.0f;
-    std::string border_style = "none";
+    CSSBorderStyle border_style = CSSBorderStyle::None;
 
     // Border per-side overrides (unset = fallback to shorthand)
     float border_top_width = -1.0f;
@@ -117,10 +118,10 @@ struct ComputedStyle {
     std::string border_right_color;
     std::string border_bottom_color;
     std::string border_left_color;
-    std::string border_top_style;
-    std::string border_right_style;
-    std::string border_bottom_style;
-    std::string border_left_style;
+    CSSBorderStyle border_top_style = CSSBorderStyleUnset;
+    CSSBorderStyle border_right_style = CSSBorderStyleUnset;
+    CSSBorderStyle border_bottom_style = CSSBorderStyleUnset;
+    CSSBorderStyle border_left_style = CSSBorderStyleUnset;
 
     // Logical borders (writing-mode: horizontal-tb only for now)
     float border_inline_start_width = -1.0f;
@@ -131,30 +132,29 @@ struct ComputedStyle {
     std::string border_inline_end_color;
     std::string border_block_start_color;
     std::string border_block_end_color;
-    std::string border_inline_start_style;
-    std::string border_inline_end_style;
-    std::string border_block_start_style;
-    std::string border_block_end_style;
+    CSSBorderStyle border_inline_start_style = CSSBorderStyleUnset;
+    CSSBorderStyle border_inline_end_style = CSSBorderStyleUnset;
+    CSSBorderStyle border_block_start_style = CSSBorderStyleUnset;
+    CSSBorderStyle border_block_end_style = CSSBorderStyleUnset;
 
-    std::string overflow = "visible";
+    CSSOverflow overflow = CSSOverflow::Visible;
 
-
-    std::string overflow_x = "visible";
-    std::string overflow_y = "visible";
+    CSSOverflow overflow_x = CSSOverflow::Visible;
+    CSSOverflow overflow_y = CSSOverflow::Visible;
 
     // Scroll behavior
-    std::string overscroll_behavior = "auto";
-    std::string overscroll_behavior_x = "auto";
-    std::string overscroll_behavior_y = "auto";
-    std::string scroll_behavior = "auto";
+    CSSOverscrollBehavior overscroll_behavior = CSSOverscrollBehavior::Auto;
+    CSSOverscrollBehavior overscroll_behavior_x = CSSOverscrollBehavior::Auto;
+    CSSOverscrollBehavior overscroll_behavior_y = CSSOverscrollBehavior::Auto;
+    CSSScrollBehavior scroll_behavior = CSSScrollBehavior::Auto;
 
-    std::string visibility = "visible";
-    std::string cursor = "auto";
+    CSSVisibility visibility = CSSVisibility::Visible;
+    CSSCursor cursor = CSSCursor::Auto;
     
     // Outline
     float outline_width = 0.0f;
     std::string outline_color = "#000000";
-    std::string outline_style = "none";
+    CSSBorderStyle outline_style = CSSBorderStyle::None;
     float outline_offset = 0.0f;
     
     float opacity = 1.0f;
@@ -164,20 +164,20 @@ struct ComputedStyle {
     // Filters
     std::vector<CSSFilter> filters;
     std::vector<CSSFilter> backdrop_filters;
-    std::string mix_blend_mode = "normal";
-    std::string background_blend_mode = "normal";
+    CSSBlendMode mix_blend_mode = CSSBlendMode::Normal;
+    CSSBlendMode background_blend_mode = CSSBlendMode::Normal;
 
     // Text
     std::string font_family = "Arial";
     float font_size = 16.0f;
-    std::string font_weight = "normal";
-    std::string font_style = "normal";
-    std::string font_variant = "normal";
-    std::string text_align = "left";
-    std::string text_align_last = "auto";
-    std::string text_decoration = "none";
+    CSSFontWeight font_weight = CSSFontWeight::Normal;
+    CSSFontStyle font_style = CSSFontStyle::Normal;
+    CSSFontVariant font_variant = CSSFontVariant::Normal;
+    CSSTextAlign text_align = CSSTextAlign::Left;
+    CSSTextAlignLast text_align_last = CSSTextAlignLast::Auto;
+    CSSTextDecoration text_decoration = CSSTextDecoration::None;
     std::string text_decoration_color;
-    std::string text_decoration_style = "solid";
+    CSSTextDecorationStyle text_decoration_style = CSSTextDecorationStyle::Solid;
     float text_decoration_thickness = 1.0f;
     float letter_spacing_em = 0.0f;
     float word_spacing_px = 0.0f;
@@ -188,17 +188,17 @@ struct ComputedStyle {
     float line_height = -1.0f;
     bool line_height_is_unitless = true;
 
-    std::string text_transform = "none";
+    CSSTextTransform text_transform = CSSTextTransform::None;
 
-    std::string text_overflow = "clip";
-    std::string white_space = "normal";
-    std::string word_break = "normal";
-    std::string overflow_wrap = "normal";
-    std::string hyphens = "manual";  // none | manual | auto
-    std::string vertical_align = "baseline";
+    CSSTextOverflow text_overflow = CSSTextOverflow::Clip;
+    CSSWhiteSpace white_space = CSSWhiteSpace::Normal;
+    CSSWordBreak word_break = CSSWordBreak::Normal;
+    CSSOverflowWrap overflow_wrap = CSSOverflowWrap::Normal;
+    CSSHyphens hyphens = CSSHyphens::Manual;
+    CSSVerticalAlign vertical_align = CSSVerticalAlign::Baseline;
 
-    std::string direction = "ltr";
-    std::string unicode_bidi = "normal";
+    CSSDirection direction = CSSDirection::Ltr;
+    CSSUnicodeBidi unicode_bidi = CSSUnicodeBidi::Normal;
     float text_indent = 0.0f;
     int webkit_line_clamp = 0;
     int tab_size = 8;  // CSS tab-size property (default: 8 spaces)
@@ -210,14 +210,14 @@ struct ComputedStyle {
     std::string text_shadow_color;
 
     // Flexbox
-    std::string flex_direction = "row";
-    std::string flex_wrap = "nowrap";
-    std::string justify_content = "flex-start";
-    std::string justify_items = "stretch";
-    std::string justify_self = "auto";
-    std::string align_items = "stretch";
-    std::string align_content = "stretch";
-    std::string align_self = "auto";
+    CSSFlexDirection flex_direction = CSSFlexDirection::Row;
+    CSSFlexWrap flex_wrap = CSSFlexWrap::Nowrap;
+    CSSJustifyContent justify_content = CSSJustifyContent::FlexStart;
+    CSSAlignItems justify_items = CSSAlignItems::Stretch;
+    CSSAlignSelf justify_self = CSSAlignSelf::Auto;
+    CSSAlignItems align_items = CSSAlignItems::Stretch;
+    CSSAlignContent align_content = CSSAlignContent::Stretch;
+    CSSAlignSelf align_self = CSSAlignSelf::Auto;
     float flex = 0.0f;
     float flex_grow = 0.0f;
     float flex_shrink = 1.0f;
@@ -237,11 +237,11 @@ struct ComputedStyle {
     float transform_skew_y = 0.0f;
     float transform_origin_x = 50.0f;
     float transform_origin_y = 50.0f;
-    std::string transform_style = "flat";
+    CSSTransformStyle transform_style = CSSTransformStyle::Flat;
     float perspective = 0.0f;
     float perspective_origin_x = 50.0f;
     float perspective_origin_y = 50.0f;
-    std::string backface_visibility = "visible";
+    CSSBackfaceVisibility backface_visibility = CSSBackfaceVisibility::Visible;
     
     // Transitions
     std::vector<CSSTransition> transitions;
@@ -253,14 +253,14 @@ struct ComputedStyle {
     std::string clip_path;
     
     // Pointer events
-    std::string pointer_events = "auto";
-    std::string user_select = "auto";
-    std::string touch_action = "auto";
+    CSSPointerEvents pointer_events = CSSPointerEvents::Auto;
+    CSSUserSelect user_select = CSSUserSelect::Auto;
+    CSSTouchAction touch_action = CSSTouchAction::Auto;
     std::string caret_color = "auto";
     
     // Float/Clear (partial support)
-    std::string float_value = "none";
-    std::string clear = "none";
+    CSSFloat float_value = CSSFloat::None;
+    CSSClear clear = CSSClear::None;
     
     // Pseudo-element content (for ::before/::after)
     struct ContentToken {
@@ -290,12 +290,12 @@ struct ComputedStyle {
     std::string content;
 
     bool is_pseudo_element = false;
-    std::string pseudo_type;  // "before" or "after" / "marker" / "placeholder"
+    CSSPseudoType pseudo_type = CSSPseudoType::None;
 
 
     // List styling
-    std::string list_style_type = "none";      // disc, circle, square, decimal, etc.
-    std::string list_style_position = "outside"; // outside, inside
+    CSSListStyleType list_style_type = CSSListStyleType::None;
+    CSSListStylePosition list_style_position = CSSListStylePosition::Outside;
     std::string list_style_image = "none";     // For future, always "none" for now
 
     // CSS counters
@@ -319,17 +319,17 @@ struct ComputedStyle {
 
     // Appearance (form control styling)
 
-    std::string appearance = "auto";  // auto, none
-    std::string resize = "none";      // none | both | horizontal | vertical
+    CSSAppearance appearance = CSSAppearance::Auto;
+    CSSResize resize = CSSResize::None;
     std::string will_change = "auto"; // auto | <animatable-feature>#
 
 
     // Table properties
-    std::string border_collapse = "separate";  // separate, collapse (inheritable)
+    CSSBorderCollapse border_collapse = CSSBorderCollapse::Separate;
     float border_spacing_x = 2.0f;             // px (inheritable, default 2px horizontal)
     float border_spacing_y = 2.0f;             // px (inheritable, default 2px vertical)
-    std::string table_layout = "auto";         // auto, fixed
-    std::string caption_side = "top";          // top, bottom
+    CSSTableLayout table_layout = CSSTableLayout::Auto;
+    CSSCaptionSide caption_side = CSSCaptionSide::Top;
     
 
     // Track which properties were explicitly set by CSS rules or inline styles.
@@ -381,9 +381,14 @@ struct ComputedStyle {
     }
     
     // Helper method to set display and automatically update layout_mode
-    void setDisplay(const std::string& value) {
+    void setDisplay(CSSDisplay value) {
         display = value;
         layout_mode = deriveLayoutModeFromDisplay(value);
+    }
+
+    // Convenience overload accepting string (for parse boundaries)
+    void setDisplay(const std::string& value) {
+        setDisplay(displayFromString(value));
     }
 
     // Update BFC flag based on style properties

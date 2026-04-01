@@ -87,7 +87,7 @@ void CSSParser::parseBorderShorthand(const std::string& value, ComputedStyle& st
             style.border_width = parseFloat(part);
         } else if (part == "solid" || part == "dashed" || part == "dotted" || 
                    part == "double" || part == "none" || part == "hidden") {
-            style.border_style = part;
+            style.border_style = borderStyleFromString(part);
         } else {
             style.border_color = parseColor(part);
         }
@@ -185,10 +185,10 @@ void CSSParser::parseFontShorthand(const std::string& value, ComputedStyle& styl
     for (size_t i = 0; i < parts.size(); ++i) {
         const std::string& p = parts[i];
         if (p == "italic" || p == "oblique") {
-            style.font_style = p;
+            style.font_style = fontStyleFromString(p);
         } else if (p == "bold" || p == "bolder" || p == "lighter" ||
                    (std::isdigit(static_cast<unsigned char>(p[0])) && p.find("px") == std::string::npos)) {
-            style.font_weight = p;
+            style.font_weight = fontWeightFromString(p);
         } else if (p.find("px") != std::string::npos || p.find("em") != std::string::npos ||
                    p.find("rem") != std::string::npos || p.find('%') != std::string::npos) {
             // Check for line-height

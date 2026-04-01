@@ -77,7 +77,7 @@ void renderSelectClosed(
 
     // Shape and draw text (left-aligned with padding)
     if (!display_text.empty()) {
-        TextShapeRequest req{display_text, style.font_family, style.font_weight, style.font_style, font_size};
+        TextShapeRequest req{display_text, style.font_family, toString(style.font_weight), toString(style.font_style), font_size};
         ShapedText shaped;
         if (shaper.shape(req, shaped) && !shaped.glyphs.empty()) {
             float scale = shaped.scale_to_pixels;
@@ -98,8 +98,8 @@ void renderSelectClosed(
             run.color = makeColorFromCss(style.color);
             run.font_size = font_size;
             run.font_family = style.font_family;
-            run.font_weight = style.font_weight;
-            run.font_style = style.font_style;
+            run.font_weight = toString(style.font_weight);
+            run.font_style = toString(style.font_style);
             run.font_paths = shaped.font_paths;
             run.font_path = shaped.font_path;
             run.baseline_x = text_x;
@@ -117,14 +117,12 @@ void renderSelectClosed(
         }
     }
 
-    // Draw dropdown arrow (right side) - using Unicode ▼ (U+25BC)
-    // appearance:none 时应隐藏默认箭头，但仍保留文本与交互。
-    if (style.appearance != "none") {
+    if (style.appearance != dom::CSSAppearance::None) {
         const std::string arrow_text = "\xE2\x96\xBC"; // UTF-8 encoding of ▼
         const float arrow_width = 20.0f;
         float arrow_x = x + w - arrow_width;
 
-        TextShapeRequest arrow_req{arrow_text, style.font_family, style.font_weight, style.font_style, font_size};
+        TextShapeRequest arrow_req{arrow_text, style.font_family, toString(style.font_weight), toString(style.font_style), font_size};
         ShapedText arrow_shaped;
         if (shaper.shape(arrow_req, arrow_shaped) && !arrow_shaped.glyphs.empty()) {
             float scale = arrow_shaped.scale_to_pixels;
@@ -144,8 +142,8 @@ void renderSelectClosed(
             arrow_run.color = makeColorFromCss(style.color);
             arrow_run.font_size = font_size;
             arrow_run.font_family = style.font_family;
-            arrow_run.font_weight = style.font_weight;
-            arrow_run.font_style = style.font_style;
+            arrow_run.font_weight = toString(style.font_weight);
+            arrow_run.font_style = toString(style.font_style);
             arrow_run.font_paths = arrow_shaped.font_paths;
             arrow_run.font_path = arrow_shaped.font_path;
             arrow_run.baseline_x = arrow_x;
@@ -261,7 +259,7 @@ void renderSelectDropdown(
             if (!opt.display_text.empty()) {
                 // 使用粗体字
                 std::string optgroup_font_weight = "700";  // bold
-                TextShapeRequest req{opt.display_text, style.font_family, optgroup_font_weight, style.font_style, font_size};
+                TextShapeRequest req{opt.display_text, style.font_family, optgroup_font_weight, toString(style.font_style), font_size};
                 ShapedText shaped;
                 if (shaper.shape(req, shaped) && !shaped.glyphs.empty()) {
                     float scale = shaped.scale_to_pixels;
@@ -283,7 +281,7 @@ void renderSelectDropdown(
                     run.font_size = font_size;
                     run.font_family = style.font_family;
                     run.font_weight = optgroup_font_weight;
-                    run.font_style = style.font_style;
+                    run.font_style = toString(style.font_style);
                     run.font_paths = shaped.font_paths;
                     run.font_path = shaped.font_path;
                     run.baseline_x = text_x;
@@ -301,7 +299,6 @@ void renderSelectDropdown(
                 }
             }
         } else {
-            // 渲染普通 option
             if (static_cast<int>(i) == hover_index && !opt.disabled) {
                 Color hover_bg = {0.92f, 0.92f, 0.92f, 1.0f};
                 builder.addRect(opt_rect, hover_bg);
@@ -314,7 +311,7 @@ void renderSelectDropdown(
                 // 根据是否在 optgroup 中设置缩进
                 float indent = opt.optgroup_label.empty() ? 0.0f : 15.0f;
 
-                TextShapeRequest req{opt.display_text, style.font_family, style.font_weight, style.font_style, font_size};
+                TextShapeRequest req{opt.display_text, style.font_family, toString(style.font_weight), toString(style.font_style), font_size};
                 ShapedText shaped;
                 if (shaper.shape(req, shaped) && !shaped.glyphs.empty()) {
                     float scale = shaped.scale_to_pixels;
@@ -335,8 +332,8 @@ void renderSelectDropdown(
                     run.color = opt.disabled ? Color{0.6f, 0.6f, 0.6f, 1.0f} : makeColorFromCss(style.color);
                     run.font_size = font_size;
                     run.font_family = style.font_family;
-                    run.font_weight = style.font_weight;
-                    run.font_style = style.font_style;
+                    run.font_weight = toString(style.font_weight);
+                    run.font_style = toString(style.font_style);
                     run.font_paths = shaped.font_paths;
                     run.font_path = shaped.font_path;
                     run.baseline_x = text_x;

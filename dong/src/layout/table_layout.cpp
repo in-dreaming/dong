@@ -14,28 +14,28 @@ namespace dong::layout {
 
 namespace {
 
-bool isTableDisplay(const std::string& display) {
-    return display == "table" || display == "inline-table";
+bool isTableDisplay(dom::CSSDisplay display) {
+    return display == dom::CSSDisplay::Table || display == dom::CSSDisplay::InlineTable;
 }
 
-bool isTableRowDisplay(const std::string& display) {
-    return display == "table-row";
+bool isTableRowDisplay(dom::CSSDisplay display) {
+    return display == dom::CSSDisplay::TableRow;
 }
 
-bool isTableCellDisplay(const std::string& display) {
-    return display == "table-cell";
+bool isTableCellDisplay(dom::CSSDisplay display) {
+    return display == dom::CSSDisplay::TableCell;
 }
 
-bool isTableRowGroupDisplay(const std::string& display) {
-    return display == "table-row-group" || display == "table-header-group" ||
-           display == "table-footer-group";
+bool isTableRowGroupDisplay(dom::CSSDisplay display) {
+    return display == dom::CSSDisplay::TableRowGroup || display == dom::CSSDisplay::TableHeaderGroup ||
+           display == dom::CSSDisplay::TableFooterGroup;
 }
 
 static dom::DOMNodePtr findTableCaptionNode(const dom::DOMNodePtr& table_node) {
     if (!table_node) return nullptr;
     for (const auto& child : table_node->getChildren()) {
         if (!child || child->getType() != dom::DOMNode::NodeType::ELEMENT) continue;
-        if (child->getComputedStyle().display == "table-caption") {
+        if (child->getComputedStyle().display == dom::CSSDisplay::TableCaption) {
             return child;
         }
     }
@@ -44,8 +44,7 @@ static dom::DOMNodePtr findTableCaptionNode(const dom::DOMNodePtr& table_node) {
 
 static bool isCaptionSideBottom(const dom::DOMNodePtr& caption_node) {
     if (!caption_node) return false;
-    std::string side = ::dong::toLower(caption_node->getComputedStyle().caption_side);
-    return side == "bottom";
+    return caption_node->getComputedStyle().caption_side == dom::CSSCaptionSide::Bottom;
 }
 
 static float getNodeLayoutHeightPx(Engine* engine, const dom::DOMNodePtr& node) {
@@ -65,7 +64,7 @@ void collectRows(const dom::DOMNodePtr& table_node,
             rows.push_back(child);
         } else if (isTableRowGroupDisplay(display)) {
             // Skip collapsed row groups (visibility: collapse removes their space)
-            if (child->getComputedStyle().visibility == "collapse") continue;
+            if (child->getComputedStyle().visibility == dom::CSSVisibility::Collapse) continue;
             for (const auto& row_child : child->getChildren()) {
                 if (!row_child || row_child->getType() != dom::DOMNode::NodeType::ELEMENT) continue;
                 if (isTableRowDisplay(row_child->getComputedStyle().display)) {
@@ -236,8 +235,8 @@ float measureTextWidthPx(const std::string& text, const dom::ComputedStyle& styl
     TextMeasureCacheKey key{
         text,
         style.font_family,
-        style.font_weight,
-        style.font_style,
+        toString(style.font_weight),
+        toString(style.font_style),
         font_size,
         style.letter_spacing_em,
         style.word_spacing_px
@@ -250,7 +249,7 @@ float measureTextWidthPx(const std::string& text, const dom::ComputedStyle& styl
     }
 
     TextShaper shaper;
-    TextShapeRequest req{text, style.font_family, style.font_weight, style.font_style, font_size};
+    TextShapeRequest req{text, style.font_family, toString(style.font_weight), toString(style.font_style), font_size};
     ShapedText shaped;
     if (!shaper.shape(req, shaped) || shaped.glyphs.empty() || shaped.scale_to_pixels <= 0.0f) {
         return 0.0f;
@@ -281,7 +280,7 @@ float measureCellPreferredWidth(const dom::DOMNodePtr& cell) {
     float pad_r = cs.padding_right.isPixel() ? cs.padding_right.value : 0.0f;
 
     float border = 0.0f;
-    if (cs.border_style != "none" && cs.border_style != "hidden") {
+    if (cs.border_style != dom::CSSBorderStyle::None && cs.border_style != dom::CSSBorderStyle::Hidden) {
         border = std::max(0.0f, cs.border_width);
     }
 
@@ -305,7 +304,7 @@ float measureCellPreferredHeight(const dom::DOMNodePtr& cell) {
     float pad_b = cs.padding_bottom.isPixel() ? cs.padding_bottom.value : 0.0f;
 
     float border = 0.0f;
-    if (cs.border_style != "none" && cs.border_style != "hidden") {
+    if (cs.border_style != dom::CSSBorderStyle::None && cs.border_style != dom::CSSBorderStyle::Hidden) {
         border = std::max(0.0f, cs.border_width);
     }
 
@@ -316,8 +315,8 @@ float measureCellPreferredHeight(const dom::DOMNodePtr& cell) {
         ::dong::render::TextMeasureCacheKey key;
         key.text = text;
         key.font_family = cs.font_family;
-        key.font_weight = cs.font_weight;
-        key.font_style = cs.font_style;
+        key.font_weight = toString(cs.font_weight);
+        key.font_style = toString(cs.font_style);
         key.font_size = font_size;
         key.letter_spacing_em = cs.letter_spacing_em;
         key.word_spacing_px = cs.word_spacing_px;
@@ -371,10 +370,10 @@ void Engine::layoutSingleTable(const dom::DOMNodePtr& table_node) {
     if (!table_ln) return;
 
     const auto& style = table_node->getComputedStyle();
-    const bool is_collapse = (style.border_collapse == "collapse");
+    const bool is_collapse = (style.border_collapse == dom::CSSBorderCollapse::Collapse);
     const float spacing_x = is_collapse ? 0.0f : style.border_spacing_x;
     const float spacing_y = is_collapse ? 0.0f : style.border_spacing_y;
-    const bool is_fixed = (style.table_layout == "fixed");
+    const bool is_fixed = (style.table_layout == dom::CSSTableLayout::Fixed);
 
     std::vector<dom::DOMNodePtr> rows;
     collectRows(table_node, rows);
@@ -529,7 +528,7 @@ void Engine::positionTableCells(
 
         // Skip collapsed row groups: visibility:collapse on tbody/thead/tfoot removes space.
         const bool group_is_collapsed = block.group &&
-            block.group->getComputedStyle().visibility == "collapse";
+            block.group->getComputedStyle().visibility == dom::CSSVisibility::Collapse;
         if (group_is_collapsed) {
             // Zero-out the group layout so it doesn't contribute to rendering or height propagation.
             if (group_ln) {
@@ -678,7 +677,7 @@ void Engine::compactNormalFlowSiblingsAfter(const dom::DOMNodePtr& start_node) {
         }
 
         const auto& cs = child->getComputedStyle();
-        if (cs.display == "none" || cs.position == "absolute" || cs.position == "fixed") {
+        if (cs.display == dom::CSSDisplay::None || cs.position == dom::CSSPosition::Absolute || cs.position == dom::CSSPosition::Fixed) {
             continue;
         }
 

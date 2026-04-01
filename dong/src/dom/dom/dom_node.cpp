@@ -1101,11 +1101,8 @@ void DOMNode::clearStyleDirtyRecursive() {
 
 namespace {
 
-using dong::toLower;
-
-static bool isScrollOverflowValue(const std::string& v) {
-    const std::string lowered = toLower(v);
-    return lowered == "scroll" || lowered == "auto";
+static bool isScrollOverflowValue(CSSOverflow v) {
+    return v == CSSOverflow::Scroll || v == CSSOverflow::Auto;
 }
 
 static float computeMaxScroll(float client, float content) {
@@ -1257,8 +1254,7 @@ void DOMNode::scrollTo(float x, float y) {
     const float target_x = std::clamp(x, 0.0f, max_x);
     const float target_y = std::clamp(y, 0.0f, max_y);
 
-    const std::string& behavior = computed_style_.scroll_behavior;
-    if (behavior == "smooth") {
+    if (computed_style_.scroll_behavior == CSSScrollBehavior::Smooth) {
         // Defer animation start until EngineView::tick (timebase + scroll metrics).
         smooth_scroll_active_ = true;
         smooth_scroll_start_time_ = -1.0;
@@ -1380,8 +1376,7 @@ void DOMNode::setOffsetRect(float top, float left, float width, float height) {
 DOMNodePtr DOMNode::getOffsetParent() const {
     auto current = parent_.lock();
     while (current) {
-        const auto& pos = current->computed_style_.position;
-        if (pos != "static") {
+        if (current->computed_style_.position != CSSPosition::Static) {
             return current;
         }
         current = current->parent_.lock();

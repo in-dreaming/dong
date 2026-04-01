@@ -188,7 +188,7 @@ void StyleEngine::processPseudoElements(DOMNodePtr node) {
         if (pseudo) {
             pseudo->getComputedStyle() = before_style;
             pseudo->getComputedStyle().is_pseudo_element = true;
-            pseudo->getComputedStyle().pseudo_type = "before";
+            pseudo->getComputedStyle().pseudo_type = CSSPseudoType::Before;
 
             // Best-effort textual representation (rendering uses computed tokens).
             pseudo->setTextContent(!before_style.content.empty() ? before_style.content : before_style.content_raw);
@@ -210,7 +210,7 @@ void StyleEngine::processPseudoElements(DOMNodePtr node) {
         if (pseudo) {
             pseudo->getComputedStyle() = after_style;
             pseudo->getComputedStyle().is_pseudo_element = true;
-            pseudo->getComputedStyle().pseudo_type = "after";
+            pseudo->getComputedStyle().pseudo_type = CSSPseudoType::After;
             node->setPseudoAfter(pseudo);
         }
     } else {
@@ -223,7 +223,7 @@ void StyleEngine::processPseudoElements(DOMNodePtr node) {
     // (unless list-style-type is "none"). Explicit ::marker CSS rules override defaults.
     if (node->getTagName() == "li") {
         const auto& node_style = node->getComputedStyle();
-        const bool needs_marker = (node_style.list_style_type != "none");
+        const bool needs_marker = (node_style.list_style_type != CSSListStyleType::None);
         if (needs_marker) {
             auto pseudo = createPseudoElement(node, "marker");
             if (pseudo) {
@@ -237,7 +237,7 @@ void StyleEngine::processPseudoElements(DOMNodePtr node) {
                 }
 
                 pseudo->getComputedStyle().is_pseudo_element = true;
-                pseudo->getComputedStyle().pseudo_type = "marker";
+                pseudo->getComputedStyle().pseudo_type = CSSPseudoType::Marker;
                 node->setPseudoMarker(pseudo);
             }
         } else {
@@ -267,7 +267,7 @@ void StyleEngine::processPseudoElements(DOMNodePtr node) {
 
                 // Set placeholder text as content
                 pseudo->getComputedStyle().is_pseudo_element = true;
-                pseudo->getComputedStyle().pseudo_type = "placeholder";
+                pseudo->getComputedStyle().pseudo_type = CSSPseudoType::Placeholder;
                 pseudo->getComputedStyle().content = node->getAttribute("placeholder");
                 pseudo->setTextContent(node->getAttribute("placeholder"));
                 node->setPseudoPlaceholder(pseudo);
@@ -285,7 +285,7 @@ void StyleEngine::processPseudoElements(DOMNodePtr node) {
             // Start with parent's styles for inheritance
             pseudo->getComputedStyle() = selection_style;
             pseudo->getComputedStyle().is_pseudo_element = true;
-            pseudo->getComputedStyle().pseudo_type = "selection";
+            pseudo->getComputedStyle().pseudo_type = CSSPseudoType::Selection;
             node->setPseudoSelection(pseudo);
         }
     } else {
@@ -301,7 +301,7 @@ void StyleEngine::processPseudoElements(DOMNodePtr node) {
             if (pseudo) {
                 pseudo->getComputedStyle() = backdrop_style;
                 pseudo->getComputedStyle().is_pseudo_element = true;
-                pseudo->getComputedStyle().pseudo_type = "backdrop";
+                pseudo->getComputedStyle().pseudo_type = CSSPseudoType::Backdrop;
                 node->setPseudoBackdrop(pseudo);
             }
         }

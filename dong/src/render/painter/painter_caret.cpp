@@ -70,8 +70,8 @@ static float computeTextXOffset(const dom::DOMNodePtr& text_node,
     req.text = prefix;
     req.font_family = style.font_family;
     req.font_size = font_size;
-    req.font_weight = style.font_weight;
-    req.font_style = style.font_style;
+    req.font_weight = toString(style.font_weight);
+    req.font_style = toString(style.font_style);
 
     ShapedText shaped;
     if (shaper.shape(req, shaped) && shaped.units_per_em > 0) {
@@ -91,8 +91,8 @@ static float measureTextWidth(const std::string& text,
     req.text = text;
     req.font_family = style.font_family;
     req.font_size = font_size;
-    req.font_weight = style.font_weight;
-    req.font_style = style.font_style;
+    req.font_weight = toString(style.font_weight);
+    req.font_style = toString(style.font_style);
     ShapedText shaped;
     if (shaper.shape(req, shaped) && shaped.units_per_em > 0) {
         float scale = font_size / static_cast<float>(shaped.units_per_em);
@@ -517,8 +517,8 @@ static float computeInputTextXOffset(const std::string& value,
     req.text = prefix;
     req.font_family = style.font_family;
     req.font_size = font_size;
-    req.font_weight = style.font_weight;
-    req.font_style = style.font_style;
+    req.font_weight = toString(style.font_weight);
+    req.font_style = toString(style.font_style);
 
     ShapedText shaped;
     if (shaper.shape(req, shaped) && shaped.units_per_em > 0) {
@@ -553,10 +553,10 @@ static InputLayoutInfo getInputLayoutInfo(const dom::DOMNodePtr& node,
     float bb = style.border_bottom_width >= 0.0f ? style.border_bottom_width : 0.0f;
 
     // For border style "none"/"hidden", width is 0
-    auto effectiveBW = [&](float w, const std::string& side_style) -> float {
+    auto effectiveBW = [&](float w, dom::CSSBorderStyle side_style) -> float {
         if (w < 0.0f) w = 0.0f;
-        std::string st = side_style.empty() ? style.border_style : side_style;
-        if (st == "none" || st == "hidden") return 0.0f;
+        dom::CSSBorderStyle st = (side_style != dom::CSSBorderStyleUnset) ? side_style : style.border_style;
+        if (st == dom::CSSBorderStyle::None || st == dom::CSSBorderStyle::Hidden) return 0.0f;
         return w;
     };
     bl = effectiveBW(bl, style.border_left_style);
@@ -581,7 +581,7 @@ static InputLayoutInfo getInputLayoutInfo(const dom::DOMNodePtr& node,
 
 // Helper: get the effective line height for an input/textarea element.
 static float getEffectiveLineHeight(const dom::ComputedStyle& style, float font_size, TextShaper& shaper) {
-    TextShapeRequest mreq{"X", style.font_family, style.font_weight, style.font_style, font_size};
+    TextShapeRequest mreq{"X", style.font_family, toString(style.font_weight), toString(style.font_style), font_size};
     ShapedText mshaped;
     if (shaper.shape(mreq, mshaped) && mshaped.scale_to_pixels > 0.0f) {
         float scale = mshaped.scale_to_pixels;

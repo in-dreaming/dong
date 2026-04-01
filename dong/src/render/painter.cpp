@@ -329,17 +329,16 @@ static void paintBorderSide(DisplayListBuilder& builder,
                             BorderSide side,
                             const Rect& side_rect,
                             const Color& c,
-                            const std::string& border_style_lower) {
+                            dom::CSSBorderStyle bs) {
     if (side_rect.width <= 0.0f || side_rect.height <= 0.0f) return;
 
-    // `solid`/`double`/etc 暂时走实线填充；`dashed`/`dotted` 用分段矩形近似。
-    if (border_style_lower == "dashed" || border_style_lower == "dotted") {
+    if (bs == dom::CSSBorderStyle::Dashed || bs == dom::CSSBorderStyle::Dotted) {
         const float thickness = (side == BorderSide::Top || side == BorderSide::Bottom)
             ? side_rect.height
             : side_rect.width;
         const float base = std::max(1.0f, thickness);
-        const float dash = (border_style_lower == "dotted") ? base : (base * 3.0f);
-        const float gap = (border_style_lower == "dotted") ? base : (base * 2.0f);
+        const float dash = (bs == dom::CSSBorderStyle::Dotted) ? base : (base * 3.0f);
+        const float gap = (bs == dom::CSSBorderStyle::Dotted) ? base : (base * 2.0f);
 
         if (side == BorderSide::Top || side == BorderSide::Bottom) {
             addDashedBorderHorizontal(builder, side_rect, c, dash, gap);
@@ -565,21 +564,12 @@ static float estimateTextWidth(const std::string& text, float font_size) {
     return static_cast<float>(text.size()) * font_size * 0.55f;
 }
 
-static bool shouldClipOverflow(const std::string& overflow_value) {
-    std::string lowered = overflow_value;
-    std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char c) {
-        return static_cast<char>(std::tolower(c));
-    });
-    // CSS 语义：overflow:hidden/scroll/auto 都需要建立裁剪上下文
-    return lowered == "hidden" || lowered == "scroll" || lowered == "auto";
+static bool shouldClipOverflow(dom::CSSOverflow v) {
+    return v == dom::CSSOverflow::Hidden || v == dom::CSSOverflow::Scroll || v == dom::CSSOverflow::Auto;
 }
 
-static bool isScrollOverflow(const std::string& overflow_value) {
-    std::string lowered = overflow_value;
-    std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char c) {
-        return static_cast<char>(std::tolower(c));
-    });
-    return lowered == "scroll" || lowered == "auto";
+static bool isScrollOverflow(dom::CSSOverflow v) {
+    return v == dom::CSSOverflow::Scroll || v == dom::CSSOverflow::Auto;
 }
 
 
@@ -689,7 +679,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
     };
 
     const auto& style = node->getComputedStyle();
-    if (style.display == "none") return;
+    if (style.display == dom::CSSDisplay::None) return;
 
     // Defer modal dialogs to top-layer rendering pass (painted after all normal content)
     if (node->getTagName() == "dialog") {
@@ -733,7 +723,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
 
     // visibility: hidden 元素不可见，但仍占位
     // 与 display: none 不同，visibility: hidden 仍然会进入布局
-    const bool is_hidden = (style.visibility == "hidden" || style.visibility == "collapse");
+    const bool is_hidden = (style.visibility == dom::CSSVisibility::Hidden || style.visibility == dom::CSSVisibility::Collapse);
 
     if (node->getType() == dom::DOMNode::NodeType::TEXT) return;
 
@@ -767,7 +757,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         node->setOffsetRect(node_rect.y, node_rect.x, node_rect.width, node_rect.height);
 
         // Apply sticky offset if this is a sticky element
-        if (style.position == "sticky" && layout_node->sticky_metadata) {
+        if (style.position == dom::CSSPosition::Sticky && layout_node->sticky_metadata) {
             // Get current scroll position from scroll container
             float scroll_x = 0.0f;
             float scroll_y = 0.0f;
@@ -966,11 +956,11 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
 
         // Tables with <caption>: the layout wrapper includes caption, but border/background should
         // only cover the grid box (exclude the caption area), matching browser behavior.
-        if (layout_engine_ && (style.display == "table" || style.display == "inline-table")) {
+        if (layout_engine_ && (style.display == dom::CSSDisplay::Table || style.display == dom::CSSDisplay::InlineTable)) {
             dom::DOMNodePtr caption_node;
             for (const auto& ch : node->getChildren()) {
                 if (!ch || ch->getType() != dom::DOMNode::NodeType::ELEMENT) continue;
-                if (ch->getComputedStyle().display == "table-caption") {
+                if (ch->getComputedStyle().display == dom::CSSDisplay::TableCaption) {
                     caption_node = ch;
                     break;
                 }
@@ -979,8 +969,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                 const auto* cap_ln = layout_engine_->getLayout(caption_node);
                 const float cap_h = (cap_ln && std::isfinite(cap_ln->layout.dimensions[1])) ? cap_ln->layout.dimensions[1] : 0.0f;
                 if (cap_h > 0.0f) {
-                    const std::string side = toLowerCollapsed(caption_node->getComputedStyle().caption_side);
-                    if (side == "bottom") {
+                    if (caption_node->getComputedStyle().caption_side == dom::CSSCaptionSide::Bottom) {
                         rect.height = std::max(0.0f, rect.height - cap_h);
                     } else {
                         rect.y += cap_h;
@@ -1004,26 +993,20 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         };
 
         // Border helpers: support per-side overrides, matching layout_engine.cpp semantics.
-        auto normalizeBorderStyle = [&](const std::string& s) -> std::string {
-            return dong::toLower(collapseWhitespace(s));
-        };
-        auto effectiveBorderStyle = [&](const std::string& side_style) -> std::string {
-            const std::string& st = !side_style.empty() ? side_style : style.border_style;
-            std::string norm = normalizeBorderStyle(st);
+        auto effectiveBorderStyleEnum = [&](dom::CSSBorderStyle side_style) -> dom::CSSBorderStyle {
+            dom::CSSBorderStyle st = (side_style != dom::CSSBorderStyleUnset) ? side_style : style.border_style;
 
-            // Browsers tend to paint form controls with flat borders even if UA rules say inset/outset.
-            // Normalize inset/outset to solid for UA-like controls so `color-scheme` comparisons are stable.
             const bool is_control = (tag == "button" || tag == "input" || tag == "select" || tag == "textarea");
-            if (is_control && (norm == "inset" || norm == "outset")) {
-                norm = "solid";
+            if (is_control && (st == dom::CSSBorderStyle::Inset || st == dom::CSSBorderStyle::Outset)) {
+                st = dom::CSSBorderStyle::Solid;
             }
-            return norm;
+            return st;
         };
-        auto effectiveBorderWidth = [&](float side_width, const std::string& side_style) -> float {
+        auto effectiveBorderWidth = [&](float side_width, dom::CSSBorderStyle side_style) -> float {
             float w = (side_width >= 0.0f) ? side_width : style.border_width;
             if (w < 0.0f) w = 0.0f;
-            const std::string st = effectiveBorderStyle(side_style);
-            if (st == "none" || st == "hidden") return 0.0f;
+            const auto st = effectiveBorderStyleEnum(side_style);
+            if (st == dom::CSSBorderStyle::None || st == dom::CSSBorderStyle::Hidden) return 0.0f;
             return w;
         };
         auto effectiveBorderColor = [&](const std::string& side_color) -> std::string {
@@ -1071,19 +1054,19 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         bg_content_box.width = std::max(0.0f, bg_content_box.width - pad_l - pad_r);
         bg_content_box.height = std::max(0.0f, bg_content_box.height - pad_t - pad_b);
 
-        auto pickBox = [&](const std::string& keyword) -> Rect {
-            if (keyword == "padding-box") return bg_padding_box;
-            if (keyword == "content-box") return bg_content_box;
+        auto pickBox = [&](dom::CSSBackgroundBox b) -> Rect {
+            if (b == dom::CSSBackgroundBox::PaddingBox) return bg_padding_box;
+            if (b == dom::CSSBackgroundBox::ContentBox) return bg_content_box;
             return bg_border_box;
         };
 
-        const std::string bg_clip_kw = toLowerCollapsed(style.background_clip);
-        const std::string bg_origin_kw = toLowerCollapsed(style.background_origin);
-        const std::string bg_attach_kw = toLowerCollapsed(style.background_attachment);
+        const auto bg_clip_kw = style.background_clip;
+        const auto bg_origin_kw = style.background_origin;
+        const auto bg_attach_kw = style.background_attachment;
 
         Rect bg_clip_rect = pickBox(bg_clip_kw);
         Rect bg_origin_rect = pickBox(bg_origin_kw);
-        if (bg_attach_kw == "fixed") {
+        if (bg_attach_kw == dom::CSSBackgroundAttachment::Fixed) {
             bg_origin_rect = Rect{0.0f, 0.0f, viewport_w, viewport_h};
         }
 
@@ -1127,9 +1110,8 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         // Important: our UA stylesheet is light-themed; when author only sets `color-scheme`,
         // controls should still adopt a dark palette similar to Chromium.
         if (tag == "button" || tag == "input" || tag == "select" || tag == "textarea") {
-            const std::string scheme = toLowerCollapsed(style.color_scheme);
             const bool is_button = (tag == "button");
-            const bool scheme_dark = (scheme == "dark");
+            const bool scheme_dark = (style.color_scheme == dom::CSSColorScheme::Dark);
 
             const std::string default_bg = scheme_dark
                 ? (is_button ? "#3c4043" : "#303134")
@@ -1206,9 +1188,9 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
 
                     Rect inner_rect = bg_clip_rect;
                     float inset_for_radius = 0.0f;
-                    if (bg_clip_kw == "padding-box") {
+                    if (bg_clip_kw == dom::CSSBackgroundBox::PaddingBox) {
                         inset_for_radius = bmax;
-                    } else if (bg_clip_kw == "content-box") {
+                    } else if (bg_clip_kw == dom::CSSBackgroundBox::ContentBox) {
                         inset_for_radius = bmax + min_pad;
                     }
                     float inner_radius = std::max(0.0f, radius - inset_for_radius);
@@ -1223,8 +1205,8 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                     if (grad.type == dong::dom::CSSGradient::Type::LINEAR && grad.stops.size() >= 2) {
                         Rect inner_rect = bg_clip_rect;
                         float inset_for_radius = 0.0f;
-                        if (bg_clip_kw == "padding-box") inset_for_radius = bmax;
-                        else if (bg_clip_kw == "content-box") inset_for_radius = bmax + min_pad;
+                        if (bg_clip_kw == dom::CSSBackgroundBox::PaddingBox) inset_for_radius = bmax;
+                        else if (bg_clip_kw == dom::CSSBackgroundBox::ContentBox) inset_for_radius = bmax + min_pad;
                         float inner_radius = std::max(0.0f, radius - inset_for_radius);
                         auto gdata = buildLinearGradientData(grad, inner_rect, inner_radius);
                         builder.addLinearGradient(gdata);
@@ -1232,15 +1214,15 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                 }
 
                 if (has_border) {
-                    const std::string st_t = effectiveBorderStyle(style.border_top_style);
-                    const std::string st_r = effectiveBorderStyle(style.border_right_style);
-                    const std::string st_b = effectiveBorderStyle(style.border_bottom_style);
-                    const std::string st_l = effectiveBorderStyle(style.border_left_style);
+                    const auto st_t = effectiveBorderStyleEnum(style.border_top_style);
+                    const auto st_r = effectiveBorderStyleEnum(style.border_right_style);
+                    const auto st_b = effectiveBorderStyleEnum(style.border_bottom_style);
+                    const auto st_l = effectiveBorderStyleEnum(style.border_left_style);
 
-                    const bool bevel = (st_t == "outset" || st_t == "inset" ||
-                                       st_r == "outset" || st_r == "inset" ||
-                                       st_b == "outset" || st_b == "inset" ||
-                                       st_l == "outset" || st_l == "inset");
+                    const bool bevel = (st_t == dom::CSSBorderStyle::Outset || st_t == dom::CSSBorderStyle::Inset ||
+                                       st_r == dom::CSSBorderStyle::Outset || st_r == dom::CSSBorderStyle::Inset ||
+                                       st_b == dom::CSSBorderStyle::Outset || st_b == dom::CSSBorderStyle::Inset ||
+                                       st_l == dom::CSSBorderStyle::Outset || st_l == dom::CSSBorderStyle::Inset);
 
                     if (!bevel) {
                         auto nearlyEqual = [](float a, float b) {
@@ -1288,12 +1270,8 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                             return c;
                         };
 
-                        // Use shorthand direction as a stable reference.
-                        const std::string bstyle = normalizeBorderStyle(style.border_style);
-                        const bool is_outset = (bstyle == "outset");
+                        const bool is_outset = (style.border_style == dom::CSSBorderStyle::Outset);
 
-                        // Prefer using the element background as the base for bevel shading;
-                        // this matches browsers better when author sets background-color but not border.
                         Color base = has_background ? makeColorFromCss(style.background_color)
                                                     : makeColorFromCss(style.border_color);
 
@@ -1327,15 +1305,15 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                 }
 
                 if (has_border) {
-                    const std::string st_t = effectiveBorderStyle(style.border_top_style);
-                    const std::string st_r = effectiveBorderStyle(style.border_right_style);
-                    const std::string st_b = effectiveBorderStyle(style.border_bottom_style);
-                    const std::string st_l = effectiveBorderStyle(style.border_left_style);
+                    const auto st_t = effectiveBorderStyleEnum(style.border_top_style);
+                    const auto st_r = effectiveBorderStyleEnum(style.border_right_style);
+                    const auto st_b = effectiveBorderStyleEnum(style.border_bottom_style);
+                    const auto st_l = effectiveBorderStyleEnum(style.border_left_style);
 
-                    const bool bevel = (st_t == "outset" || st_t == "inset" ||
-                                       st_r == "outset" || st_r == "inset" ||
-                                       st_b == "outset" || st_b == "inset" ||
-                                       st_l == "outset" || st_l == "inset");
+                    const bool bevel = (st_t == dom::CSSBorderStyle::Outset || st_t == dom::CSSBorderStyle::Inset ||
+                                       st_r == dom::CSSBorderStyle::Outset || st_r == dom::CSSBorderStyle::Inset ||
+                                       st_b == dom::CSSBorderStyle::Outset || st_b == dom::CSSBorderStyle::Inset ||
+                                       st_l == dom::CSSBorderStyle::Outset || st_l == dom::CSSBorderStyle::Inset);
 
                     const float inner_h = std::max(0.0f, rect.height - bt - bb);
 
@@ -1371,8 +1349,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                             return c;
                         };
 
-                        const std::string bstyle = normalizeBorderStyle(style.border_style);
-                        const bool is_outset = (bstyle == "outset");
+                        const bool is_outset = (style.border_style == dom::CSSBorderStyle::Outset);
                         Color base = makeColorFromCss(effectiveBorderColor(""));
 
                         Color c_tl = is_outset ? lighten(base, 0.25f) : darken(base, 0.25f);
@@ -1436,20 +1413,19 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
             
             if (!image_url.empty()) {
                 const std::string bg_size = toLowerCollapsed(style.background_size);
-                const std::string bg_repeat = toLowerCollapsed(style.background_repeat);
+                const auto bg_repeat = style.background_repeat;
                 const std::string bg_pos = toLowerCollapsed(style.background_position);
 
-                const std::string ir = toLowerCollapsed(style.image_rendering);
-                const ImageSampling img_sampling = (ir == "pixelated" || ir == "crisp-edges")
+                const ImageSampling img_sampling = (style.image_rendering == dom::CSSImageRendering::Pixelated || style.image_rendering == dom::CSSImageRendering::CrispEdges)
                     ? ImageSampling::Nearest
                     : ImageSampling::Linear;
 
 
                 // Backgrounds are clipped to background-clip.
                 float bg_clip_radius = radius;
-                if (bg_clip_kw == "padding-box") {
+                if (bg_clip_kw == dom::CSSBackgroundBox::PaddingBox) {
                     bg_clip_radius = std::max(0.0f, radius - bmax);
-                } else if (bg_clip_kw == "content-box") {
+                } else if (bg_clip_kw == dom::CSSBackgroundBox::ContentBox) {
                     bg_clip_radius = std::max(0.0f, radius - bmax - min_pad);
                 }
 
@@ -1500,7 +1476,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                         }
                     }
 
-                    const bool repeat = (bg_repeat.find("repeat") != std::string::npos) && (bg_repeat.find("no-repeat") == std::string::npos);
+                    const bool repeat = (bg_repeat == dom::CSSBackgroundRepeat::Repeat || bg_repeat == dom::CSSBackgroundRepeat::RepeatX || bg_repeat == dom::CSSBackgroundRepeat::RepeatY);
 
                     // We only implement the subset used by tests:
                     // - cover/contain: centered
@@ -1550,7 +1526,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         }
 
         // 1.4 outline 绘制（在边框外，不影响布局）
-        if (style.outline_width > 0.0f && style.outline_style != "none" && rect.width > 0.0f && rect.height > 0.0f) {
+        if (style.outline_width > 0.0f && style.outline_style != dom::CSSBorderStyle::None && rect.width > 0.0f && rect.height > 0.0f) {
             Color outline_color = makeColorFromCss(style.outline_color);
             float ow = style.outline_width;
             float offset = style.outline_offset;
@@ -1580,9 +1556,9 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
 
     DisplayListBuilder::ScopedClip clip_scope;
     if (should_apply_clip) {
-        auto effectiveBorderWidth = [&](float side_width, const std::string& side_style) -> float {
-            const std::string st = !side_style.empty() ? toLowerCollapsed(side_style) : toLowerCollapsed(style.border_style);
-            if (st == "none" || st == "hidden") {
+        auto effectiveBorderWidth = [&](float side_width, dom::CSSBorderStyle side_style) -> float {
+            const auto st = (side_style != dom::CSSBorderStyleUnset) ? side_style : style.border_style;
+            if (st == dom::CSSBorderStyle::None || st == dom::CSSBorderStyle::Hidden) {
                 return 0.0f;
             }
             if (side_width >= 0.0f) {
@@ -1916,7 +1892,7 @@ void Painter::renderPseudoElement(const dom::DOMNodePtr& pseudo,
     if (!pseudo) return;
     
     const auto& style = pseudo->getComputedStyle();
-    if (style.display == "none") return;
+    if (style.display == dom::CSSDisplay::None) return;
 
     struct ScopedGeneratedCounters {
         Painter* painter;
@@ -1927,7 +1903,7 @@ void Painter::renderPseudoElement(const dom::DOMNodePtr& pseudo,
     const std::string content_text = evaluateContentText(style, pseudo);
 
     const bool has_background = (style.background_color != "transparent");
-    const bool has_border = (style.border_width > 0.0f && style.border_style != "none");
+    const bool has_border = (style.border_width > 0.0f && style.border_style != dom::CSSBorderStyle::None);
     if (content_text.empty() && !has_background && !has_border) {
         return;
     }
@@ -1946,11 +1922,10 @@ void Painter::renderPseudoElement(const dom::DOMNodePtr& pseudo,
     
     // For ::before, position at the start; for ::after, at the end
     // This is simplified - real implementation would integrate with layout
-    if (style.pseudo_type == "before") {
-        // Position at the start of parent content
+    if (style.pseudo_type == dom::CSSPseudoType::Before) {
         rect.x = parent_rect.x + style.margin_left.value;
         rect.y = parent_rect.y + style.margin_top.value;
-    } else if (style.pseudo_type == "after") {
+    } else if (style.pseudo_type == dom::CSSPseudoType::After) {
         // Position after parent content (simplified)
         rect.x = parent_rect.x + parent_rect.width - rect.width - style.margin_right.value;
         rect.y = parent_rect.y + style.margin_top.value;
@@ -1973,7 +1948,7 @@ void Painter::renderPseudoElement(const dom::DOMNodePtr& pseudo,
     }
     
     // Draw border
-    if (style.border_width > 0.0f && style.border_style != "none") {
+    if (style.border_width > 0.0f && style.border_style != dom::CSSBorderStyle::None) {
         Color border_color = makeColorFromCss(style.border_color);
         float bw = style.border_width;
         
@@ -2002,8 +1977,8 @@ void Painter::renderPseudoElement(const dom::DOMNodePtr& pseudo,
         request.text = content_text;
 
         request.font_family = style.font_family;
-        request.font_weight = style.font_weight;
-        request.font_style = style.font_style;
+        request.font_weight = toString(style.font_weight);
+        request.font_style = toString(style.font_style);
         request.font_size = font_size;
 
         request.origin_x = text_x;
@@ -2025,8 +2000,8 @@ void Painter::renderPseudoElement(const dom::DOMNodePtr& pseudo,
             glyph_run.color = text_color;
             glyph_run.font_size = font_size;
             glyph_run.font_family = style.font_family;
-            glyph_run.font_weight = style.font_weight;
-            glyph_run.font_style = style.font_style;
+            glyph_run.font_weight = toString(style.font_weight);
+            glyph_run.font_style = toString(style.font_style);
             glyph_run.font_paths = shaped.font_paths;
             glyph_run.font_path = shaped.font_path;
             glyph_run.baseline_x = text_x;
@@ -2058,7 +2033,7 @@ void Painter::renderPseudoElement(const dom::DOMNodePtr& pseudo,
 
 bool Painter::shouldSkipNode(const dom::DOMNodePtr& node, const dom::ComputedStyle& style) const {
     if (!node) return true;
-    if (style.display == "none") return true;
+    if (style.display == dom::CSSDisplay::None) return true;
     if (node->getType() == dom::DOMNode::NodeType::TEXT) return true;
     return false;
 }
@@ -2178,21 +2153,11 @@ bool Painter::shouldSkipCachedLayer(const LayerDecision& decision) const {
 Painter::BorderWidths Painter::computeBorderWidths(const dom::ComputedStyle& style) const {
     BorderWidths bw;
 
-    auto normalizeBorderStyle = [](std::string s) -> std::string {
-        std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
-            return static_cast<char>(std::tolower(c));
-        });
-        return s;
-    };
-    auto effectiveBorderStyle = [&](const std::string& side_style) -> std::string {
-        const std::string& st = !side_style.empty() ? side_style : style.border_style;
-        return normalizeBorderStyle(st);
-    };
-    auto effectiveBorderWidth = [&](float side_width, const std::string& side_style) -> float {
+    auto effectiveBorderWidth = [&](float side_width, dom::CSSBorderStyle side_style) -> float {
         float w = (side_width >= 0.0f) ? side_width : style.border_width;
         if (w < 0.0f) w = 0.0f;
-        const std::string st = effectiveBorderStyle(side_style);
-        return (st == "none" || st == "hidden") ? 0.0f : w;
+        const auto st = (side_style != dom::CSSBorderStyleUnset) ? side_style : style.border_style;
+        return (st == dom::CSSBorderStyle::None || st == dom::CSSBorderStyle::Hidden) ? 0.0f : w;
     };
 
     bw.top = effectiveBorderWidth(style.border_top_width, style.border_top_style);
@@ -2284,12 +2249,8 @@ void Painter::paintBackgroundAndBorder(const Rect& rect,
         // 圆角路径
         if (has_background) {
             Color bg_color = makeColorFromCss(style.background_color);
-            std::string bg_clip = style.background_clip;
-            std::transform(bg_clip.begin(), bg_clip.end(), bg_clip.begin(), [](unsigned char c) {
-                return static_cast<char>(std::tolower(c));
-            });
             float inset = 0.0f;
-            if (bg_clip == "padding-box") inset = bw.max;
+            if (style.background_clip == dom::CSSBackgroundBox::PaddingBox) inset = bw.max;
             float inner_radius = std::max(0.0f, radius - inset);
             if (padding_box.width > 0.0f && padding_box.height > 0.0f) {
                 builder.addRoundedRect(padding_box, bg_color, inner_radius);
@@ -2312,9 +2273,8 @@ void Painter::paintBackgroundAndBorder(const Rect& rect,
             auto effectiveColor = [&](const std::string& side_color) -> Color {
                 return makeColorFromCss(!side_color.empty() ? side_color : style.border_color);
             };
-            auto effectiveStyle = [&](const std::string& side_style) -> std::string {
-                const std::string& st = !side_style.empty() ? side_style : style.border_style;
-                return toLowerCollapsed(st);
+            auto effectiveStyle = [&](dom::CSSBorderStyle side_style) -> dom::CSSBorderStyle {
+                return (side_style != dom::CSSBorderStyleUnset) ? side_style : style.border_style;
             };
 
             if (bw.top > 0.0f) {
@@ -2358,7 +2318,7 @@ void Painter::paintCheckboxMark(const dom::DOMNodePtr& node,
     if (!node || !node->hasAttribute("type")) return;
 
     const auto& style = node->getComputedStyle();
-    if (style.appearance == "none") return;
+    if (style.appearance == dom::CSSAppearance::None) return;
 
     std::string t = node->getAttribute("type");
     std::transform(t.begin(), t.end(), t.begin(),
@@ -2433,14 +2393,12 @@ void Painter::paintTextareaResizeHandle(const dom::DOMNodePtr& node,
     if (!node) return;
 
     const auto& style = node->getComputedStyle();
-    if (style.appearance == "none") return;
+    if (style.appearance == dom::CSSAppearance::None) return;
 
-    const std::string r = toLowerCollapsed(style.resize);
-    if (r == "none") return;
+    if (style.resize == dom::CSSResize::None) return;
 
-    // Only show the gripper when the box is scrollable (matches textarea common behavior).
-    const std::string ov = toLowerCollapsed(style.overflow);
-    if (ov == "visible") return;
+    const auto ov = style.overflow;
+    if (ov == dom::CSSOverflow::Visible) return;
 
     Rect inner = rect;
     inner.x += bw.left;
@@ -2453,7 +2411,7 @@ void Painter::paintTextareaResizeHandle(const dom::DOMNodePtr& node,
     const float size = std::min(max_size, std::min(inner.width, inner.height));
     if (size < 8.0f) return;
 
-    const bool scheme_dark = (toLowerCollapsed(style.color_scheme) == "dark");
+    const bool scheme_dark = (style.color_scheme == dom::CSSColorScheme::Dark);
     Color c = makeColorFromCss(scheme_dark ? "#c9c9c9" : "#808080");
     c.a = 1.0f;
 
@@ -2530,8 +2488,8 @@ void Painter::renderAltText(const Rect& rect, const std::string& alt_text, const
         TextShapeRequest req{
             processed_text,
             style.font_family,
-            style.font_weight,
-            style.font_style,
+            toString(style.font_weight),
+            toString(style.font_style),
             font_size
         };
 

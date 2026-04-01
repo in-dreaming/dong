@@ -56,9 +56,9 @@ static float resolveLength(const CSSValue& v, float fallback = 0) {
     return fallback;
 }
 
-static float effectiveBorderWidth(const ComputedStyle& cs, float side_width, const std::string& side_style) {
-    const std::string& st = !side_style.empty() ? side_style : cs.border_style;
-    if (st == "none" || st == "hidden") return 0.0f;
+static float effectiveBorderWidth(const ComputedStyle& cs, float side_width, CSSBorderStyle side_style) {
+    CSSBorderStyle st = (side_style != CSSBorderStyleUnset) ? side_style : cs.border_style;
+    if (st == CSSBorderStyle::None || st == CSSBorderStyle::Hidden) return 0.0f;
     return (side_width >= 0.0f) ? side_width : std::max(0.0f, cs.border_width);
 }
 
@@ -80,7 +80,7 @@ void SceneCompiler::compileNode(const DOMNodePtr& node, render::SceneGraph& sg,
 
     const auto& cs = node->getComputedStyle();
 
-    if (cs.display == "none") return;
+    if (cs.display == CSSDisplay::None) return;
 
     render::SceneNode sn;
     sn.name = node->getAttribute("id");
@@ -109,7 +109,7 @@ void SceneCompiler::compileNode(const DOMNodePtr& node, render::SceneGraph& sg,
     sn.border_left_width = bl;
 
     // content-box: borders (and padding) expand outside declared dimensions
-    if (cs.box_sizing != "border-box") {
+    if (cs.box_sizing != CSSBoxSizing::BorderBox) {
         float pl = resolveLength(cs.padding_left);
         float pr = resolveLength(cs.padding_right);
         float pt = resolveLength(cs.padding_top);
@@ -139,8 +139,8 @@ void SceneCompiler::compileNode(const DOMNodePtr& node, render::SceneGraph& sg,
     sn.text_color = makeColorFromCss(cs.color);
     sn.font_size = cs.font_size;
     sn.font_family = cs.font_family;
-    sn.font_weight = cs.font_weight;
-    sn.text_align = cs.text_align;
+    sn.font_weight = toString(cs.font_weight);
+    sn.text_align = toString(cs.text_align);
     sn.line_height = cs.has_line_height ? cs.line_height : 0;
 
     sn.text = collectDirectText(node);

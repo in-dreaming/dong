@@ -58,13 +58,13 @@ using dong::render::TextMeasureCache;
 using dong::collapseWhitespace;
 using dong::collapseSpacesPreserveNewlines;
 
-bool isTableLikeDisplay(const std::string& display) {
-    return display == "table" || display == "inline-table" ||
-           display == "table-row" || display == "table-cell" ||
-           display == "table-row-group" || display == "table-header-group" ||
-           display == "table-footer-group" ||
-           display == "table-column-group" || display == "table-column" ||
-           display == "table-caption";
+bool isTableLikeDisplay(dom::CSSDisplay display) {
+    return display == dom::CSSDisplay::Table || display == dom::CSSDisplay::InlineTable ||
+           display == dom::CSSDisplay::TableRow || display == dom::CSSDisplay::TableCell ||
+           display == dom::CSSDisplay::TableRowGroup || display == dom::CSSDisplay::TableHeaderGroup ||
+           display == dom::CSSDisplay::TableFooterGroup ||
+           display == dom::CSSDisplay::TableColumnGroup || display == dom::CSSDisplay::TableColumn ||
+           display == dom::CSSDisplay::TableCaption;
 }
 
 
@@ -94,8 +94,8 @@ float computeIntrinsicTextWidth(const dom::DOMNodePtr& node) {
     TextMeasureCacheKey cache_key{
         text,
         style.font_family,
-        style.font_weight,
-        style.font_style,
+        toString(style.font_weight),
+        toString(style.font_style),
         font_size,
         style.letter_spacing_em,
         style.word_spacing_px
@@ -115,8 +115,8 @@ float computeIntrinsicTextWidth(const dom::DOMNodePtr& node) {
         TextShapeRequest req{};
         req.text = text;
         req.font_family = style.font_family;
-        req.font_weight = style.font_weight;
-        req.font_style = style.font_style;
+        req.font_weight = toString(style.font_weight);
+        req.font_style = toString(style.font_style);
         req.font_size = font_size;
 
         ShapedText shaped{};
@@ -242,8 +242,8 @@ float computeIntrinsicTextHeight(const dom::DOMNodePtr& node) {
     TextMeasureCacheKey cache_key{
         text,
         style.font_family,
-        style.font_weight,
-        style.font_style,
+        toString(style.font_weight),
+        toString(style.font_style),
         font_size,
         style.letter_spacing_em,
         style.word_spacing_px
@@ -263,8 +263,8 @@ float computeIntrinsicTextHeight(const dom::DOMNodePtr& node) {
         TextShapeRequest req{};
         req.text = text;
         req.font_family = style.font_family;
-        req.font_weight = style.font_weight;
-        req.font_style = style.font_style;
+        req.font_weight = toString(style.font_weight);
+        req.font_style = toString(style.font_style);
         req.font_size = font_size;
 
 
@@ -404,11 +404,10 @@ float computeIntrinsicTextHeight(const dom::DOMNodePtr& node, float parent_conte
         return 0.0f;
     }
 
-    // Respect white-space property for newline preservation
-    std::string ws = style.white_space;
-    std::transform(ws.begin(), ws.end(), ws.begin(),
-                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    bool ws_preserves_newlines = (ws == "pre-wrap" || ws == "pre" || ws == "pre-line" || ws == "break-spaces");
+    bool ws_preserves_newlines = (style.white_space == dom::CSSWhiteSpace::PreWrap ||
+                                  style.white_space == dom::CSSWhiteSpace::Pre ||
+                                  style.white_space == dom::CSSWhiteSpace::PreLine ||
+                                  style.white_space == dom::CSSWhiteSpace::BreakSpaces);
 
     std::string text;
     if (ws_preserves_newlines) {
@@ -426,7 +425,7 @@ float computeIntrinsicTextHeight(const dom::DOMNodePtr& node, float parent_conte
 
         if (style.width.isPixel()) {
             wrap_width_px = style.width.value;
-            if (style.box_sizing == "border-box") {
+            if (style.box_sizing == dom::CSSBoxSizing::BorderBox) {
                 wrap_width_px -= (pad_h + border_h);
             }
         } else if (style.width.isPercent() && parent_content_width_px > 0.0f) {
@@ -450,8 +449,8 @@ float computeIntrinsicTextHeight(const dom::DOMNodePtr& node, float parent_conte
     TextShapeRequest req{};
     req.text = text;
     req.font_family = style.font_family;
-    req.font_weight = style.font_weight;
-    req.font_style = style.font_style;
+    req.font_weight = toString(style.font_weight);
+    req.font_style = toString(style.font_style);
     req.font_size = font_size;
 
     // For texts with forced newlines, compute per-segment line counts
@@ -809,8 +808,8 @@ static bool computeInlineMetricsForNode(const dom::DOMNodePtr& node,
     TextShapeRequest req{};
     req.text = text;
     req.font_family = style.font_family;
-    req.font_weight = style.font_weight;
-    req.font_style = style.font_style;
+    req.font_weight = toString(style.font_weight);
+    req.font_style = toString(style.font_style);
     req.font_size = font_size_px;
 
     ShapedText shaped{};
@@ -995,8 +994,8 @@ static bool computeInlineMetricsForTextNode(const dom::DOMNodePtr& node,
     TextShapeRequest req{};
     req.text = text;
     req.font_family = style.font_family;
-    req.font_weight = style.font_weight;
-    req.font_style = style.font_style;
+    req.font_weight = toString(style.font_weight);
+    req.font_style = toString(style.font_style);
     req.font_size = font_size_px;
 
     ShapedText shaped{};
@@ -1095,8 +1094,8 @@ static bool computeInlineMetricsForTextNode(const dom::DOMNodePtr& node,
     return true;
 }
 
-bool isInlineLevelDisplay(const std::string& display) {
-    return display == "inline" || display == "inline-block";
+bool isInlineLevelDisplay(dom::CSSDisplay display) {
+    return display == dom::CSSDisplay::Inline || display == dom::CSSDisplay::InlineBlock;
 }
 
 // Check if node has any inline-level children (text nodes or inline/inline-block elements)
@@ -1138,7 +1137,7 @@ bool isInlineFormattingContext(const dom::DOMNodePtr& node) {
         return false;
     }
 
-    if (style.display == "none" || style.display == "flex") {
+    if (style.display == dom::CSSDisplay::None || style.display == dom::CSSDisplay::Flex) {
         return false;
     }
 
@@ -1163,7 +1162,7 @@ bool isInlineFormattingContext(const dom::DOMNodePtr& node) {
         
         if (isInlineLevelDisplay(cs.display)) {
             has_inline_child = true;
-        } else if (cs.display == "block" || cs.display == "flex" || cs.display == "none") {
+        } else if (cs.display == dom::CSSDisplay::Block || cs.display == dom::CSSDisplay::Flex || cs.display == dom::CSSDisplay::None) {
             has_block_like_child = true;
         }
     }
@@ -1189,9 +1188,9 @@ static bool isWhitespaceOnlyText(const std::string& s) {
 
 static float effectiveBorderWidthPx(const dom::ComputedStyle& style,
                                     float side_width,
-                                    const std::string& side_style) {
-    const std::string& st = !side_style.empty() ? side_style : style.border_style;
-    if (st == "none" || st == "hidden") {
+                                    dom::CSSBorderStyle side_style) {
+    dom::CSSBorderStyle st = (side_style != dom::CSSBorderStyleUnset) ? side_style : style.border_style;
+    if (st == dom::CSSBorderStyle::None || st == dom::CSSBorderStyle::Hidden) {
         return 0.0f;
     }
     return (side_width >= 0.0f) ? side_width : std::max(0.0f, style.border_width);
@@ -1203,7 +1202,7 @@ static float expectedBorderBoxHeightPx(const dom::ComputedStyle& style) {
     }
 
     float h = style.height.value;
-    if (style.box_sizing == "content-box") {
+    if (style.box_sizing == dom::CSSBoxSizing::ContentBox) {
         if (style.padding_top.isPixel()) h += style.padding_top.value;
         if (style.padding_bottom.isPixel()) h += style.padding_bottom.value;
 
@@ -1226,7 +1225,7 @@ bool hasMixedBlockInlineChildren(const dom::DOMNodePtr& node) {
         return false;
     }
     const auto& style = node->getComputedStyle();
-    if (style.layout_mode == dom::LayoutMode::Flex || style.display == "none") {
+    if (style.layout_mode == dom::LayoutMode::Flex || style.display == dom::CSSDisplay::None) {
         return false;
     }
 
@@ -1248,8 +1247,8 @@ bool hasMixedBlockInlineChildren(const dom::DOMNodePtr& node) {
         if (child->getType() != dom::DOMNode::NodeType::ELEMENT) continue;
 
         const auto& cs = child->getComputedStyle();
-        if (cs.display == "none") continue;
-        if (cs.position == "absolute" || cs.position == "fixed") continue;
+        if (cs.display == dom::CSSDisplay::None) continue;
+        if (cs.position == dom::CSSPosition::Absolute || cs.position == dom::CSSPosition::Fixed) continue;
 
         if (isInlineLevelDisplay(cs.display)) {
             has_inline = true;
@@ -1461,8 +1460,8 @@ void Engine::calculateLayout(dom::DOMNodePtr root, float width, float height) {
                     const float pad_bottom = style.padding_bottom.isPixel() ? style.padding_bottom.value : 0.0f;
 
                     float bb = 0.0f;
-                    const std::string& bs = !style.border_bottom_style.empty() ? style.border_bottom_style : style.border_style;
-                    if (bs != "none" && bs != "hidden") {
+                    dom::CSSBorderStyle bs = (style.border_bottom_style != dom::CSSBorderStyleUnset) ? style.border_bottom_style : style.border_style;
+                    if (bs != dom::CSSBorderStyle::None && bs != dom::CSSBorderStyle::Hidden) {
                         bb = (style.border_bottom_width >= 0.0f) ? style.border_bottom_width : std::max(0.0f, style.border_width);
                     }
 
@@ -1550,7 +1549,7 @@ void Engine::calculateLayout(dom::DOMNodePtr root, float width, float height) {
                         "[LayoutId] tag=%s id=%s display=%s css_w_unit=%d css_w=%.1f yoga_w=%.1f extracted_w=%.1f css_h_unit=%d css_h=%.1f yoga_h=%.1f extracted_h=%.1f top=%.1f y=%.1f\n",
                         dom_node->getTagName().c_str(),
                         id.c_str(),
-                        cs.display.c_str(),
+                        toString(cs.display),
                         static_cast<int>(cs.width.unit),
                         cs.width.value,
                         width,
@@ -1736,8 +1735,8 @@ void Engine::calculateLayout(dom::DOMNodePtr root, float width, float height) {
                     const float pad_bottom = style.padding_bottom.isPixel() ? style.padding_bottom.value : 0.0f;
 
                     float bb = 0.0f;
-                    const std::string& bs = !style.border_bottom_style.empty() ? style.border_bottom_style : style.border_style;
-                    if (bs != "none" && bs != "hidden") {
+                    dom::CSSBorderStyle bs = (style.border_bottom_style != dom::CSSBorderStyleUnset) ? style.border_bottom_style : style.border_style;
+                    if (bs != dom::CSSBorderStyle::None && bs != dom::CSSBorderStyle::Hidden) {
                         bb = (style.border_bottom_width >= 0.0f) ? style.border_bottom_width : std::max(0.0f, style.border_width);
                     }
 
@@ -1874,7 +1873,7 @@ void Engine::buildChildYogaNodes(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
     if (dom_node->isContentEditable() && dom_node->getTagName() == "div") {
         DONG_LOG_WARN("[YOGA-CE] tag=%s children=%zu anon_wrap=%d parent_block=%d display=%s",
                       dom_node->getTagName().c_str(), dom_node->getChildren().size(),
-                      (int)needs_anon_wrapping, (int)parent_is_block_like, parent_style.display.c_str());
+                      (int)needs_anon_wrapping, (int)parent_is_block_like, toString(parent_style.display));
         for (size_t ci = 0; ci < dom_node->getChildren().size(); ++ci) {
             const auto& ch = dom_node->getChildren()[ci];
             if (!ch) continue;
@@ -1883,7 +1882,7 @@ void Engine::buildChildYogaNodes(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
             } else if (ch->getType() == dom::DOMNode::NodeType::ELEMENT) {
                 const auto& cs = ch->getComputedStyle();
                 DONG_LOG_WARN("[YOGA-CE]   [%zu] <%s> display=%s layout_mode=%d style_attr=\"%s\"",
-                              ci, ch->getTagName().c_str(), cs.display.c_str(), (int)cs.layout_mode,
+                              ci, ch->getTagName().c_str(), toString(cs.display), (int)cs.layout_mode,
                               ch->hasAttribute("style") ? ch->getAttribute("style").c_str() : "");
             }
         }
@@ -1972,7 +1971,7 @@ void Engine::buildChildYogaNodes(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
         auto pseudo_before = dom_node->getPseudoBefore();
         if (pseudo_before) {
             const auto& ps = pseudo_before->getComputedStyle();
-            const bool is_inline_pseudo = (ps.display == "inline" || ps.display == "inline-block" || ps.display.empty());
+            const bool is_inline_pseudo = (ps.display == dom::CSSDisplay::Inline || ps.display == dom::CSSDisplay::InlineBlock);
             const bool has_content = !ps.content_raw.empty() || !ps.content_tokens.empty();
             if (is_inline_pseudo && has_content) {
                 // Check that children are block-only (no inline/mixed children)
@@ -1980,8 +1979,8 @@ void Engine::buildChildYogaNodes(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
                 for (const auto& child : dom_node->getChildren()) {
                     if (child && child->getType() == dom::DOMNode::NodeType::ELEMENT) {
                         const auto& cs = child->getComputedStyle();
-                        if (cs.display != "none" && !isInlineLevelDisplay(cs.display) &&
-                            cs.position != "absolute" && cs.position != "fixed") {
+                        if (cs.display != dom::CSSDisplay::None && !isInlineLevelDisplay(cs.display) &&
+                            cs.position != dom::CSSPosition::Absolute && cs.position != dom::CSSPosition::Fixed) {
                             has_block_children = true;
                             break;
                         }
@@ -2027,7 +2026,7 @@ void Engine::buildChildYogaNodes(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
             if (child->getType() != dom::DOMNode::NodeType::ELEMENT) continue;
 
             const auto& cs = child->getComputedStyle();
-            if (cs.display == "none") continue;
+            if (cs.display == dom::CSSDisplay::None) continue;
 
             // display: contents - skip this node, promote children
             if (shouldSkipLayoutNode(cs)) {
@@ -2037,7 +2036,7 @@ void Engine::buildChildYogaNodes(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
             }
 
             bool is_inline = isInlineLevelDisplay(cs.display);
-            bool is_out_of_flow = (cs.position == "absolute" || cs.position == "fixed");
+            bool is_out_of_flow = (cs.position == dom::CSSPosition::Absolute || cs.position == dom::CSSPosition::Fixed);
 
             if (is_inline && !is_out_of_flow) {
                 current_inline_run.push_back(child);
@@ -2130,7 +2129,7 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
 
                 if (s.width.isPixel()) {
                     float content_w = s.width.value;
-                    if (s.box_sizing == "border-box") {
+                    if (s.box_sizing == dom::CSSBoxSizing::BorderBox) {
                         content_w -= (pad_h + border_h);
                     }
                     return std::max(content_w, 0.0f);
@@ -2144,7 +2143,7 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
                 if (is_viewport_unit(s.width.unit)) {
                     float border_box_w = s.width.resolvePixels(0.0f, root_font_size_, viewport_width_, viewport_height_);
                     float content_w = border_box_w;
-                    if (s.box_sizing == "border-box") {
+                    if (s.box_sizing == dom::CSSBoxSizing::BorderBox) {
                         content_w -= (pad_h + border_h);
                     }
                     return std::max(content_w, 0.0f);
@@ -2161,7 +2160,7 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
 
                 if (s.height.isPixel()) {
                     float content_h = s.height.value;
-                    if (s.box_sizing == "border-box") {
+                    if (s.box_sizing == dom::CSSBoxSizing::BorderBox) {
                         content_h -= (pad_v + border_v);
                     }
                     return std::max(content_h, 0.0f);
@@ -2174,7 +2173,7 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
                 if (is_viewport_unit(s.height.unit)) {
                     float border_box_h = s.height.resolvePixels(0.0f, root_font_size_, viewport_width_, viewport_height_);
                     float content_h = border_box_h;
-                    if (s.box_sizing == "border-box") {
+                    if (s.box_sizing == dom::CSSBoxSizing::BorderBox) {
                         content_h -= (pad_v + border_v);
                     }
                     return std::max(content_h, 0.0f);
@@ -2190,7 +2189,7 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
 
     // Best-effort shrink-to-fit for positioned boxes (absolute/fixed) with width:auto.
     // This helps patterns like `position: fixed; top:20px; right:20px;` to size to content.
-    if ((style.position == "absolute" || style.position == "fixed") && style.width.isAuto()) {
+    if ((style.position == dom::CSSPosition::Absolute || style.position == dom::CSSPosition::Fixed) && style.width.isAuto()) {
         const bool has_left = style.left.isSet() && !style.left.isAuto();
         const bool has_right = style.right.isSet() && !style.right.isAuto();
         if (!(has_left && has_right)) {
@@ -2215,16 +2214,16 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
 
     // align-self: apply from own style (mapComputedStylesToYoga has no align-self support)
     {
-        const auto& as = style.align_self;
-        if (as == "flex-start" || as == "start") {
+        const auto as = style.align_self;
+        if (as == dom::CSSAlignSelf::FlexStart || as == dom::CSSAlignSelf::Start) {
             YGNodeStyleSetAlignSelf(yoga_node, YGAlignFlexStart);
-        } else if (as == "flex-end" || as == "end") {
+        } else if (as == dom::CSSAlignSelf::FlexEnd || as == dom::CSSAlignSelf::End) {
             YGNodeStyleSetAlignSelf(yoga_node, YGAlignFlexEnd);
-        } else if (as == "center") {
+        } else if (as == dom::CSSAlignSelf::Center) {
             YGNodeStyleSetAlignSelf(yoga_node, YGAlignCenter);
-        } else if (as == "stretch") {
+        } else if (as == dom::CSSAlignSelf::Stretch) {
             YGNodeStyleSetAlignSelf(yoga_node, YGAlignStretch);
-        } else if (as == "baseline") {
+        } else if (as == dom::CSSAlignSelf::Baseline) {
             YGNodeStyleSetAlignSelf(yoga_node, YGAlignBaseline);
         }
         // "auto" (default): do nothing, inherits from parent align-items
@@ -2238,17 +2237,15 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
             const auto& ps = parent->getComputedStyle();
             const bool parent_is_flex = (ps.layout_mode == dom::LayoutMode::Flex);
             const bool parent_justify_non_stretch =
-                !ps.justify_items.empty() &&
-                ps.justify_items != "stretch" &&
-                ps.justify_items != "normal";
+                ps.justify_items != dom::CSSAlignItems::Stretch &&
+                ps.justify_items != dom::CSSAlignItems::Normal;
             if (parent_is_flex && parent_justify_non_stretch && style.width.isAuto()) {
                 float intrinsic_w = computeIntrinsicTextWidth(dom_node);
                 float pad_h = style.padding_left.value + style.padding_right.value;
                 float w = intrinsic_w + pad_h;
                 if (w > 0.0f && std::isfinite(w)) {
                     YGNodeStyleSetWidth(yoga_node, w);
-                    // Center via auto margins when justify-items: center
-                    if (ps.justify_items == "center") {
+                    if (ps.justify_items == dom::CSSAlignItems::Center) {
                         YGNodeStyleSetMarginAuto(yoga_node, YGEdgeLeft);
                         YGNodeStyleSetMarginAuto(yoga_node, YGEdgeRight);
                     }
@@ -2265,9 +2262,9 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
         if (parent->getType() == dom::DOMNode::NodeType::ELEMENT) {
             const auto& ps = parent->getComputedStyle();
             const bool parent_overflow =
-                (ps.overflow == "auto" || ps.overflow == "scroll" || ps.overflow == "hidden" || ps.overflow == "clip" ||
-                 ps.overflow_x == "auto" || ps.overflow_x == "scroll" || ps.overflow_x == "hidden" || ps.overflow_x == "clip" ||
-                 ps.overflow_y == "auto" || ps.overflow_y == "scroll" || ps.overflow_y == "hidden" || ps.overflow_y == "clip");
+                (ps.overflow == dom::CSSOverflow::Auto || ps.overflow == dom::CSSOverflow::Scroll || ps.overflow == dom::CSSOverflow::Hidden || ps.overflow == dom::CSSOverflow::Clip ||
+                 ps.overflow_x == dom::CSSOverflow::Auto || ps.overflow_x == dom::CSSOverflow::Scroll || ps.overflow_x == dom::CSSOverflow::Hidden || ps.overflow_x == dom::CSSOverflow::Clip ||
+                 ps.overflow_y == dom::CSSOverflow::Auto || ps.overflow_y == dom::CSSOverflow::Scroll || ps.overflow_y == dom::CSSOverflow::Hidden || ps.overflow_y == dom::CSSOverflow::Clip);
 
             if (parent_overflow && ps.layout_mode != dom::LayoutMode::Flex &&
                 style.layout_mode == dom::LayoutMode::Block &&
@@ -2314,9 +2311,9 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
     // This causes inline-block elements (buttons, inputs) to stretch to full width.
     // Solution: For non-flex block containers with inline children, set align-items: flex-start.
     if (style.layout_mode != dom::LayoutMode::Flex) {
-        const bool align_is_default = style.align_items.empty() ||
-            style.align_items == "stretch" ||
-            style.align_items == "normal";
+        const bool align_is_default = style.align_items == dom::CSSAlignItems::Stretch ||
+            style.align_items == dom::CSSAlignItems::Stretch ||
+            style.align_items == dom::CSSAlignItems::Normal;
         if (align_is_default && hasInlineLevelChild(dom_node)) {
             YGNodeStyleSetAlignItems(yoga_node, YGAlignFlexStart);
         }
@@ -2332,7 +2329,7 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
         if (parent_node && parent_node->getType() == dom::DOMNode::NodeType::ELEMENT) {
             const auto& parent_style = parent_node->getComputedStyle();
             const bool parent_is_flex = (parent_style.layout_mode == dom::LayoutMode::Flex);
-            const bool is_inline_block = (style.display == "inline-block");
+            const bool is_inline_block = (style.display == dom::CSSDisplay::InlineBlock);
 
             if (!parent_is_flex && is_inline_block) {
                 // Prevent Yoga's default stretch from widening inline-block elements
@@ -2366,9 +2363,7 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
         if (parent->getType() == dom::DOMNode::NodeType::ELEMENT) {
             const auto& parent_style = parent->getComputedStyle();
             if (parent_style.layout_mode == dom::LayoutMode::Flex) {
-                std::string dir = parent_style.flex_direction;
-                if (dir.empty()) dir = "row";
-                if (dir == "row" || dir == "row-reverse") {
+                if (parent_style.flex_direction == dom::CSSFlexDirection::Row || parent_style.flex_direction == dom::CSSFlexDirection::RowReverse) {
                     parent_row_flex = true;
                 }
             }
@@ -2469,7 +2464,7 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
                 DONG_LOG_INFO("[LayoutEngine] button intrinsic_w=%.2f text='%s' display=%s layout_mode=%d width_auto=%d",
                               intrinsic_w,
                               text.c_str(),
-                              style.display.c_str(),
+                              toString(style.display),
                               static_cast<int>(style.layout_mode),
                               style.width.isAuto() ? 1 : 0);
             }
@@ -2557,7 +2552,7 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
         }
     }
 
-    const bool is_inline_level = (style.display == "inline" || style.display == "inline-block");
+    const bool is_inline_level = (style.display == dom::CSSDisplay::Inline || style.display == dom::CSSDisplay::InlineBlock);
     // 为所有包含文本的 inline 元素设置最小宽度，防止被压缩导致文本截断
     if (is_inline_level && (style.width.isAuto() || style.height.isAuto())) {
         std::string text = collapseWhitespace(dom_node->getTextContent());
@@ -2571,8 +2566,8 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
             TextShapeRequest req{};
             req.text = text;
             req.font_family = style.font_family;
-            req.font_weight = style.font_weight;
-            req.font_style = style.font_style;
+            req.font_weight = toString(style.font_weight);
+            req.font_style = toString(style.font_style);
             req.font_size = font_size_px;
 
             ShapedText shaped{};
@@ -2719,9 +2714,9 @@ void Engine::applyYogaInlineAlignmentFixes(dom::DOMNodePtr dom_node, YGNode* yog
                                            const dom::ComputedStyle& style) {
     // Prevent Yoga from stretching inline-level children in block containers
     if (style.layout_mode != dom::LayoutMode::Flex) {
-        const bool align_is_default = style.align_items.empty() ||
-            style.align_items == "stretch" ||
-            style.align_items == "normal";
+        const bool align_is_default = style.align_items == dom::CSSAlignItems::Stretch ||
+            style.align_items == dom::CSSAlignItems::Stretch ||
+            style.align_items == dom::CSSAlignItems::Normal;
         if (align_is_default && hasInlineLevelChild(dom_node)) {
             YGNodeStyleSetAlignItems(yoga_node, YGAlignFlexStart);
         }
@@ -2732,7 +2727,7 @@ void Engine::applyYogaInlineAlignmentFixes(dom::DOMNodePtr dom_node, YGNode* yog
     if (parent_node && parent_node->getType() == dom::DOMNode::NodeType::ELEMENT) {
         const auto& parent_style = parent_node->getComputedStyle();
         const bool parent_is_flex = (parent_style.layout_mode == dom::LayoutMode::Flex);
-        const bool is_inline_block = (style.display == "inline-block");
+        const bool is_inline_block = (style.display == dom::CSSDisplay::InlineBlock);
 
         if (!parent_is_flex && is_inline_block) {
             YGNodeStyleSetAlignSelf(yoga_node, YGAlignFlexStart);
@@ -2757,9 +2752,7 @@ void Engine::applyYogaFlexBasisFromWidth(dom::DOMNodePtr dom_node, YGNode* yoga_
         if (parent->getType() == dom::DOMNode::NodeType::ELEMENT) {
             const auto& parent_style = parent->getComputedStyle();
             if (parent_style.layout_mode == dom::LayoutMode::Flex) {
-                std::string dir = parent_style.flex_direction;
-                if (dir.empty()) dir = "row";
-                if (dir == "row" || dir == "row-reverse") {
+                if (parent_style.flex_direction == dom::CSSFlexDirection::Row || parent_style.flex_direction == dom::CSSFlexDirection::RowReverse) {
                     parent_row_flex = true;
                 }
             }
@@ -2814,7 +2807,7 @@ void Engine::applyYogaInputElementStyles(dom::DOMNodePtr dom_node, YGNode* yoga_
 // ---------------------------------------------------------------------------
 void Engine::applyYogaInlineElementMinSizes(dom::DOMNodePtr dom_node, YGNode* yoga_node,
                                             const dom::ComputedStyle& style) {
-    const bool is_inline_level = (style.display == "inline" || style.display == "inline-block");
+    const bool is_inline_level = (style.display == dom::CSSDisplay::Inline || style.display == dom::CSSDisplay::InlineBlock);
     if (!is_inline_level || (!style.width.isAuto() && !style.height.isAuto())) {
         return;
     }
@@ -2831,8 +2824,8 @@ void Engine::applyYogaInlineElementMinSizes(dom::DOMNodePtr dom_node, YGNode* yo
     TextShapeRequest req{};
     req.text = text;
     req.font_family = style.font_family;
-    req.font_weight = style.font_weight;
-    req.font_style = style.font_style;
+    req.font_weight = toString(style.font_weight);
+    req.font_style = toString(style.font_style);
     req.font_size = font_size_px;
 
     ShapedText shaped{};
@@ -2947,20 +2940,20 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
     // Set flex direction
     // For flex layout, respect flex_direction; for block/inline, approximate as vertical stack
     if (style.layout_mode == dom::LayoutMode::Flex) {
-        if (style.flex_direction == "column") {
+        if (style.flex_direction == dom::CSSFlexDirection::Column) {
             YGNodeStyleSetFlexDirection(yoga_node, YGFlexDirectionColumn);
-        } else if (style.flex_direction == "column-reverse") {
+        } else if (style.flex_direction == dom::CSSFlexDirection::ColumnReverse) {
             YGNodeStyleSetFlexDirection(yoga_node, YGFlexDirectionColumnReverse);
-        } else if (style.flex_direction == "row-reverse") {
+        } else if (style.flex_direction == dom::CSSFlexDirection::RowReverse) {
             YGNodeStyleSetFlexDirection(yoga_node, YGFlexDirectionRowReverse);
         } else {
             YGNodeStyleSetFlexDirection(yoga_node, YGFlexDirectionRow);
         }
 
         // Flex wrap
-        if (style.flex_wrap == "wrap") {
+        if (style.flex_wrap == dom::CSSFlexWrap::Wrap) {
             YGNodeStyleSetFlexWrap(yoga_node, YGWrapWrap);
-        } else if (style.flex_wrap == "wrap-reverse") {
+        } else if (style.flex_wrap == dom::CSSFlexWrap::WrapReverse) {
             YGNodeStyleSetFlexWrap(yoga_node, YGWrapWrapReverse);
         } else {
             YGNodeStyleSetFlexWrap(yoga_node, YGWrapNoWrap);
@@ -2971,19 +2964,19 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
         YGNodeStyleSetFlexDirection(yoga_node, YGFlexDirectionColumn);
         
         // 浣嗗鏋滄槸 inline-block 鍏冪礌锛岃缃负 row 鏂瑰悜锛岃 Yoga 鑳芥纭绠楀叾灏哄
-        if (style.display == "inline-block") {
+        if (style.display == dom::CSSDisplay::InlineBlock) {
             YGNodeStyleSetFlexDirection(yoga_node, YGFlexDirectionRow);
         }
     }
 
     // Set justify content
-    if (style.justify_content == "flex-end") {
+    if (style.justify_content == dom::CSSJustifyContent::FlexEnd) {
         YGNodeStyleSetJustifyContent(yoga_node, YGJustifyFlexEnd);
-    } else if (style.justify_content == "center") {
+    } else if (style.justify_content == dom::CSSJustifyContent::Center) {
         YGNodeStyleSetJustifyContent(yoga_node, YGJustifyCenter);
-    } else if (style.justify_content == "space-between") {
+    } else if (style.justify_content == dom::CSSJustifyContent::SpaceBetween) {
         YGNodeStyleSetJustifyContent(yoga_node, YGJustifySpaceBetween);
-    } else if (style.justify_content == "space-around") {
+    } else if (style.justify_content == dom::CSSJustifyContent::SpaceAround) {
         YGNodeStyleSetJustifyContent(yoga_node, YGJustifySpaceAround);
     } else {
         YGNodeStyleSetJustifyContent(yoga_node, YGJustifyFlexStart);
@@ -2992,13 +2985,13 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
     // Set align items
     // CSS initial value is `stretch`.
     // Use `stretch` as fallback for empty/unknown values so block layout (column) also fills width.
-    if (style.align_items == "flex-start" || style.align_items == "start") {
+    if (style.align_items == dom::CSSAlignItems::FlexStart || style.align_items == dom::CSSAlignItems::Start) {
         YGNodeStyleSetAlignItems(yoga_node, YGAlignFlexStart);
-    } else if (style.align_items == "flex-end" || style.align_items == "end") {
+    } else if (style.align_items == dom::CSSAlignItems::FlexEnd || style.align_items == dom::CSSAlignItems::End) {
         YGNodeStyleSetAlignItems(yoga_node, YGAlignFlexEnd);
-    } else if (style.align_items == "center") {
+    } else if (style.align_items == dom::CSSAlignItems::Center) {
         YGNodeStyleSetAlignItems(yoga_node, YGAlignCenter);
-    } else if (style.align_items == "baseline") {
+    } else if (style.align_items == dom::CSSAlignItems::Baseline) {
         YGNodeStyleSetAlignItems(yoga_node, YGAlignBaseline);
     } else {
         // stretch / normal / empty / unknown
@@ -3006,20 +2999,18 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
     }
 
     // Set align-content (controls flex-line distribution when flex-wrap is used)
-    if (!style.align_content.empty() && style.align_content != "normal") {
-        const auto& ac = style.align_content;
-        if (ac == "flex-start" || ac == "start") {
+    if (style.align_content != dom::CSSAlignContent::Normal && style.align_content != dom::CSSAlignContent::Stretch) {
+        const auto ac = style.align_content;
+        if (ac == dom::CSSAlignContent::FlexStart || ac == dom::CSSAlignContent::Start) {
             YGNodeStyleSetAlignContent(yoga_node, YGAlignFlexStart);
-        } else if (ac == "flex-end" || ac == "end") {
+        } else if (ac == dom::CSSAlignContent::FlexEnd || ac == dom::CSSAlignContent::End) {
             YGNodeStyleSetAlignContent(yoga_node, YGAlignFlexEnd);
-        } else if (ac == "center") {
+        } else if (ac == dom::CSSAlignContent::Center) {
             YGNodeStyleSetAlignContent(yoga_node, YGAlignCenter);
-        } else if (ac == "space-between") {
+        } else if (ac == dom::CSSAlignContent::SpaceBetween) {
             YGNodeStyleSetAlignContent(yoga_node, YGAlignSpaceBetween);
-        } else if (ac == "space-around") {
+        } else if (ac == dom::CSSAlignContent::SpaceAround) {
             YGNodeStyleSetAlignContent(yoga_node, YGAlignSpaceAround);
-        } else if (ac == "stretch") {
-            YGNodeStyleSetAlignContent(yoga_node, YGAlignStretch);
         }
     }
 
@@ -3031,9 +3022,9 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
     // Set overflow for scroll containers
     // When overflow is hidden/scroll/auto/clip, Yoga should not expand to fit content
     // clip is similar to hidden but disables all scrolling mechanisms
-    if (style.overflow == "scroll") {
+    if (style.overflow == dom::CSSOverflow::Scroll) {
         YGNodeStyleSetOverflow(yoga_node, YGOverflowScroll);
-    } else if (style.overflow == "hidden" || style.overflow == "auto" || style.overflow == "clip") {
+    } else if (style.overflow == dom::CSSOverflow::Hidden || style.overflow == dom::CSSOverflow::Auto || style.overflow == dom::CSSOverflow::Clip) {
         YGNodeStyleSetOverflow(yoga_node, YGOverflowHidden);
     } else {
         YGNodeStyleSetOverflow(yoga_node, YGOverflowVisible);
@@ -3042,7 +3033,7 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
     // Set position type and offsets (relative/absolute/fixed)
     // - absolute/fixed: out of normal flow => Yoga absolute
     // - static/relative: in flow => Yoga relative (offsets handled via top/right/bottom/left)
-    if (style.position == "absolute" || style.position == "fixed") {
+    if (style.position == dom::CSSPosition::Absolute || style.position == dom::CSSPosition::Fixed) {
         YGNodeStyleSetPositionType(yoga_node, YGPositionTypeAbsolute);
     } else {
         YGNodeStyleSetPositionType(yoga_node, YGPositionTypeRelative);
@@ -3063,15 +3054,15 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
     float border_h = 0.0f; // horizontal border (left + right)
     float border_v = 0.0f; // vertical border (top + bottom)
     
-    auto effective_border_width = [&](float side_width, const std::string& side_style) -> float {
+    auto effective_border_width = [&](float side_width, dom::CSSBorderStyle side_style) -> float {
         float w = (side_width >= 0.0f) ? side_width : style.border_width;
         if (w < 0.0f) w = 0.0f;
-        const std::string& st = !side_style.empty() ? side_style : style.border_style;
-        if (st == "none" || st == "hidden") return 0.0f;
+        dom::CSSBorderStyle st = (side_style != dom::CSSBorderStyleUnset) ? side_style : style.border_style;
+        if (st == dom::CSSBorderStyle::None || st == dom::CSSBorderStyle::Hidden) return 0.0f;
         return w;
     };
 
-    if (style.box_sizing == "content-box") {
+    if (style.box_sizing == dom::CSSBoxSizing::ContentBox) {
         if (style.padding_left.isPixel()) pad_h += style.padding_left.value;
         if (style.padding_right.isPixel()) pad_h += style.padding_right.value;
         if (style.padding_top.isPixel()) pad_v += style.padding_top.value;
@@ -3144,7 +3135,7 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
 
     if (style.width.isPixel()) {
         float width_for_yoga = style.width.value;
-        if (style.box_sizing == "content-box") {
+        if (style.box_sizing == dom::CSSBoxSizing::ContentBox) {
             // content-box: CSS width is content width, add padding and border for Yoga
             width_for_yoga += pad_h + border_h;
         }
@@ -3155,7 +3146,7 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
         has_explicit_width = true;
     } else if (is_viewport_unit(style.width.unit)) {
         float width_for_yoga = resolve_viewport_px(style.width);
-        if (style.box_sizing == "content-box") {
+        if (style.box_sizing == dom::CSSBoxSizing::ContentBox) {
             width_for_yoga += pad_h + border_h;
         }
         if (width_for_yoga > 0.0f && std::isfinite(width_for_yoga)) {
@@ -3164,7 +3155,7 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
         }
     } else if (style.width.isCalc()) {
         float width_px = resolve_length_px_for_layout(style.width, parent_content_width_px);
-        if (style.box_sizing == "content-box") {
+        if (style.box_sizing == dom::CSSBoxSizing::ContentBox) {
             width_px += pad_h + border_h;
         }
         if (width_px < 0.0f) width_px = 0.0f;
@@ -3177,7 +3168,7 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
 
     if (style.height.isPixel()) {
         float height_for_yoga = style.height.value;
-        if (style.box_sizing == "content-box") {
+        if (style.box_sizing == dom::CSSBoxSizing::ContentBox) {
             // content-box: CSS height is content height, add padding and border for Yoga
             height_for_yoga += pad_v + border_v;
         }
@@ -3194,7 +3185,7 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
         has_explicit_height = true;
     } else if (is_viewport_unit(style.height.unit)) {
         float height_for_yoga = resolve_viewport_px(style.height);
-        if (style.box_sizing == "content-box") {
+        if (style.box_sizing == dom::CSSBoxSizing::ContentBox) {
             height_for_yoga += pad_v + border_v;
         }
         if (height_for_yoga > 0.0f && std::isfinite(height_for_yoga)) {
@@ -3203,7 +3194,7 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
         }
     } else if (style.height.isCalc()) {
         float height_px = resolve_length_px_for_layout(style.height, parent_content_height_px);
-        if (style.box_sizing == "content-box") {
+        if (style.box_sizing == dom::CSSBoxSizing::ContentBox) {
             height_px += pad_v + border_v;
         }
         if (height_px < 0.0f) height_px = 0.0f;
@@ -3223,11 +3214,11 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
     // - inline-block elements (should size to content, not stretch to 100%)
     // Otherwise Yoga will give them a 100% width box, which breaks the
     // expected CSS semantics.
-    const bool is_inline_block = (style.display == "inline-block");
+    const bool is_inline_block = (style.display == dom::CSSDisplay::InlineBlock);
     if (!has_explicit_width &&
         style.layout_mode == dom::LayoutMode::Block &&
-        style.position != "absolute" &&
-        style.position != "fixed" &&
+        style.position != dom::CSSPosition::Absolute &&
+        style.position != dom::CSSPosition::Fixed &&
         !is_inline_block) {
         YGNodeStyleSetWidthPercent(yoga_node, 100.0f);
     }
@@ -3338,7 +3329,7 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
     // Note: min/max constraints also need box-sizing adjustment for content-box
     if (style.min_width.isPixel()) {
         float min_w = style.min_width.value;
-        if (style.box_sizing == "content-box") {
+        if (style.box_sizing == dom::CSSBoxSizing::ContentBox) {
             min_w += pad_h + border_h;
         }
         YGNodeStyleSetMinWidth(yoga_node, min_w);
@@ -3347,7 +3338,7 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
     }
     if (style.max_width.isPixel()) {
         float max_w = style.max_width.value;
-        if (style.box_sizing == "content-box") {
+        if (style.box_sizing == dom::CSSBoxSizing::ContentBox) {
             max_w += pad_h + border_h;
         }
         YGNodeStyleSetMaxWidth(yoga_node, max_w);
@@ -3356,7 +3347,7 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
     }
     if (style.min_height.isPixel()) {
         float min_h = style.min_height.value;
-        if (style.box_sizing == "content-box") {
+        if (style.box_sizing == dom::CSSBoxSizing::ContentBox) {
             min_h += pad_v + border_v;
         }
         YGNodeStyleSetMinHeight(yoga_node, min_h);
@@ -3365,7 +3356,7 @@ void Engine::mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yo
     }
     if (style.max_height.isPixel()) {
         float max_h = style.max_height.value;
-        if (style.box_sizing == "content-box") {
+        if (style.box_sizing == dom::CSSBoxSizing::ContentBox) {
             max_h += pad_v + border_v;
         }
         YGNodeStyleSetMaxHeight(yoga_node, max_h);
@@ -3442,10 +3433,10 @@ void Engine::layoutBlockFormattingContext(dom::DOMNodePtr root) {
         // Skip: display:none, position:absolute/fixed, inline/inline-block, flex items
         const bool is_block_in_flow =
             style.layout_mode == dom::LayoutMode::Block &&
-            style.position != "absolute" &&
-            style.position != "fixed" &&
-            style.display != "inline" &&
-            style.display != "inline-block";
+            style.position != dom::CSSPosition::Absolute &&
+            style.position != dom::CSSPosition::Fixed &&
+            style.display != dom::CSSDisplay::Inline &&
+            style.display != dom::CSSDisplay::InlineBlock;
 
         if (is_block_in_flow && parent) {
             const bool margin_left_auto = style.margin_left.isAuto();
@@ -3599,7 +3590,7 @@ void Engine::collectInlineItems(const dom::DOMNodePtr& container,
         const std::string child_tag = child->getTagName();
 
         // Skip absolutely positioned elements
-        if (child_style.position == "absolute") continue;
+        if (child_style.position == dom::CSSPosition::Absolute) continue;
         if (!isInlineLevelDisplay(child_style.display)) continue;
 
         // Handle <br> as line break
@@ -3683,7 +3674,7 @@ void Engine::collectInlineItems(const dom::DOMNodePtr& container,
         } else {
             item.baseline_from_border_top = height_px;
         }
-        item.vertical_align = child_style.vertical_align;
+        item.vertical_align = toString(child_style.vertical_align);
         items.push_back(item);
     }
 }
@@ -3854,13 +3845,13 @@ void Engine::layoutLineItems(std::vector<InlineItem>& items,
 // Max-height helpers (used by post-pass height propagation)
 // ---------------------------------------------------------------------------
 static float effective_border_side_width(float side_width,
-                                         const std::string& side_style,
+                                         dom::CSSBorderStyle side_style,
                                          float fallback_width,
-                                         const std::string& fallback_style) {
+                                         dom::CSSBorderStyle fallback_style) {
     float w = (side_width >= 0.0f) ? side_width : fallback_width;
     if (w < 0.0f) w = 0.0f;
-    const std::string& st = !side_style.empty() ? side_style : fallback_style;
-    if (st == "none" || st == "hidden") return 0.0f;
+    dom::CSSBorderStyle st = (side_style != dom::CSSBorderStyleUnset) ? side_style : fallback_style;
+    if (st == dom::CSSBorderStyle::None || st == dom::CSSBorderStyle::Hidden) return 0.0f;
     return w;
 }
 
@@ -3877,7 +3868,7 @@ static std::optional<float> max_height_border_box_px(const dong::dom::ComputedSt
         return std::nullopt;
     }
     float max_h = style.max_height.value;
-    if (style.box_sizing == "content-box") {
+    if (style.box_sizing == dom::CSSBoxSizing::ContentBox) {
         const float pad_t = style.padding_top.isPixel() ? style.padding_top.value : 0.0f;
         const float pad_b = style.padding_bottom.isPixel() ? style.padding_bottom.value : 0.0f;
         max_h += pad_t + pad_b + effective_border_vertical_px(style);
@@ -3894,18 +3885,18 @@ float Engine::propagateIFCHeights(const dom::DOMNodePtr& node) {
     }
 
     const auto& style = node->getComputedStyle();
-    if (style.display == "none") return 0.0f;
+    if (style.display == dom::CSSDisplay::None) return 0.0f;
 
     auto it = layout_cache.find(node.get());
     if (it == layout_cache.end() || !it->second) return 0.0f;
     LayoutNode* layout = it->second.get();
 
-    if (style.position == "absolute" || style.position == "fixed") return 0.0f;
+    if (style.position == dom::CSSPosition::Absolute || style.position == dom::CSSPosition::Fixed) return 0.0f;
 
     // Table heights are managed by layoutTableElements post-pass.
     // Don't propagate child heights into tables as collapsed tbodys may report
     // their unreduced Yoga heights and grow the table incorrectly.
-    if (style.display == "table" || style.display == "inline-table") {
+    if (style.display == dom::CSSDisplay::Table || style.display == dom::CSSDisplay::InlineTable) {
         return layout->y + layout->height;
     }
 
@@ -3913,9 +3904,9 @@ float Engine::propagateIFCHeights(const dom::DOMNodePtr& node) {
     for (const auto& child : node->getChildren()) {
         if (!child || child->getType() != dom::DOMNode::NodeType::ELEMENT) continue;
         const auto& child_style = child->getComputedStyle();
-        if (child_style.display == "none" ||
-            child_style.position == "absolute" ||
-            child_style.position == "fixed") continue;
+        if (child_style.display == dom::CSSDisplay::None ||
+            child_style.position == dom::CSSPosition::Absolute ||
+            child_style.position == dom::CSSPosition::Fixed) continue;
 
         float child_bottom = propagateIFCHeights(child);
         if (child_bottom > max_child_bottom) max_child_bottom = child_bottom;
@@ -3956,7 +3947,7 @@ void Engine::adjustPositionsAfterIFC(const dom::DOMNodePtr& node, float parent_d
     if (!node || node->getType() != dom::DOMNode::NodeType::ELEMENT) return;
 
     const auto& style = node->getComputedStyle();
-    if (style.display == "none") return;
+    if (style.display == dom::CSSDisplay::None) return;
 
     auto it = layout_cache.find(node.get());
     if (it == layout_cache.end() || !it->second) return;
@@ -3971,15 +3962,15 @@ void Engine::adjustPositionsAfterIFC(const dom::DOMNodePtr& node, float parent_d
     for (const auto& child : node->getChildren()) {
         if (child && child->getType() == dom::DOMNode::NodeType::ELEMENT) {
             const auto& child_style = child->getComputedStyle();
-            if (child_style.display != "none" &&
-                child_style.position != "absolute" &&
-                child_style.position != "fixed") {
+            if (child_style.display != dom::CSSDisplay::None &&
+                child_style.position != dom::CSSPosition::Absolute &&
+                child_style.position != dom::CSSPosition::Fixed) {
                 adjustPositionsAfterIFC(child, 0.0f);
             }
         }
     }
 
-    if (style.display != "flex" && style.display != "inline-flex") {
+    if (style.display != dom::CSSDisplay::Flex && style.display != dom::CSSDisplay::InlineFlex) {
         adjustSiblingYPositions(node, layout, style);
     }
 }
@@ -4018,7 +4009,7 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
                         } else if (ch->getType() == dom::DOMNode::NodeType::ELEMENT) {
                             const auto& cs = ch->getComputedStyle();
                             DONG_LOG_WARN("[IFC-CE]   [%zu] <%s> display=%s layout_mode=%d",
-                                          ci, ch->getTagName().c_str(), cs.display.c_str(), (int)cs.layout_mode);
+                                          ci, ch->getTagName().c_str(), toString(cs.display), (int)cs.layout_mode);
                         }
                     }
                 }
@@ -4113,7 +4104,7 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
                     const auto& child_style = child->getComputedStyle();
                     const std::string child_tag = child->getTagName();
                     
-                    if (child_style.position == "absolute") {
+                    if (child_style.position == dom::CSSPosition::Absolute) {
 
                         // 缁濆瀹氫綅鍏冪礌涓嶅弬涓庡唴鑱旀牸寮忓寲涓婁笅鏂囷紝鐢变笓闂ㄧ殑瀹氫綅甯冨眬闃舵澶勭悊
                         continue;
@@ -4225,7 +4216,7 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
                         // 鏃犳枃鏈唴瀹规椂锛宐aseline 杩戜技涓哄厓绱犲簳閮紙绗﹀悎 CSS inline-block 鐨勯粯璁よ涓猴級
                         item.baseline_from_border_top = height_px;
                     }
-                    item.vertical_align = child_style.vertical_align;
+                    item.vertical_align = toString(child_style.vertical_align);
 
                     items.push_back(item);
                 }
@@ -4441,7 +4432,7 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
         }
         
         const auto& style = node->getComputedStyle();
-        if (style.display == "none") {
+        if (style.display == dom::CSSDisplay::None) {
             return 0.0f;
         }
         
@@ -4452,7 +4443,7 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
         LayoutNode* layout = it->second.get();
         
         // 如果是绝对定位元素，不参与高度计算
-        if (style.position == "absolute" || style.position == "fixed") {
+        if (style.position == dom::CSSPosition::Absolute || style.position == dom::CSSPosition::Fixed) {
             return 0.0f;
         }
         
@@ -4463,9 +4454,9 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
                 continue;
             }
             const auto& child_style = child->getComputedStyle();
-            if (child_style.display == "none" || 
-                child_style.position == "absolute" || 
-                child_style.position == "fixed") {
+            if (child_style.display == dom::CSSDisplay::None || 
+                child_style.position == dom::CSSPosition::Absolute || 
+                child_style.position == dom::CSSPosition::Fixed) {
                 continue;
             }
             
@@ -4515,7 +4506,7 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
         }
         
         const auto& style = node->getComputedStyle();
-        if (style.display == "none") {
+        if (style.display == dom::CSSDisplay::None) {
             return;
         }
         
@@ -4536,15 +4527,15 @@ void Engine::layoutInlineFormattingContexts(dom::DOMNodePtr root) {
         for (const auto& child : node->getChildren()) {
             if (child && child->getType() == dom::DOMNode::NodeType::ELEMENT) {
                 const auto& child_style = child->getComputedStyle();
-                if (child_style.display != "none" &&
-                    child_style.position != "absolute" &&
-                    child_style.position != "fixed") {
+                if (child_style.display != dom::CSSDisplay::None &&
+                    child_style.position != dom::CSSPosition::Absolute &&
+                    child_style.position != dom::CSSPosition::Fixed) {
                     adjustSiblingPositions(child, 0.0f);
                 }
             }
         }
 
-        if (style.display != "flex" && style.display != "inline-flex" &&
+        if (style.display != dom::CSSDisplay::Flex && style.display != dom::CSSDisplay::InlineFlex &&
             !isTableLikeDisplay(style.display)) {
         // 检查是否需要调整子元素的 Y 坐标
 
@@ -4600,8 +4591,8 @@ void Engine::shiftSubtreeY(const dom::DOMNodePtr& n, float dy) {
         }
         if (ch->getType() != dom::DOMNode::NodeType::ELEMENT) continue;
         const auto& cs = ch->getComputedStyle();
-        if (cs.display == "none") continue;
-        if (cs.position == "absolute" || cs.position == "fixed") continue;
+        if (cs.display == dom::CSSDisplay::None) continue;
+        if (cs.position == dom::CSSPosition::Absolute || cs.position == dom::CSSPosition::Fixed) continue;
         shiftSubtreeY(ch, dy);
     }
 }
@@ -4640,10 +4631,10 @@ void Engine::shiftSubtreeXY(const dom::DOMNodePtr& n, float dx, float dy, bool s
         }
 
         const auto& cs = cur->getComputedStyle();
-        if (cs.display == "none") {
+        if (cs.display == dom::CSSDisplay::None) {
             continue;
         }
-        if (skip_fixed_descendants && cur.get() != n.get() && cs.position == "fixed") {
+        if (skip_fixed_descendants && cur.get() != n.get() && cs.position == dom::CSSPosition::Fixed) {
             continue;
         }
 
@@ -4735,14 +4726,14 @@ void Engine::adjustSiblingYPositions(const dom::DOMNodePtr& node,
         }
 
         const auto& child_style = child->getComputedStyle();
-        if (child_style.display == "none" ||
-            child_style.position == "absolute" ||
-            child_style.position == "fixed") {
+        if (child_style.display == dom::CSSDisplay::None ||
+            child_style.position == dom::CSSPosition::Absolute ||
+            child_style.position == dom::CSSPosition::Fixed) {
             continue;
         }
 
-        bool is_inline = (child_style.display == "inline" ||
-                          child_style.display == "inline-block");
+        bool is_inline = (child_style.display == dom::CSSDisplay::Inline ||
+                          child_style.display == dom::CSSDisplay::InlineBlock);
         if (is_inline) {
             // Check if this child is the first node of an anonymous wrapper
             for (const auto* ab : parent_anon_blocks) {
@@ -4827,7 +4818,7 @@ void Engine::adjustSiblingYPositions(const dom::DOMNodePtr& node,
         for (const auto& child : node->getChildren()) {
             if (!child || child->getType() != dom::DOMNode::NodeType::ELEMENT) continue;
             const auto& cs = child->getComputedStyle();
-            if (cs.display == "none" || cs.position == "absolute" || cs.position == "fixed") continue;
+            if (cs.display == dom::CSSDisplay::None || cs.position == dom::CSSPosition::Absolute || cs.position == dom::CSSPosition::Fixed) continue;
             auto it = layout_cache.find(child.get());
             if (it != layout_cache.end() && it->second) {
                 float mb = cs.margin_bottom.isPixel() ? cs.margin_bottom.value : 0.0f;
@@ -4885,7 +4876,7 @@ void Engine::layoutPositionedElements(dom::DOMNodePtr root) {
         // Handle position: relative
         // Relative positioning: element stays in normal flow but is visually offset
         // by top/right/bottom/left values. This offset does NOT affect sibling layout.
-        if (style.position == "relative") {
+        if (style.position == dom::CSSPosition::Relative) {
             auto it_layout = layout_cache.find(node.get());
             if (it_layout != layout_cache.end() && it_layout->second) {
                 LayoutNode* layout = it_layout->second.get();
@@ -4957,15 +4948,15 @@ void Engine::layoutPositionedElements(dom::DOMNodePtr root) {
         // Handle position: absolute / fixed
         // - absolute: containing block is nearest ancestor with position != static
         // - fixed: containing block is the viewport (layout root)
-        if (style.position == "absolute" || style.position == "fixed") {
+        if (style.position == dom::CSSPosition::Absolute || style.position == dom::CSSPosition::Fixed) {
             dom::DOMNodePtr containing_block = nullptr;
 
-            if (style.position == "absolute") {
+            if (style.position == dom::CSSPosition::Absolute) {
                 // Find containing block: nearest ancestor with position != static.
                 dom::DOMNodePtr current = node->getParent();
                 while (current) {
                     const auto& cs = current->getComputedStyle();
-                    if (cs.position != "static") {
+                    if (cs.position != dom::CSSPosition::Static) {
                         containing_block = current;
                         break;
                     }
@@ -4993,7 +4984,7 @@ void Engine::layoutPositionedElements(dom::DOMNodePtr root) {
                 if (std::getenv("DONG_DEBUG_FIXED")) {
                     const std::string cls = node->getAttribute("class");
                     const std::string id = node->getAttribute("id");
-                    if (abs_style.position == "fixed") {
+                    if (abs_style.position == dom::CSSPosition::Fixed) {
                         std::fprintf(stderr,
                                      "[FixedDebug] tag=%s id=%s class=%s top=(%d,%.1f) right=(%d,%.1f) bottom=(%d,%.1f) left=(%d,%.1f) cb=(%.1f,%.1f,%.1f,%.1f) layout=(%.1f,%.1f,%.1f,%.1f)\n",
                                      node->getTagName().c_str(), id.c_str(), cls.c_str(),
@@ -5210,7 +5201,7 @@ void Engine::layoutStickyElements(dom::DOMNodePtr root) {
 
         const auto& style = node->getComputedStyle();
 
-        if (style.position == "sticky") {
+        if (style.position == dom::CSSPosition::Sticky) {
             auto it_layout = layout_cache.find(node.get());
             if (it_layout != layout_cache.end() && it_layout->second) {
                 LayoutNode* layout = it_layout->second.get();

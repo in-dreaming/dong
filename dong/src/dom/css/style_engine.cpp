@@ -14,27 +14,7 @@
 
 namespace dong::dom {
 
-namespace {
-
-LayoutMode deriveLayoutModeFromDisplay(const ComputedStyle& style) {
-    const std::string& d = style.display;
-    if (d == "none") {
-        return LayoutMode::None;
-    }
-    if (d == "flex" || d == "inline-flex") {
-        return LayoutMode::Flex;
-    }
-    if (d == "inline" || d == "inline-block") {
-        return LayoutMode::Inline;
-    }
-    return LayoutMode::Block;
-}
-
-// Logical properties (margin/padding/border-inline/block).
-// Note: we currently only map for horizontal-tb writing mode.
-// ── Sub-functions for applyRuleProperties (declared before the caller) ──
-
-
+namespace style_engine_internal {
 
 void applyInlineStyleAttributeIfAny(DOMNodePtr node) {
     if (!node) return;
@@ -42,24 +22,18 @@ void applyInlineStyleAttributeIfAny(DOMNodePtr node) {
     const std::string style_str = node->getAttribute("style");
     if (style_str.empty()) return;
 
-    // Inline style has the highest precedence in author styles.
     CSSParser::parseInlineStyle(style_str, node->getComputedStyle());
 }
 
-// Apply HTML presentational attributes that map to CSS properties.
-// These have lower priority than author styles (inline or external),
-// so they are applied BEFORE inline styles in the cascade.
 void applyPresentationalAttributesIfAny(DOMNodePtr node) {
     if (!node) return;
     const std::string& tag = node->getTagName();
     auto& cs = node->getComputedStyle();
 
-    // <img width="N" height="N"> �?CSS width/height (if no CSS width/height already set)
     if (tag == "img" || tag == "video" || tag == "canvas") {
         if (!cs.isExplicitlySet("width") && node->hasAttribute("width")) {
             const std::string& w = node->getAttribute("width");
             if (!w.empty()) {
-                // Parse as integer pixels
                 try {
                     float px = std::stof(w);
                     cs.width = CSSValue(px, CSSValue::Unit::PIXEL);
@@ -81,13 +55,14 @@ void applyPresentationalAttributesIfAny(DOMNodePtr node) {
 }
 
 void applyDirAttributeIfAny(DOMNodePtr node) {
-    // Apply dir attribute to CSS direction property
-    // The dir attribute maps to the direction CSS property
     if (!node) return;
-
     auto& computed = node->getComputedStyle();
-    computed.direction = node->getEffectiveDirection();
+    computed.direction = directionFromString(node->getEffectiveDirection());
 }
+
+} // namespace style_engine_internal
+
+namespace {
 
 using TagStyleHandler = void(*)(ComputedStyle&);
 
@@ -116,23 +91,23 @@ const std::unordered_map<std::string_view, TagStyleHandler> kTagDefaultHandlers 
 
     // Inline elements
     {"span", [](ComputedStyle& s) { s.setDisplay("inline"); }},
-    {"a", [](ComputedStyle& s) { s.setDisplay("inline"); s.color = "#0000EE"; s.text_decoration = "underline"; s.cursor = "pointer"; s.markExplicitlySet("color"); }},
-    {"b", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_weight = "bold"; s.markExplicitlySet("font-weight"); }},
-    {"i", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_style = "italic"; s.markExplicitlySet("font-style"); }},
-    {"strong", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_weight = "bold"; s.markExplicitlySet("font-weight"); }},
-    {"em", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_style = "italic"; s.markExplicitlySet("font-style"); }},
+    {"a", [](ComputedStyle& s) { s.setDisplay("inline"); s.color = "#0000EE"; s.text_decoration = CSSTextDecoration::Underline; s.cursor = CSSCursor::Pointer; s.markExplicitlySet("color"); }},
+    {"b", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_weight = CSSFontWeight::Bold; s.markExplicitlySet("font-weight"); }},
+    {"i", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_style = CSSFontStyle::Italic; s.markExplicitlySet("font-style"); }},
+    {"strong", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_weight = CSSFontWeight::Bold; s.markExplicitlySet("font-weight"); }},
+    {"em", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_style = CSSFontStyle::Italic; s.markExplicitlySet("font-style"); }},
     {"code", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_family = "Menlo, Consolas, monospace"; s.markExplicitlySet("font-family"); }},
     {"kbd", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_family = "Menlo, Consolas, monospace"; s.markExplicitlySet("font-family"); }},
     {"samp", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_family = "Menlo, Consolas, monospace"; s.markExplicitlySet("font-family"); }},
-    {"var", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_style = "italic"; s.markExplicitlySet("font-style"); }},
+    {"var", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_style = CSSFontStyle::Italic; s.markExplicitlySet("font-style"); }},
     {"small", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_size = 12.0f; s.markExplicitlySet("font-size"); }},
-    {"s", [](ComputedStyle& s) { s.setDisplay("inline"); s.text_decoration = "line-through"; }},
-    {"cite", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_style = "italic"; s.markExplicitlySet("font-style"); }},
+    {"s", [](ComputedStyle& s) { s.setDisplay("inline"); s.text_decoration = CSSTextDecoration::LineThrough; }},
+    {"cite", [](ComputedStyle& s) { s.setDisplay("inline"); s.font_style = CSSFontStyle::Italic; s.markExplicitlySet("font-style"); }},
     {"q", [](ComputedStyle& s) { s.setDisplay("inline"); }},
     {"mark", [](ComputedStyle& s) { s.setDisplay("inline"); s.background_color = "#ffff00"; }},
-    {"sub", [](ComputedStyle& s) { s.setDisplay("inline"); s.vertical_align = "sub"; s.font_size = 12.0f; s.markExplicitlySet("font-size"); }},
-    {"sup", [](ComputedStyle& s) { s.setDisplay("inline"); s.vertical_align = "super"; s.font_size = 12.0f; s.markExplicitlySet("font-size"); }},
-    {"u", [](ComputedStyle& s) { s.setDisplay("inline"); s.text_decoration = "underline"; }},
+    {"sub", [](ComputedStyle& s) { s.setDisplay("inline"); s.vertical_align = CSSVerticalAlign::Sub; s.font_size = 12.0f; s.markExplicitlySet("font-size"); }},
+    {"sup", [](ComputedStyle& s) { s.setDisplay("inline"); s.vertical_align = CSSVerticalAlign::Super; s.font_size = 12.0f; s.markExplicitlySet("font-size"); }},
+    {"u", [](ComputedStyle& s) { s.setDisplay("inline"); s.text_decoration = CSSTextDecoration::Underline; }},
     {"abbr", [](ComputedStyle& s) { s.setDisplay("inline"); }},
     {"time", [](ComputedStyle& s) { s.setDisplay("inline"); }},
     {"data", [](ComputedStyle& s) { s.setDisplay("inline"); }},
@@ -140,23 +115,23 @@ const std::unordered_map<std::string_view, TagStyleHandler> kTagDefaultHandlers 
     {"label", [](ComputedStyle& s) { s.setDisplay("inline"); }},
 
     // Headings - sizes match browser defaults (based on 16px base)
-    {"h1", [](ComputedStyle& s) { s.setDisplay("block"); s.font_weight = "bold"; s.font_size = 32.0f; s.markExplicitlySet("font-weight"); s.markExplicitlySet("font-size"); }},
-    {"h2", [](ComputedStyle& s) { s.setDisplay("block"); s.font_weight = "bold"; s.font_size = 24.0f; s.markExplicitlySet("font-weight"); s.markExplicitlySet("font-size"); }},
-    {"h3", [](ComputedStyle& s) { s.setDisplay("block"); s.font_weight = "bold"; s.font_size = 18.72f; s.markExplicitlySet("font-weight"); s.markExplicitlySet("font-size"); }},
-    {"h4", [](ComputedStyle& s) { s.setDisplay("block"); s.font_weight = "bold"; s.font_size = 16.0f; s.markExplicitlySet("font-weight"); s.markExplicitlySet("font-size"); }},
-    {"h5", [](ComputedStyle& s) { s.setDisplay("block"); s.font_weight = "bold"; s.font_size = 13.28f; s.markExplicitlySet("font-weight"); s.markExplicitlySet("font-size"); }},
-    {"h6", [](ComputedStyle& s) { s.setDisplay("block"); s.font_weight = "bold"; s.font_size = 10.72f; s.markExplicitlySet("font-weight"); s.markExplicitlySet("font-size"); }},
+    {"h1", [](ComputedStyle& s) { s.setDisplay("block"); s.font_weight = CSSFontWeight::Bold; s.font_size = 32.0f; s.markExplicitlySet("font-weight"); s.markExplicitlySet("font-size"); }},
+    {"h2", [](ComputedStyle& s) { s.setDisplay("block"); s.font_weight = CSSFontWeight::Bold; s.font_size = 24.0f; s.markExplicitlySet("font-weight"); s.markExplicitlySet("font-size"); }},
+    {"h3", [](ComputedStyle& s) { s.setDisplay("block"); s.font_weight = CSSFontWeight::Bold; s.font_size = 18.72f; s.markExplicitlySet("font-weight"); s.markExplicitlySet("font-size"); }},
+    {"h4", [](ComputedStyle& s) { s.setDisplay("block"); s.font_weight = CSSFontWeight::Bold; s.font_size = 16.0f; s.markExplicitlySet("font-weight"); s.markExplicitlySet("font-size"); }},
+    {"h5", [](ComputedStyle& s) { s.setDisplay("block"); s.font_weight = CSSFontWeight::Bold; s.font_size = 13.28f; s.markExplicitlySet("font-weight"); s.markExplicitlySet("font-size"); }},
+    {"h6", [](ComputedStyle& s) { s.setDisplay("block"); s.font_weight = CSSFontWeight::Bold; s.font_size = 10.72f; s.markExplicitlySet("font-weight"); s.markExplicitlySet("font-size"); }},
 
     // List elements
-    {"ul", [](ComputedStyle& s) { s.setDisplay("block"); s.list_style_type = "disc"; }},
-    {"ol", [](ComputedStyle& s) { s.setDisplay("block"); s.list_style_type = "decimal"; }},
+    {"ul", [](ComputedStyle& s) { s.setDisplay("block"); s.list_style_type = CSSListStyleType::Disc; }},
+    {"ol", [](ComputedStyle& s) { s.setDisplay("block"); s.list_style_type = CSSListStyleType::Decimal; }},
     {"li", [](ComputedStyle& s) { s.setDisplay("list-item"); }},
 
     // Form elements (inline-block)
     {"button", [](ComputedStyle& s) { s.setDisplay("inline-block"); }},
     {"input", [](ComputedStyle& s) { s.setDisplay("inline-block"); }},
     {"select", [](ComputedStyle& s) { s.setDisplay("inline-block"); }},
-    {"textarea", [](ComputedStyle& s) { s.setDisplay("inline-block"); s.white_space = "pre-wrap"; s.markExplicitlySet("white-space"); }},
+    {"textarea", [](ComputedStyle& s) { s.setDisplay("inline-block"); s.white_space = CSSWhiteSpace::PreWrap; s.markExplicitlySet("white-space"); }},
 
     // Media elements (inline-block)
     {"img", [](ComputedStyle& s) { s.setDisplay("inline-block"); }},
@@ -552,11 +527,11 @@ void StyleEngine::computeStyles(DOMNodePtr node) {
     // Inherit from parent
     inheritFromParent(node);
 
-    // Presentational HTML attributes (e.g. img width/height) �?lower priority than inline styles.
-    applyPresentationalAttributesIfAny(node);
+    // Presentational HTML attributes (e.g. img width/height) - lower priority than inline styles.
+    style_engine_internal::applyPresentationalAttributesIfAny(node);
 
     // Inline style overrides author rules
-    applyInlineStyleAttributeIfAny(node);
+    style_engine_internal::applyInlineStyleAttributeIfAny(node);
 
     // Re-apply !important properties from rules - these override inline styles
     for (const auto& rule : matching_rules) {
@@ -573,12 +548,12 @@ void StyleEngine::computeStyles(DOMNodePtr node) {
         "head", "style", "script", "meta", "title", "link"
     };
     if (kAlwaysHiddenTags.count(node->getTagName()) > 0) {
-        node->getComputedStyle().display = "none";
+        node->getComputedStyle().setDisplay(CSSDisplay::None);
     }
 
     // [hidden] attribute support
     if (node->hasAttribute("hidden")) {
-        node->getComputedStyle().display = "none";
+        node->getComputedStyle().setDisplay(CSSDisplay::None);
     }
 
     // <details> hiding: non-<summary> children of a closed <details> are hidden.
@@ -586,14 +561,14 @@ void StyleEngine::computeStyles(DOMNodePtr node) {
         if (parent->getTagName() == "details" &&
             !parent->hasAttribute("open") &&
             node->getTagName() != "summary") {
-            node->getComputedStyle().display = "none";
+            node->getComputedStyle().setDisplay(CSSDisplay::None);
         }
     }
 
     // <dialog> element: hidden unless open attribute is present
     if (node->getTagName() == "dialog") {
         if (!node->hasAttribute("open")) {
-            node->getComputedStyle().display = "none";
+            node->getComputedStyle().setDisplay(CSSDisplay::None);
         } else {
             // Default dialog styles (only when not explicitly styled)
             auto& cs = node->getComputedStyle();
@@ -605,7 +580,7 @@ void StyleEngine::computeStyles(DOMNodePtr node) {
             if (is_modal) {
                 // Modal dialogs are positioned fixed, centered
                 if (!cs.isExplicitlySet("position")) {
-                    cs.position = "fixed";
+                    cs.position = CSSPosition::Fixed;
                 }
                 if (!cs.isExplicitlySet("top")) {
                     cs.top = CSSValue(0.0f, CSSValue::Unit::PIXEL);
@@ -632,7 +607,7 @@ void StyleEngine::computeStyles(DOMNodePtr node) {
             } else {
                 // Non-modal: block display, centered horizontally
                 if (!cs.isExplicitlySet("display")) {
-                    cs.display = "block";
+                    cs.setDisplay(CSSDisplay::Block);
                 }
                 if (!cs.isExplicitlySet("margin")) {
                     cs.margin_top = CSSValue(1.0f, CSSValue::Unit::EM);
@@ -643,11 +618,11 @@ void StyleEngine::computeStyles(DOMNodePtr node) {
             }
 
             if (!cs.isExplicitlySet("border-style")) {
-                cs.border_style = "solid";
-                cs.border_top_style = "solid";
-                cs.border_right_style = "solid";
-                cs.border_bottom_style = "solid";
-                cs.border_left_style = "solid";
+                cs.border_style = CSSBorderStyle::Solid;
+                cs.border_top_style = CSSBorderStyle::Solid;
+                cs.border_right_style = CSSBorderStyle::Solid;
+                cs.border_bottom_style = CSSBorderStyle::Solid;
+                cs.border_left_style = CSSBorderStyle::Solid;
             }
             if (!cs.isExplicitlySet("border-width")) {
                 cs.border_width = 1.0f;
@@ -674,14 +649,14 @@ void StyleEngine::computeStyles(DOMNodePtr node) {
     // Only apply if direction is not explicitly set by CSS
     if (node->hasAttribute("dir") && !computed.isExplicitlySet("direction")) {
         auto& comp_style = node->getComputedStyle();
-        comp_style.direction = node->getEffectiveDirection();
+        comp_style.direction = directionFromString(node->getEffectiveDirection());
         comp_style.markExplicitlySet("direction");
     }
 
     // Resolve logical text-align (start/end) based on final direction.
     style_engine_internal::resolveTextAlignForDirection(node->getComputedStyle());
 
-    node->getComputedStyle().layout_mode = deriveLayoutModeFromDisplay(node->getComputedStyle());
+    node->getComputedStyle().layout_mode = deriveLayoutModeFromDisplay(node->getComputedStyle().display);
 
     // Update BFC flag based on computed style properties
     node->getComputedStyle().updateBFCFlag();
@@ -703,7 +678,7 @@ void StyleEngine::recomputeNodeStyle(DOMNodePtr node) {
     applyDefaultStyleForNode(node);
     applyMatchingRules(node);
     inheritFromParent(node);
-    applyInlineStyleAttributeIfAny(node);
+    style_engine_internal::applyInlineStyleAttributeIfAny(node);
 
     style_engine_internal::applyLogicalProperties(node->getComputedStyle());
 
@@ -712,10 +687,10 @@ void StyleEngine::recomputeNodeStyle(DOMNodePtr node) {
         "head", "style", "script", "meta", "title", "link"
     };
     if (kAlwaysHiddenTags.count(node->getTagName()) > 0) {
-        node->getComputedStyle().display = "none";
+        node->getComputedStyle().setDisplay(CSSDisplay::None);
     }
     if (node->hasAttribute("hidden")) {
-        node->getComputedStyle().display = "none";
+        node->getComputedStyle().setDisplay(CSSDisplay::None);
     }
 
     // <details> hiding
@@ -723,21 +698,21 @@ void StyleEngine::recomputeNodeStyle(DOMNodePtr node) {
         if (parent->getTagName() == "details" &&
             !parent->hasAttribute("open") &&
             node->getTagName() != "summary") {
-            node->getComputedStyle().display = "none";
+            node->getComputedStyle().setDisplay(CSSDisplay::None);
         }
     }
 
     // <dialog> element: hidden unless open attribute is present
     if (node->getTagName() == "dialog") {
         if (!node->hasAttribute("open")) {
-            node->getComputedStyle().display = "none";
+            node->getComputedStyle().setDisplay(CSSDisplay::None);
         } else {
             auto& cs = node->getComputedStyle();
             auto* state = dong::dom::getDialogState(node);
             bool is_modal = state && state->isModal();
 
             if (is_modal) {
-                if (!cs.isExplicitlySet("position")) cs.position = "fixed";
+                if (!cs.isExplicitlySet("position")) cs.position = CSSPosition::Fixed;
                 if (!cs.isExplicitlySet("top")) cs.top = CSSValue(0.0f, CSSValue::Unit::PIXEL);
                 if (!cs.isExplicitlySet("left")) cs.left = CSSValue(0.0f, CSSValue::Unit::PIXEL);
                 if (!cs.isExplicitlySet("right")) cs.right = CSSValue(0.0f, CSSValue::Unit::PIXEL);
@@ -751,7 +726,7 @@ void StyleEngine::recomputeNodeStyle(DOMNodePtr node) {
                 if (!cs.isExplicitlySet("max-width")) cs.max_width = CSSValue(90.0f, CSSValue::Unit::PERCENT);
                 if (!cs.isExplicitlySet("max-height")) cs.max_height = CSSValue(90.0f, CSSValue::Unit::PERCENT);
             } else {
-                if (!cs.isExplicitlySet("display")) cs.display = "block";
+                if (!cs.isExplicitlySet("display")) cs.setDisplay(CSSDisplay::Block);
                 if (!cs.isExplicitlySet("margin")) {
                     cs.margin_top = CSSValue(1.0f, CSSValue::Unit::EM);
                     cs.margin_bottom = CSSValue(1.0f, CSSValue::Unit::EM);
@@ -760,9 +735,9 @@ void StyleEngine::recomputeNodeStyle(DOMNodePtr node) {
                 }
             }
             if (!cs.isExplicitlySet("border-style")) {
-                cs.border_style = "solid";
-                cs.border_top_style = "solid"; cs.border_right_style = "solid";
-                cs.border_bottom_style = "solid"; cs.border_left_style = "solid";
+                cs.border_style = CSSBorderStyle::Solid;
+                cs.border_top_style = CSSBorderStyle::Solid; cs.border_right_style = CSSBorderStyle::Solid;
+                cs.border_bottom_style = CSSBorderStyle::Solid; cs.border_left_style = CSSBorderStyle::Solid;
             }
             if (!cs.isExplicitlySet("border-width")) {
                 cs.border_width = 1.0f;
@@ -787,11 +762,11 @@ void StyleEngine::recomputeNodeStyle(DOMNodePtr node) {
     // Only apply if direction is not explicitly set by CSS
     auto& computed = node->getComputedStyle();
     if (node->hasAttribute("dir") && !computed.isExplicitlySet("direction")) {
-        computed.direction = node->getEffectiveDirection();
+        computed.direction = directionFromString(node->getEffectiveDirection());
         computed.markExplicitlySet("direction");
     }
 
-    node->getComputedStyle().layout_mode = deriveLayoutModeFromDisplay(node->getComputedStyle());
+    node->getComputedStyle().layout_mode = deriveLayoutModeFromDisplay(node->getComputedStyle().display);
 
     node->getComputedStyle().updateBFCFlag();
 
@@ -891,7 +866,7 @@ bool StyleEngine::evaluateMediaQuery(const std::string& query) const {
 }
 
 LayoutMode StyleEngine::deriveLayoutMode(const ComputedStyle& style) {
-    return deriveLayoutModeFromDisplay(style);
+    return deriveLayoutModeFromDisplay(style.display);
 }
 
 bool StyleEngine::matchesSelector(const std::string& selector, DOMNodePtr node) {

@@ -68,7 +68,7 @@ ContentAnalysis analyzeChildren(const dom::DOMNodePtr& node) {
         } else if (child->getType() == dom::DOMNode::NodeType::ELEMENT) {
             result.has_element_child = true;
             const auto& cs = child->getComputedStyle();
-            if (cs.display == "inline" || cs.display == "inline-block") {
+            if (cs.display == dom::CSSDisplay::Inline || cs.display == dom::CSSDisplay::InlineBlock) {
                 result.has_inline_element_child = true;
             }
         }
@@ -95,7 +95,7 @@ TextRenderPath determinePath(const ContentAnalysis& analysis,
                              const dom::ComputedStyle& style) {
     if (!analysis.has_text_child) return TextRenderPath::None;
 
-    bool is_flex = (style.display == "flex" || style.display == "inline-flex");
+    bool is_flex = (style.display == dom::CSSDisplay::Flex || style.display == dom::CSSDisplay::InlineFlex);
     bool prefers = tagPrefersText(tag);
 
     if (analysis.has_text_child && analysis.has_inline_element_child && prefers && !is_flex) {
@@ -124,7 +124,7 @@ static Color resolveTextColorForNode(const dom::DOMNodePtr& node,
                                     const dom::ComputedStyle& style) {
     const std::string tag = node ? node->getTagName() : std::string();
     const bool is_control = (tag == "button" || tag == "input" || tag == "textarea" || tag == "select");
-    if (is_control && !style.isExplicitlySet("color") && toLowerCopy(style.color_scheme) == "dark") {
+    if (is_control && !style.isExplicitlySet("color") && style.color_scheme == dom::CSSColorScheme::Dark) {
         return makeColorFromCss("#e8eaed");
     }
 
@@ -177,7 +177,7 @@ MixedPathState initMixedPath(const dom::DOMNodePtr& node,
 
 
     // Compute baseline
-    TextShapeRequest req{"X", style.font_family, style.font_weight, style.font_style, s.container_font_size};
+    TextShapeRequest req{"X", style.font_family, toString(style.font_weight), toString(style.font_style), s.container_font_size};
     req.lang = node->getEffectiveLang();  // Set language from DOM node
     ShapedText shaped;
     if (shaper.shape(req, shaped)) {
@@ -204,7 +204,7 @@ MixedPathState initMixedPath(const dom::DOMNodePtr& node,
 
 // Measure the pixel width of a single space character in the container's font.
 float measureSpaceWidth(const dom::ComputedStyle& style, float font_size, TextShaper& shaper) {
-    TextShapeRequest req{" ", style.font_family, style.font_weight, style.font_style, font_size};
+    TextShapeRequest req{" ", style.font_family, toString(style.font_weight), toString(style.font_style), font_size};
     req.lang = "";  // Use default language for space measurement
     ShapedText shaped;
     if (shaper.shape(req, shaped) && !shaped.glyphs.empty()) {
@@ -239,8 +239,8 @@ void emitInlineTextRun(const std::string& text,
 
     float font_size = cs.font_size > 0.0f ? cs.font_size : state.container_font_size;
     std::string family = cs.font_family.empty() ? container_style.font_family : cs.font_family;
-    std::string weight = cs.font_weight.empty() ? container_style.font_weight : cs.font_weight;
-    std::string style  = cs.font_style.empty()  ? container_style.font_style  : cs.font_style;
+    std::string weight = toString(cs.font_weight);
+    std::string style  = toString(cs.font_style);
 
 
     TextShapeRequest req{text, family, weight, style, font_size};
@@ -277,23 +277,23 @@ void emitInlineTextRun(const std::string& text,
     builder.addGlyphRun(std::move(run));
 
     // text-decoration rendering (underline, line-through, overline)
-    const std::string& text_dec = cs.text_decoration;
-    if (!text_dec.empty() && text_dec != "none") {
+    const auto text_dec = cs.text_decoration;
+    if (text_dec != dom::CSSTextDecoration::None) {
         float dec_thickness = cs.text_decoration_thickness > 0.0f ? cs.text_decoration_thickness : std::max(1.0f, font_size / 14.0f);
         Color dec_color = !cs.text_decoration_color.empty()
             ? makeColorFromCss(cs.text_decoration_color) : run_color;
 
         float line_x = state.x + state.pad_left + state.cumulative_x;
 
-        if (text_dec.find("underline") != std::string::npos) {
+        if ((text_dec & dom::CSSTextDecoration::Underline) != dom::CSSTextDecoration::None) {
             float underline_y = state.baseline_y + font_size * 0.15f;
             builder.addRect({line_x, underline_y, text_width, dec_thickness}, dec_color);
         }
-        if (text_dec.find("line-through") != std::string::npos) {
+        if ((text_dec & dom::CSSTextDecoration::LineThrough) != dom::CSSTextDecoration::None) {
             float strike_y = state.baseline_y - font_size * 0.3f;
             builder.addRect({line_x, strike_y, text_width, dec_thickness}, dec_color);
         }
-        if (text_dec.find("overline") != std::string::npos) {
+        if ((text_dec & dom::CSSTextDecoration::Overline) != dom::CSSTextDecoration::None) {
             float overline_y = state.baseline_y - ascent * scale + dec_thickness;
             builder.addRect({line_x, overline_y, text_width, dec_thickness}, dec_color);
         }
@@ -363,7 +363,7 @@ void renderInlineChildren(const dom::DOMNodePtr& node,
                 prev_was_text = false;
                 continue;
             }
-            if (child_cs.display == "inline") {
+            if (child_cs.display == dom::CSSDisplay::Inline) {
                 renderInlineSubtree(gc, child_cs, container_style,
                                     state, shaper, builder);
                 prev_was_text = false;
@@ -388,8 +388,7 @@ void renderInlineSubtree(const dom::DOMNodePtr& node,
     // Merge style: child inherits container for missing fields.
     dom::ComputedStyle merged = effective_style;
     if (merged.font_family.empty()) merged.font_family = container_style.font_family;
-    if (merged.font_weight.empty()) merged.font_weight = container_style.font_weight;
-    if (merged.font_style.empty())  merged.font_style  = container_style.font_style;
+    // font_weight and font_style are enums with defaults, no empty check needed
     if (merged.color.empty())       merged.color       = container_style.color;
 
     // Record insertion point for the background rect BEFORE rendering children.
@@ -473,8 +472,8 @@ void drawTextChildAtPosition(const dom::DOMNodePtr& child,
     std::string text = collapseWhitespace(child->getRawTextContent());
     if (text.empty()) return;
 
-    TextShapeRequest req{text, container_style.font_family, container_style.font_weight,
-                         container_style.font_style, container_font_size};
+    TextShapeRequest req{text, container_style.font_family, toString(container_style.font_weight),
+                         toString(container_style.font_style), container_font_size};
     req.lang = child->getEffectiveLang();  // Set language from DOM node
     ShapedText shaped;
     if (!shaper.shape(req, shaped) || shaped.glyphs.empty()) return;
@@ -502,8 +501,8 @@ void drawTextChildAtPosition(const dom::DOMNodePtr& child,
     run.color = text_color;
     run.font_size = container_font_size;
     run.font_family = container_style.font_family;
-    run.font_weight = container_style.font_weight;
-    run.font_style = container_style.font_style;
+    run.font_weight = toString(container_style.font_weight);
+    run.font_style = toString(container_style.font_style);
     run.font_paths = shaped.font_paths;
     run.font_path = shaped.font_path;
     run.baseline_x = run.rect.x;
@@ -549,8 +548,8 @@ void drawTextChild(const dom::DOMNodePtr& child,
     // Advance cumulative_x by measuring text width
     std::string text = collapseWhitespace(child->getRawTextContent());
     if (!text.empty()) {
-        TextShapeRequest req{text, container_style.font_family, container_style.font_weight,
-                             container_style.font_style, state.container_font_size};
+        TextShapeRequest req{text, container_style.font_family, toString(container_style.font_weight),
+                             toString(container_style.font_style), state.container_font_size};
         req.lang = child->getEffectiveLang();  // Set language from DOM node
         ShapedText shaped;
         if (shaper.shape(req, shaped) && !shaped.glyphs.empty()) {
@@ -594,9 +593,9 @@ void renderMixedPath(const dom::DOMNodePtr& node,
                 state.baseline_y += state.line_height_px;
                 continue;
             }
-            if (cs.display == "inline") {
+            if (cs.display == dom::CSSDisplay::Inline) {
                 drawInlineChild(child, state, style, shaper, builder);
-            } else if (cs.display == "inline-block") {
+            } else if (cs.display == dom::CSSDisplay::InlineBlock) {
                 state.cumulative_x += getInlineBlockWidth(child, cs, engine);
             }
         } else if (child->getType() == dom::DOMNode::NodeType::TEXT) {
@@ -629,8 +628,8 @@ PlaceholderStyle resolvePlaceholderStyle(const dom::DOMNodePtr& node,
 
     ps.font_size = input_style.font_size > 0.0f ? input_style.font_size : 16.0f;
     ps.font_family = input_style.font_family;
-    ps.font_weight = input_style.font_weight;
-    ps.font_style = input_style.font_style;
+    ps.font_weight = toString(input_style.font_weight);
+    ps.font_style = toString(input_style.font_style);
 
     auto pseudo = node->getPseudoPlaceholder();
     if (pseudo) {
@@ -638,8 +637,8 @@ PlaceholderStyle resolvePlaceholderStyle(const dom::DOMNodePtr& node,
         if (!ps_style.color.empty()) ps.color = makeColorFromCss(ps_style.color);
         if (ps_style.font_size > 0.0f) ps.font_size = ps_style.font_size;
         if (!ps_style.font_family.empty()) ps.font_family = ps_style.font_family;
-        if (!ps_style.font_weight.empty()) ps.font_weight = ps_style.font_weight;
-        if (!ps_style.font_style.empty()) ps.font_style = ps_style.font_style;
+        ps.font_weight = toString(ps_style.font_weight);
+        ps.font_style = toString(ps_style.font_style);
     } else {
         // Default: 50% opacity (browser-like default for placeholder)
         ps.color.a *= 0.5f;
@@ -717,8 +716,8 @@ void renderInput(const dom::DOMNodePtr& node,
     float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
 
     std::string font_family = style.font_family;
-    std::string font_weight = style.font_weight;
-    std::string font_style = style.font_style;
+    std::string font_weight = toString(style.font_weight);
+    std::string font_style = toString(style.font_style);
 
     if (text.empty()) {
         text = node->getAttribute("placeholder");
@@ -789,14 +788,11 @@ void Painter::paintTextAndInput(const dom::DOMNodePtr& node,
                                DisplayListBuilder& builder) {
     if (!node || !layout_node || is_hidden) return;
 
-    auto effectiveBorderStyle = [&](const std::string& side_style) -> std::string {
-        return toLowerCopy(collapseWhitespace(!side_style.empty() ? side_style : style.border_style));
-    };
-    auto effectiveBorderWidth = [&](float side_width, const std::string& side_style) -> float {
+    auto effectiveBorderWidth = [&](float side_width, dom::CSSBorderStyle side_style) -> float {
         float w = (side_width >= 0.0f) ? side_width : style.border_width;
         if (w < 0.0f) w = 0.0f;
-        auto st = effectiveBorderStyle(side_style);
-        return (st == "none" || st == "hidden") ? 0.0f : w;
+        dom::CSSBorderStyle st = (side_style != dom::CSSBorderStyleUnset) ? side_style : style.border_style;
+        return (st == dom::CSSBorderStyle::None || st == dom::CSSBorderStyle::Hidden) ? 0.0f : w;
     };
 
     float bt = effectiveBorderWidth(style.border_top_width, style.border_top_style);
@@ -840,7 +836,7 @@ void Painter::paintTextAndInput(const dom::DOMNodePtr& node,
             const dom::ComputedStyle* after_style = nullptr;
 
             auto shouldInlineAffix = [](const dom::ComputedStyle& ps) {
-                if (ps.display != "inline" && ps.display != "inline-block") return false;
+                if (ps.display != dom::CSSDisplay::Inline && ps.display != dom::CSSDisplay::InlineBlock) return false;
                 // Only block inlining when background/border are EXPLICITLY set on the pseudo element
                 // (not inherited from the parent). Pseudo elements inherit parent styles but inline
                 // rendering should not be blocked by inherited background colors.
@@ -895,7 +891,7 @@ void Painter::paintTextAndInput(const dom::DOMNodePtr& node,
             auto pseudo_before = node->getPseudoBefore();
             if (pseudo_before) {
                 const auto& ps = pseudo_before->getComputedStyle();
-                const bool is_inline = (ps.display == "inline" || ps.display == "inline-block" || ps.display.empty());
+                const bool is_inline = (ps.display == dom::CSSDisplay::Inline || ps.display == dom::CSSDisplay::InlineBlock);
                 if (is_inline) {
                     std::string before_raw = evaluateContentText(ps);
                     if (!before_raw.empty()) {
@@ -1004,8 +1000,7 @@ inline std::string stripSoftHyphens(std::string_view s) {
 }
 
 inline bool hyphensManualEnabled(const dom::ComputedStyle& style) {
-    const std::string v = toLowerCopy(collapseWhitespace(style.hyphens));
-    return v == "manual";
+    return style.hyphens == dom::CSSHyphens::Manual;
 }
 
 inline void stripLeadingSoftHyphensInPlace(std::string& s) {
@@ -1021,8 +1016,8 @@ void emitFullTextLine(const std::string& line_text, int line_index,
     const std::string visible = stripSoftHyphens(line_text);
     if (visible.empty()) return;
 
-    TextShapeRequest req{visible, ctx.style.font_family, ctx.style.font_weight,
-                         ctx.style.font_style, ctx.font_size};
+    TextShapeRequest req{visible, ctx.style.font_family, toString(ctx.style.font_weight),
+                         toString(ctx.style.font_style), ctx.font_size};
     req.lang = ctx.node ? ctx.node->getEffectiveLang() : "";  // Set language from DOM node if available
 
     ShapedText shaped;
@@ -1071,8 +1066,8 @@ void emitFullTextLine(const std::string& line_text, int line_index,
                 run.color = ctx.text_color;
                 run.font_size = ctx.font_size;
                 run.font_family = ctx.style.font_family;
-                run.font_weight = ctx.style.font_weight;
-                run.font_style = ctx.style.font_style;
+                run.font_weight = toString(ctx.style.font_weight);
+                run.font_style = toString(ctx.style.font_style);
                 run.font_paths = shaped.font_paths;
                 run.font_path = shaped.font_path;
                 run.units_per_em = shaped.units_per_em;
@@ -1083,8 +1078,8 @@ void emitFullTextLine(const std::string& line_text, int line_index,
                 float current_x = 0.0f;
                 for (size_t i = 0; i < words.size(); i++) {
                     // Shape the current word
-                    TextShapeRequest word_req{words[i], ctx.style.font_family, ctx.style.font_weight,
-                                            ctx.style.font_style, ctx.font_size};
+                    TextShapeRequest word_req{words[i], ctx.style.font_family, toString(ctx.style.font_weight),
+                                            toString(ctx.style.font_style), ctx.font_size};
                     ShapedText word_shaped;
                     if (ctx.shaper.shape(word_req, word_shaped) && !word_shaped.glyphs.empty()) {
                         float word_width = word_shaped.width_units * ctx.scale;
@@ -1132,8 +1127,8 @@ void emitFullTextLine(const std::string& line_text, int line_index,
     run.color = ctx.text_color;
     run.font_size = ctx.font_size;
     run.font_family = ctx.style.font_family;
-    run.font_weight = ctx.style.font_weight;
-    run.font_style = ctx.style.font_style;
+    run.font_weight = toString(ctx.style.font_weight);
+    run.font_style = toString(ctx.style.font_style);
     run.font_paths = shaped.font_paths;
     run.font_path = shaped.font_path;
     run.baseline_x = line_x;
@@ -1149,22 +1144,22 @@ void emitFullTextLine(const std::string& line_text, int line_index,
     ctx.builder.addGlyphRun(std::move(run));
 
     // text-decoration rendering for FullText path
-    const std::string& text_dec = ctx.style.text_decoration;
-    if (!text_dec.empty() && text_dec != "none") {
+    const auto text_dec = ctx.style.text_decoration;
+    if (text_dec != dom::CSSTextDecoration::None) {
         float dec_thickness = ctx.style.text_decoration_thickness > 0.0f
             ? ctx.style.text_decoration_thickness : std::max(1.0f, ctx.font_size / 14.0f);
         Color dec_color = !ctx.style.text_decoration_color.empty()
             ? makeColorFromCss(ctx.style.text_decoration_color) : ctx.text_color;
 
-        if (text_dec.find("underline") != std::string::npos) {
+        if ((text_dec & dom::CSSTextDecoration::Underline) != dom::CSSTextDecoration::None) {
             float underline_y = baseline_y + ctx.font_size * 0.15f;
             ctx.builder.addRect({line_x, underline_y, line_width, dec_thickness}, dec_color);
         }
-        if (text_dec.find("line-through") != std::string::npos) {
+        if ((text_dec & dom::CSSTextDecoration::LineThrough) != dom::CSSTextDecoration::None) {
             float strike_y = baseline_y - ctx.font_size * 0.3f;
             ctx.builder.addRect({line_x, strike_y, line_width, dec_thickness}, dec_color);
         }
-        if (text_dec.find("overline") != std::string::npos) {
+        if ((text_dec & dom::CSSTextDecoration::Overline) != dom::CSSTextDecoration::None) {
             float overline_y = baseline_y - ctx.ascent_px + dec_thickness;
             ctx.builder.addRect({line_x, overline_y, line_width, dec_thickness}, dec_color);
         }
@@ -1174,8 +1169,8 @@ float measureTextWidthPx(std::string_view text, const FullTextRenderCtx& ctx) {
     if (text.empty()) return 0.0f;
     const std::string visible = stripSoftHyphens(text);
     if (visible.empty()) return 0.0f;
-    TextShapeRequest req{visible, ctx.style.font_family, ctx.style.font_weight,
-                         ctx.style.font_style, ctx.font_size};
+    TextShapeRequest req{visible, ctx.style.font_family, toString(ctx.style.font_weight),
+                         toString(ctx.style.font_style), ctx.font_size};
     req.lang = ctx.node ? ctx.node->getEffectiveLang() : "";  // Set language from DOM node if available
 
     ShapedText shaped;
@@ -1345,27 +1340,27 @@ int wrapAndEmitSegment(const std::string& segment, int start_line_index,
 
 
 // Determine whether newlines in text should produce forced line breaks.
-bool preservesNewlines(const std::string& white_space) {
-    return white_space == "pre-wrap" || white_space == "pre"
-        || white_space == "pre-line" || white_space == "break-spaces";
+bool preservesNewlines(dom::CSSWhiteSpace white_space) {
+    return white_space == dom::CSSWhiteSpace::PreWrap || white_space == dom::CSSWhiteSpace::Pre
+        || white_space == dom::CSSWhiteSpace::PreLine || white_space == dom::CSSWhiteSpace::BreakSpaces;
 }
 
 std::string prepareTextForRender(const std::string& raw,
                                 const dom::ComputedStyle& style) {
     std::string text = raw;
 
-    std::string white_space = toLowerCopy(collapseWhitespace(style.white_space));
-    if (white_space == "normal" || white_space == "nowrap") {
+    auto white_space = style.white_space;
+    if (white_space == dom::CSSWhiteSpace::Normal || white_space == dom::CSSWhiteSpace::Nowrap) {
         text = collapseWhitespace(text);
-    } else if (white_space == "pre-line" || white_space == "pre-wrap" || white_space == "break-spaces") {
+    } else if (white_space == dom::CSSWhiteSpace::PreLine || white_space == dom::CSSWhiteSpace::PreWrap || white_space == dom::CSSWhiteSpace::BreakSpaces) {
         text = painter_detail::collapseSpacesPreserveNewlines(text);
     }
 
-    if (!text.empty() && !style.text_transform.empty() && style.text_transform != "none") {
-        if (style.text_transform == "uppercase") {
+    if (!text.empty() && style.text_transform != dom::CSSTextTransform::None) {
+        if (style.text_transform == dom::CSSTextTransform::Uppercase) {
             std::transform(text.begin(), text.end(), text.begin(),
                            [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
-        } else if (style.text_transform == "lowercase") {
+        } else if (style.text_transform == dom::CSSTextTransform::Lowercase) {
             std::transform(text.begin(), text.end(), text.begin(),
                            [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
         }
@@ -1413,20 +1408,18 @@ std::string prepareAffixTextForRender(const std::string& raw,
     };
 
     std::string text = raw;
-    std::string white_space = toLowerCopy(collapseWhitespace(style.white_space));
-    if (white_space == "normal" || white_space == "nowrap") {
+    auto white_space = style.white_space;
+    if (white_space == dom::CSSWhiteSpace::Normal || white_space == dom::CSSWhiteSpace::Nowrap) {
         text = collapseWithPolicy(text);
-    } else if (white_space == "pre-line" || white_space == "pre-wrap") {
-        // Keep newlines but still collapse spaces/tabs. For affixes, we don't expect
-        // newlines; renderFullTextWithAffixes() will bail out when forced newlines exist.
+    } else if (white_space == dom::CSSWhiteSpace::PreLine || white_space == dom::CSSWhiteSpace::PreWrap) {
         text = painter_detail::collapseSpacesPreserveNewlines(text);
     }
 
-    if (!text.empty() && !style.text_transform.empty() && style.text_transform != "none") {
-        if (style.text_transform == "uppercase") {
+    if (!text.empty() && style.text_transform != dom::CSSTextTransform::None) {
+        if (style.text_transform == dom::CSSTextTransform::Uppercase) {
             std::transform(text.begin(), text.end(), text.begin(),
                            [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
-        } else if (style.text_transform == "lowercase") {
+        } else if (style.text_transform == dom::CSSTextTransform::Lowercase) {
             std::transform(text.begin(), text.end(), text.begin(),
                            [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
         }
@@ -1448,7 +1441,7 @@ bool shapeSingleRun(const std::string& text,
 
     out_font_size = style.font_size > 0.0f ? style.font_size : fallback_font_size;
 
-    TextShapeRequest req{text, style.font_family, style.font_weight, style.font_style, out_font_size};
+    TextShapeRequest req{text, style.font_family, toString(style.font_weight), toString(style.font_style), out_font_size};
     if (!shaper.shape(req, out) || out.glyphs.empty()) return false;
 
     float scale = out.scale_to_pixels;
@@ -1474,8 +1467,8 @@ void emitShapedRun(const ShapedText& shaped,
     run.color = color;
     run.font_size = font_size;
     run.font_family = style.font_family;
-    run.font_weight = style.font_weight;
-    run.font_style = style.font_style;
+    run.font_weight = toString(style.font_weight);
+    run.font_style = toString(style.font_style);
     run.font_paths = shaped.font_paths;
     run.font_path = shaped.font_path;
     run.baseline_x = x;
@@ -1514,8 +1507,8 @@ bool renderFullTextWithAffixes(const dom::DOMNodePtr& node,
         : std::string();
 
 
-    std::string white_space = toLowerCopy(collapseWhitespace(style.white_space));
-    const bool nowrap = (white_space == "nowrap");
+    auto white_space = style.white_space;
+    const bool nowrap = (white_space == dom::CSSWhiteSpace::Nowrap);
     const bool has_forced_newlines = preservesNewlines(white_space) &&
                                     ((main_text.find('\n') != std::string::npos) ||
                                      (before_text.find('\n') != std::string::npos) ||
@@ -1549,7 +1542,7 @@ bool renderFullTextWithAffixes(const dom::DOMNodePtr& node,
     float main_font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
 
     // Baseline metrics from the container font.
-    TextShapeRequest metrics_req{"X", style.font_family, style.font_weight, style.font_style, main_font_size};
+    TextShapeRequest metrics_req{"X", style.font_family, toString(style.font_weight), toString(style.font_style), main_font_size};
     ShapedText metrics;
     if (!shaper.shape(metrics_req, metrics)) return false;
 
@@ -1606,9 +1599,9 @@ bool renderFullTextWithAffixes(const dom::DOMNodePtr& node,
     // runs is not supported in this path anyway.
 
     float line_x = x + pad_l;
-    if (style.text_align == "center") {
+    if (style.text_align == dom::CSSTextAlign::Center) {
         line_x += std::max(0.0f, (inner_width - total_width) * 0.5f);
-    } else if (style.text_align == "right") {
+    } else if (style.text_align == dom::CSSTextAlign::Right) {
         line_x += std::max(0.0f, inner_width - total_width);
     }
 
@@ -1640,21 +1633,20 @@ void renderFullText(const dom::DOMNodePtr& node,
                     DisplayListBuilder& builder) {
     // Apply white-space and text-transform
     std::string text = raw_text;
-    std::string white_space = toLowerCopy(collapseWhitespace(style.white_space));
-    if (white_space == "normal" || white_space == "nowrap") {
+    auto white_space = style.white_space;
+    if (white_space == dom::CSSWhiteSpace::Normal || white_space == dom::CSSWhiteSpace::Nowrap) {
         text = collapseWhitespace(text);
-    } else if (white_space == "pre-line") {
+    } else if (white_space == dom::CSSWhiteSpace::PreLine) {
         text = painter_detail::collapseSpacesPreserveNewlines(text);
-    } else if (white_space == "pre-wrap" || white_space == "break-spaces") {
+    } else if (white_space == dom::CSSWhiteSpace::PreWrap || white_space == dom::CSSWhiteSpace::BreakSpaces) {
         text = painter_detail::collapseSpacesPreserveNewlines(text);
     }
-    // "pre" keeps text as-is (no collapse)
 
-    if (!text.empty() && !style.text_transform.empty() && style.text_transform != "none") {
-        if (style.text_transform == "uppercase") {
+    if (!text.empty() && style.text_transform != dom::CSSTextTransform::None) {
+        if (style.text_transform == dom::CSSTextTransform::Uppercase) {
             std::transform(text.begin(), text.end(), text.begin(),
                           [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
-        } else if (style.text_transform == "lowercase") {
+        } else if (style.text_transform == dom::CSSTextTransform::Lowercase) {
             std::transform(text.begin(), text.end(), text.begin(),
                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
         }
@@ -1690,7 +1682,7 @@ void renderFullText(const dom::DOMNodePtr& node,
     float font_size = style.font_size > 0.0f ? style.font_size : 16.0f;
 
     // Get metrics
-    TextShapeRequest metrics_req{"X", style.font_family, style.font_weight, style.font_style, font_size};
+    TextShapeRequest metrics_req{"X", style.font_family, toString(style.font_weight), toString(style.font_style), font_size};
     ShapedText metrics;
     if (!shaper.shape(metrics_req, metrics)) return;
 
@@ -1718,19 +1710,19 @@ void renderFullText(const dom::DOMNodePtr& node,
     float ascent_px = ascent_units * scale;
     float baseline_offset = (extra * 0.5f + ascent_units) * scale;
 
-    bool nowrap = (white_space == "nowrap");
+    bool nowrap = (white_space == dom::CSSWhiteSpace::Nowrap);
     bool has_forced_newlines = preservesNewlines(white_space) && text.find('\n') != std::string::npos;
 
     FullTextRenderCtx ctx{x, y, pad_l, pad_t, inner_width,
                           baseline_offset, effective_line_height, ascent_px,
                           font_size, scale, text_color,
-                          style.text_align, style, shaper, builder, node};
+                          toString(style.text_align), style, shaper, builder, node};
 
     // Path 1: text has forced newlines from pre-wrap / pre / pre-line
     if (has_forced_newlines) {
         auto segments = splitByNewline(text);
         int line_index = 0;
-        bool allow_wrap = (white_space != "pre" && white_space != "nowrap");
+        bool allow_wrap = (white_space != dom::CSSWhiteSpace::Pre && white_space != dom::CSSWhiteSpace::Nowrap);
         for (const auto& seg : segments) {
             if (seg.empty()) {
                 ++line_index; // empty line (consecutive \n)
@@ -1749,7 +1741,7 @@ void renderFullText(const dom::DOMNodePtr& node,
     }
 
     // Path 2: normal / nowrap / no-newline text — original logic
-    TextShapeRequest req{text, style.font_family, style.font_weight, style.font_style, font_size};
+    TextShapeRequest req{text, style.font_family, toString(style.font_weight), toString(style.font_style), font_size};
     ShapedText shaped;
     if (!shaper.shape(req, shaped) || shaped.glyphs.empty()) return;
 

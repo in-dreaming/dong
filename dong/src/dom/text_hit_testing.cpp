@@ -98,8 +98,8 @@ static float measureTextWidth(const std::string& text,
         req.text = text;
         req.font_family = style.font_family;
         req.font_size = font_size;
-        req.font_weight = style.font_weight;
-        req.font_style = style.font_style;
+        req.font_weight = toString(style.font_weight);
+        req.font_style = toString(style.font_style);
         dong::render::ShapedText shaped;
         if (shaper->shape(req, shaped) && shaped.units_per_em > 0) {
             float scale = font_size / static_cast<float>(shaped.units_per_em);
@@ -322,8 +322,8 @@ TextHitResult TextHitTester::hitTestRecursive(const DOMNodePtr& node,
                     req.text = text.substr(0, mid);
                     req.font_family = style.font_family;
                     req.font_size = font_size;
-                    req.font_weight = style.font_weight;
-                    req.font_style = style.font_style;
+                    req.font_weight = toString(style.font_weight);
+                    req.font_style = toString(style.font_style);
                     dong::render::ShapedText shaped;
                     if (shaper->shape(req, shaped) && shaped.units_per_em > 0) {
                         float scale = font_size / static_cast<float>(shaped.units_per_em);
@@ -342,8 +342,8 @@ TextHitResult TextHitTester::hitTestRecursive(const DOMNodePtr& node,
                     req_prev.text = text.substr(0, prev_lo);
                     req_prev.font_family = style.font_family;
                     req_prev.font_size = font_size;
-                    req_prev.font_weight = style.font_weight;
-                    req_prev.font_style = style.font_style;
+                    req_prev.font_weight = toString(style.font_weight);
+                    req_prev.font_style = toString(style.font_style);
                     dong::render::ShapedText shaped_prev;
                     if (shaper->shape(req_prev, shaped_prev) && shaped_prev.units_per_em > 0) {
                         float scale = font_size / static_cast<float>(shaped_prev.units_per_em);
@@ -352,8 +352,8 @@ TextHitResult TextHitTester::hitTestRecursive(const DOMNodePtr& node,
                         req_cur.text = text.substr(0, lo);
                         req_cur.font_family = style.font_family;
                         req_cur.font_size = font_size;
-                        req_cur.font_weight = style.font_weight;
-                        req_cur.font_style = style.font_style;
+                        req_cur.font_weight = toString(style.font_weight);
+                        req_cur.font_style = toString(style.font_style);
                         dong::render::ShapedText shaped_cur;
                         if (shaper->shape(req_cur, shaped_cur) && shaped_cur.units_per_em > 0) {
                             float right_edge = shaped_cur.width_units * (font_size / static_cast<float>(shaped_cur.units_per_em));
@@ -516,8 +516,8 @@ TextHitResult TextHitTester::hitTestRecursive(const DOMNodePtr& node,
                     req.text = text.substr(0, mid);
                     req.font_family = style.font_family;
                     req.font_size = font_size;
-                    req.font_weight = style.font_weight;
-                    req.font_style = style.font_style;
+                    req.font_weight = toString(style.font_weight);
+                    req.font_style = toString(style.font_style);
                     dong::render::ShapedText shaped;
                     if (shaper->shape(req, shaped) && shaped.units_per_em > 0) {
                         float scale = font_size / static_cast<float>(shaped.units_per_em);
@@ -535,8 +535,8 @@ TextHitResult TextHitTester::hitTestRecursive(const DOMNodePtr& node,
                     req_prev.text = text.substr(0, prev_lo);
                     req_prev.font_family = style.font_family;
                     req_prev.font_size = font_size;
-                    req_prev.font_weight = style.font_weight;
-                    req_prev.font_style = style.font_style;
+                    req_prev.font_weight = toString(style.font_weight);
+                    req_prev.font_style = toString(style.font_style);
                     dong::render::ShapedText shaped_prev;
                     if (shaper->shape(req_prev, shaped_prev) && shaped_prev.units_per_em > 0) {
                         float scale = font_size / static_cast<float>(shaped_prev.units_per_em);
@@ -545,8 +545,8 @@ TextHitResult TextHitTester::hitTestRecursive(const DOMNodePtr& node,
                         req_cur.text = text.substr(0, lo);
                         req_cur.font_family = style.font_family;
                         req_cur.font_size = font_size;
-                        req_cur.font_weight = style.font_weight;
-                        req_cur.font_style = style.font_style;
+                        req_cur.font_weight = toString(style.font_weight);
+                        req_cur.font_style = toString(style.font_style);
                         dong::render::ShapedText shaped_cur;
                         if (shaper->shape(req_cur, shaped_cur) && shaped_cur.units_per_em > 0) {
                             float right_edge = shaped_cur.width_units * (font_size / static_cast<float>(shaped_cur.units_per_em));
@@ -595,8 +595,8 @@ TextHitResult TextHitTester::hitTestRecursive(const DOMNodePtr& node,
         bool is_inline_like = false;
         if (node->getType() == DOMNode::NodeType::ELEMENT) {
             const auto& cs = node->getComputedStyle();
-            const std::string& d = cs.display;
-            is_inline_like = (d == "inline" || d == "inline-block" || d == "inline-flex" || d == "inline-table");
+            const auto d = cs.display;
+            is_inline_like = (d == CSSDisplay::Inline || d == CSSDisplay::InlineBlock || d == CSSDisplay::InlineFlex || d == CSSDisplay::InlineTable);
         }
         const bool has_reliable_box = (w > 0.0f && h > 0.0f);
         const bool strict_clip = !is_ce && !is_inline_like && has_reliable_box;
@@ -781,8 +781,8 @@ uint32_t TextHitTester::estimateCharOffset(const DOMNodePtr& text_node,
             req.text = text.substr(0, mid);
             req.font_family = style.font_family;
             req.font_size = font_size;
-            req.font_weight = style.font_weight;
-            req.font_style = style.font_style;
+            req.font_weight = toString(style.font_weight);
+            req.font_style = toString(style.font_style);
 
             dong::render::ShapedText shaped;
             if (shaper->shape(req, shaped) && shaped.units_per_em > 0) {
@@ -807,8 +807,8 @@ uint32_t TextHitTester::estimateCharOffset(const DOMNodePtr& text_node,
             req_prev.text = text.substr(0, prev_lo);
             req_prev.font_family = style.font_family;
             req_prev.font_size = font_size;
-            req_prev.font_weight = style.font_weight;
-            req_prev.font_style = style.font_style;
+            req_prev.font_weight = toString(style.font_weight);
+            req_prev.font_style = toString(style.font_style);
             dong::render::ShapedText shaped_prev;
             if (shaper->shape(req_prev, shaped_prev) && shaped_prev.units_per_em > 0) {
                 float scale_prev = font_size / static_cast<float>(shaped_prev.units_per_em);
@@ -817,8 +817,8 @@ uint32_t TextHitTester::estimateCharOffset(const DOMNodePtr& text_node,
                 req_cur.text = text.substr(0, lo);
                 req_cur.font_family = style.font_family;
                 req_cur.font_size = font_size;
-                req_cur.font_weight = style.font_weight;
-                req_cur.font_style = style.font_style;
+                req_cur.font_weight = toString(style.font_weight);
+                req_cur.font_style = toString(style.font_style);
                 dong::render::ShapedText shaped_cur;
                 if (shaper->shape(req_cur, shaped_cur) && shaped_cur.units_per_em > 0) {
                     float right_edge = shaped_cur.width_units * (font_size / static_cast<float>(shaped_cur.units_per_em));

@@ -421,7 +421,7 @@ static bool wrapSelectionWithStyle(const DOMNodePtr& editable_root,
         } else if (ch->getType() == DOMNode::NodeType::ELEMENT) {
             const auto& cs = ch->getComputedStyle();
             DONG_LOG_WARN("[BOLD-DOM]   [%zu] <%s> display=%s layout_mode=%d style=\"%s\"",
-                          i, ch->getTagName().c_str(), cs.display.c_str(), (int)cs.layout_mode,
+                          i, ch->getTagName().c_str(), toString(cs.display), (int)cs.layout_mode,
                           ch->hasAttribute("style") ? ch->getAttribute("style").c_str() : "");
             for (size_t j = 0; j < ch->getChildren().size(); ++j) {
                 const auto& gc = ch->getChildren()[j];

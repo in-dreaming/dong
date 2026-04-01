@@ -87,10 +87,9 @@ MediaFitInfo extractMediaFitInfo(const dom::ComputedStyle& style) {
     info.pos_x = 0.5f;
     info.pos_y = 0.5f;
 
-    const std::string object_fit = toLowerCopy(collapseWhitespace(style.object_fit));
-    if (object_fit == "contain") {
+    if (style.object_fit == dom::CSSObjectFit::Contain) {
         info.fit = ImageFitMode::Contain;
-    } else if (object_fit == "cover") {
+    } else if (style.object_fit == dom::CSSObjectFit::Cover) {
         info.fit = ImageFitMode::Cover;
     }
 
@@ -99,11 +98,7 @@ MediaFitInfo extractMediaFitInfo(const dom::ComputedStyle& style) {
 }
 
 ImageSampling extractImageSampling(const dom::ComputedStyle& style) {
-    using painter_detail::collapseWhitespace;
-    using painter_detail::toLowerCopy;
-
-    const std::string v = toLowerCopy(collapseWhitespace(style.image_rendering));
-    if (v == "pixelated" || v == "crisp-edges") {
+    if (style.image_rendering == dom::CSSImageRendering::Pixelated || style.image_rendering == dom::CSSImageRendering::CrispEdges) {
         return ImageSampling::Nearest;
     }
     return ImageSampling::Linear;
