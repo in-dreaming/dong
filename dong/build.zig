@@ -156,6 +156,7 @@ const BuildOptions = struct {
     android_api_level: u32,
     ios_deployment_target: []const u8,
     libs_only: bool, // Only build static libraries (for mobile)
+    optimize_size: bool, // Optimize for binary size (LTO, /O1, no RTTI, etc.)
 };
 
 fn getBuildOptions(b: *std.Build, platform: PlatformInfo) BuildOptions {
@@ -164,6 +165,7 @@ fn getBuildOptions(b: *std.Build, platform: PlatformInfo) BuildOptions {
     const android_api_level = b.option(u32, "android-api", "Android API level (default: 21)") orelse 21;
     const ios_target = b.option([]const u8, "ios-target", "iOS deployment target (default: 12.0)") orelse "12.0";
     const libs_only = b.option(bool, "libs-only", "Only build static libraries") orelse platform.is_mobile;
+    const optimize_size = b.option(bool, "optimize-size", "Optimize for binary size (LTO, /O1, no RTTI, etc.)") orelse false;
 
     return .{
         .enable_ffmpeg = enable_ffmpeg,
@@ -171,6 +173,7 @@ fn getBuildOptions(b: *std.Build, platform: PlatformInfo) BuildOptions {
         .android_api_level = android_api_level,
         .ios_deployment_target = ios_target,
         .libs_only = libs_only,
+        .optimize_size = optimize_size,
     };
 }
 
@@ -223,7 +226,12 @@ pub fn build(b: *std.Build) void {
     // Also, on Windows, default Debug builds enable UBSan in C compilation, which then
     // requires extra runtime linkage. We build these deps in ReleaseFast to keep linking
     // simple and consistent with the CMake Release build.
-    const deps_optimize: std.builtin.OptimizeMode = if (platform.is_windows) .ReleaseFast else optimize;
+    const deps_optimize: std.builtin.OptimizeMode = if (options.optimize_size)
+        .ReleaseSmall
+    else if (platform.is_windows)
+        .ReleaseFast
+    else
+        optimize;
 
     // ==========================================================================
     // QuickJS (Pure Zig Build)
@@ -464,6 +472,11 @@ pub fn build(b: *std.Build) void {
     // Always pass FFmpeg flag explicitly to override any stale CMake cache value
     dong_cmake_args.append(
         if (config.enable_ffmpeg) "-DDONG_PLUGIN_SDL_ENABLE_FFMPEG=ON" else "-DDONG_PLUGIN_SDL_ENABLE_FFMPEG=OFF",
+    ) catch unreachable;
+
+    // Pass binary size optimization flag
+    dong_cmake_args.append(
+        if (options.optimize_size) "-DDONG_OPTIMIZE_SIZE=ON" else "-DDONG_OPTIMIZE_SIZE=OFF",
     ) catch unreachable;
 
     const cmake_config = b.addSystemCommand(dong_cmake_args.items);

@@ -80,6 +80,17 @@ if(UNIX AND NOT APPLE)
 endif()
 
 
+# Size optimization
+if(DONG_OPTIMIZE_SIZE)
+    if(WIN32 AND NOT MINGW)
+        target_link_options(dong_appcore PRIVATE /OPT:REF /OPT:ICF=3)
+    else()
+        target_compile_options(dong_appcore PRIVATE -ffunction-sections -fdata-sections)
+        target_compile_options(dong_appcore PRIVATE -fvisibility=hidden -fvisibility-inlines-hidden)
+        target_link_options(dong_appcore PRIVATE -Wl,--gc-sections -Wl,--icf=safe)
+    endif()
+endif()
+
 # Install
 install(TARGETS dong_appcore
     ARCHIVE DESTINATION lib

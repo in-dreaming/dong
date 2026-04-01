@@ -20,6 +20,8 @@ zig build examples
 zig build
 zig build run-feature-tests
 
+二进制大小优化
+-Doptimize-size=true
 
 dong_app.exe
 

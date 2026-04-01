@@ -31,6 +31,34 @@ if(WIN32 AND NOT MINGW)
 endif()
 
 # =============================================================================
+# Binary size optimization (controlled by -DDONG_OPTIMIZE_SIZE=ON)
+# =============================================================================
+option(DONG_OPTIMIZE_SIZE "Optimize for binary size (LTO, /O1, no RTTI, etc.)" OFF)
+
+if(DONG_OPTIMIZE_SIZE)
+    # (a) Use size-optimized codegen instead of speed-optimized
+    if(WIN32 AND NOT MINGW)
+        # clang-cl: /O1 favors size over speed
+        string(REPLACE "/O2" "/O1" CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
+        string(REPLACE "/O2" "/O1" CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE}")
+    else()
+        string(REPLACE "-O2" "-Os" CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
+        string(REPLACE "-O2" "-Os" CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE}")
+    endif()
+
+    # (b) Enable Link-Time Optimization for cross-unit dead code elimination
+    include(CheckIPOSupported)
+    check_ipo_supported(RESULT ipo_supported OUTPUT ipo_error)
+    if(ipo_supported)
+        set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
+    else()
+        message(WARNING "LTO not supported: ${ipo_error}")
+    endif()
+
+    message(STATUS "DONG_OPTIMIZE_SIZE: ON (LTO=${CMAKE_INTERPROCEDURAL_OPTIMIZATION}, size-opt codegen)")
+endif()
+
+# =============================================================================
 # Configuration
 # =============================================================================
 set(VULKAN_SDK_PATH "$ENV{VULKAN_SDK}" CACHE PATH "Vulkan SDK path")
@@ -85,6 +113,10 @@ target_include_directories(lexbor PUBLIC third_party/lexbor/source)
 # Otherwise LXB_API expands to __declspec(dllimport) causing link warnings and crashes
 target_compile_definitions(lexbor PUBLIC LEXBOR_STATIC)
 
+if(DONG_OPTIMIZE_SIZE AND NOT WIN32)
+    target_compile_options(lexbor PRIVATE -ffunction-sections -fdata-sections)
+endif()
+
 # =============================================================================
 # Yoga library
 # =============================================================================
@@ -116,6 +148,10 @@ if(NOT MSVC)
     target_compile_options(yoga PRIVATE -fno-exceptions -fno-rtti)
 else()
     target_compile_options(yoga PRIVATE /EHs-c- /GR-)
+endif()
+
+if(DONG_OPTIMIZE_SIZE AND NOT WIN32)
+    target_compile_options(yoga PRIVATE -ffunction-sections -fdata-sections)
 endif()
 
 # =============================================================================
@@ -277,6 +313,25 @@ else()
     endif()
 endif()
 
+# Size optimization for dong target
+if(DONG_OPTIMIZE_SIZE)
+    # Disable RTTI (safe: no dynamic_cast/typeid in src/)
+    if(WIN32 AND NOT MINGW)
+        target_compile_options(dong PRIVATE /GR-)
+    else()
+        target_compile_options(dong PRIVATE -fno-rtti)
+    endif()
+
+    # Linker: eliminate unreferenced functions and fold identical COMDATs
+    if(WIN32)
+        target_link_options(dong PRIVATE /OPT:REF /OPT:ICF=3)
+    else()
+        target_compile_options(dong PRIVATE -ffunction-sections -fdata-sections)
+        target_link_options(dong PRIVATE -Wl,--gc-sections -Wl,--icf=safe)
+        target_compile_options(dong PRIVATE -fvisibility=hidden -fvisibility-inlines-hidden)
+    endif()
+endif()
+
 # dong_render: Core rendering library with SDL GPU backend
 # Contains: DOM/CSS/Layout engine + SDL_GPU rendering pipeline
 add_library(dong_render STATIC
@@ -431,6 +486,16 @@ else()
         "${ZIG_OUT_PREFIX}/lib/libharfbuzz.a"
         "${ZIG_OUT_PREFIX}/lib/libmsdfgen.a"
     )
+endif()
+
+# Size optimization for dong_render target
+if(DONG_OPTIMIZE_SIZE)
+    if(WIN32 AND NOT MINGW)
+        target_compile_options(dong_render PRIVATE /GR-)
+    else()
+        target_compile_options(dong_render PRIVATE -fno-rtti -ffunction-sections -fdata-sections)
+        target_compile_options(dong_render PRIVATE -fvisibility=hidden -fvisibility-inlines-hidden)
+    endif()
 endif()
 
 # =============================================================================

@@ -174,6 +174,18 @@ else()
 endif()
 
 
+# Size optimization
+if(DONG_OPTIMIZE_SIZE)
+    if(WIN32 AND NOT MINGW)
+        target_compile_options(dong_sdl_backend PRIVATE /GR-)
+        target_link_options(dong_sdl_backend PRIVATE /OPT:REF /OPT:ICF=3)
+    else()
+        target_compile_options(dong_sdl_backend PRIVATE -fno-rtti -ffunction-sections -fdata-sections)
+        target_compile_options(dong_sdl_backend PRIVATE -fvisibility=hidden -fvisibility-inlines-hidden)
+        target_link_options(dong_sdl_backend PRIVATE -Wl,--gc-sections -Wl,--icf=safe)
+    endif()
+endif()
+
 # Install
 install(TARGETS dong_sdl_backend
     ARCHIVE DESTINATION lib
