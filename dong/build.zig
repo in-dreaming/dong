@@ -632,7 +632,7 @@ pub fn build(b: *std.Build) void {
         "-Command",
         b.fmt(
             "& {{ $ErrorActionPreference = 'Stop'; " ++
-                "$examples = @('counter', 'game-ui', 'todo-classic'); " ++
+                "$examples = @('counter', 'game-ui', 'todo-classic', 'ui-components'); " ++
                 "foreach ($ex in $examples) {{ " ++
                 "  $src_b = 'preact/dist/' + $ex + '/bundle.js'; " ++
                 "  $src_h = 'preact/examples/' + $ex + '/index.html'; " ++
@@ -650,7 +650,7 @@ pub fn build(b: *std.Build) void {
         "sh",
         "-c",
         b.fmt(
-            "for ex in counter game-ui todo-classic; do " ++
+            "for ex in counter game-ui todo-classic ui-components; do " ++
                 "  src_b=\"preact/dist/$ex/bundle.js\"; " ++
                 "  src_h=\"preact/examples/$ex/index.html\"; " ++
                 "  if [ -f \"$src_b\" ] && [ -f \"$src_h\" ]; then " ++
@@ -681,8 +681,9 @@ pub fn build(b: *std.Build) void {
                 "node build.mjs counter; " ++
                 "node build.mjs game-ui; " ++
                 "node build.mjs todo-classic; " ++
+                "node build.mjs ui-components; " ++
                 "Pop-Location; " ++
-                "$examples = @('counter', 'game-ui', 'todo-classic'); " ++
+                "$examples = @('counter', 'game-ui', 'todo-classic', 'ui-components'); " ++
                 "foreach ($ex in $examples) {{ " ++
                 "  $dst = '{s}/bin/data/preact-' + $ex; " ++
                 "  New-Item -ItemType Directory -Force -Path $dst | Out-Null; " ++
@@ -701,8 +702,9 @@ pub fn build(b: *std.Build) void {
                 "node build.mjs counter && " ++
                 "node build.mjs game-ui && " ++
                 "node build.mjs todo-classic && " ++
+                "node build.mjs ui-components && " ++
                 "cd .. && " ++
-                "for ex in counter game-ui todo-classic; do " ++
+                "for ex in counter game-ui todo-classic ui-components; do " ++
                 "  dst='{s}/bin/data/preact-$ex'; " ++
                 "  mkdir -p \"$dst\"; " ++
                 "  cp \"preact/dist/$ex/bundle.js\" \"$dst/bundle.js\"; " ++

@@ -13,6 +13,7 @@
     "build:counter": "node build.mjs counter",
     "build:game-ui": "node build.mjs game-ui",
     "build:todo-classic": "node build.mjs todo-classic",
-    "build:all": "node build.mjs counter && node build.mjs game-ui && node build.mjs todo-classic"
+    "build:ui-components": "node build.mjs ui-components",
+    "build:all": "node build.mjs counter && node build.mjs game-ui && node build.mjs todo-classic && node build.mjs ui-components"
   }
 }
