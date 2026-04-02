@@ -1,10 +1,12 @@
-﻿#define DONG_DISABLE_VIEW_API
+#define DONG_DISABLE_VIEW_API
 #include "dong.h"
 
 #include "core/engine_view.hpp"
+#include "core/profiler.h"
 #include "render/text_renderer_mode.hpp"
 
 #include <cstdio>
+#include <cstdlib>
 #include <memory>
 
 namespace {
@@ -106,6 +108,14 @@ void dong_engine_destroy(dong_engine_t* engine) {
     auto* e = asEngine(engine);
     if (!e) {
         return;
+    }
+
+    if (dong_profiler_is_enabled()) {
+        const char* path = std::getenv("DONG_PROFILE_OUTPUT");
+        const char* out = (path && path[0]) ? path : "dong_profile.json";
+        if (dong_profiler_dump(out) == 0) {
+            fprintf(stderr, "[Profiler] Trace saved to %s\n", out);
+        }
     }
 
     if (pluginCanLog(e->plugin)) {

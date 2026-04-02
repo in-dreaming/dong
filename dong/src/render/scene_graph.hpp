@@ -65,7 +65,7 @@ public:
     void setBool(uint32_t id, const std::string& prop, bool value);
 
     const std::vector<DisplayItem>& buildDisplayItems();
-    bool isDirty() const { return any_dirty_; }
+    bool isDirty() const { return any_dirty_ && !nodes_.empty(); }
 
     SceneNode* hitTest(float x, float y);
 

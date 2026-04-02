@@ -85,6 +85,11 @@ private:
     // JS 事件监听器注册表：node_id -> (event_type -> JS 函数列表)
     std::unordered_map<uint64_t, std::unordered_map<std::string, std::vector<JSValue>>> listeners_;
 
+    // JS element wrapper cache: DOMNode* → JSValue (DupValue'd)
+    // Ensures the same DOM node always maps to the same JS object,
+    // so frameworks like Preact that store data on the element can find it later.
+    std::unordered_map<void*, JSValue> js_element_cache_;
+
     // 初始化各个 API 模块
     void initializeDocumentAPI();
     void initializeElementAPI();

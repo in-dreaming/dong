@@ -1486,6 +1486,7 @@ struct EngineView::Impl {
 
     bool loadHTML(const char* html_content) {
         activateViewContext();
+        DONG_PROFILE_SCOPE_CAT("EngineView::loadHTML", "init");
 
         if (!html_content || !dom_manager) {
             return false;
@@ -1493,8 +1494,11 @@ struct EngineView::Impl {
 
         dom_manager->setResourceRoot(resource_root);
 
-        if (!dom_manager->loadHTML(html_content)) {
-            return false;
+        {
+            DONG_PROFILE_SCOPE_CAT("HTML::parse", "init");
+            if (!dom_manager->loadHTML(html_content)) {
+                return false;
+            }
         }
 
         // DOM 重载后，必须清空全局 select 状态（避免悬空 key 被复用）。
@@ -1525,6 +1529,7 @@ struct EngineView::Impl {
         if (layout_engine && painter) {
             if (auto root2 = dom_manager->getRoot()) {
                 if (root2->isLayoutDirty()) {
+                    DONG_PROFILE_SCOPE_CAT("Layout::primeInitial", "init");
                     layout_engine->calculateLayout(root2, static_cast<float>(width), static_cast<float>(height));
                     root2->clearLayoutDirtyRecursive();
                 }
@@ -1597,6 +1602,7 @@ struct EngineView::Impl {
                 DONG_LOG_INFO("[EngineView] Script code length: %zu bytes", code.length());
                 if (!code.empty()) {
                     DONG_LOG_INFO("[EngineView] Executing script...");
+                    DONG_PROFILE_SCOPE_CAT("Script::eval", "init");
                     if (js_bindings) {
                         js_bindings->setCurrentExecutingScript(script);
                     }
@@ -1986,6 +1992,8 @@ struct EngineView::Impl {
         (void)uploadPendingVideoFrames();
     }
 
+    uint32_t idle_frame_count_ = 0;
+
     void tickExecuteGPUCommandsIfReady() {
         const bool gpu_ready = true;
         if (!(use_gpu && cached_cmd_list && !commands_dirty && gpu_ready)) return;
@@ -2000,14 +2008,18 @@ struct EngineView::Impl {
             DONG_LOG_DEBUG("[tick] Executing %zu GPU commands", cached_cmd_list->commands.size());
             DONG_PROFILE_SCOPE_CAT("GPU::execute", "render");
             (void)dong_gpu_execute(driver, cached_cmd_list.get());
-        } else {
-            // Nothing changed: pass empty list to trigger present-only (intermediate → swapchain blit)
+            idle_frame_count_ = 0;
+        } else if (idle_frame_count_ < 2) {
+            // Present-only for the first couple of idle frames to ensure
+            // the swapchain has valid content, then stop submitting.
             DONG_PROFILE_SCOPE_CAT("GPU::presentOnly", "render");
             static dong::render::GPUCommandList empty_list;
             empty_list.commands.clear();
             empty_list.sorted_draw_indices.clear();
             (void)dong_gpu_execute(driver, &empty_list);
+            ++idle_frame_count_;
         }
+        // else: content unchanged, swapchain already has valid image — skip GPU entirely
     }
 
     bool tick() {
@@ -2022,30 +2034,57 @@ struct EngineView::Impl {
         tickUpdateCaretBlink(current_time);
 
         DONG_LOG_DEBUG("[tick] step: smooth_scroll");
-        tickAdvanceSmoothScroll(current_time);
+        {
+            DONG_PROFILE_SCOPE_CAT("SmoothScroll", "tick");
+            tickAdvanceSmoothScroll(current_time);
+        }
 
         DONG_LOG_DEBUG("[tick] step: videos");
-        tickSyncVideos(current_time);
+        {
+            DONG_PROFILE_SCOPE_CAT("SyncVideos", "tick");
+            tickSyncVideos(current_time);
+        }
 
         DONG_LOG_DEBUG("[tick] step: script_tasks");
-        tickProcessScriptTasks();
+        {
+            DONG_PROFILE_SCOPE_CAT("ScriptTasks", "tick");
+            tickProcessScriptTasks();
+        }
 
         DONG_LOG_DEBUG("[tick] step: styles");
-        tickComputeStylesIfNeeded();
+        {
+            DONG_PROFILE_SCOPE_CAT("ComputeStyles", "tick");
+            tickComputeStylesIfNeeded();
+        }
 
         DONG_LOG_DEBUG("[tick] step: layout");
-        tickComputeLayoutIfNeeded();
+        {
+            DONG_PROFILE_SCOPE_CAT("ComputeLayout", "tick");
+            tickComputeLayoutIfNeeded();
+        }
 
-        tickSyncDialogTopLayer();
+        {
+            DONG_PROFILE_SCOPE_CAT("SyncDialogTopLayer", "tick");
+            tickSyncDialogTopLayer();
+        }
 
         DONG_LOG_DEBUG("[tick] step: render_build");
-        tickGenerateCommandsIfNeeded();
+        {
+            DONG_PROFILE_SCOPE_CAT("GenerateCommands", "tick");
+            tickGenerateCommandsIfNeeded();
+        }
 
         DONG_LOG_DEBUG("[tick] step: video_upload");
-        tickUploadVideoFramesIfNeeded();
+        {
+            DONG_PROFILE_SCOPE_CAT("UploadVideoFrames", "tick");
+            tickUploadVideoFramesIfNeeded();
+        }
 
         DONG_LOG_DEBUG("[tick] step: gpu_execute");
-        tickExecuteGPUCommandsIfReady();
+        {
+            DONG_PROFILE_SCOPE_CAT("ExecuteGPU", "tick");
+            tickExecuteGPUCommandsIfReady();
+        }
 
         return true;
     }
@@ -3745,6 +3784,7 @@ public:
         if (!code || !script_engine) {
             return false;
         }
+        DONG_PROFILE_SCOPE_CAT("Script::evalScript", "script");
         ensureJSBindingsInitialized();
         return script_engine->eval(std::string(code));
     }

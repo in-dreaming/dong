@@ -90,7 +90,7 @@ static bool debugScriptEval() {
         if (argc < 1) return JS_UNDEFINED; \
         auto node = dong::script::JSBindings::getNodeOpaque(ctx, this_val); \
         const char* s = JS_ToCString(ctx, argv[0]); \
-        if (node && s) { node->method(s); node->markLayoutDirty(); } \
+        if (node && s) { node->method(s); node->markStyleDirty(); node->markLayoutDirty(); } \
         if (s) JS_FreeCString(ctx, s); \
         return JS_UNDEFINED; \
     }
@@ -1832,6 +1832,15 @@ static JSValue doc_createElement(JSContext* ctx, JSValueConst this_val, int argc
     return bindings->createJSElement(ctx, node);
 }
 
+// createElementNS(namespaceURI, qualifiedName, options?)
+// Dong doesn't distinguish namespaces; delegate to createElement using the tag name.
+static JSValue doc_createElementNS(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    if (argc < 2) return JS_NULL;
+    // argv[0] = namespaceURI (ignored), argv[1] = qualifiedName
+    JSValueConst args[1] = { argv[1] };
+    return doc_createElement(ctx, this_val, 1, args);
+}
+
 static JSValue doc_createTextNode(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     auto bindings = getBindingsForDoc(ctx, this_val);
     if (!bindings || argc < 1) return JS_NULL;
@@ -1940,6 +1949,8 @@ static JSValue elem_setAttribute(JSContext* ctx, JSValueConst this_val, int argc
     auto node = JSBindings::getNodeOpaque(ctx, this_val);
     if (node && attr_name && attr_value) {
         node->setAttribute(attr_name, attr_value);
+        node->markStyleDirty();
+        node->markLayoutDirty();
     }
 
     if (dbg) {
@@ -1960,6 +1971,8 @@ static JSValue elem_appendChild(JSContext* ctx, JSValueConst this_val, int argc,
     
     if (parent && child) {
         parent->appendChild(child);
+        parent->markStyleDirty();
+        parent->markLayoutDirty();
         return JS_DupValue(ctx, argv[0]);
     }
     
@@ -1974,6 +1987,8 @@ static JSValue elem_removeChild(JSContext* ctx, JSValueConst this_val, int argc,
     
     if (parent && child) {
         parent->removeChild(child);
+        parent->markStyleDirty();
+        parent->markLayoutDirty();
         return JS_DupValue(ctx, argv[0]);
     }
     
@@ -1996,8 +2011,8 @@ static JSValue elem_setOuterHTML(JSContext* ctx, JSValueConst this_val, int argc
 
     if (node && html) {
         node->setOuterHTML(html);
-        // Parent should be marked dirty since this node is replaced
         if (auto parent = node->getParent()) {
+            parent->markStyleDirty();
             parent->markLayoutDirty();
         }
     }
@@ -2017,6 +2032,7 @@ static JSValue elem_insertAdjacentHTML(JSContext* ctx, JSValueConst this_val, in
 
     if (position && html) {
         node->insertAdjacentHTML(position, html);
+        node->markStyleDirty();
         node->markLayoutDirty();
     }
 
@@ -2361,6 +2377,7 @@ static JSValue elem_setStyle(JSContext* ctx, JSValueConst this_val, JSValue styl
     else if (strcmp(prop, "borderWidth") == 0) style.border_width = (float)num_val;
     else if (strcmp(prop, "borderColor") == 0) style.border_color = str_val;
     
+    node->markStyleDirty();
     node->markLayoutDirty();
     
     return JS_UNDEFINED;
@@ -2379,11 +2396,12 @@ static JSValue elem_setClassName(JSContext* ctx, JSValueConst this_val, int argc
         node->setAttribute("class", cls);
         JS_FreeCString(ctx, cls);
         
-        // Trigger style recomputation
         auto* bindings = getBindingsFromContext(ctx);
         if (bindings && bindings->dom_manager_) {
             bindings->dom_manager_->recomputeNodeStyle(node);
         }
+        node->markStyleDirty();
+        node->markLayoutDirty();
     }
     return JS_UNDEFINED;
 }
@@ -2406,11 +2424,12 @@ static JSValue elem_setId(JSContext* ctx, JSValueConst this_val, int argc, JSVal
 
     JS_FreeCString(ctx, id);
 
-    // Trigger style recomputation (#id selectors)
     auto* bindings = getBindingsFromContext(ctx);
     if (bindings && bindings->dom_manager_) {
         bindings->dom_manager_->recomputeNodeStyle(node);
     }
+    node->markStyleDirty();
+    node->markLayoutDirty();
 
     return JS_UNDEFINED;
 }
@@ -2451,11 +2470,12 @@ static JSValue elem_classList_add(JSContext* ctx, JSValueConst this_val, int arg
         }
         node->setAttribute("class", classes);
         
-        // Trigger style recomputation
         auto* bindings = getBindingsFromContext(ctx);
         if (bindings && bindings->dom_manager_) {
             bindings->dom_manager_->recomputeNodeStyle(node);
         }
+        node->markStyleDirty();
+        node->markLayoutDirty();
     }
 
     JS_FreeCString(ctx, cls);
@@ -2491,11 +2511,12 @@ static JSValue elem_classList_remove(JSContext* ctx, JSValueConst this_val, int 
 
     node->setAttribute("class", result);
     
-    // Trigger style recomputation
     auto* bindings = getBindingsFromContext(ctx);
     if (bindings && bindings->dom_manager_) {
         bindings->dom_manager_->recomputeNodeStyle(node);
     }
+    node->markStyleDirty();
+    node->markLayoutDirty();
     
     JS_FreeCString(ctx, cls);
     return JS_UNDEFINED;
@@ -2540,11 +2561,12 @@ static JSValue elem_classList_toggle(JSContext* ctx, JSValueConst this_val, int 
 
     node->setAttribute("class", result);
     
-    // Trigger style recomputation
     auto* bindings = getBindingsFromContext(ctx);
     if (bindings && bindings->dom_manager_) {
         bindings->dom_manager_->recomputeNodeStyle(node);
     }
+    node->markStyleDirty();
+    node->markLayoutDirty();
     
     JS_FreeCString(ctx, cls);
     return JS_NewBool(ctx, !found);
@@ -3547,6 +3569,8 @@ void JSBindings::initializeDocumentAPI() {
     // DOM 鍒涘缓 API
     JS_SetPropertyStr(ctx, document, "createElement",
         JS_NewCFunction(ctx, doc_createElement, "createElement", 1));
+    JS_SetPropertyStr(ctx, document, "createElementNS",
+        JS_NewCFunction(ctx, doc_createElementNS, "createElementNS", 2));
     JS_SetPropertyStr(ctx, document, "createTextNode",
         JS_NewCFunction(ctx, doc_createTextNode, "createTextNode", 1));
     JS_SetPropertyStr(ctx, document, "createComment",
@@ -3675,8 +3699,19 @@ JSValue JSBindings::createJSElement(JSContext* ctx, const dom::DOMNodePtr& node)
         DONG_LOG_INFO("[JS] createJSElement begin node=%p tag=%s", (void*)node.get(), node->getTagName().c_str());
     }
 
-    // Check if this node already has a JS wrapper (to avoid duplicate inline handler registration)
     auto bindings = getBindingsFromContext(ctx);
+
+    // Return cached wrapper if one exists for this DOM node.
+    if (bindings) {
+        auto cache_it = bindings->js_element_cache_.find(node.get());
+        if (cache_it != bindings->js_element_cache_.end()) {
+            if (dbg) {
+                DONG_LOG_INFO("[JS] createJSElement cache hit node=%p", (void*)node.get());
+            }
+            return JS_DupValue(ctx, cache_it->second);
+        }
+    }
+
     bool already_has_wrapper = false;
     if (bindings) {
         auto it = bindings->node_to_id_.find(node.get());
@@ -3809,6 +3844,28 @@ JSValue JSBindings::createJSElement(JSContext* ctx, const dom::DOMNodePtr& node)
     JS_SetPropertyStr(ctx, elem, "blur",
         JS_NewCFunction(ctx, elem_blur, "blur", 0));
 
+    // Standard DOM on* event handler properties (null by default).
+    // Frameworks like Preact check `"onclick" in element` to decide event name casing.
+    static const char* const on_event_props[] = {
+        "onclick", "ondblclick", "onmousedown", "onmouseup", "onmousemove",
+        "onmouseenter", "onmouseleave", "onmouseover", "onmouseout",
+        "onkeydown", "onkeyup", "onkeypress",
+        "onfocus", "onblur", "oninput", "onchange", "onsubmit", "onreset",
+        "onscroll", "onwheel", "onresize",
+        "onpointerdown", "onpointerup", "onpointermove",
+        "onpointerenter", "onpointerleave", "onpointerover", "onpointerout",
+        "ontouchstart", "ontouchend", "ontouchmove", "ontouchcancel",
+        "ondragstart", "ondrag", "ondragend", "ondrop", "ondragenter", "ondragleave", "ondragover",
+        "oncontextmenu", "onfocusin", "onfocusout",
+        "onanimationstart", "onanimationend", "onanimationiteration",
+        "ontransitionend", "ontransitionstart",
+        "onload", "onerror",
+        nullptr
+    };
+    for (const char* const* p = on_event_props; *p; ++p) {
+        JS_SetPropertyStr(ctx, elem, *p, JS_NULL);
+    }
+
     // style and classList
     JS_SetPropertyStr(ctx, elem, "style", elem_getStyle(ctx, elem, 0, nullptr));
     JS_SetPropertyStr(ctx, elem, "classList", elem_getClassList(ctx, elem, 0, nullptr));
@@ -3866,6 +3923,11 @@ JSValue JSBindings::createJSElement(JSContext* ctx, const dom::DOMNodePtr& node)
                 }
             }
         }
+    }
+
+    // Cache this wrapper so the same DOM node always returns the same JS object.
+    if (bindings) {
+        bindings->js_element_cache_[node.get()] = JS_DupValue(ctx, elem);
     }
 
     if (dbg) {
@@ -4726,6 +4788,17 @@ void JSBindings::resetForNewDOM() {
     id_to_node_.clear();
     node_to_id_.clear();
 
+    // Free cached JS element wrappers
+    if (engine_) {
+        JSContext* ctx = engine_->getContext();
+        if (ctx) {
+            for (auto& [ptr, val] : js_element_cache_) {
+                JS_FreeValue(ctx, val);
+            }
+        }
+    }
+    js_element_cache_.clear();
+
     // Cancel all pending timers
     if (engine_) {
         JSContext* ctx = engine_->getContext();
@@ -4927,6 +5000,8 @@ void JSBindings::registerAsNamedView() {
         JS_NewCFunction(ctx, doc_hasFocus, "hasFocus", 0));
     JS_SetPropertyStr(ctx, doc, "createElement",
         JS_NewCFunction(ctx, doc_createElement, "createElement", 1));
+    JS_SetPropertyStr(ctx, doc, "createElementNS",
+        JS_NewCFunction(ctx, doc_createElementNS, "createElementNS", 2));
     JS_SetPropertyStr(ctx, doc, "createTextNode",
         JS_NewCFunction(ctx, doc_createTextNode, "createTextNode", 1));
     JS_SetPropertyStr(ctx, doc, "createComment",

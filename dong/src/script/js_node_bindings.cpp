@@ -281,6 +281,8 @@ static JSValue elem_insertBefore(JSContext* ctx, JSValueConst this_val, int argc
     }
     if (parent && newChild) {
         parent->insertBefore(newChild, refChild);
+        parent->markStyleDirty();
+        parent->markLayoutDirty();
         return JS_DupValue(ctx, argv[0]);
     }
     return JS_UNDEFINED;
@@ -357,6 +359,8 @@ static JSValue elem_replaceChild(JSContext* ctx, JSValueConst this_val, int argc
     auto oldChild = JSBindings::getNodeOpaque(ctx, argv[1]);
     if (!parent || !newChild || !oldChild) return JS_NULL;
     parent->replaceChild(newChild, oldChild);
+    parent->markStyleDirty();
+    parent->markLayoutDirty();
     return JS_DupValue(ctx, argv[1]);
 }
 
@@ -376,6 +380,8 @@ static JSValue elem_replaceChildren(JSContext* ctx, JSValueConst this_val, int a
         }
     }
 
+    node->markStyleDirty();
+    node->markLayoutDirty();
     return JS_UNDEFINED;
 }
 
@@ -392,6 +398,8 @@ static JSValue elem_insertAdjacentElement(JSContext* ctx, JSValueConst this_val,
     node->insertAdjacentElement(pos, element);
     JS_FreeCString(ctx, pos);
 
+    node->markStyleDirty();
+    node->markLayoutDirty();
     return JS_DupValue(ctx, argv[1]);
 }
 
@@ -413,6 +421,9 @@ static JSValue elem_insertAdjacentText(JSContext* ctx, JSValueConst this_val, in
 
     JS_FreeCString(ctx, pos);
     JS_FreeCString(ctx, text);
+
+    node->markStyleDirty();
+    node->markLayoutDirty();
     return JS_UNDEFINED;
 }
 
@@ -458,6 +469,8 @@ static JSValue elem_before(JSContext* ctx, JSValueConst this_val, int argc, JSVa
         }
     }
 
+    parent->markStyleDirty();
+    parent->markLayoutDirty();
     return JS_UNDEFINED;
 }
 
@@ -482,6 +495,8 @@ static JSValue elem_after(JSContext* ctx, JSValueConst this_val, int argc, JSVal
         }
     }
 
+    parent->markStyleDirty();
+    parent->markLayoutDirty();
     return JS_UNDEFINED;
 }
 
@@ -508,6 +523,8 @@ static JSValue elem_replaceWith(JSContext* ctx, JSValueConst this_val, int argc,
     // Remove this node
     parent->removeChild(node);
 
+    parent->markStyleDirty();
+    parent->markLayoutDirty();
     return JS_UNDEFINED;
 }
 
@@ -528,6 +545,8 @@ static JSValue elem_prepend(JSContext* ctx, JSValueConst this_val, int argc, JSV
         }
     }
 
+    node->markStyleDirty();
+    node->markLayoutDirty();
     return JS_UNDEFINED;
 }
 
@@ -546,6 +565,8 @@ static JSValue elem_append(JSContext* ctx, JSValueConst this_val, int argc, JSVa
         }
     }
 
+    node->markStyleDirty();
+    node->markLayoutDirty();
     return JS_UNDEFINED;
 }
 
@@ -727,6 +748,8 @@ static JSValue elem_removeAttribute(JSContext* ctx, JSValueConst this_val, int a
     if (!name) return JS_UNDEFINED;
     node->removeAttribute(name);
     JS_FreeCString(ctx, name);
+    node->markStyleDirty();
+    node->markLayoutDirty();
     return JS_UNDEFINED;
 }
 

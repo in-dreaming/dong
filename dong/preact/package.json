@@ -1,0 +1,18 @@
+{
+  "name": "dong-preact",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Preact integration for Dong HTML/CSS engine (lightweight React alternative)",
+  "dependencies": {
+    "preact": "^10.24.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.21.0"
+  },
+  "scripts": {
+    "build:counter": "node build.mjs counter",
+    "build:game-ui": "node build.mjs game-ui",
+    "build:todo-classic": "node build.mjs todo-classic",
+    "build:all": "node build.mjs counter && node build.mjs game-ui && node build.mjs todo-classic"
+  }
+}

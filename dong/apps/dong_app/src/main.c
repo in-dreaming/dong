@@ -149,7 +149,23 @@ int main(int argc, char** argv) {
     }
 
     printf("[dong_app] Running...\n");
-    dong_app_run(app, NULL, NULL);
+
+    {
+        const char* aq_env = getenv("DONG_AUTO_QUIT");
+        int auto_quit_frames = aq_env ? atoi(aq_env) : 0;
+        if (auto_quit_frames > 0) {
+            int frame = 0;
+            while (dong_app_poll_events(app)) {
+                dong_app_present(app);
+                if (++frame >= auto_quit_frames) {
+                    printf("[dong_app] Auto-quit after %d frames\n", frame);
+                    break;
+                }
+            }
+        } else {
+            dong_app_run(app, NULL, NULL);
+        }
+    }
 
     // Cleanup
     printf("[dong_app] Shutting down...\n");

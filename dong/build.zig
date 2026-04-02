@@ -622,6 +622,100 @@ pub fn build(b: *std.Build) void {
     react_step.dependOn(&react_build_and_install.step);
 
     // ==========================================================================
+    // Preact Examples: copy pre-built bundles to zig-out/bin/data/
+    // ==========================================================================
+    const preact_copy = b.addSystemCommand(if (host_is_windows) &.{
+        "powershell",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        b.fmt(
+            "& {{ $ErrorActionPreference = 'Stop'; " ++
+                "$examples = @('counter', 'game-ui', 'todo-classic'); " ++
+                "foreach ($ex in $examples) {{ " ++
+                "  $src_b = 'preact/dist/' + $ex + '/bundle.js'; " ++
+                "  $src_h = 'preact/examples/' + $ex + '/index.html'; " ++
+                "  if ((Test-Path $src_b) -and (Test-Path $src_h)) {{ " ++
+                "    $dst = '{s}/bin/data/preact-' + $ex; " ++
+                "    New-Item -ItemType Directory -Force -Path $dst | Out-Null; " ++
+                "    Copy-Item -Force $src_b (Join-Path $dst 'bundle.js'); " ++
+                "    Copy-Item -Force $src_h (Join-Path $dst 'index.html'); " ++
+                "    Write-Host ('  Installed preact-' + $ex); " ++
+                "  }} " ++
+                "}} }}",
+            .{install_prefix},
+        ),
+    } else &.{
+        "sh",
+        "-c",
+        b.fmt(
+            "for ex in counter game-ui todo-classic; do " ++
+                "  src_b=\"preact/dist/$ex/bundle.js\"; " ++
+                "  src_h=\"preact/examples/$ex/index.html\"; " ++
+                "  if [ -f \"$src_b\" ] && [ -f \"$src_h\" ]; then " ++
+                "    dst='{s}/bin/data/preact-$ex'; " ++
+                "    mkdir -p \"$dst\"; " ++
+                "    cp \"$src_b\" \"$dst/bundle.js\"; " ++
+                "    cp \"$src_h\" \"$dst/index.html\"; " ++
+                "    echo \"  Installed preact-$ex\"; " ++
+                "  fi; " ++
+                "done",
+            .{install_prefix},
+        ),
+    });
+    preact_copy.step.dependOn(&cmake_install.step);
+    b.getInstallStep().dependOn(&preact_copy.step);
+
+    // "zig build preact" — build Preact bundles from source, then copy to output
+    const preact_build_and_install = b.addSystemCommand(if (host_is_windows) &.{
+        "powershell",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        b.fmt(
+            "& {{ $ErrorActionPreference = 'Stop'; " ++
+                "Push-Location preact; " ++
+                "if (-not (Test-Path node_modules)) {{ npm install }}; " ++
+                "node build.mjs counter; " ++
+                "node build.mjs game-ui; " ++
+                "node build.mjs todo-classic; " ++
+                "Pop-Location; " ++
+                "$examples = @('counter', 'game-ui', 'todo-classic'); " ++
+                "foreach ($ex in $examples) {{ " ++
+                "  $dst = '{s}/bin/data/preact-' + $ex; " ++
+                "  New-Item -ItemType Directory -Force -Path $dst | Out-Null; " ++
+                "  Copy-Item -Force ('preact/dist/' + $ex + '/bundle.js') (Join-Path $dst 'bundle.js'); " ++
+                "  Copy-Item -Force ('preact/examples/' + $ex + '/index.html') (Join-Path $dst 'index.html'); " ++
+                "  Write-Host ('  Built & installed preact-' + $ex); " ++
+                "}} }}",
+            .{install_prefix},
+        ),
+    } else &.{
+        "sh",
+        "-c",
+        b.fmt(
+            "cd preact && " ++
+                "[ -d node_modules ] || npm install && " ++
+                "node build.mjs counter && " ++
+                "node build.mjs game-ui && " ++
+                "node build.mjs todo-classic && " ++
+                "cd .. && " ++
+                "for ex in counter game-ui todo-classic; do " ++
+                "  dst='{s}/bin/data/preact-$ex'; " ++
+                "  mkdir -p \"$dst\"; " ++
+                "  cp \"preact/dist/$ex/bundle.js\" \"$dst/bundle.js\"; " ++
+                "  cp \"preact/examples/$ex/index.html\" \"$dst/index.html\"; " ++
+                "  echo \"  Built & installed preact-$ex\"; " ++
+                "done",
+            .{install_prefix},
+        ),
+    });
+    const preact_step = b.step("preact", "Build & install Preact examples (requires Node.js)");
+    preact_step.dependOn(&preact_build_and_install.step);
+
+    // ==========================================================================
     // Build Steps
     // ==========================================================================
     const examples_step = b.step("examples", "Build all examples and install to zig-out/bin");
