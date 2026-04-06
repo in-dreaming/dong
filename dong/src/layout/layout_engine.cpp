@@ -2645,32 +2645,42 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
                             // Flex item that can shrink — set flex-basis to full text width so
                             // Yoga knows its natural size, and min-width to longest-word width
                             // so the item can shrink (wrap text at spaces) but not below one word.
-                            float longest_word_width_px = 0.0f;
-                            float word_start_x = shaped.glyphs.front().pen_x_units;
-                            float word_end_x = word_start_x;
-                            for (size_t gi = 0; gi < shaped.glyphs.size(); ++gi) {
-                                const auto& g = shaped.glyphs[gi];
-                                bool is_space = (g.cluster < text.size() && text[g.cluster] == ' ');
-                                if (is_space) {
-                                    float w = (word_end_x - word_start_x) * scale;
-                                    if (w > longest_word_width_px) longest_word_width_px = w;
-                                    // Next word starts after this space
-                                    if (gi + 1 < shaped.glyphs.size()) {
-                                        word_start_x = shaped.glyphs[gi + 1].pen_x_units;
-                                        word_end_x = word_start_x;
-                                    }
-                                } else {
-                                    float x_end = g.pen_x_units + g.advance_x_units;
-                                    if (x_end > word_end_x) word_end_x = x_end;
-                                }
-                            }
-                            // Last word
-                            float w = (word_end_x - word_start_x) * scale;
-                            if (w > longest_word_width_px) longest_word_width_px = w;
+                            // IMPORTANT: Only allow wrapping for inline-block elements, not pure inline.
+                            // Pure inline elements in flex containers should preserve their full text width.
+                            const bool is_inline_block_elem = (style.display == dom::CSSDisplay::InlineBlock);
 
-                            const float min_w = longest_word_width_px + pad_l + pad_r + border_w * 2.0f;
-                            if (min_w > 0.0f && min_w < 100000.0f && std::isfinite(min_w)) {
-                                YGNodeStyleSetMinWidth(yoga_node, min_w);
+                            if (is_inline_block_elem) {
+                                // Inline-block: allow wrapping at word boundaries
+                                float longest_word_width_px = 0.0f;
+                                float word_start_x = shaped.glyphs.front().pen_x_units;
+                                float word_end_x = word_start_x;
+                                for (size_t gi = 0; gi < shaped.glyphs.size(); ++gi) {
+                                    const auto& g = shaped.glyphs[gi];
+                                    bool is_space = (g.cluster < text.size() && text[g.cluster] == ' ');
+                                    if (is_space) {
+                                        float w = (word_end_x - word_start_x) * scale;
+                                        if (w > longest_word_width_px) longest_word_width_px = w;
+                                        // Next word starts after this space
+                                        if (gi + 1 < shaped.glyphs.size()) {
+                                            word_start_x = shaped.glyphs[gi + 1].pen_x_units;
+                                            word_end_x = word_start_x;
+                                        }
+                                    } else {
+                                        float x_end = g.pen_x_units + g.advance_x_units;
+                                        if (x_end > word_end_x) word_end_x = x_end;
+                                    }
+                                }
+                                // Last word
+                                float w = (word_end_x - word_start_x) * scale;
+                                if (w > longest_word_width_px) longest_word_width_px = w;
+
+                                const float min_w = longest_word_width_px + pad_l + pad_r + border_w * 2.0f;
+                                if (min_w > 0.0f && min_w < 100000.0f && std::isfinite(min_w)) {
+                                    YGNodeStyleSetMinWidth(yoga_node, min_w);
+                                }
+                            } else {
+                                // Pure inline (or other display types): use full text width to prevent wrapping
+                                YGNodeStyleSetMinWidth(yoga_node, nat_w);
                             }
                             // Set flex-basis to full text width so Yoga proportionally shrinks.
                             YGNodeStyleSetFlexBasis(yoga_node, nat_w);
