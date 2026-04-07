@@ -2680,9 +2680,13 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
                                 }
                             } else {
                                 // Pure inline (or other display types): use full text width to prevent wrapping
+                                // Also prevent flex-shrink so the item doesn't shrink and wrap
                                 YGNodeStyleSetMinWidth(yoga_node, nat_w);
+                                // Set flex-shrink to 0 so pure inline elements preserve full width in flex containers
+                                YGNodeStyleSetFlexShrink(yoga_node, 0.0f);
                             }
                             // Set flex-basis to full text width so Yoga proportionally shrinks.
+                            // (Note: for pure inline with shrink:0, this is moot but kept for consistency)
                             YGNodeStyleSetFlexBasis(yoga_node, nat_w);
                         }
                     }
