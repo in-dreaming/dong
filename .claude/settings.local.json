@@ -95,7 +95,12 @@
       "Bash(del:*)",
       "Bash(zig-out\\\\bin\\\\html_test.exe:*)",
       "Bash(python3:*)",
-      "Bash(zig-outbinhtml_render_test.exe:*)"
+      "Bash(zig-outbinhtml_render_test.exe:*)",
+      "Bash(wc -l /d/mix/agents/game/indr/dong/dong/ai_working/*.md)",
+      "Read(//tmp/**)",
+      "Bash(tee /tmp/preact_baseline_test.log)",
+      "Bash(DONG_LOG_LEVEL=DEBUG python scripts/tools/run_preact_baseline_compare.py --case discovery-buttons --frames 1 --llm)",
+      "Bash(tee /tmp/full_baseline_run.txt)"
     ]
   }
 }

@@ -70,6 +70,18 @@ namespace {
 
 using dong::dom::DOMNodePtr;
 
+/**
+ * Check if a script element is an ES module script.
+ * @param script_node: The <script> DOM element to check
+ * @return true if type="module", false otherwise
+ */
+static bool isModuleScript(const DOMNodePtr& script_node) {
+    if (!script_node) return false;
+    std::string type = script_node->getAttribute("type");
+    // ES module scripts have type="module"
+    return (type == "module");
+}
+
 DOMNodePtr hitTestRecursive(const DOMNodePtr& node, dong::layout::Engine* layout_engine,
                             int32_t x, int32_t y) {
     if (!node || !layout_engine) return nullptr;
@@ -1582,12 +1594,30 @@ struct EngineView::Impl {
 
             auto scripts = dom_manager->getElementsByTagName("script");
             DONG_LOG_INFO("[EngineView] Found %zu script tag(s)", scripts.size());
+
+            // Phase 1: Separate module scripts from regular scripts
+            std::vector<DOMNodePtr> module_scripts;
+            std::vector<DOMNodePtr> regular_scripts;
+
             for (const auto& script : scripts) {
+                if (!script) continue;
+                if (isModuleScript(script)) {
+                    module_scripts.push_back(script);
+                } else {
+                    regular_scripts.push_back(script);
+                }
+            }
+
+            DONG_LOG_INFO("[EngineView] Found %zu regular script(s) and %zu ES module script(s)",
+                          regular_scripts.size(), module_scripts.size());
+
+            // Phase 2: Execute regular scripts first
+            for (const auto& script : regular_scripts) {
                 if (!script) continue;
 
                 std::string code;
                 std::string src = script->getAttribute("src");
-                DONG_LOG_INFO("[EngineView] Processing script tag, src='%s'", src.c_str());
+                DONG_LOG_INFO("[EngineView] Processing regular script tag, src='%s'", src.c_str());
 
                 if (!src.empty()) {
                     (void)readTextFileFromPlatformFS(src, resource_root, code);
@@ -1601,7 +1631,7 @@ struct EngineView::Impl {
 
                 DONG_LOG_INFO("[EngineView] Script code length: %zu bytes", code.length());
                 if (!code.empty()) {
-                    DONG_LOG_INFO("[EngineView] Executing script...");
+                    DONG_LOG_INFO("[EngineView] Executing regular script...");
                     DONG_PROFILE_SCOPE_CAT("Script::eval", "init");
                     if (js_bindings) {
                         js_bindings->setCurrentExecutingScript(script);
@@ -1610,7 +1640,52 @@ struct EngineView::Impl {
                     if (js_bindings) {
                         js_bindings->clearCurrentExecutingScript();
                     }
-                    DONG_LOG_INFO("[EngineView] Script execution completed");
+                    DONG_LOG_INFO("[EngineView] Regular script execution completed");
+                }
+            }
+
+            // Phase 3: Execute ES module scripts
+            for (const auto& script : module_scripts) {
+                if (!script) continue;
+
+                std::string src = script->getAttribute("src");
+                DONG_LOG_INFO("[EngineView] Processing ES module script, src='%s'", src.c_str());
+
+                if (src.empty()) {
+                    DONG_LOG_WARN("[EngineView] Module script without src attribute (inline modules not supported)");
+                    continue;
+                }
+
+                std::string code;
+                bool loaded = readTextFileFromPlatformFS(src, resource_root, code);
+                if (!loaded) {
+                    DONG_LOG_ERROR("[EngineView] Failed to load module script: %s", src.c_str());
+                    continue;
+                }
+
+                DONG_LOG_INFO("[EngineView] Loaded ES module: %zu bytes", code.length());
+
+                if (!code.empty()) {
+                    DONG_LOG_INFO("[EngineView] Executing ES module script...");
+                    DONG_PROFILE_SCOPE_CAT("Script::eval_module", "init");
+                    if (js_bindings) {
+                        js_bindings->setCurrentExecutingScript(script);
+                    }
+
+                    // Execute module using ES module evaluation
+                    bool module_ok = script_engine->evalModule(src, code);
+
+                    if (js_bindings) {
+                        js_bindings->clearCurrentExecutingScript();
+                    }
+
+                    if (module_ok) {
+                        DONG_LOG_INFO("[EngineView] ES module execution completed: %s", src.c_str());
+                    } else {
+                        DONG_LOG_ERROR("[EngineView] ES module execution failed: %s", src.c_str());
+                    }
+                } else {
+                    DONG_LOG_WARN("[EngineView] Empty module script: %s", src.c_str());
                 }
             }
 

@@ -144,7 +144,7 @@ int ScriptEngine::interruptHandler(JSRuntime* rt, void* opaque) {
     return steadyNowNs() > deadline ? 1 : 0;
 }
 
-ScriptEngine::ScriptEngine() : runtime_(nullptr), context_(nullptr) {
+ScriptEngine::ScriptEngine() : runtime_(nullptr), context_(nullptr), module_loader_(nullptr) {
     runtime_ = JS_NewRuntime();
     if (!runtime_) {
         return;
@@ -158,6 +158,9 @@ ScriptEngine::ScriptEngine() : runtime_(nullptr), context_(nullptr) {
         runtime_ = nullptr;
         return;
     }
+
+    // Initialize module loader for ES module support
+    module_loader_ = std::make_unique<ModuleLoader>(context_, runtime_);
 
     initializeBuiltins();
 }
@@ -350,6 +353,14 @@ void ScriptEngine::bindGlobalFunction(const std::string& name, JSCFunction* func
     JSValue js_func = JS_NewCFunction(context_, func, name.c_str(), argc);
     JS_SetPropertyStr(context_, global, name.c_str(), js_func);
     JS_FreeValue(context_, global);
+}
+
+bool ScriptEngine::evalModule(const std::string& module_path, const std::string& code) {
+    if (!module_loader_) {
+        DONG_LOG_ERROR("[ScriptEngine] Module loader not initialized");
+        return false;
+    }
+    return module_loader_->loadModule(module_path, code);
 }
 
 void ScriptEngine::processPendingTasks() {

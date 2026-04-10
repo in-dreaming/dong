@@ -10,6 +10,7 @@
 
 
 #include "quickjs_compat.h"
+#include "module_loader.hpp"
 
 
 
@@ -42,12 +43,19 @@ public:
     // 处理待定的 JS 任务
     void processPendingTasks();
 
+    // 【Phase 3】执行 ES 模块脚本
+    // 加载并执行 ES 模块代码，使用 JS_EVAL_TYPE_MODULE 标志
+    // 自动处理待定的 job（模块初始化）
+    bool evalModule(const std::string& module_path, const std::string& code);
+
 private:
     static int interruptHandler(JSRuntime* rt, void* opaque);
 
     JSRuntime* runtime_;
     JSContext* context_;
     uint64_t interrupt_deadline_ns_ = 0;
+
+    std::unique_ptr<ModuleLoader> module_loader_;
 
     void initializeBuiltins();
 };

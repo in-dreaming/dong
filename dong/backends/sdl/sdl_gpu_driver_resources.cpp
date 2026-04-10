@@ -619,8 +619,25 @@ void SDLGPUDriver::uploadSlugTextureData(SDL_GPUDevice* dev,
     std::memcpy(mapped, data, static_cast<size_t>(total_bytes));
     SDL_UnmapGPUTransferBuffer(dev, transfer);
 
+    // CRITICAL: For Slug texture uploads, ALWAYS use a temporary command buffer to ensure
+    // GPU synchronization. If we reuse the current frame's command buffer, the copy pass
+    // and rendering pass may execute out-of-order on the GPU, causing glyphs to sample
+    // incomplete texture data (intermittent flickering).
+    // See: https://github.com/libsdl-org/SDL/issues/... (GPU command buffer ordering)
+    bool force_temp_cmd = true;
     bool temp_cmd = false;
-    SDL_GPUCommandBuffer* cmd = acquireCommandBufferForUploads(dev, temp_cmd);
+    SDL_GPUCommandBuffer* cmd = nullptr;
+
+    if (force_temp_cmd && current_cmd_buf_) {
+        // Force creation of a temporary command buffer, bypass acquireCommandBufferForUploads
+        reapUploadBuffers(dev);
+        cmd = gpu_device_->acquireCommandBuffer();
+        temp_cmd = true;
+        DONG_LOG_DEBUG("[SlugUpload] Using temporary command buffer for curve texture (forced sync)");
+    } else {
+        cmd = acquireCommandBufferForUploads(dev, temp_cmd);
+    }
+
     if (!cmd) {
         free_upload_buffers_.push_back(upload);
         return;
@@ -696,8 +713,22 @@ void SDLGPUDriver::uploadSlugBandTextureData(SDL_GPUDevice* dev,
     }
     SDL_UnmapGPUTransferBuffer(dev, transfer);
 
+    // CRITICAL: Same as uploadSlugTextureData - ALWAYS use a temporary command buffer
+    // to ensure GPU synchronization and prevent out-of-order copy/render execution.
+    bool force_temp_cmd = true;
     bool temp_cmd = false;
-    SDL_GPUCommandBuffer* cmd = acquireCommandBufferForUploads(dev, temp_cmd);
+    SDL_GPUCommandBuffer* cmd = nullptr;
+
+    if (force_temp_cmd && current_cmd_buf_) {
+        // Force creation of a temporary command buffer, bypass acquireCommandBufferForUploads
+        reapUploadBuffers(dev);
+        cmd = gpu_device_->acquireCommandBuffer();
+        temp_cmd = true;
+        DONG_LOG_DEBUG("[SlugUpload] Using temporary command buffer for band texture (forced sync)");
+    } else {
+        cmd = acquireCommandBufferForUploads(dev, temp_cmd);
+    }
+
     if (!cmd) {
         free_upload_buffers_.push_back(upload);
         return;

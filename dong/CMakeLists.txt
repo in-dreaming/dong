@@ -205,6 +205,7 @@ add_library(dong SHARED
     src/layout/display_contents.cpp
     src/layout/table_layout.cpp
     # Script
+    src/script/module_loader.cpp
     src/script/script_engine.cpp
     src/script/js_bindings.cpp
     src/script/js_node_bindings.cpp
@@ -384,6 +385,7 @@ add_library(dong_render STATIC
     src/layout/display_contents.cpp
     src/layout/table_layout.cpp
     # Script
+    src/script/module_loader.cpp
     src/script/script_engine.cpp
     src/script/js_bindings.cpp
     src/script/js_node_bindings.cpp
