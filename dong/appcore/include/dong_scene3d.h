@@ -35,6 +35,7 @@ typedef struct dong_screen3d_config_t {
     uint32_t height;            // Render texture height (default 600)
     float pos_x, pos_y, pos_z;  // Position in 3D space
     float yaw;                  // Rotation around Y axis (radians)
+    float pitch;                // Rotation around X axis (radians); e.g. -pi/2 lays quad on XZ floor
     float screen_width;         // Physical width in 3D units (default 4.0)
     float screen_height;        // Physical height in 3D units (default 3.0)
 } dong_screen3d_config_t;
@@ -85,6 +86,9 @@ DONG_APPCORE_API void dong_screen3d_set_position(dong_screen3d_t* screen, float 
 
 // Set screen rotation (yaw around Y axis).
 DONG_APPCORE_API void dong_screen3d_set_yaw(dong_screen3d_t* screen, float yaw);
+
+// Set screen pitch (rotation around X axis, radians).
+DONG_APPCORE_API void dong_screen3d_set_pitch(dong_screen3d_t* screen, float pitch);
 
 // Execute JavaScript on a screen.
 DONG_APPCORE_API int dong_screen3d_eval_script(dong_screen3d_t* screen, const char* script);

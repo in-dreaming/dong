@@ -121,6 +121,17 @@ static inline dong_mat4_t dong_mat4_translate(float x, float y, float z) {
     return m;
 }
 
+static inline dong_mat4_t dong_mat4_rotate_x(float angle) {
+    float c = cosf(angle);
+    float s = sinf(angle);
+    dong_mat4_t m = dong_mat4_identity();
+    m.m[5] = c;
+    m.m[6] = s;
+    m.m[9] = -s;
+    m.m[10] = c;
+    return m;
+}
+
 static inline dong_mat4_t dong_mat4_rotate_y(float angle) {
     float c = cosf(angle);
     float s = sinf(angle);

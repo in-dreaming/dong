@@ -163,6 +163,7 @@ struct dong_screen3d_t {
     SDL_GPUTexture* texture;
     float pos_x, pos_y, pos_z;
     float yaw;
+    float pitch;
     float screen_width, screen_height;
     uint32_t tex_width, tex_height;
 
@@ -772,6 +773,7 @@ DONG_APPCORE_API dong_screen3d_t* dong_scene3d_add_screen(dong_scene3d_t* scene,
     screen->pos_y = config->pos_y;
     screen->pos_z = config->pos_z;
     screen->yaw = config->yaw;
+    screen->pitch = config->pitch;
     screen->resource_root[0] = 0;
 
     screen->engine = create_screen_engine(scene, screen->tex_width, screen->tex_height);
@@ -868,6 +870,7 @@ DONG_APPCORE_API void dong_screen3d_set_position(dong_screen3d_t* s, float x, fl
     if (s) { s->pos_x = x; s->pos_y = y; s->pos_z = z; }
 }
 DONG_APPCORE_API void dong_screen3d_set_yaw(dong_screen3d_t* s, float yaw) { if (s) s->yaw = yaw; }
+DONG_APPCORE_API void dong_screen3d_set_pitch(dong_screen3d_t* s, float pitch) { if (s) s->pitch = pitch; }
 DONG_APPCORE_API int dong_screen3d_eval_script(dong_screen3d_t* s, const char* js) {
     if (!s || !s->engine || !js) return 0;
     return (dong_engine_eval_script(s->engine, js) == DONG_OK) ? 1 : 0;
@@ -939,6 +942,7 @@ DONG_APPCORE_API void dong_scene3d_arrange_screens(dong_scene3d_t* scene, float 
         scr->yaw = -delta_x * 0.08f;
         if (scr->yaw > 0.4f) scr->yaw = 0.4f;
         if (scr->yaw < -0.4f) scr->yaw = -0.4f;
+        scr->pitch = 0.0f;
     }
 
     printf("[Scene3D] Arranged %d screens in %d rows\n", scene->screen_count, total_rows);
@@ -1080,40 +1084,39 @@ static dong_ray_t make_mouse_ray(const dong_scene3d_t* scene, int32_t mx, int32_
 }
 
 // Return uv where u=0..1 (left->right), v=0..1 (bottom->top)
+// World model: pos + Ry * Rx * S * (lx,ly,0), lx,ly in [-0.5,0.5], S = diag(sw,sh,1)
 static int ray_hit_screen(const dong_ray_t* ray, const dong_screen3d_t* scr, float* out_t, float* out_u, float* out_v) {
-    const float hw = scr->screen_width * 0.5f;
-    const float hh = scr->screen_height * 0.5f;
+    const float sw = scr->screen_width;
+    const float sh = scr->screen_height;
+    const float hw = sw * 0.5f;
+    const float hh = sh * 0.5f;
 
-    const float c = cosf(scr->yaw);
-    const float s = sinf(scr->yaw);
+    dong_mat4_t Rx = dong_mat4_rotate_x(scr->pitch);
+    dong_mat4_t Ry = dong_mat4_rotate_y(scr->yaw);
+    dong_mat4_t R = dong_mat4_multiply(Ry, Rx);
+    dong_mat4_t invR = dong_mat4_inverse(R);
 
-    dong_vec3_t o = dong_vec3_sub(ray->origin, dong_vec3(scr->pos_x, scr->pos_y, scr->pos_z));
+    dong_vec3_t o1 = dong_vec3_sub(ray->origin, dong_vec3(scr->pos_x, scr->pos_y, scr->pos_z));
+    dong_vec4_t w4 = dong_mat4_transform(invR, dong_vec4(o1.x, o1.y, o1.z, 1.0f));
+    dong_vec4_t e4 = dong_mat4_transform(invR, dong_vec4(ray->dir.x, ray->dir.y, ray->dir.z, 0.0f));
 
-    // Transform into screen-local space using inverse rotation (-yaw)
-    dong_vec3_t d_local;
-    d_local.x = c * ray->dir.x - s * ray->dir.z;
-    d_local.y = ray->dir.y;
-    d_local.z = s * ray->dir.x + c * ray->dir.z;
+    if (fabsf(e4.z) < 1e-5f) return 0;
 
-    dong_vec3_t o_local;
-    o_local.x = c * o.x - s * o.z;
-    o_local.y = o.y;
-    o_local.z = s * o.x + c * o.z;
-
-
-    if (fabsf(d_local.z) < 1e-5f) return 0;
-
-    const float t = -o_local.z / d_local.z;
+    const float t = -w4.z / e4.z;
     if (t < 0.0f) return 0;
 
-    const float ix = o_local.x + t * d_local.x;
-    const float iy = o_local.y + t * d_local.y;
+    const float px = w4.x + t * e4.x;
+    const float py = w4.y + t * e4.y;
 
-    if (ix < -hw || ix > hw || iy < -hh || iy > hh) return 0;
+    const float vx = px / sw;
+    const float vy = py / sh;
+    if (vx < -0.5f - 1e-4f || vx > 0.5f + 1e-4f || vy < -0.5f - 1e-4f || vy > 0.5f + 1e-4f) return 0;
 
+    const float ix = vx * sw;
+    const float iy = vy * sh;
     *out_t = t;
-    *out_u = (ix + hw) / scr->screen_width;
-    *out_v = (iy + hh) / scr->screen_height;
+    *out_u = (ix + hw) / sw;
+    *out_v = (iy + hh) / sh;
     return 1;
 }
 
@@ -2003,10 +2006,9 @@ DONG_APPCORE_API void dong_scene3d_render(dong_scene3d_t* scene) {
                 if (solo_idx >= 0) {
                     model = build_solo_screen_model(scene, scr);
                 } else {
-                    // Model matrix: translate * rotate * scale
-                    // Scale by screen_width and screen_height to size the unit quad
+                    // Model matrix: T * Ry * Rx * S (unit quad in XY, z=0)
                     dong_mat4_t scale = dong_mat4_scale(scr->screen_width, scr->screen_height, 1.0f);
-                    dong_mat4_t rotate = dong_mat4_rotate_y(scr->yaw);
+                    dong_mat4_t rotate = dong_mat4_multiply(dong_mat4_rotate_y(scr->yaw), dong_mat4_rotate_x(scr->pitch));
                     dong_mat4_t translate = dong_mat4_translate(scr->pos_x, scr->pos_y, scr->pos_z);
                     model = dong_mat4_multiply(translate, dong_mat4_multiply(rotate, scale));
                 }

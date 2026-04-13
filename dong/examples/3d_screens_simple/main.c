@@ -1,19 +1,16 @@
 /**
- * Dong Engine - 3D HTML Screens Demo (Complete)
- *
- * This example fully replicates the 3d_screen_script.cpp functionality
- * using the new AppCore Scene3D API - ~200 lines vs 1500+ in the legacy approach.
+ * Dong Engine - 3D HTML Screens Demo (floor layout + Preact + curated cases)
  *
  * Features:
- *   - Multiple HTML test screens with automatic arrangement
- *   - First-person camera controls (WASD + mouse)
- *   - HTML/CSS/JS interaction on 3D screens
- *   - HUD overlay with FPS display and help panel
+ *   - Preact bundles + engine feature tests laid on the XZ floor (pitch)
+ *   - Vertical HTML "billboards" as zone titles
+ *   - First-person camera (WASD + mouse); optional overview camera preset
+ *   - HUD overlay with FPS / help
  *
  * Controls:
  *   - Right mouse + mouse: Look around
  *   - WASD: Move forward/back/left/right
- *   - Space/E: Move up, Ctrl/Q: Move down
+ *   - Space/E: Up, Ctrl/Q: Down
  *   - Shift: Sprint
  *   - Left click: Interact with HTML screens
  *   - F1/H: Toggle help panel
@@ -21,6 +18,7 @@
  */
 
 #include "dong_app.h"
+#include "dong_math.h"
 #include "dong_scene3d.h"
 #include "dong_overlay.h"
 #include "dong.h"
@@ -41,58 +39,88 @@ static void on_app_event(void* user_data, const dong_app_event_t* event) {
         if (event->key.key_code == SDLK_F1 || event->key.key_code == SDLK_H) {
             g_toggle_help_requested = 1;
         }
-
-
     }
 }
 
-
-
-// Screen configuration structure (mirrors ScreenConfig from legacy)
 typedef struct {
     const char* html_file;
     uint32_t rt_width;
     uint32_t rt_height;
     float screen_width;
     float screen_height;
-} ScreenConfig;
+} FloorPanel;
 
-// All test screens from 3d_screen_script.cpp
-static const ScreenConfig SCREEN_CONFIGS[] = {
-    {"screen1_script.html", 800, 1280, 3.0f, 4.8f},
-    {"screen2_script.html", 960, 640, 3.0f, 2.0f},
-    {"feature_test.html", 960, 640, 3.0f, 2.0f},
-    {"tests/cursor_test.html", 960, 640, 3.0f, 2.0f},
-    {"tests/image_test.html", 960, 640, 3.0f, 2.0f},
-    {"tests/background_attachment_fixed_test.html", 960, 640, 3.0f, 2.0f},
-    {"tests/background_clip_test.html", 960, 640, 3.0f, 2.0f},
-    {"tests/background_origin_test.html", 960, 640, 3.0f, 2.0f},
-    {"tests/font_style_test.html", 960, 640, 3.0f, 2.0f},
-    {"tests/outline_test.html", 960, 640, 3.0f, 2.0f},
-    {"tests/queryselector_complex_test.html", 960, 640, 3.0f, 2.0f},
-    {"tests/stylesheets_deleterule_test.html", 960, 640, 3.0f, 2.0f},
-    {"tests/stylesheets_insertrule_test.html", 960, 640, 3.0f, 2.0f},
-    {"tests/text_decoration_test.html", 960, 640, 3.0f, 2.0f},
-    {"tests/text_shadow_test.html", 960, 640, 3.0f, 2.0f},
-    {"tests/text_wrap_test.html", 960, 640, 3.0f, 2.0f},
-    {"tests/transform_test.html", 960, 640, 3.0f, 2.0f},
-    {"video/video_play_test.html", 960, 640, 3.0f, 2.0f},
-    {"video/video_test.html", 960, 640, 3.0f, 2.0f},
-    {"video/video_events_test.html", 960, 640, 3.0f, 2.0f},
-    {"video/video_acceptance.html", 960, 640, 3.0f, 2.0f},
-    {"video/video_js_api_smoke_test.html", 960, 640, 3.0f, 2.0f},
+typedef struct {
+    const char* zone_title;
+    int panel_count;
+    const FloorPanel* panels;
+} ZoneRow;
+
+static const FloorPanel k_preact[] = {
+    {"preact-counter/index.html", 960, 640, 4.5f, 2.8f},
+    {"preact-game-ui/index.html", 960, 640, 4.5f, 2.8f},
+    {"preact-todo-classic/index.html", 960, 640, 4.5f, 2.8f},
+    {"preact-ui-components/index.html", 960, 640, 4.5f, 2.8f},
 };
 
-static const int NUM_SCREENS = sizeof(SCREEN_CONFIGS) / sizeof(SCREEN_CONFIGS[0]);
+static const FloorPanel k_scripts[] = {
+    {"feature_test.html", 960, 640, 4.2f, 2.6f},
+    {"screen1_script.html", 800, 1280, 3.2f, 5.0f},
+    {"screen2_script.html", 960, 640, 4.2f, 2.6f},
+};
+
+static const FloorPanel k_forms[] = {
+    {"tests/test_select_keyboard.html", 960, 640, 4.2f, 2.6f},
+    {"tests/test_form_element_bindings.html", 960, 640, 4.2f, 2.6f},
+    {"tests/test_textarea_element_bindings.html", 960, 640, 4.2f, 2.6f},
+};
+
+static const FloorPanel k_layout[] = {
+    {"tests/test_sticky_scroll_top.html", 960, 640, 4.2f, 2.6f},
+    {"tests/test_display_contents_layout.html", 960, 640, 4.2f, 2.6f},
+    {"tests/test_aspect_ratio_flex.html", 960, 640, 4.2f, 2.6f},
+};
+
+static const FloorPanel k_text[] = {
+    {"tests/text_wrap_test.html", 960, 640, 4.2f, 2.6f},
+    {"pretext/test_text_flow.html", 960, 640, 4.2f, 2.6f},
+};
+
+static const FloorPanel k_video[] = {
+    {"video/video_play_test.html", 960, 640, 4.0f, 2.5f},
+    {"video/video_test.html", 960, 640, 4.0f, 2.5f},
+    {"video/video_events_test.html", 960, 640, 4.0f, 2.5f},
+    {"video/video_acceptance.html", 960, 640, 4.0f, 2.5f},
+    {"video/video_js_api_smoke_test.html", 960, 640, 4.0f, 2.5f},
+};
+
+static const ZoneRow ZONE_ROWS[] = {
+    {"Preact", (int)(sizeof(k_preact) / sizeof(k_preact[0])), k_preact},
+    {"Scripts / DOM", (int)(sizeof(k_scripts) / sizeof(k_scripts[0])), k_scripts},
+    {"Forms", (int)(sizeof(k_forms) / sizeof(k_forms[0])), k_forms},
+    {"Layout / CSS", (int)(sizeof(k_layout) / sizeof(k_layout[0])), k_layout},
+    {"Text / Typography", (int)(sizeof(k_text) / sizeof(k_text[0])), k_text},
+    {"Video", (int)(sizeof(k_video) / sizeof(k_video[0])), k_video},
+};
+
+static const int NUM_ZONE_ROWS = (int)(sizeof(ZONE_ROWS) / sizeof(ZONE_ROWS[0]));
 
 static int is_data_dir(const char* dir) {
     if (!dir || !dir[0]) return 0;
     char test[1024];
     snprintf(test, sizeof(test), "%s/screen1_script.html", dir);
     FILE* f = fopen(test, "r");
-    if (!f) return 0;
-    fclose(f);
-    return 1;
+    if (f) {
+        fclose(f);
+        return 1;
+    }
+    snprintf(test, sizeof(test), "%s/preact-counter/index.html", dir);
+    f = fopen(test, "r");
+    if (f) {
+        fclose(f);
+        return 1;
+    }
+    return 0;
 }
 
 static void try_set_data_path(const char* candidate, char* out, size_t out_size) {
@@ -110,7 +138,6 @@ static void try_set_data_path_from_base(const char* base, const char* suffix, ch
     try_set_data_path(candidate, out, out_size);
 }
 
-// Get data path (looks for examples/data relative to executable)
 static const char* get_data_path(void) {
     static char path[1024] = {0};
     if (path[0] == 0) {
@@ -126,7 +153,7 @@ static const char* get_data_path(void) {
             "dong/examples/data",
             "../dong/examples/data",
         };
-        for (int i = 0; i < (int)(sizeof(candidates) / sizeof(candidates[0])); i++) {
+        for (size_t i = 0; i < sizeof(candidates) / sizeof(candidates[0]); i++) {
             try_set_data_path(candidates[i], path, sizeof(path));
         }
 
@@ -145,8 +172,17 @@ static const char* get_data_path(void) {
     return path;
 }
 
+static void ensure_script_timeout_env(void) {
+    if (getenv("DONG_SCRIPT_TIMEOUT_MS") && getenv("DONG_SCRIPT_TIMEOUT_MS")[0]) {
+        return;
+    }
+#if defined(_WIN32)
+    _putenv_s("DONG_SCRIPT_TIMEOUT_MS", "10000");
+#else
+    setenv("DONG_SCRIPT_TIMEOUT_MS", "10000", 0);
+#endif
+}
 
-// Fallback HUD HTML (used if hud.html not found)
 static const char* FALLBACK_HUD =
     "<html><body style='background:transparent;font-family:Arial;'>"
     "<div id='fps' style='position:absolute;top:12px;left:12px;color:#00ff88;font-size:18px;text-shadow:1px 1px 0 rgba(0,0,0,0.9);'>"
@@ -159,18 +195,22 @@ static const char* FALLBACK_HUD =
     "</body></html>";
 
 int main(int argc, char* argv[]) {
-    (void)argc; (void)argv;
+    (void)argc;
+    (void)argv;
 
-    printf("=== Dong 3D Multi-Screen Demo (AppCore) ===\n");
-    printf("This demo supports %d HTML screens with automatic arrangement\n", NUM_SCREENS);
+    ensure_script_timeout_env();
+
+    int total_floor = 0;
+    for (int r = 0; r < NUM_ZONE_ROWS; r++) {
+        total_floor += ZONE_ROWS[r].panel_count;
+    }
+
+    printf("=== Dong 3D Floor Gallery (Preact + curated tests) ===\n");
+    printf("Zones: %d, floor panels: %d (+ %d title billboards)\n", NUM_ZONE_ROWS, total_floor, NUM_ZONE_ROWS);
     printf("Controls: RMB+Mouse=Look, WASD=Move, Space/E=Up, Ctrl/Q=Down, Shift=Sprint, F1/H=Help, ESC=Exit\n");
 
-    // 为了与 ./dong_app --html 的表现保持一致，这里不再默认禁用脚本。
-    // 如需禁用：自行设置环境变量 DONG_DISABLE_SCRIPTS=1。
-
-    // Create application
     dong_app_config_t config = {0};
-    config.title = "Dong 3D Multi-Screen Demo";
+    config.title = "Dong 3D Floor Gallery";
     config.width = 2000;
     config.height = 1000;
     config.enable_dong = 1;
@@ -182,7 +222,6 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    // Create 3D scene
     dong_scene3d_t* scene = dong_scene3d_create(app);
     if (!scene) {
         fprintf(stderr, "Failed to create 3D scene\n");
@@ -191,37 +230,88 @@ int main(int argc, char* argv[]) {
     }
     g_scene = scene;
 
-    // Forward SDL input events to Scene3D (mouse/keyboard/text)
     dong_app_set_event_callback(app, on_app_event, NULL);
-
-    // Enable SDL text input so input fields can receive SDL_EVENT_TEXT_INPUT
     dong_app_enable_text_input(app, 1);
 
-    // Set resource root for HTML file resolution
     const char* data_path = get_data_path();
     dong_scene3d_set_resource_root(scene, data_path);
 
-    // Add all test screens
-    printf("Loading %d HTML screens...\n", NUM_SCREENS);
-    for (int i = 0; i < NUM_SCREENS; i++) {
-        dong_screen3d_config_t scfg = {0};
-        scfg.html_file = SCREEN_CONFIGS[i].html_file;
-        scfg.width = SCREEN_CONFIGS[i].rt_width;
-        scfg.height = SCREEN_CONFIGS[i].rt_height;
-        scfg.screen_width = SCREEN_CONFIGS[i].screen_width;
-        scfg.screen_height = SCREEN_CONFIGS[i].screen_height;
-        // Position will be set by arrange_screens
+    const float floor_y = 0.02f;
+    const float row_step_z = 7.5f;
+    const float col_spacing = 5.8f;
+    const float first_row_z = 1.0f;
+    const float label_x = -14.0f;
+    const float label_y = 2.4f;
+    const float floor_pitch = -DONG_PI * 0.5f;
 
-        dong_screen3d_t* screen = dong_scene3d_add_screen(scene, &scfg);
-        if (!screen) {
-            printf("[Scene3D] Warning: Failed to add screen %d (%s)\n", i, SCREEN_CONFIGS[i].html_file);
+    int screen_index = 0;
+
+    for (int row = 0; row < NUM_ZONE_ROWS; row++) {
+        const ZoneRow* zr = &ZONE_ROWS[row];
+        float row_z = first_row_z - (float)row * row_step_z;
+
+        {
+            char label_html[512];
+            snprintf(label_html, sizeof(label_html),
+                "<html><head><meta charset=\"utf-8\"/></head>"
+                "<body style=\"margin:0;background:#1a1a2e;color:#e8e8f0;"
+                "font:bold 28px sans-serif;display:flex;align-items:center;justify-content:center;height:100%%;\">"
+                "%s</body></html>",
+                zr->zone_title);
+
+            dong_screen3d_config_t lcfg = {0};
+            lcfg.html_content = label_html;
+            lcfg.width = 640;
+            lcfg.height = 160;
+            lcfg.pos_x = label_x;
+            lcfg.pos_y = label_y;
+            lcfg.pos_z = row_z;
+            lcfg.yaw = 0.0f;
+            lcfg.pitch = 0.0f;
+            lcfg.screen_width = 3.2f;
+            lcfg.screen_height = 0.85f;
+
+            dong_screen3d_t* lab = dong_scene3d_add_screen(scene, &lcfg);
+            if (lab) {
+                printf("  [%d] ZONE \"%s\" label @ (%.1f,%.1f,%.1f) yaw=0 pitch=0\n",
+                       screen_index++, zr->zone_title, label_x, label_y, row_z);
+            } else {
+                printf("[Scene3D] Warning: failed zone label \"%s\"\n", zr->zone_title);
+            }
+        }
+
+        int n = zr->panel_count;
+        float row_width = (n > 1) ? (float)(n - 1) * col_spacing : 0.0f;
+        float start_x = -row_width * 0.5f;
+
+        for (int i = 0; i < n; i++) {
+            const FloorPanel* p = &zr->panels[i];
+            dong_screen3d_config_t scfg = {0};
+            scfg.html_file = p->html_file;
+            scfg.width = p->rt_width;
+            scfg.height = p->rt_height;
+            scfg.pos_x = start_x + (float)i * col_spacing;
+            scfg.pos_y = floor_y;
+            scfg.pos_z = row_z;
+            scfg.yaw = 0.0f;
+            scfg.pitch = floor_pitch;
+            scfg.screen_width = p->screen_width;
+            scfg.screen_height = p->screen_height;
+
+            dong_screen3d_t* scr = dong_scene3d_add_screen(scene, &scfg);
+            if (scr) {
+                printf("  [%d] floor \"%s\" [%s] @ (%.1f,%.1f,%.1f) yaw=0 pitch=-pi/2 w=%.2f h=%.2f\n",
+                       screen_index++, zr->zone_title, p->html_file,
+                       scfg.pos_x, scfg.pos_y, scfg.pos_z, p->screen_width, p->screen_height);
+            } else {
+                printf("[Scene3D] Warning: failed screen %s\n", p->html_file);
+            }
         }
     }
 
-    // Automatically arrange screens in a grid
-    dong_scene3d_arrange_screens(scene, 4.0f, 2.8f, 5);
+    dong_scene3d_set_camera_position(scene, 0.0f, 9.0f, 16.0f);
+    dong_scene3d_set_camera_rotation(scene, -DONG_PI, -0.55f);
 
-    // Apply text renderer mode from environment variable to all screens
     {
         const char* tr_env = getenv("DONG_TEXT_RENDERER");
         if (tr_env) {
@@ -234,7 +324,9 @@ int main(int argc, char* argv[]) {
             for (int i = 0; i < dong_scene3d_get_screen_count(scene); i++) {
                 dong_screen3d_t* scr = dong_scene3d_get_screen(scene, i);
                 dong_engine_t* eng = (dong_engine_t*)dong_screen3d_get_view(scr);
-                if (eng) dong_engine_set_text_renderer_mode(eng, mode);
+                if (eng) {
+                    dong_engine_set_text_renderer_mode(eng, mode);
+                }
             }
             printf("[Scene3D] Text renderer: %s (from DONG_TEXT_RENDERER='%s')\n",
                    mode == DONG_TEXT_RENDERER_SLUG ? "Slug" :
@@ -242,21 +334,10 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    // Print screen arrangement
-    printf("Screen arrangement:\n");
-    int count = dong_scene3d_get_screen_count(scene);
-    for (int i = 0; i < count; i++) {
-        dong_screen3d_t* scr = dong_scene3d_get_screen(scene, i);
-        if (scr) {
-            printf("  Screen %d: %s\n", i, SCREEN_CONFIGS[i].html_file);
-        }
-    }
-    printf("Created 3D scene with %d screens\n", dong_scene3d_get_screen_count(scene));
+    printf("Created 3D scene with %d screens (resource root: %s)\n", dong_scene3d_get_screen_count(scene), data_path);
 
-    // Create HUD overlay (managed by scene3d)
     dong_overlay_t* hud = dong_scene3d_add_overlay_file(scene, "hud.html", 0, 0);
     if (!hud) {
-        // Fallback to inline HUD
         hud = dong_scene3d_add_overlay(scene, FALLBACK_HUD, 0, 0);
         if (hud) {
             printf("[HUD] Using fallback HUD\n");
@@ -265,21 +346,17 @@ int main(int argc, char* argv[]) {
         printf("[HUD] Loaded hud.html\n");
     }
 
-    // FPS tracking
     int frame_count = 0;
     float fps_timer = 0.0f;
     float fps = 0.0f;
-    float total_time = 0.0f;
-    int total_frames = 0;
 
-    // Main loop
     while (dong_app_is_running(app)) {
-
-        if (!dong_app_poll_events(app)) break;
+        if (!dong_app_poll_events(app)) {
+            break;
+        }
 
         float dt = dong_app_get_delta_time(app);
 
-        // Handle F1/H for help toggle (event-driven)
         if (g_toggle_help_requested) {
             g_toggle_help_requested = 0;
             if (hud) {
@@ -287,18 +364,13 @@ int main(int argc, char* argv[]) {
             }
         }
 
-
-        // Update FPS display
         frame_count++;
-        total_frames++;
         fps_timer += dt;
-        total_time += dt;
         if (fps_timer >= 1.0f) {
             fps = (float)frame_count / fps_timer;
             frame_count = 0;
             fps_timer = 0.0f;
 
-            // Update FPS in HUD
             if (hud) {
                 char js[256];
                 snprintf(js, sizeof(js),
@@ -306,35 +378,18 @@ int main(int argc, char* argv[]) {
                     (int)fps);
                 dong_overlay_eval_script(hud, js);
             }
-            // Also print to console for performance monitoring
             printf("[FPS] %.1f\n", fps);
             fflush(stdout);
         }
 
-        // Auto-exit after 10 seconds for benchmark (uncomment for testing)
-        // if (total_time >= 10.0f) {
-        //     printf("\n[BENCHMARK] Total frames: %d, Time: %.2fs, Average FPS: %.1f\n",
-        //            total_frames, total_time, (float)total_frames / total_time);
-        //     break;
-        // }
-
-        // Update scene (camera controls, HTML texture updates, overlay updates)
         dong_scene3d_update(scene, dt);
-
-        // Render 3D scene + HUD overlays (all in one pass)
-        // Note: dong_scene3d_render handles swapchain acquisition and submission internally;
-        // so we don't need to call dong_app_present here.
         dong_scene3d_render(scene);
-
-        // dong_app_present is intentionally NOT called here because dong_scene3d_render
-        // already acquires and submits to the swapchain. Calling both would cause conflicts.
     }
 
-    // Cleanup (scene3d manages overlays, no need to destroy separately)
     printf("Shutting down...\n");
     dong_scene3d_destroy(scene);
     dong_app_destroy(app);
 
-    printf("=== 3D Multi-Screen Demo Complete ===\n");
+    printf("=== 3D Floor Gallery Complete ===\n");
     return 0;
 }
