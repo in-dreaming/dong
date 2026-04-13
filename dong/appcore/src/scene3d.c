@@ -232,6 +232,11 @@ struct dong_scene3d_t {
     SDL_GPUTextureFormat depth_format;
     uint32_t depth_width, depth_height;
 
+    // 窗口物理颜色缓冲 MSAA（解析到 swapchain 或 DUMP 用的离屏纹理）
+    SDL_GPUSampleCount screen_sample_count;
+    SDL_GPUTexture* msaa_color_texture;
+    uint32_t msaa_tex_w, msaa_tex_h;
+
     // GPU resources for HUD overlay
     SDL_GPUGraphicsPipeline* hud_pipeline;
     SDL_GPUBuffer* hud_quad_vb;
@@ -695,6 +700,9 @@ DONG_APPCORE_API dong_scene3d_t* dong_scene3d_create(dong_app_t* app) {
     scene->cam_controls_enabled = 1;
     scene->bg_r = 0.1f; scene->bg_g = 0.1f; scene->bg_b = 0.15f; scene->bg_a = 1;
     scene->depth_test_enabled = 1;
+    scene->screen_sample_count = SDL_GPU_SAMPLECOUNT_1;
+    scene->msaa_color_texture = NULL;
+    scene->msaa_tex_w = scene->msaa_tex_h = 0;
 
     // Input defaults
     scene->hovered_idx = -1;
@@ -1910,20 +1918,6 @@ DONG_APPCORE_API void dong_scene3d_render(dong_scene3d_t* scene) {
         return;
     }
 
-    // Ensure depth texture
-    if (!scene->depth_texture || scene->depth_width != sw || scene->depth_height != sh) {
-        if (scene->depth_texture) SDL_ReleaseGPUTexture(scene->device, scene->depth_texture);
-        SDL_GPUTextureCreateInfo dti = {0};
-        dti.type = SDL_GPU_TEXTURETYPE_2D;
-        dti.format = scene->depth_format;
-        dti.width = sw; dti.height = sh;
-        dti.layer_count_or_depth = 1; dti.num_levels = 1;
-        dti.sample_count = SDL_GPU_SAMPLECOUNT_1;
-        dti.usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET;
-        scene->depth_texture = SDL_CreateGPUTexture(scene->device, &dti);
-        scene->depth_width = sw; scene->depth_height = sh;
-    }
-
     SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(scene->device);
     if (!cmd) return;
 
@@ -1946,10 +1940,55 @@ DONG_APPCORE_API void dong_scene3d_render(dong_scene3d_t* scene) {
         return;
     }
 
+    const uint32_t rw = swapchain_w;
+    const uint32_t rh = swapchain_h;
+    const int use_msaa = scene->screen_sample_count > SDL_GPU_SAMPLECOUNT_1;
+
+    // Depth / MSAA 尺寸与 swapchain 一致，避免与解析目标错位
+    if (!scene->depth_texture || scene->depth_width != rw || scene->depth_height != rh) {
+        if (scene->depth_texture) SDL_ReleaseGPUTexture(scene->device, scene->depth_texture);
+        SDL_GPUTextureCreateInfo dti = {0};
+        dti.type = SDL_GPU_TEXTURETYPE_2D;
+        dti.format = scene->depth_format;
+        dti.width = rw;
+        dti.height = rh;
+        dti.layer_count_or_depth = 1;
+        dti.num_levels = 1;
+        dti.sample_count = scene->screen_sample_count;
+        dti.usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET;
+        scene->depth_texture = SDL_CreateGPUTexture(scene->device, &dti);
+        scene->depth_width = rw;
+        scene->depth_height = rh;
+    }
+
+    if (use_msaa) {
+        if (!scene->msaa_color_texture || scene->msaa_tex_w != rw || scene->msaa_tex_h != rh) {
+            if (scene->msaa_color_texture) {
+                SDL_ReleaseGPUTexture(scene->device, scene->msaa_color_texture);
+                scene->msaa_color_texture = NULL;
+            }
+            SDL_GPUTextureCreateInfo mti = {0};
+            mti.type = SDL_GPU_TEXTURETYPE_2D;
+            mti.format = SDL_GetGPUSwapchainTextureFormat(scene->device, scene->window);
+            mti.width = rw;
+            mti.height = rh;
+            mti.layer_count_or_depth = 1;
+            mti.num_levels = 1;
+            mti.sample_count = scene->screen_sample_count;
+            mti.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET;
+            scene->msaa_color_texture = SDL_CreateGPUTexture(scene->device, &mti);
+            scene->msaa_tex_w = rw;
+            scene->msaa_tex_h = rh;
+        }
+    } else if (scene->msaa_color_texture) {
+        SDL_ReleaseGPUTexture(scene->device, scene->msaa_color_texture);
+        scene->msaa_color_texture = NULL;
+        scene->msaa_tex_w = scene->msaa_tex_h = 0;
+    }
+
     // Optional: render into an intermediate texture so we can safely read back a frame.
     // Swapchain textures must only be referenced by the command buffer that acquired them.
     SDL_GPUTexture* capture_tex = NULL;
-    SDL_GPUTexture* color_target = swapchain;
     const int want_dump_frame = env_i32_or_default("DONG_SCENE3D_DUMP_FRAME", 0);
     if (want_dump_frame) {
         SDL_GPUTextureCreateInfo ti = {0};
@@ -1963,16 +2002,31 @@ DONG_APPCORE_API void dong_scene3d_render(dong_scene3d_t* scene) {
         ti.sample_count = SDL_GPU_SAMPLECOUNT_1;
 
         capture_tex = SDL_CreateGPUTexture(scene->device, &ti);
-        if (capture_tex) {
-            color_target = capture_tex;
-        }
     }
+
+    if (use_msaa && !scene->msaa_color_texture) {
+        printf("[Scene3D] MSAA color texture missing, skipping frame (%s)\n", SDL_GetError());
+        if (capture_tex) SDL_ReleaseGPUTexture(scene->device, capture_tex);
+        SDL_SubmitGPUCommandBuffer(cmd);
+        return;
+    }
+
+    // HUD 与解析结果合成在同一非多重采样目标上（swapchain 或 DUMP 离屏纹理）
+    SDL_GPUTexture* hud_target = capture_tex ? capture_tex : swapchain;
 
     if (swapchain && scene->screen_pipeline) {
         SDL_GPUColorTargetInfo cti = {0};
-        cti.texture = color_target;
+        if (use_msaa) {
+            cti.texture = scene->msaa_color_texture;
+            cti.store_op = SDL_GPU_STOREOP_RESOLVE;
+            cti.resolve_texture = hud_target;
+            cti.cycle = true;
+            cti.cycle_resolve_texture = true;
+        } else {
+            cti.texture = hud_target;
+            cti.store_op = SDL_GPU_STOREOP_STORE;
+        }
         cti.load_op = SDL_GPU_LOADOP_CLEAR;
-        cti.store_op = SDL_GPU_STOREOP_STORE;
         cti.clear_color.r = scene->bg_r;
         cti.clear_color.g = scene->bg_g;
         cti.clear_color.b = scene->bg_b;
@@ -1988,8 +2042,8 @@ DONG_APPCORE_API void dong_scene3d_render(dong_scene3d_t* scene) {
         if (pass) {
             SDL_BindGPUGraphicsPipeline(pass, scene->screen_pipeline);
 
-            // Build VP matrix
-            float aspect = (float)sw / (float)sh;
+            // Build VP matrix（与 swapchain 像素尺寸一致）
+            float aspect = (float)rw / (float)rh;
             dong_vec3_t eye = dong_vec3(scene->cam_x, scene->cam_y, scene->cam_z);
             dong_vec3_t fwd = dong_vec3(
                 cosf(scene->cam_pitch) * sinf(scene->cam_yaw),
@@ -2052,7 +2106,7 @@ DONG_APPCORE_API void dong_scene3d_render(dong_scene3d_t* scene) {
             }
 
             SDL_GPUColorTargetInfo hud_cti = {0};
-            hud_cti.texture = color_target;
+            hud_cti.texture = hud_target;
             hud_cti.load_op = SDL_GPU_LOADOP_LOAD;  // Preserve 3D scene
             hud_cti.store_op = SDL_GPU_STOREOP_STORE;
 
@@ -2222,6 +2276,40 @@ static SDL_GPUTextureFormat choose_depth_format(SDL_GPUDevice* device) {
     return SDL_GPU_TEXTUREFORMAT_INVALID;
 }
 
+// DONG_SCENE3D_MSAA：0/1 关闭，2、4、8 为期望采样数（若 GPU 不支持则自动降级）
+static SDL_GPUSampleCount pick_scene3d_msaa(
+    SDL_GPUDevice* device,
+    SDL_GPUTextureFormat color_fmt,
+    SDL_GPUTextureFormat depth_fmt,
+    int env_val) {
+    if (!device || env_val <= 1) {
+        return SDL_GPU_SAMPLECOUNT_1;
+    }
+
+    SDL_GPUSampleCount want;
+    if (env_val >= 8) {
+        want = SDL_GPU_SAMPLECOUNT_8;
+    } else if (env_val >= 4) {
+        want = SDL_GPU_SAMPLECOUNT_4;
+    } else {
+        want = SDL_GPU_SAMPLECOUNT_2;
+    }
+
+    for (;;) {
+        if (SDL_GPUTextureSupportsSampleCount(device, color_fmt, want) &&
+            SDL_GPUTextureSupportsSampleCount(device, depth_fmt, want)) {
+            return want;
+        }
+        if (want == SDL_GPU_SAMPLECOUNT_8) {
+            want = SDL_GPU_SAMPLECOUNT_4;
+        } else if (want == SDL_GPU_SAMPLECOUNT_4) {
+            want = SDL_GPU_SAMPLECOUNT_2;
+        } else {
+            return SDL_GPU_SAMPLECOUNT_1;
+        }
+    }
+}
+
 static int create_pipelines(dong_scene3d_t* scene) {
     if (!SDL_ShaderCross_Init()) {
         printf("[Scene3D] SDL_ShaderCross_Init failed (%s)\n", SDL_GetError());
@@ -2277,6 +2365,15 @@ static int create_pipelines(dong_scene3d_t* scene) {
         return 0;
     }
 
+    {
+        const int msaa_env = env_i32_or_default("DONG_SCENE3D_MSAA", 0);
+        scene->screen_sample_count = pick_scene3d_msaa(scene->device, swfmt, scene->depth_format, msaa_env);
+        if (scene->screen_sample_count != SDL_GPU_SAMPLECOUNT_1) {
+            printf("[Scene3D] Physical RT MSAA enabled: %d samples (DONG_SCENE3D_MSAA=%d)\n",
+                   (int)scene->screen_sample_count, msaa_env);
+        }
+    }
+
     SDL_GPUVertexBufferDescription vbd = {0};
     vbd.slot = 0; vbd.pitch = 5 * sizeof(float); vbd.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
 
@@ -2307,6 +2404,10 @@ static int create_pipelines(dong_scene3d_t* scene) {
     pci.depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_LESS;
     pci.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
     pci.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
+
+    SDL_GPUMultisampleState msaa = {0};
+    msaa.sample_count = scene->screen_sample_count;
+    pci.multisample_state = msaa;
 
     scene->screen_pipeline = SDL_CreateGPUGraphicsPipeline(scene->device, &pci);
 
@@ -2415,5 +2516,6 @@ static void destroy_pipelines(dong_scene3d_t* scene) {
     if (scene->sampler) SDL_ReleaseGPUSampler(scene->device, scene->sampler);
     if (scene->quad_vb) SDL_ReleaseGPUBuffer(scene->device, scene->quad_vb);
     if (scene->hud_quad_vb) SDL_ReleaseGPUBuffer(scene->device, scene->hud_quad_vb);
+    if (scene->msaa_color_texture) SDL_ReleaseGPUTexture(scene->device, scene->msaa_color_texture);
     if (scene->depth_texture) SDL_ReleaseGPUTexture(scene->device, scene->depth_texture);
 }

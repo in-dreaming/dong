@@ -183,6 +183,18 @@ static void ensure_script_timeout_env(void) {
 #endif
 }
 
+// 物理 swapchain 路径 MSAA（Scene3D 在 scene3d.c 中解析到 swapchain）；未设置时可由此默认开启
+static void ensure_scene3d_msaa_env(void) {
+    if (getenv("DONG_SCENE3D_MSAA") && getenv("DONG_SCENE3D_MSAA")[0]) {
+        return;
+    }
+#if defined(_WIN32)
+    _putenv_s("DONG_SCENE3D_MSAA", "4");
+#else
+    setenv("DONG_SCENE3D_MSAA", "4", 0);
+#endif
+}
+
 static const char* FALLBACK_HUD =
     "<html><body style='background:transparent;font-family:Arial;'>"
     "<div id='fps' style='position:absolute;top:12px;left:12px;color:#00ff88;font-size:18px;text-shadow:1px 1px 0 rgba(0,0,0,0.9);'>"
@@ -199,6 +211,7 @@ int main(int argc, char* argv[]) {
     (void)argv;
 
     ensure_script_timeout_env();
+    ensure_scene3d_msaa_env();
 
     int total_floor = 0;
     for (int r = 0; r < NUM_ZONE_ROWS; r++) {
