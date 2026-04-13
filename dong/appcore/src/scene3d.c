@@ -1698,9 +1698,15 @@ static int update_screens_scheduled(dong_scene3d_t* scene) {
     if (!scene) return 0;
 
     const double now_sec = get_scene_time_sec(scene);
-    // Video screens: 30fps
-    const double video_interval = 1.0 / 30.0;
-    const int max_updates_per_frame = 1;  // Only 1 update per frame for background screens
+    // Video tick rate for Scene3D scheduling (engine tick / decode cadence). Default 60Hz so playback
+    // can keep up with typical 30/60fps content; lower via DONG_SCENE3D_VIDEO_TICK_HZ to save CPU.
+    const int video_tick_hz = env_i32_or_default("DONG_SCENE3D_VIDEO_TICK_HZ", 60);
+    const int vhz = (video_tick_hz < 15) ? 15 : (video_tick_hz > 120 ? 120 : video_tick_hz);
+    const double video_interval = 1.0 / (double)vhz;
+    // Background offscreen updates (non-hover/non-focus): was hard-coded to 1, which starves
+    // multi-video scenes (each screen only got ~1/N of frames). Increase default; tune down if needed.
+    const int max_bg_updates = env_i32_or_default("DONG_SCENE3D_MAX_BACKGROUND_UPDATES_PER_FRAME", 8);
+    const int max_updates_per_frame = (max_bg_updates < 1) ? 1 : max_bg_updates;
 
     // Warmup: 在启动后的短时间内，多 tick 几次静态页面，确保异步资源能落到画面上。
     const int warmup_extra_updates = 2;
