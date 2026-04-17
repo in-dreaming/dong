@@ -1,6 +1,10 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
+// Zig 0.16 migrated File System APIs to std.Io.Dir; alias for brevity.
+const Io = std.Io;
+const IoDir = std.Io.Dir;
+
 // =============================================================================
 // DXC Configuration
 // =============================================================================
@@ -20,23 +24,21 @@ const BuildConfig = struct {
     enable_ffmpeg: bool = true, // auto-detected if not set in build.env
 };
 
-fn loadBuildConfig(allocator: std.mem.Allocator) BuildConfig {
+fn loadBuildConfig(allocator: std.mem.Allocator, io: Io) BuildConfig {
     var config = BuildConfig{};
 
-    const env_file = std.fs.cwd().openFile("build.env", .{}) catch {
+    const contents = IoDir.cwd().readFileAlloc(io, "build.env", allocator, .unlimited) catch {
         std.debug.print("Note: build.env not found, using defaults. Copy build.env.example to build.env and configure paths.\n", .{});
         return config;
     };
-    defer env_file.close();
+    defer allocator.free(contents);
 
-    var reader = env_file.deprecatedReader();
-    var line_buf: [1024]u8 = undefined;
-
-    while (reader.readUntilDelimiterOrEof(&line_buf, '\n') catch null) |line| {
-        const trimmed_line = if (line.len > 0 and line[line.len - 1] == '\r')
-            line[0 .. line.len - 1]
+    var line_iter = std.mem.splitScalar(u8, contents, '\n');
+    while (line_iter.next()) |raw_line| {
+        const trimmed_line = if (raw_line.len > 0 and raw_line[raw_line.len - 1] == '\r')
+            raw_line[0 .. raw_line.len - 1]
         else
-            line;
+            raw_line;
 
         const stripped = std.mem.trim(u8, trimmed_line, " \t");
         if (stripped.len == 0 or stripped[0] == '#') continue;
@@ -68,7 +70,7 @@ fn loadBuildConfig(allocator: std.mem.Allocator) BuildConfig {
 
     // Auto-detect: disable FFmpeg if the source tree is absent
     if (config.enable_ffmpeg) {
-        std.fs.cwd().access("third_party/ffmpeg/configure", .{}) catch {
+        IoDir.cwd().access(io, "third_party/ffmpeg/configure", .{}) catch {
             config.enable_ffmpeg = false;
         };
     }
@@ -150,6 +152,20 @@ fn createRootModule(
     });
 }
 
+// Zig 0.16 moved most attribute setters from Step.Compile to Build.Module.
+// These tiny helpers preserve the previous call sites with minimal noise.
+fn linkLibC(c: *std.Build.Step.Compile) void {
+    c.root_module.link_libc = true;
+}
+
+fn linkLibCpp(c: *std.Build.Step.Compile) void {
+    c.root_module.link_libcpp = true;
+}
+
+fn linkSystemLib(c: *std.Build.Step.Compile, name: []const u8) void {
+    c.root_module.linkSystemLibrary(name, .{});
+}
+
 const BuildOptions = struct {
     enable_ffmpeg: bool,
     enable_sdl: bool,
@@ -200,7 +216,8 @@ pub fn build(b: *std.Build) void {
     const options = getBuildOptions(b, platform);
 
     // Load build configuration
-    var config = loadBuildConfig(b.allocator);
+    const io = b.graph.io;
+    var config = loadBuildConfig(b.allocator, io);
 
     // Print build info
     std.debug.print("Building for: {s} (native: {})\n", .{ platform.target_triple, platform.is_native });
@@ -964,7 +981,7 @@ fn buildQuickJS(
 
     const c_flags_slice = c_flags.toOwnedSlice() catch unreachable;
 
-    quickjs.addCSourceFiles(.{
+    quickjs.root_module.addCSourceFiles(.{
         .files = &.{
             quickjs_src ++ "/quickjs.c",
             quickjs_src ++ "/libregexp.c",
@@ -975,12 +992,12 @@ fn buildQuickJS(
         .flags = c_flags_slice,
     });
 
-    quickjs.addIncludePath(b.path(quickjs_src));
-    quickjs.linkLibC();
+    quickjs.root_module.addIncludePath(b.path(quickjs_src));
+    linkLibC(quickjs);
 
     if (platform.is_windows) {
         // Windows-specific settings
-        quickjs.addIncludePath(b.path(quickjs_compat));
+        quickjs.root_module.addIncludePath(b.path(quickjs_compat));
         quickjs.root_module.addCMacro("_CRT_SECURE_NO_WARNINGS", "");
         quickjs.root_module.addCMacro("_CRT_NONSTDC_NO_DEPRECATE", "");
         // Use EMSCRIPTEN=1 to disable CONFIG_ATOMICS (avoids pthread_cond dependency)
@@ -1038,13 +1055,15 @@ fn buildLexbor(
         "lexbor/utils",
     };
 
+    const io = b.graph.io;
+
     for (modules) |mod| {
         const mod_path = b.fmt("{s}/{s}", .{ lexbor_src, mod });
-        var dir = std.fs.cwd().openDir(mod_path, .{ .iterate = true }) catch continue;
-        defer dir.close();
+        var dir = IoDir.cwd().openDir(io, mod_path, .{ .iterate = true }) catch continue;
+        defer dir.close(io);
 
         var iter = dir.iterate();
-        while (iter.next() catch null) |entry| {
+        while (iter.next(io) catch null) |entry| {
             if (entry.kind == .file and std.mem.endsWith(u8, entry.name, ".c")) {
                 const full_path = b.fmt("{s}/{s}", .{ mod_path, entry.name });
                 sources.append(b.allocator.dupe(u8, full_path) catch unreachable) catch unreachable;
@@ -1055,14 +1074,14 @@ fn buildLexbor(
     // Add platform-specific port files
     if (platform.is_windows) {
         const win_port = b.fmt("{s}/lexbor/ports/windows_nt/lexbor/core", .{lexbor_src});
-        var dir = std.fs.cwd().openDir(win_port, .{ .iterate = true }) catch |err| blk: {
+        var dir = IoDir.cwd().openDir(io, win_port, .{ .iterate = true }) catch |err| blk: {
             std.debug.print("Warning: Could not open Windows port dir: {}\n", .{err});
             break :blk null;
         };
         if (dir) |*d| {
-            defer d.close();
+            defer d.close(io);
             var iter = d.iterate();
-            while (iter.next() catch null) |entry| {
+            while (iter.next(io) catch null) |entry| {
                 if (entry.kind == .file and std.mem.endsWith(u8, entry.name, ".c")) {
                     const full_path = b.fmt("{s}/{s}", .{ win_port, entry.name });
                     sources.append(b.allocator.dupe(u8, full_path) catch unreachable) catch unreachable;
@@ -1071,14 +1090,14 @@ fn buildLexbor(
         }
     } else {
         const posix_port = b.fmt("{s}/lexbor/ports/posix/lexbor/core", .{lexbor_src});
-        var dir = std.fs.cwd().openDir(posix_port, .{ .iterate = true }) catch |err| blk: {
+        var dir = IoDir.cwd().openDir(io, posix_port, .{ .iterate = true }) catch |err| blk: {
             std.debug.print("Warning: Could not open POSIX port dir: {}\n", .{err});
             break :blk null;
         };
         if (dir) |*d| {
-            defer d.close();
+            defer d.close(io);
             var iter = d.iterate();
-            while (iter.next() catch null) |entry| {
+            while (iter.next(io) catch null) |entry| {
                 if (entry.kind == .file and std.mem.endsWith(u8, entry.name, ".c")) {
                     const full_path = b.fmt("{s}/{s}", .{ posix_port, entry.name });
                     sources.append(b.allocator.dupe(u8, full_path) catch unreachable) catch unreachable;
@@ -1089,14 +1108,14 @@ fn buildLexbor(
 
     // Convert to slice for addCSourceFiles
     const source_slice = sources.toOwnedSlice() catch unreachable;
-    lexbor.addCSourceFiles(.{
+    lexbor.root_module.addCSourceFiles(.{
         .files = source_slice,
         .flags = &.{"-std=c11"},
     });
 
-    lexbor.addIncludePath(b.path(lexbor_src));
+    lexbor.root_module.addIncludePath(b.path(lexbor_src));
     lexbor.root_module.addCMacro("LEXBOR_STATIC", "");
-    lexbor.linkLibC();
+    linkLibC(lexbor);
 
     return b.addInstallArtifact(lexbor, .{});
 }
@@ -1117,7 +1136,7 @@ fn buildYoga(
 
     const yoga_src = "third_party/yoga";
 
-    yoga.addCSourceFiles(.{
+    yoga.root_module.addCSourceFiles(.{
         .files = &.{
             yoga_src ++ "/yoga/YGConfig.cpp",
             yoga_src ++ "/yoga/YGEnums.cpp",
@@ -1146,8 +1165,8 @@ fn buildYoga(
         },
     });
 
-    yoga.addIncludePath(b.path(yoga_src));
-    yoga.linkLibCpp();
+    yoga.root_module.addIncludePath(b.path(yoga_src));
+    linkLibCpp(yoga);
 
     return b.addInstallArtifact(yoga, .{});
 }
@@ -1241,15 +1260,15 @@ fn buildFreeType(
     }) catch unreachable;
 
     const source_slice = sources.toOwnedSlice() catch unreachable;
-    freetype.addCSourceFiles(.{
+    freetype.root_module.addCSourceFiles(.{
         .files = source_slice,
         .flags = &.{
             "-DFT2_BUILD_LIBRARY",
         },
     });
 
-    freetype.addIncludePath(b.path(ft_include));
-    freetype.linkLibC();
+    freetype.root_module.addIncludePath(b.path(ft_include));
+    linkLibC(freetype);
 
     // Install FreeType headers for CMake to find.
     // CMake expects: <prefix>/freetype/include/freetype2/ft2build.h
@@ -1290,9 +1309,8 @@ fn buildFreeType(
 // HarfBuzz Build
 // =============================================================================
 
-fn fileExists(rel_path: []const u8) bool {
-    const f = std.fs.cwd().openFile(rel_path, .{}) catch return false;
-    f.close();
+fn fileExists(io: Io, rel_path: []const u8) bool {
+    IoDir.cwd().access(io, rel_path, .{}) catch return false;
     return true;
 }
 
@@ -1309,20 +1327,21 @@ fn buildHarfBuzz(
     // Some workspaces ship only prebuilt libs under zig-out/.
     // If sources are missing, fall back to the prebuilt archive and ensure it is
     // installed to zig-out/lib (CMake links from there).
+    const io = b.graph.io;
     std.debug.print("Checking file: {s}\n", .{hb_amalgamation});
-    const file_exists = fileExists(hb_amalgamation);
+    const file_exists = fileExists(io, hb_amalgamation);
     std.debug.print("File exists: {}\n", .{file_exists});
     if (!file_exists) {
         const prebuilt = b.step("harfbuzz_prebuilt", "Use prebuilt harfbuzz from zig-out/");
         prebuilt.dependOn(&freetype_artifact.step);
 
         if (platform.is_windows) {
-            const src_lib = if (fileExists("zig-out/harfbuzz/lib/harfbuzz.lib"))
+            const src_lib = if (fileExists(io, "zig-out/harfbuzz/lib/harfbuzz.lib"))
                 "zig-out/harfbuzz/lib/harfbuzz.lib"
             else
                 "zig-out/lib/harfbuzz.lib";
 
-            if (!fileExists(src_lib)) {
+            if (!fileExists(io, src_lib)) {
                 @panic("harfbuzz sources missing (third_party/harfbuzz) and no prebuilt harfbuzz.lib found under zig-out/harfbuzz/lib or zig-out/lib");
             }
 
@@ -1331,13 +1350,13 @@ fn buildHarfBuzz(
             return prebuilt;
         }
 
-        if (fileExists("zig-out/harfbuzz/lib/libharfbuzz.a")) {
+        if (fileExists(io, "zig-out/harfbuzz/lib/libharfbuzz.a")) {
             const install_hb = b.addInstallFileWithDir(b.path("zig-out/harfbuzz/lib/libharfbuzz.a"), .lib, "libharfbuzz.a");
             prebuilt.dependOn(&install_hb.step);
             return prebuilt;
         }
 
-        if (fileExists("zig-out/lib/libharfbuzz.a")) {
+        if (fileExists(io, "zig-out/lib/libharfbuzz.a")) {
             return prebuilt;
         }
 
@@ -1345,7 +1364,7 @@ fn buildHarfBuzz(
     }
 
     // On Windows native builds, build HarfBuzz via its CMake to avoid libc++ linkage surprises.
-    if (platform.is_windows and platform.is_native and fileExists("third_party/harfbuzz/CMakeLists.txt")) {
+    if (platform.is_windows and platform.is_native and fileExists(io, "third_party/harfbuzz/CMakeLists.txt")) {
         const build_dir = "third_party/harfbuzz/build-zig";
         const freetype_inc = "zig-out/freetype/include/freetype2";
         const freetype_lib = "zig-out/lib/freetype.lib";
@@ -1403,7 +1422,7 @@ fn buildHarfBuzz(
     });
 
     // HarfBuzz provides an amalgamation file for easier building
-    harfbuzz.addCSourceFiles(.{
+    harfbuzz.root_module.addCSourceFiles(.{
         .files = &.{
             hb_amalgamation,
         },
@@ -1414,9 +1433,9 @@ fn buildHarfBuzz(
         },
     });
 
-    harfbuzz.addIncludePath(b.path(hb_src));
-    harfbuzz.addIncludePath(b.path("third_party/freetype/include"));
-    harfbuzz.linkLibCpp();
+    harfbuzz.root_module.addIncludePath(b.path(hb_src));
+    harfbuzz.root_module.addIncludePath(b.path("third_party/freetype/include"));
+    linkLibCpp(harfbuzz);
 
     // Depend on FreeType being built
     harfbuzz.step.dependOn(&freetype_artifact.step);
@@ -1467,16 +1486,17 @@ fn buildMsdfgen(
     const msdf_root = "third_party/msdfgen";
 
     const msdf_probe = msdf_root ++ "/core/Contour.cpp";
+    const io = b.graph.io;
 
     // Some workspaces ship only prebuilt libs under zig-out/.
-    if (!fileExists(msdf_probe)) {
+    if (!fileExists(io, msdf_probe)) {
         const prebuilt = b.step("msdfgen_prebuilt", "Use prebuilt msdfgen from zig-out/");
         prebuilt.dependOn(&freetype_artifact.step);
 
         if (platform.is_windows) {
             const core_src = "zig-out/msdfgen/lib/msdfgen-core.lib";
             const ext_src = "zig-out/msdfgen/lib/msdfgen-ext.lib";
-            if (!fileExists(core_src) or !fileExists(ext_src)) {
+            if (!fileExists(io, core_src) or !fileExists(io, ext_src)) {
                 @panic("msdfgen sources missing (third_party/msdfgen) and prebuilt msdfgen-core/msdfgen-ext not found under zig-out/msdfgen/lib");
             }
 
@@ -1487,7 +1507,7 @@ fn buildMsdfgen(
             return prebuilt;
         }
 
-        if (fileExists("zig-out/lib/libmsdfgen.a")) {
+        if (fileExists(io, "zig-out/lib/libmsdfgen.a")) {
             // Non-windows toolchains typically link libmsdfgen.a.
             return prebuilt;
         }
@@ -1567,7 +1587,7 @@ fn buildMsdfgen(
         .linkage = .static,
         .root_module = createRootModule(b, target, optimize),
     });
-    msdfgen.addCSourceFiles(.{
+    msdfgen.root_module.addCSourceFiles(.{
         .files = &.{
             msdf_root ++ "/core/Contour.cpp",
             msdf_root ++ "/core/DistanceMapping.cpp",
@@ -1593,9 +1613,9 @@ fn buildMsdfgen(
         },
         .flags = common_flags,
     });
-    msdfgen.addIncludePath(b.path(msdf_root));
-    msdfgen.addIncludePath(b.path("third_party/freetype/include"));
-    msdfgen.linkLibCpp();
+    msdfgen.root_module.addIncludePath(b.path(msdf_root));
+    msdfgen.root_module.addIncludePath(b.path("third_party/freetype/include"));
+    linkLibCpp(msdfgen);
     msdfgen.step.dependOn(&freetype_artifact.step);
 
     return &b.addInstallArtifact(msdfgen, .{}).step;
@@ -1623,7 +1643,7 @@ fn buildDongCore(
     });
 
     // Core C++ sources
-    dong_core.addCSourceFiles(.{
+    dong_core.root_module.addCSourceFiles(.{
         .files = &.{
             // Core
             "src/api_bindings.cpp",
@@ -1718,7 +1738,7 @@ fn buildDongCore(
     });
 
     // Core C sources
-    dong_core.addCSourceFiles(.{
+    dong_core.root_module.addCSourceFiles(.{
         .files = &.{
             "src/core/platform.c",
         },
@@ -1726,38 +1746,39 @@ fn buildDongCore(
     });
 
     // Include directories
-    dong_core.addIncludePath(b.path("include"));
-    dong_core.addIncludePath(b.path("src"));
-    dong_core.addIncludePath(b.path("third_party/quickjs"));
-    dong_core.addIncludePath(b.path("third_party/lexbor/source"));
-    dong_core.addIncludePath(b.path("third_party/yoga"));
-    dong_core.addIncludePath(b.path("third_party/freetype/include"));
-    if (fileExists("third_party/harfbuzz/src/harfbuzz.cc")) {
-        dong_core.addIncludePath(b.path("third_party/harfbuzz/src"));
+    const io = b.graph.io;
+    dong_core.root_module.addIncludePath(b.path("include"));
+    dong_core.root_module.addIncludePath(b.path("src"));
+    dong_core.root_module.addIncludePath(b.path("third_party/quickjs"));
+    dong_core.root_module.addIncludePath(b.path("third_party/lexbor/source"));
+    dong_core.root_module.addIncludePath(b.path("third_party/yoga"));
+    dong_core.root_module.addIncludePath(b.path("third_party/freetype/include"));
+    if (fileExists(io, "third_party/harfbuzz/src/harfbuzz.cc")) {
+        dong_core.root_module.addIncludePath(b.path("third_party/harfbuzz/src"));
     } else {
-        dong_core.addIncludePath(b.path("zig-out/harfbuzz/include/harfbuzz"));
-        dong_core.addIncludePath(b.path("zig-out/harfbuzz/include"));
+        dong_core.root_module.addIncludePath(b.path("zig-out/harfbuzz/include/harfbuzz"));
+        dong_core.root_module.addIncludePath(b.path("zig-out/harfbuzz/include"));
     }
 
-    if (fileExists("third_party/msdfgen/core/Contour.cpp")) {
-        dong_core.addIncludePath(b.path("third_party")); // For msdfgen/msdfgen.h
+    if (fileExists(io, "third_party/msdfgen/core/Contour.cpp")) {
+        dong_core.root_module.addIncludePath(b.path("third_party")); // For msdfgen/msdfgen.h
     } else {
-        dong_core.addIncludePath(b.path("zig-out/msdfgen/include"));
+        dong_core.root_module.addIncludePath(b.path("zig-out/msdfgen/include"));
     }
 
-    dong_core.linkLibCpp();
-    dong_core.linkLibC();
+    linkLibCpp(dong_core);
+    linkLibC(dong_core);
 
     // Platform-specific settings
     if (platform.is_windows) {
         dong_core.root_module.addCMacro("_CRT_SECURE_NO_WARNINGS", "");
         dong_core.root_module.addCMacro("NOMINMAX", "");
-        dong_core.linkSystemLibrary("user32");
-        dong_core.linkSystemLibrary("gdi32");
-        dong_core.linkSystemLibrary("ole32");
-        dong_core.linkSystemLibrary("shell32");
-        dong_core.linkSystemLibrary("advapi32");
-        dong_core.linkSystemLibrary("winhttp");
+        linkSystemLib(dong_core, "user32");
+        linkSystemLib(dong_core, "gdi32");
+        linkSystemLib(dong_core, "ole32");
+        linkSystemLib(dong_core, "shell32");
+        linkSystemLib(dong_core, "advapi32");
+        linkSystemLib(dong_core, "winhttp");
     }
 
     // Dependencies
@@ -1789,7 +1810,7 @@ fn buildSDLBackend(
     });
 
     // SDL backend sources
-    sdl_backend.addCSourceFiles(.{
+    sdl_backend.root_module.addCSourceFiles(.{
         .files = &.{
             "backends/sdl/sdl_gpu_driver.cpp",
             "backends/sdl/sdl_gpu_driver_init.cpp",
@@ -1813,7 +1834,7 @@ fn buildSDLBackend(
     });
 
     // SDL_shadercross
-    sdl_backend.addCSourceFiles(.{
+    sdl_backend.root_module.addCSourceFiles(.{
         .files = &.{
             "third_party/SDL_shadercross/src/SDL_shadercross.c",
         },
@@ -1824,54 +1845,55 @@ fn buildSDLBackend(
     });
 
     // Include directories
-    sdl_backend.addIncludePath(b.path("include"));
-    sdl_backend.addIncludePath(b.path("src"));
-    sdl_backend.addIncludePath(b.path("backends/sdl"));
-    sdl_backend.addIncludePath(b.path("third_party/sdl/include"));
-    sdl_backend.addIncludePath(b.path("third_party/SDL_shadercross/include"));
-    sdl_backend.addIncludePath(b.path("third_party/quickjs"));
-    sdl_backend.addIncludePath(b.path("third_party/lexbor/source"));
-    sdl_backend.addIncludePath(b.path("third_party/yoga"));
-    sdl_backend.addIncludePath(b.path("third_party/freetype/include"));
-    if (fileExists("third_party/harfbuzz/src/harfbuzz.cc")) {
-        sdl_backend.addIncludePath(b.path("third_party/harfbuzz/src"));
+    sdl_backend.root_module.addIncludePath(b.path("include"));
+    sdl_backend.root_module.addIncludePath(b.path("src"));
+    sdl_backend.root_module.addIncludePath(b.path("backends/sdl"));
+    sdl_backend.root_module.addIncludePath(b.path("third_party/sdl/include"));
+    sdl_backend.root_module.addIncludePath(b.path("third_party/SDL_shadercross/include"));
+    sdl_backend.root_module.addIncludePath(b.path("third_party/quickjs"));
+    sdl_backend.root_module.addIncludePath(b.path("third_party/lexbor/source"));
+    sdl_backend.root_module.addIncludePath(b.path("third_party/yoga"));
+    sdl_backend.root_module.addIncludePath(b.path("third_party/freetype/include"));
+    const io = b.graph.io;
+    if (fileExists(io, "third_party/harfbuzz/src/harfbuzz.cc")) {
+        sdl_backend.root_module.addIncludePath(b.path("third_party/harfbuzz/src"));
     } else {
-        sdl_backend.addIncludePath(b.path("zig-out/harfbuzz/include"));
+        sdl_backend.root_module.addIncludePath(b.path("zig-out/harfbuzz/include"));
     }
 
-    if (fileExists("third_party/msdfgen/core/Contour.cpp")) {
-        sdl_backend.addIncludePath(b.path("third_party")); // For msdfgen/msdfgen.h
+    if (fileExists(io, "third_party/msdfgen/core/Contour.cpp")) {
+        sdl_backend.root_module.addIncludePath(b.path("third_party")); // For msdfgen/msdfgen.h
     } else {
-        sdl_backend.addIncludePath(b.path("zig-out/msdfgen/include"));
+        sdl_backend.root_module.addIncludePath(b.path("zig-out/msdfgen/include"));
     }
 
     // DXC include path (can be absolute or relative)
     if (std.fs.path.isAbsolute(config.dxc_include_path)) {
-        sdl_backend.addIncludePath(.{ .cwd_relative = config.dxc_include_path });
+        sdl_backend.root_module.addIncludePath(.{ .cwd_relative = config.dxc_include_path });
     } else {
-        sdl_backend.addIncludePath(b.path(config.dxc_include_path));
+        sdl_backend.root_module.addIncludePath(b.path(config.dxc_include_path));
     }
 
     // Vulkan SDK include for spirv_cross_c.h
     if (config.vulkan_sdk_path) |vk_path| {
         if (platform.is_windows) {
             const vk_include = b.fmt("{s}/Include/spirv_cross", .{vk_path});
-            sdl_backend.addIncludePath(.{ .cwd_relative = vk_include });
+            sdl_backend.root_module.addIncludePath(.{ .cwd_relative = vk_include });
         } else {
             const vk_include = b.fmt("{s}/include/spirv_cross", .{vk_path});
-            sdl_backend.addIncludePath(.{ .cwd_relative = vk_include });
+            sdl_backend.root_module.addIncludePath(.{ .cwd_relative = vk_include });
         }
     }
 
-    sdl_backend.linkLibCpp();
-    sdl_backend.linkLibC();
+    linkLibCpp(sdl_backend);
+    linkLibC(sdl_backend);
 
     // Platform-specific settings
     if (platform.is_windows) {
         sdl_backend.root_module.addCMacro("_CRT_SECURE_NO_WARNINGS", "");
         sdl_backend.root_module.addCMacro("NOMINMAX", "");
-        sdl_backend.linkSystemLibrary("user32");
-        sdl_backend.linkSystemLibrary("gdi32");
+        linkSystemLib(sdl_backend, "user32");
+        linkSystemLib(sdl_backend, "gdi32");
     }
 
     // Shader directory define
@@ -1906,7 +1928,8 @@ fn ensureDxc(b: *std.Build, platform: PlatformInfo, config: *BuildConfig) ?*std.
         DXC_DIR ++ "/lib/libdxcompiler.so";
 
     // Check if DXC is already downloaded
-    if (std.fs.cwd().access(dxc_check_path, .{})) |_| {
+    const io = b.graph.io;
+    if (IoDir.cwd().access(io, dxc_check_path, .{})) |_| {
         std.debug.print("DXC found at: {s}\n", .{DXC_DIR});
         config.dxc_lib_path = dxc_lib_path;
         return null;
