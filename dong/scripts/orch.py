@@ -944,9 +944,19 @@ def skill_merge(feature_id: str, strategy: str = "squash", dry_run: bool = False
     commit_msg_path.parent.mkdir(parents=True, exist_ok=True)
     commit_msg_path.write_text(_gen_commit_message(feature_id, meta, state), encoding="utf-8")
 
+    squash_no_commit = False
     if strategy == "squash":
         git("merge", "--squash", branch)
-        git("commit", "-F", str(commit_msg_path))
+        staged = git("diff", "--cached", "--stat", check=False).stdout.strip()
+        if staged:
+            git("commit", "-F", str(commit_msg_path))
+        else:
+            squash_no_commit = True
+            ledger_append(
+                "note",
+                feature_id,
+                {"text": "squash merge produced no staged changes (noop / identical branch); skip git commit"},
+            )
     elif strategy == "merge":
         git("merge", "--no-ff", "-F", str(commit_msg_path), branch)
     elif strategy == "ff":
@@ -955,9 +965,12 @@ def skill_merge(feature_id: str, strategy: str = "squash", dry_run: bool = False
         raise RuntimeError(f"unknown strategy: {strategy}")
 
     merge_sha = git_head_sha()
-    # save diff
-    (reports_dir() / feature_id / "merge_diff.txt").write_text(
-        git("diff", f"{merge_sha}~..{merge_sha}").stdout, encoding="utf-8")
+    # save diff (empty squash: no new commit, do not use merge_sha~..merge_sha)
+    if squash_no_commit:
+        diff_txt = "# no file changes merged (feature tree matched dev_next)\n"
+    else:
+        diff_txt = git("diff", f"{merge_sha}~..{merge_sha}", check=False).stdout
+    (reports_dir() / feature_id / "merge_diff.txt").write_text(diff_txt, encoding="utf-8")
 
     # remove worktree, keep branch
     git("worktree", "remove", str(worktree), check=False)
