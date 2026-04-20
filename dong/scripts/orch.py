@@ -20,6 +20,7 @@ Common subcommands:
     approve  <id>              Mark review_approved
     reject   <id> <reason>     Mark review_rejected
     merge    <id>              Merge feature branch into dev_next
+    mark-merged <id>           Ledger-only: already merged outside orch (see README)
     abort    <id> [reason]     Abort / abandon feature
     ledger-dump [N]            Print last N ledger lines (default 40)
     snapshot                   Re-reduce ledger and rewrite snapshots/state.json
@@ -49,10 +50,9 @@ import subprocess
 import sys
 import textwrap
 import time
-from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, NoReturn, Optional, Tuple
+from typing import Any, Dict, List, NoReturn, Optional, Tuple
 
 # ----------------------------------------------------------------------------
 # Constants / registry of features
@@ -139,6 +139,10 @@ DEFAULT_CONFIG = {
         },
         "codex": {
             "command": "codex",
+            "args": ["exec", "--cd", "{worktree}", "--prompt-file", "{prompt_file}"],
+        },
+        "claude-internal": {
+            "command": "claude-internal",
             "args": ["exec", "--cd", "{worktree}", "--prompt-file", "{prompt_file}"],
         },
     },
@@ -1110,7 +1114,7 @@ def cmd_status(args: argparse.Namespace) -> None:
     eligible = compute_eligible(state, cfg)
     info(f"dev_next exists: {git_branch_exists('dev_next')}")
     info(f"active_workers:  {state['active_workers']} / cap {cfg['max_parallel_workers']}")
-    info(f"features by status:")
+    info("features by status:")
     for k, v in sorted(counts.items()):
         info(f"  {k:>18} : {v}")
     info(f"eligible now ({len(eligible)}): {', '.join(eligible) if eligible else '-'}")
@@ -1139,7 +1143,7 @@ def cmd_eligible(args: argparse.Namespace) -> None:
 
 def cmd_dispatch(args: argparse.Namespace) -> None:
     fid = args.feature
-    meta = find_feature_meta(fid)
+    find_feature_meta(fid)
     monitor_active_clis()
     state = reduce_state(ledger_read_all())
     f = state["features"].get(fid, {})
@@ -1166,6 +1170,41 @@ def cmd_reject(args: argparse.Namespace) -> None:
 def cmd_merge(args: argparse.Namespace) -> None:
     out = skill_merge(args.feature, strategy=args.strategy, dry_run=args.dry_run)
     info(json.dumps(out, ensure_ascii=False, indent=2))
+
+def cmd_mark_merged(args: argparse.Namespace) -> None:
+    """Record that a feature was merged outside the normal orch pipeline (e.g. dev
+    already landed uber-quad on dev_next before orch was used)."""
+    fid = args.feature
+    find_feature_meta(fid)  # validate id
+    state = reduce_state(ledger_read_all())
+    f = state["features"].get(fid, {})
+    st = f.get("status", "registered")
+    if st == "merged":
+        info(f"{fid}: already merged in ledger; nothing to do")
+        return
+    allowed = {"registered", "prepared"}
+    if st not in allowed and not args.force:
+        die(
+            f"{fid}: status is `{st}`; expected registered/prepared. "
+            f"Use `orch abort {fid}` first, or pass --force (dangerous)."
+        )
+    merge_sha = (args.merge_sha or "").strip()
+    if not merge_sha:
+        if git_branch_exists("dev_next"):
+            merge_sha = git("rev-parse", "dev_next").stdout.strip()
+        else:
+            merge_sha = git("rev-parse", "HEAD").stdout.strip()
+    target_sha = (args.target_sha_after or merge_sha).strip()
+    note_text = args.note or f"manual mark-merged: code landed outside orch (merge_sha={merge_sha})"
+    ledger_append("note", fid, {"text": note_text})
+    ledger_append("merge_finished", fid, {"merge_sha": merge_sha, "target_sha_after": target_sha})
+    ledger_append("feature_done", fid, {"final_status": "merged"})
+    lock = workers_dir() / f"{fid}.lock"
+    if lock.exists():
+        lock.unlink()
+    ledger_append("worker_released", fid, {})
+    write_snapshot(reduce_state(ledger_read_all()))
+    info(f"{fid}: marked merged (merge_sha={merge_sha}). Run `orch status` or `orch eligible`.")
 
 def cmd_abort(args: argparse.Namespace) -> None:
     fid = args.feature
@@ -1313,6 +1352,17 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--strategy", choices=["squash", "merge", "ff"], default="squash")
     s.add_argument("--dry-run", action="store_true")
     s.set_defaults(func=cmd_merge)
+
+    s = sub.add_parser(
+        "mark-merged",
+        help="ledger-only: feature already merged outside orch (e.g. P0-1 uber-quad committed by hand)",
+    )
+    s.add_argument("feature")
+    s.add_argument("--merge-sha", default="", help="commit on dev_next that contains the work (default: git rev-parse dev_next or HEAD)")
+    s.add_argument("--target-sha-after", default="", help="dev_next tip after merge (default: same as merge-sha)")
+    s.add_argument("--note", default="", help="reason for audit trail")
+    s.add_argument("--force", action="store_true", help="allow even if feature was in_progress (use after abort/cleanup)")
+    s.set_defaults(func=cmd_mark_merged)
 
     s = sub.add_parser("abort", help="abort a feature")
     s.add_argument("feature")

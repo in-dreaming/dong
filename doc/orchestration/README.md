@@ -98,6 +98,30 @@ dong/
 
 ## 6. 启动指南
 
+### 6.0a 已在 Git 里合过 uber-quad（P0-1），`init` 之后如何标记完成
+
+编排器只看 **ledger**，不会读 Git 历史。若 P0-1 已在 `dev_next`（或你当前分支）上提交、且**没有**走 `dispatch → verify → merge`，在 `init` 之后执行：
+
+```bash
+# 可选：显式写上含 uber-quad 的那次提交（推荐，便于审计）
+python dong/scripts/orch.py mark-merged P0-1 --merge-sha <commit_sha>
+
+# 或省略：有 dev_next 则用 dev_next 的 HEAD，否则用当前分支 HEAD
+python dong/scripts/orch.py mark-merged P0-1
+
+# 带说明
+python dong/scripts/orch.py mark-merged P0-1 --merge-sha <sha> --note "manual merge before orch"
+```
+
+然后：
+
+```bash
+python dong/scripts/orch.py snapshot
+python dong/scripts/orch.py status
+```
+
+此时 P0-1 在账本里为 `merged`，下游 P0-2 / P0-3 / P0-6 等会按依赖变为可派发。若某 feature 曾被误 `dispatch` 卡在中间态，先 `orch abort <id>` 再 `mark-merged`，或 `mark-merged --force`（慎用）。
+
 ### 6.0 两种使用方式
 
 | 方式 | 谁驱动 | 适合 |
@@ -120,6 +144,7 @@ python dong/scripts/orch.py dispatch P0-1         # 手动派单 feature
 python dong/scripts/orch.py verify   P0-1         # 跑 spec § 5 验收
 python dong/scripts/orch.py approve  P0-1
 python dong/scripts/orch.py merge    P0-1         # 合并回 dev_next
+python dong/scripts/orch.py mark-merged P0-1      # 已在 dev_next 上合过（orch 外），只写账本
 python dong/scripts/orch.py abort    P0-1
 python dong/scripts/orch.py ledger-dump 40
 python dong/scripts/orch.py snapshot
