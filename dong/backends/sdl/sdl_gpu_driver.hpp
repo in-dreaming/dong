@@ -178,7 +178,9 @@ private:
     SDL_GPUShader* uber_quad_instanced_fs_ = nullptr;
     SDL_GPUGraphicsPipeline* uber_quad_instanced_pipeline_ = nullptr;
     SDL_GPUBuffer* uber_instance_buffer_ = nullptr;
-    static constexpr uint32_t kMaxUberInstances = 1024;
+    /// 当前 GPU buffer 可承载的 instance 槽位数（可随帧扩容）
+    uint32_t uber_instance_buffer_instance_cap_ = 0;
+    static constexpr uint32_t kMaxUberInstances = 4096;
 
     bool use_uber_quad_ = false;
 
@@ -253,6 +255,10 @@ private:
     };
     std::vector<PendingUploadBuffers> pending_upload_buffers_;
 
+    /// 上一帧 CPU 侧耗时（微秒），供 DONG_GPU_STATS / 外部对比；prepare 在 execute 之前调用
+    int64_t last_prepare_resources_cpu_us_ = 0;
+    int64_t last_execute_cpu_us_ = 0;
+
     void reapUploadBuffers(SDL_GPUDevice* dev);
     UploadBuffer acquireUploadBuffer(SDL_GPUDevice* dev, uint32_t size);
 
@@ -306,7 +312,7 @@ private:
     struct ExecuteContext;
     bool executeSetupMainTarget(ExecuteContext& ctx);
     void executePreuploadImages(const GPUCommandList& commands);
-    void executeDispatchCommand(const GPUCommand& cmd, ExecuteContext& ctx);
+    void executeDispatchCommand(const GPUCommand& cmd, ExecuteContext& ctx, const GPUCommandList& commands);
 
     void executeBeginPass(ExecuteContext& ctx);
     void executeEndPass(ExecuteContext& ctx);
@@ -323,6 +329,9 @@ private:
     void executeDrawGradient(ExecuteContext& ctx, const GPUCommand& cmd);
     void executeDrawUberQuad(ExecuteContext& ctx, const GPUCommand& cmd, float material_type);
     void flushUberBatch(ExecuteContext& ctx);
+    void executeUberQuadInstancedBatch(ExecuteContext& ctx, const GPUCommand& cmd, const GPUCommandList& commands);
+    bool ensureUberInstanceBufferCapacity(uint32_t min_instances);
+    void prepareUberQuadInstances(const GPUCommandList& commands);
     void executeDrawImage(ExecuteContext& ctx, const GPUCommand& cmd);
     void executeDrawText(ExecuteContext& ctx, const GPUCommand& cmd);
     void executeDrawTextMsdf(ExecuteContext& ctx, const GPUCommand& cmd);

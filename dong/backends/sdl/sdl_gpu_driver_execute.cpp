@@ -24,6 +24,7 @@
 #include "../../src/render/slug/slug_types.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
@@ -141,6 +142,7 @@ struct PipelineBindingState {
         ImageYUV,
         Text,
         UberQuad,
+        UberQuadInstanced,
     } active = ActivePipeline::None;
 
     bool image_sampler_bound = false;
@@ -234,6 +236,12 @@ struct SDLGPUDriver::ExecuteContext {
     };
     std::vector<UberQuadInstance> uber_batch;
     uint32_t uber_batch_draw_count = 0;
+
+    /// 帧内统计（见 DONG_GPU_STATS）；与 uber_batch_draw_count 互补：后者为 uber 路径 GPU draw 总数估值
+    uint32_t gpu_stats_uber_instanced_batches = 0;
+    uint32_t gpu_stats_uber_instanced_instances = 0;
+    uint32_t gpu_stats_uber_uniform_draws = 0;
+    uint32_t gpu_stats_uber_legacy_fallback_draws = 0;
 
     ExecuteContext(SDL_GPUCommandBuffer*& in_cmd_buf, SDL_GPUDevice* in_dev, SDL_Window* in_window)
         : cmd_buf(in_cmd_buf), dev(in_dev), window(in_window) {
@@ -1367,6 +1375,114 @@ void SDLGPUDriver::executeDrawGradient(ExecuteContext& ctx, const GPUCommand& cm
     SDL_DrawGPUPrimitives(ctx.pass, 4, 1, 0, 0);
 }
 
+void SDLGPUDriver::executeUberQuadInstancedBatch(ExecuteContext& ctx,
+                                                 const GPUCommand& cmd,
+                                                 const GPUCommandList& commands) {
+    if (!ctx.pass || cmd.uber_instance_count == 0) {
+        return;
+    }
+    const uint64_t end = static_cast<uint64_t>(cmd.uber_instance_offset) +
+                         static_cast<uint64_t>(cmd.uber_instance_count);
+    if (end > commands.uber_instance_pool.size()) {
+        DONG_LOG_ERROR("[UberQuadBatch] invalid range offset=%u count=%u pool=%zu",
+                       cmd.uber_instance_offset,
+                       cmd.uber_instance_count,
+                       commands.uber_instance_pool.size());
+        return;
+    }
+
+    flushUberBatch(ctx);
+
+    const UberQuadInstance* base = commands.uber_instance_pool.data() + cmd.uber_instance_offset;
+
+    auto draw_fallback_uniform = [&]() {
+        if (!uber_quad_pipeline_) {
+            return;
+        }
+        for (uint32_t i = 0; i < cmd.uber_instance_count; ++i) {
+            const UberQuadInstance& inst = base[i];
+            GPUCommand synthetic{};
+            synthetic.rect =
+                Rect{inst.rect[0], inst.rect[1], inst.rect[2], inst.rect[3]};
+            synthetic.color =
+                Color{inst.color[0], inst.color[1], inst.color[2], inst.color[3]};
+            synthetic.radius = inst.params[1];
+            synthetic.stroke_width = inst.params[2];
+            synthetic.blur = inst.params[3];
+            executeDrawUberQuad(ctx, synthetic, inst.params[0]);
+        }
+        flushUberBatch(ctx);
+    };
+
+    if (!use_uber_quad_) {
+        // 不应与 GPUCompiler 的合批同时出现；兜底按材质走 legacy 管线
+        for (uint32_t i = 0; i < cmd.uber_instance_count; ++i) {
+            const UberQuadInstance& inst = base[i];
+            GPUCommand synthetic{};
+            synthetic.rect =
+                Rect{inst.rect[0], inst.rect[1], inst.rect[2], inst.rect[3]};
+            synthetic.color =
+                Color{inst.color[0], inst.color[1], inst.color[2], inst.color[3]};
+            synthetic.radius = inst.params[1];
+            synthetic.stroke_width = inst.params[2];
+            synthetic.blur = inst.params[3];
+            const float m = inst.params[0];
+            if (m == UberQuadMaterial::kSolid && rect_pipeline_) {
+                executeDrawRect(ctx, synthetic);
+                ++ctx.gpu_stats_uber_legacy_fallback_draws;
+            } else if (m == UberQuadMaterial::kRounded && round_rect_pipeline_) {
+                executeDrawRoundedRect(ctx, synthetic);
+                ++ctx.gpu_stats_uber_legacy_fallback_draws;
+            } else if (m == UberQuadMaterial::kShadow && shadow_pipeline_) {
+                executeDrawShadow(ctx, synthetic);
+                ++ctx.gpu_stats_uber_legacy_fallback_draws;
+            }
+        }
+        return;
+    }
+
+    if (!uber_quad_instanced_pipeline_ || !uber_instance_buffer_) {
+        draw_fallback_uniform();
+        return;
+    }
+
+    struct UberQuadInstancedBatchUniform {
+        float viewport[4];
+        float transform[8];
+        ClipUniformBlock clip;
+    };
+
+    UberQuadInstancedBatchUniform u{};
+    ctx.writeViewport(u.viewport);
+    writeTransform(u.transform, ctx.getCurrentTransform());
+    ctx.fillClipUniform(u.clip);
+
+    if (ctx.pipeline_state.active != PipelineBindingState::ActivePipeline::UberQuadInstanced) {
+        SDL_BindGPUGraphicsPipeline(ctx.pass, uber_quad_instanced_pipeline_);
+        ctx.pipeline_state.active = PipelineBindingState::ActivePipeline::UberQuadInstanced;
+    }
+
+    SDL_PushGPUVertexUniformData(ctx.cmd_buf, 0, &u, sizeof(u));
+    SDL_PushGPUFragmentUniformData(ctx.cmd_buf, 0, &u, sizeof(u));
+
+    SDL_GPUBufferBinding vb{};
+    vb.buffer = uber_instance_buffer_;
+    vb.offset = cmd.uber_instance_offset * static_cast<uint32_t>(sizeof(UberQuadInstance));
+    SDL_BindGPUVertexBuffers(ctx.pass, 0, &vb, 1);
+
+    {
+        DONG_PROFILE_SCOPE_CAT("GPU::uberInstancedDraw", "gpu");
+        SDL_DrawGPUPrimitives(ctx.pass,
+                              4,
+                              static_cast<Uint32>(cmd.uber_instance_count),
+                              0,
+                              0);
+    }
+    ctx.uber_batch_draw_count++;
+    ctx.gpu_stats_uber_instanced_batches++;
+    ctx.gpu_stats_uber_instanced_instances += cmd.uber_instance_count;
+}
+
 void SDLGPUDriver::flushUberBatch(ExecuteContext& ctx) {
     if (ctx.uber_batch.empty() || !ctx.pass) {
         return;
@@ -1402,6 +1518,7 @@ void SDLGPUDriver::flushUberBatch(ExecuteContext& ctx) {
         SDL_PushGPUFragmentUniformData(ctx.cmd_buf, 0, &u, sizeof(u));
         SDL_DrawGPUPrimitives(ctx.pass, 4, 1, 0, 0);
         ctx.uber_batch_draw_count++;
+        ctx.gpu_stats_uber_uniform_draws++;
     }
 
     ctx.uber_batch.clear();
@@ -1412,8 +1529,8 @@ void SDLGPUDriver::executeDrawUberQuad(ExecuteContext& ctx, const GPUCommand& cm
         return;
     }
 
-    // Gradient: too much per-instance data for batching, use per-draw uniform path
-    if (material_type == 3.0f) {
+    // Gradient: multi-stop data uses per-draw uniform path (non-instanced uber shader)
+    if (material_type == UberQuadMaterial::kGradient) {
         flushUberBatch(ctx);
 
         if (!uber_quad_pipeline_) return;
@@ -1440,7 +1557,7 @@ void SDLGPUDriver::executeDrawUberQuad(ExecuteContext& ctx, const GPUCommand& cm
         ctx.writeViewport(u.viewport);
         writeTransform(u.transform, ctx.getCurrentTransform());
 
-        u.params[0] = 3.0f;
+        u.params[0] = UberQuadMaterial::kGradient;
         u.params[1] = cmd.radius;
         u.params[2] = cmd.stroke_width;
         u.params[3] = cmd.blur;
@@ -1469,6 +1586,7 @@ void SDLGPUDriver::executeDrawUberQuad(ExecuteContext& ctx, const GPUCommand& cm
         SDL_PushGPUFragmentUniformData(ctx.cmd_buf, 0, &u, sizeof(u));
         SDL_DrawGPUPrimitives(ctx.pass, 4, 1, 0, 0);
         ctx.uber_batch_draw_count++;
+        ctx.gpu_stats_uber_uniform_draws++;
         return;
     }
 
@@ -2361,7 +2479,9 @@ void SDLGPUDriver::executeDrawTextMsdf(ExecuteContext& ctx, const GPUCommand& cm
     render_glyphs(prepared_main);
 }
 
-void SDLGPUDriver::executeDispatchCommand(const GPUCommand& cmd, ExecuteContext& ctx) {
+void SDLGPUDriver::executeDispatchCommand(const GPUCommand& cmd,
+                                          ExecuteContext& ctx,
+                                          const GPUCommandList& commands) {
     if (ctx.aborted) {
         return;
     }
@@ -2409,20 +2529,35 @@ void SDLGPUDriver::executeDispatchCommand(const GPUCommand& cmd, ExecuteContext&
         executeEndIsolatedLayer(ctx, cmd);
         break;
     case GPUCommandType::DrawInstancedQuads:
-        if (use_uber_quad_) { executeDrawUberQuad(ctx, cmd, 0.0f); }
-        else { executeDrawRect(ctx, cmd); }
+        if (use_uber_quad_) {
+            executeDrawUberQuad(ctx, cmd, UberQuadMaterial::kSolid);
+        } else {
+            executeDrawRect(ctx, cmd);
+        }
         break;
     case GPUCommandType::DrawRoundedRectQuad:
-        if (use_uber_quad_) { executeDrawUberQuad(ctx, cmd, 1.0f); }
-        else { executeDrawRoundedRect(ctx, cmd); }
+        if (use_uber_quad_) {
+            executeDrawUberQuad(ctx, cmd, UberQuadMaterial::kRounded);
+        } else {
+            executeDrawRoundedRect(ctx, cmd);
+        }
         break;
     case GPUCommandType::DrawShadowQuad:
-        if (use_uber_quad_) { executeDrawUberQuad(ctx, cmd, 2.0f); }
-        else { executeDrawShadow(ctx, cmd); }
+        if (use_uber_quad_) {
+            executeDrawUberQuad(ctx, cmd, UberQuadMaterial::kShadow);
+        } else {
+            executeDrawShadow(ctx, cmd);
+        }
         break;
     case GPUCommandType::DrawGradientQuad:
-        if (use_uber_quad_) { executeDrawUberQuad(ctx, cmd, 3.0f); }
-        else { executeDrawGradient(ctx, cmd); }
+        if (use_uber_quad_) {
+            executeDrawUberQuad(ctx, cmd, UberQuadMaterial::kGradient);
+        } else {
+            executeDrawGradient(ctx, cmd);
+        }
+        break;
+    case GPUCommandType::UberQuadBatch:
+        executeUberQuadInstancedBatch(ctx, cmd, commands);
         break;
     case GPUCommandType::DrawImageQuad:
         if (use_uber_quad_) flushUberBatch(ctx);
@@ -2438,13 +2573,15 @@ void SDLGPUDriver::executeDispatchCommand(const GPUCommand& cmd, ExecuteContext&
 }
 
 void SDLGPUDriver::execute(const GPUCommandList& commands) {
-    DONG_PROFILE_SCOPE_CAT("GPU::execute", "gpu");
-
     if (!in_frame_ || !current_cmd_buf_ || !gpu_device_) {
         DONG_LOG_ERROR("SDLGPUDriver::execute: invalid state (in_frame=%d cmd_buf=%p device=%p)",
                        in_frame_, current_cmd_buf_, gpu_device_);
         return;
     }
+
+    const std::chrono::steady_clock::time_point exec_wall_t0 = std::chrono::steady_clock::now();
+
+    DONG_PROFILE_SCOPE_CAT("GPU::execute", "gpu");
 
     SDL_GPUDevice* dev = gpu_device_->getHandle();
 
@@ -2458,6 +2595,9 @@ void SDLGPUDriver::execute(const GPUCommandList& commands) {
     ctx.frame_index = frame_index_;
 
     if (!executeSetupMainTarget(ctx)) {
+        last_execute_cpu_us_ = std::chrono::duration_cast<std::chrono::microseconds>(
+                                     std::chrono::steady_clock::now() - exec_wall_t0)
+                                     .count();
         return;
     }
 
@@ -2486,10 +2626,16 @@ void SDLGPUDriver::execute(const GPUCommandList& commands) {
             // 首帧/尺寸变化后 intermediate 还没内容：至少 clear 一次，保证 deterministic。
             executeBeginPass(ctx);
             if (ctx.aborted) {
+                last_execute_cpu_us_ = std::chrono::duration_cast<std::chrono::microseconds>(
+                                             std::chrono::steady_clock::now() - exec_wall_t0)
+                                             .count();
                 return;
             }
         }
         executeEndPass(ctx);
+        last_execute_cpu_us_ = std::chrono::duration_cast<std::chrono::microseconds>(
+                                   std::chrono::steady_clock::now() - exec_wall_t0)
+                                   .count();
         return;
     }
 
@@ -2515,7 +2661,7 @@ void SDLGPUDriver::execute(const GPUCommandList& commands) {
                         ctx.skip_draw_depth);
             }
 
-            executeDispatchCommand(cmd, ctx);
+            executeDispatchCommand(cmd, ctx, commands);
             if (ctx.aborted) {
                 break;
             }
@@ -2550,6 +2696,10 @@ void SDLGPUDriver::execute(const GPUCommandList& commands) {
         ctx.pass = nullptr;
     }
 
+    last_execute_cpu_us_ = std::chrono::duration_cast<std::chrono::microseconds>(
+                               std::chrono::steady_clock::now() - exec_wall_t0)
+                               .count();
+
     {
         uint32_t n_rect = 0, n_round = 0, n_shadow = 0, n_gradient = 0;
         uint32_t n_image = 0, n_text = 0, n_clip = 0, n_layer = 0;
@@ -2563,6 +2713,25 @@ void SDLGPUDriver::execute(const GPUCommandList& commands) {
             case GPUCommandType::DrawText:             ++n_text; break;
             case GPUCommandType::PushClipRect:         ++n_clip; break;
             case GPUCommandType::BeginIsolatedLayer:   ++n_layer; break;
+            case GPUCommandType::UberQuadBatch: {
+                const uint64_t end = static_cast<uint64_t>(c.uber_instance_offset) +
+                                     static_cast<uint64_t>(c.uber_instance_count);
+                if (end <= commands.uber_instance_pool.size()) {
+                    for (uint32_t i = 0; i < c.uber_instance_count; ++i) {
+                        const UberQuadInstance& in =
+                            commands.uber_instance_pool[c.uber_instance_offset + i];
+                        const int m = static_cast<int>(in.params[0]);
+                        if (m == static_cast<int>(UberQuadMaterial::kSolid)) {
+                            ++n_rect;
+                        } else if (m == static_cast<int>(UberQuadMaterial::kRounded)) {
+                            ++n_round;
+                        } else if (m == static_cast<int>(UberQuadMaterial::kShadow)) {
+                            ++n_shadow;
+                        }
+                    }
+                }
+                break;
+            }
             default: break;
             }
         }
@@ -2578,6 +2747,40 @@ void SDLGPUDriver::execute(const GPUCommandList& commands) {
                           n_rect, n_round, n_shadow, n_gradient, n_image, n_text,
                           n_clip, n_layer, commands.commands.size());
         }
+
+        const char* gpu_stats_env = std::getenv("DONG_GPU_STATS");
+        if (gpu_stats_env && gpu_stats_env[0] && gpu_stats_env[0] != '0') {
+            DONG_LOG_INFO("[GPUStats] frame=%llu cpu_prepare_us=%lld cpu_execute_us=%lld "
+                          "uber_inst_batches=%u uber_inst_instances=%u "
+                          "uber_uniform_draws=%u uber_gpu_draws_total=%u uber_compiler_pool=%zu "
+                          "legacy_uber_batch_fallback=%u",
+                          ctx.frame_index,
+                          static_cast<long long>(last_prepare_resources_cpu_us_),
+                          static_cast<long long>(last_execute_cpu_us_),
+                          ctx.gpu_stats_uber_instanced_batches,
+                          ctx.gpu_stats_uber_instanced_instances,
+                          ctx.gpu_stats_uber_uniform_draws,
+                          ctx.uber_batch_draw_count,
+                          commands.uber_instance_pool.size(),
+                          ctx.gpu_stats_uber_legacy_fallback_draws);
+        }
+
+#if DONG_PROFILER_ENABLED
+        if (dong_profiler_is_enabled()) {
+            DONG_PROFILE_SAMPLE_I64("gpu.cpu.prepare_resources_us", "gpu", last_prepare_resources_cpu_us_);
+            DONG_PROFILE_SAMPLE_I64("gpu.cpu.execute_us", "gpu", last_execute_cpu_us_);
+            DONG_PROFILE_SAMPLE_I64("gpu.uber_instanced_batches", "gpu",
+                                    static_cast<int64_t>(ctx.gpu_stats_uber_instanced_batches));
+            DONG_PROFILE_SAMPLE_I64("gpu.uber_instanced_instances", "gpu",
+                                    static_cast<int64_t>(ctx.gpu_stats_uber_instanced_instances));
+            DONG_PROFILE_SAMPLE_I64("gpu.uber_uniform_draws", "gpu",
+                                    static_cast<int64_t>(ctx.gpu_stats_uber_uniform_draws));
+            DONG_PROFILE_SAMPLE_I64("gpu.uber_gpu_draws_total", "gpu",
+                                    static_cast<int64_t>(ctx.uber_batch_draw_count));
+            DONG_PROFILE_SAMPLE_I64("gpu.uber_compiler_pool_instances", "gpu",
+                                    static_cast<int64_t>(commands.uber_instance_pool.size()));
+        }
+#endif
     }
 }
 

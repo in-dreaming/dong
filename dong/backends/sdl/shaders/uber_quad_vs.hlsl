@@ -8,7 +8,7 @@ struct VSOutput {
     float2 local_uv : TEXCOORD4;
 };
 
-// params.x: material type (0=rect, 1=round, 2=shadow, 3=gradient)
+// params.x: material (0=solid, 1=rounded, 2=shadow, 4=gradient, 5=nineslice reserved)
 // params.y: corner radius
 // params.z: stroke width
 // params.w: blur radius

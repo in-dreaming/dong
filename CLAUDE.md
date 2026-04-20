@@ -264,6 +264,10 @@ dong_engine_eval_script(dong_engine_t* engine, const char* code);
 - Environment variable `DONG_LOG_LEVEL` to set level (default: INFO)
 - Environment variable `DONG_LOG_TO_STDOUT=1` to output to stdout instead of stderr
 
+### GPU / frame stats（轻量）
+- `DONG_GPU_STATS=1`：每帧在 `SDLGPUDriver::execute` 末尾多打一行 `[GPUStats]`（instanced uber 批次数、instance 总数、uniform uber draw 数、`uber_gpu_draws_total` 等），用于对比 draw 合批收益。
+- Chrome Trace：`DONG_PROFILER=1` 启用 `src/core/profiler`；GPU 相关 scope 带 `category="gpu"`（如 `GPU::execute`、`GPU::uberInstancedDraw`、`GPU::prepareUberQuadInstances`）；帧末可调用 `dong_profiler_dump(path.json)` 导出（见 `profiler.h`）。
+
 ### GPU Compressed Textures
 - Environment variable `DONG_ATLAS_FORMAT=BC7` or `DONG_ATLAS_FORMAT=ASTC` to enable compressed atlas
 - GPU decompression is automatic (hardware supported)

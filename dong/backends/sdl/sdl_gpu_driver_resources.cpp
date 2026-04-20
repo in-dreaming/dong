@@ -22,6 +22,7 @@
 #include "dong_image_decoder.h"
 #include "dong_platform.h"
 
+#include <chrono>
 #include <vector>
 #include <algorithm>
 #include <cstring>
@@ -36,8 +37,12 @@ namespace render {
 void SDLGPUDriver::prepareResources(const GPUCommandList& commands) {
     if (!gpu_device_ || !gpu_device_->isInitialized()) {
         DONG_LOG_WARN("[prepareResources] SKIP: gpu_device not ready");
+        last_prepare_resources_cpu_us_ = 0;
         return;
     }
+
+    const std::chrono::steady_clock::time_point prep_t0 = std::chrono::steady_clock::now();
+    DONG_PROFILE_SCOPE_CAT("GPU::prepareResources", "gpu");
 
     DONG_LOG_VERBOSE("[prepareResources] START frame=%llu commands=%zu", frame_index_ + 1, commands.commands.size());
 
@@ -133,7 +138,118 @@ void SDLGPUDriver::prepareResources(const GPUCommandList& commands) {
         prepareSlugResources(commands);
     }
 
+    prepareUberQuadInstances(commands);
+
+    last_prepare_resources_cpu_us_ = std::chrono::duration_cast<std::chrono::microseconds>(
+                                           std::chrono::steady_clock::now() - prep_t0)
+                                           .count();
+
     DONG_LOG_DEBUG("[prepareResources] END frame=%llu", frame_index_ + 1);
+}
+
+bool SDLGPUDriver::ensureUberInstanceBufferCapacity(uint32_t min_instances) {
+    if (!gpu_device_ || !gpu_device_->isInitialized()) {
+        return false;
+    }
+    if (min_instances == 0) {
+        return true;
+    }
+    SDL_GPUDevice* dev = gpu_device_->getHandle();
+    if (!dev) {
+        return false;
+    }
+    if (uber_instance_buffer_ && uber_instance_buffer_instance_cap_ >= min_instances) {
+        return true;
+    }
+    if (uber_instance_buffer_) {
+        SDL_ReleaseGPUBuffer(dev, uber_instance_buffer_);
+        uber_instance_buffer_ = nullptr;
+        uber_instance_buffer_instance_cap_ = 0;
+    }
+
+    uint32_t cap = (uber_instance_buffer_instance_cap_ > 0) ? uber_instance_buffer_instance_cap_ : kMaxUberInstances;
+    while (cap < min_instances) {
+        const uint32_t next = cap * 2u;
+        if (next < cap) {
+            return false;
+        }
+        cap = next;
+    }
+
+    SDL_GPUBufferCreateInfo buf_ci{};
+    buf_ci.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
+    buf_ci.size = cap * static_cast<uint32_t>(sizeof(UberQuadInstance));
+    uber_instance_buffer_ = SDL_CreateGPUBuffer(dev, &buf_ci);
+    if (!uber_instance_buffer_) {
+        DONG_LOG_ERROR("SDLGPUDriver::ensureUberInstanceBufferCapacity: SDL_CreateGPUBuffer failed cap=%u: %s",
+                       cap,
+                       SDL_GetError());
+        uber_instance_buffer_instance_cap_ = 0;
+        return false;
+    }
+    uber_instance_buffer_instance_cap_ = cap;
+    DONG_LOG_INFO("SDLGPUDriver: uber_instance_buffer resized to %u instances", cap);
+    return true;
+}
+
+void SDLGPUDriver::prepareUberQuadInstances(const GPUCommandList& commands) {
+    if (!use_uber_quad_ || !uber_quad_instanced_pipeline_) {
+        return;
+    }
+    if (!current_cmd_buf_ || !gpu_device_) {
+        return;
+    }
+    const auto& pool = commands.uber_instance_pool;
+    if (pool.empty()) {
+        return;
+    }
+
+    DONG_PROFILE_SCOPE_CAT("GPU::prepareUberQuadInstances", "gpu");
+
+    SDL_GPUDevice* dev = gpu_device_->getHandle();
+    if (!dev) {
+        return;
+    }
+
+    const uint32_t n = static_cast<uint32_t>(pool.size());
+    if (!ensureUberInstanceBufferCapacity(n)) {
+        return;
+    }
+
+    const uint32_t bytes = n * static_cast<uint32_t>(sizeof(UberQuadInstance));
+    UploadBuffer upload = acquireUploadBuffer(dev, bytes);
+    if (!upload.buf || upload.size < bytes) {
+        DONG_LOG_WARN("[prepareUberQuadInstances] upload buffer acquire failed (%u bytes)", bytes);
+        return;
+    }
+
+    auto* transfer = static_cast<SDL_GPUTransferBuffer*>(upload.buf);
+    void* mapped = SDL_MapGPUTransferBuffer(dev, transfer, false);
+    if (!mapped) {
+        free_upload_buffers_.push_back(upload);
+        return;
+    }
+    std::memcpy(mapped, pool.data(), static_cast<size_t>(bytes));
+    SDL_UnmapGPUTransferBuffer(dev, transfer);
+
+    SDL_GPUCopyPass* copy_pass = SDL_BeginGPUCopyPass(current_cmd_buf_);
+    if (!copy_pass) {
+        free_upload_buffers_.push_back(upload);
+        DONG_LOG_WARN("[prepareUberQuadInstances] BeginGPUCopyPass failed");
+        return;
+    }
+
+    SDL_GPUTransferBufferLocation src{};
+    src.transfer_buffer = transfer;
+    src.offset = 0;
+    SDL_GPUBufferRegion dst{};
+    dst.buffer = uber_instance_buffer_;
+    dst.offset = 0;
+    dst.size = bytes;
+    SDL_UploadToGPUBuffer(copy_pass, &src, &dst, false);
+    SDL_EndGPUCopyPass(copy_pass);
+
+    frame_upload_buffers_.push_back(upload);
 }
 
 bool SDLGPUDriver::ensureImageInAtlas(const std::string& src, ImageAtlasEntry& out_entry) {

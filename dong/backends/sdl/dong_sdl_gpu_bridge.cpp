@@ -8,6 +8,7 @@
 #include "sdl_shader_manager.hpp"
 #include "render/resource_manager.hpp"
 #include "render/gpu_ir.hpp"
+#include "../../src/core/profiler.h"
 
 #include <SDL3/SDL_gpu.h>
 #include <SDL3/SDL_video.h>
@@ -110,8 +111,11 @@ int dong_sdl_gpu_bridge_execute(DongSDLGPUBridge* bridge, const void* command_li
             return 1;
         }
     }
-    bridge->driver->prepareResources(*list);
-    bridge->driver->execute(*list);
+    {
+        DONG_PROFILE_SCOPE_CAT("GPU::prepareAndExecute", "gpu");
+        bridge->driver->prepareResources(*list);
+        bridge->driver->execute(*list);
+    }
     if (!already_in_frame) {
         bridge->driver->endFrame();
     }

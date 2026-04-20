@@ -24,6 +24,7 @@ enum class EventType : uint8_t {
     Begin = 'B',      // Duration event begin
     End = 'E',        // Duration event end
     Instant = 'i',    // Instant event
+    SampleI64 = 'N',  // Instant + 标量 args.value（Chrome Trace）
     FrameBegin = 's', // 内部用：帧开始
     FrameEnd = 'f',   // 内部用：帧结束
 };
@@ -36,6 +37,7 @@ struct ProfileEvent {
     uint32_t thread_id;      // 线程 ID
     EventType type;          // 事件类型
     uint8_t padding[3];
+    int64_t value = 0;       // SampleI64：标量负载
 };
 
 
@@ -182,7 +184,32 @@ void recordEvent(const char* name, const char* category, EventType type) {
     event.timestamp_us = getTimestampUs();
     event.thread_id = buf->thread_id;
     event.type = type;
+    event.value = 0;
     
+    buf->events.push_back(event);
+}
+
+static void recordSampleI64(const char* name, const char* category, int64_t value) {
+    auto& state = getState();
+
+    if (!state.enabled.load(std::memory_order_relaxed)) {
+        return;
+    }
+
+    if (!state.initialized.load(std::memory_order_acquire)) {
+        dong_profiler_init();
+    }
+
+    ThreadBuffer* buf = getThreadBuffer();
+
+    ProfileEvent event;
+    event.name = internString(name);
+    event.category = internString(category);
+    event.timestamp_us = getTimestampUs();
+    event.thread_id = buf->thread_id;
+    event.type = EventType::SampleI64;
+    event.value = value;
+
     buf->events.push_back(event);
 }
 
@@ -255,6 +282,10 @@ void dong_profiler_instant(const char* name, const char* category) {
     recordEvent(name, category, EventType::Instant);
 }
 
+void dong_profiler_sample_i64(const char* name, const char* category, int64_t value) {
+    recordSampleI64(name, category, value);
+}
+
 void dong_profiler_frame_begin(void) {
     auto& state = getState();
     state.frame_count.fetch_add(1, std::memory_order_relaxed);
@@ -322,6 +353,9 @@ int dong_profiler_dump(const char* filepath) {
             } else if (event.type == EventType::Instant) {
                 ph = 'i';
                 category = event.category ? event.category : "default";
+            } else if (event.type == EventType::SampleI64) {
+                ph = 'i';
+                category = event.category ? event.category : "default";
             }
             
             // 写入事件
@@ -338,6 +372,9 @@ int dong_profiler_dump(const char* filepath) {
             // Instant 事件需要 scope
             if (event.type == EventType::Instant) {
                 fputs(",\"s\":\"g\"", fp);  // global scope
+            } else if (event.type == EventType::SampleI64) {
+                fputs(",\"s\":\"g\"", fp);
+                fprintf(fp, ",\"args\":{\"value\":%" PRId64 "}", event.value);
             }
             
             fputs("}", fp);
@@ -397,6 +434,7 @@ void dong_profiler_shutdown(void) {}
 void dong_profiler_begin(const char*, const char*) {}
 void dong_profiler_end(void) {}
 void dong_profiler_instant(const char*, const char*) {}
+void dong_profiler_sample_i64(const char*, const char*, int64_t) {}
 void dong_profiler_frame_begin(void) {}
 void dong_profiler_frame_end(void) {}
 int dong_profiler_dump(const char*) { return -1; }

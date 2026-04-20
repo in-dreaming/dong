@@ -114,6 +114,7 @@ float4 main(PSInput input) : SV_Target0 {
     if (material == 0) return materialSolidRect(input);
     if (material == 1) return materialRoundedRect(input);
     if (material == 2) return materialShadow(input);
+    // 4 = gradient / 5 = nine-slice：当前 instanced 布局未编码，走非 instanced uber 路径
 
     return float4(1, 0, 1, 1);
 }

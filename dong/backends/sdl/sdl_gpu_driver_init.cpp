@@ -381,6 +381,7 @@ bool SDLGPUDriver::initialize() {
                 buf_ci.size = kMaxUberInstances * 48;
                 uber_instance_buffer_ = SDL_CreateGPUBuffer(dev, &buf_ci);
                 if (uber_instance_buffer_) {
+                    uber_instance_buffer_instance_cap_ = kMaxUberInstances;
                     DONG_LOG_INFO("SDLGPUDriver: uber_instance_buffer created (%u instances)", kMaxUberInstances);
                 }
             } else {
@@ -388,8 +389,8 @@ bool SDLGPUDriver::initialize() {
             }
         }
 
-        const char* env = std::getenv("DONG_USE_UBER_QUAD");
-        use_uber_quad_ = (uber_quad_pipeline_ != nullptr) && env && env[0] == '1';
+        const char* env = std::getenv("DONG_DONT_USE_UBER_QUAD");
+        use_uber_quad_ = (uber_quad_pipeline_ != nullptr) && (!env || env[0] != '0');
         if (use_uber_quad_) {
             DONG_LOG_INFO("SDLGPUDriver: uber_quad rendering ENABLED (instanced=%s)",
                           uber_quad_instanced_pipeline_ ? "yes" : "no");

@@ -29,8 +29,7 @@
 
 ## After Uber Quad Pipeline (2026-03-31)
 
-With `DONG_USE_UBER_QUAD=1`, rect/round/shadow/gradient unified into single pipeline:
-
+With `DONG_DONT_USE_UBER_QUAD=0`, rect/round/shadow/gradient unified into single pipeline:
 | Page | uber_draws | text | total | pipeline switches | pixel diff |
 |------|-----------|------|-------|-------------------|------------|
 | game_ui2 | 40 | 28 | 68 | 1 (uber) | 0 |

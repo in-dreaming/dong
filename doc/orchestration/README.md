@@ -81,6 +81,7 @@ dong/
 | [`dependency-matrix.md`](./dependency-matrix.md) | 27 任务依赖、群组、wave、并发上限 |
 | [`orchestrator-prompt.md`](./orchestrator-prompt.md) | 主 agent 的 system prompt 全文 |
 | [`state-ledger-schema.md`](./state-ledger-schema.md) | 状态账本 / 报告 / 锁文件格式 |
+| `dong/scripts/orch.py` | Python CLI 实现（见 § 6.0） |
 
 ## 5. Skill 清单（`.claude/skills/`）
 
@@ -97,15 +98,42 @@ dong/
 
 ## 6. 启动指南
 
+### 6.0 两种使用方式
+
+| 方式 | 谁驱动 | 适合 |
+|---|---|---|
+| **A. Python CLI** `python dong/scripts/orch.py ...` | 你 / CI / cron | **推荐**：确定性高、易脚本化、无需开 agent |
+| **B. Agent + skills** | 长期运行的 orchestrator agent | 需要"自己决策 + 给你发通知"的场景 |
+
+两种方式共用同一个 ledger / config / 目录布局，可以互相切换。先用 A 把流程跑通，再决定是否引入 B。
+
+orch.py 子命令速查：
+
+```bash
+python dong/scripts/orch.py init                  # 首次初始化（不建 dev_next）
+python dong/scripts/orch.py init --create-dev-next  # 同时建 dev_next
+python dong/scripts/orch.py status                # 当前状态
+python dong/scripts/orch.py list [--phase p0|p1|p2]
+python dong/scripts/orch.py eligible              # 现在能派发哪些
+python dong/scripts/orch.py tick [--dry-run]      # 推进一个 tick
+python dong/scripts/orch.py dispatch P0-1         # 手动派单 feature
+python dong/scripts/orch.py verify   P0-1         # 跑 spec § 5 验收
+python dong/scripts/orch.py approve  P0-1
+python dong/scripts/orch.py merge    P0-1         # 合并回 dev_next
+python dong/scripts/orch.py abort    P0-1
+python dong/scripts/orch.py ledger-dump 40
+python dong/scripts/orch.py snapshot
+python dong/scripts/orch.py config-show
+```
+
 ### 6.1 准备工作
 
 1. 确认在 `main` 上、`git status` clean。
-2. 项目根 `.gitignore` 加：
-   ```
-   dong/.orchestration/
-   dong/.worktrees/
-   ```
-3. 创建 `dong/.orchestration/config.json`（最小可跑示例）：
+2. 跑 `python dong/scripts/orch.py init`，会自动：
+   - 在根 `.gitignore` 追加 `dong/.orchestration/` + `dong/.worktrees/`
+   - 创建 `dong/.orchestration/` 目录骨架与 `config.json` 占位
+   - 写 ledger 的 `schema_init` 并登记 27 个 feature
+3. （可选）编辑 `dong/.orchestration/config.json`，内容同下最小示例：
    ```json
    {
      "cli_tool": "noop-dryrun",

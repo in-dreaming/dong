@@ -55,6 +55,9 @@ DONG_PROFILER_API void dong_profiler_end(void);
 // 记录瞬时事件（无持续时间）
 DONG_PROFILER_API void dong_profiler_instant(const char* name, const char* category);
 
+/// 记录带标量参数的采样点（Chrome Trace 中为 instant + args.value，便于统计 draw call 等）
+DONG_PROFILER_API void dong_profiler_sample_i64(const char* name, const char* category, int64_t value);
+
 // 开始新的一帧（用于帧边界标记）
 DONG_PROFILER_API void dong_profiler_frame_begin(void);
 
@@ -163,6 +166,9 @@ public:
 #define DONG_PROFILE_INSTANT(name) \
     dong_profiler_instant(name, "instant")
 
+#define DONG_PROFILE_SAMPLE_I64(name, category, value) \
+    dong_profiler_sample_i64(name, category, (value))
+
 #else
 
 #define DONG_PROFILE_FUNCTION()          ((void)0)
@@ -170,6 +176,7 @@ public:
 #define DONG_PROFILE_SCOPE_CAT(name, category) ((void)0)
 #define DONG_PROFILE_FRAME()             ((void)0)
 #define DONG_PROFILE_INSTANT(name)       ((void)0)
+#define DONG_PROFILE_SAMPLE_I64(name, category, value) ((void)0)
 
 #endif
 

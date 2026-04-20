@@ -93,6 +93,20 @@ SDLGPUDriver::~SDLGPUDriver() {
         if (gradient_vs_) SDL_ReleaseGPUShader(dev, gradient_vs_);
         if (gradient_fs_) SDL_ReleaseGPUShader(dev, gradient_fs_);
 
+        if (uber_quad_instanced_pipeline_) SDL_ReleaseGPUGraphicsPipeline(dev, uber_quad_instanced_pipeline_);
+        if (uber_quad_instanced_vs_) SDL_ReleaseGPUShader(dev, uber_quad_instanced_vs_);
+        if (uber_quad_instanced_fs_) SDL_ReleaseGPUShader(dev, uber_quad_instanced_fs_);
+
+        if (uber_quad_pipeline_) SDL_ReleaseGPUGraphicsPipeline(dev, uber_quad_pipeline_);
+        if (uber_quad_vs_) SDL_ReleaseGPUShader(dev, uber_quad_vs_);
+        if (uber_quad_fs_) SDL_ReleaseGPUShader(dev, uber_quad_fs_);
+
+        if (uber_instance_buffer_) {
+            SDL_ReleaseGPUBuffer(dev, uber_instance_buffer_);
+            uber_instance_buffer_ = nullptr;
+            uber_instance_buffer_instance_cap_ = 0;
+        }
+
         if (image_pipeline_) SDL_ReleaseGPUGraphicsPipeline(dev, image_pipeline_);
         if (video_yuv_pipeline_) SDL_ReleaseGPUGraphicsPipeline(dev, video_yuv_pipeline_);
         if (image_vs_) SDL_ReleaseGPUShader(dev, image_vs_);

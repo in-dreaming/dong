@@ -177,7 +177,8 @@ float4 main(PSInput input) : SV_Target0 {
     if (material == 0) return materialSolidRect(input);
     if (material == 1) return materialRoundedRect(input);
     if (material == 2) return materialShadow(input);
-    if (material == 3) return materialGradient(input);
+    // 4 = linear gradient (multi-stop via uniforms)；5 = P0-2 nine-slice 预留
+    if (material == 4) return materialGradient(input);
 
     return float4(1, 0, 1, 1);
 }

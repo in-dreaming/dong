@@ -33,3 +33,6 @@ ai_working/
 dong/ai_working/
 node_modules/
 dist/
+# orchestration
+dong/.orchestration/
+dong/.worktrees/

@@ -78,7 +78,7 @@ description: >-
 5. 若有"观察期"约束（`observe_until` 字段），现在已过窗口。
 6. 若 `dispatch_overrides` 非空，候选必须在其中。
 
-按 wave 顺序排序候选：先 Wave 0 / 1 / 2 ...，同 wave 内按 spec 估时升序（短任务先发，让长任务后排，便于 wave 整体早完）。
+按 wave 顺序排序候选：先 Wave 0 / 1 / 2 ...，同 wave 内**按下游数降序**（关键路径先发）→ **估时降序**（长任务先发，短任务填缝）→ id 字典序，使整个 wave 的墙钟时间最短。
 
 ### Step 7 · Dispatch 新 worker
 
