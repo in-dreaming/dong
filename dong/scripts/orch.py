@@ -142,8 +142,19 @@ DEFAULT_CONFIG = {
             "args": ["exec", "--cd", "{worktree}", "--prompt-file", "{prompt_file}"],
         },
         "claude-internal": {
-            "command": "claude-internal",
-            "args": ["exec", "--cd", "{worktree}", "--prompt-file", "{prompt_file}"],
+            "command": "claude",
+            "args": [
+                "--bare",
+                "-p",
+                "Your assigned task is in `.task/prompt.md` in the current working directory. "
+                "Use Read to open it, then implement it fully. When done: append a line "
+                "`STATUS: ready-for-orchestrator-verify` to `.task/notes.md` and ensure "
+                "`git status` is clean (all changes committed).",
+                "--permission-mode",
+                "acceptEdits",
+                "--max-turns",
+                "50",
+            ],
         },
     },
 }

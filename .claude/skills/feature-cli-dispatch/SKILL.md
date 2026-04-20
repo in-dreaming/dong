@@ -46,6 +46,18 @@ cli 的实际命令、参数、prompt 模板在不同环境会变（cursor-cli /
       "command": "codex",
       "args": ["exec", "--cd", "{worktree}", "--prompt-file", "{prompt_file}"]
     },
+    "claude-internal": {
+      "command": "claude",
+      "args": [
+        "--bare",
+        "-p",
+        "Your assigned task is in `.task/prompt.md` ...",
+        "--permission-mode",
+        "acceptEdits",
+        "--max-turns",
+        "50"
+      ]
+    },
     "noop-dryrun": {
       "command": "echo",
       "args": ["DRYRUN", "{feature_id}"]
@@ -62,6 +74,8 @@ placeholder：
 | `{prompt_file}` | dispatch 写出的 prompt md 路径 |
 | `{feature_id}` | feature id |
 | `{spec_path}` | spec 绝对路径 |
+
+`claude-internal`：与官方 `claude` 命令一致（Claude Code print 模式）。`orch` 已将进程 `cwd` 设为 `{worktree}`，故 `-p` 里让模型用 **Read** 打开 `.task/prompt.md`（与 `{prompt_file}` 为同一路径）；args 中可不写占位符。
 
 ## Procedure
 
