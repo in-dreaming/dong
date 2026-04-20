@@ -128,6 +128,8 @@ DEFAULT_CONFIG = {
     "retry_verify": 2,
     "auto_push": False,
     "auto_approve_soft_pass": False,
+    # Per-feature observe window (days after upstream merged_at). 0 or null = off.
+    "observe_window_days": {},
     "tools": {
         "noop-dryrun": {
             "command": "python",
@@ -214,6 +216,8 @@ def load_config() -> Dict[str, Any]:
     merged: Dict[str, Any] = {**DEFAULT_CONFIG, **cfg}
     default_tools: Dict[str, Any] = DEFAULT_CONFIG["tools"]  # type: ignore[assignment]
     merged["tools"] = {**default_tools, **cfg.get("tools", {})}
+    def_obs: Dict[str, Any] = DEFAULT_CONFIG.get("observe_window_days") or {}
+    merged["observe_window_days"] = {**def_obs, **(cfg.get("observe_window_days") or {})}
     return merged
 
 def write_default_config_if_missing() -> None:
@@ -1019,6 +1023,16 @@ def group_class(groups: List[str]) -> str:
 def _downstream_count(fid: str) -> int:
     return sum(1 for m in FEATURES if fid in m["upstream"])
 
+def observe_days_for(fid: str, cfg: Dict[str, Any]) -> Optional[int]:
+    """Days to wait after upstream merged_at. None = no window / disabled."""
+    ovr = cfg.get("observe_window_days") or {}
+    if fid in ovr:
+        v = ovr[fid]
+        if v is None or v == 0:
+            return None
+        return int(v)
+    return OBSERVE_WINDOW_DAYS.get(fid)
+
 def compute_eligible(state: Dict[str, Any], cfg: Dict[str, Any]) -> List[str]:
     features = state["features"]
     in_progress_status = {"preparing","prepared","cli_running","awaiting_verify","verifying","awaiting_review","awaiting_retry","mergeable","merging"}
@@ -1061,8 +1075,8 @@ def compute_eligible(state: Dict[str, Any], cfg: Dict[str, Any]) -> List[str]:
                 break
         if blocked_by_Y:
             continue
-        # observe window
-        w = OBSERVE_WINDOW_DAYS.get(fid)
+        # observe window (config observe_window_days overrides built-in table)
+        w = observe_days_for(fid, cfg)
         if w:
             # require upstream's merged_at + w days
             latest_upstream_merged = None
