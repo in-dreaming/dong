@@ -36,3 +36,4 @@ dist/
 # orchestration
 dong/.orchestration/
 dong/.worktrees/
+.mypy_cache/
