@@ -145,6 +145,7 @@ python dong/scripts/orch.py verify   P0-1         # 跑 spec § 5 验收
 python dong/scripts/orch.py approve  P0-1
 python dong/scripts/orch.py merge    P0-1         # 合并回 dev_next
 python dong/scripts/orch.py mark-merged P0-1      # 已在 dev_next 上合过（orch 外），只写账本
+python dong/scripts/orch.py rollback P0-4 --from-seq 58 --reason "merge failed"  # 撤销账本区间
 python dong/scripts/orch.py abort    P0-1
 python dong/scripts/orch.py ledger-dump 40
 python dong/scripts/orch.py snapshot

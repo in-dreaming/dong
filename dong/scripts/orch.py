@@ -21,6 +21,7 @@ Common subcommands:
     reject   <id> <reason>     Mark review_rejected
     merge    <id>              Merge feature branch into dev_next
     mark-merged <id>           Ledger-only: already merged outside orch (see README)
+    rollback <id> --from-seq N [--reason]  Undo ledger range (failed merge recovery)
     abort    <id> [reason]     Abort / abandon feature
     ledger-dump [N]            Print last N ledger lines (default 40)
     snapshot                   Re-reduce ledger and rewrite snapshots/state.json
@@ -922,11 +923,13 @@ def skill_merge(feature_id: str, strategy: str = "squash", dry_run: bool = False
     if dry_run:
         return {"feature_id": feature_id, "branch": branch, "strategy": strategy, "dry_run": True}
 
+    # Must pass before merge_started — otherwise ledger sticks at "merging".
+    if not git_workdir_clean():
+        raise RuntimeError("main working tree is dirty; commit or stash first")
+
     ledger_append("merge_started", feature_id, {"strategy": strategy, "target_ref": "dev_next"})
 
     # checkout dev_next in main workdir
-    if not git_workdir_clean():
-        raise RuntimeError("main working tree is dirty; commit or stash first")
     git("switch", "dev_next")
 
     # rebase feature onto latest dev_next inside worktree
@@ -1217,6 +1220,17 @@ def cmd_mark_merged(args: argparse.Namespace) -> None:
     write_snapshot(reduce_state(ledger_read_all()))
     info(f"{fid}: marked merged (merge_sha={merge_sha}). Run `orch status` or `orch eligible`.")
 
+def cmd_rollback(args: argparse.Namespace) -> None:
+    """Append a rollback event: reducer drops ledger lines [from_seq, new_seq] inclusive."""
+    fid = args.feature
+    find_feature_meta(fid)
+    from_seq = int(args.from_seq)
+    reason = args.reason or "rollback"
+    ledger_append("rollback", fid, {"from_event_id": from_seq, "reason": reason})
+    write_snapshot(reduce_state(ledger_read_all()))
+    info(f"{fid}: rollback from seq {from_seq}; see `orch status` / `orch ledger-dump`")
+
+
 def cmd_abort(args: argparse.Namespace) -> None:
     fid = args.feature
     lock = workers_dir() / f"{fid}.lock"
@@ -1374,6 +1388,15 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--note", default="", help="reason for audit trail")
     s.add_argument("--force", action="store_true", help="allow even if feature was in_progress (use after abort/cleanup)")
     s.set_defaults(func=cmd_mark_merged)
+
+    s = sub.add_parser(
+        "rollback",
+        help="undo ledger range [from_seq, this event] (e.g. after failed merge); see state-ledger-schema",
+    )
+    s.add_argument("feature")
+    s.add_argument("--from-seq", type=int, required=True, dest="from_seq", help="first ledger seq to drop (inclusive)")
+    s.add_argument("--reason", default="")
+    s.set_defaults(func=cmd_rollback)
 
     s = sub.add_parser("abort", help="abort a feature")
     s.add_argument("feature")
