@@ -33,6 +33,8 @@ cli 的实际命令、参数、prompt 模板在不同环境会变（cursor-cli /
 
 `dong/.orchestration/config.json`（**用户编辑**）：
 
+**Windows**：若 `command` 为 PATH 上的 `*.cmd` / `*.bat`，`orch.py` 会用 `cmd.exe /c` 包装（`CreateProcess` 不能直接跑 cmd 脚本）。若子进程仍找不到命令，把 `command` 改成 `where` 输出的**绝对路径**。
+
 ```json
 {
   "cli_tool": "cursor-cli",

@@ -54,7 +54,7 @@ verify:
 ```
 ````
 
-如果 spec 里没有这个 yaml 块（早期 spec 都是自然语言），verify skill 会做尽力而为的解析（grep `\bcmd:`、提取相邻代码块），并在报告里加 `parse_quality: heuristic` 警告，让 orchestrator 提示作者补 yaml。
+如果 spec 里没有这个 yaml 块（早期 spec 都是自然语言），`orch.py verify` 会做尽力而为的解析（grep `\bcmd:`、提取相邻代码块），并在报告里加 `parse_quality: heuristic` 警告。**解析后若仍没有任何 `hard` 规则，验收一律失败**（合成规则 `_orch_no_hard_verify_rules`），避免 noop 流水线误标为已验收。
 
 ## Procedure
 
@@ -75,7 +75,7 @@ verify:
 4. **跑 soft 规则**（同上，失败不阻塞）。
 5. **写报告**（路径 `reports/<id>/verify_<ts>.json` 与 `.md`，结构见 [state-ledger-schema § 6](../../doc/orchestration/state-ledger-schema.md#6-报告产物-reportsfeature)）。
 6. **判定**：
-   - `hard_pass = 全部 hard 规则 passed=true`。
+   - `hard_pass = 全部 hard 规则 passed=true`（**且**至少存在一条 hard 规则；否则 `hard_pass=false`）。
    - `soft_pass = 全部 soft 规则 passed=true`。
    - `overall = "pass" if hard_pass else "fail"`。
 7. **ledger**：

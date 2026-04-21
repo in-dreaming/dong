@@ -122,7 +122,28 @@ python dong/scripts/orch.py status
 
 此时 P0-1 在账本里为 `merged`，下游 P0-2 / P0-3 / P0-6 等会按依赖变为可派发。若某 feature 曾被误 `dispatch` 卡在中间态，先 `orch abort <id>` 再 `mark-merged`，或 `mark-merged --force`（慎用）。
 
-### 6.0 两种使用方式
+### 6.0b `merged` 不等于代码已实现
+
+账本里的 **`merged` 只表示「状态机走到了合并完成 / 你执行了 `mark-merged`」**，**不保证** `dev_next` 上存在对应业务提交，更不保证 spec 里的工作真的做过。
+
+常见情况：
+
+- **`noop-dryrun` / 假 CLI**：整条链可以自动走完，**仓库里可能没有一行相关 diff**。
+- **早期 spec 没有 §5 的 fenced `yaml verify`**：`orch verify` 过去可能「没有 hard 规则也算过」；现已改为 **至少一条 `hard:` + `cmd`，否则验收失败**（规则 id `_orch_no_hard_verify_rules`）。
+- **`mark-merged`**：仅同步账本与 Git 现实，**不会替你实现功能**。
+
+若你曾用 noop 把大量 feature 标成 `merged`，而 Git 上并未合入，建议：
+
+```bash
+# 备份 ledger 后清空并重新登记 27 项（全部为 registered）
+python dong/scripts/orch.py ledger-reset --remove-worktrees
+python dong/scripts/orch.py snapshot
+python dong/scripts/orch.py status
+```
+
+然后只对 **已经在 `dev_next` 上的真实提交** 使用 `mark-merged <id>`，其余走正常的 `dispatch → verify → merge`。
+
+### 6.0c 两种使用方式
 
 | 方式 | 谁驱动 | 适合 |
 |---|---|---|
@@ -145,6 +166,7 @@ python dong/scripts/orch.py verify   P0-1         # 跑 spec § 5 验收
 python dong/scripts/orch.py approve  P0-1
 python dong/scripts/orch.py merge    P0-1         # 合并回 dev_next
 python dong/scripts/orch.py mark-merged P0-1      # 已在 dev_next 上合过（orch 外），只写账本
+python dong/scripts/orch.py ledger-reset [--remove-worktrees]  # 误 merged / noop 后重置账本
 python dong/scripts/orch.py rollback P0-4 --from-seq 58 --reason "merge failed"  # 撤销账本区间
 python dong/scripts/orch.py abort    P0-1
 python dong/scripts/orch.py ledger-dump 40
@@ -159,7 +181,7 @@ python dong/scripts/orch.py config-show
    - 在根 `.gitignore` 追加 `dong/.orchestration/` + `dong/.worktrees/`
    - 创建 `dong/.orchestration/` 目录骨架与 `config.json` 占位
    - 写 ledger 的 `schema_init` 并登记 27 个 feature
-3. （可选）编辑 `dong/.orchestration/config.json`。`"cli_tool": "claude-internal"` 时，`tools.claude-internal.command` 应为你本机 **实际可执行文件名**（例如自建入口 `claude-internal`，或官方 `claude`），并保证在 `PATH` 中（或写绝对路径）。
+3. （可选）编辑 `dong/.orchestration/config.json`。`"cli_tool": "claude-internal"` 时，`tools.claude-internal.command` 应为本机 **实际可执行路径或文件名**（或官方 `claude`）。**Windows**：npm 类入口多为 `claude-internal.cmd`，`orch.py` 会通过 `cmd.exe /c` 启动；若仍报找不到文件，请写 **绝对路径**（与你在终端里 `where claude-internal` 一致），并确保运行 `python dong/scripts/orch.py` 的进程继承的 `PATH` 含该目录。
 4. 若用 Claude Code 系 CLI，需已登录或按 [headless 文档](https://code.claude.com/docs/en/headless) 配置 `ANTHROPIC_API_KEY` / `--bare` 等（以你的 wrapper 为准）。
 
 以下为最小示例（可把 `cli_tool` 改为 `claude-internal`）：
@@ -181,6 +203,8 @@ python dong/scripts/orch.py config-show
    }
    ```
    先用 `noop-dryrun` 走通整套流程，再换真 cli。
+
+   **正式推进（非 mock）**：`cli_tool` 固定为真 CLI（如 `claude-internal`），从 `tools` 里删掉 `noop-dryrun` 以免误切回 mock；若账本曾被 noop 标满 `merged`，按 §6.0b 做 `ledger-reset`（或删除旧 `state-ledger.jsonl` 后跑 `init`）再 `tick` / `dispatch`。
 
 ### 6.2 启动 orchestrator agent
 

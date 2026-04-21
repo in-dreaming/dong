@@ -21,6 +21,7 @@ Common subcommands:
     reject   <id> <reason>     Mark review_rejected
     merge    <id>              Merge feature branch into dev_next
     mark-merged <id>           Ledger-only: already merged outside orch (see README)
+    ledger-reset [--remove-worktrees]  Backup ledger; all features back to registered
     rollback <id> --from-seq N [--reason]  Undo ledger range (failed merge recovery)
     abort    <id> [reason]     Abort / abandon feature
     ledger-dump [N]            Print last N ledger lines (default 40)
@@ -453,6 +454,38 @@ def git_workdir_clean() -> bool:
 def git_head_sha() -> str:
     return git("rev-parse", "HEAD").stdout.strip()
 
+
+def resolve_tool_executable(cmd: str) -> str:
+    """Resolve a CLI name or path for subprocess (Windows: PATHEXT / .cmd shims)."""
+    cmd = os.path.expandvars(os.path.expanduser((cmd or "").strip()))
+    if not cmd:
+        raise RuntimeError("empty cli command")
+    p = Path(cmd)
+    if p.is_file():
+        return str(p.resolve())
+    found = shutil.which(cmd)
+    if found:
+        return found
+    if os.name == "nt" and not p.suffix:
+        for ext in (".cmd", ".exe", ".bat"):
+            w = shutil.which(cmd + ext)
+            if w:
+                return w
+    return cmd
+
+
+def build_cli_argv(exe: str, args: List[str]) -> List[str]:
+    """
+    argv for subprocess.Popen. On Windows, .cmd/.bat are not PE executables for
+    CreateProcess — must run via ``cmd.exe /c ...``.
+    """
+    resolved = resolve_tool_executable(exe)
+    if os.name == "nt" and resolved.lower().endswith((".cmd", ".bat")):
+        inner = subprocess.list2cmdline([resolved, *args])
+        return ["cmd.exe", "/c", inner]
+    return [resolved, *args]
+
+
 # ----------------------------------------------------------------------------
 # Skill: feature-worktree-setup
 # ----------------------------------------------------------------------------
@@ -491,7 +524,17 @@ def skill_worktree_setup(feature_id: str, dry_run: bool = False) -> Dict[str, An
         "base_ref": base_ref,
     })
 
-    git("worktree", "add", "-b", branch, str(worktree), base_ref)
+    if git_branch_exists(branch):
+        info(f"branch `{branch}` already exists; attaching worktree (no -b)")
+        res = git("worktree", "add", str(worktree), branch, check=False)
+        if res.returncode != 0:
+            raise RuntimeError(
+                "git worktree add failed (branch may be checked out in another worktree):\n"
+                f"{res.stderr.strip()}\n"
+                "Hint: `git worktree list` — remove the other checkout or `git branch -D` after backup if abandoned."
+            )
+    else:
+        git("worktree", "add", "-b", branch, str(worktree), base_ref)
 
     # Seed .task
     task_dir = worktree / ".task"
@@ -616,7 +659,17 @@ def skill_cli_dispatch(feature_id: str, retry_feedback_path: Optional[Path] = No
         "{spec_path}": str(repo_root() / meta["spec"]),
     }
     rendered_args = [apply_placeholders(a, placeholders) for a in tool_cfg.get("args", [])]
-    command = [tool_cfg["command"], *rendered_args]
+    raw_cmd = str(tool_cfg["command"])
+    command = build_cli_argv(raw_cmd, rendered_args)
+    if command[0].lower().endswith("cmd.exe") or command[0].lower() == "cmd.exe":
+        if shutil.which("cmd.exe") is None:
+            raise RuntimeError("cmd.exe not on PATH; cannot launch .cmd/.bat cli wrapper")
+    elif not Path(command[0]).is_file():
+        raise RuntimeError(
+            f"cli command not found for this process: {raw_cmd!r} (argv0 {command[0]!r}). "
+            "Set `tools.<name>.command` to a full path (e.g. ...\\\\claude-internal.cmd), "
+            "or add the install directory to PATH for the environment that runs `python dong/scripts/orch.py`."
+        )
 
     if dry_run:
         return {
@@ -828,6 +881,21 @@ def skill_verify(feature_id: str, mode: str = "full") -> Dict[str, Any]:
         rule_results.append(run_rule(r, "hard"))
     for r in soft_rules:
         rule_results.append(run_rule(r, "soft"))
+
+    if len(hard_rules) == 0:
+        rule_results.append({
+            "id": "_orch_no_hard_verify_rules",
+            "kind": "hard",
+            "command": "",
+            "cwd": str(repo_root()),
+            "passed": False,
+            "exit_code": None,
+            "duration_sec": 0,
+            "error": (
+                "Spec §5 must include a fenced ```yaml verify:``` with at least one `hard:` entry and `cmd`. "
+                "See doc/orchestration/README.md § merged vs delivery."
+            ),
+        })
 
     hard_failed = [r["id"] for r in rule_results if r["kind"] == "hard" and not r["passed"]]
     soft_failed = [r["id"] for r in rule_results if r["kind"] == "soft" and not r["passed"]]
@@ -1148,6 +1216,52 @@ def cmd_init(args: argparse.Namespace) -> None:
     write_snapshot(reduce_state(ledger_read_all()))
     info(f"orchestration initialized at {orch_dir()}")
 
+
+def cmd_ledger_reset(args: argparse.Namespace) -> None:
+    """Backup state-ledger.jsonl and re-init feature rows (all `registered`). Git branches untouched."""
+    ensure_dirs()
+    led = ledger_path()
+    if led.exists() and led.read_text(encoding="utf-8").strip():
+        ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        bak = led.parent / f"state-ledger.jsonl.bak.{ts}"
+        shutil.copy2(led, bak)
+        info(f"Backed up ledger to {bak}")
+
+    # Remove worktrees *before* deleting ledger so a hung `git worktree remove` never leaves no ledger.
+    if args.remove_worktrees:
+        wt_root = worktrees_dir()
+        if wt_root.exists():
+            for child in sorted(wt_root.iterdir()):
+                if child.is_dir():
+                    git("worktree", "remove", "--force", str(child), check=False)
+            info(f"Removed worktrees under {wt_root}")
+
+    if led.exists():
+        led.unlink()
+
+    if workers_dir().exists():
+        for lf in workers_dir().glob("*.lock"):
+            lf.unlink(missing_ok=True)
+        info("Removed worker locks")
+
+    ledger_append("schema_init", "_meta", {"version": SCHEMA_VERSION, "reason": "ledger-reset"})
+    for m in FEATURES:
+        ledger_append("feature_registered", m["id"], {
+            "spec_path": m["spec"],
+            "groups": m["groups"],
+            "upstream": m["upstream"],
+            "wave": m["wave"],
+            "weeks": m["weeks"],
+            "slug": m["slug"],
+        })
+    write_snapshot(reduce_state(ledger_read_all()))
+    info(
+        "Ledger reset: 27 features are `registered`.\n"
+        "Use `mark-merged` only for work already on dev_next.\n"
+        "Verify now fails if spec §5 has no `hard` rules — add YAML verify blocks before merge."
+    )
+
+
 def cmd_status(args: argparse.Namespace) -> None:
     state = reduce_state(ledger_read_all())
     cfg = load_config()
@@ -1370,6 +1484,17 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("init", help="first-time initialization")
     s.add_argument("--create-dev-next", action="store_true", help="create dev_next branch if missing")
     s.set_defaults(func=cmd_init)
+
+    s = sub.add_parser(
+        "ledger-reset",
+        help="backup state-ledger.jsonl and re-register all features (noop / mistaken merged recovery)",
+    )
+    s.add_argument(
+        "--remove-worktrees",
+        action="store_true",
+        help="git worktree remove --force each dong/.worktrees/<id>/ (recommended before real CLI)",
+    )
+    s.set_defaults(func=cmd_ledger_reset)
 
     s = sub.add_parser("status", help="short summary")
     s.set_defaults(func=cmd_status)
