@@ -145,7 +145,7 @@ DEFAULT_CONFIG = {
             "args": ["exec", "--cd", "{worktree}", "--prompt-file", "{prompt_file}"],
         },
         "claude-internal": {
-            "command": "claude",
+            "command": "claude-internal",
             "args": [
                 "--bare",
                 "-p",

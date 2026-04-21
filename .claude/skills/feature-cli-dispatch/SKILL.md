@@ -47,7 +47,7 @@ cli 的实际命令、参数、prompt 模板在不同环境会变（cursor-cli /
       "args": ["exec", "--cd", "{worktree}", "--prompt-file", "{prompt_file}"]
     },
     "claude-internal": {
-      "command": "claude",
+      "command": "claude-internal",
       "args": [
         "--bare",
         "-p",
@@ -75,7 +75,7 @@ placeholder：
 | `{feature_id}` | feature id |
 | `{spec_path}` | spec 绝对路径 |
 
-`claude-internal`：与官方 `claude` 命令一致（Claude Code print 模式）。`orch` 已将进程 `cwd` 设为 `{worktree}`，故 `-p` 里让模型用 **Read** 打开 `.task/prompt.md`（与 `{prompt_file}` 为同一路径）；args 中可不写占位符。
+`claude-internal`：**`command` 填你 PATH 上的真实可执行名**（常见为自建 wrapper `claude-internal`，或官方 `claude`；二者择一即可）。`orch` 将进程 `cwd` 设为 `{worktree}`，`-p` 里让模型用 **Read** 打开 `.task/prompt.md`（与 `{prompt_file}` 同路径）；args 中可不写占位符。
 
 ## Procedure
 

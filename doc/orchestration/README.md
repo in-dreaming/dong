@@ -159,8 +159,8 @@ python dong/scripts/orch.py config-show
    - 在根 `.gitignore` 追加 `dong/.orchestration/` + `dong/.worktrees/`
    - 创建 `dong/.orchestration/` 目录骨架与 `config.json` 占位
    - 写 ledger 的 `schema_init` 并登记 27 个 feature
-3. （可选）编辑 `dong/.orchestration/config.json`。把 `"cli_tool"` 改成 `"claude-internal"` 即可用本机 `claude`（Claude Code `-p` 模式）跑 worktree；工具定义里 **`command` 为 `claude`**，与你在终端里敲的 `claude` 一致。
-4. 若用上一句，确保 `claude` 在 `PATH` 中且已登录（或按 [headless 文档](https://code.claude.com/docs/en/headless) 配置 `ANTHROPIC_API_KEY` / `--bare` 等）。
+3. （可选）编辑 `dong/.orchestration/config.json`。`"cli_tool": "claude-internal"` 时，`tools.claude-internal.command` 应为你本机 **实际可执行文件名**（例如自建入口 `claude-internal`，或官方 `claude`），并保证在 `PATH` 中（或写绝对路径）。
+4. 若用 Claude Code 系 CLI，需已登录或按 [headless 文档](https://code.claude.com/docs/en/headless) 配置 `ANTHROPIC_API_KEY` / `--bare` 等（以你的 wrapper 为准）。
 
 以下为最小示例（可把 `cli_tool` 改为 `claude-internal`）：
    ```json
