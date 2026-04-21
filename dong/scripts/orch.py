@@ -1054,7 +1054,9 @@ def compute_eligible(state: Dict[str, Any], cfg: Dict[str, Any]) -> List[str]:
     for meta in sorted(FEATURES, key=lambda m: (m["wave"], -_downstream_count(m["id"]), -m["weeks"], m["id"])):
         fid = meta["id"]
         st = features.get(fid, {}).get("status", "registered") if fid in features else "unregistered"
-        if st not in ("registered", "unregistered"):
+        # `prepared` = worktree ready but `cli_dispatched` never succeeded (e.g. CLI binary missing); must be
+        # eligible so `tick` / dispatch can retry `skill_cli_dispatch` only.
+        if st not in ("registered", "unregistered", "prepared"):
             continue
         # upstream merged
         if any(features.get(u, {}).get("status") != "merged" for u in meta["upstream"]):
@@ -1340,7 +1342,9 @@ def cmd_tick(args: argparse.Namespace) -> None:
         actions.append(f"dispatch {fid}")
         if not dry:
             try:
-                skill_worktree_setup(fid)
+                fst = state["features"].get(fid, {}).get("status")
+                if fst == "registered":
+                    skill_worktree_setup(fid)
                 skill_cli_dispatch(fid)
             except Exception as e:
                 actions.append(f"dispatch {fid} FAILED: {e}")
