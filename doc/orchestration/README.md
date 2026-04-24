@@ -161,6 +161,8 @@ python dong/scripts/orch.py status                # 当前状态
 python dong/scripts/orch.py list [--phase p0|p1|p2]
 python dong/scripts/orch.py eligible              # 现在能派发哪些
 python dong/scripts/orch.py tick [--dry-run]      # 推进一个 tick
+python dong/scripts/orch.py cli-health            # 每个 cli_running：PID/存活 + session log 尾部；顺带检测已退出进程
+python dong/scripts/orch_watchdog.ps1             # 长期守护：tick + 自动 approve；每 15 分钟 cli-health（可调参数）
 python dong/scripts/orch.py dispatch P0-1         # 手动派单 feature
 python dong/scripts/orch.py verify   P0-1         # 跑 spec § 5 验收
 python dong/scripts/orch.py approve  P0-1

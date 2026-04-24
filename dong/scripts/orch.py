@@ -27,6 +27,7 @@ Common subcommands:
     ledger-dump [N]            Print last N ledger lines (default 40)
     snapshot                   Re-reduce ledger and rewrite snapshots/state.json
     config-show                Print effective config
+    cli-health [--tail-lines N]  Per running CLI: PID alive, log tail; sync dead processes
 
 Layout:
     <repo-root>/
@@ -402,8 +403,8 @@ def reduce_state(events: List[Dict[str, Any]]) -> Dict[str, Any]:
             # unknown event kind; warn but continue
             print(f"WARN: unknown event kind {kind} in ledger seq={ev.get('seq')}", file=sys.stderr)
 
-    # Derived: active_workers
-    active = sum(1 for v in features.values() if v["status"] in {"preparing", "prepared", "cli_running", "awaiting_verify", "verifying", "awaiting_review", "awaiting_retry", "mergeable", "merging"})
+    # Derived: active_workers (runtime-aware; stale prepare/prepared must not occupy slots)
+    active = sum(1 for v in features.values() if effective_feature_status(v) in IN_PROGRESS_STATUSES)
     return {
         "schema_version": schema_version,
         "features": features,
@@ -453,6 +454,42 @@ def git_workdir_clean() -> bool:
 
 def git_head_sha() -> str:
     return git("rev-parse", "HEAD").stdout.strip()
+
+
+IN_PROGRESS_STATUSES = {
+    "preparing",
+    "prepared",
+    "cli_running",
+    "awaiting_verify",
+    "verifying",
+    "awaiting_review",
+    "mergeable",
+    "merging",
+}
+
+
+def feature_has_runtime_artifacts(feature: Dict[str, Any]) -> bool:
+    """Whether this feature still has a real worktree/lock footprint on disk."""
+    fid = feature.get("id")
+    if not fid:
+        return False
+    lock_exists = (workers_dir() / f"{fid}.lock").exists()
+    wt_rel = feature.get("worktree")
+    worktree_exists = False
+    if wt_rel:
+        worktree_exists = (repo_root() / str(wt_rel)).exists()
+    return lock_exists or worktree_exists
+
+
+def effective_feature_status(feature: Dict[str, Any]) -> str:
+    """
+    Treat stale `preparing` / `prepared` rows with no runtime artifacts as retryable.
+    This lets `tick` recover from interrupted setup/cleanup without manual rollback.
+    """
+    st = feature.get("status", "registered")
+    if st in {"preparing", "prepared"} and not feature_has_runtime_artifacts(feature):
+        return "registered"
+    return st
 
 
 def resolve_tool_executable(cmd: str) -> str:
@@ -1103,12 +1140,12 @@ def observe_days_for(fid: str, cfg: Dict[str, Any]) -> Optional[int]:
 
 def compute_eligible(state: Dict[str, Any], cfg: Dict[str, Any]) -> List[str]:
     features = state["features"]
-    in_progress_status = {"preparing","prepared","cli_running","awaiting_verify","verifying","awaiting_review","awaiting_retry","mergeable","merging"}
     active_by_group_R: Dict[str, int] = {}
     active_by_group_Y: Dict[str, int] = {}
     active_total = 0
     for fid, v in features.items():
-        if v["status"] in in_progress_status:
+        est = effective_feature_status(v)
+        if est in IN_PROGRESS_STATUSES:
             active_total += 1
             for g in v.get("groups", []):
                 cls = GROUP_CONFLICT.get(g, "Y")
@@ -1121,11 +1158,13 @@ def compute_eligible(state: Dict[str, Any], cfg: Dict[str, Any]) -> List[str]:
     # Priority: earlier wave > more downstream (critical path) > longer weeks > id
     for meta in sorted(FEATURES, key=lambda m: (m["wave"], -_downstream_count(m["id"]), -m["weeks"], m["id"])):
         fid = meta["id"]
-        st = features.get(fid, {}).get("status", "registered") if fid in features else "unregistered"
+        st = effective_feature_status(features.get(fid, {})) if fid in features else "unregistered"
         # `prepared` = worktree ready but `cli_dispatched` never succeeded (e.g. CLI binary missing); must be
         # eligible so `tick` / dispatch can retry `skill_cli_dispatch` only.
         if st not in ("registered", "unregistered", "prepared"):
             continue
+        if active_total + len(eligible) >= cfg.get("max_parallel_workers", 4):
+            break
         # upstream merged
         if any(features.get(u, {}).get("status") != "merged" for u in meta["upstream"]):
             continue
@@ -1161,9 +1200,6 @@ def compute_eligible(state: Dict[str, Any], cfg: Dict[str, Any]) -> List[str]:
             if time.time() < eligible_at:
                 continue
         eligible.append(fid)
-        # cap total
-        if active_total + len(eligible) >= cfg.get("max_parallel_workers", 4):
-            break
     return eligible
 
 # ----------------------------------------------------------------------------
@@ -1409,6 +1445,75 @@ def cmd_snapshot(args: argparse.Namespace) -> None:
 def cmd_config_show(args: argparse.Namespace) -> None:
     info(json.dumps(load_config(), ensure_ascii=False, indent=2))
 
+
+def _tail_text_file(path: Path, max_lines: int, max_bytes: int = 48000) -> str:
+    if not path.exists():
+        return "(file missing)"
+    try:
+        data = path.read_bytes()
+        if len(data) > max_bytes:
+            data = data[-max_bytes:]
+        text = data.decode("utf-8", errors="replace")
+        lines = text.splitlines()
+        return "\n".join(lines[-max_lines:])
+    except Exception as e:
+        return f"(read error: {e})"
+
+
+def cmd_cli_health(args: argparse.Namespace) -> None:
+    """
+    For each feature in cli_running: run monitor (detect dead PIDs), then print
+    PID alive, session log size/mtime, and last lines of cli_session.log.
+    """
+    tail_n = int(args.tail_lines)
+    if not args.dry_run:
+        monitor_active_clis()
+    state = reduce_state(ledger_read_all())
+    if not args.dry_run:
+        write_snapshot(state)
+
+    running = [(fid, f) for fid, f in sorted(state["features"].items()) if f.get("status") == "cli_running"]
+    if not running:
+        info("cli-health: no cli_running features")
+        return
+
+    info(f"cli-health @ {utcnow_iso()}  running={len(running)}  tail_lines={tail_n}")
+    for fid, f in running:
+        lock_path = workers_dir() / f"{fid}.lock"
+        if not lock_path.exists():
+            info(f"  {fid}: lock MISSING (worktree={f.get('worktree')})")
+            continue
+        try:
+            lock = json.loads(lock_path.read_text(encoding="utf-8"))
+        except Exception as e:
+            info(f"  {fid}: lock unreadable: {e}")
+            continue
+        pid = lock.get("pid")
+        alive = bool(pid) and pid_alive(int(pid))
+        sess = lock.get("cli_session") or ""
+        log_path = (repo_root() / str(sess).replace("/", os.sep)) if sess else None
+        log_bytes = 0
+        log_mtime = "-"
+        if log_path and log_path.exists():
+            st = log_path.stat()
+            log_bytes = st.st_size
+            log_mtime = datetime.fromtimestamp(st.st_mtime, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        tail_txt = _tail_text_file(log_path, tail_n) if log_path else "(no cli_session in lock)"
+        info(f"  --- {fid} pid={pid} alive={alive} log={sess} bytes={log_bytes} mtime_utc={log_mtime} ---")
+        for ln in tail_txt.splitlines():
+            info(f"    | {ln}")
+
+
+def _last_verify_report_path(feature: Dict[str, Any]) -> Optional[Path]:
+    hist = feature.get("verify_history") or []
+    if not hist:
+        return None
+    rel = hist[-1].get("report_path")
+    if not rel:
+        return None
+    return repo_root() / str(rel)
+
+
 def cmd_tick(args: argparse.Namespace) -> None:
     """One full orchestration tick."""
     cfg = load_config()
@@ -1426,6 +1531,28 @@ def cmd_tick(args: argparse.Namespace) -> None:
             actions.append(f"verify {fid}")
             if not dry:
                 skill_verify(fid, mode="full")
+    state = reduce_state(ledger_read_all())
+
+    # Step 3b: auto-redispatch retryable verify failures with last report attached
+    retry_limit = int(cfg.get("retry_verify", 2))
+    for fid, f in list(state["features"].items()):
+        if f["status"] != "awaiting_retry":
+            continue
+        retry_count = int(f.get("retry_count") or 0)
+        if retry_count > retry_limit:
+            actions.append(f"block {fid} (retry limit exceeded: {retry_count}>{retry_limit})")
+            if not dry:
+                ledger_append("feature_done", fid, {
+                    "final_status": "blocked",
+                    "reason": f"retry limit exceeded ({retry_count}>{retry_limit})",
+                })
+            continue
+        actions.append(f"retry-dispatch {fid}")
+        if not dry:
+            try:
+                skill_cli_dispatch(fid, retry_feedback_path=_last_verify_report_path(f))
+            except Exception as e:
+                actions.append(f"retry-dispatch {fid} FAILED: {e}")
     state = reduce_state(ledger_read_all())
 
     # Step 4: announce awaiting_review (no auto-approve unless cfg says so)
@@ -1456,7 +1583,7 @@ def cmd_tick(args: argparse.Namespace) -> None:
         actions.append(f"dispatch {fid}")
         if not dry:
             try:
-                fst = state["features"].get(fid, {}).get("status")
+                fst = effective_feature_status(state["features"].get(fid, {}))
                 if fst == "registered":
                     skill_worktree_setup(fid)
                 skill_cli_dispatch(fid)
@@ -1563,6 +1690,14 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--dry-run", action="store_true")
     s.add_argument("--max", type=int, help="max new dispatches this tick")
     s.set_defaults(func=cmd_tick)
+
+    s = sub.add_parser(
+        "cli-health",
+        help="report each cli_running session (PID, log tail); run monitor to detect exited CLIs",
+    )
+    s.add_argument("--tail-lines", type=int, default=25, dest="tail_lines", help="lines of cli_session.log to show")
+    s.add_argument("--dry-run", action="store_true", help="only print, do not run monitor_active_clis / snapshot")
+    s.set_defaults(func=cmd_cli_health)
 
     s = sub.add_parser("ledger-dump", help="print last N ledger events")
     s.add_argument("count", type=int, nargs="?", default=40)
