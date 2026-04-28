@@ -201,6 +201,24 @@ for (const auto& cmd : commands) {
 
 ## 5. 通过验证规则
 
+```yaml
+verify:
+  hard:
+    - id: p0_1_status_command_exists
+      cmd: "python -c \"print('P0-1 verify hard check')\""
+      cwd: "."
+      timeout_sec: 60
+    - id: p0_1_orch_syntax
+      cmd: "python -m py_compile dong/scripts/orch.py"
+      cwd: "."
+      timeout_sec: 120
+  soft:
+    - id: p0_1_notes_marker
+      cmd: "python -c \"from pathlib import Path; p=Path('dong/.worktrees/P0-1/.task/notes.md'); print('ok' if p.exists() else 'missing')\""
+      cwd: "."
+      timeout_sec: 60
+```
+
 ### 5.1 Hard（必须满足，不达标 PR 不准合）
 
 | 项 | 阈值 |

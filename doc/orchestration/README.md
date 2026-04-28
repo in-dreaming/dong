@@ -160,9 +160,14 @@ python dong/scripts/orch.py init --create-dev-next  # 同时建 dev_next
 python dong/scripts/orch.py status                # 当前状态
 python dong/scripts/orch.py list [--phase p0|p1|p2]
 python dong/scripts/orch.py eligible              # 现在能派发哪些
+python dong/scripts/orch.py next                  # 只看下一个 eligible（不改状态）
+python dong/scripts/orch.py start-next            # 只启动一个任务（prepare+dispatch）
+python dong/scripts/orch.py advance P0-1          # 仅推进该任务一个阶段
+python dong/scripts/orch.py retry   P0-1          # 显式重试（不走自动 retry）
+python dong/scripts/orch.py reopen  P0-1          # blocked/abandoned 重新入队为 registered
 python dong/scripts/orch.py tick [--dry-run]      # 推进一个 tick
 python dong/scripts/orch.py cli-health            # 每个 cli_running：PID/存活 + session log 尾部；顺带检测已退出进程
-python dong/scripts/orch_watchdog.ps1             # 长期守护：tick + 自动 approve；每 15 分钟 cli-health（可调参数）
+powershell -NoProfile -ExecutionPolicy Bypass -File dong/scripts/orch_watchdog.ps1  # 只读守护：默认每 30s cli-health --dry-run（不会改 ledger）
 python dong/scripts/orch.py dispatch P0-1         # 手动派单 feature
 python dong/scripts/orch.py verify   P0-1         # 跑 spec § 5 验收
 python dong/scripts/orch.py approve  P0-1
@@ -207,6 +212,32 @@ python dong/scripts/orch.py config-show
    先用 `noop-dryrun` 走通整套流程，再换真 cli。
 
    **正式推进（非 mock）**：`cli_tool` 固定为真 CLI（如 `claude-internal`），从 `tools` 里删掉 `noop-dryrun` 以免误切回 mock；若账本曾被 noop 标满 `merged`，按 §6.0b 做 `ledger-reset`（或删除旧 `state-ledger.jsonl` 后跑 `init`）再 `tick` / `dispatch`。
+
+### 6.1a 稳定模式（推荐）
+
+稳定模式目标：**每次只推进一个 feature，所有状态变化都来自显式命令**。
+
+```bash
+# 1) 只读监控（可常驻）
+powershell -NoProfile -ExecutionPolicy Bypass -File dong/scripts/orch_watchdog.ps1
+
+# 2) 显式推进
+python dong/scripts/orch.py next
+python dong/scripts/orch.py start-next
+python dong/scripts/orch.py cli-health --dry-run
+python dong/scripts/orch.py advance <id>
+python dong/scripts/orch.py approve <id>
+python dong/scripts/orch.py merge <id>
+```
+
+建议配置：
+- `max_parallel_workers=1`
+- `retry_verify=1`（或 `0`）
+- `auto_approve_soft_pass=false`
+
+### 6.1b 全自动模式（实验 / 不推荐）
+
+把 `watchdog` 配成自动 `tick + approve + retry` 的模式虽然快，但在 CLI 波动、spec 缺 YAML 验收、lock/worktree 漂移时容易放大错误并批量 `blocked`。除非你明确接受这种风险，否则请使用 §6.1a 稳定模式。
 
 ### 6.2 启动 orchestrator agent
 

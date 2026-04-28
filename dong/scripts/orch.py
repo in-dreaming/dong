@@ -12,6 +12,11 @@ Usage:
 Common subcommands:
     init [--create-dev-next]   First-time setup; register 27 features
     status                     Short summary
+    next                       Show next eligible feature only
+    start-next                 Prepare+dispatch one next eligible feature
+    advance <id>               Advance one feature by one stage
+    retry <id>                 Explicitly retry a failed feature
+    reopen <id>                Requeue blocked/abandoned feature as registered
     list [--phase p0|p1|p2]    Full feature table
     eligible                   What could dispatch right now
     tick [--dry-run] [--max N] Advance one orchestration tick
@@ -344,6 +349,13 @@ def reduce_state(events: List[Dict[str, Any]]) -> Dict[str, Any]:
             f["groups"] = payload.get("groups", [])
             f["upstream"] = payload.get("upstream", [])
             f["status"] = "registered"
+            # Re-register can be used as explicit reopen; clear lifecycle counters.
+            f["retry_count"] = 0
+            f["verify_history"] = []
+            f["started_at"] = None
+            f["merged_at"] = None
+            f["merge_sha"] = None
+            f["observed_since"] = None
         elif kind == "prepare_started":
             f["branch"] = payload.get("branch")
             f["worktree"] = payload.get("worktree_path")
@@ -358,6 +370,10 @@ def reduce_state(events: List[Dict[str, Any]]) -> Dict[str, Any]:
             f["session_log"] = payload.get("session_log")
             if not f["started_at"]:
                 f["started_at"] = ev.get("ts")
+        elif kind == "cli_failed":
+            f["status"] = "prepared"
+            f["cli_exit_code"] = payload.get("exit_code")
+            f["cli_failure"] = payload.get("reason") or payload.get("tail")
         elif kind == "cli_finished":
             f["status"] = "awaiting_verify"
             f["cli_exit_code"] = payload.get("exit_code")
@@ -514,13 +530,30 @@ def resolve_tool_executable(cmd: str) -> str:
 def build_cli_argv(exe: str, args: List[str]) -> List[str]:
     """
     argv for subprocess.Popen. On Windows, .cmd/.bat are not PE executables for
-    CreateProcess — must run via ``cmd.exe /c ...``.
+    CreateProcess — run them through cmd.exe, but keep argv structured.
     """
     resolved = resolve_tool_executable(exe)
     if os.name == "nt" and resolved.lower().endswith((".cmd", ".bat")):
-        inner = subprocess.list2cmdline([resolved, *args])
-        return ["cmd.exe", "/c", inner]
+        return ["cmd.exe", "/d", "/s", "/c", resolved, *args]
     return [resolved, *args]
+
+
+def worktree_changed_files(feature_id: str) -> List[str]:
+    wt = worktrees_dir() / feature_id
+    if not wt.exists():
+        return []
+    out = git("diff", "--name-only", "dev_next...HEAD", cwd=wt, check=False).stdout
+    return [ln for ln in out.splitlines() if ln.strip()]
+
+
+def worktree_ready_marker(feature_id: str) -> bool:
+    notes = worktrees_dir() / feature_id / ".task" / "notes.md"
+    if not notes.exists():
+        return False
+    try:
+        return "STATUS: ready-for-orchestrator-verify" in notes.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return False
 
 
 # ----------------------------------------------------------------------------
@@ -538,7 +571,17 @@ def skill_worktree_setup(feature_id: str, dry_run: bool = False) -> Dict[str, An
     lock_file = workers_dir() / f"{feature_id}.lock"
     if worktree.exists():
         if lock_file.exists():
-            raise RuntimeError(f"worktree {worktree} exists and lock {lock_file} is held; refuse to reuse")
+            try:
+                lock_data = json.loads(lock_file.read_text(encoding="utf-8"))
+                pid = lock_data.get("pid")
+                if pid and pid_alive(int(pid)):
+                    raise RuntimeError(f"worktree {worktree} exists and lock {lock_file} is held; refuse to reuse")
+            except RuntimeError:
+                raise
+            except Exception:
+                pass
+            info(f"removing stale lock {lock_file}")
+            lock_file.unlink(missing_ok=True)
         if not dry_run:
             info(f"worktree {worktree} exists but no lock; removing")
             git("worktree", "remove", "--force", str(worktree), check=False)
@@ -721,9 +764,15 @@ def skill_cli_dispatch(feature_id: str, retry_feedback_path: Optional[Path] = No
     for k, v in (tool_cfg.get("env") or {}).items():
         env[k] = os.path.expandvars(v)
 
-    # Launch detached background process; redirect stdout+stderr to session log.
-    log_fh = session_log.open("ab")
+    stdin_fh = None
+    if bool(tool_cfg.get("stdin_prompt")):
+        stdin_fh = prompt_file.open("rb")
+
+    # Launch detached background process; redirect stdout+stderr to a fresh session log.
+    log_fh = session_log.open("wb")
     popen_kwargs: Dict[str, Any] = dict(cwd=str(worktree), stdout=log_fh, stderr=subprocess.STDOUT, env=env)
+    if stdin_fh:
+        popen_kwargs["stdin"] = stdin_fh
     if os.name == "nt":
         popen_kwargs["creationflags"] = 0x00000200  # CREATE_NEW_PROCESS_GROUP
     else:
@@ -733,7 +782,13 @@ def skill_cli_dispatch(feature_id: str, retry_feedback_path: Optional[Path] = No
         proc = subprocess.Popen(command, **popen_kwargs)
     except FileNotFoundError as e:
         log_fh.close()
+        if stdin_fh:
+            stdin_fh.close()
         raise RuntimeError(f"cli command not found: {command[0]} ({e})")
+    finally:
+        if stdin_fh:
+            stdin_fh.close()
+        log_fh.close()
 
     # Spawn a tiny shim that waits and writes exit code — python one-liner.
     # To keep this simple we rely on a separate wait step at status time instead of a shim.
@@ -749,6 +804,28 @@ def skill_cli_dispatch(feature_id: str, retry_feedback_path: Optional[Path] = No
         "command": command,
     }
     (workers_dir() / f"{feature_id}.lock").write_text(json.dumps(lock, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    probe_sec = float(tool_cfg.get("startup_probe_sec", 5))
+    if probe_sec > 0:
+        time.sleep(probe_sec)
+        exited = proc.poll() is not None
+        log_text = ""
+        if session_log.exists():
+            log_text = session_log.read_text(encoding="utf-8", errors="replace")
+        has_signal = "STATUS: ready-for-orchestrator-verify" in log_text or worktree_ready_marker(feature_id)
+        changed = worktree_changed_files(feature_id)
+        if exited and not has_signal and not changed:
+            (workers_dir() / f"{feature_id}.lock").unlink(missing_ok=True)
+            ledger_append("note", feature_id, {
+                "text": (
+                    "cli dispatch failed startup probe: process exited early "
+                    f"exit={proc.returncode}, log_bytes={len(log_text.encode('utf-8', errors='replace'))}"
+                )
+            })
+            raise RuntimeError(
+                f"cli exited during startup probe (exit={proc.returncode}, log_bytes={len(log_text)}). "
+                f"See {session_log}"
+            )
 
     ledger_append("cli_dispatched", feature_id, {
         "cli_tool": tool_name,
@@ -797,10 +874,38 @@ def monitor_active_clis() -> None:
         except Exception:
             continue
         pid = lock.get("pid")
+        started_at_raw = lock.get("started_at")
+        started_at = None
+        if started_at_raw:
+            try:
+                started_at = datetime.strptime(started_at_raw, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+            except Exception:
+                started_at = None
+        session_log = repo_root() / lock.get("cli_session", "")
+        log_size = session_log.stat().st_size if session_log.exists() else 0
+        no_output_sec = 0
+        if started_at:
+            no_output_sec = int((datetime.now(timezone.utc) - started_at).total_seconds())
+        if pid and pid_alive(int(pid)) and log_size == 0 and no_output_sec >= 120:
+            try:
+                if os.name == "nt":
+                    subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], check=False)
+                else:
+                    os.kill(int(pid), signal.SIGTERM)
+            except Exception:
+                pass
+            ledger_append("note", fid, {
+                "text": f"cli startup timeout: no output for {no_output_sec}s; killed pid {pid}"
+            })
+            ledger_append("cli_failed", fid, {
+                "exit_code": None,
+                "reason": f"startup timeout: no output for {no_output_sec}s",
+            })
+            lock_path.unlink(missing_ok=True)
+            continue
         if not pid or not pid_alive(int(pid)):
             exit_code = 0
             # try to read session log tail
-            session_log = repo_root() / lock.get("cli_session", "")
             tail = ""
             if session_log.exists():
                 tail = session_log.read_text(encoding="utf-8", errors="replace").splitlines()[-5:]
@@ -808,17 +913,24 @@ def monitor_active_clis() -> None:
             # best-effort file count
             files_changed = 0
             try:
-                wt = worktrees_dir() / fid
-                if wt.exists():
-                    diff = git("diff", "--name-only", "dev_next...HEAD", cwd=wt, check=False).stdout.splitlines()
-                    files_changed = len(diff)
+                files_changed = len(worktree_changed_files(fid))
             except Exception:
                 pass
-            ledger_append("cli_finished", fid, {
-                "exit_code": exit_code,
-                "files_changed": files_changed,
-                "tail": tail,
-            })
+            exit_code = 0 if (files_changed > 0 or worktree_ready_marker(fid)) else 1
+            if exit_code == 0:
+                ledger_append("cli_finished", fid, {
+                    "exit_code": exit_code,
+                    "files_changed": files_changed,
+                    "tail": tail,
+                })
+            else:
+                ledger_append("cli_failed", fid, {
+                    "exit_code": exit_code,
+                    "files_changed": files_changed,
+                    "tail": tail,
+                    "reason": "process exited without ready marker or code changes",
+                })
+            lock_path.unlink(missing_ok=True)
 
 # ----------------------------------------------------------------------------
 # Skill: feature-verify
@@ -1138,21 +1250,39 @@ def observe_days_for(fid: str, cfg: Dict[str, Any]) -> Optional[int]:
         return int(v)
     return OBSERVE_WINDOW_DAYS.get(fid)
 
-def compute_eligible(state: Dict[str, Any], cfg: Dict[str, Any]) -> List[str]:
-    features = state["features"]
+
+def _dispatch_occupancy(
+    features: Dict[str, Dict[str, Any]],
+    exclude_fid: Optional[str],
+) -> Tuple[int, Dict[str, int], Dict[str, int]]:
+    """
+    In-progress slots and R/Y group occupancy **excluding** `exclude_fid`.
+    Needed so a `prepared` feature in an R group does not block its own cli_dispatch retry.
+    """
     active_by_group_R: Dict[str, int] = {}
     active_by_group_Y: Dict[str, int] = {}
     active_total = 0
     for fid, v in features.items():
+        if exclude_fid is not None and fid == exclude_fid:
+            continue
         est = effective_feature_status(v)
-        if est in IN_PROGRESS_STATUSES:
-            active_total += 1
-            for g in v.get("groups", []):
-                cls = GROUP_CONFLICT.get(g, "Y")
-                if cls == "R":
-                    active_by_group_R[g] = active_by_group_R.get(g, 0) + 1
-                elif cls == "Y":
-                    active_by_group_Y[g] = active_by_group_Y.get(g, 0) + 1
+        if est not in IN_PROGRESS_STATUSES:
+            continue
+        active_total += 1
+        for g in v.get("groups", []):
+            cls = GROUP_CONFLICT.get(g, "Y")
+            if cls == "R":
+                active_by_group_R[g] = active_by_group_R.get(g, 0) + 1
+            elif cls == "Y":
+                active_by_group_Y[g] = active_by_group_Y.get(g, 0) + 1
+    return active_total, active_by_group_R, active_by_group_Y
+
+
+def compute_eligible(state: Dict[str, Any], cfg: Dict[str, Any]) -> List[str]:
+    features = state["features"]
+    cap = int(cfg.get("max_parallel_workers", 4))
+    max_r = int(cfg.get("max_per_group_r", 1))
+    max_y = int(cfg.get("max_per_group_y", 2))
 
     eligible = []
     # Priority: earlier wave > more downstream (critical path) > longer weeks > id
@@ -1163,7 +1293,8 @@ def compute_eligible(state: Dict[str, Any], cfg: Dict[str, Any]) -> List[str]:
         # eligible so `tick` / dispatch can retry `skill_cli_dispatch` only.
         if st not in ("registered", "unregistered", "prepared"):
             continue
-        if active_total + len(eligible) >= cfg.get("max_parallel_workers", 4):
+        act_ex, active_by_group_R, active_by_group_Y = _dispatch_occupancy(features, exclude_fid=fid)
+        if act_ex + len(eligible) >= cap:
             break
         # upstream merged
         if any(features.get(u, {}).get("status") != "merged" for u in meta["upstream"]):
@@ -1171,7 +1302,7 @@ def compute_eligible(state: Dict[str, Any], cfg: Dict[str, Any]) -> List[str]:
         # R group not occupied
         blocked_by_R = False
         for g in meta["groups"]:
-            if GROUP_CONFLICT.get(g, "Y") == "R" and active_by_group_R.get(g, 0) >= cfg.get("max_per_group_r", 1):
+            if GROUP_CONFLICT.get(g, "Y") == "R" and active_by_group_R.get(g, 0) >= max_r:
                 blocked_by_R = True
                 break
         if blocked_by_R:
@@ -1179,7 +1310,7 @@ def compute_eligible(state: Dict[str, Any], cfg: Dict[str, Any]) -> List[str]:
         # Y group cap
         blocked_by_Y = False
         for g in meta["groups"]:
-            if GROUP_CONFLICT.get(g, "Y") == "Y" and active_by_group_Y.get(g, 0) >= cfg.get("max_per_group_y", 2):
+            if GROUP_CONFLICT.get(g, "Y") == "Y" and active_by_group_Y.get(g, 0) >= max_y:
                 blocked_by_Y = True
                 break
         if blocked_by_Y:
@@ -1334,17 +1465,135 @@ def cmd_eligible(args: argparse.Namespace) -> None:
         meta = find_feature_meta(fid)
         info(f"{fid:<6} wave={meta['wave']} weeks={meta['weeks']} groups={','.join(meta['groups'])}")
 
-def cmd_dispatch(args: argparse.Namespace) -> None:
+
+def _dispatch_feature(fid: str, dry_run: bool = False) -> Dict[str, Any]:
+    state = reduce_state(ledger_read_all())
+    f = state["features"].get(fid, {})
+    st = effective_feature_status(f)
+    if st not in ("registered", "prepared"):
+        raise RuntimeError(f"{fid} status is `{st}`, expected registered/prepared")
+    if st == "registered":
+        skill_worktree_setup(fid, dry_run=dry_run)
+    return skill_cli_dispatch(fid, dry_run=dry_run)
+
+
+def cmd_next(args: argparse.Namespace) -> None:
+    state = reduce_state(ledger_read_all())
+    cfg = load_config()
+    el = compute_eligible(state, cfg)
+    if not el:
+        info("(none)")
+        return
+    fid = el[0]
+    meta = find_feature_meta(fid)
+    info(f"{fid:<6} wave={meta['wave']} weeks={meta['weeks']} groups={','.join(meta['groups'])}")
+
+
+def cmd_start_next(args: argparse.Namespace) -> None:
+    monitor_active_clis()
+    state = reduce_state(ledger_read_all())
+    cfg = load_config()
+    el = compute_eligible(state, cfg)
+    if not el:
+        info("(none)")
+        return
+    fid = el[0]
+    out = _dispatch_feature(fid, dry_run=args.dry_run)
+    if not args.dry_run:
+        write_snapshot(reduce_state(ledger_read_all()))
+    info(json.dumps({"selected": fid, "dispatch": out}, ensure_ascii=False, indent=2))
+
+
+def cmd_advance(args: argparse.Namespace) -> None:
     fid = args.feature
     find_feature_meta(fid)
     monitor_active_clis()
     state = reduce_state(ledger_read_all())
     f = state["features"].get(fid, {})
-    if f.get("status") not in ("registered", "prepared"):
-        die(f"{fid} status is `{f.get('status')}`, expected registered/prepared")
-    if f.get("status") == "registered":
-        skill_worktree_setup(fid, dry_run=args.dry_run)
-    out = skill_cli_dispatch(fid, dry_run=args.dry_run)
+    st = effective_feature_status(f)
+    action = ""
+    if st in ("registered", "prepared"):
+        out = _dispatch_feature(fid, dry_run=args.dry_run)
+        action = f"dispatch {fid}"
+        info(json.dumps(out, ensure_ascii=False, indent=2))
+    elif st == "cli_running":
+        # One-step advance for running worker = refresh status only.
+        action = f"monitor {fid}"
+        monitor_active_clis()
+    elif st == "awaiting_verify":
+        action = f"verify {fid}"
+        if not args.dry_run:
+            rep = skill_verify(fid, mode=args.mode)
+            info(json.dumps({k: rep[k] for k in ("feature", "overall", "hard_pass", "soft_pass")}, ensure_ascii=False, indent=2))
+    elif st == "mergeable":
+        action = f"merge {fid}"
+        out = skill_merge(fid, strategy=args.strategy, dry_run=args.dry_run)
+        info(json.dumps(out, ensure_ascii=False, indent=2))
+    elif st == "awaiting_review":
+        action = f"review-gate {fid}"
+        info(f"{fid}: awaiting_review (use `orch approve {fid}` or `orch reject {fid} <reason>`)")
+    elif st == "awaiting_retry":
+        action = f"retry-gate {fid}"
+        info(f"{fid}: awaiting_retry (use `orch retry {fid}`)")
+    elif st in ("blocked", "abandoned"):
+        action = f"blocked {fid}"
+        info(f"{fid}: status `{st}` (use `orch reopen {fid}` then `orch start-next` or `orch retry {fid}`)")
+    else:
+        action = f"noop {fid}"
+        info(f"{fid}: no advance action for status `{st}`")
+    if not args.dry_run:
+        write_snapshot(reduce_state(ledger_read_all()))
+    info(f"advance: {action}")
+
+
+def cmd_retry(args: argparse.Namespace) -> None:
+    fid = args.feature
+    find_feature_meta(fid)
+    monitor_active_clis()
+    state = reduce_state(ledger_read_all())
+    f = state["features"].get(fid, {})
+    st = effective_feature_status(f)
+    if st not in ("awaiting_retry", "blocked", "prepared", "registered"):
+        die(f"{fid}: status `{st}` not retryable")
+    if st == "blocked" and not args.force:
+        die(f"{fid}: blocked; run `orch reopen {fid}` first, or pass --force")
+    out = _dispatch_feature(fid, dry_run=args.dry_run) if st in ("prepared", "registered") else (
+        skill_cli_dispatch(fid, retry_feedback_path=_last_verify_report_path(f), dry_run=args.dry_run)
+    )
+    if not args.dry_run:
+        write_snapshot(reduce_state(ledger_read_all()))
+    info(json.dumps(out, ensure_ascii=False, indent=2))
+
+
+def cmd_reopen(args: argparse.Namespace) -> None:
+    fid = args.feature
+    meta = find_feature_meta(fid)
+    state = reduce_state(ledger_read_all())
+    st = state["features"].get(fid, {}).get("status", "registered")
+    if st not in ("blocked", "abandoned", "awaiting_retry") and not args.force:
+        die(f"{fid}: status `{st}` not reopenable (pass --force to override)")
+    if args.dry_run:
+        info(f"[dry-run] {fid}: reopen -> registered")
+        return
+    ledger_append("note", fid, {"text": args.reason or f"reopen {fid} to registered"})
+    ledger_append("feature_registered", fid, {
+        "spec_path": meta["spec"],
+        "groups": meta["groups"],
+        "upstream": meta["upstream"],
+        "wave": meta["wave"],
+        "weeks": meta["weeks"],
+        "slug": meta["slug"],
+    })
+    if not args.dry_run:
+        write_snapshot(reduce_state(ledger_read_all()))
+    info(f"{fid}: reopened to registered")
+
+
+def cmd_dispatch(args: argparse.Namespace) -> None:
+    fid = args.feature
+    find_feature_meta(fid)
+    monitor_active_clis()
+    out = _dispatch_feature(fid, dry_run=args.dry_run)
     info(json.dumps(out, ensure_ascii=False, indent=2))
 
 def cmd_verify(args: argparse.Namespace) -> None:
@@ -1473,8 +1722,13 @@ def cmd_cli_health(args: argparse.Namespace) -> None:
         write_snapshot(state)
 
     running = [(fid, f) for fid, f in sorted(state["features"].items()) if f.get("status") == "cli_running"]
+    prepared_only = [(fid, f) for fid, f in sorted(state["features"].items()) if f.get("status") == "prepared"]
     if not running:
-        info("cli-health: no cli_running features")
+        extra = ""
+        if prepared_only:
+            bits = [f"{p[0]} (wt={p[1].get('worktree')})" for p in prepared_only]
+            extra = "; prepared (no CLI yet): " + ", ".join(bits)
+        info(f"cli-health: no cli_running features{extra}")
         return
 
     info(f"cli-health @ {utcnow_iso()}  running={len(running)}  tail_lines={tail_n}")
@@ -1533,26 +1787,10 @@ def cmd_tick(args: argparse.Namespace) -> None:
                 skill_verify(fid, mode="full")
     state = reduce_state(ledger_read_all())
 
-    # Step 3b: auto-redispatch retryable verify failures with last report attached
-    retry_limit = int(cfg.get("retry_verify", 2))
+    # Step 3b: retry is explicit in stable mode (use `orch retry <id>`).
     for fid, f in list(state["features"].items()):
-        if f["status"] != "awaiting_retry":
-            continue
-        retry_count = int(f.get("retry_count") or 0)
-        if retry_count > retry_limit:
-            actions.append(f"block {fid} (retry limit exceeded: {retry_count}>{retry_limit})")
-            if not dry:
-                ledger_append("feature_done", fid, {
-                    "final_status": "blocked",
-                    "reason": f"retry limit exceeded ({retry_count}>{retry_limit})",
-                })
-            continue
-        actions.append(f"retry-dispatch {fid}")
-        if not dry:
-            try:
-                skill_cli_dispatch(fid, retry_feedback_path=_last_verify_report_path(f))
-            except Exception as e:
-                actions.append(f"retry-dispatch {fid} FAILED: {e}")
+        if f["status"] == "awaiting_retry":
+            actions.append(f"awaiting_retry {fid} (use `orch retry {fid}`)")
     state = reduce_state(ledger_read_all())
 
     # Step 4: announce awaiting_review (no auto-approve unless cfg says so)
@@ -1632,6 +1870,33 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("eligible", help="list eligible features for dispatch")
     s.set_defaults(func=cmd_eligible)
+
+    s = sub.add_parser("next", help="show first eligible feature only")
+    s.set_defaults(func=cmd_next)
+
+    s = sub.add_parser("start-next", help="prepare+dispatch first eligible feature")
+    s.add_argument("--dry-run", action="store_true")
+    s.set_defaults(func=cmd_start_next)
+
+    s = sub.add_parser("advance", help="advance one feature by one stage")
+    s.add_argument("feature")
+    s.add_argument("--dry-run", action="store_true")
+    s.add_argument("--mode", choices=["full", "hard-only"], default="full", help="verify mode when status=awaiting_verify")
+    s.add_argument("--strategy", choices=["squash", "merge", "ff"], default="squash", help="merge strategy when status=mergeable")
+    s.set_defaults(func=cmd_advance)
+
+    s = sub.add_parser("retry", help="explicit retry for awaiting_retry/blocked feature")
+    s.add_argument("feature")
+    s.add_argument("--dry-run", action="store_true")
+    s.add_argument("--force", action="store_true", help="allow retry even when blocked")
+    s.set_defaults(func=cmd_retry)
+
+    s = sub.add_parser("reopen", help="reopen blocked/abandoned feature as registered")
+    s.add_argument("feature")
+    s.add_argument("--reason", default="")
+    s.add_argument("--dry-run", action="store_true")
+    s.add_argument("--force", action="store_true")
+    s.set_defaults(func=cmd_reopen)
 
     s = sub.add_parser("dispatch", help="setup worktree + dispatch cli for a feature")
     s.add_argument("feature")
