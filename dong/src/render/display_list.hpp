@@ -34,6 +34,7 @@ enum class DisplayItemType : uint8_t {
     DrawImage,
     DrawGlyphRun,
     DrawLinearGradient,  // CSS linear-gradient background
+    DrawConicGradient,    // CSS conic-gradient background
     PushLayer,
     PopLayer,
     PushClipRect,
@@ -148,6 +149,17 @@ struct DrawLinearGradientData {
     GradientColorStop stops[kMaxGradientStops];
 };
 
+struct DrawConicGradientData {
+    Rect rect;
+    float radius = 0.0f; // border-radius for clipping (SDF discard)
+    float center_x_px = 0.0f;
+    float center_y_px = 0.0f;
+    float from_angle_deg = 0.0f;
+    bool repeating = false;
+    int stop_count = 0;
+    GradientColorStop stops[kMaxGradientStops];
+};
+
 struct LayerData {
     Rect bounds;
     float opacity = 1.0f;
@@ -166,6 +178,7 @@ struct DisplayItem {
     DrawImageData image;
     DrawGlyphRunData glyph_run;
     DrawLinearGradientData gradient;
+    DrawConicGradientData conic_gradient;
     ClipData clip;
     LayerData layer;
 };
@@ -343,6 +356,18 @@ public:
         list_.items.push_back(std::move(item));
     }
 
+    void addConicGradient(const DrawConicGradientData& data) {
+        DisplayItem item{};
+        item.type = DisplayItemType::DrawConicGradient;
+        const Rect tr = applyTranslate(data.rect);
+        item.conic_gradient = data;
+        item.conic_gradient.rect = tr;
+        const float dx = tr.x - data.rect.x;
+        const float dy = tr.y - data.rect.y;
+        item.conic_gradient.center_x_px += dx;
+        item.conic_gradient.center_y_px += dy;
+        list_.items.push_back(std::move(item));
+    }
 
     void addGlyphRun(DrawGlyphRunData data) {
         DisplayItem item{};

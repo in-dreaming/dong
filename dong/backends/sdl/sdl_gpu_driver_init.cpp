@@ -265,6 +265,52 @@ bool SDLGPUDriver::initialize() {
         return false;
     }
 
+    // 锥形渐变（conic-gradient）
+    conic_gradient_vs_ = shader_manager_->loadShaderFromHLSLFile(
+        "dong_conic_gradient_vs",
+        SDL_GPU_SHADERSTAGE_VERTEX,
+        shader_path("conic_gradient_vs.hlsl").c_str(),
+        "main"
+    );
+    conic_gradient_fs_ = shader_manager_->loadShaderFromHLSLFile(
+        "dong_conic_gradient_fs",
+        SDL_GPU_SHADERSTAGE_FRAGMENT,
+        shader_path("conic_gradient_fs.hlsl").c_str(),
+        "main"
+    );
+    if (!conic_gradient_vs_ || !conic_gradient_fs_) {
+        DONG_LOG_WARN("SDLGPUDriver::initialize: conic gradient shaders unavailable");
+    } else {
+        SDL_GPUGraphicsPipelineCreateInfo ccone_ci{};
+        SDL_GPUColorTargetDescription color_desc_ccone{};
+        color_desc_ccone.format = render_target_format_;
+        color_desc_ccone.blend_state.enable_blend = true;
+        color_desc_ccone.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+        color_desc_ccone.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+        color_desc_ccone.blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
+        color_desc_ccone.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+        color_desc_ccone.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+        color_desc_ccone.blend_state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
+
+        ccone_ci.target_info.num_color_targets = 1;
+        ccone_ci.target_info.color_target_descriptions = &color_desc_ccone;
+        ccone_ci.target_info.has_depth_stencil_target = false;
+
+        ccone_ci.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLESTRIP;
+        ccone_ci.vertex_shader = conic_gradient_vs_;
+        ccone_ci.fragment_shader = conic_gradient_fs_;
+
+        ccone_ci.vertex_input_state.num_vertex_buffers = 0;
+        ccone_ci.vertex_input_state.vertex_buffer_descriptions = nullptr;
+        ccone_ci.vertex_input_state.num_vertex_attributes = 0;
+        ccone_ci.vertex_input_state.vertex_attributes = nullptr;
+
+        conic_gradient_pipeline_ = SDL_CreateGPUGraphicsPipeline(dev, &ccone_ci);
+        if (!conic_gradient_pipeline_) {
+            DONG_LOG_WARN("SDLGPUDriver::initialize: failed to create conic gradient pipeline: %s", SDL_GetError());
+        }
+    }
+
     // Uber quad pipeline: unifies rect, round-rect, shadow, gradient via material type dispatch
     {
         uber_quad_vs_ = shader_manager_->loadShaderFromHLSLFile(

@@ -166,11 +166,14 @@ struct CSSGradient {
         RADIAL,
         CONIC,
         REPEATING_LINEAR,
-        REPEATING_RADIAL
+        REPEATING_RADIAL,
+        REPEATING_CONIC
     };
-    
+
     Type type = Type::LINEAR;
-    float angle = 180.0f;  // for linear gradient (degrees)
+    float angle = 180.0f;  // linear: direction (degrees)
+    float from_angle_deg = 0.0f; // conic: from <angle> (degrees); default 0
+    float repeat_period_normalized = 1.0f; // conic repeating: angular span >0 (turns fraction of circle)
     std::string shape;     // for radial: circle, ellipse
     std::string size;      // for radial: closest-side, farthest-corner, etc.
     float center_x = 50.0f;  // percentage

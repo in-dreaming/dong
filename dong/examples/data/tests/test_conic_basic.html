@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width">
+  <title>P0-3 test_conic_basic</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 24px;
+      font-family: system-ui, sans-serif;
+      background: #222;
+      color: #eee;
+    }
+    .wheel {
+      width: 280px;
+      height: 280px;
+      margin: 24px auto;
+      border-radius: 50%;
+      border: 2px solid #444;
+      /* Four stops — Chrome baseline compare */
+      background: conic-gradient(red 0deg, yellow 90deg, lime 180deg, blue 270deg);
+    }
+  </style>
+</head>
+<body>
+  <p>Four-stop conic wheel (spec § 5.3).</p>
+  <div class="wheel"></div>
+</body>
+</html>

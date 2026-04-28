@@ -559,6 +559,30 @@ static DrawLinearGradientData buildLinearGradientData(
     return data;
 }
 
+static DrawConicGradientData buildDrawConicGradientData(const dong::dom::CSSGradient& grad,
+                                                         const Rect& target_rect,
+                                                         float border_radius)
+{
+    DrawConicGradientData data{};
+    data.rect = target_rect;
+    data.radius = border_radius;
+    data.from_angle_deg = grad.from_angle_deg;
+    data.repeating = (grad.type == dong::dom::CSSGradient::Type::REPEATING_CONIC);
+    data.center_x_px = target_rect.x + (grad.center_x / 100.0f) * target_rect.width;
+    data.center_y_px = target_rect.y + (grad.center_y / 100.0f) * target_rect.height;
+
+    const int raw = static_cast<int>(grad.stops.size());
+    if (raw > kMaxGradientStops) {
+        DONG_LOG_WARN("[Painter] conic-gradient: %d stops, only first %d are used", raw, kMaxGradientStops);
+    }
+    data.stop_count = std::min(raw, kMaxGradientStops);
+    for (int i = 0; i < data.stop_count; ++i) {
+        data.stops[i].color = makeColorFromCss(grad.stops[i].color);
+        data.stops[i].position = grad.stops[i].position;
+    }
+    return data;
+}
+
 // 简单的文本宽度估算（后续用 HarfBuzz 替换�?
 static float estimateTextWidth(const std::string& text, float font_size) {
     return static_cast<float>(text.size()) * font_size * 0.55f;
@@ -1211,6 +1235,17 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                         auto gdata = buildLinearGradientData(grad, inner_rect, inner_radius);
                         builder.addLinearGradient(gdata);
                     }
+                    if ((grad.type == dong::dom::CSSGradient::Type::CONIC ||
+                         grad.type == dong::dom::CSSGradient::Type::REPEATING_CONIC) &&
+                        grad.stops.size() >= 2) {
+                        Rect inner_rect = bg_clip_rect;
+                        float inset_for_radius = 0.0f;
+                        if (bg_clip_kw == dom::CSSBackgroundBox::PaddingBox) inset_for_radius = bmax;
+                        else if (bg_clip_kw == dom::CSSBackgroundBox::ContentBox) inset_for_radius = bmax + min_pad;
+                        float inner_radius = std::max(0.0f, radius - inset_for_radius);
+                        auto cdata = buildDrawConicGradientData(grad, inner_rect, inner_radius);
+                        builder.addConicGradient(cdata);
+                    }
                 }
 
                 if (has_border) {
@@ -1301,6 +1336,12 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                     if (grad.type == dong::dom::CSSGradient::Type::LINEAR && grad.stops.size() >= 2) {
                         auto gdata = buildLinearGradientData(grad, bg_clip_rect, 0.0f);
                         builder.addLinearGradient(gdata);
+                    }
+                    if ((grad.type == dong::dom::CSSGradient::Type::CONIC ||
+                         grad.type == dong::dom::CSSGradient::Type::REPEATING_CONIC) &&
+                        grad.stops.size() >= 2) {
+                        auto cdata = buildDrawConicGradientData(grad, bg_clip_rect, 0.0f);
+                        builder.addConicGradient(cdata);
                     }
                 }
 

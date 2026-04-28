@@ -1,6 +1,9 @@
 #include "css_parser.hpp"
+#include "../../core/log.h"
+
 #include <algorithm>
 #include <cctype>
+#include <cstring>
 #include <sstream>
 #include <unordered_map>
 
@@ -139,6 +142,8 @@ CSSGradient CSSParser::parseGradient(const std::string& value) {
         gradient.type = CSSGradient::Type::LINEAR;
     } else if (v.find("radial-gradient") == 0) {
         gradient.type = CSSGradient::Type::RADIAL;
+    } else if (v.find("repeating-conic-gradient") == 0) {
+        gradient.type = CSSGradient::Type::REPEATING_CONIC;
     } else if (v.find("conic-gradient") == 0) {
         gradient.type = CSSGradient::Type::CONIC;
     }
@@ -187,20 +192,65 @@ CSSGradient CSSParser::parseGradient(const std::string& value) {
         }
     }
     
-    // Parse direction/angle (first part if it's not a color)
+    // Parse linear direction or conic (from/at) prelude — do not confuse with color stops.
     size_t color_start = 0;
-    if (!parts.empty()) {
+    auto starts_with_lc = [](const std::string& s, const char* pref) -> bool {
+        const size_t n = std::strlen(pref);
+        return s.size() >= n && s.compare(0, n, pref) == 0;
+    };
+
+    const bool is_linearish = (gradient.type == CSSGradient::Type::LINEAR ||
+                               gradient.type == CSSGradient::Type::REPEATING_LINEAR);
+    const bool is_conic_t = (gradient.type == CSSGradient::Type::CONIC ||
+                             gradient.type == CSSGradient::Type::REPEATING_CONIC);
+
+    if (is_conic_t && !parts.empty()) {
+        const std::string& p0 = parts[0];
+        const size_t combined_at = p0.find(" at ");
+        if (starts_with_lc(p0, "from ") && combined_at != std::string::npos) {
+            const std::string from_seg = p0.substr(5, combined_at - 5);
+            gradient.from_angle_deg = parseFloat(from_seg);
+            if (from_seg.find("turn") != std::string::npos) {
+                gradient.from_angle_deg *= 360.0f;
+            }
+            std::istringstream ats(p0.substr(combined_at + 4));
+            std::string axs;
+            std::string ays;
+            if (ats >> axs >> ays) {
+                gradient.center_x = parseFloat(axs);
+                gradient.center_y = parseFloat(ays);
+            }
+            color_start = 1;
+        } else if (starts_with_lc(p0, "from ")) {
+            gradient.from_angle_deg = parseFloat(p0.substr(5));
+            if (p0.find("turn") != std::string::npos) {
+                gradient.from_angle_deg *= 360.0f;
+            }
+            color_start = 1;
+            if (parts.size() > 1 && starts_with_lc(parts[1], "at ")) {
+                std::istringstream ats(parts[1].substr(3));
+                std::string axs;
+                std::string ays;
+                if (ats >> axs >> ays) {
+                    gradient.center_x = parseFloat(axs);
+                    gradient.center_y = parseFloat(ays);
+                }
+                color_start = 2;
+            }
+        }
+    }
+
+    if (is_linearish && !parts.empty()) {
         const std::string& first = parts[0];
         if (first.find("deg") != std::string::npos) {
             gradient.angle = parseFloat(first);
-            color_start = 1;
+            color_start = std::max(color_start, static_cast<size_t>(1));
         } else if (first.find("to ") == 0) {
-            // Parse direction keywords
             if (first.find("right") != std::string::npos) gradient.angle = 90.0f;
             else if (first.find("left") != std::string::npos) gradient.angle = 270.0f;
             else if (first.find("bottom") != std::string::npos) gradient.angle = 180.0f;
             else if (first.find("top") != std::string::npos) gradient.angle = 0.0f;
-            color_start = 1;
+            color_start = std::max(color_start, static_cast<size_t>(1));
         }
     }
     
@@ -213,8 +263,8 @@ CSSGradient CSSParser::parseGradient(const std::string& value) {
         GradientStop stop;
         const std::string& part = parts[i];
         
-        // Check for position
         size_t percent_pos = part.rfind('%');
+        size_t deg_pos = part.find("deg");
         if (percent_pos != std::string::npos) {
             // Find where position starts
             size_t pos_start = part.rfind(' ', percent_pos);
@@ -223,6 +273,16 @@ CSSGradient CSSParser::parseGradient(const std::string& value) {
                 stop.position = parseFloat(part.substr(pos_start)) / 100.0f;
             } else {
                 stop.position = parseFloat(part) / 100.0f;
+            }
+        } else if (deg_pos != std::string::npos &&
+                   (gradient.type == CSSGradient::Type::CONIC ||
+                    gradient.type == CSSGradient::Type::REPEATING_CONIC)) {
+            size_t pos_start = part.rfind(' ', deg_pos);
+            if (pos_start != std::string::npos) {
+                stop.color = parseColor(part.substr(0, pos_start));
+                stop.position = parseFloat(part.substr(pos_start)) / 360.0f;
+            } else {
+                stop.position = parseFloat(part) / 360.0f;
             }
         } else {
             stop.color = parseColor(part);

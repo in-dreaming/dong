@@ -93,6 +93,10 @@ SDLGPUDriver::~SDLGPUDriver() {
         if (gradient_vs_) SDL_ReleaseGPUShader(dev, gradient_vs_);
         if (gradient_fs_) SDL_ReleaseGPUShader(dev, gradient_fs_);
 
+        if (conic_gradient_pipeline_) SDL_ReleaseGPUGraphicsPipeline(dev, conic_gradient_pipeline_);
+        if (conic_gradient_vs_) SDL_ReleaseGPUShader(dev, conic_gradient_vs_);
+        if (conic_gradient_fs_) SDL_ReleaseGPUShader(dev, conic_gradient_fs_);
+
         if (uber_quad_instanced_pipeline_) SDL_ReleaseGPUGraphicsPipeline(dev, uber_quad_instanced_pipeline_);
         if (uber_quad_instanced_vs_) SDL_ReleaseGPUShader(dev, uber_quad_instanced_vs_);
         if (uber_quad_instanced_fs_) SDL_ReleaseGPUShader(dev, uber_quad_instanced_fs_);

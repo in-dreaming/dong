@@ -50,6 +50,7 @@ enum class GPUCommandType : uint8_t {
     DrawShadowQuad,          // 带模糊的阴影 quad（SDF + blur）
     DrawText,                // 文本 glyph run
     DrawGradientQuad,        // 线性渐变 quad
+    DrawConicGradientQuad,   // 锥形渐变 quad
     /// 多条 rect / round / shadow 合并为一次 GPU instanced draw；实例数据在 GPUCommandList::uber_instance_pool
     UberQuadBatch,
 
@@ -130,10 +131,16 @@ struct GPUCommand {
     // Text renderer mode preference
     TextRendererMode text_renderer_mode = TextRendererMode::Auto;
 
-    // Gradient rendering (DrawGradientQuad only)
+    // Gradient rendering (DrawGradientQuad / DrawConicGradientQuad)
     float gradient_angle_deg = 180.0f;
     int gradient_stop_count = 0;
     GradientColorStop gradient_stops[kMaxGradientStops];
+
+    // Conic gradient (DrawConicGradientQuad)
+    float conic_center_x_px = 0.0f;
+    float conic_center_y_px = 0.0f;
+    float conic_from_angle_deg = 0.0f;
+    float conic_repeating = 0.0f; // 0 or 1
 
     // UberQuadBatch：在 uber_instance_pool 中的 [offset, offset+count) 半开区间
     uint32_t uber_instance_offset = 0;
@@ -236,6 +243,9 @@ public:
                 break;
             case GPUCommandType::DrawGradientQuad:
                 pipeline_id = 6; // 渐变管线
+                break;
+            case GPUCommandType::DrawConicGradientQuad:
+                pipeline_id = 7;
                 break;
             case GPUCommandType::UberQuadBatch:
                 pipeline_id = 10; // instanced uber quad
@@ -561,6 +571,27 @@ public:
                 out.commands.push_back(cmd);
                 break;
             }
+            case DisplayItemType::DrawConicGradient: {
+                flush_uber_batch();
+                GPUCommand cmd{};
+                cmd.type = GPUCommandType::DrawConicGradientQuad;
+                cmd.instance_count = 1;
+                cmd.rect = item.conic_gradient.rect;
+                cmd.radius = item.conic_gradient.radius;
+                cmd.conic_center_x_px = item.conic_gradient.center_x_px;
+                cmd.conic_center_y_px = item.conic_gradient.center_y_px;
+                cmd.conic_from_angle_deg = item.conic_gradient.from_angle_deg;
+                cmd.conic_repeating = item.conic_gradient.repeating ? 1.0f : 0.0f;
+                cmd.gradient_stop_count = item.conic_gradient.stop_count;
+                for (int i = 0; i < item.conic_gradient.stop_count; ++i) {
+                    cmd.gradient_stops[i].color =
+                        apply_opacity(item.conic_gradient.stops[i].color, current_opacity());
+                    cmd.gradient_stops[i].position = item.conic_gradient.stops[i].position;
+                }
+                cmd.sort_key = make_sort_key(cmd.type, cmd);
+                out.commands.push_back(cmd);
+                break;
+            }
             default:
                 // 其他类型先忽略，后续再逐步接入
                 break;
@@ -592,6 +623,7 @@ public:
                 case GPUCommandType::DrawImageQuad:
                 case GPUCommandType::DrawText:
                 case GPUCommandType::DrawGradientQuad:
+                case GPUCommandType::DrawConicGradientQuad:
                 case GPUCommandType::UberQuadBatch:
                     out.sorted_draw_indices.push_back(i);
                     break;
@@ -641,7 +673,7 @@ public:
         for (const auto& c : out.commands) {
             if (c.type == GPUCommandType::DrawShadowQuad) {
                 ++shadow_count_cmds;
-            } else if (c.type == GPUCommandType::DrawGradientQuad) {
+            } else if (c.type == GPUCommandType::DrawGradientQuad || c.type == GPUCommandType::DrawConicGradientQuad) {
                 ++gradient_count;
             } else if (c.type == GPUCommandType::PushClipRect) {
                 ++clip_count;

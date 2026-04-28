@@ -200,6 +200,10 @@ private:
     SDL_GPUShader* gradient_fs_ = nullptr;
     SDL_GPUGraphicsPipeline* gradient_pipeline_ = nullptr;
 
+    SDL_GPUShader* conic_gradient_vs_ = nullptr;
+    SDL_GPUShader* conic_gradient_fs_ = nullptr;
+    SDL_GPUGraphicsPipeline* conic_gradient_pipeline_ = nullptr;
+
     SDL_GPUShader* image_vs_ = nullptr;
     SDL_GPUShader* image_fs_ = nullptr;
     SDL_GPUGraphicsPipeline* image_pipeline_ = nullptr;
@@ -327,6 +331,7 @@ private:
     void executeDrawRoundedRect(ExecuteContext& ctx, const GPUCommand& cmd);
     void executeDrawShadow(ExecuteContext& ctx, const GPUCommand& cmd);
     void executeDrawGradient(ExecuteContext& ctx, const GPUCommand& cmd);
+    void executeDrawConicGradient(ExecuteContext& ctx, const GPUCommand& cmd);
     void executeDrawUberQuad(ExecuteContext& ctx, const GPUCommand& cmd, float material_type);
     void flushUberBatch(ExecuteContext& ctx);
     void executeUberQuadInstancedBatch(ExecuteContext& ctx, const GPUCommand& cmd, const GPUCommandList& commands);
