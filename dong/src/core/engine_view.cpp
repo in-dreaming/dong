@@ -71,6 +71,25 @@ namespace {
 
 using dong::dom::DOMNodePtr;
 
+// --- P0-6 S1: Invalidation tracking (behavioral equivalence) ---
+// All invalidations still trigger full repaint. This tracks WHAT caused it.
+enum class InvalidationKind : uint8_t {
+    Style,      // color, opacity, visibility change - no layout needed
+    Layout,     // width, height, margin, display - needs layout
+    Paint,      // background, border-color, box-shadow, scroll, caret - only repaint
+    Geometry,   // hit-test rect change
+    Full,       // entire view (e.g. resize, initial load)
+};
+
+struct Invalidation {
+    InvalidationKind kind;
+    // Source node - nullptr means entire view
+    // Not stored as DOMNodePtr to avoid reference cycle; just for tracking
+    const void* source_node = nullptr;
+    const char* reason = nullptr;  // debug string literal (not owned)
+};
+// --- end P0-6 S1 types ---
+
 /**
  * Check if a script element is an ES module script.
  * @param script_node: The <script> DOM element to check
@@ -430,7 +449,10 @@ struct EngineView::Impl {
     void* external_window = nullptr;
 
     bool use_gpu = false;
-    bool commands_dirty = true;
+    bool commands_dirty_ = true;  // P0-6 S1: renamed (underscore), still controls actual behavior
+    std::vector<Invalidation> pending_invalidations_;
+    uint32_t invalidation_count_this_tick_ = 0;
+    uint32_t full_repaint_count_ = 0;  // for P0-7 perf metric
     bool js_bindings_initialized = false;
 
     // Top-layer: modal dialogs rendered above everything
@@ -589,13 +611,21 @@ struct EngineView::Impl {
         js_bindings_initialized = true;
     }
 
-    void markNeedsRepaint() {
-        commands_dirty = true;
+    // --- P0-6 S1: Invalidation tracking ---
+    void invalidate(InvalidationKind kind, const void* source = nullptr, const char* reason = nullptr) {
+        pending_invalidations_.push_back({kind, source, reason});
+        commands_dirty_ = true;
         dom_display_list_valid_ = false;
         if (render_surface) {
             render_surface->markDirty();
         }
     }
+
+    // Backward-compat shortcut: Full invalidation (used by 60+ callsites)
+    void markNeedsRepaint() {
+        invalidate(InvalidationKind::Full, nullptr, "markNeedsRepaint");
+    }
+    // --- end P0-6 S1 ---
 
     void resetCaretBlink() {
         caret_blink_time_ = 0.0;
@@ -1474,7 +1504,7 @@ struct EngineView::Impl {
             setHoverChain(hovered_element, false);
             hovered_element = hit;
             setHoverChain(hovered_element, true);
-            markNeedsRepaint();
+            invalidate(InvalidationKind::Style, hit.get(), "hover");
         }
         updateNativeTooltip(hovered_element, x, y);
     }
@@ -1530,7 +1560,7 @@ struct EngineView::Impl {
             dong::script::resetFetchState(script_engine->getContext());
         }
 
-        markNeedsRepaint();
+        invalidate(InvalidationKind::Full, nullptr, "loadHTML");
 
         auto root = dom_manager->getRoot();
         if (root) {
@@ -1742,7 +1772,7 @@ struct EngineView::Impl {
             static_cast<dong::render::CPUBufferSurface*>(render_surface.get())->resize(width, height);
         }
 
-        markNeedsRepaint();
+        invalidate(InvalidationKind::Full, nullptr, "resize");
 
         auto root = dom_manager ? dom_manager->getRoot() : nullptr;
         if (root) {
@@ -1833,7 +1863,7 @@ struct EngineView::Impl {
             if (caret_blink_time_ >= CARET_BLINK_INTERVAL) {
                 caret_blink_time_ -= CARET_BLINK_INTERVAL;
                 caret_visible_ = !caret_visible_;
-                markNeedsRepaint();
+                invalidate(InvalidationKind::Paint, nullptr, "caret_blink");
             }
         } else {
             caret_visible_ = true;
@@ -1850,7 +1880,7 @@ struct EngineView::Impl {
         bool any_changed = false;
         updateSmoothScrollRecursive(root_for_scroll, current_time, any_active, any_changed);
         if (any_active || any_changed) {
-            markNeedsRepaint();
+            invalidate(InvalidationKind::Paint, nullptr, "smooth_scroll");
         }
     }
 
@@ -1999,7 +2029,7 @@ struct EngineView::Impl {
 
         bool overlay_dirty = overlay.isDirty();
         bool scene_dirty = sg.isDirty();
-        bool dom_dirty = commands_dirty;
+        bool dom_dirty = commands_dirty_;
 
         // Fast path: only overlay/scene changed, DOM display list still valid
         if ((overlay_dirty || scene_dirty) && !dom_dirty && dom_display_list_valid_) {
@@ -2059,7 +2089,17 @@ struct EngineView::Impl {
         dong::render::GPUCompiler compiler;
         compiler.compile(painter->getDisplayList(), *cached_cmd_list, &painter->getLayerTree());
         DONG_LOG_DEBUG("[tick] GPU commands: %zu", cached_cmd_list->commands.size());
-        commands_dirty = false;
+        commands_dirty_ = false;
+
+        // --- P0-6 S1: log invalidation metrics ---
+        if (!pending_invalidations_.empty()) {
+            invalidation_count_this_tick_ = static_cast<uint32_t>(pending_invalidations_.size());
+            full_repaint_count_++;
+            DONG_LOG_DEBUG("[invalidation] %u invalidations this tick (all->full repaint)", invalidation_count_this_tick_);
+            pending_invalidations_.clear();
+        }
+        // --- end P0-6 S1 ---
+
         commands_regenerated_this_tick_ = true;
     }
 
@@ -2072,7 +2112,7 @@ struct EngineView::Impl {
 
     void tickExecuteGPUCommandsIfReady() {
         const bool gpu_ready = true;
-        if (!(use_gpu && cached_cmd_list && !commands_dirty && gpu_ready)) return;
+        if (!(use_gpu && cached_cmd_list && !commands_dirty_ && gpu_ready)) return;
 
         DongGPUDriver* driver = dong_platform_get_gpu_driver(dong_platform_get());
         if (!driver) {
@@ -3208,7 +3248,7 @@ struct EngineView::Impl {
                         state->scrollBy(scroll_dy, dh);
                         if (state->getScrollOffset() != prev) {
                             updateOpenSelectHover(last_mouse_x, last_mouse_y);
-                            markNeedsRepaint();
+                            invalidate(InvalidationKind::Paint, open_select_element.get(), "scroll");
                         }
                         return;
                     }
@@ -3249,7 +3289,7 @@ struct EngineView::Impl {
             }
         }
 
-        markNeedsRepaint();
+        invalidate(InvalidationKind::Paint, scroll_container.get(), "scroll");
 
         // Dispatch scroll event on the scroll container
         if (js_bindings && script_engine) {
