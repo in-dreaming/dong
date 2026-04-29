@@ -1,0 +1,62 @@
+# Performance scenes for dong perf_baseline.py
+# Each scene defines metrics with soft/hard thresholds
+#
+# Thresholds:
+#   soft - target performance (warn if not met)
+#   hard - minimum acceptable (fail in CI if not met)
+#
+# Metric types:
+#   fps      - frames per second (higher is better)
+#   count    - per-frame count (lower is better)
+#   us       - microseconds (lower is better)
+
+S1:
+  name: "Game HUD (DOM)"
+  track: dom
+  exe: dong_app
+  args: ["--html", "data/gamelikeui/game_ui2.html"]
+  warmup_ms: 2000
+  run_ms: 3000
+  env:
+    DONG_PROFILER: "1"
+    DONG_GPU_STATS: "1"
+    DONG_BENCH_AUTOSTOP: "1"
+  metrics:
+    fps_static:
+      soft: 240
+      hard: 120
+      unit: fps
+      description: "Frames per second (present-only path)"
+    draw_call:
+      soft: 30
+      hard: 50
+      unit: count
+      description: "GPU draw calls per frame"
+    cpu_frame_us:
+      soft: 4000
+      hard: 8000
+      unit: us
+      description: "CPU frame time (microseconds)"
+
+S3:
+  name: "Multi-Screen 3D (GlobalShared)"
+  track: multi
+  exe: 3d_screens_simple
+  args: []
+  warmup_ms: 2000
+  run_ms: 3000
+  env:
+    DONG_PROFILER: "1"
+    DONG_GPU_STATS: "1"
+    DONG_BENCH_AUTOSTOP: "1"
+  metrics:
+    fps_static:
+      soft: 60
+      hard: 30
+      unit: fps
+      description: "FPS with all screens rendering"
+    draw_call:
+      soft: 100
+      hard: 200
+      unit: count
+      description: "GPU draw calls per frame (multi-screen)"
