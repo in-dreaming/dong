@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>P0-3 Cooldown Circular (Game UI)</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 24px;
+      background: #0f0f23;
+      color: #eee;
+      font-family: system-ui, sans-serif;
+    }
+    .hud {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      padding: 16px;
+      background: rgba(0, 0, 0, 0.5);
+      border-radius: 8px;
+      width: fit-content;
+    }
+    .skill {
+      position: relative;
+      width: 64px;
+      height: 64px;
+    }
+    .skill-icon {
+      width: 100%;
+      height: 100%;
+      background: #334;
+      border-radius: 8px;
+      border: 2px solid #556;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+    }
+    .cooldown {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      border-radius: 8px;
+      /* This is the key P0-3 pattern: conic-gradient as a cooldown overlay */
+      background: conic-gradient(
+        rgba(0, 0, 0, 0.7) 0%,
+        rgba(0, 0, 0, 0.7) 60%,
+        transparent 60%,
+        transparent 100%
+      );
+    }
+    .cooldown-75 {
+      background: conic-gradient(
+        rgba(0, 0, 0, 0.7) 0%,
+        rgba(0, 0, 0, 0.7) 75%,
+        transparent 75%,
+        transparent 100%
+      );
+    }
+    .cooldown-25 {
+      background: conic-gradient(
+        rgba(0, 0, 0, 0.7) 0%,
+        rgba(0, 0, 0, 0.7) 25%,
+        transparent 25%,
+        transparent 100%
+      );
+    }
+    .cooldown-100 {
+      background: rgba(0, 0, 0, 0.7);
+    }
+    .health-ring {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      /* Health bar: green portion = health remaining */
+      background: conic-gradient(
+        #22c55e 0%,
+        #22c55e 70%,
+        #333 70%,
+        #333 100%
+      );
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .health-inner {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: #0f0f23;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: bold;
+      color: #22c55e;
+    }
+    .label {
+      text-align: center;
+      font-size: 11px;
+      color: #888;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+  <p>Game UI cooldown indicators using conic-gradient (P0-3 key use case)</p>
+
+  <div class="hud">
+    <div>
+      <div class="skill">
+        <div class="skill-icon">Q</div>
+        <div class="cooldown-100"></div>
+      </div>
+      <div class="label">100% CD</div>
+    </div>
+    <div>
+      <div class="skill">
+        <div class="skill-icon">W</div>
+        <div class="cooldown-75"></div>
+      </div>
+      <div class="label">75% CD</div>
+    </div>
+    <div>
+      <div class="skill">
+        <div class="skill-icon">E</div>
+        <div class="cooldown"></div>
+      </div>
+      <div class="label">60% CD</div>
+    </div>
+    <div>
+      <div class="skill">
+        <div class="skill-icon">R</div>
+        <div class="cooldown-25"></div>
+      </div>
+      <div class="label">25% CD</div>
+    </div>
+    <div>
+      <div class="skill">
+        <div class="skill-icon">D</div>
+      </div>
+      <div class="label">Ready</div>
+    </div>
+  </div>
+
+  <div style="margin-top: 24px;">
+    <p>Circular health ring:</p>
+    <div class="health-ring">
+      <div class="health-inner">70%</div>
+    </div>
+  </div>
+</body>
+</html>
