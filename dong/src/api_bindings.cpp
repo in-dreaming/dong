@@ -310,6 +310,29 @@ dong_text_renderer_mode_t dong_engine_get_text_renderer_mode(dong_engine_t* engi
     return static_cast<dong_text_renderer_mode_t>(e->view->getTextRendererMode());
 }
 
+dong_result_t dong_engine_focus_nav(dong_engine_t* engine, dong_nav_dir_t dir) {
+    auto* e = asEngine(engine);
+    if (!e || !e->view) {
+        return DONG_ERR_INVALID_ARG;
+    }
+
+    bool moved = e->view->focusNav(static_cast<int>(dir));
+    return moved ? DONG_OK : DONG_ERR_INVALID_ARG;
+}
+
+dong_result_t dong_engine_send_gamepad_button(dong_engine_t* engine,
+                                              int32_t gamepad_id,
+                                              dong_gamepad_button_t button,
+                                              int pressed) {
+    auto* e = asEngine(engine);
+    if (!e || !e->view) {
+        return DONG_ERR_INVALID_ARG;
+    }
+
+    e->view->sendGamepadButton(gamepad_id, static_cast<int>(button), pressed != 0);
+    return DONG_OK;
+}
+
 dong_result_t dong_engine_create_shared_js(
     const dong_engine_desc_t* desc,
     dong_engine_t* script_source,

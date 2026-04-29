@@ -21,6 +21,7 @@
 #include "../dom/focus_manager.hpp"
 #include "../dom/input_element.hpp"
 #include "../dom/select_element.hpp"
+#include "../input/spatial_nav.hpp"
 #include "quickjs_compat.h"
 
 
@@ -4945,6 +4946,76 @@ static JSValue js_dong_getView(JSContext* ctx, JSValueConst this_val, int argc, 
     return result;
 }
 
+// C callback for dong.focusNav(direction) — spatial/tab focus navigation from JS.
+static JSValue js_dong_focusNav(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_FALSE;
+
+    const char* dir_str = JS_ToCString(ctx, argv[0]);
+    if (!dir_str) return JS_FALSE;
+
+    auto* bindings = getBindingsFromContext(ctx);
+    if (!bindings || !bindings->focus_manager_ || !bindings->dom_manager_ || !bindings->layout_engine_) {
+        JS_FreeCString(ctx, dir_str);
+        return JS_FALSE;
+    }
+
+    // Parse direction string
+    std::string dir(dir_str);
+    JS_FreeCString(ctx, dir_str);
+
+    if (dir == "next") {
+        bindings->focus_manager_->moveFocus(bindings->dom_manager_->getRoot(), false);
+        return JS_TRUE;
+    }
+    if (dir == "prev") {
+        bindings->focus_manager_->moveFocus(bindings->dom_manager_->getRoot(), true);
+        return JS_TRUE;
+    }
+
+    dong::input::NavDirection nav_dir;
+    if (dir == "up") nav_dir = dong::input::NavDirection::Up;
+    else if (dir == "down") nav_dir = dong::input::NavDirection::Down;
+    else if (dir == "left") nav_dir = dong::input::NavDirection::Left;
+    else if (dir == "right") nav_dir = dong::input::NavDirection::Right;
+    else return JS_FALSE;
+
+    auto current = bindings->focus_manager_->getFocusedElement();
+
+    // Collect focusable elements
+    std::vector<dong::dom::DOMNodePtr> candidates;
+    std::function<void(const dong::dom::DOMNodePtr&)> collect =
+        [&](const dong::dom::DOMNodePtr& node) {
+            if (!node) return;
+            if (node->hasAttribute("inert")) return;
+            if (dong::dom::FocusManager::isFocusable(node)) {
+                const auto* layout = bindings->layout_engine_->getLayout(node);
+                if (layout && layout->width > 0 && layout->height > 0) {
+                    candidates.push_back(node);
+                }
+            }
+            for (const auto& child : node->getChildren()) {
+                collect(child);
+            }
+        };
+    collect(bindings->dom_manager_->getRoot());
+
+    if (candidates.empty()) return JS_FALSE;
+
+    // If no current focus, pick first candidate
+    if (!current) {
+        bindings->focus_manager_->setKeyboardFocus(true);
+        bindings->focus_manager_->setFocus(candidates.front());
+        return JS_TRUE;
+    }
+
+    auto target = dong::input::findSpatialNavTarget(current, nav_dir, candidates, bindings->layout_engine_);
+    if (!target) return JS_FALSE;
+
+    bindings->focus_manager_->setKeyboardFocus(true);
+    bindings->focus_manager_->setFocus(target);
+    return JS_TRUE;
+}
+
 // Ensure the global `dong` object and `dong.views` sub-object exist.
 static void ensureDongViewsObject(JSContext* ctx) {
     JSValue global = JS_GetGlobalObject(ctx);
@@ -4955,6 +5026,8 @@ static void ensureDongViewsObject(JSContext* ctx) {
         JS_SetPropertyStr(ctx, dong_obj, "views", JS_NewObject(ctx));
         JS_SetPropertyStr(ctx, dong_obj, "getView",
             JS_NewCFunction(ctx, js_dong_getView, "getView", 1));
+        JS_SetPropertyStr(ctx, dong_obj, "focusNav",
+            JS_NewCFunction(ctx, js_dong_focusNav, "focusNav", 1));
         JS_SetPropertyStr(ctx, global, "dong", dong_obj);
     } else {
         JSValue views = JS_GetPropertyStr(ctx, dong_obj, "views");
@@ -4963,6 +5036,15 @@ static void ensureDongViewsObject(JSContext* ctx) {
             JS_SetPropertyStr(ctx, dong_obj, "views", JS_NewObject(ctx));
         } else {
             JS_FreeValue(ctx, views);
+        }
+        // Ensure focusNav exists even if dong obj was created earlier
+        JSValue fn = JS_GetPropertyStr(ctx, dong_obj, "focusNav");
+        if (JS_IsUndefined(fn) || JS_IsNull(fn)) {
+            JS_FreeValue(ctx, fn);
+            JS_SetPropertyStr(ctx, dong_obj, "focusNav",
+                JS_NewCFunction(ctx, js_dong_focusNav, "focusNav", 1));
+        } else {
+            JS_FreeValue(ctx, fn);
         }
         JS_FreeValue(ctx, dong_obj);
     }

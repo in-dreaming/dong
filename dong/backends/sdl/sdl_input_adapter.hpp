@@ -9,7 +9,7 @@ namespace dong::input {
 
 /**
  * SDL3 输入适配器
- * 
+ *
  * 将 SDL3 事件转换为 dong 引擎的统一输入事件格式
  */
 class SDL3InputAdapter : public InputAdapter {
@@ -32,20 +32,29 @@ public:
     KeyModifiers getKeyModifiers() const override;
     void setCursor(const std::string& cursor_name) override;
 
+    // Gamepad button callback: called when a gamepad button is pressed/released.
+    // Parameters: gamepad_id, button (dong_gamepad_button_t), pressed
+    using GamepadButtonCallback = std::function<void(int32_t, int, bool)>;
+    void setGamepadButtonCallback(GamepadButtonCallback callback) { gamepad_callback_ = std::move(callback); }
+
 private:
     SDL_Window* window_ = nullptr;
     InputEventCallback callback_;
+    GamepadButtonCallback gamepad_callback_;
     bool text_input_active_ = false;
-    
+
     // 上一次鼠标位置（用于计算 delta）
     int32_t last_mouse_x_ = 0;
     int32_t last_mouse_y_ = 0;
 
     // 将 SDL 鼠标按钮转换为引擎格式
     static MouseButton convertMouseButton(uint8_t sdl_button);
-    
+
     // 获取当前修饰键状态
     KeyModifiers getCurrentModifiers() const;
+
+    // Map SDL gamepad button to dong_gamepad_button_t. Returns -1 if unmapped.
+    static int mapSDLGamepadButton(uint8_t sdl_button);
 };
 
 /**

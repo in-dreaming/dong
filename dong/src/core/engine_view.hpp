@@ -59,6 +59,12 @@ public:
     void sendText(const char* text);
     void sendTextEditing(const char* text, int32_t cursor, int32_t selection_length);
 
+    // Spatial navigation: move focus in a direction. Returns true if focus moved.
+    bool focusNav(int dir);
+
+    // Gamepad button input. Returns true if handled.
+    bool sendGamepadButton(int32_t gamepad_id, int button, bool pressed);
+
     // URL fragment management for :target pseudo-class
     void setCurrentFragment(const std::string& fragment);
 

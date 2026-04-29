@@ -164,6 +164,8 @@ add_library(dong SHARED
     src/core/engine_view.cpp
     src/core/platform.c
     src/core/profiler.cpp
+    # Input
+    src/input/spatial_nav.cpp
     # DOM module (modular structure)
     src/dom/dom_manager.cpp
     src/dom/event_system.cpp
@@ -343,6 +345,9 @@ add_library(dong_render STATIC
     src/core/global_shared_c_api.cpp
     src/core/glyph_atlas_c_api.cpp
     src/render/glyph_atlas.cpp
+
+    # Input
+    src/input/spatial_nav.cpp
 
     # DOM module (modular structure)
     src/dom/dom_manager.cpp

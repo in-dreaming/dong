@@ -52,6 +52,7 @@ typedef enum dong_app_event_type_t {
     DONG_APP_EVENT_KEY,
     DONG_APP_EVENT_TEXT,
     DONG_APP_EVENT_TEXT_EDITING,
+    DONG_APP_EVENT_GAMEPAD_BUTTON,
 } dong_app_event_type_t;
 
 typedef struct dong_app_event_t {
@@ -102,6 +103,12 @@ typedef struct dong_app_event_t {
             int32_t cursor;
             int32_t selection_length;
         } text_editing;
+
+        struct {
+            int32_t gamepad_id;
+            int button;      // dong_gamepad_button_t
+            int pressed;
+        } gamepad_button;
     };
 } dong_app_event_t;
 

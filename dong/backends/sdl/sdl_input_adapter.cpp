@@ -4,6 +4,7 @@
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_keyboard.h>
 #include <SDL3/SDL_mouse.h>
+#include <SDL3/SDL_gamepad.h>
 
 namespace dong::input {
 
@@ -199,6 +200,18 @@ bool SDL3InputAdapter::pollEvents() {
                 }
                 break;
 
+            case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
+            case SDL_EVENT_GAMEPAD_BUTTON_UP:
+                if (gamepad_callback_) {
+                    int mapped = mapSDLGamepadButton(ev.gbutton.button);
+                    if (mapped >= 0) {
+                        int32_t gpad_id = static_cast<int32_t>(ev.gbutton.which);
+                        bool pressed = (ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN);
+                        gamepad_callback_(gpad_id, mapped, pressed);
+                    }
+                }
+                break;
+
             default:
                 break;
         }
@@ -289,6 +302,24 @@ void SDL3InputAdapter::setCursor(const std::string& cursor_name) {
     SDL_Cursor* cursor = SDL_CreateSystemCursor(sdl_cursor);
     if (cursor) {
         SDL_SetCursor(cursor);
+    }
+}
+
+int SDL3InputAdapter::mapSDLGamepadButton(uint8_t sdl_button) {
+    switch (sdl_button) {
+        case SDL_GAMEPAD_BUTTON_DPAD_UP:    return 0;  // DONG_GAMEPAD_DPAD_UP
+        case SDL_GAMEPAD_BUTTON_DPAD_DOWN:  return 1;  // DONG_GAMEPAD_DPAD_DOWN
+        case SDL_GAMEPAD_BUTTON_DPAD_LEFT:  return 2;  // DONG_GAMEPAD_DPAD_LEFT
+        case SDL_GAMEPAD_BUTTON_DPAD_RIGHT: return 3;  // DONG_GAMEPAD_DPAD_RIGHT
+        case SDL_GAMEPAD_BUTTON_SOUTH:      return 4;  // DONG_GAMEPAD_BUTTON_A
+        case SDL_GAMEPAD_BUTTON_EAST:       return 5;  // DONG_GAMEPAD_BUTTON_B
+        case SDL_GAMEPAD_BUTTON_WEST:       return 6;  // DONG_GAMEPAD_BUTTON_X
+        case SDL_GAMEPAD_BUTTON_NORTH:      return 7;  // DONG_GAMEPAD_BUTTON_Y
+        case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER:  return 8;  // DONG_GAMEPAD_LB
+        case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER: return 9;  // DONG_GAMEPAD_RB
+        case SDL_GAMEPAD_BUTTON_START:      return 10; // DONG_GAMEPAD_START
+        case SDL_GAMEPAD_BUTTON_BACK:       return 11; // DONG_GAMEPAD_BACK
+        default: return -1;
     }
 }
 

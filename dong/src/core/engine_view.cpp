@@ -23,6 +23,7 @@
 #include "../dom/text_hit_testing.hpp"
 #include "../dom/drag_manager.hpp"
 #include "../layout/layout_engine.hpp"
+#include "../input/spatial_nav.hpp"
 
 #include "../render/render_surface.hpp"
 #include "../render/painter.hpp"
@@ -3787,7 +3788,251 @@ struct EngineView::Impl {
         // is_empty && !isComposing → 无事发生
     }
 
+    // =========================================================================
+    // Spatial Navigation / Gamepad
+    // =========================================================================
+
+    bool focusNav(int dir) {
+        activateViewContext();
+        if (!focus_manager || !dom_manager || !layout_engine) {
+            return false;
+        }
+
+        // DONG_NAV_NEXT / DONG_NAV_PREV → delegate to tab-order navigation
+        if (dir == 4 /* DONG_NAV_NEXT */) {
+            focus_manager->moveFocus(dom_manager->getRoot(), false);
+            markNeedsRepaint();
+            return true;
+        }
+        if (dir == 5 /* DONG_NAV_PREV */) {
+            focus_manager->moveFocus(dom_manager->getRoot(), true);
+            markNeedsRepaint();
+            return true;
+        }
+
+        // Spatial: Up/Down/Left/Right
+        dong::input::NavDirection nav_dir;
+        switch (dir) {
+            case 0: nav_dir = dong::input::NavDirection::Up; break;
+            case 1: nav_dir = dong::input::NavDirection::Down; break;
+            case 2: nav_dir = dong::input::NavDirection::Left; break;
+            case 3: nav_dir = dong::input::NavDirection::Right; break;
+            default: return false;
+        }
+
+        auto current = focus_manager->getFocusedElement();
+
+        // Collect all focusable elements
+        std::vector<dong::dom::DOMNodePtr> candidates;
+        collectFocusableCandidates(dom_manager->getRoot(), candidates);
+
+        if (candidates.empty()) {
+            return false;
+        }
+
+        // If no current focus, pick the first candidate
+        if (!current) {
+            focus_manager->setKeyboardFocus(true);
+            focus_manager->setFocus(candidates.front());
+            markNeedsRepaint();
+            return true;
+        }
+
+        auto target = dong::input::findSpatialNavTarget(current, nav_dir, candidates, layout_engine.get());
+        if (!target) {
+            return false;
+        }
+
+        focus_manager->setKeyboardFocus(true);
+        focus_manager->setFocus(target);
+        markNeedsRepaint();
+        return true;
+    }
+
+    bool sendGamepadButton(int32_t gamepad_id, int button, bool pressed) {
+        activateViewContext();
+
+        // Only handle press events for navigation/actions
+        if (!pressed) {
+            return true;
+        }
+
+        // Dispatch JS 'gamepadbutton' event on focused element (or document)
+        bool prevented = dispatchGamepadButtonEvent(gamepad_id, button, pressed);
+        if (prevented) {
+            return true;
+        }
+
+        // Default behaviors if not preventDefault'd
+        switch (button) {
+            case 0: // DONG_GAMEPAD_DPAD_UP
+                return focusNav(0);
+            case 1: // DONG_GAMEPAD_DPAD_DOWN
+                return focusNav(1);
+            case 2: // DONG_GAMEPAD_DPAD_LEFT
+                return focusNav(2);
+            case 3: // DONG_GAMEPAD_DPAD_RIGHT
+                return focusNav(3);
+            case 4: // DONG_GAMEPAD_BUTTON_A → click focused element
+                return clickFocusedElement();
+            case 5: // DONG_GAMEPAD_BUTTON_B → cancel / close dialog
+                return handleGamepadCancel();
+            default:
+                break;
+        }
+        return true;
+    }
+
 private:
+    // Collect all focusable elements from the DOM tree (for spatial navigation)
+    void collectFocusableCandidates(const dong::dom::DOMNodePtr& node,
+                                     std::vector<dong::dom::DOMNodePtr>& out) {
+        if (!node) return;
+        if (node->hasAttribute("inert")) return;
+
+        if (dong::dom::FocusManager::isFocusable(node)) {
+            // Skip elements with no layout (hidden/not rendered)
+            const auto* layout = layout_engine->getLayout(node);
+            if (layout && layout->width > 0 && layout->height > 0) {
+                out.push_back(node);
+            }
+        }
+
+        for (const auto& child : node->getChildren()) {
+            collectFocusableCandidates(child, out);
+        }
+    }
+
+    // Dispatch 'gamepadbutton' JS event on focused element. Returns true if preventDefault'd.
+    bool dispatchGamepadButtonEvent(int32_t gamepad_id, int button, bool pressed) {
+        if (!js_bindings || !script_engine) return false;
+        ensureJSBindingsInitialized();
+
+        JSContext* ctx = script_engine->getContext();
+        if (!ctx) return false;
+
+        // Target: focused element or document body
+        dong::dom::DOMNodePtr target;
+        if (focus_manager) {
+            target = focus_manager->getFocusedElement();
+        }
+        if (!target && dom_manager) {
+            target = dom_manager->getRoot();
+        }
+        if (!target) return false;
+
+        uint64_t node_id = ensureNodeIdForJS(target);
+        if (!node_id) return false;
+
+        // Build event object
+        JSValue ev = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, ev, "type", JS_NewString(ctx, "gamepadbutton"));
+        JS_SetPropertyStr(ctx, ev, "bubbles", JS_TRUE);
+        JS_SetPropertyStr(ctx, ev, "cancelable", JS_TRUE);
+        JS_SetPropertyStr(ctx, ev, "isTrusted", JS_TRUE);
+        JS_SetPropertyStr(ctx, ev, "gamepadId", JS_NewInt32(ctx, gamepad_id));
+        JS_SetPropertyStr(ctx, ev, "button", JS_NewInt32(ctx, button));
+        JS_SetPropertyStr(ctx, ev, "pressed", pressed ? JS_TRUE : JS_FALSE);
+
+        // Map button to name string
+        const char* button_name = "unknown";
+        switch (button) {
+            case 0: button_name = "dpad_up"; break;
+            case 1: button_name = "dpad_down"; break;
+            case 2: button_name = "dpad_left"; break;
+            case 3: button_name = "dpad_right"; break;
+            case 4: button_name = "a"; break;
+            case 5: button_name = "b"; break;
+            case 6: button_name = "x"; break;
+            case 7: button_name = "y"; break;
+            case 8: button_name = "lb"; break;
+            case 9: button_name = "rb"; break;
+            case 10: button_name = "start"; break;
+            case 11: button_name = "back"; break;
+        }
+        JS_SetPropertyStr(ctx, ev, "buttonName", JS_NewString(ctx, button_name));
+
+        // dispatchEventObject returns true if NOT prevented
+        bool not_prevented = js_bindings->dispatchEventObject(node_id, ev);
+        JS_FreeValue(ctx, ev);
+        return !not_prevented; // return true if prevented
+    }
+
+    // Simulate a click on the currently focused element
+    bool clickFocusedElement() {
+        if (!focus_manager) return false;
+        auto focused = focus_manager->getFocusedElement();
+        if (!focused) return false;
+
+        // Get the center of the element for the click coordinates
+        if (layout_engine) {
+            const auto* layout = layout_engine->getLayout(focused);
+            if (layout) {
+                int32_t cx = static_cast<int32_t>(layout->x + layout->width * 0.5f);
+                int32_t cy = static_cast<int32_t>(layout->y + layout->height * 0.5f);
+                // Simulate mouse move to element center, then click
+                sendMouseMove(cx, cy);
+                sendMouseButton(1, true);  // button 1 = SDL left
+                sendMouseButton(1, false);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Handle gamepad B button: dispatch 'gamepadcancel', default close topmost dialog
+    bool handleGamepadCancel() {
+        // Dispatch 'gamepadcancel' event on focused element
+        if (js_bindings && script_engine) {
+            ensureJSBindingsInitialized();
+            JSContext* ctx = script_engine->getContext();
+            if (ctx) {
+                dong::dom::DOMNodePtr target;
+                if (focus_manager) {
+                    target = focus_manager->getFocusedElement();
+                }
+                if (!target && dom_manager) {
+                    target = dom_manager->getRoot();
+                }
+                if (target) {
+                    uint64_t node_id = ensureNodeIdForJS(target);
+                    if (node_id) {
+                        JSValue ev = JS_NewObject(ctx);
+                        JS_SetPropertyStr(ctx, ev, "type", JS_NewString(ctx, "gamepadcancel"));
+                        JS_SetPropertyStr(ctx, ev, "bubbles", JS_TRUE);
+                        JS_SetPropertyStr(ctx, ev, "cancelable", JS_TRUE);
+                        JS_SetPropertyStr(ctx, ev, "isTrusted", JS_TRUE);
+
+                        // dispatchEventObject returns true if NOT prevented
+                        bool not_prevented = js_bindings->dispatchEventObject(node_id, ev);
+                        JS_FreeValue(ctx, ev);
+                        if (!not_prevented) return true; // prevented
+                    }
+                }
+            }
+        }
+
+        // Default: close topmost dialog
+        if (!top_layer.empty()) {
+            auto dialog = top_layer.back();
+            auto* state = dong::dom::getDialogState(dialog);
+            if (state && state->isOpen()) {
+                state->close("");
+                dialog->removeAttribute("open");
+                dialog->markStyleDirty();
+                dialog->markLayoutDirty();
+                top_layer.pop_back();
+                if (focus_manager) {
+                    focus_manager->setModalDialogRoot(
+                        top_layer.empty() ? nullptr : top_layer.back());
+                }
+                markNeedsRepaint();
+                return true;
+            }
+        }
+        return false;
+    }
+
     void dispatchCompositionJS(const dong::dom::DOMNodePtr& node,
                                const char* type, const char* data) {
         if (!js_bindings || !script_engine) return;
@@ -3971,6 +4216,14 @@ void EngineView::setCurrentFragment(const std::string& fragment) {
 
 void EngineView::sendTextEditing(const char* text, int32_t cursor, int32_t selection_length) {
     if (impl_) impl_->sendTextEditing(text, cursor, selection_length);
+}
+
+bool EngineView::focusNav(int dir) {
+    return impl_ ? impl_->focusNav(dir) : false;
+}
+
+bool EngineView::sendGamepadButton(int32_t gamepad_id, int button, bool pressed) {
+    return impl_ ? impl_->sendGamepadButton(gamepad_id, button, pressed) : false;
 }
 
 bool EngineView::evalScript(const char* code) {

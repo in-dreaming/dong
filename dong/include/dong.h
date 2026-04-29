@@ -151,6 +151,48 @@ DONG_API void dong_engine_invalidate_commands(dong_engine_t* engine);
 // If you need the view API, include "dong_view.h" explicitly.
 
 
+// =============================================================================
+// Gamepad & Spatial Navigation (P0-4)
+// =============================================================================
+
+typedef enum dong_nav_dir_t {
+    DONG_NAV_UP = 0,
+    DONG_NAV_DOWN = 1,
+    DONG_NAV_LEFT = 2,
+    DONG_NAV_RIGHT = 3,
+    DONG_NAV_NEXT = 4,   // Tab order forward
+    DONG_NAV_PREV = 5,   // Tab order backward
+} dong_nav_dir_t;
+
+// Programmatic focus navigation. Moves focus from current element in the given direction.
+// Returns DONG_OK if focus moved, DONG_ERR_INVALID_ARG if no focusable candidate found.
+DONG_API dong_result_t dong_engine_focus_nav(dong_engine_t* engine, dong_nav_dir_t dir);
+
+typedef enum dong_gamepad_button_t {
+    DONG_GAMEPAD_DPAD_UP = 0,
+    DONG_GAMEPAD_DPAD_DOWN = 1,
+    DONG_GAMEPAD_DPAD_LEFT = 2,
+    DONG_GAMEPAD_DPAD_RIGHT = 3,
+    DONG_GAMEPAD_BUTTON_A = 4,     // confirm / click
+    DONG_GAMEPAD_BUTTON_B = 5,     // cancel / back
+    DONG_GAMEPAD_BUTTON_X = 6,
+    DONG_GAMEPAD_BUTTON_Y = 7,
+    DONG_GAMEPAD_LB = 8,
+    DONG_GAMEPAD_RB = 9,
+    DONG_GAMEPAD_START = 10,
+    DONG_GAMEPAD_BACK = 11,
+} dong_gamepad_button_t;
+
+// Send gamepad button press/release. Default behaviors:
+// - DPad -> spatial focus navigation
+// - A -> click focused element
+// - B -> dispatch 'gamepadcancel' event (default: close topmost dialog)
+// All default behaviors can be intercepted via JS 'gamepadbutton' event.
+DONG_API dong_result_t dong_engine_send_gamepad_button(dong_engine_t* engine,
+                                                       int32_t gamepad_id,
+                                                       dong_gamepad_button_t button,
+                                                       int pressed);
+
 #ifdef __cplusplus
 }
 #endif

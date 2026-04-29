@@ -269,6 +269,11 @@ static void app_forward_event_to_engine(dong_app_impl_t* app, const dong_app_eve
                                                 ev->text_editing.cursor,
                                                 ev->text_editing.selection_length);
             break;
+        case DONG_APP_EVENT_GAMEPAD_BUTTON:
+            (void)dong_engine_send_gamepad_button(app->engine, ev->gamepad_button.gamepad_id,
+                                                  (dong_gamepad_button_t)ev->gamepad_button.button,
+                                                  ev->gamepad_button.pressed);
+            break;
         default:
             break;
     }
@@ -363,6 +368,33 @@ static dong_app_event_t app_translate_sdl_event(dong_app_impl_t* app, const SDL_
                 fprintf(stderr, "[DongApp][TextEditing] %s\n", e->edit.text ? e->edit.text : "(null)");
             }
             return out;
+
+        case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
+        case SDL_EVENT_GAMEPAD_BUTTON_UP: {
+            int mapped = -1;
+            switch (e->gbutton.button) {
+                case SDL_GAMEPAD_BUTTON_DPAD_UP:         mapped = DONG_GAMEPAD_DPAD_UP; break;
+                case SDL_GAMEPAD_BUTTON_DPAD_DOWN:       mapped = DONG_GAMEPAD_DPAD_DOWN; break;
+                case SDL_GAMEPAD_BUTTON_DPAD_LEFT:       mapped = DONG_GAMEPAD_DPAD_LEFT; break;
+                case SDL_GAMEPAD_BUTTON_DPAD_RIGHT:      mapped = DONG_GAMEPAD_DPAD_RIGHT; break;
+                case SDL_GAMEPAD_BUTTON_SOUTH:           mapped = DONG_GAMEPAD_BUTTON_A; break;
+                case SDL_GAMEPAD_BUTTON_EAST:            mapped = DONG_GAMEPAD_BUTTON_B; break;
+                case SDL_GAMEPAD_BUTTON_WEST:            mapped = DONG_GAMEPAD_BUTTON_X; break;
+                case SDL_GAMEPAD_BUTTON_NORTH:           mapped = DONG_GAMEPAD_BUTTON_Y; break;
+                case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER:   mapped = DONG_GAMEPAD_LB; break;
+                case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER:  mapped = DONG_GAMEPAD_RB; break;
+                case SDL_GAMEPAD_BUTTON_START:           mapped = DONG_GAMEPAD_START; break;
+                case SDL_GAMEPAD_BUTTON_BACK:            mapped = DONG_GAMEPAD_BACK; break;
+                default: break;
+            }
+            if (mapped >= 0) {
+                out.type = DONG_APP_EVENT_GAMEPAD_BUTTON;
+                out.gamepad_button.gamepad_id = (int32_t)e->gbutton.which;
+                out.gamepad_button.button = mapped;
+                out.gamepad_button.pressed = (e->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN) ? 1 : 0;
+            }
+            return out;
+        }
 
         default:
             return out;

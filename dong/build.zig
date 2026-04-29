@@ -1653,6 +1653,8 @@ fn buildDongCore(
             "src/core/global_shared.cpp",
             "src/core/global_shared_c_api.cpp",
             "src/core/glyph_atlas_c_api.cpp",
+            // Input
+            "src/input/spatial_nav.cpp",
             // DOM
             "src/dom/dom_manager.cpp",
             "src/dom/event_system.cpp",

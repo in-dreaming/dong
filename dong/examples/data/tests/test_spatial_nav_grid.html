@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Spatial Navigation Grid Test</title>
+<style>
+body {
+    margin: 0;
+    padding: 20px;
+    font-family: sans-serif;
+    background: #1a1a2e;
+    color: #eee;
+}
+h1 {
+    text-align: center;
+    margin-bottom: 20px;
+    font-size: 18px;
+}
+.grid {
+    display: flex;
+    flex-wrap: wrap;
+    width: 360px;
+    margin: 0 auto;
+    gap: 10px;
+}
+.grid button {
+    width: 100px;
+    height: 100px;
+    font-size: 16px;
+    border: 2px solid #444;
+    border-radius: 8px;
+    background: #16213e;
+    color: #eee;
+    cursor: pointer;
+    transition: background 0.1s, border-color 0.1s, transform 0.1s;
+}
+.grid button:focus {
+    border-color: #0f0;
+    background: #0f3460;
+    outline: none;
+    transform: scale(1.05);
+}
+.grid button:focus-visible {
+    border-color: #0f0;
+    box-shadow: 0 0 10px #0f0;
+}
+.grid button:active {
+    background: #e94560;
+}
+#log {
+    margin-top: 20px;
+    padding: 10px;
+    background: #0f3460;
+    border-radius: 4px;
+    font-size: 14px;
+    min-height: 60px;
+    max-height: 120px;
+    overflow-y: auto;
+}
+.instructions {
+    text-align: center;
+    margin-bottom: 10px;
+    font-size: 13px;
+    color: #aaa;
+}
+</style>
+</head>
+<body>
+<h1>Spatial Navigation Test (3x3 Grid)</h1>
+<p class="instructions">Use DPad/Arrow keys to navigate, A/Enter to click. Connect a gamepad or use keyboard.</p>
+
+<div class="grid">
+    <button id="btn-1">1</button>
+    <button id="btn-2">2</button>
+    <button id="btn-3">3</button>
+    <button id="btn-4">4</button>
+    <button id="btn-5">5</button>
+    <button id="btn-6">6</button>
+    <button id="btn-7">7</button>
+    <button id="btn-8">8</button>
+    <button id="btn-9">9</button>
+</div>
+
+<div id="log">Ready. Navigate with DPad or call dong.focusNav('right') from JS.</div>
+
+<script>
+    // Log focus changes
+    var log = document.getElementById('log');
+    function logMsg(msg) {
+        log.textContent = msg + '\n' + log.textContent;
+    }
+
+    // Track focus events on all buttons
+    var buttons = document.querySelectorAll('.grid button');
+    for (var i = 0; i < buttons.length; i++) {
+        (function(btn) {
+            btn.addEventListener('focus', function() {
+                logMsg('Focus: ' + btn.id);
+            });
+            btn.addEventListener('click', function() {
+                logMsg('Click: ' + btn.id);
+            });
+        })(buttons[i]);
+    }
+
+    // Listen for gamepadbutton event
+    document.addEventListener('gamepadbutton', function(e) {
+        logMsg('Gamepad button: ' + e.buttonName + ' (id=' + e.gamepadId + ')');
+    });
+
+    // Listen for gamepadcancel event
+    document.addEventListener('gamepadcancel', function(e) {
+        logMsg('Gamepad cancel');
+    });
+
+    // Keyboard fallback: arrow keys trigger dong.focusNav
+    document.addEventListener('keydown', function(e) {
+        var dir = null;
+        if (e.key === 'ArrowUp') dir = 'up';
+        else if (e.key === 'ArrowDown') dir = 'down';
+        else if (e.key === 'ArrowLeft') dir = 'left';
+        else if (e.key === 'ArrowRight') dir = 'right';
+
+        if (dir && typeof dong !== 'undefined' && dong.focusNav) {
+            dong.focusNav(dir);
+            e.preventDefault();
+        }
+    });
+</script>
+</body>
+</html>
