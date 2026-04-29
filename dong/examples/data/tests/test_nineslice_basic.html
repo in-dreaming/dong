@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+body { margin: 0; padding: 24px; background: #1a1a2e; }
+.panel {
+  width: 300px;
+  height: 200px;
+  padding: 20px;
+  color: white;
+  font-family: sans-serif;
+  border-image-source: url("nineslice_panel.png");
+  border-image-slice: 32;
+  border-image-width: 32px;
+  border-image-repeat: stretch;
+}
+.panel-shorthand {
+  width: 300px;
+  height: 150px;
+  margin-top: 20px;
+  padding: 20px;
+  color: white;
+  font-family: sans-serif;
+  border-image: url("nineslice_panel.png") 32 / 32px stretch;
+}
+.panel-repeat {
+  width: 300px;
+  height: 150px;
+  margin-top: 20px;
+  padding: 20px;
+  color: white;
+  font-family: sans-serif;
+  border-image-source: url("nineslice_panel.png");
+  border-image-slice: 16 24;
+  border-image-width: 16px 24px;
+  border-image-repeat: repeat round;
+}
+</style>
+</head>
+<body>
+<div class="panel">
+  <h2>Nine-Slice Panel</h2>
+  <p>This panel uses border-image for game UI styling.</p>
+</div>
+<div class="panel-shorthand">
+  <h2>Shorthand Panel</h2>
+  <p>Uses border-image shorthand property.</p>
+</div>
+<div class="panel-repeat">
+  <h2>Repeat Panel</h2>
+  <p>Uses repeat/round border-image-repeat.</p>
+</div>
+</body>
+</html>

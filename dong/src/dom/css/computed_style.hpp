@@ -137,6 +137,21 @@ struct ComputedStyle {
     CSSBorderStyle border_block_start_style = CSSBorderStyleUnset;
     CSSBorderStyle border_block_end_style = CSSBorderStyleUnset;
 
+    // border-image (nine-slice panel)
+    std::string border_image_source;  // url("panel.png") or empty
+    float border_image_slice_top = 0;
+    float border_image_slice_right = 0;
+    float border_image_slice_bottom = 0;
+    float border_image_slice_left = 0;
+    float border_image_width_top = 0;
+    float border_image_width_right = 0;
+    float border_image_width_bottom = 0;
+    float border_image_width_left = 0;
+    enum class BorderImageRepeat : uint8_t { Stretch = 0, Repeat = 1, Round = 2 };
+    BorderImageRepeat border_image_repeat_h = BorderImageRepeat::Stretch;
+    BorderImageRepeat border_image_repeat_v = BorderImageRepeat::Stretch;
+    bool border_image_fill = true;  // dong default: true (games need center fill)
+
     CSSOverflow overflow = CSSOverflow::Visible;
 
     CSSOverflow overflow_x = CSSOverflow::Visible;

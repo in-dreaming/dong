@@ -17,6 +17,7 @@ inline void parseMarginShorthandHelper(const std::string& value, ComputedStyle& 
 inline void parsePaddingShorthandHelper(const std::string& value, ComputedStyle& style);
 inline void parseBorderShorthandHelper(const std::string& value, ComputedStyle& style);
 inline void parseBorderRadiusShorthandHelper(const std::string& value, ComputedStyle& style);
+inline void parseBorderImageShorthandHelper(const std::string& value, ComputedStyle& style);
 inline void parseFlexShorthandHelper(const std::string& value, ComputedStyle& style);
 inline void parseBackgroundShorthandHelper(const std::string& value, ComputedStyle& style);
 inline void parseFontShorthandHelper(const std::string& value, ComputedStyle& style);
@@ -343,6 +344,106 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
         {"border-top-right-radius", [](const std::string& val, ComputedStyle& style) { style.border_top_right_radius = CSSParser::parseValue(val); }},
         {"border-bottom-left-radius", [](const std::string& val, ComputedStyle& style) { style.border_bottom_left_radius = CSSParser::parseValue(val); }},
         {"border-bottom-right-radius", [](const std::string& val, ComputedStyle& style) { style.border_bottom_right_radius = CSSParser::parseValue(val); }},
+
+        // Border image (nine-slice)
+        {"border-image", [](const std::string& val, ComputedStyle& style) { parseBorderImageShorthandHelper(val, style); }},
+        {"border-image-source", [](const std::string& val, ComputedStyle& style) {
+            if (val == "none") {
+                style.border_image_source.clear();
+            } else {
+                style.border_image_source = val;
+            }
+        }},
+        {"border-image-slice", [](const std::string& val, ComputedStyle& style) {
+            // Parse 1-4 numeric values + optional "fill" / "no-fill"
+            std::istringstream iss(val);
+            std::vector<float> nums;
+            std::string part;
+            bool found_fill = false;
+            bool found_nofill = false;
+            while (iss >> part) {
+                std::string lower = part;
+                std::transform(lower.begin(), lower.end(), lower.begin(),
+                               [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+                if (lower == "fill") { found_fill = true; continue; }
+                if (lower == "no-fill") { found_nofill = true; continue; }
+                // Strip trailing '%' – stored as px for now
+                float v = parseFloatHelper(part);
+                nums.push_back(v);
+            }
+            if (found_nofill) style.border_image_fill = false;
+            else if (found_fill) style.border_image_fill = true;
+
+            if (nums.size() == 1) {
+                style.border_image_slice_top = style.border_image_slice_right =
+                    style.border_image_slice_bottom = style.border_image_slice_left = nums[0];
+            } else if (nums.size() == 2) {
+                style.border_image_slice_top = style.border_image_slice_bottom = nums[0];
+                style.border_image_slice_right = style.border_image_slice_left = nums[1];
+            } else if (nums.size() == 3) {
+                style.border_image_slice_top = nums[0];
+                style.border_image_slice_right = style.border_image_slice_left = nums[1];
+                style.border_image_slice_bottom = nums[2];
+            } else if (nums.size() >= 4) {
+                style.border_image_slice_top = nums[0];
+                style.border_image_slice_right = nums[1];
+                style.border_image_slice_bottom = nums[2];
+                style.border_image_slice_left = nums[3];
+            }
+        }},
+        {"border-image-width", [](const std::string& val, ComputedStyle& style) {
+            std::istringstream iss(val);
+            std::vector<float> nums;
+            std::string part;
+            while (iss >> part) {
+                nums.push_back(parseFloatHelper(part));
+            }
+            if (nums.size() == 1) {
+                style.border_image_width_top = style.border_image_width_right =
+                    style.border_image_width_bottom = style.border_image_width_left = nums[0];
+            } else if (nums.size() == 2) {
+                style.border_image_width_top = style.border_image_width_bottom = nums[0];
+                style.border_image_width_right = style.border_image_width_left = nums[1];
+            } else if (nums.size() == 3) {
+                style.border_image_width_top = nums[0];
+                style.border_image_width_right = style.border_image_width_left = nums[1];
+                style.border_image_width_bottom = nums[2];
+            } else if (nums.size() >= 4) {
+                style.border_image_width_top = nums[0];
+                style.border_image_width_right = nums[1];
+                style.border_image_width_bottom = nums[2];
+                style.border_image_width_left = nums[3];
+            }
+        }},
+        {"border-image-repeat", [](const std::string& val, ComputedStyle& style) {
+            auto parseRepeat = [](const std::string& s) -> ComputedStyle::BorderImageRepeat {
+                std::string lower = s;
+                std::transform(lower.begin(), lower.end(), lower.begin(),
+                               [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+                if (lower == "repeat") return ComputedStyle::BorderImageRepeat::Repeat;
+                if (lower == "round") return ComputedStyle::BorderImageRepeat::Round;
+                return ComputedStyle::BorderImageRepeat::Stretch;
+            };
+            std::istringstream iss(val);
+            std::string h_str, v_str;
+            iss >> h_str;
+            style.border_image_repeat_h = parseRepeat(h_str);
+            if (iss >> v_str) {
+                style.border_image_repeat_v = parseRepeat(v_str);
+            } else {
+                style.border_image_repeat_v = style.border_image_repeat_h;
+            }
+        }},
+        {"border-image-fill", [](const std::string& val, ComputedStyle& style) {
+            std::string lower = val;
+            std::transform(lower.begin(), lower.end(), lower.begin(),
+                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            if (lower == "true" || lower == "fill" || lower == "1") {
+                style.border_image_fill = true;
+            } else {
+                style.border_image_fill = false;
+            }
+        }},
 
         
         // Outline
@@ -1506,6 +1607,144 @@ inline void parseBorderRadiusShorthandHelper(const std::string& value, ComputedS
         style.border_top_right_radius = CSSParser::parseValue(parts[1]);
         style.border_bottom_right_radius = CSSParser::parseValue(parts[2]);
         style.border_bottom_left_radius = CSSParser::parseValue(parts[3]);
+    }
+}
+
+inline void parseBorderImageShorthandHelper(const std::string& value, ComputedStyle& style) {
+    // border-image: <source> <slice> / <width> <repeat>
+    // Simplified parser: extract url() first, then split on '/' for slice/width, then repeat keywords
+
+    std::string remaining = value;
+
+    // 1. Extract url(...) source
+    size_t url_start = remaining.find("url(");
+    if (url_start != std::string::npos) {
+        // Find matching closing paren
+        int depth = 0;
+        size_t url_end = url_start + 4; // skip "url("
+        depth = 1;
+        while (url_end < remaining.size() && depth > 0) {
+            if (remaining[url_end] == '(') ++depth;
+            else if (remaining[url_end] == ')') --depth;
+            ++url_end;
+        }
+        style.border_image_source = remaining.substr(url_start, url_end - url_start);
+        remaining = remaining.substr(0, url_start) + remaining.substr(url_end);
+    } else if (remaining.find("none") != std::string::npos) {
+        style.border_image_source.clear();
+        // Remove "none" from remaining
+        size_t pos = remaining.find("none");
+        remaining = remaining.substr(0, pos) + remaining.substr(pos + 4);
+    }
+
+    // Trim remaining
+    remaining.erase(0, remaining.find_first_not_of(" \t\n\r"));
+    size_t last = remaining.find_last_not_of(" \t\n\r");
+    if (last != std::string::npos) remaining = remaining.substr(0, last + 1);
+    if (remaining.empty()) return;
+
+    // 2. Split on '/' to separate slice from width
+    std::string slice_part;
+    std::string width_part;
+    size_t slash_pos = remaining.find('/');
+    if (slash_pos != std::string::npos) {
+        slice_part = remaining.substr(0, slash_pos);
+        width_part = remaining.substr(slash_pos + 1);
+    } else {
+        slice_part = remaining;
+    }
+
+    // 3. Parse slice part (numbers + fill/no-fill + repeat keywords)
+    std::string repeat_str;
+    {
+        std::istringstream iss(slice_part);
+        std::vector<float> nums;
+        std::string part;
+        bool found_fill = false;
+        bool found_nofill = false;
+        while (iss >> part) {
+            std::string lower = part;
+            std::transform(lower.begin(), lower.end(), lower.begin(),
+                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            if (lower == "fill") { found_fill = true; continue; }
+            if (lower == "no-fill") { found_nofill = true; continue; }
+            if (lower == "stretch" || lower == "repeat" || lower == "round") {
+                repeat_str += (repeat_str.empty() ? "" : " ") + lower;
+                continue;
+            }
+            float v = parseFloatHelper(part);
+            nums.push_back(v);
+        }
+        if (found_nofill) style.border_image_fill = false;
+        else if (found_fill) style.border_image_fill = true;
+
+        if (nums.size() == 1) {
+            style.border_image_slice_top = style.border_image_slice_right =
+                style.border_image_slice_bottom = style.border_image_slice_left = nums[0];
+        } else if (nums.size() == 2) {
+            style.border_image_slice_top = style.border_image_slice_bottom = nums[0];
+            style.border_image_slice_right = style.border_image_slice_left = nums[1];
+        } else if (nums.size() == 3) {
+            style.border_image_slice_top = nums[0];
+            style.border_image_slice_right = style.border_image_slice_left = nums[1];
+            style.border_image_slice_bottom = nums[2];
+        } else if (nums.size() >= 4) {
+            style.border_image_slice_top = nums[0];
+            style.border_image_slice_right = nums[1];
+            style.border_image_slice_bottom = nums[2];
+            style.border_image_slice_left = nums[3];
+        }
+    }
+
+    // 4. Parse width part (if present)
+    if (!width_part.empty()) {
+        std::istringstream iss(width_part);
+        std::vector<float> nums;
+        std::string part;
+        while (iss >> part) {
+            std::string lower = part;
+            std::transform(lower.begin(), lower.end(), lower.begin(),
+                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            if (lower == "stretch" || lower == "repeat" || lower == "round") {
+                repeat_str += (repeat_str.empty() ? "" : " ") + lower;
+                continue;
+            }
+            nums.push_back(parseFloatHelper(part));
+        }
+        if (nums.size() == 1) {
+            style.border_image_width_top = style.border_image_width_right =
+                style.border_image_width_bottom = style.border_image_width_left = nums[0];
+        } else if (nums.size() == 2) {
+            style.border_image_width_top = style.border_image_width_bottom = nums[0];
+            style.border_image_width_right = style.border_image_width_left = nums[1];
+        } else if (nums.size() == 3) {
+            style.border_image_width_top = nums[0];
+            style.border_image_width_right = style.border_image_width_left = nums[1];
+            style.border_image_width_bottom = nums[2];
+        } else if (nums.size() >= 4) {
+            style.border_image_width_top = nums[0];
+            style.border_image_width_right = nums[1];
+            style.border_image_width_bottom = nums[2];
+            style.border_image_width_left = nums[3];
+        }
+    }
+
+    // 5. Parse repeat keywords (if collected)
+    if (!repeat_str.empty()) {
+        auto parseRepeat = [](const std::string& s) -> ComputedStyle::BorderImageRepeat {
+            if (s == "repeat") return ComputedStyle::BorderImageRepeat::Repeat;
+            if (s == "round") return ComputedStyle::BorderImageRepeat::Round;
+            return ComputedStyle::BorderImageRepeat::Stretch;
+        };
+        std::istringstream riss(repeat_str);
+        std::string h_str, v_str;
+        riss >> h_str;
+        style.border_image_repeat_h = parseRepeat(h_str);
+        if (riss >> v_str) {
+            style.border_image_repeat_v = parseRepeat(v_str);
+        } else {
+            style.border_image_repeat_v = style.border_image_repeat_h;
+        }
     }
 }
 
