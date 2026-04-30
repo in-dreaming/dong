@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>P0-4 Spatial Navigation - Explicit Override Test</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 24px;
+      background: #0f0f23;
+      color: #eee;
+      font-family: system-ui, sans-serif;
+    }
+    .menu {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      width: 300px;
+      margin: 0 auto;
+    }
+    .menu-item {
+      padding: 12px 20px;
+      background: #1a1a3e;
+      border: 2px solid #333;
+      border-radius: 8px;
+      color: #ccc;
+      font-size: 16px;
+      cursor: pointer;
+      text-align: center;
+    }
+    .menu-item:focus {
+      border-color: #667eea;
+      background: #252560;
+      color: #fff;
+      outline: none;
+    }
+    .menu-item:focus-visible {
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.4);
+    }
+    /* Explicit nav: the last item wraps back to first */
+    #item-4 { nav-down: #item-0; }
+    #item-0 { nav-up: #item-4; }
+    /* Side panel: explicit nav-right goes to panel */
+    #item-2 { nav-right: #panel-btn; }
+    #panel-btn { nav-left: #item-2; }
+
+    .side-panel {
+      position: absolute;
+      right: 24px;
+      top: 100px;
+      width: 200px;
+    }
+    .panel-btn {
+      padding: 10px 16px;
+      background: #2a1a3e;
+      border: 2px solid #444;
+      border-radius: 8px;
+      color: #ccc;
+      cursor: pointer;
+      text-align: center;
+    }
+    .panel-btn:focus {
+      border-color: #e74c3c;
+      background: #3a1a2e;
+      color: #fff;
+      outline: none;
+    }
+    .status {
+      margin-top: 16px;
+      padding: 8px;
+      font-size: 12px;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <h2>Spatial Nav - Explicit Override</h2>
+  <p style="color:#888;font-size:13px;">Use arrow keys / gamepad D-pad. Last↔First wraps. Item 3 → Right goes to side panel.</p>
+
+  <div class="menu">
+    <button id="item-0" class="menu-item" tabindex="0" autofocus>Start Game</button>
+    <button id="item-1" class="menu-item" tabindex="0">Load Save</button>
+    <button id="item-2" class="menu-item" tabindex="0">Settings ➜</button>
+    <button id="item-3" class="menu-item" tabindex="0">Credits</button>
+    <button id="item-4" class="menu-item" tabindex="0">Quit</button>
+  </div>
+
+  <div class="side-panel">
+    <button id="panel-btn" class="panel-btn" tabindex="0">⚙ Side Panel</button>
+  </div>
+
+  <div class="status" id="status">Focus: none</div>
+
+  <script>
+    // Track focus changes
+    document.addEventListener('focusin', function(e) {
+      var el = e.target;
+      var status = document.getElementById('status');
+      if (status && el) {
+        status.textContent = 'Focus: ' + (el.id || el.tagName) + ' - ' + (el.textContent || '').substring(0, 30);
+      }
+    });
+
+    // Keyboard arrow key → dong.focusNav (for testing without gamepad)
+    document.addEventListener('keydown', function(e) {
+      if (typeof dong !== 'undefined' && dong.focusNav) {
+        if (e.key === 'ArrowUp') { dong.focusNav('up'); e.preventDefault(); }
+        if (e.key === 'ArrowDown') { dong.focusNav('down'); e.preventDefault(); }
+        if (e.key === 'ArrowLeft') { dong.focusNav('left'); e.preventDefault(); }
+        if (e.key === 'ArrowRight') { dong.focusNav('right'); e.preventDefault(); }
+      }
+    });
+  </script>
+</body>
+</html>

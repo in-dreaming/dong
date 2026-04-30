@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>P0-4 Spatial Nav - Game UI Full Flow</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0a0a1a;
+      color: #eee;
+      font-family: system-ui, sans-serif;
+      overflow: hidden;
+    }
+    .hud {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 12px;
+    }
+    .skill-slot {
+      width: 60px;
+      height: 60px;
+      background: #1a1a3e;
+      border: 2px solid #333;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      cursor: pointer;
+      position: relative;
+    }
+    .skill-slot:focus {
+      border-color: #ffd700;
+      background: #252550;
+      outline: none;
+      box-shadow: 0 0 12px rgba(255, 215, 0, 0.3);
+    }
+    .keybind {
+      position: absolute;
+      bottom: -18px;
+      font-size: 10px;
+      color: #555;
+    }
+    .menu-overlay {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(10, 10, 30, 0.95);
+      border: 1px solid #333;
+      border-radius: 12px;
+      padding: 24px;
+      width: 320px;
+    }
+    .menu-title {
+      font-size: 18px;
+      font-weight: bold;
+      margin-bottom: 16px;
+      text-align: center;
+      color: #ffd700;
+    }
+    .menu-btn {
+      display: block;
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 8px;
+      background: #1a1a3e;
+      border: 2px solid transparent;
+      border-radius: 6px;
+      color: #ccc;
+      font-size: 14px;
+      cursor: pointer;
+      text-align: left;
+    }
+    .menu-btn:focus {
+      border-color: #667eea;
+      background: #252560;
+      color: #fff;
+      outline: none;
+    }
+    .menu-btn:last-child { margin-bottom: 0; }
+    .info {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      font-size: 11px;
+      color: #444;
+    }
+  </style>
+</head>
+<body>
+  <div class="info">
+    Use ↑↓←→ to navigate, Enter to activate, Escape to close menu<br>
+    Gamepad: D-pad navigate, A confirm, B cancel
+  </div>
+
+  <!-- HUD skill bar -->
+  <div class="hud">
+    <button class="skill-slot" tabindex="0" id="skill-q">⚡<span class="keybind">Q</span></button>
+    <button class="skill-slot" tabindex="0" id="skill-w">🔥<span class="keybind">W</span></button>
+    <button class="skill-slot" tabindex="0" id="skill-e">❄<span class="keybind">E</span></button>
+    <button class="skill-slot" tabindex="0" id="skill-r">💀<span class="keybind">R</span></button>
+  </div>
+
+  <!-- Pause menu overlay -->
+  <div class="menu-overlay" id="pause-menu">
+    <div class="menu-title">PAUSED</div>
+    <button class="menu-btn" tabindex="0" autofocus id="btn-resume">Resume</button>
+    <button class="menu-btn" tabindex="0" id="btn-settings">Settings</button>
+    <button class="menu-btn" tabindex="0" id="btn-save">Save Game</button>
+    <button class="menu-btn" tabindex="0" id="btn-quit">Quit to Menu</button>
+  </div>
+
+  <script>
+    // Arrow key → dong.focusNav
+    document.addEventListener('keydown', function(e) {
+      if (typeof dong !== 'undefined' && dong.focusNav) {
+        if (e.key === 'ArrowUp') { dong.focusNav('up'); e.preventDefault(); }
+        if (e.key === 'ArrowDown') { dong.focusNav('down'); e.preventDefault(); }
+        if (e.key === 'ArrowLeft') { dong.focusNav('left'); e.preventDefault(); }
+        if (e.key === 'ArrowRight') { dong.focusNav('right'); e.preventDefault(); }
+      }
+    });
+  </script>
+</body>
+</html>
