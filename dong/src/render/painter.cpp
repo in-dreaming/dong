@@ -599,6 +599,98 @@ static bool isScrollOverflow(dom::CSSOverflow v) {
 
 } // anonymous namespace
 
+// Paint border-image as 9 image quads (P0-2 nine-slice).
+// Returns true if border-image was painted (caller should skip normal border).
+static bool paintBorderImage(
+    const dong::dom::ComputedStyle& style,
+    const Rect& border_box,  // element's border box
+    DisplayListBuilder& builder)
+{
+    if (style.border_image_source.empty()) return false;
+
+    // Parse the source URL
+    std::string src = style.border_image_source;
+    if (src.find("url(") == 0) {
+        size_t start = 4;
+        size_t end = src.rfind(")");
+        if (end != std::string::npos && end > start) {
+            src = src.substr(start, end - start);
+            if (!src.empty() && (src[0] == '"' || src[0] == '\'')) src = src.substr(1);
+            if (!src.empty() && (src.back() == '"' || src.back() == '\'')) src.pop_back();
+        }
+    }
+    if (src.empty()) return false;
+
+    // Slice insets (how much of the source image belongs to each edge)
+    float st = style.border_image_slice_top;
+    float sr = style.border_image_slice_right;
+    float sb = style.border_image_slice_bottom;
+    float sl = style.border_image_slice_left;
+
+    // If all slices are 0, just draw the whole image stretched
+    if (st <= 0 && sr <= 0 && sb <= 0 && sl <= 0) {
+        builder.addImage(border_box, src, 1.0f, ImageFitMode::Fill);
+        return true;
+    }
+
+    // Width: how much of the dest box the border occupies
+    float wt = style.border_image_width_top > 0 ? style.border_image_width_top : st;
+    float wr = style.border_image_width_right > 0 ? style.border_image_width_right : sr;
+    float wb = style.border_image_width_bottom > 0 ? style.border_image_width_bottom : sb;
+    float wl = style.border_image_width_left > 0 ? style.border_image_width_left : sl;
+
+    // Clamp widths to not exceed box
+    if (wl + wr > border_box.width) {
+        float scale = border_box.width / (wl + wr);
+        wl *= scale;
+        wr *= scale;
+    }
+    if (wt + wb > border_box.height) {
+        float scale = border_box.height / (wt + wb);
+        wt *= scale;
+        wb *= scale;
+    }
+
+    // 9-slice destination regions
+    // Layout:  TL | TC | TR
+    //          ML | MC | MR
+    //          BL | BC | BR
+    float x0 = border_box.x;
+    float x1 = border_box.x + wl;
+    float x2 = border_box.x + border_box.width - wr;
+    float x3 = border_box.x + border_box.width;
+    float y0 = border_box.y;
+    float y1 = border_box.y + wt;
+    float y2 = border_box.y + border_box.height - wb;
+    float y3 = border_box.y + border_box.height;
+
+    (void)x3; (void)y3; // suppress unused warnings
+
+    auto emitQuad = [&](float qx, float qy, float qw, float qh) {
+        if (qw <= 0.0f || qh <= 0.0f) return;
+        builder.addImage(Rect{qx, qy, qw, qh}, src, 1.0f, ImageFitMode::Fill);
+    };
+
+    // Top row
+    emitQuad(x0, y0, wl, wt);           // TL corner
+    emitQuad(x1, y0, x2 - x1, wt);      // TC edge
+    emitQuad(x2, y0, wr, wt);           // TR corner
+
+    // Middle row
+    emitQuad(x0, y1, wl, y2 - y1);      // ML edge
+    if (style.border_image_fill) {
+        emitQuad(x1, y1, x2 - x1, y2 - y1);  // MC center (only if fill)
+    }
+    emitQuad(x2, y1, wr, y2 - y1);      // MR edge
+
+    // Bottom row
+    emitQuad(x0, y2, wl, wb);           // BL corner
+    emitQuad(x1, y2, x2 - x1, wb);      // BC edge
+    emitQuad(x2, y2, wr, wb);           // BR corner
+
+    return true;
+}
+
 Painter::Painter(RenderSurface* surface)
     : surface_(surface), layout_engine_(nullptr) {
 }
@@ -1248,7 +1340,10 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                     }
                 }
 
-                if (has_border) {
+                // Border-image replaces normal border when present
+                bool border_image_painted = paintBorderImage(style, rect, builder);
+
+                if (has_border && !border_image_painted) {
                     const auto st_t = effectiveBorderStyleEnum(style.border_top_style);
                     const auto st_r = effectiveBorderStyleEnum(style.border_right_style);
                     const auto st_b = effectiveBorderStyleEnum(style.border_bottom_style);
@@ -1345,7 +1440,10 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                     }
                 }
 
-                if (has_border) {
+                // Border-image replaces normal border when present (non-rounded path)
+                bool border_image_painted_nr = paintBorderImage(style, rect, builder);
+
+                if (has_border && !border_image_painted_nr) {
                     const auto st_t = effectiveBorderStyleEnum(style.border_top_style);
                     const auto st_r = effectiveBorderStyleEnum(style.border_right_style);
                     const auto st_b = effectiveBorderStyleEnum(style.border_bottom_style);
@@ -2297,7 +2395,9 @@ void Painter::paintBackgroundAndBorder(const Rect& rect,
                 builder.addRoundedRect(padding_box, bg_color, inner_radius);
             }
         }
-        if (has_border) {
+        // Border-image replaces normal border when present (paintBackgroundAndBorder rounded)
+        bool border_image_painted_bab1 = paintBorderImage(style, rect, builder);
+        if (has_border && !border_image_painted_bab1) {
             // 简化的圆角边框实现：使用填充方式
             Color border_color = makeColorFromCss(style.border_color);
             // 绘制外圆角矩形
@@ -2310,7 +2410,9 @@ void Painter::paintBackgroundAndBorder(const Rect& rect,
         if (has_background) {
             builder.addRect(padding_box, makeColorFromCss(style.background_color));
         }
-        if (has_border) {
+        // Border-image replaces normal border when present (paintBackgroundAndBorder non-rounded)
+        bool border_image_painted_bab2 = paintBorderImage(style, rect, builder);
+        if (has_border && !border_image_painted_bab2) {
             auto effectiveColor = [&](const std::string& side_color) -> Color {
                 return makeColorFromCss(!side_color.empty() ? side_color : style.border_color);
             };
