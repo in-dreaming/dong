@@ -445,6 +445,130 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
             }
         }},
 
+        // CSS mask
+        {"mask-image", [](const std::string& val, ComputedStyle& style) {
+            if (val == "none") {
+                style.mask_image.clear();
+            } else {
+                style.mask_image = val;
+            }
+        }},
+        {"-webkit-mask-image", [](const std::string& val, ComputedStyle& style) {
+            if (val == "none") {
+                style.mask_image.clear();
+            } else {
+                style.mask_image = val;
+            }
+        }},
+        {"mask-mode", [](const std::string& val, ComputedStyle& style) {
+            std::string lower = val;
+            std::transform(lower.begin(), lower.end(), lower.begin(),
+                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            if (lower == "luminance") {
+                style.mask_mode = ComputedStyle::MaskMode::Luminance;
+            } else {
+                style.mask_mode = ComputedStyle::MaskMode::Alpha;
+            }
+        }},
+        {"mask-repeat", [](const std::string& val, ComputedStyle& style) {
+            style.mask_repeat = val;
+        }},
+        {"mask-position", [](const std::string& val, ComputedStyle& style) {
+            style.mask_position = val;
+        }},
+        {"mask-size", [](const std::string& val, ComputedStyle& style) {
+            style.mask_size = val;
+        }},
+        {"mask-clip", [](const std::string& val, ComputedStyle& style) {
+            std::string lower = val;
+            std::transform(lower.begin(), lower.end(), lower.begin(),
+                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            if (lower == "padding-box") {
+                style.mask_clip = ComputedStyle::MaskClip::PaddingBox;
+            } else if (lower == "content-box") {
+                style.mask_clip = ComputedStyle::MaskClip::ContentBox;
+            } else {
+                style.mask_clip = ComputedStyle::MaskClip::BorderBox;
+            }
+        }},
+        {"mask", [](const std::string& val, ComputedStyle& style) {
+            if (val == "none") {
+                style.mask_image.clear();
+                return;
+            }
+            // Extract the image function (url(), *-gradient()) by finding
+            // the first function call (contains '(') and extracting with balanced parens
+            std::string remaining;
+            size_t paren_pos = val.find('(');
+            if (paren_pos != std::string::npos) {
+                // Walk back to find function name start
+                size_t name_start = paren_pos;
+                while (name_start > 0 && (std::isalnum(static_cast<unsigned char>(val[name_start - 1])) || val[name_start - 1] == '-')) {
+                    --name_start;
+                }
+                // Find matching closing paren
+                int depth = 1;
+                size_t end = paren_pos + 1;
+                while (end < val.size() && depth > 0) {
+                    if (val[end] == '(') ++depth;
+                    else if (val[end] == ')') --depth;
+                    ++end;
+                }
+                style.mask_image = val.substr(name_start, end - name_start);
+                remaining = val.substr(0, name_start) + val.substr(end);
+            } else {
+                remaining = val;
+            }
+            // Parse remaining keywords
+            std::istringstream iss(remaining);
+            std::string part;
+            while (iss >> part) {
+                std::string lower = part;
+                std::transform(lower.begin(), lower.end(), lower.begin(),
+                               [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+                if (lower == "alpha") {
+                    style.mask_mode = ComputedStyle::MaskMode::Alpha;
+                } else if (lower == "luminance") {
+                    style.mask_mode = ComputedStyle::MaskMode::Luminance;
+                } else if (lower == "no-repeat" || lower == "repeat" || lower == "space" || lower == "round") {
+                    style.mask_repeat = lower;
+                } else if (lower == "border-box") {
+                    style.mask_clip = ComputedStyle::MaskClip::BorderBox;
+                } else if (lower == "padding-box") {
+                    style.mask_clip = ComputedStyle::MaskClip::PaddingBox;
+                } else if (lower == "content-box") {
+                    style.mask_clip = ComputedStyle::MaskClip::ContentBox;
+                } else if (lower == "contain" || lower == "cover") {
+                    style.mask_size = lower;
+                } else if (lower == "center" || lower == "top" || lower == "bottom" ||
+                           lower == "left" || lower == "right") {
+                    style.mask_position = lower;
+                }
+            }
+        }},
+        {"-webkit-mask", [](const std::string& val, ComputedStyle& style) {
+            // Delegate to mask handler
+            if (val == "none") {
+                style.mask_image.clear();
+                return;
+            }
+            size_t paren_pos = val.find('(');
+            if (paren_pos != std::string::npos) {
+                size_t name_start = paren_pos;
+                while (name_start > 0 && (std::isalnum(static_cast<unsigned char>(val[name_start - 1])) || val[name_start - 1] == '-')) {
+                    --name_start;
+                }
+                int depth = 1;
+                size_t end = paren_pos + 1;
+                while (end < val.size() && depth > 0) {
+                    if (val[end] == '(') ++depth;
+                    else if (val[end] == ')') --depth;
+                    ++end;
+                }
+                style.mask_image = val.substr(name_start, end - name_start);
+            }
+        }},
+
         
         // Outline
         {"outline", [](const std::string& val, ComputedStyle& style) {

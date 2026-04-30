@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+body { margin: 0; padding: 24px; background: #0f0f23; font-family: sans-serif; color: #eee; }
+.container { display: flex; gap: 20px; flex-wrap: wrap; }
+.skill {
+  width: 80px; height: 80px;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  border-radius: 12px;
+}
+.cd-overlay {
+  width: 100%; height: 100%;
+  background: rgba(0,0,0,0.75);
+  border-radius: 12px;
+  /* The key game UI pattern: mask with conic-gradient */
+  mask-image: conic-gradient(transparent 0%, transparent 40%, black 40%, black 100%);
+  -webkit-mask-image: conic-gradient(transparent 0%, transparent 40%, black 40%, black 100%);
+}
+.cd-75 {
+  mask-image: conic-gradient(transparent 0%, transparent 75%, black 75%, black 100%);
+  -webkit-mask-image: conic-gradient(transparent 0%, transparent 75%, black 75%, black 100%);
+}
+.cd-25 {
+  mask-image: conic-gradient(transparent 0%, transparent 25%, black 25%, black 100%);
+  -webkit-mask-image: conic-gradient(transparent 0%, transparent 25%, black 25%, black 100%);
+}
+.label { text-align: center; font-size: 12px; color: #888; margin-top: 4px; }
+</style>
+</head>
+<body>
+<p>CSS mask + conic-gradient for game UI cooldowns (P0-3 key pattern)</p>
+<div class="container">
+  <div>
+    <div class="skill"><div class="cd-overlay cd-75"></div></div>
+    <div class="label">75% CD</div>
+  </div>
+  <div>
+    <div class="skill"><div class="cd-overlay"></div></div>
+    <div class="label">40% CD</div>
+  </div>
+  <div>
+    <div class="skill"><div class="cd-overlay cd-25"></div></div>
+    <div class="label">25% CD</div>
+  </div>
+  <div>
+    <div class="skill"></div>
+    <div class="label">Ready</div>
+  </div>
+</div>
+</body>
+</html>

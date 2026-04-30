@@ -152,6 +152,16 @@ struct ComputedStyle {
     BorderImageRepeat border_image_repeat_v = BorderImageRepeat::Stretch;
     bool border_image_fill = true;  // dong default: true (games need center fill)
 
+    // CSS mask
+    std::string mask_image;  // url("...") | linear-gradient(...) | conic-gradient(...) | none
+    enum class MaskMode : uint8_t { Alpha = 0, Luminance = 1 };
+    MaskMode mask_mode = MaskMode::Alpha;
+    std::string mask_repeat = "no-repeat";
+    std::string mask_position = "center";
+    std::string mask_size = "contain";
+    enum class MaskClip : uint8_t { BorderBox = 0, PaddingBox = 1, ContentBox = 2 };
+    MaskClip mask_clip = MaskClip::BorderBox;
+
     CSSOverflow overflow = CSSOverflow::Visible;
 
     CSSOverflow overflow_x = CSSOverflow::Visible;
