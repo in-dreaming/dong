@@ -50,6 +50,7 @@ void paintInputSelectionHighlight(const dom::DOMNodePtr& input_node,
 #include "../core/log.h"
 #include "../core/profiler.h"
 #include "../core/string_utils.h"
+#include "../dom/css/css_parser.hpp"
 #include "../layout/display_contents.hpp"
 #include "../layout/sticky_positioning.hpp"
 namespace dong::render {
@@ -581,6 +582,67 @@ static DrawConicGradientData buildDrawConicGradientData(const dong::dom::CSSGrad
         data.stops[i].position = grad.stops[i].position;
     }
     return data;
+}
+
+// P0-3 Fast-path: mask-image with conic-gradient on solid background.
+// Instead of an offscreen render target, we emit a conic gradient display item
+// where the mask's opaque regions show bg_color and transparent regions are fully transparent.
+// Returns true if the fast path was applied (caller should skip normal background paint).
+static bool applyMaskConicFastPath(
+    const dong::dom::ComputedStyle& style,
+    const Rect& target_rect,
+    float border_radius,
+    const Color& bg_color,
+    DisplayListBuilder& builder)
+{
+    const std::string& mask = style.mask_image;
+    if (mask.empty() || mask == "none") return false;
+
+    // Only handle conic-gradient mask for now (fast path)
+    if (mask.find("conic-gradient") == std::string::npos) return false;
+
+    // Parse the conic gradient from the mask_image string
+    dong::dom::CSSGradient grad = dong::dom::CSSParser::parseGradient(mask);
+    if ((grad.type != dong::dom::CSSGradient::Type::CONIC &&
+         grad.type != dong::dom::CSSGradient::Type::REPEATING_CONIC) ||
+        grad.stops.size() < 2) {
+        return false;
+    }
+
+    // Build a DrawConicGradientData where each stop's color is the bg_color
+    // modulated by the mask stop's alpha (luminance for alpha mask mode).
+    DrawConicGradientData cdata{};
+    cdata.rect = target_rect;
+    cdata.radius = border_radius;
+    cdata.from_angle_deg = grad.from_angle_deg;
+    cdata.repeating = (grad.type == dong::dom::CSSGradient::Type::REPEATING_CONIC);
+    cdata.center_x_px = target_rect.x + (grad.center_x / 100.0f) * target_rect.width;
+    cdata.center_y_px = target_rect.y + (grad.center_y / 100.0f) * target_rect.height;
+
+    const int raw = static_cast<int>(grad.stops.size());
+    cdata.stop_count = std::min(raw, kMaxGradientStops);
+    for (int i = 0; i < cdata.stop_count; ++i) {
+        Color mask_color = makeColorFromCss(grad.stops[i].color);
+        // For alpha mask mode (default): use the mask stop's alpha to modulate bg.
+        // For luminance mask mode: use luminance (0.2126R + 0.7152G + 0.0722B) * alpha.
+        float mask_alpha;
+        if (style.mask_mode == dong::dom::ComputedStyle::MaskMode::Luminance) {
+            float lum = 0.2126f * mask_color.r + 0.7152f * mask_color.g + 0.0722f * mask_color.b;
+            mask_alpha = lum * mask_color.a;
+        } else {
+            mask_alpha = mask_color.a;
+        }
+        cdata.stops[i].position = grad.stops[i].position;
+        cdata.stops[i].color = Color{
+            bg_color.r,
+            bg_color.g,
+            bg_color.b,
+            bg_color.a * mask_alpha
+        };
+    }
+
+    builder.addConicGradient(cdata);
+    return true;
 }
 
 // 简单的文本宽度估算（后续用 HarfBuzz 替换�?
@@ -1312,7 +1374,10 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                     float inner_radius = std::max(0.0f, radius - inset_for_radius);
 
                     if (inner_rect.width > 0.0f && inner_rect.height > 0.0f) {
-                        builder.addRoundedRect(inner_rect, bg_color, inner_radius);
+                        // P0-3 Mask fast-path: conic-gradient mask on solid background
+                        if (!applyMaskConicFastPath(style, inner_rect, inner_radius, bg_color, builder)) {
+                            builder.addRoundedRect(inner_rect, bg_color, inner_radius);
+                        }
                     }
                 }
 
@@ -1423,7 +1488,10 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                 // 非圆角情况：先背景，后边框
                 if (has_background) {
                     Color bg_color = makeColorFromCss(bg_color_css);
-                    builder.addRect(bg_clip_rect, bg_color);
+                    // P0-3 Mask fast-path: conic-gradient mask on solid background
+                    if (!applyMaskConicFastPath(style, bg_clip_rect, 0.0f, bg_color, builder)) {
+                        builder.addRect(bg_clip_rect, bg_color);
+                    }
                 }
 
                 // CSS gradients paint on top of background-color (non-rounded path)
