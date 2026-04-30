@@ -105,6 +105,20 @@ dom::DOMNodePtr findSpatialNavTarget(
         }
     }
 
+    // Check for data-nav-trap container (P0-4: focus containment)
+    // If current element is inside a nav-trap, only consider candidates within that container
+    dom::DOMNodePtr nav_trap_container = nullptr;
+    {
+        auto ancestor = current->getParent();
+        while (ancestor) {
+            if (ancestor->hasAttribute("data-nav-trap")) {
+                nav_trap_container = ancestor;
+                break;
+            }
+            ancestor = ancestor->getParent();
+        }
+    }
+
     // Get current element's layout rect
     const auto* current_layout = layout_engine->getLayout(current);
     if (!current_layout) {
@@ -124,6 +138,23 @@ dom::DOMNodePtr findSpatialNavTarget(
     for (const auto& candidate : candidates) {
         if (!candidate || candidate.get() == current.get()) {
             continue;
+        }
+
+        // If inside a nav-trap container, skip candidates outside it
+        if (nav_trap_container) {
+            bool inside_trap = false;
+            auto anc = candidate->getParent();
+            while (anc) {
+                if (anc.get() == nav_trap_container.get()) {
+                    inside_trap = true;
+                    break;
+                }
+                anc = anc->getParent();
+            }
+            // Also check if candidate itself is the trap container
+            if (!inside_trap && candidate.get() != nav_trap_container.get()) {
+                continue;
+            }
         }
 
         const auto* candidate_layout = layout_engine->getLayout(candidate);
