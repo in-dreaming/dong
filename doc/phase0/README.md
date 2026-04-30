@@ -135,5 +135,24 @@ Week 11-12
 | 2026-04-17 | UE/Unity adapter 不在 Phase 0；详见 [`integration_ue.md`](../integration_ue.md) `integration_unity.md` |
 | 2026-04-17 | World Space 3D primitives 不在 Phase 0；归 Phase 2 |
 | 2026-04-17 | DevTools / live reload 不在 Phase 0；归 Phase 1 |
+| 2026-05-01 | P0-4/P0-5/P0-7/P0-8 实现完成确认；P0-1 已在 dev_next |
+| 2026-05-01 | P0-2 CSS border-image 解析+painter emit 完成；GPU material 5 待做 |
+| 2026-05-01 | P0-3 conic-gradient 完成；mask fast-path（conic+solid bg）完成；通用 mask RT 待做 |
+| 2026-05-01 | P0-6 S1 invalidation 基础设施完成；46/48 调用点已分类 |
 
 后续 Phase 0 内重大调整在此处追加。
+
+---
+
+## 8. 实施进度（2026-05-01 更新）
+
+| ID | 状态 | 完成项 | 剩余 |
+|---|---|---|---|
+| **P0-1** | ✅ Done | uber quad pipeline 全量落地 | — |
+| **P0-2** | 🔶 75% | CSS border-image 解析 ✅ · painter 9 quad emit ✅ | GPU material 5 shader |
+| **P0-3** | 🔶 70% | conic-gradient 解析+渲染 ✅ · mask CSS 解析 ✅ · mask fast-path(conic+solid) ✅ | 通用 mask offscreen RT |
+| **P0-4** | ✅ Done | spatial nav 算法 ✅ · C ABI ✅ · SDL gamepad ✅ · JS API ✅ · CSS nav-\* ✅ | — |
+| **P0-5** | ✅ Done | composition 三件套 ✅ · SDL_SetTextInputArea ✅ | — |
+| **P0-6** | 🔶 40% | InvalidationKind 数据结构 ✅ · 46/48 调用点分类 ✅ | sub-tree display list/GPU compile |
+| **P0-7** | ✅ Done | perf_baseline.py ✅ · perf_scenes.yaml (4 scenes) ✅ · BENCH_AUTOSTOP ✅ · profiler auto-dump ✅ | — |
+| **P0-8** | ✅ Done | DOM API/遍历/Input/CSS 级联/事件/UA 样式 全部已在 dev_next | — |
