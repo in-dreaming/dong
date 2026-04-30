@@ -152,6 +152,13 @@ struct ComputedStyle {
     BorderImageRepeat border_image_repeat_v = BorderImageRepeat::Stretch;
     bool border_image_fill = true;  // dong default: true (games need center fill)
 
+    // CSS spatial navigation (P0-4)
+    // Values: "auto" (algorithm), "#id" (explicit target), "none" (disabled)
+    std::string nav_up = "auto";
+    std::string nav_down = "auto";
+    std::string nav_left = "auto";
+    std::string nav_right = "auto";
+
     // CSS mask
     std::string mask_image;  // url("...") | linear-gradient(...) | conic-gradient(...) | none
     enum class MaskMode : uint8_t { Alpha = 0, Luminance = 1 };

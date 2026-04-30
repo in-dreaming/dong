@@ -78,6 +78,33 @@ dom::DOMNodePtr findSpatialNavTarget(
         return nullptr;
     }
 
+    // Check for explicit nav-* CSS override (P0-4 S3)
+    {
+        const auto& style = current->getComputedStyle();
+        std::string explicit_target;
+        switch (dir) {
+            case NavDirection::Up: explicit_target = style.nav_up; break;
+            case NavDirection::Down: explicit_target = style.nav_down; break;
+            case NavDirection::Left: explicit_target = style.nav_left; break;
+            case NavDirection::Right: explicit_target = style.nav_right; break;
+        }
+        if (!explicit_target.empty() && explicit_target != "auto") {
+            if (explicit_target == "none") {
+                return nullptr;  // Navigation disabled in this direction
+            }
+            // Target is a selector (e.g., "#my-button") - find it in candidates
+            for (const auto& candidate : candidates) {
+                if (!candidate) continue;
+                // Check if candidate matches the selector (simple #id check)
+                if (explicit_target[0] == '#' && candidate->hasAttribute("id")) {
+                    if (candidate->getAttribute("id") == explicit_target.substr(1)) {
+                        return candidate;
+                    }
+                }
+            }
+        }
+    }
+
     // Get current element's layout rect
     const auto* current_layout = layout_engine->getLayout(current);
     if (!current_layout) {

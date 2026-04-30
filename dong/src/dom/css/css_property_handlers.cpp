@@ -569,7 +569,13 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
             }
         }},
 
-        
+        // Spatial navigation (P0-4)
+        {"nav-up", [](const std::string& val, ComputedStyle& style) { style.nav_up = val; }},
+        {"nav-down", [](const std::string& val, ComputedStyle& style) { style.nav_down = val; }},
+        {"nav-left", [](const std::string& val, ComputedStyle& style) { style.nav_left = val; }},
+        {"nav-right", [](const std::string& val, ComputedStyle& style) { style.nav_right = val; }},
+
+
         // Outline
         {"outline", [](const std::string& val, ComputedStyle& style) {
             std::istringstream iss(val);
