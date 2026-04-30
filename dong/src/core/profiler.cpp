@@ -76,6 +76,14 @@ struct ProfilerState {
     }
 
     ~ProfilerState() {
+        // Auto-dump to DONG_PROFILER_OUTPUT if set (P0-7 bench support)
+        if (initialized.load(std::memory_order_acquire)) {
+            const char* auto_output = std::getenv("DONG_PROFILER_OUTPUT");
+            if (auto_output && auto_output[0]) {
+                // Temporarily ensure initialized so dump works
+                dong_profiler_dump(auto_output);
+            }
+        }
         // 清理所有缓冲区
         std::lock_guard<std::mutex> lock(buffers_mutex);
         for (auto* buf : all_buffers) {

@@ -111,7 +111,8 @@ void dong_engine_destroy(dong_engine_t* engine) {
     }
 
     if (dong_profiler_is_enabled()) {
-        const char* path = std::getenv("DONG_PROFILE_OUTPUT");
+        const char* path = std::getenv("DONG_PROFILER_OUTPUT");
+        if (!path || !path[0]) path = std::getenv("DONG_PROFILE_OUTPUT");
         const char* out = (path && path[0]) ? path : "dong_profile.json";
         if (dong_profiler_dump(out) == 0) {
             fprintf(stderr, "[Profiler] Trace saved to %s\n", out);
