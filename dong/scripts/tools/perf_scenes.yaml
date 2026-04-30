@@ -60,3 +60,55 @@ S3:
       hard: 200
       unit: count
       description: "GPU draw calls per frame (multi-screen)"
+
+S2:
+  name: "DOM React Panel"
+  track: dom
+  exe: dong_app
+  args: ["--html", "data/react-game-ui/index.html"]
+  warmup_ms: 5000
+  run_ms: 3000
+  env:
+    DONG_PROFILER: "1"
+    DONG_GPU_STATS: "1"
+    DONG_BENCH_AUTOSTOP: "1"
+    DONG_SCRIPT_TIMEOUT_MS: "15000"
+  metrics:
+    fps_idle:
+      soft: 60
+      hard: 30
+      unit: fps
+      description: "FPS at idle (React reconciler idle)"
+    draw_call:
+      soft: 80
+      hard: 150
+      unit: count
+      description: "GPU draw calls per frame"
+    cpu_frame_us:
+      soft: 8000
+      hard: 16000
+      unit: us
+      description: "CPU frame time (microseconds)"
+
+S5:
+  name: "Static HTML Tests Render"
+  track: dom
+  exe: dong_app
+  args: ["--html", "data/tests/test_conic_basic.html"]
+  warmup_ms: 1000
+  run_ms: 2000
+  env:
+    DONG_PROFILER: "1"
+    DONG_GPU_STATS: "1"
+    DONG_BENCH_AUTOSTOP: "1"
+  metrics:
+    fps_static:
+      soft: 300
+      hard: 144
+      unit: fps
+      description: "FPS for simple static content"
+    draw_call:
+      soft: 15
+      hard: 30
+      unit: count
+      description: "GPU draw calls for simple page"
