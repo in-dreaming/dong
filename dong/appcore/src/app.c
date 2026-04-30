@@ -122,6 +122,13 @@ typedef struct dong_app_impl_t {
     uint32_t fps_frame_count;
     uint64_t fps_last_time;
     float fps_value;
+
+    // Bench autostop (P0-7): auto-exit after warmup + run period
+    int bench_autostop;       // 0 = disabled, 1 = enabled
+    uint32_t bench_warmup_ms; // warmup period (no measurement)
+    uint32_t bench_run_ms;    // measurement period
+    uint64_t bench_start_time;
+    int bench_warmup_done;
 } dong_app_impl_t;
 
 static void app_set_present_mode(dong_app_impl_t* app) {
@@ -517,6 +524,22 @@ DONG_APPCORE_API dong_app_t* dong_app_create(const dong_app_config_t* config) {
     app->fps_last_time = app->last_frame_time;
     app->fps_value = 0.0f;
 
+    // Bench autostop (P0-7): read env vars
+    {
+        const char* autostop = getenv("DONG_BENCH_AUTOSTOP");
+        if (autostop && autostop[0] == '1') {
+            app->bench_autostop = 1;
+            const char* warmup = getenv("DONG_BENCH_WARMUP_MS");
+            const char* run = getenv("DONG_BENCH_RUN_MS");
+            app->bench_warmup_ms = warmup ? (uint32_t)atoi(warmup) : 2000;
+            app->bench_run_ms = run ? (uint32_t)atoi(run) : 5000;
+            app->bench_start_time = SDL_GetPerformanceCounter();
+            app->bench_warmup_done = 0;
+            printf("[DongApp] BENCH_AUTOSTOP: warmup=%ums run=%ums\n",
+                   app->bench_warmup_ms, app->bench_run_ms);
+        }
+    }
+
     return (dong_app_t*)app;
 }
 
@@ -547,7 +570,20 @@ DONG_APPCORE_API void dong_app_destroy(dong_app_t* app_handle) {
 
 DONG_APPCORE_API int dong_app_is_running(dong_app_t* app_handle) {
     dong_app_impl_t* app = (dong_app_impl_t*)app_handle;
-    return app ? app->running : 0;
+    if (!app) return 0;
+    // Bench autostop check
+    if (app->bench_autostop && app->running) {
+        uint64_t now = SDL_GetPerformanceCounter();
+        double elapsed_ms = (double)(now - app->bench_start_time) * 1000.0
+                            / (double)SDL_GetPerformanceFrequency();
+        uint32_t total_ms = app->bench_warmup_ms + app->bench_run_ms;
+        if (elapsed_ms >= (double)total_ms) {
+            printf("[DongApp] BENCH_AUTOSTOP: elapsed %.0fms >= %ums, exiting\n",
+                   elapsed_ms, total_ms);
+            app->running = 0;
+        }
+    }
+    return app->running;
 }
 
 DONG_APPCORE_API void dong_app_quit(dong_app_t* app_handle) {
@@ -562,6 +598,20 @@ DONG_APPCORE_API void dong_app_run(dong_app_t* app_handle, dong_app_tick_fn tick
     while (app->running) {
         if (!dong_app_poll_events(app_handle)) {
             break;
+        }
+
+        // Bench autostop: check elapsed time and quit when done
+        if (app->bench_autostop) {
+            uint64_t now = SDL_GetPerformanceCounter();
+            double elapsed_ms = (double)(now - app->bench_start_time) * 1000.0
+                                / (double)SDL_GetPerformanceFrequency();
+            uint32_t total_ms = app->bench_warmup_ms + app->bench_run_ms;
+            if (elapsed_ms >= (double)total_ms) {
+                printf("[DongApp] BENCH_AUTOSTOP: elapsed %.0fms >= %ums, exiting\n",
+                       elapsed_ms, total_ms);
+                app->running = 0;
+                break;
+            }
         }
 
         float dt = dong_app_get_delta_time(app_handle);
