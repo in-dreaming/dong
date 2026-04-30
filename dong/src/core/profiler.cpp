@@ -259,8 +259,17 @@ void dong_profiler_init(void) {
 
 void dong_profiler_shutdown(void) {
     auto& state = getState();
-    
+
     if (state.initialized.exchange(false, std::memory_order_acq_rel)) {
+        // Auto-dump if DONG_PROFILER_OUTPUT is set (P0-7 bench autostop support)
+        const char* auto_output = std::getenv("DONG_PROFILER_OUTPUT");
+        if (auto_output && auto_output[0]) {
+            // Re-mark as initialized briefly so dump works
+            state.initialized.store(true, std::memory_order_release);
+            dong_profiler_dump(auto_output);
+            state.initialized.store(false, std::memory_order_release);
+        }
+
         std::lock_guard<std::mutex> lock(state.buffers_mutex);
         for (auto* buf : state.all_buffers) {
             delete buf;
