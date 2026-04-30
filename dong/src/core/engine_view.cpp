@@ -852,7 +852,7 @@ struct EngineView::Impl {
         vs.frame_stride = 0;
         if (vs.node && !vs.node->getAttribute("__dong_video_frame").empty()) {
             vs.node->setAttribute("__dong_video_frame", "");
-            markNeedsRepaint();
+            invalidate(InvalidationKind::Paint, nullptr, "video_frame");
         }
     }
 
@@ -1149,7 +1149,7 @@ struct EngineView::Impl {
                 vs.needs_upload = false;
                 if (vs.node && vs.node->getAttribute("__dong_video_frame").empty()) {
                     vs.node->setAttribute("__dong_video_frame", vs.frame_key);
-                    markNeedsRepaint();
+                    invalidate(InvalidationKind::Paint, nullptr, "video_frame");
                 }
                 if (vs.node && cached_cmd_list) {
                     const uint64_t layer_id = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(vs.node.get()));
@@ -1344,7 +1344,7 @@ struct EngineView::Impl {
 
             if (!vs.has_frame && vs.node && !vs.node->getAttribute("__dong_video_frame").empty()) {
                 vs.node->setAttribute("__dong_video_frame", "");
-                markNeedsRepaint();
+                invalidate(InvalidationKind::Paint, nullptr, "video_frame");
             }
         }
 
@@ -1388,7 +1388,7 @@ struct EngineView::Impl {
         if (!native_tooltip_node) return;
         native_tooltip_node->setInlineStyleProperty("display", "none");
         native_tooltip_target.reset();
-        markNeedsRepaint();
+        invalidate(InvalidationKind::Layout, nullptr, "dom_mutation");
     }
 
     DOMNodePtr ensureNativeTooltipNode() {
@@ -1444,7 +1444,7 @@ struct EngineView::Impl {
         tooltip->setInlineStyleProperty("left", toPx(px));
         tooltip->setInlineStyleProperty("top", toPx(py));
         tooltip->setInlineStyleProperty("display", "block");
-        markNeedsRepaint();
+        invalidate(InvalidationKind::Layout, nullptr, "dom_mutation");
     }
 
     bool updateTextareaResizeDrag(int32_t x, int32_t y) {
@@ -1457,7 +1457,7 @@ struct EngineView::Impl {
         if (textarea_resize.mode == dom::CSSResize::Both || textarea_resize.mode == dom::CSSResize::Vertical) nh = std::max(30.0f, nh + dy);
         if (textarea_resize.mode == dom::CSSResize::Both || textarea_resize.mode == dom::CSSResize::Horizontal) textarea_resize.node->setInlineStyleProperty("width", toPx(nw));
         if (textarea_resize.mode == dom::CSSResize::Both || textarea_resize.mode == dom::CSSResize::Vertical) textarea_resize.node->setInlineStyleProperty("height", toPx(nh));
-        markNeedsRepaint();
+        invalidate(InvalidationKind::Layout, nullptr, "dom_mutation");
         return true;
     }
 
@@ -1493,7 +1493,7 @@ struct EngineView::Impl {
         textarea_resize.node.reset();
         textarea_resize.mode = dom::CSSResize::None;
         clearActiveElement();
-        markNeedsRepaint();
+        invalidate(InvalidationKind::Paint, nullptr, "input_text");
         return true;
     }
 
@@ -1517,14 +1517,14 @@ struct EngineView::Impl {
         if (active_element) {
             setActiveChain(active_element, true);
         }
-        markNeedsRepaint();
+        invalidate(InvalidationKind::Style, nullptr, "className");
     }
 
     void clearActiveElement() {
         if (!active_element) return;
         setActiveChain(active_element, false);
         active_element.reset();
-        markNeedsRepaint();
+        invalidate(InvalidationKind::Style, nullptr, "className");
     }
 
     bool loadHTML(const char* html_content) {
@@ -1940,7 +1940,7 @@ struct EngineView::Impl {
         }
 
         if (did_work) {
-            markNeedsRepaint();
+            invalidate(InvalidationKind::Layout, nullptr, "dom_mutation");
         }
     }
 
@@ -1967,7 +1967,7 @@ struct EngineView::Impl {
         DONG_PROFILE_SCOPE_CAT("Layout::calculate", "layout");
         layout_engine->calculateLayout(root, static_cast<float>(width), static_cast<float>(height));
         root->clearLayoutDirtyRecursive();
-        markNeedsRepaint();
+        invalidate(InvalidationKind::Layout, nullptr, "dom_mutation");
     }
 
     void tickSyncDialogTopLayer() {
@@ -2580,7 +2580,7 @@ struct EngineView::Impl {
                         }
                         target->markLayoutDirty();
                         resetCaretBlink();
-                        markNeedsRepaint();
+                        invalidate(InvalidationKind::Paint, nullptr, "input_text");
                     }
                 }
             } else if (event_type == "paste") {
@@ -2593,7 +2593,7 @@ struct EngineView::Impl {
                             dong::dom::ContentEditableState::insertText(editable_root, *selection, text);
                             target->markLayoutDirty();
                             resetCaretBlink();
-                            markNeedsRepaint();
+                            invalidate(InvalidationKind::Paint, nullptr, "input_text");
                         }
                         free(text);
                     }
@@ -2620,7 +2620,7 @@ struct EngineView::Impl {
                                 target->markLayoutDirty();
                             }
                             resetCaretBlink();
-                            markNeedsRepaint();
+                            invalidate(InvalidationKind::Paint, nullptr, "input_text");
                         }
                     }
                 } else if (event_type == "paste" && !target->hasAttribute("readonly")) {
@@ -2635,7 +2635,7 @@ struct EngineView::Impl {
                                 target->markLayoutDirty();
                             }
                             resetCaretBlink();
-                            markNeedsRepaint();
+                            invalidate(InvalidationKind::Paint, nullptr, "input_text");
 
                             if (js_bindings && script_engine) {
                                 ensureJSBindingsInitialized();
@@ -2715,7 +2715,7 @@ struct EngineView::Impl {
             auto hit = dong::dom::TextHitTester::hitTestAt(ce_drag_editable_root_, layout_engine.get(), x, y, &text_shaper_hit_);
             if (hit.found) {
                 selection->extend(hit.text_node, hit.char_offset);
-                markNeedsRepaint();
+                invalidate(InvalidationKind::Paint, nullptr, "input_text");
             }
         }
 
@@ -2729,7 +2729,7 @@ struct EngineView::Impl {
                 } else {
                     state->setCursorPosition(current_idx);
                 }
-                markNeedsRepaint();
+                invalidate(InvalidationKind::Paint, nullptr, "input_text");
             }
         }
     }
@@ -2808,7 +2808,7 @@ struct EngineView::Impl {
 
         if (new_hover != state->getHoverIndex()) {
             state->setHoverIndex(new_hover);
-            markNeedsRepaint();
+            invalidate(InvalidationKind::Paint, nullptr, "select_state");
         }
     }
 
@@ -2859,7 +2859,7 @@ struct EngineView::Impl {
                 }
 
                 open_select_element.reset();
-                markNeedsRepaint();
+                invalidate(InvalidationKind::Paint, nullptr, "select_state");
                 return true;
             }
         }
@@ -2868,14 +2868,14 @@ struct EngineView::Impl {
         if (in_select) {
             state->close();
             open_select_element.reset();
-            markNeedsRepaint();
+            invalidate(InvalidationKind::Paint, nullptr, "select_state");
             return true;
         }
 
         // Click outside: close dropdown but do not consume the event.
         state->close();
         open_select_element.reset();
-        markNeedsRepaint();
+        invalidate(InvalidationKind::Paint, nullptr, "select_state");
         return false;
     }
 
@@ -2906,7 +2906,7 @@ struct EngineView::Impl {
 
             drag_manager->endDrag(last_mouse_x, last_mouse_y);
             drop_target.reset();
-            markNeedsRepaint();
+            invalidate(InvalidationKind::Paint, nullptr, "input_text");
         } else if (!pressed && drag_manager && drag_manager->hasPotentialDrag()) {
             drag_manager->endDrag(last_mouse_x, last_mouse_y);
         }
@@ -2953,7 +2953,7 @@ struct EngineView::Impl {
                     }
 
                     setActiveElement(select_hit);
-                    markNeedsRepaint();
+                    invalidate(InvalidationKind::Paint, nullptr, "select_state");
                     return;
                 }
             }
@@ -3042,7 +3042,7 @@ struct EngineView::Impl {
                         js_bindings->last_editable_root_ = editable_root;
                     }
                     resetCaretBlink();
-                    markNeedsRepaint();
+                    invalidate(InvalidationKind::Paint, nullptr, "input_text");
                 }
             }
 
@@ -3057,7 +3057,7 @@ struct EngineView::Impl {
                     input_drag_node_ = hit;
                     input_drag_anchor_ = char_idx;
                     resetCaretBlink();
-                    markNeedsRepaint();
+                    invalidate(InvalidationKind::Paint, nullptr, "input_text");
                 }
             }
 
@@ -3106,12 +3106,12 @@ struct EngineView::Impl {
                             // Double-click: select word
                             dong::dom::ContentEditableState::selectWordAtCaret(editable_root, *selection);
                             resetCaretBlink();
-                            markNeedsRepaint();
+                            invalidate(InvalidationKind::Paint, nullptr, "input_text");
                         } else if (click_count_ >= 3) {
                             // Triple-click: select all
                             selection->selectAllChildren(editable_root);
                             resetCaretBlink();
-                            markNeedsRepaint();
+                            invalidate(InvalidationKind::Paint, nullptr, "input_text");
                         }
                     }
                 }
@@ -3133,7 +3133,7 @@ struct EngineView::Impl {
                         std::string tag = target_element->getTagName();
                         if (tag == "input" || tag == "textarea" || tag == "select" || tag == "button") {
                             focus_manager->setFocus(target_element);
-                            markNeedsRepaint();
+                            invalidate(InvalidationKind::Paint, nullptr, "focus");
                         }
                     }
                 }
@@ -3151,7 +3151,7 @@ struct EngineView::Impl {
                     } else {
                         clicked->setAttribute("checked", "");
                     }
-                    markNeedsRepaint();
+                    invalidate(InvalidationKind::Paint, nullptr, "checkbox_toggle");
                     // Dispatch change event
                     dispatchSimpleEventForNode(clicked, "change");
                 } else if (type == "radio") {
@@ -3169,7 +3169,7 @@ struct EngineView::Impl {
                             }
                         }
                         clicked->setAttribute("checked", "");
-                        markNeedsRepaint();
+                        invalidate(InvalidationKind::Paint, nullptr, "checkbox_toggle");
                         dispatchSimpleEventForNode(clicked, "change");
                     }
                 }
@@ -3195,7 +3195,7 @@ struct EngineView::Impl {
                         state->applyOpenStateToDOM(details_element);
                         // Dispatch toggle event
                         dispatchSimpleEventForNode(details_element, "toggle");
-                        markNeedsRepaint();
+                        invalidate(InvalidationKind::Layout, nullptr, "dom_mutation");
                         return;  // Don't let this click continue to general handling
                     }
                 }
@@ -3213,7 +3213,7 @@ struct EngineView::Impl {
                             target_element->scrollIntoView(true);
                             // Update URL fragment for :target pseudo-class
                             setCurrentFragment(target_id);
-                            markNeedsRepaint();
+                            invalidate(InvalidationKind::Style, nullptr, "setAttribute");
                         }
                     }
                 }
@@ -3346,7 +3346,7 @@ struct EngineView::Impl {
                             event_dispatcher->dispatch(close_evt);
                         }
                     }
-                    markNeedsRepaint();
+                    invalidate(InvalidationKind::Layout, nullptr, "dialog");
                     return;
                 }
             }
@@ -3406,7 +3406,7 @@ struct EngineView::Impl {
                                 const size_t next = nextEnabled(base, dir);
                                 state->setHoverIndex(static_cast<int>(next));
                                 ensureVisible(next);
-                                markNeedsRepaint();
+                                invalidate(InvalidationKind::Paint, nullptr, "select_state");
                                 handled = true;
                             } else {
                                 const size_t prev = state->getSelectedIndex();
@@ -3414,7 +3414,7 @@ struct EngineView::Impl {
                                 if (next != prev) {
                                     state->selectOption(next);
                                     state->applySelectionToDOM(focused);
-                                    markNeedsRepaint();
+                                    invalidate(InvalidationKind::Paint, nullptr, "select_state");
                                     dispatchSimpleEventForNode(focused, "change");
                                 }
                                 handled = true;
@@ -3435,12 +3435,12 @@ struct EngineView::Impl {
                                 if (open_select_element.get() == focused.get()) {
                                     open_select_element.reset();
                                 }
-                                markNeedsRepaint();
+                                invalidate(InvalidationKind::Paint, nullptr, "select_state");
                                 handled = true;
                             } else {
                                 state->open();
                                 open_select_element = focused;
-                                markNeedsRepaint();
+                                invalidate(InvalidationKind::Paint, nullptr, "select_state");
                                 handled = true;
                             }
                         } else if (key_code == SDLK_ESCAPE) {
@@ -3449,7 +3449,7 @@ struct EngineView::Impl {
                                 if (open_select_element.get() == focused.get()) {
                                     open_select_element.reset();
                                 }
-                                markNeedsRepaint();
+                                invalidate(InvalidationKind::Paint, nullptr, "select_state");
                                 handled = true;
                             }
                         }
@@ -3644,7 +3644,7 @@ struct EngineView::Impl {
                                 focused->markLayoutDirty();
                             }
                             resetCaretBlink();
-                            markNeedsRepaint();
+                            invalidate(InvalidationKind::Paint, nullptr, "input_text");
 
                             // Dispatch input event for delete/insert operations
                             if (input_type && js_bindings && script_engine) {
@@ -3728,7 +3728,7 @@ struct EngineView::Impl {
                         }
                         if (ce_handled) {
                             resetCaretBlink();
-                            markNeedsRepaint();
+                            invalidate(InvalidationKind::Paint, nullptr, "input_text");
                             dispatchKeyEvent("keydown", key_code);
                             return;
                         }
@@ -3776,7 +3776,7 @@ struct EngineView::Impl {
                     focused->markLayoutDirty();
                 }
                 resetCaretBlink();
-                markNeedsRepaint();
+                invalidate(InvalidationKind::Paint, nullptr, "input_text");
 
 
                 // Dispatch input event with inputType
@@ -3796,7 +3796,7 @@ struct EngineView::Impl {
             if (editable_root && selection) {
                 dong::dom::ContentEditableState::insertText(editable_root, *selection, text);
                 resetCaretBlink();
-                markNeedsRepaint();
+                invalidate(InvalidationKind::Paint, nullptr, "input_text");
             }
         }
     }
@@ -3841,12 +3841,12 @@ struct EngineView::Impl {
         // DONG_NAV_NEXT / DONG_NAV_PREV → delegate to tab-order navigation
         if (dir == 4 /* DONG_NAV_NEXT */) {
             focus_manager->moveFocus(dom_manager->getRoot(), false);
-            markNeedsRepaint();
+            invalidate(InvalidationKind::Paint, nullptr, "focus");
             return true;
         }
         if (dir == 5 /* DONG_NAV_PREV */) {
             focus_manager->moveFocus(dom_manager->getRoot(), true);
-            markNeedsRepaint();
+            invalidate(InvalidationKind::Paint, nullptr, "focus");
             return true;
         }
 
@@ -3874,7 +3874,7 @@ struct EngineView::Impl {
         if (!current) {
             focus_manager->setKeyboardFocus(true);
             focus_manager->setFocus(candidates.front());
-            markNeedsRepaint();
+            invalidate(InvalidationKind::Paint, nullptr, "focus");
             return true;
         }
 
@@ -3885,7 +3885,7 @@ struct EngineView::Impl {
 
         focus_manager->setKeyboardFocus(true);
         focus_manager->setFocus(target);
-        markNeedsRepaint();
+        invalidate(InvalidationKind::Paint, nullptr, "focus");
         return true;
     }
 
@@ -4066,7 +4066,7 @@ private:
                     focus_manager->setModalDialogRoot(
                         top_layer.empty() ? nullptr : top_layer.back());
                 }
-                markNeedsRepaint();
+                invalidate(InvalidationKind::Layout, nullptr, "dialog");
                 return true;
             }
         }
@@ -4108,7 +4108,7 @@ private:
                           const char* text) {
         state->startComposition(text);
         focused->setAttribute("value", state->getValue());
-        markNeedsRepaint();
+        invalidate(InvalidationKind::Paint, nullptr, "input_text");
 
         // W3C: compositionstart.data is "" (or selected text, which is empty here)
         dispatchCompositionJS(focused, "compositionstart", "");
@@ -4121,7 +4121,7 @@ private:
                              const char* text) {
         state->updateComposition(text);
         focused->setAttribute("value", state->getValue());
-        markNeedsRepaint();
+        invalidate(InvalidationKind::Paint, nullptr, "input_text");
 
         dispatchCompositionJS(focused, "compositionupdate", text);
         dispatchInputEventForNode(focused, "insertCompositionText", text);
@@ -4132,7 +4132,7 @@ private:
         std::string final_data = state->getCompositionText();
         state->endComposition();
         focused->setAttribute("value", state->getValue());
-        markNeedsRepaint();
+        invalidate(InvalidationKind::Paint, nullptr, "input_text");
 
         dispatchCompositionJS(focused, "compositionend", final_data.c_str());
     }
