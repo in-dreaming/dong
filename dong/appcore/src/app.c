@@ -129,6 +129,12 @@ typedef struct dong_app_impl_t {
     uint32_t bench_run_ms;    // measurement period
     uint64_t bench_start_time;
     int bench_warmup_done;
+
+    // Live reload (P1-4): poll file modification time
+    int hot_reload;           // 0 = disabled, 1 = enabled
+    char hot_reload_path[MAX_PATH_LEN]; // path to watched HTML file
+    uint64_t hot_reload_last_check_ms;  // last poll time
+    int64_t hot_reload_mtime;           // last known modification time
 } dong_app_impl_t;
 
 static void app_set_present_mode(dong_app_impl_t* app) {
@@ -619,6 +625,23 @@ DONG_APPCORE_API void dong_app_run(dong_app_t* app_handle, dong_app_tick_fn tick
             tick(app_handle, dt, user_data);
         }
 
+        // Hot reload (P1-4): poll file mtime every 500ms
+        if (app->hot_reload && app->hot_reload_path[0]) {
+            uint64_t now_ms = SDL_GetTicks();
+            if (now_ms - app->hot_reload_last_check_ms >= 500) {
+                app->hot_reload_last_check_ms = now_ms;
+                SDL_PathInfo info;
+                if (SDL_GetPathInfo(app->hot_reload_path, &info)) {
+                    if (info.modify_time != app->hot_reload_mtime) {
+                        app->hot_reload_mtime = info.modify_time;
+                        printf("[DongApp] HOT_RELOAD: file changed, reloading %s\n",
+                               app->hot_reload_path);
+                        dong_app_load_html_file(app_handle, app->hot_reload_path);
+                    }
+                }
+            }
+        }
+
         dong_app_present(app_handle);
     }
 }
@@ -810,6 +833,24 @@ DONG_APPCORE_API int dong_app_load_html_file(dong_app_t* app_handle, const char*
 
     int result = dong_app_load_html(app_handle, content);
     free(content);
+
+    // Hot reload (P1-4): remember file path for polling
+    if (result) {
+        const char* hot = getenv("DONG_HOT_RELOAD");
+        if (hot && hot[0] == '1') {
+            app->hot_reload = 1;
+            strncpy(app->hot_reload_path, path, MAX_PATH_LEN - 1);
+            app->hot_reload_path[MAX_PATH_LEN - 1] = '\0';
+            app->hot_reload_last_check_ms = SDL_GetTicks();
+            // Get initial mtime via SDL
+            SDL_PathInfo info;
+            if (SDL_GetPathInfo(path, &info)) {
+                app->hot_reload_mtime = info.modify_time;
+            }
+            printf("[DongApp] HOT_RELOAD: watching %s\n", path);
+        }
+    }
+
     return result;
 }
 
