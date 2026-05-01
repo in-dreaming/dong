@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Dong JS Engine Microbenchmarks</title>
+<style>
+body {
+    font-family: monospace;
+    background: #1a1a2e;
+    color: #0f0;
+    padding: 20px;
+    font-size: 14px;
+}
+h1 { color: #0ff; margin-bottom: 10px; }
+#status { color: #ff0; }
+#results { white-space: pre; line-height: 1.6; }
+</style>
+</head>
+<body>
+<h1>JS Engine Microbenchmarks</h1>
+<div id="status">Running...</div>
+<div id="results"></div>
+<script>
+// Helper: time a function in ms
+function bench(name, fn, iterations) {
+    // Warmup
+    for (var i = 0; i < Math.min(iterations, 100); i++) fn();
+
+    var start = Date.now();
+    for (var i = 0; i < iterations; i++) fn();
+    var elapsed = Date.now() - start;
+    var nsPerIter = (elapsed * 1000000 / iterations).toFixed(1);
+    console.log('[BENCH] ' + name + ': ' + elapsed + 'ms (' + iterations + ' iterations, ' + nsPerIter + ' ns/iter)');
+    return { name: name, elapsed: elapsed, iterations: iterations, nsPerIter: nsPerIter };
+}
+
+var results = [];
+
+// 1. Property access (1M iterations)
+results.push(bench('property_access', function() {
+    var obj = { x: 1, y: 2, z: 3 };
+    var sum = obj.x + obj.y + obj.z;
+}, 1000000));
+
+// 2. Function call overhead (200K iterations, 5 calls each)
+function noop() {}
+results.push(bench('function_call', function() {
+    noop(); noop(); noop(); noop(); noop();
+}, 200000));
+
+// 3. Closure creation (1M iterations)
+results.push(bench('closure_create', function() {
+    var fn = function(x) { return x + 1; };
+    fn(42);
+}, 1000000));
+
+// 4. Object creation (100K iterations)
+results.push(bench('object_create', function() {
+    var obj = { a: 1, b: 'hello', c: [1, 2, 3] };
+}, 100000));
+
+// 5. Array manipulation (10K iterations)
+results.push(bench('array_push_pop', function() {
+    var arr = [];
+    for (var j = 0; j < 100; j++) arr.push(j);
+    while (arr.length > 0) arr.pop();
+}, 10000));
+
+// 6. JSON parse (1K iterations)
+var jsonStr = JSON.stringify({ items: Array.from({length: 100}, function(_, i) { return { id: i, name: 'item' + i, value: Math.random() }; }) });
+results.push(bench('json_parse', function() {
+    JSON.parse(jsonStr);
+}, 1000));
+
+// 7. JSON stringify (1K iterations)
+var jsonObj = JSON.parse(jsonStr);
+results.push(bench('json_stringify', function() {
+    JSON.stringify(jsonObj);
+}, 1000));
+
+// 8. String concatenation (10K iterations)
+results.push(bench('string_concat', function() {
+    var s = '';
+    for (var j = 0; j < 100; j++) s += 'x';
+}, 10000));
+
+// 9. RegExp (10K iterations)
+var re = /(\d+)-(\w+)/g;
+results.push(bench('regexp_exec', function() {
+    re.lastIndex = 0;
+    re.exec('123-hello 456-world');
+}, 10000));
+
+// 10. DOM-like tree walk simulation (1K iterations)
+// Simulate what React reconciler does
+results.push(bench('tree_diff_sim', function() {
+    var nodes = [];
+    for (var j = 0; j < 50; j++) {
+        nodes.push({ tag: 'div', key: 'k' + j, children: [{ tag: 'span', text: 'item ' + j }] });
+    }
+    // Simulate diffing
+    for (var j = 0; j < nodes.length; j++) {
+        var n = nodes[j];
+        if (n.key === 'k25') n.text = 'updated';
+    }
+}, 1000));
+
+// 11. Prototype chain lookup (500K iterations)
+function Base() {}
+Base.prototype.method = function() { return 42; };
+function Derived() {}
+Derived.prototype = Object.create(Base.prototype);
+Derived.prototype.constructor = Derived;
+var derived = new Derived();
+results.push(bench('proto_lookup', function() {
+    var x = derived.method();
+}, 500000));
+
+// 12. Map operations (10K iterations)
+results.push(bench('map_operations', function() {
+    var m = {};
+    for (var j = 0; j < 50; j++) m['key' + j] = j;
+    for (var j = 0; j < 50; j++) { var v = m['key' + j]; }
+    for (var j = 0; j < 50; j++) delete m['key' + j];
+}, 10000));
+
+// Signal completion
+console.log('[BENCH] DONE');
+
+// Update DOM with results summary
+try {
+    var statusEl = document.getElementById('status');
+    if (statusEl) statusEl.textContent = 'Complete!';
+    var resultsEl = document.getElementById('results');
+    if (resultsEl) {
+        var text = '';
+        for (var i = 0; i < results.length; i++) {
+            var r = results[i];
+            text += r.name + ': ' + r.elapsed + 'ms (' + r.nsPerIter + ' ns/iter)\n';
+        }
+        resultsEl.textContent = text;
+    }
+} catch(e) {}
+</script>
+</body>
+</html>
