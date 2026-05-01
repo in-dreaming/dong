@@ -575,6 +575,30 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
         {"nav-left", [](const std::string& val, ComputedStyle& style) { style.nav_left = val; }},
         {"nav-right", [](const std::string& val, ComputedStyle& style) { style.nav_right = val; }},
 
+        // CSS Grid (P1-5)
+        {"grid-template-columns", [](const std::string& val, ComputedStyle& style) { style.grid_template_columns = val; }},
+        {"grid-template-rows", [](const std::string& val, ComputedStyle& style) { style.grid_template_rows = val; }},
+        {"grid-column", [](const std::string& val, ComputedStyle& style) { style.grid_column = val; }},
+        {"grid-row", [](const std::string& val, ComputedStyle& style) { style.grid_row = val; }},
+        {"grid-column-start", [](const std::string& val, ComputedStyle& style) { style.grid_column_start = val; }},
+        {"grid-column-end", [](const std::string& val, ComputedStyle& style) { style.grid_column_end = val; }},
+        {"grid-row-start", [](const std::string& val, ComputedStyle& style) { style.grid_row_start = val; }},
+        {"grid-row-end", [](const std::string& val, ComputedStyle& style) { style.grid_row_end = val; }},
+        {"grid-gap", [](const std::string& val, ComputedStyle& style) {
+            style.grid_gap = val;
+            std::istringstream iss(val);
+            std::string first, second;
+            iss >> first;
+            iss >> second;
+            style.row_gap = parseFloatHelper(first);
+            style.column_gap = second.empty() ? style.row_gap : parseFloatHelper(second);
+        }},
+        {"grid-auto-flow", [](const std::string& val, ComputedStyle& style) { style.grid_auto_flow = val; }},
+        {"grid-auto-columns", [](const std::string& val, ComputedStyle& style) { style.grid_auto_columns = val; }},
+        {"grid-auto-rows", [](const std::string& val, ComputedStyle& style) { style.grid_auto_rows = val; }},
+        {"grid-template-areas", [](const std::string& val, ComputedStyle& style) { style.grid_template_areas = val; }},
+        {"grid-area", [](const std::string& val, ComputedStyle& style) { style.grid_area = val; }},
+
 
         // Outline
         {"outline", [](const std::string& val, ComputedStyle& style) {
@@ -753,6 +777,7 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
         {"flex-basis", [](const std::string& val, ComputedStyle& style) { style.flex_basis = CSSParser::parseValue(val); }},
         {"order", [](const std::string& val, ComputedStyle& style) { style.order = static_cast<int>(parseFloatHelper(val)); }},
         {"gap", [](const std::string& val, ComputedStyle& style) {
+            style.grid_gap = val;
             // Support dual-value syntax: gap: row-gap column-gap
             std::istringstream iss(val);
             std::vector<std::string> parts;

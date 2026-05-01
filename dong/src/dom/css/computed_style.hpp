@@ -159,6 +159,22 @@ struct ComputedStyle {
     std::string nav_left = "auto";
     std::string nav_right = "auto";
 
+    // CSS Grid (P1-5)
+    std::string grid_template_columns;  // e.g., "1fr 2fr 100px", "repeat(3, 1fr)"
+    std::string grid_template_rows;     // same format
+    std::string grid_column;            // e.g., "1 / 3", "span 2"
+    std::string grid_row;               // same format
+    std::string grid_column_start;      // e.g., "1", "span 2"
+    std::string grid_column_end;
+    std::string grid_row_start;
+    std::string grid_row_end;
+    std::string grid_gap;               // shorthand, stored as string
+    std::string grid_auto_flow = "row"; // row | column | dense | row dense
+    std::string grid_auto_columns;      // default track sizing
+    std::string grid_auto_rows;
+    std::string grid_template_areas;    // named areas
+    std::string grid_area;              // shorthand for grid-row/column
+
     // CSS mask
     std::string mask_image;  // url("...") | linear-gradient(...) | conic-gradient(...) | none
     enum class MaskMode : uint8_t { Alpha = 0, Luminance = 1 };
