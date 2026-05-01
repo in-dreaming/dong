@@ -146,7 +146,12 @@ static void default_logger_log(DongLogger* logger, DongLoggerLevel level, const 
         return;
     }
 
+    /* Respect DONG_LOG_TO_STDOUT env var (P0-7 bench capture support) */
     FILE* out = stderr;
+    const char* to_stdout = getenv("DONG_LOG_TO_STDOUT");
+    if (to_stdout && (to_stdout[0] == '1' || to_stdout[0] == 'y' || to_stdout[0] == 'Y')) {
+        out = stdout;
+    }
     fprintf(out, "%s%s\n", default_logger_level_prefix(level), message);
     fflush(out);
 }
