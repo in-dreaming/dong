@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>P0 Feature Verification - Comprehensive</title>
+  <style>
+    * { margin: 0; box-sizing: border-box; }
+    body {
+      font-family: system-ui, sans-serif;
+      background: #0f0f23;
+      color: #e0e0e0;
+      padding: 16px;
+      font-size: 14px;
+    }
+    h2 { color: #ffd700; margin: 16px 0 8px; font-size: 16px; }
+    .section { margin-bottom: 16px; padding: 12px; background: #1a1a3e; border-radius: 8px; }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+
+    /* P0-1: Uber Quad - mix of rounded rects + shadows */
+    .uberquad-box {
+      width: 80px; height: 60px;
+      background: #334;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    }
+    .uberquad-box.accent { background: #667eea; }
+    .uberquad-box.warn { background: #e74c3c; }
+    .uberquad-box.success { background: #2ecc71; }
+
+    /* P0-3: Conic gradient (cooldowns) */
+    .cooldown {
+      width: 48px; height: 48px;
+      border-radius: 50%;
+      background: conic-gradient(rgba(0,0,0,0.7) 0% 60%, transparent 60% 100%);
+    }
+    .cooldown-30 { background: conic-gradient(rgba(0,0,0,0.7) 0% 30%, transparent 30% 100%); }
+    .cooldown-90 { background: conic-gradient(rgba(0,0,0,0.7) 0% 90%, transparent 90% 100%); }
+
+    /* P0-3: Mask fast-path test */
+    .masked-skill {
+      width: 48px; height: 48px;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      border-radius: 8px;
+    }
+    .mask-overlay {
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.75);
+      border-radius: 8px;
+      mask-image: conic-gradient(transparent 0% 40%, black 40% 100%);
+      -webkit-mask-image: conic-gradient(transparent 0% 40%, black 40% 100%);
+    }
+
+    /* P0-4: Spatial nav (focusable buttons) */
+    .nav-btn {
+      padding: 8px 16px;
+      background: #252560;
+      border: 2px solid #444;
+      border-radius: 6px;
+      color: #ccc;
+      cursor: pointer;
+    }
+    .nav-btn:focus {
+      border-color: #ffd700;
+      color: #fff;
+      outline: none;
+      box-shadow: 0 0 8px rgba(255,215,0,0.3);
+    }
+
+    /* P0-8: CSS cascade keywords */
+    .inherit-test { color: #e74c3c; }
+    .inherit-test .child { color: inherit; }
+    .initial-test { font-weight: bold; }
+    .initial-test .child { font-weight: initial; }
+
+    /* P0-8: Hidden attribute */
+    [hidden] { display: none !important; }
+
+    /* P0-8: Anchor default style */
+    a { color: #0af; text-decoration: underline; cursor: pointer; }
+
+    /* Various CSS features */
+    .sticky-header {
+      position: sticky;
+      top: 0;
+      background: #1a1a3e;
+      padding: 8px;
+      z-index: 10;
+    }
+    .flex-container { display: flex; gap: 8px; }
+    .grid-like { display: flex; flex-wrap: wrap; gap: 4px; }
+    .grid-like > div { width: 30px; height: 30px; background: #334; border-radius: 4px; }
+    .aspect-box { width: 80px; aspect-ratio: 16/9; background: #456; border-radius: 4px; }
+    .label { font-size: 11px; color: #888; }
+  </style>
+</head>
+<body>
+  <h2>P0-1: Uber Quad Batching</h2>
+  <div class="section row">
+    <div class="uberquad-box"></div>
+    <div class="uberquad-box accent"></div>
+    <div class="uberquad-box warn"></div>
+    <div class="uberquad-box success"></div>
+    <div class="uberquad-box" style="border-radius: 50%;"></div>
+  </div>
+
+  <h2>P0-3: Conic Gradient Cooldowns</h2>
+  <div class="section row">
+    <div><div class="cooldown-30"></div><div class="label">30%</div></div>
+    <div><div class="cooldown"></div><div class="label">60%</div></div>
+    <div><div class="cooldown-90"></div><div class="label">90%</div></div>
+    <div><div class="masked-skill"><div class="mask-overlay"></div></div><div class="label">Mask</div></div>
+  </div>
+
+  <h2>P0-4: Spatial Navigation</h2>
+  <div class="section row">
+    <button class="nav-btn" tabindex="0" id="btn-a" autofocus>Start</button>
+    <button class="nav-btn" tabindex="0" id="btn-b">Load</button>
+    <button class="nav-btn" tabindex="0" id="btn-c">Settings</button>
+    <button class="nav-btn" tabindex="0" id="btn-d">Quit</button>
+  </div>
+
+  <h2>P0-8: CSS Cascade + DOM</h2>
+  <div class="section">
+    <div class="row">
+      <div class="inherit-test">Red parent: <span class="child">inherits red</span></div>
+      <div class="initial-test">Bold parent: <span class="child">initial weight</span></div>
+    </div>
+    <div hidden>This should be hidden</div>
+    <a href="#">Anchor with default style</a>
+  </div>
+
+  <h2>CSS Features</h2>
+  <div class="section">
+    <div class="row">
+      <div class="aspect-box"></div>
+      <div class="label">aspect-ratio: 16/9</div>
+    </div>
+    <div class="grid-like" style="margin-top: 8px;">
+      <div></div><div></div><div></div><div></div><div></div>
+      <div></div><div></div><div></div><div></div><div></div>
+    </div>
+  </div>
+
+  <script>
+    // P0-4: Arrow key navigation
+    document.addEventListener('keydown', function(e) {
+      if (typeof dong !== 'undefined' && dong.focusNav) {
+        if (e.key === 'ArrowUp') { dong.focusNav('up'); e.preventDefault(); }
+        if (e.key === 'ArrowDown') { dong.focusNav('down'); e.preventDefault(); }
+        if (e.key === 'ArrowLeft') { dong.focusNav('left'); e.preventDefault(); }
+        if (e.key === 'ArrowRight') { dong.focusNav('right'); e.preventDefault(); }
+      }
+    });
+  </script>
+</body>
+</html>
