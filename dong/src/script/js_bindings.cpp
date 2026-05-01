@@ -3079,6 +3079,27 @@ void JSBindings::initializeConsoleAPI() {
     JS_SetPropertyStr(ctx, global, "DOMParser",
         JS_NewCFunction2(ctx, domparser_constructor, "DOMParser", 0, JS_CFUNC_constructor, 0));
 
+    // crypto.randomUUID() (P1-9)
+    {
+        JSValue crypto = JS_NewObject(ctx);
+        auto randomUUID = [](JSContext* ctx2, JSValueConst, int, JSValueConst*) -> JSValue {
+            // Generate UUID v4: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
+            static auto hexChar = [](unsigned v) -> char { return "0123456789abcdef"[v & 0xf]; };
+            char uuid[37];
+            for (int i = 0; i < 36; i++) {
+                if (i == 8 || i == 13 || i == 18 || i == 23) uuid[i] = '-';
+                else if (i == 14) uuid[i] = '4';
+                else if (i == 19) uuid[i] = hexChar((std::rand() & 0x3) | 0x8);
+                else uuid[i] = hexChar(std::rand());
+            }
+            uuid[36] = '\0';
+            return JS_NewString(ctx2, uuid);
+        };
+        JS_SetPropertyStr(ctx, crypto, "randomUUID",
+            JS_NewCFunction(ctx, randomUUID, "randomUUID", 0));
+        JS_SetPropertyStr(ctx, global, "crypto", crypto);
+    }
+
     JS_FreeValue(ctx, global);
 }
 
