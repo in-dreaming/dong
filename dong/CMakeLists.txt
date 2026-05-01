@@ -160,6 +160,7 @@ endif()
 # dong: platform-agnostic core (will become dong.dll)
 add_library(dong SHARED
     src/api_bindings.cpp
+    src/render/drawlist_emitter.cpp
     src/core/context.cpp
     src/core/engine_view.cpp
     src/core/platform.c

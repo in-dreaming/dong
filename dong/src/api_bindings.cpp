@@ -1,9 +1,12 @@
 #define DONG_DISABLE_VIEW_API
 #include "dong.h"
+#include "dong_drawlist.h"
 
 #include "core/engine_view.hpp"
 #include "core/profiler.h"
 #include "render/text_renderer_mode.hpp"
+#include "render/drawlist_emitter.hpp"
+#include "render/gpu_ir.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -398,6 +401,37 @@ dong_result_t dong_engine_create_shared_js(
         *out_engine = nullptr;
         return DONG_ERR_INTERNAL;
     }
+}
+
+// ============================================================================
+// Draw List API
+// ============================================================================
+
+const dong_draw_cmd_t* dong_drawlist_get_commands(dong_engine_t* engine,
+                                                   uint32_t* out_count) {
+    if (!engine || !engine->view || !out_count) {
+        if (out_count) *out_count = 0;
+        return nullptr;
+    }
+
+    const void* raw = engine->view->getCommandList();
+    if (!raw) {
+        *out_count = 0;
+        return nullptr;
+    }
+
+    const auto* cmd_list = static_cast<const dong::render::GPUCommandList*>(raw);
+    dong::render::emitDrawList(*cmd_list);
+    return dong::render::getEmittedCommands(out_count);
+}
+
+uint32_t dong_drawlist_get_abi_version(void) {
+    return DONG_DRAWLIST_ABI_VERSION;
+}
+
+dong_draw_cmd_type_t dong_draw_cmd_get_type(const dong_draw_cmd_t* cmd) {
+    if (!cmd) return DONG_DRAW_CMD_RECT;
+    return cmd->type;
 }
 
 } // extern "C"

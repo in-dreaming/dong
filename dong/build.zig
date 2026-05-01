@@ -1732,6 +1732,7 @@ fn buildDongCore(
             "src/render/slug/slug_curve_encoder.cpp",
             "src/render/slug/slug_band_builder.cpp",
             "src/render/slug/slug_font_cache.cpp",
+            "src/render/drawlist_emitter.cpp",
         },
         .flags = &.{
             "-std=c++20",
