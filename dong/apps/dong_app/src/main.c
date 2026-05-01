@@ -85,6 +85,7 @@ int main(int argc, char** argv) {
     const char* html_file = NULL;
     uint32_t width = 960;
     uint32_t height = 540;
+    int watch_mode = 0;
 
     // Parse command line arguments
     for (int i = 1; i < argc; i++) {
@@ -94,10 +95,21 @@ int main(int argc, char** argv) {
             width = (uint32_t)atoi(argv[++i]);
         } else if (strcmp(argv[i], "--height") == 0 && i + 1 < argc) {
             height = (uint32_t)atoi(argv[++i]);
+        } else if (strcmp(argv[i], "--watch") == 0 || strcmp(argv[i], "-w") == 0) {
+            watch_mode = 1;
         } else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
             print_usage();
             return 0;
         }
+    }
+
+    // --watch implies DONG_HOT_RELOAD=1
+    if (watch_mode) {
+        #if defined(_WIN32)
+        _putenv_s("DONG_HOT_RELOAD", "1");
+        #else
+        setenv("DONG_HOT_RELOAD", "1", 1);
+        #endif
     }
 
     // Create application
