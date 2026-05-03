@@ -2789,6 +2789,13 @@ void SDLGPUDriver::executeDispatchCommand(const GPUCommand& cmd,
         if (use_uber_quad_) flushUberBatch(ctx);
         executeDrawNineSlice(ctx, cmd);
         break;
+    case GPUCommandType::DrawHostView:
+        // P1-2: Host-rendered content placeholder.
+        // The SDL backend doesn't render host views directly — they are consumed
+        // by the host engine through the DongDrawList C ABI.
+        // In the SDL demo, we just skip these commands (no visual output).
+        if (use_uber_quad_) flushUberBatch(ctx);
+        break;
     case GPUCommandType::DrawText:
         if (use_uber_quad_) flushUberBatch(ctx);
         executeDrawText(ctx, cmd);

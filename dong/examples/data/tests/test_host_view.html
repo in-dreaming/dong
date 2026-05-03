@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>P1-2: Host View Embedded Element Test</title>
+  <style>
+    body {
+      margin: 0; padding: 24px;
+      background: #0f0f23; color: #eee;
+      font-family: sans-serif;
+    }
+    .game-hud {
+      display: flex; gap: 16px; flex-wrap: wrap;
+    }
+    .panel {
+      background: #1a1a3e; border: 1px solid #333;
+      border-radius: 8px; padding: 12px;
+    }
+    .panel h3 { margin: 0 0 8px; color: #ffd700; font-size: 14px; }
+
+    /* host-view elements act as replaced content placeholders */
+    host-view {
+      display: block;
+      background: #222; /* fallback visual in SDL backend */
+      border: 2px dashed #555;
+    }
+
+    .minimap {
+      width: 180px; height: 180px;
+    }
+    .inventory-slot {
+      width: 64px; height: 64px;
+      margin: 4px;
+      display: inline-block;
+    }
+    .character-portrait {
+      width: 120px; height: 160px;
+    }
+    .label { font-size: 11px; color: #888; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <h2>Host View Test (P1-2)</h2>
+  <p>Each dashed-border rectangle represents a &lt;host-view&gt; element where the game engine renders its own content.</p>
+
+  <div class="game-hud">
+    <div class="panel">
+      <h3>Mini Map</h3>
+      <host-view data-host-view-id="1" class="minimap"></host-view>
+      <div class="label">host-view id=1 (180x180)</div>
+    </div>
+
+    <div class="panel">
+      <h3>Character</h3>
+      <host-view data-host-view-id="2" class="character-portrait"></host-view>
+      <div class="label">host-view id=2 (120x160)</div>
+    </div>
+
+    <div class="panel">
+      <h3>Inventory</h3>
+      <div>
+        <host-view data-host-view-id="10" class="inventory-slot"></host-view>
+        <host-view data-host-view-id="11" class="inventory-slot"></host-view>
+        <host-view data-host-view-id="12" class="inventory-slot"></host-view>
+        <host-view data-host-view-id="13" class="inventory-slot"></host-view>
+      </div>
+      <div>
+        <host-view data-host-view-id="14" class="inventory-slot"></host-view>
+        <host-view data-host-view-id="15" class="inventory-slot"></host-view>
+        <host-view data-host-view-id="16" class="inventory-slot"></host-view>
+        <host-view data-host-view-id="17" class="inventory-slot"></host-view>
+      </div>
+      <div class="label">8 inventory slots (64x64 each)</div>
+    </div>
+
+    <div class="panel" style="opacity: 0.5;">
+      <h3>Dimmed Panel (opacity: 0.5)</h3>
+      <host-view data-host-view-id="99" style="width: 100px; height: 80px;"></host-view>
+      <div class="label">host-view inherits parent opacity</div>
+    </div>
+  </div>
+</body>
+</html>

@@ -1211,21 +1211,16 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                 host_view_id = 0;
             }
         }
-        
+
         // Add host-view display item to the display list
         float hv_opacity = std::clamp(style.opacity, 0.0f, 1.0f);
         if (node->hasAttribute("inert")) {
             hv_opacity *= 0.5f;
         }
         builder.addHostView(host_view_id, node_rect, hv_opacity);
-        
-        // Skip normal element painting - host-view elements don't render content
-        if (pushed_layer_node) {
-            layer_stack_.pop_back();
-            opacity_scope = DisplayListBuilder::ScopedLayer();
-        }
-        // Continue to next sibling
-        goto end_paint_node;
+
+        // Skip normal element painting - host-view is a replaced element
+        return;
     }
 
     if (layout_node && !is_hidden) {
@@ -2415,7 +2410,6 @@ Painter::LayerDecision Painter::decideLayerNeeds(const dom::DOMNodePtr& node,
         if (!decision.content_dirty && use_dirty_rect_ && !current_dirty_rect_.isEmpty()) {
             decision.content_dirty = isRectInDirtyRect(layer_bounds);
         }
-end_paint_node:
     }
 
     return decision;
