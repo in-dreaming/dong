@@ -464,6 +464,10 @@ struct EngineView::Impl {
     bool use_gpu = false;
     bool commands_dirty_ = true;  // P0-6 S1: renamed (underscore), still controls actual behavior
     std::vector<Invalidation> pending_invalidations_;
+    // P0-6: Set of node pointers that have been explicitly invalidated this tick.
+    // Empty set means "full invalidation" (all nodes dirty). Non-empty means only
+    // those specific nodes need re-painting. Foundation for future partial repaint.
+    std::unordered_set<const void*> dirty_node_ptrs_;
     uint32_t invalidation_count_this_tick_ = 0;
     uint32_t full_repaint_count_ = 0;  // for P0-7 perf metric
     uint32_t paint_only_tick_count_ = 0;  // ticks where only Paint invalidations were pending
@@ -631,6 +635,19 @@ struct EngineView::Impl {
         pending_invalidations_.push_back({kind, source, reason});
         commands_dirty_ = true;
         dom_display_list_valid_ = false;
+        // P0-6: Track which specific nodes are dirty for future partial repaint.
+        // A null source or Full/Layout kind means all nodes are potentially dirty,
+        // so we clear the set (empty = full invalidation).
+        if (source && kind != InvalidationKind::Full && kind != InvalidationKind::Layout) {
+            // Only track targeted invalidations (Style/Paint/Geometry with a source)
+            if (!dirty_node_ptrs_.empty() || pending_invalidations_.size() == 1) {
+                dirty_node_ptrs_.insert(source);
+            }
+            // else: already in "all dirty" mode (empty set after a Full/Layout/null)
+        } else {
+            // Null source or Full/Layout → all nodes dirty: clear set to signal full invalidation
+            dirty_node_ptrs_.clear();
+        }
         if (render_surface) {
             render_surface->markDirty();
         }
@@ -652,6 +669,16 @@ struct EngineView::Impl {
             }
         }
         return true;  // Only Style/Paint/Geometry — no layout recalc needed
+    }
+
+    // P0-6: Query whether a specific node needs re-painting.
+    // Returns true if:
+    //   - dirty_node_ptrs_ is empty (full invalidation — all nodes dirty), OR
+    //   - the given node_ptr is in the dirty set.
+    // This is the foundation for skipping buildDisplayListNode on clean nodes
+    // once per-node display list caching is implemented.
+    bool isNodeDirty(const void* node_ptr) const {
+        return dirty_node_ptrs_.empty() || dirty_node_ptrs_.count(node_ptr) > 0;
     }
     // --- end P0-6 ---
 
@@ -2137,6 +2164,7 @@ struct EngineView::Impl {
                                paint_only_tick_count_, full_repaint_count_);
             }
             pending_invalidations_.clear();
+            dirty_node_ptrs_.clear();
         }
         // --- end P0-6 ---
 
