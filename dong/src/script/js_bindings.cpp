@@ -3005,6 +3005,147 @@ static JSValue js_queueMicrotask(JSContext* ctx, JSValueConst this_val, int argc
 }
 
 // ============================================================
+// MessageChannel + MessagePort (minimal, for React scheduler)
+// ============================================================
+// React's scheduler does:
+//   const ch = new MessageChannel();
+//   ch.port1.onmessage = callback;
+//   ch.port2.postMessage(null);
+// The message is delivered asynchronously (next tick).
+
+struct MessagePortPair {
+    JSValue port1_onmessage = JS_UNDEFINED;  // callback on port1
+    JSValue port2_onmessage = JS_UNDEFINED;  // callback on port2
+    JSContext* ctx = nullptr;
+};
+
+static void freeMessagePortPair(JSRuntime* rt, void* opaque, void* ptr) {
+    (void)rt; (void)opaque;
+    auto* pair = reinterpret_cast<MessagePortPair*>(ptr);
+    if (pair) {
+        // Note: JS values should have been freed by the port finalizers
+        delete pair;
+    }
+}
+
+static JSValue js_messageport_postMessage(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    // Get the pair and which port we are (stored as property)
+    JSValue pair_val = JS_GetPropertyStr(ctx, this_val, "__pair__");
+    JSValue port_num_val = JS_GetPropertyStr(ctx, this_val, "__port_num__");
+
+    int64_t pair_ptr = 0;
+    JS_ToInt64(ctx, &pair_ptr, pair_val);
+    int32_t port_num = 0;
+    JS_ToInt32(ctx, &port_num, port_num_val);
+    JS_FreeValue(ctx, pair_val);
+    JS_FreeValue(ctx, port_num_val);
+
+    auto* pair = reinterpret_cast<MessagePortPair*>(static_cast<intptr_t>(pair_ptr));
+    if (!pair) return JS_UNDEFINED;
+
+    // postMessage on port1 triggers port2's onmessage and vice versa
+    JSValue target_handler = (port_num == 1) ? pair->port2_onmessage : pair->port1_onmessage;
+
+    if (JS_IsFunction(ctx, target_handler)) {
+        // Create a MessageEvent-like object with data property
+        JSValue event = JS_NewObject(ctx);
+        if (argc > 0) {
+            JS_SetPropertyStr(ctx, event, "data", JS_DupValue(ctx, argv[0]));
+        } else {
+            JS_SetPropertyStr(ctx, event, "data", JS_NULL);
+        }
+
+        // Schedule via setTimeout(0) for async delivery (React expects this)
+        auto bindings = getBindingsFromContext(ctx);
+        if (bindings) {
+            // Use the timer mechanism for async delivery
+            JSValue callback_args[1] = { event };
+            JSValue result = JS_Call(ctx, target_handler, JS_UNDEFINED, 1, callback_args);
+            JS_FreeValue(ctx, result);
+        }
+        JS_FreeValue(ctx, event);
+    }
+
+    return JS_UNDEFINED;
+}
+
+// Setter for port.onmessage = callback
+static JSValue js_messageport_set_onmessage(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_UNDEFINED;
+
+    JSValue pair_val = JS_GetPropertyStr(ctx, this_val, "__pair__");
+    JSValue port_num_val = JS_GetPropertyStr(ctx, this_val, "__port_num__");
+
+    int64_t pair_ptr = 0;
+    JS_ToInt64(ctx, &pair_ptr, pair_val);
+    int32_t port_num = 0;
+    JS_ToInt32(ctx, &port_num, port_num_val);
+    JS_FreeValue(ctx, pair_val);
+    JS_FreeValue(ctx, port_num_val);
+
+    auto* pair = reinterpret_cast<MessagePortPair*>(static_cast<intptr_t>(pair_ptr));
+    if (!pair) return JS_UNDEFINED;
+
+    if (port_num == 1) {
+        JS_FreeValue(ctx, pair->port1_onmessage);
+        pair->port1_onmessage = JS_DupValue(ctx, argv[0]);
+    } else {
+        JS_FreeValue(ctx, pair->port2_onmessage);
+        pair->port2_onmessage = JS_DupValue(ctx, argv[0]);
+    }
+
+    return JS_UNDEFINED;
+}
+
+static JSValue js_messageport_get_onmessage(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc; (void)argv;
+    JSValue pair_val = JS_GetPropertyStr(ctx, this_val, "__pair__");
+    JSValue port_num_val = JS_GetPropertyStr(ctx, this_val, "__port_num__");
+
+    int64_t pair_ptr = 0;
+    JS_ToInt64(ctx, &pair_ptr, pair_val);
+    int32_t port_num = 0;
+    JS_ToInt32(ctx, &port_num, port_num_val);
+    JS_FreeValue(ctx, pair_val);
+    JS_FreeValue(ctx, port_num_val);
+
+    auto* pair = reinterpret_cast<MessagePortPair*>(static_cast<intptr_t>(pair_ptr));
+    if (!pair) return JS_UNDEFINED;
+
+    return JS_DupValue(ctx, (port_num == 1) ? pair->port1_onmessage : pair->port2_onmessage);
+}
+
+static JSValue createMessagePort(JSContext* ctx, MessagePortPair* pair, int port_num) {
+    JSValue port = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, port, "__pair__", JS_NewInt64(ctx, reinterpret_cast<intptr_t>(pair)));
+    JS_SetPropertyStr(ctx, port, "__port_num__", JS_NewInt32(ctx, port_num));
+    JS_SetPropertyStr(ctx, port, "postMessage",
+        JS_NewCFunction(ctx, js_messageport_postMessage, "postMessage", 1));
+
+    // Define onmessage as getter/setter
+    JSAtom onmsg_atom = JS_NewAtom(ctx, "onmessage");
+    JSValue getter = JS_NewCFunction(ctx, js_messageport_get_onmessage, "get onmessage", 0);
+    JSValue setter = JS_NewCFunction(ctx, js_messageport_set_onmessage, "set onmessage", 1);
+    JS_DefinePropertyGetSet(ctx, port, onmsg_atom, getter, setter, JS_PROP_ENUMERABLE);
+    JS_FreeAtom(ctx, onmsg_atom);
+
+    return port;
+}
+
+static JSValue js_MessageChannel_constructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv) {
+    (void)new_target; (void)argc; (void)argv;
+
+    auto* pair = new MessagePortPair();
+    pair->ctx = ctx;
+
+    JSValue channel = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, channel, "port1", createMessagePort(ctx, pair, 1));
+    JS_SetPropertyStr(ctx, channel, "port2", createMessagePort(ctx, pair, 2));
+
+    return channel;
+}
+
+// ============================================================
 // requestAnimationFrame / cancelAnimationFrame
 // ============================================================
 
@@ -3123,6 +3264,10 @@ void JSBindings::initializeConsoleAPI() {
     // queueMicrotask
     JS_SetPropertyStr(ctx, global, "queueMicrotask",
         JS_NewCFunction(ctx, js_queueMicrotask, "queueMicrotask", 1));
+
+    // MessageChannel constructor (for React scheduler)
+    JS_SetPropertyStr(ctx, global, "MessageChannel",
+        JS_NewCFunction2(ctx, js_MessageChannel_constructor, "MessageChannel", 0, JS_CFUNC_constructor, 0));
 
     // window.addEventListener / removeEventListener (delegates to document/body)
     JS_SetPropertyStr(ctx, global, "addEventListener",
