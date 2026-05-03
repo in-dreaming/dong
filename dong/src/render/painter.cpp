@@ -1038,6 +1038,14 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         clamped_opacity *= 0.5f;
     }
 
+    // P1-9: Disabled form elements are visually dimmed (60% opacity)
+    if (node->hasAttribute("disabled")) {
+        const std::string& dtag = node->getTagName();
+        if (dtag == "input" || dtag == "button" || dtag == "select" || dtag == "textarea" || dtag == "fieldset") {
+            clamped_opacity *= 0.6f;
+        }
+    }
+
     // layer bounds 用于 isolated layer 的采样与合成，需要落在“最终屏幕坐标系”中。
     // 注意：滚动是通过 DisplayListBuilder 的 translate 实现的，因此这里必须把 translate 计入 bounds。
     Rect layer_bounds = node_rect;

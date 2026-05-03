@@ -2401,6 +2401,22 @@ struct EngineView::Impl {
         auto target = hitTestElementAt(dom_manager.get(), layout_engine.get(), x, y);
         if (!target) return;
 
+        // P1-9: Block events on disabled elements and their descendants.
+        // In HTML, disabled form elements (<input>, <button>, <select>, <textarea>)
+        // and children of disabled <fieldset> should not receive click/mousedown events.
+        {
+            auto check = target;
+            while (check) {
+                if (check->hasAttribute("disabled")) {
+                    const std::string& t = check->getTagName();
+                    if (t == "input" || t == "button" || t == "select" || t == "textarea" || t == "fieldset") {
+                        return;  // Swallow the event
+                    }
+                }
+                check = check->getParent();
+            }
+        }
+
         // Pointer capture (mouse-only): route events to captured element if present.
         if (auto captured = dong::dom::DOMNode::getPointerCapture()) {
             target = captured;
