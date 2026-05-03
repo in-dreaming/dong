@@ -1199,6 +1199,35 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
 
     // 1. ��������Ӱ (visibility: hidden ʱ��������)
 
+    // P1-2: Check for host-view custom element
+    if (tag == "host-view" && has_layout_rect) {
+        // Extract host_view_id from data attribute
+        uint32_t host_view_id = 0;
+        const std::string id_str = node->getAttribute("data-host-view-id");
+        if (!id_str.empty()) {
+            try {
+                host_view_id = static_cast<uint32_t>(std::stoul(id_str));
+            } catch (...) {
+                host_view_id = 0;
+            }
+        }
+        
+        // Add host-view display item to the display list
+        float hv_opacity = std::clamp(style.opacity, 0.0f, 1.0f);
+        if (node->hasAttribute("inert")) {
+            hv_opacity *= 0.5f;
+        }
+        builder.addHostView(host_view_id, node_rect, hv_opacity);
+        
+        // Skip normal element painting - host-view elements don't render content
+        if (pushed_layer_node) {
+            layer_stack_.pop_back();
+            opacity_scope = DisplayListBuilder::ScopedLayer();
+        }
+        // Continue to next sibling
+        goto end_paint_node;
+    }
+
     if (layout_node && !is_hidden) {
         Rect rect = node_rect;
 
@@ -2386,6 +2415,7 @@ Painter::LayerDecision Painter::decideLayerNeeds(const dom::DOMNodePtr& node,
         if (!decision.content_dirty && use_dirty_rect_ && !current_dirty_rect_.isEmpty()) {
             decision.content_dirty = isRectInDirtyRect(layer_bounds);
         }
+end_paint_node:
     }
 
     return decision;

@@ -132,6 +132,14 @@ void emitDrawList(const GPUCommandList& gpu_cmds) {
                 break;
             }
 
+            case GPUCommandType::DrawHostView:
+                out.type = DONG_DRAW_CMD_HOST_VIEW;
+                out.rect = {cmd.rect.x, cmd.rect.y, cmd.rect.width, cmd.rect.height};
+                out.host_view_id = cmd.host_view_id;
+                out.opacity = cmd.opacity;
+                s_emitted_commands.push_back(out);
+                break;
+
             case GPUCommandType::BeginIsolatedLayer:
                 out.type = DONG_DRAW_CMD_LAYER_PUSH;
                 out.rect = {cmd.rect.x, cmd.rect.y, cmd.rect.width, cmd.rect.height};

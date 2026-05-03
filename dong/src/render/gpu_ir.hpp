@@ -53,6 +53,7 @@ enum class GPUCommandType : uint8_t {
     DrawGradientQuad,        // 线性渐变 quad
     DrawConicGradientQuad,   // 锥形渐变 quad
     ApplyMaskConicGradient,  // P0-3: render conic gradient as mask (multiply blend)
+    DrawHostView,              // P1-2: Host-rendered content placeholder
     /// 多条 rect / round / shadow 合并为一次 GPU instanced draw；实例数据在 GPUCommandList::uber_instance_pool
     UberQuadBatch,
 
@@ -105,6 +106,9 @@ struct GPUCommand {
     float layer_transform[6] = {1.0f, 0.0f, 0.0f,
                                 0.0f, 1.0f, 0.0f};
     float layer_scroll[2] = {0.0f, 0.0f};
+
+    // Host-rendered content placeholder (P1-2)
+    uint32_t host_view_id = 0;  // opaque identifier for host-rendered content
 
     // 文字绘制专用字段（仅在 DrawText 时使用）
     float font_size = 16.0f;
@@ -258,6 +262,9 @@ public:
                 break;
             case GPUCommandType::ApplyMaskConicGradient:
                 pipeline_id = 8; // mask apply conic pipeline
+                break;
+            case GPUCommandType::DrawHostView:
+                pipeline_id = 11; // host-rendered content
                 break;
             case GPUCommandType::UberQuadBatch:
                 pipeline_id = 10; // instanced uber quad
@@ -648,6 +655,18 @@ public:
                 out.commands.push_back(cmd);
                 break;
             }
+            case DisplayItemType::DrawHostView: {
+                flush_uber_batch();
+                GPUCommand cmd{};
+                cmd.type = GPUCommandType::DrawHostView;
+                cmd.instance_count = 1;
+                cmd.rect = item.host_view.rect;
+                cmd.host_view_id = item.host_view.host_view_id;
+                cmd.opacity = item.host_view.opacity * current_opacity();
+                cmd.sort_key = make_sort_key(cmd.type, cmd);
+                out.commands.push_back(cmd);
+                break;
+            }
             default:
                 // 其他类型先忽略，后续再逐步接入
                 break;
@@ -682,6 +701,7 @@ public:
                 case GPUCommandType::DrawGradientQuad:
                 case GPUCommandType::DrawConicGradientQuad:
                 case GPUCommandType::ApplyMaskConicGradient:
+                case GPUCommandType::DrawHostView:
                 case GPUCommandType::UberQuadBatch:
                     out.sorted_draw_indices.push_back(i);
                     break;

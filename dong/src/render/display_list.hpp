@@ -42,6 +42,7 @@ enum class DisplayItemType : uint8_t {
     PushClipRect,
     PushClipRoundedRect,
     PopClip,
+    DrawHostView,  // P1-2: Host-rendered content placeholder
 };
 
 struct DrawRectData {
@@ -98,6 +99,12 @@ struct DrawNineSliceData {
     float width_left = 0;
     float opacity = 1.0f;
     ImageSampling sampling = ImageSampling::Linear;
+};
+
+struct DrawHostViewData {
+    Rect rect;
+    uint32_t host_view_id = 0;  // opaque identifier for host-rendered content
+    float opacity = 1.0f;       // opacity for the host-rendered region
 };
 
 
@@ -199,6 +206,7 @@ struct DisplayItem {
     DrawConicGradientData conic_gradient;
     ClipData clip;
     LayerData layer;
+    DrawHostViewData host_view;
 };
 
 struct DisplayList {
@@ -427,6 +435,15 @@ public:
         const float dy = tr.y - data.rect.y;
         item.conic_gradient.center_x_px += dx;
         item.conic_gradient.center_y_px += dy;
+        list_.items.push_back(std::move(item));
+    }
+
+    void addHostView(uint32_t host_view_id, const Rect& rect, float opacity = 1.0f) {
+        DisplayItem item{};
+        item.type = DisplayItemType::DrawHostView;
+        item.host_view.rect = applyTranslate(rect);
+        item.host_view.host_view_id = host_view_id;
+        item.host_view.opacity = std::clamp(opacity, 0.0f, 1.0f);
         list_.items.push_back(std::move(item));
     }
 
