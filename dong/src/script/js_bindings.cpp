@@ -2750,6 +2750,20 @@ static JSValue keyboard_event_constructor(JSContext* ctx, JSValueConst this_val,
     return event;
 }
 
+// CustomEvent constructor: new CustomEvent(type, { detail: ... })
+static JSValue custom_event_constructor(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    JSValue event = event_constructor(ctx, this_val, argc, argv);
+
+    // Extract detail from options (second argument)
+    JSValue detail = JS_UNDEFINED;
+    if (argc >= 2 && JS_IsObject(argv[1])) {
+        detail = JS_GetPropertyStr(ctx, argv[1], "detail");
+    }
+    JS_SetPropertyStr(ctx, event, "detail", JS_IsUndefined(detail) ? JS_NULL : detail);
+
+    return event;
+}
+
 // ============================================================
 // JSBindings Implementation
 // ============================================================
@@ -4028,6 +4042,9 @@ void JSBindings::initializeEventAPI() {
 
     JSValue keyboard_event_ctor = JS_NewCFunction2(ctx, keyboard_event_constructor, "KeyboardEvent", 1, JS_CFUNC_constructor, 0);
     JS_SetPropertyStr(ctx, global, "KeyboardEvent", keyboard_event_ctor);
+
+    JSValue custom_event_ctor = JS_NewCFunction2(ctx, custom_event_constructor, "CustomEvent", 1, JS_CFUNC_constructor, 0);
+    JS_SetPropertyStr(ctx, global, "CustomEvent", custom_event_ctor);
 
 
     JS_FreeValue(ctx, global);
