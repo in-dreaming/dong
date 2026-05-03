@@ -453,6 +453,8 @@ struct EngineView::Impl {
     std::vector<Invalidation> pending_invalidations_;
     uint32_t invalidation_count_this_tick_ = 0;
     uint32_t full_repaint_count_ = 0;  // for P0-7 perf metric
+    uint32_t paint_only_tick_count_ = 0;  // ticks where only Paint invalidations were pending
+    uint32_t layout_skip_count_ = 0;     // ticks where layout was skipped due to Paint-only
     bool js_bindings_initialized = false;
 
     // Top-layer: modal dialogs rendered above everything
@@ -625,7 +627,18 @@ struct EngineView::Impl {
     void markNeedsRepaint() {
         invalidate(InvalidationKind::Full, nullptr, "markNeedsRepaint");
     }
-    // --- end P0-6 S1 ---
+
+    // P0-6: Check if all pending invalidations are paint-only (no layout needed)
+    bool isPaintOnlyInvalidation() const {
+        if (pending_invalidations_.empty()) return false;
+        for (const auto& inv : pending_invalidations_) {
+            if (inv.kind == InvalidationKind::Layout || inv.kind == InvalidationKind::Full) {
+                return false;
+            }
+        }
+        return true;  // Only Style/Paint/Geometry — no layout recalc needed
+    }
+    // --- end P0-6 ---
 
     void resetCaretBlink() {
         caret_blink_time_ = 0.0;
@@ -2091,14 +2104,22 @@ struct EngineView::Impl {
         DONG_LOG_DEBUG("[tick] GPU commands: %zu", cached_cmd_list->commands.size());
         commands_dirty_ = false;
 
-        // --- P0-6 S1: log invalidation metrics ---
+        // --- P0-6: log invalidation metrics ---
         if (!pending_invalidations_.empty()) {
             invalidation_count_this_tick_ = static_cast<uint32_t>(pending_invalidations_.size());
-            full_repaint_count_++;
-            DONG_LOG_DEBUG("[invalidation] %u invalidations this tick (all->full repaint)", invalidation_count_this_tick_);
+            if (isPaintOnlyInvalidation()) {
+                paint_only_tick_count_++;
+                layout_skip_count_++;
+                DONG_LOG_DEBUG("[invalidation] %u Paint-only invalidations (layout skip #%u)",
+                               invalidation_count_this_tick_, layout_skip_count_);
+            } else {
+                full_repaint_count_++;
+                DONG_LOG_DEBUG("[invalidation] %u invalidations (full repaint #%u)",
+                               invalidation_count_this_tick_, full_repaint_count_);
+            }
             pending_invalidations_.clear();
         }
-        // --- end P0-6 S1 ---
+        // --- end P0-6 ---
 
         commands_regenerated_this_tick_ = true;
     }
