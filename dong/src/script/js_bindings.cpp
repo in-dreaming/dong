@@ -3146,6 +3146,108 @@ static JSValue js_MessageChannel_constructor(JSContext* ctx, JSValueConst new_ta
 }
 
 // ============================================================
+// localStorage / sessionStorage (in-memory implementation)
+// ============================================================
+// Game UIs often use these for preferences/settings. We provide an in-memory
+// implementation (data survives within a session but not across app restarts).
+
+static std::unordered_map<std::string, std::string> s_localStorage;
+static std::unordered_map<std::string, std::string> s_sessionStorage;
+
+static JSValue js_storage_getItem(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv,
+                                  std::unordered_map<std::string, std::string>& store) {
+    if (argc < 1) return JS_NULL;
+    const char* key = JS_ToCString(ctx, argv[0]);
+    if (!key) return JS_NULL;
+    std::string k(key);
+    JS_FreeCString(ctx, key);
+    auto it = store.find(k);
+    if (it == store.end()) return JS_NULL;
+    return JS_NewString(ctx, it->second.c_str());
+}
+
+static JSValue js_storage_setItem(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv,
+                                  std::unordered_map<std::string, std::string>& store) {
+    if (argc < 2) return JS_UNDEFINED;
+    const char* key = JS_ToCString(ctx, argv[0]);
+    const char* val = JS_ToCString(ctx, argv[1]);
+    if (key && val) store[std::string(key)] = std::string(val);
+    if (key) JS_FreeCString(ctx, key);
+    if (val) JS_FreeCString(ctx, val);
+    return JS_UNDEFINED;
+}
+
+static JSValue js_storage_removeItem(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv,
+                                     std::unordered_map<std::string, std::string>& store) {
+    if (argc < 1) return JS_UNDEFINED;
+    const char* key = JS_ToCString(ctx, argv[0]);
+    if (key) { store.erase(std::string(key)); JS_FreeCString(ctx, key); }
+    return JS_UNDEFINED;
+}
+
+static JSValue js_storage_clear(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv,
+                                std::unordered_map<std::string, std::string>& store) {
+    (void)ctx; (void)this_val; (void)argc; (void)argv;
+    store.clear();
+    return JS_UNDEFINED;
+}
+
+static JSValue js_storage_key(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv,
+                              std::unordered_map<std::string, std::string>& store) {
+    if (argc < 1) return JS_NULL;
+    int32_t index = 0;
+    JS_ToInt32(ctx, &index, argv[0]);
+    if (index < 0 || index >= static_cast<int32_t>(store.size())) return JS_NULL;
+    auto it = store.begin();
+    std::advance(it, index);
+    return JS_NewString(ctx, it->first.c_str());
+}
+
+static JSValue js_storage_length(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv,
+                                 std::unordered_map<std::string, std::string>& store) {
+    (void)this_val; (void)argc; (void)argv;
+    return JS_NewInt32(ctx, static_cast<int32_t>(store.size()));
+}
+
+// Wrappers that bind to specific storage
+#define STORAGE_WRAPPER(name, method, store) \
+    static JSValue name(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) { \
+        return method(ctx, this_val, argc, argv, store); \
+    }
+
+STORAGE_WRAPPER(js_localStorage_getItem, js_storage_getItem, s_localStorage)
+STORAGE_WRAPPER(js_localStorage_setItem, js_storage_setItem, s_localStorage)
+STORAGE_WRAPPER(js_localStorage_removeItem, js_storage_removeItem, s_localStorage)
+STORAGE_WRAPPER(js_localStorage_clear, js_storage_clear, s_localStorage)
+STORAGE_WRAPPER(js_localStorage_key, js_storage_key, s_localStorage)
+STORAGE_WRAPPER(js_localStorage_length, js_storage_length, s_localStorage)
+STORAGE_WRAPPER(js_sessionStorage_getItem, js_storage_getItem, s_sessionStorage)
+STORAGE_WRAPPER(js_sessionStorage_setItem, js_storage_setItem, s_sessionStorage)
+STORAGE_WRAPPER(js_sessionStorage_removeItem, js_storage_removeItem, s_sessionStorage)
+STORAGE_WRAPPER(js_sessionStorage_clear, js_storage_clear, s_sessionStorage)
+STORAGE_WRAPPER(js_sessionStorage_key, js_storage_key, s_sessionStorage)
+STORAGE_WRAPPER(js_sessionStorage_length, js_storage_length, s_sessionStorage)
+#undef STORAGE_WRAPPER
+
+static JSValue createStorageObject(JSContext* ctx, const char* prefix,
+                                   JSCFunction* get, JSCFunction* set, JSCFunction* rem,
+                                   JSCFunction* clr, JSCFunction* key, JSCFunction* len) {
+    JSValue obj = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, obj, "getItem", JS_NewCFunction(ctx, get, "getItem", 1));
+    JS_SetPropertyStr(ctx, obj, "setItem", JS_NewCFunction(ctx, set, "setItem", 2));
+    JS_SetPropertyStr(ctx, obj, "removeItem", JS_NewCFunction(ctx, rem, "removeItem", 1));
+    JS_SetPropertyStr(ctx, obj, "clear", JS_NewCFunction(ctx, clr, "clear", 0));
+    JS_SetPropertyStr(ctx, obj, "key", JS_NewCFunction(ctx, key, "key", 1));
+    // length as getter
+    JSAtom len_atom = JS_NewAtom(ctx, "length");
+    JS_DefinePropertyGetSet(ctx, obj, len_atom,
+        JS_NewCFunction(ctx, len, "get length", 0), JS_UNDEFINED,
+        JS_PROP_ENUMERABLE);
+    JS_FreeAtom(ctx, len_atom);
+    return obj;
+}
+
+// ============================================================
 // requestAnimationFrame / cancelAnimationFrame
 // ============================================================
 
@@ -3268,6 +3370,16 @@ void JSBindings::initializeConsoleAPI() {
     // MessageChannel constructor (for React scheduler)
     JS_SetPropertyStr(ctx, global, "MessageChannel",
         JS_NewCFunction2(ctx, js_MessageChannel_constructor, "MessageChannel", 0, JS_CFUNC_constructor, 0));
+
+    // localStorage / sessionStorage (in-memory)
+    JS_SetPropertyStr(ctx, global, "localStorage",
+        createStorageObject(ctx, "local",
+            js_localStorage_getItem, js_localStorage_setItem, js_localStorage_removeItem,
+            js_localStorage_clear, js_localStorage_key, js_localStorage_length));
+    JS_SetPropertyStr(ctx, global, "sessionStorage",
+        createStorageObject(ctx, "session",
+            js_sessionStorage_getItem, js_sessionStorage_setItem, js_sessionStorage_removeItem,
+            js_sessionStorage_clear, js_sessionStorage_key, js_sessionStorage_length));
 
     // window.addEventListener / removeEventListener (delegates to document/body)
     JS_SetPropertyStr(ctx, global, "addEventListener",
