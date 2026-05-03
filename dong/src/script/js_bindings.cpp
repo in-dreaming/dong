@@ -1879,6 +1879,23 @@ static JSValue doc_createComment(JSContext* ctx, JSValueConst this_val, int argc
     return bindings->createJSElement(ctx, node);
 }
 
+// P1-9: document.createDocumentFragment()
+// Returns a lightweight container node that can hold children.
+// When appended to the DOM, only its children are moved (the fragment itself is not inserted).
+static JSValue doc_createDocumentFragment(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)argc; (void)argv;
+    auto bindings = getBindingsForDoc(ctx, this_val);
+    if (!bindings) return JS_NULL;
+
+    // Create a DOCUMENT_FRAGMENT type node. It acts as a container:
+    // when appendChild'd, its children get moved to the target.
+    auto node = std::make_shared<dong::dom::DOMNode>(dong::dom::DOMNode::NodeType::ELEMENT, "#document-fragment");
+    // Mark it as a fragment so appendChild can detect and move children
+    node->setAttribute("__dong_fragment__", "1");
+
+    return bindings->createJSElement(ctx, node);
+}
+
 static JSValue doc_write(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     (void)this_val;
     auto bindings = getBindingsFromContext(ctx);
@@ -1966,17 +1983,28 @@ static JSValue elem_setAttribute(JSContext* ctx, JSValueConst this_val, int argc
 
 static JSValue elem_appendChild(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     if (argc < 1) return JS_UNDEFINED;
-    
+
     auto parent = JSBindings::getNodeOpaque(ctx, this_val);
     auto child = JSBindings::getNodeOpaque(ctx, argv[0]);
-    
+
     if (parent && child) {
-        parent->appendChild(child);
+        // P1-9: DocumentFragment — when appending a fragment, move its children
+        if (child->getAttribute("__dong_fragment__") == "1") {
+            auto fragment_children = child->getChildren();  // copy
+            for (const auto& fc : fragment_children) {
+                if (fc) {
+                    child->removeChild(fc);
+                    parent->appendChild(fc);
+                }
+            }
+        } else {
+            parent->appendChild(child);
+        }
         parent->markStyleDirty();
         parent->markLayoutDirty();
         return JS_DupValue(ctx, argv[0]);
     }
-    
+
     return JS_UNDEFINED;
 }
 
@@ -3931,6 +3959,8 @@ void JSBindings::initializeDocumentAPI() {
         JS_NewCFunction(ctx, doc_createTextNode, "createTextNode", 1));
     JS_SetPropertyStr(ctx, document, "createComment",
         JS_NewCFunction(ctx, doc_createComment, "createComment", 1));
+    JS_SetPropertyStr(ctx, document, "createDocumentFragment",
+        JS_NewCFunction(ctx, doc_createDocumentFragment, "createDocumentFragment", 0));
 
     // Document object references
     JSValue body = JS_NewObject(ctx);
