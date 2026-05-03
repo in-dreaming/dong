@@ -270,8 +270,28 @@ public:
         bool active_ = false;
     };
 
+    // P0-6: Track which display items belong to which DOM node for sub-tree rebuild
+    struct NodeRange {
+        const void* node_ptr = nullptr;  // DOMNode raw pointer (not owning)
+        uint32_t start_index = 0;        // First item index
+        uint32_t end_index = 0;          // One past last item index
+    };
+
+    void beginNode(const void* node_ptr) {
+        node_ranges_.push_back({node_ptr, static_cast<uint32_t>(list_.items.size()), 0});
+    }
+
+    void endNode() {
+        if (!node_ranges_.empty()) {
+            node_ranges_.back().end_index = static_cast<uint32_t>(list_.items.size());
+        }
+    }
+
+    const std::vector<NodeRange>& getNodeRanges() const { return node_ranges_; }
+
     void clear() {
         list_.items.clear();
+        node_ranges_.clear();
         layer_depth_ = 0;
         clip_depth_ = 0;
         translate_x_ = 0.0f;
@@ -517,6 +537,7 @@ private:
     }
 
     DisplayList list_;
+    std::vector<NodeRange> node_ranges_;  // P0-6: node-to-range mapping
     int layer_depth_ = 0;
     int clip_depth_ = 0;
     float translate_x_ = 0.0f;

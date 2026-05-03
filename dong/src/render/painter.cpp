@@ -837,6 +837,13 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                                    DisplayListBuilder& builder) {
     if (!node) return;
 
+    // P0-6: Track which display items belong to this DOM node
+    builder.beginNode(node.get());
+    struct ScopedNodeEnd {
+        DisplayListBuilder& b;
+        ~ScopedNodeEnd() { b.endNode(); }
+    } scoped_node_end{builder};
+
     struct ScopedCounterScope {
         Painter* painter = nullptr;
         bool enabled = false;
