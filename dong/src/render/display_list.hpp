@@ -390,6 +390,21 @@ public:
         list_.items.push_back(std::move(item));
     }
 
+    // P0-3: Emit a conic gradient mask application (multiply blend mode).
+    // Used inside an isolated layer to multiply content alpha by the mask gradient.
+    void addMaskConicGradient(const DrawConicGradientData& data) {
+        DisplayItem item{};
+        item.type = DisplayItemType::ApplyMaskConicGradient;
+        const Rect tr = applyTranslate(data.rect);
+        item.conic_gradient = data;
+        item.conic_gradient.rect = tr;
+        const float dx = tr.x - data.rect.x;
+        const float dy = tr.y - data.rect.y;
+        item.conic_gradient.center_x_px += dx;
+        item.conic_gradient.center_y_px += dy;
+        list_.items.push_back(std::move(item));
+    }
+
     void addGlyphRun(DrawGlyphRunData data) {
         DisplayItem item{};
         item.type = DisplayItemType::DrawGlyphRun;

@@ -1126,6 +1126,38 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
 
     }
 
+    // P0-3: General mask compositing via isolated layer.
+    // If the element has a conic-gradient mask AND complex content (gradients, images, children),
+    // wrap everything in an isolated layer and apply the mask at the end.
+    // The fast-path (solid bg only) is handled separately in applyMaskConicFastPath.
+    bool needs_mask_layer = false;
+    dong::dom::CSSGradient mask_gradient;
+    if (!style.mask_image.empty() && style.mask_image != "none") {
+        if (style.mask_image.find("conic-gradient") != std::string::npos) {
+            mask_gradient = dong::dom::CSSParser::parseGradient(style.mask_image);
+            if ((mask_gradient.type == dom::CSSGradient::Type::CONIC ||
+                 mask_gradient.type == dom::CSSGradient::Type::REPEATING_CONIC) &&
+                mask_gradient.stops.size() >= 2) {
+                // Determine if there's complex content beyond a solid background-color.
+                // Complex content: background gradients, background-image, or child elements.
+                const bool has_bg_gradients = !style.background_gradients.empty();
+                const bool has_bg_image = !style.background_image.empty();
+                const bool has_children = !node->getChildren().empty();
+                if (has_bg_gradients || has_bg_image || has_children) {
+                    needs_mask_layer = true;
+                }
+            }
+        }
+    }
+
+    DisplayListBuilder::ScopedLayer mask_scope;
+    if (needs_mask_layer && has_layout_rect) {
+        Rect mask_bounds = layer_bounds;
+        // Use a unique layer ID distinct from the opacity layer (OR with 0x1 bit)
+        uint64_t mask_layer_id = reinterpret_cast<uint64_t>(node.get()) | 0x1;
+        mask_scope = builder.pushLayer(1.0f, true, mask_bounds, mask_layer_id, true);
+    }
+
     // 1. ��������Ӱ (visibility: hidden ʱ��������)
 
     if (layout_node && !is_hidden) {
@@ -1382,7 +1414,8 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
 
                     if (inner_rect.width > 0.0f && inner_rect.height > 0.0f) {
                         // P0-3 Mask fast-path: conic-gradient mask on solid background
-                        if (!applyMaskConicFastPath(style, inner_rect, inner_radius, bg_color, builder)) {
+                        // Skip fast-path when general mask layer is active (it handles all cases)
+                        if (needs_mask_layer || !applyMaskConicFastPath(style, inner_rect, inner_radius, bg_color, builder)) {
                             builder.addRoundedRect(inner_rect, bg_color, inner_radius);
                         }
                     }
@@ -1496,7 +1529,8 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
                 if (has_background) {
                     Color bg_color = makeColorFromCss(bg_color_css);
                     // P0-3 Mask fast-path: conic-gradient mask on solid background
-                    if (!applyMaskConicFastPath(style, bg_clip_rect, 0.0f, bg_color, builder)) {
+                    // Skip fast-path when general mask layer is active (it handles all cases)
+                    if (needs_mask_layer || !applyMaskConicFastPath(style, bg_clip_rect, 0.0f, bg_color, builder)) {
                         builder.addRect(bg_clip_rect, bg_color);
                     }
                 }
@@ -1808,13 +1842,29 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
 
     paintChildrenAndOverlays(node, layout_node, node_rect, has_layout_rect, is_scroll_container, builder);
 
-
-
-
+    // P0-3: Emit the conic gradient mask before closing the mask layer.
+    // The mask multiplies the layer's content alpha by the gradient's luminance/alpha.
+    if (needs_mask_layer && has_layout_rect) {
+        DrawConicGradientData mask_data = buildDrawConicGradientData(mask_gradient, node_rect, style.border_radius);
+        // Override stop colors: for mask mode, use white with alpha derived from mask color.
+        // The GPU shader will multiply the layer content's alpha by this mask value.
+        for (int i = 0; i < mask_data.stop_count; ++i) {
+            Color mask_color = makeColorFromCss(mask_gradient.stops[i].color);
+            float mask_alpha;
+            if (style.mask_mode == dong::dom::ComputedStyle::MaskMode::Luminance) {
+                float lum = 0.2126f * mask_color.r + 0.7152f * mask_color.g + 0.0722f * mask_color.b;
+                mask_alpha = lum * mask_color.a;
+            } else {
+                mask_alpha = mask_color.a;
+            }
+            // White color with mask alpha — the shader multiplies content.a by this
+            mask_data.stops[i].color = Color{1.0f, 1.0f, 1.0f, mask_alpha};
+        }
+        builder.addMaskConicGradient(mask_data);
+    }
+    // mask_scope destructor will pop the mask layer automatically
 
     if (pushed_layer_node && !layer_stack_.empty()) {
-
-
         layer_stack_.pop_back();
     }
 
