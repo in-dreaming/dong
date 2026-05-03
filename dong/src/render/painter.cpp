@@ -1003,6 +1003,26 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         }
     }
 
+    // P1-9: position: fixed — counter accumulated scroll translate so the element
+    // renders at viewport-relative coordinates. Yoga already positions fixed elements
+    // relative to the root, but the painter's translate stack includes scroll offsets
+    // from ancestor scroll containers. We push a negative translate to cancel them.
+    bool pushed_fixed_translate = false;
+    if (style.position == dom::CSSPosition::Fixed && layout_node) {
+        const float tx = builder.getTranslateX();
+        const float ty = builder.getTranslateY();
+        if (tx != 0.0f || ty != 0.0f) {
+            builder.pushTranslate(-tx, -ty);
+            pushed_fixed_translate = true;
+        }
+    }
+    // RAII guard to pop the fixed translate when the node scope ends
+    struct ScopedFixedTranslate {
+        DisplayListBuilder& b;
+        bool active;
+        ~ScopedFixedTranslate() { if (active) b.popTranslate(); }
+    } scoped_fixed{builder, pushed_fixed_translate};
+
     const float builder_tx = builder.getTranslateX();
     const float builder_ty = builder.getTranslateY();
 
