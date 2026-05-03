@@ -2958,6 +2958,53 @@ static JSValue js_clearInterval(JSContext* ctx, JSValueConst this_val, int argc,
 }
 
 // ============================================================
+// queueMicrotask — schedules a callback to run after current script but before rendering
+// ============================================================
+static JSValue js_queueMicrotask(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val;
+    if (argc < 1 || !JS_IsFunction(ctx, argv[0])) {
+        return JS_ThrowTypeError(ctx, "queueMicrotask requires a function argument");
+    }
+    // QuickJS supports enqueuing jobs on its microtask queue.
+    // We wrap the callback in a resolved Promise.then() which runs as a microtask.
+    JSValue resolved = JS_NewPromiseCapability(ctx, nullptr);
+    if (JS_IsUndefined(resolved)) {
+        // Fallback: call the function immediately (best-effort)
+        JSValue ret = JS_Call(ctx, argv[0], JS_UNDEFINED, 0, nullptr);
+        JS_FreeValue(ctx, ret);
+        return JS_UNDEFINED;
+    }
+    // Even simpler: use JS_EnqueueJob if available in QuickJS
+    // Actually, the simplest approach: just schedule it as a 0ms timeout,
+    // which effectively runs it in the next microtask-like checkpoint.
+    // For correct semantics, call it immediately after current execution.
+    // QuickJS processes Promise jobs automatically.
+    // Let's use the direct approach: enqueue via a resolved promise's .then()
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue promise_resolve = JS_GetPropertyStr(ctx, global, "Promise");
+    if (!JS_IsUndefined(promise_resolve) && !JS_IsNull(promise_resolve)) {
+        JSValue resolve_method = JS_GetPropertyStr(ctx, promise_resolve, "resolve");
+        if (JS_IsFunction(ctx, resolve_method)) {
+            JSValue resolved_promise = JS_Call(ctx, resolve_method, promise_resolve, 0, nullptr);
+            if (!JS_IsException(resolved_promise)) {
+                JSValue then_method = JS_GetPropertyStr(ctx, resolved_promise, "then");
+                if (JS_IsFunction(ctx, then_method)) {
+                    JSValue result = JS_Call(ctx, then_method, resolved_promise, 1, &argv[0]);
+                    JS_FreeValue(ctx, result);
+                }
+                JS_FreeValue(ctx, then_method);
+            }
+            JS_FreeValue(ctx, resolved_promise);
+        }
+        JS_FreeValue(ctx, resolve_method);
+    }
+    JS_FreeValue(ctx, promise_resolve);
+    JS_FreeValue(ctx, global);
+    JS_FreeValue(ctx, resolved);
+    return JS_UNDEFINED;
+}
+
+// ============================================================
 // requestAnimationFrame / cancelAnimationFrame
 // ============================================================
 
@@ -3072,6 +3119,10 @@ void JSBindings::initializeConsoleAPI() {
         JS_NewCFunction(ctx, js_requestAnimationFrame, "requestAnimationFrame", 1));
     JS_SetPropertyStr(ctx, global, "cancelAnimationFrame",
         JS_NewCFunction(ctx, js_cancelAnimationFrame, "cancelAnimationFrame", 1));
+
+    // queueMicrotask
+    JS_SetPropertyStr(ctx, global, "queueMicrotask",
+        JS_NewCFunction(ctx, js_queueMicrotask, "queueMicrotask", 1));
 
     // window.addEventListener / removeEventListener (delegates to document/body)
     JS_SetPropertyStr(ctx, global, "addEventListener",
