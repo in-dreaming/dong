@@ -337,6 +337,19 @@ static bool debug_video_enabled() {
     return s_cached != 0;
 }
 
+// P0-6 S6: Force full repaint on every invalidation (disables paint-only optimization).
+// Set DONG_FORCE_FULL_REPAINT=1 to force all invalidations to Full kind.
+static bool force_full_repaint_enabled() {
+    static int s_cached = -1;
+    if (s_cached != -1) return s_cached != 0;
+    const char* v = std::getenv("DONG_FORCE_FULL_REPAINT");
+    s_cached = (v && v[0] && v[0] != '0') ? 1 : 0;
+    if (s_cached) {
+        DONG_LOG_INFO("[P0-6] DONG_FORCE_FULL_REPAINT=1: all invalidations treated as Full");
+    }
+    return s_cached != 0;
+}
+
 static void markIsolatedLayerDirtyFlags(dong::render::GPUCommandList& list, uint64_t layer_id) {
     if (layer_id == 0) return;
     for (auto& cmd : list.commands) {
@@ -629,7 +642,9 @@ struct EngineView::Impl {
     }
 
     // P0-6: Check if all pending invalidations are paint-only (no layout needed)
+    // Returns false if DONG_FORCE_FULL_REPAINT is set (env var fallback).
     bool isPaintOnlyInvalidation() const {
+        if (force_full_repaint_enabled()) return false;
         if (pending_invalidations_.empty()) return false;
         for (const auto& inv : pending_invalidations_) {
             if (inv.kind == InvalidationKind::Layout || inv.kind == InvalidationKind::Full) {
@@ -2110,12 +2125,16 @@ struct EngineView::Impl {
             if (isPaintOnlyInvalidation()) {
                 paint_only_tick_count_++;
                 layout_skip_count_++;
-                DONG_LOG_DEBUG("[invalidation] %u Paint-only invalidations (layout skip #%u)",
-                               invalidation_count_this_tick_, layout_skip_count_);
+                DONG_LOG_DEBUG("[P0-6 invalidation] %u Paint-only invalidations (layout skip #%u, "
+                               "paint_only_ticks=%u, full_repaints=%u)",
+                               invalidation_count_this_tick_, layout_skip_count_,
+                               paint_only_tick_count_, full_repaint_count_);
             } else {
                 full_repaint_count_++;
-                DONG_LOG_DEBUG("[invalidation] %u invalidations (full repaint #%u)",
-                               invalidation_count_this_tick_, full_repaint_count_);
+                DONG_LOG_DEBUG("[P0-6 invalidation] %u invalidations -> full repaint #%u "
+                               "(paint_only_ticks=%u, full_repaints=%u)",
+                               invalidation_count_this_tick_, full_repaint_count_,
+                               paint_only_tick_count_, full_repaint_count_);
             }
             pending_invalidations_.clear();
         }
@@ -2189,15 +2208,23 @@ struct EngineView::Impl {
         }
 
         DONG_LOG_DEBUG("[tick] step: styles");
+        double style_ms = 0.0;
         {
             DONG_PROFILE_SCOPE_CAT("ComputeStyles", "tick");
+            auto t0 = std::chrono::steady_clock::now();
             tickComputeStylesIfNeeded();
+            auto t1 = std::chrono::steady_clock::now();
+            style_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
         }
 
         DONG_LOG_DEBUG("[tick] step: layout");
+        double layout_ms = 0.0;
         {
             DONG_PROFILE_SCOPE_CAT("ComputeLayout", "tick");
+            auto t0 = std::chrono::steady_clock::now();
             tickComputeLayoutIfNeeded();
+            auto t1 = std::chrono::steady_clock::now();
+            layout_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
         }
 
         {
@@ -2206,9 +2233,20 @@ struct EngineView::Impl {
         }
 
         DONG_LOG_DEBUG("[tick] step: render_build");
+        double paint_ms = 0.0;
         {
             DONG_PROFILE_SCOPE_CAT("GenerateCommands", "tick");
+            auto t0 = std::chrono::steady_clock::now();
             tickGenerateCommandsIfNeeded();
+            auto t1 = std::chrono::steady_clock::now();
+            paint_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
+        }
+
+        // P0-6 S6: Log tick breakdown metrics when work was done
+        if (commands_regenerated_this_tick_ && (style_ms > 0.01 || layout_ms > 0.01 || paint_ms > 0.01)) {
+            DONG_LOG_DEBUG("[P0-6 metrics] style=%.2fms layout=%.2fms paint+compile=%.2fms total=%.2fms",
+                          style_ms, layout_ms, paint_ms,
+                          style_ms + layout_ms + paint_ms);
         }
 
         DONG_LOG_DEBUG("[tick] step: video_upload");
