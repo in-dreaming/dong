@@ -713,43 +713,20 @@ static bool paintBorderImage(
         wb *= scale;
     }
 
-    // 9-slice destination regions
-    // Layout:  TL | TC | TR
-    //          ML | MC | MR
-    //          BL | BC | BR
-    float x0 = border_box.x;
-    float x1 = border_box.x + wl;
-    float x2 = border_box.x + border_box.width - wr;
-    float x3 = border_box.x + border_box.width;
-    float y0 = border_box.y;
-    float y1 = border_box.y + wt;
-    float y2 = border_box.y + border_box.height - wb;
-    float y3 = border_box.y + border_box.height;
-
-    (void)x3; (void)y3; // suppress unused warnings
-
-    auto emitQuad = [&](float qx, float qy, float qw, float qh) {
-        if (qw <= 0.0f || qh <= 0.0f) return;
-        builder.addImage(Rect{qx, qy, qw, qh}, src, 1.0f, ImageFitMode::Fill);
-    };
-
-    // Top row
-    emitQuad(x0, y0, wl, wt);           // TL corner
-    emitQuad(x1, y0, x2 - x1, wt);      // TC edge
-    emitQuad(x2, y0, wr, wt);           // TR corner
-
-    // Middle row
-    emitQuad(x0, y1, wl, y2 - y1);      // ML edge
-    if (style.border_image_fill) {
-        emitQuad(x1, y1, x2 - x1, y2 - y1);  // MC center (only if fill)
-    }
-    emitQuad(x2, y1, wr, y2 - y1);      // MR edge
-
-    // Bottom row
-    emitQuad(x0, y2, wl, wb);           // BL corner
-    emitQuad(x1, y2, x2 - x1, wb);      // BC edge
-    emitQuad(x2, y2, wr, wb);           // BR corner
-
+    // P0-2: Emit single DrawNineSlice command (1 draw call via nineslice shader)
+    DrawNineSliceData ns{};
+    ns.rect = border_box;
+    ns.src = src;
+    ns.slice_top = st;
+    ns.slice_right = sr;
+    ns.slice_bottom = sb;
+    ns.slice_left = sl;
+    ns.width_top = wt;
+    ns.width_right = wr;
+    ns.width_bottom = wb;
+    ns.width_left = wl;
+    ns.opacity = 1.0f;
+    builder.addNineSlice(ns);
     return true;
 }
 
