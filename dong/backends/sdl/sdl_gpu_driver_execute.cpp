@@ -142,6 +142,7 @@ struct PipelineBindingState {
         MaskApplyConicGradient,
         Image,
         ImageYUV,
+        NineSlice,
         Text,
         UberQuad,
         UberQuadInstanced,
@@ -501,7 +502,8 @@ void SDLGPUDriver::executePreuploadImages(const GPUCommandList& commands) {
     // SDL_gpu forbids beginning a copy pass while a render pass is active.
     // If we lazily upload inside DrawImageQuad (which runs inside a render pass), SDL will assert.
     for (const auto& cmd : commands.commands) {
-        if (cmd.type != GPUCommandType::DrawImageQuad) {
+        if (cmd.type != GPUCommandType::DrawImageQuad &&
+            cmd.type != GPUCommandType::DrawNineSliceQuad) {
             continue;
         }
         if (cmd.image_src.empty()) {
@@ -1936,6 +1938,104 @@ void SDLGPUDriver::executeDrawImage(ExecuteContext& ctx, const GPUCommand& cmd) 
     SDL_DrawGPUPrimitives(ctx.pass, 4, 1, 0, 0);
 }
 
+void SDLGPUDriver::executeDrawNineSlice(ExecuteContext& ctx, const GPUCommand& cmd) {
+    if (!ctx.pass || !nineslice_pipeline_ || !image_sampler_) {
+        return;
+    }
+    if (cmd.image_src.empty()) {
+        return;
+    }
+
+    // Resolve texture (same as image pipeline — atlas lookup)
+    SDL_GPUTexture* src_texture = nullptr;
+    ImageAtlasEntry entry{};
+
+    if (cmd.image_src.rfind("video://", 0) == 0) {
+        // Nine-slice doesn't support video textures
+        return;
+    }
+
+    SDL_GPUTexture* atlas_texture = static_cast<SDL_GPUTexture*>(dong_atlas_get_texture(image_atlas_, 0));
+    if (!atlas_texture) {
+        return;
+    }
+    if (!ensureImageInAtlas(cmd.image_src, entry)) {
+        return;
+    }
+    src_texture = atlas_texture;
+
+    // Uniform structure matches image pipeline + extra nine-slice params
+    struct NineSliceUniformData {
+        float rect[4];
+        float uv_rect[4];
+        float viewport[4];
+        float transform[8];
+        float tint[4];
+        ClipUniformBlock clip;
+        float nine_slice[4];  // top, right, bottom, left (in UV 0..1)
+        float nine_width[4];  // top, right, bottom, left (in dest pixels)
+    };
+
+    NineSliceUniformData u{};
+
+    u.rect[0] = cmd.rect.x;
+    u.rect[1] = cmd.rect.y;
+    u.rect[2] = cmd.rect.width;
+    u.rect[3] = cmd.rect.height;
+
+    u.uv_rect[0] = entry.u0;
+    u.uv_rect[1] = entry.v0;
+    u.uv_rect[2] = entry.u1;
+    u.uv_rect[3] = entry.v1;
+
+    ctx.writeViewport(u.viewport);
+    writeTransform(u.transform, ctx.getCurrentTransform());
+
+    u.tint[0] = 1.0f;
+    u.tint[1] = 1.0f;
+    u.tint[2] = 1.0f;
+    u.tint[3] = cmd.opacity;
+    ctx.fillClipUniform(u.clip);
+
+    // Convert slice values from source pixels to UV space (0..1)
+    const float img_w = static_cast<float>(entry.width);
+    const float img_h = static_cast<float>(entry.height);
+    if (img_w > 0.0f && img_h > 0.0f) {
+        u.nine_slice[0] = cmd.nine_slice_top / img_h;     // top
+        u.nine_slice[1] = cmd.nine_slice_right / img_w;   // right
+        u.nine_slice[2] = cmd.nine_slice_bottom / img_h;  // bottom
+        u.nine_slice[3] = cmd.nine_slice_left / img_w;    // left
+    }
+
+    u.nine_width[0] = cmd.nine_width_top;
+    u.nine_width[1] = cmd.nine_width_right;
+    u.nine_width[2] = cmd.nine_width_bottom;
+    u.nine_width[3] = cmd.nine_width_left;
+
+    if (ctx.pipeline_state.active != PipelineBindingState::ActivePipeline::NineSlice) {
+        SDL_BindGPUGraphicsPipeline(ctx.pass, nineslice_pipeline_);
+        ctx.pipeline_state.active = PipelineBindingState::ActivePipeline::NineSlice;
+    }
+
+    SDL_PushGPUVertexUniformData(ctx.cmd_buf, 0, &u, sizeof(u));
+    SDL_PushGPUFragmentUniformData(ctx.cmd_buf, 0, &u, sizeof(u));
+
+    SDL_GPUSampler* sampler = image_sampler_;
+    if (cmd.image_sampling == ImageSampling::Nearest && image_sampler_nearest_) {
+        sampler = image_sampler_nearest_;
+    }
+
+    SDL_GPUTextureSamplerBinding binding{};
+    binding.texture = src_texture;
+    binding.sampler = sampler;
+    SDL_BindGPUFragmentSamplers(ctx.pass, 0, &binding, 1);
+
+    ctx.pipeline_state.image_sampler_bound = true;
+    ctx.pipeline_state.text_sampler_bound = false;
+
+    SDL_DrawGPUPrimitives(ctx.pass, 4, 1, 0, 0);
+}
+
 void SDLGPUDriver::executeDrawText(ExecuteContext& ctx, const GPUCommand& cmd) {
     if (!ctx.pass || cmd.glyphs.empty()) return;
 
@@ -2684,6 +2784,10 @@ void SDLGPUDriver::executeDispatchCommand(const GPUCommand& cmd,
     case GPUCommandType::DrawImageQuad:
         if (use_uber_quad_) flushUberBatch(ctx);
         executeDrawImage(ctx, cmd);
+        break;
+    case GPUCommandType::DrawNineSliceQuad:
+        if (use_uber_quad_) flushUberBatch(ctx);
+        executeDrawNineSlice(ctx, cmd);
         break;
     case GPUCommandType::DrawText:
         if (use_uber_quad_) flushUberBatch(ctx);

@@ -538,6 +538,26 @@ bool SDLGPUDriver::initialize() {
         return false;
     }
 
+    // Nine-slice pipeline: same vertex shader as image, custom fragment shader
+    nineslice_fs_ = shader_manager_->loadShaderFromHLSLFile(
+        "dong_nineslice_fs",
+        SDL_GPU_SHADERSTAGE_FRAGMENT,
+        shader_path("nineslice_fs.hlsl").c_str(),
+        "main"
+    );
+    if (nineslice_fs_) {
+        SDL_GPUGraphicsPipelineCreateInfo ns_pci = ipci;
+        ns_pci.fragment_shader = nineslice_fs_;
+        nineslice_pipeline_ = SDL_CreateGPUGraphicsPipeline(dev, &ns_pci);
+        if (nineslice_pipeline_) {
+            DONG_LOG_INFO("SDLGPUDriver: nineslice_pipeline created");
+        } else {
+            DONG_LOG_WARN("SDLGPUDriver: nineslice_pipeline creation failed: %s", SDL_GetError());
+        }
+    } else {
+        DONG_LOG_WARN("SDLGPUDriver: nineslice_fs shader unavailable, nine-slice disabled");
+    }
+
     // YUV pipeline: identical to image pipeline except fragment shader.
     SDL_GPUGraphicsPipelineCreateInfo yuv_pci = ipci;
     yuv_pci.fragment_shader = video_yuv_fs_;

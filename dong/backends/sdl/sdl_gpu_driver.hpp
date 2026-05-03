@@ -209,6 +209,9 @@ private:
     SDL_GPUShader* image_fs_ = nullptr;
     SDL_GPUGraphicsPipeline* image_pipeline_ = nullptr;
 
+    SDL_GPUShader* nineslice_fs_ = nullptr;
+    SDL_GPUGraphicsPipeline* nineslice_pipeline_ = nullptr;
+
     SDL_GPUShader* video_yuv_fs_ = nullptr;
     SDL_GPUGraphicsPipeline* video_yuv_pipeline_ = nullptr;
     SDL_GPUGraphicsPipeline* image_copy_pipeline_ = nullptr;
@@ -340,6 +343,7 @@ private:
     bool ensureUberInstanceBufferCapacity(uint32_t min_instances);
     void prepareUberQuadInstances(const GPUCommandList& commands);
     void executeDrawImage(ExecuteContext& ctx, const GPUCommand& cmd);
+    void executeDrawNineSlice(ExecuteContext& ctx, const GPUCommand& cmd);
     void executeDrawText(ExecuteContext& ctx, const GPUCommand& cmd);
     void executeDrawTextMsdf(ExecuteContext& ctx, const GPUCommand& cmd);
     void executeDrawTextSlug(ExecuteContext& ctx, const GPUCommand& cmd);

@@ -113,9 +113,11 @@ SDLGPUDriver::~SDLGPUDriver() {
         }
 
         if (image_pipeline_) SDL_ReleaseGPUGraphicsPipeline(dev, image_pipeline_);
+        if (nineslice_pipeline_) SDL_ReleaseGPUGraphicsPipeline(dev, nineslice_pipeline_);
         if (video_yuv_pipeline_) SDL_ReleaseGPUGraphicsPipeline(dev, video_yuv_pipeline_);
         if (image_vs_) SDL_ReleaseGPUShader(dev, image_vs_);
         if (image_fs_) SDL_ReleaseGPUShader(dev, image_fs_);
+        if (nineslice_fs_) SDL_ReleaseGPUShader(dev, nineslice_fs_);
         if (video_yuv_fs_) SDL_ReleaseGPUShader(dev, video_yuv_fs_);
         if (image_sampler_) SDL_ReleaseGPUSampler(dev, image_sampler_);
         if (image_sampler_nearest_) SDL_ReleaseGPUSampler(dev, image_sampler_nearest_);

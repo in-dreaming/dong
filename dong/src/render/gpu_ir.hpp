@@ -46,6 +46,7 @@ enum class GPUCommandType : uint8_t {
     // 后续可以通过 instance buffer 将其中的 rect/image/text 扩展为真正的 GPU instancing。
     DrawInstancedQuads,      // 纯色矩形（当前每条命令只画 1 个 quad）
     DrawImageQuad,           // 图片 quad
+    DrawNineSliceQuad,       // P0-2: nine-slice textured quad
     DrawRoundedRectQuad,     // 圆角矩形 quad（analytic SDF）
     DrawShadowQuad,          // 带模糊的阴影 quad（SDF + blur）
     DrawText,                // 文本 glyph run
@@ -90,6 +91,10 @@ struct GPUCommand {
     float image_position_y = 0.5f;  // object-position Y
     ImageSampling image_sampling = ImageSampling::Linear;
     float opacity = 1.0f;  // 图片整体透明度
+
+    // Nine-slice fields (DrawNineSliceQuad only)
+    float nine_slice_top = 0, nine_slice_right = 0, nine_slice_bottom = 0, nine_slice_left = 0;
+    float nine_width_top = 0, nine_width_right = 0, nine_width_bottom = 0, nine_width_left = 0;
 
 
     float layer_opacity = 1.0f; // 图层合成透明度（BeginIsolatedLayer）
@@ -239,6 +244,9 @@ public:
             case GPUCommandType::DrawImageQuad:
                 pipeline_id = 3; // 图片管线
                 break;
+            case GPUCommandType::DrawNineSliceQuad:
+                pipeline_id = 9; // 九宫格管线
+                break;
             case GPUCommandType::DrawText:
                 pipeline_id = 4; // 文本管线
                 break;
@@ -260,7 +268,7 @@ public:
             }
 
             uint64_t resource_hash = 0;
-            if (type == GPUCommandType::DrawImageQuad) {
+            if (type == GPUCommandType::DrawImageQuad || type == GPUCommandType::DrawNineSliceQuad) {
                 if (!cmd.image_src.empty()) {
                     resource_hash = static_cast<uint64_t>(std::hash<std::string>{}(cmd.image_src));
                 }
@@ -526,6 +534,29 @@ public:
                 break;
             }
 
+            case DisplayItemType::DrawNineSlice: {
+                flush_uber_batch();
+                GPUCommand cmd{};
+                cmd.type = GPUCommandType::DrawNineSliceQuad;
+                cmd.instance_count = 1;
+                cmd.rect = item.nine_slice.rect;
+                cmd.opacity = item.nine_slice.opacity * current_opacity();
+                cmd.image_src = item.nine_slice.src;
+                cmd.image_sampling = item.nine_slice.sampling;
+                cmd.nine_slice_top = item.nine_slice.slice_top;
+                cmd.nine_slice_right = item.nine_slice.slice_right;
+                cmd.nine_slice_bottom = item.nine_slice.slice_bottom;
+                cmd.nine_slice_left = item.nine_slice.slice_left;
+                cmd.nine_width_top = item.nine_slice.width_top;
+                cmd.nine_width_right = item.nine_slice.width_right;
+                cmd.nine_width_bottom = item.nine_slice.width_bottom;
+                cmd.nine_width_left = item.nine_slice.width_left;
+                cmd.sort_key = make_sort_key(cmd.type, cmd);
+                out.commands.push_back(cmd);
+                image_count++;
+                break;
+            }
+
             case DisplayItemType::DrawGlyphRun: {
                 flush_uber_batch();
                 GPUCommand cmd{};
@@ -646,6 +677,7 @@ public:
                 case GPUCommandType::DrawRoundedRectQuad:
                 case GPUCommandType::DrawShadowQuad:
                 case GPUCommandType::DrawImageQuad:
+                case GPUCommandType::DrawNineSliceQuad:
                 case GPUCommandType::DrawText:
                 case GPUCommandType::DrawGradientQuad:
                 case GPUCommandType::DrawConicGradientQuad:

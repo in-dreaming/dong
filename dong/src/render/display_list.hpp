@@ -32,6 +32,7 @@ enum class DisplayItemType : uint8_t {
     DrawRoundedRect,
     DrawShadow,      // box-shadow with blur
     DrawImage,
+    DrawNineSlice,   // P0-2: nine-slice border-image
     DrawGlyphRun,
     DrawLinearGradient,  // CSS linear-gradient background
     DrawConicGradient,    // CSS conic-gradient background
@@ -81,6 +82,21 @@ struct DrawImageData {
     ImageFitMode fit = ImageFitMode::Fill;
     float position_x = 0.5f;  // object-position X (0.0=left, 0.5=center, 1.0=right)
     float position_y = 0.5f;  // object-position Y (0.0=top, 0.5=center, 1.0=bottom)
+    ImageSampling sampling = ImageSampling::Linear;
+};
+
+struct DrawNineSliceData {
+    Rect rect;
+    std::string src;           // Image source path
+    float slice_top = 0;       // Source slice insets (pixels in source image)
+    float slice_right = 0;
+    float slice_bottom = 0;
+    float slice_left = 0;
+    float width_top = 0;       // Dest border widths (pixels)
+    float width_right = 0;
+    float width_bottom = 0;
+    float width_left = 0;
+    float opacity = 1.0f;
     ImageSampling sampling = ImageSampling::Linear;
 };
 
@@ -177,6 +193,7 @@ struct DisplayItem {
     DrawRoundedRectData rounded_rect;
     DrawShadowData shadow;
     DrawImageData image;
+    DrawNineSliceData nine_slice;
     DrawGlyphRunData glyph_run;
     DrawLinearGradientData gradient;
     DrawConicGradientData conic_gradient;
@@ -366,6 +383,14 @@ public:
         item.image.position_x = pos_x;
         item.image.position_y = pos_y;
         item.image.sampling = sampling;
+        list_.items.push_back(std::move(item));
+    }
+
+    void addNineSlice(const DrawNineSliceData& data) {
+        DisplayItem item{};
+        item.type = DisplayItemType::DrawNineSlice;
+        item.nine_slice = data;
+        item.nine_slice.rect = applyTranslate(data.rect);
         list_.items.push_back(std::move(item));
     }
 
