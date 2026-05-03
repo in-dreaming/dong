@@ -516,6 +516,13 @@ public:
         list_.items.insert(list_.items.end(), items.begin(), items.end());
     }
 
+    // P0-6: Append a range of items from a source vector (for partial repaint cache copy).
+    void appendItemRange(const std::vector<DisplayItem>& src, uint32_t start, uint32_t end) {
+        if (start < end && end <= static_cast<uint32_t>(src.size())) {
+            list_.items.insert(list_.items.end(), src.begin() + start, src.begin() + end);
+        }
+    }
+
     // Returns the current number of items in the display list.
     // Use this to record an insertion point before emitting child items.
     size_t getItemCount() const { return list_.items.size(); }

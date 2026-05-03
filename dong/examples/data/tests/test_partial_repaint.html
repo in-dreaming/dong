@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>P0-6 S4: Partial Repaint Test</title>
+  <style>
+    body {
+      margin: 0; padding: 20px;
+      background: #1a1a2e; color: #eee;
+      font-family: sans-serif;
+    }
+    .panel {
+      display: flex; gap: 16px; margin-bottom: 16px;
+    }
+    .card {
+      width: 200px; padding: 16px;
+      background: #16213e; border-radius: 8px;
+      border: 1px solid #0f3460;
+    }
+    .card h3 { margin: 0 0 8px; color: #e94560; font-size: 14px; }
+    .card p { margin: 0; font-size: 12px; color: #aaa; }
+    .blink-target {
+      width: 40px; height: 40px;
+      background: #00ff88; border-radius: 50%;
+    }
+    #status { margin-top: 16px; font-size: 11px; color: #666; }
+  </style>
+</head>
+<body>
+  <h2>Partial Repaint Test (P0-6 S4)</h2>
+  <p>Only the blinking dot changes color (paint-only). Other cards should use cached display items.</p>
+
+  <div class="panel">
+    <div class="card" id="card-static-1">
+      <h3>Static Card 1</h3>
+      <p>This card never changes. Its display items should be reused from cache during partial repaint.</p>
+    </div>
+    <div class="card" id="card-static-2">
+      <h3>Static Card 2</h3>
+      <p>Another static card with text content that should not be re-painted.</p>
+    </div>
+    <div class="card" id="card-dynamic">
+      <h3>Dynamic Card</h3>
+      <p>Watch the dot blink:</p>
+      <div class="blink-target" id="blinker"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="card" id="card-static-3">
+      <h3>Static Card 3</h3>
+      <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit.</p>
+    </div>
+    <div class="card" id="card-static-4">
+      <h3>Static Card 4</h3>
+      <p>Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+    </div>
+  </div>
+
+  <div id="status">Waiting...</div>
+
+  <script>
+    var count = 0;
+    var blinkerOn = true;
+
+    // Use paint-only style changes (backgroundColor) to trigger partial repaint
+    setInterval(function() {
+      count++;
+      blinkerOn = !blinkerOn;
+
+      // This should be a paint-only change (no layout needed)
+      document.getElementById('blinker').style.backgroundColor = blinkerOn ? '#00ff88' : '#ff4444';
+    }, 500);
+  </script>
+</body>
+</html>

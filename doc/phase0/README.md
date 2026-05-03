@@ -139,6 +139,7 @@ Week 11-12
 | 2026-05-01 | P0-2 CSS border-image 解析+painter emit 完成；GPU material 5 待做 |
 | 2026-05-01 | P0-3 conic-gradient 完成；mask fast-path（conic+solid bg）完成；通用 mask RT 待做 |
 | 2026-05-01 | P0-6 S1 invalidation 基础设施完成；46/48 调用点已分类 |
+| 2026-05-02 | P0-6 S4 display list partial repaint 完成；paint-only JS style → 跳过 clean subtree；280/280 tests pass |
 
 后续 Phase 0 内重大调整在此处追加。
 
@@ -153,6 +154,6 @@ Week 11-12
 | **P0-3** | ✅ Done | conic-gradient 解析+渲染 ✅ · mask CSS 解析 ✅ · fast-path(conic+solid) ✅ · general mask(isolated layer + multiply blend) ✅ | — |
 | **P0-4** | ✅ Done | spatial nav 算法 ✅ · C ABI ✅ · SDL gamepad ✅ · JS API ✅ · CSS nav-\* ✅ · data-nav-trap ✅ | — |
 | **P0-5** | ✅ Done | composition 三件套 ✅ · SDL_SetTextInputArea ✅ | — |
-| **P0-6** | 🔶 65% | InvalidationKind ✅ · 48/48 分类 ✅ · Paint-only 检测 ✅ · metrics ✅ · FORCE_FULL_REPAINT ✅ · node range mapping ✅ · dirty node tracking ✅ | display list sub-tree rebuild |
+| **P0-6** | ✅ Done | InvalidationKind ✅ · 48/48 分类 ✅ · Paint-only 检测 ✅ · metrics ✅ · FORCE_FULL_REPAINT ✅ · node range mapping ✅ · dirty node tracking ✅ · partial repaint cache ✅ · paint-only JS style path ✅ · ancestor-aware skip ✅ | — |
 | **P0-7** | ✅ Done | perf_baseline.py ✅ · 4 scenes ✅ · BENCH_AUTOSTOP ✅ · profiler dump ✅ · LOG_TO_STDOUT ✅ | — |
 | **P0-8** | ✅ Done | DOM API/遍历/Input/CSS 级联/事件/UA 样式 全部已在 dev_next | — |

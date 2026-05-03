@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 #include "../dom/dom/dom_node.hpp"
 
 namespace dong::dom {
@@ -42,6 +43,28 @@ public:
     // Text renderer mode preference (propagated to glyph runs)
     void setTextRendererMode(TextRendererMode mode) { text_renderer_mode_ = mode; }
     TextRendererMode getTextRendererMode() const { return text_renderer_mode_; }
+
+    // P0-6 S4: Partial repaint support.
+    // Set the dirty node pointers for this frame. If non-empty, buildDisplayList
+    // will reuse cached display items for nodes NOT in this set.
+    // Pass an empty set to force full repaint (default behavior).
+    // Also pass the set of all ancestor nodes of dirty nodes, so that
+    // container nodes with dirty descendants are NOT cached.
+    void setDirtyNodes(const std::unordered_set<const void*>& dirty,
+                       const std::unordered_set<const void*>& ancestors) {
+        dirty_nodes_ = &dirty;
+        dirty_ancestors_ = &ancestors;
+        partial_repaint_active_ = !dirty.empty();
+    }
+    void clearDirtyNodes() {
+        dirty_nodes_ = nullptr;
+        dirty_ancestors_ = nullptr;
+        partial_repaint_active_ = false;
+    }
+
+    // Stats: how many nodes were skipped in the last partial repaint
+    uint32_t getLastPartialSkipCount() const { return partial_skip_count_; }
+    uint32_t getLastPartialRepaintCount() const { return partial_repaint_count_; }
 
     // 访问最近一帧构建好的 DisplayList / LayerTree
     const DisplayList& getDisplayList() const { return display_list_builder_.get(); }
@@ -90,6 +113,18 @@ private:
     std::vector<dom::DOMNodePtr> top_layer_modals_;
     TextShaper text_shaper_;
     TextRendererMode text_renderer_mode_ = TextRendererMode::Auto;
+
+    // P0-6 S4: Partial repaint cached state
+    const std::unordered_set<const void*>* dirty_nodes_ = nullptr;
+    const std::unordered_set<const void*>* dirty_ancestors_ = nullptr;
+    bool partial_repaint_active_ = false;
+    // Cache of previous frame's node ranges (maps node_ptr -> item range in previous display list)
+    std::unordered_map<const void*, std::pair<uint32_t, uint32_t>> prev_node_ranges_;
+    // Cache of previous frame's display items (for copying clean node items)
+    std::vector<DisplayItem> prev_display_items_;
+    // Stats
+    uint32_t partial_skip_count_ = 0;
+    uint32_t partial_repaint_count_ = 0;
 
     // Generated content (counter()/counters()/open-quote/close-quote)
     struct GeneratedContentState {

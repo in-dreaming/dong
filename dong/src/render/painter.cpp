@@ -750,8 +750,12 @@ void Painter::setInputEditingState(const dom::DOMNodePtr& focused_input, bool ca
 
 const DisplayList& Painter::buildDisplayList(const dom::DOMNodePtr& root, layout::Engine* layout_engine) {
     DONG_PROFILE_FUNCTION();
-    
+
     layout_engine_ = layout_engine;
+
+    // P0-6 S4: Reset partial repaint stats
+    partial_skip_count_ = 0;
+    partial_repaint_count_ = 0;
 
     display_list_builder_.clear();
     layer_tree_.clear();
@@ -805,6 +809,25 @@ const DisplayList& Painter::buildDisplayList(const dom::DOMNodePtr& root, layout
         }
     }
 
+    // P0-6 S4: Cache node ranges and display items for next frame's partial repaint.
+    // Build a lookup map from node_ptr -> (start, end) for efficient dirty-node checking.
+    prev_node_ranges_.clear();
+    const auto& ranges = display_list_builder_.getNodeRanges();
+    for (const auto& r : ranges) {
+        if (r.node_ptr && r.end_index > r.start_index) {
+            prev_node_ranges_[r.node_ptr] = {r.start_index, r.end_index};
+        }
+    }
+    prev_display_items_ = display_list_builder_.get().items;
+
+    if (partial_repaint_active_) {
+        DONG_LOG_DEBUG("[P0-6 partial] frame: skipped=%u repainted=%u total_nodes=%zu",
+                      partial_skip_count_, partial_repaint_count_, ranges.size());
+    }
+
+    // Clear partial repaint state after build
+    clearDirtyNodes();
+
     layout_engine_ = nullptr;
     return display_list_builder_.get();
 }
@@ -820,6 +843,45 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         DisplayListBuilder& b;
         ~ScopedNodeEnd() { b.endNode(); }
     } scoped_node_end{builder};
+
+    // P0-6 S4: Partial repaint — if this node is NOT dirty and we have cached items,
+    // copy the cached items instead of doing the full paint. This skips text shaping,
+    // gradient computation, etc. for unchanged nodes.
+    // We must NOT use the cache when:
+    // - The node itself is dirty (needs repaint)
+    // - The node is an ancestor of a dirty node (descendant needs repaint)
+    // - The node has no cached range (first frame, or new node)
+    if (partial_repaint_active_ && dirty_nodes_ && !dirty_nodes_->empty()) {
+        const void* node_ptr = node.get();
+        bool is_dirty = dirty_nodes_->count(node_ptr) > 0;
+        bool has_dirty_descendant = dirty_ancestors_ && dirty_ancestors_->count(node_ptr) > 0;
+
+        if (!is_dirty && !has_dirty_descendant) {
+            // Check if we have cached items for this node
+            auto it = prev_node_ranges_.find(node_ptr);
+            if (it != prev_node_ranges_.end()) {
+                uint32_t start = it->second.first;
+                uint32_t end = it->second.second;
+                if (start < end && end <= static_cast<uint32_t>(prev_display_items_.size())) {
+                    // Copy cached display items for this clean node (includes all children)
+                    builder.appendItemRange(prev_display_items_, start, end);
+                    partial_skip_count_++;
+                    // Expose layout metrics to DOM APIs even when skipping paint
+                    if (layout_node) {
+                        Rect nr{};
+                        nr.x = layout_node->layout.position[0];
+                        nr.y = layout_node->layout.position[1];
+                        nr.width = layout_node->layout.dimensions[0];
+                        nr.height = layout_node->layout.dimensions[1];
+                        node->setOffsetRect(nr.y, nr.x, nr.width, nr.height);
+                    }
+                    return;  // Skip entire subtree — cached items include children
+                }
+            }
+        } else if (is_dirty) {
+            partial_repaint_count_++;
+        }
+    }
 
     struct ScopedCounterScope {
         Painter* painter = nullptr;

@@ -1976,13 +1976,14 @@ struct EngineView::Impl {
         auto root = dom_manager->getRoot();
         if (!root) return;
 
-        bool did_work = false;
+        bool style_work = false;
+        bool layout_work = false;
 
         if (root->isStyleDirty() || root->isStyleSubtreeDirty()) {
             if (auto* se = dom_manager->getStyleEngine()) {
                 DONG_PROFILE_SCOPE_CAT("Style::compute", "style");
                 se->computeStylesIncremental(root);
-                did_work = true;
+                style_work = true;
             }
             root->clearStyleDirtyRecursive();
         }
@@ -1991,11 +1992,16 @@ struct EngineView::Impl {
             DONG_PROFILE_SCOPE_CAT("Layout::calculate", "layout");
             layout_engine->calculateLayout(root, static_cast<float>(width), static_cast<float>(height));
             root->clearLayoutDirtyRecursive();
-            did_work = true;
+            layout_work = true;
         }
 
-        if (did_work) {
+        // P0-6 S4: Distinguish layout vs paint-only invalidation
+        if (layout_work) {
             invalidate(InvalidationKind::Layout, nullptr, "dom_mutation");
+        } else if (style_work) {
+            // Style-only change (no layout affected): paint invalidation.
+            // Note: we don't have specific dirty node info here, so use nullptr.
+            invalidate(InvalidationKind::Paint, nullptr, "style_flush");
         }
     }
 
@@ -2004,13 +2010,47 @@ struct EngineView::Impl {
         if (!dom_manager) return;
         auto root = dom_manager->getRoot();
         if (!root) return;
-        if (!(root->isStyleDirty() || root->isStyleSubtreeDirty())) return;
+        bool style_dirty = root->isStyleDirty() || root->isStyleSubtreeDirty();
+        if (!style_dirty) return;
+
+        // P0-6 S4: Check if layout is also dirty BEFORE style computation.
+        bool layout_also_dirty = root->isLayoutDirty();
 
         if (auto* se = dom_manager->getStyleEngine()) {
             DONG_PROFILE_SCOPE_CAT("Style::compute", "style");
             se->computeStylesIncremental(root);
         }
         root->clearStyleDirtyRecursive();
+
+        // P0-6 S4: If style changed but layout did NOT, generate targeted paint
+        // invalidation using paint_dirty_ flags on DOM nodes.
+        if (!layout_also_dirty && !root->isLayoutDirty()) {
+            // Collect nodes with paint_dirty_ flag set
+            std::vector<const void*> paint_dirty_nodes;
+            std::function<void(const dong::dom::DOMNodePtr&)> collect_paint =
+                [&](const dong::dom::DOMNodePtr& n) {
+                    if (!n) return;
+                    if (n->isPaintDirty()) {
+                        paint_dirty_nodes.push_back(n.get());
+                        n->clearPaintDirty();
+                    }
+                    for (const auto& c : n->getChildren()) {
+                        collect_paint(c);
+                    }
+                };
+            collect_paint(root);
+
+            if (!paint_dirty_nodes.empty()) {
+                for (const void* ptr : paint_dirty_nodes) {
+                    invalidate(InvalidationKind::Paint, ptr, "style_paint_only");
+                }
+                DONG_LOG_DEBUG("[P0-6 S4] paint-only style change: %zu dirty nodes",
+                              paint_dirty_nodes.size());
+            } else {
+                // Style changed but no paint_dirty_ nodes found: full paint
+                invalidate(InvalidationKind::Paint, nullptr, "style_no_paint_nodes");
+            }
+        }
     }
 
     void tickComputeLayoutIfNeeded() {
@@ -2124,10 +2164,37 @@ struct EngineView::Impl {
         }
         painter->setTextRendererMode(text_renderer_mode);
 
+        // P0-6 S4: When we have paint-only invalidation with targeted dirty nodes,
+        // tell the painter so it can skip unchanged nodes and reuse cached display items.
+        // Also compute ancestors-of-dirty set so container nodes are NOT cached.
+        bool using_partial_repaint = false;
+        std::unordered_set<const void*> dirty_ancestors;
+        if (isPaintOnlyInvalidation() && !dirty_node_ptrs_.empty()) {
+            // Build ancestors set: for each dirty node, walk up to root
+            for (const void* dirty_ptr : dirty_node_ptrs_) {
+                // Walk up using DOM tree. We need to find the node from the pointer.
+                // The dirty_node_ptrs contain raw DOMNode pointers.
+                const auto* dirty_node = static_cast<const dong::dom::DOMNode*>(dirty_ptr);
+                auto parent = dirty_node->getParent();
+                while (parent) {
+                    dirty_ancestors.insert(parent.get());
+                    parent = parent->getParent();
+                }
+            }
+            painter->setDirtyNodes(dirty_node_ptrs_, dirty_ancestors);
+            using_partial_repaint = true;
+        }
+
         if (scene_mode_active_) {
             painter->clearDisplayList();
         } else {
             painter->buildDisplayList(root, layout_engine.get());
+        }
+
+        if (using_partial_repaint) {
+            DONG_LOG_DEBUG("[P0-6 partial] skipped=%u repainted=%u",
+                          painter->getLastPartialSkipCount(),
+                          painter->getLastPartialRepaintCount());
         }
 
         cached_dom_display_items_ = painter->getDisplayList().items;

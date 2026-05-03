@@ -2377,9 +2377,21 @@ static JSValue elem_setStyle(JSContext* ctx, JSValueConst this_val, JSValue styl
     else if (strcmp(prop, "borderRadius") == 0) style.border_radius = (float)num_val;
     else if (strcmp(prop, "borderWidth") == 0) style.border_width = (float)num_val;
     else if (strcmp(prop, "borderColor") == 0) style.border_color = str_val;
-    
+
+    // P0-6 S4: Distinguish paint-only vs layout-affecting style changes.
+    // Paint-only properties (color, backgroundColor, opacity, borderColor) don't need layout recalc.
+    bool is_paint_only = (strcmp(prop, "color") == 0 ||
+                          strcmp(prop, "backgroundColor") == 0 ||
+                          strcmp(prop, "background") == 0 ||
+                          strcmp(prop, "opacity") == 0 ||
+                          strcmp(prop, "borderColor") == 0);
+
     node->markStyleDirty();
-    node->markLayoutDirty();
+    if (is_paint_only) {
+        node->markPaintDirty();  // P0-6 S4: targeted paint-only dirty flag
+    } else {
+        node->markLayoutDirty();
+    }
     
     return JS_UNDEFINED;
 }

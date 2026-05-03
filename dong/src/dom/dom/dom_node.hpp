@@ -180,6 +180,12 @@ public:
     bool isStyleDirty() const { return style_dirty_; }
     bool isStyleSubtreeDirty() const { return style_subtree_dirty_; }
 
+    // P0-6 S4: Paint-dirty flag — marks this node as needing repaint but NOT relayout.
+    // Persists through style computation; cleared after display list generation.
+    void markPaintDirty() { paint_dirty_ = true; }
+    bool isPaintDirty() const { return paint_dirty_; }
+    void clearPaintDirty() { paint_dirty_ = false; }
+
     // Scroll
 
     float getScrollX() const { return scroll_x_; }
@@ -326,6 +332,7 @@ protected:
     bool layout_dirty_ = true;
     bool style_dirty_ = true;
     bool style_subtree_dirty_ = false;
+    bool paint_dirty_ = false;  // P0-6 S4: paint-only dirty (cleared after display list gen)
 
 
     // Interaction states (used by selector matcher for :hover/:active/:focus/:focus-visible)
