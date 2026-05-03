@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>P0-3 Mask General Path Test</title>
+  <style>
+    body { margin: 0; padding: 24px; background: #0f0f23; color: #eee; font-family: sans-serif; }
+    .container { display: flex; gap: 20px; flex-wrap: wrap; }
+
+    /* General mask: gradient bg + conic mask (NOT fast path) */
+    .masked-gradient {
+      width: 120px; height: 120px;
+      background: linear-gradient(135deg, #667eea, #764ba2, #f093fb);
+      border-radius: 50%;
+      mask-image: conic-gradient(black 0% 70%, transparent 70% 100%);
+      -webkit-mask-image: conic-gradient(black 0% 70%, transparent 70% 100%);
+    }
+
+    /* General mask: element with children */
+    .masked-card {
+      width: 200px; height: 100px;
+      padding: 16px;
+      background: linear-gradient(180deg, #1a1a4e, #2a1a5e);
+      border-radius: 12px;
+      mask-image: conic-gradient(black 0% 50%, transparent 50% 100%);
+      -webkit-mask-image: conic-gradient(black 0% 50%, transparent 50% 100%);
+    }
+    .masked-card h3 { margin: 0 0 8px; color: #ffd700; font-size: 14px; }
+    .masked-card p { margin: 0; font-size: 12px; color: #aaa; }
+
+    /* Fast path comparison: solid bg + conic mask */
+    .masked-solid {
+      width: 120px; height: 120px;
+      background: #e74c3c;
+      border-radius: 50%;
+      mask-image: conic-gradient(black 0% 60%, transparent 60% 100%);
+      -webkit-mask-image: conic-gradient(black 0% 60%, transparent 60% 100%);
+    }
+
+    .label { font-size: 11px; color: #666; margin-top: 6px; text-align: center; }
+  </style>
+</head>
+<body>
+  <p>CSS mask with conic-gradient: general path (complex content) vs fast path (solid bg)</p>
+  <div class="container">
+    <div>
+      <div class="masked-gradient"></div>
+      <div class="label">Gradient bg (general)</div>
+    </div>
+    <div>
+      <div class="masked-card">
+        <h3>Card Title</h3>
+        <p>Content with text inside a masked container</p>
+      </div>
+      <div class="label">Card with children (general)</div>
+    </div>
+    <div>
+      <div class="masked-solid"></div>
+      <div class="label">Solid bg (fast path)</div>
+    </div>
+  </div>
+</body>
+</html>
