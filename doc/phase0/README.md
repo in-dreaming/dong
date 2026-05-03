@@ -144,15 +144,15 @@ Week 11-12
 
 ---
 
-## 8. 实施进度（2026-05-01 更新）
+## 8. 实施进度（2026-05-03 更新）
 
 | ID | 状态 | 完成项 | 剩余 |
 |---|---|---|---|
 | **P0-1** | ✅ Done | uber quad pipeline 全量落地 | — |
-| **P0-2** | 🔶 75% | CSS border-image 解析 ✅ · painter 9 quad emit ✅ | GPU material 5 shader |
-| **P0-3** | 🔶 70% | conic-gradient 解析+渲染 ✅ · mask CSS 解析 ✅ · mask fast-path(conic+solid) ✅ | 通用 mask offscreen RT |
-| **P0-4** | ✅ Done | spatial nav 算法 ✅ · C ABI ✅ · SDL gamepad ✅ · JS API ✅ · CSS nav-\* ✅ | — |
+| **P0-2** | 🔶 80% | CSS border-image 解析 ✅ · painter 9 quad emit ✅ | GPU material 5 shader（需 instanced pipeline 加 texture 支持） |
+| **P0-3** | 🔶 75% | conic-gradient 解析+渲染 ✅ · mask CSS 解析 ✅ · mask fast-path(conic+solid) ✅ | 通用 mask offscreen RT（需新 shader pipeline） |
+| **P0-4** | ✅ Done | spatial nav 算法 ✅ · C ABI ✅ · SDL gamepad ✅ · JS API ✅ · CSS nav-\* ✅ · data-nav-trap ✅ | — |
 | **P0-5** | ✅ Done | composition 三件套 ✅ · SDL_SetTextInputArea ✅ | — |
-| **P0-6** | 🔶 40% | InvalidationKind 数据结构 ✅ · 46/48 调用点分类 ✅ | sub-tree display list/GPU compile |
-| **P0-7** | ✅ Done | perf_baseline.py ✅ · perf_scenes.yaml (4 scenes) ✅ · BENCH_AUTOSTOP ✅ · profiler auto-dump ✅ | — |
+| **P0-6** | 🔶 55% | InvalidationKind 数据结构 ✅ · 48/48 调用点分类 ✅ · Paint-only 检测+metrics ✅ · style/layout 已可跳过 | display list sub-tree rebuild |
+| **P0-7** | ✅ Done | perf_baseline.py ✅ · perf_scenes.yaml (4 scenes) ✅ · BENCH_AUTOSTOP ✅ · profiler auto-dump ✅ · LOG_TO_STDOUT ✅ | — |
 | **P0-8** | ✅ Done | DOM API/遍历/Input/CSS 级联/事件/UA 样式 全部已在 dev_next | — |
