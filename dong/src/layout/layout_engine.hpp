@@ -205,6 +205,10 @@ private:
     // Sticky positioning layout (position: sticky)
     void layoutStickyElements(dom::DOMNodePtr root);
 
+    // Grid layout post-pass
+    void layoutGridElements(dom::DOMNodePtr root);
+    void layoutSingleGrid(const dom::DOMNodePtr& grid_container);
+
     // Table layout post-pass
     void layoutTableElements(dom::DOMNodePtr root);
     void layoutSingleTable(const dom::DOMNodePtr& table_node);

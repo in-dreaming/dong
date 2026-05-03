@@ -15,6 +15,7 @@
 #include "../render/text_shaper.hpp"
 #include "aspect_ratio_resolver.hpp"
 #include "display_contents.hpp"
+#include "grid_layout.hpp"
 #include "sticky_positioning.hpp"
 
 namespace dong::layout {
@@ -1756,6 +1757,7 @@ void Engine::calculateLayout(dom::DOMNodePtr root, float width, float height) {
 
     layoutBlockFormattingContext(layout_root_dom);
     layoutTableElements(layout_root_dom);
+    layoutGridElements(layout_root_dom);
     layoutInlineFormattingContexts(layout_root_dom);
     layoutPositionedElements(layout_root_dom);
     layoutStickyElements(layout_root_dom);

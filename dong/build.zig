@@ -1694,6 +1694,7 @@ fn buildDongCore(
             "src/layout/display_contents.cpp",
             "src/layout/sticky_positioning.cpp",
             "src/layout/table_layout.cpp",
+            "src/layout/grid_layout.cpp",
             // Script
             "src/script/script_engine.cpp",
             "src/script/js_bindings.cpp",

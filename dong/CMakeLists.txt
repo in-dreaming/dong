@@ -207,6 +207,7 @@ add_library(dong SHARED
     src/layout/sticky_positioning.cpp
     src/layout/display_contents.cpp
     src/layout/table_layout.cpp
+    src/layout/grid_layout.cpp
     # Script
     src/script/module_loader.cpp
     src/script/script_engine.cpp
@@ -390,6 +391,7 @@ add_library(dong_render STATIC
     src/layout/sticky_positioning.cpp
     src/layout/display_contents.cpp
     src/layout/table_layout.cpp
+    src/layout/grid_layout.cpp
     # Script
     src/script/module_loader.cpp
     src/script/script_engine.cpp
