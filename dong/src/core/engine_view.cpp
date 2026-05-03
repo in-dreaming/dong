@@ -1814,6 +1814,30 @@ struct EngineView::Impl {
         // This is especially important for document.write and attribute-driven selectors.
         flushStyleLayoutAfterScripts();
 
+        // P1-9: autofocus — find the first element with the autofocus attribute and focus it.
+        if (focus_manager && dom_manager) {
+            auto root_af = dom_manager->getRoot();
+            if (root_af) {
+                dong::dom::DOMNodePtr autofocus_target;
+                std::function<void(const dong::dom::DOMNodePtr&)> find_autofocus =
+                    [&](const dong::dom::DOMNodePtr& n) {
+                        if (!n || autofocus_target) return;
+                        if (n->hasAttribute("autofocus")) {
+                            autofocus_target = n;
+                            return;
+                        }
+                        for (const auto& c : n->getChildren()) {
+                            find_autofocus(c);
+                        }
+                    };
+                find_autofocus(root_af);
+                if (autofocus_target) {
+                    focus_manager->setFocus(autofocus_target);
+                    invalidate(InvalidationKind::Paint, autofocus_target.get(), "autofocus");
+                }
+            }
+        }
+
         return true;
     }
 
