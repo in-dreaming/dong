@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>text-overflow: ellipsis test</title>
+  <style>
+    body { margin: 0; padding: 20px; background: #1a1a2e; color: #eee; font-family: sans-serif; }
+    .container { display: flex; gap: 16px; flex-wrap: wrap; }
+    .card {
+      width: 180px; padding: 12px;
+      background: #16213e; border-radius: 8px;
+      border: 1px solid #0f3460;
+    }
+    .truncate {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-size: 14px;
+      margin: 4px 0;
+    }
+    .label { font-size: 11px; color: #666; margin-top: 6px; }
+    h3 { margin: 0 0 8px; color: #e94560; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h2 style="color: #ffd700;">text-overflow: ellipsis</h2>
+
+  <div class="container">
+    <div class="card">
+      <h3>Short text (no truncate)</h3>
+      <div class="truncate">Hello</div>
+      <div class="label">Fits within container</div>
+    </div>
+
+    <div class="card">
+      <h3>Long text (truncated)</h3>
+      <div class="truncate">This is a very long text that should be truncated with an ellipsis</div>
+      <div class="label">Should show "This is a very lon…"</div>
+    </div>
+
+    <div class="card">
+      <h3>Medium text</h3>
+      <div class="truncate">Medium length text here</div>
+      <div class="label">May or may not truncate</div>
+    </div>
+
+    <div class="card">
+      <h3>No ellipsis (clip)</h3>
+      <div style="white-space: nowrap; overflow: hidden; text-overflow: clip; font-size: 14px;">
+        This text is clipped without ellipsis when it overflows
+      </div>
+      <div class="label">Clipped, no dots</div>
+    </div>
+
+    <div class="card">
+      <h3>Normal wrap (no truncate)</h3>
+      <div style="font-size: 14px;">This text wraps normally without any truncation applied to it at all</div>
+      <div class="label">Wraps to multiple lines</div>
+    </div>
+  </div>
+</body>
+</html>

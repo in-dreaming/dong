@@ -1747,6 +1747,46 @@ void renderFullText(const dom::DOMNodePtr& node,
 
     float text_width = shaped.width_units * scale;
 
+    // P1-9: text-overflow: ellipsis — when text overflows in nowrap mode,
+    // truncate and append "…" (U+2026) to fit within the container.
+    if (nowrap && text_width > inner_width && inner_width > 0.0f &&
+        style.text_overflow == dom::CSSTextOverflow::Ellipsis) {
+        // Measure ellipsis width
+        const std::string ellipsis = "\xE2\x80\xA6"; // U+2026 "…"
+        TextShapeRequest ellipsis_req{ellipsis, style.font_family, toString(style.font_weight), toString(style.font_style), font_size};
+        ShapedText ellipsis_shaped;
+        float ellipsis_width = 0.0f;
+        if (shaper.shape(ellipsis_req, ellipsis_shaped)) {
+            ellipsis_width = ellipsis_shaped.width_units * scale;
+        }
+
+        float target_width = inner_width - ellipsis_width;
+        if (target_width > 0.0f) {
+            // Binary search for the number of characters that fit
+            size_t lo = 0, hi = text.size();
+            while (lo < hi) {
+                size_t mid = (lo + hi + 1) / 2;
+                // Ensure we don't split a UTF-8 multi-byte character
+                while (mid < text.size() && (text[mid] & 0xC0) == 0x80) mid++;
+                std::string sub = text.substr(0, mid);
+                TextShapeRequest sub_req{sub, style.font_family, toString(style.font_weight), toString(style.font_style), font_size};
+                ShapedText sub_shaped;
+                if (shaper.shape(sub_req, sub_shaped) && sub_shaped.width_units * scale <= target_width) {
+                    lo = mid;
+                } else {
+                    hi = mid - 1;
+                    while (hi > 0 && (text[hi] & 0xC0) == 0x80) hi--;
+                }
+            }
+            std::string truncated = text.substr(0, lo) + ellipsis;
+            emitFullTextLine(truncated, 0, ctx);
+        } else {
+            // Not enough space even for ellipsis — just show ellipsis
+            emitFullTextLine(ellipsis, 0, ctx);
+        }
+        return;
+    }
+
     if (!nowrap && text_width > inner_width && inner_width > 0.0f) {
         int emitted = wrapAndEmitSegment(text, 0, ctx);
         (void)emitted;
