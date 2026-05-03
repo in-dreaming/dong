@@ -309,6 +309,37 @@ bool SDLGPUDriver::initialize() {
         if (!conic_gradient_pipeline_) {
             DONG_LOG_WARN("SDLGPUDriver::initialize: failed to create conic gradient pipeline: %s", SDL_GetError());
         }
+
+        // Mask apply pipeline: same conic gradient shaders, destination-multiply blend
+        // Result: dst_color * src_alpha (gradient alpha masks existing content)
+        SDL_GPUGraphicsPipelineCreateInfo mask_ci{};
+        SDL_GPUColorTargetDescription color_desc_mask{};
+        color_desc_mask.format = render_target_format_;
+        color_desc_mask.blend_state.enable_blend = true;
+        color_desc_mask.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_ZERO;
+        color_desc_mask.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+        color_desc_mask.blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
+        color_desc_mask.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ZERO;
+        color_desc_mask.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+        color_desc_mask.blend_state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
+
+        mask_ci.target_info.num_color_targets = 1;
+        mask_ci.target_info.color_target_descriptions = &color_desc_mask;
+        mask_ci.target_info.has_depth_stencil_target = false;
+
+        mask_ci.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLESTRIP;
+        mask_ci.vertex_shader = conic_gradient_vs_;
+        mask_ci.fragment_shader = conic_gradient_fs_;
+
+        mask_ci.vertex_input_state.num_vertex_buffers = 0;
+        mask_ci.vertex_input_state.vertex_buffer_descriptions = nullptr;
+        mask_ci.vertex_input_state.num_vertex_attributes = 0;
+        mask_ci.vertex_input_state.vertex_attributes = nullptr;
+
+        mask_apply_conic_pipeline_ = SDL_CreateGPUGraphicsPipeline(dev, &mask_ci);
+        if (!mask_apply_conic_pipeline_) {
+            DONG_LOG_WARN("SDLGPUDriver::initialize: failed to create mask apply conic pipeline: %s", SDL_GetError());
+        }
     }
 
     // Uber quad pipeline: unifies rect, round-rect, shadow, gradient via material type dispatch

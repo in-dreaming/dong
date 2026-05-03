@@ -51,6 +51,7 @@ enum class GPUCommandType : uint8_t {
     DrawText,                // 文本 glyph run
     DrawGradientQuad,        // 线性渐变 quad
     DrawConicGradientQuad,   // 锥形渐变 quad
+    ApplyMaskConicGradient,  // P0-3: render conic gradient as mask (multiply blend)
     /// 多条 rect / round / shadow 合并为一次 GPU instanced draw；实例数据在 GPUCommandList::uber_instance_pool
     UberQuadBatch,
 
@@ -246,6 +247,9 @@ public:
                 break;
             case GPUCommandType::DrawConicGradientQuad:
                 pipeline_id = 7;
+                break;
+            case GPUCommandType::ApplyMaskConicGradient:
+                pipeline_id = 8; // mask apply conic pipeline
                 break;
             case GPUCommandType::UberQuadBatch:
                 pipeline_id = 10; // instanced uber quad
@@ -592,6 +596,27 @@ public:
                 out.commands.push_back(cmd);
                 break;
             }
+            case DisplayItemType::ApplyMaskConicGradient: {
+                flush_uber_batch();
+                GPUCommand cmd{};
+                cmd.type = GPUCommandType::ApplyMaskConicGradient;
+                cmd.instance_count = 1;
+                cmd.rect = item.conic_gradient.rect;
+                cmd.radius = item.conic_gradient.radius;
+                cmd.conic_center_x_px = item.conic_gradient.center_x_px;
+                cmd.conic_center_y_px = item.conic_gradient.center_y_px;
+                cmd.conic_from_angle_deg = item.conic_gradient.from_angle_deg;
+                cmd.conic_repeating = item.conic_gradient.repeating ? 1.0f : 0.0f;
+                cmd.gradient_stop_count = item.conic_gradient.stop_count;
+                for (int i = 0; i < item.conic_gradient.stop_count; ++i) {
+                    cmd.gradient_stops[i].color =
+                        apply_opacity(item.conic_gradient.stops[i].color, current_opacity());
+                    cmd.gradient_stops[i].position = item.conic_gradient.stops[i].position;
+                }
+                cmd.sort_key = make_sort_key(cmd.type, cmd);
+                out.commands.push_back(cmd);
+                break;
+            }
             default:
                 // 其他类型先忽略，后续再逐步接入
                 break;
@@ -624,6 +649,7 @@ public:
                 case GPUCommandType::DrawText:
                 case GPUCommandType::DrawGradientQuad:
                 case GPUCommandType::DrawConicGradientQuad:
+                case GPUCommandType::ApplyMaskConicGradient:
                 case GPUCommandType::UberQuadBatch:
                     out.sorted_draw_indices.push_back(i);
                     break;
@@ -673,7 +699,7 @@ public:
         for (const auto& c : out.commands) {
             if (c.type == GPUCommandType::DrawShadowQuad) {
                 ++shadow_count_cmds;
-            } else if (c.type == GPUCommandType::DrawGradientQuad || c.type == GPUCommandType::DrawConicGradientQuad) {
+            } else if (c.type == GPUCommandType::DrawGradientQuad || c.type == GPUCommandType::DrawConicGradientQuad || c.type == GPUCommandType::ApplyMaskConicGradient) {
                 ++gradient_count;
             } else if (c.type == GPUCommandType::PushClipRect) {
                 ++clip_count;

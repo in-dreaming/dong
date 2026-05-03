@@ -139,6 +139,7 @@ struct PipelineBindingState {
         Shadow,
         Gradient,
         ConicGradient,
+        MaskApplyConicGradient,
         Image,
         ImageYUV,
         Text,
@@ -1432,6 +1433,62 @@ void SDLGPUDriver::executeDrawConicGradient(ExecuteContext& ctx, const GPUComman
     SDL_DrawGPUPrimitives(ctx.pass, 4, 1, 0, 0);
 }
 
+void SDLGPUDriver::executeApplyMaskConicGradient(ExecuteContext& ctx, const GPUCommand& cmd) {
+    if (!ctx.pass || !mask_apply_conic_pipeline_) {
+        return;
+    }
+
+    struct ConicGradientUniformData {
+        float rect[4];
+        float viewport[4];
+        float transform[8];
+        float conic_meta[4];
+        float conic_center_period[4];
+        float stop_colors[8][4];
+        float stop_positions[2][4];
+        ClipUniformBlock clip;
+    };
+
+    ConicGradientUniformData u{};
+    u.rect[0] = cmd.rect.x;
+    u.rect[1] = cmd.rect.y;
+    u.rect[2] = cmd.rect.width;
+    u.rect[3] = cmd.rect.height;
+
+    ctx.writeViewport(u.viewport);
+    writeTransform(u.transform, ctx.getCurrentTransform());
+
+    const float from_rad = cmd.conic_from_angle_deg * 3.14159265358979f / 180.0f;
+    u.conic_meta[0] = from_rad;
+    u.conic_meta[1] = static_cast<float>(cmd.gradient_stop_count);
+    u.conic_meta[2] = cmd.radius;
+    u.conic_meta[3] = cmd.conic_repeating;
+
+    u.conic_center_period[0] = cmd.conic_center_x_px;
+    u.conic_center_period[1] = cmd.conic_center_y_px;
+    u.conic_center_period[2] = 0.0f;
+    u.conic_center_period[3] = 0.0f;
+
+    for (int i = 0; i < cmd.gradient_stop_count && i < 8; ++i) {
+        writeLinearColor(cmd.gradient_stops[i].color, u.stop_colors[i]);
+        int vec_idx = i / 4;
+        int comp_idx = i % 4;
+        u.stop_positions[vec_idx][comp_idx] = cmd.gradient_stops[i].position;
+    }
+
+    ctx.fillClipUniform(u.clip);
+
+    if (ctx.pipeline_state.active != PipelineBindingState::ActivePipeline::MaskApplyConicGradient) {
+        SDL_BindGPUGraphicsPipeline(ctx.pass, mask_apply_conic_pipeline_);
+        ctx.pipeline_state.active = PipelineBindingState::ActivePipeline::MaskApplyConicGradient;
+    }
+
+    SDL_PushGPUVertexUniformData(ctx.cmd_buf, 0, &u, sizeof(u));
+    SDL_PushGPUFragmentUniformData(ctx.cmd_buf, 0, &u, sizeof(u));
+
+    SDL_DrawGPUPrimitives(ctx.pass, 4, 1, 0, 0);
+}
+
 void SDLGPUDriver::executeUberQuadInstancedBatch(ExecuteContext& ctx,
                                                  const GPUCommand& cmd,
                                                  const GPUCommandList& commands) {
@@ -2617,6 +2674,10 @@ void SDLGPUDriver::executeDispatchCommand(const GPUCommand& cmd,
         if (use_uber_quad_) flushUberBatch(ctx);
         executeDrawConicGradient(ctx, cmd);
         break;
+    case GPUCommandType::ApplyMaskConicGradient:
+        if (use_uber_quad_) flushUberBatch(ctx);
+        executeApplyMaskConicGradient(ctx, cmd);
+        break;
     case GPUCommandType::UberQuadBatch:
         executeUberQuadInstancedBatch(ctx, cmd, commands);
         break;
@@ -2771,6 +2832,7 @@ void SDLGPUDriver::execute(const GPUCommandList& commands) {
             case GPUCommandType::DrawShadowQuad:       ++n_shadow; break;
             case GPUCommandType::DrawGradientQuad:
             case GPUCommandType::DrawConicGradientQuad:
+            case GPUCommandType::ApplyMaskConicGradient:
                 ++n_gradient;
                 break;
             case GPUCommandType::DrawImageQuad:        ++n_image; break;

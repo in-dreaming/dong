@@ -94,6 +94,7 @@ SDLGPUDriver::~SDLGPUDriver() {
         if (gradient_fs_) SDL_ReleaseGPUShader(dev, gradient_fs_);
 
         if (conic_gradient_pipeline_) SDL_ReleaseGPUGraphicsPipeline(dev, conic_gradient_pipeline_);
+        if (mask_apply_conic_pipeline_) SDL_ReleaseGPUGraphicsPipeline(dev, mask_apply_conic_pipeline_);
         if (conic_gradient_vs_) SDL_ReleaseGPUShader(dev, conic_gradient_vs_);
         if (conic_gradient_fs_) SDL_ReleaseGPUShader(dev, conic_gradient_fs_);
 

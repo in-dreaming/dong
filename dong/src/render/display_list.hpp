@@ -35,6 +35,7 @@ enum class DisplayItemType : uint8_t {
     DrawGlyphRun,
     DrawLinearGradient,  // CSS linear-gradient background
     DrawConicGradient,    // CSS conic-gradient background
+    ApplyMaskConicGradient,  // P0-3: conic gradient mask application (multiply blend)
     PushLayer,
     PopLayer,
     PushClipRect,
