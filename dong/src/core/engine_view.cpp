@@ -110,6 +110,10 @@ DOMNodePtr hitTestRecursive(const DOMNodePtr& node, dong::layout::Engine* layout
     // Skip inert subtrees
     if (node->hasAttribute("inert")) return nullptr;
 
+    // P1-9: pointer-events: none — skip this element (and its subtree) from hit testing
+    const auto& style = node->getComputedStyle();
+    if (style.pointer_events == dom::CSSPointerEvents::None) return nullptr;
+
     const auto* layout = layout_engine->getLayout(node);
     if (!layout) return nullptr;
 
