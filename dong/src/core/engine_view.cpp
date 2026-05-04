@@ -4427,9 +4427,14 @@ const char* EngineView::getCursorAt(int32_t x, int32_t y) {
 
     auto current = element;
     while (current) {
-        const auto cursor = current->getComputedStyle().cursor;
-        if (cursor != dom::CSSCursor::Auto) {
-            impl_->cached_cursor = dom::toString(cursor);
+        const auto& cs = current->getComputedStyle();
+        if (cs.cursor != dom::CSSCursor::Auto) {
+            impl_->cached_cursor = dom::toString(cs.cursor);
+            return impl_->cached_cursor.c_str();
+        }
+        // P1-9: user-select: none — show default cursor instead of text cursor
+        if (cs.user_select == dom::CSSUserSelect::None) {
+            impl_->cached_cursor = "default";
             return impl_->cached_cursor.c_str();
         }
         current = current->getParent();
