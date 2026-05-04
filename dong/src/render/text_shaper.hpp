@@ -55,6 +55,24 @@ public:
 
     bool shape(const TextShapeRequest& request, ShapedText& out_text);
 
+    // P1-8: Pre-warm the shape cache with multiple requests.
+    // Call before paint phase to ensure all text is shaped in batch.
+    // Returns the number of cache misses (newly shaped texts).
+    size_t prewarmCache(const std::vector<TextShapeRequest>& requests) {
+        size_t misses = 0;
+        ShapedText dummy;
+        for (const auto& req : requests) {
+            ShapedCacheKey key{req.text, req.font_family, req.font_weight, req.font_style, req.font_size, req.lang};
+            auto& cache = getShapedCache();
+            if (cache.find(key) == cache.end()) {
+                if (shape(req, dummy)) {
+                    ++misses;
+                }
+            }
+        }
+        return misses;
+    }
+
     void clearShapedCache() { getShapedCache().clear(); }
     size_t shapedCacheSize() const { return getShapedCache().size(); }
 

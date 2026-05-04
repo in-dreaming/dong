@@ -2372,6 +2372,53 @@ struct EngineView::Impl {
             tickSyncDialogTopLayer();
         }
 
+        // P1-8: Pre-warm text shape cache before paint phase.
+        // Collect visible text nodes and batch-shape them for better cache locality.
+        if (commands_dirty_ && dom_manager && layout_engine) {
+            DONG_PROFILE_SCOPE_CAT("TextPrewarm", "tick");
+            auto root_pw = dom_manager->getRoot();
+            if (root_pw) {
+                std::vector<dong::render::TextShapeRequest> prewarm_requests;
+                std::function<void(const dong::dom::DOMNodePtr&)> collect_text =
+                    [&](const dong::dom::DOMNodePtr& node) {
+                        if (!node) return;
+                        const auto& cs = node->getComputedStyle();
+                        if (cs.display == dong::dom::CSSDisplay::None) return;
+
+                        if (node->getType() == dong::dom::DOMNode::NodeType::TEXT) {
+                            auto parent = node->getParent();
+                            if (parent) {
+                                const auto& ps = parent->getComputedStyle();
+                                std::string text = node->getRawTextContent();
+                                if (!text.empty() && text.size() < 2000) {
+                                    dong::render::TextShapeRequest req;
+                                    req.text = text;
+                                    req.font_family = ps.font_family;
+                                    req.font_weight = dong::dom::toString(ps.font_weight);
+                                    req.font_style = dong::dom::toString(ps.font_style);
+                                    req.font_size = ps.font_size > 0.0f ? ps.font_size : 16.0f;
+                                    prewarm_requests.push_back(std::move(req));
+                                }
+                            }
+                        }
+
+                        for (const auto& child : node->getChildren()) {
+                            collect_text(child);
+                        }
+                    };
+                collect_text(root_pw);
+
+                if (!prewarm_requests.empty()) {
+                    dong::render::TextShaper prewarm_shaper;
+                    size_t misses = prewarm_shaper.prewarmCache(prewarm_requests);
+                    if (misses > 0) {
+                        DONG_LOG_DEBUG("[P1-8] pre-warmed %zu text shape entries (%zu requests)",
+                                      misses, prewarm_requests.size());
+                    }
+                }
+            }
+        }
+
         DONG_LOG_DEBUG("[tick] step: render_build");
         double paint_ms = 0.0;
         {
