@@ -161,6 +161,7 @@ endif()
 add_library(dong SHARED
     src/api_bindings.cpp
     src/render/drawlist_emitter.cpp
+    src/devtools/devtools_overlay.cpp
     src/core/context.cpp
     src/core/engine_view.cpp
     src/core/platform.c

@@ -35,6 +35,7 @@
 #include "../script/script_engine.hpp"
 #include "../script/js_bindings.hpp"
 #include "../script/js_fetch_bindings.hpp"
+#include "../devtools/devtools_overlay.hpp"
 
 #include <cstdlib>
 #include <cstring>
@@ -406,6 +407,9 @@ struct EngineView::Impl {
     std::unique_ptr<dong::script::ScriptEngine> owned_script_engine;  // null when sharing
     dong::script::ScriptEngine* script_engine = nullptr;              // always valid
     std::unique_ptr<dong::script::JSBindings> js_bindings;
+
+    // P1-3: DevTools overlay
+    dong::devtools::DevToolsOverlay devtools_overlay;
 
     const dong_plugin_vtable_t* plugin = nullptr;
     void* plugin_user = nullptr;
@@ -2226,6 +2230,19 @@ struct EngineView::Impl {
 
         appendSceneAndOverlay(overlay);
 
+        // P1-3: Render DevTools overlay on top of all content
+        if (devtools_overlay.isVisible()) {
+            devtools_overlay.setRoot(dom_manager->getRoot());
+            devtools_overlay.setViewport(static_cast<float>(width), static_cast<float>(height));
+            devtools_overlay.setMetrics(
+                0,
+                static_cast<uint32_t>(painter->getDisplayList().items.size()),
+                0.0f);
+            dong::render::DisplayListBuilder devtools_builder;
+            devtools_overlay.buildOverlay(devtools_builder);
+            painter->appendOverlayItems(devtools_builder.get().items);
+        }
+
         const auto& dl = painter->getDisplayList();
         DONG_LOG_DEBUG("[tick] DisplayList items: %zu", dl.items.size());
 
@@ -3506,8 +3523,20 @@ struct EngineView::Impl {
         constexpr uint32_t SDLK_RIGHT = 0x4000004F;
         constexpr uint32_t SDLK_UP = 0x40000052;
         constexpr uint32_t SDLK_DOWN = 0x40000051;
+        constexpr uint32_t SDLK_F12 = 0x40000045;
 
         updateModifierState(key_code, pressed);
+
+        // P1-3: F12 toggles DevTools overlay
+        if (pressed && key_code == SDLK_F12) {
+            devtools_overlay.toggle();
+            if (devtools_overlay.isVisible() && dom_manager) {
+                devtools_overlay.setRoot(dom_manager->getRoot());
+                devtools_overlay.setViewport(static_cast<float>(width), static_cast<float>(height));
+            }
+            invalidate(InvalidationKind::Paint, nullptr, "devtools_toggle");
+            return;
+        }
 
         if (pressed) {
             dispatchClipboardEventIfNeeded(key_code);
