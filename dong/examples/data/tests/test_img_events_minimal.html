@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { font-family: monospace; padding: 20px; }
+        #log { background-color: #f5f5f5; padding: 10px; border: 1px solid #ccc; }
+        .success { color: green; font-weight: bold; }
+        .error { color: red; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>Image Load/Error Event Test</h1>
+    <div id="log"></div>
+
+    <script>
+        const log = document.getElementById('log');
+
+        function addLog(msg, isSuccess) {
+            const p = document.createElement('p');
+            p.className = isSuccess ? 'success' : (isSuccess === false ? 'error' : '');
+            p.textContent = new Date().toISOString() + ': ' + msg;
+            log.appendChild(p);
+            console.log(msg);  // Also log to console
+        }
+
+        addLog('Test started');
+
+        // Test 1: Valid src
+        addLog('Creating img1 with valid src');
+        const img1 = document.createElement('img');
+        img1.addEventListener('load', () => addLog('img1: LOAD event fired!', true));
+        img1.addEventListener('error', () => addLog('img1: ERROR event fired (unexpected)', false));
+        img1.src = '../images/bg.png';
+        addLog('img1.src set to: ' + img1.src);
+
+        // Test 2: Empty src
+        addLog('Creating img2 with empty src');
+        const img2 = document.createElement('img');
+        img2.addEventListener('load', () => addLog('img2: LOAD event fired (unexpected)', false));
+        img2.addEventListener('error', () => addLog('img2: ERROR event fired!', true));
+        img2.src = '';
+        addLog('img2.src set to empty string');
+
+        addLog('Waiting for events...');
+    </script>
+</body>
+</html>

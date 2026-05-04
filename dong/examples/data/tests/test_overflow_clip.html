@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Overflow Clip Value Test</title>
+    <style>
+        body {
+            margin: 20px;
+            font-family: sans-serif;
+            background: white;
+        }
+
+        .container {
+            margin-bottom: 30px;
+        }
+
+        h2 {
+            font-size: 18px;
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .box {
+            width: 200px;
+            height: 100px;
+            border: 2px solid #333;
+            background: #f0f0f0;
+            padding: 10px;
+            position: relative;
+        }
+
+        .content {
+            width: 300px;
+            height: 150px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 10px;
+            font-weight: bold;
+        }
+
+        .overflow-visible {
+            overflow: visible;
+        }
+
+        .overflow-hidden {
+            overflow: hidden;
+        }
+
+        .overflow-clip {
+            overflow: clip;
+        }
+
+        .overflow-scroll {
+            overflow: scroll;
+        }
+
+        .overflow-auto {
+            overflow: auto;
+        }
+
+        .code {
+            font-family: monospace;
+            background: #e0e0e0;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 14px;
+        }
+
+        .description {
+            font-size: 14px;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        h1 {
+            font-size: 24px;
+            margin-bottom: 30px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Overflow Clip Value Test</h1>
+
+    <div class="container">
+        <h2><span class="code">overflow: visible</span></h2>
+        <p class="description">Content overflows and is visible outside the box</p>
+        <div class="box overflow-visible">
+            <div class="content">
+                This content is larger than the container.
+                overflow: visible allows it to extend beyond bounds.
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2><span class="code">overflow: hidden</span></h2>
+        <p class="description">Content is clipped. May be scrollable programmatically (via scrollTo/scrollBy)</p>
+        <div class="box overflow-hidden">
+            <div class="content">
+                This content is larger than the container.
+                overflow: hidden clips it but allows programmatic scrolling.
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2><span class="code">overflow: clip</span></h2>
+        <p class="description">Content is clipped. NOT scrollable (no scrolling mechanism at all)</p>
+        <div class="box overflow-clip">
+            <div class="content">
+                This content is larger than the container.
+                overflow: clip clips it and disables ALL scrolling.
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2><span class="code">overflow: scroll</span></h2>
+        <p class="description">Always shows scrollbars, content is scrollable</p>
+        <div class="box overflow-scroll">
+            <div class="content">
+                This content is larger than the container.
+                overflow: scroll shows scrollbars.
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2><span class="code">overflow: auto</span></h2>
+        <p class="description">Shows scrollbars only when needed</p>
+        <div class="box overflow-auto">
+            <div class="content">
+                This content is larger than the container.
+                overflow: auto shows scrollbars when needed.
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Test: Try to scroll the clip container programmatically
+        // This should NOT work for overflow: clip
+        const clipBox = document.querySelector('.overflow-clip');
+        const hiddenBox = document.querySelector('.overflow-hidden');
+
+        console.log('Testing programmatic scrolling:');
+        console.log('Clip box scrollTop before:', clipBox.scrollTop);
+        console.log('Hidden box scrollTop before:', hiddenBox.scrollTop);
+
+        clipBox.scrollTop = 50;
+        hiddenBox.scrollTop = 50;
+
+        console.log('Clip box scrollTop after:', clipBox.scrollTop, '(should be 0)');
+        console.log('Hidden box scrollTop after:', hiddenBox.scrollTop, '(may be 50)');
+    </script>
+</body>
+</html>

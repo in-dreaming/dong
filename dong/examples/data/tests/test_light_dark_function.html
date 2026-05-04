@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>light-dark() Function Test</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+        }
+
+        .test-container {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+
+        .test-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            font-size: 18px;
+        }
+
+        .test-description {
+            margin-bottom: 15px;
+            color: #666;
+        }
+
+        .test-case {
+            margin: 10px 0;
+            padding: 10px;
+            border-left: 3px solid #007acc;
+            background-color: #f9f9f9;
+        }
+
+        .result {
+            margin-top: 5px;
+            padding: 5px;
+            background-color: #e8f4fd;
+            border-radius: 3px;
+        }
+
+        /* Test 1: Basic light-dark() function with explicit color-scheme */
+        .test-light-scheme {
+            color-scheme: light;
+            color: light-dark(black, white);
+            background-color: light-dark(white, black);
+            border: 2px solid light-dark(#ccc, #333);
+        }
+
+        .test-dark-scheme {
+            color-scheme: dark;
+            color: light-dark(black, white);
+            background-color: light-dark(white, black);
+            border: 2px solid light-dark(#ccc, #333);
+        }
+
+        /* Test 2: light-dark() with inherited color-scheme */
+        .parent-light-scheme {
+            color-scheme: light;
+        }
+
+        .parent-dark-scheme {
+            color-scheme: dark;
+        }
+
+        .child-inherit {
+            color: light-dark(red, blue);
+            background-color: light-dark(yellow, purple);
+        }
+
+        /* Test 3: light-dark() with different color formats */
+        .test-color-formats {
+            color-scheme: light;
+            color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));
+            background-color: light-dark(hsl(0, 0%, 100%), hsl(0, 0%, 0%));
+            border-color: light-dark(#ff0000, #00ff00);
+        }
+
+        /* Test 4: light-dark() with named colors */
+        .test-named-colors {
+            color-scheme: dark;
+            color: light-dark(black, white);
+            background-color: light-dark(white, black);
+            border-color: light-dark(red, green);
+        }
+
+        /* Test 5: light-dark() with normal color-scheme (should use light) */
+        .test-normal-scheme {
+            color-scheme: normal;
+            color: light-dark(black, white);
+            background-color: light-dark(white, black);
+        }
+
+        /* Test 6: light-dark() with no color-scheme (should use light) */
+        .test-no-scheme {
+            color: light-dark(black, white);
+            background-color: light-dark(white, black);
+        }
+
+        /* Test 7: light-dark() with light dark color-scheme */
+        .test-light-dark-scheme {
+            color-scheme: light dark;
+            color: light-dark(black, white);
+            background-color: light-dark(white, black);
+        }
+
+        /* Test 8: light-dark() with dark light color-scheme */
+        .test-dark-light-scheme {
+            color-scheme: dark light;
+            color: light-dark(black, white);
+            background-color: light-dark(white, black);
+        }
+
+        /* Test 9: light-dark() with only light color-scheme */
+        .test-only-light-scheme {
+            color-scheme: light;
+            color: light-dark(black, white);
+            background-color: light-dark(white, black);
+        }
+
+        /* Test 10: light-dark() with only dark color-scheme */
+        .test-only-dark-scheme {
+            color-scheme: dark;
+            color: light-dark(black, white);
+            background-color: light-dark(white, black);
+        }
+    </style>
+</head>
+<body>
+    <h1>light-dark() Function Test</h1>
+
+    <div class="test-container">
+        <div class="test-title">Test 1: Basic light-dark() function with explicit color-scheme</div>
+        <div class="test-description">Testing light-dark() function with explicitly set color-scheme values.</div>
+
+        <div class="test-case">
+            <div class="test-light-scheme">
+                This should have black text on white background (light scheme)
+            </div>
+            <div class="result">Expected: black text, white background, light gray border</div>
+        </div>
+
+        <div class="test-case">
+            <div class="test-dark-scheme">
+                This should have white text on black background (dark scheme)
+            </div>
+            <div class="result">Expected: white text, black background, dark gray border</div>
+        </div>
+    </div>
+
+    <div class="test-container">
+        <div class="test-title">Test 2: light-dark() with inherited color-scheme</div>
+        <div class="test-description">Testing light-dark() function with inherited color-scheme values.</div>
+
+        <div class="test-case">
+            <div class="parent-light-scheme">
+                Parent with light scheme
+                <div class="child-inherit">Child should have red text on yellow background</div>
+            </div>
+            <div class="result">Expected: red text, yellow background</div>
+        </div>
+
+        <div class="test-case">
+            <div class="parent-dark-scheme">
+                Parent with dark scheme
+                <div class="child-inherit">Child should have blue text on purple background</div>
+            </div>
+            <div class="result">Expected: blue text, purple background</div>
+        </div>
+    </div>
+
+    <div class="test-container">
+        <div class="test-title">Test 3: light-dark() with different color formats</div>
+        <div class="test-description">Testing light-dark() function with various color formats (RGB, HSL, hex).</div>
+
+        <div class="test-case">
+            <div class="test-color-formats">
+                This should use light colors: black text, white background, red border
+            </div>
+            <div class="result">Expected: black text (rgb), white background (hsl), red border (hex)</div>
+        </div>
+    </div>
+
+    <div class="test-container">
+        <div class="test-title">Test 4: light-dark() with named colors</div>
+        <div class="test-description">Testing light-dark() function with CSS named colors.</div>
+
+        <div class="test-case">
+            <div class="test-named-colors">
+                This should use dark colors: white text, black background, green border
+            </div>
+            <div class="result">Expected: white text, black background, green border</div>
+        </div>
+    </div>
+
+    <div class="test-container">
+        <div class="test-title">Test 5: light-dark() with normal color-scheme</div>
+        <div class="test-description">Testing light-dark() function with color-scheme: normal (should use light colors).</div>
+
+        <div class="test-case">
+            <div class="test-normal-scheme">
+                This should use light colors (normal scheme defaults to light)
+            </div>
+            <div class="result">Expected: black text, white background</div>
+        </div>
+    </div>
+
+    <div class="test-container">
+        <div class="test-title">Test 6: light-dark() with no color-scheme</div>
+        <div class="test-description">Testing light-dark() function when no color-scheme is set (should use light colors).</div>
+
+        <div class="test-case">
+            <div class="test-no-scheme">
+                This should use light colors (default behavior)
+            </div>
+            <div class="result">Expected: black text, white background</div>
+        </div>
+    </div>
+
+    <div class="test-container">
+        <div class="test-title">Test 7-10: light-dark() with combined color-scheme values</div>
+        <div class="test-description">Testing light-dark() function with various color-scheme combinations.</div>
+
+        <div class="test-case">
+            <div class="test-light-dark-scheme">
+                color-scheme: light dark - should use first supported scheme (light)
+            </div>
+            <div class="result">Expected: black text, white background</div>
+        </div>
+
+        <div class="test-case">
+            <div class="test-dark-light-scheme">
+                color-scheme: dark light - should use first supported scheme (dark)
+            </div>
+            <div class="result">Expected: white text, black background</div>
+        </div>
+
+        <div class="test-case">
+            <div class="test-only-light-scheme">
+                color-scheme: light - should use light colors
+            </div>
+            <div class="result">Expected: black text, white background</div>
+        </div>
+
+        <div class="test-case">
+            <div class="test-only-dark-scheme">
+                color-scheme: dark - should use dark colors
+            </div>
+            <div class="result">Expected: white text, black background</div>
+        </div>
+    </div>
+
+    <script>
+        // JavaScript validation of computed styles
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('light-dark() function test loaded');
+
+            // Test 1: Basic light-dark() function
+            const lightSchemeEl = document.querySelector('.test-light-scheme');
+            const darkSchemeEl = document.querySelector('.test-dark-scheme');
+
+            console.log('Light scheme element computed color:', getComputedStyle(lightSchemeEl).color);
+            console.log('Light scheme element computed background-color:', getComputedStyle(lightSchemeEl).backgroundColor);
+            console.log('Dark scheme element computed color:', getComputedStyle(darkSchemeEl).color);
+            console.log('Dark scheme element computed background-color:', getComputedStyle(darkSchemeEl).backgroundColor);
+
+            // Test 2: Inherited color-scheme
+            const childLight = document.querySelector('.parent-light-scheme .child-inherit');
+            const childDark = document.querySelector('.parent-dark-scheme .child-inherit');
+
+            console.log('Child with light scheme computed color:', getComputedStyle(childLight).color);
+            console.log('Child with dark scheme computed color:', getComputedStyle(childDark).color);
+
+            // Test various color-scheme values
+            const schemes = [
+                '.test-normal-scheme',
+                '.test-no-scheme',
+                '.test-light-dark-scheme',
+                '.test-dark-light-scheme',
+                '.test-only-light-scheme',
+                '.test-only-dark-scheme'
+            ];
+
+            schemes.forEach(selector => {
+                const el = document.querySelector(selector);
+                if (el) {
+                    console.log(selector + ' color:', getComputedStyle(el).color);
+                    console.log(selector + ' background-color:', getComputedStyle(el).backgroundColor);
+                }
+            });
+        });
+    </script>
+</body>
+</html>

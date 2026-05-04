@@ -1,4 +1,4 @@
-#include "context.hpp"
+﻿#include "context.hpp"
 #include <iostream>
 
 namespace dong {
@@ -19,10 +19,11 @@ bool Context::initialize() {
 
     std::cout << "[Context] Initializing " << getName() << " v" << getVersion() << std::endl;
 
-    // TODO: Initialize platform-specific resources if needed
-    // - Font management
-    // - Color space
-    // - DPI settings
+    // Platform-specific resources are now injected via Plugin system:
+    // - GPUDriver: injected via DongGPUDriver C interface
+    // - ImageDecoder: injected via DongImageDecoder interface
+    // - FileSystem: injected via DongFileSystem interface
+    // No additional initialization needed here.
 
     initialized_ = true;
     return true;
@@ -35,7 +36,8 @@ void Context::shutdown() {
 
     if (initialized_) {
         std::cout << "[Context] Shutting down " << getName() << std::endl;
-        // TODO: Clean up platform resources
+        // Clean up platform resources
+        // Note: Font finder cleanup is handled automatically via static destructors
     }
 
     shutdown_called_ = true;

@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>white-space: pre-line vs break-spaces test</title>
+<style>
+body { margin: 10px; font-family: sans-serif; font-size: 14px; background: #fff; }
+
+.box {
+  border: 1px solid #333;
+  padding: 8px;
+  margin-bottom: 10px;
+  width: 300px;
+}
+
+#pre-line-box {
+  white-space: pre-line;
+  background: #eef;
+}
+
+#break-spaces-box {
+  white-space: break-spaces;
+  background: #efe;
+}
+
+#pre-wrap-box {
+  white-space: pre-wrap;
+  background: #fee;
+}
+
+.test-case {
+  margin-bottom: 15px;
+  border-bottom: 1px dashed #ccc;
+  padding-bottom: 10px;
+}
+
+.test-case h3 {
+  margin: 0 0 5px 0;
+  font-size: 12px;
+  color: #666;
+}
+</style>
+</head>
+<body>
+  <h1>white-space: pre-line vs break-spaces 测试</h1>
+
+  <div class="test-case">
+    <h3>测试 1: 空格折叠行为</h3>
+    <div class="box" id="pre-line-box-1">pre-line: 多个    空格    被折叠</div>
+    <div class="box" id="break-spaces-box-1">break-spaces: 多个    空格    被保留</div>
+    <div class="box" id="pre-wrap-box-1">pre-wrap: 多个    空格    被保留</div>
+  </div>
+
+  <div class="test-case">
+    <h3>测试 2: 换行符保留</h3>
+    <div class="box" id="pre-line-box-2">pre-line: 第一行
+第二行
+
+第四行（空行）</div>
+    <div class="box" id="break-spaces-box-2">break-spaces: 第一行
+第二行
+
+第四行（空行）</div>
+    <div class="box" id="pre-wrap-box-2">pre-wrap: 第一行
+第二行
+
+第四行（空行）</div>
+  </div>
+
+  <div class="test-case">
+    <h3>测试 3: 行尾空格处理（关键区别）</h3>
+    <div class="box" id="pre-line-box-3">pre-line: 行尾空格
+下一行开始</div>
+    <div class="box" id="break-spaces-box-3">break-spaces: 行尾空格
+下一行开始</div>
+    <div class="box" id="pre-wrap-box-3">pre-wrap: 行尾空格
+下一行开始</div>
+  </div>
+
+  <div class="test-case">
+    <h3>测试 4: 自动换行 + 空格</h3>
+    <div class="box" id="pre-line-box-4">pre-line: 这是一个很长的文本包含    多个空格    测试自动换行行为</div>
+    <div class="box" id="break-spaces-box-4">break-spaces: 这是一个很长的文本包含    多个空格    测试自动换行行为</div>
+    <div class="box" id="pre-wrap-box-4">pre-wrap: 这是一个很长的文本包含    多个空格    测试自动换行行为</div>
+  </div>
+
+  <script>
+    // 测试 1: 空格折叠行为
+    document.getElementById('pre-line-box-1').textContent = 'pre-line: 多个    空格    被折叠';
+    document.getElementById('break-spaces-box-1').textContent = 'break-spaces: 多个    空格    被保留';
+    document.getElementById('pre-wrap-box-1').textContent = 'pre-wrap: 多个    空格    被保留';
+
+    // 测试 2: 换行符保留
+    document.getElementById('pre-line-box-2').textContent = 'pre-line: 第一行\n第二行\n\n第四行（空行）';
+    document.getElementById('break-spaces-box-2').textContent = 'break-spaces: 第一行\n第二行\n\n第四行（空行）';
+    document.getElementById('pre-wrap-box-2').textContent = 'pre-wrap: 第一行\n第二行\n\n第四行（空行）';
+
+    // 测试 3: 行尾空格处理
+    document.getElementById('pre-line-box-3').textContent = 'pre-line: 行尾空格     \n下一行开始';
+    document.getElementById('break-spaces-box-3').textContent = 'break-spaces: 行尾空格     \n下一行开始';
+    document.getElementById('pre-wrap-box-3').textContent = 'pre-wrap: 行尾空格     \n下一行开始';
+
+    // 测试 4: 自动换行 + 空格
+    document.getElementById('pre-line-box-4').textContent = 'pre-line: 这是一个很长的文本包含    多个空格    测试自动换行行为';
+    document.getElementById('break-spaces-box-4').textContent = 'break-spaces: 这是一个很长的文本包含    多个空格    测试自动换行行为';
+    document.getElementById('pre-wrap-box-4').textContent = 'pre-wrap: 这是一个很长的文本包含    多个空格    测试自动换行行为';
+  </script>
+</body>
+</html>

@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        #test-box {
+            width: 200px;
+            height: 100px;
+            background-color: red;
+            color: white;
+            padding: 10px;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div id="test-box" style="border: 2px solid blue; margin: 10px;">
+        Test Box
+    </div>
+    <div id="results" style="margin-top: 20px; font-family: monospace; white-space: pre;"></div>
+
+    <script>
+        const box = document.getElementById('test-box');
+        const results = document.getElementById('results');
+        let output = '';
+
+        // Test 1: getPropertyValue() - inline style
+        const borderValue = box.style.getPropertyValue('border');
+        output += `Test 1 - getPropertyValue('border'): ${borderValue}\n`;
+
+        // Test 2: getPropertyValue() - computed style
+        const bgColor = box.style.getPropertyValue('background-color');
+        output += `Test 2 - getPropertyValue('background-color'): ${bgColor}\n`;
+
+        // Test 3: setProperty() - set new property
+        box.style.setProperty('opacity', '0.8');
+        const opacityAfter = box.style.getPropertyValue('opacity');
+        output += `Test 3 - setProperty('opacity', '0.8'): ${opacityAfter}\n`;
+
+        // Test 4: setProperty() with !important
+        box.style.setProperty('color', 'yellow', 'important');
+        const colorAfter = box.style.getPropertyValue('color');
+        output += `Test 4 - setProperty('color', 'yellow', 'important'): ${colorAfter}\n`;
+
+        // Test 5: removeProperty() - should return old value
+        const oldMargin = box.style.removeProperty('margin');
+        const marginAfter = box.style.getPropertyValue('margin');
+        output += `Test 5 - removeProperty('margin') returned: ${oldMargin}\n`;
+        output += `Test 5 - margin after removal: ${marginAfter}\n`;
+
+        // Test 6: getPropertyValue() on non-existent property
+        const nonExistent = box.style.getPropertyValue('non-existent-property');
+        output += `Test 6 - getPropertyValue('non-existent-property'): "${nonExistent}"\n`;
+
+        // Test 7: Check that methods exist
+        output += `\nTest 7 - Methods exist:\n`;
+        output += `  typeof getPropertyValue: ${typeof box.style.getPropertyValue}\n`;
+        output += `  typeof setProperty: ${typeof box.style.setProperty}\n`;
+        output += `  typeof removeProperty: ${typeof box.style.removeProperty}\n`;
+
+        results.textContent = output;
+        console.log(output);
+    </script>
+</body>
+</html>

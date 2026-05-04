@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+body { font-family: sans-serif; padding: 20px; }
+p { font-size: 18px; line-height: 1.6; }
+#log { margin-top: 10px; padding: 10px; border: 1px solid #ccc; min-height: 50px; }
+::selection { background: #ffd700; color: #000; }
+</style>
+</head>
+<body>
+<h2>Mouse Selection Test</h2>
+<p>Click and drag to select text in this paragraph. The selection should be highlighted in gold.</p>
+<p>This is another paragraph to test cross-paragraph selection.</p>
+<div id="log"></div>
+
+<script>
+var log = document.getElementById('log');
+function addLog(msg) {
+    log.textContent += msg + '\n';
+}
+addLog('Mouse selection test ready. Try click-dragging to select text.');
+</script>
+</body>
+</html>

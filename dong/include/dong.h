@@ -3,60 +3,153 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-typedef struct dong_context_t dong_context_t;
-typedef struct dong_view_t dong_view_t;
+// =============================================================================
+// DLL export/import macros
+// =============================================================================
+#if defined(_WIN32) || defined(_WIN64)
+    #ifdef DONG_BUILDING_DLL
+        #define DONG_API __declspec(dllexport)
+    #else
+        #define DONG_API __declspec(dllimport)
+    #endif
+#else
+    #define DONG_API __attribute__((visibility("default")))
+#endif
 
-// 1. Initialization
-dong_context_t* dong_create_context(void);
-void dong_destroy_context(dong_context_t* ctx);
+// =============================================================================
+// Dong public C ABI (stable entrypoints)
+// =============================================================================
 
-// 2. View Management
-dong_view_t* dong_view_create(dong_context_t* ctx, uint32_t width, uint32_t height);
-void dong_view_destroy(dong_view_t* view);
-void dong_view_free(dong_view_t* view);
-void dong_view_load_html(dong_view_t* view, const char* html);
-void dong_view_resize(dong_view_t* view, uint32_t width, uint32_t height);
+// Increment this when making a breaking ABI change.
+#define DONG_API_VERSION 2u
 
-// 3. Update/Render Pipeline
-void dong_view_update(dong_view_t* view);
+typedef struct dong_engine_t dong_engine_t;
 
-// 4. Render Output
-void* dong_view_get_pixel_buffer(dong_view_t* view);
-uint32_t dong_view_get_texture_id(dong_view_t* view);
+typedef enum dong_result_t {
+    DONG_OK = 0,
+    DONG_ERR_INVALID_ARG = 1,
+    DONG_ERR_VERSION_MISMATCH = 2,
+    DONG_ERR_PLUGIN_MISSING_CAP = 3,
+    DONG_ERR_NOT_IMPLEMENTED = 4,
+    DONG_ERR_INTERNAL = 255,
+} dong_result_t;
 
-// 5. Input Events (host -> engine -> DOM -> JS)
-// Mouse coordinates are in view space pixels.
-// Supported JS event types: "mousemove", "mousedown", "mouseup", "click", "keydown", "keyup".
-void dong_view_send_mouse_move(dong_view_t* view, int32_t x, int32_t y);
-void dong_view_send_mouse_down(dong_view_t* view, int32_t button);
-void dong_view_send_mouse_up(dong_view_t* view, int32_t button);
-void dong_view_send_key_down(dong_view_t* view, uint32_t key_code);
-void dong_view_send_key_up(dong_view_t* view, uint32_t key_code);
+// Plugin API is a separate C ABI header.
+#include "dong_plugin_api.h"
 
-// 6. Rendering mode control
-// When use_gpu is true, the view will use the SDL_gpu-based GPU backend
-// instead of the CPU Skia backend for rendering.
-void dong_view_set_render_mode(dong_view_t* view, bool use_gpu);
+typedef struct dong_engine_desc_t {
+    uint32_t api_version;        // must be DONG_API_VERSION
+    uint32_t plugin_api_version; // must be DONG_PLUGIN_API_VERSION
+    const dong_plugin_vtable_t* plugin;
+    void* plugin_user;
+    const char* html;            // optional: initial HTML content to load
+    uint32_t width;              // window width (0 = default 960)
+    uint32_t height;             // window height (0 = default 540)
+} dong_engine_desc_t;
 
-// Set an external GPU device and window for rendering.
-// This allows the host application to create and manage the GPU device
-// and window, then pass them to Dong for rendering.
-// device: SDL_GPUDevice* pointer (cast from void*)
-// window: SDL_Window* pointer (cast from void*)
-void dong_view_set_external_gpu_device(dong_view_t* view, void* device, void* window);
 
-// 7. JS Interaction
-// Evaluate JavaScript code in the view's scripting context.
-// Returns true on success, false if evaluation fails.
-bool dong_view_eval(dong_view_t* view, const char* script);
-// Execute script and return a stringified result. Currently returns an empty
-// string but still evaluates the script for side effects.
-const char* dong_view_eval_return(dong_view_t* view, const char* script);
+// ABI version query
+DONG_API uint32_t dong_get_api_version(void);
+
+// Engine lifecycle
+// NOTE: In current codebase this is a thin wrapper. Full pluginized behavior will
+// be implemented during the refactor (dong.dll must not depend on SDL).
+DONG_API dong_result_t dong_engine_create(const dong_engine_desc_t* desc, dong_engine_t** out_engine);
+DONG_API void dong_engine_destroy(dong_engine_t* engine);
+
+// Drive one tick/frame (update + render).
+// For headless tests this may be a no-op depending on configuration.
+DONG_API dong_result_t dong_engine_tick(dong_engine_t* engine);
+
+// Load HTML content into the engine.
+DONG_API dong_result_t dong_engine_load_html(dong_engine_t* engine, const char* html);
+
+// Resize the engine viewport.
+DONG_API dong_result_t dong_engine_resize(dong_engine_t* engine, uint32_t width, uint32_t height);
+
+// Set GPU device and window for rendering (must be called before first tick if using GPU).
+// The device and window are owned by the caller (typically the plugin).
+DONG_API dong_result_t dong_engine_set_gpu(dong_engine_t* engine, void* gpu_device, void* window);
+
+// Set resource root for resolving relative asset/script paths.
+DONG_API dong_result_t dong_engine_set_resource_root(dong_engine_t* engine, const char* root);
+
+// Query cursor at a given position (returns CSS cursor name; valid until next tick).
+DONG_API const char* dong_engine_get_cursor_at(dong_engine_t* engine, int32_t x, int32_t y);
+
+// Input event handling
+DONG_API dong_result_t dong_engine_send_mouse_move(dong_engine_t* engine, int32_t x, int32_t y);
+
+DONG_API dong_result_t dong_engine_send_mouse_button(dong_engine_t* engine, int32_t button, int pressed);
+DONG_API dong_result_t dong_engine_send_mouse_wheel(dong_engine_t* engine, float delta_x, float delta_y);
+DONG_API dong_result_t dong_engine_send_key(dong_engine_t* engine, uint32_t key_code, int pressed);
+DONG_API dong_result_t dong_engine_send_text(dong_engine_t* engine, const char* text);
+DONG_API dong_result_t dong_engine_send_text_editing(dong_engine_t* engine, const char* text, int32_t cursor, int32_t selection_length);
+
+// Script evaluation
+DONG_API dong_result_t dong_engine_eval_script(dong_engine_t* engine, const char* code);
+
+// =============================================================================
+// Multi-View Shared JS
+// =============================================================================
+
+// Create an engine that shares the JavaScript environment (JSRuntime+JSContext)
+// with an existing engine. The new engine has its own DOM/Layout/Render but runs
+// JS in the same context as script_source.
+//
+// In JS, the default `window`/`document` globals point to script_source's DOM.
+// The new view is accessible via `dong.getView(view_name).document`.
+//
+// script_source must outlive the returned engine.
+DONG_API dong_result_t dong_engine_create_shared_js(
+    const dong_engine_desc_t* desc,
+    dong_engine_t* script_source,
+    const char* view_name,
+    dong_engine_t** out_engine);
+
+// =============================================================================
+// Text Renderer Mode
+// =============================================================================
+
+typedef enum dong_text_renderer_mode_t {
+    DONG_TEXT_RENDERER_AUTO = 0,   // Engine picks best available (default: MSDF)
+    DONG_TEXT_RENDERER_MSDF = 1,   // Force MSDF atlas-based rendering
+    DONG_TEXT_RENDERER_SLUG = 2,   // Force Slug analytical rendering (fallback to MSDF)
+} dong_text_renderer_mode_t;
+
+// Set text renderer mode for the engine.
+// Can be called at any time; takes effect on next tick.
+DONG_API dong_result_t dong_engine_set_text_renderer_mode(dong_engine_t* engine,
+                                                          dong_text_renderer_mode_t mode);
+
+// Query current text renderer mode.
+DONG_API dong_text_renderer_mode_t dong_engine_get_text_renderer_mode(dong_engine_t* engine);
+
+// =============================================================================
+// Rendering (GPU command list access)
+// =============================================================================
+
+// Get the current GPU command list (opaque pointer).
+// Returns NULL if no commands have been generated.
+// The pointer is valid until the next dong_engine_tick() call.
+// External renderers can cast this to GPUCommandList* and execute it.
+DONG_API const void* dong_engine_get_command_list(dong_engine_t* engine);
+
+// Force regeneration of GPU commands on next tick.
+DONG_API void dong_engine_invalidate_commands(dong_engine_t* engine);
+
+// =============================================================================
+// View API (legacy / advanced)
+// =============================================================================
+// Not included by default.
+// If you need the view API, include "dong_view.h" explicitly.
+
 
 #ifdef __cplusplus
 }

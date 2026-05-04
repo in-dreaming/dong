@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CSSStyleDeclaration.cssText Test</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; }
+        .test { margin: 10px 0; padding: 10px; border: 1px solid #ccc; }
+        .pass { background: #d4edda; color: #155724; }
+        .fail { background: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+    <h1>CSSStyleDeclaration.cssText Test</h1>
+
+    <div class="test">
+        <h2>Test 1: cssText getter - get inline styles</h2>
+        <div id="test1" style="color: red; font-size: 16px; margin-top: 10px;">Element with inline styles</div>
+        <script>
+            const elem = document.getElementById('test1');
+            const cssText = elem.style.cssText;
+            console.log('cssText:', cssText);
+
+            const expectedProps = ['color: red', 'font-size: 16px', 'margin-top: 10px'];
+            const allPropsPresent = expectedProps.every(prop => cssText.includes(prop));
+
+            if (allPropsPresent) {
+                document.write('<div class="pass">✓ PASS: cssText contains all expected properties</div>');
+            } else {
+                document.write('<div class="fail">✗ FAIL: cssText missing properties. Got: ' + cssText + '</div>');
+            }
+        </script>
+    </div>
+
+    <div class="test">
+        <h2>Test 2: cssText setter - set inline styles</h2>
+        <div id="test2">Element to style</div>
+        <script>
+            const elem2 = document.getElementById('test2');
+            elem2.style.cssText = 'background-color: blue; color: white; padding: 20px;';
+
+            const computedStyle = window.getComputedStyle(elem2);
+            const bgColor = computedStyle.backgroundColor;
+            const color = computedStyle.color;
+            const padding = computedStyle.padding;
+
+            if (bgColor.includes('blue') && color.includes('white') && padding === '20px') {
+                document.write('<div class="pass">✓ PASS: cssText setter applied all styles correctly</div>');
+            } else {
+                document.write('<div class="fail">✗ FAIL: Styles not applied correctly. bg: ' + bgColor + ', color: ' + color + ', padding: ' + padding + '</div>');
+            }
+        </script>
+    </div>
+
+    <div class="test">
+        <h2>Test 3: cssText empty getter/setter</h2>
+        <div id="test3" style="border: 1px solid black;">Element with border</div>
+        <script>
+            const elem3 = document.getElementById('test3');
+            const initialCssText = elem3.style.cssText;
+
+            // Test setting empty string
+            elem3.style.cssText = '';
+            const emptyCssText = elem3.style.cssText;
+            const computedStyle = window.getComputedStyle(elem3);
+            const border = computedStyle.borderWidth;
+
+            if (emptyCssText === '' && border === '0px') {
+                document.write('<div class="pass">✓ PASS: cssText setter clears styles when set to empty string</div>');
+            } else {
+                document.write('<div class="fail">✗ FAIL: Styles not cleared. cssText: "' + emptyCssText + '", border: ' + border + '</div>');
+            }
+        </script>
+    </div>
+
+    <div class="test">
+        <h2>Test 4: cssText property enumeration</h2>
+        <div id="test4" style="width: 100px; height: 50px; opacity: 0.5;">Styled element</div>
+        <script>
+            const elem4 = document.getElementById('test4');
+            const cssText = elem4.style.cssText;
+
+            // Check that cssText is enumerable
+            let isEnumerable = false;
+            for (let prop in elem4.style) {
+                if (prop === 'cssText') {
+                    isEnumerable = true;
+                    break;
+                }
+            }
+
+            if (isEnumerable && cssText.includes('width: 100px') && cssText.includes('height: 50px') && cssText.includes('opacity: 0.5')) {
+                document.write('<div class="pass">✓ PASS: cssText is enumerable and contains all properties</div>');
+            } else {
+                document.write('<div class="fail">✗ FAIL: cssText enumeration issue. enumerable: ' + isEnumerable + ', content: ' + cssText + '</div>');
+            }
+        </script>
+    </div>
+</body>
+</html>

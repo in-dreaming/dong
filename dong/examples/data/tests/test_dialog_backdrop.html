@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+body { font-family: sans-serif; padding: 20px; }
+button { padding: 8px 16px; margin: 5px; cursor: pointer; }
+dialog::backdrop {
+    background: rgba(0, 100, 200, 0.3);
+}
+#log { margin-top: 10px; padding: 10px; border: 1px solid #ccc; min-height: 50px; }
+</style>
+</head>
+<body>
+<h2>Dialog Backdrop Test</h2>
+
+<button id="open-btn">Open Modal (blue backdrop)</button>
+
+<dialog id="my-dialog">
+    <h3>Custom Backdrop</h3>
+    <p>The backdrop should be semi-transparent blue.</p>
+    <button id="close-btn">Close</button>
+</dialog>
+
+<div id="log"></div>
+
+<script>
+var dialog = document.getElementById('my-dialog');
+var log = document.getElementById('log');
+
+function addLog(msg) {
+    log.textContent += msg + '\n';
+}
+
+document.getElementById('open-btn').addEventListener('click', function() {
+    dialog.showModal();
+    addLog('Modal opened with blue backdrop');
+});
+
+document.getElementById('close-btn').addEventListener('click', function() {
+    dialog.close();
+    addLog('Dialog closed');
+});
+
+// Auto-open modal for render testing
+dialog.showModal();
+addLog('Modal auto-opened with blue backdrop');
+</script>
+</body>
+</html>

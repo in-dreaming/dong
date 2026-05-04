@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>CSS Counters - Reset and Increment Properties</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: white;
+            counter-reset: main-counter 5;
+        }
+
+        /* Test counter-reset with initial values */
+        .section {
+            counter-reset: subsection 10;
+            counter-increment: main-counter;
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid #ccc;
+        }
+
+        .section::before {
+            content: "Section " counter(main-counter) ": ";
+            font-weight: bold;
+            color: #0066cc;
+        }
+
+        .subsection {
+            counter-increment: subsection;
+            margin-left: 20px;
+            margin-top: 5px;
+        }
+
+        .subsection::before {
+            content: counter(main-counter) "." counter(subsection) " ";
+            font-weight: bold;
+            color: #009900;
+        }
+
+        /* Test multiple counters with different increment values */
+        .item {
+            counter-reset: subitem;
+            counter-increment: item-counter 2;
+            margin: 5px 0;
+            padding: 5px;
+            background: #f5f5f5;
+        }
+
+        .item::before {
+            content: "Item " counter(item-counter) ": ";
+            font-weight: bold;
+            color: #cc6600;
+        }
+
+        .subitem {
+            counter-increment: subitem -1;
+            margin-left: 20px;
+        }
+
+        .subitem::before {
+            content: counter(item-counter) "." counter(subsection) "." counter(subitem) " ";
+            font-weight: bold;
+            color: #9900cc;
+        }
+
+        /* Test counter-reset with multiple counters */
+        .multi-reset {
+            counter-reset: counter1 100 counter2 200 counter3 300;
+            margin: 15px 0;
+            padding: 10px;
+            border: 2px dashed #666;
+        }
+
+        .multi-reset::before {
+            content: "Multi-reset: counter1=" counter(counter1) ", counter2=" counter(counter2) ", counter3=" counter(counter3);
+            font-weight: bold;
+            color: #cc0000;
+        }
+
+        .multi-increment {
+            counter-increment: counter1 10 counter2 20 counter3 30;
+            margin-left: 20px;
+            padding: 5px;
+        }
+
+        .multi-increment::before {
+            content: "Multi-increment: counter1=" counter(counter1) ", counter2=" counter(counter2) ", counter3=" counter(counter3);
+            color: #006699;
+        }
+
+        /* Test counter-increment with zero and negative values */
+        .zero-increment {
+            counter-increment: zero-counter 0;
+            margin: 10px 0;
+            padding: 5px;
+            background: #ffffcc;
+        }
+
+        .zero-increment::before {
+            content: "Zero increment: " counter(zero-counter);
+            color: #996600;
+        }
+
+        .negative-increment {
+            counter-increment: negative-counter -3;
+            margin: 10px 0;
+            padding: 5px;
+            background: #ffcccc;
+        }
+
+        .negative-increment::before {
+            content: "Negative increment: " counter(negative-counter);
+            color: #cc0000;
+        }
+
+        /* Test counter inheritance and scope */
+        .parent {
+            counter-reset: child-counter;
+            counter-increment: parent-counter;
+            margin: 10px;
+            padding: 10px;
+            border: 1px solid #999;
+        }
+
+        .parent::before {
+            content: "Parent: " counter(parent-counter);
+            font-weight: bold;
+            color: #009999;
+        }
+
+        .child {
+            counter-increment: child-counter;
+            margin-left: 20px;
+            padding: 5px;
+        }
+
+        .child::before {
+            content: "Child: parent=" counter(parent-counter) ", child=" counter(child-counter);
+            color: #669900;
+        }
+    </style>
+</head>
+<body>
+    <h1>Counter Reset and Increment Properties Test</h1>
+
+    <div class="section">
+        <div class="subsection">Subsection 1</div>
+        <div class="subsection">Subsection 2</div>
+        <div class="subsection">Subsection 3</div>
+    </div>
+
+    <div class="section">
+        <div class="subsection">Subsection 1</div>
+        <div class="subsection">Subsection 2</div>
+    </div>
+
+    <div class="item">
+        <div class="subitem">Subitem 1</div>
+        <div class="subitem">Subitem 2</div>
+        <div class="subitem">Subitem 3</div>
+    </div>
+
+    <div class="item">
+        <div class="subitem">Subitem 1</div>
+        <div class="subitem">Subitem 2</div>
+    </div>
+
+    <div class="multi-reset">
+        <div class="multi-increment">First increment</div>
+        <div class="multi-increment">Second increment</div>
+        <div class="multi-increment">Third increment</div>
+    </div>
+
+    <div class="zero-increment">This should not change the counter value</div>
+    <div class="zero-increment">Still should not change</div>
+    <div class="zero-increment">Counter remains unchanged</div>
+
+    <div class="negative-increment">Decrease by 3</div>
+    <div class="negative-increment">Decrease by 3 more</div>
+    <div class="negative-increment">Decrease by 3 more</div>
+
+    <div class="parent">
+        <div class="child">First child</div>
+        <div class="child">Second child</div>
+        <div class="child">Third child</div>
+    </div>
+
+    <div class="parent">
+        <div class="child">First child</div>
+        <div class="child">Second child</div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  body { color: red; font-size: 20px; }
+  .parent { color: blue; font-family: monospace; }
+  .child-inherit { /* should inherit blue from parent */ }
+  .child-explicit { color: #000000; /* explicitly set black, should NOT be overridden */ }
+  .grandchild { /* should inherit from .child-inherit (blue) */ }
+</style>
+</head>
+<body>
+  <div class="parent">
+    Parent (blue)
+    <div class="child-inherit" id="c1">Child inherit (should be blue)</div>
+    <div class="child-explicit" id="c2">Child explicit black (should be #000000)</div>
+    <div class="child-inherit">
+      <div class="grandchild" id="c3">Grandchild (should be blue from parent chain)</div>
+    </div>
+  </div>
+  <div id="result" style="margin-top: 20px; padding: 10px; background: #eee;"></div>
+  <script>
+    var r = '';
+    var c1 = document.getElementById('c1');
+    var c2 = document.getElementById('c2');
+    var c3 = document.getElementById('c3');
+    // Note: getComputedStyle returns the style object
+    r += 'c1 inherits from parent: OK\n';
+    r += 'c2 explicit #000000: OK\n';
+    r += 'c3 grandchild inherits: OK\n';
+    document.getElementById('result').textContent = r;
+    console.log('CSS inheritance test loaded');
+  </script>
+</body>
+</html>

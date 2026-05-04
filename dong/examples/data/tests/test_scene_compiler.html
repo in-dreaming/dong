@@ -1,0 +1,133 @@
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="dong-render-mode" content="scene">
+  <title>Scene Compiler Test</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #1a1a2e; font-family: sans-serif; color: #eee; overflow: hidden; width: 960px; height: 600px;">
+
+<div id="root" style="position: absolute; left: 0px; top: 0px; width: 960px; height: 600px; background: #16213e;">
+
+  <!-- Top bar -->
+  <div id="topbar" style="position: absolute; left: 0px; top: 0px; width: 960px; height: 44px; background: #0f3460;">
+    <div id="back_btn" style="position: absolute; left: 12px; top: 6px; width: 32px; height: 32px; border: 1px solid #555; border-radius: 16px; text-align: center; line-height: 32px; font-size: 20px; background: rgba(0,0,0,0.3);">←</div>
+    <div id="page_title" style="position: absolute; left: 56px; top: 0px; width: 300px; height: 44px; font-size: 18px; font-weight: bold; color: #e94560; line-height: 44px;">Scene Compiler Demo</div>
+    <div id="timer" style="position: absolute; left: 720px; top: 8px; width: 220px; height: 28px; background: rgba(0,0,0,0.4); border-radius: 14px; text-align: center; line-height: 28px; font-size: 13px; color: #ffcc00;">Compiled from HTML</div>
+  </div>
+
+  <!-- Sidebar -->
+  <div id="sidebar" style="position: absolute; left: 0px; top: 44px; width: 160px; height: 556px; background: #1a1a2e; border-right: 1px solid #333;">
+    <div id="nav1" style="position: absolute; left: 0px; top: 8px; width: 160px; height: 40px; background: rgba(233,69,96,0.15); border-left: 3px solid #e94560; font-size: 14px; color: #e94560; text-align: center; line-height: 40px; font-weight: bold;">Overview</div>
+    <div id="nav2" style="position: absolute; left: 0px; top: 56px; width: 160px; height: 40px; font-size: 14px; color: #8b949e; text-align: center; line-height: 40px;">Rewards</div>
+    <div id="nav3" style="position: absolute; left: 0px; top: 104px; width: 160px; height: 40px; font-size: 14px; color: #8b949e; text-align: center; line-height: 40px;">Tasks</div>
+    <div id="nav4" style="position: absolute; left: 0px; top: 152px; width: 160px; height: 40px; font-size: 14px; color: #8b949e; text-align: center; line-height: 40px;">Settings</div>
+  </div>
+
+  <!-- Main content -->
+  <div id="content" style="position: absolute; left: 160px; top: 44px; width: 800px; height: 556px; background: #16213e;">
+
+    <!-- Header -->
+    <div id="content_title" style="position: absolute; left: 24px; top: 16px; width: 400px; height: 32px; font-size: 22px; font-weight: bold; color: #ffffff;">Welcome, Player</div>
+    <div id="content_subtitle" style="position: absolute; left: 24px; top: 52px; width: 500px; height: 20px; font-size: 13px; color: #8b949e;">This UI was auto-compiled from HTML to SceneGraph — zero Yoga layout</div>
+
+    <!-- Stat cards -->
+    <div id="card1_bg" style="position: absolute; left: 24px; top: 90px; width: 170px; height: 90px; background: rgba(233,69,96,0.1); border-radius: 8px; border: 1px solid rgba(233,69,96,0.3);"></div>
+    <div id="card1_label" style="position: absolute; left: 36px; top: 98px; width: 146px; height: 20px; font-size: 11px; color: #8b949e;">Level</div>
+    <div id="card1_value" style="position: absolute; left: 36px; top: 120px; width: 146px; height: 40px; font-size: 28px; font-weight: bold; color: #e94560;">42</div>
+
+    <div id="card2_bg" style="position: absolute; left: 210px; top: 90px; width: 170px; height: 90px; background: rgba(15,52,96,0.3); border-radius: 8px; border: 1px solid rgba(15,52,96,0.6);"></div>
+    <div id="card2_label" style="position: absolute; left: 222px; top: 98px; width: 146px; height: 20px; font-size: 11px; color: #8b949e;">Gold</div>
+    <div id="card2_value" style="position: absolute; left: 222px; top: 120px; width: 146px; height: 40px; font-size: 28px; font-weight: bold; color: #ffcc00;">12,580</div>
+
+    <div id="card3_bg" style="position: absolute; left: 396px; top: 90px; width: 170px; height: 90px; background: rgba(0,200,83,0.08); border-radius: 8px; border: 1px solid rgba(0,200,83,0.3);"></div>
+    <div id="card3_label" style="position: absolute; left: 408px; top: 98px; width: 146px; height: 20px; font-size: 11px; color: #8b949e;">Quests</div>
+    <div id="card3_value" style="position: absolute; left: 408px; top: 120px; width: 146px; height: 40px; font-size: 28px; font-weight: bold; color: #00c853;">7 / 10</div>
+
+    <div id="card4_bg" style="position: absolute; left: 582px; top: 90px; width: 170px; height: 90px; background: rgba(210,168,255,0.08); border-radius: 8px; border: 1px solid rgba(210,168,255,0.3);"></div>
+    <div id="card4_label" style="position: absolute; left: 594px; top: 98px; width: 146px; height: 20px; font-size: 11px; color: #8b949e;">Rank</div>
+    <div id="card4_value" style="position: absolute; left: 594px; top: 120px; width: 146px; height: 40px; font-size: 28px; font-weight: bold; color: #d2a8ff;">Diamond</div>
+
+    <!-- Action buttons -->
+    <div id="btn_play" style="position: absolute; left: 24px; top: 210px; width: 240px; height: 48px; background: #e94560; border-radius: 8px; text-align: center; line-height: 48px; font-size: 16px; font-weight: bold; color: #ffffff;">Start Match</div>
+    <div id="btn_shop" style="position: absolute; left: 280px; top: 210px; width: 240px; height: 48px; background: rgba(15,52,96,0.6); border: 1px solid #0f3460; border-radius: 8px; text-align: center; line-height: 48px; font-size: 16px; color: #ffffff;">Shop</div>
+    <div id="btn_social" style="position: absolute; left: 536px; top: 210px; width: 240px; height: 48px; background: rgba(15,52,96,0.6); border: 1px solid #0f3460; border-radius: 8px; text-align: center; line-height: 48px; font-size: 16px; color: #ffffff;">Friends</div>
+
+    <!-- Info panel -->
+    <div id="info_bg" style="position: absolute; left: 24px; top: 280px; width: 752px; height: 250px; background: rgba(0,0,0,0.2); border-radius: 8px; border: 1px solid #333;"></div>
+    <div id="info_title" style="position: absolute; left: 40px; top: 296px; width: 300px; height: 24px; font-size: 16px; font-weight: bold; color: #ffffff;">Daily Rewards</div>
+    <div id="info_desc" style="position: absolute; left: 40px; top: 324px; width: 700px; height: 20px; font-size: 12px; color: #8b949e;">Complete daily tasks to earn bonus rewards and experience points.</div>
+
+    <!-- Reward items -->
+    <div id="reward1" style="position: absolute; left: 40px; top: 360px; width: 100px; height: 130px; background: rgba(255,204,0,0.08); border: 1px solid rgba(255,204,0,0.3); border-radius: 6px; text-align: center;">
+      <div style="position: absolute; left: 0px; top: 10px; width: 100px; height: 60px; font-size: 32px; text-align: center; line-height: 60px;">Day 1</div>
+      <div style="position: absolute; left: 0px; top: 80px; width: 100px; height: 20px; font-size: 11px; color: #ffcc00; text-align: center;">100 Gold</div>
+      <div style="position: absolute; left: 10px; top: 106px; width: 80px; height: 20px; background: #00c853; border-radius: 4px; text-align: center; line-height: 20px; font-size: 10px; color: #fff;">Claimed</div>
+    </div>
+    <div id="reward2" style="position: absolute; left: 160px; top: 360px; width: 100px; height: 130px; background: rgba(255,204,0,0.08); border: 1px solid rgba(255,204,0,0.3); border-radius: 6px; text-align: center;">
+      <div style="position: absolute; left: 0px; top: 10px; width: 100px; height: 60px; font-size: 32px; text-align: center; line-height: 60px;">Day 2</div>
+      <div style="position: absolute; left: 0px; top: 80px; width: 100px; height: 20px; font-size: 11px; color: #ffcc00; text-align: center;">200 Gold</div>
+      <div style="position: absolute; left: 10px; top: 106px; width: 80px; height: 20px; background: #e94560; border-radius: 4px; text-align: center; line-height: 20px; font-size: 10px; color: #fff;">Claim</div>
+    </div>
+    <div id="reward3" style="position: absolute; left: 280px; top: 360px; width: 100px; height: 130px; background: rgba(100,100,100,0.08); border: 1px dashed #555; border-radius: 6px; text-align: center;">
+      <div style="position: absolute; left: 0px; top: 10px; width: 100px; height: 60px; font-size: 32px; text-align: center; line-height: 60px; color: #555;">Day 3</div>
+      <div style="position: absolute; left: 0px; top: 80px; width: 100px; height: 20px; font-size: 11px; color: #555; text-align: center;">Locked</div>
+    </div>
+  </div>
+
+  <!-- Status bar -->
+  <div id="status" style="position: absolute; left: 160px; top: 576px; width: 800px; height: 24px; font-size: 11px; color: #484f58; text-align: center; line-height: 24px;">Scene Compiler: HTML auto-compiled to SceneGraph — zero DOM/CSS/Yoga overhead</div>
+
+</div>
+
+<script>
+(function() {
+    if (typeof dong === 'undefined' || !dong.scene) return;
+    var S = dong.scene;
+
+    // Add click handlers via scene graph API
+    var navItems = ['nav1', 'nav2', 'nav3', 'nav4'];
+    var navLabels = ['Overview', 'Rewards', 'Tasks', 'Settings'];
+
+    for (var i = 0; i < navItems.length; i++) {
+        (function(idx) {
+            var nid = S.find(navItems[idx]);
+            if (nid > 0) {
+                S.on(nid, 'click', function() {
+                    for (var j = 0; j < navItems.length; j++) {
+                        var jid = S.find(navItems[j]);
+                        if (jid > 0) {
+                            S.set(jid, 'background', j === idx ? 'rgba(233,69,96,0.15)' : '#00000000');
+                            S.set(jid, 'color', j === idx ? '#e94560' : '#8b949e');
+                        }
+                    }
+                    var titleId = S.find('content_title');
+                    if (titleId > 0) S.set(titleId, 'text', navLabels[idx]);
+
+                    var statusId = S.find('status');
+                    if (statusId > 0) S.set(statusId, 'text', 'Switched to: ' + navLabels[idx] + ' | Nodes: ' + S.count());
+                });
+            }
+        })(i);
+    }
+
+    // Button click handlers
+    var btnPlay = S.find('btn_play');
+    if (btnPlay > 0) {
+        S.on(btnPlay, 'click', function() {
+            var statusId = S.find('status');
+            if (statusId > 0) S.set(statusId, 'text', 'Starting match... | Scene mode active | Nodes: ' + S.count());
+        });
+    }
+
+    var btnShop = S.find('btn_shop');
+    if (btnShop > 0) {
+        S.on(btnShop, 'click', function() {
+            var statusId = S.find('status');
+            if (statusId > 0) S.set(statusId, 'text', 'Opening shop... | Scene mode active');
+        });
+    }
+})();
+</script>
+
+</body>
+</html>

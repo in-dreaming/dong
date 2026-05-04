@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  /* Test !important declarations */
+  .low-priority {
+    color: blue;
+    background-color: yellow;
+    font-size: 16px;
+  }
+
+  .high-priority {
+    color: red !important;
+    background-color: green;
+    font-size: 24px !important;
+  }
+
+  /* Specificity test: higher specificity but without !important should lose to !important */
+  #specific {
+    color: purple;
+    background-color: orange !important;
+  }
+</style>
+</head>
+<body style="padding: 20px;">
+  <!-- Test 1: !important should override later rules -->
+  <div class="high-priority low-priority" style="width: 200px; height: 100px; margin: 10px; padding: 10px;">
+    Test 1: color=red (important), background=yellow, font-size=24px (important)
+  </div>
+
+  <!-- Test 2: ID selector vs !important -->
+  <div id="specific" class="high-priority" style="width: 200px; height: 100px; margin: 10px; padding: 10px;">
+    Test 2: color=red (class important wins), background=orange (id important wins)
+  </div>
+
+  <!-- Test 3: Inline style with !important -->
+  <div class="low-priority" style="width: 200px; height: 100px; margin: 10px; padding: 10px; color: green !important;">
+    Test 3: color=green (inline important), background=yellow
+  </div>
+
+  <!-- Test 4: No important, normal cascade -->
+  <div class="low-priority" style="width: 200px; height: 100px; margin: 10px; padding: 10px; color: black;">
+    Test 4: color=black (inline), background=yellow
+  </div>
+</body>
+</html>

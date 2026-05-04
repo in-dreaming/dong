@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Select - dropdown scroll</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; background: #f0f0f0; }
+    .card { background: #fff; border: 1px solid #ddd; border-radius: 10px; padding: 16px; }
+    .pos { position: absolute; left: 60px; top: 80px; }
+    select { padding: 10px; font-size: 16px; border: 2px solid #ff9800; border-radius: 6px; background: #fff; width: 320px; }
+    .hint { margin-top: 140px; color: #666; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <h1>Select - dropdown scroll (Chunk 4/7)</h1>
+
+  <div class="card">
+    <div class="pos">
+      <select id="s">
+        <option value="v00">Item 00</option>
+        <option value="v01">Item 01</option>
+        <option value="v02">Item 02</option>
+        <option value="v03">Item 03</option>
+        <option value="v04" disabled>Item 04 (disabled)</option>
+        <option value="v05">Item 05</option>
+        <option value="v06">Item 06</option>
+        <option value="v07">Item 07</option>
+        <option value="v08">Item 08</option>
+        <option value="v09">Item 09</option>
+        <option value="v10">Item 10</option>
+        <option value="v11">Item 11</option>
+        <option value="v12">Item 12</option>
+        <option value="v13">Item 13</option>
+        <option value="v14">Item 14</option>
+        <option value="v15">Item 15</option>
+        <option value="v16">Item 16</option>
+        <option value="v17">Item 17</option>
+        <option value="v18">Item 18</option>
+        <option value="v19">Item 19</option>
+      </select>
+    </div>
+
+    <div class="hint">
+      For dong: use synthetic inputs to open + wheel scroll.
+      The dropdown viewport should clamp to 8 rows and show a scroll thumb.
+    </div>
+  </div>
+</body>
+</html>

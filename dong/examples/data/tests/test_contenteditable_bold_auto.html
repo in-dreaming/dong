@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+body { font-family: sans-serif; padding: 20px; }
+#editor {
+    border: 2px solid #333;
+    padding: 16px;
+    min-height: 100px;
+    margin: 10px 0;
+    font-size: 16px;
+    line-height: 1.5;
+}
+#note { font-size: 13px; color: #444; max-width: 720px; }
+#log { margin-top: 10px; padding: 10px; border: 1px solid #ccc; min-height: 40px; font-family: monospace; font-size: 12px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<h2>ContentEditable — auto bold (regression)</h2>
+<p id="note">No buttons: on parse we focus the editor, selectAll, then bold. Single BMP: run-html-test on this file. Before/after + stitched: test_contenteditable_basic.html with html_render_test --frames 2 --eval-after-frame0-file snippets/ce_bold_after_frame0.js --stitch-horizontal. To mimic clicking Bold (focus on button), use snippets/ce_bold_like_button_click.js instead. For DOM logs set DONG_LOG_LEVEL=WARN and watch [BOLD-DOM].</p>
+
+<!-- Same inner markup pattern as test_contenteditable_basic.html (indentation / newlines) to match the manual bug. -->
+<div id="editor" contenteditable="true">
+    Hello, this is an editable area. Try typing here!
+</div>
+
+<div id="log"></div>
+
+<script>
+(function () {
+    var editor = document.getElementById('editor');
+    var log = document.getElementById('log');
+    if (!editor) {
+        if (log) log.textContent = 'missing #editor';
+        return;
+    }
+    editor.focus();
+    document.execCommand('selectAll');
+    var ok = document.execCommand('bold');
+    if (log) {
+        log.textContent = 'auto: selectAll + bold → ' + (ok ? 'true' : 'false');
+    }
+})();
+</script>
+</body>
+</html>

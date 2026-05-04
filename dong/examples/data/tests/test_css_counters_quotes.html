@@ -1,0 +1,71 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>CSS counters + quotes</title>
+  <style>
+    body {
+      font-family: Arial;
+      font-size: 20px;
+      margin: 20px;
+      color: #111;
+    }
+
+    /* Simple named counter */
+    ol { counter-reset: item; padding-left: 0; margin: 0; }
+    li {
+      list-style: none;
+      counter-increment: item;
+      margin: 6px 0;
+    }
+    li::before {
+      content: counter(item) ". ";
+      color: #0a5;
+    }
+
+    /* Nested counters() */
+    ol.nested { counter-reset: section; margin-top: 16px; }
+    ol.nested > li { counter-increment: section; }
+    ol.nested > li::before {
+      content: "S" counter(section) ": ";
+      color: #05a;
+    }
+    ol.nested ol { counter-reset: sub; margin-top: 6px; }
+    ol.nested ol > li { counter-increment: sub; }
+    ol.nested ol > li::before {
+      content: counters(section, ".") "." counter(sub) " ";
+      color: #a50;
+    }
+
+    /* Quotes */
+    .q { quotes: "\u00AB" "\u00BB" "\u2039" "\u203A"; }
+    .q::before { content: open-quote; color: #a0a; }
+    .q::after { content: close-quote; color: #a0a; }
+  </style>
+</head>
+<body>
+  <div>Expected: green numeric prefixes; nested shows section.sub; purple quotes around the middle items.</div>
+
+  <ol>
+    <li>Alpha</li>
+    <li class="q">Bravo</li>
+    <li>Charlie</li>
+  </ol>
+
+  <ol class="nested">
+    <li>
+      Section One
+      <ol>
+        <li>Sub A</li>
+        <li class="q">Sub B</li>
+      </ol>
+    </li>
+    <li>
+      Section Two
+      <ol>
+        <li>Sub A</li>
+      </ol>
+    </li>
+  </ol>
+</body>
+</html>

@@ -1,0 +1,109 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>test_textarea_rows_cols_override</title>
+  <style>
+    body { font-family: Arial; margin: 24px; }
+    .row { display: flex; gap: 24px; margin-bottom: 24px; }
+    .col { width: 400px; }
+    .label { font-size: 14px; color: #333; margin-bottom: 6px; font-weight: bold; }
+    textarea {
+      border: 1px solid #777;
+      padding: 4px;
+      font-size: 16px;
+      line-height: 20px;
+      background: #fff;
+      box-sizing: border-box;
+    }
+  </style>
+</head>
+<body>
+  <h1>Textarea rows/cols with CSS Override</h1>
+
+  <div class="row">
+    <div class="col">
+      <div class="label">rows="2" cols="20" with CSS width: 300px</div>
+      <textarea style="width: 300px;" rows="2" cols="20">
+CSS width overrides cols</textarea>
+      <div class="label" style="font-weight: normal; font-size: 12px; margin-top: 4px;">
+        Should use CSS width=300px, not cols<br>
+        Height still uses rows=2
+      </div>
+    </div>
+    <div class="col">
+      <div class="label">rows="5" cols="30" with CSS height: 100px</div>
+      <textarea style="height: 100px;" rows="5" cols="30">
+CSS height overrides rows</textarea>
+      <div class="label" style="font-weight: normal; font-size: 12px; margin-top: 4px;">
+        Should use CSS height=100px, not rows<br>
+        Width still uses cols=30
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col">
+      <div class="label">rows="3" cols="20" with both CSS width/height</div>
+      <textarea style="width: 250px; height: 80px;" rows="3" cols="20">
+CSS fully overrides both</textarea>
+      <div class="label" style="font-weight: normal; font-size: 12px; margin-top: 4px;">
+        Should use CSS width=250px and height=80px<br>
+        Both rows and cols are ignored
+      </div>
+    </div>
+    <div class="col">
+      <div class="label">rows="4" cols="40" with min-width</div>
+      <textarea style="min-width: 200px;" rows="4" cols="40">
+min-width prevents cols</textarea>
+      <div class="label" style="font-weight: normal; font-size: 12px; margin-top: 4px;">
+        Should not use cols when min-width is set<br>
+        Height still uses rows=4
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col">
+      <div class="label">rows="2" cols="30" with min-height</div>
+      <textarea style="min-height: 120px;" rows="2" cols="30">
+min-height prevents rows</textarea>
+      <div class="label" style="font-weight: normal; font-size: 12px; margin-top: 4px;">
+        Should not use rows when min-height is set<br>
+        Width still uses cols=30
+      </div>
+    </div>
+    <div class="col">
+      <div class="label">rows="6" cols="50" with class setting width</div>
+      <style>.wide-textarea { width: 350px; }</style>
+      <textarea class="wide-textarea" rows="6" cols="50">
+Class CSS overrides cols</textarea>
+      <div class="label" style="font-weight: normal; font-size: 12px; margin-top: 4px;">
+        Should use class CSS width=350px<br>
+        Height still uses rows=6
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col">
+      <div class="label">Invalid rows="0" cols="-5"</div>
+      <textarea rows="0" cols="-5">
+Invalid values use defaults</textarea>
+      <div class="label" style="font-weight: normal; font-size: 12px; margin-top: 4px;">
+        Should clamp to minimum valid values:<br>
+        rows=1, cols=1 (defaults if invalid)
+      </div>
+    </div>
+    <div class="col">
+      <div class="label">rows="abc" cols="xyz" (non-numeric)</div>
+      <textarea rows="abc" cols="xyz">
+Non-numeric values use defaults</textarea>
+      <div class="label" style="font-weight: normal; font-size: 12px; margin-top: 4px;">
+        Should use default values:<br>
+        rows=2, cols=20
+      </div>
+    </div>
+  </div>
+</body>
+</html>

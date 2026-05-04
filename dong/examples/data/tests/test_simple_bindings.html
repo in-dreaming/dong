@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Simple Bindings Test</title>
+</head>
+<body>
+    <h1>Simple Bindings Test</h1>
+
+    <form id="testForm">
+        <input type="text" id="testInput" value="Hello">
+        <textarea id="testTextarea">Test textarea</textarea>
+    </form>
+
+    <script>
+        console.log('=== Starting simple bindings test ===');
+
+        // Test form elements property
+        const form = document.getElementById('testForm');
+        console.log('Form elements:', form.elements);
+        console.log('Form elements length:', form.elements ? form.elements.length : 'undefined');
+
+        // Test input element properties
+        const input = document.getElementById('testInput');
+        console.log('Input value:', input.value);
+        console.log('Input selectionStart:', input.selectionStart);
+        console.log('Input selectionEnd:', input.selectionEnd);
+
+        // Test textarea properties
+        const textarea = document.getElementById('testTextarea');
+        console.log('Textarea value:', textarea.value);
+        console.log('Textarea disabled:', textarea.disabled);
+        console.log('Textarea readOnly:', textarea.readOnly);
+
+        // Test methods existence
+        console.log('form.submit exists:', typeof form.submit === 'function');
+        console.log('form.reset exists:', typeof form.reset === 'function');
+        console.log('form.checkValidity exists:', typeof form.checkValidity === 'function');
+        console.log('input.select exists:', typeof input.select === 'function');
+        console.log('input.setSelectionRange exists:', typeof input.setSelectionRange === 'function');
+        console.log('input.checkValidity exists:', typeof input.checkValidity === 'function');
+        console.log('input.setCustomValidity exists:', typeof input.setCustomValidity === 'function');
+
+        console.log('=== Simple bindings test completed ===');
+    </script>
+</body>
+</html>

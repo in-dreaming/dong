@@ -51,7 +51,9 @@
 #define CONFIG_VERSION "2024-01"
 #endif
 
-#define OPTIMIZE         1
+// NOTE: QuickJS peephole optimizer has been observed to trigger SIGTRAP on some valid scripts
+// (e.g. typeof comparisons used by our HTML test pages). Disable it to favor stability.
+#define OPTIMIZE         0
 #define SHORT_OPCODES    1
 #if defined(EMSCRIPTEN)
 #define DIRECT_DISPATCH  0
@@ -564,7 +566,7 @@ typedef enum {
 } JSClosureTypeEnum;
 
 typedef struct JSClosureVar {
-    JSClosureTypeEnum closure_type : 3;
+    uint8_t closure_type : 3; /* JSClosureTypeEnum - use uint8_t to avoid signed bit-field issues */
     uint8_t is_lexical : 1; /* lexical variable */
     uint8_t is_const : 1; /* const variable (is_lexical = 1 if is_const = 1 */
     uint8_t var_kind : 4; /* see JSVarKindEnum */

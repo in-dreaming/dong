@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>CSS @layer + Specificity Test</title>
+    <style>
+        /* 层优先级与specificity结合测试 */
+        @layer low, high;
+
+        @layer low {
+            div.container p { color: red; }  /* specificity: 0,1,1 */
+        }
+
+        @layer high {
+            p { color: blue; }  /* specificity: 0,0,1 */
+        }
+
+        /* 层优先级高于specificity */
+        div.container p { color: green; }  /* specificity: 0,1,1 (未分层) */
+    </style>
+</head>
+<body>
+    <div class="container">
+        <p>This text should be green (unlayered > high layer > low layer, despite specificity differences)</p>
+    </div>
+</body>
+</html>

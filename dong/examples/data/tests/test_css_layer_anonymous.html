@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>CSS @layer Anonymous Test</title>
+    <style>
+        /* 匿名层测试 */
+        @layer {
+            div { color: red; }  /* 匿名层1 */
+        }
+
+        @layer {
+            div { color: blue; }  /* 匿名层2（优先级更高） */
+        }
+
+        @layer named {
+            div { color: green; }  /* 命名层 */
+        }
+
+        /* 未分层规则优先级最高 */
+        div { color: orange; }
+    </style>
+</head>
+<body>
+    <div>This text should be orange (unlayered > named > anonymous2 > anonymous1)</div>
+</body>
+</html>

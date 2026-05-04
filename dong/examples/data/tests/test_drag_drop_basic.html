@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  body { font-size: 16px; padding: 20px; }
+  #draggable {
+    width: 100px; height: 50px;
+    background: lightblue;
+    border: 2px solid blue;
+    padding: 10px;
+    margin: 10px;
+    cursor: move;
+  }
+  #dropzone {
+    width: 150px; height: 80px;
+    background: lightgreen;
+    border: 2px solid green;
+    padding: 10px;
+    margin: 10px;
+  }
+  #result {
+    margin-top: 20px;
+    padding: 10px;
+    background: #eee;
+    white-space: pre;
+    font-family: monospace;
+    min-height: 200px;
+  }
+  .dragging { opacity: 0.5; }
+  .drop-target { background: yellow; }
+</style>
+</head>
+<body>
+  <h3>Drag & Drop 基本测试</h3>
+
+  <div id="draggable" draggable="true">拖拽我</div>
+  <div id="dropzone">放置区域</div>
+
+  <div id="result">拖放事件日志将显示在这里...</div>
+
+  <script>
+    var log = '';
+    var draggable = document.getElementById('draggable');
+    var dropzone = document.getElementById('dropzone');
+    var result = document.getElementById('result');
+
+    function logEvent(type, event) {
+      log += type + ' 事件:\n';
+      log += '  目标: ' + (event.target ? event.target.id : 'null') + '\n';
+      log += '  当前目标: ' + (event.currentTarget ? event.currentTarget.id : 'null') + '\n';
+      log += '  鼠标位置: (' + event.clientX + ', ' + event.clientY + ')\n';
+      log += '  偏移量: (' + event.offsetX + ', ' + event.offsetY + ')\n';
+      log += '  可信事件: ' + event.isTrusted + '\n';
+      if (event.dataTransfer) {
+        log += '  数据传递: ' + event.dataTransfer + '\n';
+      }
+      log += '\n';
+      result.textContent = log;
+    }
+
+    // 拖拽源事件
+    draggable.addEventListener('dragstart', function(e) {
+      logEvent('dragstart', e);
+      e.target.classList.add('dragging');
+
+      // 设置拖拽数据
+      if (e.dataTransfer) {
+        e.dataTransfer = 'dragged-element:' + e.target.id;
+      }
+    });
+
+    draggable.addEventListener('drag', function(e) {
+      logEvent('drag', e);
+    });
+
+    draggable.addEventListener('dragend', function(e) {
+      logEvent('dragend', e);
+      e.target.classList.remove('dragging');
+    });
+
+    // 放置目标事件
+    dropzone.addEventListener('dragenter', function(e) {
+      logEvent('dragenter', e);
+      e.target.classList.add('drop-target');
+      e.preventDefault(); // 允许放置
+    });
+
+    dropzone.addEventListener('dragover', function(e) {
+      logEvent('dragover', e);
+      e.preventDefault(); // 允许放置
+    });
+
+    dropzone.addEventListener('dragleave', function(e) {
+      logEvent('dragleave', e);
+      e.target.classList.remove('drop-target');
+    });
+
+    dropzone.addEventListener('drop', function(e) {
+      logEvent('drop', e);
+      e.target.classList.remove('drop-target');
+
+      if (e.dataTransfer) {
+        log += '  接收到的数据: ' + e.dataTransfer + '\n\n';
+      }
+
+      // 显示成功消息
+      log += '✅ 拖放操作完成！\n\n';
+      result.textContent = log;
+    });
+
+    log += '拖放事件测试已加载\n';
+    log += '1. 在蓝色方块上按下鼠标\n';
+    log += '2. 拖动到绿色区域\n';
+    log += '3. 释放鼠标完成拖放\n\n';
+    result.textContent = log;
+
+    console.log('Drag & Drop 测试已加载');
+  </script>
+</body>
+</html>

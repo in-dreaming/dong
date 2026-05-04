@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>window.matchMedia() Test</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; }
+        .test { margin: 10px 0; padding: 10px; border: 1px solid #ccc; }
+        .pass { background: #d4edda; color: #155724; }
+        .fail { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+    </style>
+</head>
+<body>
+    <h1>window.matchMedia() Test</h1>
+
+    <div class="info">
+        <p><strong>Note:</strong> This test assumes default viewport size of 800x600px and light color scheme.</p>
+    </div>
+
+    <div class="test">
+        <h2>Test 1: window.matchMedia() - basic media queries</h2>
+        <script>
+            const basicTests = [
+                { query: '(prefers-color-scheme: light)', expected: true, desc: 'light color scheme (assumed true)' },
+                { query: '(prefers-color-scheme: dark)', expected: false, desc: 'dark color scheme (assumed false)' },
+                { query: '(prefers-reduced-motion: reduce)', expected: false, desc: 'reduced motion (assumed false)' },
+                { query: '(orientation: portrait)', expected: true, desc: 'portrait orientation (assumed true)' },
+                { query: '(orientation: landscape)', expected: false, desc: 'landscape orientation (assumed false)' },
+                { query: '(min-width: 400px)', expected: true, desc: 'min-width: 400px (800px viewport)' },
+                { query: '(min-width: 1000px)', expected: false, desc: 'min-width: 1000px (800px viewport)' },
+                { query: '(max-width: 800px)', expected: true, desc: 'max-width: 800px (800px viewport)' },
+                { query: '(max-width: 600px)', expected: false, desc: 'max-width: 600px (800px viewport)' },
+                { query: '(min-height: 400px)', expected: true, desc: 'min-height: 400px (600px viewport)' },
+                { query: '(min-height: 800px)', expected: false, desc: 'min-height: 800px (600px viewport)' },
+                { query: '(max-height: 600px)', expected: true, desc: 'max-height: 600px (600px viewport)' },
+                { query: '(max-height: 400px)', expected: false, desc: 'max-height: 400px (600px viewport)' }
+            ];
+
+            let allBasicPassed = true;
+            let basicResults = '';
+
+            basicTests.forEach(test => {
+                const mql = window.matchMedia(test.query);
+                const passed = mql.matches === test.expected;
+
+                if (passed) {
+                    basicResults += `<div class="pass">✓ PASS: matchMedia("${test.query}").matches = ${mql.matches}</div>`;
+                } else {
+                    basicResults += `<div class="fail">✗ FAIL: matchMedia("${test.query}").matches = ${mql.matches} (expected ${test.expected})</div>`;
+                    allBasicPassed = false;
+                }
+            });
+
+            document.write(basicResults);
+            if (allBasicPassed) {
+                document.write('<div class="pass">✓ All basic media query tests passed!</div>');
+            }
+        </script>
+    </div>
+
+    <div class="test">
+        <h2>Test 2: MediaQueryList object properties</h2>
+        <script>
+            const mql = window.matchMedia('(min-width: 400px)');
+
+            const propertyTests = [
+                { property: 'media', expected: '(min-width: 400px)', desc: 'media property returns query string' },
+                { property: 'matches', expected: true, desc: 'matches property returns boolean' },
+                { property: 'typeof onchange', expected: 'undefined', desc: 'onchange property exists but is undefined' },
+                { property: 'typeof addEventListener', expected: 'function', desc: 'addEventListener method exists' },
+                { property: 'typeof removeEventListener', expected: 'function', desc: 'removeEventListener method exists' }
+            ];
+
+            let allPropsPassed = true;
+            let propResults = '';
+
+            propertyTests.forEach(test => {
+                let result;
+                if (test.property === 'media' || test.property === 'matches') {
+                    result = mql[test.property];
+                } else {
+                    result = typeof mql[test.property];
+                }
+                const passed = result === test.expected;
+
+                if (passed) {
+                    propResults += `<div class="pass">✓ PASS: mql.${test.property} = ${result}</div>`;
+                } else {
+                    propResults += `<div class="fail">✗ FAIL: mql.${test.property} = ${result} (expected ${test.expected})</div>`;
+                    allPropsPassed = false;
+                }
+            });
+
+            document.write(propResults);
+            if (allPropsPassed) {
+                document.write('<div class="pass">✓ All MediaQueryList property tests passed!</div>');
+            }
+        </script>
+    </div>
+
+    <div class="test">
+        <h2>Test 3: window.matchMedia() - edge cases</h2>
+        <script>
+            const edgeCases = [
+                { query: '(min-width: 800px)', expected: true, desc: 'exact width match' },
+                { query: '(max-width: 800px)', expected: true, desc: 'exact width match (max)' },
+                { query: '(min-height: 600px)', expected: true, desc: 'exact height match' },
+                { query: '(max-height: 600px)', expected: true, desc: 'exact height match (max)' },
+                { query: '(min-width: 801px)', expected: false, desc: 'width just above threshold' },
+                { query: '(max-width: 799px)', expected: false, desc: 'width just below threshold' },
+                { query: '(min-width: 0px)', expected: true, desc: 'min-width with 0px' },
+                { query: '(max-width: 9999px)', expected: true, desc: 'max-width with large value' },
+                { query: '(min-width: 100px)', expected: true, desc: 'min-width with small value' },
+                { query: '(max-width: 100px)', expected: false, desc: 'max-width with small value' }
+            ];
+
+            let allEdgePassed = true;
+            let edgeResults = '';
+
+            edgeCases.forEach(test => {
+                const mql = window.matchMedia(test.query);
+                const passed = mql.matches === test.expected;
+
+                if (passed) {
+                    edgeResults += `<div class="pass">✓ PASS: matchMedia("${test.query}").matches = ${mql.matches}</div>`;
+                } else {
+                    edgeResults += `<div class="fail">✗ FAIL: matchMedia("${test.query}").matches = ${mql.matches} (expected ${test.expected})</div>`;
+                    allEdgePassed = false;
+                }
+            });
+
+            document.write(edgeResults);
+            if (allEdgePassed) {
+                document.write('<div class="pass">✓ All edge case tests passed!</div>');
+            }
+        </script>
+    </div>
+
+    <div class="test">
+        <h2>Test 4: window.matchMedia() - unsupported queries</h2>
+        <script>
+            const unsupportedTests = [
+                { query: '(prefers-color-scheme: no-preference)', expected: false, desc: 'unsupported color scheme value' },
+                { query: '(prefers-reduced-motion: no-preference)', expected: false, desc: 'unsupported motion preference' },
+                { query: '(aspect-ratio: 16/9)', expected: false, desc: 'unsupported aspect-ratio query' },
+                { query: '(resolution: 2dppx)', expected: false, desc: 'unsupported resolution query' },
+                { query: '(hover: hover)', expected: false, desc: 'unsupported hover query' },
+                { query: '(pointer: fine)', expected: false, desc: 'unsupported pointer query' },
+                { query: '(display-mode: fullscreen)', expected: false, desc: 'unsupported display-mode query' },
+                { query: '(invalid-query)', expected: false, desc: 'invalid query syntax' },
+                { query: '(min-width: 100px) and (max-width: 800px)', expected: false, desc: 'complex query (not supported)' },
+                { query: '(min-width: 100px), (max-width: 800px)', expected: false, desc: 'multiple queries (not supported)' }
+            ];
+
+            let allUnsupportedPassed = true;
+            let unsupportedResults = '';
+
+            unsupportedTests.forEach(test => {
+                const mql = window.matchMedia(test.query);
+                const passed = mql.matches === test.expected;
+
+                if (passed) {
+                    unsupportedResults += `<div class="pass">✓ PASS: matchMedia("${test.query}").matches = ${mql.matches} (unsupported query returns false)</div>`;
+                } else {
+                    unsupportedResults += `<div class="fail">✗ FAIL: matchMedia("${test.query}").matches = ${mql.matches} (expected ${test.expected} for unsupported query)</div>`;
+                    allUnsupportedPassed = false;
+                }
+            });
+
+            document.write(unsupportedResults);
+            if (allUnsupportedPassed) {
+                document.write('<div class="pass">✓ All unsupported query tests passed!</div>');
+            }
+        </script>
+    </div>
+
+    <div class="test">
+        <h2>Test 5: window.matchMedia() - function properties</h2>
+        <script>
+            const functionTests = [
+                { test: 'typeof window.matchMedia', expected: 'function', desc: 'matchMedia is a function' },
+                { test: 'window.matchMedia.name', expected: 'matchMedia', desc: 'function name is "matchMedia"' },
+                { test: 'window.matchMedia.length', expected: 1, desc: 'function length is 1' }
+            ];
+
+            let allFuncTestsPassed = true;
+            let funcResults = '';
+
+            functionTests.forEach(test => {
+                let result;
+                try {
+                    result = eval(test.test);
+                } catch (e) {
+                    result = 'error';
+                }
+                const passed = result === test.expected;
+
+                if (passed) {
+                    funcResults += `<div class="pass">✓ PASS: ${test.test} = ${result}</div>`;
+                } else {
+                    funcResults += `<div class="fail">✗ FAIL: ${test.test} = ${result} (expected ${test.expected})</div>`;
+                    allFuncTestsPassed = false;
+                }
+            });
+
+            document.write(funcResults);
+            if (allFuncTestsPassed) {
+                document.write('<div class="pass">✓ All function property tests passed!</div>');
+            }
+        </script>
+    </div>
+</body>
+</html>

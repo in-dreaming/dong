@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 28px;
+      background: #060914;
+      color: #e5e7eb;
+      font-family: Arial, sans-serif;
+    }
+    .title {
+      font-size: 18px;
+      font-weight: 700;
+      margin: 0 0 14px 0;
+      color: #a7f3d0;
+    }
+    .row {
+      display: flex;
+      gap: 18px;
+      flex-wrap: wrap;
+      align-items: flex-start;
+    }
+    .card {
+      width: 280px;
+      height: 170px;
+      border-radius: 18px;
+      padding: 30px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background-color: rgba(17, 24, 39, 0.75);
+      box-shadow: 0 12px 28px rgba(0,0,0,0.55);
+
+      background-image: url('../images/bg.png');
+      background-size: 64px 64px;
+      background-repeat: repeat;
+      background-position: 0 0;
+      background-clip: padding-box;
+    }
+    .label {
+      font-size: 12px;
+      color: rgba(255,255,255,0.92);
+      margin-bottom: 10px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      text-shadow: 0 1px 0 rgba(0,0,0,0.25);
+    }
+    .inner {
+      width: 100%;
+      height: calc(100% - 22px);
+      border-radius: 12px;
+      background: rgba(0,0,0,0.22);
+      border: 1px solid rgba(255,255,255,0.16);
+    }
+
+    .origin-padding { background-origin: padding-box; }
+    .origin-content { background-origin: content-box; }
+  </style>
+</head>
+<body>
+  <div class="title">CSS background-origin: padding-box vs content-box (repeat + tile)</div>
+  <div class="row">
+    <div class="card origin-padding">
+      <div class="label">background-origin: padding-box</div>
+      <div class="inner"></div>
+    </div>
+    <div class="card origin-content">
+      <div class="label">background-origin: content-box</div>
+      <div class="inner"></div>
+    </div>
+  </div>
+</body>
+</html>

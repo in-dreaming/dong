@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            font-family: Arial;
+            padding: 20px;
+            background: #f0f0f0;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .test-box {
+            background: #f9f9f9;
+            padding: 15px;
+            margin: 10px 0;
+            border-left: 3px solid #2196f3;
+        }
+        button {
+            padding: 8px 16px;
+            margin: 5px;
+            background: #2196f3;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #1976d2;
+        }
+        .result {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            margin-top: 10px;
+        }
+        .inserted {
+            background: #4caf50;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            margin: 2px;
+            display: inline-block;
+        }
+        .original {
+            background: #ff9800;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            margin: 2px;
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+    <h1>Modern DOM Manipulation Methods Test</h1>
+
+    <div class="container">
+        <h3>Test 1: Element.before()</h3>
+        <p>Insert nodes before an element</p>
+        <div class="test-box">
+            <div id="test1-target" class="original">Target Element</div>
+        </div>
+        <button onclick="testBefore()">Test before()</button>
+        <div id="result1" class="result"></div>
+    </div>
+
+    <div class="container">
+        <h3>Test 2: Element.after()</h3>
+        <p>Insert nodes after an element</p>
+        <div class="test-box">
+            <div id="test2-target" class="original">Target Element</div>
+        </div>
+        <button onclick="testAfter()">Test after()</button>
+        <div id="result2" class="result"></div>
+    </div>
+
+    <div class="container">
+        <h3>Test 3: Element.replaceWith()</h3>
+        <p>Replace an element with new nodes</p>
+        <div class="test-box">
+            <div id="test3-target" class="original">Target Element</div>
+        </div>
+        <button onclick="testReplaceWith()">Test replaceWith()</button>
+        <div id="result3" class="result"></div>
+    </div>
+
+    <div class="container">
+        <h3>Test 4: Element.prepend()</h3>
+        <p>Insert nodes at the beginning of an element's children</p>
+        <div class="test-box">
+            <div id="test4-target">
+                <div class="original">Child 1</div>
+                <div class="original">Child 2</div>
+            </div>
+        </div>
+        <button onclick="testPrepend()">Test prepend()</button>
+        <div id="result4" class="result"></div>
+    </div>
+
+    <div class="container">
+        <h3>Test 5: Element.append()</h3>
+        <p>Insert nodes at the end of an element's children</p>
+        <div class="test-box">
+            <div id="test5-target">
+                <div class="original">Child 1</div>
+                <div class="original">Child 2</div>
+            </div>
+        </div>
+        <button onclick="testAppend()">Test append()</button>
+        <div id="result5" class="result"></div>
+    </div>
+
+    <div class="container">
+        <h3>Test 6: Mixed Nodes (Elements and Text)</h3>
+        <p>These methods accept both elements and text strings</p>
+        <div class="test-box">
+            <div id="test6-target" class="original">Target</div>
+        </div>
+        <button onclick="testMixed()">Test Mixed Nodes</button>
+        <div id="result6" class="result"></div>
+    </div>
+
+    <script>
+        function testBefore() {
+            const target = document.getElementById('test1-target');
+            const newElem = document.createElement('div');
+            newElem.className = 'inserted';
+            newElem.textContent = 'Inserted Before';
+
+            target.before(newElem);
+
+            document.getElementById('result1').innerHTML =
+                'New element inserted before target<br>' +
+                'Parent HTML: ' + target.parentElement.innerHTML.replace(/</g, '&lt;');
+        }
+
+        function testAfter() {
+            const target = document.getElementById('test2-target');
+            const newElem = document.createElement('div');
+            newElem.className = 'inserted';
+            newElem.textContent = 'Inserted After';
+
+            target.after(newElem);
+
+            document.getElementById('result2').innerHTML =
+                'New element inserted after target<br>' +
+                'Parent HTML: ' + target.parentElement.innerHTML.replace(/</g, '&lt;');
+        }
+
+        function testReplaceWith() {
+            const target = document.getElementById('test3-target');
+            const parent = target.parentElement;
+            const newElem = document.createElement('div');
+            newElem.className = 'inserted';
+            newElem.textContent = 'Replacement Element';
+
+            target.replaceWith(newElem);
+
+            document.getElementById('result3').innerHTML =
+                'Target replaced with new element<br>' +
+                'Target still exists in memory: ' + (target !== null) + '<br>' +
+                'Target has parent: ' + (target.parentElement !== null) + '<br>' +
+                'Parent HTML: ' + parent.innerHTML.replace(/</g, '&lt;');
+        }
+
+        function testPrepend() {
+            const target = document.getElementById('test4-target');
+            const newElem = document.createElement('div');
+            newElem.className = 'inserted';
+            newElem.textContent = 'Prepended Child';
+
+            target.prepend(newElem);
+
+            document.getElementById('result4').innerHTML =
+                'New element prepended to target<br>' +
+                'First child class: ' + target.firstElementChild.className + '<br>' +
+                'Target HTML: ' + target.innerHTML.replace(/</g, '&lt;');
+        }
+
+        function testAppend() {
+            const target = document.getElementById('test5-target');
+            const newElem = document.createElement('div');
+            newElem.className = 'inserted';
+            newElem.textContent = 'Appended Child';
+
+            target.append(newElem);
+
+            document.getElementById('result5').innerHTML =
+                'New element appended to target<br>' +
+                'Last child class: ' + target.lastElementChild.className + '<br>' +
+                'Target HTML: ' + target.innerHTML.replace(/</g, '&lt;');
+        }
+
+        function testMixed() {
+            const target = document.getElementById('test6-target');
+            const newElem = document.createElement('span');
+            newElem.className = 'inserted';
+            newElem.textContent = 'Element';
+
+            // Mix text and element nodes
+            target.after('Text1 ', newElem, ' Text2');
+
+            document.getElementById('result6').innerHTML =
+                'Mixed nodes (text + element + text) inserted<br>' +
+                'Parent HTML: ' + target.parentElement.innerHTML.replace(/</g, '&lt;');
+        }
+
+        console.log('DOM manipulation methods test loaded');
+        console.log('Available methods:', {
+            before: typeof Element.prototype.before,
+            after: typeof Element.prototype.after,
+            replaceWith: typeof Element.prototype.replaceWith,
+            prepend: typeof Element.prototype.prepend,
+            append: typeof Element.prototype.append
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+---
+description: 
+alwaysApply: true
+enabled: true
+updatedAt: 2026-02-22T15:35:27.479Z
+provider: 
+---
+
+
+注意：
+1.使用对比工具(dong/scripts/tools/run_baseline_compare.py)可以将html使用基准html渲染器和dong渲染器渲染到对比图片(最多3帧！不可太多)。
+2.使用skill：baseline-render-diff-analysis ， 可以分析对应case存在的问题。
+3.如果需要grid，则修改html(grid to flex)，yoga目前不支持grid。

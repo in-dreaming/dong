@@ -1,6 +1,6 @@
-#pragma once
+﻿#pragma once
 
-#include "dom_node.hpp"
+#include "dom/dom_node.hpp"
 #include <functional>
 #include <vector>
 #include <string>
@@ -13,20 +13,73 @@ namespace dong::dom {
 enum class EventType {
     CLICK,
     DOUBLE_CLICK,
+
+    // Mouse events
     MOUSE_MOVE,
     MOUSE_DOWN,
     MOUSE_UP,
     MOUSE_ENTER,
     MOUSE_LEAVE,
+
+    // Pointer events (unified mouse/touch/pen)
+    POINTER_DOWN,
+    POINTER_UP,
+    POINTER_MOVE,
+    POINTER_ENTER,
+    POINTER_LEAVE,
+    POINTER_OVER,
+    POINTER_OUT,
+    POINTER_CANCEL,
+
+    // Keyboard events
     KEY_DOWN,
     KEY_UP,
     KEY_PRESS,
+
+    // Focus / form
     FOCUS,
     BLUR,
     CHANGE,
     INPUT,
+    BEFORE_INPUT,
     SUBMIT,
+
+    // Clipboard
+    COPY,
+    CUT,
+    PASTE,
+
+    // Layout / lifecycle
+    SCROLL,
+    RESIZE,
+    WHEEL,
+    DOM_CONTENT_LOADED,
+
+    // HTML-specific
+    TOGGLE,
+
+    // Dialog events
+    CLOSE,
+    CANCEL,
+
+    // Drag & Drop
+    DRAG_START,
+    DRAG,
+    DRAG_ENTER,
+    DRAG_LEAVE,
+    DRAG_OVER,
+    DROP,
+    DRAG_END,
+
+    // Fallback
     CUSTOM
+};
+
+// Pointer type for unified pointer events
+enum class PointerType {
+    MOUSE,
+    TOUCH,
+    PEN
 };
 
 // Event object
@@ -35,24 +88,67 @@ struct Event {
     std::string type_name;
     DOMNodePtr target;
     DOMNodePtr current_target;
-    
-    // Mouse event data
+    DOMNodePtr related_target;  // For FocusEvent and MouseEvent
+
+    // Mouse/Pointer event data
     int32_t mouse_x = 0;
     int32_t mouse_y = 0;
+    int32_t offset_x = 0;  // Relative to target element
+    int32_t offset_y = 0;  // Relative to target element
     int32_t mouse_button = 0;
+    
+    // Pointer-specific data
+    int32_t pointer_id = 0;          // Unique pointer identifier
+    PointerType pointer_type = PointerType::MOUSE;
+    float pressure = 0.0f;           // Pressure (0.0-1.0)
+    float tilt_x = 0.0f;             // Tilt angle X
+    float tilt_y = 0.0f;             // Tilt angle Y
+    int32_t width = 1;               // Contact width
+    int32_t height = 1;              // Contact height
+    bool is_primary = true;          // Is primary pointer
     
     // Keyboard event data
     uint32_t key_code = 0;
     std::string key_name;
+    std::string key_string;      // Standard 'key' property (e.g. "Enter", "a")
+    std::string code_string;     // Standard 'code' property (e.g. "Enter", "KeyA")
+
+    // Modifier key state
+    bool alt_key = false;
+    bool ctrl_key = false;
+    bool shift_key = false;
+    bool meta_key = false;
+
+    // Wheel event data
+    float delta_x = 0.0f;
+    float delta_y = 0.0f;
+    float delta_z = 0.0f;
+
+    // Input event data
+    std::string input_type;      // The input type for 'beforeinput' events (e.g., "insertText", "deleteContentBackward")
+    std::string input_data;      // The inserted text for 'input' events
     
     // Custom data
     std::unordered_map<std::string, std::string> data;
-    
+
+    // Web Event flags
+    bool is_trusted = false;   // Event.isTrusted
+    bool repeat = false;       // KeyboardEvent.repeat
+
+    // Drag & Drop specific data
+    std::string data_transfer;  // Simplified data transfer (for Phase 1)
+
     bool stopped = false;
     bool prevented = false;
+    bool stopped_immediate = false;  // For stopImmediatePropagation()
+
 
     void stopPropagation() { stopped = true; }
     void preventDefault() { prevented = true; }
+    void stopImmediatePropagation() {
+        stopped = true;
+        stopped_immediate = true;
+    }
 };
 
 // Event listener callback
@@ -79,6 +175,9 @@ public:
     Event createEvent(EventType type);
     Event createMouseEvent(EventType type, int32_t x, int32_t y, int32_t button = 0);
     Event createKeyEvent(EventType type, uint32_t key_code);
+    Event createPointerEvent(EventType type, int32_t x, int32_t y, 
+                             int32_t pointer_id = 0, PointerType pointer_type = PointerType::MOUSE,
+                             int32_t button = 0, float pressure = 0.5f);
 
 private:
     struct ListenerEntry {
@@ -94,19 +193,61 @@ private:
     std::unordered_map<std::string, EventType> event_type_map = {
         {"click", EventType::CLICK},
         {"dblclick", EventType::DOUBLE_CLICK},
+
+        // Mouse
         {"mousemove", EventType::MOUSE_MOVE},
         {"mousedown", EventType::MOUSE_DOWN},
         {"mouseup", EventType::MOUSE_UP},
         {"mouseenter", EventType::MOUSE_ENTER},
         {"mouseleave", EventType::MOUSE_LEAVE},
+
+        // Pointer
+        {"pointerdown", EventType::POINTER_DOWN},
+        {"pointerup", EventType::POINTER_UP},
+        {"pointermove", EventType::POINTER_MOVE},
+        {"pointerenter", EventType::POINTER_ENTER},
+        {"pointerleave", EventType::POINTER_LEAVE},
+        {"pointerover", EventType::POINTER_OVER},
+        {"pointerout", EventType::POINTER_OUT},
+        {"pointercancel", EventType::POINTER_CANCEL},
+
+        // Keyboard
         {"keydown", EventType::KEY_DOWN},
         {"keyup", EventType::KEY_UP},
         {"keypress", EventType::KEY_PRESS},
+
+        // Focus / form
         {"focus", EventType::FOCUS},
         {"blur", EventType::BLUR},
         {"change", EventType::CHANGE},
+        {"beforeinput", EventType::BEFORE_INPUT},
         {"input", EventType::INPUT},
         {"submit", EventType::SUBMIT},
+
+        // Clipboard
+        {"copy", EventType::COPY},
+        {"cut", EventType::CUT},
+        {"paste", EventType::PASTE},
+
+        // Layout / lifecycle
+        {"scroll", EventType::SCROLL},
+        {"resize", EventType::RESIZE},
+        {"wheel", EventType::WHEEL},
+        {"DOMContentLoaded", EventType::DOM_CONTENT_LOADED},
+
+        // HTML-specific
+        {"toggle", EventType::TOGGLE},
+        {"close", EventType::CLOSE},
+        {"cancel", EventType::CANCEL},
+
+        // Drag & Drop
+        {"dragstart", EventType::DRAG_START},
+        {"drag", EventType::DRAG},
+        {"dragenter", EventType::DRAG_ENTER},
+        {"dragleave", EventType::DRAG_LEAVE},
+        {"dragover", EventType::DRAG_OVER},
+        {"drop", EventType::DROP},
+        {"dragend", EventType::DRAG_END},
     };
 };
 

@@ -1,0 +1,41 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>CSS image-rendering</title>
+  <style>
+    body { margin: 20px; font-family: Arial; }
+    .row { display: flex; gap: 20px; align-items: flex-start; }
+    .card { width: 360px; }
+    .label { margin: 0 0 6px 0; font-size: 14px; color: #333; }
+    img { width: 360px; height: 200px; display: block; border: 1px solid #bbb; }
+    .pixel { image-rendering: pixelated; }
+
+    .bg {
+      margin-top: 16px;
+      width: 360px;
+      height: 120px;
+      border: 1px solid #bbb;
+      background-image: url("../images/bg.png");
+      background-size: 120px 60px;
+      background-repeat: repeat;
+      background-position: 0% 0%;
+    }
+    .bg.pixel { image-rendering: crisp-edges; }
+  </style>
+</head>
+<body>
+  <div class="row">
+    <div class="card">
+      <div class="label">default (linear)</div>
+      <img src="../images/bg.png" />
+      <div class="bg"></div>
+    </div>
+    <div class="card">
+      <div class="label">pixelated / crisp-edges (nearest)</div>
+      <img class="pixel" src="../images/bg.png" />
+      <div class="bg pixel"></div>
+    </div>
+  </div>
+</body>
+</html>

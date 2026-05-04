@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body {
+    margin: 10px;
+    font-family: Arial, sans-serif;
+    background-color: #f5f5f5;
+  }
+
+  div {
+    padding: 10px;
+    margin: 5px 0;
+    border-radius: 5px;
+  }
+
+  /* :dir() 伪类选择器 */
+  div:dir(ltr) {
+    background-color: #e6f7ff;
+    border-left: 4px solid #1890ff;
+  }
+
+  div:dir(rtl) {
+    background-color: #fff7e6;
+    border-right: 4px solid #fa8c16;
+  }
+
+  /* 测试不同的选择器组合 */
+  p:dir(ltr) {
+    font-weight: bold;
+    color: #1890ff;
+  }
+
+  p:dir(rtl) {
+    font-weight: bold;
+    color: #fa8c16;
+  }
+
+  h2 {
+    font-size: 14px;
+    color: #333;
+    margin-bottom: 5px;
+  }
+
+  .note { font-size: 12px; color: #666; }
+</style>
+</head>
+<body>
+
+  <h1>:dir() 伪类选择器深度测试</h1>
+
+  <div dir="ltr">
+    <h2>1. LTR 元素匹配 :dir(ltr)</h2>
+    <p>This LTR paragraph should have blue bold text.</p>
+  </div>
+
+  <div dir="rtl">
+    <h2>2. RTL 元素匹配 :dir(rtl)</h2>
+    <p>هذا RTL paragraph should have orange bold text.</p>
+  </div>
+
+  <div>
+    <h2>3. 默认 LTR (无 dir 属性)</h2>
+    <p>默认 LTR paragraph should have blue bold text (inherited).</p>
+  </div>
+
+  <div style="direction: rtl;">
+    <h2>4. CSS direction: rtl (通过 CSS 设置)</h2>
+    <p>CSS set RTL - 这个段落应该匹配 :dir(rtl)</p>
+  </div>
+
+  <div style="direction: ltr;">
+    <h2>5. CSS direction: ltr (通过 CSS 设置)</h2>
+    <p>CSS set LTR - This paragraph should match :dir(ltr)</p>
+  </div>
+
+  <div dir="ltr">
+    <h2>6. 父元素 LTR，子元素无 dir 属性</h2>
+    <div style="margin-left: 10px;">
+      <p>子元素继承 LTR - should match :dir(ltr)</p>
+      <div class="note">孙元素也继承 LTR</div>
+    </div>
+  </div>
+
+  <div dir="rtl">
+    <h2>7. 父元素 RTL，子元素无 dir 属性</h2>
+    <div style="margin-right: 10px;">
+      <p>子元素继承 RTL - should match :dir(rtl)</p>
+      <div class="note">孙元素也继承 RTL</div>
+    </div>
+  </div>
+
+  <div dir="auto">
+    <h2>8. dir="auto" 第一个强方向为 LTR</h2>
+    <p>First char is 'F' (Latin) - matches :dir(ltr)</p>
+  </div>
+
+  <div dir="auto">
+    <h2>9. dir="auto" 第一个强方向为 RTL</h2>
+    <p>أول حرف عربي - matches :dir(rtl)</p>
+  </div>
+
+  <div dir="auto">
+    <h2>10. dir="auto" 从数字和空格开始，然后 LTR</h2>
+    <p>123 Hello - matches :dir(ltr)</p>
+  </div>
+
+</body>
+</html>

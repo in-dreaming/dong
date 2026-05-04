@@ -1,0 +1,98 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>test_textarea_rows_cols</title>
+  <style>
+    body { font-family: Arial; margin: 24px; }
+    .row { display: flex; gap: 24px; margin-bottom: 24px; }
+    .col { width: 400px; }
+    .label { font-size: 14px; color: #333; margin-bottom: 6px; font-weight: bold; }
+    textarea {
+      border: 1px solid #777;
+      padding: 4px;
+      font-size: 16px;
+      line-height: 20px;
+      background: #fff;
+      box-sizing: border-box;
+    }
+  </style>
+</head>
+<body>
+  <h1>Textarea rows/cols Attributes</h1>
+
+  <div class="row">
+    <div class="col">
+      <div class="label">Default (no rows/cols)</div>
+      <textarea>Default textarea</textarea>
+      <div class="label" style="font-weight: normal; font-size: 12px; margin-top: 4px;">
+        Should use: rows=2, cols=20 (defaults: height≈48px, width≈160px+padding)
+      </div>
+    </div>
+    <div class="col">
+      <div class="label">rows="3" cols="10"</div>
+      <textarea rows="3" cols="10">rows 3 cols 10</textarea>
+      <div class="label" style="font-weight: normal; font-size: 12px; margin-top: 4px;">
+        3 rows × 20px = 60px height<br>
+        10 cols × 8px (0.5em) = 80px width
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col">
+      <div class="label">rows="5" cols="40"</div>
+      <textarea rows="5" cols="40">rows 5 cols 40
+This is a larger textarea with
+more rows and columns.
+The size should be based on
+the rows and cols attributes.</textarea>
+      <div class="label" style="font-weight: normal; font-size: 12px; margin-top: 4px;">
+        5 rows × 20px = 100px height<br>
+        40 cols × 8px (0.5em) = 320px width
+      </div>
+    </div>
+    <div class="col">
+      <div class="label">rows="1" cols="30"</div>
+      <textarea rows="1" cols="30">single row textarea</textarea>
+      <div class="label" style="font-weight: normal; font-size: 12px; margin-top: 4px;">
+        1 row × 20px = 20px height<br>
+        30 cols × 8px (0.5em) = 240px width
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col">
+      <div class="label">Large textarea (rows="10" cols="60")</div>
+      <textarea rows="10" cols="60">This is a large textarea with
+10 rows and 60 columns.
+It provides ample space for
+longer text input or content
+editing. The dimensions are
+calculated from the rows and
+cols attributes multiplied by
+the font metrics.</textarea>
+      <div class="label" style="font-weight: normal; font-size: 12px; margin-top: 4px;">
+        10 rows × 20px = 200px height<br>
+        60 cols × 8px (0.5em) = 480px width
+      </div>
+    </div>
+    <div class="col">
+      <div class="label">rows="15" cols="80"</div>
+      <textarea rows="15" cols="80">Very large textarea with
+15 rows and 80 columns.
+Maximum capacity for
+extensive text entry.
+Each row provides space
+for approximately 80
+characters of content
+with the current font.</textarea>
+      <div class="label" style="font-weight: normal; font-size: 12px; margin-top: 4px;">
+        15 rows × 20px = 300px height<br>
+        80 cols × 8px (0.5em) = 640px width
+      </div>
+    </div>
+  </div>
+</body>
+</html>

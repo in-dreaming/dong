@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Scroll metrics: scroll to Section 2</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: Arial, sans-serif;
+      background: #ffffff;
+    }
+
+    #metrics {
+      font-family: ui-monospace, Menlo, monospace;
+      font-size: 12px;
+      white-space: pre;
+      padding: 8px;
+      margin: 0 0 10px 0;
+      border: 1px solid #4a9eba;
+      background: #e8f4f8;
+      width: 520px;
+    }
+
+    .container {
+      width: 400px;
+      height: 300px;
+      border: 2px solid #333;
+      overflow: auto;
+      background-color: #f0f0f0;
+      scroll-behavior: auto;
+    }
+
+    .content { padding: 10px; }
+
+    .section {
+      height: 250px;
+      padding: 20px;
+      margin-bottom: 10px;
+      border: 1px solid #ddd;
+      background: white;
+    }
+
+    h2 {
+      margin: 0 0 10px 0;
+      font-size: 16px;
+    }
+  </style>
+</head>
+<body>
+  <div id="metrics">metrics: (pending)</div>
+
+  <div class="container" id="c">
+    <div class="content">
+      <div class="section" id="s1">
+        <h2>Section 1 (Top)</h2>
+        <p>Top</p>
+      </div>
+      <div class="section" id="s2">
+        <h2>Section 2</h2>
+        <p>Middle content</p>
+      </div>
+      <div class="section" id="s3">
+        <h2>Section 3 (Bottom)</h2>
+        <p>End of content</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      var c = document.getElementById('c');
+      var s2 = document.getElementById('s2');
+
+      // Target: place Section2 at the top of scroll viewport.
+      // Use offsetTop (layout-derived) to avoid hardcoding.
+      var target = s2.offsetTop;
+      c.scrollTop = target;
+
+      var lines = [];
+      lines.push('target = s2.offsetTop = ' + target);
+      lines.push('scrollTop = ' + c.scrollTop);
+      lines.push('scrollHeight = ' + c.scrollHeight);
+      lines.push('clientHeight = ' + c.clientHeight);
+      lines.push('maxScroll = scrollHeight - clientHeight = ' + (c.scrollHeight - c.clientHeight));
+
+      // Additional sanity numbers.
+      lines.push('s1.offsetHeight = ' + document.getElementById('s1').offsetHeight);
+      lines.push('s2.offsetHeight = ' + s2.offsetHeight);
+      lines.push('s3.offsetHeight = ' + document.getElementById('s3').offsetHeight);
+
+      document.getElementById('metrics').textContent = lines.join('\n');
+    })();
+  </script>
+</body>
+</html>

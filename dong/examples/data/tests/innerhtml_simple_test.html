@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>innerHTML Simple Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        .container {
+            border: 2px solid #333;
+            padding: 10px;
+            margin: 10px 0;
+            min-height: 50px;
+        }
+        .highlight {
+            background: yellow;
+            padding: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>innerHTML Simple Test</h1>
+    
+    <div class="container" id="test1">
+        <p>Original content - should be replaced</p>
+    </div>
+    
+    <script>
+        // Immediate execution
+        (function() {
+            console.log('Script executing');
+            var container = document.getElementById('test1');
+            console.log('Container:', container ? 'found' : 'not found');
+            if (container) {
+                container.innerHTML = '<p class="highlight">SUCCESS: innerHTML works! <span>Nested</span></p>';
+                console.log('innerHTML set');
+            }
+        })();
+    </script>
+</body>
+</html>

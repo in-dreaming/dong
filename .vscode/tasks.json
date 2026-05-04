@@ -1,0 +1,87 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build-debug",
+            "type": "shell",
+            "command": "zig build examples -Doptimize=Debug",
+            "options": {
+                "cwd": "${workspaceFolder}/dong"
+            },
+            "problemMatcher": [
+                {
+                    "owner": "zig",
+                    "fileLocation": ["relative", "${workspaceFolder}/dong"],
+                    "pattern": {
+                        "regexp": "^(.+):(\\d+):(\\d+):\\s+(error|warning|note):\\s+(.*)$",
+                        "file": 1,
+                        "line": 2,
+                        "column": 3,
+                        "severity": 4,
+                        "message": 5
+                    }
+                },
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "focus": false,
+                "clear": true
+            }
+        },
+        {
+            "label": "build-release",
+            "type": "shell",
+            "command": "zig build examples -Doptimize=ReleaseFast",
+            "options": {
+                "cwd": "${workspaceFolder}/dong"
+            },
+            "problemMatcher": ["$gcc"],
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "build-single-demo",
+            "type": "shell",
+            "command": "zig build examples -Doptimize=Debug",
+            "options": {
+                "cwd": "${workspaceFolder}/dong"
+            },
+            "problemMatcher": ["$gcc"],
+            "group": "build"
+        },
+        {
+            "label": "clean",
+            "type": "shell",
+            "command": "rm -rf zig-out zig-cache .zig-cache",
+            "options": {
+                "cwd": "${workspaceFolder}/dong"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "rebuild",
+            "dependsOn": ["clean", "build-debug"],
+            "dependsOrder": "sequence",
+            "problemMatcher": []
+        },
+        {
+            "label": "cmake-build-debug",
+            "type": "shell",
+            "command": "cmake --build build-cmake --config Debug --target interactive_demo",
+            "options": {
+                "cwd": "${workspaceFolder}/dong"
+            },
+            "problemMatcher": ["$gcc", "$msCompile"],
+            "group": "build"
+        }
+    ]
+}

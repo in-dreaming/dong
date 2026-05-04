@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background: transparent;
+    color: white;
+    overflow: hidden;
+    width: 100%;
+    height: 100%;
+}
+
+/* FPS 显示 - 左上角 */
+#fps {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    font-size: 18px;
+    font-weight: bold;
+    /* NOTE: blur-based text-shadow currently looks like doubled glyphs in our MSDF approximation.
+       Keep a simple 1px shadow for readability without the "duplicated" look. */
+    text-shadow: 1px 1px 0 rgba(0,0,0,0.9);
+    color: #00ff88;
+}
+
+#fps-value {
+    font-size: 24px;
+    color: #ffff00;  /* 黄色，更醒目 */
+    font-weight: bold;
+    background: rgba(0, 0, 0, 0.5);  /* 半透明黑色背景 */
+    padding: 2px 6px;
+    border-radius: 3px;
+}
+
+/* 操作说明面板 */
+#help-panel {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.85);
+    border: 2px solid rgba(100, 150, 255, 0.6);
+    border-radius: 12px;
+    padding: 24px 32px;
+    min-width: 320px;
+    display: none;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+#help-panel.visible {
+    display: block;
+}
+
+#help-panel h2 {
+    text-align: center;
+    margin-bottom: 16px;
+    color: #88aaff;
+    font-size: 20px;
+    border-bottom: 1px solid rgba(100, 150, 255, 0.4);
+    padding-bottom: 12px;
+}
+
+.help-section {
+    margin-bottom: 16px;
+}
+
+.help-section h3 {
+    color: #aaccff;
+    font-size: 14px;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.help-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 0;
+    font-size: 14px;
+}
+
+.help-key {
+    background: rgba(100, 150, 255, 0.3);
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-family: 'Consolas', monospace;
+    font-size: 13px;
+    color: #ffffff;
+    min-width: 80px;
+    text-align: center;
+}
+
+.help-desc {
+    color: #cccccc;
+    margin-left: 16px;
+    flex: 1;
+}
+
+#help-hint {
+    position: absolute;
+    bottom: 12px;
+    left: 12px;
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.9);
+    text-shadow: 1px 1px 0 rgba(0,0,0,0.95);
+    background: rgba(0, 0, 0, 0.5);
+    padding: 6px 12px;
+    border-radius: 4px;
+}
+</style>
+</head>
+<body>
+
+<!-- FPS 显示 -->
+<div id="fps">
+    FPS: <span id="fps-value" style="color: #ffff00; font-weight: bold; background: rgba(0,0,0,0.7); padding: 2px 6px; border-radius: 3px;">0</span>
+</div>
+
+<!-- 操作说明面板 -->
+<div id="help-panel">
+    <h2>Controls</h2>
+    
+    <div class="help-section">
+        <h3>Camera</h3>
+        <div class="help-row">
+            <span class="help-key">RMB + Mouse</span>
+            <span class="help-desc">Look around</span>
+        </div>
+        <div class="help-row">
+            <span class="help-key">W A S D</span>
+            <span class="help-desc">Move forward/left/back/right</span>
+        </div>
+        <div class="help-row">
+            <span class="help-key">Q / E</span>
+            <span class="help-desc">Move down / up</span>
+        </div>
+        <div class="help-row">
+            <span class="help-key">Space / Ctrl</span>
+            <span class="help-desc">Move up / down</span>
+        </div>
+        <div class="help-row">
+            <span class="help-key">Shift</span>
+            <span class="help-desc">Sprint (move faster)</span>
+        </div>
+    </div>
+    
+    <div class="help-section">
+        <h3>Interaction</h3>
+        <div class="help-row">
+            <span class="help-key">LMB</span>
+            <span class="help-desc">Click on HTML screens</span>
+        </div>
+        <div class="help-row">
+            <span class="help-key">Scroll</span>
+            <span class="help-desc">Scroll content on screens</span>
+        </div>
+    </div>
+    
+    <div class="help-section">
+        <h3>General</h3>
+        <div class="help-row">
+            <span class="help-key">F1 / H</span>
+            <span class="help-desc">Toggle this help panel</span>
+        </div>
+        <div class="help-row">
+            <span class="help-key">ESC</span>
+            <span class="help-desc">Exit application</span>
+        </div>
+    </div>
+</div>
+
+<!-- 帮助提示 -->
+<div id="help-hint">Press F1 or H for help</div>
+
+<script>
+// HUD 状态
+var hudState = {
+    fps: 0,
+    showHelp: false
+};
+
+// 更新 FPS 显示
+function updateFPS(fps) {
+    var elem = document.getElementById('fps-value');
+    if (elem) {
+        elem.textContent = Math.round(fps);
+    }
+}
+
+// 切换帮助面板
+function toggleHelp() {
+    hudState.showHelp = !hudState.showHelp;
+    var panel = document.getElementById('help-panel');
+    var hint = document.getElementById('help-hint');
+    
+    if (hudState.showHelp) {
+        panel.classList.add('visible');
+        hint.style.display = 'none';
+    } else {
+        panel.classList.remove('visible');
+        hint.style.display = 'block';
+    }
+}
+
+// 设置帮助面板显示状态
+function setHelpVisible(visible) {
+    hudState.showHelp = visible;
+    var panel = document.getElementById('help-panel');
+    var hint = document.getElementById('help-hint');
+    
+    if (visible) {
+        panel.classList.add('visible');
+        hint.style.display = 'none';
+    } else {
+        panel.classList.remove('visible');
+        hint.style.display = 'block';
+    }
+}
+</script>
+
+</body>
+</html>

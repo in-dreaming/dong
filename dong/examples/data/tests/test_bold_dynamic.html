@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+body { font-family: sans-serif; padding: 20px; }
+.editor {
+    border: 2px solid #333;
+    padding: 16px;
+    min-height: 100px;
+    margin: 10px 0;
+    font-size: 16px;
+    line-height: 1.5;
+}
+</style>
+</head>
+<body>
+<h2>Dynamic Bold Test</h2>
+
+<p>Editor A: Will be bolded via JS execCommand</p>
+<div id="editorA" class="editor" contenteditable="true">
+    Hello, this is an editable area. Try typing here!
+</div>
+
+<p>Editor B: Static reference (no bold)</p>
+<div id="editorB" class="editor" contenteditable="true">
+    Hello, this is an editable area. Try typing here!
+</div>
+
+<div id="log" style="font-family:monospace; font-size:12px; white-space:pre; border:1px solid #ccc; padding:10px; margin-top:10px;"></div>
+
+<script>
+var editor = document.getElementById('editorA');
+var log = document.getElementById('log');
+
+function addLog(msg) {
+    log.textContent += msg + '\n';
+}
+
+// Log initial state
+addLog('=== Before Bold ===');
+addLog('children count: ' + editor.childNodes.length);
+for (var i = 0; i < editor.childNodes.length; i++) {
+    var cn = editor.childNodes[i];
+    if (cn.nodeType === 3) {
+        addLog('[' + i + '] TEXT len=' + cn.textContent.length + ' "' + cn.textContent.replace(/\n/g, '\\n').replace(/\t/g, '\\t') + '"');
+    } else {
+        addLog('[' + i + '] <' + cn.tagName + '> display=' + (cn.style ? cn.style.display : '?'));
+    }
+}
+
+// Select "here" text
+var sel = window.getSelection();
+var textNode = editor.firstChild;
+if (textNode && textNode.nodeType === 3) {
+    var text = textNode.textContent;
+    var hereIdx = text.indexOf('here');
+    addLog('textNode content len=' + text.length);
+    addLog('here found at idx=' + hereIdx);
+
+    if (hereIdx >= 0) {
+        var range = document.createRange();
+        range.setStart(textNode, hereIdx);
+        range.setEnd(textNode, hereIdx + 4);
+        sel.removeAllRanges();
+        sel.addRange(range);
+
+        addLog('Selection set: ' + hereIdx + '-' + (hereIdx + 4));
+
+        // Execute bold
+        var result = document.execCommand('bold');
+        addLog('Bold result: ' + result);
+
+        // Log after state
+        addLog('');
+        addLog('=== After Bold ===');
+        addLog('children count: ' + editor.childNodes.length);
+        for (var j = 0; j < editor.childNodes.length; j++) {
+            var cn2 = editor.childNodes[j];
+            if (cn2.nodeType === 3) {
+                addLog('[' + j + '] TEXT len=' + cn2.textContent.length + ' "' + cn2.textContent.replace(/\n/g, '\\n').replace(/\t/g, '\\t') + '"');
+            } else {
+                addLog('[' + j + '] <' + cn2.tagName + '> display=' + (cn2.style ? cn2.style.display : '?') + ' children=' + cn2.childNodes.length);
+                for (var k = 0; k < cn2.childNodes.length; k++) {
+                    var gc = cn2.childNodes[k];
+                    if (gc.nodeType === 3) {
+                        addLog('  [' + k + '] TEXT len=' + gc.textContent.length + ' "' + gc.textContent.replace(/\n/g, '\\n').replace(/\t/g, '\\t') + '"');
+                    }
+                }
+            }
+        }
+    }
+} else {
+    addLog('ERROR: firstChild is not TEXT, type=' + (textNode ? textNode.nodeType : 'null'));
+}
+</script>
+</body>
+</html>

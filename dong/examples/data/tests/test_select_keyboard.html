@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 2px solid #333;
+            background-color: #f5f5f5;
+        }
+        select {
+            padding: 8px;
+            font-size: 16px;
+            margin: 10px 0;
+            width: 300px;
+        }
+        select:focus {
+            outline: 2px solid #2196f3;
+            outline-offset: 2px;
+        }
+        #log {
+            background-color: #fff;
+            padding: 15px;
+            border: 1px solid #ddd;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 13px;
+            margin-top: 20px;
+        }
+        .log-entry {
+            padding: 6px;
+            margin: 3px 0;
+            border-left: 4px solid #4caf50;
+            background-color: #e8f5e9;
+        }
+        .log-entry.change {
+            border-left-color: #2196f3;
+            background-color: #e3f2fd;
+        }
+        .instructions {
+            background-color: #fff3cd;
+            border: 1px solid #ffc107;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .summary {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #e3f2fd;
+            border: 1px solid #2196f3;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 14px;
+            margin: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Select Element Keyboard Navigation Test</h1>
+
+    <div class="instructions">
+        <h3>📋 Instructions:</h3>
+        <ol>
+            <li>Click on a select element to focus it</li>
+            <li>Use <strong>Arrow Up</strong> and <strong>Arrow Down</strong> keys to navigate options</li>
+            <li>Press <strong>Enter</strong> to confirm selection</li>
+            <li>Use <strong>Tab</strong> to move between select elements</li>
+        </ol>
+    </div>
+
+    <div class="test-section">
+        <h3>Test 1: Countries</h3>
+        <label for="country">Select a country:</label><br>
+        <select id="country" name="country">
+            <option value="us">United States</option>
+            <option value="uk">United Kingdom</option>
+            <option value="ca">Canada</option>
+            <option value="de">Germany</option>
+            <option value="fr">France</option>
+            <option value="jp">Japan</option>
+            <option value="cn">China</option>
+        </select>
+        <div>Current value: <strong id="country-value">us</strong></div>
+    </div>
+
+    <div class="test-section">
+        <h3>Test 2: Colors</h3>
+        <label for="color">Select a color:</label><br>
+        <select id="color" name="color">
+            <option value="red">Red</option>
+            <option value="blue">Blue</option>
+            <option value="green">Green</option>
+            <option value="yellow">Yellow</option>
+            <option value="purple">Purple</option>
+        </select>
+        <div>Current value: <strong id="color-value">red</strong></div>
+    </div>
+
+    <div class="test-section">
+        <h3>Test 3: Numbers</h3>
+        <label for="number">Select a number:</label><br>
+        <select id="number" name="number">
+            <option value="1">One</option>
+            <option value="2">Two</option>
+            <option value="3">Three</option>
+            <option value="4">Four</option>
+            <option value="5">Five</option>
+            <option value="10">Ten</option>
+            <option value="100">One Hundred</option>
+        </select>
+        <div>Current value: <strong id="number-value">1</strong></div>
+    </div>
+
+    <div>
+        <button id="clearLog">Clear Log</button>
+        <button id="resetAll">Reset All</button>
+    </div>
+
+    <div id="log"></div>
+    <div class="summary" id="summary"></div>
+
+    <script>
+        const log = document.getElementById('log');
+        const summary = document.getElementById('summary');
+
+        let eventCount = 0;
+        let changeEvents = 0;
+        let keyboardNavigations = 0;
+
+        function addLog(selectId, eventType, value, selectedIndex) {
+            eventCount++;
+            if (eventType === 'change') changeEvents++;
+
+            const div = document.createElement('div');
+            div.className = 'log-entry ' + eventType;
+
+            let msg = `[${eventCount}] ${eventType} on #${selectId}`;
+            msg += ` - value: "${value}", selectedIndex: ${selectedIndex}`;
+
+            div.textContent = msg;
+
+            log.appendChild(div);
+
+            // Keep only last 30 entries
+            while (log.children.length > 30) {
+                log.removeChild(log.firstChild);
+            }
+
+            // Auto scroll to bottom
+            log.scrollTop = log.scrollHeight;
+
+            updateSummary();
+        }
+
+        function updateSummary() {
+            const hasEvents = eventCount > 0;
+
+            summary.innerHTML = `
+                <h3>Test Summary</h3>
+                <p><strong>Total events:</strong> ${eventCount}</p>
+                <p><strong>Change events:</strong> ${changeEvents}</p>
+                ${hasEvents ?
+                    '<p style="color: green; font-weight: bold;">✓ Select keyboard navigation is working!</p>' :
+                    '<p style="color: gray;">No events detected yet. Try using arrow keys on a focused select.</p>'
+                }
+            `;
+        }
+
+        // Setup listeners for all select elements
+        const selects = [
+            { id: 'country', displayId: 'country-value' },
+            { id: 'color', displayId: 'color-value' },
+            { id: 'number', displayId: 'number-value' }
+        ];
+
+        selects.forEach(function(selectInfo) {
+            const select = document.getElementById(selectInfo.id);
+            const display = document.getElementById(selectInfo.displayId);
+
+            select.addEventListener('change', function(e) {
+                const value = e.target.value;
+                const selectedIndex = e.target.selectedIndex;
+
+                display.textContent = value;
+                addLog(selectInfo.id, 'change', value, selectedIndex);
+            });
+
+            select.addEventListener('focus', function(e) {
+                console.log('Select #' + selectInfo.id + ' focused');
+            });
+
+            select.addEventListener('blur', function(e) {
+                console.log('Select #' + selectInfo.id + ' blurred');
+            });
+
+            // Track keyboard navigation
+            select.addEventListener('keydown', function(e) {
+                if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                    keyboardNavigations++;
+                    console.log('Keyboard navigation: ' + e.key + ' on #' + selectInfo.id);
+                }
+            });
+        });
+
+        // Button handlers
+        document.getElementById('clearLog').addEventListener('click', function() {
+            log.innerHTML = '';
+            eventCount = 0;
+            changeEvents = 0;
+            keyboardNavigations = 0;
+            updateSummary();
+        });
+
+        document.getElementById('resetAll').addEventListener('click', function() {
+            selects.forEach(function(selectInfo) {
+                const select = document.getElementById(selectInfo.id);
+                const display = document.getElementById(selectInfo.displayId);
+
+                select.selectedIndex = 0;
+                display.textContent = select.value;
+            });
+
+            // Clear log
+            log.innerHTML = '';
+            eventCount = 0;
+            changeEvents = 0;
+            keyboardNavigations = 0;
+
+            const initial = document.createElement('div');
+            initial.className = 'log-entry';
+            initial.textContent = 'All selects reset to first option.';
+            log.appendChild(initial);
+
+            updateSummary();
+        });
+
+        // Initial message
+        const initial = document.createElement('div');
+        initial.className = 'log-entry';
+        initial.textContent = 'Test initialized. Focus a select and use arrow keys to navigate.';
+        log.appendChild(initial);
+
+        updateSummary();
+
+        console.log('Select keyboard navigation test ready');
+    </script>
+</body>
+</html>

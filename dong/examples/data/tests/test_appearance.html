@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Appearance Property Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            padding: 20px;
+        }
+
+        .container {
+            margin: 20px 0;
+            padding: 10px;
+            border: 1px solid #ccc;
+        }
+
+        .test-group {
+            margin: 15px 0;
+        }
+
+        .label {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .description {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+
+        /* Test cases for appearance: none */
+        .appearance-none {
+            appearance: none;
+        }
+
+        .appearance-auto {
+            appearance: auto;
+        }
+
+        /* Custom styling for form controls */
+        .custom-input {
+            border: 2px solid #007bff;
+            border-radius: 4px;
+            padding: 8px;
+            background-color: #f8f9fa;
+        }
+
+        .custom-button {
+            background: linear-gradient(to bottom, #007bff, #0056b3);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 10px 20px;
+            cursor: pointer;
+        }
+
+        .custom-checkbox {
+            width: 20px;
+            height: 20px;
+            border: 2px solid #007bff;
+            border-radius: 3px;
+            background-color: white;
+        }
+
+        .custom-select {
+            border: 2px solid #28a745;
+            border-radius: 4px;
+            padding: 8px;
+            background-color: #f8f9fa;
+        }
+
+        .custom-textarea {
+            border: 2px solid #dc3545;
+            border-radius: 4px;
+            padding: 8px;
+            background-color: #f8f9fa;
+            resize: both;
+        }
+    </style>
+</head>
+<body>
+    <h1>Appearance Property Test</h1>
+    <p>This test demonstrates the <code>appearance</code> CSS property which controls browser default styling of form controls.</p>
+
+    <div class="container">
+        <h2>Input Elements</h2>
+
+        <div class="test-group">
+            <div class="label">Default input (appearance: auto)</div>
+            <div class="description">Uses browser default styling</div>
+            <input type="text" placeholder="Default input field" class="appearance-auto">
+        </div>
+
+        <div class="test-group">
+            <div class="label">Custom styled input (appearance: none)</div>
+            <div class="description">Browser default styling removed, custom CSS applied</div>
+            <input type="text" placeholder="Custom styled input" class="appearance-none custom-input">
+        </div>
+
+        <div class="test-group">
+            <div class="label">Checkbox with appearance: none</div>
+            <div class="description">Default checkbox styling removed, custom styling applied</div>
+            <input type="checkbox" id="custom-checkbox" class="appearance-none custom-checkbox">
+            <label for="custom-checkbox">Custom checkbox</label>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>Button Elements</h2>
+
+        <div class="test-group">
+            <div class="label">Default button (appearance: auto)</div>
+            <div class="description">Uses browser default button styling</div>
+            <button class="appearance-auto">Default Button</button>
+        </div>
+
+        <div class="test-group">
+            <div class="label">Custom button (appearance: none)</div>
+            <div class="description">Browser default styling removed, custom gradient applied</div>
+            <button class="appearance-none custom-button">Custom Button</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>Select Elements</h2>
+
+        <div class="test-group">
+            <div class="label">Default select (appearance: auto)</div>
+            <div class="description">Uses browser default dropdown styling</div>
+            <select class="appearance-auto">
+                <option>Option 1</option>
+                <option>Option 2</option>
+                <option>Option 3</option>
+            </select>
+        </div>
+
+        <div class="test-group">
+            <div class="label">Custom select (appearance: none)</div>
+            <div class="description">Browser default styling removed, custom CSS applied</div>
+            <select class="appearance-none custom-select">
+                <option>Custom Option 1</option>
+                <option>Custom Option 2</option>
+                <option>Custom Option 3</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>Textarea Elements</h2>
+
+        <div class="test-group">
+            <div class="label">Default textarea (appearance: auto)</div>
+            <div class="description">Uses browser default textarea styling</div>
+            <textarea class="appearance-auto" placeholder="Default textarea"></textarea>
+        </div>
+
+        <div class="test-group">
+            <div class="label">Custom textarea (appearance: none)</div>
+            <div class="description">Browser default styling removed, custom CSS applied</div>
+            <textarea class="appearance-none custom-textarea" placeholder="Custom textarea"></textarea>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>WebKit Compatibility</h2>
+        <div class="test-group">
+            <div class="label">WebKit appearance prefix</div>
+            <div class="description">Testing -webkit-appearance for compatibility</div>
+            <input type="text" style="-webkit-appearance: none; appearance: none; border: 2px solid purple; padding: 8px;"
+                   placeholder="WebKit appearance test">
+        </div>
+    </div>
+
+    <script>
+        // Add some interactivity to demonstrate appearance:none functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            // Custom checkbox behavior
+            const customCheckbox = document.querySelector('#custom-checkbox');
+            if (customCheckbox) {
+                customCheckbox.addEventListener('change', function() {
+                    if (this.checked) {
+                        this.style.backgroundColor = '#007bff';
+                    } else {
+                        this.style.backgroundColor = 'white';
+                    }
+                });
+            }
+
+            // Log appearance property values for debugging
+            const elements = document.querySelectorAll('[class*="appearance"]');
+            elements.forEach(el => {
+                const computedStyle = window.getComputedStyle(el);
+                console.log(`Element: ${el.tagName}, appearance: ${computedStyle.appearance}`);
+            });
+        });
+    </script>
+</body>
+</html>

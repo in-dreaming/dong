@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Tabindex Sorting Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        
+        .focusable {
+            margin: 10px 0;
+            padding: 10px;
+            border: 2px solid #333;
+            background: #f5f5f5;
+        }
+        
+        .focusable:focus {
+            outline: 3px solid blue;
+            background: lightyellow;
+        }
+        
+        input, button {
+            margin: 5px;
+            padding: 10px;
+            font-size: 14px;
+        }
+        
+        .info {
+            margin: 20px 0;
+            padding: 15px;
+            background: #e8f4f8;
+            border-left: 4px solid #2196F3;
+        }
+        
+        .expected-order {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f0f8e8;
+            border-left: 4px solid #4CAF50;
+        }
+    </style>
+</head>
+<body>
+    <h1>Tabindex Sorting Test</h1>
+    
+    <div class="info">
+        <p><strong>Test Instructions:</strong></p>
+        <p>Press Tab key repeatedly to navigate through focusable elements.</p>
+        <p>The focus order should follow the "Expected Focus Order" below.</p>
+    </div>
+    
+    <div class="expected-order">
+        <p><strong>Expected Focus Order (by tabindex):</strong></p>
+        <ol>
+            <li>Input with tabindex="1" (lowest positive)</li>
+            <li>Button with tabindex="2"</li>
+            <li>Input with tabindex="5"</li>
+            <li>Input with tabindex="10" (highest positive)</li>
+            <li>Default input (no tabindex, defaults to 0)</li>
+            <li>Button with tabindex="0"</li>
+            <li>Default button (no tabindex, defaults to 0)</li>
+            <li>Content editable div</li>
+        </ol>
+        <p><em>Note: Element with tabindex="-1" is skipped in Tab navigation but can be focused programmatically.</em></p>
+    </div>
+    
+    <!-- tabindex=-1 (not in tab order) -->
+    <div class="focusable" tabindex="-1" id="skip">
+        tabindex="-1" - Skipped in Tab navigation
+        <button onclick="focusSkip()">Focus me programmatically</button>
+    </div>
+    
+    <!-- tabindex=0 -->
+    <button class="focusable" tabindex="0">tabindex="0" Button</button>
+    
+    <!-- No tabindex (defaults to 0) -->
+    <input type="text" class="focusable" placeholder="Default input (no tabindex)">
+    
+    <!-- tabindex=10 -->
+    <input type="text" class="focusable" tabindex="10" placeholder="tabindex="10"">
+    
+    <!-- tabindex=2 -->
+    <button class="focusable" tabindex="2">tabindex="2" Button</button>
+    
+    <!-- tabindex=1 -->
+    <input type="text" class="focusable" tabindex="1" placeholder="tabindex="1" (first)">
+    
+    <!-- tabindex=5 -->
+    <input type="text" class="focusable" tabindex="5" placeholder="tabindex="5"">
+    
+    <!-- Default button (no tabindex) -->
+    <button class="focusable">Default button (no tabindex)</button>
+    
+    <!-- Content editable -->
+    <div class="focusable" contenteditable="true">
+        Content editable div (no tabindex attribute)
+    </div>
+    
+    <div id="output" style="margin-top: 20px; padding: 10px; background: #f0f0f0;"></div>
+    
+    <script>
+        function log(msg) {
+            const output = document.getElementById('output');
+            output.innerHTML += msg + '<br>';
+        }
+        
+        function focusSkip() {
+            document.getElementById('skip').focus();
+            log('Focused tabindex="-1" element programmatically');
+        }
+        
+        // Track focus order
+        let focusCount = 0;
+        const focusables = document.querySelectorAll('.focusable, input, button');
+        focusables.forEach(el => {
+            el.addEventListener('focus', function() {
+                focusCount++;
+                const tabindex = el.getAttribute('tabindex') || 'none';
+                log(`#${focusCount} - Focused: ${el.tagName}, tabindex="${tabindex}"`);
+            });
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>test_css_hyphens_soft_hyphen</title>
+  <style>
+    body { font-family: Arial; margin: 24px; }
+    .row { display: flex; gap: 24px; }
+    .box { width: 260px; border: 1px solid #999; padding: 12px; }
+    .label { font-size: 14px; color: #333; margin-bottom: 8px; }
+    .t { width: 180px; border: 1px dashed #bbb; padding: 6px; }
+    .manual { hyphens: manual; }
+    .none { hyphens: none; }
+  </style>
+</head>
+<body>
+  <div class="row">
+    <div class="box">
+      <div class="label">hyphens: manual (soft hyphen should become '-' when breaking)</div>
+      <div class="t manual">hyphenation&shy;demo&shy;word hyphenation&shy;demo&shy;word</div>
+    </div>
+    <div class="box">
+      <div class="label">hyphens: none (no soft hyphen breaks)</div>
+      <div class="t none">hyphenation&shy;demo&shy;word hyphenation&shy;demo&shy;word</div>
+    </div>
+  </div>
+</body>
+</html>

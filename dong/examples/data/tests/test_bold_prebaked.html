@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+body { font-family: sans-serif; padding: 20px; }
+.editor {
+    border: 2px solid #333;
+    padding: 16px;
+    min-height: 100px;
+    margin: 10px 0;
+    font-size: 16px;
+    line-height: 1.5;
+}
+</style>
+</head>
+<body>
+<h2>Bold Layout Test - Pre-baked DOM</h2>
+
+<p>Editor 1: Original (no bold)</p>
+<div class="editor" contenteditable="true">Hello, this is an editable area. Try typing here!</div>
+
+<p>Editor 2: Post-bold structure (manually constructed)</p>
+<div class="editor" contenteditable="true">Hello, this is an editable area. Try typing <span style="display:inline; font-weight:bold;">here</span>!</div>
+
+<div id="log">Comparing editor heights</div>
+</body>
+</html>

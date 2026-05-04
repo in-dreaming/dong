@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>visibility: collapse - Non-table elements</title>
+<style>
+/* Non-table elements: collapse should behave like hidden */
+.collapsed {
+    visibility: collapse;
+}
+
+.visible {
+    visibility: visible;
+}
+
+.hidden {
+    visibility: hidden;
+}
+
+.box {
+    width: 100px;
+    height: 50px;
+    background: lightblue;
+    border: 2px solid blue;
+    margin: 10px;
+}
+</style>
+</head>
+<body>
+<h1>visibility: collapse on non-table elements</h1>
+<p>For non-table elements, visibility: collapse should behave like visibility: hidden (invisible but takes space).</p>
+
+<div>
+  <div class="box visible">Visible box 1</div>
+  <div class="box collapsed">Collapsed box (should be invisible but still occupy space)</div>
+  <div class="box visible">Visible box 2</div>
+</div>
+
+<div>
+  <div class="box visible">Visible box 3</div>
+  <div class="box hidden">Hidden box (for comparison - invisible but occupies space)</div>
+  <div class="box visible">Visible box 4</div>
+</div>
+</body>
+</html>

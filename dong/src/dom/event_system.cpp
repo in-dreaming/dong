@@ -1,4 +1,4 @@
-#include "event_system.hpp"
+﻿#include "event_system.hpp"
 #include <algorithm>
 
 namespace dong::dom {
@@ -52,26 +52,54 @@ void EventDispatcher::removeEventListener(DOMNodePtr target, const std::string& 
     }
 }
 
-void EventDispatcher::dispatch(const Event& event) {
-    if (!event.target) return;
+void EventDispatcher::dispatch(const Event& orig_event) {
+    if (!orig_event.target) return;
+
+    // Inert elements do not receive user-interaction events
+    if (orig_event.target->isInert()) {
+        // Allow lifecycle events (scroll, resize, DOMContentLoaded) through
+        switch (orig_event.type) {
+            case EventType::SCROLL:
+            case EventType::RESIZE:
+            case EventType::DOM_CONTENT_LOADED:
+                break;
+            default:
+                return;
+        }
+    }
+
+    // Create mutable copy to update current_target
+    Event event = orig_event;
 
     // Walk up the DOM tree and dispatch to all parents
     DOMNodePtr current = event.target;
-    
+
     while (current && !event.stopped) {
+        // Set currentTarget to the element currently handling the event
+        event.current_target = current;
+
         uintptr_t key = reinterpret_cast<uintptr_t>(current.get());
         auto it = listeners.find(key);
         if (it != listeners.end()) {
             auto& type_listeners = it->second;
             auto type_it = type_listeners.find(static_cast<int>(event.type));
-            
+
             if (type_it != type_listeners.end()) {
                 for (const auto& entry : type_it->second) {
+                    // Check both stopped and stopped_immediate
+                    if (event.stopped_immediate) {
+                        break;  // Stop calling any more listeners on this element
+                    }
                     if (!event.stopped) {
                         entry.callback(event);
                     }
                 }
             }
+        }
+
+        // stopImmediatePropagation also stops propagation to parent elements
+        if (event.stopped_immediate) {
+            break;
         }
 
         current = current->getParent();
@@ -86,22 +114,57 @@ Event EventDispatcher::createEvent(EventType type) {
     switch (type) {
         case EventType::CLICK: event.type_name = "click"; break;
         case EventType::DOUBLE_CLICK: event.type_name = "dblclick"; break;
+
         case EventType::MOUSE_MOVE: event.type_name = "mousemove"; break;
         case EventType::MOUSE_DOWN: event.type_name = "mousedown"; break;
         case EventType::MOUSE_UP: event.type_name = "mouseup"; break;
         case EventType::MOUSE_ENTER: event.type_name = "mouseenter"; break;
         case EventType::MOUSE_LEAVE: event.type_name = "mouseleave"; break;
+
+        case EventType::POINTER_DOWN: event.type_name = "pointerdown"; break;
+        case EventType::POINTER_UP: event.type_name = "pointerup"; break;
+        case EventType::POINTER_MOVE: event.type_name = "pointermove"; break;
+        case EventType::POINTER_ENTER: event.type_name = "pointerenter"; break;
+        case EventType::POINTER_LEAVE: event.type_name = "pointerleave"; break;
+        case EventType::POINTER_OVER: event.type_name = "pointerover"; break;
+        case EventType::POINTER_OUT: event.type_name = "pointerout"; break;
+        case EventType::POINTER_CANCEL: event.type_name = "pointercancel"; break;
+
         case EventType::KEY_DOWN: event.type_name = "keydown"; break;
         case EventType::KEY_UP: event.type_name = "keyup"; break;
         case EventType::KEY_PRESS: event.type_name = "keypress"; break;
+
         case EventType::FOCUS: event.type_name = "focus"; break;
         case EventType::BLUR: event.type_name = "blur"; break;
+
         case EventType::CHANGE: event.type_name = "change"; break;
+        case EventType::BEFORE_INPUT: event.type_name = "beforeinput"; break;
         case EventType::INPUT: event.type_name = "input"; break;
         case EventType::SUBMIT: event.type_name = "submit"; break;
+
+        case EventType::COPY: event.type_name = "copy"; break;
+        case EventType::CUT: event.type_name = "cut"; break;
+        case EventType::PASTE: event.type_name = "paste"; break;
+
+        case EventType::SCROLL: event.type_name = "scroll"; break;
+        case EventType::RESIZE: event.type_name = "resize"; break;
+        case EventType::WHEEL: event.type_name = "wheel"; break;
+        case EventType::DOM_CONTENT_LOADED: event.type_name = "DOMContentLoaded"; break;
+
+        case EventType::TOGGLE: event.type_name = "toggle"; break;
+        case EventType::CLOSE: event.type_name = "close"; break;
+        case EventType::CANCEL: event.type_name = "cancel"; break;
+        case EventType::DRAG_START: event.type_name = "dragstart"; break;
+        case EventType::DRAG: event.type_name = "drag"; break;
+        case EventType::DRAG_ENTER: event.type_name = "dragenter"; break;
+        case EventType::DRAG_LEAVE: event.type_name = "dragleave"; break;
+        case EventType::DRAG_OVER: event.type_name = "dragover"; break;
+        case EventType::DROP: event.type_name = "drop"; break;
+        case EventType::DRAG_END: event.type_name = "dragend"; break;
+
         case EventType::CUSTOM: event.type_name = "custom"; break;
     }
-    
+
     return event;
 }
 
@@ -116,6 +179,20 @@ Event EventDispatcher::createMouseEvent(EventType type, int32_t x, int32_t y, in
 Event EventDispatcher::createKeyEvent(EventType type, uint32_t key_code) {
     Event event = createEvent(type);
     event.key_code = key_code;
+    return event;
+}
+
+Event EventDispatcher::createPointerEvent(EventType type, int32_t x, int32_t y, 
+                                          int32_t pointer_id, PointerType pointer_type,
+                                          int32_t button, float pressure) {
+    Event event = createEvent(type);
+    event.mouse_x = x;
+    event.mouse_y = y;
+    event.mouse_button = button;
+    event.pointer_id = pointer_id;
+    event.pointer_type = pointer_type;
+    event.pressure = pressure;
+    event.is_primary = (pointer_id == 0);
     return event;
 }
 

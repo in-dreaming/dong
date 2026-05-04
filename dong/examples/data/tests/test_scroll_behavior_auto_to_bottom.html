@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Scroll auto to bottom (scrollTop=scrollHeight)</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: Arial, sans-serif;
+      background: #ffffff;
+    }
+    .container-auto {
+      width: 400px;
+      height: 300px;
+      border: 2px solid #333;
+      overflow: auto;
+      background-color: #f0f0f0;
+      scroll-behavior: auto;
+    }
+    .content {
+      padding: 10px;
+    }
+    .section {
+      height: 250px;
+      padding: 20px;
+      margin-bottom: 10px;
+      border: 1px solid #ddd;
+      background: white;
+    }
+    h2 {
+      margin: 0 0 10px 0;
+      font-size: 16px;
+    }
+  </style>
+</head>
+<body>
+  <h2>Container: scroll-behavior: auto (auto scroll to bottom on load)</h2>
+  <div class="container-auto" id="autoContainer">
+    <div class="content">
+      <div class="section">
+        <h2>Section 1 (Top)</h2>
+        <p>Top</p>
+      </div>
+      <div class="section">
+        <h2>Section 2</h2>
+        <p>Middle content</p>
+      </div>
+      <div class="section">
+        <h2>Section 3 (Bottom)</h2>
+        <p>End of content</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      var container = document.getElementById('autoContainer');
+      container.scrollTop = container.scrollHeight;
+    })();
+  </script>
+</body>
+</html>

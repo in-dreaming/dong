@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Test oklab() Color Function</title>
+    <style>
+        body {
+            margin: 20px;
+            font-family: sans-serif;
+        }
+        .test-box {
+            width: 100px;
+            height: 100px;
+            margin: 10px;
+            display: inline-block;
+            border: 1px solid #333;
+        }
+        .label {
+            font-size: 12px;
+            text-align: center;
+            margin-top: 5px;
+        }
+        .container {
+            display: inline-block;
+            text-align: center;
+            margin: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>oklab() Color Function Tests</h1>
+
+    <h2>Basic oklab() values</h2>
+    <div class="container">
+        <div class="test-box" style="background-color: oklab(1 0 0);"></div>
+        <div class="label">oklab(1 0 0)<br>White</div>
+    </div>
+    <div class="container">
+        <div class="test-box" style="background-color: oklab(0 0 0);"></div>
+        <div class="label">oklab(0 0 0)<br>Black</div>
+    </div>
+    <div class="container">
+        <div class="test-box" style="background-color: oklab(0.5 0 0);"></div>
+        <div class="label">oklab(0.5 0 0)<br>Gray</div>
+    </div>
+
+    <h2>oklab() with a (red-green axis)</h2>
+    <div class="container">
+        <div class="test-box" style="background-color: oklab(0.6 0.2 0.1);"></div>
+        <div class="label">oklab(0.6 0.2 0.1)<br>Reddish</div>
+    </div>
+    <div class="container">
+        <div class="test-box" style="background-color: oklab(0.7 -0.2 0.1);"></div>
+        <div class="label">oklab(0.7 -0.2 0.1)<br>Greenish</div>
+    </div>
+
+    <h2>oklab() with b (blue-yellow axis)</h2>
+    <div class="container">
+        <div class="test-box" style="background-color: oklab(0.7 0.1 0.2);"></div>
+        <div class="label">oklab(0.7 0.1 0.2)<br>Yellowish</div>
+    </div>
+    <div class="container">
+        <div class="test-box" style="background-color: oklab(0.6 0.15 -0.18);"></div>
+        <div class="label">oklab(0.6 0.15 -0.18)<br>Bluish</div>
+    </div>
+
+    <h2>oklab() with alpha</h2>
+    <div class="container">
+        <div class="test-box" style="background-color: oklab(0.6 0.2 0.1 / 0.5); background-image: repeating-conic-gradient(#ccc 0% 25%, white 0% 50%) 50% / 10px 10px;"></div>
+        <div class="label">oklab(0.6 0.2 0.1 / 0.5)<br>50% alpha</div>
+    </div>
+    <div class="container">
+        <div class="test-box" style="background-color: oklab(0.7 -0.15 0.08 / 0.75); background-image: repeating-conic-gradient(#ccc 0% 25%, white 0% 50%) 50% / 10px 10px;"></div>
+        <div class="label">oklab(0.7 -0.15 0.08 / 0.75)<br>75% alpha</div>
+    </div>
+
+    <h2>oklab() with alpha percentage</h2>
+    <div class="container">
+        <div class="test-box" style="background-color: oklab(0.6 0.2 0.1 / 25%); background-image: repeating-conic-gradient(#ccc 0% 25%, white 0% 50%) 50% / 10px 10px;"></div>
+        <div class="label">oklab(0.6 0.2 0.1 / 25%)<br>25% alpha</div>
+    </div>
+
+    <h2>oklab() with text color</h2>
+    <p style="color: oklab(0.7 0.2 0.1);">This text is red (oklab)</p>
+    <p style="color: oklab(0.5 -0.15 -0.15);">This text is blue (oklab)</p>
+
+    <h2>oklab() with border color</h2>
+    <div class="test-box" style="border: 5px solid oklab(0.6 0.25 0.1);"></div>
+    <div class="label">Red border</div>
+
+    <h2>oklab() extreme values (clamped)</h2>
+    <div class="container">
+        <div class="test-box" style="background-color: oklab(1.5 0 0);"></div>
+        <div class="label">oklab(1.5 0 0)<br>L clamped to 1</div>
+    </div>
+    <div class="container">
+        <div class="test-box" style="background-color: oklab(-0.5 0 0);"></div>
+        <div class="label">oklab(-0.5 0 0)<br>L clamped to 0</div>
+    </div>
+</body>
+</html>

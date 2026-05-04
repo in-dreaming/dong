@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  body { font-size: 16px; padding: 20px; }
+  #target1, #target2, #target3, #target4 { padding: 20px; background: lightyellow; border: 2px solid orange; min-height: 60px; margin-bottom: 20px; }
+  #result { margin-top: 20px; padding: 10px; background: #eee; white-space: pre; font-family: monospace; }
+</style>
+</head>
+<body>
+  <h1>P2 Event Features Test</h1>
+
+  <div id="target1" tabindex="0">1. Clipboard (Ctrl+C/X/V)</div>
+  <div id="target2" tabindex="0">2. Beforeinput (type characters)</div>
+  <div id="target3">3. Mouse extended properties (move/click)</div>
+  <div id="target4" tabindex="0">4. Key repeat (hold key)</div>
+
+  <div id="result"></div>
+
+  <script>
+    var r = '';
+    var target1 = document.getElementById('target1');
+    var target2 = document.getElementById('target2');
+    var target3 = document.getElementById('target3');
+    var target4 = document.getElementById('target4');
+
+    // === Feature 1: Clipboard events (copy/cut/paste) ===
+    r += '=== 1. Clipboard Events ===\n';
+
+    ['copy', 'cut', 'paste'].forEach(function(type) {
+      target1.addEventListener(type, function(e) {
+        r += type + ' event: isTrusted=' + e.isTrusted;
+        if (e.clipboardData) {
+          r += ', clipboardData=' + JSON.stringify(e.clipboardData);
+        }
+        r += '\n';
+        document.getElementById('result').textContent = r;
+      });
+    });
+
+    // === Feature 2: beforeinput event with preventDefault ===
+    r += '=== 2. Beforeinput Event ===\n';
+
+    target2.addEventListener('beforeinput', function(e) {
+      r += 'beforeinput: inputType=' + e.inputType + ', data=' + e.data + ', isTrusted=' + e.isTrusted + '\n';
+      document.getElementById('result').textContent = r;
+    });
+
+    target2.addEventListener('input', function(e) {
+      r += 'input: inputType=' + e.inputType + ', data=' + e.data + ', isTrusted=' + e.isTrusted + '\n';
+      document.getElementById('result').textContent = r;
+    });
+
+    // === Feature 3: MouseEvent extended properties ===
+    r += '=== 3. Mouse Extended Properties ===\n';
+
+    target3.addEventListener('mousemove', function(e) {
+      if (e.movementX !== 0 || e.movementY !== 0) {
+        r += 'mousemove: pageX=' + e.pageX + ', pageY=' + e.pageY + ', ';
+        r += 'movementX=' + e.movementX + ', movementY=' + e.movementY + '\n';
+        document.getElementById('result').textContent = r;
+      }
+    });
+
+    target3.addEventListener('click', function(e) {
+      r += 'click: pageX=' + e.pageX + ', pageY=' + e.pageY;
+      r += ', offsetX=' + e.offsetX + ', offsetY=' + e.offsetY;
+      r += ', isTrusted=' + e.isTrusted + '\n';
+      document.getElementById('result').textContent = r;
+    });
+
+    // === Feature 4: KeyboardEvent.repeat ===
+    r += '=== 4. KeyboardEvent.repeat ===\n';
+
+    target4.addEventListener('keydown', function(e) {
+      r += 'keydown: key="' + e.key + '", repeat=' + e.repeat + ', isTrusted=' + e.isTrusted + '\n';
+      document.getElementById('result').textContent = r;
+    });
+
+    // === Feature 5: isTrusted verification (shown in all events above) ===
+    r += '=== 5. Event.isTrusted (shown above) ===\n';
+    r += '\nAll user-initiated events show isTrusted=true\n';
+
+    // Test dispatchEvent creates non-trusted events
+    var testDiv = document.createElement('div');
+    testDiv.addEventListener('click', function(e) {
+      r += '\nProgrammatic click (dispatchEvent): isTrusted=' + e.isTrusted + ' (should be false)\n';
+      document.getElementById('result').textContent = r;
+    });
+    var evt = new MouseEvent('click');
+    testDiv.dispatchEvent(evt);
+
+    r += '\nTest loaded. Interact with each box to verify features.\n';
+    document.getElementById('result').textContent = r;
+    console.log('P2 Event Features test loaded');
+  </script>
+</body>
+</html>

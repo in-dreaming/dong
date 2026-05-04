@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  body { font-size: 18px; }
+</style>
+</head>
+<body>
+  <p>Normal text. <a href="#" id="link1">This is a link</a> and more text.</p>
+  <p><a href="https://example.com" id="link2">Another link</a></p>
+  <div id="result" style="margin-top: 20px; padding: 10px; background: #eee;"></div>
+  <script>
+    var r = '';
+    // Anchor tags should have blue color (#0000EE), underline, pointer cursor
+    r += 'Anchor default styles test loaded\n';
+    r += 'Links should appear blue with underline\n';
+    document.getElementById('result').textContent = r;
+    console.log('Anchor default style test loaded');
+  </script>
+</body>
+</html>

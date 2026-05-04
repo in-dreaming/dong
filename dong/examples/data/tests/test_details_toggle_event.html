@@ -1,0 +1,41 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    html, body { margin: 0; background: #000; }
+    #status { position: absolute; left: 20px; top: 20px; width: 220px; height: 64px; background: #ff0000; }
+    details { position: absolute; left: -2000px; top: -2000px; font-size: 0px; }
+  </style>
+</head>
+<body>
+  <div id="status"></div>
+  <details id="d"><summary></summary><div></div></details>
+
+  <script>
+    function setOK(ok) {
+      document.getElementById('status').style.background = ok ? '#00ff00' : '#ff0000';
+    }
+
+    try {
+      const d = document.getElementById('d');
+      const expected = 1;
+
+      let toggles = 0;
+      d.addEventListener('toggle', () => {
+        toggles++;
+        if (toggles >= expected) {
+          setOK(true);
+        }
+      });
+
+      d.setAttribute('open', '');
+      d.removeAttribute('open');
+      d.setAttribute('open', '');
+
+    } catch (e) {
+      setOK(false);
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+        }
+        .scroll-container {
+            width: 600px;
+            height: 400px;
+            overflow: auto;
+            border: 2px solid #333;
+            background: #f0f0f0;
+        }
+        .parent {
+            margin: 20px;
+            padding: 20px;
+            height: 600px;
+            background: #FFE082;
+            border: 3px solid #FFA000;
+        }
+        .block {
+            height: 100px;
+            margin-bottom: 20px;
+            padding: 20px;
+            background: #ddd;
+            border: 1px solid #999;
+        }
+        .sticky {
+            position: sticky;
+            top: 10px;
+            background: #F44336;
+            color: white;
+            padding: 15px;
+            margin-bottom: 20px;
+            border: 2px solid #C62828;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>Sticky Positioning Test - Parent Clamp</h1>
+    <p>The sticky element (red) should clamp to its parent's (yellow) bottom boundary when scrolling down.</p>
+
+    <div class="scroll-container">
+        <div class="block">Block Before Parent</div>
+
+        <div class="parent">
+            <h3 style="margin-top: 0;">Parent Container (Yellow Box)</h3>
+            <div class="block">Block 1 in parent</div>
+
+            <div class="sticky">STICKY ELEMENT - Should clamp to parent boundary</div>
+
+            <div class="block">Block 2 in parent</div>
+            <div class="block">Block 3 in parent</div>
+        </div>
+
+        <div class="block">Block After Parent</div>
+        <div class="block">Block 2 After Parent</div>
+        <div class="block">Block 3 After Parent</div>
+    </div>
+</body>
+</html>

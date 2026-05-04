@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Opacity Percentage Value Test</title>
+    <style>
+        body {
+            margin: 20px;
+            font-family: sans-serif;
+            background: white;
+        }
+
+        .container {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .box {
+            width: 100px;
+            height: 100px;
+            background: #FF0000;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+
+        .opacity-100 {
+            opacity: 100%;
+        }
+
+        .opacity-75 {
+            opacity: 75%;
+        }
+
+        .opacity-50 {
+            opacity: 50%;
+        }
+
+        .opacity-25 {
+            opacity: 25%;
+        }
+
+        .opacity-0 {
+            opacity: 0%;
+        }
+
+        .opacity-decimal-05 {
+            opacity: 0.5;
+        }
+
+        .opacity-decimal-025 {
+            opacity: 0.25;
+        }
+
+        h1 {
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+
+        .label {
+            margin-top: 5px;
+            text-align: center;
+            font-size: 14px;
+        }
+
+        .box-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+    </style>
+</head>
+<body>
+    <h1>Opacity Percentage Value Test</h1>
+
+    <div class="container">
+        <div class="box-wrapper">
+            <div class="box opacity-100">100%</div>
+            <div class="label">opacity: 100%</div>
+        </div>
+
+        <div class="box-wrapper">
+            <div class="box opacity-75">75%</div>
+            <div class="label">opacity: 75%</div>
+        </div>
+
+        <div class="box-wrapper">
+            <div class="box opacity-50">50%</div>
+            <div class="label">opacity: 50%</div>
+        </div>
+
+        <div class="box-wrapper">
+            <div class="box opacity-25">25%</div>
+            <div class="label">opacity: 25%</div>
+        </div>
+
+        <div class="box-wrapper">
+            <div class="box opacity-0">0%</div>
+            <div class="label">opacity: 0%</div>
+        </div>
+    </div>
+
+    <h1 style="margin-top: 30px;">Decimal Comparison</h1>
+    <div class="container">
+        <div class="box-wrapper">
+            <div class="box opacity-decimal-05">0.5</div>
+            <div class="label">opacity: 0.5</div>
+        </div>
+
+        <div class="box-wrapper">
+            <div class="box opacity-decimal-025">0.25</div>
+            <div class="label">opacity: 0.25</div>
+        </div>
+    </div>
+</body>
+</html>

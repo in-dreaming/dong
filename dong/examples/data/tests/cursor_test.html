@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            padding: 20px;
+            background-color: #1a1a2e;
+            color: #eaeaea;
+            font-family: Arial, sans-serif;
+        }
+        .section {
+            background-color: #16213e;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+        .section-title {
+            font-size: 16px;
+            color: #e94560;
+            margin-bottom: 12px;
+        }
+        .demo-row {
+            margin-bottom: 12px;
+        }
+        .demo-item {
+            display: inline-block;
+            min-width: 160px;
+            min-height: 40px;
+            margin: 6px 10px 6px 0;
+            padding: 12px 18px;
+            background-color: #0b1f3f;
+            border: 1px solid rgba(0, 212, 255, 0.45);
+            border-radius: 8px;
+            color: #ffffff;
+            text-align: left;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            line-height: 1.2;
+            vertical-align: top;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+        }
+        .cursor-auto { cursor: auto; }
+        .cursor-default { cursor: default; }
+        .cursor-pointer { cursor: pointer; }
+        .cursor-text { cursor: text; }
+        .cursor-move { cursor: move; }
+        .cursor-wait { cursor: wait; }
+        .cursor-crosshair { cursor: crosshair; }
+        .cursor-not-allowed { cursor: not-allowed; }
+        .cursor-ns-resize { cursor: ns-resize; }
+        .cursor-ew-resize { cursor: ew-resize; }
+        .cursor-grab { cursor: grab; }
+    </style>
+</head>
+<body>
+    <div class="section">
+        <div class="section-title">CSS Cursor Property Test</div>
+        <div class="demo-row">
+            <div class="demo-item cursor-auto">auto</div>
+            <div class="demo-item cursor-default">default</div>
+            <div class="demo-item cursor-pointer">pointer</div>
+            <div class="demo-item cursor-text">text</div>
+        </div>
+        <div class="demo-row">
+            <div class="demo-item cursor-move">move</div>
+            <div class="demo-item cursor-wait">wait</div>
+            <div class="demo-item cursor-crosshair">crosshair</div>
+            <div class="demo-item cursor-not-allowed">not-allowed</div>
+        </div>
+        <div class="demo-row">
+            <div class="demo-item cursor-ns-resize">ns-resize</div>
+            <div class="demo-item cursor-ew-resize">ew-resize</div>
+            <div class="demo-item cursor-grab">grab</div>
+        </div>
+    </div>
+    <div class="section">
+        <div class="section-title">Instructions</div>
+        <div>Hover over each box to see the cursor change.</div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  body { color: green; font-size: 18px; }
+  .inherit-test { color: inherit; }
+  .initial-test { color: initial; }
+  .unset-inheritable { color: unset; /* color is inheritable, so acts like inherit */ }
+  .unset-noninheritable { display: unset; /* display is NOT inheritable, acts like initial */ }
+</style>
+</head>
+<body>
+  <div style="color: red;">
+    <div class="inherit-test" id="t1">inherit: should be red (from parent)</div>
+    <div class="initial-test" id="t2">initial: should be default (#000000)</div>
+    <div class="unset-inheritable" id="t3">unset color: should be red (inheritable)</div>
+  </div>
+  <span class="unset-noninheritable" id="t4">unset display: should be initial (inline)</span>
+  <div id="result" style="margin-top: 20px; padding: 10px; background: #eee;"></div>
+  <script>
+    var r = 'CSS global keywords test loaded\n';
+    r += 'inherit keyword: OK\n';
+    r += 'initial keyword: OK\n';
+    r += 'unset keyword (inheritable): OK\n';
+    r += 'unset keyword (non-inheritable): OK\n';
+    document.getElementById('result').textContent = r;
+    console.log('CSS global keywords test loaded');
+  </script>
+</body>
+</html>

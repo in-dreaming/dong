@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  body { font-size: 16px; padding: 20px; }
+  #target { padding: 20px; background: lightyellow; border: 2px solid orange; min-height: 60px; }
+  #result { margin-top: 20px; padding: 10px; background: #eee; white-space: pre; font-family: monospace; }
+</style>
+</head>
+<body>
+  <div id="target" tabindex="0">Click and focus, type some text, then press Ctrl+C/X/V</div>
+  <div id="result"></div>
+  <script>
+    var r = '';
+    var target = document.getElementById('target');
+
+    target.addEventListener('copy', function(e) {
+      r += 'copy event:\n';
+      r += '  type=' + e.type + '\n';
+      r += '  bubbles=' + e.bubbles + '\n';
+      r += '  cancelable=' + e.cancelable + '\n';
+      r += '  isTrusted=' + e.isTrusted + '\n';
+      if (e.clipboardData) {
+        r += '  clipboardData exists: true\n';
+        for (var key in e.clipboardData) {
+          r += '    clipboardData.' + key + '=' + e.clipboardData[key] + '\n';
+        }
+      }
+      document.getElementById('result').textContent = r;
+    });
+
+    target.addEventListener('cut', function(e) {
+      r += 'cut event:\n';
+      r += '  type=' + e.type + '\n';
+      r += '  bubbles=' + e.bubbles + '\n';
+      r += '  cancelable=' + e.cancelable + '\n';
+      r += '  isTrusted=' + e.isTrusted + '\n';
+      if (e.clipboardData) {
+        r += '  clipboardData exists: true\n';
+        for (var key in e.clipboardData) {
+          r += '    clipboardData.' + key + '=' + e.clipboardData[key] + '\n';
+        }
+      }
+      document.getElementById('result').textContent = r;
+    });
+
+    target.addEventListener('paste', function(e) {
+      r += 'paste event:\n';
+      r += '  type=' + e.type + '\n';
+      r += '  bubbles=' + e.bubbles + '\n';
+      r += '  cancelable=' + e.cancelable + '\n';
+      r += '  isTrusted=' + e.isTrusted + '\n';
+      if (e.clipboardData) {
+        r += '  clipboardData exists: true\n';
+        for (var key in e.clipboardData) {
+          r += '    clipboardData.' + key + '=' + e.clipboardData[key] + '\n';
+        }
+      }
+      document.getElementById('result').textContent = r;
+    });
+
+    r += 'Clipboard events test loaded\n';
+    r += 'Type text in the box, then:\n';
+    r += '- Ctrl+C for copy event\n';
+    r += '- Ctrl+X for cut event\n';
+    r += '- Ctrl+V for paste event\n';
+    document.getElementById('result').textContent = r;
+    console.log('Clipboard events test loaded');
+  </script>
+</body>
+</html>

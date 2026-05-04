@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test CSSStyleDeclaration.cssText</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        .test-box {
+            width: 200px;
+            height: 100px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+        }
+        #test1 {
+            background-color: #eeeeee;
+            color: #333333;
+        }
+        #test2 {
+            background-color: #dddddd;
+            color: #555555;
+        }
+        #test3 {
+            background-color: #cccccc;
+            color: #777777;
+        }
+        #test4 {
+            background-color: #bbbbbb;
+            color: #999999;
+            white-space: pre-wrap;
+        }
+        .result {
+            font-family: monospace;
+            background: #f5f5f5;
+            padding: 10px;
+            margin: 10px 0;
+            border-left: 3px solid #0066cc;
+        }
+        .success {
+            color: green;
+        }
+    </style>
+</head>
+<body>
+    <h1>Test CSSStyleDeclaration.cssText</h1>
+
+    <h2>Test 1: Read cssText of element with inline styles</h2>
+    <div id="test1" class="test-box" style="background-color: red; color: white; border: 2px solid blue;">Test Box 1</div>
+    <div class="result" id="result1">Result: </div>
+
+    <h2>Test 2: Read cssText of element with no inline styles</h2>
+    <div id="test2" class="test-box">Test Box 2</div>
+    <div class="result" id="result2">Result: </div>
+
+    <h2>Test 3: Set cssText on element</h2>
+    <div id="test3" class="test-box">Test Box 3</div>
+    <div class="result" id="result3">Result: </div>
+
+    <h2>Test 4: Set cssText with multiple properties</h2>
+    <div id="test4" class="test-box">Test Box 4</div>
+    <div class="result" id="result4">Result: </div>
+
+    <h2>Test 5: Set empty cssText to clear styles</h2>
+    <div id="test5" class="test-box" style="background-color: red; color: white;">Test Box 5</div>
+    <div class="result" id="result5">Result: </div>
+
+    <script>
+        // Test 1: Read cssText of element with inline styles
+        const test1 = document.getElementById('test1');
+        const cssText1 = test1.style.cssText;
+        document.getElementById('result1').textContent =
+            'cssText: "' + cssText1 + '"';
+
+        // Test 2: Read cssText of element with no inline styles
+        const test2 = document.getElementById('test2');
+        const cssText2 = test2.style.cssText;
+        document.getElementById('result2').textContent =
+            'cssText: "' + cssText2 + '"' + (cssText2 === '' ? ' ✓' : ' ✗');
+
+        // Test 3: Set cssText on element
+        const test3 = document.getElementById('test3');
+        test3.style.cssText = 'background-color: green; color: white; padding: 10px;';
+        const cssText3 = test3.style.cssText;
+        document.getElementById('result3').textContent =
+            'After setting cssText: "' + cssText3 + '"';
+        test3.textContent = 'Should be green with white text';
+
+        // Test 4: Set cssText with multiple properties
+        const test4 = document.getElementById('test4');
+        test4.style.cssText = 'background-color: purple; color: white; border: 3px solid orange; padding: 15px; font-weight: bold;';
+        const cssText4 = test4.style.cssText;
+        document.getElementById('result4').textContent =
+            'After setting cssText: "' + cssText4 + '"';
+        test4.textContent = 'Should be purple with orange border';
+
+        // Test 5: Set empty cssText to clear styles
+        const test5 = document.getElementById('test5');
+        const beforeClear = test5.style.cssText;
+        test5.style.cssText = '';
+        const afterClear = test5.style.cssText;
+        document.getElementById('result5').textContent =
+            'Before: "' + beforeClear + '"' + '\nAfter: "' + afterClear + '"' +
+            (afterClear === '' ? ' ✓' : ' ✗');
+    </script>
+</body>
+</html>

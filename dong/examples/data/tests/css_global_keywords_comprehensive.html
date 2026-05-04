@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>CSS Global Keywords: Comprehensive Test</title>
+    <style>
+        body {
+            margin: 20px;
+            font-family: Arial, sans-serif;
+            color: #333;
+            font-size: 14px;
+        }
+
+        h1 {
+            font-size: 28px;
+            margin-bottom: 20px;
+            color: #000;
+        }
+
+        h2 {
+            font-size: 20px;
+            margin-top: 30px;
+            margin-bottom: 15px;
+            color: #666;
+            border-bottom: 2px solid #ddd;
+            padding-bottom: 5px;
+        }
+
+        .test-container {
+            margin-bottom: 30px;
+            border: 1px solid #ccc;
+            padding: 15px;
+            background-color: #f9f9f9;
+        }
+
+        .parent-box {
+            background-color: #e3f2fd;
+            border: 3px solid #2196f3;
+            padding: 15px;
+            margin: 10px 0;
+            color: #0d47a1;
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .child {
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px dashed #999;
+        }
+
+        /* inherit tests */
+        .inherit-border { border: inherit; }
+        .inherit-bg { background-color: inherit; }
+        .inherit-padding { padding: inherit; }
+        .inherit-color { color: inherit; }
+        .inherit-all {
+            border: inherit;
+            background-color: inherit;
+            padding: inherit;
+        }
+
+        /* initial tests */
+        .initial-color { color: initial; }
+        .initial-font-size { font-size: initial; }
+        .initial-font-weight { font-weight: initial; }
+        .initial-border { border: initial; }
+
+        /* unset tests */
+        .unset-color { color: unset; }
+        .unset-font-size { font-size: unset; }
+        .unset-border { border: unset; }
+        .unset-bg { background-color: unset; }
+
+        /* Mixed explicit styles for testing override */
+        .explicit {
+            color: red;
+            font-size: 24px;
+            background-color: yellow;
+            border: 2px solid purple;
+        }
+
+        .explicit-then-inherit {
+            color: red;
+            background-color: yellow;
+        }
+        .explicit-then-inherit * {
+            color: inherit;
+            background-color: inherit;
+        }
+
+        code {
+            background-color: #f0f0f0;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <h1>CSS Global Keywords: Comprehensive Test Suite</h1>
+
+    <h2>1. inherit Keyword</h2>
+    <div class="test-container">
+        <p><strong>Test:</strong> Non-inheritable properties with <code>inherit</code></p>
+        <div class="parent-box">
+            Parent (blue bg, blue border, 15px padding)
+            <div class="child">Normal child (no border/bg/padding)</div>
+            <div class="child inherit-all">inherit all (should copy parent's border/bg/padding)</div>
+        </div>
+    </div>
+
+    <div class="test-container">
+        <p><strong>Test:</strong> Inheritable properties with <code>inherit</code></p>
+        <div class="parent-box">
+            Parent (dark blue text, 18px, bold)
+            <div class="child explicit" style="color: green; font-size: 12px;">
+                Explicit green 12px
+            </div>
+            <div class="child explicit inherit-color" style="color: green; font-size: 12px;">
+                Explicit green + inherit color (should be dark blue like parent)
+            </div>
+        </div>
+    </div>
+
+    <h2>2. initial Keyword</h2>
+    <div class="test-container">
+        <p><strong>Test:</strong> Reset inherited properties to initial</p>
+        <div class="parent-box">
+            Parent (dark blue, 18px, bold)
+            <div class="child">Normal child (inherits all)</div>
+            <div class="child initial-color">initial color (should be black)</div>
+            <div class="child initial-font-size">initial font-size (should be default ~16px)</div>
+            <div class="child initial-font-weight">initial font-weight (should be normal)</div>
+        </div>
+    </div>
+
+    <div class="test-container">
+        <p><strong>Test:</strong> Reset non-inherited properties to initial</p>
+        <div class="parent-box">
+            Parent (blue border)
+            <div class="child explicit">Explicit border (purple)</div>
+            <div class="child explicit initial-border">Explicit + initial border (should have no visible border)</div>
+        </div>
+    </div>
+
+    <h2>3. unset Keyword</h2>
+    <div class="test-container">
+        <p><strong>Test:</strong> unset on inheritable properties (behaves like inherit)</p>
+        <div class="parent-box">
+            Parent (dark blue, 18px)
+            <div class="child explicit">Explicit (red, 24px)</div>
+            <div class="child explicit unset-color unset-font-size">
+                Explicit + unset (should inherit parent's blue and 18px)
+            </div>
+        </div>
+    </div>
+
+    <div class="test-container">
+        <p><strong>Test:</strong> unset on non-inheritable properties (behaves like initial)</p>
+        <div class="parent-box">
+            Parent (blue bg, blue border)
+            <div class="child explicit">Explicit (yellow bg, purple border)</div>
+            <div class="child explicit unset-bg unset-border">
+                Explicit + unset (should have no bg/border, not inherit parent's)
+            </div>
+        </div>
+    </div>
+
+    <h2>4. Cascading and Specificity</h2>
+    <div class="test-container">
+        <p><strong>Test:</strong> Global keywords with specificity</p>
+        <div class="parent-box">
+            Parent
+            <div class="child explicit-then-inherit">
+                Parent with explicit styles
+                <div>Child (should inherit red text and yellow bg from parent)</div>
+            </div>
+        </div>
+    </div>
+
+    <h2>5. Edge Cases</h2>
+    <div class="test-container">
+        <p><strong>Test:</strong> Multiple levels of inheritance</p>
+        <div class="parent-box" style="color: #ff0000;">
+            Grandparent (red)
+            <div style="color: #00ff00;">
+                Parent (green)
+                <div class="child">Normal child (green)</div>
+                <div class="child" style="color: inherit;">Explicit inherit (green from parent)</div>
+                <div class="child" style="color: initial;">Explicit initial (black)</div>
+                <div class="child" style="color: unset;">Explicit unset (green from parent)</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="test-container">
+        <p><strong>Summary:</strong></p>
+        <ul>
+            <li><code>inherit</code>: Always inherit from parent, even for non-inheritable properties</li>
+            <li><code>initial</code>: Reset to CSS-spec initial value</li>
+            <li><code>unset</code>: For inheritable = inherit, for non-inheritable = initial</li>
+        </ul>
+    </div>
+</body>
+</html>

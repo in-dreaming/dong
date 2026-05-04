@@ -1,0 +1,60 @@
+{
+  "default_timeout_seconds": 10,
+  "cases": [
+    {
+      "name": "3d_cube",
+      "timeout": 5
+    },
+    {
+      "name": "3d_screen",
+      "timeout": 5
+    },
+    {
+      "name": "3d_screen_html",
+      "needs_data_dir": true,
+      "timeout": 10
+    },
+    {
+      "name": "3d_screen_script",
+      "needs_data_dir": true,
+      "timeout": 10
+    },
+    {
+      "name": "gpu_screenshot_demo",
+      "timeout": 10
+    },
+    {
+      "name": "gpu_screenshot_demo_fontonly",
+      "timeout": 10
+    },
+    {
+      "name": "gpu_screenshot_demo_basic_layout",
+      "timeout": 10
+    },
+    {
+      "name": "gpu_screenshot_demo_glyph_stress",
+      "timeout": 15
+    },
+    {
+      "name": "gpu_screenshot_analysis",
+      "timeout": 10
+    },
+    {
+      "name": "interactive_demo",
+      "set_layer_cache_env": true,
+      "timeout": 5
+    },
+    {
+      "name": "integration_demo",
+      "timeout": 5
+    },
+    {
+      "name": "sdl_gpu_demo",
+      "timeout": 5
+    },
+    {
+      "name": "dong_app",
+      "timeout": 5
+    }
+  ]
+}

@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Select - Programmatic Setters</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; background: #f7f7f7; }
+    .card { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 16px; margin: 12px 0; }
+    .row { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+    select { padding: 10px; font-size: 16px; border: 2px solid #4caf50; border-radius: 6px; background: #fff; width: 260px; }
+    .mono { font-family: Menlo, Monaco, Consolas, 'Courier New', monospace; font-size: 13px; background: #111; color: #f5f5f5; padding: 10px; border-radius: 6px; }
+    .hint { color: #666; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <h1>Select - Programmatic Setters (Chunk 8)</h1>
+
+  <div class="card">
+    <h2>Test 1: selectedIndex setter updates value + selectedIndex</h2>
+    <div class="row">
+      <select id="s1">
+        <option value="a">Option A</option>
+        <option value="b">Option B</option>
+        <option value="c">Option C</option>
+        <option value="d">Option D</option>
+      </select>
+      <div class="mono" id="out1">(pending)</div>
+    </div>
+    <div class="hint">On load we set selectedIndex=2 and dispatch a change event.</div>
+  </div>
+
+  <div class="card">
+    <h2>Test 2: value setter maps to matching option (disabled option should be skipped)</h2>
+    <div class="row">
+      <select id="s2">
+        <option value="apple">Apple</option>
+        <option value="banana" disabled>Banana (disabled)</option>
+        <option value="cherry">Cherry</option>
+      </select>
+      <div class="mono" id="out2">(pending)</div>
+    </div>
+    <div class="hint">On load we set value="banana" then value="cherry" and dispatch change manually.</div>
+  </div>
+
+  <script>
+    function dump(sel) {
+      return 'id=' + sel.id + ' value="' + sel.value + '" selectedIndex=' + sel.selectedIndex;
+    }
+
+    function setOut(id, text) {
+      var el = document.getElementById(id);
+      if (el) el.textContent = text;
+    }
+
+    (function () {
+      var s1 = document.getElementById('s1');
+      s1.selectedIndex = 2;
+      s1.dispatchEvent(new Event('change', { bubbles: true }));
+      setOut('out1', dump(s1));
+
+      s1.addEventListener('change', function () {
+        setOut('out1', dump(s1));
+      });
+
+      var s2 = document.getElementById('s2');
+      s2.value = 'banana';
+      s2.value = 'cherry';
+      s2.dispatchEvent(new Event('change', { bubbles: true }));
+      setOut('out2', dump(s2));
+
+      s2.addEventListener('change', function () {
+        setOut('out2', dump(s2));
+      });
+    })();
+  </script>
+</body>
+</html>

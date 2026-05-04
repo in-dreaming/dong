@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Font-Weight Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            padding: 20px;
+            background: white;
+            font-size: 14px;
+        }
+        .test-section {
+            margin-bottom: 30px;
+            padding: 15px;
+            border: 1px solid #eee;
+            border-radius: 8px;
+        }
+        h2 {
+            margin: 0 0 15px 0;
+            font-size: 16px;
+            color: #333;
+        }
+        .weight-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+            gap: 20px;
+        }
+        .weight-label {
+            width: 100px;
+            font-size: 12px;
+            color: #666;
+            font-weight: 400;
+        }
+        .weight-value {
+            width: 50px;
+            font-size: 12px;
+            color: #666;
+        }
+        .sample {
+            font-size: 16px;
+        }
+        .w100 { font-weight: 100; }
+        .w200 { font-weight: 200; }
+        .w300 { font-weight: 300; }
+        .w400 { font-weight: 400; }
+        .w500 { font-weight: 500; }
+        .w600 { font-weight: 600; }
+        .w700 { font-weight: 700; }
+        .w800 { font-weight: 800; }
+        .w900 { font-weight: 900; }
+        .normal { font-weight: normal; }
+        .bold { font-weight: bold; }
+        .bolder { font-weight: bolder; }
+        .lighter { font-weight: lighter; }
+
+        /* Test with different font families */
+        .arial { font-family: Arial, sans-serif; }
+        .helvetica { font-family: "Helvetica Neue", Helvetica, sans-serif; }
+        .times { font-family: "Times New Roman", Times, serif; }
+        .courier { font-family: "Courier New", monospace; }
+    </style>
+</head>
+<body>
+    <h1>Font-Weight Test</h1>
+    <p>Testing font-weight values from 100 to 900 with different font families.</p>
+
+    <!-- Test 1: Numeric weight values (100-900) -->
+    <div class="test-section">
+        <h2>1. Numeric Weight Values (100-900)</h2>
+        <div class="weight-row">
+            <span class="weight-label">Thin 100</span>
+            <span class="weight-value">100</span>
+            <span class="sample w100">The quick brown fox jumps over the lazy dog</span>
+        </div>
+        <div class="weight-row">
+            <span class="weight-label">Extra Light</span>
+            <span class="weight-value">200</span>
+            <span class="sample w200">The quick brown fox jumps over the lazy dog</span>
+        </div>
+        <div class="weight-row">
+            <span class="weight-label">Light 300</span>
+            <span class="weight-value">300</span>
+            <span class="sample w300">The quick brown fox jumps over the lazy dog</span>
+        </div>
+        <div class="weight-row">
+            <span class="weight-label">Normal 400</span>
+            <span class="weight-value">400</span>
+            <span class="sample w400">The quick brown fox jumps over the lazy dog</span>
+        </div>
+        <div class="weight-row">
+            <span class="weight-label">Medium 500</span>
+            <span class="weight-value">500</span>
+            <span class="sample w500">The quick brown fox jumps over the lazy dog</span>
+        </div>
+        <div class="weight-row">
+            <span class="weight-label">Semi Bold</span>
+            <span class="weight-value">600</span>
+            <span class="sample w600">The quick brown fox jumps over the lazy dog</span>
+        </div>
+        <div class="weight-row">
+            <span class="weight-label">Bold 700</span>
+            <span class="weight-value">700</span>
+            <span class="sample w700">The quick brown fox jumps over the lazy dog</span>
+        </div>
+        <div class="weight-row">
+            <span class="weight-label">Extra Bold</span>
+            <span class="weight-value">800</span>
+            <span class="sample w800">The quick brown fox jumps over the lazy dog</span>
+        </div>
+        <div class="weight-row">
+            <span class="weight-label">Black 900</span>
+            <span class="weight-value">900</span>
+            <span class="sample w900">The quick brown fox jumps over the lazy dog</span>
+        </div>
+    </div>
+
+    <!-- Test 2: Keyword values -->
+    <div class="test-section">
+        <h2>2. Keyword Values (normal, bold, bolder, lighter)</h2>
+        <div class="weight-row">
+            <span class="weight-label">normal</span>
+            <span class="weight-value">normal</span>
+            <span class="sample normal">The quick brown fox jumps over the lazy dog</span>
+        </div>
+        <div class="weight-row">
+            <span class="weight-label">bold</span>
+            <span class="weight-value">bold</span>
+            <span class="sample bold">The quick brown fox jumps over the lazy dog</span>
+        </div>
+        <div class="weight-row">
+            <span class="weight-label">bolder</span>
+            <span class="weight-value">bolder</span>
+            <span class="sample bolder">The quick brown fox jumps over the lazy dog</span>
+        </div>
+        <div class="weight-row">
+            <span class="weight-label">lighter</span>
+            <span class="weight-value">lighter</span>
+            <span class="sample lighter">The quick brown fox jumps over the lazy dog</span>
+        </div>
+    </div>
+
+    <!-- Test 3: Arial font family -->
+    <div class="test-section">
+        <h2>3. Arial Font Family</h2>
+        <div class="weight-row">
+            <span class="weight-label">Regular</span>
+            <span class="weight-value">400</span>
+            <span class="sample arial w400">The quick brown fox jumps over the lazy dog</span>
+        </div>
+        <div class="weight-row">
+            <span class="weight-label">Bold</span>
+            <span class="weight-value">700</span>
+            <span class="sample arial w700">The quick brown fox jumps over the lazy dog</span>
+        </div>
+        <div class="weight-row">
+            <span class="weight-label">Normal</span>
+            <span class="weight-value">normal</span>
+            <span class="sample arial">The quick brown fox jumps over the lazy dog</span>
+        </div>
+        <div class="weight-row">
+            <span class="weight-label">Bold</span>
+            <span class="weight-value">bold</span>
+            <span class="sample arial" style="font-weight: bold;">The quick brown fox jumps over the lazy dog</span>
+        </div>
+    </div>
+
+    <!-- Test 4: Serif font family -->
+    <div class="test-section">
+        <h2>4. Times New Roman Font Family</h2>
+        <div class="weight-row">
+            <span class="weight-label">Regular</span>
+            <span class="weight-value">400</span>
+            <span class="sample times w400">The quick brown fox jumps over the lazy dog</span>
+        </div>
+        <div class="weight-row">
+            <span class="weight-label">Bold</span>
+            <span class="weight-value">700</span>
+            <span class="sample times w700">The quick brown fox jumps over the lazy dog</span>
+        </div>
+    </div>
+
+    <!-- Test 5: Monospace font family -->
+    <div class="test-section">
+        <h2>5. Courier New Font Family</h2>
+        <div class="weight-row">
+            <span class="weight-label">Regular</span>
+            <span class="weight-value">400</span>
+            <span class="sample courier w400">The quick brown fox jumps over the lazy dog</span>
+        </div>
+        <div class="weight-row">
+            <span class="weight-label">Bold</span>
+            <span class="weight-value">700</span>
+            <span class="sample courier w700">The quick brown fox jumps over the lazy dog</span>
+        </div>
+    </div>
+
+    <!-- Test 6: Weight with inline style -->
+    <div class="test-section">
+        <h2>6. Inline Font-Weight Styles</h2>
+        <div class="weight-row">
+            <span class="weight-label">Inline</span>
+            <span class="weight-value">"100"</span>
+            <span class="sample" style="font-weight: 100;">The quick brown fox jumps over the lazy dog</span>
+        </div>
+        <div class="weight-row">
+            <span class="weight-label">Inline</span>
+            <span class="weight-value">"300"</span>
+            <span class="sample" style="font-weight: 300;">The quick brown fox jumps over the lazy dog</span>
+        </div>
+        <div class="weight-row">
+            <span class="weight-label">Inline</span>
+            <span class="weight-value">"bold"</span>
+            <span class="sample" style="font-weight: bold;">The quick brown fox jumps over the lazy dog</span>
+        </div>
+        <div class="weight-row">
+            <span class="weight-label">Inline</span>
+            <span class="weight-value">"900"</span>
+            <span class="sample" style="font-weight: 900;">The quick brown fox jumps over the lazy dog</span>
+        </div>
+    </div>
+
+    <!-- Test 7: Chinese text with weight -->
+    <div class="test-section">
+        <h2>7. Chinese Text with Weight</h2>
+        <div class="weight-row">
+            <span class="weight-label">Regular</span>
+            <span class="weight-value">400</span>
+            <span class="sample w400">快速狐棕色懒狗跳过</span>
+        </div>
+        <div class="weight-row">
+            <span class="weight-label">Bold</span>
+            <span class="weight-value">700</span>
+            <span class="sample w700">快速狐棕色懒狗跳过</span>
+        </div>
+        <div class="weight-row">
+            <span class="weight-label">Normal</span>
+            <span class="weight-value">normal</span>
+            <span class="sample normal">快速狐棕色懒狗跳过</span>
+        </div>
+    </div>
+
+    <!-- Test 8: Numbers and digits -->
+    <div class="test-section">
+        <h2>8. Numbers with Different Weights</h2>
+        <div class="weight-row">
+            <span class="weight-label">Thin 100</span>
+            <span class="weight-value">100</span>
+            <span class="sample w100">1234567890</span>
+        </div>
+        <div class="weight-row">
+            <span class="weight-label">Normal 400</span>
+            <span class="weight-value">400</span>
+            <span class="sample w400">1234567890</span>
+        </div>
+        <div class="weight-row">
+            <span class="weight-label">Bold 700</span>
+            <span class="weight-value">700</span>
+            <span class="sample w700">1234567890</span>
+        </div>
+        <div class="weight-row">
+            <span class="weight-label">Black 900</span>
+            <span class="weight-value">900</span>
+            <span class="sample w900">1234567890</span>
+        </div>
+    </div>
+
+    <!-- Test 9: Font shorthand -->
+    <div class="test-section">
+        <h2>9. Font Shorthand with Weight</h2>
+        <div class="weight-row">
+            <span class="weight-label">font:</span>
+            <span class="weight-value">bold</span>
+            <span class="sample" style="font: bold 16px sans-serif;">The quick brown fox jumps</span>
+        </div>
+        <div class="weight-row">
+            <span class="weight-label">font:</span>
+            <span class="weight-value">400</span>
+            <span class="sample" style="font: 400 16px sans-serif;">The quick brown fox jumps</span>
+        </div>
+        <div class="weight-row">
+            <span class="weight-label">font:</span>
+            <span class="weight-value">700</span>
+            <span class="sample" style="font: 700 16px sans-serif;">The quick brown fox jumps</span>
+        </div>
+        <div class="weight-row">
+            <span class="weight-label">font:</span>
+            <span class="weight-value">plain</span>
+            <span class="sample" style="font: 16px sans-serif;">The quick brown fox jumps</span>
+        </div>
+    </div>
+</body>
+</html>

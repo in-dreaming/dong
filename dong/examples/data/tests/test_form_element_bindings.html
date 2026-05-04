@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Form Element Bindings</title>
+    <style>
+        body { font-family: Arial; margin: 20px; }
+        .test { margin: 10px 0; padding: 10px; border: 1px solid #ccc; }
+        .pass { background: #d4edda; }
+        .fail { background: #f8d7da; }
+    </style>
+</head>
+<body>
+    <h1>Form Element Bindings Test</h1>
+
+    <div class="test">
+        <h3>HTMLFormElement.elements property</h3>
+        <form id="testForm">
+            <input type="text" name="username" value="test">
+            <textarea name="message">Hello</textarea>
+            <select name="country">
+                <option value="us">US</option>
+                <option value="uk">UK</option>
+            </select>
+        </form>
+        <script>
+            const form = document.getElementById('testForm');
+            const elements = form.elements;
+            console.log('Form elements count:', elements.length);
+            console.log('Form elements:', elements);
+
+            // Test elements property
+            if (elements && elements.length === 3) {
+                console.log('✓ elements property works');
+                document.write('<p class="pass">✓ elements property returns correct number of controls</p>');
+            } else {
+                console.log('✗ elements property failed');
+                document.write('<p class="fail">✗ elements property failed</p>');
+            }
+        </script>
+    </div>
+
+    <div class="test">
+        <h3>HTMLFormElement.submit() method</h3>
+        <form id="submitForm">
+            <input type="text" name="data" value="test">
+        </form>
+        <script>
+            const submitForm = document.getElementById('submitForm');
+            let submitEventFired = false;
+
+            submitForm.addEventListener('submit', (e) => {
+                submitEventFired = true;
+                e.preventDefault(); // Prevent actual form submission
+                console.log('Submit event fired');
+            });
+
+            submitForm.submit();
+
+            if (submitEventFired) {
+                console.log('✓ submit() method works');
+                document.write('<p class="pass">✓ submit() method triggers submit event</p>');
+            } else {
+                console.log('✗ submit() method failed');
+                document.write('<p class="fail">✗ submit() method failed</p>');
+            }
+        </script>
+    </div>
+
+    <div class="test">
+        <h3>HTMLFormElement.reset() method</h3>
+        <form id="resetForm">
+            <input type="text" name="field1" value="initial">
+            <textarea name="field2">initial text</textarea>
+        </form>
+        <script>
+            const resetForm = document.getElementById('resetForm');
+            const input = resetForm.elements[0];
+            const textarea = resetForm.elements[1];
+
+            // Change values
+            input.value = 'changed';
+            textarea.value = 'changed text';
+
+            console.log('Before reset - input:', input.value, 'textarea:', textarea.value);
+            resetForm.reset();
+            console.log('After reset - input:', input.value, 'textarea:', textarea.value);
+
+            if (input.value === 'initial' && textarea.value === 'initial text') {
+                console.log('✓ reset() method works');
+                document.write('<p class="pass">✓ reset() method restores default values</p>');
+            } else {
+                console.log('✗ reset() method failed');
+                document.write('<p class="fail">✗ reset() method failed</p>');
+            }
+        </script>
+    </div>
+
+    <div class="test">
+        <h3>HTMLFormElement.checkValidity() method</h3>
+        <form id="validityForm">
+            <input type="text" required value="">
+            <input type="text" required value="valid">
+        </form>
+        <script>
+            const validityForm = document.getElementById('validityForm');
+
+            // First test with invalid form
+            const result1 = validityForm.checkValidity();
+            console.log('Invalid form check:', result1);
+
+            // Fix the first input and test again
+            validityForm.elements[0].value = 'valid';
+            const result2 = validityForm.checkValidity();
+            console.log('Valid form check:', result2);
+
+            if (result1 === false && result2 === true) {
+                console.log('✓ checkValidity() method works');
+                document.write('<p class="pass">✓ checkValidity() method returns correct validity state</p>');
+            } else {
+                console.log('✗ checkValidity() method failed');
+                document.write('<p class="fail">✗ checkValidity() method failed</p>');
+            }
+        </script>
+    </div>
+
+</body>
+</html>

@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    body {
+      margin: 0;
+      padding: 24px;
+      background: #0b0f14;
+      color: #e6eefc;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    }
+    .row {
+      display: flex;
+      gap: 18px;
+      align-items: flex-start;
+      flex-wrap: wrap;
+    }
+    .card {
+      width: 420px;
+      padding: 14px;
+      border-radius: 14px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.12);
+    }
+    .title {
+      font-size: 14px;
+      opacity: 0.85;
+      margin-bottom: 10px;
+    }
+    video {
+      width: 384px;
+      height: 216px;
+      object-fit: cover;
+      background: #0f1115;
+      border-radius: 10px;
+    }
+    .hint {
+      margin-top: 10px;
+      font-size: 12px;
+      opacity: 0.7;
+      line-height: 1.4;
+    }
+  </style>
+</head>
+<body>
+  <div class="row">
+    <div class="card">
+      <div class="title">autoplay + loop (expect frames change across renders)</div>
+      <video id="v_auto" autoplay loop muted src="snow.mp4" poster="../images/bg.png"></video>
+      <div class="hint">
+        Notes: this test is meant for multi-frame rendering tools. If video backend is working,
+        exported frames should differ. Click the video to toggle play/pause.
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="title">paused by default (expect stable first frame if preload works)</div>
+      <video id="v_pause" muted src="snow.mp4" poster="../images/bg.png"></video>
+      <div class="hint">Click the video to toggle play/pause.</div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      function bindToggle(id) {
+        const v = document.getElementById(id);
+        if (!v) return;
+        v.addEventListener('click', () => {
+          if (v.paused) v.play();
+          else v.pause();
+        });
+      }
+      bindToggle('v_auto');
+      bindToggle('v_pause');
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  body { font-size: 16px; padding: 20px; }
+  #target { padding: 20px; background: lightyellow; border: 2px solid orange; min-height: 200px; }
+  #result { margin-top: 20px; padding: 10px; background: #eee; white-space: pre; font-family: monospace; }
+</style>
+</head>
+<body>
+  <h1>MouseEvent 属性测试</h1>
+
+  <div id="target">在此区域移动鼠标测试 pageX/pageY, movementX/movementY, relatedTarget 等属性</div>
+  <div id="result"></div>
+
+  <script>
+    var r = '';
+    var target = document.getElementById('target');
+    var result = document.getElementById('result');
+
+    // 测试 mousemove 事件 - pageX/pageY, movementX/movementY
+    target.addEventListener('mousemove', function(e) {
+      r += 'mousemove 事件:\n';
+      r += '  pageX=' + e.pageX + ', pageY=' + e.pageY + '\n';
+      r += '  movementX=' + e.movementX + ', movementY=' + e.movementY + '\n';
+      r += '  clientX=' + e.clientX + ', clientY=' + e.clientY + '\n';
+      r += '  screenX=' + e.screenX + ', screenY=' + e.screenY + '\n';
+      r += '  offsetX=' + e.offsetX + ', offsetY=' + e.offsetY + '\n';
+      r += '  isTrusted=' + e.isTrusted + '\n';
+      result.textContent = r;
+    });
+
+    // 测试 mouseenter/mouseleave 事件 - relatedTarget
+    target.addEventListener('mouseenter', function(e) {
+      r += 'mouseenter 事件:\n';
+      r += '  relatedTarget=' + (e.relatedTarget ? e.relatedTarget.id || e.relatedTarget.tagName : 'null') + '\n';
+      r += '  isTrusted=' + e.isTrusted + '\n';
+      result.textContent = r;
+    });
+
+    target.addEventListener('mouseleave', function(e) {
+      r += 'mouseleave 事件:\n';
+      r += '  relatedTarget=' + (e.relatedTarget ? e.relatedTarget.id || e.relatedTarget.tagName : 'null') + '\n';
+      r += '  isTrusted=' + e.isTrusted + '\n';
+      result.textContent = r;
+    });
+
+    // 测试 mousedown/mouseup 事件 - button, buttons
+    target.addEventListener('mousedown', function(e) {
+      r += 'mousedown 事件:\n';
+      r += '  button=' + e.button + ' (0=left, 1=middle, 2=right)\n';
+      r += '  buttons=' + e.buttons + ' (bitmask: 1=left, 2=right, 4=middle)\n';
+      r += '  isTrusted=' + e.isTrusted + '\n';
+      result.textContent = r;
+    });
+
+    target.addEventListener('mouseup', function(e) {
+      r += 'mouseup 事件:\n';
+      r += '  button=' + e.button + '\n';
+      r += '  buttons=' + e.buttons + '\n';
+      r += '  isTrusted=' + e.isTrusted + '\n';
+      result.textContent = r;
+    });
+
+    // 测试 click 事件
+    target.addEventListener('click', function(e) {
+      r += 'click 事件:\n';
+      r += '  pageX=' + e.pageX + ', pageY=' + e.pageY + '\n';
+      r += '  isTrusted=' + e.isTrusted + '\n';
+      result.textContent = r;
+    });
+
+    r += 'MouseEvent 属性测试已加载\n';
+    r += '测试说明:\n';
+    r += '- 在黄色区域移动鼠标测试 pageX/pageY, movementX/movementY\n';
+    r += '- 鼠标进入/离开区域测试 relatedTarget\n';
+    r += '- 点击鼠标测试 button/buttons 属性\n';
+    r += '- 所有事件都包含 isTrusted 属性\n';
+    result.textContent = r;
+    console.log('MouseEvent 属性测试已加载');
+  </script>
+</body>
+</html>

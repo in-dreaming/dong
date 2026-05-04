@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            font-family: Arial;
+            padding: 20px;
+            background: #f0f0f0;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .node {
+            padding: 10px;
+            margin: 5px 0;
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+        }
+        .output {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .pass { color: #4caf50; }
+        .fail { color: #f44336; }
+    </style>
+</head>
+<body>
+    <h1>Node Sibling Navigation Test</h1>
+
+    <div class="container">
+        <h2>Test Structure</h2>
+        <div id="parent">
+            <!-- Comment node -->
+            <div class="node" id="node1">Node 1 (Element)</div>
+            Some text between nodes
+            <div class="node" id="node2">Node 2 (Element)</div>
+            <div class="node" id="node3">Node 3 (Element)</div>
+            More text
+            <div class="node" id="node4">Node 4 (Element)</div>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>Test Results</h2>
+        <div class="output" id="output"></div>
+    </div>
+
+    <script>
+        const output = document.getElementById('output');
+        let passed = 0;
+        let failed = 0;
+
+        function log(msg, isPass = null) {
+            const span = document.createElement('span');
+            if (isPass === true) {
+                span.className = 'pass';
+                span.textContent = '✓ ' + msg;
+                passed++;
+            } else if (isPass === false) {
+                span.className = 'fail';
+                span.textContent = '✗ ' + msg;
+                failed++;
+            } else {
+                span.textContent = msg;
+            }
+            output.appendChild(span);
+            output.appendChild(document.createTextNode('\n'));
+        }
+
+        function test(name, condition, actual, expected) {
+            const pass = condition;
+            if (pass) {
+                log(`${name}: PASS`, true);
+            } else {
+                log(`${name}: FAIL (expected: ${expected}, got: ${actual})`, false);
+            }
+        }
+
+        log('=== Node.previousSibling / nextSibling Tests ===\n');
+
+        const node1 = document.getElementById('node1');
+        const node2 = document.getElementById('node2');
+        const node3 = document.getElementById('node3');
+        const node4 = document.getElementById('node4');
+        const parent = document.getElementById('parent');
+
+        // Test nextSibling (includes text nodes)
+        log('\n--- nextSibling tests (all nodes) ---');
+        test('node1.nextSibling exists', node1.nextSibling !== null, node1.nextSibling, 'text node');
+        test('node2.nextSibling exists', node2.nextSibling !== null, node2.nextSibling, 'element');
+        test('node3.nextSibling exists', node3.nextSibling !== null, node3.nextSibling, 'text node');
+
+        // Test previousSibling
+        log('\n--- previousSibling tests (all nodes) ---');
+        test('node2.previousSibling exists', node2.previousSibling !== null, node2.previousSibling, 'text node');
+        test('node3.previousSibling is node2', node3.previousSibling === node2, node3.previousSibling?.id, 'node2');
+        test('node4.previousSibling exists', node4.previousSibling !== null, node4.previousSibling, 'text node');
+
+        // Test nextElementSibling (elements only)
+        log('\n--- nextElementSibling tests (elements only) ---');
+        test('node1.nextElementSibling is node2', node1.nextElementSibling === node2,
+             node1.nextElementSibling?.id, 'node2');
+        test('node2.nextElementSibling is node3', node2.nextElementSibling === node3,
+             node2.nextElementSibling?.id, 'node3');
+        test('node3.nextElementSibling is node4', node3.nextElementSibling === node4,
+             node3.nextElementSibling?.id, 'node4');
+        test('node4.nextElementSibling is null', node4.nextElementSibling === null,
+             node4.nextElementSibling, 'null');
+
+        // Test previousElementSibling
+        log('\n--- previousElementSibling tests (elements only) ---');
+        test('node1.previousElementSibling is null', node1.previousElementSibling === null,
+             node1.previousElementSibling, 'null');
+        test('node2.previousElementSibling is node1', node2.previousElementSibling === node1,
+             node2.previousElementSibling?.id, 'node1');
+        test('node3.previousElementSibling is node2', node3.previousElementSibling === node2,
+             node3.previousElementSibling?.id, 'node2');
+        test('node4.previousElementSibling is node3', node4.previousElementSibling === node3,
+             node4.previousElementSibling?.id, 'node3');
+
+        // Test firstChild / lastChild
+        log('\n--- firstChild / lastChild tests ---');
+        test('parent.firstChild is text node', parent.firstChild.nodeType === 3, parent.firstChild?.nodeType, '3');
+        test('parent.lastChild is text node', parent.lastChild.nodeType === 3, parent.lastChild?.nodeType, '3');
+
+        // Test childNodes
+        log('\n--- childNodes tests ---');
+        test('parent.childNodes exists', parent.childNodes !== undefined && parent.childNodes !== null,
+             typeof parent.childNodes, 'object');
+        test('parent.childNodes.length > 4', parent.childNodes.length > 4,
+             parent.childNodes.length, '> 4 (includes text nodes)');
+
+        // Test Node type constants
+        log('\n--- Node type constants ---');
+        test('Node.ELEMENT_NODE is 1', typeof Node !== 'undefined' && Node.ELEMENT_NODE === 1,
+             Node?.ELEMENT_NODE, '1');
+        test('Node.TEXT_NODE is 3', typeof Node !== 'undefined' && Node.TEXT_NODE === 3,
+             Node?.TEXT_NODE, '3');
+
+        // Summary
+        log(`\n=== Test Summary ===`);
+        log(`Total: ${passed + failed} tests`);
+        log(`Passed: ${passed}`, true);
+        if (failed > 0) {
+            log(`Failed: ${failed}`, false);
+        }
+    </script>
+</body>
+</html>

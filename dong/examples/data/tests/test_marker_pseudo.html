@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>::marker Pseudo-element Styling Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        
+        .red-marker li::marker {
+            color: red;
+            font-size: 20px;
+            font-weight: bold;
+        }
+        
+        .blue-marker li::marker {
+            color: blue;
+            font-size: 24px;
+        }
+        
+        .green-marker li::marker {
+            color: green;
+            font-weight: bold;
+        }
+        
+        .custom-style li::marker {
+            color: orange;
+            font-size: 28px;
+            font-weight: bold;
+        }
+        
+        h2 {
+            margin-top: 30px;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <h1>::marker Pseudo-element Styling Test</h1>
+    
+    <h2>Red bold large markers</h2>
+    <ul class="red-marker">
+        <li>Item with red bold 20px marker</li>
+        <li>Another item</li>
+        <li>Third item</li>
+    </ul>
+    
+    <h2>Blue extra-large markers</h2>
+    <ol class="blue-marker">
+        <li>Item with blue 24px marker</li>
+        <li>Second item</li>
+        <li>Third item</li>
+    </ol>
+    
+    <h2>Green bold markers</h2>
+    <ul class="green-marker">
+        <li>Item with green bold marker</li>
+        <li>Another item</li>
+    </ul>
+    
+    <h2>Orange extra-bold extra-large markers</h2>
+    <ol class="custom-style">
+        <li>Item with orange 28px bold marker</li>
+        <li>Second item</li>
+        <li>Third item</li>
+    </ol>
+    
+    <h2>Mixed: Custom marker style with circle type</h2>
+    <ul class="red-marker" style="list-style-type: circle;">
+        <li>Circle marker in red</li>
+        <li>Another circle</li>
+    </ul>
+</body>
+</html>

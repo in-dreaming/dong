@@ -1,0 +1,10 @@
+---
+description: 
+alwaysApply: true
+enabled: true
+updatedAt: 2026-01-17T10:44:19.344Z
+provider: 
+---
+
+- 除非用户明确要求，否则不要新建或改写任何文档文件（例如 `*.md` / `README`）。
+- 需要说明时，直接在对话中解释，不要通过新增文档“绕过去”。

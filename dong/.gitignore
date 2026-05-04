@@ -1,14 +1,24 @@
 zig-cache/
+zig-out/
+zig-out-*/
 zig-build-output/
 build/
+build-cmake/
+build-cmake-core/
+build-ninja-core/
 .DS_Store
 *.o
 *.a
 *.so
 *.dll
 *.dylib
+*.lib
+*.exe
 .vscode/
 .idea/
+
+# Build configuration (user-specific paths)
+build.env
 
 # Skia precompiled libraries (platform-specific)
 third_party/skia/*/lib/
@@ -16,3 +26,9 @@ third_party/skia/windows/
 third_party/skia/linux/
 # Keep Mac headers for development
 !third_party/skia/mac/include/
+
+# CMake build directories
+third_party/*/build-zig/
+
+# DXC binaries (auto-downloaded during build)
+third_party/dxc/

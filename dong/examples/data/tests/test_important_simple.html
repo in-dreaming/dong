@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  div {
+    width: 100px;
+    height: 100px;
+    background-color: red;
+  }
+  .important {
+    background-color: blue !important;
+  }
+</style>
+</head>
+<body>
+  <div class="important" style="background-color: green;">
+    Should be BLUE (not green)
+  </div>
+</body>
+</html>

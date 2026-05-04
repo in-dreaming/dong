@@ -1,0 +1,25 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>test_title_tooltip</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px; }
+    .grid { display: flex; gap: 20px; }
+    .card { width: 320px; border: 1px solid #ccd3dc; border-radius: 10px; padding: 12px; background: #f8fbff; }
+    .target { display: inline-block; margin-top: 8px; padding: 8px 12px; border-radius: 6px; background: #3569d6; color: #fff; }
+  </style>
+</head>
+<body>
+  <div class="grid">
+    <div class="card">
+      <div>hover target with title</div>
+      <span class="target" title="Tooltip text from title attribute">hover me</span>
+    </div>
+    <div class="card">
+      <div>no title (should not show tooltip)</div>
+      <span class="target">plain element</span>
+    </div>
+  </div>
+</body>
+</html>

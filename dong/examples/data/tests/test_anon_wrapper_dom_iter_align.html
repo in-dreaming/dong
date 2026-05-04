@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Anon wrapper DOM iter align</title>
+  <style>
+    html, body { margin: 0; padding: 0; background: #ffffff; }
+    .root { padding: 20px; }
+    .block { display: block; height: 24px; background: #e0e0e0; border: 1px solid #bbbbbb; margin-bottom: 12px; }
+    .inline { display: inline-block; width: 120px; height: 24px; background: #2196f3; border: 2px solid #0d47a1; }
+    .after { display: block; height: 24px; background: #111111; border-radius: 6px; margin-top: 12px; }
+  </style>
+</head>
+<body>
+  <div class="root">
+    <div class="block" id="a"></div>
+
+    <span class="inline" id="s"></span>
+
+    <div class="after" id="b"></div>
+  </div>
+</body>
+</html>

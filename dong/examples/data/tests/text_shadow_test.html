@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            padding: 20px;
+            background-color: #1a1a2e;
+            color: #eaeaea;
+            font-family: Arial, sans-serif;
+        }
+        .section {
+            background-color: #16213e;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+        .section-title {
+            font-size: 16px;
+            color: #e94560;
+            margin-bottom: 12px;
+        }
+        .demo-row {
+            margin-bottom: 12px;
+        }
+        .demo-item {
+            display: inline-block;
+            min-width: 160px;
+            min-height: 40px;
+            margin: 6px 10px 6px 0;
+            padding: 12px 18px;
+            background-color: #0b1f3f;
+            border: 1px solid rgba(0, 212, 255, 0.45);
+            border-radius: 8px;
+            color: #ffffff;
+            text-align: left;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            line-height: 1.2;
+            vertical-align: top;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+        }
+        .text-shadow-basic {
+            text-shadow: 2px 2px #000000;
+            font-size: 24px;
+            color: #ffffff;
+        }
+        .text-shadow-blur {
+            text-shadow: 2px 2px 4px #00d4ff;
+            font-size: 24px;
+            color: #ffffff;
+        }
+        .text-shadow-glow {
+            text-shadow: 0px 0px 8px #e94560;
+            font-size: 24px;
+            color: #e94560;
+        }
+        .text-shadow-offset {
+            text-shadow: 4px 4px 2px #7b2cbf;
+            font-size: 24px;
+            color: #ffffff;
+        }
+    </style>
+</head>
+<body>
+    <div class="section">
+        <div class="section-title">CSS Text Shadow Test</div>
+        <div class="demo-row">
+            <div class="demo-item text-shadow-basic">Basic Shadow</div>
+            <div class="demo-item text-shadow-blur">Blur Shadow</div>
+        </div>
+        <div class="demo-row">
+            <div class="demo-item text-shadow-glow">Glow Effect</div>
+            <div class="demo-item text-shadow-offset">Large Offset</div>
+        </div>
+    </div>
+</body>
+</html>

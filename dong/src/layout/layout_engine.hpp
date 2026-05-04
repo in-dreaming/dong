@@ -1,8 +1,12 @@
 #pragma once
 
-#include "../dom/dom_node.hpp"
+#include "../dom/dom/dom_node.hpp"
+
+
 #include <memory>
 #include <unordered_map>
+#include <unordered_set>
+#include <vector>
 
 // Forward declare Yoga types
 extern "C" {
@@ -11,6 +15,8 @@ extern "C" {
 }
 
 namespace dong::layout {
+
+struct StickyMetadata;
 
 // Dirty rectangle for incremental rendering
 struct DirtyRect {
@@ -43,6 +49,8 @@ struct LayoutNode {
         float dimensions[2] = {0, 0}; // width, height
     } layout;
 
+    std::unique_ptr<StickyMetadata> sticky_metadata;
+
     LayoutNode() = default;
     ~LayoutNode();
 };
@@ -56,8 +64,15 @@ public:
     // Calculate layout for DOM tree
     void calculateLayout(dom::DOMNodePtr root, float width, float height);
 
+    float getViewportWidth() const { return viewport_width_; }
+    float getViewportHeight() const { return viewport_height_; }
+
     // Get layout info for a node
     const LayoutNode* getLayout(dom::DOMNodePtr node) const;
+
+
+    // Get mutable layout info (for post-layout passes like table layout)
+    LayoutNode* getLayoutMutable(dom::DOMNodePtr node);
 
     // Update layout when DOM changes
     void markDirty(dom::DOMNodePtr node);
@@ -71,10 +86,44 @@ private:
     std::unordered_map<void*, std::unique_ptr<LayoutNode>> layout_cache;
     DirtyRect dirty_rect_;  // Accumulates all regions that changed this frame
 
+    // Anonymous block wrappers: maps an anonymous YGNode* to its inline-level DOM children.
+    // Created when a block container has mixed block + inline-level children (CSS anonymous
+    // block box generation). The anonymous wrapper uses row + wrap direction so that
+    // consecutive inline-level elements are laid out horizontally.
+    struct AnonBlockInfo {
+        YGNode* yoga_node = nullptr;
+        dom::DOMNodePtr parent;  // The DOM parent that owns this anonymous wrapper
+        std::vector<dom::DOMNodePtr> children;
+    };
+    std::vector<AnonBlockInfo> anon_blocks_;
+
+    // Phantom Yoga nodes injected for inline ::before pseudo-elements in block containers.
+    // These reserve vertical space so block children don't overlap the ::before text.
+    std::unordered_set<YGNode*> pseudo_before_phantom_nodes_;
+
+    // Viewport size for resolving vw/vh units during Yoga style mapping
+    float viewport_width_ = 0.0f;
+    float viewport_height_ = 0.0f;
+    float root_font_size_ = 16.0f;
+
     // Yoga node creation and style mapping
     YGNode* createYogaNode(dom::DOMNodePtr dom_node);
+    void buildChildYogaNodes(dom::DOMNodePtr dom_node, YGNode* yoga_node);
     void applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node);
-    void mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yoga_node);
+    void mapComputedStylesToYoga(const dom::ComputedStyle& style, YGNode* yoga_node,
+                                float parent_content_width_px, float parent_content_height_px);
+
+    // applyDOMStylesToYoga helpers (refactored)
+    void applyYogaInlineAlignmentFixes(dom::DOMNodePtr dom_node, YGNode* yoga_node,
+                                       const dom::ComputedStyle& style);
+    void applyYogaFlexBasisFromWidth(dom::DOMNodePtr dom_node, YGNode* yoga_node,
+                                     const dom::ComputedStyle& style,
+                                     bool width_converted_to_max, float converted_width_value);
+    void applyYogaInputElementStyles(dom::DOMNodePtr dom_node, YGNode* yoga_node,
+                                     const dom::ComputedStyle& style);
+    void applyYogaInlineElementMinSizes(dom::DOMNodePtr dom_node, YGNode* yoga_node,
+                                        const dom::ComputedStyle& style);
+
 
     // CSS unit conversion
     float parsePixelValue(const dom::CSSValue& value, float parent_size = 0);
@@ -82,6 +131,106 @@ private:
 
     // Cleanup
     void destroyYogaNode(YGNode* node);
+
+    // Block formatting context layout (margin: auto centering, etc.)
+    void layoutBlockFormattingContext(dom::DOMNodePtr root);
+
+    // Inline formatting context layout
+    void layoutInlineFormattingContexts(dom::DOMNodePtr root);
+
+
+
+
+
+    // IFC helper structures and functions (refactored from layoutInlineFormattingContexts)
+    struct InlineItem {
+        dom::DOMNodePtr node;
+
+        // Margins: horizontal affects line breaking; vertical affects line height/placement.
+        float margin_left = 0.0f;
+        float margin_right = 0.0f;
+        float margin_top = 0.0f;
+        float margin_bottom = 0.0f;
+
+        // Preferred border-box size.
+        float preferred_width = 0.0f;
+        float preferred_height = 0.0f;
+
+        // Baseline measured from border-box top.
+        float baseline_from_border_top = 0.0f;
+
+        // Contribution to line box height (margin-box height).
+        float line_height_px = 0.0f;
+
+        float offset_x_in_content = 0.0f;
+        std::string vertical_align = "baseline";
+        bool is_line_break = false;
+    };
+
+    struct LineInfo {
+        std::vector<size_t> item_indices;
+        float max_baseline_from_border_top = 0.0f;
+        float max_line_height_px = 0.0f;
+    };
+
+    struct IFCContext {
+        float container_x = 0.0f;
+        float container_y = 0.0f;
+        float content_x = 0.0f;
+        float content_y = 0.0f;
+        float content_w = 0.0f;
+        float pad_top = 0.0f;
+        float pad_bottom = 0.0f;
+        float container_baseline_from_border_top = 0.0f;
+        float container_line_height_px = 0.0f;
+        bool has_container_text_metrics = false;
+    };
+
+    void collectInlineItems(const dom::DOMNodePtr& container,
+                           const IFCContext& ctx,
+                           std::vector<InlineItem>& items);
+    void breakIntoLines(std::vector<InlineItem>& items,
+                       const IFCContext& ctx,
+                       std::vector<LineInfo>& lines);
+    void layoutLineItems(std::vector<InlineItem>& items,
+                        const std::vector<LineInfo>& lines,
+                        const IFCContext& ctx,
+                        const dom::DOMNodePtr& container);
+    float propagateIFCHeights(const dom::DOMNodePtr& node);
+    void adjustPositionsAfterIFC(const dom::DOMNodePtr& node, float parent_delta_y);
+
+    // Positioned layout (position: absolute)
+    void layoutPositionedElements(dom::DOMNodePtr root);
+
+    // Sticky positioning layout (position: sticky)
+    void layoutStickyElements(dom::DOMNodePtr root);
+
+    // Table layout post-pass
+    void layoutTableElements(dom::DOMNodePtr root);
+    void layoutSingleTable(const dom::DOMNodePtr& table_node);
+    void computeColumnWidths(const dom::DOMNodePtr& table_node,
+                            const std::vector<dom::DOMNodePtr>& rows,
+                            size_t num_cols, bool is_fixed, float spacing_x,
+                            std::vector<float>& col_widths);
+    void positionTableCells(const dom::DOMNodePtr& table_node,
+                           const std::vector<dom::DOMNodePtr>& rows,
+                           const std::vector<float>& col_widths,
+                           float spacing_x, float spacing_y, bool is_collapse);
+    void updateRowGroupLayouts(const dom::DOMNodePtr& table_node);
+
+    // Third-pass sibling Y adjustment helpers
+    void shiftSubtreeY(const dom::DOMNodePtr& n, float dy);
+    void shiftSubtreeXY(const dom::DOMNodePtr& n, float dx, float dy, bool skip_fixed_descendants);
+    void shiftAnonWrapperY(const AnonBlockInfo& ab, float dy);
+    void adjustSiblingYPositions(const dom::DOMNodePtr& node,
+                                 LayoutNode* layout,
+                                 const dom::ComputedStyle& style);
+
+    // When a post-pass changes a block's height (e.g. table layout), Yoga's sibling positions
+    // can leave large gaps. Compact subsequent normal-flow siblings back to the minimal
+    // non-overlapping positions.
+    void compactNormalFlowSiblingsAfter(const dom::DOMNodePtr& start_node);
+
 
     // Incremental layout helpers
     bool calculateLayoutIncremental(dom::DOMNodePtr dom_node, YGNode* yoga_node,

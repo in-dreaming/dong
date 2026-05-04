@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Document Properties Test</title>
+    <style>
+        body {
+            font-family: Arial;
+            padding: 20px;
+            background: #f0f0f0;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .test-group {
+            margin-bottom: 15px;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 4px;
+            border-left: 3px solid #2196f3;
+        }
+        .result {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            margin-top: 10px;
+        }
+        .pass {
+            color: #4caf50;
+            font-weight: bold;
+        }
+        .fail {
+            color: #f44336;
+            font-weight: bold;
+        }
+        .note {
+            color: #666;
+            font-size: 14px;
+            padding: 10px;
+            background: #fff3cd;
+            border-left: 3px solid #ffc107;
+            margin-bottom: 10px;
+        }
+        input, button {
+            padding: 8px;
+            margin: 5px;
+            border: 2px solid #2196f3;
+            border-radius: 4px;
+        }
+        button {
+            background: #2196f3;
+            color: white;
+            cursor: pointer;
+            border: none;
+        }
+        button:hover {
+            background: #1976d2;
+        }
+    </style>
+</head>
+<body>
+    <h1>Document Properties Test</h1>
+
+    <div class="container">
+        <p class="note">
+            <strong>Test Instructions:</strong><br>
+            This page tests document.head and document.activeElement properties.
+        </p>
+
+        <div class="test-group">
+            <h3>Test 1: document.head</h3>
+            <div class="result" id="result1"></div>
+        </div>
+
+        <div class="test-group">
+            <h3>Test 2: document.activeElement (initial)</h3>
+            <div class="result" id="result2"></div>
+        </div>
+
+        <div class="test-group">
+            <h3>Test 3: document.activeElement (after focus)</h3>
+            <input type="text" id="input1" value="Input 1">
+            <input type="text" id="input2" value="Input 2">
+            <button id="button1">Button 1</button>
+            <button onclick="focusInput1()">Focus Input 1</button>
+            <button onclick="focusInput2()">Focus Input 2</button>
+            <button onclick="focusButton1()">Focus Button</button>
+            <div class="result" id="result3"></div>
+        </div>
+    </div>
+
+    <script>
+        function focusInput1() {
+            document.getElementById('input1').focus();
+            updateActiveElement();
+        }
+
+        function focusInput2() {
+            document.getElementById('input2').focus();
+            updateActiveElement();
+        }
+
+        function focusButton1() {
+            document.getElementById('button1').focus();
+            updateActiveElement();
+        }
+
+        function updateActiveElement() {
+            const result3 = document.getElementById('result3');
+            const activeElement = document.activeElement;
+            if (activeElement) {
+                const id = activeElement.id || '(no id)';
+                const tagName = activeElement.tagName;
+                result3.innerHTML = `
+                    activeElement.tagName = ${tagName}<br>
+                    activeElement.id = ${id}<br>
+                    <span class="pass">✓ activeElement updated</span>
+                `;
+            } else {
+                result3.innerHTML = `
+                    activeElement = null<br>
+                    <span class="fail">✗ activeElement is null</span>
+                `;
+            }
+        }
+
+        function runTests() {
+            // Test 1: document.head
+            const result1 = document.getElementById('result1');
+            const head = document.head;
+            const headIsHead = head && head.tagName === 'HEAD';
+            const headHasTitle = head && head.querySelector('title') !== null;
+
+            result1.innerHTML = `
+                document.head exists: ${head ? 'yes' : 'no'}<br>
+                document.head.tagName = ${head ? head.tagName : 'null'} (expected: HEAD)<br>
+                head contains title: ${headHasTitle}<br>
+                <span class="${headIsHead && headHasTitle ? 'pass' : 'fail'}">${headIsHead && headHasTitle ? '✓ PASS' : '✗ FAIL'}</span>
+            `;
+
+            // Test 2: document.activeElement (initial)
+            const result2 = document.getElementById('result2');
+            const activeElement = document.activeElement;
+            const activeIsBody = activeElement && activeElement.tagName === 'BODY';
+
+            result2.innerHTML = `
+                document.activeElement exists: ${activeElement ? 'yes' : 'no'}<br>
+                activeElement.tagName = ${activeElement ? activeElement.tagName : 'null'}<br>
+                Expected: BODY (or null if no focus)<br>
+                <span class="${activeElement ? 'pass' : 'fail'}">${activeElement ? '✓ PASS' : '⚠ Note: null is acceptable'}</span>
+            `;
+
+            // Test 3: Initial state
+            updateActiveElement();
+        }
+
+        // Run tests after page load
+        document.addEventListener('DOMContentLoaded', runTests);
+
+        // Also add focus listeners to all interactive elements
+        ['input1', 'input2', 'button1'].forEach(id => {
+            const element = document.getElementById(id);
+            if (element) {
+                element.addEventListener('focus', function() {
+                    console.log('Focused:', id);
+                    setTimeout(updateActiveElement, 0);
+                });
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test CSS.supports()</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        .result {
+            font-family: monospace;
+            background: #f5f5f5;
+            padding: 10px;
+            margin: 10px 0;
+            border-left: 3px solid #0066cc;
+        }
+        .success {
+            color: green;
+        }
+        .failure {
+            color: red;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 20px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #4CAF50;
+            color: white;
+        }
+ tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+<body>
+    <h1>Test CSS.supports()</h1>
+
+    <h2>Test Results</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Test</th>
+                <th>Expected</th>
+                <th>Actual</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody id="results">
+        </tbody>
+    </table>
+
+    <h2>Additional Tests</h2>
+    <div class="result" id="extraResults"></div>
+
+    <script>
+        const tbody = document.getElementById('results');
+        const extraResults = document.getElementById('extraResults');
+
+        const tests = [
+            // Supported properties
+            {
+                name: "CSS.supports('display', 'flex')",
+                fn: () => CSS.supports('display', 'flex'),
+                expected: true
+            },
+            {
+                name: "CSS.supports('color', 'red')",
+                fn: () => CSS.supports('color', 'red'),
+                expected: true
+            },
+            {
+                name: "CSS.supports('background-color', '#ffffff')",
+                fn: () => CSS.supports('background-color', '#ffffff'),
+                expected: true
+            },
+            {
+                name: "CSS.supports('margin', '10px')",
+                fn: () => CSS.supports('margin', '10px'),
+                expected: true
+            },
+            {
+                name: "CSS.supports('flex-direction', 'row')",
+                fn: () => CSS.supports('flex-direction', 'row'),
+                expected: true
+            },
+            {
+                name: "CSS.supports('grid-template-columns', '1fr 1fr')",
+                fn: () => CSS.supports('grid-template-columns', '1fr 1fr'),
+                expected: false
+            },
+            // Condition text overload
+            {
+                name: "CSS.supports('(display: flex)')",
+                fn: () => CSS.supports('(display: flex)'),
+                expected: true
+            },
+            {
+                name: "CSS.supports('(color: red)')",
+                fn: () => CSS.supports('(color: red)'),
+                expected: true
+            },
+            {
+                name: "CSS.supports('(display: grid)')",
+                fn: () => CSS.supports('(display: grid)'),
+                expected: false
+            },
+            // Case insensitivity
+            {
+                name: "CSS.supports('DISPLAY', 'flex')",
+                fn: () => CSS.supports('DISPLAY', 'flex'),
+                expected: true
+            },
+            {
+                name: "CSS.supports('display', 'FLEX')",
+                fn: () => CSS.supports('display', 'FLEX'),
+                expected: true
+            },
+        ];
+
+        tests.forEach(test => {
+            const result = test.fn();
+            const passed = result === test.expected;
+
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><code>${test.name}</code></td>
+                <td>${test.expected}</td>
+                <td>${result}</td>
+                <td class="${passed ? 'success' : 'failure'}">${passed ? '✓ PASS' : '✗ FAIL'}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        // Additional tests with detailed output
+        let extra = '';
+        extra += 'CSS.supports exists: ' + (typeof CSS.supports === 'function') + '\n';
+        if (typeof CSS.supports === 'function') {
+            extra += 'CSS.supports is a function: ' + (typeof CSS.supports) + '\n';
+
+            // Test with whitespace
+            extra += '\nWhitespace handling:\n';
+            extra += 'CSS.supports("( display : flex )"): ' + CSS.supports('( display : flex )') + '\n';
+
+            // Test various properties
+            extra += '\nVarious properties:\n';
+            const props = ['width', 'height', 'margin', 'padding', 'border', 'background', 'font', 'position', 'overflow', 'flex', 'justify-content'];
+            props.forEach(prop => {
+                extra += `  ${prop}: ${CSS.supports(prop, 'auto') || CSS.supports(prop, 'normal') || CSS.supports(prop, 'flex') || true}\n`;
+            });
+
+            // Test unsupported
+            extra += '\nUnsupported properties:\n';
+            extra += '  grid-template-columns: ' + CSS.supports('grid-template-columns', '1fr') + '\n';
+            extra += '  display: grid: ' + CSS.supports('display', 'grid') + '\n';
+        }
+        extraResults.textContent = extra;
+    </script>
+</body>
+</html>

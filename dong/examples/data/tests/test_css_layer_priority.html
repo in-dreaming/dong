@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>CSS @layer Priority Test</title>
+    <style>
+        /* 层声明顺序测试 */
+        @layer A, B, C;  /* 优先级: A < B < C */
+
+        @layer C {
+            div { color: red; }  /* 最高优先级 */
+        }
+
+        @layer A {
+            div { color: blue; }  /* 最低优先级 */
+        }
+
+        @layer B {
+            div { color: green; }  /* 中等优先级 */
+        }
+    </style>
+</head>
+<body>
+    <div>This text should be red (C > B > A)</div>
+</body>
+</html>

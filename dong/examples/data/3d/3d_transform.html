@@ -1,0 +1,15 @@
+<div class="scene">
+  <div class="box a">A</div>
+  <div class="box b">B</div>
+</div>
+
+<style>
+.scene{ perspective:800px; margin:100px; display:flex; gap:40px;}
+.box{
+  width:120px;height:120px;
+  background:orange;color:black;
+  display:flex;align-items:center;justify-content:center;
+}
+.a{ transform: rotateY(45deg) translateZ(100px); }
+.b{ transform: translateZ(100px) rotateY(45deg); }
+</style>

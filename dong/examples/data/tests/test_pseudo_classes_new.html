@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>New Pseudo-classes Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        /* :target pseudo-class */
+        :target {
+            background-color: yellow;
+            border: 2px solid red;
+            padding: 10px;
+        }
+
+        /* :any-link pseudo-class */
+        :any-link {
+            color: green;
+            font-weight: bold;
+        }
+
+        /* :indeterminate pseudo-class */
+        input[type="checkbox"]:indeterminate {
+            background-color: orange;
+        }
+
+        input[type="radio"]:indeterminate {
+            background-color: lightblue;
+        }
+
+        /* :nth-last-of-type pseudo-class */
+        li:nth-last-of-type(2n) {
+            background-color: lightgreen;
+        }
+
+        li:nth-last-of-type(2n+1) {
+            background-color: lightpink;
+        }
+
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+
+        .info {
+            background-color: #f5f5f5;
+            padding: 10px;
+            margin: 10px 0;
+            border-left: 4px solid #333;
+        }
+
+        ul {
+            list-style-type: none;
+            padding: 0;
+        }
+
+        li {
+            padding: 5px 10px;
+            margin: 2px 0;
+            border: 1px solid #ddd;
+        }
+
+        a {
+            display: block;
+            margin: 5px 0;
+            padding: 5px;
+        }
+
+        .result {
+            font-weight: bold;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <h1>New CSS Pseudo-classes Test</h1>
+
+    <div class="info">
+        <p><strong>Test Cases:</strong></p>
+        <ul>
+            <li><strong>:target</strong> - Elements with matching URL fragment identifier</li>
+            <li><strong>:any-link</strong> - Any element with href attribute (a, area, link)</li>
+            <li><strong>:indeterminate</strong> - Checkboxes/radios in indeterminate state</li>
+            <li><strong>:nth-last-of-type</strong> - Elements from the end of their type</li>
+        </ul>
+    </div>
+
+    <!-- :target test -->
+    <div class="test-section">
+        <h2>:target Pseudo-class</h2>
+        <p>Click links below to test :target styling:</p>
+        <a href="#section1">Go to Section 1</a>
+        <a href="#section2">Go to Section 2</a>
+        <a href="#section3">Go to Section 3</a>
+
+        <div id="section1">
+            <h3>Section 1</h3>
+            <p>This section should be highlighted when URL fragment is #section1</p>
+        </div>
+
+        <div id="section2">
+            <h3>Section 2</h3>
+            <p>This section should be highlighted when URL fragment is #section2</p>
+        </div>
+
+        <div id="section3">
+            <h3>Section 3</h3>
+            <p>This section should be highlighted when URL fragment is #section3</p>
+        </div>
+    </div>
+
+    <!-- :any-link test -->
+    <div class="test-section">
+        <h2>:any-link Pseudo-class</h2>
+        <p>All links should be green and bold:</p>
+        <a href="#test1">Link 1 (href="#test1")</a>
+        <a href="http://example.com">Link 2 (external)</a>
+        <a href="test.html">Link 3 (relative)</a>
+
+        <p>Non-link elements should not be styled:</p>
+        <span>This is not a link</span>
+        <div>This is not a link</div>
+    </div>
+
+    <!-- :indeterminate test -->
+    <div class="test-section">
+        <h2>:indeterminate Pseudo-class</h2>
+        <p>Checkboxes and radios in indeterminate state:</p>
+
+        <h3>Checkboxes</h3>
+        <label>
+            <input type="checkbox" id="checkbox1"> Normal checkbox
+        </label><br>
+        <label>
+            <input type="checkbox" id="checkbox2" indeterminate> Indeterminate checkbox (should be orange)
+        </label><br>
+
+        <h3>Radio Groups</h3>
+        <p>Radio group with no selection (all should be indeterminate):</p>
+        <label>
+            <input type="radio" name="group1" value="1"> Option 1
+        </label><br>
+        <label>
+            <input type="radio" name="group1" value="2"> Option 2
+        </label><br>
+        <label>
+            <input type="radio" name="group1" value="3"> Option 3
+        </label><br>
+
+        <p>Radio group with selection (only selected should not be indeterminate):</p>
+        <label>
+            <input type="radio" name="group2" value="a"> Option A
+        </label><br>
+        <label>
+            <input type="radio" name="group2" value="b" checked> Option B (checked)
+        </label><br>
+        <label>
+            <input type="radio" name="group2" value="c"> Option C
+        </label><br>
+    </div>
+
+    <!-- :nth-last-of-type test -->
+    <div class="test-section">
+        <h2>:nth-last-of-type Pseudo-class</h2>
+        <p>List items colored by their position from the end:</p>
+        <ul>
+            <li>Item 1 (nth-last-of-type(2n+1) - lightpink)</li>
+            <li>Item 2 (nth-last-of-type(2n) - lightgreen)</li>
+            <li>Item 3 (nth-last-of-type(2n+1) - lightpink)</li>
+            <li>Item 4 (nth-last-of-type(2n) - lightgreen)</li>
+            <li>Item 5 (nth-last-of-type(2n+1) - lightpink)</li>
+            <li>Item 6 (nth-last-of-type(2n) - lightgreen)</li>
+            <li>Item 7 (nth-last-of-type(2n+1) - lightpink)</li>
+            <li>Item 8 (nth-last-of-type(2n) - lightgreen)</li>
+        </ul>
+    </div>
+
+    <div class="info">
+        <h3>Expected Results:</h3>
+        <ul>
+            <li><span class="result">:target</span> - Elements with matching ID should have yellow background</li>
+            <li><span class="result">:any-link</span> - All links should be green and bold</li>
+            <li><span class="result">:indeterminate</span> - Checkboxes with indeterminate attribute and radio groups with no selection should be styled</li>
+            <li><span class="result">:nth-last-of-type</span> - List items should alternate colors from the end</li>
+        </ul>
+    </div>
+
+    <script>
+        // Set indeterminate state for checkboxes
+        document.getElementById('checkbox2').indeterminate = true;
+
+        // Test URL fragment changes
+        function updateTargetDisplay() {
+            const hash = window.location.hash.substring(1);
+            const output = document.getElementById('target-output');
+            if (output) {
+                output.textContent = 'Current target: ' + (hash || 'none');
+            }
+        }
+
+        window.addEventListener('hashchange', updateTargetDisplay);
+        updateTargetDisplay();
+
+        // Log pseudo-class matching results
+        function logPseudoClassResults() {
+            const results = [];
+
+            // Test :any-link
+            const links = document.querySelectorAll('a[href]');
+            results.push(':any-link matches: ' + links.length + ' links');
+
+            // Test :indeterminate
+            const indeterminateCheckboxes = document.querySelectorAll('input[type="checkbox"]:indeterminate');
+            const indeterminateRadios = document.querySelectorAll('input[type="radio"]:indeterminate');
+            results.push(':indeterminate matches: ' + indeterminateCheckboxes.length + ' checkboxes, ' + indeterminateRadios.length + ' radios');
+
+            // Test :nth-last-of-type
+            const nthLastItems = document.querySelectorAll('li:nth-last-of-type(2n)');
+            results.push(':nth-last-of-type(2n) matches: ' + nthLastItems.length + ' items');
+
+            console.log('Pseudo-class test results:', results);
+        }
+
+        logPseudoClassResults();
+    </script>
+</body>
+</html>

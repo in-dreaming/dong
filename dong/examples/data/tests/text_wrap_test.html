@@ -1,0 +1,37 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>text_wrap_test</title>
+  <style>
+    body { margin: 0; padding: 16px; font-family: Arial, sans-serif; background: #111; color: #eee; }
+    .box {
+      width: 320px;
+      border: 2px solid rgba(255,255,255,0.25);
+      padding: 10px;
+      margin-bottom: 14px;
+      background: rgba(255,255,255,0.06);
+      line-height: normal;
+    }
+    .label { font-size: 12px; opacity: 0.8; margin-bottom: 6px; }
+    .text { font-size: 20px; }
+
+    /* Case A: word-spacing + 空格断行。目标：不要因为“行尾空格”被错误计入 word-spacing 而提前换行。 */
+    .case-word-spacing .text { word-spacing: 18px; }
+
+    /* Case B: fallback 字体（常见：Arial 不覆盖 CJK，触发回退）。目标：回退 glyph 不要因为 units_per_em 口径混用导致位置漂移/挤压，从而影响断行。 */
+    .case-fallback .text { word-spacing: 0; letter-spacing: 0; }
+  </style>
+</head>
+<body>
+  <div class="box case-word-spacing">
+    <div class="label">Case A: word-spacing + wrap at spaces</div>
+    <div class="text">alpha beta gamma delta epsilon zeta eta theta iota kappa</div>
+  </div>
+
+  <div class="box case-fallback">
+    <div class="label">Case B: fallback font (CJK mixed)</div>
+    <div class="text">hello 世界 hello 世界 hello 世界 hello 世界</div>
+  </div>
+</body>
+</html>

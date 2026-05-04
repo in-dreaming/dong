@@ -1,0 +1,19 @@
+{
+  "name": "dong-react",
+  "version": "0.1.0",
+  "private": true,
+  "description": "React renderer for Dong HTML/CSS engine via react-reconciler",
+  "dependencies": {
+    "react": "^18.3.0",
+    "react-reconciler": "^0.29.2"
+  },
+  "devDependencies": {
+    "esbuild": "^0.21.0"
+  },
+  "scripts": {
+    "build:counter": "node build.mjs counter",
+    "build:game-ui": "node build.mjs game-ui",
+    "build:todo-classic": "node build.mjs todo-classic",
+    "build:all": "node build.mjs counter && node build.mjs game-ui && node build.mjs todo-classic"
+  }
+}

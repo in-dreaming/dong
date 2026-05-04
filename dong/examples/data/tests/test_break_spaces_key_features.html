@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>white-space: break-spaces 关键特性测试</title>
+<style>
+body { margin: 10px; font-family: sans-serif; font-size: 14px; background: #fff; }
+
+.test-container {
+  width: 200px;
+  border: 1px solid #ccc;
+  padding: 10px;
+  margin-bottom: 20px;
+}
+
+.test-title {
+  font-weight: bold;
+  margin-bottom: 5px;
+  font-size: 12px;
+  color: #333;
+}
+
+.normal { white-space: normal; background: #f0f0f0; }
+.pre-line { white-space: pre-line; background: #e0f0e0; }
+.pre-wrap { white-space: pre-wrap; background: #f0e0e0; }
+.break-spaces { white-space: break-spaces; background: #e0e0f0; }
+
+.space-indicator {
+  color: red;
+  font-weight: bold;
+}
+</style>
+</head>
+<body>
+  <h1>white-space: break-spaces 关键特性测试</h1>
+
+  <h2>测试 1: 行尾空格处理（关键区别）</h2>
+  <p>break-spaces 与 pre-wrap 的主要区别：行尾空格不会悬挂，而是会占据空间</p>
+
+  <div class="test-container">
+    <div class="test-title">normal (空格折叠)</div>
+    <div class="normal">行尾空格
+下一行开始</div>
+  </div>
+
+  <div class="test-container">
+    <div class="test-title">pre-line (空格折叠，保留换行)</div>
+    <div class="pre-line">行尾空格
+下一行开始</div>
+  </div>
+
+  <div class="test-container">
+    <div class="test-title">pre-wrap (空格保留，行尾空格悬挂)</div>
+    <div class="pre-wrap">行尾空格
+下一行开始</div>
+  </div>
+
+  <div class="test-container">
+    <div class="test-title">break-spaces (空格保留，行尾空格占据空间)</div>
+    <div class="break-spaces">行尾空格
+下一行开始</div>
+  </div>
+
+  <h2>测试 2: 空格保留</h2>
+  <p>验证 break-spaces 是否保留所有空格</p>
+
+  <div class="test-container">
+    <div class="test-title">normal (折叠为单个空格)</div>
+    <div class="normal">多个    空格    测试</div>
+  </div>
+
+  <div class="test-container">
+    <div class="test-title">pre-line (折叠为单个空格)</div>
+    <div class="pre-line">多个    空格    测试</div>
+  </div>
+
+  <div class="test-container">
+    <div class="test-title">pre-wrap (保留所有空格)</div>
+    <div class="pre-wrap">多个    空格    测试</div>
+  </div>
+
+  <div class="test-container">
+    <div class="test-title">break-spaces (保留所有空格)</div>
+    <div class="break-spaces">多个    空格    测试</div>
+  </div>
+
+  <h2>测试 3: 换行符保留</h2>
+  <p>验证 break-spaces 是否保留换行符</p>
+
+  <div class="test-container">
+    <div class="test-title">normal (换行符折叠)</div>
+    <div class="normal">第一行
+第二行
+
+第四行（空行）</div>
+  </div>
+
+  <div class="test-container">
+    <div class="test-title">pre-line (保留换行符)</div>
+    <div class="pre-line">第一行
+第二行
+
+第四行（空行）</div>
+  </div>
+
+  <div class="test-container">
+    <div class="test-title">pre-wrap (保留换行符)</div>
+    <div class="pre-wrap">第一行
+第二行
+
+第四行（空行）</div>
+  </div>
+
+  <div class="test-container">
+    <div class="test-title">break-spaces (保留换行符)</div>
+    <div class="break-spaces">第一行
+第二行
+
+第四行（空行）</div>
+  </div>
+
+  <h2>测试 4: 自动换行 + 空格</h2>
+  <p>验证 break-spaces 在自动换行时的行为</p>
+
+  <div class="test-container">
+    <div class="test-title">break-spaces (长文本自动换行)</div>
+    <div class="break-spaces">这是一个很长的文本包含    多个空格    测试自动换行行为，看看空格在换行时如何处理</div>
+  </div>
+
+  <div class="test-container">
+    <div class="test-title">pre-wrap (对比)</div>
+    <div class="pre-wrap">这是一个很长的文本包含    多个空格    测试自动换行行为，看看空格在换行时如何处理</div>
+  </div>
+
+  <script>
+    // 添加空格指示器以便观察
+    function addSpaceIndicators() {
+      const containers = document.querySelectorAll('.test-container > div');
+      containers.forEach(container => {
+        const original = container.textContent;
+        const withIndicators = original.replace(/ /g, '<span class="space-indicator">·</span>');
+        container.innerHTML = withIndicators;
+      });
+    }
+
+    addSpaceIndicators();
+  </script>
+</body>
+</html>

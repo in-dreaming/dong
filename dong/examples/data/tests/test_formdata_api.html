@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Test FormData API</title>
+    <style>
+        body { padding: 20px; font-family: Arial, sans-serif; }
+        .test-case { margin: 20px 0; padding: 10px; border: 1px solid #ccc; }
+        .pass { background-color: #d4edda; border-color: #c3e6cb; }
+        .fail { background-color: #f8d7da; border-color: #f5c6cb; }
+        pre { background: #f5f5f5; padding: 10px; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <h1>FormData API Tests</h1>
+    <div id="test-results"></div>
+
+    <script>
+        const results = document.getElementById('test-results');
+
+        function assert(condition, message) {
+            const div = document.createElement('div');
+            div.className = 'test-case ' + (condition ? 'pass' : 'fail');
+            div.innerHTML = `<strong>${condition ? 'PASS' : 'FAIL'}</strong>: ${message}<pre>${condition ? '✓' : '✗'}</pre>`;
+            results.appendChild(div);
+        }
+
+        // Test 1: Create empty FormData
+        const fd1 = new FormData();
+        assert(typeof fd1 !== 'undefined', 'FormData can be created');
+        assert(typeof fd1.append === 'function', 'FormData has append method');
+        assert(typeof fd1.get === 'function', 'FormData has get method');
+
+        // Test 2: append() method
+        fd1.append('username', 'alice');
+        assert(fd1.get('username') === 'alice', 'append() adds value');
+
+        fd1.append('email', 'alice@example.com');
+        assert(fd1.get('email') === 'alice@example.com', 'append() works multiple times');
+
+        // Test 3: get() method
+        const fd2 = new FormData();
+        fd2.append('key', 'value1');
+        assert(fd2.get('key') === 'value1', 'get() returns value');
+        assert(fd2.get('nonexistent') === null, 'get() returns null for missing key');
+
+        // Test 4: getAll() method for multiple values with same key
+        const fd3 = new FormData();
+        fd3.append('hobbies', 'reading');
+        fd3.append('hobbies', 'coding');
+        fd3.append('hobbies', 'gaming');
+        const allHobbies = fd3.getAll('hobbies');
+        assert(Array.isArray(allHobbies), 'getAll() returns array');
+        assert(allHobbies.length === 3, 'getAll() returns all values');
+        assert(allHobbies[0] === 'reading', 'getAll() first value');
+        assert(allHobbies[1] === 'coding', 'getAll() second value');
+        assert(allHobbies[2] === 'gaming', 'getAll() third value');
+
+        // Test 5: getAll() for single value
+        fd3.append('single', 'onlyone');
+        const singleValue = fd3.getAll('single');
+        assert(singleValue.length === 1, 'getAll() returns array of length 1 for single value');
+        assert(singleValue[0] === 'onlyone', 'getAll() correct for single value');
+
+        // Test 6: has() method
+        const fd4 = new FormData();
+        fd4.append('name', 'bob');
+        assert(fd4.has('name') === true, 'has() returns true for existing key');
+        assert(fd4.has('missing') === false, 'has() returns false for missing key');
+
+        // Test 7: delete() method
+        const fd5 = new FormData();
+        fd5.append('temp', 'value');
+        assert(fd5.has('temp') === true, 'key exists before delete');
+        fd5.delete('temp');
+        assert(fd5.has('temp') === false, 'key does not exist after delete');
+        assert(fd5.get('temp') === null, 'get() returns null after delete');
+
+        // Test 8: set() method replaces all values
+        const fd6 = new FormData();
+        fd6.append('color', 'red');
+        fd6.append('color', 'blue');
+        assert(fd6.getAll('color').length === 2, 'two values before set');
+        fd6.set('color', 'green');
+        assert(fd6.getAll('color').length === 1, 'one value after set');
+        assert(fd6.get('color') === 'green', 'set() replaces with new value');
+
+        // Test 9: entries() method
+        const fd7 = new FormData();
+        fd7.append('a', '1');
+        fd7.append('b', '2');
+        const entries = fd7.entries();
+        assert(Array.isArray(entries), 'entries() returns array');
+        assert(entries.length === 2, 'entries() returns correct number of entries');
+        assert(entries[0][0] === 'a' && entries[0][1] === '1', 'entries() first entry');
+        assert(entries[1][0] === 'b' && entries[1][1] === '2', 'entries() second entry');
+
+        // Test 10: keys() method
+        const fd8 = new FormData();
+        fd8.append('key1', 'val1');
+        fd8.append('key2', 'val2');
+        fd8.append('key1', 'val3');
+        const keys = fd8.keys();
+        assert(Array.isArray(keys), 'keys() returns array');
+        assert(keys.length === 3, 'keys() returns correct number of keys');
+        assert(keys[0] === 'key1', 'keys() first key');
+        assert(keys[1] === 'key2', 'keys() second key');
+        assert(keys[2] === 'key1', 'keys() third key (duplicate)');
+
+        // Test 11: values() method
+        const fd9 = new FormData();
+        fd9.append('x', '10');
+        fd9.append('y', '20');
+        const values = fd9.values();
+        assert(Array.isArray(values), 'values() returns array');
+        assert(values.length === 2, 'values() returns correct number of values');
+        assert(values[0] === '10', 'values() first value');
+        assert(values[1] === '20', 'values() second value');
+
+        // Test 12: Complex scenario
+        const fd10 = new FormData();
+        fd10.append('username', 'jane');
+        fd10.append('tags', 'javascript');
+        fd10.append('tags', 'web');
+        fd10.append('tags', 'frontend');
+        fd10.set('username', 'jane_doe');
+        assert(fd10.get('username') === 'jane_doe', 'Complex scenario: get value');
+        assert(fd10.getAll('tags').length === 3, 'Complex scenario: multiple values');
+        fd10.delete('tags');
+        assert(fd10.getAll('tags').length === 0, 'Complex scenario: delete all');
+
+        results.innerHTML += '<p><strong>All tests completed!</strong></p>';
+    </script>
+</body>
+</html>

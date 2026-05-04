@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  body { font-size: 18px; padding: 20px; }
+  .row { margin: 10px 0; }
+  label { margin-left: 10px; }
+  #result { margin-top: 20px; padding: 10px; background: #eee; white-space: pre; }
+</style>
+</head>
+<body>
+  <div class="row">
+    <input type="checkbox" id="cb1"> <label for="cb1">Checkbox 1</label>
+  </div>
+  <div class="row">
+    <input type="checkbox" id="cb2" checked> <label for="cb2">Checkbox 2 (pre-checked)</label>
+  </div>
+  <div class="row">
+    <input type="radio" name="group1" id="r1"> <label for="r1">Radio A</label>
+    <input type="radio" name="group1" id="r2"> <label for="r2">Radio B</label>
+    <input type="radio" name="group1" id="r3" checked> <label for="r3">Radio C (pre-selected)</label>
+  </div>
+  <div id="result"></div>
+  <script>
+    var log = '';
+    var cb1 = document.getElementById('cb1');
+    var cb2 = document.getElementById('cb2');
+
+    cb1.addEventListener('change', function() {
+      log += 'cb1 changed: checked=' + cb1.checked + '\n';
+      document.getElementById('result').textContent = log;
+    });
+
+    cb2.addEventListener('change', function() {
+      log += 'cb2 changed: checked=' + cb2.checked + '\n';
+      document.getElementById('result').textContent = log;
+    });
+
+    // Test initial state
+    log += 'cb1.checked initial: ' + (cb1.checked === false ? 'PASS' : 'FAIL') + '\n';
+    log += 'cb2.checked initial: ' + (cb2.checked === true ? 'PASS' : 'FAIL') + '\n';
+
+    // Test JS toggle
+    cb1.checked = true;
+    log += 'cb1.checked after JS set: ' + (cb1.checked === true ? 'PASS' : 'FAIL') + '\n';
+    cb1.checked = false;
+    log += 'cb1.checked after JS unset: ' + (cb1.checked === false ? 'PASS' : 'FAIL') + '\n';
+
+    document.getElementById('result').textContent = log;
+    console.log('Checkbox toggle test loaded');
+  </script>
+</body>
+</html>

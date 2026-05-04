@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>HTML lang Attribute Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 16px;
+            margin: 20px;
+            line-height: 1.5;
+        }
+        .test-case {
+            margin: 20px 0;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        .lang-info {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 5px;
+        }
+        .text-sample {
+            font-size: 18px;
+            margin: 10px 0;
+        }
+        .explanation {
+            font-size: 14px;
+            color: #666;
+            margin-top: 5px;
+        }
+        .turkish-example {
+            font-size: 20px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>HTML lang Attribute Test</h1>
+    <p>This test demonstrates how the lang attribute affects text shaping in different languages.</p>
+
+    <!-- Test Case 1: English (default) -->
+    <div class="test-case">
+        <div class="lang-info">English (default): lang="en"</div>
+        <div class="text-sample">The quick brown fox jumps over the lazy dog.</div>
+        <div class="explanation">Standard English text with normal shaping.</div>
+    </div>
+
+    <!-- Test Case 2: Turkish -->
+    <div class="test-case" lang="tr">
+        <div class="lang-info">Turkish: lang="tr"</div>
+        <div class="text-sample">Pijamalı hasta yağız şoföre çabucak güvendi.</div>
+        <div class="turkish-example">i İ ı I</div>
+        <div class="explanation">Turkish text with special i/İ handling. Note the dotless i (ı) and dotted I (İ).</div>
+    </div>
+
+    <!-- Test Case 3: French -->
+    <div class="test-case" lang="fr">
+        <div class="lang-info">French: lang="fr"</div>
+        <div class="text-sample">Portez ce vieux whisky au juge blond qui fume.</div>
+        <div class="explanation">French text with accented characters and ligatures.</div>
+    </div>
+
+    <!-- Test Case 4: German -->
+    <div class="test-case" lang="de">
+        <div class="lang-info">German: lang="de"</div>
+        <div class="text-sample">Zwölf Boxkämpfer jagen Viktor quer über den großen Sylter Deich.</div>
+        <div class="explanation">German text with umlauts and special characters.</div>
+    </div>
+
+    <!-- Test Case 5: Arabic -->
+    <div class="test-case" lang="ar">
+        <div class="lang-info">Arabic: lang="ar"</div>
+        <div class="text-sample">نص حكيم له سر قاطع وذو شأن عظيم مكتوب على ثوب أخضر ومغلف بجلد أزرق</div>
+        <div class="explanation">Arabic text with right-to-left shaping and contextual forms.</div>
+    </div>
+
+    <!-- Test Case 6: Chinese -->
+    <div class="test-case" lang="zh">
+        <div class="lang-info">Chinese: lang="zh"</div>
+        <div class="text-sample">今天天气很好，我们去公园散步吧。</div>
+        <div class="explanation">Chinese text with CJK character shaping.</div>
+    </div>
+
+    <!-- Test Case 7: Japanese -->
+    <div class="test-case" lang="ja">
+        <div class="lang-info">Japanese: lang="ja"</div>
+        <div class="text-sample">いろはにほへと ちりぬるを わかよたれそ つねならむ</div>
+        <div class="explanation">Japanese text with kana and kanji shaping.</div>
+    </div>
+
+    <!-- Test Case 8: Korean -->
+    <div class="test-case" lang="ko">
+        <div class="lang-info">Korean: lang="ko"</div>
+        <div class="text-sample">다람쥐 헌 쳇바퀴에 돌아간다</div>
+        <div class="explanation">Korean text with Hangul syllable shaping.</div>
+    </div>
+
+    <!-- Test Case 9: Language inheritance -->
+    <div class="test-case" lang="es">
+        <div class="lang-info">Spanish parent with English child: lang="es"</div>
+        <div class="text-sample">El niño juega en el parque.</div>
+        <div class="text-sample" lang="en">The child plays in the park.</div>
+        <div class="explanation">Demonstrates language inheritance: child elements inherit parent's lang attribute.</div>
+    </div>
+
+    <!-- Test Case 10: Mixed language content -->
+    <div class="test-case">
+        <div class="lang-info">Mixed language content</div>
+        <div class="text-sample">
+            English: Hello world.<br>
+            <span lang="fr">French: Bonjour le monde.</span><br>
+            <span lang="de">German: Hallo Welt.</span><br>
+            <span lang="es">Spanish: Hola mundo.</span>
+        </div>
+        <div class="explanation">Mixed language content with proper language tagging.</div>
+    </div>
+
+    <script>
+        // Verify that lang attributes are properly set
+        document.addEventListener('DOMContentLoaded', function() {
+            const testCases = document.querySelectorAll('.test-case');
+            testCases.forEach((testCase, index) => {
+                const lang = testCase.getAttribute('lang') || 'en';
+                console.log(`Test case ${index + 1}: lang="${lang}"`);
+
+                // Check child elements for lang inheritance
+                const children = testCase.querySelectorAll('[lang]');
+                children.forEach(child => {
+                    const childLang = child.getAttribute('lang');
+                    console.log(`  Child element: lang="${childLang}"`);
+                });
+            });
+        });
+    </script>
+</body>
+</html>

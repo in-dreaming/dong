@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Overscroll Behavior - Contain Test</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+        }
+        .outer {
+            width: 400px;
+            height: 300px;
+            border: 2px solid #333;
+            overflow: auto;
+            background-color: #f0f0f0;
+        }
+        .outer-content {
+            height: 600px;
+            padding: 10px;
+        }
+        .inner {
+            width: 300px;
+            height: 150px;
+            border: 2px solid #c00;
+            overflow: auto;
+            background-color: #fff;
+            margin-top: 10px;
+            /* Prevent scroll chaining to outer container */
+            overscroll-behavior: contain;
+        }
+        .inner-content {
+            height: 400px;
+            padding: 10px;
+        }
+        h1 {
+            margin: 0 0 10px 0;
+            font-size: 18px;
+        }
+        p {
+            margin: 5px 0;
+        }
+        .legend {
+            margin-bottom: 20px;
+            padding: 10px;
+            background: #e8f4f8;
+            border: 1px solid #4a9eba;
+        }
+    </style>
+</head>
+<body>
+    <div class="legend">
+        <h1>Test: overscroll-behavior: contain</h1>
+        <p><strong>Expected behavior:</strong> When scrolling inside the red inner box reaches the bottom/top, it should NOT propagate to the outer gray box.</p>
+        <p><strong>Test:</strong> Scroll down inside the red box until you reach the end. The outer box should not scroll.</p>
+    </div>
+
+    <div class="outer">
+        <div class="outer-content">
+            <p>Outer container (scrollable)</p>
+            <p>This container has overflow:auto and should receive scroll events only when not inside the inner box.</p>
+
+            <div class="inner">
+                <div class="inner-content">
+                    <p><strong>Inner container (overscroll-behavior: contain)</strong></p>
+                    <p>Line 1</p>
+                    <p>Line 2</p>
+                    <p>Line 3</p>
+                    <p>Line 4</p>
+                    <p>Line 5</p>
+                    <p>Line 6</p>
+                    <p>Line 7</p>
+                    <p>Line 8</p>
+                    <p>Line 9</p>
+                    <p>Line 10</p>
+                    <p>Line 11</p>
+                    <p>Line 12</p>
+                    <p>Line 13</p>
+                    <p>Line 14</p>
+                    <p>Line 15 (end)</p>
+                </div>
+            </div>
+
+            <p>More outer content below inner box</p>
+            <p>Line A</p>
+            <p>Line B</p>
+            <p>Line C</p>
+            <p>Line D</p>
+            <p>Line E</p>
+            <p>Line F</p>
+            <p>Line G</p>
+            <p>Line H</p>
+            <p>Line I</p>
+            <p>Line J (end)</p>
+        </div>
+    </div>
+</body>
+</html>

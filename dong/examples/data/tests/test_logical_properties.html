@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>CSS Logical Properties Test</title>
+    <style>
+        body {
+            margin: 20px;
+            font-family: Arial, sans-serif;
+            direction: ltr;
+            writing-mode: horizontal-tb;
+        }
+
+        .test-box {
+            margin-bottom: 30px;
+            border: 1px solid #ccc;
+            padding: 15px;
+            background-color: #f9f9f9;
+        }
+
+        h1, h2 {
+            color: #333;
+        }
+
+        .result-box {
+            border: 2px dashed #999;
+            padding: 10px;
+            margin: 10px 0;
+            background-color: white;
+        }
+
+        /* Test 1: Individual logical properties */
+        .margin-inline-start-test {
+            margin-inline-start: 20px;
+            background-color: #e6f7ff;
+        }
+
+        .margin-inline-end-test {
+            margin-inline-end: 30px;
+            background-color: #f0fff0;
+        }
+
+        .margin-block-start-test {
+            margin-block-start: 15px;
+            background-color: #fff0f5;
+        }
+
+        .margin-block-end-test {
+            margin-block-end: 25px;
+            background-color: #fff8e1;
+        }
+
+        .padding-inline-start-test {
+            padding-inline-start: 20px;
+            background-color: #f5f0ff;
+        }
+
+        .padding-inline-end-test {
+            padding-inline-end: 30px;
+            background-color: #f0f8ff;
+        }
+
+        .padding-block-start-test {
+            padding-block-start: 15px;
+            background-color: #f8fff0;
+        }
+
+        .padding-block-end-test {
+            padding-block-end: 25px;
+            background-color: #fff5f0;
+        }
+
+        .border-inline-start-test {
+            border-inline-start-width: 4px;
+            border-inline-start-color: red;
+            border-inline-start-style: solid;
+            background-color: #ffe6e6;
+        }
+
+        .border-inline-end-test {
+            border-inline-end-width: 3px;
+            border-inline-end-color: blue;
+            border-inline-end-style: dashed;
+            background-color: #e6e6ff;
+        }
+
+        .border-block-start-test {
+            border-block-start-width: 5px;
+            border-block-start-color: green;
+            border-block-start-style: dotted;
+            background-color: #e6ffe6;
+        }
+
+        .border-block-end-test {
+            border-block-end-width: 2px;
+            border-block-end-color: purple;
+            border-block-end-style: double;
+            background-color: #f0e6ff;
+        }
+
+        .inset-inline-start-test {
+            position: relative;
+            inset-inline-start: 10px;
+            background-color: #fff5e6;
+        }
+
+        .inset-inline-end-test {
+            position: relative;
+            inset-inline-end: 20px;
+            background-color: #e6f5ff;
+        }
+
+        .inset-block-start-test {
+            position: relative;
+            inset-block-start: 5px;
+            background-color: #f5ffe6;
+        }
+
+        .inset-block-end-test {
+            position: relative;
+            inset-block-end: 15px;
+            background-color: #ffe6f5;
+        }
+
+        /* Test 2: Shorthand logical properties */
+        .margin-inline-shorthand {
+            margin-inline: 20px 40px;
+            background-color: #e6fffd;
+        }
+
+        .margin-block-shorthand {
+            margin-block: 10px 30px;
+            background-color: #fffde6;
+        }
+
+        .padding-inline-shorthand {
+            padding-inline: 15px 25px;
+            background-color: #fde6ff;
+        }
+
+        .padding-block-shorthand {
+            padding-block: 5px 20px;
+            background-color: #e6fdff;
+        }
+
+        .border-inline-shorthand {
+            border-inline: 3px solid orange;
+            background-color: #fff8e6;
+        }
+
+        .border-block-shorthand {
+            border-block: 2px dashed teal;
+            background-color: #e6fff8;
+        }
+
+        .inset-inline-shorthand {
+            position: relative;
+            inset-inline: 5px 15px;
+            background-color: #f8e6ff;
+        }
+
+        .inset-block-shorthand {
+            position: relative;
+            inset-block: 10px 25px;
+            background-color: #e6f8ff;
+        }
+
+        /* Test 3: Mixed logical and physical properties */
+        .mixed-properties {
+            margin-left: 10px;
+            margin-inline-start: 20px;
+            padding-top: 5px;
+            padding-block-start: 15px;
+            border-right: 2px solid black;
+            border-inline-end: 3px dashed red;
+            background-color: #f5f5f5;
+        }
+
+        /* Test 4: Global keywords with logical properties */
+        .logical-global-keywords {
+            margin-inline-start: initial;
+            padding-block-end: inherit;
+            border-inline: unset;
+            background-color: #f0f0f0;
+        }
+
+        .code {
+            font-family: 'Courier New', monospace;
+            background-color: #f5f5f5;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <h1>CSS Logical Properties Test</h1>
+    <p>This test verifies that CSS logical properties are correctly parsed and mapped to physical properties.</p>
+    <p><strong>Current writing-mode:</strong> horizontal-tb, <strong>direction:</strong> ltr</p>
+    <p><strong>Expected mapping:</strong> inline-start = left, inline-end = right, block-start = top, block-end = bottom</p>
+
+    <div class="test-box">
+        <h2>Test 1: Individual Logical Properties</h2>
+
+        <div class="result-box margin-inline-start-test">
+            <code class="code">margin-inline-start: 20px</code><br>
+            Should have left margin of 20px
+        </div>
+
+        <div class="result-box margin-inline-end-test">
+            <code class="code">margin-inline-end: 30px</code><br>
+            Should have right margin of 30px
+        </div>
+
+        <div class="result-box margin-block-start-test">
+            <code class="code">margin-block-start: 15px</code><br>
+            Should have top margin of 15px
+        </div>
+
+        <div class="result-box margin-block-end-test">
+            <code class="code">margin-block-end: 25px</code><br>
+            Should have bottom margin of 25px
+        </div>
+
+        <div class="result-box padding-inline-start-test">
+            <code class="code">padding-inline-start: 20px</code><br>
+            Should have left padding of 20px
+        </div>
+
+        <div class="result-box padding-inline-end-test">
+            <code class="code">padding-inline-end: 30px</code><br>
+            Should have right padding of 30px
+        </div>
+
+        <div class="result-box padding-block-start-test">
+            <code class="code">padding-block-start: 15px</code><br>
+            Should have top padding of 15px
+        </div>
+
+        <div class="result-box padding-block-end-test">
+            <code class="code">padding-block-end: 25px</code><br>
+            Should have bottom padding of 25px
+        </div>
+
+        <div class="result-box border-inline-start-test">
+            <code class="code">border-inline-start: 4px solid red</code><br>
+            Should have left border: 4px solid red
+        </div>
+
+        <div class="result-box border-inline-end-test">
+            <code class="code">border-inline-end: 3px dashed blue</code><br>
+            Should have right border: 3px dashed blue
+        </div>
+
+        <div class="result-box border-block-start-test">
+            <code class="code">border-block-start: 5px dotted green</code><br>
+            Should have top border: 5px dotted green
+        </div>
+
+        <div class="result-box border-block-end-test">
+            <code class="code">border-block-end: 2px double purple</code><br>
+            Should have bottom border: 2px double purple
+        </div>
+
+        <div class="result-box inset-inline-start-test">
+            <code class="code">inset-inline-start: 10px</code><br>
+            Should have left offset of 10px
+        </div>
+
+        <div class="result-box inset-inline-end-test">
+            <code class="code">inset-inline-end: 20px</code><br>
+            Should have right offset of 20px
+        </div>
+
+        <div class="result-box inset-block-start-test">
+            <code class="code">inset-block-start: 5px</code><br>
+            Should have top offset of 5px
+        </div>
+
+        <div class="result-box inset-block-end-test">
+            <code class="code">inset-block-end: 15px</code><br>
+            Should have bottom offset of 15px
+        </div>
+    </div>
+
+    <div class="test-box">
+        <h2>Test 2: Shorthand Logical Properties</h2>
+
+        <div class="result-box margin-inline-shorthand">
+            <code class="code">margin-inline: 20px 40px</code><br>
+            Should have left margin 20px, right margin 40px
+        </div>
+
+        <div class="result-box margin-block-shorthand">
+            <code class="code">margin-block: 10px 30px</code><br>
+            Should have top margin 10px, bottom margin 30px
+        </div>
+
+        <div class="result-box padding-inline-shorthand">
+            <code class="code">padding-inline: 15px 25px</code><br>
+            Should have left padding 15px, right padding 25px
+        </div>
+
+        <div class="result-box padding-block-shorthand">
+            <code class="code">padding-block: 5px 20px</code><br>
+            Should have top padding 5px, bottom padding 20px
+        </div>
+
+        <div class="result-box border-inline-shorthand">
+            <code class="code">border-inline: 3px solid orange</code><br>
+            Should have left and right borders: 3px solid orange
+        </div>
+
+        <div class="result-box border-block-shorthand">
+            <code class="code">border-block: 2px dashed teal</code><br>
+            Should have top and bottom borders: 2px dashed teal
+        </div>
+
+        <div class="result-box inset-inline-shorthand">
+            <code class="code">inset-inline: 5px 15px</code><br>
+            Should have left offset 5px, right offset 15px
+        </div>
+
+        <div class="result-box inset-block-shorthand">
+            <code class="code">inset-block: 10px 25px</code><br>
+            Should have top offset 10px, bottom offset 25px
+        </div>
+    </div>
+
+    <div class="test-box">
+        <h2>Test 3: Mixed Logical and Physical Properties</h2>
+
+        <div class="result-box mixed-properties">
+            <code class="code">margin-left: 10px; margin-inline-start: 20px</code><br>
+            <code class="code">padding-top: 5px; padding-block-start: 15px</code><br>
+            <code class="code">border-right: 2px solid black; border-inline-end: 3px dashed red</code><br>
+            Should show interaction between logical and physical properties
+        </div>
+    </div>
+
+    <div class="test-box">
+        <h2>Test 4: Global Keywords with Logical Properties</h2>
+
+        <div class="result-box logical-global-keywords">
+            <code class="code">margin-inline-start: initial</code><br>
+            <code class="code">padding-block-end: inherit</code><br>
+            <code class="code">border-inline: unset</code><br>
+            Should handle global keywords correctly
+        </div>
+    </div>
+
+    <div class="test-box">
+        <h2>Test Results Summary</h2>
+        <p>If all tests pass, you should see:</p>
+        <ul>
+            <li>Proper spacing and borders on all sides according to logical property values</li>
+            <li>Correct mapping of logical directions to physical directions (LTR horizontal-tb)</li>
+            <li>Shorthand properties working correctly with 1 or 2 values</li>
+            <li>No conflicts between logical and physical properties</li>
+            <li>Global keywords applied appropriately</li>
+        </ul>
+    </div>
+</body>
+</html>

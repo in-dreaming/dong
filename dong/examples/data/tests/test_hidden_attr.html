@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  .visible { background: lightgreen; padding: 10px; margin: 5px; }
+  .box { background: lightblue; padding: 10px; margin: 5px; }
+</style>
+</head>
+<body>
+  <div class="visible" id="v1">Visible element</div>
+  <div class="box" hidden id="h1">This should be HIDDEN</div>
+  <div class="visible" id="v2">Another visible element</div>
+  <div id="toggle" class="box">Toggle target</div>
+  <div id="result" style="margin-top: 20px; padding: 10px; background: #eee;"></div>
+  <script>
+    var r = '';
+    var h1 = document.getElementById('h1');
+    var toggle = document.getElementById('toggle');
+
+    // Test: hidden element should have display:none
+    r += 'h1 has hidden attr: ' + (h1.hidden === true ? 'PASS' : 'FAIL') + '\n';
+
+    // Test: toggle hidden via JS
+    toggle.hidden = true;
+    r += 'toggle.hidden set to true: ' + (toggle.hidden === true ? 'PASS' : 'FAIL') + '\n';
+
+    toggle.hidden = false;
+    r += 'toggle.hidden set to false: ' + (toggle.hidden === false ? 'PASS' : 'FAIL') + '\n';
+
+    document.getElementById('result').textContent = r;
+    console.log('[hidden] attribute test loaded');
+  </script>
+</body>
+</html>

@@ -21,3 +21,18 @@ src/core/examples/libs/
 dong/third_party/skia/
 /dong/third_party/skia
 /dong/third_party/DXC-1.8.2505.1
+build-cmake/
+build-zig/
+/tmp/
+dong/tmp/
+.tools/
+build-test/
+dong/--filter/
+dong/test_output/
+ai_working/
+dong/ai_working/
+node_modules/
+dist/
+# orchestration
+dong/.orchestration/
+dong/.worktrees/

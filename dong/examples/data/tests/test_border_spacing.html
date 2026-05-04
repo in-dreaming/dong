@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {
+      margin: 20px;
+      font-family: Arial, sans-serif;
+    }
+    h2 {
+      margin: 20px 0 10px;
+    }
+
+    table {
+      border-collapse: separate;
+      border: 2px solid #333;
+    }
+
+    td {
+      border: 2px solid #999;
+      padding: 5px;
+      background: #f0f8ff;
+    }
+  </style>
+</head>
+<body>
+  <h1>border-spacing Test</h1>
+
+  <h2>border-spacing: 5px (single value - horizontal and vertical)</h2>
+  <table style="border-spacing: 5px">
+    <tr>
+      <td>Cell 1</td>
+      <td>Cell 2</td>
+      <td>Cell 3</td>
+    </tr>
+    <tr>
+      <td>Cell 4</td>
+      <td>Cell 5</td>
+      <td>Cell 6</td>
+    </tr>
+    <tr>
+      <td>Cell 7</td>
+      <td>Cell 8</td>
+      <td>Cell 9</td>
+    </tr>
+  </table>
+
+  <h2>border-spacing: 10px 20px (horizontal 10px, vertical 20px)</h2>
+  <table style="border-spacing: 10px 20px">
+    <tr>
+      <td>Cell 1</td>
+      <td>Cell 2</td>
+      <td>Cell 3</td>
+    </tr>
+    <tr>
+      <td>Cell 4</td>
+      <td>Cell 5</td>
+      <td>Cell 6</td>
+    </tr>
+    <tr>
+      <td>Cell 7</td>
+      <td>Cell 8</td>
+      <td>Cell 9</td>
+    </tr>
+  </table>
+
+  <h2>border-spacing: 2px 15px (small horizontal, large vertical)</h2>
+  <table style="border-spacing: 2px 15px">
+    <tr>
+      <td>Cell 1</td>
+      <td>Cell 2</td>
+    </tr>
+    <tr>
+      <td>Cell 3</td>
+      <td>Cell 4</td>
+    </tr>
+  </table>
+
+  <h2>border-spacing: 30px 2px (large horizontal, small vertical)</h2>
+  <table style="border-spacing: 30px 2px">
+    <tr>
+      <td>Cell 1</td>
+      <td>Cell 2</td>
+    </tr>
+    <tr>
+      <td>Cell 3</td>
+      <td>Cell 4</td>
+    </tr>
+  </table>
+</body>
+</html>

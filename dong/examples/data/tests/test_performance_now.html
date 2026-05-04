@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            font-family: Arial;
+            padding: 20px;
+            background: #f0f0f0;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .test-group {
+            margin-bottom: 15px;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 4px;
+            border-left: 3px solid #2196f3;
+        }
+        .result {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            margin-top: 10px;
+        }
+        .pass {
+            color: #4caf50;
+            font-weight: bold;
+        }
+        .fail {
+            color: #f44336;
+            font-weight: bold;
+        }
+        .note {
+            color: #666;
+            font-size: 14px;
+            padding: 10px;
+            background: #fff3cd;
+            border-left: 3px solid #ffc107;
+            margin-bottom: 10px;
+        }
+        button {
+            padding: 8px 16px;
+            background: #2196f3;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #1976d2;
+        }
+    </style>
+</head>
+<body>
+    <h1>performance.now() API Test</h1>
+
+    <div class="container">
+        <p class="note">
+            <strong>Test Instructions:</strong><br>
+            This page tests the performance.now() API which returns a high-resolution timestamp in milliseconds.
+        </p>
+
+        <div class="test-group">
+            <h3>Test 1: performance.now() exists</h3>
+            <div class="result" id="result1"></div>
+        </div>
+
+        <div class="test-group">
+            <h3>Test 2: performance.now() returns a number</h3>
+            <div class="result" id="result2"></div>
+        </div>
+
+        <div class="test-group">
+            <h3>Test 3: performance.now() increases over time</h3>
+            <button onclick="testMonotonicity()">Test Time Progression</button>
+            <div class="result" id="result3"></div>
+        </div>
+
+        <div class="test-group">
+            <h3>Test 4: performance.now() precision</h3>
+            <div class="result" id="result4"></div>
+        </div>
+
+        <div class="test-group">
+            <h3>Test 5: Measure operation time</h3>
+            <button onclick="measureOperation()">Measure Heavy Operation</button>
+            <div class="result" id="result5"></div>
+        </div>
+    </div>
+
+    <script>
+        function runBasicTests() {
+            // Test 1: performance.now() exists
+            const result1 = document.getElementById('result1');
+            const performanceExists = typeof performance !== 'undefined';
+            const nowExists = performanceExists && typeof performance.now === 'function';
+
+            result1.innerHTML = `
+                typeof performance = ${typeof performance}<br>
+                typeof performance.now = ${performanceExists ? typeof performance.now : 'N/A'}<br>
+                <span class="${nowExists ? 'pass' : 'fail'}">${nowExists ? '✓ PASS' : '✗ FAIL'}</span>
+            `;
+
+            // Test 2: performance.now() returns a number
+            const result2 = document.getElementById('result2');
+            if (nowExists) {
+                const now = performance.now();
+                const isNumber = typeof now === 'number';
+                const isPositive = now >= 0;
+
+                result2.innerHTML = `
+                    performance.now() = ${now}<br>
+                    typeof = ${typeof now} (expected: number)<br>
+                    value >= 0: ${isPositive}<br>
+                    <span class="${isNumber && isPositive ? 'pass' : 'fail'}">${isNumber && isPositive ? '✓ PASS' : '✗ FAIL'}</span>
+                `;
+            } else {
+                result2.innerHTML = '<span class="fail">✗ SKIP (performance.now not available)</span>';
+            }
+
+            // Test 4: Check precision
+            const result4 = document.getElementById('result4');
+            if (nowExists) {
+                const t1 = performance.now();
+                const t2 = performance.now();
+                const t3 = performance.now();
+
+                const hasFractional = (t1 % 1 !== 0) || (t2 % 1 !== 0) || (t3 % 1 !== 0);
+
+                result4.innerHTML = `
+                    Sample 1: ${t1.toFixed(6)} ms<br>
+                    Sample 2: ${t2.toFixed(6)} ms<br>
+                    Sample 3: ${t3.toFixed(6)} ms<br>
+                    Has sub-millisecond precision: ${hasFractional}<br>
+                    <span class="pass">✓ Timestamps captured</span>
+                `;
+            } else {
+                result4.innerHTML = '<span class="fail">✗ SKIP (performance.now not available)</span>';
+            }
+        }
+
+        function testMonotonicity() {
+            const result3 = document.getElementById('result3');
+            if (typeof performance === 'undefined' || typeof performance.now !== 'function') {
+                result3.innerHTML = '<span class="fail">✗ FAIL (performance.now not available)</span>';
+                return;
+            }
+
+            const samples = [];
+            for (let i = 0; i < 10; i++) {
+                samples.push(performance.now());
+            }
+
+            let monotonic = true;
+            for (let i = 1; i < samples.length; i++) {
+                if (samples[i] < samples[i-1]) {
+                    monotonic = false;
+                    break;
+                }
+            }
+
+            const first = samples[0];
+            const last = samples[samples.length - 1];
+            const delta = last - first;
+
+            result3.innerHTML = `
+                First timestamp: ${first.toFixed(6)} ms<br>
+                Last timestamp: ${last.toFixed(6)} ms<br>
+                Delta: ${delta.toFixed(6)} ms<br>
+                Monotonic (always increasing): ${monotonic}<br>
+                <span class="${monotonic && delta >= 0 ? 'pass' : 'fail'}">${monotonic && delta >= 0 ? '✓ PASS' : '✗ FAIL'}</span>
+            `;
+        }
+
+        function measureOperation() {
+            const result5 = document.getElementById('result5');
+            if (typeof performance === 'undefined' || typeof performance.now !== 'function') {
+                result5.innerHTML = '<span class="fail">✗ FAIL (performance.now not available)</span>';
+                return;
+            }
+
+            const start = performance.now();
+
+            // Simulate some work
+            let sum = 0;
+            for (let i = 0; i < 1000000; i++) {
+                sum += Math.sqrt(i);
+            }
+
+            const end = performance.now();
+            const duration = end - start;
+
+            result5.innerHTML = `
+                Start: ${start.toFixed(6)} ms<br>
+                End: ${end.toFixed(6)} ms<br>
+                Duration: ${duration.toFixed(6)} ms<br>
+                Operation result: ${sum.toFixed(2)}<br>
+                <span class="pass">✓ Operation measured successfully</span>
+            `;
+        }
+
+        // Run basic tests on load
+        document.addEventListener('DOMContentLoaded', runBasicTests);
+
+        console.log('performance.now() test page loaded');
+        if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
+            console.log('Initial timestamp:', performance.now());
+        }
+    </script>
+</body>
+</html>

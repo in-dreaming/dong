@@ -1,0 +1,108 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    html, body { margin: 0; background: #000; }
+    #status { position: absolute; left: 20px; top: 20px; width: 220px; height: 64px; background: #ff0000; }
+    #testContainer { position: absolute; left: 300px; top: 20px; width: 400px; height: 400px; background: #222; }
+    .hidden { position: absolute; left: -2000px; top: -2000px; }
+    .btn { position: absolute; width: 100px; height: 40px; background: #444; border: 2px solid #666; }
+    #clickBtn { left: 10px; top: 10px; }
+    #clickResult { position: absolute; left: 10px; top: 60px; width: 180px; height: 30px; background: #333; }
+  </style>
+</head>
+<body>
+  <div id="status"></div>
+
+  <div id="testContainer">
+    <button id="clickBtn">Click Me</button>
+    <div id="clickResult"></div>
+  </div>
+
+  <script>
+    const status = document.getElementById('status');
+    const clickResult = document.getElementById('clickResult');
+    const stageColors = {
+      0: '#ff0000',
+      1: '#ff00ff',
+      2: '#00ffff',
+      3: '#ffff00',
+      4: '#ff8800',
+      5: '#8888ff',
+      9: '#00ff00',
+    };
+
+    let stage = 0;
+    function mark(s) {
+      stage = s;
+      status.style.background = stageColors[s] || '#ff0000';
+    }
+
+    function setOK(ok) {
+      status.style.background = ok ? stageColors[9] : (stageColors[stage] || '#ff0000');
+    }
+
+    let clickCount = 0;
+
+    try {
+      mark(1);
+      // Test Element.click() method
+      const btn = document.getElementById('clickBtn');
+      btn.addEventListener('click', (e) => {
+        clickCount++;
+        clickResult.textContent = 'Clicked: ' + clickCount;
+      });
+
+      // Programmatic click
+      btn.click();
+
+      // Wait slightly for event to process, then verify
+      setTimeout(() => {
+        if (clickCount !== 1) {
+          mark(31);
+          throw new Error('click() did not trigger event');
+        }
+
+        mark(2);
+        // Test that click() works without user interaction (should still trigger event)
+        for (let i = 0; i < 3; i++) {
+          btn.click();
+        }
+
+        setTimeout(() => {
+          if (clickCount !== 4) {
+            mark(32);
+            throw new Error('click() multiple calls failed');
+          }
+
+          mark(3);
+          // Test setPointerCapture and releasePointerCapture
+          const captureTarget = document.createElement('div');
+          captureTarget.style.position = 'absolute';
+          captureTarget.style.left = '10px';
+          captureTarget.style.top = '100px';
+          captureTarget.style.width = '100px';
+          captureTarget.style.height = '100px';
+          captureTarget.style.background = '#556677';
+          captureTarget.style.borderRadius = '8px';
+          captureTarget.id = 'captureTarget';
+          document.getElementById('testContainer').appendChild(captureTarget);
+
+          // Note: pointer capture is primarily for pointer events (PointerEvent API)
+          // This test verifies the methods exist and can be called
+          captureTarget.setPointerCapture(1);
+          captureTarget.releasePointerCapture(1);
+
+          mark(4);
+          setOK(true);
+        }, 50);
+      }, 50);
+    } catch (e) {
+      setOK(false);
+      clickResult.textContent = 'Error: ' + e.message;
+    }
+
+  </script>
+</body>
+</html>

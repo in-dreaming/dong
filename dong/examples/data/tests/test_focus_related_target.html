@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        .input-group {
+            margin: 15px 0;
+        }
+        input, button {
+            padding: 10px;
+            font-size: 16px;
+            margin: 5px;
+            border: 2px solid #ccc;
+        }
+        input:focus, button:focus {
+            border-color: #2196f3;
+            outline: none;
+        }
+        #log {
+            background-color: #f5f5f5;
+            padding: 15px;
+            border: 1px solid #ddd;
+            max-height: 500px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 14px;
+            margin-top: 20px;
+        }
+        .log-entry {
+            padding: 8px;
+            margin: 5px 0;
+            border-left: 4px solid #4caf50;
+            background-color: #e8f5e9;
+        }
+        .log-entry.blur {
+            border-left-color: #ff9800;
+            background-color: #fff3e0;
+        }
+        .log-entry.error {
+            border-left-color: #f44336;
+            background-color: #ffebee;
+        }
+        .event-detail {
+            padding-left: 20px;
+            color: #666;
+            font-size: 13px;
+        }
+        .summary {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #e3f2fd;
+            border: 1px solid #2196f3;
+        }
+    </style>
+</head>
+<body>
+    <h1>FocusEvent relatedTarget Test</h1>
+    <p><strong>Instructions:</strong> Click or tab through the inputs to test focus/blur events.</p>
+
+    <div class="input-group">
+        <label>Input 1: <input type="text" id="input1" placeholder="First input"></label>
+    </div>
+
+    <div class="input-group">
+        <label>Input 2: <input type="text" id="input2" placeholder="Second input"></label>
+    </div>
+
+    <div class="input-group">
+        <label>Input 3: <input type="text" id="input3" placeholder="Third input"></label>
+    </div>
+
+    <div class="input-group">
+        <button id="btn1">Button 1</button>
+        <button id="btn2">Button 2</button>
+    </div>
+
+    <div id="log"></div>
+    <div class="summary" id="summary"></div>
+
+    <script>
+        const log = document.getElementById('log');
+        const summary = document.getElementById('summary');
+
+        let eventCount = 0;
+        let focusEvents = 0;
+        let blurEvents = 0;
+        let validRelatedTargetCount = 0;
+
+        function getElementDesc(elem) {
+            if (!elem) return 'null';
+            let desc = elem.tagName.toLowerCase();
+            if (elem.id) desc += '#' + elem.id;
+            if (elem.placeholder) desc += `[placeholder="${elem.placeholder}"]`;
+            return desc;
+        }
+
+        function addLog(eventType, target, relatedTarget, isError = false) {
+            eventCount++;
+            if (eventType === 'focus') focusEvents++;
+            if (eventType === 'blur') blurEvents++;
+
+            const div = document.createElement('div');
+            div.className = 'log-entry' + (eventType === 'blur' ? ' blur' : '') + (isError ? ' error' : '');
+
+            const targetDesc = getElementDesc(target);
+            const relatedDesc = getElementDesc(relatedTarget);
+
+            let msg = `[${eventCount}] ${eventType} on ${targetDesc}`;
+            div.textContent = msg;
+
+            const detail = document.createElement('div');
+            detail.className = 'event-detail';
+            detail.textContent = `relatedTarget: ${relatedDesc}`;
+            div.appendChild(detail);
+
+            log.appendChild(div);
+
+            // Validate relatedTarget
+            if (relatedTarget !== null) {
+                validRelatedTargetCount++;
+            }
+
+            // Keep only last 30 entries
+            while (log.children.length > 30) {
+                log.removeChild(log.firstChild);
+            }
+
+            // Auto scroll to bottom
+            log.scrollTop = log.scrollHeight;
+
+            updateSummary();
+        }
+
+        function updateSummary() {
+            const hasRelatedTarget = validRelatedTargetCount > 0;
+            const percentage = eventCount > 0 ? ((validRelatedTargetCount / eventCount) * 100).toFixed(0) : 0;
+
+            summary.innerHTML = `
+                <h3>Test Summary</h3>
+                <p><strong>Total events:</strong> ${eventCount} (focus: ${focusEvents}, blur: ${blurEvents})</p>
+                <p><strong>Events with relatedTarget:</strong> ${validRelatedTargetCount} (${percentage}%)</p>
+                ${hasRelatedTarget ?
+                    '<p style="color: green; font-weight: bold;">✓ relatedTarget property is working!</p>' :
+                    '<p style="color: red; font-weight: bold;">✗ No relatedTarget detected yet</p>'
+                }
+            `;
+        }
+
+        // Attach focus/blur listeners to all inputs and buttons
+        const elements = ['input1', 'input2', 'input3', 'btn1', 'btn2'];
+        elements.forEach(id => {
+            const elem = document.getElementById(id);
+
+            elem.addEventListener('focus', function(e) {
+                // Check if relatedTarget exists
+                const hasRelatedTarget = 'relatedTarget' in e;
+                if (!hasRelatedTarget) {
+                    addLog('focus', e.target, null, true);
+                    return;
+                }
+                addLog('focus', e.target, e.relatedTarget);
+            });
+
+            elem.addEventListener('blur', function(e) {
+                // Check if relatedTarget exists
+                const hasRelatedTarget = 'relatedTarget' in e;
+                if (!hasRelatedTarget) {
+                    addLog('blur', e.target, null, true);
+                    return;
+                }
+                addLog('blur', e.target, e.relatedTarget);
+            });
+        });
+
+        // Initial message
+        const initial = document.createElement('div');
+        initial.className = 'log-entry';
+        initial.textContent = 'Test initialized. Click on inputs or use Tab to navigate.';
+        log.appendChild(initial);
+
+        updateSummary();
+    </script>
+</body>
+</html>

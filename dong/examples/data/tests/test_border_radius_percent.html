@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            font-family: Arial;
+            padding: 20px;
+            background: #f0f0f0;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .test-box {
+            margin: 15px;
+            display: inline-block;
+            text-align: center;
+        }
+        .box {
+            width: 150px;
+            height: 150px;
+            background: #3498db;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+        .label {
+            font-size: 14px;
+            color: #666;
+        }
+
+        /* Test cases */
+        .percent-50 {
+            border-radius: 50%;
+        }
+        .percent-25 {
+            border-radius: 25%;
+        }
+        .percent-10 {
+            border-radius: 10%;
+        }
+        .px-75 {
+            border-radius: 75px;
+        }
+        .px-20 {
+            border-radius: 20px;
+        }
+        .mixed {
+            border-top-left-radius: 50%;
+            border-top-right-radius: 10px;
+            border-bottom-right-radius: 30%;
+            border-bottom-left-radius: 5px;
+        }
+        .rect-box {
+            width: 200px;
+            height: 100px;
+            border-radius: 50%;
+        }
+    </style>
+</head>
+<body>
+    <h1>Border-Radius Percentage Value Test</h1>
+
+    <div class="container">
+        <h3>Test 1: Percentage Values on Square Elements</h3>
+        <p>All boxes are 150x150px. Percentage values should be relative to element size.</p>
+
+        <div class="test-box">
+            <div class="box percent-50">50%</div>
+            <div class="label">border-radius: 50%<br>(Perfect circle)</div>
+        </div>
+
+        <div class="test-box">
+            <div class="box percent-25">25%</div>
+            <div class="label">border-radius: 25%<br>(Rounded square)</div>
+        </div>
+
+        <div class="test-box">
+            <div class="box percent-10">10%</div>
+            <div class="label">border-radius: 10%<br>(Slightly rounded)</div>
+        </div>
+    </div>
+
+    <div class="container">
+        <h3>Test 2: Pixel Values (Comparison)</h3>
+
+        <div class="test-box">
+            <div class="box px-75">75px</div>
+            <div class="label">border-radius: 75px<br>(Same as 50% on 150px box)</div>
+        </div>
+
+        <div class="test-box">
+            <div class="box px-20">20px</div>
+            <div class="label">border-radius: 20px<br>(Fixed pixel value)</div>
+        </div>
+    </div>
+
+    <div class="container">
+        <h3>Test 3: Mixed Values (Per-Corner)</h3>
+
+        <div class="test-box">
+            <div class="box mixed">Mixed</div>
+            <div class="label">TL:50%, TR:10px<br>BR:30%, BL:5px</div>
+        </div>
+    </div>
+
+    <div class="container">
+        <h3>Test 4: Percentage on Rectangular Element</h3>
+        <p>Box is 200x100px. With border-radius: 50%, it should become pill-shaped.</p>
+
+        <div class="test-box">
+            <div class="box rect-box">50% on<br>200×100</div>
+            <div class="label">border-radius: 50%<br>(Pill shape)</div>
+        </div>
+    </div>
+
+    <div class="container">
+        <h3>JavaScript Verification</h3>
+        <div id="results"></div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const results = document.getElementById('results');
+            let html = '<div style="font-family: monospace; font-size: 14px;">';
+
+            // Test that percentage values are parsed correctly
+            const box50 = document.querySelector('.percent-50');
+            const box25 = document.querySelector('.percent-25');
+            const boxMixed = document.querySelector('.mixed');
+
+            const style50 = window.getComputedStyle(box50);
+            const style25 = window.getComputedStyle(box25);
+            const styleMixed = window.getComputedStyle(boxMixed);
+
+            html += '<strong>Computed border-radius values:</strong><br>';
+            html += `50% box: ${style50.borderRadius || style50.borderTopLeftRadius}<br>`;
+            html += `25% box: ${style25.borderRadius || style25.borderTopLeftRadius}<br>`;
+            html += `Mixed box TL: ${styleMixed.borderTopLeftRadius}<br>`;
+            html += `Mixed box TR: ${styleMixed.borderTopRightRadius}<br>`;
+
+            // Visual verification note
+            html += '<br><strong>Expected behavior:</strong><br>';
+            html += '- 50% on square = perfect circle<br>';
+            html += '- 50% on rectangle = pill/stadium shape<br>';
+            html += '- Percentage values should scale with element size<br>';
+
+            html += '</div>';
+            results.innerHTML = html;
+        });
+    </script>
+</body>
+</html>

@@ -1,106 +1,379 @@
+#define DONG_DISABLE_VIEW_API
 #include "dong.h"
-#include "core/context.hpp"
-#include "core/view.hpp"
 
-using DongContext = dong::Context;
-using DongView = dong::View;
+#include "core/engine_view.hpp"
+#include "core/profiler.h"
+#include "render/text_renderer_mode.hpp"
+
+#include <cstdio>
+#include <cstdlib>
+#include <memory>
+
+namespace {
+
+static inline bool pluginCanLog(const dong_plugin_vtable_t* plugin) {
+    return plugin && plugin->log;
+}
+
+static inline void pluginLog(const dong_plugin_vtable_t* plugin, void* plugin_user,
+                             dong_log_level_t level, const char* msg) {
+    if (!pluginCanLog(plugin) || !msg) {
+        return;
+    }
+    plugin->log(plugin_user, level, msg);
+}
+
+} // namespace
 
 extern "C" {
 
-dong_context_t* dong_create_context(void) {
-    return reinterpret_cast<dong_context_t*>(new DongContext());
+struct dong_engine_t {
+    const dong_plugin_vtable_t* plugin = nullptr;
+    void* plugin_user = nullptr;
+
+    uint32_t width = 960;
+    uint32_t height = 540;
+
+    std::unique_ptr<dong::EngineView> view;
+};
+
+static inline dong_engine_t* asEngine(dong_engine_t* engine) {
+    return engine;
 }
 
-void dong_destroy_context(dong_context_t* ctx) {
-    delete reinterpret_cast<DongContext*>(ctx);
+static inline const dong_engine_t* asEngineConst(const dong_engine_t* engine) {
+    return engine;
 }
 
-dong_view_t* dong_view_create(dong_context_t* ctx, uint32_t width, uint32_t height) {
-    (void)ctx; // Unused for now
-    return reinterpret_cast<dong_view_t*>(new DongView(width, height));
+dong_result_t dong_engine_create(const dong_engine_desc_t* desc, dong_engine_t** out_engine) {
+    if (!desc || !out_engine) {
+        return DONG_ERR_INVALID_ARG;
+    }
+    *out_engine = nullptr;
+
+    if (desc->api_version != DONG_API_VERSION) {
+        return DONG_ERR_VERSION_MISMATCH;
+    }
+
+    if (desc->plugin) {
+        if (desc->plugin_api_version != DONG_PLUGIN_API_VERSION) {
+            return DONG_ERR_VERSION_MISMATCH;
+        }
+        if (desc->plugin->info.plugin_api_version != DONG_PLUGIN_API_VERSION) {
+            return DONG_ERR_VERSION_MISMATCH;
+        }
+    }
+
+    const uint32_t w = desc->width > 0 ? desc->width : 960;
+    const uint32_t h = desc->height > 0 ? desc->height : 540;
+
+    try {
+        auto* engine = new dong_engine_t();
+        engine->plugin = desc->plugin;
+        engine->plugin_user = desc->plugin_user;
+        engine->width = w;
+        engine->height = h;
+
+        engine->view = std::make_unique<dong::EngineView>(w, h);
+        if (!engine->view || !engine->view->isInitialized()) {
+            delete engine;
+            return DONG_ERR_INTERNAL;
+        }
+
+        if (engine->plugin) {
+            engine->view->setPlugin(engine->plugin, engine->plugin_user);
+        }
+
+        if (desc->html) {
+            (void)engine->view->loadHTML(desc->html);
+        }
+
+
+        if (pluginCanLog(engine->plugin)) {
+            char msg[256];
+            std::snprintf(msg, sizeof(msg), "Engine created (%ux%u, html=%s)",
+                          engine->width, engine->height, desc->html ? "loaded" : "none");
+            pluginLog(engine->plugin, engine->plugin_user, DONG_LOG_INFO, msg);
+        }
+
+        *out_engine = engine;
+        return DONG_OK;
+    } catch (...) {
+        *out_engine = nullptr;
+        return DONG_ERR_INTERNAL;
+    }
 }
 
-void dong_view_destroy(dong_view_t* view) {
-    // Alias to dong_view_free for backward compatibility
-    dong_view_free(view);
+void dong_engine_destroy(dong_engine_t* engine) {
+    auto* e = asEngine(engine);
+    if (!e) {
+        return;
+    }
+
+    if (dong_profiler_is_enabled()) {
+        const char* path = std::getenv("DONG_PROFILE_OUTPUT");
+        const char* out = (path && path[0]) ? path : "dong_profile.json";
+        if (dong_profiler_dump(out) == 0) {
+            fprintf(stderr, "[Profiler] Trace saved to %s\n", out);
+        }
+    }
+
+    if (pluginCanLog(e->plugin)) {
+        pluginLog(e->plugin, e->plugin_user, DONG_LOG_INFO, "Engine destroyed");
+    }
+
+    delete e;
 }
 
-void dong_view_free(dong_view_t* view) {
-    if (!view) return;
-    delete reinterpret_cast<DongView*>(view);
+dong_result_t dong_engine_tick(dong_engine_t* engine) {
+    auto* e = asEngine(engine);
+    if (!e || !e->view) {
+        return DONG_ERR_INVALID_ARG;
+    }
+
+    return e->view->tick() ? DONG_OK : DONG_ERR_INTERNAL;
 }
 
-void dong_view_load_html(dong_view_t* view, const char* html) {
-    reinterpret_cast<DongView*>(view)->load_html(html);
+dong_result_t dong_engine_load_html(dong_engine_t* engine, const char* html) {
+    auto* e = asEngine(engine);
+    if (!e || !e->view || !html) {
+        return DONG_ERR_INVALID_ARG;
+    }
+
+    if (!e->view->loadHTML(html)) {
+        return DONG_ERR_INTERNAL;
+    }
+
+    if (pluginCanLog(e->plugin)) {
+        pluginLog(e->plugin, e->plugin_user, DONG_LOG_INFO, "HTML loaded");
+    }
+
+    return DONG_OK;
 }
 
-void dong_view_resize(dong_view_t* view, uint32_t width, uint32_t height) {
-    reinterpret_cast<DongView*>(view)->resize(width, height);
+dong_result_t dong_engine_resize(dong_engine_t* engine, uint32_t width, uint32_t height) {
+    auto* e = asEngine(engine);
+    if (!e || !e->view) {
+        return DONG_ERR_INVALID_ARG;
+    }
+
+    e->width = width;
+    e->height = height;
+    e->view->resize(width, height);
+    return DONG_OK;
 }
 
-void dong_view_update(dong_view_t* view) {
-    reinterpret_cast<DongView*>(view)->update();
+dong_result_t dong_engine_set_gpu(dong_engine_t* engine, void* gpu_device, void* window) {
+    auto* e = asEngine(engine);
+    if (!e || !e->view) {
+        return DONG_ERR_INVALID_ARG;
+    }
+
+    if (!e->view->setGPU(gpu_device, window)) {
+        return DONG_ERR_INTERNAL;
+    }
+
+    if (pluginCanLog(e->plugin)) {
+        pluginLog(e->plugin, e->plugin_user, DONG_LOG_INFO, "GPU device set");
+    }
+
+    return DONG_OK;
 }
 
-void* dong_view_get_pixel_buffer(dong_view_t* view) {
-    return reinterpret_cast<DongView*>(view)->get_pixel_buffer();
+dong_result_t dong_engine_set_resource_root(dong_engine_t* engine, const char* root) {
+    auto* e = asEngine(engine);
+    if (!e || !e->view || !root) {
+        return DONG_ERR_INVALID_ARG;
+    }
+
+    e->view->setResourceRoot(root);
+    return DONG_OK;
 }
 
-uint32_t dong_view_get_texture_id(dong_view_t* view) {
-    (void)view;
-    return 0;
+const char* dong_engine_get_cursor_at(dong_engine_t* engine, int32_t x, int32_t y) {
+    auto* e = asEngine(engine);
+    if (!e || !e->view) {
+        return "auto";
+    }
+
+    return e->view->getCursorAt(x, y);
 }
 
-void dong_view_send_mouse_move(dong_view_t* view, int32_t x, int32_t y) {
-    if (!view) return;
-    reinterpret_cast<DongView*>(view)->handle_mouse_move(x, y);
+dong_result_t dong_engine_send_mouse_move(dong_engine_t* engine, int32_t x, int32_t y) {
+    auto* e = asEngine(engine);
+    if (!e || !e->view) {
+        return DONG_ERR_INVALID_ARG;
+    }
+
+    e->view->sendMouseMove(x, y);
+    return DONG_OK;
 }
 
-void dong_view_send_mouse_down(dong_view_t* view, int32_t button) {
-    if (!view) return;
-    reinterpret_cast<DongView*>(view)->handle_mouse_down(button);
+dong_result_t dong_engine_send_mouse_button(dong_engine_t* engine, int32_t button, int pressed) {
+    auto* e = asEngine(engine);
+    if (!e || !e->view) {
+        return DONG_ERR_INVALID_ARG;
+    }
+
+    e->view->sendMouseButton(button, pressed != 0);
+    return DONG_OK;
 }
 
-void dong_view_send_mouse_up(dong_view_t* view, int32_t button) {
-    if (!view) return;
-    reinterpret_cast<DongView*>(view)->handle_mouse_up(button);
+dong_result_t dong_engine_send_mouse_wheel(dong_engine_t* engine, float delta_x, float delta_y) {
+    auto* e = asEngine(engine);
+    if (!e || !e->view) {
+        return DONG_ERR_INVALID_ARG;
+    }
+
+    e->view->sendMouseWheel(delta_x, delta_y);
+    return DONG_OK;
 }
 
-void dong_view_send_key_down(dong_view_t* view, uint32_t key_code) {
-    if (!view) return;
-    reinterpret_cast<DongView*>(view)->handle_key_down(key_code);
+dong_result_t dong_engine_send_key(dong_engine_t* engine, uint32_t key_code, int pressed) {
+    auto* e = asEngine(engine);
+    if (!e || !e->view) {
+        return DONG_ERR_INVALID_ARG;
+    }
+
+    e->view->sendKey(key_code, pressed != 0);
+    return DONG_OK;
 }
 
-void dong_view_send_key_up(dong_view_t* view, uint32_t key_code) {
-    if (!view) return;
-    reinterpret_cast<DongView*>(view)->handle_key_up(key_code);
+dong_result_t dong_engine_send_text(dong_engine_t* engine, const char* text) {
+    auto* e = asEngine(engine);
+    if (!e || !e->view) {
+        return DONG_ERR_INVALID_ARG;
+    }
+
+    e->view->sendText(text);
+    return DONG_OK;
 }
 
-void dong_view_set_render_mode(dong_view_t* view, bool use_gpu) {
-    if (!view) return;
-    reinterpret_cast<DongView*>(view)->setRenderMode(use_gpu);
+dong_result_t dong_engine_send_text_editing(dong_engine_t* engine, const char* text, int32_t cursor, int32_t selection_length) {
+    auto* e = asEngine(engine);
+    if (!e || !e->view) {
+        return DONG_ERR_INVALID_ARG;
+    }
+
+    e->view->sendTextEditing(text, cursor, selection_length);
+    return DONG_OK;
 }
 
-void dong_view_set_external_gpu_device(dong_view_t* view, void* device, void* window) {
-    if (!view || !device || !window) return;
-    SDL_GPUDevice* gpu_device = reinterpret_cast<SDL_GPUDevice*>(device);
-    SDL_Window* sdl_window = reinterpret_cast<SDL_Window*>(window);
-    reinterpret_cast<DongView*>(view)->setExternalGPUDevice(gpu_device, sdl_window);
+dong_result_t dong_engine_eval_script(dong_engine_t* engine, const char* code) {
+    auto* e = asEngine(engine);
+    if (!e || !e->view || !code) {
+        return DONG_ERR_INVALID_ARG;
+    }
+
+    return e->view->evalScript(code) ? DONG_OK : DONG_ERR_INTERNAL;
 }
 
-bool dong_view_eval(dong_view_t* view, const char* script) {
-    if (!view || !script) return false;
-    return reinterpret_cast<DongView*>(view)->eval_script(script);
+const void* dong_engine_get_command_list(dong_engine_t* engine) {
+    const auto* e = asEngineConst(engine);
+    if (!e || !e->view) {
+        return nullptr;
+    }
+
+    return e->view->getCommandList();
 }
 
-const char* dong_view_eval_return(dong_view_t* view, const char* script) {
-    if (!view || !script) return "";
-    // 【缺口3】真正的返回值捕获
-    std::string result = reinterpret_cast<DongView*>(view)->eval_script_with_return(script);
-    // 返回静态存储的指针（调用者应立即使用）
-    static thread_local std::string cached_result;
-    cached_result = result;
-    return cached_result.c_str();
+void dong_engine_invalidate_commands(dong_engine_t* engine) {
+    auto* e = asEngine(engine);
+    if (!e || !e->view) {
+        return;
+    }
+
+    e->view->invalidateCommands();
+}
+
+uint32_t dong_get_api_version(void) {
+    return DONG_API_VERSION;
+}
+
+dong_result_t dong_engine_set_text_renderer_mode(dong_engine_t* engine,
+                                                  dong_text_renderer_mode_t mode) {
+    auto* e = asEngine(engine);
+    if (!e || !e->view) {
+        return DONG_ERR_INVALID_ARG;
+    }
+
+    e->view->setTextRendererMode(static_cast<dong::render::TextRendererMode>(mode));
+    return DONG_OK;
+}
+
+dong_text_renderer_mode_t dong_engine_get_text_renderer_mode(dong_engine_t* engine) {
+    auto* e = asEngine(engine);
+    if (!e || !e->view) {
+        return DONG_TEXT_RENDERER_AUTO;
+    }
+
+    return static_cast<dong_text_renderer_mode_t>(e->view->getTextRendererMode());
+}
+
+dong_result_t dong_engine_create_shared_js(
+    const dong_engine_desc_t* desc,
+    dong_engine_t* script_source,
+    const char* view_name,
+    dong_engine_t** out_engine) {
+
+    if (!desc || !script_source || !view_name || !out_engine) {
+        return DONG_ERR_INVALID_ARG;
+    }
+    *out_engine = nullptr;
+
+    if (desc->api_version != DONG_API_VERSION) {
+        return DONG_ERR_VERSION_MISMATCH;
+    }
+
+    if (!script_source->view) {
+        return DONG_ERR_INVALID_ARG;
+    }
+
+    auto* shared_se = script_source->view->getScriptEngine();
+    if (!shared_se) {
+        return DONG_ERR_INTERNAL;
+    }
+
+    const uint32_t w = desc->width > 0 ? desc->width : 960;
+    const uint32_t h = desc->height > 0 ? desc->height : 540;
+
+    try {
+        auto* engine = new dong_engine_t();
+        engine->plugin = desc->plugin ? desc->plugin : script_source->plugin;
+        engine->plugin_user = desc->plugin ? desc->plugin_user : script_source->plugin_user;
+        engine->width = w;
+        engine->height = h;
+
+        engine->view = std::make_unique<dong::EngineView>(w, h, shared_se);
+        if (!engine->view || !engine->view->isInitialized()) {
+            delete engine;
+            return DONG_ERR_INTERNAL;
+        }
+
+        engine->view->setViewName(view_name);
+
+        if (engine->plugin) {
+            engine->view->setPlugin(engine->plugin, engine->plugin_user);
+        }
+
+        if (desc->html) {
+            (void)engine->view->loadHTML(desc->html);
+        }
+
+        if (pluginCanLog(engine->plugin)) {
+            char msg[256];
+            std::snprintf(msg, sizeof(msg),
+                          "Engine created (shared-js, %ux%u, view='%s')",
+                          engine->width, engine->height, view_name);
+            pluginLog(engine->plugin, engine->plugin_user, DONG_LOG_INFO, msg);
+        }
+
+        *out_engine = engine;
+        return DONG_OK;
+    } catch (...) {
+        *out_engine = nullptr;
+        return DONG_ERR_INTERNAL;
+    }
 }
 
 } // extern "C"

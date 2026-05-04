@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+body { font-family: sans-serif; padding: 20px; }
+#result { margin-top: 10px; padding: 10px; border: 1px solid #ccc; min-height: 40px; background: #f9f9f9; }
+.pass { color: green; font-weight: bold; }
+.fail { color: red; font-weight: bold; }
+</style>
+</head>
+<body>
+<h2>fetch() Text Basic Test</h2>
+<div id="result">Loading...</div>
+
+<script>
+var result = document.getElementById('result');
+
+fetch('test_fetch_local.txt')
+    .then(function(response) {
+        if (!response.ok) {
+            result.textContent = 'FAIL: response.ok is false, status=' + response.status;
+            result.className = 'fail';
+            return;
+        }
+        return response.text();
+    })
+    .then(function(text) {
+        if (text && text.indexOf('local text file') >= 0) {
+            result.textContent = 'PASS: ' + text.trim();
+            result.className = 'pass';
+        } else {
+            result.textContent = 'FAIL: unexpected content: ' + text;
+            result.className = 'fail';
+        }
+    })
+    .catch(function(err) {
+        result.textContent = 'FAIL: ' + err;
+        result.className = 'fail';
+    });
+</script>
+</body>
+</html>

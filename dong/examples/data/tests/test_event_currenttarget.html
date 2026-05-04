@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        #parent {
+            width: 300px;
+            height: 200px;
+            background-color: #f0f0f0;
+            padding: 20px;
+            border: 2px solid #333;
+        }
+        #child {
+            width: 200px;
+            height: 100px;
+            background-color: #add8e6;
+            padding: 10px;
+            border: 2px solid blue;
+        }
+        #results {
+            margin-top: 20px;
+            font-family: monospace;
+            white-space: pre;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <h2>Event currentTarget and stopImmediatePropagation Test</h2>
+    <div id="parent">
+        <div id="child">Click me!</div>
+    </div>
+    <div id="results"></div>
+
+    <script>
+        const parent = document.getElementById('parent');
+        const child = document.getElementById('child');
+        const results = document.getElementById('results');
+        let output = '';
+
+        // Test 1: currentTarget shows the element handling the event
+        child.addEventListener('click', function(e) {
+            output += `Test 1 - Child click listener:\n`;
+            output += `  target.id: ${e.target.id}\n`;
+            output += `  currentTarget.id: ${e.currentTarget.id}\n`;
+            output += `  currentTarget === child: ${e.currentTarget === child}\n\n`;
+        });
+
+        parent.addEventListener('click', function(e) {
+            output += `Test 1 - Parent click listener (bubbled):\n`;
+            output += `  target.id: ${e.target.id}\n`;
+            output += `  currentTarget.id: ${e.currentTarget.id}\n`;
+            output += `  currentTarget === parent: ${e.currentTarget === parent}\n\n`;
+        });
+
+        // Test 2: stopImmediatePropagation prevents other listeners on same element
+        const test2Btn = document.createElement('button');
+        test2Btn.textContent = 'Test stopImmediatePropagation';
+        test2Btn.style.marginTop = '20px';
+        test2Btn.style.display = 'block';
+        document.body.appendChild(test2Btn);
+
+        test2Btn.addEventListener('click', function(e) {
+            output += `Test 2 - First listener executed\n`;
+            e.stopImmediatePropagation();
+            output += `  stopImmediatePropagation() called\n\n`;
+        });
+
+        test2Btn.addEventListener('click', function(e) {
+            output += `Test 2 - Second listener (should NOT execute)\n\n`;
+        });
+
+        test2Btn.addEventListener('click', function(e) {
+            output += `Test 2 - Third listener (should NOT execute)\n\n`;
+        });
+
+        // Test 3: Verify stopPropagation still exists
+        const test3Btn = document.createElement('button');
+        test3Btn.textContent = 'Test stopPropagation';
+        test3Btn.style.marginTop = '10px';
+        test3Btn.style.display = 'block';
+        document.body.appendChild(test3Btn);
+
+        test3Btn.addEventListener('click', function(e) {
+            output += `Test 3 - Button listener\n`;
+            e.stopPropagation();
+            output += `  stopPropagation() called\n\n`;
+        });
+
+        document.body.addEventListener('click', function(e) {
+            if (e.target === test3Btn) {
+                output += `Test 3 - Body listener (should NOT execute after stopPropagation)\n\n`;
+            }
+        });
+
+        // Test 4: Check that methods exist
+        output += `Test 4 - Methods exist:\n`;
+        child.addEventListener('click', function(e) {
+            output += `  typeof stopPropagation: ${typeof e.stopPropagation}\n`;
+            output += `  typeof stopImmediatePropagation: ${typeof e.stopImmediatePropagation}\n`;
+            output += `  typeof preventDefault: ${typeof e.preventDefault}\n\n`;
+
+            results.textContent = output;
+        }, { once: true });
+
+        // Trigger initial test by clicking child
+        setTimeout(function() {
+            output += '=== Starting Tests ===\n\n';
+            child.click();
+        }, 100);
+    </script>
+</body>
+</html>

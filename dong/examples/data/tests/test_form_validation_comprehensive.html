@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Form Validation - Comprehensive Test</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; }
+        input, select, textarea { margin: 5px; padding: 5px; border: 1px solid #ccc; }
+        :valid { border-color: green; background-color: #f0fff0; }
+        :invalid { border-color: red; background-color: #fff0f0; }
+        .test-case { margin: 10px 0; padding: 10px; border: 1px solid #ddd; }
+        .result { margin-top: 5px; font-weight: bold; }
+        form { border: 2px solid #333; padding: 15px; margin: 10px 0; }
+        button { margin: 5px; padding: 8px 15px; }
+    </style>
+</head>
+<body>
+    <h1>Comprehensive Form Validation Test</h1>
+
+    <div class="test-case">
+        <h3>1. Form with Multiple Validation Types</h3>
+        <form id="testForm">
+            <div>
+                <label>Email (required + pattern):</label>
+                <input type="email" required pattern="[a-z0-9._%+-]+@[a-z0-9.-]+\\.[a-z]{2,}$"
+                       value="test@example.com">
+            </div>
+
+            <div>
+                <label>Age (required + min/max):</label>
+                <input type="number" required min="18" max="120" value="25">
+            </div>
+
+            <div>
+                <label>Password (pattern + minlength):</label>
+                <input type="password" pattern=".{8,}" value="password123">
+            </div>
+
+            <div>
+                <label>Select (required):</label>
+                <select required>
+                    <option value="">Choose...</option>
+                    <option value="option1" selected>Option 1</option>
+                    <option value="option2">Option 2</option>
+                </select>
+            </div>
+
+            <div>
+                <label>Textarea (required):</label>
+                <textarea required>Sample text</textarea>
+            </div>
+
+            <button type="button" onclick="testFormValidity()">Check Form Validity</button>
+            <button type="button" onclick="testIndividualValidity()">Check Individual Validity</button>
+        </form>
+    </div>
+
+    <div class="test-case">
+        <h3>2. Invalid Form Test</h3>
+        <form id="invalidForm">
+            <div>
+                <label>Email (invalid pattern):</label>
+                <input type="email" pattern="[a-z0-9._%+-]+@[a-z0-9.-]+\\.[a-z]{2,}$"
+                       value="invalid-email">
+            </div>
+
+            <div>
+                <label>Age (out of range):</label>
+                <input type="number" min="18" max="120" value="15">
+            </div>
+
+            <div>
+                <label>Required (empty):</label>
+                <input type="text" required value="">
+            </div>
+
+            <button type="button" onclick="testInvalidForm()">Check Invalid Form</button>
+        </form>
+    </div>
+
+    <div class="test-case">
+        <h3>3. Dynamic Validation Test</h3>
+        <div>
+            <label>Dynamic Pattern Test:</label>
+            <input type="text" id="dynamicPattern" pattern="[A-Z]{3}" value="ABC">
+            <button onclick="changePattern()">Change Pattern to [0-9]{3}</button>
+            <button onclick="changeValue()">Change Value to abc</button>
+        </div>
+    </div>
+
+    <div class="test-case">
+        <h3>4. Custom Validity Test</h3>
+        <div>
+            <label>Custom Validation:</label>
+            <input type="text" id="customInput" value="test">
+            <button onclick="setCustomValidity('Custom error message')">Set Custom Error</button>
+            <button onclick="clearCustomValidity()">Clear Custom Error</button>
+        </div>
+    </div>
+
+    <script>
+        function testFormValidity() {
+            const form = document.getElementById('testForm');
+            const isValid = form.checkValidity();
+            console.log('Form validity:', isValid);
+            alert('Form is ' + (isValid ? 'VALID' : 'INVALID'));
+        }
+
+        function testIndividualValidity() {
+            const inputs = document.querySelectorAll('#testForm input, #testForm select, #testForm textarea');
+            inputs.forEach((input, index) => {
+                console.log(`Element ${index + 1}:`, {
+                    type: input.type,
+                    value: input.value,
+                    valid: input.checkValidity(),
+                    validity: input.validity
+                });
+            });
+        }
+
+        function testInvalidForm() {
+            const form = document.getElementById('invalidForm');
+            const isValid = form.checkValidity();
+            console.log('Invalid form validity:', isValid);
+
+            const inputs = form.querySelectorAll('input');
+            inputs.forEach((input, index) => {
+                console.log(`Invalid input ${index + 1}:`, {
+                    value: input.value,
+                    valid: input.checkValidity(),
+                    validity: input.validity
+                });
+            });
+        }
+
+        function changePattern() {
+            const input = document.getElementById('dynamicPattern');
+            input.pattern = '[0-9]{3}';
+            input.value = '123';
+            console.log('Changed pattern to [0-9]{3}, value to 123');
+            console.log('Validity:', input.checkValidity());
+        }
+
+        function changeValue() {
+            const input = document.getElementById('dynamicPattern');
+            input.value = 'abc';
+            console.log('Changed value to abc');
+            console.log('Validity:', input.checkValidity());
+        }
+
+        function setCustomValidity(message) {
+            const input = document.getElementById('customInput');
+            input.setCustomValidity(message);
+            console.log('Set custom validity:', message);
+            console.log('Validity after custom error:', input.checkValidity());
+        }
+
+        function clearCustomValidity() {
+            const input = document.getElementById('customInput');
+            input.setCustomValidity('');
+            console.log('Cleared custom validity');
+            console.log('Validity after clear:', input.checkValidity());
+        }
+
+        // Initial test
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('=== Initial Form Validation State ===');
+            testIndividualValidity();
+        });
+    </script>
+</body>
+</html>

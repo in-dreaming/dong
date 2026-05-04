@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.5;
+    padding: 20px;
+  }
+
+  /* ::selection伪元素样式测试 */
+  .test1::selection {
+    background-color: yellow;
+    color: red;
+  }
+
+  .test2::selection {
+    background-color: #00ff00;
+    color: #0000ff;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+  }
+
+  .test3::selection {
+    background-color: rgba(255, 0, 0, 0.5);
+    color: white;
+  }
+
+  .test4::selection {
+    background-color: transparent;
+    color: inherit;
+  }
+
+  .test5 {
+    color: green;
+  }
+
+  .test5::selection {
+    background-color: orange;
+    /* 不设置color，应该继承父元素的绿色 */
+  }
+
+  .default-selection {
+    /* 没有::selection样式，使用默认选中样式 */
+  }
+
+  .test-section {
+    margin-bottom: 30px;
+    padding: 10px;
+    border: 1px solid #ccc;
+  }
+
+  .test-title {
+    font-weight: bold;
+    margin-bottom: 10px;
+  }
+
+  .test-content {
+    padding: 10px;
+    background: #f9f9f9;
+    border-radius: 4px;
+  }
+</style>
+</head>
+<body>
+  <h1>::selection伪元素测试</h1>
+
+  <div class="test-section">
+    <div class="test-title">测试1: 基本::selection样式（黄色背景，红色文字）</div>
+    <div class="test-content test1">
+      选中这段文字应该显示黄色背景和红色文字
+    </div>
+  </div>
+
+  <div class="test-section">
+    <div class="test-title">测试2: ::selection带文本阴影</div>
+    <div class="test-content test2">
+      选中这段文字应该显示绿色背景、蓝色文字和文本阴影效果
+    </div>
+  </div>
+
+  <div class="test-section">
+    <div class="test-title">测试3: ::selection半透明背景</div>
+    <div class="test-content test3">
+      选中这段文字应该显示半透明红色背景和白色文字
+    </div>
+  </div>
+
+  <div class="test-section">
+    <div class="test-title">测试4: ::selection透明背景和继承颜色</div>
+    <div class="test-content test4">
+      选中这段文字应该显示透明背景并继承父元素颜色
+    </div>
+  </div>
+
+  <div class="test-section">
+    <div class="test-title">测试5: ::selection继承父元素颜色</div>
+    <div class="test-content test5">
+      这段文字本身是绿色的，选中时应该显示橙色背景并保持绿色文字
+    </div>
+  </div>
+
+  <div class="test-section">
+    <div class="test-title">测试6: 默认选中样式（无::selection）</div>
+    <div class="test-content default-selection">
+      这段文字没有::selection样式，应该使用系统默认的选中样式
+    </div>
+  </div>
+
+  <div id="result" style="margin-top: 30px; padding: 15px; background: #e8f4fd; border-radius: 4px;">
+    <h3>测试结果</h3>
+    <div id="result-content"></div>
+  </div>
+
+  <script>
+    // 简单的测试结果验证
+    var result = '';
+
+    // 检查::selection样式是否被正确解析和应用
+    var testElements = document.querySelectorAll('.test1, .test2, .test3, .test4, .test5, .default-selection');
+
+    result += '::selection伪元素测试页面已加载\n';
+    result += '测试元素数量: ' + testElements.length + '\n';
+    result += '请手动选中各测试段落的文字来验证::selection样式效果\n';
+    result += '\n预期效果:\n';
+    result += '- 测试1: 黄色背景 + 红色文字\n';
+    result += '- 测试2: 绿色背景 + 蓝色文字 + 文本阴影\n';
+    result += '- 测试3: 半透明红色背景 + 白色文字\n';
+    result += '- 测试4: 透明背景 + 继承颜色\n';
+    result += '- 测试5: 橙色背景 + 绿色文字（继承）\n';
+    result += '- 测试6: 系统默认选中样式\n';
+
+    document.getElementById('result-content').textContent = result;
+    console.log('::selection伪元素测试页面已加载');
+  </script>
+</body>
+</html>

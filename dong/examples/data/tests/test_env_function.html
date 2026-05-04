@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>env() Function Test</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+        }
+
+        .test-container {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+
+        .test-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            font-size: 18px;
+        }
+
+        .test-description {
+            margin-bottom: 15px;
+            color: #666;
+        }
+
+        .test-case {
+            margin: 10px 0;
+            padding: 10px;
+            border-left: 3px solid #007acc;
+            background-color: #f9f9f9;
+        }
+
+        .result {
+            margin-top: 5px;
+            padding: 5px;
+            background-color: #e8f4fd;
+            border-radius: 3px;
+        }
+
+        /* Test 1: Basic env() function with safe-area-inset values */
+        .test-safe-area-inset {
+            margin-top: env(safe-area-inset-top, 0px);
+            margin-right: env(safe-area-inset-right, 0px);
+            margin-bottom: env(safe-area-inset-bottom, 0px);
+            margin-left: env(safe-area-inset-left, 0px);
+            padding: 20px;
+            background-color: #f0f0f0;
+            border: 1px solid #ccc;
+        }
+
+        /* Test 2: env() function with fallback values */
+        .test-env-fallback {
+            margin: env(safe-area-inset-top, 10px) env(safe-area-inset-right, 15px)
+                    env(safe-area-inset-bottom, 20px) env(safe-area-inset-left, 25px);
+            padding: env(safe-area-inset-top, 5px);
+            background-color: #e8f8ff;
+            border: 2px solid #007acc;
+        }
+
+        /* Test 3: env() function in calc() expressions */
+        .test-env-calc {
+            width: calc(100% - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
+            height: calc(100vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+            padding: calc(10px + env(safe-area-inset-top, 5px));
+            background-color: #fff3cd;
+            border: 1px solid #ffc107;
+        }
+
+        /* Test 4: env() function with different units */
+        .test-env-units {
+            margin: env(safe-area-inset-top, 1rem) env(safe-area-inset-right, 2em)
+                    env(safe-area-inset-bottom, 3%) env(safe-area-inset-left, 4vw);
+            padding: 15px;
+            background-color: #d4edda;
+            border: 1px solid #28a745;
+        }
+
+        /* Test 5: env() function without fallback */
+        .test-env-no-fallback {
+            margin: env(safe-area-inset-top) env(safe-area-inset-right)
+                    env(safe-area-inset-bottom) env(safe-area-inset-left);
+            padding: 10px;
+            background-color: #f8d7da;
+            border: 1px solid #dc3545;
+        }
+
+        /* Test 6: env() function in position properties */
+        .test-env-position {
+            position: absolute;
+            top: env(safe-area-inset-top, 0px);
+            right: env(safe-area-inset-right, 0px);
+            bottom: env(safe-area-inset-bottom, 0px);
+            left: env(safe-area-inset-left, 0px);
+            background-color: #d1ecf1;
+            border: 1px solid #17a2b8;
+        }
+
+        /* Test 7: env() function in font-size */
+        .test-env-font-size {
+            font-size: calc(16px + env(safe-area-inset-top, 0px) / 10);
+            padding: 10px;
+            background-color: #e2e3e5;
+            border: 1px solid #6c757d;
+        }
+
+        /* Test 8: env() function in border-radius */
+        .test-env-border-radius {
+            border-radius: env(safe-area-inset-top, 5px);
+            padding: 15px;
+            background-color: #fff;
+            border: 2px solid #6f42c1;
+            box-shadow: 0 0 10px rgba(111, 66, 193, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <h1>env() Function Test</h1>
+
+    <div class="test-container">
+        <div class="test-title">Test 1: Basic env() function with safe-area-inset values</div>
+        <div class="test-description">Testing env() function with safe-area-inset environment variables.</div>
+
+        <div class="test-case">
+            <div class="test-safe-area-inset">
+                This element uses env(safe-area-inset-*) values for margins.
+                If safe-area-inset values are set, margins will reflect the safe area.
+                Otherwise, fallback to 0px.
+            </div>
+            <div class="result">Expected: Margins set to safe area inset values or 0px fallback</div>
+        </div>
+    </div>
+
+    <div class="test-container">
+        <div class="test-title">Test 2: env() function with fallback values</div>
+        <div class="test-description">Testing env() function with explicit fallback values.</div>
+
+        <div class="test-case">
+            <div class="test-env-fallback">
+                This element uses env() with fallback values: 10px, 15px, 20px, 25px.
+                If safe-area-inset values are not set, these fallback values will be used.
+            </div>
+            <div class="result">Expected: Margins and padding set to safe area inset values or specified fallback values</div>
+        </div>
+    </div>
+
+    <div class="test-container">
+        <div class="test-title">Test 3: env() function in calc() expressions</div>
+        <div class="test-description">Testing env() function used within calc() expressions.</div>
+
+        <div class="test-case">
+            <div class="test-env-calc">
+                This element uses env() inside calc() expressions for width and height.
+                Width: calc(100% - safe-area-inset-left - safe-area-inset-right)
+                Height: calc(100vh - safe-area-inset-top - safe-area-inset-bottom)
+            </div>
+            <div class="result">Expected: Width and height adjusted for safe area insets</div>
+        </div>
+    </div>
+
+    <div class="test-container">
+        <div class="test-title">Test 4: env() function with different units</div>
+        <div class="test-description">Testing env() function with fallback values in different CSS units.</div>
+
+        <div class="test-case">
+            <div class="test-env-units">
+                This element uses env() with fallback values in different units:
+                rem, em, %, and vw.
+            </div>
+            <div class="result">Expected: Margins set to safe area inset values or unit-based fallback values</div>
+        </div>
+    </div>
+
+    <div class="test-container">
+        <div class="test-title">Test 5: env() function without fallback</div>
+        <div class="test-description">Testing env() function without fallback values.</div>
+
+        <div class="test-case">
+            <div class="test-env-no-fallback">
+                This element uses env() without fallback values.
+                If safe-area-inset values are not set, these properties should use 0px as default.
+            </div>
+            <div class="result">Expected: Margins set to safe area inset values or 0px default</div>
+        </div>
+    </div>
+
+    <div class="test-container">
+        <div class="test-title">Test 6: env() function in position properties</div>
+        <div class="test-description">Testing env() function used in position properties (top, right, bottom, left).</div>
+
+        <div class="test-case">
+            <div class="test-env-position">
+                This absolutely positioned element uses env() for positioning.
+                It should be positioned within the safe area boundaries.
+            </div>
+            <div class="result">Expected: Element positioned relative to safe area insets</div>
+        </div>
+    </div>
+
+    <div class="test-container">
+        <div class="test-title">Test 7: env() function in font-size</div>
+        <div class="test-description">Testing env() function used in font-size calculations.</div>
+
+        <div class="test-case">
+            <div class="test-env-font-size">
+                This element uses env() in font-size calculation.
+                Font size: calc(16px + safe-area-inset-top / 10)
+            </div>
+            <div class="result">Expected: Font size adjusted based on safe area inset top value</div>
+        </div>
+    </div>
+
+    <div class="test-container">
+        <div class="test-title">Test 8: env() function in border-radius</div>
+        <div class="test-description">Testing env() function used in border-radius property.</div>
+
+        <div class="test-case">
+            <div class="test-env-border-radius">
+                This element uses env() for border-radius.
+                Border radius adjusts based on safe area inset top value.
+            </div>
+            <div class="result">Expected: Border radius set to safe area inset top value or 5px fallback</div>
+        </div>
+    </div>
+
+    <script>
+        // JavaScript validation of computed styles
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('env() function test loaded');
+
+            // Test 1: Basic env() function
+            const safeAreaEl = document.querySelector('.test-safe-area-inset');
+            console.log('Safe area element computed margin-top:', getComputedStyle(safeAreaEl).marginTop);
+            console.log('Safe area element computed margin-right:', getComputedStyle(safeAreaEl).marginRight);
+            console.log('Safe area element computed margin-bottom:', getComputedStyle(safeAreaEl).marginBottom);
+            console.log('Safe area element computed margin-left:', getComputedStyle(safeAreaEl).marginLeft);
+
+            // Test 2: env() with fallback
+            const fallbackEl = document.querySelector('.test-env-fallback');
+            console.log('Fallback element computed margin-top:', getComputedStyle(fallbackEl).marginTop);
+            console.log('Fallback element computed margin-right:', getComputedStyle(fallbackEl).marginRight);
+
+            // Test 3: env() in calc()
+            const calcEl = document.querySelector('.test-env-calc');
+            console.log('Calc element computed width:', getComputedStyle(calcEl).width);
+            console.log('Calc element computed height:', getComputedStyle(calcEl).height);
+
+            // Test 4: env() with different units
+            const unitsEl = document.querySelector('.test-env-units');
+            console.log('Units element computed margin-top:', getComputedStyle(unitsEl).marginTop);
+
+            // Test 5: env() without fallback
+            const noFallbackEl = document.querySelector('.test-env-no-fallback');
+            console.log('No fallback element computed margin-top:', getComputedStyle(noFallbackEl).marginTop);
+
+            // Test 6: env() in position
+            const positionEl = document.querySelector('.test-env-position');
+            console.log('Position element computed top:', getComputedStyle(positionEl).top);
+            console.log('Position element computed right:', getComputedStyle(positionEl).right);
+
+            // Test 7: env() in font-size
+            const fontSizeEl = document.querySelector('.test-env-font-size');
+            console.log('Font size element computed font-size:', getComputedStyle(fontSizeEl).fontSize);
+
+            // Test 8: env() in border-radius
+            const borderRadiusEl = document.querySelector('.test-env-border-radius');
+            console.log('Border radius element computed border-radius:', getComputedStyle(borderRadiusEl).borderRadius);
+        });
+    </script>
+</body>
+</html>

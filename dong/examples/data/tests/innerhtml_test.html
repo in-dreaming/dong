@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>innerHTML/outerHTML Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        .container {
+            border: 2px solid #333;
+            padding: 10px;
+            margin: 10px 0;
+            min-height: 50px;
+        }
+        .highlight {
+            background: yellow;
+            padding: 5px;
+        }
+        button {
+            margin: 5px;
+            padding: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>innerHTML/outerHTML/insertAdjacentHTML Test</h1>
+    
+    <div class="container" id="test1">
+        <p>Original content</p>
+    </div>
+    
+    <button onclick="testInnerHTML()">Test innerHTML</button>
+    <button onclick="testOuterHTML()">Test outerHTML</button>
+    <button onclick="testInsertAdjacentHTML()">Test insertAdjacentHTML</button>
+    
+    <div id="output" style="margin-top: 20px; padding: 10px; background: #f0f0f0;"></div>
+    
+    <script>
+        function log(msg) {
+            const output = document.getElementById('output');
+            output.innerHTML += msg + '<br>';
+        }
+        
+        function testInnerHTML() {
+            const container = document.getElementById('test1');
+            container.innerHTML = '<p class="highlight">New content via innerHTML! <span>Nested span</span></p>';
+            log('innerHTML set successfully');
+        }
+        
+        function testOuterHTML() {
+            const container = document.getElementById('test1');
+            container.outerHTML = '<div class="container" id="test1"><p class="highlight">Replaced via outerHTML!</p></div>';
+            log('outerHTML set successfully');
+        }
+        
+        function testInsertAdjacentHTML() {
+            const container = document.getElementById('test1');
+            container.insertAdjacentHTML('beforebegin', '<p style="color: green;">Before begin</p>');
+            container.insertAdjacentHTML('afterbegin', '<span style="color: blue;">After begin | </span>');
+            container.insertAdjacentHTML('beforeend', '<span style="color: red;"> | Before end</span>');
+            container.insertAdjacentHTML('afterend', '<p style="color: purple;">After end</p>');
+            log('insertAdjacentHTML executed for all positions');
+        }
+    </script>
+</body>
+</html>

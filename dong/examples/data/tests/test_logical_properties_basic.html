@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>CSS Logical Properties Basic Test</title>
+    <style>
+        body {
+            margin: 20px;
+            font-family: Arial, sans-serif;
+        }
+
+        .test-box {
+            margin: 10px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            background-color: #f9f9f9;
+        }
+
+        /* Basic logical properties test */
+        .margin-inline-start-test {
+            margin-inline-start: 30px;
+            background-color: #e6f7ff;
+        }
+
+        .margin-inline-end-test {
+            margin-inline-end: 40px;
+            background-color: #f0fff0;
+        }
+
+        .padding-inline-start-test {
+            padding-inline-start: 20px;
+            background-color: #fff0f5;
+        }
+
+        .padding-inline-end-test {
+            padding-inline-end: 25px;
+            background-color: #fff8e1;
+        }
+
+        .border-inline-start-test {
+            border-inline-start: 3px solid red;
+            background-color: #ffe6e6;
+        }
+
+        .border-inline-end-test {
+            border-inline-end: 2px dashed blue;
+            background-color: #e6e6ff;
+        }
+
+        /* Shorthand properties test */
+        .margin-inline-shorthand {
+            margin-inline: 15px 25px;
+            background-color: #e6fffd;
+        }
+
+        .padding-inline-shorthand {
+            padding-inline: 10px 20px;
+            background-color: #fde6ff;
+        }
+
+        .border-inline-shorthand {
+            border-inline: 2px solid green;
+            background-color: #e6ffe6;
+        }
+    </style>
+</head>
+<body>
+    <h1>CSS Logical Properties Basic Test</h1>
+    <p>Testing basic logical property support with LTR horizontal-tb writing mode.</p>
+
+    <div class="test-box margin-inline-start-test">
+        margin-inline-start: 30px (should be left margin)
+    </div>
+
+    <div class="test-box margin-inline-end-test">
+        margin-inline-end: 40px (should be right margin)
+    </div>
+
+    <div class="test-box padding-inline-start-test">
+        padding-inline-start: 20px (should be left padding)
+    </div>
+
+    <div class="test-box padding-inline-end-test">
+        padding-inline-end: 25px (should be right padding)
+    </div>
+
+    <div class="test-box border-inline-start-test">
+        border-inline-start: 3px solid red (should be left border)
+    </div>
+
+    <div class="test-box border-inline-end-test">
+        border-inline-end: 2px dashed blue (should be right border)
+    </div>
+
+    <div class="test-box margin-inline-shorthand">
+        margin-inline: 15px 25px (should be left:15px, right:25px)
+    </div>
+
+    <div class="test-box padding-inline-shorthand">
+        padding-inline: 10px 20px (should be left:10px, right:20px)
+    </div>
+
+    <div class="test-box border-inline-shorthand">
+        border-inline: 2px solid green (should be left and right borders)
+    </div>
+</body>
+</html>

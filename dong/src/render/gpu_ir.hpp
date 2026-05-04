@@ -3,91 +3,192 @@
 #include <algorithm>
 #include <vector>
 #include <cstdint>
+#include <cstdlib>
 #include <string>
+#include <functional>
 #include "display_list.hpp"
-#include <SDL3/SDL_log.h>
+
+#include "layer_tree.hpp"
+#include "../core/log.h"
 
 namespace dong::render {
 
+// 与 backends/sdl/shaders/uber_quad_instanced_*.hlsl 中 instance params.x 一致（及 uber_quad_fs 非 instanced 路径）。
+struct UberQuadMaterial {
+    static constexpr float kSolid = 0.f;       // 纯色矩形
+    static constexpr float kRounded = 1.f;    // 圆角（含描边，见 params.z）
+    static constexpr float kShadow = 2.f;     // box-shadow
+    static constexpr float kGradient = 4.f;  // 多 stop 渐变（当前走非 instanced uber / 独立 uniform）
+    static constexpr float kNineSlice = 5.f; // P0-2 预留
+};
+
+// GPU instance 布局：3×float4 = 48 bytes，须与 SDL uber_quad_instanced pipeline 顶点步进一致。
+struct UberQuadInstance {
+    float rect[4]{};   // x, y, w, h
+    float color[4]{};  // RGBA（与既有 Color 管线一致，线性空间由后端 writeLinearColor 约定）
+    float params[4]{}; // x=material, y=radius, z=stroke_width, w=blur
+};
+static_assert(sizeof(UberQuadInstance) == 48, "UberQuadInstance must match instanced shader stride");
+
+/// 单批最大 instance 数（与驱动侧 uber_instance_buffer 容量一致）。
+constexpr uint32_t kUberQuadMaxInstancesPerBatch = 4096u;
+
 // GPU 级别的命令类型（与具体后端无关）
+// 目前仅包含 DisplayList → GPUDriverSDL 实际会用到的子集。
+// 后续如果增加新的 UI 原语，应在这里显式扩展并在 GPUDriver 中实现。
 enum class GPUCommandType : uint8_t {
     BeginFrame,
     EndFrame,
     BeginPass,
     EndPass,
-    SetViewport,
-    SetPipeline,
-    BindTexture,
-    BindSampler,
-    BindInstanceBuffer,
-    DrawInstancedQuads,
-    DrawImageQuad,
-    DrawRoundedRectQuad,
-    DrawText,  // 文字绘制命令
+
+    // 绘制命令：一条命令对应一个"逻辑图元批次"
+    // 后续可以通过 instance buffer 将其中的 rect/image/text 扩展为真正的 GPU instancing。
+    DrawInstancedQuads,      // 纯色矩形（当前每条命令只画 1 个 quad）
+    DrawImageQuad,           // 图片 quad
+    DrawRoundedRectQuad,     // 圆角矩形 quad（analytic SDF）
+    DrawShadowQuad,          // 带模糊的阴影 quad（SDF + blur）
+    DrawText,                // 文本 glyph run
+    DrawGradientQuad,        // 线性渐变 quad
+    /// 多条 rect / round / shadow 合并为一次 GPU instanced draw；实例数据在 GPUCommandList::uber_instance_pool
+    UberQuadBatch,
+
+    // 剪裁与图层命令
     PushClipRect,
     PopClip,
     BeginIsolatedLayer,
     EndIsolatedLayer,
 };
 
-struct GPUViewport {
-    float x = 0.0f;
-    float y = 0.0f;
-    float width = 0.0f;
-    float height = 0.0f;
-};
-
-// 为了保持 IR 简单，这里用整型 id 代表各种资源（pipeline / texture / buffer）
-using PipelineId = uint32_t;
-using TextureId = uint32_t;
-using BufferId = uint32_t;
-
+// GPU 级别的通用命令。这里刻意只保留当前真实使用的字段，
+// 避免为了"未来也许会用"的场景引入多余的抽象。
 struct GPUCommand {
     GPUCommandType type;
 
-    GPUViewport viewport{};
-    PipelineId pipeline = 0;
-    TextureId texture = 0;
-    BufferId instance_buffer = 0;
-    uint32_t instance_count = 0;
+    // 当前所有绘制命令的 instance_count 都为 1；
+    // 引入 instance buffer 后可以将多个实例合并到同一命令。
+    uint32_t instance_count = 1;
 
-    // 最小实现：为 DrawRect / DrawRoundedRect / DrawImage 携带一份立即模式的矩形和颜色数据
+    // 基于 pipeline / 资源的排序 key，供后续批处理/排序使用。
+    // 当前编译阶段会填充该字段，但执行阶段仍按原始顺序渲染。
+    uint64_t sort_key = 0;
+
+    // 通用几何/颜色参数：不同命令按需读取
     Rect rect;      // 目标矩形（像素坐标）
     Color color;    // 颜色或调制色（用于纯色/圆角矩形、后续也可用于调制图片）
-    float radius = 0.0f; // 圆角矩形半径（仅在 DrawRoundedRectQuad 时使用）
+    float radius = 0.0f;        // 圆角矩形半径（仅在 DrawRoundedRectQuad/DrawShadowQuad 时使用）
+    float stroke_width = 0.0f;  // 圆角描边宽度（仅在 DrawRoundedRectQuad 时使用；0=fill）
+    float blur = 0.0f;          // 模糊半径（仅在 DrawShadowQuad 时使用）
+
 
     // 图片绘制专用字段（仅在 DrawImageQuad 时使用）
     std::string image_src; // 原始图片资源标识（路径）
+    ImageFitMode image_fit = ImageFitMode::Fill;
+    float image_position_x = 0.5f;  // object-position X
+    float image_position_y = 0.5f;  // object-position Y
+    ImageSampling image_sampling = ImageSampling::Linear;
     float opacity = 1.0f;  // 图片整体透明度
+
+
     float layer_opacity = 1.0f; // 图层合成透明度（BeginIsolatedLayer）
+    uint64_t layer_id = 0;      // 图层的稳定 ID，用于跨帧缓存
+    bool layer_dirty = true;    // 本帧该图层是否需要重新栅格
+
+    // LayerTree 相关属性：目前主要由 Begin/EndIsolatedLayer 使用
+    float layer_transform[6] = {1.0f, 0.0f, 0.0f,
+                                0.0f, 1.0f, 0.0f};
+    float layer_scroll[2] = {0.0f, 0.0f};
 
     // 文字绘制专用字段（仅在 DrawText 时使用）
     float font_size = 16.0f;
     std::string font_family;
+    std::string font_weight; // CSS font-weight（"normal"/"bold"/数值）
+    std::string font_style;  // CSS font-style（normal/italic/oblique）
+
+    // 字体路径表：索引 0 为主字体；后续为回退字体。
+    std::vector<std::string> font_paths;
+
+    // 为了兼容旧代码：主字体路径（等价于 font_paths[0]）。
     std::string font_path;
+
+
+    float baseline_x = 0.0f;
+    float baseline_y = 0.0f;
     std::vector<GlyphInstance> glyphs;
+    
+    // design units 元数据（文本布局与渲染共享）
+    uint32_t units_per_em = 0;
+    float scale_to_pixels = 1.0f;
+
+    // text-shadow 支持
+    float text_shadow_offset_x = 0.0f;
+    float text_shadow_offset_y = 0.0f;
+    float text_shadow_blur = 0.0f;
+    Color text_shadow_color;
+    bool has_text_shadow = false;
+
+    // Text renderer mode preference
+    TextRendererMode text_renderer_mode = TextRendererMode::Auto;
+
+    // Gradient rendering (DrawGradientQuad only)
+    float gradient_angle_deg = 180.0f;
+    int gradient_stop_count = 0;
+    GradientColorStop gradient_stops[kMaxGradientStops];
+
+    // UberQuadBatch：在 uber_instance_pool 中的 [offset, offset+count) 半开区间
+    uint32_t uber_instance_offset = 0;
+    uint32_t uber_instance_count = 0;
+};
+
+struct DrawBatchRange {
+    uint32_t start = 0;      // 在 sorted_draw_indices 中的起始位置
+    uint32_t count = 0;      // 连续归为同一批次的绘制命令数量
+    uint64_t sort_key = 0;   // 该批次共享的 sort_key（pipeline+资源）
+    GPUCommandType type = GPUCommandType::BeginFrame; // 该批次的命令类型
 };
 
 struct GPUCommandList {
     std::vector<GPUCommand> commands;
+
+    /// 本帧 UberQuad 实例数据（仅当编译时启用 DONG_DONT_USE_UBER_QUAD=0 合批时填充）
+    std::vector<UberQuadInstance> uber_instance_pool;
+
+    // 基于 sort_key 的排序视图（不改变 commands 的存储顺序）
+    // 元素为 commands 的索引，按 sort_key 升序稳定排序
+    std::vector<uint32_t> sorted_draw_indices;
+
+    // 将 sorted_draw_indices 中连续、且 sort_key/type 相同的绘制命令
+    // 聚合成批次，方便后端按批次遍历或做进一步优化。
+    std::vector<DrawBatchRange> draw_batches;
 };
 
 // DisplayList → GPUCommandList 的编译器骨架
 class GPUCompiler {
 public:
-    // 简化版编译接口：只处理最基础的 rect / image / text 类型
-    void compile(const DisplayList& dl, GPUCommandList& out) {
+    // 支持可选的 LayerTree，用于在图层命令上携带 transform/scroll 等属性
+    void compile(const DisplayList& dl, GPUCommandList& out, const LayerTree* layer_tree = nullptr) {
+        DONG_LOG_DEBUG("[GPUCompiler] compile: items=%zu", dl.items.size());
         out.commands.clear();
+
+        auto find_layer_by_id = [layer_tree](uint64_t id) -> const LayerNode* {
+            if (!layer_tree || !id) {
+                return nullptr;
+            }
+            return layer_tree->findById(id);
+        };
 
         // 统计各种类型
         int rect_count = 0;
         int round_rect_count = 0;
+        int shadow_count_items = 0;
         int image_count = 0;
         int text_count = 0;
 
         std::vector<float> draw_opacity_stack;
         draw_opacity_stack.push_back(1.0f);
         std::vector<bool> layer_isolate_stack;
+        std::vector<uint64_t> layer_id_stack;
+        std::vector<bool> layer_dirty_stack;
 
         auto apply_opacity = [](const Color& base_color, float opacity) {
             Color result = base_color;
@@ -104,6 +205,115 @@ public:
                 return 1.0f;
             }
             return draw_opacity_stack.back();
+        };
+
+        // draw batch / sort view 目前只用于 debug 打印（执行阶段仍按原始顺序渲染）。
+        // 默认关闭以降低 compile 的 CPU 开销；需要调试批次时设置：DONG_GPU_BUILD_DRAW_BATCHES=1
+        static const bool kBuildDrawBatches = (std::getenv("DONG_GPU_BUILD_DRAW_BATCHES") != nullptr);
+        const bool build_draw_batches = kBuildDrawBatches;
+
+        auto make_sort_key = [build_draw_batches](GPUCommandType type, const GPUCommand& cmd) -> uint64_t {
+            if (!build_draw_batches) {
+                return 0;
+            }
+
+            uint64_t pipeline_id = 0;
+            switch (type) {
+            case GPUCommandType::DrawInstancedQuads:
+                pipeline_id = 1; // 纯色矩形管线
+                break;
+            case GPUCommandType::DrawRoundedRectQuad:
+                pipeline_id = 2; // 圆角矩形管线
+                break;
+            case GPUCommandType::DrawShadowQuad:
+                pipeline_id = 5; // 阴影管线
+                break;
+            case GPUCommandType::DrawImageQuad:
+                pipeline_id = 3; // 图片管线
+                break;
+            case GPUCommandType::DrawText:
+                pipeline_id = 4; // 文本管线
+                break;
+            case GPUCommandType::DrawGradientQuad:
+                pipeline_id = 6; // 渐变管线
+                break;
+            case GPUCommandType::UberQuadBatch:
+                pipeline_id = 10; // instanced uber quad
+                break;
+            default:
+                pipeline_id = 0; // 非绘制类命令
+                break;
+            }
+
+            uint64_t resource_hash = 0;
+            if (type == GPUCommandType::DrawImageQuad) {
+                if (!cmd.image_src.empty()) {
+                    resource_hash = static_cast<uint64_t>(std::hash<std::string>{}(cmd.image_src));
+                }
+            } else if (type == GPUCommandType::DrawText) {
+                const std::string* key = nullptr;
+                if (!cmd.font_paths.empty()) {
+                    key = &cmd.font_paths[0];
+                } else if (!cmd.font_path.empty()) {
+                    key = &cmd.font_path;
+                } else {
+                    key = &cmd.font_family;
+                }
+                if (key && !key->empty()) {
+                    resource_hash = static_cast<uint64_t>(std::hash<std::string>{}(*key));
+                }
+            }
+
+            // sort_key 的低 8 位用于标记 pipeline，
+            // 高位用于资源 hash，便于后续按 pipeline/纹理分组和排序。
+            return (resource_hash << 8) | (pipeline_id & 0xffu);
+        };
+
+        out.uber_instance_pool.clear();
+        const char* uber_env = std::getenv("DONG_DONT_USE_UBER_QUAD");
+        const bool emit_uber_batches = !uber_env || uber_env[0] != '0';
+        size_t uber_pool_batch_start = 0;
+
+        auto flush_uber_batch = [&]() {
+            if (!emit_uber_batches) {
+                return;
+            }
+            if (out.uber_instance_pool.size() <= uber_pool_batch_start) {
+                return;
+            }
+            GPUCommand batch{};
+            batch.type = GPUCommandType::UberQuadBatch;
+            batch.uber_instance_offset = static_cast<uint32_t>(uber_pool_batch_start);
+            batch.uber_instance_count =
+                static_cast<uint32_t>(out.uber_instance_pool.size() - uber_pool_batch_start);
+            batch.sort_key = make_sort_key(batch.type, batch);
+            out.commands.push_back(batch);
+            uber_pool_batch_start = out.uber_instance_pool.size();
+        };
+
+        auto push_uber_color = [](const Color& c, float out[4]) {
+            out[0] = c.r;
+            out[1] = c.g;
+            out[2] = c.b;
+            out[3] = c.a;
+        };
+
+        auto append_uber_rect = [&](const Rect& r, const Color& color, float material, float radius,
+                                    float stroke, float blur) {
+            if (out.uber_instance_pool.size() - uber_pool_batch_start >= kUberQuadMaxInstancesPerBatch) {
+                flush_uber_batch();
+            }
+            UberQuadInstance inst{};
+            inst.rect[0] = r.x;
+            inst.rect[1] = r.y;
+            inst.rect[2] = r.width;
+            inst.rect[3] = r.height;
+            push_uber_color(color, inst.color);
+            inst.params[0] = material;
+            inst.params[1] = radius;
+            inst.params[2] = stroke;
+            inst.params[3] = blur;
+            out.uber_instance_pool.push_back(inst);
         };
 
         // 一个最小的实现：
@@ -123,28 +333,70 @@ public:
                 float clamped = std::clamp(item.layer.opacity, 0.0f, 1.0f);
                 float parent = current_opacity();
                 bool isolate = item.layer.isolate;
+                uint64_t layer_id = item.layer.id;
+                bool is_dirty = item.layer.is_dirty;
+
+                const LayerNode* layer_node = find_layer_by_id(layer_id);
+
                 if (isolate) {
+                    flush_uber_batch();
                     GPUCommand cmd{};
                     cmd.type = GPUCommandType::BeginIsolatedLayer;
                     cmd.rect = item.layer.bounds;
                     cmd.layer_opacity = clamped;
+                    cmd.layer_id = layer_id;
+                    cmd.layer_dirty = is_dirty;
+
+                    if (layer_node) {
+                        for (int i = 0; i < 6; ++i) {
+                            cmd.layer_transform[i] = layer_node->transform.m[i];
+                        }
+                        cmd.layer_scroll[0] = layer_node->scroll_x;
+                        cmd.layer_scroll[1] = layer_node->scroll_y;
+                    }
+
                     out.commands.push_back(cmd);
                 }
                 float next_opacity = isolate ? parent : parent * clamped;
                 draw_opacity_stack.push_back(next_opacity);
                 layer_isolate_stack.push_back(isolate);
+                layer_id_stack.push_back(layer_id);
+                layer_dirty_stack.push_back(is_dirty);
                 break;
             }
             case DisplayItemType::PopLayer: {
                 if (!layer_isolate_stack.empty()) {
                     bool isolate = layer_isolate_stack.back();
                     layer_isolate_stack.pop_back();
+                    uint64_t layer_id = 0;
+                    bool is_dirty = true;
+                    if (!layer_id_stack.empty()) {
+                        layer_id = layer_id_stack.back();
+                        layer_id_stack.pop_back();
+                    }
+                    if (!layer_dirty_stack.empty()) {
+                        is_dirty = layer_dirty_stack.back();
+                        layer_dirty_stack.pop_back();
+                    }
                     if (draw_opacity_stack.size() > 1) {
                         draw_opacity_stack.pop_back();
                     }
                     if (isolate) {
+                        flush_uber_batch();
                         GPUCommand cmd{};
                         cmd.type = GPUCommandType::EndIsolatedLayer;
+                        cmd.layer_id = layer_id;
+                        cmd.layer_dirty = is_dirty;
+
+                        const LayerNode* layer_node = find_layer_by_id(layer_id);
+                        if (layer_node) {
+                            for (int i = 0; i < 6; ++i) {
+                                cmd.layer_transform[i] = layer_node->transform.m[i];
+                            }
+                            cmd.layer_scroll[0] = layer_node->scroll_x;
+                            cmd.layer_scroll[1] = layer_node->scroll_y;
+                        }
+
                         out.commands.push_back(cmd);
                     }
                 }
@@ -152,6 +404,7 @@ public:
             }
             case DisplayItemType::PushClipRect:
             case DisplayItemType::PushClipRoundedRect: {
+                flush_uber_batch();
                 GPUCommand cmd{};
                 cmd.type = GPUCommandType::PushClipRect;
                 cmd.rect = item.clip.rect;
@@ -160,44 +413,107 @@ public:
                 break;
             }
             case DisplayItemType::PopClip: {
+                flush_uber_batch();
                 GPUCommand cmd{};
                 cmd.type = GPUCommandType::PopClip;
                 out.commands.push_back(cmd);
                 break;
             }
             case DisplayItemType::DrawRect: {
-                GPUCommand cmd{};
-                cmd.type = GPUCommandType::DrawInstancedQuads;
-                cmd.instance_count = 1;
-                cmd.rect = item.rect.rect;
-                cmd.color = apply_opacity(item.rect.color, current_opacity());
-                out.commands.push_back(cmd);
-                rect_count++;
+                if (emit_uber_batches) {
+                    append_uber_rect(item.rect.rect,
+                                       apply_opacity(item.rect.color, current_opacity()),
+                                       UberQuadMaterial::kSolid,
+                                       0.0f,
+                                       0.0f,
+                                       0.0f);
+                    rect_count++;
+                } else {
+                    GPUCommand cmd{};
+                    cmd.type = GPUCommandType::DrawInstancedQuads;
+                    cmd.instance_count = 1;
+                    cmd.rect = item.rect.rect;
+                    cmd.color = apply_opacity(item.rect.color, current_opacity());
+                    cmd.sort_key = make_sort_key(cmd.type, cmd);
+                    out.commands.push_back(cmd);
+                    rect_count++;
+                }
                 break;
             }
             case DisplayItemType::DrawRoundedRect: {
-                GPUCommand cmd{};
-                cmd.type = GPUCommandType::DrawRoundedRectQuad;
-                cmd.instance_count = 1;
-                cmd.rect = item.rounded_rect.rect;
-                cmd.color = apply_opacity(item.rounded_rect.color, current_opacity());
-                cmd.radius = item.rounded_rect.radius;
-                out.commands.push_back(cmd);
-                round_rect_count++;
+                DONG_LOG_DEBUG("[DISPLAY_LIST] DrawRoundedRect: rect=(%.1f,%.1f,%.1f,%.1f) radius=%.1f",
+                    item.rounded_rect.rect.x, item.rounded_rect.rect.y, 
+                    item.rounded_rect.rect.width, item.rounded_rect.rect.height,
+                    item.rounded_rect.radius);
+                if (emit_uber_batches) {
+                    append_uber_rect(item.rounded_rect.rect,
+                                       apply_opacity(item.rounded_rect.color, current_opacity()),
+                                       UberQuadMaterial::kRounded,
+                                       item.rounded_rect.radius,
+                                       item.rounded_rect.stroke_width,
+                                       0.0f);
+                    round_rect_count++;
+                } else {
+                    GPUCommand cmd{};
+                    cmd.type = GPUCommandType::DrawRoundedRectQuad;
+                    cmd.instance_count = 1;
+                    cmd.rect = item.rounded_rect.rect;
+                    cmd.color = apply_opacity(item.rounded_rect.color, current_opacity());
+                    cmd.radius = item.rounded_rect.radius;
+                    cmd.stroke_width = item.rounded_rect.stroke_width;
+                    cmd.sort_key = make_sort_key(cmd.type, cmd);
+
+                    out.commands.push_back(cmd);
+                    round_rect_count++;
+                }
+                break;
+            }
+            case DisplayItemType::DrawShadow: {
+                if (emit_uber_batches) {
+                    append_uber_rect(item.shadow.rect,
+                                       apply_opacity(item.shadow.color, current_opacity()),
+                                       UberQuadMaterial::kShadow,
+                                       item.shadow.radius,
+                                       0.0f,
+                                       item.shadow.blur);
+                    round_rect_count++;  // 统计为圆角矩形类
+                    ++shadow_count_items;
+                } else {
+                    GPUCommand cmd{};
+                    cmd.type = GPUCommandType::DrawShadowQuad;
+                    cmd.instance_count = 1;
+                    cmd.rect = item.shadow.rect;
+                    cmd.color = apply_opacity(item.shadow.color, current_opacity());
+                    cmd.radius = item.shadow.radius;
+                    cmd.blur = item.shadow.blur;
+                    cmd.sort_key = make_sort_key(cmd.type, cmd);
+                    out.commands.push_back(cmd);
+                    round_rect_count++;  // 统计为圆角矩形类
+                    ++shadow_count_items;
+                }
                 break;
             }
             case DisplayItemType::DrawImage: {
+                flush_uber_batch();
                 GPUCommand cmd{};
                 cmd.type = GPUCommandType::DrawImageQuad;
                 cmd.instance_count = 1;
                 cmd.rect = item.image.rect;
                 cmd.opacity = item.image.opacity * current_opacity();
                 cmd.image_src = item.image.src;
+                cmd.image_fit = item.image.fit;
+                cmd.image_position_x = item.image.position_x;
+                cmd.image_position_y = item.image.position_y;
+                cmd.image_sampling = item.image.sampling;
+
+                cmd.sort_key = make_sort_key(cmd.type, cmd);
                 out.commands.push_back(cmd);
                 image_count++;
                 break;
             }
+
             case DisplayItemType::DrawGlyphRun: {
+                flush_uber_batch();
                 GPUCommand cmd{};
                 cmd.type = GPUCommandType::DrawText;
                 cmd.instance_count = 1;
@@ -205,10 +521,44 @@ public:
                 cmd.color = apply_opacity(item.glyph_run.color, current_opacity());
                 cmd.font_size = item.glyph_run.font_size;
                 cmd.font_family = item.glyph_run.font_family;
+                cmd.font_weight = item.glyph_run.font_weight;
+                cmd.font_style = item.glyph_run.font_style;
+                cmd.font_paths = item.glyph_run.font_paths;
                 cmd.font_path = item.glyph_run.font_path;
+
+
+                cmd.baseline_x = item.glyph_run.baseline_x;
+                cmd.baseline_y = item.glyph_run.baseline_y;
                 cmd.glyphs = item.glyph_run.glyphs;
+                cmd.units_per_em = item.glyph_run.units_per_em;
+                cmd.scale_to_pixels = item.glyph_run.scale_to_pixels;
+                // text-shadow 传递
+                cmd.has_text_shadow = item.glyph_run.has_text_shadow;
+                cmd.text_shadow_offset_x = item.glyph_run.text_shadow_offset_x;
+                cmd.text_shadow_offset_y = item.glyph_run.text_shadow_offset_y;
+                cmd.text_shadow_blur = item.glyph_run.text_shadow_blur;
+                cmd.text_shadow_color = apply_opacity(item.glyph_run.text_shadow_color, current_opacity());
+                cmd.text_renderer_mode = item.glyph_run.text_renderer_mode;
+                cmd.sort_key = make_sort_key(cmd.type, cmd);
                 out.commands.push_back(cmd);
                 text_count++;
+                break;
+            }
+            case DisplayItemType::DrawLinearGradient: {
+                flush_uber_batch();
+                GPUCommand cmd{};
+                cmd.type = GPUCommandType::DrawGradientQuad;
+                cmd.instance_count = 1;
+                cmd.rect = item.gradient.rect;
+                cmd.radius = item.gradient.radius;
+                cmd.gradient_angle_deg = item.gradient.angle_deg;
+                cmd.gradient_stop_count = item.gradient.stop_count;
+                for (int i = 0; i < item.gradient.stop_count; ++i) {
+                    cmd.gradient_stops[i].color = apply_opacity(item.gradient.stops[i].color, current_opacity());
+                    cmd.gradient_stops[i].position = item.gradient.stops[i].position;
+                }
+                cmd.sort_key = make_sort_key(cmd.type, cmd);
+                out.commands.push_back(cmd);
                 break;
             }
             default:
@@ -216,6 +566,8 @@ public:
                 break;
             }
         }
+
+        flush_uber_batch();
 
         GPUCommand end_pass{};
         end_pass.type = GPUCommandType::EndPass;
@@ -225,9 +577,92 @@ public:
         end_frame.type = GPUCommandType::EndFrame;
         out.commands.push_back(end_frame);
 
-        // 输出统计信息
-        SDL_Log("GPU Compiler: %d rects, %d round_rects, %d images, %d texts -> %zu GPU commands",
-                rect_count, round_rect_count, image_count, text_count, out.commands.size());
+        // 基于 sort_key 构建绘制命令的排序视图和批次描述。
+        out.sorted_draw_indices.clear();
+        out.draw_batches.clear();
+
+        if (build_draw_batches) {
+            // 收集所有绘制类命令的索引。
+            for (uint32_t i = 0; i < out.commands.size(); ++i) {
+                const GPUCommandType t = out.commands[i].type;
+                switch (t) {
+                case GPUCommandType::DrawInstancedQuads:
+                case GPUCommandType::DrawRoundedRectQuad:
+                case GPUCommandType::DrawShadowQuad:
+                case GPUCommandType::DrawImageQuad:
+                case GPUCommandType::DrawText:
+                case GPUCommandType::DrawGradientQuad:
+                case GPUCommandType::UberQuadBatch:
+                    out.sorted_draw_indices.push_back(i);
+                    break;
+                default:
+                    break;
+                }
+            }
+
+            // 按 sort_key 升序稳定排序（同 key 时保留原始顺序，用索引比较保证稳定性）。
+            std::sort(out.sorted_draw_indices.begin(), out.sorted_draw_indices.end(),
+                      [&out](uint32_t a, uint32_t b) {
+                          const GPUCommand& ca = out.commands[a];
+                          const GPUCommand& cb = out.commands[b];
+                          if (ca.sort_key < cb.sort_key) return true;
+                          if (ca.sort_key > cb.sort_key) return false;
+                          return a < b;
+                      });
+
+            // 将排序后的绘制命令按 sort_key/type 聚合成批次。
+            if (!out.sorted_draw_indices.empty()) {
+                DrawBatchRange current{};
+                const uint32_t first_index = out.sorted_draw_indices[0];
+                current.start = 0;
+                current.count = 1;
+                current.sort_key = out.commands[first_index].sort_key;
+                current.type = out.commands[first_index].type;
+
+                for (uint32_t i = 1; i < out.sorted_draw_indices.size(); ++i) {
+                    const uint32_t cmd_index = out.sorted_draw_indices[i];
+                    const GPUCommand& cmd = out.commands[cmd_index];
+                    if (cmd.sort_key == current.sort_key && cmd.type == current.type) {
+                        ++current.count;
+                    } else {
+                        out.draw_batches.push_back(current);
+                        current.start = i;
+                        current.count = 1;
+                        current.sort_key = cmd.sort_key;
+                        current.type = cmd.type;
+                    }
+                }
+                out.draw_batches.push_back(current);
+            }
+        }
+
+
+        int shadow_count_cmds = 0, gradient_count = 0, clip_count = 0, layer_count = 0;
+        for (const auto& c : out.commands) {
+            if (c.type == GPUCommandType::DrawShadowQuad) {
+                ++shadow_count_cmds;
+            } else if (c.type == GPUCommandType::DrawGradientQuad) {
+                ++gradient_count;
+            } else if (c.type == GPUCommandType::PushClipRect) {
+                ++clip_count;
+            } else if (c.type == GPUCommandType::BeginIsolatedLayer) {
+                ++layer_count;
+            }
+        }
+
+        const int shadow_total = shadow_count_cmds + shadow_count_items;
+
+        DONG_LOG_INFO("[GPUCompiler] rect=%d round=%d shadow=%d gradient=%d image=%d text=%d clip=%d layer=%d -> %zu cmds, %zu batches",
+                rect_count,
+                round_rect_count,
+                shadow_total,
+                gradient_count,
+                image_count,
+                text_count,
+                clip_count,
+                layer_count,
+                out.commands.size(),
+                out.draw_batches.size());
     }
 };
 

@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        h1 {
+            font-family: Arial, sans-serif;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            background-color: white;
+            border: 2px solid #333;
+        }
+        pre {
+            background-color: #282c34;
+            color: #abb2bf;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            margin: 10px 0;
+        }
+        .tab-2 {
+            tab-size: 2;
+        }
+        .tab-4 {
+            tab-size: 4;
+        }
+        .tab-8 {
+            tab-size: 8;
+        }
+        .tab-16 {
+            tab-size: 16;
+        }
+        .label {
+            font-family: Arial, sans-serif;
+            font-weight: bold;
+            color: #2196f3;
+            margin-top: 10px;
+        }
+        .comparison {
+            display: flex;
+            gap: 20px;
+        }
+        .comparison > div {
+            flex: 1;
+        }
+    </style>
+</head>
+<body>
+    <h1>CSS tab-size Property Test</h1>
+
+    <div class="test-section">
+        <h2>Test 1: Different tab-size Values</h2>
+        <p>The same code with different tab-size settings:</p>
+
+        <div class="label">tab-size: 2</div>
+        <pre class="tab-2">function hello() {
+	if (true) {
+		console.log("Tab size: 2");
+	}
+}</pre>
+
+        <div class="label">tab-size: 4</div>
+        <pre class="tab-4">function hello() {
+	if (true) {
+		console.log("Tab size: 4");
+	}
+}</pre>
+
+        <div class="label">tab-size: 8 (default)</div>
+        <pre class="tab-8">function hello() {
+	if (true) {
+		console.log("Tab size: 8");
+	}
+}</pre>
+
+        <div class="label">tab-size: 16</div>
+        <pre class="tab-16">function hello() {
+	if (true) {
+		console.log("Tab size: 16");
+	}
+}</pre>
+    </div>
+
+    <div class="test-section">
+        <h2>Test 2: Code with Multiple Indentation Levels</h2>
+
+        <div class="comparison">
+            <div>
+                <div class="label">tab-size: 2</div>
+                <pre class="tab-2">class Example {
+	constructor() {
+		this.data = [];
+	}
+
+	process() {
+		for (let i = 0; i < 10; i++) {
+			if (i % 2 === 0) {
+				this.data.push(i);
+			}
+		}
+	}
+}</pre>
+            </div>
+
+            <div>
+                <div class="label">tab-size: 4</div>
+                <pre class="tab-4">class Example {
+	constructor() {
+		this.data = [];
+	}
+
+	process() {
+		for (let i = 0; i < 10; i++) {
+			if (i % 2 === 0) {
+				this.data.push(i);
+			}
+		}
+	}
+}</pre>
+            </div>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>Test 3: Mixed Tabs and Spaces</h2>
+        <p>Tabs should render at tab-size width, spaces remain fixed:</p>
+
+        <div class="label">tab-size: 4</div>
+        <pre class="tab-4">// Tabs for indentation
+function mix() {
+	const obj = {
+		key1: 'value',  // Tab + spaces for alignment
+		key2: 'value',
+		keyLong: 'val'
+	};
+}</pre>
+    </div>
+
+    <div class="test-section">
+        <h2>Test 4: Inheritance Test</h2>
+        <p>tab-size is an inheritable property:</p>
+
+        <div class="label">Parent: tab-size: 2</div>
+        <div style="tab-size: 2;">
+            <pre>Parent container (tab-size: 2):
+	Level 1
+		Level 2
+			Level 3</pre>
+
+            <div class="label">Child: Inherited</div>
+            <pre>Child element (should inherit tab-size: 2):
+	Level 1
+		Level 2
+			Level 3</pre>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>Test 5: Dynamic Verification</h2>
+        <div id="verification"></div>
+    </div>
+
+    <script>
+        // Verify tab-size is applied
+        const verification = document.getElementById('verification');
+
+        const tests = [
+            { selector: '.tab-2', expected: 2 },
+            { selector: '.tab-4', expected: 4 },
+            { selector: '.tab-8', expected: 8 },
+            { selector: '.tab-16', expected: 16 }
+        ];
+
+        let allPassed = true;
+        let results = '<h3>Verification Results:</h3><ul>';
+
+        tests.forEach(function(test) {
+            const elem = document.querySelector(test.selector);
+            if (elem) {
+                const computed = window.getComputedStyle(elem);
+                const tabSize = computed.getPropertyValue('tab-size') || '8';
+                const passed = tabSize == test.expected.toString();
+
+                if (!passed) allPassed = false;
+
+                results += '<li>' + test.selector + ': ';
+                results += passed ?
+                    '<span style="color: green;">✓ PASS</span>' :
+                    '<span style="color: red;">✗ FAIL</span>';
+                results += ' (expected: ' + test.expected + ', got: ' + tabSize + ')</li>';
+            }
+        });
+
+        results += '</ul>';
+
+        if (allPassed) {
+            results += '<p style="color: green; font-weight: bold;">✓ All tests passed!</p>';
+        } else {
+            results += '<p style="color: red; font-weight: bold;">✗ Some tests failed</p>';
+        }
+
+        verification.innerHTML = results;
+
+        console.log('tab-size property test initialized');
+    </script>
+</body>
+</html>

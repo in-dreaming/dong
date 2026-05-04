@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Font Size Keywords Test</title>
+    <style>
+        body {
+            margin: 20px;
+            font-family: Arial, sans-serif;
+            background: white;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .test-box {
+            padding: 10px;
+            border: 1px solid #ccc;
+            background: #f9f9f9;
+        }
+
+        .label {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        /* Absolute size keywords */
+        .xx-small {
+            font-size: xx-small;
+        }
+
+        .x-small {
+            font-size: x-small;
+        }
+
+        .small {
+            font-size: small;
+        }
+
+        .medium {
+            font-size: medium;
+        }
+
+        .large {
+            font-size: large;
+        }
+
+        .x-large {
+            font-size: x-large;
+        }
+
+        .xx-large {
+            font-size: xx-large;
+        }
+
+        /* Relative size keywords (approximate for now) */
+        .parent-16 {
+            font-size: 16px;
+        }
+
+        .smaller {
+            font-size: smaller;
+        }
+
+        .larger {
+            font-size: larger;
+        }
+
+        /* Shorthand with keywords */
+        .shorthand-medium {
+            font: medium Arial, sans-serif;
+        }
+
+        .shorthand-large {
+            font: bold large/1.5 Arial, sans-serif;
+        }
+
+        /* Case insensitivity */
+        .uppercase {
+            font-size: LARGE;
+        }
+
+        /* Comparison with pixel values */
+        .px-10 {
+            font-size: 10px;
+        }
+
+        .px-12 {
+            font-size: 12px;
+        }
+
+        .px-14 {
+            font-size: 14px;
+        }
+
+        .px-16 {
+            font-size: 16px;
+        }
+
+        .px-18 {
+            font-size: 18px;
+        }
+
+        .px-24 {
+            font-size: 24px;
+        }
+
+        .px-32 {
+            font-size: 32px;
+        }
+
+        h2 {
+            font-size: 16px;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+
+        .comparison-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1 style="font-size: 20px;">Font Size Keywords Test</h1>
+
+    <h2>Absolute Size Keywords</h2>
+    <div class="container">
+        <div class="test-box">
+            <div class="label">xx-small (should be 10px)</div>
+            <div class="xx-small">The quick brown fox jumps over the lazy dog.</div>
+        </div>
+
+        <div class="test-box">
+            <div class="label">x-small (should be 12px)</div>
+            <div class="x-small">The quick brown fox jumps over the lazy dog.</div>
+        </div>
+
+        <div class="test-box">
+            <div class="label">small (should be 14px)</div>
+            <div class="small">The quick brown fox jumps over the lazy dog.</div>
+        </div>
+
+        <div class="test-box">
+            <div class="label">medium (should be 16px, default)</div>
+            <div class="medium">The quick brown fox jumps over the lazy dog.</div>
+        </div>
+
+        <div class="test-box">
+            <div class="label">large (should be 18px)</div>
+            <div class="large">The quick brown fox jumps over the lazy dog.</div>
+        </div>
+
+        <div class="test-box">
+            <div class="label">x-large (should be 24px)</div>
+            <div class="x-large">The quick brown fox jumps over the lazy dog.</div>
+        </div>
+
+        <div class="test-box">
+            <div class="label">xx-large (should be 32px)</div>
+            <div class="xx-large">The quick brown fox jumps over the lazy dog.</div>
+        </div>
+    </div>
+
+    <h2>Relative Size Keywords (Approximate)</h2>
+    <div class="container">
+        <div class="test-box parent-16">
+            <div class="label">Parent: 16px</div>
+            Parent text
+            <div class="smaller">smaller child (approximate 14px)</div>
+            <div class="larger">larger child (approximate 18px)</div>
+        </div>
+    </div>
+
+    <h2>Shorthand with Keywords</h2>
+    <div class="container">
+        <div class="test-box">
+            <div class="label">font: medium Arial</div>
+            <div class="shorthand-medium">The quick brown fox.</div>
+        </div>
+
+        <div class="test-box">
+            <div class="label">font: bold large/1.5 Arial</div>
+            <div class="shorthand-large">The quick brown fox.</div>
+        </div>
+    </div>
+
+    <h2>Case Insensitivity</h2>
+    <div class="container">
+        <div class="test-box">
+            <div class="label">font-size: LARGE (uppercase)</div>
+            <div class="uppercase">The quick brown fox jumps over the lazy dog.</div>
+        </div>
+    </div>
+
+    <h2>Comparison with Pixel Values</h2>
+    <div class="comparison-grid">
+        <div class="test-box">
+            <div class="label">10px</div>
+            <div class="px-10">Quick brown fox</div>
+        </div>
+        <div class="test-box">
+            <div class="label">xx-small</div>
+            <div class="xx-small">Quick brown fox</div>
+        </div>
+
+        <div class="test-box">
+            <div class="label">12px</div>
+            <div class="px-12">Quick brown fox</div>
+        </div>
+        <div class="test-box">
+            <div class="label">x-small</div>
+            <div class="x-small">Quick brown fox</div>
+        </div>
+
+        <div class="test-box">
+            <div class="label">14px</div>
+            <div class="px-14">Quick brown fox</div>
+        </div>
+        <div class="test-box">
+            <div class="label">small</div>
+            <div class="small">Quick brown fox</div>
+        </div>
+
+        <div class="test-box">
+            <div class="label">16px</div>
+            <div class="px-16">Quick brown fox</div>
+        </div>
+        <div class="test-box">
+            <div class="label">medium</div>
+            <div class="medium">Quick brown fox</div>
+        </div>
+
+        <div class="test-box">
+            <div class="label">18px</div>
+            <div class="px-18">Quick brown fox</div>
+        </div>
+        <div class="test-box">
+            <div class="label">large</div>
+            <div class="large">Quick brown fox</div>
+        </div>
+
+        <div class="test-box">
+            <div class="label">24px</div>
+            <div class="px-24">Quick brown fox</div>
+        </div>
+        <div class="test-box">
+            <div class="label">x-large</div>
+            <div class="x-large">Quick brown fox</div>
+        </div>
+
+        <div class="test-box">
+            <div class="label">32px</div>
+            <div class="px-32">Quick brown fox</div>
+        </div>
+        <div class="test-box">
+            <div class="label">xx-large</div>
+            <div class="xx-large">Quick brown fox</div>
+        </div>
+    </div>
+</body>
+</html>

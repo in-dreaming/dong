@@ -1,0 +1,77 @@
+{
+    // C/C++ 配置
+    "C_Cpp.default.includePath": [
+        "${workspaceFolder}/dong/include",
+        "${workspaceFolder}/dong/src",
+        "${workspaceFolder}/dong/third_party/sdl/include",
+        "${workspaceFolder}/dong/third_party/quickjs"
+    ],
+    "C_Cpp.default.defines": [],
+    "C_Cpp.default.compilerPath": "/usr/bin/clang++",
+    "C_Cpp.default.cppStandard": "c++17",
+    "C_Cpp.default.intelliSenseMode": "macos-clang-arm64",
+    
+    // 文件关联
+    "files.associations": {
+        "*.hpp": "cpp",
+        "*.cpp": "cpp",
+        "*.h": "c",
+        "any": "cpp",
+        "filesystem": "cpp",
+        "xstring": "cpp",
+        "array": "cpp",
+        "bitset": "cpp",
+        "deque": "cpp",
+        "initializer_list": "cpp",
+        "list": "cpp",
+        "queue": "cpp",
+        "random": "cpp",
+        "ranges": "cpp",
+        "regex": "cpp",
+        "span": "cpp",
+        "stack": "cpp",
+        "utility": "cpp",
+        "valarray": "cpp",
+        "vector": "cpp",
+        "xhash": "cpp",
+        "xtree": "cpp",
+        "xutility": "cpp",
+        "__hash_table": "cpp",
+        "__split_buffer": "cpp",
+        "__tree": "cpp",
+        "map": "cpp",
+        "set": "cpp",
+        "string": "cpp",
+        "string_view": "cpp",
+        "unordered_map": "cpp",
+        "unordered_set": "cpp"
+    },
+    
+    // 搜索排除
+    "search.exclude": {
+        "**/zig-out": true,
+        "**/zig-cache": true,
+        "**/third_party": true,
+        "**/.git": true
+    },
+    
+    // 文件监视排除
+    "files.watcherExclude": {
+        "**/zig-out/**": true,
+        "**/zig-cache/**": true,
+        "**/third_party/**": true
+    },
+    
+    // Code Runner 配置（禁用对 C++ 文件的自动运行，避免错误）
+    "code-runner.runInTerminal": true,
+    "code-runner.clearPreviousOutput": true,
+    "code-runner.saveFileBeforeRun": true,
+    "code-runner.executorMap": {
+        "cpp": "cd $workspaceRoot/dong && zig build examples -Doptimize=Debug && ./zig-out/bin/interactive_demo"
+    },
+    // 禁用 Code Runner 对特定文件的自动运行
+    "code-runner.ignoreSelection": true,
+    "code-runner.fileDirectoryAsCwd": false,
+    "codingcopilot.enableCompletionLanguage": {},
+    "cmake.sourceDirectory": "D:/mix/agents/game/indr/dong/dong"
+}

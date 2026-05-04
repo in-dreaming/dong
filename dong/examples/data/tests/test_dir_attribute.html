@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body
+  { margin: 10px;
+    font-family: Arial, sans-serif;
+    background-color: #f5f5f5;
+  }
+
+  .test-case
+  { padding: 10px;
+    margin: 10px 0;
+    border-radius: 5px;
+  }
+
+  /* :dir() 伪类选择器 - 匹配 LTR 方向元素 */
+  :dir(ltr) { background-color: #90EE90; padding: 10px; }
+  :dir(rtl) { background-color: #FFB6C1; padding: 10px; }
+
+  /* 测试标签 */
+  h2
+  { font-size: 14px;
+    color: #333;
+    margin-bottom: 8px;
+  }
+</style>
+</head>
+<body>
+
+  <h1>HTML dir 属性和 :dir() 伪类测试</h1>
+
+  <div class="test-case">
+    <h2>1. dir="ltr" 元素 (绿色背景 - :dir(ltr) 匹配)</h2>
+    <div dir="ltr">这是 LTR 文本。This text is left-to-right.</div>
+  </div>
+
+  <div class="test-case">
+    <h2>2. dir="rtl" 元素 (粉色背景 - :dir(rtl) 匹配)</h2>
+    <div dir="rtl">هذا text نص RTL.</div>
+  </div>
+
+  <div class="test-case">
+    <h2>3. 无 dir 属性的元素 (继承父元素 LTR - 绿色背景)</h2>
+    <div>默认 LTR 文本，继承 direction。</div>
+  </div>
+
+  <div class="test-case">
+    <h2>4. dir="auto" 以 LTR 文本开头 (检测为 LTR - 绿色背景)</h2>
+    <div dir="auto">Hello 这是 LTR 文本。</div>
+  </div>
+
+  <div class="test-case">
+    <h2>5. dir="auto" 以 RTL 文本开头 (检测为 RTL - 粉色背景)</h2>
+    <div dir="auto">مرحبا Hello this starts with RTL.</div>
+  </div>
+
+  <div class="test-case">
+    <h2>6. 嵌套元素 - 父 LTR，子 RTL (粉色背景)</h2>
+    <div dir="ltr">
+      父 LTR
+      <div dir="rtl">子 RTL - هذا نص</div>
+      父 LTR 继续
+    </div>
+  </div>
+
+  <div class="test-case">
+    <h2>7. 子元素继承父元素方向</h2>
+    <div dir="rtl" style="padding: 10px;">
+      父 RTL
+      <div style="padding: 10px;">
+        子元素继承 RTL (粉色背景)
+        <div style="padding: 10px;">
+          孙元素继承 RTL (粉色背景)
+        </div>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>

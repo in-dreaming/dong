@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { padding: 20px; font-family: sans-serif; }
+
+.container {
+    display: flex;
+    width: 600px;
+    border: 2px solid #333;
+    margin-bottom: 30px;
+    flex-wrap: wrap;
+}
+
+.item {
+    padding: 10px;
+    margin: 5px;
+    background: #4CAF50;
+    color: white;
+    font-size: 14px;
+}
+
+/* Test 1: flex-basis: content on single item */
+.container-1 .item {
+    flex-basis: content;
+}
+
+/* Test 2: flex-basis: content vs flex-basis: auto comparison */
+.container-2 .content-item {
+    flex-basis: content;
+    background: #2196F3;
+}
+
+.container-2 .auto-item {
+    flex-basis: auto;
+    background: #FF5722;
+}
+
+/* Test 3: flex-basis: content with small content */
+.container-3 .item {
+    flex-basis: content;
+}
+
+/* Test 4: flex-basis: content with max-width constraint */
+.container-4 .item {
+    flex-basis: content;
+    max-width: 200px;
+}
+
+h2 { margin-top: 0; margin-bottom: 10px; font-size: 18px;}
+.small-content { font-size: 12px; }
+.large-content { font-size: 18px; }
+.expected {
+    margin-top: 10px;
+    font-size: 12px;
+    color: #666;
+}
+</style>
+</head>
+<body>
+
+<h2>Test 1: flex-basis: content (items sized by their content)</h2>
+<div class="container container-1">
+    <div class="item">Short</div>
+    <div class="item">Medium length text here</div>
+    <div class="item">This is a much longer piece of content</div>
+</div>
+<div class="expected">Expected: Items sized to fit their content width</div>
+
+<h2>Test 2: flex-basis: content vs auto comparison</h2>
+<div class="container container-2">
+    <div class="item content-item">Content basis</div>
+    <div class="item auto-item">Auto basis</div>
+    <div class="item content-item large-content">Content (large)</div>
+</div>
+<div class="expected">Expected: content items sized by text, auto items use flex-grow</div>
+
+<h2>Test 3: flex-basis: content with small content</h2>
+<div class="container container-3">
+    <div class="item small-content">A</div>
+    <div class="item small-content">BC</div>
+    <div class="item small-content">DEF</div>
+</div>
+<div class="expected">Expected: Items sized to fit small content</div>
+
+<h2>Test 4: flex-basis: content with max-width constraint</h2>
+<div class="container container-4">
+    <div class="item">Content text</div>
+    <div class="item">Short</div>
+</div>
+<div class="expected">Expected: Items sized by content but capped at max-width</div>
+
+</body>
+</html>

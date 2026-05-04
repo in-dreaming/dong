@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Select Element - Option Click Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f0f0f0;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        select {
+            padding: 8px;
+            font-size: 16px;
+            border: 2px solid #4CAF50;
+            border-radius: 4px;
+            background: white;
+            min-width: 200px;
+        }
+        .result {
+            margin-top: 10px;
+            padding: 10px;
+            background: #e8f5e9;
+            border-left: 4px solid #4CAF50;
+            font-family: monospace;
+        }
+        .log {
+            background: #f5f5f5;
+            padding: 10px;
+            margin-top: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+            border: 1px solid #ddd;
+        }
+        .log-entry {
+            padding: 2px 0;
+            border-bottom: 1px solid #eee;
+        }
+    </style>
+</head>
+<body>
+    <h1>Select Element - Option Click Test (Chunk 5)</h1>
+
+    <div class="test-section">
+        <h2>Test 1: Basic Option Selection</h2>
+        <p>Click the select box, then click an option to select it</p>
+        <select id="test1">
+            <option value="apple">Apple</option>
+            <option value="banana">Banana</option>
+            <option value="cherry">Cherry</option>
+            <option value="date">Date</option>
+        </select>
+        <div class="result" id="result1">
+            Selected value: <span id="value1">-</span><br>
+            Selected index: <span id="index1">-</span>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>Test 2: Change Event Handling</h2>
+        <p>Select should fire 'change' event when option is clicked</p>
+        <select id="test2">
+            <option value="red">Red</option>
+            <option value="green">Green</option>
+            <option value="blue">Blue</option>
+        </select>
+        <div class="result" id="result2">
+            Last change event: <span id="event2">none</span>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>Test 3: Multiple Selections</h2>
+        <p>Click different options multiple times</p>
+        <select id="test3">
+            <option value="opt1">Option 1</option>
+            <option value="opt2">Option 2</option>
+            <option value="opt3">Option 3</option>
+            <option value="opt4">Option 4</option>
+            <option value="opt5">Option 5</option>
+        </select>
+        <div class="log" id="log3"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Test 4: Programmatic vs Click Selection</h2>
+        <p>Test both programmatic and click-based selection</p>
+        <select id="test4">
+            <option value="a">Option A</option>
+            <option value="b">Option B</option>
+            <option value="c">Option C</option>
+        </select>
+        <div style="margin-top: 10px;">
+            <button id="btn-select-b">Select B Programmatically</button>
+            <button id="btn-select-c">Select C Programmatically</button>
+        </div>
+        <div class="result" id="result4">
+            Current value: <span id="value4">-</span><br>
+            Selection method: <span id="method4">-</span>
+        </div>
+    </div>
+
+    <script>
+        // Test 1: Basic selection
+        const test1 = document.getElementById('test1');
+        function updateTest1() {
+            document.getElementById('value1').textContent = test1.value;
+            document.getElementById('index1').textContent = test1.selectedIndex;
+        }
+        test1.addEventListener('change', updateTest1);
+        updateTest1();
+
+        // Test 2: Change event
+        const test2 = document.getElementById('test2');
+        test2.addEventListener('change', (e) => {
+            const timestamp = new Date().toLocaleTimeString();
+            document.getElementById('event2').textContent =
+                `value="${e.target.value}" at ${timestamp}`;
+        });
+
+        // Test 3: Multiple selections with log
+        const test3 = document.getElementById('test3');
+        const log3 = document.getElementById('log3');
+        let selectionCount = 0;
+        test3.addEventListener('change', (e) => {
+            selectionCount++;
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.textContent = `[${selectionCount}] Selected: ${e.target.value} (index: ${e.target.selectedIndex})`;
+            log3.appendChild(entry);
+            log3.scrollTop = log3.scrollHeight;
+        });
+
+        // Test 4: Programmatic vs click
+        const test4 = document.getElementById('test4');
+        let lastMethod = 'none';
+
+        test4.addEventListener('change', (e) => {
+            document.getElementById('value4').textContent = e.target.value;
+            document.getElementById('method4').textContent = lastMethod;
+        });
+
+        // Monitor for click events (user selection)
+        test4.addEventListener('click', () => {
+            lastMethod = 'user click';
+        });
+
+        document.getElementById('btn-select-b').addEventListener('click', () => {
+            lastMethod = 'programmatic (button)';
+            test4.selectedIndex = 1; // Select "Option B"
+            // Manually trigger change event for programmatic changes
+            const event = new Event('change', { bubbles: true });
+            test4.dispatchEvent(event);
+        });
+
+        document.getElementById('btn-select-c').addEventListener('click', () => {
+            lastMethod = 'programmatic (button)';
+            test4.selectedIndex = 2; // Select "Option C"
+            const event = new Event('change', { bubbles: true });
+            test4.dispatchEvent(event);
+        });
+
+        // Initialize Test 4
+        document.getElementById('value4').textContent = test4.value;
+        document.getElementById('method4').textContent = 'initial';
+
+        console.log('Select option click test initialized');
+        console.log('Expected behavior:');
+        console.log('1. Click select to open dropdown');
+        console.log('2. Click an option to select it');
+        console.log('3. Dropdown should close');
+        console.log('4. Change event should fire');
+        console.log('5. Visual display should update');
+    </script>
+</body>
+</html>

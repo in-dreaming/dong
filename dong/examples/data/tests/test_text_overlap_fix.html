@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Text Overlap Fix Test</title>
+    <style>
+        body {
+            margin: 20px;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+        }
+
+        .parent-box {
+            background-color: #e3f2fd;
+            border: 3px solid #2196f3;
+            padding: 15px;
+            margin: 10px 0;
+            color: #0d47a1;
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .child {
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid #999;
+            background-color: #fff;
+            color: #333;
+            font-size: 14px;
+            font-weight: normal;
+        }
+    </style>
+</head>
+<body>
+    <h1>Text Overlap Fix Test</h1>
+
+    <p>This test verifies that text nodes mixed with block children render correctly without overlap.</p>
+
+    <h2>Test Case 1: Text + Block Children</h2>
+    <div class="parent-box">
+        Parent text here (should NOT overlap with children)
+        <div class="child">First child (should be below parent text)</div>
+        <div class="child">Second child (should be below first child)</div>
+    </div>
+
+    <h2>Test Case 2: Multiple Text Nodes</h2>
+    <div class="parent-box">
+        First text line
+        <div class="child">Middle child</div>
+        Second text line (after child)
+        <div class="child">Last child</div>
+    </div>
+
+    <h2>Test Case 3: Only Block Children (Reference)</h2>
+    <div class="parent-box">
+        <div class="child">Only child 1</div>
+        <div class="child">Only child 2</div>
+    </div>
+
+    <h2>Expected Behavior</h2>
+    <ul>
+        <li>Test Case 1: Parent text should be visible at top, followed by two child boxes</li>
+        <li>Test Case 2: Text should appear between and around children without overlap</li>
+        <li>Test Case 3: No text, just two stacked child boxes (reference for spacing)</li>
+    </ul>
+</body>
+</html>

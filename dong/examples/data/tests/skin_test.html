@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>皮肤切换测试</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            /* 默认浅色主题变量 */
+            --primary-color: #4a6fa5;
+            --secondary-color: #6b9ac4;
+            --background-color: #f8f9fa;
+            --surface-color: #ffffff;
+            --text-color: #333333;
+            --text-secondary: #666666;
+            --border-color: #dddddd;
+            --shadow-color: rgba(0, 0, 0, 0.1);
+            --accent-color: #ff6b6b;
+            --success-color: #51cf66;
+            --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        /* 深色主题变量 */
+        .theme-dark {
+            --primary-color: #6b9ac4;
+            --secondary-color: #4a6fa5;
+            --background-color: #1a1a2e;
+            --surface-color: #16213e;
+            --text-color: #e6e6e6;
+            --text-secondary: #aaaaaa;
+            --border-color: #2d4059;
+            --shadow-color: rgba(0, 0, 0, 0.3);
+            --accent-color: #ff9a76;
+            --success-color: #69db7c;
+        }
+
+        /* 蓝色主题变量 */
+        .theme-blue {
+            --primary-color: #1e88e5;
+            --secondary-color: #64b5f6;
+            --background-color: #e3f2fd;
+            --surface-color: #ffffff;
+            --text-color: #0d47a1;
+            --text-secondary: #1565c0;
+            --border-color: #90caf9;
+            --shadow-color: rgba(30, 136, 229, 0.2);
+            --accent-color: #ff5722;
+            --success-color: #00bcd4;
+        }
+
+        /* 绿色主题变量 */
+        .theme-green {
+            --primary-color: #2e7d32;
+            --secondary-color: #4caf50;
+            --background-color: #f1f8e9;
+            --surface-color: #ffffff;
+            --text-color: #1b5e20;
+            --text-secondary: #388e3c;
+            --border-color: #a5d6a7;
+            --shadow-color: rgba(46, 125, 50, 0.2);
+            --accent-color: #ff8a65;
+            --success-color: #8bc34a;
+        }
+
+        /* 暖色主题变量 */
+        .theme-warm {
+            --primary-color: #e65100;
+            --secondary-color: #ff9800;
+            --background-color: #fff3e0;
+            --surface-color: #ffffff;
+            --text-color: #bf360c;
+            --text-secondary: #e65100;
+            --border-color: #ffcc80;
+            --shadow-color: rgba(230, 81, 0, 0.2);
+            --accent-color: #5d4037;
+            --success-color: #ffb300;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+        }
+
+        body {
+            font-family: var(--font-family);
+            background-color: var(--background-color);
+            color: var(--text-color);
+            line-height: 1.6;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            padding: 30px 0;
+            margin-bottom: 30px;
+            border-bottom: 2px solid var(--border-color);
+        }
+
+        h1 {
+            color: var(--primary-color);
+            margin-bottom: 10px;
+            font-size: 2.5rem;
+        }
+
+        .subtitle {
+            color: var(--text-secondary);
+            font-size: 1.2rem;
+        }
+
+        .theme-selector {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 15px;
+            margin: 30px 0;
+        }
+
+        .theme-btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 4px 8px var(--shadow-color);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .theme-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 12px var(--shadow-color);
+        }
+
+        .theme-btn.active {
+            transform: scale(1.05);
+            box-shadow: 0 0 0 3px var(--surface-color), 0 0 0 6px var(--primary-color);
+        }
+
+        .theme-light {
+            background-color: #f8f9fa;
+            color: #333333;
+        }
+
+        .theme-dark-btn {
+            background-color: #1a1a2e;
+            color: #e6e6e6;
+        }
+
+        .theme-blue-btn {
+            background-color: #e3f2fd;
+            color: #0d47a1;
+        }
+
+        .theme-green-btn {
+            background-color: #f1f8e9;
+            color: #1b5e20;
+        }
+
+        .theme-warm-btn {
+            background-color: #fff3e0;
+            color: #bf360c;
+        }
+
+        .preview-section {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin: 40px 0;
+        }
+
+        .preview-card {
+            background-color: var(--surface-color);
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 8px 20px var(--shadow-color);
+            border: 1px solid var(--border-color);
+        }
+
+        .preview-card h3 {
+            color: var(--primary-color);
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid var(--border-color);
+        }
+
+        .preview-content {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .button-example {
+            padding: 10px 20px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            width: fit-content;
+        }
+
+        .button-example:hover {
+            background-color: var(--secondary-color);
+        }
+
+        .accent-button {
+            background-color: var(--accent-color);
+        }
+
+        .success-button {
+            background-color: var(--success-color);
+        }
+
+        .input-example {
+            padding: 10px 15px;
+            border: 2px solid var(--border-color);
+            border-radius: 6px;
+            background-color: var(--surface-color);
+            color: var(--text-color);
+            width: 100%;
+        }
+
+        .input-example:focus {
+            outline: none;
+            border-color: var(--primary-color);
+        }
+
+        .alert-example {
+            padding: 15px;
+            border-radius: 6px;
+            background-color: var(--background-color);
+            border-left: 4px solid var(--primary-color);
+        }
+
+        .progress-bar {
+            height: 10px;
+            background-color: var(--border-color);
+            border-radius: 5px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background-color: var(--primary-color);
+            width: 70%;
+        }
+
+        .theme-info {
+            background-color: var(--surface-color);
+            border-radius: 15px;
+            padding: 30px;
+            margin-top: 40px;
+            box-shadow: 0 8px 20px var(--shadow-color);
+            border: 1px solid var(--border-color);
+        }
+
+        .theme-info h2 {
+            color: var(--primary-color);
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .color-palette {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .color-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .color-box {
+            width: 30px;
+            height: 30px;
+            border-radius: 6px;
+            border: 2px solid var(--border-color);
+        }
+
+        .color-name {
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 2px solid var(--border-color);
+            color: var(--text-secondary);
+        }
+
+        .instructions {
+            background-color: var(--surface-color);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 30px;
+            border-left: 5px solid var(--accent-color);
+        }
+
+        @media (max-width: 768px) {
+            .preview-section {
+                grid-template-columns: 1fr;
+            }
+            
+            .theme-selector {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .theme-btn {
+                width: 90%;
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+<body class="theme-light">
+    <div class="container">
+        <header>
+            <h1><i class="fas fa-palette"></i> 皮肤切换测试</h1>
+            <p class="subtitle">点击下方主题按钮，实时预览不同皮肤效果</p>
+        </header>
+
+        <div class="instructions">
+            <h3><i class="fas fa-info-circle"></i> 使用说明</h3>
+            <p>选择下方主题按钮可以切换页面皮肤。您的选择将自动保存到浏览器本地存储中，下次访问时会自动应用您上次选择的主题。</p>
+        </div>
+
+        <div class="theme-selector">
+            <button class="theme-btn theme-light active" data-theme="light">
+                <i class="fas fa-sun"></i> 浅色主题
+            </button>
+            <button class="theme-btn theme-dark-btn" data-theme="dark">
+                <i class="fas fa-moon"></i> 深色主题
+            </button>
+            <button class="theme-btn theme-blue-btn" data-theme="blue">
+                <i class="fas fa-tint"></i> 蓝色主题
+            </button>
+            <button class="theme-btn theme-green-btn" data-theme="green">
+                <i class="fas fa-leaf"></i> 绿色主题
+            </button>
+            <button class="theme-btn theme-warm-btn" data-theme="warm">
+                <i class="fas fa-fire"></i> 暖色主题
+            </button>
+        </div>
+
+        <div class="preview-section">
+            <div class="preview-card">
+                <h3><i class="fas fa-bell"></i> 按钮示例</h3>
+                <div class="preview-content">
+                    <button class="button-example">主要按钮</button>
+                    <button class="button-example accent-button">强调按钮</button>
+                    <button class="button-example success-button">成功按钮</button>
+                </div>
+            </div>
+
+            <div class="preview-card">
+                <h3><i class="fas fa-edit"></i> 表单元素</h3>
+                <div class="preview-content">
+                    <input type="text" class="input-example" placeholder="输入框示例">
+                    <select class="input-example">
+                        <option>下拉选择示例</option>
+                        <option>选项一</option>
+                        <option>选项二</option>
+                    </select>
+                    <div class="progress-bar">
+                        <div class="progress-fill"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="preview-card">
+                <h3><i class="fas fa-comment-alt"></i> 内容区域</h3>
+                <div class="preview-content">
+                    <div class="alert-example">
+                        <strong>提示信息:</strong> 这是一个示例提示框，展示当前主题下的文本和背景效果。
+                    </div>
+                    <p>这是一段示例文本，展示当前主题下的文字颜色和阅读效果。您可以通过切换主题来查看不同皮肤下的显示差异。</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="theme-info">
+            <h2><i class="fas fa-palette"></i> 当前主题信息</h2>
+            <p>当前应用的主题是：<strong id="current-theme-name">浅色主题</strong></p>
+            <p>主题颜色变量值：</p>
+            
+            <div class="color-palette">
+                <div class="color-item">
+                    <div class="color-box" id="primary-color"></div>
+                    <span class="color-name">主色</span>
+                </div>
+                <div class="color-item">
+                    <div class="color-box" id="secondary-color"></div>
+                    <span class="color-name">辅助色</span>
+                </div>
+                <div class="color-item">
+                    <div class="color-box" id="background-color"></div>
+                    <span class="color-name">背景色</span>
+                </div>
+                <div class="color-item">
+                    <div class="color-box" id="surface-color"></div>
+                    <span class="color-name">表面色</span>
+                </div>
+                <div class="color-item">
+                    <div class="color-box" id="text-color"></div>
+                    <span class="color-name">文本色</span>
+                </div>
+                <div class="color-item">
+                    <div class="color-box" id="accent-color"></div>
+                    <span class="color-name">强调色</span>
+                </div>
+            </div>
+            
+            <p style="margin-top: 20px;">切换主题时，所有元素都会平滑过渡到新的颜色方案。此偏好设置已保存到您的浏览器本地存储中。</p>
+        </div>
+
+        <footer>
+            <p>皮肤切换测试页面 &copy; 2023 | 使用HTML、CSS和JavaScript实现</p>
+            <p>刷新页面后，您选择的主题会自动恢复</p>
+        </footer>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // 获取所有主题按钮
+            const themeButtons = document.querySelectorAll('.theme-btn');
+            const body = document.body;
+            const currentThemeName = document.getElementById('current-theme-name');
+            
+            // 主题名称映射
+            const themeNames = {
+                'light': '浅色主题',
+                'dark': '深色主题',
+                'blue': '蓝色主题',
+                'green': '绿色主题',
+                'warm': '暖色主题'
+            };
+            
+            // 从本地存储获取保存的主题
+            const savedTheme = localStorage.getItem('selected-theme') || 'light';
+            
+            // 应用保存的主题
+            applyTheme(savedTheme);
+            
+            // 为每个主题按钮添加点击事件
+            themeButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    const theme = this.getAttribute('data-theme');
+                    applyTheme(theme);
+                    
+                    // 保存到本地存储
+                    localStorage.setItem('selected-theme', theme);
+                });
+            });
+            
+            // 应用主题函数
+            function applyTheme(theme) {
+                // 移除所有主题类
+                body.classList.remove('theme-light', 'theme-dark', 'theme-blue', 'theme-green', 'theme-warm');
+                
+                // 添加当前主题类
+                body.classList.add(`theme-${theme}`);
+                
+                // 更新按钮激活状态
+                themeButtons.forEach(button => {
+                    if (button.getAttribute('data-theme') === theme) {
+                        button.classList.add('active');
+                    } else {
+                        button.classList.remove('active');
+                    }
+                });
+                
+                // 更新当前主题名称显示
+                currentThemeName.textContent = themeNames[theme];
+                
+                // 更新颜色示例显示
+                updateColorDisplay();
+            }
+            
+            // 更新颜色示例显示
+            function updateColorDisplay() {
+                const computedStyle = getComputedStyle(document.documentElement);
+                
+                const colorIds = [
+                    'primary-color',
+                    'secondary-color',
+                    'background-color',
+                    'surface-color',
+                    'text-color',
+                    'accent-color'
+                ];
+                
+                colorIds.forEach(id => {
+                    const cssVar = id.replace('-', '-');
+                    const colorValue = computedStyle.getPropertyValue(`--${id}`).trim();
+                    const colorBox = document.getElementById(id);
+                    colorBox.style.backgroundColor = colorValue;
+                    
+                    // 为浅色背景添加边框
+                    if (id === 'surface-color' || id === 'background-color') {
+                        colorBox.style.border = `2px solid ${computedStyle.getPropertyValue('--border-color').trim()}`;
+                    }
+                });
+            }
+            
+            // 初始更新颜色显示
+            updateColorDisplay();
+            
+            // 为示例按钮添加交互效果
+            document.querySelectorAll('.button-example').forEach(button => {
+                button.addEventListener('click', function() {
+                    const originalText = this.textContent;
+                    this.textContent = '已点击！';
+                    this.style.transform = 'scale(0.95)';
+                    
+                    setTimeout(() => {
+                        this.textContent = originalText;
+                        this.style.transform = '';
+                    }, 300);
+                });
+            });
+        });
+    </script>
+</body>
+</html>

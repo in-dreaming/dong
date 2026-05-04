@@ -1,0 +1,108 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    html, body { height: 100%; margin: 0; }
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #0b0f17;
+      color: rgba(255,255,255,0.9);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    }
+    .panel {
+      width: 520px;
+      padding: 18px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.18);
+      background: rgba(255,255,255,0.06);
+      box-shadow: 0 12px 34px rgba(0,0,0,0.55);
+    }
+    .badge {
+      display: inline-block;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-weight: 700;
+      background: rgba(255, 90, 90, 0.18);
+      border: 1px solid rgba(255, 90, 90, 0.5);
+      color: rgb(255, 160, 160);
+      margin-bottom: 10px;
+    }
+    body.ok .badge {
+      background: rgba(80, 220, 140, 0.18);
+      border: 1px solid rgba(80, 220, 140, 0.5);
+      color: rgb(140, 255, 190);
+    }
+    pre {
+      margin: 0;
+      padding: 12px;
+      border-radius: 10px;
+      background: rgba(0,0,0,0.35);
+      border: 1px solid rgba(255,255,255,0.12);
+      white-space: pre-wrap;
+      line-height: 1.4;
+    }
+    video { display: none; }
+  </style>
+</head>
+<body>
+  <div class="panel">
+    <div class="badge" id="badge">VIDEO JS API: FAIL</div>
+    <pre id="out">running...</pre>
+
+    <!-- No src needed: this is a JS API smoke test (play/pause/paused/seeking). -->
+    <video id="v" muted></video>
+  </div>
+
+  <script>
+    (function () {
+      var out = document.getElementById('out');
+      var badge = document.getElementById('badge');
+      var v = document.getElementById('v');
+
+      function line(s) {
+        out.textContent += s + "\n";
+      }
+
+      out.textContent = '';
+
+      var ok = true;
+      ok = ok && v;
+      ok = ok && (typeof v.play === 'function');
+      ok = ok && (typeof v.pause === 'function');
+      ok = ok && ('paused' in v);
+      ok = ok && ('seeking' in v);
+
+      var p0 = v ? !!v.paused : true;
+      if (!p0) ok = false; // default should be paused=true
+
+      if (v) v.play();
+      var p1 = v ? !!v.paused : true;
+      if (p1) ok = false;
+
+      if (v) v.pause();
+      var p2 = v ? !!v.paused : true;
+      if (!p2) ok = false;
+
+      // Setting currentTime should flip seeking=true in our minimal model.
+      if (v) v.currentTime = 1.0;
+      var s1 = v ? !!v.seeking : false;
+      if (!s1) ok = false;
+
+      line('default paused: ' + p0);
+      line('after play paused: ' + p1);
+      line('after pause paused: ' + p2);
+      line('after set currentTime seeking: ' + s1);
+
+      if (ok) {
+        document.body.setAttribute('class', 'ok');
+        badge.textContent = 'VIDEO JS API: OK';
+      } else {
+        badge.textContent = 'VIDEO JS API: FAIL';
+      }
+    })();
+  </script>
+</body>
+</html>

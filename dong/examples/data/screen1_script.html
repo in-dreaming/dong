@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            margin: 0;
+            padding: 20px;
+            background-color: #1a1a2e;
+            color: #eaeaea;
+            font-family: Arial, sans-serif;
+        }
+        
+        h1 {
+            font-size: 28px;
+            color: #00d4ff;
+            margin-bottom: 20px;
+        }
+        
+        .section {
+            background-color: #16213e;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+        
+        .section-title {
+            font-size: 18px;
+            color: #e94560;
+            margin-bottom: 12px;
+        }
+        
+        .button-row {
+            display: flex;
+            gap: 12px;
+        }
+        
+        button {
+            background-color: #0f3460;
+            color: #ffffff;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-size: 16px;
+        }
+        
+        #click-count {
+            margin-top: 12px;
+            font-size: 14px;
+            color: #94a3b8;
+        }
+        
+        .scroll-container {
+            overflow: scroll;
+            height: 150px;
+            background-color: #0f3460;
+            border-radius: 6px;
+            padding: 8px;
+        }
+        
+        .scroll-item {
+            padding: 10px;
+            margin-bottom: 8px;
+            background-color: #1a1a2e;
+            border-radius: 4px;
+        }
+        
+        .input-group {
+            margin-bottom: 12px;
+        }
+        
+        .input-label {
+            font-size: 14px;
+            color: #94a3b8;
+            margin-bottom: 6px;
+        }
+        
+        input {
+            width: 100%;
+            padding: 12px;
+            background-color: #0f3460;
+            color: #ffffff;
+            border-radius: 6px;
+            font-size: 16px;
+        }
+        
+        #input-preview {
+            margin-top: 12px;
+            padding: 12px;
+            background-color: #0f3460;
+            border-radius: 6px;
+            font-size: 14px;
+            color: #94a3b8;
+        }
+        
+        .status-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 8px 20px;
+            background-color: #0f3460;
+            font-size: 12px;
+            color: #64748b;
+        }
+    </style>
+</head>
+<body>
+    <h1>Interactive (Script Tag)</h1>
+    
+    <!-- Button Section -->
+    <div class="section">
+        <div class="section-title">Button Clicks</div>
+        <div class="button-row">
+            <button id="btn-primary">Primary Button</button>
+            <button id="btn-secondary">Secondary</button>
+            <button id="btn-reset">Reset</button>
+        </div>
+        <div id="click-count">Clicks: 0</div>
+    </div>
+    
+    <!-- ScrollView Section -->
+    <div class="section">
+        <div class="section-title">ScrollView (use mouse wheel)</div>
+        <div class="scroll-container" id="scroll-area">
+            <div class="scroll-item">Item 1 - Scroll down to see more</div>
+            <div class="scroll-item">Item 2 - Lorem ipsum dolor sit amet</div>
+            <div class="scroll-item">Item 3 - Consectetur adipiscing elit</div>
+            <div class="scroll-item">Item 4 - Sed do eiusmod tempor</div>
+            <div class="scroll-item">Item 5 - Incididunt ut labore</div>
+            <div class="scroll-item">Item 6 - Et dolore magna aliqua</div>
+            <div class="scroll-item">Item 7 - Ut enim ad minim veniam</div>
+            <div class="scroll-item">Item 8 - Quis nostrud exercitation</div>
+        </div>
+    </div>
+    
+    <!-- Input Section -->
+    <div class="section">
+        <div class="section-title">Text Input</div>
+        <div class="input-group">
+            <div class="input-label">Enter your name:</div>
+            <input type="text" id="name-input" placeholder="Type here..." />
+        </div>
+        <div class="input-group">
+            <div class="input-label">Enter your message:</div>
+            <input type="text" id="message-input" placeholder="Your message..." />
+        </div>
+        <div id="input-preview">Preview: (type something above)</div>
+    </div>
+    
+    <div class="status-bar" id="status">
+        Ready. Press Tab to navigate, click buttons, scroll the list, or type in inputs.
+    </div>
+    
+    <!-- Inline script for initialization -->
+    <script>
+        console.log("[JS] Screen 1 inline script - initializing...");
+    </script>
+    
+    <!-- External script for event handlers -->
+    <script src="screen1.js"></script>
+
+</body>
+</html>

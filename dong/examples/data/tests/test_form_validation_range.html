@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Form Validation - Range Attributes Test</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; }
+        input { margin: 5px; padding: 5px; border: 1px solid #ccc; }
+        input:valid { border-color: green; background-color: #f0fff0; }
+        input:invalid { border-color: red; background-color: #fff0f0; }
+        .test-case { margin: 10px 0; padding: 10px; border: 1px solid #ddd; }
+        .result { margin-top: 5px; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>Range Attributes Validation Test</h1>
+
+    <div class="test-case">
+        <h3>1. Number Input with Min/Max</h3>
+        <input type="number" min="10" max="100" value="50">
+        <div class="result">Should be valid (50 between 10-100)</div>
+    </div>
+
+    <div class="test-case">
+        <h3>2. Number Input Below Min</h3>
+        <input type="number" min="10" max="100" value="5">
+        <div class="result">Should be invalid (5 &lt; 10)</div>
+    </div>
+
+    <div class="test-case">
+        <h3>3. Number Input Above Max</h3>
+        <input type="number" min="10" max="100" value="150">
+        <div class="result">Should be invalid (150 &gt; 100)</div>
+    </div>
+
+    <div class="test-case">
+        <h3>4. Number Input with Step</h3>
+        <input type="number" min="0" max="10" step="2" value="4">
+        <div class="result">Should be valid (4 is multiple of 2 from 0)</div>
+    </div>
+
+    <div class="test-case">
+        <h3>5. Number Input with Invalid Step</h3>
+        <input type="number" min="0" max="10" step="2" value="3">
+        <div class="result">Should be invalid (3 not multiple of 2 from 0)</div>
+    </div>
+
+    <div class="test-case">
+        <h3>6. Range Input with Min/Max</h3>
+        <input type="range" min="0" max="100" value="75">
+        <div class="result">Should be valid (75 between 0-100)</div>
+    </div>
+
+    <div class="test-case">
+        <h3>7. Date Input with Min/Max</h3>
+        <input type="date" min="2024-01-01" max="2024-12-31" value="2024-06-15">
+        <div class="result">Should be valid (date within range)</div>
+    </div>
+
+    <div class="test-case">
+        <h3>8. Date Input Out of Range</h3>
+        <input type="date" min="2024-01-01" max="2024-12-31" value="2023-12-31">
+        <div class="result">Should be invalid (date before min)</div>
+    </div>
+
+    <div class="test-case">
+        <h3>9. Time Input with Min/Max</h3>
+        <input type="time" min="09:00" max="17:00" value="12:30">
+        <div class="result">Should be valid (time within range)</div>
+    </div>
+
+    <div class="test-case">
+        <h3>10. Combined Validation</h3>
+        <input type="number" min="0" max="100" step="5" required value="25">
+        <div class="result">Should be valid (25 is multiple of 5, within range, not empty)</div>
+    </div>
+
+    <script>
+        // Test JavaScript API
+        document.addEventListener('DOMContentLoaded', function() {
+            const inputs = document.querySelectorAll('input');
+            inputs.forEach((input, index) => {
+                console.log(`Input ${index + 1}:`, {
+                    type: input.type,
+                    value: input.value,
+                    min: input.min,
+                    max: input.max,
+                    step: input.step,
+                    valid: input.checkValidity(),
+                    validity: input.validity
+                });
+            });
+        });
+    </script>
+</body>
+</html>

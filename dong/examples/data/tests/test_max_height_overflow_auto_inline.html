@@ -1,0 +1,47 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>max-height + overflow:auto (inline style) regression</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 24px; }
+    .card { background: #fff; border: 1px solid #ddd; border-radius: 10px; padding: 16px; }
+    .hint { color: #555; margin: 6px 0 14px; }
+    #below {
+      margin-top: 16px;
+      padding: 12px;
+      background: #f7f7f7;
+      border-radius: 8px;
+      border: 1px dashed #bbb;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div style="font-size:18px;font-weight:700;">max-height + overflow:auto (inline style)</div>
+    <div class="hint">用于覆盖 inline style 解析路径。正确行为：黑框高度固定，内容溢出走内部滚动；下方灰框位置不被推走。</div>
+
+    <div id="log" style="background:#111;color:#f5f5f5;border-radius:6px;padding:10px;max-height:140px;overflow:auto;font-family:Menlo,Monaco,Consolas,'Courier New',monospace;font-size:14px;line-height:18px;"></div>
+    <div id="below">Below marker: should stay close to the log box.</div>
+  </div>
+
+  <script>
+    const log = document.getElementById('log');
+    let i = 0;
+
+    function appendLine(text) {
+      const d = document.createElement('div');
+      d.textContent = text;
+      d.style.whiteSpace = 'nowrap';
+      d.style.overflow = 'hidden';
+      d.style.textOverflow = 'ellipsis';
+      log.appendChild(d);
+    }
+
+    for (let k = 0; k < 80; k++) {
+      appendLine(`[${String(i).padStart(3, '0')}] The quick brown fox jumps over the lazy dog. 0123456789`);
+      i++;
+    }
+  </script>
+</body>
+</html>

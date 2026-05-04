@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Test DOMParser API</title>
+    <style>
+        body { padding: 20px; font-family: Arial, sans-serif; }
+        .test-case { margin: 20px 0; padding: 10px; border: 1px solid #ccc; }
+        .pass { background-color: #d4edda; border-color: #c3e6cb; }
+        .fail { background-color: #f8d7da; border-color: #f5c6cb; }
+        pre { background: #f5f5f5; padding: 10px; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <h1>DOMParser API Tests</h1>
+    <div id="test-results"></div>
+
+    <script>
+        const results = document.getElementById('test-results');
+
+        function assert(condition, message) {
+            const div = document.createElement('div');
+            div.className = 'test-case ' + (condition ? 'pass' : 'fail');
+            div.innerHTML = `<strong>${condition ? 'PASS' : 'FAIL'}</strong>: ${message}<pre>${condition ? '✓' : '✗'}</pre>`;
+            results.appendChild(div);
+        }
+
+        // Test 1: DOMParser constructor exists
+        const parser = new DOMParser();
+        assert(typeof parser !== 'undefined', 'DOMParser can be created');
+        assert(typeof parser.parseFromString === 'function', 'DOMParser has parseFromString method');
+
+        // Test 2: Parse simple HTML
+        const doc1 = parser.parseFromString('<div>Hello World</div>', 'text/html');
+        assert(doc1 !== null, 'parseFromString returns document');
+        assert(typeof doc1.body !== 'undefined', 'Parsed document has body property');
+
+        // Test 3: Parse HTML with body element
+        const html1 = '<html><body><h1>Title</h1><p>Content</p></body></html>';
+        const doc2 = parser.parseFromString(html1, 'text/html');
+        assert(doc2.body !== null, 'Parsed HTML has body');
+        const body = doc2.body;
+        assert(body.children.length === 2, 'Body has 2 child elements');
+        assert(body.children[0].tagName === 'H1', 'First child is H1');
+        assert(body.children[0].textContent === 'Title', 'H1 has correct text');
+        assert(body.children[1].tagName === 'P', 'Second child is P');
+        assert(body.children[1].textContent === 'Content', 'P has correct text');
+
+        // Test 4: Parse HTML with attributes
+        const html2 = '<div id="myDiv" class="container" data-value="test">Content</div>';
+        const doc3 = parser.parseFromString(html2, 'text/html');
+        assert(doc3.body !== null, 'Parsed HTML with attributes');
+        const div = doc3.body.firstChild;
+        assert(div.id === 'myDiv', 'Element has id attribute');
+        assert(div.className === 'container', 'Element has class attribute');
+        assert(div.getAttribute('data-value') === 'test', 'Element has data attribute');
+
+        // Test 5: Parse HTML with nested elements
+        const html3 = '<div><ul><li>Item 1</li><li>Item 2</li></ul></div>';
+        const doc4 = parser.parseFromString(html3, 'text/html');
+        const ul = doc4.body.firstChild.firstChild;
+        assert(ul.tagName === 'UL', 'Nested UL element parsed');
+        assert(ul.children.length === 2, 'UL has 2 LI children');
+        assert(ul.children[0].textContent === 'Item 1', 'First LI content');
+        assert(ul.children[1].textContent === 'Item 2', 'Second LI content');
+
+        // Test 6: Parse HTML with script tags (should be parsed but not executed)
+        const html4 = '<div><script>console.log("test");</script><p>After script</p></div>';
+        const doc5 = parser.parseFromString(html4, 'text/html');
+        const script = doc5.body.querySelector('script');
+        assert(script !== null, 'Script tag is parsed');
+        assert(script.textContent.includes('console.log'), 'Script content is preserved');
+
+        // Test 7: Parse HTML with inline styles
+        const html5 = '<p style="color: red; font-size: 16px;">Styled text</p>';
+        const doc6 = parser.parseFromString(html5, 'text/html');
+        const styledP = doc6.body.firstChild;
+        assert(styledP.style.color === 'red' || styledP.getAttribute('style').includes('red'), 'Inline style preserved');
+
+        // Test 8: Parse malformed HTML (should still work)
+        const html6 = '<p>Unclosed paragraph<div>Nested div</p></div>';
+        const doc7 = parser.parseFromString(html6, 'text/html');
+        assert(doc7.body !== null, 'Malformed HTML still parses');
+
+        // Test 9: Parse empty HTML
+        const html7 = '';
+        const doc8 = parser.parseFromString(html7, 'text/html');
+        assert(doc8 !== null, 'Empty HTML returns document');
+
+        // Test 10: Parse HTML with multiple root elements
+        const html8 = '<h1>Title</h1><p>Para 1</p><p>Para 2</p>';
+        const doc9 = parser.parseFromString(html8, 'text/html');
+        assert(doc9.body.children.length === 3, 'Multiple root elements parsed');
+
+        results.innerHTML += '<p><strong>All tests completed!</strong></p>';
+    </script>
+</body>
+</html>

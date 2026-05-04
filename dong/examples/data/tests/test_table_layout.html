@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {
+      margin: 20px;
+      font-family: Arial, sans-serif;
+    }
+    h2 {
+      margin: 20px 0 10px;
+    }
+
+    /* Auto layout (default) */
+    .table-auto {
+      table-layout: auto;
+      border-collapse: collapse;
+      border: 2px solid #333;
+      width: 500px;
+    }
+    .table-auto td, .table-auto th {
+      border: 1px solid #999;
+      padding: 8px;
+    }
+    .table-auto th {
+      background: #f0f0f0;
+    }
+
+    /* Fixed layout */
+    .table-fixed {
+      table-layout: fixed;
+      border-collapse: collapse;
+      border: 2px solid #333;
+      width: 500px;
+    }
+    .table-fixed td, .table-fixed th {
+      border: 1px solid #999;
+      padding: 8px;
+    }
+    .table-fixed th {
+      background: #f0f0f0;
+    }
+
+    /* Table with thead/tbody */
+    .table-sections {
+      table-layout: auto;
+      border-collapse: separate;
+      border-spacing: 4px;
+      border: 2px solid #4A90E2;
+      width: 400px;
+    }
+    .table-sections td, .table-sections th {
+      border: 1px solid #4A90E2;
+      padding: 6px;
+    }
+    .table-sections th {
+      background: #e0f0ff;
+    }
+    .table-sections tbody td {
+      background: #f8fcff;
+    }
+  </style>
+</head>
+<body>
+  <h1>table-layout Test</h1>
+
+  <h2>table-layout: auto (columns adapt to content)</h2>
+  <table class="table-auto">
+    <tr>
+      <th>Name</th>
+      <th>Description</th>
+      <th>Status</th>
+    </tr>
+    <tr>
+      <td>Item A</td>
+      <td>A longer description text here</td>
+      <td>OK</td>
+    </tr>
+    <tr>
+      <td>Item B</td>
+      <td>Short</td>
+      <td>Pending</td>
+    </tr>
+  </table>
+
+  <h2>table-layout: fixed (equal column widths)</h2>
+  <table class="table-fixed">
+    <tr>
+      <th>Name</th>
+      <th>Description</th>
+      <th>Status</th>
+    </tr>
+    <tr>
+      <td>Item A</td>
+      <td>A longer description text here</td>
+      <td>OK</td>
+    </tr>
+    <tr>
+      <td>Item B</td>
+      <td>Short</td>
+      <td>Pending</td>
+    </tr>
+  </table>
+
+  <h2>Table with thead/tbody sections</h2>
+  <table class="table-sections">
+    <thead>
+      <tr>
+        <th>Col 1</th>
+        <th>Col 2</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Data 1</td>
+        <td>Data 2</td>
+      </tr>
+      <tr>
+        <td>Data 3</td>
+        <td>Data 4</td>
+      </tr>
+    </tbody>
+  </table>
+</body>
+</html>

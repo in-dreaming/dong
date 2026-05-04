@@ -1,30 +1,157 @@
-#include "script_engine.hpp"
-#include <cstring>
+﻿#include "script_engine.hpp"
+
+#include "../core/log.h"
+
+#include <chrono>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <string>
 
 namespace dong::script {
 
-// 简单的 console.log 实现，直接打印到 stderr
-static JSValue js_console_log(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-    (void)this_val;
-    for (int i = 0; i < argc; i++) {
-        if (i > 0) std::fprintf(stderr, " ");
-        const char* str = JS_ToCString(ctx, argv[i]);
-        if (str) {
-            std::fprintf(stderr, "%s", str);
-            JS_FreeCString(ctx, str);
-        }
-    }
-    std::fprintf(stderr, "\n");
-    return JS_UNDEFINED;
+namespace {
+
+using SteadyClock = std::chrono::steady_clock;
+
+uint64_t steadyNowNs() {
+    const auto now = SteadyClock::now().time_since_epoch();
+    return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(now).count());
 }
 
-ScriptEngine::ScriptEngine() : runtime_(nullptr), context_(nullptr) {
-    // 创建 QuickJS 运行时
-    runtime_ = JS_NewRuntime();
-    if (!runtime_) return;
+uint64_t getScriptTimeoutNs() {
+    // Default: 2000ms to avoid hard hangs during page/script load.
+    const char* s = std::getenv("DONG_SCRIPT_TIMEOUT_MS");
+    if (!s || !*s) {
+        return 2000ULL * 1000ULL * 1000ULL;
+    }
+    char* end = nullptr;
+    long ms = std::strtol(s, &end, 10);
+    if (!end || end == s) {
+        return 2000ULL * 1000ULL * 1000ULL;
+    }
+    if (ms <= 0) {
+        return 0;
+    }
+    return static_cast<uint64_t>(ms) * 1000ULL * 1000ULL;
+}
 
-    // 创建 JavaScript 上下文
+void printJsValueToStderr(JSContext* ctx, JSValueConst v) {
+    const char* s = JS_ToCString(ctx, v);
+    if (s) {
+        std::fprintf(stderr, "%s", s);
+        JS_FreeCString(ctx, s);
+    }
+}
+
+void dumpJsException(JSContext* ctx, const char* where) {
+    JSValue exception = JS_GetException(ctx);
+
+    std::fprintf(stderr, "[ScriptEngine] JS exception (%s): ", where ? where : "unknown");
+    printJsValueToStderr(ctx, exception);
+    std::fprintf(stderr, "\n");
+
+    // Try to print stack if present.
+    JSValue stack = JS_GetPropertyStr(ctx, exception, "stack");
+    if (!JS_IsUndefined(stack) && !JS_IsNull(stack)) {
+        std::fprintf(stderr, "[ScriptEngine] stack: ");
+        printJsValueToStderr(ctx, stack);
+        std::fprintf(stderr, "\n");
+    }
+    JS_FreeValue(ctx, stack);
+    JS_FreeValue(ctx, exception);
+}
+
+std::string jsValueToStdString(JSContext* ctx, JSValueConst v) {
+    if (JS_IsString(v)) {
+        const char* s = JS_ToCString(ctx, v);
+        if (!s) {
+            return {};
+        }
+        std::string out = s;
+        JS_FreeCString(ctx, s);
+        return out;
+    }
+
+    if (JS_IsNumber(v)) {
+        double num = 0;
+        JS_ToFloat64(ctx, &num, v);
+        char buf[64];
+        std::snprintf(buf, sizeof(buf), "%.17g", num);
+        return buf;
+    }
+
+    if (JS_IsBool(v)) {
+        return JS_ToBool(ctx, v) ? "true" : "false";
+    }
+
+    if (JS_IsNull(v)) {
+        return "null";
+    }
+
+    if (JS_IsUndefined(v)) {
+        return "undefined";
+    }
+
+    if (JS_IsObject(v)) {
+        // Best-effort: JSON.stringify(value)
+        JSValue global = JS_GetGlobalObject(ctx);
+        JSValue json = JS_GetPropertyStr(ctx, global, "JSON");
+        JSValue stringify = JS_UNDEFINED;
+        std::string out;
+
+        if (!JS_IsUndefined(json) && !JS_IsNull(json)) {
+            stringify = JS_GetPropertyStr(ctx, json, "stringify");
+            if (JS_IsFunction(ctx, stringify)) {
+                JSValue str_val = JS_Call(ctx, stringify, json, 1, &v);
+                if (!JS_IsException(str_val)) {
+                    out = jsValueToStdString(ctx, str_val);
+                }
+                JS_FreeValue(ctx, str_val);
+            }
+        }
+
+        JS_FreeValue(ctx, stringify);
+        JS_FreeValue(ctx, json);
+        JS_FreeValue(ctx, global);
+        return out;
+    }
+
+    // Fallback: stringify via JS_ToCString.
+    const char* s = JS_ToCString(ctx, v);
+    if (!s) {
+        return {};
+    }
+    std::string out = s;
+    JS_FreeCString(ctx, s);
+    return out;
+}
+
+} // namespace
+
+int ScriptEngine::interruptHandler(JSRuntime* rt, void* opaque) {
+    (void)rt;
+    auto* self = static_cast<ScriptEngine*>(opaque);
+    if (!self) {
+        return 0;
+    }
+
+    const uint64_t deadline = self->interrupt_deadline_ns_;
+    if (deadline == 0) {
+        return 0;
+    }
+
+    return steadyNowNs() > deadline ? 1 : 0;
+}
+
+ScriptEngine::ScriptEngine() : runtime_(nullptr), context_(nullptr), module_loader_(nullptr) {
+    runtime_ = JS_NewRuntime();
+    if (!runtime_) {
+        return;
+    }
+
+    JS_SetInterruptHandler(runtime_, &ScriptEngine::interruptHandler, this);
+
     context_ = JS_NewContext(runtime_);
     if (!context_) {
         JS_FreeRuntime(runtime_);
@@ -32,140 +159,152 @@ ScriptEngine::ScriptEngine() : runtime_(nullptr), context_(nullptr) {
         return;
     }
 
-    // 初始化内置绑定
+    // Initialize module loader for ES module support
+    module_loader_ = std::make_unique<ModuleLoader>(context_, runtime_);
+
     initializeBuiltins();
 }
 
 ScriptEngine::~ScriptEngine() {
-    // NOTE: QuickJS teardown is temporarily disabled to avoid a crash during
-    // demo shutdown. The OS will reclaim this memory when the process exits.
-    // if (context_) {
-    //     JS_FreeContext(context_);
-    // }
-    // if (runtime_) {
-    //     JS_FreeRuntime(runtime_);
-    // }
+    // QuickJS teardown is intentionally guarded:
+    // - In some configurations we still leak JSValues (C-side refs), and JS_FreeRuntime asserts.
+    // - Default behavior keeps the process stable; opt-in teardown for leak hunting.
+
+    const bool teardown = (std::getenv("DONG_QUICKJS_TEARDOWN") != nullptr);
+    if (!teardown) {
+        return;
+    }
+
+    processPendingTasks();
+
+    if (context_) {
+        JS_FreeContext(context_);
+        context_ = nullptr;
+    }
+
+    if (runtime_) {
+        JS_RunGC(runtime_);
+        JS_FreeRuntime(runtime_);
+        runtime_ = nullptr;
+    }
 }
 
 bool ScriptEngine::eval(const std::string& code) {
-    if (!context_) return false;
+    if (!context_) {
+        return false;
+    }
 
-    JSValue result = JS_Eval(context_, code.c_str(), code.length(), "<eval>", 0);
+    const bool dbg = (std::getenv("DONG_DEBUG_SCRIPT_EVAL") != nullptr);
+    if (dbg) {
+        DONG_LOG_INFO("[ScriptEngine] eval begin (len=%zu)", code.length());
+    }
 
-    if (JS_IsException(result)) {
-        // 获取异常信息
-        JSValue exception = JS_GetException(context_);
-        const char* error_str = JS_ToCString(context_, exception);
-        if (error_str) {
-            std::fprintf(stderr, "[ScriptEngine] JS exception: %s\n", error_str);
-            JS_FreeCString(context_, error_str);
-        }
-        JS_FreeValue(context_, exception);
-
-        // 调试 console 绑定状态
-        JSValue global = JS_GetGlobalObject(context_);
-        JSValue console_val = JS_GetPropertyStr(context_, global, "console");
-        const char* console_type = JS_IsUndefined(console_val) ? "undefined" :
-                                   JS_IsNull(console_val) ? "null" :
-                                   JS_IsObject(console_val) ? "object" : "other";
-
-        JSValue log_val = JS_UNDEFINED;
-        const char* log_type = "missing";
-        if (!JS_IsUndefined(console_val) && !JS_IsNull(console_val)) {
-            log_val = JS_GetPropertyStr(context_, console_val, "log");
-            if (JS_IsUndefined(log_val)) {
-                log_type = "undefined";
-            } else if (JS_IsFunction(context_, log_val)) {
-                log_type = "function";
-            } else {
-                log_type = "non-function";
+    if (const char* dump_path = std::getenv("DONG_DEBUG_DUMP_SCRIPT_PATH")) {
+        if (dump_path[0] != '\0') {
+            if (FILE* f = std::fopen(dump_path, "wb")) {
+                (void)std::fwrite(code.data(), 1, code.size(), f);
+                std::fclose(f);
+                if (dbg) {
+                    DONG_LOG_INFO("[ScriptEngine] dumped script to %s", dump_path);
+                }
+            } else if (dbg) {
+                DONG_LOG_WARN("[ScriptEngine] failed to open dump path: %s", dump_path);
             }
         }
+    }
 
-        std::fprintf(stderr, "[ScriptEngine] debug: console=%s, log=%s\n", console_type, log_type);
+    if (dbg) {
+        DONG_LOG_INFO("[ScriptEngine] eval compile begin");
+    }
 
-        if (!JS_IsUndefined(log_val)) {
-            JS_FreeValue(context_, log_val);
-        }
-        JS_FreeValue(context_, console_val);
-        JS_FreeValue(context_, global);
+    JSValue compiled = JS_Eval(context_, code.c_str(), code.length(), "<eval>",
+                               JS_EVAL_TYPE_GLOBAL | JS_EVAL_FLAG_COMPILE_ONLY);
 
+    if (dbg) {
+        DONG_LOG_INFO("[ScriptEngine] eval compile done (is_exception=%d)", JS_IsException(compiled));
+    }
+
+    if (JS_IsException(compiled)) {
+        dumpJsException(context_, "eval/compile");
+        JS_FreeValue(context_, compiled);
+        return false;
+    }
+
+    const uint64_t timeout_ns = getScriptTimeoutNs();
+    if (timeout_ns != 0) {
+        interrupt_deadline_ns_ = steadyNowNs() + timeout_ns;
+    } else {
+        interrupt_deadline_ns_ = 0;
+    }
+
+    if (dbg) {
+        DONG_LOG_INFO("[ScriptEngine] eval exec begin");
+    }
+
+    JSValue result = JS_EvalFunction(context_, compiled);
+
+    // Always clear the deadline after a single eval.
+    interrupt_deadline_ns_ = 0;
+
+    if (dbg) {
+        DONG_LOG_INFO("[ScriptEngine] eval exec done (is_exception=%d)", JS_IsException(result));
+    }
+
+    if (JS_IsException(result)) {
+        dumpJsException(context_, "eval/exec");
+        JS_FreeValue(context_, result);
         return false;
     }
 
     JS_FreeValue(context_, result);
+    processPendingTasks();
+
+    if (dbg) {
+        DONG_LOG_INFO("[ScriptEngine] eval done");
+    }
+
     return true;
 }
 
-// 【缺口3】执行代码并返回字符串化的结果
 std::string ScriptEngine::evalWithReturn(const std::string& code) {
-    if (!context_) return "";
-
-    JSValue result = JS_Eval(context_, code.c_str(), code.length(), "<eval>", 0);
-
-    if (JS_IsException(result)) {
-        // 获取异常信息
-        JSValue exception = JS_GetException(context_);
-        const char* error_str = JS_ToCString(context_, exception);
-        std::string error_msg = error_str ? error_str : "Unknown error";
-        if (error_str) JS_FreeCString(context_, error_str);
-        JS_FreeValue(context_, exception);
-        
-        std::fprintf(stderr, "[ScriptEngine] JS exception: %s\n", error_msg.c_str());
+    if (!context_) {
         return "";
     }
 
-    // 将结果转换为字符串
-    std::string return_value;
-    
-    if (JS_IsString(result)) {
-        const char* str = JS_ToCString(context_, result);
-        if (str) {
-            return_value = str;
-            JS_FreeCString(context_, str);
-        }
-    } else if (JS_IsNumber(result)) {
-        double num = 0;
-        JS_ToFloat64(context_, &num, result);
-        // 转换为字符串
-        char buf[64];
-        snprintf(buf, sizeof(buf), "%.17g", num);
-        return_value = buf;
-    } else if (JS_IsBool(result)) {
-        return_value = JS_ToBool(context_, result) ? "true" : "false";
-    } else if (JS_IsNull(result)) {
-        return_value = "null";
-    } else if (JS_IsUndefined(result)) {
-        return_value = "undefined";
-    } else if (JS_IsObject(result)) {
-        // 对象转字符串 - 调用 JSON.stringify
-        JSValue global = JS_GetGlobalObject(context_);
-        JSValue json = JS_GetPropertyStr(context_, global, "JSON");
-        if (!JS_IsUndefined(json) && !JS_IsNull(json)) {
-            JSValue stringify = JS_GetPropertyStr(context_, json, "stringify");
-            if (JS_IsFunction(context_, stringify)) {
-                JSValue str_result = JS_Call(context_, stringify, json, 1, &result);
-                if (!JS_IsException(str_result)) {
-                    const char* str = JS_ToCString(context_, str_result);
-                    if (str) {
-                        return_value = str;
-                        JS_FreeCString(context_, str);
-                    }
-                }
-                JS_FreeValue(context_, str_result);
-            }
-            JS_FreeValue(context_, stringify);
-        }
-        JS_FreeValue(context_, json);
-        JS_FreeValue(context_, global);
+    JSValue compiled = JS_Eval(context_, code.c_str(), code.length(), "<eval>",
+                               JS_EVAL_TYPE_GLOBAL | JS_EVAL_FLAG_COMPILE_ONLY);
+    if (JS_IsException(compiled)) {
+        dumpJsException(context_, "evalWithReturn/compile");
+        JS_FreeValue(context_, compiled);
+        return "";
     }
 
+    const uint64_t timeout_ns = getScriptTimeoutNs();
+    if (timeout_ns != 0) {
+        interrupt_deadline_ns_ = steadyNowNs() + timeout_ns;
+    } else {
+        interrupt_deadline_ns_ = 0;
+    }
+
+    JSValue result = JS_EvalFunction(context_, compiled);
+    interrupt_deadline_ns_ = 0;
+
+    if (JS_IsException(result)) {
+        dumpJsException(context_, "evalWithReturn/exec");
+        JS_FreeValue(context_, result);
+        return "";
+    }
+
+    std::string out = jsValueToStdString(context_, result);
     JS_FreeValue(context_, result);
-    return return_value;
+    processPendingTasks();
+    return out;
 }
 
 JSValue* ScriptEngine::callFunction(const std::string& function_name, int argc, JSValue* argv) {
-    if (!context_) return nullptr;
+    if (!context_) {
+        return nullptr;
+    }
 
     JSValue global = JS_GetGlobalObject(context_);
     JSValue func = JS_GetPropertyStr(context_, global, function_name.c_str());
@@ -182,47 +321,74 @@ JSValue* ScriptEngine::callFunction(const std::string& function_name, int argc, 
     JS_FreeValue(context_, global);
 
     if (JS_IsException(result)) {
-        JSValue exception = JS_GetException(context_);
-        JS_FreeValue(context_, exception);
+        dumpJsException(context_, "callFunction");
+        JS_FreeValue(context_, result);
         return nullptr;
     }
 
-    // 返回结果（调用者需要释放）
-    JSValue* ret = new JSValue(result);
-    return ret;
+    return new JSValue(result);
 }
 
 void ScriptEngine::bindGlobalObject(const std::string& name, void* object) {
-    if (!context_) return;
+    if (!context_) {
+        return;
+    }
 
     JSValue global = JS_GetGlobalObject(context_);
     JSValue obj = JS_NewObject(context_);
 
-    // 将对象指针存储为 opaque 数据
+    // Store as opaque pointer. Callers must know how to retrieve it.
     JS_SetOpaque(obj, object);
 
     JS_SetPropertyStr(context_, global, name.c_str(), obj);
     JS_FreeValue(context_, global);
 }
 
-void ScriptEngine::bindGlobalFunction(const std::string& name, void* func) {
-    // TODO: 使用 JS_NewCFunction 包装 C 函数
-    (void)name;
-    (void)func;
+void ScriptEngine::bindGlobalFunction(const std::string& name, JSCFunction* func, int argc) {
+    if (!context_) {
+        return;
+    }
+
+    JSValue global = JS_GetGlobalObject(context_);
+    JSValue js_func = JS_NewCFunction(context_, func, name.c_str(), argc);
+    JS_SetPropertyStr(context_, global, name.c_str(), js_func);
+    JS_FreeValue(context_, global);
+}
+
+bool ScriptEngine::evalModule(const std::string& module_path, const std::string& code) {
+    if (!module_loader_) {
+        DONG_LOG_ERROR("[ScriptEngine] Module loader not initialized");
+        return false;
+    }
+    return module_loader_->loadModule(module_path, code);
 }
 
 void ScriptEngine::processPendingTasks() {
-    // TODO: 运行微任务队列（Promise）
-    // 可选：定期调用 js_std_loop() 或类似的任务处理函数
+    if (!context_ || !runtime_) {
+        return;
+    }
+
+    JSContext* ctx = nullptr;
+    int executed = 0;
+    constexpr int kMaxJobs = 1000;
+
+    while (executed < kMaxJobs) {
+        const int rc = JS_ExecutePendingJob(runtime_, &ctx);
+        if (rc < 0) {
+            if (ctx) {
+                dumpJsException(ctx, "microtask");
+            }
+            break;
+        }
+        if (rc == 0) {
+            break;
+        }
+        ++executed;
+    }
 }
 
 void ScriptEngine::initializeBuiltins() {
-    if (!context_) return;
-
-    // 初始化 console 对象（可选）
-    // TODO: 为 console.log 等提供实现
-
-    // 其他内置对象初始化在 DOM 绑定层进行
+    // Builtins like console are registered by the DOM bindings layer.
 }
 
 } // namespace dong::script

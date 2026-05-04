@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>CSS Global Keyword: unset</title>
+    <style>
+        body {
+            margin: 20px;
+            font-family: Arial, sans-serif;
+        }
+
+        .parent {
+            color: blue;
+            font-size: 20px;
+            font-weight: bold;
+            background-color: #ffcccc;
+            border: 3px solid green;
+            padding: 15px;
+            margin-bottom: 10px;
+        }
+
+        .child-unset-color {
+            /* unset on inheritable property = inherit */
+            color: unset;
+        }
+
+        .child-unset-background {
+            /* unset on non-inheritable property = initial */
+            background-color: unset;
+        }
+
+        .child-unset-border {
+            /* unset on non-inheritable property = initial */
+            border: unset;
+        }
+
+        .child-unset-all {
+            /* unset on multiple properties */
+            color: unset;              /* Should inherit blue */
+            font-size: unset;          /* Should inherit 20px */
+            background-color: unset;   /* Should reset to transparent */
+            border: unset;             /* Should reset to none */
+        }
+
+        h1 {
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+
+        .test-box {
+            margin-bottom: 30px;
+            border: 1px solid #999;
+            padding: 10px;
+        }
+
+        .explicit-style {
+            color: red;
+            background-color: yellow;
+        }
+    </style>
+</head>
+<body>
+    <h1>CSS Global Keyword: unset</h1>
+
+    <div class="test-box">
+        <h2>Test 1: Unset Inheritable Property (color)</h2>
+        <div class="parent">
+            Parent (blue)
+            <div class="explicit-style">Explicit red</div>
+            <div class="explicit-style child-unset-color">
+                Explicit red + unset (should inherit parent's blue, not stay red)
+            </div>
+        </div>
+    </div>
+
+    <div class="test-box">
+        <h2>Test 2: Unset Non-Inheritable Property (background-color)</h2>
+        <div class="parent">
+            Parent (pink background)
+            <div class="explicit-style">Explicit yellow background</div>
+            <div class="explicit-style child-unset-background">
+                Explicit yellow + unset (should reset to transparent, not inherit pink)
+            </div>
+        </div>
+    </div>
+
+    <div class="test-box">
+        <h2>Test 3: Unset Non-Inheritable Property (border)</h2>
+        <div class="parent">
+            Parent (green border)
+            <div style="border: 2px solid orange;">Explicit orange border</div>
+            <div style="border: 2px solid orange;" class="child-unset-border">
+                Explicit orange + unset (should have no border, not inherit green)
+            </div>
+        </div>
+    </div>
+
+    <div class="test-box">
+        <h2>Test 4: Unset Multiple Properties</h2>
+        <div class="parent">
+            Parent (blue, 20px, pink bg, green border)
+            <div class="explicit-style">
+                Explicit: red text, yellow bg
+            </div>
+            <div class="explicit-style child-unset-all">
+                With unset: blue text (inherited), 20px (inherited), no bg (reset), no border (reset)
+            </div>
+        </div>
+    </div>
+
+    <div class="test-box">
+        <h2>Test 5: Mixed Comparison</h2>
+        <div class="parent">
+            Parent
+            <div>Normal (inherits color/size, no bg/border)</div>
+            <div class="child-unset-all">Unset all (same as normal)</div>
+        </div>
+    </div>
+</body>
+</html>

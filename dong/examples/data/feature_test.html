@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #1a1a2e;
+            color: #eaeaea;
+            font-family: Arial, sans-serif;
+        }
+        
+        /* Tab Container */
+        .tab-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        
+        /* Tab Header */
+        .tab-header {
+            display: flex;
+            background-color: #0f3460;
+            padding: 0;
+        }
+        
+        .tab-btn {
+            padding: 14px 24px;
+            background-color: #0f3460;
+            color: #94a3b8;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        
+        .tab-btn.active {
+            background-color: #16213e;
+            color: #00d4ff;
+        }
+        
+        /* Tab Content */
+        .tab-content {
+            flex: 1;
+            padding: 20px;
+            overflow: auto;
+        }
+        
+        .tab-page {
+            display: none;
+        }
+        
+        .tab-page.active {
+            display: block;
+        }
+        
+        /* Section Styles */
+        .section {
+            background-color: #16213e;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+        
+        .section-title {
+            font-size: 16px;
+            color: #e94560;
+            margin-bottom: 12px;
+        }
+        
+        .demo-row {
+            margin-bottom: 12px;
+        }
+        
+        .demo-item {
+            display: inline-block;
+            min-width: 160px;
+            min-height: 40px;
+            margin: 6px 10px 6px 0;
+            padding: 12px 18px;
+            background-color: #0b1f3f;
+            border: 1px solid rgba(0, 212, 255, 0.45);
+            border-radius: 8px;
+            color: #ffffff;
+            text-align: left;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            line-height: 1.2;
+            vertical-align: top;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+        }
+
+
+        
+        /* ========== Page 1: Cursor Tests ========== */
+        .cursor-auto { cursor: auto; }
+        .cursor-default { cursor: default; }
+        .cursor-pointer { cursor: pointer; }
+        .cursor-text { cursor: text; }
+        .cursor-move { cursor: move; }
+        .cursor-wait { cursor: wait; }
+        .cursor-crosshair { cursor: crosshair; }
+        .cursor-not-allowed { cursor: not-allowed; }
+        .cursor-ns-resize { cursor: ns-resize; }
+        .cursor-ew-resize { cursor: ew-resize; }
+        .cursor-grab { cursor: grab; }
+        
+        /* ========== Page 2: Outline Tests ========== */
+        .outline-solid {
+            outline: 3px solid #00d4ff;
+        }
+        
+        .outline-dashed {
+            outline: 2px dashed #e94560;
+        }
+        
+        .outline-dotted {
+            outline: 2px dotted #7b2cbf;
+        }
+        
+        .outline-offset {
+            outline: 3px solid #00ff88;
+            outline-offset: 5px;
+        }
+        
+        .outline-thick {
+            outline: 5px solid #ff6b35;
+            outline-offset: 3px;
+        }
+        
+        /* ========== Page 3: Text Decoration Tests ========== */
+        .text-underline {
+            text-decoration: underline;
+            font-size: 18px;
+        }
+        
+        .text-line-through {
+            text-decoration: line-through;
+            font-size: 18px;
+        }
+        
+        .text-overline {
+            text-decoration: overline;
+            font-size: 18px;
+        }
+        
+        .text-deco-color {
+            text-decoration: underline;
+            text-decoration-color: #e94560;
+            font-size: 18px;
+        }
+        
+        /* ========== Page 4: Font Style Tests ========== */
+        .font-normal {
+            font-style: normal;
+            font-size: 18px;
+        }
+        
+        .font-italic {
+            font-style: italic;
+            font-size: 18px;
+        }
+        
+        .font-oblique {
+            font-style: oblique;
+            font-size: 18px;
+        }
+        
+        .font-italic-bold {
+            font-style: italic;
+            font-weight: bold;
+            font-size: 20px;
+            color: #00d4ff;
+        }
+        
+        /* ========== Page 5: Text Shadow Tests ========== */
+        .text-shadow-basic {
+            text-shadow: 2px 2px #000000;
+            font-size: 24px;
+            color: #ffffff;
+        }
+        
+        .text-shadow-blur {
+            text-shadow: 2px 2px 4px #00d4ff;
+            font-size: 24px;
+            color: #ffffff;
+        }
+        
+        .text-shadow-glow {
+            text-shadow: 0px 0px 8px #e94560;
+            font-size: 24px;
+            color: #e94560;
+        }
+        
+        .text-shadow-offset {
+            text-shadow: 4px 4px 2px #7b2cbf;
+            font-size: 24px;
+            color: #ffffff;
+        }
+        
+        /* ========== Page 6: Transform Tests ========== */
+        .transform-rotate-15 {
+            transform: rotate(15deg);
+            background-color: #7b2cbf;
+        }
+        
+        .transform-rotate-45 {
+            transform: rotate(45deg);
+            background-color: #e94560;
+        }
+        
+        .transform-rotate-neg {
+            transform: rotate(-30deg);
+            background-color: #00d4ff;
+        }
+        
+        .transform-skew-x {
+            transform: skewX(15deg);
+            background-color: #ff6b35;
+        }
+        
+        .transform-skew-y {
+            transform: skewY(10deg);
+            background-color: #00ff88;
+        }
+        
+        .transform-skew-both {
+            transform: skew(10deg, 5deg);
+            background-color: #ffd93d;
+            color: #1a1a2e;
+        }
+        
+        .transform-combined {
+            transform: rotate(10deg) scale(1.1);
+            background-color: #9d4edd;
+        }
+        
+        .transform-box {
+            width: 80px;
+            height: 50px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border-radius: 6px;
+            font-size: 12px;
+            margin: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="tab-container">
+        <!-- Tab Header -->
+        <div class="tab-header">
+            <div class="tab-btn active" id="tab-1" data-page="page-1">Cursor</div>
+            <div class="tab-btn" id="tab-2" data-page="page-2">Outline</div>
+            <div class="tab-btn" id="tab-3" data-page="page-3">Text Deco</div>
+            <div class="tab-btn" id="tab-4" data-page="page-4">Font Style</div>
+            <div class="tab-btn" id="tab-5" data-page="page-5">Text Shadow</div>
+            <div class="tab-btn" id="tab-6" data-page="page-6">Transform</div>
+        </div>
+        
+        <!-- Tab Content -->
+        <div class="tab-content">
+            <!-- Page 1: Cursor -->
+            <div class="tab-page active" id="page-1" style="display: block;">
+
+                <div class="section">
+                    <div class="section-title">CSS Cursor Property Test</div>
+                    <div class="demo-row">
+                        <div class="demo-item cursor-auto">auto</div>
+                        <div class="demo-item cursor-default">default</div>
+                        <div class="demo-item cursor-pointer">pointer</div>
+                        <div class="demo-item cursor-text">text</div>
+                    </div>
+                    <div class="demo-row">
+                        <div class="demo-item cursor-move">move</div>
+                        <div class="demo-item cursor-wait">wait</div>
+                        <div class="demo-item cursor-crosshair">crosshair</div>
+                        <div class="demo-item cursor-not-allowed">not-allowed</div>
+                    </div>
+                    <div class="demo-row">
+                        <div class="demo-item cursor-ns-resize">ns-resize</div>
+                        <div class="demo-item cursor-ew-resize">ew-resize</div>
+                        <div class="demo-item cursor-grab">grab</div>
+                    </div>
+                </div>
+                <div class="section">
+                    <div class="section-title">Instructions</div>
+                    <div>Hover over each box to see the cursor change.</div>
+                </div>
+            </div>
+            
+            <!-- Page 2: Outline -->
+            <div class="tab-page" id="page-2">
+                <div class="section">
+                    <div class="section-title">CSS Outline Property Test</div>
+                    <div class="demo-row">
+                        <div class="demo-item outline-solid">Solid Outline</div>
+                        <div class="demo-item outline-dashed">Dashed Outline</div>
+                        <div class="demo-item outline-dotted">Dotted Outline</div>
+                    </div>
+                    <div class="demo-row">
+                        <div class="demo-item outline-offset">With Offset (5px)</div>
+                        <div class="demo-item outline-thick">Thick (5px) + Offset</div>
+                    </div>
+                </div>
+                <div class="section">
+                    <div class="section-title">Note</div>
+                    <div>Outline is drawn outside the border and does not affect layout.</div>
+                </div>
+            </div>
+            
+            <!-- Page 3: Text Decoration -->
+            <div class="tab-page" id="page-3">
+                <div class="section">
+                    <div class="section-title">CSS Text Decoration Test</div>
+                    <div class="demo-row">
+                        <div class="demo-item text-underline">Underline Text</div>
+                        <div class="demo-item text-line-through">Line-through Text</div>
+                        <div class="demo-item text-overline">Overline Text</div>
+                    </div>
+                    <div class="demo-row">
+                        <div class="demo-item text-deco-color">Colored Underline</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Page 4: Font Style -->
+            <div class="tab-page" id="page-4">
+                <div class="section">
+                    <div class="section-title">CSS Font Style Test</div>
+                    <div class="demo-row">
+                        <div class="demo-item font-normal">Normal Style</div>
+                        <div class="demo-item font-italic">Italic Style</div>
+                        <div class="demo-item font-oblique">Oblique Style</div>
+                    </div>
+                    <div class="demo-row">
+                        <div class="demo-item font-italic-bold">Italic + Bold Combined</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Page 5: Text Shadow -->
+            <div class="tab-page" id="page-5">
+                <div class="section">
+                    <div class="section-title">CSS Text Shadow Test</div>
+                    <div class="demo-row">
+                        <div class="demo-item text-shadow-basic">Basic Shadow</div>
+                        <div class="demo-item text-shadow-blur">Blur Shadow</div>
+                    </div>
+                    <div class="demo-row">
+                        <div class="demo-item text-shadow-glow">Glow Effect</div>
+                        <div class="demo-item text-shadow-offset">Large Offset</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Page 6: Transform -->
+            <div class="tab-page" id="page-6">
+                <div class="section">
+                    <div class="section-title">CSS Transform: Rotate</div>
+                    <div class="demo-row">
+                        <div class="transform-box transform-rotate-15">15deg</div>
+                        <div class="transform-box transform-rotate-45">45deg</div>
+                        <div class="transform-box transform-rotate-neg">-30deg</div>
+                    </div>
+                </div>
+                <div class="section">
+                    <div class="section-title">CSS Transform: Skew</div>
+                    <div class="demo-row">
+                        <div class="transform-box transform-skew-x">skewX(15)</div>
+                        <div class="transform-box transform-skew-y">skewY(10)</div>
+                        <div class="transform-box transform-skew-both">skew(10,5)</div>
+                    </div>
+                </div>
+                <div class="section">
+                    <div class="section-title">CSS Transform: Combined</div>
+                    <div class="demo-row">
+                        <div class="transform-box transform-combined">rotate+scale</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Tab switching logic（避免 querySelectorAll 兼容性问题）
+        var tabs = document.getElementsByClassName('tab-btn');
+        var pages = document.getElementsByClassName('tab-page');
+        
+        function clearActive() {
+            for (var i = 0; i < tabs.length; i++) {
+                tabs[i].className = tabs[i].className.replace(' active', '');
+            }
+            for (var j = 0; j < pages.length; j++) {
+                pages[j].className = pages[j].className.replace(' active', '');
+                pages[j].style.display = 'none';
+            }
+        }
+        
+        function switchTab(tabId) {
+            clearActive();
+            var tab = document.getElementById(tabId);
+            if (!tab) return;
+            var pageId = tab.getAttribute('data-page');
+            tab.className = tab.className + ' active';
+            var page = document.getElementById(pageId);
+            if (page) {
+                page.className = page.className + ' active';
+                page.style.display = 'block';
+            }
+        }
+        
+        function attachTabHandler(id) {
+            var tab = document.getElementById(id);
+            if (tab) {
+                tab.addEventListener('click', function() {
+                    console.log('[Feature Test] switchTab -> ' + id);
+                    switchTab(id);
+                });
+            }
+        }
+        
+        attachTabHandler('tab-1');
+        attachTabHandler('tab-2');
+        attachTabHandler('tab-3');
+        attachTabHandler('tab-4');
+        attachTabHandler('tab-5');
+        attachTabHandler('tab-6');
+        
+        var demoItems = document.getElementsByClassName('demo-item');
+        console.log('[Feature Test] demo-item count = ' + demoItems.length);
+        for (var i = 0; i < demoItems.length && i < 5; i++) {
+            console.log('[Feature Test] demo-item[' + i + '] text = ' + demoItems[i].textContent);
+        }
+        
+        switchTab('tab-1');
+        
+        console.log('[Feature Test] Tab demo loaded. Click tabs to switch pages.');
+    </script>
+
+
+</body>
+</html>
+
