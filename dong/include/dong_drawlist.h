@@ -86,6 +86,8 @@ typedef enum dong_draw_cmd_type_t {
     DONG_DRAW_CMD_LAYER_POP       = 13,  /**< Pop isolated layer, composite back */
 
     DONG_DRAW_CMD_HOST_VIEW       = 20,  /**< Host-provided content placeholder (P1-2) */
+    DONG_DRAW_CMD_DECAL           = 21,  /**< World-space decal projection (P2-2) */
+    DONG_DRAW_CMD_WORLD_TEXT      = 22,  /**< World-space billboard text (P2-1) */
 } dong_draw_cmd_type_t;
 
 /* ============================================================================
@@ -186,6 +188,18 @@ typedef struct dong_draw_cmd_t {
     /** Host view identifier for host-rendered content regions.
      *  Used by: HOST_VIEW. The host engine maps this to its own content. */
     uint32_t host_view_id;
+
+    /** Decal projection parameters (P2-2).
+     *  Used by: DECAL. Host engine projects this onto scene geometry. */
+    struct {
+        float position[3];        /**< World-space center of decal volume */
+        float direction[3];       /**< Projection direction (normalized) */
+        float size[2];            /**< Width/height in world units */
+        float depth;              /**< Projection depth */
+        float normal_threshold;   /**< Dot product threshold for surface filtering */
+        float rotation;           /**< Rotation around projection axis (radians) */
+        const char* texture_path; /**< Texture path (NULL = solid color) */
+    } decal;
 
     /** Reserved for future ABI-compatible extensions. Must be zero. */
     uint32_t reserved[4];
