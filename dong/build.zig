@@ -1366,8 +1366,9 @@ fn buildHarfBuzz(
     // On Windows native builds, build HarfBuzz via its CMake to avoid libc++ linkage surprises.
     if (platform.is_windows and platform.is_native and fileExists(io, "third_party/harfbuzz/CMakeLists.txt")) {
         const build_dir = "third_party/harfbuzz/build-zig";
-        const freetype_inc = "zig-out/freetype/include/freetype2";
-        const freetype_lib = "zig-out/lib/freetype.lib";
+        // Must be absolute for CMake to resolve from its own build dir
+        const freetype_inc = b.fmt("{s}/zig-out/freetype/include/freetype2", .{b.build_root.path orelse "."});
+        const freetype_lib = b.fmt("{s}/zig-out/lib/freetype.lib", .{b.build_root.path orelse "."});
 
         var cfg_args = std.array_list.Managed([]const u8).init(b.allocator);
         cfg_args.appendSlice(&.{
@@ -1435,6 +1436,7 @@ fn buildHarfBuzz(
 
     harfbuzz.root_module.addIncludePath(b.path(hb_src));
     harfbuzz.root_module.addIncludePath(b.path("third_party/freetype/include"));
+    harfbuzz.root_module.addSystemIncludePath(b.path("third_party/freetype/include"));
     linkLibCpp(harfbuzz);
 
     // Depend on FreeType being built
@@ -1529,8 +1531,9 @@ fn buildMsdfgen(
     if (platform.is_windows and platform.is_native) {
         const build_dir = "third_party/msdfgen/build-zig";
         const prefix = "zig-out/msdfgen";
-        const freetype_inc = "zig-out/freetype/include/freetype2";
-        const freetype_lib = "zig-out/lib/freetype.lib";
+        // Must be absolute for CMake to resolve from its own build dir
+        const freetype_inc = b.fmt("{s}/zig-out/freetype/include/freetype2", .{b.build_root.path orelse "."});
+        const freetype_lib = b.fmt("{s}/zig-out/lib/freetype.lib", .{b.build_root.path orelse "."});
 
         var cfg_args = std.array_list.Managed([]const u8).init(b.allocator);
         cfg_args.appendSlice(&.{
