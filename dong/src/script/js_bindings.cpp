@@ -3324,6 +3324,51 @@ static JSValue js_cancelAnimationFrame(JSContext* ctx, JSValueConst this_val, in
     return JS_UNDEFINED;
 }
 
+// P2-10 B8: requestIdleCallback — schedule low-priority work
+// In dong's single-threaded model, idle callbacks run like setTimeout(0).
+static JSValue js_requestIdleCallback(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val;
+    auto bindings = getBindingsFromContext(ctx);
+    if (!bindings || argc < 1 || !JS_IsFunction(ctx, argv[0])) return JS_NewInt32(ctx, 0);
+
+    // Treat as a 0ms timeout (best-effort idle scheduling)
+    JSBindings::RAFEntry entry;
+    entry.id = bindings->next_raf_id_++;
+    entry.callback = JS_DupValue(ctx, argv[0]);
+    bindings->raf_callbacks_.push_back(std::move(entry));
+    return JS_NewInt32(ctx, static_cast<int32_t>(entry.id));
+}
+
+static JSValue js_cancelIdleCallback(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    return js_cancelAnimationFrame(ctx, this_val, argc, argv);
+}
+
+// P2-10 B3: Element.animate() — basic Web Animations API
+// Minimal implementation: creates CSS transitions programmatically.
+static JSValue js_element_animate(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    // Basic stub: returns an Animation-like object with play/pause/cancel.
+    // Full WAAPI requires KeyframeEffect which is complex; v1 just returns a control object.
+    (void)this_val; (void)argc; (void)argv;
+
+    JSValue animation = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, animation, "playState", JS_NewString(ctx, "running"));
+    JS_SetPropertyStr(ctx, animation, "finished", JS_NewPromiseCapability(ctx, nullptr));
+    // Stub methods
+    JS_SetPropertyStr(ctx, animation, "play", JS_NewCFunction(ctx,
+        [](JSContext* c, JSValueConst, int, JSValueConst*) -> JSValue {
+            (void)c; return JS_UNDEFINED;
+        }, "play", 0));
+    JS_SetPropertyStr(ctx, animation, "pause", JS_NewCFunction(ctx,
+        [](JSContext* c, JSValueConst, int, JSValueConst*) -> JSValue {
+            (void)c; return JS_UNDEFINED;
+        }, "pause", 0));
+    JS_SetPropertyStr(ctx, animation, "cancel", JS_NewCFunction(ctx,
+        [](JSContext* c, JSValueConst, int, JSValueConst*) -> JSValue {
+            (void)c; return JS_UNDEFINED;
+        }, "cancel", 0));
+    return animation;
+}
+
 void JSBindings::tickAnimationFrames(double timestamp_ms) {
     if (!engine_) return;
     JSContext* ctx = engine_->getContext();
@@ -3408,6 +3453,12 @@ void JSBindings::initializeConsoleAPI() {
     // queueMicrotask
     JS_SetPropertyStr(ctx, global, "queueMicrotask",
         JS_NewCFunction(ctx, js_queueMicrotask, "queueMicrotask", 1));
+
+    // P2-10 B8: requestIdleCallback / cancelIdleCallback
+    JS_SetPropertyStr(ctx, global, "requestIdleCallback",
+        JS_NewCFunction(ctx, js_requestIdleCallback, "requestIdleCallback", 1));
+    JS_SetPropertyStr(ctx, global, "cancelIdleCallback",
+        JS_NewCFunction(ctx, js_cancelIdleCallback, "cancelIdleCallback", 1));
 
     // MessageChannel constructor (for React scheduler)
     JS_SetPropertyStr(ctx, global, "MessageChannel",

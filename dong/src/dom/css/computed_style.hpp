@@ -305,6 +305,19 @@ struct ComputedStyle {
     CSSUserSelect user_select = CSSUserSelect::Auto;
     CSSTouchAction touch_action = CSSTouchAction::Auto;
     std::string caret_color = "auto";
+
+    // P2-10 B4: Rendering isolation
+    std::string contain;                  // "none" | "layout" | "paint" | "size" | "layout paint" etc.
+    std::string content_visibility;       // "visible" | "auto" | "hidden"
+
+    // P2-10 B5: Container queries
+    std::string container_type;           // "normal" | "inline-size" | "size"
+    std::string container_name;           // custom name for @container
+
+    // P2-10 B6: Scroll snap
+    std::string scroll_snap_type;         // "none" | "x mandatory" | "y proximity" etc.
+    std::string scroll_snap_align;        // "none" | "start" | "center" | "end"
+    std::string scroll_snap_stop;         // "normal" | "always"
     
     // Float/Clear (partial support)
     CSSFloat float_value = CSSFloat::None;

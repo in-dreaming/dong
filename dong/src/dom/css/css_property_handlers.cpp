@@ -894,6 +894,29 @@ const std::unordered_map<std::string_view, PropertyHandler>& getPropertyHandlers
             }
         }},
 
+        // P2-10 B4: Rendering isolation
+        {"contain", [](const std::string& val, ComputedStyle& style) { style.contain = trimWhitespace(val); }},
+        {"content-visibility", [](const std::string& val, ComputedStyle& style) { style.content_visibility = trimWhitespace(val); }},
+
+        // P2-10 B5: Container queries
+        {"container-type", [](const std::string& val, ComputedStyle& style) { style.container_type = trimWhitespace(val); }},
+        {"container-name", [](const std::string& val, ComputedStyle& style) { style.container_name = trimWhitespace(val); }},
+        {"container", [](const std::string& val, ComputedStyle& style) {
+            // Shorthand: container-name / container-type
+            auto slash = val.find('/');
+            if (slash != std::string::npos) {
+                style.container_name = trimWhitespace(val.substr(0, slash));
+                style.container_type = trimWhitespace(val.substr(slash + 1));
+            } else {
+                style.container_type = trimWhitespace(val);
+            }
+        }},
+
+        // P2-10 B6: Scroll snap
+        {"scroll-snap-type", [](const std::string& val, ComputedStyle& style) { style.scroll_snap_type = trimWhitespace(val); }},
+        {"scroll-snap-align", [](const std::string& val, ComputedStyle& style) { style.scroll_snap_align = trimWhitespace(val); }},
+        {"scroll-snap-stop", [](const std::string& val, ComputedStyle& style) { style.scroll_snap_stop = trimWhitespace(val); }},
+
 
         // Table properties
         {"border-collapse", [](const std::string& val, ComputedStyle& style) {

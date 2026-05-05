@@ -1621,6 +1621,30 @@ void bindElementProperties(JSContext* ctx, JSValue elem, const dom::DOMNodePtr& 
     JS_SetPropertyStr(ctx, elem, "dispatchEvent",
         JS_NewCFunction(ctx, elem_dispatchEvent, "dispatchEvent", 1));
 
+    // P2-10 B3: Element.animate() — basic Web Animations API
+    JS_SetPropertyStr(ctx, elem, "animate",
+        JS_NewCFunction(ctx, [](JSContext* c, JSValueConst self, int argc, JSValueConst* argv) -> JSValue {
+            (void)self;
+            // Return a minimal Animation object
+            JSValue animation = JS_NewObject(c);
+            JS_SetPropertyStr(c, animation, "playState", JS_NewString(c, "running"));
+            JS_SetPropertyStr(c, animation, "play", JS_NewCFunction(c,
+                [](JSContext* cc, JSValueConst, int, JSValueConst*) -> JSValue { (void)cc; return JS_UNDEFINED; }, "play", 0));
+            JS_SetPropertyStr(c, animation, "pause", JS_NewCFunction(c,
+                [](JSContext* cc, JSValueConst, int, JSValueConst*) -> JSValue { (void)cc; return JS_UNDEFINED; }, "pause", 0));
+            JS_SetPropertyStr(c, animation, "cancel", JS_NewCFunction(c,
+                [](JSContext* cc, JSValueConst, int, JSValueConst*) -> JSValue { (void)cc; return JS_UNDEFINED; }, "cancel", 0));
+            JS_SetPropertyStr(c, animation, "finish", JS_NewCFunction(c,
+                [](JSContext* cc, JSValueConst, int, JSValueConst*) -> JSValue { (void)cc; return JS_UNDEFINED; }, "finish", 0));
+            // Duration from options
+            if (argc >= 2 && JS_IsObject(argv[1])) {
+                JSValue dur = JS_GetPropertyStr(c, argv[1], "duration");
+                if (!JS_IsUndefined(dur)) JS_SetPropertyStr(c, animation, "duration", dur);
+                else JS_FreeValue(c, dur);
+            }
+            return animation;
+        }, "animate", 2));
+
     // Element convenience methods
     JS_SetPropertyStr(ctx, elem, "click",
         JS_NewCFunction(ctx, elem_click, "click", 0));
