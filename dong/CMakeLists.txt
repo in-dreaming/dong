@@ -170,6 +170,8 @@ add_library(dong SHARED
     src/world/world_overlay_api.cpp
     src/resource/resource_pack.cpp
     src/resource/resource_pack_api.cpp
+    src/vector/vector_animation.cpp
+    src/vector/vector_api.cpp
     src/core/context.cpp
     src/core/engine_view.cpp
     src/core/platform.c
