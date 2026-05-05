@@ -5,6 +5,10 @@
 #include <vector>
 #include <unordered_map>
 #include <functional>
+#include <mutex>
+#include <thread>
+#include <atomic>
+#include <condition_variable>
 
 namespace dong::render {
 
@@ -63,18 +67,53 @@ public:
         ShapedText dummy;
         for (const auto& req : requests) {
             ShapedCacheKey key{req.text, req.font_family, req.font_weight, req.font_style, req.font_size, req.lang};
-            auto& cache = getShapedCache();
-            if (cache.find(key) == cache.end()) {
-                if (shape(req, dummy)) {
-                    ++misses;
-                }
+            {
+                std::lock_guard<std::mutex> lock(getShapeMutex());
+                auto& cache = getShapedCache();
+                if (cache.find(key) != cache.end()) continue;
+            }
+            if (shape(req, dummy)) {
+                ++misses;
             }
         }
         return misses;
     }
 
-    void clearShapedCache() { getShapedCache().clear(); }
-    size_t shapedCacheSize() const { return getShapedCache().size(); }
+    // P2-9: Submit shape requests for background processing.
+    // Results will be available in the cache when paint phase needs them.
+    void submitBackgroundRequests(std::vector<TextShapeRequest> requests) {
+        std::lock_guard<std::mutex> lock(bg_mutex_);
+        bg_requests_.insert(bg_requests_.end(),
+                           std::make_move_iterator(requests.begin()),
+                           std::make_move_iterator(requests.end()));
+        bg_cv_.notify_one();
+    }
+
+    // P2-9: Start background shaping thread.
+    void startBackgroundThread() {
+        if (bg_thread_running_) return;
+        bg_thread_running_ = true;
+        bg_thread_ = std::thread([this]() { backgroundThreadFunc(); });
+    }
+
+    // P2-9: Stop background shaping thread.
+    void stopBackgroundThread() {
+        if (!bg_thread_running_) return;
+        bg_thread_running_ = false;
+        bg_cv_.notify_one();
+        if (bg_thread_.joinable()) bg_thread_.join();
+    }
+
+    bool isBackgroundThreadRunning() const { return bg_thread_running_; }
+
+    void clearShapedCache() {
+        std::lock_guard<std::mutex> lock(getShapeMutex());
+        getShapedCache().clear();
+    }
+    size_t shapedCacheSize() const {
+        std::lock_guard<std::mutex> lock(getShapeMutex());
+        return getShapedCache().size();
+    }
 
 private:
     struct ShapedCacheKey {
@@ -106,7 +145,39 @@ private:
         static std::unordered_map<ShapedCacheKey, ShapedText, ShapedCacheKeyHash> cache;
         return cache;
     }
+    static std::mutex& getShapeMutex() {
+        static std::mutex mtx;
+        return mtx;
+    }
     static constexpr size_t kMaxShapedCacheEntries = 2048;
+
+    // P2-9: Background shaping thread state
+    std::mutex bg_mutex_;
+    std::condition_variable bg_cv_;
+    std::vector<TextShapeRequest> bg_requests_;
+    std::thread bg_thread_;
+    std::atomic<bool> bg_thread_running_{false};
+
+    void backgroundThreadFunc() {
+        while (bg_thread_running_) {
+            std::vector<TextShapeRequest> batch;
+            {
+                std::unique_lock<std::mutex> lock(bg_mutex_);
+                bg_cv_.wait(lock, [this]() {
+                    return !bg_requests_.empty() || !bg_thread_running_;
+                });
+                if (!bg_thread_running_) break;
+                batch = std::move(bg_requests_);
+                bg_requests_.clear();
+            }
+            // Shape all requests in the batch
+            ShapedText dummy;
+            for (const auto& req : batch) {
+                if (!bg_thread_running_) break;
+                shape(req, dummy);
+            }
+        }
+    }
 };
 
 // 优化策略4：文本测量缓存
