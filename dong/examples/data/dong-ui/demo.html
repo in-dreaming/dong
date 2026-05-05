@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>dong-ui Component Library Demo</title>
+  <link rel="stylesheet" href="dong-ui.css">
+  <style>
+    body {
+      margin: 0; padding: 24px;
+      background: var(--dui-color-bg);
+    }
+    .demo-section { margin-bottom: 32px; }
+    .demo-section h2 { color: var(--dui-color-primary); font-size: 18px; margin-bottom: 12px; }
+    .demo-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+  </style>
+</head>
+<body class="dui">
+  <h1 style="color: var(--dui-color-text); margin-bottom: 24px;">dong-ui Components (Cyberpunk Theme)</h1>
+
+  <div class="demo-section">
+    <h2>Buttons</h2>
+    <div class="demo-row">
+      <button class="dui-btn">Default</button>
+      <button class="dui-btn dui-btn-primary">Primary</button>
+      <button class="dui-btn dui-btn-danger">Danger</button>
+      <button class="dui-btn" disabled>Disabled</button>
+    </div>
+    <div class="demo-row">
+      <button class="dui-btn dui-btn-sm dui-btn-primary">Small</button>
+      <button class="dui-btn dui-btn-primary">Medium</button>
+      <button class="dui-btn dui-btn-lg dui-btn-primary">Large</button>
+    </div>
+  </div>
+
+  <div class="demo-section">
+    <h2>Inputs</h2>
+    <div class="demo-row">
+      <input class="dui-input" placeholder="Enter text..." style="width: 200px;">
+      <input class="dui-input" value="Filled input" style="width: 200px;">
+      <input class="dui-input" disabled value="Disabled" style="width: 200px;">
+    </div>
+  </div>
+
+  <div class="demo-section">
+    <h2>Cards</h2>
+    <div class="demo-row">
+      <div class="dui-card" style="width: 220px;">
+        <div class="dui-card-header">Health Potion</div>
+        <div class="dui-card-body">Restores 50 HP instantly. Cooldown: 30s.</div>
+      </div>
+      <div class="dui-card" style="width: 220px;">
+        <div class="dui-card-header">Mana Crystal</div>
+        <div class="dui-card-body">+100 Mana over 5 seconds. Rare drop.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="demo-section">
+    <h2>Badges</h2>
+    <div class="demo-row">
+      <span class="dui-badge">Lv.42</span>
+      <span class="dui-badge dui-badge-success">Online</span>
+      <span class="dui-badge dui-badge-warning">AFK</span>
+      <span class="dui-badge dui-badge-danger">Dead</span>
+    </div>
+  </div>
+
+  <div class="demo-section">
+    <h2>Progress Bars</h2>
+    <div style="width: 300px;">
+      <div class="dui-progress" style="margin-bottom: 8px;">
+        <div class="dui-progress-bar" style="width: 75%;"></div>
+      </div>
+      <div class="dui-progress" style="margin-bottom: 8px;">
+        <div class="dui-progress-bar dui-progress-bar-success" style="width: 100%;"></div>
+      </div>
+      <div class="dui-progress">
+        <div class="dui-progress-bar dui-progress-bar-danger" style="width: 25%;"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="demo-section">
+    <h2>Tabs</h2>
+    <div class="dui-tabs">
+      <div class="dui-tab dui-tab-active">Inventory</div>
+      <div class="dui-tab">Skills</div>
+      <div class="dui-tab">Quests</div>
+      <div class="dui-tab">Map</div>
+    </div>
+  </div>
+
+  <div class="demo-section">
+    <h2>Menu</h2>
+    <div class="dui-menu" style="width: 200px;">
+      <div class="dui-menu-item">New Game</div>
+      <div class="dui-menu-item">Load Save</div>
+      <div class="dui-menu-divider"></div>
+      <div class="dui-menu-item">Settings</div>
+      <div class="dui-menu-item" style="color: var(--dui-color-danger);">Quit</div>
+    </div>
+  </div>
+</body>
+</html>

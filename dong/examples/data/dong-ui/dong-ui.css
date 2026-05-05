@@ -1,0 +1,343 @@
+/**
+ * dong-ui: Game-ready UI component library for dong
+ *
+ * Design tokens + base component styles.
+ * Themes: cyberpunk (default), medieval, clean
+ *
+ * Usage in HTML:
+ *   <link rel="stylesheet" href="dong-ui.css">
+ *   <button class="dui-btn dui-btn-primary">Attack</button>
+ */
+
+/* ============================================================================
+ * Design Tokens (CSS Custom Properties)
+ * ============================================================================ */
+:root {
+  /* Colors - Cyberpunk theme (default) */
+  --dui-color-bg: #0a0a1a;
+  --dui-color-surface: #14142b;
+  --dui-color-surface-hover: #1e1e3f;
+  --dui-color-surface-active: #28284f;
+  --dui-color-border: #2a2a5a;
+  --dui-color-border-focus: #6366f1;
+  --dui-color-text: #e2e8f0;
+  --dui-color-text-muted: #94a3b8;
+  --dui-color-text-disabled: #475569;
+
+  --dui-color-primary: #6366f1;
+  --dui-color-primary-hover: #818cf8;
+  --dui-color-primary-text: #ffffff;
+  --dui-color-secondary: #ec4899;
+  --dui-color-secondary-hover: #f472b6;
+  --dui-color-success: #10b981;
+  --dui-color-warning: #f59e0b;
+  --dui-color-danger: #ef4444;
+  --dui-color-info: #06b6d4;
+
+  /* Typography */
+  --dui-font-family: 'Inter', 'Segoe UI', sans-serif;
+  --dui-font-mono: 'JetBrains Mono', 'Consolas', monospace;
+  --dui-font-size-xs: 11px;
+  --dui-font-size-sm: 12px;
+  --dui-font-size-md: 14px;
+  --dui-font-size-lg: 16px;
+  --dui-font-size-xl: 20px;
+  --dui-font-size-2xl: 24px;
+
+  /* Spacing */
+  --dui-space-1: 4px;
+  --dui-space-2: 8px;
+  --dui-space-3: 12px;
+  --dui-space-4: 16px;
+  --dui-space-5: 20px;
+  --dui-space-6: 24px;
+  --dui-space-8: 32px;
+
+  /* Border Radius */
+  --dui-radius-sm: 4px;
+  --dui-radius-md: 6px;
+  --dui-radius-lg: 8px;
+  --dui-radius-xl: 12px;
+  --dui-radius-full: 9999px;
+
+  /* Shadows */
+  --dui-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --dui-shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
+  --dui-shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.5);
+
+  /* Transitions */
+  --dui-transition-fast: 150ms ease;
+  --dui-transition-normal: 250ms ease;
+}
+
+/* ============================================================================
+ * Medieval Theme
+ * ============================================================================ */
+[data-theme="medieval"] {
+  --dui-color-bg: #1a1008;
+  --dui-color-surface: #2d1f0e;
+  --dui-color-surface-hover: #3d2b14;
+  --dui-color-surface-active: #4d371a;
+  --dui-color-border: #5c4a2a;
+  --dui-color-border-focus: #d4a853;
+  --dui-color-text: #f0e6d2;
+  --dui-color-text-muted: #b8a88a;
+  --dui-color-primary: #d4a853;
+  --dui-color-primary-hover: #e4b863;
+  --dui-color-primary-text: #1a1008;
+  --dui-color-secondary: #8b4513;
+  --dui-color-danger: #cc3333;
+}
+
+/* ============================================================================
+ * Clean Theme
+ * ============================================================================ */
+[data-theme="clean"] {
+  --dui-color-bg: #ffffff;
+  --dui-color-surface: #f8fafc;
+  --dui-color-surface-hover: #f1f5f9;
+  --dui-color-surface-active: #e2e8f0;
+  --dui-color-border: #e2e8f0;
+  --dui-color-border-focus: #3b82f6;
+  --dui-color-text: #1e293b;
+  --dui-color-text-muted: #64748b;
+  --dui-color-primary: #3b82f6;
+  --dui-color-primary-hover: #60a5fa;
+  --dui-color-primary-text: #ffffff;
+  --dui-color-secondary: #8b5cf6;
+  --dui-color-danger: #dc2626;
+}
+
+/* ============================================================================
+ * Base Reset
+ * ============================================================================ */
+.dui {
+  font-family: var(--dui-font-family);
+  font-size: var(--dui-font-size-md);
+  color: var(--dui-color-text);
+  line-height: 1.5;
+}
+
+/* ============================================================================
+ * Button (.dui-btn)
+ * ============================================================================ */
+.dui-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--dui-space-2);
+  padding: var(--dui-space-2) var(--dui-space-4);
+  font-family: var(--dui-font-family);
+  font-size: var(--dui-font-size-md);
+  font-weight: 500;
+  border: 1px solid var(--dui-color-border);
+  border-radius: var(--dui-radius-md);
+  background: var(--dui-color-surface);
+  color: var(--dui-color-text);
+  cursor: pointer;
+  transition: background var(--dui-transition-fast), border-color var(--dui-transition-fast);
+  user-select: none;
+}
+.dui-btn:hover { background: var(--dui-color-surface-hover); }
+.dui-btn:active { background: var(--dui-color-surface-active); }
+.dui-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.dui-btn-primary {
+  background: var(--dui-color-primary);
+  color: var(--dui-color-primary-text);
+  border-color: var(--dui-color-primary);
+}
+.dui-btn-primary:hover { background: var(--dui-color-primary-hover); }
+
+.dui-btn-danger {
+  background: var(--dui-color-danger);
+  color: #fff;
+  border-color: var(--dui-color-danger);
+}
+
+.dui-btn-sm { padding: var(--dui-space-1) var(--dui-space-3); font-size: var(--dui-font-size-sm); }
+.dui-btn-lg { padding: var(--dui-space-3) var(--dui-space-6); font-size: var(--dui-font-size-lg); }
+
+/* ============================================================================
+ * Input (.dui-input)
+ * ============================================================================ */
+.dui-input {
+  display: block;
+  width: 100%;
+  padding: var(--dui-space-2) var(--dui-space-3);
+  font-family: var(--dui-font-family);
+  font-size: var(--dui-font-size-md);
+  color: var(--dui-color-text);
+  background: var(--dui-color-surface);
+  border: 1px solid var(--dui-color-border);
+  border-radius: var(--dui-radius-md);
+  transition: border-color var(--dui-transition-fast);
+}
+.dui-input:focus {
+  border-color: var(--dui-color-border-focus);
+  outline: none;
+}
+.dui-input:disabled { opacity: 0.5; }
+
+/* ============================================================================
+ * Card (.dui-card)
+ * ============================================================================ */
+.dui-card {
+  background: var(--dui-color-surface);
+  border: 1px solid var(--dui-color-border);
+  border-radius: var(--dui-radius-lg);
+  padding: var(--dui-space-4);
+  box-shadow: var(--dui-shadow-sm);
+}
+.dui-card-header { margin-bottom: var(--dui-space-3); font-size: var(--dui-font-size-lg); font-weight: 600; }
+.dui-card-body { color: var(--dui-color-text-muted); }
+
+/* ============================================================================
+ * Badge (.dui-badge)
+ * ============================================================================ */
+.dui-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px var(--dui-space-2);
+  font-size: var(--dui-font-size-xs);
+  font-weight: 600;
+  border-radius: var(--dui-radius-full);
+  background: var(--dui-color-primary);
+  color: var(--dui-color-primary-text);
+}
+.dui-badge-success { background: var(--dui-color-success); }
+.dui-badge-warning { background: var(--dui-color-warning); color: #000; }
+.dui-badge-danger { background: var(--dui-color-danger); }
+
+/* ============================================================================
+ * Progress Bar (.dui-progress)
+ * ============================================================================ */
+.dui-progress {
+  width: 100%;
+  height: 8px;
+  background: var(--dui-color-surface);
+  border-radius: var(--dui-radius-full);
+  overflow: hidden;
+  border: 1px solid var(--dui-color-border);
+}
+.dui-progress-bar {
+  height: 100%;
+  background: var(--dui-color-primary);
+  border-radius: var(--dui-radius-full);
+  transition: width var(--dui-transition-normal);
+}
+.dui-progress-bar-success { background: var(--dui-color-success); }
+.dui-progress-bar-danger { background: var(--dui-color-danger); }
+
+/* ============================================================================
+ * Tooltip (.dui-tooltip)
+ * ============================================================================ */
+.dui-tooltip {
+  position: relative;
+}
+.dui-tooltip-content {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  padding: var(--dui-space-1) var(--dui-space-2);
+  font-size: var(--dui-font-size-xs);
+  background: var(--dui-color-text);
+  color: var(--dui-color-bg);
+  border-radius: var(--dui-radius-sm);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* ============================================================================
+ * Slider (.dui-slider)
+ * ============================================================================ */
+.dui-slider {
+  width: 100%;
+  height: 6px;
+  background: var(--dui-color-surface);
+  border-radius: var(--dui-radius-full);
+  border: 1px solid var(--dui-color-border);
+  position: relative;
+}
+.dui-slider-fill {
+  height: 100%;
+  background: var(--dui-color-primary);
+  border-radius: var(--dui-radius-full);
+}
+.dui-slider-thumb {
+  position: absolute;
+  top: 50%;
+  width: 16px; height: 16px;
+  background: var(--dui-color-primary);
+  border: 2px solid var(--dui-color-primary-text);
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+/* ============================================================================
+ * Tabs (.dui-tabs)
+ * ============================================================================ */
+.dui-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--dui-color-border);
+  gap: 0;
+}
+.dui-tab {
+  padding: var(--dui-space-2) var(--dui-space-4);
+  font-size: var(--dui-font-size-md);
+  color: var(--dui-color-text-muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color var(--dui-transition-fast), border-color var(--dui-transition-fast);
+}
+.dui-tab:hover { color: var(--dui-color-text); }
+.dui-tab-active {
+  color: var(--dui-color-primary);
+  border-bottom-color: var(--dui-color-primary);
+}
+
+/* ============================================================================
+ * Dialog (.dui-dialog)
+ * ============================================================================ */
+.dui-dialog-backdrop {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dui-dialog {
+  background: var(--dui-color-surface);
+  border: 1px solid var(--dui-color-border);
+  border-radius: var(--dui-radius-xl);
+  padding: var(--dui-space-6);
+  min-width: 300px;
+  max-width: 90%;
+  box-shadow: var(--dui-shadow-lg);
+}
+.dui-dialog-title { font-size: var(--dui-font-size-xl); font-weight: 600; margin-bottom: var(--dui-space-4); }
+.dui-dialog-actions { display: flex; gap: var(--dui-space-2); justify-content: flex-end; margin-top: var(--dui-space-4); }
+
+/* ============================================================================
+ * Dropdown Menu (.dui-menu)
+ * ============================================================================ */
+.dui-menu {
+  background: var(--dui-color-surface);
+  border: 1px solid var(--dui-color-border);
+  border-radius: var(--dui-radius-md);
+  padding: var(--dui-space-1) 0;
+  box-shadow: var(--dui-shadow-md);
+  min-width: 160px;
+}
+.dui-menu-item {
+  display: block;
+  width: 100%;
+  padding: var(--dui-space-2) var(--dui-space-4);
+  font-size: var(--dui-font-size-md);
+  color: var(--dui-color-text);
+  cursor: pointer;
+  transition: background var(--dui-transition-fast);
+}
+.dui-menu-item:hover { background: var(--dui-color-surface-hover); }
+.dui-menu-divider { height: 1px; background: var(--dui-color-border); margin: var(--dui-space-1) 0; }
