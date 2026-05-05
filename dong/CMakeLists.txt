@@ -166,6 +166,8 @@ add_library(dong SHARED
     src/world/world_text_api.cpp
     src/world/decal.cpp
     src/world/decal_api.cpp
+    src/world/world_overlay.cpp
+    src/world/world_overlay_api.cpp
     src/core/context.cpp
     src/core/engine_view.cpp
     src/core/platform.c

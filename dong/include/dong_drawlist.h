@@ -88,6 +88,7 @@ typedef enum dong_draw_cmd_type_t {
     DONG_DRAW_CMD_HOST_VIEW       = 20,  /**< Host-provided content placeholder (P1-2) */
     DONG_DRAW_CMD_DECAL           = 21,  /**< World-space decal projection (P2-2) */
     DONG_DRAW_CMD_WORLD_TEXT      = 22,  /**< World-space billboard text (P2-1) */
+    DONG_DRAW_CMD_WORLD_OVERLAY   = 23,  /**< World-space HTML overlay quad (P2-3) */
 } dong_draw_cmd_type_t;
 
 /* ============================================================================
