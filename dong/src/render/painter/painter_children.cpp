@@ -375,11 +375,24 @@ void Painter::paintChildrenAndOverlays(const dom::DOMNodePtr& node,
         const dom::ComputedStyle& style = node->getComputedStyle();
         client_rect = computeClientRectFromBorderBox(node_rect, style);
 
+        // Viewport-scrolling root semantics: html/body scroll against viewport size,
+        // not against their own laid-out document height.
+        if (surface_ && (node->getTagName() == "html" || node->getTagName() == "body")) {
+            client_rect.x = 0.0f;
+            client_rect.y = 0.0f;
+            client_rect.width = static_cast<float>(surface_->getWidth());
+            client_rect.height = static_cast<float>(surface_->getHeight());
+        }
+
         float content_bottom = client_rect.y;
         if (layout_engine_) {
             // 用子树的最大 bottom 作为内容底部（比只看直接子节点更鲁棒）。
             content_bottom = computeScrollContentBottom(node, layout_engine_, content_bottom);
         }
+
+        // Include this element's own box size in scrollable content height.
+        // Needed for cases like body { height: 2000px } with relatively short children.
+        content_bottom = std::max(content_bottom, node_rect.y + node_rect.height);
 
         float content_height = content_bottom - client_rect.y;
         if (content_height < 0.0f) content_height = 0.0f;

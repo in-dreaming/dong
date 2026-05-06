@@ -1329,9 +1329,26 @@ void DOMNode::scrollIntoView(bool alignToTop) {
 
 bool DOMNode::isScrollContainer() const {
     // CSS: overflow-x / overflow-y can differ; treat any axis with scroll/auto as scrollable.
-    return isScrollOverflowValue(computed_style_.overflow) ||
-           isScrollOverflowValue(computed_style_.overflow_x) ||
-           isScrollOverflowValue(computed_style_.overflow_y);
+    if (isScrollOverflowValue(computed_style_.overflow) ||
+        isScrollOverflowValue(computed_style_.overflow_x) ||
+        isScrollOverflowValue(computed_style_.overflow_y)) {
+        return true;
+    }
+
+    // Viewport scrolling semantics: in browsers, document root can scroll even when
+    // overflow is "visible" (default), unless explicitly disabled.
+    if (tag_name_ == "html" || tag_name_ == "body") {
+        const bool hidden_or_clip =
+            computed_style_.overflow == CSSOverflow::Hidden ||
+            computed_style_.overflow == CSSOverflow::Clip ||
+            computed_style_.overflow_x == CSSOverflow::Hidden ||
+            computed_style_.overflow_x == CSSOverflow::Clip ||
+            computed_style_.overflow_y == CSSOverflow::Hidden ||
+            computed_style_.overflow_y == CSSOverflow::Clip;
+        return !hidden_or_clip;
+    }
+
+    return false;
 }
 
 

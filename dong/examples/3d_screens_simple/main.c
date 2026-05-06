@@ -84,6 +84,8 @@ static const FloorPanel k_layout[] = {
 static const FloorPanel k_text[] = {
     {"tests/text_wrap_test.html", 960, 640, 4.2f, 2.6f},
     {"pretext/test_text_flow.html", 960, 640, 4.2f, 2.6f},
+    {"tests/test_colr_emoji.html", 960, 640, 4.2f, 2.6f},
+    {"tests/test_colr_v0_emoji.html", 960, 640, 4.2f, 2.6f},
 };
 
 static const FloorPanel k_video[] = {
@@ -99,7 +101,7 @@ static const ZoneRow ZONE_ROWS[] = {
     {"Scripts / DOM", (int)(sizeof(k_scripts) / sizeof(k_scripts[0])), k_scripts},
     {"Forms", (int)(sizeof(k_forms) / sizeof(k_forms[0])), k_forms},
     {"Layout / CSS", (int)(sizeof(k_layout) / sizeof(k_layout[0])), k_layout},
-    {"Text / Typography", (int)(sizeof(k_text) / sizeof(k_text[0])), k_text},
+    {"Text / Emoji", (int)(sizeof(k_text) / sizeof(k_text[0])), k_text},
     {"Video", (int)(sizeof(k_video) / sizeof(k_video[0])), k_video},
 };
 
@@ -249,13 +251,14 @@ int main(int argc, char* argv[]) {
     const char* data_path = get_data_path();
     dong_scene3d_set_resource_root(scene, data_path);
 
-    const float floor_y = 0.02f;
+    const float floor_y = 1.2f;
     const float row_step_z = 7.5f;
     const float col_spacing = 5.8f;
     const float first_row_z = 1.0f;
     const float label_x = -14.0f;
-    const float label_y = 2.4f;
-    const float floor_pitch = -DONG_PI * 0.5f;
+    const float label_y = 3.5f;
+    // Easel-style tilt: -60° from horizontal (30° from vertical, angled toward viewer)
+    const float floor_pitch = -DONG_PI * 0.333f;
 
     int screen_index = 0;
 
@@ -322,8 +325,8 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    dong_scene3d_set_camera_position(scene, 0.0f, 9.0f, 16.0f);
-    dong_scene3d_set_camera_rotation(scene, -DONG_PI, -0.55f);
+    dong_scene3d_set_camera_position(scene, 0.0f, 5.0f, 16.0f);
+    dong_scene3d_set_camera_rotation(scene, -DONG_PI, -0.35f);
 
     {
         const char* tr_env = getenv("DONG_TEXT_RENDERER");
