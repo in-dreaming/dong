@@ -162,6 +162,32 @@ inline Rect resolveBackgroundImageRect(const Rect& origin_rect,
     return Rect{origin_rect.x + offset_x, origin_rect.y + offset_y, image_w, image_h};
 }
 
+inline float resolveBorderRadiusPx(const Rect& rect, const dom::ComputedStyle& style) {
+    float radius = std::max(0.0f, style.border_radius);
+    const bool has_corner_radius = style.border_top_left_radius.isSet() ||
+                                   style.border_top_right_radius.isSet() ||
+                                   style.border_bottom_left_radius.isSet() ||
+                                   style.border_bottom_right_radius.isSet();
+    if (has_corner_radius) {
+        auto resolve_corner = [&](const dom::CSSValue& v) -> float {
+            if (!v.isSet()) return radius;
+            if (v.isPercent()) {
+                const float ref_size = (rect.width + rect.height) * 0.5f;
+                return v.value * ref_size / 100.0f;
+            }
+            if (v.isPixel()) return v.value;
+            return radius;
+        };
+        const float tl = resolve_corner(style.border_top_left_radius);
+        const float tr = resolve_corner(style.border_top_right_radius);
+        const float bl = resolve_corner(style.border_bottom_left_radius);
+        const float br = resolve_corner(style.border_bottom_right_radius);
+        radius = std::max(std::max(tl, tr), std::max(bl, br));
+    }
+    const float max_radius = std::max(0.0f, std::min(rect.width, rect.height) * 0.5f);
+    return std::clamp(radius, 0.0f, max_radius);
+}
+
 inline bool shouldPromoteLayerForWillChange(const std::string& will_change_raw) {
     const std::string value = toLowerCollapsed(will_change_raw);
     if (value.empty() || value == "auto" || value == "none") {
@@ -1292,7 +1318,7 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         std::string override_border_color;
 
         // 1.1 background box helpers (clip/origin/attachment)
-        const float radius = style.border_radius;
+        const float radius = resolveBorderRadiusPx(rect, style);
         const float viewport_w = surface_ ? static_cast<float>(surface_->getWidth()) : 800.0f;
         const float viewport_h = surface_ ? static_cast<float>(surface_->getHeight()) : 600.0f;
 
@@ -2558,38 +2584,7 @@ void Painter::paintBackgroundAndBorder(const Rect& rect,
     bool has_background = !style.background_color.empty() && style.background_color != "transparent";
     bool has_border = (bw.top > 0.0f || bw.right > 0.0f || bw.bottom > 0.0f || bw.left > 0.0f);
 
-    // Resolve border-radius values (support percentages relative to element size)
-    // For border-radius, percentages are relative to the corresponding dimension:
-    // horizontal radii use width, vertical radii use height
-    // For simplicity, we'll use a single radius value (the average of width/height for percentage)
-    float radius = style.border_radius;
-
-    // Check if any corner has a set value (which might be percentage)
-    if (style.border_top_left_radius.isSet() || style.border_top_right_radius.isSet() ||
-        style.border_bottom_left_radius.isSet() || style.border_bottom_right_radius.isSet()) {
-
-        // Helper to resolve a corner radius value
-        auto resolveRadius = [&](const dom::CSSValue& val) -> float {
-            if (!val.isSet()) return radius; // Fall back to legacy value
-            if (val.isPercent()) {
-                // For percentage border-radius, use the average of width and height
-                // (In full CSS spec, horizontal and vertical radii can differ, but we use circular arcs)
-                float ref_size = (rect.width + rect.height) * 0.5f;
-                return val.value * ref_size / 100.0f;
-            } else if (val.isPixel()) {
-                return val.value;
-            }
-            return 0.0f;
-        };
-
-        // For now, use the maximum of all four corners as the single radius
-        // (Painter currently doesn't support per-corner radii)
-        float tl = resolveRadius(style.border_top_left_radius);
-        float tr = resolveRadius(style.border_top_right_radius);
-        float bl = resolveRadius(style.border_bottom_left_radius);
-        float br = resolveRadius(style.border_bottom_right_radius);
-        radius = std::max(std::max(tl, tr), std::max(bl, br));
-    }
+    float radius = resolveBorderRadiusPx(rect, style);
 
     if (rect.width <= 0.0f || rect.height <= 0.0f) return;
 

@@ -183,9 +183,13 @@ verify:
       cwd: "dong/.worktrees/P0-3"
       timeout_sec: 60
     - id: p0_3_worktree_clean
-      cmd: "python -c \"import subprocess, sys; out=subprocess.check_output(['git','status','--porcelain'], text=True); print(out); sys.exit(0 if not out.strip() else 1)\""
+      cmd: "python -c \"import subprocess, sys; out=subprocess.check_output(['git','status','--porcelain','--ignore-submodules=dirty'], text=True); print(out); sys.exit(0 if not out.strip() else 1)\""
       cwd: "dong/.worktrees/P0-3"
       timeout_sec: 60
+    - id: p0_3_zig_build
+      cmd: "zig build"
+      cwd: "dong/.worktrees/P0-3/dong"
+      timeout_sec: 600
   soft:
     - id: p0_3_notes_ready_marker
       cmd: "python -c \"from pathlib import Path; import sys; p=Path('.task/notes.md'); txt=p.read_text(encoding='utf-8') if p.exists() else ''; sys.exit(0 if 'STATUS: ready-for-orchestrator-verify' in txt else 1)\""

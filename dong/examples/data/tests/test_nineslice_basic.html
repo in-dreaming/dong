@@ -9,10 +9,12 @@ body { margin: 0; padding: 24px; background: #1a1a2e; }
   padding: 20px;
   color: white;
   font-family: sans-serif;
-  border-image-source: url("nineslice_panel.png");
-  border-image-slice: 32;
-  border-image-width: 32px;
+  border: 24px solid transparent;
+  border-image-source: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAO0lEQVR42u3WMQ0AIAwAwSphrkTE4qWYaAKEG36/8aMy62QBAHAtYKzZGgAAAAAAAAAAwHsAVwzwDWADLslvOPzc32sAAAAASUVORK5CYII=");
+  border-image-slice: 6 fill;
+  border-image-width: 24px;
   border-image-repeat: stretch;
+  background: rgba(12, 16, 36, 0.75);
 }
 .panel-shorthand {
   width: 300px;
@@ -21,7 +23,9 @@ body { margin: 0; padding: 24px; background: #1a1a2e; }
   padding: 20px;
   color: white;
   font-family: sans-serif;
-  border-image: url("nineslice_panel.png") 32 / 32px stretch;
+  border: 24px solid transparent;
+  border-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAO0lEQVR42u3WMQ0AIAwAwSphrkTE4qWYaAKEG36/8aMy62QBAHAtYKzZGgAAAAAAAAAAwHsAVwzwDWADLslvOPzc32sAAAAASUVORK5CYII=") 6 fill / 24px stretch;
+  background: rgba(10, 14, 30, 0.75);
 }
 .panel-repeat {
   width: 300px;
@@ -30,10 +34,12 @@ body { margin: 0; padding: 24px; background: #1a1a2e; }
   padding: 20px;
   color: white;
   font-family: sans-serif;
-  border-image-source: url("nineslice_panel.png");
-  border-image-slice: 16 24;
-  border-image-width: 16px 24px;
+  border: 18px solid transparent;
+  border-image-source: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAO0lEQVR42u3WMQ0AIAwAwSphrkTE4qWYaAKEG36/8aMy62QBAHAtYKzZGgAAAAAAAAAAwHsAVwzwDWADLslvOPzc32sAAAAASUVORK5CYII=");
+  border-image-slice: 6 fill;
+  border-image-width: 18px;
   border-image-repeat: repeat round;
+  background: rgba(8, 12, 24, 0.8);
 }
 </style>
 </head>

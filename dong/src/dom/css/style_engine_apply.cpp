@@ -127,6 +127,34 @@ void applyRuleBorderProperties(const ComputedStyle& rs, ComputedStyle& computed)
     if (rs.border_block_end_style != CSSBorderStyleUnset) computed.border_block_end_style = rs.border_block_end_style;
 }
 
+void applyRuleBorderImageProperties(const ComputedStyle& rs, ComputedStyle& computed) {
+    const bool border_image_set = rs.isExplicitlySet("border-image");
+
+    if (border_image_set || rs.isExplicitlySet("border-image-source")) {
+        computed.border_image_source = rs.border_image_source;
+    }
+    if (border_image_set || rs.isExplicitlySet("border-image-slice")) {
+        computed.border_image_slice_top = rs.border_image_slice_top;
+        computed.border_image_slice_right = rs.border_image_slice_right;
+        computed.border_image_slice_bottom = rs.border_image_slice_bottom;
+        computed.border_image_slice_left = rs.border_image_slice_left;
+        computed.border_image_fill = rs.border_image_fill;
+    }
+    if (border_image_set || rs.isExplicitlySet("border-image-width")) {
+        computed.border_image_width_top = rs.border_image_width_top;
+        computed.border_image_width_right = rs.border_image_width_right;
+        computed.border_image_width_bottom = rs.border_image_width_bottom;
+        computed.border_image_width_left = rs.border_image_width_left;
+    }
+    if (border_image_set || rs.isExplicitlySet("border-image-repeat")) {
+        computed.border_image_repeat_h = rs.border_image_repeat_h;
+        computed.border_image_repeat_v = rs.border_image_repeat_v;
+    }
+    if (border_image_set || rs.isExplicitlySet("border-image-fill")) {
+        computed.border_image_fill = rs.border_image_fill;
+    }
+}
+
 void applyRuleOverflowProperties(const ComputedStyle& rs, ComputedStyle& computed) {
     if (rs.overflow != CSSOverflow::Visible) {
         computed.overflow = rs.overflow;
@@ -286,6 +314,7 @@ void applyRuleProperties(const ComputedStyle& rs, ComputedStyle& computed) {
 
     applyRuleBorderRadius(rs, computed);
     applyRuleBorderProperties(rs, computed);
+    applyRuleBorderImageProperties(rs, computed);
     applyRuleOverflowProperties(rs, computed);
 
     // List styling (affects ::marker auto-generation)
@@ -340,6 +369,23 @@ void applyRuleProperties(const ComputedStyle& rs, ComputedStyle& computed) {
     // Clip path
     APPLY_PROP("clip-path", computed.clip_path = rs.clip_path,
                !rs.clip_path.empty());
+
+    // CSS mask (P0-3): must use explicit-set checks so `none` can clear previous masks.
+    APPLY_PROP("mask-image", computed.mask_image = rs.mask_image,
+               rs.isExplicitlySet("mask-image") ||
+               rs.isExplicitlySet("-webkit-mask-image") ||
+               rs.isExplicitlySet("mask") ||
+               rs.isExplicitlySet("-webkit-mask"));
+    APPLY_PROP("mask-mode", computed.mask_mode = rs.mask_mode,
+               rs.isExplicitlySet("mask-mode") || rs.isExplicitlySet("mask"));
+    APPLY_PROP("mask-repeat", computed.mask_repeat = rs.mask_repeat,
+               rs.isExplicitlySet("mask-repeat") || rs.isExplicitlySet("mask"));
+    APPLY_PROP("mask-position", computed.mask_position = rs.mask_position,
+               rs.isExplicitlySet("mask-position") || rs.isExplicitlySet("mask"));
+    APPLY_PROP("mask-size", computed.mask_size = rs.mask_size,
+               rs.isExplicitlySet("mask-size") || rs.isExplicitlySet("mask"));
+    APPLY_PROP("mask-clip", computed.mask_clip = rs.mask_clip,
+               rs.isExplicitlySet("mask-clip") || rs.isExplicitlySet("mask"));
 
     // Pointer events / interaction
     APPLY_PROP("pointer-events", computed.pointer_events = rs.pointer_events,
@@ -432,6 +478,48 @@ void applyImportantPropertiesOnly(const ComputedStyle& rs, ComputedStyle& comput
     }
     APPLY_IF_IMPORTANT("position", computed.position = rs.position,
                        rs.position != CSSPosition::Static);
+
+    // CSS mask (!important)
+    APPLY_IF_IMPORTANT("mask-image", computed.mask_image = rs.mask_image,
+                       rs.isExplicitlySet("mask-image") ||
+                       rs.isExplicitlySet("-webkit-mask-image") ||
+                       rs.isExplicitlySet("mask") ||
+                       rs.isExplicitlySet("-webkit-mask"));
+    APPLY_IF_IMPORTANT("mask-mode", computed.mask_mode = rs.mask_mode,
+                       rs.isExplicitlySet("mask-mode") || rs.isExplicitlySet("mask"));
+    APPLY_IF_IMPORTANT("mask-repeat", computed.mask_repeat = rs.mask_repeat,
+                       rs.isExplicitlySet("mask-repeat") || rs.isExplicitlySet("mask"));
+    APPLY_IF_IMPORTANT("mask-position", computed.mask_position = rs.mask_position,
+                       rs.isExplicitlySet("mask-position") || rs.isExplicitlySet("mask"));
+    APPLY_IF_IMPORTANT("mask-size", computed.mask_size = rs.mask_size,
+                       rs.isExplicitlySet("mask-size") || rs.isExplicitlySet("mask"));
+    APPLY_IF_IMPORTANT("mask-clip", computed.mask_clip = rs.mask_clip,
+                       rs.isExplicitlySet("mask-clip") || rs.isExplicitlySet("mask"));
+
+    // Border-image (including shorthand !important)
+    if (rs.isImportant("border-image") || rs.isImportant("border-image-source")) {
+        computed.border_image_source = rs.border_image_source;
+    }
+    if (rs.isImportant("border-image") || rs.isImportant("border-image-slice")) {
+        computed.border_image_slice_top = rs.border_image_slice_top;
+        computed.border_image_slice_right = rs.border_image_slice_right;
+        computed.border_image_slice_bottom = rs.border_image_slice_bottom;
+        computed.border_image_slice_left = rs.border_image_slice_left;
+        computed.border_image_fill = rs.border_image_fill;
+    }
+    if (rs.isImportant("border-image") || rs.isImportant("border-image-width")) {
+        computed.border_image_width_top = rs.border_image_width_top;
+        computed.border_image_width_right = rs.border_image_width_right;
+        computed.border_image_width_bottom = rs.border_image_width_bottom;
+        computed.border_image_width_left = rs.border_image_width_left;
+    }
+    if (rs.isImportant("border-image") || rs.isImportant("border-image-repeat")) {
+        computed.border_image_repeat_h = rs.border_image_repeat_h;
+        computed.border_image_repeat_v = rs.border_image_repeat_v;
+    }
+    if (rs.isImportant("border-image") || rs.isImportant("border-image-fill")) {
+        computed.border_image_fill = rs.border_image_fill;
+    }
 
     // Font properties
     if (rs.font_size != 16.0f && rs.isImportant("font-size")) {

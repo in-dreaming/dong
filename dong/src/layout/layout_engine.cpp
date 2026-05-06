@@ -2374,6 +2374,16 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
 
     bool has_explicit_width = style.width.isPixel() || style.width.isPercent() || width_converted_to_max;
     bool has_custom_flex_basis = style.flex_basis.unit != dom::CSSValue::Unit::AUTO;
+    // mapComputedStylesToYoga() applies a generic block fallback width:100% for width:auto.
+    // For block children inside row-flex containers, CSS wants content-based main-size instead.
+    // Reset to auto here so each flex item doesn't consume the whole row.
+    if (parent_row_flex && !has_explicit_width &&
+        style.layout_mode == dom::LayoutMode::Block &&
+        style.position != dom::CSSPosition::Absolute &&
+        style.position != dom::CSSPosition::Fixed &&
+        style.display != dom::CSSDisplay::InlineBlock) {
+        YGNodeStyleSetWidthAuto(yoga_node);
+    }
     if (parent_row_flex && has_explicit_width && !has_custom_flex_basis) {
         if (width_converted_to_max) {
             YGNodeStyleSetFlexBasis(yoga_node, converted_width_value);

@@ -444,6 +444,8 @@ def run(cmd: List[str], cwd: Optional[Path] = None, check: bool = True, capture:
         cwd=str(cwd) if cwd else None,
         capture_output=capture,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         env=env,
     )
     if check and res.returncode != 0:
@@ -533,9 +535,47 @@ def build_cli_argv(exe: str, args: List[str]) -> List[str]:
     CreateProcess — run them through cmd.exe, but keep argv structured.
     """
     resolved = resolve_tool_executable(exe)
+    if os.name == "nt" and Path(resolved).name.lower() == "claude-internal.cmd":
+        base = Path(resolved).parent
+        node = base / "node.exe"
+        if not node.exists():
+            node = Path(shutil.which("node") or "node")
+        script = base / "node_modules" / "@tencent" / "claude-code-internal" / "dist" / "claude-code-internal.js"
+        if script.exists():
+            return [str(node), str(script), *args]
+    if os.name == "nt" and Path(resolved).name.lower() == "cursor-agent.cmd":
+        ps1 = Path(resolved).with_suffix(".ps1")
+        if ps1.exists():
+            direct = _cursor_agent_direct_argv(ps1, args)
+            if direct:
+                return direct
+            return ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(ps1), *args]
+    if os.name == "nt" and Path(resolved).name.lower() == "cursor-agent.ps1":
+        direct = _cursor_agent_direct_argv(Path(resolved), args)
+        if direct:
+            return direct
+    if os.name == "nt" and resolved.lower().endswith(".ps1"):
+        return ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", resolved, *args]
     if os.name == "nt" and resolved.lower().endswith((".cmd", ".bat")):
         return ["cmd.exe", "/d", "/s", "/c", resolved, *args]
     return [resolved, *args]
+
+
+def _cursor_agent_direct_argv(ps1: Path, args: List[str]) -> Optional[List[str]]:
+    script_dir = ps1.parent
+    local_node = script_dir / "node.exe"
+    local_index = script_dir / "index.js"
+    if local_node.exists() and local_index.exists():
+        return [str(local_node), str(local_index), *args]
+    versions = script_dir / "versions"
+    if not versions.exists():
+        return None
+    candidates = [p for p in versions.iterdir() if p.is_dir() and (p / "node.exe").exists() and (p / "index.js").exists()]
+    if not candidates:
+        return None
+    candidates.sort(key=lambda p: p.name, reverse=True)
+    latest = candidates[0]
+    return [str(latest / "node.exe"), str(latest / "index.js"), *args]
 
 
 def worktree_changed_files(feature_id: str) -> List[str]:
@@ -615,6 +655,22 @@ def skill_worktree_setup(feature_id: str, dry_run: bool = False) -> Dict[str, An
             )
     else:
         git("worktree", "add", "-b", branch, str(worktree), base_ref)
+
+    # Worktrees do not automatically populate submodule working trees.
+    # Keep third_party dependencies available for builds inside feature worktrees.
+    submodule_res = git("submodule", "update", "--init", "--recursive", cwd=worktree, check=False)
+    if submodule_res.returncode != 0:
+        raise RuntimeError(
+            "git submodule update failed in feature worktree:\n"
+            f"{submodule_res.stderr.strip() or submodule_res.stdout.strip()}"
+        )
+
+    # build.env is intentionally local/untracked, but worktree builds need the
+    # same SDK paths as the main checkout (e.g. VulkanSDK spirv_cross headers).
+    main_build_env = repo_root() / "dong" / "build.env"
+    worktree_build_env = worktree / "dong" / "build.env"
+    if main_build_env.exists() and not worktree_build_env.exists():
+        shutil.copy(main_build_env, worktree_build_env)
 
     # Seed .task
     task_dir = worktree / ".task"
@@ -744,7 +800,7 @@ def skill_cli_dispatch(feature_id: str, retry_feedback_path: Optional[Path] = No
     if command[0].lower().endswith("cmd.exe") or command[0].lower() == "cmd.exe":
         if shutil.which("cmd.exe") is None:
             raise RuntimeError("cmd.exe not on PATH; cannot launch .cmd/.bat cli wrapper")
-    elif not Path(command[0]).is_file():
+    elif not Path(command[0]).is_file() and shutil.which(command[0]) is None:
         raise RuntimeError(
             f"cli command not found for this process: {raw_cmd!r} (argv0 {command[0]!r}). "
             "Set `tools.<name>.command` to a full path (e.g. ...\\\\claude-internal.cmd), "
@@ -764,31 +820,42 @@ def skill_cli_dispatch(feature_id: str, retry_feedback_path: Optional[Path] = No
     for k, v in (tool_cfg.get("env") or {}).items():
         env[k] = os.path.expandvars(v)
 
-    stdin_fh = None
-    if bool(tool_cfg.get("stdin_prompt")):
-        stdin_fh = prompt_file.open("rb")
+    if session_log.exists():
+        session_log.unlink()
+    runner_command = [
+        sys.executable,
+        "-u",
+        str(Path(__file__).resolve()),
+        "__run-cli-child",
+        "--cwd",
+        str(worktree),
+        "--log",
+        str(session_log),
+        "--exit-file",
+        str(exit_code_file),
+        "--",
+        *command,
+    ]
 
-    # Launch detached background process; redirect stdout+stderr to a fresh session log.
-    log_fh = session_log.open("wb")
-    popen_kwargs: Dict[str, Any] = dict(cwd=str(worktree), stdout=log_fh, stderr=subprocess.STDOUT, env=env)
-    if stdin_fh:
-        popen_kwargs["stdin"] = stdin_fh
+    # Launch a tiny Python runner. It captures the real CLI via PIPE and writes
+    # to the log file incrementally; this is more reliable for claude-internal
+    # than redirecting the .cmd stdout directly to a file on Windows.
+    popen_kwargs: Dict[str, Any] = dict(
+        cwd=str(worktree),
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        stdin=subprocess.DEVNULL,
+        env=env,
+    )
     if os.name == "nt":
         popen_kwargs["creationflags"] = 0x00000200  # CREATE_NEW_PROCESS_GROUP
     else:
         popen_kwargs["start_new_session"] = True
 
     try:
-        proc = subprocess.Popen(command, **popen_kwargs)
+        proc = subprocess.Popen(runner_command, **popen_kwargs)
     except FileNotFoundError as e:
-        log_fh.close()
-        if stdin_fh:
-            stdin_fh.close()
-        raise RuntimeError(f"cli command not found: {command[0]} ({e})")
-    finally:
-        if stdin_fh:
-            stdin_fh.close()
-        log_fh.close()
+        raise RuntimeError(f"cli runner command not found: {runner_command[0]} ({e})")
 
     # Spawn a tiny shim that waits and writes exit code — python one-liner.
     # To keep this simple we rely on a separate wait step at status time instead of a shim.
@@ -802,6 +869,7 @@ def skill_cli_dispatch(feature_id: str, retry_feedback_path: Optional[Path] = No
         "cli_session": str(session_log.relative_to(repo_root())).replace(os.sep, "/"),
         "exit_file": str(exit_code_file.relative_to(repo_root())).replace(os.sep, "/"),
         "command": command,
+        "runner_command": runner_command,
     }
     (workers_dir() / f"{feature_id}.lock").write_text(json.dumps(lock, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -861,6 +929,8 @@ def pid_alive(pid: int) -> bool:
 
 def monitor_active_clis() -> None:
     """For each in-progress feature, check cli process; if dead, append cli_finished."""
+    cfg = load_config()
+    silent_alive_timeout_sec = int(cfg.get("silent_alive_timeout_sec", 900))
     events = ledger_read_all()
     state = reduce_state(events)
     for fid, f in state["features"].items():
@@ -886,7 +956,13 @@ def monitor_active_clis() -> None:
         no_output_sec = 0
         if started_at:
             no_output_sec = int((datetime.now(timezone.utc) - started_at).total_seconds())
-        if pid and pid_alive(int(pid)) and log_size == 0 and no_output_sec >= 120:
+        if (
+            silent_alive_timeout_sec > 0
+            and pid
+            and pid_alive(int(pid))
+            and log_size == 0
+            and no_output_sec >= silent_alive_timeout_sec
+        ):
             try:
                 if os.name == "nt":
                     subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], check=False)
@@ -895,11 +971,11 @@ def monitor_active_clis() -> None:
             except Exception:
                 pass
             ledger_append("note", fid, {
-                "text": f"cli startup timeout: no output for {no_output_sec}s; killed pid {pid}"
+                "text": f"cli silent timeout: no output for {no_output_sec}s; killed pid {pid}"
             })
             ledger_append("cli_failed", fid, {
                 "exit_code": None,
-                "reason": f"startup timeout: no output for {no_output_sec}s",
+                "reason": f"silent timeout: no output for {no_output_sec}s",
             })
             lock_path.unlink(missing_ok=True)
             continue
@@ -1695,6 +1771,45 @@ def cmd_config_show(args: argparse.Namespace) -> None:
     info(json.dumps(load_config(), ensure_ascii=False, indent=2))
 
 
+def cmd_run_cli_child(args: argparse.Namespace) -> None:
+    cmd = list(args.command or [])
+    if cmd and cmd[0] == "--":
+        cmd = cmd[1:]
+    if not cmd:
+        raise SystemExit("missing child command")
+
+    log_path = Path(args.log)
+    exit_path = Path(args.exit_file)
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    exit_path.parent.mkdir(parents=True, exist_ok=True)
+
+    code = 127
+    with log_path.open("ab") as lf:
+        try:
+            proc = subprocess.Popen(
+                cmd,
+                cwd=args.cwd,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+            )
+            assert proc.stdout is not None
+            while True:
+                chunk = proc.stdout.read(4096)
+                if not chunk:
+                    break
+                lf.write(chunk)
+                lf.flush()
+            code = proc.wait()
+        except Exception as e:
+            lf.write(f"\n[orch-runner] failed: {e}\n".encode("utf-8", errors="replace"))
+            lf.flush()
+            code = 127
+
+    exit_path.write_text(str(code), encoding="utf-8")
+    raise SystemExit(code)
+
+
 def _tail_text_file(path: Path, max_lines: int, max_bytes: int = 48000) -> str:
     if not path.exists():
         return "(file missing)"
@@ -1973,6 +2088,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("config-show", help="print effective config")
     s.set_defaults(func=cmd_config_show)
+
+    s = sub.add_parser("__run-cli-child", help=argparse.SUPPRESS)
+    s.add_argument("--cwd", required=True)
+    s.add_argument("--log", required=True)
+    s.add_argument("--exit-file", required=True, dest="exit_file")
+    s.add_argument("command", nargs=argparse.REMAINDER)
+    s.set_defaults(func=cmd_run_cli_child)
 
     return p
 

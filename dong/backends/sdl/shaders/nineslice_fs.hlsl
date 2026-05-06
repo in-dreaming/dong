@@ -57,7 +57,15 @@ float4 main(PSInput input) : SV_Target0 {
     if (discardByClip(input.pixel))
         discard;
 
-    float2 uv = input.uv;  // 0..1 across the entire dest rect
+    // image_vs outputs UV already mapped into uUVRect atlas space.
+    // Nine-slice math below expects local 0..1 UV across the destination rect,
+    // so we must normalize back from atlas UV first.
+    float2 uv_size = float2(max(uUVRect.z - uUVRect.x, 1e-6), max(uUVRect.w - uUVRect.y, 1e-6));
+    float2 uv = float2(
+        (input.uv.x - uUVRect.x) / uv_size.x,
+        (input.uv.y - uUVRect.y) / uv_size.y
+    );
+    uv = saturate(uv);
 
     // Nine-slice parameters
     float st = uNineSlice.x;  // slice top (UV)
