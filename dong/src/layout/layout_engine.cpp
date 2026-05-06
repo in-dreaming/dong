@@ -1934,7 +1934,11 @@ void Engine::buildChildYogaNodes(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
     }
 
     const bool parent_is_block_like = (parent_style.layout_mode == dom::LayoutMode::Block);
-    const bool needs_anon_wrapping = parent_is_block_like && hasMixedBlockInlineChildren(dom_node);
+    // Inline-only containers also need anonymous wrapping so Yoga can observe
+    // inline-block child sizes before the IFC post-pass runs.
+    const bool needs_anon_wrapping =
+        parent_is_block_like &&
+        (hasMixedBlockInlineChildren(dom_node) || hasInlineLevelChild(dom_node));
 
     if (dom_node->isContentEditable() && dom_node->getTagName() == "div") {
         DONG_LOG_WARN("[YOGA-CE] tag=%s children=%zu anon_wrap=%d parent_block=%d display=%s",

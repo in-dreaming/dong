@@ -61,6 +61,7 @@ struct AtlasEntry {
     float u1 = 0.0f;
     float v1 = 0.0f;
     GlyphMetrics metrics;
+    bool is_color_bitmap = false;  // true = direct RGBA color (no MSDF decode)
 };
 
 // GPU Texture handle alias for clarity
@@ -88,6 +89,12 @@ public:
     // 添加字形到 Atlas（生成 MSDF 并上传）
     // 注意：此方法同步等待 GPU 完成，不适合批量添加
     const AtlasEntry* addGlyph(uint32_t glyph_id, const std::string& font_path);
+
+    // 添加彩色字形到 Atlas（使用 FT_LOAD_COLOR 光栅化为 BGRA 位图）
+    // 用于 COLR v0/v1、CBDT/CBLC、sbix 等颜色字体格式
+    // render_size: 光栅化像素尺寸（建议 64-128）
+    const AtlasEntry* addColorGlyph(uint32_t glyph_id, const std::string& font_path,
+                                     uint32_t render_size = 64);
 
     // 批量添加字形到 Atlas（单次 GPU 同步）
     // 这是首选的批量添加方法，可显著减少 GPU 同步开销
@@ -165,6 +172,9 @@ private:
     // 未完成的异步上传（在后续帧/下一次 addGlyphsBatched 时回收）。
     std::vector<PendingUpload> pending_uploads_;
     std::unordered_set<std::string> pending_keys_;
+
+    // Fonts known to not have color capability (fast rejection for addColorGlyph)
+    std::unordered_set<std::string> non_color_fonts_;
 
     std::string makeGlyphKey(uint32_t codepoint, const std::string& font_path) const;
 

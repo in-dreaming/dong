@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>COLR v0 Color Emoji Test</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 24px;
+      background: #1a1a2e;
+      color: #eee;
+      font-family: "Segoe UI Emoji", "Noto Color Emoji", "Apple Color Emoji", sans-serif;
+    }
+    h2 { color: #ffd700; margin-bottom: 16px; }
+    .section { margin-bottom: 24px; }
+    .section h3 { color: #88ccff; font-size: 14px; margin-bottom: 8px; }
+
+    .emoji-row {
+      font-size: 32px;
+      line-height: 1.5;
+      letter-spacing: 8px;
+      margin-bottom: 8px;
+    }
+    .emoji-large {
+      font-size: 64px;
+      line-height: 1.4;
+      letter-spacing: 16px;
+    }
+    .emoji-small {
+      font-size: 16px;
+      line-height: 1.5;
+      letter-spacing: 4px;
+    }
+    .mixed {
+      font-size: 24px;
+      line-height: 1.6;
+    }
+    .label {
+      font-size: 11px;
+      color: #666;
+      font-family: sans-serif;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+  <h2>COLR v0 Color Emoji Rendering</h2>
+
+  <div class="section">
+    <h3>Common Emoji (32px)</h3>
+    <div class="emoji-row">&#x1F600; &#x1F60D; &#x1F525; &#x1F4A5; &#x2764; &#x1F44D; &#x1F389;</div>
+    <div class="label">Grinning, Heart Eyes, Fire, Collision, Heart, Thumbs Up, Party</div>
+  </div>
+
+  <div class="section">
+    <h3>Large Emoji (64px)</h3>
+    <div class="emoji-large">&#x1F680; &#x1F30D; &#x2B50; &#x1F308;</div>
+    <div class="label">Rocket, Earth, Star, Rainbow</div>
+  </div>
+
+  <div class="section">
+    <h3>Small Emoji (16px)</h3>
+    <div class="emoji-small">&#x1F4AC; &#x1F4E7; &#x1F512; &#x1F50D; &#x2705; &#x274C; &#x26A0; &#x2139;</div>
+    <div class="label">Speech, Email, Lock, Search, Check, Cross, Warning, Info</div>
+  </div>
+
+  <div class="section">
+    <h3>Mixed Text + Emoji</h3>
+    <div class="mixed">Hello &#x1F44B; World &#x1F30D; - Status: &#x2705; OK</div>
+    <div class="mixed">Warning &#x26A0; Error &#x274C; Loading &#x23F3;</div>
+  </div>
+
+  <div class="section">
+    <h3>Animals &amp; Nature</h3>
+    <div class="emoji-row">&#x1F436; &#x1F431; &#x1F98A; &#x1F42C; &#x1F33B; &#x1F332;</div>
+    <div class="label">Dog, Cat, Fox, Dolphin, Sunflower, Tree</div>
+  </div>
+</body>
+</html>

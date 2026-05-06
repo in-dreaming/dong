@@ -5,6 +5,7 @@
 #include <memory>
 #include "../dom/dom/dom_node.hpp"
 #include "../render/display_list.hpp"
+#include "../render/text_shaper.hpp"
 
 namespace dong::devtools {
 
@@ -57,6 +58,7 @@ private:
     // Panel layout
     float panel_width_ = 300.0f;  // right-side panel width
     float scroll_y_ = 0.0f;
+    render::TextShaper text_shaper_;
 
     // Tree rendering state
     struct TreeLine {

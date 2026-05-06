@@ -2146,6 +2146,9 @@ void SDLGPUDriver::executeDrawTextSlug(ExecuteContext& ctx, const GPUCommand& cm
     std::vector<slug::SlugGlyphParams> glyph_params;
     glyph_params.reserve(cmd.glyphs.size());
 
+    // Track if any glyphs couldn't be handled by Slug (need MSDF/bitmap fallback)
+    bool has_unhandled_glyphs = false;
+
     for (const auto& glyph : cmd.glyphs) {
         if (glyph.glyph_id == 0) continue;
 
@@ -2154,13 +2157,8 @@ void SDLGPUDriver::executeDrawTextSlug(ExecuteContext& ctx, const GPUCommand& cm
             glyph_font = &cmd.font_paths[glyph.font_path_index];
         }
 
-        const auto* prepared = slug_font_cache_->getGlyph(*glyph_font, glyph.glyph_id);
-        if (!prepared) continue;
-
         // Slug glyph data is in em-space [0,1] (already normalized by UPM),
         // so the scale from em-space to screen pixels is simply font_size.
-        // Note: scale_to_px = font_size/UPM is for design-unit coords,
-        // but Slug's bbox/curves are already in em-space (divided by UPM).
         float slug_scale = font_size;
         if (glyph.units_per_em > 0 && glyph.units_per_em != cmd.units_per_em) {
             slug_scale = font_size;  // em-space is already UPM-normalized
@@ -2170,19 +2168,32 @@ void SDLGPUDriver::executeDrawTextSlug(ExecuteContext& ctx, const GPUCommand& cm
         const float pen_x = glyph.pen_x_units * scale_to_px + cmd.baseline_x;
         const float pen_y = glyph.pen_y_units * scale_to_px + cmd.baseline_y;
 
-        slug::SlugGlyphParams p;
-        p.prepared = prepared;
-        p.pos_x = pen_x;
-        p.pos_y = pen_y;
-        p.scale = slug_scale;
-        p.color_r = cmd.color.r;
-        p.color_g = cmd.color.g;
-        p.color_b = cmd.color.b;
-        p.color_a = cmd.color.a;
-        glyph_params.push_back(p);
+        // Regular Slug glyph path
+        const auto* prepared = slug_font_cache_->getGlyph(*glyph_font, glyph.glyph_id);
+        if (prepared) {
+            slug::SlugGlyphParams p;
+            p.prepared = prepared;
+            p.pos_x = pen_x;
+            p.pos_y = pen_y;
+            p.scale = slug_scale;
+            p.color_r = cmd.color.r;
+            p.color_g = cmd.color.g;
+            p.color_b = cmd.color.b;
+            p.color_a = cmd.color.a;
+            glyph_params.push_back(p);
+        } else {
+            // Glyph not renderable by Slug (e.g. COLR v1 emoji without v0 layers)
+            has_unhandled_glyphs = true;
+        }
     }
 
-    if (glyph_params.empty()) return;
+    if (glyph_params.empty()) {
+        // No Slug-renderable glyphs; fall back to MSDF for unhandled glyphs (color emoji)
+        if (has_unhandled_glyphs) {
+            executeDrawTextMsdf(ctx, cmd);
+        }
+        return;
+    }
 
     // Build vertex/index mesh
     auto mesh = slug::buildSlugMesh(glyph_params.data(),
@@ -2437,6 +2448,12 @@ void SDLGPUDriver::executeDrawTextSlug(ExecuteContext& ctx, const GPUCommand& cm
                    mesh.glyph_count,
                    mesh.vertices.size(),
                    mesh.indices.size());
+
+    // Fall back to MSDF path for glyphs that Slug couldn't handle
+    // (e.g. COLR v1 emoji that need bitmap rasterization)
+    if (has_unhandled_glyphs) {
+        executeDrawTextMsdf(ctx, cmd);
+    }
 }
 
 void SDLGPUDriver::executeDrawTextMsdf(ExecuteContext& ctx, const GPUCommand& cmd) {
@@ -2547,9 +2564,16 @@ void SDLGPUDriver::executeDrawTextMsdf(ExecuteContext& ctx, const GPUCommand& cm
 
         (void)glyph_idx; // Suppress unused warning in release builds
 
-        const AtlasEntry* entry = glyph_atlas->addGlyph(glyph.glyph_id, glyph_font_path);
+        // Try color bitmap FIRST for color-capable fonts (COLR v1, CBDT, sbix).
+        // Color fonts (e.g. Segoe UI Emoji) still have fallback outlines in glyf table,
+        // so addGlyph() would succeed but render monochrome. We must try color first.
+        const AtlasEntry* entry = glyph_atlas->addColorGlyph(glyph.glyph_id, glyph_font_path);
         if (!entry) {
-            continue;
+            // Not a color glyph or color rasterization failed - use MSDF
+            entry = glyph_atlas->addGlyph(glyph.glyph_id, glyph_font_path);
+            if (!entry) {
+                continue;
+            }
         }
 
         if (entry->metrics.width_units <= 0.0f || entry->metrics.height_units <= 0.0f ||
@@ -2569,36 +2593,39 @@ void SDLGPUDriver::executeDrawTextMsdf(ExecuteContext& ctx, const GPUCommand& cm
         const float msdf_scale = (entry->metrics.msdf_scale > 0.0f) ? entry->metrics.msdf_scale : 1.0f;
         const float msdf_size = static_cast<float>(glyph_atlas->getGlyphBitmapSize());
 
-        const float render_scale = glyph_pixel_scale / msdf_scale;
-        const float glyph_w = msdf_size * render_scale;
-        const float glyph_h = msdf_size * render_scale;
+        float glyph_w, glyph_h, glyph_x, glyph_y, px_range_screen, unit_range;
 
-        DONG_LOG_DEBUG("[DrawText] glyph=%u msdf_scale=%.4f msdf_size=%.1f glyph_pixel_scale=%.4f render_scale=%.4f w=%.1f h=%.1f uv=(%.4f,%.4f)-(%.4f,%.4f)",
-                      glyph.glyph_id, msdf_scale, msdf_size, glyph_pixel_scale, render_scale,
-                      glyph_w, glyph_h, entry->u0, entry->v0, entry->u1, entry->v1);
+        if (entry->is_color_bitmap) {
+            // Color bitmap glyph (emoji) - use bearing-based positioning
+            const float pen_x_px = glyph.pen_x_units * cmd.scale_to_pixels + cmd.baseline_x;
+            const float pen_y_px = glyph.pen_y_units * cmd.scale_to_pixels + cmd.baseline_y;
 
-        if (glyph_w <= 0.0f || glyph_h <= 0.0f) {
-            DONG_LOG_VERBOSE("[DrawText] SKIP glyph[%zu]: glyph_id=%u zero_size (w=%.1f h=%.1f render_scale=%.4f msdf_size=%.0f)",
-                             glyph_idx,
-                             glyph.glyph_id,
-                             glyph_w,
-                             glyph_h,
-                             render_scale,
-                             msdf_size);
-            continue;
+            glyph_w = entry->metrics.width_units * glyph_pixel_scale;
+            glyph_h = entry->metrics.height_units * glyph_pixel_scale;
+            glyph_x = pen_x_px + entry->metrics.bearing_x_units * glyph_pixel_scale;
+            glyph_y = pen_y_px - entry->metrics.bearing_y_units * glyph_pixel_scale;
+
+            px_range_screen = 0.0f;  // Signal: color bitmap, no MSDF decode
+            unit_range = 0.0f;
+        } else {
+            // MSDF glyph - use translate-based positioning
+            const float render_scale = glyph_pixel_scale / msdf_scale;
+            glyph_w = msdf_size * render_scale;
+            glyph_h = msdf_size * render_scale;
+
+            const float pen_x_px = glyph.pen_x_units * cmd.scale_to_pixels + cmd.baseline_x;
+            const float pen_y_px = glyph.pen_y_units * cmd.scale_to_pixels + cmd.baseline_y;
+
+            glyph_x = pen_x_px - entry->metrics.msdf_translate_x * glyph_pixel_scale;
+            glyph_y = pen_y_px - msdf_size * render_scale + entry->metrics.msdf_translate_y * glyph_pixel_scale;
+
+            px_range_screen = atlas_range * (glyph_pixel_scale / msdf_scale);
+            unit_range = atlas_range / msdf_size;
         }
 
-        const float pen_x_px = glyph.pen_x_units * cmd.scale_to_pixels + cmd.baseline_x;
-        const float pen_y_px = glyph.pen_y_units * cmd.scale_to_pixels + cmd.baseline_y;
-
-        const float tile_x = pen_x_px - entry->metrics.msdf_translate_x * glyph_pixel_scale;
-        const float tile_y = pen_y_px - msdf_size * render_scale + entry->metrics.msdf_translate_y * glyph_pixel_scale;
-
-        const float glyph_x = tile_x;
-        const float glyph_y = tile_y;
-
-        const float px_range_screen = atlas_range * (glyph_pixel_scale / msdf_scale);
-        const float unit_range = atlas_range / msdf_size;
+        if (glyph_w <= 0.0f || glyph_h <= 0.0f) {
+            continue;
+        }
 
         if (cmd.has_text_shadow) {
             const float blur = cmd.text_shadow_blur;
@@ -2681,7 +2708,16 @@ void SDLGPUDriver::executeDrawTextMsdf(ExecuteContext& ctx, const GPUCommand& cm
         inst.uv_rect[2] = entry->u1;
         inst.uv_rect[3] = entry->v1;
 
-        writeLinearColor(cmd.color, inst.color);
+        if (entry->is_color_bitmap) {
+            // Color bitmap: pass white color; texture has the actual colors.
+            // Alpha channel carries text opacity.
+            inst.color[0] = 1.0f;
+            inst.color[1] = 1.0f;
+            inst.color[2] = 1.0f;
+            inst.color[3] = cmd.color.a;
+        } else {
+            writeLinearColor(cmd.color, inst.color);
+        }
 
         inst.params[0] = px_range_screen;
         inst.params[1] = unit_range;
@@ -2850,11 +2886,39 @@ void SDLGPUDriver::executeDispatchCommand(const GPUCommand& cmd,
         executeDrawNineSlice(ctx, cmd);
         break;
     case GPUCommandType::DrawHostView:
-        // P1-2: Host-rendered content placeholder.
-        // The SDL backend doesn't render host views directly — they are consumed
-        // by the host engine through the DongDrawList C ABI.
-        // In the SDL demo, we just skip these commands (no visual output).
         if (ctx.use_uber_for_frame) flushUberBatch(ctx);
+        // P1-2: SDL backend fallback for host-view placeholder.
+        // Real host integrations consume DrawHostView via drawlist C ABI and render
+        // engine content. In SDL demo/offscreen runs, render a visible placeholder
+        // so layout and baseline comparisons remain inspectable.
+        if (cmd.rect.width > 0.0f && cmd.rect.height > 0.0f) {
+            const float a = std::clamp(cmd.opacity, 0.0f, 1.0f);
+            const float border = 2.0f;
+
+            GPUCommand fill{};
+            fill.type = GPUCommandType::DrawInstancedQuads;
+            fill.rect = cmd.rect;
+            fill.color = {34.0f / 255.0f, 34.0f / 255.0f, 34.0f / 255.0f, a};
+            executeDrawRect(ctx, fill);
+
+            const Color border_color{85.0f / 255.0f, 85.0f / 255.0f, 85.0f / 255.0f, a};
+            GPUCommand side{};
+            side.type = GPUCommandType::DrawInstancedQuads;
+            side.color = border_color;
+
+            // top
+            side.rect = {cmd.rect.x, cmd.rect.y, cmd.rect.width, border};
+            executeDrawRect(ctx, side);
+            // bottom
+            side.rect = {cmd.rect.x, cmd.rect.y + std::max(0.0f, cmd.rect.height - border), cmd.rect.width, border};
+            executeDrawRect(ctx, side);
+            // left
+            side.rect = {cmd.rect.x, cmd.rect.y, border, cmd.rect.height};
+            executeDrawRect(ctx, side);
+            // right
+            side.rect = {cmd.rect.x + std::max(0.0f, cmd.rect.width - border), cmd.rect.y, border, cmd.rect.height};
+            executeDrawRect(ctx, side);
+        }
         break;
     case GPUCommandType::DrawText:
         if (ctx.use_uber_for_frame) flushUberBatch(ctx);

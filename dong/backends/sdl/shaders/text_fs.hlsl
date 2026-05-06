@@ -101,6 +101,17 @@ float4 main(PSInput input) : SV_Target0 {
 
     // 计算 screenPxRange
     float precomputedRange = input.params.x;
+
+    // Color bitmap path: screenPxRange <= 0 signals a pre-rendered color glyph
+    // (COLR v1, CBDT, sbix etc.) - sample texture directly as RGBA color
+    if (precomputedRange <= 0.0) {
+        float4 texColor = msdfTexture.Sample(msdfSampler, input.uv);
+        // Pre-multiplied alpha from FreeType; output with text opacity
+        texColor.a *= input.color.a;
+        if (texColor.a < 1.0 / 255.0) discard;
+        return texColor;
+    }
+
     float screenPxRange = calcScreenPxRange(precomputedRange);
 
     // 计算 opacity：小字体用 4-tap 超采样消除残余锯齿，大字体用单次采样
@@ -111,11 +122,11 @@ float4 main(PSInput input) : SV_Target0 {
         float3 msdf = msdfTexture.Sample(msdfSampler, input.uv).rgb;
         opacity = calcMSDFOpacity(msdf, screenPxRange);
     }
-    
+
     // 输出颜色
     float4 result;
     result.rgb = input.color.rgb;
     result.a = input.color.a * opacity;
-    
+
     return result;
 }

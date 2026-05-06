@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>COLR v0 Emoji Layer Test</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 24px;
+      background: #1a1a2e;
+      color: #eee;
+      font-family: "Noto Color Emoji", "Segoe UI Emoji", "Apple Color Emoji", sans-serif;
+    }
+    h2 { color: #ffd700; margin-bottom: 16px; }
+    .section { margin-bottom: 24px; }
+    .section h3 { color: #88ccff; font-size: 14px; margin-bottom: 8px; }
+
+    .emoji-row {
+      font-size: 32px;
+      line-height: 1.5;
+      letter-spacing: 8px;
+      margin-bottom: 8px;
+    }
+    .emoji-large {
+      font-size: 48px;
+      line-height: 1.4;
+      letter-spacing: 12px;
+    }
+    .info {
+      font-size: 12px;
+      color: #666;
+      font-family: monospace;
+      margin-top: 4px;
+      padding: 8px;
+      background: #111;
+      border-radius: 4px;
+    }
+    .mixed {
+      font-size: 20px;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+  <h2>COLR v0 Emoji Rendering Test</h2>
+  <div class="info">
+    Tests COLR v0 multi-layer vector emoji via Slug analytical coverage.<br>
+    COLR v0 fonts: Noto Color Emoji (Linux), older Segoe UI Emoji (Win10).<br>
+    On COLR v1 systems (Win11), falls back to FT_LOAD_COLOR bitmap path.
+  </div>
+
+  <div class="section">
+    <h3>Faces (multi-layer composites)</h3>
+    <div class="emoji-large">&#x1F600; &#x1F603; &#x1F604; &#x1F601; &#x1F606;</div>
+    <div class="info">U+1F600..1F606 — typically 3-5 COLR layers (face, eyes, mouth)</div>
+  </div>
+
+  <div class="section">
+    <h3>Simple shapes (2-3 layers)</h3>
+    <div class="emoji-row">&#x2764; &#x1F499; &#x1F49A; &#x1F49B; &#x1F49C; &#x1F5A4;</div>
+    <div class="info">Hearts: red, blue, green, yellow, purple, black — each 2-3 COLR layers</div>
+  </div>
+
+  <div class="section">
+    <h3>Complex multi-layer (5+ layers)</h3>
+    <div class="emoji-large">&#x1F3E0; &#x1F697; &#x1F6F8; &#x1F384; &#x1F382;</div>
+    <div class="info">House, Car, UFO, Christmas Tree, Cake — complex layered compositions</div>
+  </div>
+
+  <div class="section">
+    <h3>Flags (many layers)</h3>
+    <div class="emoji-row">&#x1F1FA;&#x1F1F8; &#x1F1EC;&#x1F1E7; &#x1F1EF;&#x1F1F5; &#x1F1E9;&#x1F1EA; &#x1F1EB;&#x1F1F7;</div>
+    <div class="info">US, GB, JP, DE, FR — regional indicator pairs, many color layers</div>
+  </div>
+
+  <div class="section">
+    <h3>Foreground color index test (0xFFFF)</h3>
+    <div class="emoji-row" style="color: #ff6b6b;">&#x2702; &#x2708; &#x2709; &#x270F; &#x2712;</div>
+    <div class="emoji-row" style="color: #4ecdc4;">&#x2702; &#x2708; &#x2709; &#x270F; &#x2712;</div>
+    <div class="info">Scissors, Airplane, Envelope, Pencil, Pen — should inherit text color via COLR foreground index</div>
+  </div>
+
+  <div class="section">
+    <h3>Mixed text with color emoji</h3>
+    <div class="mixed">Score: &#x1F3C6; 100 pts &#x2B50;&#x2B50;&#x2B50;</div>
+    <div class="mixed">Health: &#x1F49A;&#x1F49A;&#x1F49A;&#x1F5A4;&#x1F5A4;</div>
+    <div class="mixed">Weather: &#x2600; sunny &#x1F327; rainy &#x2744; snow</div>
+  </div>
+</body>
+</html>

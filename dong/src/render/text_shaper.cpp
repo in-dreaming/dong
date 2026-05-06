@@ -240,6 +240,12 @@ uint32_t mapEmojiCodepointToOutlineFallback(uint32_t codepoint) {
 
 bool hasOutlineGlyph(FT_Face face, FT_UInt glyph_id) {
     if (!face || glyph_id == 0) return false;
+
+    // Color fonts (COLR v0/v1, CBDT, sbix) are handled by bitmap fallback in renderer
+    if (FT_HAS_COLOR(face)) {
+        return true;
+    }
+
     if (FT_Load_Glyph(face, glyph_id, FT_LOAD_NO_BITMAP | FT_LOAD_NO_SCALE) != 0 || !face->glyph) {
         return false;
     }
@@ -254,11 +260,16 @@ uint32_t chooseGlyphIdForFreeType(CachedFontInfo* font_info, uint32_t hb_gid, ui
     uint32_t glyph_id = hb_gid;
 
     if (unicode_codepoint != 0) {
-        const uint32_t mapped = mapEmojiCodepointToOutlineFallback(unicode_codepoint);
-        if (mapped != unicode_codepoint) {
-            const FT_UInt mapped_gid = FT_Get_Char_Index(font_info->face, mapped);
-            if (mapped_gid != 0 && hasOutlineGlyph(font_info->face, mapped_gid)) {
-                glyph_id = static_cast<uint32_t>(mapped_gid);
+        // Skip emoji-to-outline fallback for COLR fonts - they render natively via layers
+        const bool font_has_colr = FT_HAS_COLOR(font_info->face);
+
+        if (!font_has_colr) {
+            const uint32_t mapped = mapEmojiCodepointToOutlineFallback(unicode_codepoint);
+            if (mapped != unicode_codepoint) {
+                const FT_UInt mapped_gid = FT_Get_Char_Index(font_info->face, mapped);
+                if (mapped_gid != 0 && hasOutlineGlyph(font_info->face, mapped_gid)) {
+                    glyph_id = static_cast<uint32_t>(mapped_gid);
+                }
             }
         }
 

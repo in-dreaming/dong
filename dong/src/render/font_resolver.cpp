@@ -237,9 +237,9 @@ const std::vector<std::string> kEmojiFallbackFonts = {
     "/System/Library/Fonts/Apple Color Emoji.ttc",
     "/Library/Fonts/Apple Color Emoji.ttc",
 #elif defined(_WIN32) || defined(_WIN64)
-    "C:/Windows/Fonts/seguisym.ttf",   // Segoe UI Symbol
-    "C:/Windows/Fonts/seguiemj.ttf",   // Segoe UI Emoji (color glyphs may fallback to monochrome path)
-    "C:/Windows/Fonts/segoeuiemoji.ttf",
+    "C:/Windows/Fonts/seguiemj.ttf",   // Segoe UI Emoji (color, COLR v1)
+    "C:/Windows/Fonts/segoeuiemoji.ttf", // Segoe UI Emoji (alternative path)
+    "C:/Windows/Fonts/seguisym.ttf",   // Segoe UI Symbol (monochrome fallback)
 #else
     "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",
     "/usr/share/fonts/noto/NotoColorEmoji.ttf",

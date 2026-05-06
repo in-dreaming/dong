@@ -16,6 +16,7 @@
 #include <ft2build.h>
 #include FT_FREETYPE_H
 #include FT_OUTLINE_H
+#include FT_COLOR_H
 
 namespace dong::render {
 
@@ -1046,6 +1047,188 @@ bool GlyphAtlas::generateMSDF(uint32_t glyph_id, const std::string& font_path,
             min_r, max_r, min_g, max_g, min_b, max_b);
 
     return true;
+}
+
+const AtlasEntry* GlyphAtlas::addColorGlyph(uint32_t glyph_id, const std::string& font_path,
+                                             uint32_t render_size) {
+    if (font_path.empty()) {
+        return nullptr;
+    }
+
+    if (!pending_uploads_.empty()) {
+        reapPendingUploads();
+    }
+
+    // Check cache first (color glyphs use "C#" prefix to distinguish from MSDF)
+    std::string key = font_path + "#C#" + std::to_string(glyph_id);
+    auto it = cache_.find(key);
+    if (it != cache_.end()) {
+        const AtlasEntry& entry = it->second;
+        if (entry.atlas_page < pages_.size()) {
+            pages_[entry.atlas_page].last_used = ++usage_counter_;
+        }
+        return &it->second;
+    }
+
+    if (pending_keys_.find(key) != pending_keys_.end()) {
+        return nullptr;
+    }
+
+    // Fast rejection for fonts known to not have color
+    if (non_color_fonts_.find(font_path) != non_color_fonts_.end()) {
+        return nullptr;
+    }
+
+    // Get face for color rendering
+    FT_Face face = getOrCreateDesignUnitsFace(font_path);
+    if (!face) {
+        non_color_fonts_.insert(font_path);
+        return nullptr;
+    }
+
+    // Check if font has color capability
+    if (!FT_HAS_COLOR(face)) {
+        non_color_fonts_.insert(font_path);
+        return nullptr;
+    }
+
+    // Set pixel size for rasterization
+    FT_Set_Pixel_Sizes(face, render_size, render_size);
+
+    // Load with FT_LOAD_COLOR to get pre-blended BGRA bitmap
+    FT_Int32 load_flags = FT_LOAD_COLOR | FT_LOAD_RENDER;
+    if (FT_Load_Glyph(face, glyph_id, load_flags) != 0) {
+        DONG_LOG_DEBUG("GlyphAtlas::addColorGlyph: FT_Load_Glyph failed for glyph %u", glyph_id);
+        return nullptr;
+    }
+
+    FT_GlyphSlot slot = face->glyph;
+    if (!slot || slot->bitmap.width == 0 || slot->bitmap.rows == 0) {
+        // Empty glyph - cache with zero size
+        AtlasEntry entry{};
+        entry.is_color_bitmap = true;
+        entry.metrics.advance_x_units = static_cast<float>(slot->advance.x) / 64.0f / static_cast<float>(render_size) * static_cast<float>(face->units_per_EM);
+        entry.metrics.units_per_em = face->units_per_EM;
+        entry.atlas_page = 0;
+        cache_[key] = entry;
+        return &cache_[key];
+    }
+
+    const uint32_t bmp_w = slot->bitmap.width;
+    const uint32_t bmp_h = slot->bitmap.rows;
+
+    // Convert to RGBA (FreeType gives BGRA for FT_PIXEL_MODE_BGRA)
+    std::vector<uint8_t> rgba_bitmap(bmp_w * bmp_h * 4);
+
+    if (slot->bitmap.pixel_mode == FT_PIXEL_MODE_BGRA) {
+        // BGRA -> RGBA swizzle
+        for (uint32_t y = 0; y < bmp_h; y++) {
+            const uint8_t* src_row = slot->bitmap.buffer + y * slot->bitmap.pitch;
+            uint8_t* dst_row = rgba_bitmap.data() + y * bmp_w * 4;
+            for (uint32_t x = 0; x < bmp_w; x++) {
+                dst_row[x * 4 + 0] = src_row[x * 4 + 2]; // R
+                dst_row[x * 4 + 1] = src_row[x * 4 + 1]; // G
+                dst_row[x * 4 + 2] = src_row[x * 4 + 0]; // B
+                dst_row[x * 4 + 3] = src_row[x * 4 + 3]; // A
+            }
+        }
+    } else if (slot->bitmap.pixel_mode == FT_PIXEL_MODE_GRAY) {
+        // Grayscale alpha - render as white with alpha
+        for (uint32_t y = 0; y < bmp_h; y++) {
+            const uint8_t* src_row = slot->bitmap.buffer + y * slot->bitmap.pitch;
+            uint8_t* dst_row = rgba_bitmap.data() + y * bmp_w * 4;
+            for (uint32_t x = 0; x < bmp_w; x++) {
+                dst_row[x * 4 + 0] = 255;
+                dst_row[x * 4 + 1] = 255;
+                dst_row[x * 4 + 2] = 255;
+                dst_row[x * 4 + 3] = src_row[x];
+            }
+        }
+    } else {
+        DONG_LOG_WARN("GlyphAtlas::addColorGlyph: unsupported pixel mode %d", slot->bitmap.pixel_mode);
+        return nullptr;
+    }
+
+    // Find atlas page
+    AtlasPage* page = selectPageForGlyph(bmp_w, bmp_h);
+    if (!page || !page->texture) {
+        DONG_LOG_WARN("GlyphAtlas::addColorGlyph: no available atlas page for glyph %u", glyph_id);
+        return nullptr;
+    }
+
+    constexpr uint32_t kAtlasPadding = 2;
+
+    if (page->cursor_x + bmp_w + kAtlasPadding > page->width) {
+        page->cursor_x = 0;
+        page->cursor_y += page->row_height + kAtlasPadding;
+        page->row_height = 0;
+    }
+
+    if (page->cursor_y + bmp_h > page->height) {
+        return nullptr;
+    }
+
+    uint32_t dst_x = page->cursor_x;
+    uint32_t dst_y = page->cursor_y;
+    page->cursor_x += bmp_w + kAtlasPadding;
+    page->row_height = std::max(page->row_height, bmp_h);
+
+    // Upload to GPU
+    void* fence = nullptr;
+    int upload_result = dong_gpu_upload_texture_subrect(
+        driver_, page->texture,
+        rgba_bitmap.data(),
+        dst_x, dst_y,
+        bmp_w, bmp_h,
+        bmp_w * 4,
+        &fence);
+
+    if (upload_result != 0) {
+        DONG_LOG_ERROR("GlyphAtlas::addColorGlyph: failed to upload color glyph");
+        return nullptr;
+    }
+
+    if (fence) {
+        while (!dong_gpu_query_fence(driver_, fence)) {}
+        dong_gpu_release_fence(driver_, fence);
+    } else {
+        dong_gpu_wait_for_gpu(driver_);
+    }
+
+    // Build metrics in design units
+    // Convert bitmap metrics back to design units for consistent positioning
+    const float px_to_units = static_cast<float>(face->units_per_EM) / static_cast<float>(render_size);
+
+    AtlasEntry entry{};
+    entry.atlas_page = page->page_index;
+    entry.u0 = static_cast<float>(dst_x) / static_cast<float>(page->width);
+    entry.v0 = static_cast<float>(dst_y) / static_cast<float>(page->height);
+    entry.u1 = static_cast<float>(dst_x + bmp_w) / static_cast<float>(page->width);
+    entry.v1 = static_cast<float>(dst_y + bmp_h) / static_cast<float>(page->height);
+    entry.is_color_bitmap = true;
+
+    entry.metrics.units_per_em = face->units_per_EM;
+    entry.metrics.advance_x_units = static_cast<float>(slot->advance.x) / 64.0f * px_to_units;
+    entry.metrics.bearing_x_units = static_cast<float>(slot->bitmap_left) * px_to_units;
+    entry.metrics.bearing_y_units = static_cast<float>(slot->bitmap_top) * px_to_units;
+    entry.metrics.width_units = static_cast<float>(bmp_w) * px_to_units;
+    entry.metrics.height_units = static_cast<float>(bmp_h) * px_to_units;
+
+    // Logical bbox (baseline coordinates, design units)
+    entry.metrics.logical_left = entry.metrics.bearing_x_units;
+    entry.metrics.logical_top = entry.metrics.bearing_y_units;
+    entry.metrics.logical_right = entry.metrics.bearing_x_units + entry.metrics.width_units;
+    entry.metrics.logical_bottom = entry.metrics.bearing_y_units - entry.metrics.height_units;
+
+    cache_[key] = entry;
+    page_to_keys_[page->page_index].push_back(key);
+    page->glyph_count += 1;
+    page->last_used = ++usage_counter_;
+
+    DONG_LOG_DEBUG("GlyphAtlas::addColorGlyph: added color glyph %u (%ux%u) at page %u (%u,%u)",
+                   glyph_id, bmp_w, bmp_h, page->page_index, dst_x, dst_y);
+
+    return &cache_[key];
 }
 
 } // namespace dong::render
