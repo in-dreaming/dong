@@ -3,6 +3,8 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <unordered_map>
+#include <cstdint>
 #include "../dom/dom/dom_node.hpp"
 #include "../render/display_list.hpp"
 #include "../render/text_shaper.hpp"
@@ -38,7 +40,9 @@ public:
 
     // Handle mouse interaction with the overlay
     // Returns true if the event was consumed by the overlay
-    bool handleClick(float x, float y);
+    bool handleMouseMove(float x, float y);
+    bool handleMouseButton(float x, float y, bool pressed, int32_t button);
+    bool handleMouseWheel(float x, float y, float delta_y);
 
     // Get the currently selected/hovered node for highlight
     const dom::DOMNodePtr& getSelectedNode() const { return selected_node_; }
@@ -47,6 +51,7 @@ private:
     bool visible_ = false;
     dom::DOMNodePtr root_;
     dom::DOMNodePtr selected_node_;
+    dom::DOMNodePtr hovered_node_;
     float viewport_w_ = 800.0f;
     float viewport_h_ = 600.0f;
 
@@ -66,11 +71,18 @@ private:
         int depth = 0;
         dom::DOMNodePtr node;
         float y_pos = 0.0f;
+        float arrow_x = 0.0f;
+        bool has_children = false;
+        bool expanded = true;
     };
     std::vector<TreeLine> tree_lines_;
+    std::unordered_map<const dom::DOMNode*, bool> expanded_state_;
 
     void buildTreeLines();
     void collectTreeLines(const dom::DOMNodePtr& node, int depth);
+    bool isWhitespaceOnly(const std::string& s) const;
+    bool isPointInPanel(float x, float y) const;
+    bool findLineAtY(float y, TreeLine& out_line) const;
 };
 
 } // namespace dong::devtools

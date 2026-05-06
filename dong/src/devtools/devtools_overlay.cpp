@@ -71,6 +71,13 @@ void DevToolsOverlay::buildTreeLines() {
     }
 }
 
+bool DevToolsOverlay::isWhitespaceOnly(const std::string& s) const {
+    for (char c : s) {
+        if (c != ' ' && c != '\n' && c != '\t' && c != '\r') return false;
+    }
+    return true;
+}
+
 void DevToolsOverlay::collectTreeLines(const dom::DOMNodePtr& node, int depth) {
     if (!node) return;
     if (depth > 20) return;  // prevent infinite recursion
@@ -79,11 +86,8 @@ void DevToolsOverlay::collectTreeLines(const dom::DOMNodePtr& node, int depth) {
     if (type == dom::DOMNode::NodeType::TEXT) {
         std::string text = node->getRawTextContent();
         if (text.size() > 30) text = text.substr(0, 30) + "...";
-        // Collapse whitespace-only text nodes
-        bool all_ws = true;
-        for (char c : text) { if (c != ' ' && c != '\n' && c != '\t' && c != '\r') { all_ws = false; break; } }
-        if (all_ws) return;
-        tree_lines_.push_back({"\"" + text + "\"", depth, node, 0.0f});
+        if (isWhitespaceOnly(text)) return;
+        tree_lines_.push_back({"\"" + text + "\"", depth, node, 0.0f, 0.0f, false, true});
         return;
     }
 
@@ -109,10 +113,34 @@ void DevToolsOverlay::collectTreeLines(const dom::DOMNodePtr& node, int depth) {
     }
     label += ">";
 
-    tree_lines_.push_back({label, depth, node, 0.0f});
-
+    bool has_children = false;
     for (const auto& child : node->getChildren()) {
-        collectTreeLines(child, depth + 1);
+        if (!child) continue;
+        if (child->getType() == dom::DOMNode::NodeType::ELEMENT) {
+            has_children = true;
+            break;
+        }
+        if (child->getType() == dom::DOMNode::NodeType::TEXT &&
+            !isWhitespaceOnly(child->getRawTextContent())) {
+            has_children = true;
+            break;
+        }
+    }
+
+    bool expanded = true;
+    auto it = expanded_state_.find(node.get());
+    if (it == expanded_state_.end()) {
+        expanded_state_[node.get()] = true;
+    } else {
+        expanded = it->second;
+    }
+
+    tree_lines_.push_back({label, depth, node, 0.0f, 0.0f, has_children, expanded});
+
+    if (has_children && expanded) {
+        for (const auto& child : node->getChildren()) {
+            collectTreeLines(child, depth + 1);
+        }
     }
 }
 
@@ -148,37 +176,66 @@ void DevToolsOverlay::buildOverlay(render::DisplayListBuilder& builder) {
         {1.0f, 0.84f, 0.0f, 1.0f});
 
     // DOM tree entries (simplified: colored rects per node for now)
-    float y = 32.0f;
+    const float tree_top = 32.0f;
+    float y = tree_top - scroll_y_;
     float line_h = 16.0f;
     float indent_px = 12.0f;
+    const float tree_bottom = panel_h - metrics_h - 4.0f;
 
-    for (size_t i = 0; i < tree_lines_.size() && y < panel_h - metrics_h - 4.0f; ++i) {
+    for (size_t i = 0; i < tree_lines_.size(); ++i) {
         auto& line = tree_lines_[i];
         line.y_pos = y;
+        line.arrow_x = panel_x + 8.0f + line.depth * indent_px;
 
-        float x = panel_x + 8.0f + line.depth * indent_px;
+        if (y + line_h < tree_top) {
+            y += line_h;
+            continue;
+        }
+        if (y > tree_bottom) {
+            break;
+        }
+
+        float x = line.arrow_x;
 
         // Highlight selected node
         bool is_selected = (selected_node_ && line.node && line.node.get() == selected_node_.get());
         if (is_selected) {
             render::Rect hl_rect{panel_x, y, panel_width_, line_h};
-            render::Color hl_color{0.2f, 0.3f, 0.5f, 0.6f};
+            render::Color hl_color{0.2f, 0.35f, 0.65f, 0.62f};
             builder.addRect(hl_rect, hl_color);
+        } else {
+            bool is_hover = (hovered_node_ && line.node && line.node.get() == hovered_node_.get());
+            if (is_hover) {
+                render::Rect hl_rect{panel_x, y, panel_width_, line_h};
+                render::Color hl_color{0.18f, 0.24f, 0.36f, 0.55f};
+                builder.addRect(hl_rect, hl_color);
+            }
+        }
+
+        // Fold arrow for expandable nodes
+        float cursor_x = x;
+        if (line.has_children) {
+            appendOverlayText(
+                builder, text_shaper_, line.expanded ? "v" : ">",
+                cursor_x, y + 2.0f, 10.0f,
+                {0.72f, 0.72f, 0.78f, 0.95f});
+            cursor_x += 9.0f;
         }
 
         // Tag indicator dot
         render::Color dot_color;
-        if (line.text.front() == '<') {
+        if (!line.text.empty() && line.text.front() == '<') {
             dot_color = {0.4f, 0.7f, 1.0f, 1.0f};  // blue for elements
         } else {
             dot_color = {0.6f, 0.6f, 0.6f, 0.8f};  // grey for text
         }
-        render::Rect dot_rect{x, y + 5.0f, 6.0f, 6.0f};
+        render::Rect dot_rect{cursor_x, y + 5.0f, 6.0f, 6.0f};
         builder.addRect(dot_rect, dot_color);
+        cursor_x += 10.0f;
 
         appendOverlayText(
             builder, text_shaper_, line.text,
-            x + 10.0f, y + 2.0f, 11.0f,
+            cursor_x, y + 2.0f, 11.0f,
             {0.85f, 0.85f, 0.9f, 0.95f});
 
         y += line_h;
@@ -207,22 +264,73 @@ void DevToolsOverlay::buildOverlay(render::DisplayListBuilder& builder) {
         {0.75f, 0.82f, 1.0f, 0.95f});
 }
 
-bool DevToolsOverlay::handleClick(float x, float y) {
+bool DevToolsOverlay::isPointInPanel(float x, float y) const {
     if (!visible_) return false;
+    const float panel_x = viewport_w_ - panel_width_;
+    return (x >= panel_x && x <= viewport_w_ && y >= 0.0f && y <= viewport_h_);
+}
 
-    float panel_x = viewport_w_ - panel_width_;
-    if (x < panel_x) return false;  // Click outside panel
-
-    // Find which tree line was clicked
-    float line_h = 16.0f;
+bool DevToolsOverlay::findLineAtY(float y, TreeLine& out_line) const {
+    const float line_h = 16.0f;
     for (const auto& line : tree_lines_) {
         if (y >= line.y_pos && y < line.y_pos + line_h) {
+            out_line = line;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool DevToolsOverlay::handleMouseMove(float x, float y) {
+    if (!visible_) return false;
+    if (!isPointInPanel(x, y)) {
+        hovered_node_.reset();
+        return false;
+    }
+
+    TreeLine hit{};
+    if (findLineAtY(y, hit)) {
+        hovered_node_ = hit.node;
+    } else {
+        hovered_node_.reset();
+    }
+    return true;
+}
+
+bool DevToolsOverlay::handleMouseButton(float x, float y, bool pressed, int32_t button) {
+    if (!visible_) return false;
+    if (!isPointInPanel(x, y)) return false;
+    if (button != 1) return true;  // consume clicks inside panel
+
+    if (!pressed) return true;
+
+    TreeLine line{};
+    if (!findLineAtY(y, line)) return true;
+
+    if (line.has_children) {
+        const float arrow_w = 8.0f;
+        if (x >= line.arrow_x && x <= line.arrow_x + arrow_w) {
+            const bool old = expanded_state_[line.node.get()];
+            expanded_state_[line.node.get()] = !old;
             selected_node_ = line.node;
             return true;
         }
     }
 
-    return true;  // Consume click within panel area
+    selected_node_ = line.node;
+    return true;
+}
+
+bool DevToolsOverlay::handleMouseWheel(float x, float y, float delta_y) {
+    if (!visible_) return false;
+    if (!isPointInPanel(x, y)) return false;
+
+    const float line_h = 16.0f;
+    const float tree_h = static_cast<float>(tree_lines_.size()) * line_h;
+    const float visible_h = std::max(0.0f, viewport_h_ - 32.0f - 24.0f - 4.0f);
+    const float max_scroll = std::max(0.0f, tree_h - visible_h);
+    scroll_y_ = std::clamp(scroll_y_ + delta_y, 0.0f, max_scroll);
+    return true;
 }
 
 } // namespace dong::devtools

@@ -2997,6 +2997,12 @@ struct EngineView::Impl {
         last_mouse_x = x;
         last_mouse_y = y;
 
+        if (devtools_overlay.isVisible() &&
+            devtools_overlay.handleMouseMove(static_cast<float>(x), static_cast<float>(y))) {
+            invalidate(InvalidationKind::Paint, nullptr, "devtools_hover");
+            return;
+        }
+
         if (updateTextareaResizeDrag(x, y)) {
             dispatchMouseEvent("mousemove", x, y, 0);
             return;
@@ -3197,6 +3203,14 @@ struct EngineView::Impl {
 
     void sendMouseButton(int32_t button, bool pressed) {
         activateViewContext();
+
+        if (devtools_overlay.isVisible() &&
+            devtools_overlay.handleMouseButton(static_cast<float>(last_mouse_x),
+                                               static_cast<float>(last_mouse_y),
+                                               pressed, button)) {
+            invalidate(InvalidationKind::Paint, nullptr, "devtools_click");
+            return;
+        }
 
         if (endTextareaResize(button, pressed)) {
             return;
@@ -3543,6 +3557,14 @@ struct EngineView::Impl {
         constexpr float kScrollSpeed = 20.0f;
         float scroll_dx = delta_x * kScrollSpeed;
         float scroll_dy = delta_y * kScrollSpeed;
+
+        if (devtools_overlay.isVisible() &&
+            devtools_overlay.handleMouseWheel(static_cast<float>(last_mouse_x),
+                                              static_cast<float>(last_mouse_y),
+                                              scroll_dy)) {
+            invalidate(InvalidationKind::Paint, nullptr, "devtools_scroll");
+            return;
+        }
 
         // Select 下拉框滚动：下拉不在 DOM 树中（不属于 scroll container），因此需要在这里优先处理。
         if (open_select_element) {
