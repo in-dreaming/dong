@@ -70,6 +70,16 @@ void writeTransform(float (&out)[8], const float transform[6]) {
     }
 }
 
+inline void transformPoint2D(const float transform[6], float x, float y, float& out_x, float& out_y) {
+    out_x = transform[0] * x + transform[1] * y + transform[2];
+    out_y = transform[3] * x + transform[4] * y + transform[5];
+}
+
+inline bool isIdentity2D(const float transform[6]) {
+    return transform[0] == 1.0f && transform[1] == 0.0f && transform[2] == 0.0f &&
+           transform[3] == 0.0f && transform[4] == 1.0f && transform[5] == 0.0f;
+}
+
 struct RenderTargetState {
     SDL_GPUTexture* texture = nullptr;
     Uint32 width = 0;
@@ -225,6 +235,7 @@ struct SDLGPUDriver::ExecuteContext {
 
     bool offscreen = false;
     unsigned long long frame_index = 0;
+    bool use_uber_for_frame = false;
 
     bool aborted = false;
 
@@ -1344,13 +1355,26 @@ void SDLGPUDriver::executeDrawGradient(ExecuteContext& ctx, const GPUCommand& cm
     };
 
     GradientUniformData u{};
-    u.rect[0] = cmd.rect.x;
-    u.rect[1] = cmd.rect.y;
+    const float* current_transform = ctx.getCurrentTransform();
+    const bool fold_transform = !isIdentity2D(current_transform);
+
+    float rect_x = cmd.rect.x;
+    float rect_y = cmd.rect.y;
+    if (fold_transform) {
+        transformPoint2D(current_transform, rect_x, rect_y, rect_x, rect_y);
+    }
+    u.rect[0] = rect_x;
+    u.rect[1] = rect_y;
     u.rect[2] = cmd.rect.width;
     u.rect[3] = cmd.rect.height;
 
     ctx.writeViewport(u.viewport);
-    writeTransform(u.transform, ctx.getCurrentTransform());
+    if (fold_transform) {
+        static const float identity[6] = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f};
+        writeTransform(u.transform, identity);
+    } else {
+        writeTransform(u.transform, current_transform);
+    }
 
     // Convert degrees to radians
     float angle_rad = cmd.gradient_angle_deg * 3.14159265358979f / 180.0f;
@@ -1396,13 +1420,26 @@ void SDLGPUDriver::executeDrawConicGradient(ExecuteContext& ctx, const GPUComman
     };
 
     ConicGradientUniformData u{};
-    u.rect[0] = cmd.rect.x;
-    u.rect[1] = cmd.rect.y;
+    const float* current_transform = ctx.getCurrentTransform();
+    const bool fold_transform = !isIdentity2D(current_transform);
+
+    float rect_x = cmd.rect.x;
+    float rect_y = cmd.rect.y;
+    if (fold_transform) {
+        transformPoint2D(current_transform, rect_x, rect_y, rect_x, rect_y);
+    }
+    u.rect[0] = rect_x;
+    u.rect[1] = rect_y;
     u.rect[2] = cmd.rect.width;
     u.rect[3] = cmd.rect.height;
 
     ctx.writeViewport(u.viewport);
-    writeTransform(u.transform, ctx.getCurrentTransform());
+    if (fold_transform) {
+        static const float identity[6] = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f};
+        writeTransform(u.transform, identity);
+    } else {
+        writeTransform(u.transform, current_transform);
+    }
 
     const float from_rad = cmd.conic_from_angle_deg * 3.14159265358979f / 180.0f;
     u.conic_meta[0] = from_rad;
@@ -1410,8 +1447,13 @@ void SDLGPUDriver::executeDrawConicGradient(ExecuteContext& ctx, const GPUComman
     u.conic_meta[2] = cmd.radius;
     u.conic_meta[3] = cmd.conic_repeating;
 
-    u.conic_center_period[0] = cmd.conic_center_x_px;
-    u.conic_center_period[1] = cmd.conic_center_y_px;
+    float center_x = cmd.conic_center_x_px;
+    float center_y = cmd.conic_center_y_px;
+    if (fold_transform) {
+        transformPoint2D(current_transform, center_x, center_y, center_x, center_y);
+    }
+    u.conic_center_period[0] = center_x;
+    u.conic_center_period[1] = center_y;
     u.conic_center_period[2] = 0.0f;
     u.conic_center_period[3] = 0.0f;
 
@@ -1452,13 +1494,26 @@ void SDLGPUDriver::executeApplyMaskConicGradient(ExecuteContext& ctx, const GPUC
     };
 
     ConicGradientUniformData u{};
-    u.rect[0] = cmd.rect.x;
-    u.rect[1] = cmd.rect.y;
+    const float* current_transform = ctx.getCurrentTransform();
+    const bool fold_transform = !isIdentity2D(current_transform);
+
+    float rect_x = cmd.rect.x;
+    float rect_y = cmd.rect.y;
+    if (fold_transform) {
+        transformPoint2D(current_transform, rect_x, rect_y, rect_x, rect_y);
+    }
+    u.rect[0] = rect_x;
+    u.rect[1] = rect_y;
     u.rect[2] = cmd.rect.width;
     u.rect[3] = cmd.rect.height;
 
     ctx.writeViewport(u.viewport);
-    writeTransform(u.transform, ctx.getCurrentTransform());
+    if (fold_transform) {
+        static const float identity[6] = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f};
+        writeTransform(u.transform, identity);
+    } else {
+        writeTransform(u.transform, current_transform);
+    }
 
     const float from_rad = cmd.conic_from_angle_deg * 3.14159265358979f / 180.0f;
     u.conic_meta[0] = from_rad;
@@ -1466,8 +1521,13 @@ void SDLGPUDriver::executeApplyMaskConicGradient(ExecuteContext& ctx, const GPUC
     u.conic_meta[2] = cmd.radius;
     u.conic_meta[3] = cmd.conic_repeating;
 
-    u.conic_center_period[0] = cmd.conic_center_x_px;
-    u.conic_center_period[1] = cmd.conic_center_y_px;
+    float center_x = cmd.conic_center_x_px;
+    float center_y = cmd.conic_center_y_px;
+    if (fold_transform) {
+        transformPoint2D(current_transform, center_x, center_y, center_x, center_y);
+    }
+    u.conic_center_period[0] = center_x;
+    u.conic_center_period[1] = center_y;
     u.conic_center_period[2] = 0.0f;
     u.conic_center_period[3] = 0.0f;
 
@@ -2719,74 +2779,74 @@ void SDLGPUDriver::executeDispatchCommand(const GPUCommand& cmd,
     case GPUCommandType::EndFrame:
         break;
     case GPUCommandType::BeginPass:
-        if (use_uber_quad_) flushUberBatch(ctx);
+        if (ctx.use_uber_for_frame) flushUberBatch(ctx);
         executeBeginPass(ctx);
         break;
     case GPUCommandType::EndPass:
-        if (use_uber_quad_) flushUberBatch(ctx);
+        if (ctx.use_uber_for_frame) flushUberBatch(ctx);
         executeEndPass(ctx);
         break;
     case GPUCommandType::PushClipRect:
-        if (use_uber_quad_) flushUberBatch(ctx);
+        if (ctx.use_uber_for_frame) flushUberBatch(ctx);
         executePushClipRect(ctx, cmd);
         break;
     case GPUCommandType::PopClip:
-        if (use_uber_quad_) flushUberBatch(ctx);
+        if (ctx.use_uber_for_frame) flushUberBatch(ctx);
         executePopClip(ctx);
         break;
     case GPUCommandType::BeginIsolatedLayer:
-        if (use_uber_quad_) flushUberBatch(ctx);
+        if (ctx.use_uber_for_frame) flushUberBatch(ctx);
         executeBeginIsolatedLayer(ctx, cmd);
         break;
     case GPUCommandType::EndIsolatedLayer:
-        if (use_uber_quad_) flushUberBatch(ctx);
+        if (ctx.use_uber_for_frame) flushUberBatch(ctx);
         executeEndIsolatedLayer(ctx, cmd);
         break;
     case GPUCommandType::DrawInstancedQuads:
-        if (use_uber_quad_) {
+        if (ctx.use_uber_for_frame) {
             executeDrawUberQuad(ctx, cmd, UberQuadMaterial::kSolid);
         } else {
             executeDrawRect(ctx, cmd);
         }
         break;
     case GPUCommandType::DrawRoundedRectQuad:
-        if (use_uber_quad_) {
+        if (ctx.use_uber_for_frame) {
             executeDrawUberQuad(ctx, cmd, UberQuadMaterial::kRounded);
         } else {
             executeDrawRoundedRect(ctx, cmd);
         }
         break;
     case GPUCommandType::DrawShadowQuad:
-        if (use_uber_quad_) {
+        if (ctx.use_uber_for_frame) {
             executeDrawUberQuad(ctx, cmd, UberQuadMaterial::kShadow);
         } else {
             executeDrawShadow(ctx, cmd);
         }
         break;
     case GPUCommandType::DrawGradientQuad:
-        if (use_uber_quad_) {
+        if (ctx.use_uber_for_frame) {
             executeDrawUberQuad(ctx, cmd, UberQuadMaterial::kGradient);
         } else {
             executeDrawGradient(ctx, cmd);
         }
         break;
     case GPUCommandType::DrawConicGradientQuad:
-        if (use_uber_quad_) flushUberBatch(ctx);
+        if (ctx.use_uber_for_frame) flushUberBatch(ctx);
         executeDrawConicGradient(ctx, cmd);
         break;
     case GPUCommandType::ApplyMaskConicGradient:
-        if (use_uber_quad_) flushUberBatch(ctx);
+        if (ctx.use_uber_for_frame) flushUberBatch(ctx);
         executeApplyMaskConicGradient(ctx, cmd);
         break;
     case GPUCommandType::UberQuadBatch:
         executeUberQuadInstancedBatch(ctx, cmd, commands);
         break;
     case GPUCommandType::DrawImageQuad:
-        if (use_uber_quad_) flushUberBatch(ctx);
+        if (ctx.use_uber_for_frame) flushUberBatch(ctx);
         executeDrawImage(ctx, cmd);
         break;
     case GPUCommandType::DrawNineSliceQuad:
-        if (use_uber_quad_) flushUberBatch(ctx);
+        if (ctx.use_uber_for_frame) flushUberBatch(ctx);
         executeDrawNineSlice(ctx, cmd);
         break;
     case GPUCommandType::DrawHostView:
@@ -2794,10 +2854,10 @@ void SDLGPUDriver::executeDispatchCommand(const GPUCommand& cmd,
         // The SDL backend doesn't render host views directly — they are consumed
         // by the host engine through the DongDrawList C ABI.
         // In the SDL demo, we just skip these commands (no visual output).
-        if (use_uber_quad_) flushUberBatch(ctx);
+        if (ctx.use_uber_for_frame) flushUberBatch(ctx);
         break;
     case GPUCommandType::DrawText:
-        if (use_uber_quad_) flushUberBatch(ctx);
+        if (ctx.use_uber_for_frame) flushUberBatch(ctx);
         executeDrawText(ctx, cmd);
         break;
     default:
@@ -2826,6 +2886,14 @@ void SDLGPUDriver::execute(const GPUCommandList& commands) {
     ctx.split_cmd_buf_for_isolated_layers = split_cmd_buf_for_isolated_layers_;
     ctx.offscreen = (offscreen_target_ != nullptr);
     ctx.frame_index = frame_index_;
+    bool has_mask_apply = false;
+    for (const auto& c : commands.commands) {
+        if (c.type == GPUCommandType::ApplyMaskConicGradient) {
+            has_mask_apply = true;
+            break;
+        }
+    }
+    ctx.use_uber_for_frame = use_uber_quad_ && !has_mask_apply;
 
     if (!executeSetupMainTarget(ctx)) {
         last_execute_cpu_us_ = std::chrono::duration_cast<std::chrono::microseconds>(
@@ -2920,7 +2988,7 @@ void SDLGPUDriver::execute(const GPUCommandList& commands) {
         }
     }
 
-    if (use_uber_quad_) {
+    if (ctx.use_uber_for_frame) {
         flushUberBatch(ctx);
     }
 
@@ -2973,7 +3041,7 @@ void SDLGPUDriver::execute(const GPUCommandList& commands) {
             }
         }
         uint32_t total_draws = n_rect + n_round + n_shadow + n_gradient + n_image + n_text;
-        if (use_uber_quad_) {
+        if (ctx.use_uber_for_frame) {
             DONG_LOG_INFO("[RenderStats] frame=%llu uber_draws=%u (logical: rect=%u round=%u shadow=%u grad=%u) + text=%u img=%u clips=%u layers=%u cmds=%zu",
                           ctx.frame_index, ctx.uber_batch_draw_count,
                           n_rect, n_round, n_shadow, n_gradient,

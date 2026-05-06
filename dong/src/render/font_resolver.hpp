@@ -31,6 +31,10 @@ std::string resolveFontPath(const std::string& requested_family,
 // 返回系统中存在的 CJK 字体路径列表，按优先级排序
 const std::vector<std::string>& getCJKFallbackFonts();
 
+// 获取 Emoji 字体回退列表
+// 返回系统中存在的 emoji 字体路径列表，按优先级排序
+const std::vector<std::string>& getEmojiFallbackFonts();
+
 // 查找支持指定 Unicode 码点的字体
 // 首先检查 primary_font，如果不支持则尝试 CJK 回退字体
 // 返回支持该字符的字体路径，如果都不支持则返回空字符串

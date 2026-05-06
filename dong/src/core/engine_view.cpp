@@ -103,8 +103,57 @@ static bool isModuleScript(const DOMNodePtr& script_node) {
     return (type == "module");
 }
 
+static void mapPointThroughInverseTransform(const dong::dom::ComputedStyle& style,
+                                            float lx, float ly, float w, float h,
+                                            float& x, float& y) {
+    const bool has_transform =
+        (style.transform_translate_x != 0.0f || style.transform_translate_y != 0.0f ||
+         style.transform_scale_x != 1.0f || style.transform_scale_y != 1.0f ||
+         style.transform_rotate != 0.0f || style.transform_skew_x != 0.0f ||
+         style.transform_skew_y != 0.0f);
+    if (!has_transform) return;
+
+    const float sx = style.transform_scale_x;
+    const float sy = style.transform_scale_y;
+    const float tx = style.transform_translate_x_is_percent
+                         ? w * style.transform_translate_x / 100.0f
+                         : style.transform_translate_x;
+    const float ty = style.transform_translate_y_is_percent
+                         ? h * style.transform_translate_y / 100.0f
+                         : style.transform_translate_y;
+    const float angle_rad = style.transform_rotate * 3.14159265358979f / 180.0f;
+    const float skew_x_rad = style.transform_skew_x * 3.14159265358979f / 180.0f;
+    const float skew_y_rad = style.transform_skew_y * 3.14159265358979f / 180.0f;
+
+    const float origin_x = lx + w * style.transform_origin_x / 100.0f;
+    const float origin_y = ly + h * style.transform_origin_y / 100.0f;
+
+    const float cos_r = cosf(angle_rad);
+    const float sin_r = sinf(angle_rad);
+    const float tan_kx = tanf(skew_x_rad);
+    const float tan_ky = tanf(skew_y_rad);
+
+    const float a00 = sx * (cos_r - sin_r * tan_ky);
+    const float a01 = sy * (cos_r * tan_kx - sin_r);
+    const float a10 = sx * (sin_r + cos_r * tan_ky);
+    const float a11 = sy * (sin_r * tan_kx + cos_r);
+
+    const float m02 = origin_x + tx - (a00 * origin_x + a01 * origin_y);
+    const float m12 = origin_y + ty - (a10 * origin_x + a11 * origin_y);
+
+    const float det = a00 * a11 - a01 * a10;
+    if (fabsf(det) < 1e-6f) return;
+
+    const float dx = x - m02;
+    const float dy = y - m12;
+    const float inv_x = (a11 * dx - a01 * dy) / det;
+    const float inv_y = (-a10 * dx + a00 * dy) / det;
+    x = inv_x;
+    y = inv_y;
+}
+
 DOMNodePtr hitTestRecursive(const DOMNodePtr& node, dong::layout::Engine* layout_engine,
-                            int32_t x, int32_t y) {
+                            float x, float y) {
     if (!node || !layout_engine) return nullptr;
 
     // Skip inert subtrees
@@ -125,6 +174,10 @@ DOMNodePtr hitTestRecursive(const DOMNodePtr& node, dong::layout::Engine* layout
     float ly = layout->y;
     float w = layout->width;
     float h = layout->height;
+
+    // Render path applies CSS transforms in painter/GPU; hit testing must invert
+    // the same transform so pointer coordinates match visual positions.
+    mapPointThroughInverseTransform(style, lx, ly, w, h, x, y);
 
     bool in_bounds = (x >= lx && x <= lx + w && y >= ly && y <= ly + h);
 
@@ -161,7 +214,7 @@ DOMNodePtr hitTestElementAt(dong::dom::Manager* dom_mgr, dong::layout::Engine* l
     if (!dom_mgr || !layout_engine) return nullptr;
     auto root = dom_mgr->getRoot();
     if (!root) return nullptr;
-    return hitTestRecursive(root, layout_engine, x, y);
+    return hitTestRecursive(root, layout_engine, static_cast<float>(x), static_cast<float>(y));
 }
 
 DOMNodePtr findScrollContainerAt(dong::dom::Manager* dom_mgr, dong::layout::Engine* layout_engine,

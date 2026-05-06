@@ -258,43 +258,108 @@ CSSGradient CSSParser::parseGradient(const std::string& value) {
     float auto_position = 0.0f;
     float auto_step = parts.size() > color_start + 1 ? 
                       1.0f / (parts.size() - color_start - 1) : 1.0f;
-    
+
+    auto trim_copy = [](const std::string& s) -> std::string {
+        std::string out = s;
+        out.erase(0, out.find_first_not_of(" \t\n\r"));
+        size_t last = out.find_last_not_of(" \t\n\r");
+        if (last != std::string::npos) out = out.substr(0, last + 1);
+        return out;
+    };
+
+    auto split_space_outside_parens = [](const std::string& s) -> std::vector<std::string> {
+        std::vector<std::string> tokens;
+        std::string cur;
+        int depth = 0;
+        for (char c : s) {
+            if (c == '(') {
+                ++depth;
+                cur.push_back(c);
+                continue;
+            }
+            if (c == ')') {
+                --depth;
+                cur.push_back(c);
+                continue;
+            }
+            if (std::isspace(static_cast<unsigned char>(c)) && depth == 0) {
+                if (!cur.empty()) {
+                    tokens.push_back(cur);
+                    cur.clear();
+                }
+                continue;
+            }
+            cur.push_back(c);
+        }
+        if (!cur.empty()) tokens.push_back(cur);
+        return tokens;
+    };
+
+    auto parse_stop_position = [&](const std::string& token, bool conic_mode, float& out_pos) -> bool {
+        std::string t = trim_copy(token);
+        if (t.empty()) return false;
+        if (!conic_mode) {
+            if (t.find('%') == std::string::npos) return false;
+            out_pos = parseFloat(t) / 100.0f;
+            return true;
+        }
+        if (t.find('%') != std::string::npos) {
+            out_pos = parseFloat(t) / 100.0f;
+            return true;
+        }
+        if (t.find("deg") != std::string::npos) {
+            out_pos = parseFloat(t) / 360.0f;
+            return true;
+        }
+        return false;
+    };
+
     for (size_t i = color_start; i < parts.size(); ++i) {
         GradientStop stop;
         const std::string& part = parts[i];
-        
-        size_t percent_pos = part.rfind('%');
-        size_t deg_pos = part.find("deg");
-        if (percent_pos != std::string::npos) {
-            // Find where position starts
-            size_t pos_start = part.rfind(' ', percent_pos);
-            if (pos_start != std::string::npos) {
-                stop.color = parseColor(part.substr(0, pos_start));
-                stop.position = parseFloat(part.substr(pos_start)) / 100.0f;
-            } else {
-                stop.position = parseFloat(part) / 100.0f;
+
+        const bool is_conic = (gradient.type == CSSGradient::Type::CONIC ||
+                               gradient.type == CSSGradient::Type::REPEATING_CONIC);
+        const auto tokens = split_space_outside_parens(part);
+
+        std::vector<float> positions;
+        int first_pos_token = static_cast<int>(tokens.size());
+        for (int t = static_cast<int>(tokens.size()) - 1; t >= 0; --t) {
+            float p = 0.0f;
+            if (!parse_stop_position(tokens[t], is_conic, p)) break;
+            positions.push_back(p);
+            first_pos_token = t;
+        }
+        std::reverse(positions.begin(), positions.end());
+
+        std::string color_part;
+        if (!tokens.empty() && first_pos_token > 0) {
+            for (int t = 0; t < first_pos_token; ++t) {
+                if (!color_part.empty()) color_part += " ";
+                color_part += tokens[t];
             }
-        } else if (deg_pos != std::string::npos &&
-                   (gradient.type == CSSGradient::Type::CONIC ||
-                    gradient.type == CSSGradient::Type::REPEATING_CONIC)) {
-            size_t pos_start = part.rfind(' ', deg_pos);
-            if (pos_start != std::string::npos) {
-                stop.color = parseColor(part.substr(0, pos_start));
-                stop.position = parseFloat(part.substr(pos_start)) / 360.0f;
-            } else {
-                stop.position = parseFloat(part) / 360.0f;
-            }
-        } else {
-            stop.color = parseColor(part);
+        } else if (positions.empty()) {
+            color_part = part;
+        }
+        color_part = trim_copy(color_part);
+
+        if (positions.empty()) {
+            stop.color = parseColor(color_part.empty() ? part : color_part);
             stop.position = auto_position;
             auto_position += auto_step;
+            if (stop.color.empty()) stop.color = part;
+            gradient.stops.push_back(stop);
+            continue;
         }
-        
-        if (stop.color.empty()) {
-            stop.color = part;
+
+        const std::string parsed_color = parseColor(color_part.empty() ? part : color_part);
+        const std::string final_color = parsed_color.empty() ? (color_part.empty() ? part : color_part) : parsed_color;
+        for (float p : positions) {
+            GradientStop s2;
+            s2.color = final_color;
+            s2.position = p;
+            gradient.stops.push_back(s2);
         }
-        
-        gradient.stops.push_back(stop);
     }
     
     return gradient;

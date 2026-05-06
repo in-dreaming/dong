@@ -232,6 +232,21 @@ const std::vector<std::string> kCJKFallbackFonts = {
 #endif
 };
 
+const std::vector<std::string> kEmojiFallbackFonts = {
+#if defined(__APPLE__) && defined(__MACH__)
+    "/System/Library/Fonts/Apple Color Emoji.ttc",
+    "/Library/Fonts/Apple Color Emoji.ttc",
+#elif defined(_WIN32) || defined(_WIN64)
+    "C:/Windows/Fonts/seguisym.ttf",   // Segoe UI Symbol
+    "C:/Windows/Fonts/seguiemj.ttf",   // Segoe UI Emoji (color glyphs may fallback to monochrome path)
+    "C:/Windows/Fonts/segoeuiemoji.ttf",
+#else
+    "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",
+    "/usr/share/fonts/noto/NotoColorEmoji.ttf",
+    "/usr/share/fonts/truetype/emoji/NotoColorEmoji.ttf",
+#endif
+};
+
 // Normalize CSS font-weight to numeric 100-900, unknown values fallback to 400
 int normalizeFontWeight(const std::string& css_weight) {
     std::string trimmed = trimWhitespace(css_weight);
@@ -709,6 +724,24 @@ const std::vector<std::string>& getCJKFallbackFonts() {
     }
 
     return cached_result;
+}
+
+const std::vector<std::string>& getEmojiFallbackFonts() {
+    static std::vector<std::string> existing_emoji_fonts;
+    static bool initialized = false;
+
+    if (!initialized) {
+        initialized = true;
+        namespace fs = std::filesystem;
+        for (const auto& font_path : kEmojiFallbackFonts) {
+            std::error_code ec;
+            if (fs::exists(font_path, ec) && !ec) {
+                existing_emoji_fonts.push_back(font_path);
+            }
+        }
+    }
+
+    return existing_emoji_fonts;
 }
 
 namespace {

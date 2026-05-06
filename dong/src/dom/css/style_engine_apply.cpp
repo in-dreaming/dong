@@ -240,8 +240,15 @@ void applyRuleFlexbox(const ComputedStyle& rs, ComputedStyle& computed) {
 }
 
 void applyRuleTransform(const ComputedStyle& rs, ComputedStyle& computed) {
-    if (rs.transform_translate_x != 0.0f) computed.transform_translate_x = rs.transform_translate_x;
-    if (rs.transform_translate_y != 0.0f) computed.transform_translate_y = rs.transform_translate_y;
+    const bool transform_explicit = rs.isExplicitlySet("transform");
+    if (transform_explicit || rs.transform_translate_x != 0.0f || rs.transform_translate_x_is_percent) {
+        computed.transform_translate_x = rs.transform_translate_x;
+        computed.transform_translate_x_is_percent = rs.transform_translate_x_is_percent;
+    }
+    if (transform_explicit || rs.transform_translate_y != 0.0f || rs.transform_translate_y_is_percent) {
+        computed.transform_translate_y = rs.transform_translate_y;
+        computed.transform_translate_y_is_percent = rs.transform_translate_y_is_percent;
+    }
     if (rs.transform_scale_x != 1.0f) computed.transform_scale_x = rs.transform_scale_x;
     if (rs.transform_scale_y != 1.0f) computed.transform_scale_y = rs.transform_scale_y;
     if (rs.transform_rotate != 0.0f) computed.transform_rotate = rs.transform_rotate;

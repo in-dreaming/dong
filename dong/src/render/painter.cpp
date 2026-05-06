@@ -1144,8 +1144,12 @@ void Painter::buildDisplayListNode(const dom::DOMNodePtr& node,
         
         const float sx = style.transform_scale_x;
         const float sy = style.transform_scale_y;
-        const float tx = style.transform_translate_x;
-        const float ty = style.transform_translate_y;
+        const float tx = style.transform_translate_x_is_percent
+                             ? layer_bounds.width * style.transform_translate_x / 100.0f
+                             : style.transform_translate_x;
+        const float ty = style.transform_translate_y_is_percent
+                             ? layer_bounds.height * style.transform_translate_y / 100.0f
+                             : style.transform_translate_y;
         const float angle_rad = style.transform_rotate * 3.14159265358979f / 180.0f;
         const float skew_x_rad = style.transform_skew_x * 3.14159265358979f / 180.0f;
         const float skew_y_rad = style.transform_skew_y * 3.14159265358979f / 180.0f;
@@ -2489,8 +2493,12 @@ LayerTransform Painter::computeLayerTransform(const dom::ComputedStyle& style,
 
     float sx = style.transform_scale_x;
     float sy = style.transform_scale_y;
-    float tx = style.transform_translate_x;
-    float ty = style.transform_translate_y;
+    float tx = style.transform_translate_x_is_percent
+                   ? layer_bounds.width * style.transform_translate_x / 100.0f
+                   : style.transform_translate_x;
+    float ty = style.transform_translate_y_is_percent
+                   ? layer_bounds.height * style.transform_translate_y / 100.0f
+                   : style.transform_translate_y;
     float angle_rad = style.transform_rotate * 3.14159265358979f / 180.0f;
     float skew_x_rad = style.transform_skew_x * 3.14159265358979f / 180.0f;
     float skew_y_rad = style.transform_skew_y * 3.14159265358979f / 180.0f;

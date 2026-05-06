@@ -278,6 +278,8 @@ struct ComputedStyle {
     // Transform
     float transform_translate_x = 0.0f;
     float transform_translate_y = 0.0f;
+    bool transform_translate_x_is_percent = false;
+    bool transform_translate_y_is_percent = false;
     float transform_scale_x = 1.0f;
     float transform_scale_y = 1.0f;
     float transform_rotate = 0.0f;

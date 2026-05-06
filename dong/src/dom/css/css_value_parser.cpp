@@ -596,6 +596,8 @@ void CSSParser::parseTransform(const std::string& value, ComputedStyle& style) {
     // Reset transform values
     style.transform_translate_x = 0.0f;
     style.transform_translate_y = 0.0f;
+    style.transform_translate_x_is_percent = false;
+    style.transform_translate_y_is_percent = false;
     style.transform_scale_x = 1.0f;
     style.transform_scale_y = 1.0f;
     style.transform_rotate = 0.0f;
@@ -637,17 +639,22 @@ void CSSParser::parseTransform(const std::string& value, ComputedStyle& style) {
             arg_parts.push_back(current);
         }
         
+        auto parse_translate_arg = [](const std::string& token, float& out_value, bool& out_is_percent) {
+            out_value = parseFloat(token);
+            out_is_percent = (token.find('%') != std::string::npos);
+        };
+
         if (func_name == "translate" || func_name == "translate3d") {
             if (!arg_parts.empty()) {
-                style.transform_translate_x = parseFloat(arg_parts[0]);
+                parse_translate_arg(arg_parts[0], style.transform_translate_x, style.transform_translate_x_is_percent);
                 if (arg_parts.size() > 1) {
-                    style.transform_translate_y = parseFloat(arg_parts[1]);
+                    parse_translate_arg(arg_parts[1], style.transform_translate_y, style.transform_translate_y_is_percent);
                 }
             }
         } else if (func_name == "translatex") {
-            style.transform_translate_x = parseFloat(args);
+            parse_translate_arg(args, style.transform_translate_x, style.transform_translate_x_is_percent);
         } else if (func_name == "translatey") {
-            style.transform_translate_y = parseFloat(args);
+            parse_translate_arg(args, style.transform_translate_y, style.transform_translate_y_is_percent);
         } else if (func_name == "scale" || func_name == "scale3d") {
             if (!arg_parts.empty()) {
                 float sx = parseFloat(arg_parts[0]);

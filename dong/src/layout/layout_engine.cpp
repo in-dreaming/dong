@@ -969,7 +969,71 @@ static float estimateShrinkToFitWidthFromText(const dom::DOMNodePtr& node) {
         }
     }
 
-    const float w = max_child_total + pad_l + pad_r + border_w * 2.0f;
+    // Prefer direct children's border-box widths when available (critical for
+    // abs/fixed width:auto flex containers like HUD bars).
+    float direct_children_total = 0.0f;
+    float direct_children_max = 0.0f;
+    int direct_children_count = 0;
+    const bool is_row_flex =
+        (style.layout_mode == dom::LayoutMode::Flex) &&
+        (style.flex_direction == dom::CSSFlexDirection::Row ||
+         style.flex_direction == dom::CSSFlexDirection::RowReverse);
+
+    auto child_border_box_width = [](const dom::ComputedStyle& cs) -> float {
+        float w = 0.0f;
+        if (cs.width.isPixel()) {
+            w = cs.width.value;
+            if (cs.box_sizing == dom::CSSBoxSizing::ContentBox) {
+                if (cs.padding_left.isPixel()) w += cs.padding_left.value;
+                if (cs.padding_right.isPixel()) w += cs.padding_right.value;
+                float bw = cs.border_width > 0.0f ? cs.border_width : 0.0f;
+                w += bw * 2.0f;
+            }
+        }
+        if (cs.min_width.isPixel() && cs.min_width.value > w) {
+            w = cs.min_width.value;
+        }
+        return (w > 0.0f && std::isfinite(w)) ? w : 0.0f;
+    };
+
+    for (const auto& ch : node->getChildren()) {
+        if (!ch || ch->getType() != dom::DOMNode::NodeType::ELEMENT) continue;
+        const auto& cs = ch->getComputedStyle();
+        if (cs.display == dom::CSSDisplay::None ||
+            cs.position == dom::CSSPosition::Absolute ||
+            cs.position == dom::CSSPosition::Fixed) {
+            continue;
+        }
+
+        float cw = child_border_box_width(cs);
+        if (cw <= 0.0f) {
+            cw = computeIntrinsicTextWidth(ch);
+        }
+        if (!(cw > 0.0f && std::isfinite(cw))) continue;
+
+        float ml = cs.margin_left.isPixel() ? cs.margin_left.value : 0.0f;
+        float mr = cs.margin_right.isPixel() ? cs.margin_right.value : 0.0f;
+        float child_total = cw + ml + mr;
+
+        direct_children_total += child_total;
+        direct_children_max = std::max(direct_children_max, child_total);
+        ++direct_children_count;
+    }
+
+    float children_preferred = 0.0f;
+    if (direct_children_count > 0) {
+        if (is_row_flex) {
+            children_preferred = direct_children_total;
+            if (style.gap > 0.0f && direct_children_count > 1) {
+                children_preferred += style.gap * static_cast<float>(direct_children_count - 1);
+            }
+        } else {
+            children_preferred = direct_children_max;
+        }
+    }
+
+    const float preferred_content_w = std::max(max_child_total, children_preferred);
+    const float w = preferred_content_w + pad_l + pad_r + border_w * 2.0f;
     return (w > 0.0f && std::isfinite(w)) ? w : 0.0f;
 }
 

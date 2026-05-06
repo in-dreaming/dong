@@ -228,6 +228,24 @@ float computeUnitsScale(uint32_t primary_units_per_em, uint32_t seg_units_per_em
     return static_cast<float>(primary_units_per_em) / static_cast<float>(seg_units_per_em);
 }
 
+uint32_t mapEmojiCodepointToOutlineFallback(uint32_t codepoint) {
+    // For engines without COLR/bitmap emoji rendering, map a few common emoji
+    // to outline-capable symbols so UI remains legible and interactive.
+    switch (codepoint) {
+        case 0x1F525: return 0x2668; // FIRE -> HOT SPRINGS
+        case 0x1F480: return 0x2620; // SKULL -> SKULL AND CROSSBONES
+        default: return codepoint;
+    }
+}
+
+bool hasOutlineGlyph(FT_Face face, FT_UInt glyph_id) {
+    if (!face || glyph_id == 0) return false;
+    if (FT_Load_Glyph(face, glyph_id, FT_LOAD_NO_BITMAP | FT_LOAD_NO_SCALE) != 0 || !face->glyph) {
+        return false;
+    }
+    return face->glyph->format == FT_GLYPH_FORMAT_OUTLINE;
+}
+
 uint32_t chooseGlyphIdForFreeType(CachedFontInfo* font_info, uint32_t hb_gid, uint32_t unicode_codepoint) {
     if (!font_info || !font_info->face) {
         return hb_gid;
@@ -236,8 +254,16 @@ uint32_t chooseGlyphIdForFreeType(CachedFontInfo* font_info, uint32_t hb_gid, ui
     uint32_t glyph_id = hb_gid;
 
     if (unicode_codepoint != 0) {
+        const uint32_t mapped = mapEmojiCodepointToOutlineFallback(unicode_codepoint);
+        if (mapped != unicode_codepoint) {
+            const FT_UInt mapped_gid = FT_Get_Char_Index(font_info->face, mapped);
+            if (mapped_gid != 0 && hasOutlineGlyph(font_info->face, mapped_gid)) {
+                glyph_id = static_cast<uint32_t>(mapped_gid);
+            }
+        }
+
         const FT_UInt ft_gid = FT_Get_Char_Index(font_info->face, unicode_codepoint);
-        if (ft_gid != 0) {
+        if (glyph_id == hb_gid && ft_gid != 0 && hasOutlineGlyph(font_info->face, ft_gid)) {
             glyph_id = static_cast<uint32_t>(ft_gid);
         }
     }
@@ -305,7 +331,7 @@ void appendHbGlyphRun(const std::string& text,
 
         const uint32_t unicode_codepoint = extractCodepoint(text, byte_start + info.cluster);
 
-        uint32_t glyph_id = info.codepoint;
+        uint32_t glyph_id = chooseGlyphIdForFreeType(font_info, info.codepoint, unicode_codepoint);
         const float x_offset_units = static_cast<float>(pos.x_offset) * units_scale;
         const float y_offset_units = static_cast<float>(pos.y_offset) * units_scale;
         const float y_advance_units = static_cast<float>(pos.y_advance) * units_scale;
@@ -314,7 +340,6 @@ void appendHbGlyphRun(const std::string& text,
         if (!use_ft_positions) {
             x_advance_units = static_cast<float>(pos.x_advance) * units_scale;
         } else {
-            glyph_id = chooseGlyphIdForFreeType(font_info, glyph_id, unicode_codepoint);
             x_advance_units = computeFreeTypeAdvanceXUnits(font_info, glyph_id, units_scale, dbg);
         }
 
@@ -570,8 +595,10 @@ bool TextShaper::shape(const TextShapeRequest& request, ShapedText& out_text) {
     float pen_x_units = 0.0f;
     float pen_y_units = 0.0f;
 
+    std::vector<std::string> fallback_fonts = getEmojiFallbackFonts();
     const std::vector<std::string>& cjk_fallbacks = getCJKFallbackFonts();
-    FontChooser chooser(primary_font_path, primary_font, cjk_fallbacks, out_text.font_paths);
+    fallback_fonts.insert(fallback_fonts.end(), cjk_fallbacks.begin(), cjk_fallbacks.end());
+    FontChooser chooser(primary_font_path, primary_font, fallback_fonts, out_text.font_paths);
 
     shapeByFontSegments(request.text, chooser, primary_font->units_per_em, pen_x_units, pen_y_units, out_text.glyphs, request.lang);
 

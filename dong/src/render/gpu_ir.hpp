@@ -299,8 +299,18 @@ public:
         };
 
         out.uber_instance_pool.clear();
+        bool has_mask_conic_apply = false;
+        for (const auto& it : dl.items) {
+            if (it.type == DisplayItemType::ApplyMaskConicGradient) {
+                has_mask_conic_apply = true;
+                break;
+            }
+        }
         const char* uber_env = std::getenv("DONG_DONT_USE_UBER_QUAD");
-        const bool emit_uber_batches = !uber_env || uber_env[0] != '0';
+        const bool uber_enabled_by_env = (!uber_env || uber_env[0] != '0');
+        // Mask-general path relies on isolated-layer-local coordinates. Temporarily
+        // bypass uber batching for those lists to avoid coordinate-space mismatch.
+        const bool emit_uber_batches = uber_enabled_by_env && !has_mask_conic_apply;
         size_t uber_pool_batch_start = 0;
 
         auto flush_uber_batch = [&]() {
