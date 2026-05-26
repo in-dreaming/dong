@@ -20,7 +20,7 @@ GPU-accelerated HTML/CSS UI engine for games and interactive applications.
 
 ## 快速开始
 
-前置条件：[Zig](https://ziglang.org/) 0.14+、CMake、Ninja、Python 3.10+（Windows 另需 Visual Studio Build Tools）。
+前置条件：[Zig](https://ziglang.org/) 0.16、CMake、Ninja、Python 3.10+（Windows 另需 Visual Studio Build Tools）。
 
 ```bash
 cd dong
