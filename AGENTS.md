@@ -2,6 +2,8 @@
 
 This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
 
+> **Documentation**: User-facing docs live in [`docs/`](../docs/). Maintainer docs in [`docs/developer/`](../docs/developer/). Human contributors see [`CONTRIBUTING.md`](../CONTRIBUTING.md).
+
 ## Project Overview
 
 **Dong** is a GPU-accelerated HTML/CSS rendering engine written in C++20, designed for embedding in games and interactive applications. It provides a complete web-like UI system with DOM, CSS styling, layout (Yoga), JavaScript (QuickJS), and hardware-accelerated rendering via SDL_GPU.
@@ -322,7 +324,7 @@ Dong supports modern CSS layout features with standards compliance:
 - Don't modify Yoga library itself
 - Maintain dependency purity
 
-See `doc/css_features.md` for detailed specifications and implementation notes.
+See `docs/reference/css-subset.md` for detailed specifications and implementation notes.
 
 ## List Styling
 
@@ -367,7 +369,7 @@ Dong supports CSS list styling properties and `::marker` pseudo-element for cust
 
 **Test cases**: `test_list_markers_basic.html`, `test_list_style_types.html`, `test_list_position.html`, `test_marker_pseudo.html`, `test_list_nested.html`, `test_ol_start.html`
 
-See `doc/css_features.md` for complete list system documentation.
+See `docs/reference/css-subset.md` for complete list system documentation.
 
 ## Form Elements
 
@@ -470,7 +472,7 @@ This project uses Document-Driven Development (DDD). For multi-file changes, use
 
 ## Refactoring Progress
 
-See `doc/重构遗留.md` for current refactoring status and TODO items.
+See [docs/developer/README.md](../docs/developer/README.md) for maintainer docs and Phase specs.
 
 ## Philosophy
 

@@ -37,4 +37,5 @@ dist/
 dong/.orchestration/
 dong/.worktrees/
 .mypy_cache/
+__pycache__/
 tmp/

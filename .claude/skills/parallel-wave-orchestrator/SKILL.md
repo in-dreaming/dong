@@ -4,7 +4,7 @@ description: >-
   Run one tick of the multi-feature scheduling loop: read state, advance
   finished/verified/approved/mergeable features, and dispatch new CLI workers
   bounded by Wave / group / concurrency rules from
-  doc/orchestration/dependency-matrix.md. Use this skill on every orchestrator
+  docs/developer/orchestration/dependency-matrix.md. Use this skill on every orchestrator
   tick instead of inlining the logic.
 ---
 
@@ -27,7 +27,7 @@ description: >-
 
 1. `dong/.orchestration/state-ledger.jsonl` 末尾增量。
 2. `dong/.orchestration/snapshots/state.json`。
-3. `doc/orchestration/dependency-matrix.md` § 2 / § 3 / § 5。
+3. `docs/developer/orchestration/dependency-matrix.md` § 2 / § 3 / § 5。
 4. `dong/.orchestration/config.json`（取 `MAX_PARALLEL_WORKERS` 等）。
 
 ## Tick Procedure
@@ -55,7 +55,7 @@ description: >-
 
 ### Step 4 · 报告 awaiting_review
 
-- 对每个 `awaiting_review` feature → 给用户输出标准摘要（见 [orchestrator-prompt § 3.5](../../doc/orchestration/orchestrator-prompt.md#35-review)）。
+- 对每个 `awaiting_review` feature → 给用户输出标准摘要（见 [orchestrator-prompt § 3.5](../../docs/developer/orchestration/orchestrator-prompt.md#35-review)）。
 - **不自动批准**（除非用户启动时 `auto_approve_soft_pass=true` 且 hard+soft 全过）。
 - 等用户 `approve` / `reject <reason>` / `hold` 之一。
 

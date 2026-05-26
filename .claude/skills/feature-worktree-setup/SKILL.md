@@ -4,7 +4,7 @@ description: >-
   Prepare an isolated git worktree + feature branch from `dev_next` (or a
   declared upstream feature), seed the task folder with the spec, and emit the
   ledger events. Use when the orchestrator wants to start a new feature in
-  the multi-cli parallel pipeline (see doc/orchestration/orchestrator-prompt.md).
+  the multi-cli parallel pipeline (see docs/developer/orchestration/orchestrator-prompt.md).
 ---
 
 # Feature Worktree Setup
@@ -19,7 +19,7 @@ description: >-
 |---|---|---|
 | `feature_id` | ✓ | 例 `P0-1` |
 | `slug` | ✓ | kebab-case，例 `uber-quad` |
-| `spec_path` | ✓ | 例 `doc/phase0/P0-1_uber_quad_pipeline.md` |
+| `spec_path` | ✓ | 例 `docs/developer/phase0/P0-1_uber_quad_pipeline.md` |
 | `groups[]` | ✓ | 来自 dependency-matrix § 2.3，例 `["render-core"]` |
 | `upstream[]` |   | 已 merge 的 feature id 列表（不影响 base，仅记录） |
 | `base_ref` |   | 默认 `dev_next` |

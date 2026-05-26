@@ -73,7 +73,7 @@ verify:
      - 简单运算符：`>= <= == != > <`，左侧支持 `.` 路径，右侧字面量数值。
    - 超时按 `timeout_sec` 杀进程，记 `timed_out: true`。
 4. **跑 soft 规则**（同上，失败不阻塞）。
-5. **写报告**（路径 `reports/<id>/verify_<ts>.json` 与 `.md`，结构见 [state-ledger-schema § 6](../../doc/orchestration/state-ledger-schema.md#6-报告产物-reportsfeature)）。
+5. **写报告**（路径 `reports/<id>/verify_<ts>.json` 与 `.md`，结构见 [state-ledger-schema § 6](../../docs/developer/orchestration/state-ledger-schema.md#6-报告产物-reportsfeature)）。
 6. **判定**：
    - `hard_pass = 全部 hard 规则 passed=true`（**且**至少存在一条 hard 规则；否则 `hard_pass=false`）。
    - `soft_pass = 全部 soft 规则 passed=true`。

@@ -101,14 +101,14 @@ placeholder：
    - 你的最终交付 = 一组本地 commit（逻辑切分），分支已就位。
    - 必须满足 spec 的 § 5 验收（Hard 全过；Soft 尽量过）。
    - 若与 spec 矛盾，先在 .task/notes.md 记原因，再选最接近 spec 意图的实现。
-   - 不要修改 doc/orchestration/、doc/phase*/ 下任何文件。
+   - 不要修改 docs/developer/orchestration/、docs/developer/phase*/ 下任何文件。
 
    ## 必读文档
 
    1. .task/spec.md            ← 你的 spec
    2. CLAUDE.md / AGENTS.md    ← 项目约定
-   3. doc/positioning.md
-   4. doc/perf_budget.md       ← 性能门槛
+   3. docs/overview/positioning.md
+   4. docs/developer/perf-budget.md       ← 性能门槛
    {extra_context}
 
    ## 工作流建议

@@ -45,7 +45,7 @@ JSX components → esbuild bundle (IIFE) → <script src="bundle.js">
                                    Yoga Layout → GPU Render
 ```
 
-See `doc/arch/react.md` for the full architecture document.
+See `docs/developer/arch/react.md` for the full architecture document.
 
 ## Examples
 

@@ -17,7 +17,7 @@ description: >-
 
 - 主账本：`dong/.orchestration/state-ledger.jsonl`（append-only JSONL）
 - 快照：`dong/.orchestration/snapshots/state.json`（reducer 输出）
-- Schema 详见：[`doc/orchestration/state-ledger-schema.md`](../../doc/orchestration/state-ledger-schema.md)
+- Schema 详见：[`docs/developer/orchestration/state-ledger-schema.md`](../../docs/developer/orchestration/state-ledger-schema.md)
 
 ## API（本 skill 提供给其他 skill 的概念性接口）
 
@@ -64,7 +64,7 @@ skill 自动注入：
 
 ### `reduce(events) → state`
 
-reducer 规则严格按 [schema § 3](../../doc/orchestration/state-ledger-schema.md#3-状态机)。输出：
+reducer 规则严格按 [schema § 3](../../docs/developer/orchestration/state-ledger-schema.md#3-状态机)。输出：
 
 ```json
 {
@@ -75,7 +75,7 @@ reducer 规则严格按 [schema § 3](../../doc/orchestration/state-ledger-schem
       "worktree": "dong/.worktrees/P0-1",
       "groups": ["render-core"],
       "upstream": [],
-      "spec_path": "doc/phase0/P0-1_uber_quad_pipeline.md",
+      "spec_path": "docs/developer/phase0/P0-1_uber_quad_pipeline.md",
       "retry_count": 0,
       "last_event_idx": 1281,
       "started_at": "2026-04-15T08:00:00Z",

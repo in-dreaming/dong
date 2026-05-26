@@ -4,7 +4,7 @@ Dong Multi-Feature Orchestrator CLI (`orch`)
 
 Concrete implementation of the skills in .claude/skills/orchestration-*/, 
 feature-worktree-setup/, feature-cli-dispatch/, feature-verify/, feature-merge-back/,
-and parallel-wave-orchestrator/. See doc/orchestration/README.md.
+and parallel-wave-orchestrator/. See docs/developer/orchestration/README.md.
 
 Usage:
     python dong/scripts/orch.py <subcommand> [args]
@@ -71,38 +71,38 @@ SCHEMA_VERSION = 1
 # Each feature: (id, slug, spec_path, groups, upstream, wave, est_weeks)
 FEATURES: List[Dict[str, Any]] = [
     # Phase 0
-    dict(id="P0-1", slug="uber-quad",       spec="doc/phase0/P0-1_uber_quad_pipeline.md",       groups=["render-core"],                upstream=[],                          wave=0, weeks=3),
-    dict(id="P0-2", slug="nineslice-panel", spec="doc/phase0/P0-2_nineslice_panel.md",           groups=["render-core"],                upstream=["P0-1"],                    wave=1, weeks=1),
-    dict(id="P0-3", slug="mask-conic",      spec="doc/phase0/P0-3_mask_and_conic_gradient.md",   groups=["render-core"],                upstream=["P0-1"],                    wave=1, weeks=2),
-    dict(id="P0-4", slug="gamepad-nav",     spec="doc/phase0/P0-4_gamepad_spatial_navigation.md",groups=["input"],                      upstream=[],                          wave=0, weeks=2),
-    dict(id="P0-5", slug="ime",             spec="doc/phase0/P0-5_ime_composition.md",           groups=["input"],                      upstream=[],                          wave=0, weeks=1.5),
-    dict(id="P0-6", slug="damage-rect",     spec="doc/phase0/P0-6_partial_damage_rect.md",       groups=["render-core", "layout-core"], upstream=["P0-1"],                    wave=2, weeks=3),
-    dict(id="P0-7", slug="perf-baseline",   spec="doc/phase0/P0-7_perf_baseline.md",             groups=["tools"],                      upstream=[],                          wave=0, weeks=1.5),
-    dict(id="P0-8", slug="gap-p0",          spec="doc/phase0/P0-8_gap_analysis_p0_cleanup.md",   groups=["dom-scatter"],                upstream=[],                          wave=0, weeks=2),
+    dict(id="P0-1", slug="uber-quad",       spec="docs/developer/phase0/P0-1_uber_quad_pipeline.md",       groups=["render-core"],                upstream=[],                          wave=0, weeks=3),
+    dict(id="P0-2", slug="nineslice-panel", spec="docs/developer/phase0/P0-2_nineslice_panel.md",           groups=["render-core"],                upstream=["P0-1"],                    wave=1, weeks=1),
+    dict(id="P0-3", slug="mask-conic",      spec="docs/developer/phase0/P0-3_mask_and_conic_gradient.md",   groups=["render-core"],                upstream=["P0-1"],                    wave=1, weeks=2),
+    dict(id="P0-4", slug="gamepad-nav",     spec="docs/developer/phase0/P0-4_gamepad_spatial_navigation.md",groups=["input"],                      upstream=[],                          wave=0, weeks=2),
+    dict(id="P0-5", slug="ime",             spec="docs/developer/phase0/P0-5_ime_composition.md",           groups=["input"],                      upstream=[],                          wave=0, weeks=1.5),
+    dict(id="P0-6", slug="damage-rect",     spec="docs/developer/phase0/P0-6_partial_damage_rect.md",       groups=["render-core", "layout-core"], upstream=["P0-1"],                    wave=2, weeks=3),
+    dict(id="P0-7", slug="perf-baseline",   spec="docs/developer/phase0/P0-7_perf_baseline.md",             groups=["tools"],                      upstream=[],                          wave=0, weeks=1.5),
+    dict(id="P0-8", slug="gap-p0",          spec="docs/developer/phase0/P0-8_gap_analysis_p0_cleanup.md",   groups=["dom-scatter"],                upstream=[],                          wave=0, weeks=2),
     # Phase 1
-    dict(id="P1-1", slug="drawlist-abi",    spec="doc/phase1/P1-1_drawlist_c_abi.md",            groups=["render-core", "abi"],         upstream=["P0-1","P0-2","P0-3","P0-6"],wave=2, weeks=4),
-    dict(id="P1-2", slug="host-view",       spec="doc/phase1/P1-2_host_view_embed.md",           groups=["abi", "appcore"],             upstream=["P1-1"],                    wave=3, weeks=3),
-    dict(id="P1-3", slug="devtools",        spec="doc/phase1/P1-3_devtools_v1.md",               groups=["appcore"],                    upstream=["P0-6","P0-7"],             wave=3, weeks=4),
-    dict(id="P1-4", slug="live-reload",     spec="doc/phase1/P1-4_live_reload.md",               groups=["appcore"],                    upstream=[],                          wave=0, weeks=2),
-    dict(id="P1-5", slug="css-grid",        spec="doc/phase1/P1-5_css_grid_subset.md",           groups=["layout"],                     upstream=[],                          wave=1, weeks=4),
-    dict(id="P1-6", slug="hdr",             spec="doc/phase1/P1-6_hdr_output.md",                groups=["render-core"],                upstream=[],                          wave=1, weeks=2),
-    dict(id="P1-7", slug="js-bench",        spec="doc/phase1/P1-7_js_engine_benchmark.md",       groups=["tools-readonly"],             upstream=[],                          wave=0, weeks=2),
-    dict(id="P1-8", slug="async-layout",    spec="doc/phase1/P1-8_async_layout_shaping.md",      groups=["layout", "script"],           upstream=["P0-6"],                    wave=2, weeks=4),
-    dict(id="P1-9", slug="gap-p1",          spec="doc/phase1/P1-9_gap_analysis_p1_cleanup.md",   groups=["dom-scatter"],                upstream=[],                          wave=1, weeks=4),
+    dict(id="P1-1", slug="drawlist-abi",    spec="docs/developer/phase1/P1-1_drawlist_c_abi.md",            groups=["render-core", "abi"],         upstream=["P0-1","P0-2","P0-3","P0-6"],wave=2, weeks=4),
+    dict(id="P1-2", slug="host-view",       spec="docs/developer/phase1/P1-2_host_view_embed.md",           groups=["abi", "appcore"],             upstream=["P1-1"],                    wave=3, weeks=3),
+    dict(id="P1-3", slug="devtools",        spec="docs/developer/phase1/P1-3_devtools_v1.md",               groups=["appcore"],                    upstream=["P0-6","P0-7"],             wave=3, weeks=4),
+    dict(id="P1-4", slug="live-reload",     spec="docs/developer/phase1/P1-4_live_reload.md",               groups=["appcore"],                    upstream=[],                          wave=0, weeks=2),
+    dict(id="P1-5", slug="css-grid",        spec="docs/developer/phase1/P1-5_css_grid_subset.md",           groups=["layout"],                     upstream=[],                          wave=1, weeks=4),
+    dict(id="P1-6", slug="hdr",             spec="docs/developer/phase1/P1-6_hdr_output.md",                groups=["render-core"],                upstream=[],                          wave=1, weeks=2),
+    dict(id="P1-7", slug="js-bench",        spec="docs/developer/phase1/P1-7_js_engine_benchmark.md",       groups=["tools-readonly"],             upstream=[],                          wave=0, weeks=2),
+    dict(id="P1-8", slug="async-layout",    spec="docs/developer/phase1/P1-8_async_layout_shaping.md",      groups=["layout", "script"],           upstream=["P0-6"],                    wave=2, weeks=4),
+    dict(id="P1-9", slug="gap-p1",          spec="docs/developer/phase1/P1-9_gap_analysis_p1_cleanup.md",   groups=["dom-scatter"],                upstream=[],                          wave=1, weeks=4),
     # Phase 2
-    dict(id="P2-1", slug="world-text",      spec="doc/phase2/P2-1_world_text.md",                groups=["render-3d"],                  upstream=["P0-1","P1-1"],             wave=4, weeks=3),
-    dict(id="P2-2", slug="decal",           spec="doc/phase2/P2-2_decal.md",                     groups=["render-3d"],                  upstream=[],                          wave=4, weeks=3),
-    dict(id="P2-3", slug="world-overlay",   spec="doc/phase2/P2-3_world_overlay.md",             groups=["render-3d", "appcore"],       upstream=["P1-2"],                    wave=5, weeks=3),
-    dict(id="P2-4", slug="lottie-rive",     spec="doc/phase2/P2-4_lottie_rive.md",               groups=["render", "vector"],           upstream=[],                          wave=4, weeks=4),
-    dict(id="P2-5", slug="dong-ui",         spec="doc/phase2/P2-5_dong_ui_library.md",           groups=["js-tooling"],                 upstream=["P0-3","P0-4","P2-1"],      wave=5, weeks=8),
-    dict(id="P2-6", slug="ts-npm",          spec="doc/phase2/P2-6_typescript_npm.md",            groups=["js-tooling"],                 upstream=["P1-1"],                    wave=3, weeks=3),
-    dict(id="P2-7", slug="visual-editor",   spec="doc/phase2/P2-7_visual_editor.md",             groups=["appcore", "js-tooling"],      upstream=["P1-3","P1-4","P2-5"],      wave=6, weeks=6),
-    dict(id="P2-8", slug="dpkg",            spec="doc/phase2/P2-8_dpkg_resource_pack.md",        groups=["tooling"],                    upstream=[],                          wave=4, weeks=4),
-    dict(id="P2-9", slug="async-default",   spec="doc/phase2/P2-9_async_default_on.md",          groups=["layout", "script"],           upstream=["P1-8"],                    wave=5, weeks=1),  # has observe window
-    dict(id="P2-10",slug="gap-p2",          spec="doc/phase2/P2-10_gap_analysis_p2_cleanup.md",  groups=["dom-scatter"],                upstream=[],                          wave=4, weeks=6),
+    dict(id="P2-1", slug="world-text",      spec="docs/developer/phase2/P2-1_world_text.md",                groups=["render-3d"],                  upstream=["P0-1","P1-1"],             wave=4, weeks=3),
+    dict(id="P2-2", slug="decal",           spec="docs/developer/phase2/P2-2_decal.md",                     groups=["render-3d"],                  upstream=[],                          wave=4, weeks=3),
+    dict(id="P2-3", slug="world-overlay",   spec="docs/developer/phase2/P2-3_world_overlay.md",             groups=["render-3d", "appcore"],       upstream=["P1-2"],                    wave=5, weeks=3),
+    dict(id="P2-4", slug="lottie-rive",     spec="docs/developer/phase2/P2-4_lottie_rive.md",               groups=["render", "vector"],           upstream=[],                          wave=4, weeks=4),
+    dict(id="P2-5", slug="dong-ui",         spec="docs/developer/phase2/P2-5_dong_ui_library.md",           groups=["js-tooling"],                 upstream=["P0-3","P0-4","P2-1"],      wave=5, weeks=8),
+    dict(id="P2-6", slug="ts-npm",          spec="docs/developer/phase2/P2-6_typescript_npm.md",            groups=["js-tooling"],                 upstream=["P1-1"],                    wave=3, weeks=3),
+    dict(id="P2-7", slug="visual-editor",   spec="docs/developer/phase2/P2-7_visual_editor.md",             groups=["appcore", "js-tooling"],      upstream=["P1-3","P1-4","P2-5"],      wave=6, weeks=6),
+    dict(id="P2-8", slug="dpkg",            spec="docs/developer/phase2/P2-8_dpkg_resource_pack.md",        groups=["tooling"],                    upstream=[],                          wave=4, weeks=4),
+    dict(id="P2-9", slug="async-default",   spec="docs/developer/phase2/P2-9_async_default_on.md",          groups=["layout", "script"],           upstream=["P1-8"],                    wave=5, weeks=1),  # has observe window
+    dict(id="P2-10",slug="gap-p2",          spec="docs/developer/phase2/P2-10_gap_analysis_p2_cleanup.md",  groups=["dom-scatter"],                upstream=[],                          wave=4, weeks=6),
 ]
 
-# R (hard-conflict) vs Y (rebase-conflict) vs G (free) — source of truth: doc/orchestration/dependency-matrix.md
+# R (hard-conflict) vs Y (rebase-conflict) vs G (free) — source of truth: docs/developer/orchestration/dependency-matrix.md
 GROUP_CONFLICT: Dict[str, str] = {
     "render-core":  "R",
     "layout-core":  "R",
@@ -733,14 +733,14 @@ def render_prompt_md(feature_id: str, meta: Dict[str, Any], retry_feedback: Opti
         - 你的最终交付 = 一组本地 commit（逻辑切分），分支已就位。
         - 必须满足 spec 的 § 5 验收（Hard 全过；Soft 尽量过）。
         - 若与 spec 矛盾，先在 .task/notes.md 记原因，再选最接近 spec 意图的实现。
-        - 不要修改 doc/orchestration/、doc/phase*/ 下任何文件。
+        - 不要修改 docs/developer/orchestration/、docs/developer/phase*/ 下任何文件。
 
         ## 必读文档
 
         1. .task/spec.md
         2. CLAUDE.md / AGENTS.md
-        3. doc/positioning.md
-        4. doc/perf_budget.md
+        3. docs/overview/positioning.md
+        4. docs/developer/perf-budget.md
         {extra}
         ## 工作流建议
 
@@ -1118,7 +1118,7 @@ def skill_verify(feature_id: str, mode: str = "full") -> Dict[str, Any]:
             "duration_sec": 0,
             "error": (
                 "Spec §5 must include a fenced ```yaml verify:``` with at least one `hard:` entry and `cmd`. "
-                "See doc/orchestration/README.md § merged vs delivery."
+                "See docs/developer/orchestration/README.md § merged vs delivery."
             ),
         })
 
