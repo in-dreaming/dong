@@ -1,4 +1,5 @@
 #include "quickjs_compat.h"
+#include "js_bindings.hpp"
 #include "../render/text_layout_core.hpp"
 #include "../render/overlay_draw.hpp"
 #include "../render/text_shaper.hpp"
@@ -47,6 +48,15 @@ static double jsNum(JSContext* ctx, JSValueConst obj, const char* key, double fa
 static int64_t jsArrLen(JSContext* ctx, JSValueConst arr) {
     JSValue v = JS_GetPropertyStr(ctx, arr, "length");
     int64_t n = 0; JS_ToInt64(ctx, &n, v); JS_FreeValue(ctx, v); return n;
+}
+
+static render::OverlayDraw& resolveOverlayDraw(JSContext* ctx) {
+    auto* bindings = static_cast<JSBindings*>(JS_GetContextOpaque(ctx));
+    if (bindings && bindings->overlay_draw_) {
+        return *bindings->overlay_draw_;
+    }
+    // Fallback for legacy contexts that don't wire per-view storage.
+    return render::OverlayDraw::instance();
 }
 
 // Horizontal interval
@@ -232,7 +242,7 @@ static JSValue js_dong_textLayout(JSContext* ctx, JSValueConst, int argc, JSValu
 
 // dong.clearOverlay() — clear all direct-draw items
 static JSValue js_dong_clearOverlay(JSContext* ctx, JSValueConst, int, JSValueConst*) {
-    render::OverlayDraw::instance().clear();
+    resolveOverlayDraw(ctx).clear();
     return JS_UNDEFINED;
 }
 
@@ -353,7 +363,7 @@ static JSValue js_dong_renderText(JSContext* ctx, JSValueConst, int argc, JSValu
 
     if (!merged.glyphs.empty()) {
         merged.rect = {min_x, min_y, max_x - min_x, max_y - min_y};
-        auto& overlay = render::OverlayDraw::instance();
+        auto& overlay = resolveOverlayDraw(ctx);
         overlay.addGlyphRun(std::move(merged));
     }
 
@@ -373,7 +383,7 @@ static JSValue js_dong_drawRect(JSContext* ctx, JSValueConst, int argc, JSValueC
     float radius = (float)jsNum(ctx, cfg, "radius", 0);
     float strokeWidth = (float)jsNum(ctx, cfg, "strokeWidth", 0);
 
-    auto& overlay = render::OverlayDraw::instance();
+    auto& overlay = resolveOverlayDraw(ctx);
     if (radius > 0.01f || strokeWidth > 0.01f) {
         overlay.addRoundedRect({x, y, w, h}, color, radius, strokeWidth);
     } else {
@@ -393,7 +403,7 @@ static JSValue js_dong_drawCircle(JSContext* ctx, JSValueConst, int argc, JSValu
     render::Color color = parseHexColor(jsStr(ctx, cfg, "color", "#ffffff"));
     float strokeWidth = (float)jsNum(ctx, cfg, "strokeWidth", 0);
 
-    render::OverlayDraw::instance().addCircle(cx, cy, r, color, strokeWidth);
+    resolveOverlayDraw(ctx).addCircle(cx, cy, r, color, strokeWidth);
     return JS_UNDEFINED;
 }
 

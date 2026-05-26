@@ -90,6 +90,14 @@ static void copy_string(char* dst, size_t dst_size, const char* src) {
     dst[n] = 0;
 }
 
+static int html_uses_overlay_api(const char* html) {
+    if (!html || !html[0]) return 0;
+    return (strstr(html, "dong.clearOverlay") != NULL) ||
+           (strstr(html, "dong.renderText") != NULL) ||
+           (strstr(html, "dong.drawRect") != NULL) ||
+           (strstr(html, "dong.drawCircle") != NULL);
+}
+
 static void extract_dir_from_path(const char* path, char* out_dir, size_t out_size) {
     if (!out_dir || out_size == 0) return;
     out_dir[0] = 0;
@@ -175,6 +183,7 @@ struct dong_screen3d_t {
     int32_t mouse_y;
 
     int is_video;
+    int uses_overlay_api;
     double next_update_time;
 
     // Dirty flag for optimization - only re-render when content changes
@@ -820,6 +829,7 @@ DONG_APPCORE_API dong_screen3d_t* dong_scene3d_add_screen(dong_scene3d_t* scene,
         if (buf && size > 0) {
             if (dong_engine_load_html(screen->engine, buf) == DONG_OK) {
                 printf("[Scene3D] Loaded screen: %s (%ux%u)\n", full_path, screen->tex_width, screen->tex_height);
+                screen->uses_overlay_api = html_uses_overlay_api(buf);
             }
         } else {
             printf("[Scene3D] Warning: Failed to open %s\n", full_path);
@@ -830,6 +840,7 @@ DONG_APPCORE_API dong_screen3d_t* dong_scene3d_add_screen(dong_scene3d_t* scene,
             set_screen_resource_root(screen, base_root);
         }
         (void)dong_engine_load_html(screen->engine, config->html_content);
+        screen->uses_overlay_api = html_uses_overlay_api(config->html_content);
         copy_string(screen->debug_name, sizeof(screen->debug_name), "inline");
     }
 
@@ -1692,6 +1703,7 @@ static float get_screen_distance_sq(dong_scene3d_t* scene, dong_screen3d_t* scr)
 static void mark_screen_updated(dong_screen3d_t* scr,
                                 double now_sec,
                                 double video_interval,
+                                double overlay_interval,
                                 double static_refresh_interval,
                                 int consume_warmup) {
     if (!scr) return;
@@ -1699,7 +1711,10 @@ static void mark_screen_updated(dong_screen3d_t* scr,
     if (consume_warmup && scr->warmup_updates_remaining > 0) {
         scr->warmup_updates_remaining -= 1;
     }
-    scr->next_update_time = now_sec + (scr->is_video ? video_interval : static_refresh_interval);
+    const double interval = scr->is_video
+        ? video_interval
+        : (scr->uses_overlay_api ? overlay_interval : static_refresh_interval);
+    scr->next_update_time = now_sec + interval;
 }
 
 static int update_screens_scheduled(dong_scene3d_t* scene) {
@@ -1711,6 +1726,9 @@ static int update_screens_scheduled(dong_scene3d_t* scene) {
     const int video_tick_hz = env_i32_or_default("DONG_SCENE3D_VIDEO_TICK_HZ", 60);
     const int vhz = (video_tick_hz < 15) ? 15 : (video_tick_hz > 120 ? 120 : video_tick_hz);
     const double video_interval = 1.0 / (double)vhz;
+    const int overlay_tick_hz = env_i32_or_default("DONG_SCENE3D_OVERLAY_TICK_HZ", 30);
+    const int ohz = (overlay_tick_hz < 1) ? 1 : (overlay_tick_hz > 120 ? 120 : overlay_tick_hz);
+    const double overlay_interval = 1.0 / (double)ohz;
     // Background offscreen updates (non-hover/non-focus): was hard-coded to 1, which starves
     // multi-video scenes (each screen only got ~1/N of frames). Increase default; tune down if needed.
     const int max_bg_updates = env_i32_or_default("DONG_SCENE3D_MAX_BACKGROUND_UPDATES_PER_FRAME", 8);
@@ -1746,7 +1764,7 @@ static int update_screens_scheduled(dong_scene3d_t* scene) {
             if (update_screen_texture(scene, i)) {
                 ++updates_total;
                 scr->warmup_updates_remaining = warmup_extra_updates;
-                mark_screen_updated(scr, now_sec, video_interval, static_refresh_interval, 0);
+                mark_screen_updated(scr, now_sec, video_interval, overlay_interval, static_refresh_interval, 0);
             }
         }
         scene->initial_full_update_done = 1;
@@ -1760,7 +1778,7 @@ static int update_screens_scheduled(dong_scene3d_t* scene) {
         dong_screen3d_t* scr = scene->screens[scene->hovered_idx];
         if (scr && (scr->dirty || scr->warmup_updates_remaining > 0 || now_sec >= scr->next_update_time)) {
             if (update_screen_texture(scene, scene->hovered_idx)) {
-                mark_screen_updated(scr, now_sec, video_interval, static_refresh_interval, 1);
+                mark_screen_updated(scr, now_sec, video_interval, overlay_interval, static_refresh_interval, 1);
                 updates_this_frame++;
             }
         }
@@ -1771,7 +1789,7 @@ static int update_screens_scheduled(dong_scene3d_t* scene) {
         dong_screen3d_t* scr = scene->screens[scene->focused_idx];
         if (scr && (scr->dirty || scr->warmup_updates_remaining > 0 || now_sec >= scr->next_update_time)) {
             if (update_screen_texture(scene, scene->focused_idx)) {
-                mark_screen_updated(scr, now_sec, video_interval, static_refresh_interval, 1);
+                mark_screen_updated(scr, now_sec, video_interval, overlay_interval, static_refresh_interval, 1);
                 updates_this_frame++;
             }
         }
@@ -1793,7 +1811,7 @@ static int update_screens_scheduled(dong_scene3d_t* scene) {
 
         if (scr->warmup_updates_remaining > 0 || now_sec >= scr->next_update_time) {
             if (update_screen_texture(scene, i)) {
-                mark_screen_updated(scr, now_sec, video_interval, static_refresh_interval, 1);
+                mark_screen_updated(scr, now_sec, video_interval, overlay_interval, static_refresh_interval, 1);
                 updates_this_frame++;
             }
         }
@@ -1813,7 +1831,7 @@ static int update_screens_scheduled(dong_scene3d_t* scene) {
 
             if (scr->dirty || scr->warmup_updates_remaining > 0 || now_sec >= scr->next_update_time) {
                 if (update_screen_texture(scene, idx)) {
-                    mark_screen_updated(scr, now_sec, video_interval, static_refresh_interval, 1);
+                    mark_screen_updated(scr, now_sec, video_interval, overlay_interval, static_refresh_interval, 1);
                     updates_this_frame++;
                 }
             }

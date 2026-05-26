@@ -14,6 +14,8 @@ namespace dong::render {
 //   dong.drawCircle({cx, cy, r, color, strokeWidth?, strokeColor?})
 class OverlayDraw {
 public:
+    OverlayDraw() = default;
+
     static OverlayDraw& instance() {
         static OverlayDraw inst;
         return inst;
@@ -62,7 +64,6 @@ public:
     bool empty() const { return items_.empty(); }
 
 private:
-    OverlayDraw() = default;
     std::vector<DisplayItem> items_;
     bool dirty_ = false;
 };

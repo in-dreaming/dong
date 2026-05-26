@@ -464,6 +464,7 @@ struct EngineView::Impl {
     std::unique_ptr<dong::script::ScriptEngine> owned_script_engine;  // null when sharing
     dong::script::ScriptEngine* script_engine = nullptr;              // always valid
     std::unique_ptr<dong::script::JSBindings> js_bindings;
+    dong::render::OverlayDraw overlay_draw;
 
     // P1-3: DevTools overlay
     dong::devtools::DevToolsOverlay devtools_overlay;
@@ -633,6 +634,7 @@ struct EngineView::Impl {
               focus_manager.get())) {
         selection = std::make_unique<dong::dom::Selection>();
         js_bindings->selection_ = selection.get();
+        js_bindings->overlay_draw_ = &overlay_draw;
         focus_manager->setEventDispatcher(event_dispatcher.get());
         activateViewContext();
         ctx.initialize();
@@ -659,6 +661,7 @@ struct EngineView::Impl {
               focus_manager.get())) {
         selection = std::make_unique<dong::dom::Selection>();
         js_bindings->selection_ = selection.get();
+        js_bindings->overlay_draw_ = &overlay_draw;
         focus_manager->setEventDispatcher(event_dispatcher.get());
         activateViewContext();
         ctx.initialize();
@@ -1265,8 +1268,10 @@ struct EngineView::Impl {
                 vs.needs_upload = false;
                 if (vs.node && vs.node->getAttribute("__dong_video_frame").empty()) {
                     vs.node->setAttribute("__dong_video_frame", vs.frame_key);
-                    invalidate(InvalidationKind::Paint, nullptr, "video_frame");
                 }
+                // Video frames are time-varying content: force a paint invalidation on each
+                // successful upload so single-view dong_app keeps presenting without input.
+                invalidate(InvalidationKind::Paint, nullptr, "video_frame");
                 if (vs.node && cached_cmd_list) {
                     const uint64_t layer_id = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(vs.node.get()));
                     markIsolatedLayerDirtyFlags(*cached_cmd_list, layer_id);
@@ -2204,7 +2209,7 @@ struct EngineView::Impl {
     void tickGenerateCommandsIfNeeded() {
         commands_regenerated_this_tick_ = false;
         const bool gpu_ready = true;
-        auto& overlay = dong::render::OverlayDraw::instance();
+        auto& overlay = overlay_draw;
         auto& sg = dong::getSceneGraph();
 
         bool overlay_dirty = overlay.isDirty();
@@ -2336,9 +2341,11 @@ struct EngineView::Impl {
         commands_regenerated_this_tick_ = true;
     }
 
+    bool video_uploaded_this_tick_ = false;
+
     void tickUploadVideoFramesIfNeeded() {
         if (!use_gpu) return;
-        (void)uploadPendingVideoFrames();
+        video_uploaded_this_tick_ = uploadPendingVideoFrames();
     }
 
     uint32_t idle_frame_count_ = 0;
@@ -2353,7 +2360,7 @@ struct EngineView::Impl {
             return;
         }
 
-        if (commands_regenerated_this_tick_) {
+        if (commands_regenerated_this_tick_ || video_uploaded_this_tick_) {
             DONG_LOG_DEBUG("[tick] Executing %zu GPU commands", cached_cmd_list->commands.size());
             DONG_PROFILE_SCOPE_CAT("GPU::execute", "render");
             (void)dong_gpu_execute(driver, cached_cmd_list.get());

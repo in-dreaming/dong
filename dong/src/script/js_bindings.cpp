@@ -2095,6 +2095,20 @@ static JSValue elem_blur(JSContext* ctx, JSValueConst this_val, int argc, JSValu
     return JS_UNDEFINED;
 }
 
+static std::string normalizeListenerType(std::string type) {
+    if (type.empty() || type == "DOMContentLoaded") {
+        return type;
+    }
+    unsigned char first = static_cast<unsigned char>(type.front());
+    if (!std::isupper(first)) {
+        return type;
+    }
+    std::transform(type.begin(), type.end(), type.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    return type;
+}
+
 static JSValue elem_addEventListener(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     if (argc < 2) return JS_UNDEFINED;
 
@@ -2124,7 +2138,7 @@ static JSValue elem_addEventListener(JSContext* ctx, JSValueConst this_val, int 
 
     auto bindings = getBindingsFromContext(ctx);
     if (bindings) {
-        std::string type_str(type_cstr);
+        std::string type_str = normalizeListenerType(std::string(type_cstr));
         bindings->registerEventListener(static_cast<uint64_t>(node_id), type_str, argv[1]);
 
         // Bridge this JS listener into the C++ DOM event system so that
@@ -2167,7 +2181,8 @@ static JSValue elem_removeEventListener(JSContext* ctx, JSValueConst this_val, i
 
     auto bindings = getBindingsFromContext(ctx);
     if (bindings) {
-        bindings->removeEventListener(static_cast<uint64_t>(node_id), std::string(type_cstr), argv[1]);
+        std::string type_str = normalizeListenerType(std::string(type_cstr));
+        bindings->removeEventListener(static_cast<uint64_t>(node_id), type_str, argv[1]);
     }
 
     JS_FreeCString(ctx, type_cstr);

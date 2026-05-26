@@ -83,7 +83,7 @@ static const FloorPanel k_layout[] = {
 
 static const FloorPanel k_text[] = {
     {"tests/text_wrap_test.html", 960, 640, 4.2f, 2.6f},
-    {"pretext/test_text_flow.html", 960, 640, 4.2f, 2.6f},
+    {"pretext/test_text_flow_directdraw.html", 960, 640, 4.2f, 2.6f},
     {"tests/test_colr_emoji.html", 960, 640, 4.2f, 2.6f},
     {"tests/test_colr_v0_emoji.html", 960, 640, 4.2f, 2.6f},
 };
@@ -271,14 +271,14 @@ int main(int argc, char* argv[]) {
             snprintf(label_html, sizeof(label_html),
                 "<html><head><meta charset=\"utf-8\"/></head>"
                 "<body style=\"margin:0;background:#1a1a2e;color:#e8e8f0;"
-                "font:bold 28px sans-serif;display:flex;align-items:center;justify-content:center;height:100%%;\">"
+                "font:bold 128px sans-serif;display:flex;align-items:center;justify-content:center;height:100%%;\">"
                 "%s</body></html>",
                 zr->zone_title);
 
             dong_screen3d_config_t lcfg = {0};
             lcfg.html_content = label_html;
-            lcfg.width = 640;
-            lcfg.height = 160;
+            lcfg.width = 1024;
+            lcfg.height = 320;
             lcfg.pos_x = label_x;
             lcfg.pos_y = label_y;
             lcfg.pos_z = row_z;

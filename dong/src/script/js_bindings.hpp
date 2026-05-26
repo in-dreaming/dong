@@ -21,6 +21,10 @@ namespace dong::layout {
 class Engine;
 }
 
+namespace dong::render {
+class OverlayDraw;
+}
+
 
 #include "quickjs_compat.h"
 
@@ -69,6 +73,7 @@ public:
     dom::FocusManager* focus_manager_;
     dom::Selection* selection_ = nullptr;
     dom::DOMNodePtr last_editable_root_;  // Last focused contenteditable root (for execCommand after focus loss)
+    dong::render::OverlayDraw* overlay_draw_ = nullptr;  // Per-view immediate draw storage
 
 
     // Start time for performance.now()

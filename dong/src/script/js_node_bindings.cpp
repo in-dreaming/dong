@@ -241,6 +241,23 @@ static JSValue elem_getNodeValue(JSContext* ctx, JSValueConst this_val, int argc
     return JS_NULL;
 }
 
+static JSValue elem_setNodeValue(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_UNDEFINED;
+    auto node = JSBindings::getNodeOpaque(ctx, this_val);
+    if (!node) return JS_UNDEFINED;
+
+    if (JS_IsNull(argv[0]) || JS_IsUndefined(argv[0])) {
+        node->setNodeValue("");
+        return JS_UNDEFINED;
+    }
+
+    const char* value = JS_ToCString(ctx, argv[0]);
+    if (!value) return JS_UNDEFINED;
+    node->setNodeValue(value);
+    JS_FreeCString(ctx, value);
+    return JS_UNDEFINED;
+}
+
 static JSValue elem_getChildElementCount(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     (void)argc; (void)argv;
     auto node = JSBindings::getNodeOpaque(ctx, this_val);
@@ -1584,7 +1601,8 @@ void bindNodeProperties(JSContext* ctx, JSValue elem, const dom::DOMNodePtr& nod
     DEFINE_GETTER(ctx, elem, "lastElementChild", elem_getLastElementChild);
     DEFINE_GETTER(ctx, elem, "nodeType", elem_getNodeType);
     DEFINE_GETTER(ctx, elem, "nodeName", elem_getNodeName);
-    DEFINE_GETTER(ctx, elem, "nodeValue", elem_getNodeValue);
+    DEFINE_GETTER_SETTER(ctx, elem, "nodeValue", elem_getNodeValue, elem_setNodeValue);
+    DEFINE_GETTER_SETTER(ctx, elem, "data", elem_getNodeValue, elem_setNodeValue);
     DEFINE_GETTER(ctx, elem, "childElementCount", elem_getChildElementCount);
     DEFINE_GETTER(ctx, elem, "ownerDocument", elem_getOwnerDocument);
     DEFINE_GETTER(ctx, elem, "isConnected", elem_getIsConnected);
