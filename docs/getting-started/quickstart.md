@@ -4,7 +4,7 @@
 
 ## 前置条件
 
-- [Zig](https://ziglang.org/) 0.14+
+- [Zig](https://ziglang.org/) 0.16
 - CMake、Ninja
 - **Windows**：Visual Studio Build Tools（`clang-cl`）
 - **macOS / Linux**：clang 或 gcc

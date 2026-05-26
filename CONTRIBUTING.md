@@ -6,7 +6,7 @@
 
 | 工具 | 版本 / 说明 |
 |------|-------------|
-| [Zig](https://ziglang.org/) | 0.14+（主构建系统） |
+| [Zig](https://ziglang.org/) | 0.16（主构建系统） |
 | CMake + Ninja | SDL3、部分依赖 |
 | Python 3.10+ | 脚本与测试工具 |
 | Node.js | 可选，从源码构建 React/Preact bundle |
