@@ -10,6 +10,11 @@
 [submodule "dong/third_party/sdl"]
 	path = dong/third_party/sdl
 	url = https://github.com/in-dreaming/SDL.git
+	branch = enjin/gpu/main
+[submodule "dong/third_party/gpu"]
+	path = dong/third_party/gpu
+	url = https://github.com/in-dreaming/gpu.git
+	branch = main
 [submodule "dong/third_party/SDL_shadercross"]
 	path = dong/third_party/SDL_shadercross
 	url = https://github.com/in-dreaming/SDL_shadercross.git

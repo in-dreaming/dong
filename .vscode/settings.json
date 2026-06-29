@@ -73,5 +73,6 @@
     "code-runner.ignoreSelection": true,
     "code-runner.fileDirectoryAsCwd": false,
     "codingcopilot.enableCompletionLanguage": {},
-    "cmake.sourceDirectory": "D:/mix/agents/game/indr/dong/dong"
+    "cmake.sourceDirectory": "D:/mix/agents/game/indr/dong/dong",
+    "specstory.cloudSync.enabled": "never"
 }

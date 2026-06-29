@@ -12,6 +12,35 @@ zig build examples           # 构建示例到 zig-out/bin
 zig build deps               # 仅第三方依赖
 ```
 
+### 图形后端（`-Dbackend`）
+
+| 值 | 说明 |
+|----|------|
+| `sdl`（桌面默认） | SDL3 + `dong_sdl_backend` + 全部 examples |
+| `gpu` | `dong_gpu_backend` stub + Core（**无** SDL examples） |
+| `none` | 仅 `dong_core` 与第三方静态库 |
+
+```bash
+zig build examples -Dbackend=sdl          # 默认
+zig build dong-core -Dbackend=none
+zig build gpu-backend -Dbackend=gpu
+```
+
+`-Dsdl=false` 已废弃，请改用 `-Dbackend=none`。
+
+外部 Zig 项目集成见 [Zig Package 集成](../guide/integrations/zig-package.md)。
+
+## 子模块
+
+```bash
+git submodule update --init --recursive
+```
+
+- SDL：`dong/third_party/sdl` 跟踪分支 **`enjin/gpu/main`**
+- GPU：`dong/third_party/gpu` 跟踪分支 **`main`**（仓库无 `master` 分支）
+
+`gpu` 含嵌套子模块，必须 `--recursive`。
+
 优化级别：
 
 ```bash
@@ -32,7 +61,8 @@ zig build examples -Doptimize-size=true   # 二进制体积优化
 | `zig build msdfgen` | MSDF 字体 |
 | `zig build sdl3` | SDL3（CMake） |
 | `zig build dong-core` | Dong Core 库 |
-| `zig build sdl-backend` | SDL 后端 |
+| `zig build sdl-backend` | SDL 后端（`-Dbackend=sdl`） |
+| `zig build gpu-backend` | GPU 后端 stub（`-Dbackend=gpu`） |
 
 ## React / Preact
 

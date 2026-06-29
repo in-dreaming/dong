@@ -166,30 +166,58 @@ fn linkSystemLib(c: *std.Build.Step.Compile, name: []const u8) void {
     c.root_module.linkSystemLibrary(name, .{});
 }
 
+const Backend = enum { sdl, gpu, none };
+
+fn backendToCMake(backend: Backend) []const u8 {
+    return switch (backend) {
+        .sdl => "sdl",
+        .gpu => "gpu",
+        .none => "none",
+    };
+}
+
 const BuildOptions = struct {
     enable_ffmpeg: bool,
-    enable_sdl: bool,
+    backend: Backend,
     android_api_level: u32,
     ios_deployment_target: []const u8,
     libs_only: bool, // Only build static libraries (for mobile)
     optimize_size: bool, // Optimize for binary size (LTO, /O1, no RTTI, etc.)
+    package_only: bool, // Skip examples/apps (Zig package dependency mode)
 };
+
+fn resolveBackend(b: *std.Build, platform: PlatformInfo) Backend {
+    if (b.option(Backend, "backend", "Graphics backend: sdl (default on desktop), gpu, or none")) |backend| {
+        return backend;
+    }
+    if (b.option(bool, "sdl", "Deprecated: use -Dbackend=none instead of -Dsdl=false")) |enable_sdl| {
+        if (!enable_sdl) {
+            std.debug.print("Note: -Dsdl=false is deprecated; use -Dbackend=none\n", .{});
+            return .none;
+        }
+        std.debug.print("Note: -Dsdl=true is deprecated; use -Dbackend=sdl\n", .{});
+        return .sdl;
+    }
+    return if (platform.is_desktop) .sdl else .none;
+}
 
 fn getBuildOptions(b: *std.Build, platform: PlatformInfo) BuildOptions {
     const enable_ffmpeg = b.option(bool, "ffmpeg", "Enable FFmpeg support (default: true on desktop)") orelse platform.is_desktop;
-    const enable_sdl = b.option(bool, "sdl", "Enable SDL3 backend (default: true on desktop)") orelse platform.is_desktop;
+    const backend = resolveBackend(b, platform);
     const android_api_level = b.option(u32, "android-api", "Android API level (default: 21)") orelse 21;
     const ios_target = b.option([]const u8, "ios-target", "iOS deployment target (default: 12.0)") orelse "12.0";
     const libs_only = b.option(bool, "libs-only", "Only build static libraries") orelse platform.is_mobile;
     const optimize_size = b.option(bool, "optimize-size", "Optimize for binary size (LTO, /O1, no RTTI, etc.)") orelse false;
+    const package_only = b.option(bool, "package-only", "Skip examples/apps (for Zig package consumers)") orelse false;
 
     return .{
         .enable_ffmpeg = enable_ffmpeg,
-        .enable_sdl = enable_sdl,
+        .backend = backend,
         .android_api_level = android_api_level,
         .ios_deployment_target = ios_target,
         .libs_only = libs_only,
         .optimize_size = optimize_size,
+        .package_only = package_only,
     };
 }
 
@@ -221,6 +249,7 @@ pub fn build(b: *std.Build) void {
 
     // Print build info
     std.debug.print("Building for: {s} (native: {})\n", .{ platform.target_triple, platform.is_native });
+    std.debug.print("  Backend: {s}\n", .{backendToCMake(options.backend)});
     if (platform.is_android) {
         std.debug.print("  Android API level: {}\n", .{options.android_api_level});
     }
@@ -231,7 +260,7 @@ pub fn build(b: *std.Build) void {
     // ==========================================================================
     // DXC Auto-download (Windows/Linux desktop)
     // ==========================================================================
-    const dxc_step = ensureDxc(b, platform, &config);
+    const dxc_step = if (options.backend == .sdl) ensureDxc(b, platform, &config) else null;
 
     // Build type for CMake (SDL3 fallback)
     const cmake_build_type = if (platform.is_windows) "Release" else switch (optimize) {
@@ -281,43 +310,47 @@ pub fn build(b: *std.Build) void {
     const msdfgen = buildMsdfgen(b, target, deps_optimize, platform, freetype);
 
     // ==========================================================================
-    // SDL3 via CMake (shared) - too complex for initial pure Zig migration
+    // SDL3 via CMake (shared) - only when backend=sdl
     // ==========================================================================
     const sdl3_build_dir = "third_party/sdl/build-zig";
     const sdl3_prefix = "zig-out/sdl3";
 
-    var sdl3_cmake_args = std.array_list.Managed([]const u8).init(b.allocator);
-    sdl3_cmake_args.appendSlice(&.{
-        "cmake",                                              "-S",             "third_party/sdl",  "-B",              sdl3_build_dir,
-        b.fmt("-DCMAKE_BUILD_TYPE={s}", .{cmake_build_type}), "-DSDL_TEST=OFF", "-DSDL_STATIC=OFF", "-DSDL_SHARED=ON", "-DSDL_TESTS=OFF",
-        "-DSDL_EXAMPLES=OFF",
-    }) catch unreachable;
-
-    if (platform.is_windows) {
+    const sdl3_cmake_install = if (options.backend == .sdl) blk: {
+        var sdl3_cmake_args = std.array_list.Managed([]const u8).init(b.allocator);
         sdl3_cmake_args.appendSlice(&.{
-            "-G",                                            "Ninja",
-            "-DCMAKE_C_COMPILER=clang-cl",                   "-DCMAKE_CXX_COMPILER=clang-cl",
-            "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL",
+            "cmake",                                              "-S",             "third_party/sdl",  "-B",              sdl3_build_dir,
+            b.fmt("-DCMAKE_BUILD_TYPE={s}", .{cmake_build_type}), "-DSDL_TEST=OFF", "-DSDL_STATIC=OFF", "-DSDL_SHARED=ON", "-DSDL_TESTS=OFF",
+            "-DSDL_EXAMPLES=OFF",
         }) catch unreachable;
-    } else if (platform.is_linux) {
-        sdl3_cmake_args.appendSlice(&.{
-            "-G",                          "Ninja",
-            "-DSDL_UNIX_CONSOLE_BUILD=ON",
-            "-DCMAKE_BUILD_WITH_INSTALL_RPATH=ON",
-        }) catch unreachable;
-    }
 
-    const sdl3_cmake_config = b.addSystemCommand(sdl3_cmake_args.items);
-    const sdl3_cmake_build = b.addSystemCommand(&.{ "cmake", "--build", sdl3_build_dir, "--config", cmake_build_type });
-    sdl3_cmake_build.step.dependOn(&sdl3_cmake_config.step);
-    const sdl3_cmake_install = b.addSystemCommand(&.{ "cmake", "--install", sdl3_build_dir, "--prefix", sdl3_prefix });
-    sdl3_cmake_install.step.dependOn(&sdl3_cmake_build.step);
+        if (platform.is_windows) {
+            sdl3_cmake_args.appendSlice(&.{
+                "-G",                                            "Ninja",
+                "-DCMAKE_C_COMPILER=clang-cl",                   "-DCMAKE_CXX_COMPILER=clang-cl",
+                "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL",
+            }) catch unreachable;
+        } else if (platform.is_linux) {
+            sdl3_cmake_args.appendSlice(&.{
+                "-G",                          "Ninja",
+                "-DSDL_UNIX_CONSOLE_BUILD=ON",
+                "-DCMAKE_BUILD_WITH_INSTALL_RPATH=ON",
+            }) catch unreachable;
+        }
+
+        const sdl3_cmake_config = b.addSystemCommand(sdl3_cmake_args.items);
+        const sdl3_cmake_build = b.addSystemCommand(&.{ "cmake", "--build", sdl3_build_dir, "--config", cmake_build_type });
+        sdl3_cmake_build.step.dependOn(&sdl3_cmake_config.step);
+        const install = b.addSystemCommand(&.{ "cmake", "--install", sdl3_build_dir, "--prefix", sdl3_prefix });
+        install.step.dependOn(&sdl3_cmake_build.step);
+        break :blk install;
+    } else null;
+
+    const core_only = options.libs_only or options.backend == .none or options.package_only;
 
     // ==========================================================================
-    // Mobile/Cross-compile: libs-only mode
-    // For mobile platforms, we only build the static libraries
+    // Mobile/Cross-compile / core-only: libs-only mode
     // ==========================================================================
-    if (options.libs_only) {
+    if (core_only) {
         // Build Dong Core for mobile
         const dong_core = buildDongCore(b, target, optimize, platform, quickjs, lexbor, yoga, freetype, harfbuzz, msdfgen);
 
@@ -446,13 +479,15 @@ pub fn build(b: *std.Build) void {
         const package_zip_step = b.step("package-zip", "Package SDK (libs-only) to zip under <prefix>/dist/");
         package_zip_step.dependOn(&package_zip_cmd.step);
 
-        return; // Skip CMake build for mobile targets
+        exportDongPackage(b, target, optimize, options.backend, dong_core);
+
+        return; // Skip CMake build for core-only targets
     }
 
     // ==========================================================================
     // Dong core + examples via CMake (for now - will migrate later)
     // ==========================================================================
-    const cmake_build_dir = "build-cmake";
+    const cmake_build_dir = b.fmt("build-cmake-{s}", .{backendToCMake(options.backend)});
 
     const vulkan_sdk_cmake_arg = if (config.vulkan_sdk_path) |vk_path|
         b.fmt("-DVULKAN_SDK_PATH={s}", .{vk_path})
@@ -496,6 +531,10 @@ pub fn build(b: *std.Build) void {
         if (options.optimize_size) "-DDONG_OPTIMIZE_SIZE=ON" else "-DDONG_OPTIMIZE_SIZE=OFF",
     ) catch unreachable;
 
+    dong_cmake_args.append(
+        b.fmt("-DDONG_BACKEND={s}", .{backendToCMake(options.backend)}),
+    ) catch unreachable;
+
     const cmake_config = b.addSystemCommand(dong_cmake_args.items);
     // Depend on Zig-built libraries being installed first
     cmake_config.step.dependOn(&quickjs.step);
@@ -505,7 +544,9 @@ pub fn build(b: *std.Build) void {
     cmake_config.step.dependOn(harfbuzz);
     cmake_config.step.dependOn(msdfgen);
 
-    cmake_config.step.dependOn(&sdl3_cmake_install.step);
+    if (sdl3_cmake_install) |sdl_install| {
+        cmake_config.step.dependOn(&sdl_install.step);
+    }
     // Depend on DXC being downloaded
     if (dxc_step) |step| {
         cmake_config.step.dependOn(step);
@@ -530,7 +571,7 @@ pub fn build(b: *std.Build) void {
     cmake_install.step.dependOn(&cmake_build.step);
     b.getInstallStep().dependOn(&cmake_install.step);
 
-    if (platform.is_windows) {
+    if (platform.is_windows and options.backend == .sdl) {
         const copy_runtime = b.addSystemCommand(&.{
             "powershell",
             "-NoProfile",
@@ -844,7 +885,9 @@ pub fn build(b: *std.Build) void {
     deps_step.dependOn(harfbuzz);
     deps_step.dependOn(msdfgen);
 
-    deps_step.dependOn(&sdl3_cmake_install.step);
+    if (sdl3_cmake_install) |sdl_install| {
+        deps_step.dependOn(&sdl_install.step);
+    }
 
     const quickjs_step = b.step("quickjs", "Build QuickJS only");
     quickjs_step.dependOn(&quickjs.step);
@@ -865,25 +908,40 @@ pub fn build(b: *std.Build) void {
     msdfgen_step.dependOn(msdfgen);
 
     const sdl3_step = b.step("sdl3", "Build SDL3 only");
-    sdl3_step.dependOn(&sdl3_cmake_install.step);
+    if (sdl3_cmake_install) |sdl_install| {
+        sdl3_step.dependOn(&sdl_install.step);
+    }
 
     // ==========================================================================
-    // Dong Core (Pure Zig Build) - Desktop mode only for now
+    // Dong Core (Pure Zig Build)
     // ==========================================================================
     const dong_core = buildDongCore(b, target, optimize, platform, quickjs, lexbor, yoga, freetype, harfbuzz, msdfgen);
     const dong_core_step = b.step("dong-core", "Build Dong Core (pure Zig)");
     dong_core_step.dependOn(&dong_core.step);
 
-    // ==========================================================================
-    // SDL Backend (Pure Zig Build) - Desktop mode only
-    // ==========================================================================
-    const sdl_backend = buildSDLBackend(b, target, optimize, platform, config, dong_core);
-    const sdl_backend_step = b.step("sdl-backend", "Build SDL Backend (pure Zig)");
-    sdl_backend_step.dependOn(&sdl_backend.step);
+    exportDongPackage(b, target, optimize, options.backend, dong_core);
 
     // ==========================================================================
-    // Run shortcuts
+    // SDL Backend (Pure Zig Build)
     // ==========================================================================
+    if (options.backend == .sdl) {
+        const sdl_backend = buildSDLBackend(b, target, optimize, platform, config, dong_core);
+        const sdl_backend_step = b.step("sdl-backend", "Build SDL Backend (pure Zig)");
+        sdl_backend_step.dependOn(&sdl_backend.step);
+    }
+
+    // ==========================================================================
+    // GPU Backend (CMake builds third_party/gpu + dong_gpu_backend)
+    // ==========================================================================
+    if (options.backend == .gpu) {
+        const gpu_backend_step = b.step("gpu-backend", "Build GPU backend (via CMake)");
+        gpu_backend_step.dependOn(&cmake_build.step);
+    }
+
+    // ==========================================================================
+    // Run shortcuts (SDL backend + examples only)
+    // ==========================================================================
+    if (options.backend == .sdl) {
     const run_demo = b.addSystemCommand(&.{
         if (platform.is_windows) "zig-out\\bin\\interactive_demo_new.exe" else "zig-out/bin/interactive_demo_new",
     });
@@ -941,6 +999,29 @@ pub fn build(b: *std.Build) void {
     run_3d_simple.step.dependOn(&cmake_install.step);
     const run_3d_simple_step = b.step("run-3d-simple", "Run 3D screens simple demo");
     run_3d_simple_step.dependOn(&run_3d_simple.step);
+    }
+}
+
+// =============================================================================
+// Zig Package exports (build.zig.zon consumers)
+// =============================================================================
+fn exportDongPackage(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    backend: Backend,
+    dong_core: *std.Build.Step.InstallArtifact,
+) void {
+    _ = backend;
+    _ = dong_core;
+
+    const dong_mod = b.addModule("dong", .{
+        .root_source_file = b.path("zig/dong.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    dong_mod.addIncludePath(b.path("include"));
+    dong_mod.link_libc = true;
 }
 
 // =============================================================================

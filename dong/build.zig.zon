@@ -1,0 +1,20 @@
+.{
+    .name = .dong,
+    .version = "0.1.0",
+    .minimum_zig_version = "0.16.0",
+    .fingerprint = 0xfe23818757b11872,
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "include",
+        "src",
+        "backends",
+        "third_party",
+        "CMakeLists.txt",
+        "appcore",
+        "examples",
+        "plugins",
+        "zig",
+    },
+    .dependencies = .{},
+}

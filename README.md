@@ -24,7 +24,7 @@ GPU-accelerated HTML/CSS UI engine for games and interactive applications.
 
 ```bash
 cd dong
-zig build examples
+zig build examples   # 默认全量示例（首次会重配 build-cmake-sdl）
 
 # Windows
 .\zig-out\bin\3d_screens_simple.exe
@@ -45,6 +45,14 @@ export DONG_SCRIPT_TIMEOUT_MS=10000
 ```
 
 更多示例见 [快速开始指南](./docs/getting-started/quickstart.md)。
+
+backend
+```bash
+zig build -Dbackend=sdl|gpu|none
+zig build dong-core -Dbackend=none    # 已通过
+zig build gpu-backend -Dbackend=gpu   # 已通过（stub DLL）
+zig build examples -Dbackend=sdl   
+```
 
 ## 示例程序
 

@@ -14,6 +14,12 @@
 
 详细构建步骤见 [docs/getting-started/build-from-source.md](./docs/getting-started/build-from-source.md)。
 
+克隆后初始化子模块（`gpu` 含嵌套依赖，必须 recursive）：
+
+```bash
+git submodule update --init --recursive
+```
+
 ## 快速构建与测试
 
 所有命令在 `dong/` 子目录执行：
@@ -46,6 +52,8 @@ zig build examples -Doptimize=Debug
 dong/
 ├── src/           # Core：DOM、CSS、Layout、Script、Render
 ├── backends/sdl/  # SDL GPU 后端与着色器
+├── backends/gpu/  # in-dreaming/gpu 后端 stub
+├── third_party/gpu/  # in-dreaming/gpu 子模块（独立构建）
 ├── appcore/       # 高层 C API（dong_app、scene3d）
 ├── include/       # 公开 C 头文件
 ├── examples/      # 示例程序

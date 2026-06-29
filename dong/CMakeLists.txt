@@ -24,10 +24,21 @@ if(APPLE)
     set(CMAKE_BUILD_WITH_INSTALL_RPATH ON)
 endif()
 
+# Graphics backend must be known before applying global MSVC flags (gpu embeds slang-rhi).
+set(DONG_BACKEND "sdl" CACHE STRING "Graphics backend: sdl | gpu | none")
+set_property(CACHE DONG_BACKEND PROPERTY STRINGS sdl gpu none)
+if(NOT DONG_BACKEND MATCHES "^(sdl|gpu|none)$")
+    message(FATAL_ERROR "Invalid DONG_BACKEND='${DONG_BACKEND}' (expected sdl, gpu, or none)")
+endif()
+
 # Windows MSVC runtime
 if(WIN32 AND NOT MINGW)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
-    add_compile_options(/MD /permissive-)
+    if(DONG_BACKEND STREQUAL "gpu")
+        add_compile_options(/MD)
+    else()
+        add_compile_options(/MD /permissive-)
+    endif()
 endif()
 
 # =============================================================================
@@ -522,33 +533,48 @@ endif()
 # =============================================================================
 # Backends
 # =============================================================================
-option(BUILD_BACKENDS "Build dong backends" ON)
-if(BUILD_BACKENDS)
+if(DONG_BACKEND STREQUAL "sdl")
     add_subdirectory(backends/sdl)
+elseif(DONG_BACKEND STREQUAL "gpu")
+  if(CMAKE_VERSION VERSION_LESS "3.24")
+    message(FATAL_ERROR "DONG_BACKEND=gpu requires CMake 3.24+ (in-dreaming/gpu dependency)")
+  endif()
+  if(WIN32 AND NOT MINGW)
+    add_compile_options(/MD /permissive-)
+  endif()
+  # Stub backend only. Full in-dreaming/gpu (slang-rhi) builds standalone in
+  # third_party/gpu; embedding it under dong+clang-cl needs upstream/toolchain alignment.
+  add_subdirectory(backends/gpu)
 endif()
 
 # =============================================================================
-# AppCore
+# AppCore (SDL backend only)
 # =============================================================================
 option(BUILD_APPCORE "Build dong appcore library" ON)
-if(BUILD_APPCORE)
+if(BUILD_APPCORE AND DONG_BACKEND STREQUAL "sdl")
     add_subdirectory(appcore)
+elseif(BUILD_APPCORE)
+    message(STATUS "Skipping AppCore: requires DONG_BACKEND=sdl")
 endif()
 
 # =============================================================================
-# Plugins
+# Plugins (SDL backend only)
 # =============================================================================
 option(BUILD_PLUGINS "Build dong plugins" ON)
-if(BUILD_PLUGINS)
+if(BUILD_PLUGINS AND DONG_BACKEND STREQUAL "sdl")
     add_subdirectory(plugins/sdl)
+elseif(BUILD_PLUGINS)
+    message(STATUS "Skipping plugins: requires DONG_BACKEND=sdl")
 endif()
 
 # =============================================================================
-# Apps
+# Apps (SDL backend only)
 # =============================================================================
 option(BUILD_APPS "Build dong apps" ON)
-if(BUILD_APPS)
+if(BUILD_APPS AND DONG_BACKEND STREQUAL "sdl")
     add_subdirectory(apps/dong_app)
+elseif(BUILD_APPS)
+    message(STATUS "Skipping apps: requires DONG_BACKEND=sdl")
 endif()
 
 # =============================================================================
@@ -564,7 +590,7 @@ endif()
 # =============================================================================
 option(BUILD_EXAMPLES "Build examples" ON)
 
-if(BUILD_EXAMPLES)
+if(BUILD_EXAMPLES AND DONG_BACKEND STREQUAL "sdl")
     # Common function to configure examples
     function(add_dong_example name source)
         add_executable(${name} ${source})
@@ -764,6 +790,8 @@ if(BUILD_EXAMPLES)
         install(TARGETS run_feature_tests RUNTIME DESTINATION bin)
     endif()
 
+elseif(BUILD_EXAMPLES)
+    message(STATUS "Skipping examples: requires DONG_BACKEND=sdl")
 endif()
 
 # =============================================================================
@@ -779,7 +807,7 @@ install(TARGETS dong lexbor yoga
 install(DIRECTORY include/ DESTINATION include)
 
 # Install examples
-if(BUILD_EXAMPLES)
+if(BUILD_EXAMPLES AND DONG_BACKEND STREQUAL "sdl")
     # Get all example targets
     set(EXAMPLE_TARGETS)
     foreach(example ${CPP_EXAMPLES})
@@ -833,35 +861,34 @@ if(BUILD_EXAMPLES)
     endif()
 endif()
 
-# Copy SDL3 DLL/dylib to bin
-if(WIN32)
-    install(FILES "${SDL3_PREFIX}/bin/SDL3.dll" DESTINATION bin)
-elseif(APPLE)
-    file(GLOB SDL3_DYLIBS "${SDL3_PREFIX}/lib/libSDL3*.dylib")
-    # dylib needs executable bit on macOS, so treat as PROGRAMS to preserve runnable perms
-    install(PROGRAMS ${SDL3_DYLIBS} DESTINATION lib)
+# Copy SDL3 DLL/dylib to bin (SDL backend only)
+if(DONG_BACKEND STREQUAL "sdl")
+    if(WIN32)
+        install(FILES "${SDL3_PREFIX}/bin/SDL3.dll" DESTINATION bin)
+    elseif(APPLE)
+        file(GLOB SDL3_DYLIBS "${SDL3_PREFIX}/lib/libSDL3*.dylib")
+        # dylib needs executable bit on macOS, so treat as PROGRAMS to preserve runnable perms
+        install(PROGRAMS ${SDL3_DYLIBS} DESTINATION lib)
 
-    # VulkanSDK runtime dylibs used by SDL_shadercross (and therefore by dong_sdl_backend)
-    # The executable records these as @rpath/..., so we must ship them alongside our own dylibs.
-    # NOTE: On macOS these are often symlinks (e.g. libspirv-cross-c-shared.0.dylib -> *.0.67.0.dylib),
-    # so we install the whole set to keep symlinks valid.
-    set(VULKAN_RUNTIME_LIB_DIR "")
-    if(DXC_LIB_PATH AND EXISTS "${DXC_LIB_PATH}/libdxcompiler.dylib")
-        set(VULKAN_RUNTIME_LIB_DIR "${DXC_LIB_PATH}")
-    elseif(VULKAN_SDK_PATH AND EXISTS "${VULKAN_SDK_PATH}/lib/libdxcompiler.dylib")
-        set(VULKAN_RUNTIME_LIB_DIR "${VULKAN_SDK_PATH}/lib")
-    elseif(EXISTS "/usr/local/lib/libdxcompiler.dylib")
-        set(VULKAN_RUNTIME_LIB_DIR "/usr/local/lib")
-    endif()
+        # VulkanSDK runtime dylibs used by SDL_shadercross (and therefore by dong_sdl_backend)
+        set(VULKAN_RUNTIME_LIB_DIR "")
+        if(DXC_LIB_PATH AND EXISTS "${DXC_LIB_PATH}/libdxcompiler.dylib")
+            set(VULKAN_RUNTIME_LIB_DIR "${DXC_LIB_PATH}")
+        elseif(VULKAN_SDK_PATH AND EXISTS "${VULKAN_SDK_PATH}/lib/libdxcompiler.dylib")
+            set(VULKAN_RUNTIME_LIB_DIR "${VULKAN_SDK_PATH}/lib")
+        elseif(EXISTS "/usr/local/lib/libdxcompiler.dylib")
+            set(VULKAN_RUNTIME_LIB_DIR "/usr/local/lib")
+        endif()
 
-    if(VULKAN_RUNTIME_LIB_DIR)
-        file(GLOB VULKAN_RUNTIME_DYLIBS
-            "${VULKAN_RUNTIME_LIB_DIR}/libdxcompiler.dylib"
-            "${VULKAN_RUNTIME_LIB_DIR}/libspirv-cross-c-shared*.dylib"
-        )
-        install(PROGRAMS ${VULKAN_RUNTIME_DYLIBS} DESTINATION lib)
+        if(VULKAN_RUNTIME_LIB_DIR)
+            file(GLOB VULKAN_RUNTIME_DYLIBS
+                "${VULKAN_RUNTIME_LIB_DIR}/libdxcompiler.dylib"
+                "${VULKAN_RUNTIME_LIB_DIR}/libspirv-cross-c-shared*.dylib"
+            )
+            install(PROGRAMS ${VULKAN_RUNTIME_DYLIBS} DESTINATION lib)
+        endif()
+    else()
+        file(GLOB SDL3_SOS "${SDL3_PREFIX}/lib/libSDL3*.so*")
+        install(FILES ${SDL3_SOS} DESTINATION lib)
     endif()
-else()
-    file(GLOB SDL3_SOS "${SDL3_PREFIX}/lib/libSDL3*.so*")
-    install(FILES ${SDL3_SOS} DESTINATION lib)
 endif()
