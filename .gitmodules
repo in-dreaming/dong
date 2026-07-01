@@ -30,3 +30,7 @@
 [submodule "dong/third_party/ffmpeg"]
 	path = dong/third_party/ffmpeg
 	url = https://github.com/FFmpeg/FFmpeg.git
+[submodule "dong/third_party/gpu_texture_compress"]
+	path = dong/third_party/gpu_texture_compress
+	url = https://github.com/in-dreaming/gpu_texture_compress.git
+	branch = main

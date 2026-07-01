@@ -3,6 +3,7 @@
 #include <dong_platform.h>
 #include <dong_gpu_driver.h>
 #include "dong_sdl_platform.h"
+#include "dong_sdl_gpu_formats.h"
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_gpu.h>
 
@@ -219,8 +220,7 @@ static bool ensureEngineInitialized(int width, int height) {
         return false;
     }
 
-    s_device = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_DXIL | SDL_GPU_SHADERFORMAT_MSL,
-                                   false, nullptr);
+    s_device = SDL_CreateGPUDevice(dong_sdl_default_shader_formats(), false, nullptr);
     if (!s_device) {
         SDL_Log("ERROR: SDL_CreateGPUDevice failed: %s", SDL_GetError());
         return false;

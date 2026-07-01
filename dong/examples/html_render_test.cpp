@@ -32,6 +32,7 @@
 #include <dong_gpu_driver.h>
 #include <dong_plugin_api.h>
 #include "dong_sdl_platform.h"
+#include "dong_sdl_gpu_formats.h"
 
 
 #include <SDL3/SDL.h>
@@ -884,7 +885,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    SDL_GPUDevice* device = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_DXIL | SDL_GPU_SHADERFORMAT_MSL,
+    SDL_GPUDevice* device = SDL_CreateGPUDevice(dong_sdl_default_shader_formats(),
                                                false, nullptr);
     if (!device) {
         SDL_Log("ERROR: SDL_CreateGPUDevice failed: %s", SDL_GetError());

@@ -1,5 +1,6 @@
 #include "dong_plugin_api.h"
 #include "video_ffmpeg.h"
+#include "dong_sdl_gpu_formats.h"
 
 #include <SDL3/SDL.h>
 
@@ -222,7 +223,7 @@ static dong_gpu_device_t* sdl_renderer_init(void* /*user*/, dong_window_t* windo
     SDL_Window* sdl_window = reinterpret_cast<SDL_Window*>(window);
 
     SDL_GPUDevice* device = SDL_CreateGPUDevice(
-        SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_DXIL | SDL_GPU_SHADERFORMAT_MSL,
+        dong_sdl_default_shader_formats(),
         true, // debug mode
         nullptr
     );

@@ -8,7 +8,8 @@
 
 #include "sdl_gpu_device.hpp"
 #include "sdl_shader_manager.hpp"
-#include "gpu_texture_compressor.hpp"
+#include "dong_format_policy.h"
+#include "dong_gtc.h"
 #include "../../src/render/glyph_atlas.hpp"
 #include "../../src/render/font_resolver.hpp"
 #include "../../src/render/slug/slug_font_cache.hpp"
@@ -30,6 +31,20 @@
 namespace dong {
 namespace render {
 
+namespace {
+
+void init_default_rasterizer(SDL_GPURasterizerState& rs) {
+    rs.cull_mode = SDL_GPU_CULLMODE_NONE;
+    rs.fill_mode = SDL_GPU_FILLMODE_FILL;
+    rs.enable_depth_clip = true;
+}
+
+void apply_graphics_pipeline_defaults(SDL_GPUGraphicsPipelineCreateInfo& pci) {
+    init_default_rasterizer(pci.rasterizer_state);
+}
+
+} // namespace
+
 bool SDLGPUDriver::initialize() {
     if (!gpu_device_ || !gpu_device_->isInitialized() || !window_ || !shader_manager_) {
         DONG_LOG_ERROR("SDLGPUDriver::initialize: invalid device, window, or shader manager");
@@ -38,20 +53,17 @@ bool SDLGPUDriver::initialize() {
 
     SDL_GPUDevice* dev = gpu_device_->getHandle();
 
-    // 获取 swapchain 的实际格式，用于创建兼容的 pipeline
+    // 获取 swapchain 的实际格式，用于创建兼容的 pipeline（D3D12 上常为 BGRA8）
     SDL_GPUTextureFormat swapchain_format = SDL_GetGPUSwapchainTextureFormat(dev, window_);
+    swapchain_format_ = swapchain_format;
     DONG_LOG_INFO("SDLGPUDriver::initialize: swapchain format = %d", swapchain_format);
 
-    // Determine render target format based on swapchain format (HDR detection)
-    // R16G16B16A16_SFLOAT is used for HDR Extended Linear
-    if (swapchain_format == SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT) {
-        render_target_format_ = SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT;
-        hdr_enabled_ = true;
+    render_target_format_ = detail::render_target_format_from_swapchain(swapchain_format, hdr_enabled_);
+    hdr_enabled_ = (render_target_format_ == SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT);
+    if (hdr_enabled_) {
         DONG_LOG_INFO("SDLGPUDriver::initialize: HDR mode enabled (R16G16B16A16_FLOAT)");
     } else {
-        render_target_format_ = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
-        hdr_enabled_ = false;
-        DONG_LOG_INFO("SDLGPUDriver::initialize: SDR mode (R8G8B8A8_UNORM)");
+        DONG_LOG_INFO("SDLGPUDriver::initialize: SDR mode (format=%d)", render_target_format_);
     }
 
 #ifndef DONG_SDL_SHADER_DIR
@@ -104,15 +116,23 @@ bool SDLGPUDriver::initialize() {
     pci.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLESTRIP;
     pci.vertex_shader = rect_vs_;
     pci.fragment_shader = rect_fs_;
+    init_default_rasterizer(pci.rasterizer_state);
 
     pci.vertex_input_state.num_vertex_buffers = 0;
     pci.vertex_input_state.vertex_buffer_descriptions = nullptr;
     pci.vertex_input_state.num_vertex_attributes = 0;
     pci.vertex_input_state.vertex_attributes = nullptr;
 
+    SDL_GPUMultisampleState msaa_state{};
+    msaa_state.sample_count = SDL_GPU_SAMPLECOUNT_1;
+    pci.multisample_state = msaa_state;
+
     rect_pipeline_ = SDL_CreateGPUGraphicsPipeline(dev, &pci);
     if (!rect_pipeline_) {
-        DONG_LOG_ERROR("SDLGPUDriver::initialize: failed to create rect pipeline: %s", SDL_GetError());
+        DONG_LOG_ERROR("SDLGPUDriver::initialize: failed to create rect pipeline (format=%d driver=%s): %s",
+                       (int)render_target_format_,
+                       SDL_GetGPUDeviceDriver(dev) ? SDL_GetGPUDeviceDriver(dev) : "?",
+                       SDL_GetError());
         return false;
     }
 
@@ -160,6 +180,7 @@ bool SDLGPUDriver::initialize() {
     rrci.vertex_input_state.num_vertex_attributes = 0;
     rrci.vertex_input_state.vertex_attributes = nullptr;
 
+    apply_graphics_pipeline_defaults(rrci);
     round_rect_pipeline_ = SDL_CreateGPUGraphicsPipeline(dev, &rrci);
     if (!round_rect_pipeline_) {
         DONG_LOG_ERROR("SDLGPUDriver::initialize: failed to create round-rect pipeline: %s", SDL_GetError());
@@ -210,6 +231,7 @@ bool SDLGPUDriver::initialize() {
     shadow_ci.vertex_input_state.num_vertex_attributes = 0;
     shadow_ci.vertex_input_state.vertex_attributes = nullptr;
 
+    apply_graphics_pipeline_defaults(shadow_ci);
     shadow_pipeline_ = SDL_CreateGPUGraphicsPipeline(dev, &shadow_ci);
     if (!shadow_pipeline_) {
         DONG_LOG_ERROR("SDLGPUDriver::initialize: failed to create shadow pipeline: %s", SDL_GetError());
@@ -259,6 +281,7 @@ bool SDLGPUDriver::initialize() {
     grad_ci.vertex_input_state.num_vertex_attributes = 0;
     grad_ci.vertex_input_state.vertex_attributes = nullptr;
 
+    apply_graphics_pipeline_defaults(grad_ci);
     gradient_pipeline_ = SDL_CreateGPUGraphicsPipeline(dev, &grad_ci);
     if (!gradient_pipeline_) {
         DONG_LOG_ERROR("SDLGPUDriver::initialize: failed to create gradient pipeline: %s", SDL_GetError());
@@ -305,6 +328,7 @@ bool SDLGPUDriver::initialize() {
         ccone_ci.vertex_input_state.num_vertex_attributes = 0;
         ccone_ci.vertex_input_state.vertex_attributes = nullptr;
 
+        apply_graphics_pipeline_defaults(ccone_ci);
         conic_gradient_pipeline_ = SDL_CreateGPUGraphicsPipeline(dev, &ccone_ci);
         if (!conic_gradient_pipeline_) {
             DONG_LOG_WARN("SDLGPUDriver::initialize: failed to create conic gradient pipeline: %s", SDL_GetError());
@@ -336,6 +360,7 @@ bool SDLGPUDriver::initialize() {
         mask_ci.vertex_input_state.num_vertex_attributes = 0;
         mask_ci.vertex_input_state.vertex_attributes = nullptr;
 
+        apply_graphics_pipeline_defaults(mask_ci);
         mask_apply_conic_pipeline_ = SDL_CreateGPUGraphicsPipeline(dev, &mask_ci);
         if (!mask_apply_conic_pipeline_) {
             DONG_LOG_WARN("SDLGPUDriver::initialize: failed to create mask apply conic pipeline: %s", SDL_GetError());
@@ -380,6 +405,7 @@ bool SDLGPUDriver::initialize() {
             uber_ci.vertex_input_state.num_vertex_attributes = 0;
             uber_ci.vertex_input_state.vertex_attributes = nullptr;
 
+            apply_graphics_pipeline_defaults(uber_ci);
             uber_quad_pipeline_ = SDL_CreateGPUGraphicsPipeline(dev, &uber_ci);
             if (uber_quad_pipeline_) {
                 DONG_LOG_INFO("SDLGPUDriver: uber_quad_pipeline created");
@@ -449,6 +475,7 @@ bool SDLGPUDriver::initialize() {
             inst_ci.vertex_input_state.num_vertex_attributes = 3;
             inst_ci.vertex_input_state.vertex_attributes = inst_attrs;
 
+            apply_graphics_pipeline_defaults(inst_ci);
             uber_quad_instanced_pipeline_ = SDL_CreateGPUGraphicsPipeline(dev, &inst_ci);
             if (uber_quad_instanced_pipeline_) {
                 DONG_LOG_INFO("SDLGPUDriver: uber_quad_instanced_pipeline created");
@@ -532,6 +559,7 @@ bool SDLGPUDriver::initialize() {
     ipci.vertex_input_state.num_vertex_attributes = 0;
     ipci.vertex_input_state.vertex_attributes = nullptr;
 
+    apply_graphics_pipeline_defaults(ipci);
     image_pipeline_ = SDL_CreateGPUGraphicsPipeline(dev, &ipci);
     if (!image_pipeline_) {
         DONG_LOG_ERROR("SDLGPUDriver::initialize: failed to create image pipeline: %s", SDL_GetError());
@@ -548,6 +576,7 @@ bool SDLGPUDriver::initialize() {
     if (nineslice_fs_) {
         SDL_GPUGraphicsPipelineCreateInfo ns_pci = ipci;
         ns_pci.fragment_shader = nineslice_fs_;
+        apply_graphics_pipeline_defaults(ns_pci);
         nineslice_pipeline_ = SDL_CreateGPUGraphicsPipeline(dev, &ns_pci);
         if (nineslice_pipeline_) {
             DONG_LOG_INFO("SDLGPUDriver: nineslice_pipeline created");
@@ -561,6 +590,7 @@ bool SDLGPUDriver::initialize() {
     // YUV pipeline: identical to image pipeline except fragment shader.
     SDL_GPUGraphicsPipelineCreateInfo yuv_pci = ipci;
     yuv_pci.fragment_shader = video_yuv_fs_;
+    apply_graphics_pipeline_defaults(yuv_pci);
     video_yuv_pipeline_ = SDL_CreateGPUGraphicsPipeline(dev, &yuv_pci);
     if (!video_yuv_pipeline_) {
         DONG_LOG_ERROR("SDLGPUDriver::initialize: failed to create video_yuv pipeline: %s", SDL_GetError());
@@ -595,23 +625,16 @@ bool SDLGPUDriver::initialize() {
     };
 
     // 检查环境变量是否强制使用压缩格式
-    const char* atlas_format_env = std::getenv("DONG_ATLAS_FORMAT");
-    if (atlas_format_env) {
-        if (strcmp(atlas_format_env, "BC7") == 0) {
-            if (test_format_support(SDL_GPU_TEXTUREFORMAT_BC7_RGBA_UNORM)) {
-                selected_atlas_format = DONG_IMAGE_FORMAT_BC7;
-                DONG_LOG_INFO("SDLGPUDriver: Using BC7 atlas format (via env)");
-            } else {
-                DONG_LOG_WARN("SDLGPUDriver: BC7 not supported, falling back to RGBA8");
-            }
-        } else if (strcmp(atlas_format_env, "ASTC") == 0) {
-            if (test_format_support(SDL_GPU_TEXTUREFORMAT_ASTC_4x4_UNORM)) {
-                selected_atlas_format = DONG_IMAGE_FORMAT_ASTC_4x4;
-                DONG_LOG_INFO("SDLGPUDriver: Using ASTC 4x4 atlas format (via env)");
-            } else {
-                DONG_LOG_WARN("SDLGPUDriver: ASTC not supported, falling back to RGBA8");
-            }
-        }
+    DongFormatPolicyCaps policy_caps{};
+    policy_caps.supports_bcn = test_format_support(SDL_GPU_TEXTUREFORMAT_BC7_RGBA_UNORM) ? 1 : 0;
+    policy_caps.supports_astc = test_format_support(SDL_GPU_TEXTUREFORMAT_ASTC_6x6_UNORM) ? 1 : 0;
+    if (!policy_caps.supports_astc) {
+        policy_caps.supports_astc = test_format_support(SDL_GPU_TEXTUREFORMAT_ASTC_4x4_UNORM) ? 1 : 0;
+    }
+    selected_atlas_format = dong_format_policy_atlas_default(&policy_caps);
+    if (selected_atlas_format != DONG_IMAGE_FORMAT_RGBA8) {
+        DONG_LOG_INFO("SDLGPUDriver: atlas format %s (format policy)",
+                      dong_image_format_name(selected_atlas_format));
     }
 
     DongAtlasConfig atlas_cfg = dong_atlas_config_default();
@@ -702,6 +725,7 @@ bool SDLGPUDriver::initialize() {
     tpci.vertex_input_state.num_vertex_attributes = 0;
     tpci.vertex_input_state.vertex_attributes = nullptr;
 
+    apply_graphics_pipeline_defaults(tpci);
     text_pipeline_ = SDL_CreateGPUGraphicsPipeline(dev, &tpci);
     if (!text_pipeline_) {
         DONG_LOG_ERROR("SDLGPUDriver::initialize: failed to create text pipeline: %s", SDL_GetError());
@@ -785,13 +809,15 @@ bool SDLGPUDriver::initialize() {
     // RenderTarget/图层合成调试日志默认关闭，可通过环境变量 DONG_DEBUG_RT=1 开启
     debug_rt_enabled_ = false;
 
-    // Initialize GPU texture compressor for BC7/ASTC compression
-    gpu_compressor_ = std::make_unique<sdl_backend::GPUTextureCompressor>(gpu_device_, shader_manager_);
-    if (gpu_compressor_ && gpu_compressor_->initialize()) {
-        DONG_LOG_INFO("SDLGPUDriver: GPU texture compressor initialized");
-    } else {
-        DONG_LOG_WARN("SDLGPUDriver: GPU texture compressor not available, falling back to CPU");
-        gpu_compressor_.reset();
+    // GPU texture compression via gpu_texture_compress (dong_gtc)
+    if (gpu_device_ && gpu_device_->isInitialized()) {
+        DongGtcContext* gtc = dong_gtc_create(gpu_device_->getHandle(), DONG_GTC_BACKEND_SDL_GPU);
+        if (gtc) {
+            dong_gtc_set_default(gtc);
+            DONG_LOG_INFO("SDLGPUDriver: dong_gtc (gpu_texture_compress) initialized");
+        } else {
+            DONG_LOG_WARN("SDLGPUDriver: dong_gtc init failed");
+        }
     }
 
     // Initialize Slug font cache (always created, used when Slug mode is requested)
@@ -889,6 +915,7 @@ bool SDLGPUDriver::initSlugPipeline() {
     pci.vertex_input_state.num_vertex_attributes = 5;
     pci.vertex_input_state.vertex_attributes = vertex_attrs;
 
+    apply_graphics_pipeline_defaults(pci);
     slug_text_pipeline_ = SDL_CreateGPUGraphicsPipeline(dev, &pci);
     if (!slug_text_pipeline_) {
         DONG_LOG_WARN("SDLGPUDriver::initSlugPipeline: pipeline creation failed: %s",
@@ -915,15 +942,11 @@ bool SDLGPUDriver::initSlugPipeline() {
 }
 
 void SDLGPUDriver::setHDREnabled(bool enable) {
-    if (enable) {
-        render_target_format_ = SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT;
-        hdr_enabled_ = true;
-        DONG_LOG_INFO("SDLGPUDriver: HDR mode enabled");
-    } else {
-        render_target_format_ = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
-        hdr_enabled_ = false;
-        DONG_LOG_INFO("SDLGPUDriver: SDR mode enabled");
-    }
+    hdr_enabled_ = enable;
+    render_target_format_ = detail::render_target_format_from_swapchain(swapchain_format_, enable);
+    DONG_LOG_INFO("SDLGPUDriver: %s mode (format=%d)",
+                  hdr_enabled_ ? "HDR" : "SDR",
+                  render_target_format_);
 }
 
 } // namespace render

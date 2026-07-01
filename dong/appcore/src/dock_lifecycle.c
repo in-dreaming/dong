@@ -4,6 +4,7 @@
 #include "dong.h"
 #include "dong_plugin_api.h"
 #include "dong_sdl_platform.h"
+#include "dong_sdl_gpu_formats.h"
 #include "dong_platform.h"
 
 #include <SDL3/SDL.h>
@@ -182,7 +183,7 @@ DONG_APPCORE_API dong_dock_t* dong_dock_create(const dong_dock_config_t* config)
     }
 
     SDL_GPUDevice* dev = SDL_CreateGPUDevice(
-        SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_DXIL | SDL_GPU_SHADERFORMAT_MSL,
+        dong_sdl_default_shader_formats(),
         false, NULL);
     if (!dev) {
         fprintf(stderr, "[DongDock] SDL_CreateGPUDevice failed: %s\n", SDL_GetError());

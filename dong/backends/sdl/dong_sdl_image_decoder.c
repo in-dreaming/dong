@@ -3,8 +3,7 @@
 // Includes ASTC and BC encoders for GPU texture compression.
 
 #include "dong_sdl_image_decoder.h"
-#include "dong_astc_encoder.h"
-#include "dong_bc_encoder.h"
+#include "dong_gtc.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -37,12 +36,11 @@ static void premultiply_rgba8(unsigned char* pixels, int width, int height) {
 // stb_image integration
 // =============================================================================
 
-#define STB_IMAGE_IMPLEMENTATION
-#define STBI_NO_STDIO  // We'll use memory-based loading only
+// stb_image (implementation lives in dong_render / gpu_texture_compress texture_loader)
+#define STBI_NO_STDIO
 #define STBI_ONLY_PNG
 #define STBI_ONLY_JPEG
 #define STBI_ONLY_BMP
-// #define STBI_ONLY_GIF  // Disable GIF support due to stbi__g_failure_reason issue
 #define STBI_ONLY_TGA
 
 // Silence warnings in stb_image
@@ -265,39 +263,11 @@ static void sdl_free_image(DongImageDecoder* decoder, DongDecodedImage* image) {
 
 static int sdl_can_encode(DongImageDecoder* decoder, DongImageFormat src_format, DongImageFormat dst_format) {
     (void)decoder;
-
-    // Source must be uncompressed
-    if (dong_image_format_is_compressed(src_format)) {
+    DongGtcContext* gtc = dong_gtc_get_default();
+    if (!gtc) {
         return 0;
     }
-
-    // Supported encodings from RGBA8:
-    if (src_format == DONG_IMAGE_FORMAT_RGBA8) {
-        switch (dst_format) {
-            case DONG_IMAGE_FORMAT_ASTC_4x4:
-            case DONG_IMAGE_FORMAT_ASTC_5x5:
-            case DONG_IMAGE_FORMAT_ASTC_6x6:
-            case DONG_IMAGE_FORMAT_ASTC_8x8:
-                return 1;  // ASTC encoder available
-            case DONG_IMAGE_FORMAT_BC7:
-                return 1;  // BC7 encoder available
-            default:
-                return 0;
-        }
-    }
-
-    // BC6H requires RGBA16F source
-    if (src_format == DONG_IMAGE_FORMAT_RGBA16F) {
-        switch (dst_format) {
-            case DONG_IMAGE_FORMAT_BC6H:
-            case DONG_IMAGE_FORMAT_BC6H_SF:
-                return 1;  // BC6H encoder available
-            default:
-                return 0;
-        }
-    }
-
-    return 0;
+    return dong_gtc_can_encode(gtc, src_format, dst_format);
 }
 
 static DongImageDecoderResult sdl_encode(DongImageDecoder* decoder,
@@ -306,160 +276,11 @@ static DongImageDecoderResult sdl_encode(DongImageDecoder* decoder,
                                          const DongEncodeOptions* options,
                                          DongDecodedImage* out_image) {
     (void)decoder;
-
-    if (!src || !src->data || !out_image) {
-        return DONG_IMAGE_ERR_INVALID_ARG;
+    DongGtcContext* gtc = dong_gtc_get_default();
+    if (!gtc) {
+        return DONG_IMAGE_ERR_UNSUPPORTED_FORMAT;
     }
-
-    memset(out_image, 0, sizeof(*out_image));
-
-    // Handle ASTC encoding from RGBA8
-    if (src->format == DONG_IMAGE_FORMAT_RGBA8 && dong_image_format_is_astc(dst_format)) {
-        DongASTCBlockSize block_size;
-        switch (dst_format) {
-            case DONG_IMAGE_FORMAT_ASTC_4x4:  block_size = DONG_ASTC_4x4; break;
-            case DONG_IMAGE_FORMAT_ASTC_5x5:  block_size = DONG_ASTC_5x5; break;
-            case DONG_IMAGE_FORMAT_ASTC_6x6:  block_size = DONG_ASTC_6x6; break;
-            case DONG_IMAGE_FORMAT_ASTC_8x8:  block_size = DONG_ASTC_8x8; break;
-            default: return DONG_IMAGE_ERR_UNSUPPORTED_FORMAT;
-        }
-
-        size_t output_size = dong_astc_calc_size(src->width, src->height, block_size);
-        if (output_size == 0) {
-            return DONG_IMAGE_ERR_INVALID_ARG;
-        }
-
-        uint8_t* output_data = (uint8_t*)malloc(output_size);
-        if (!output_data) {
-            return DONG_IMAGE_ERR_OUT_OF_MEMORY;
-        }
-
-        DongASTCEncodeOptions astc_opts = dong_astc_options_default();
-        if (options) {
-            astc_opts.quality = (DongASTCQuality)(options->quality / 25);
-            astc_opts.srgb = options->srgb;
-            astc_opts.normal_map = options->normal_map;
-        }
-
-        size_t bytes_written = dong_astc_encode_image(
-            (const uint8_t*)src->data,
-            src->width,
-            src->height,
-            block_size,
-            &astc_opts,
-            output_data,
-            output_size
-        );
-
-        if (bytes_written == 0) {
-            free(output_data);
-            return DONG_IMAGE_ERR_ENCODE_FAILED;
-        }
-
-        out_image->data = output_data;
-        out_image->data_size = bytes_written;
-        out_image->width = src->width;
-        out_image->height = src->height;
-        out_image->row_bytes = 0;  // Not applicable for compressed
-        out_image->format = dst_format;
-        out_image->mip_levels = 1;
-        out_image->user_data = NULL;
-
-        return DONG_IMAGE_OK;
-    }
-
-    // Handle BC7 encoding from RGBA8
-    if (src->format == DONG_IMAGE_FORMAT_RGBA8 && dst_format == DONG_IMAGE_FORMAT_BC7) {
-        size_t output_size = dong_bc_calc_size(src->width, src->height, DONG_BC_FORMAT_BC7);
-        if (output_size == 0) {
-            return DONG_IMAGE_ERR_INVALID_ARG;
-        }
-
-        uint8_t* output_data = (uint8_t*)malloc(output_size);
-        if (!output_data) {
-            return DONG_IMAGE_ERR_OUT_OF_MEMORY;
-        }
-
-        DongBCEncodeOptions bc_opts = dong_bc_options_default();
-        if (options) {
-            bc_opts.quality = (DongBCQuality)(options->quality / 25);
-            bc_opts.srgb = options->srgb;
-        }
-
-        size_t bytes_written = dong_bc7_encode_image(
-            (const uint8_t*)src->data,
-            src->width,
-            src->height,
-            &bc_opts,
-            output_data,
-            output_size
-        );
-
-        if (bytes_written == 0) {
-            free(output_data);
-            return DONG_IMAGE_ERR_ENCODE_FAILED;
-        }
-
-        out_image->data = output_data;
-        out_image->data_size = bytes_written;
-        out_image->width = src->width;
-        out_image->height = src->height;
-        out_image->row_bytes = 0;
-        out_image->format = DONG_IMAGE_FORMAT_BC7;
-        out_image->mip_levels = 1;
-        out_image->user_data = NULL;
-
-        return DONG_IMAGE_OK;
-    }
-
-    // Handle BC6H encoding from RGBA16F
-    if (src->format == DONG_IMAGE_FORMAT_RGBA16F &&
-        (dst_format == DONG_IMAGE_FORMAT_BC6H || dst_format == DONG_IMAGE_FORMAT_BC6H_SF)) {
-        size_t output_size = dong_bc_calc_size(src->width, src->height, DONG_BC_FORMAT_BC6H);
-        if (output_size == 0) {
-            return DONG_IMAGE_ERR_INVALID_ARG;
-        }
-
-        uint8_t* output_data = (uint8_t*)malloc(output_size);
-        if (!output_data) {
-            return DONG_IMAGE_ERR_OUT_OF_MEMORY;
-        }
-
-        DongBCEncodeOptions bc_opts = dong_bc_options_default();
-        if (options) {
-            bc_opts.quality = (DongBCQuality)(options->quality / 25);
-        }
-
-        int is_signed = (dst_format == DONG_IMAGE_FORMAT_BC6H_SF) ? 1 : 0;
-
-        size_t bytes_written = dong_bc6h_encode_image(
-            (const uint16_t*)src->data,
-            src->width,
-            src->height,
-            is_signed,
-            &bc_opts,
-            output_data,
-            output_size
-        );
-
-        if (bytes_written == 0) {
-            free(output_data);
-            return DONG_IMAGE_ERR_ENCODE_FAILED;
-        }
-
-        out_image->data = output_data;
-        out_image->data_size = bytes_written;
-        out_image->width = src->width;
-        out_image->height = src->height;
-        out_image->row_bytes = 0;
-        out_image->format = dst_format;
-        out_image->mip_levels = 1;
-        out_image->user_data = NULL;
-
-        return DONG_IMAGE_OK;
-    }
-
-    return DONG_IMAGE_ERR_UNSUPPORTED_FORMAT;
+    return dong_gtc_encode_rgba(gtc, src, dst_format, options, out_image);
 }
 
 static int sdl_gpu_supports_format(DongImageDecoder* decoder, DongImageFormat format) {

@@ -90,6 +90,8 @@ public:
     // 释放所有着色器
     void releaseAll();
 
+    static void clearGlobalCache(SDL_GPUDevice* device);
+
 private:
     GPUDevice* gpu_device_;
     std::unordered_map<std::string, SDL_GPUShader*> shader_cache_;

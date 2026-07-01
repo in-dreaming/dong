@@ -1,4 +1,5 @@
 #include "sdl_window.hpp"
+#include "dong_sdl_gpu_formats.h"
 #include "../src/core/log.h"
 
 #include <cstdlib>
@@ -123,14 +124,7 @@ bool SDL3Window::createWindow(const CreateInfo& info) {
 }
 
 bool SDL3Window::createGPUDevice(bool debug_mode) {
-    // 选择最优的着色器格式（位掩码）
-#ifdef __APPLE__
-    SDL_GPUShaderFormat format_flags = SDL_GPU_SHADERFORMAT_MSL;
-#else
-    SDL_GPUShaderFormat format_flags =
-        SDL_GPU_SHADERFORMAT_SPIRV |
-        SDL_GPU_SHADERFORMAT_DXIL;
-#endif
+    const SDL_GPUShaderFormat format_flags = dong_sdl_default_shader_formats();
 
     gpu_device_ = SDL_CreateGPUDevice(format_flags, debug_mode, nullptr);
     if (!gpu_device_) {

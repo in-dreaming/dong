@@ -173,6 +173,27 @@ void ShaderManager::releaseAll() {
     compute_pipeline_cache_.clear();
 }
 
+void ShaderManager::clearGlobalCache(SDL_GPUDevice* device) {
+    if (!device) {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(g_shader_cache_mutex);
+    auto dev_it = g_global_shader_cache.find(device);
+    if (dev_it != g_global_shader_cache.end()) {
+        for (auto& entry : dev_it->second) {
+            SDL_ReleaseGPUShader(device, entry.second);
+        }
+        g_global_shader_cache.erase(dev_it);
+    }
+    auto cp_it = g_global_compute_cache.find(device);
+    if (cp_it != g_global_compute_cache.end()) {
+        for (auto& entry : cp_it->second) {
+            SDL_ReleaseGPUComputePipeline(device, entry.second);
+        }
+        g_global_compute_cache.erase(cp_it);
+    }
+}
+
 SDL_GPUShader* ShaderManager::createShaderFromBinary(
     SDL_GPUShaderStage stage,
     const ShaderSource& source,
@@ -234,6 +255,10 @@ SDL_GPUShader* ShaderManager::createShaderFromHLSL(
     hlsl_info.shader_stage = sc_stage;
     hlsl_info.props = 0;
 
+    SDL_GPUDevice* dev = gpu_device_->getHandle();
+    const SDL_GPUShaderFormat device_formats = SDL_GetGPUShaderFormats(dev);
+    (void)device_formats;
+
     size_t spirv_size = 0;
     void* spirv_data = SDL_ShaderCross_CompileSPIRVFromHLSL(&hlsl_info, &spirv_size);
     if (!spirv_data || spirv_size == 0) {
@@ -269,7 +294,7 @@ SDL_GPUShader* ShaderManager::createShaderFromHLSL(
     spirv_info.props = props;
 
     SDL_GPUShader* shader = SDL_ShaderCross_CompileGraphicsShaderFromSPIRV(
-        gpu_device_->getHandle(),
+        dev,
         &spirv_info,
         &metadata->resource_info,
         props

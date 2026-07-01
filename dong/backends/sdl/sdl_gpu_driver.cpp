@@ -14,7 +14,6 @@
 // Core includes (temporary, to be decoupled in future phases)
 #include "sdl_gpu_device.hpp"
 #include "sdl_shader_manager.hpp"
-#include "gpu_texture_compressor.hpp"
 #include "../../src/render/resource_manager.hpp"
 #include "../../src/render/glyph_atlas.hpp"
 #include "../../src/render/font_resolver.hpp"

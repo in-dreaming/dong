@@ -22,10 +22,27 @@
 #include "dong_scene3d.h"
 #include "dong_overlay.h"
 #include "dong.h"
+#if !defined(DONG_BACKEND_GPU)
 #include <SDL3/SDL.h>
+#endif
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+
+#if defined(DONG_BACKEND_GPU) && defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
+
+#if defined(DONG_BACKEND_GPU)
+#define DONG_KEY_F1 0x70
+#define DONG_KEY_H 'h'
+#else
+#define DONG_KEY_F1 SDLK_F1
+#define DONG_KEY_H SDLK_H
+#endif
 
 static dong_scene3d_t* g_scene = NULL;
 static int g_toggle_help_requested = 0;
@@ -36,7 +53,7 @@ static void on_app_event(void* user_data, const dong_app_event_t* event) {
         dong_scene3d_process_event(g_scene, event);
     }
     if (event && event->type == DONG_APP_EVENT_KEY && event->key.pressed) {
-        if (event->key.key_code == SDLK_F1 || event->key.key_code == SDLK_H) {
+        if (event->key.key_code == DONG_KEY_F1 || event->key.key_code == DONG_KEY_H) {
             g_toggle_help_requested = 1;
         }
     }
@@ -140,6 +157,21 @@ static void try_set_data_path_from_base(const char* base, const char* suffix, ch
     try_set_data_path(candidate, out, out_size);
 }
 
+#if defined(DONG_BACKEND_GPU) && defined(_WIN32)
+static void get_exe_dir(char* out, size_t out_size) {
+    if (!out || out_size == 0) return;
+    out[0] = 0;
+    DWORD n = GetModuleFileNameA(NULL, out, (DWORD)out_size);
+    if (n == 0 || n >= out_size) return;
+    for (int i = (int)n - 1; i >= 0; --i) {
+        if (out[i] == '\\' || out[i] == '/') {
+            out[i] = 0;
+            return;
+        }
+    }
+}
+#endif
+
 static const char* get_data_path(void) {
     static char path[1024] = {0};
     if (path[0] == 0) {
@@ -159,6 +191,18 @@ static const char* get_data_path(void) {
             try_set_data_path(candidates[i], path, sizeof(path));
         }
 
+#if defined(DONG_BACKEND_GPU) && defined(_WIN32)
+        {
+            char base[1024];
+            get_exe_dir(base, sizeof(base));
+            if (base[0]) {
+                try_set_data_path_from_base(base, "/data", path, sizeof(path));
+                try_set_data_path_from_base(base, "/../data", path, sizeof(path));
+                try_set_data_path_from_base(base, "/../examples/data", path, sizeof(path));
+                try_set_data_path_from_base(base, "/../../examples/data", path, sizeof(path));
+            }
+        }
+#else
         const char* base = SDL_GetBasePath();
         if (base) {
             try_set_data_path_from_base(base, "data", path, sizeof(path));
@@ -166,6 +210,7 @@ static const char* get_data_path(void) {
             try_set_data_path_from_base(base, "../examples/data", path, sizeof(path));
             try_set_data_path_from_base(base, "../../examples/data", path, sizeof(path));
         }
+#endif
 
         if (path[0] == 0) {
             strcpy(path, "data");
@@ -221,6 +266,9 @@ int main(int argc, char* argv[]) {
     }
 
     printf("=== Dong 3D Floor Gallery (Preact + curated tests) ===\n");
+#if defined(DONG_BACKEND_GPU)
+    printf("[Dong] backend=gpu (native in-dreaming/gpu Scene3D)\n");
+#endif
     printf("Zones: %d, floor panels: %d (+ %d title billboards)\n", NUM_ZONE_ROWS, total_floor, NUM_ZONE_ROWS);
     printf("Controls: RMB+Mouse=Look, WASD=Move, Space/E=Up, Ctrl/Q=Down, Shift=Sprint, F1/H=Help, ESC=Exit\n");
 
@@ -365,6 +413,9 @@ int main(int argc, char* argv[]) {
     int frame_count = 0;
     float fps_timer = 0.0f;
     float fps = 0.0f;
+    const char* aq_env = getenv("DONG_AUTO_QUIT");
+    int auto_quit_frames = aq_env ? atoi(aq_env) : 0;
+    int total_frames = 0;
 
     while (dong_app_is_running(app)) {
         if (!dong_app_poll_events(app)) {
@@ -400,6 +451,11 @@ int main(int argc, char* argv[]) {
 
         dong_scene3d_update(scene, dt);
         dong_scene3d_render(scene);
+
+        if (auto_quit_frames > 0 && ++total_frames >= auto_quit_frames) {
+            printf("[Scene3D] Auto-quit after %d frames (DONG_AUTO_QUIT)\n", total_frames);
+            break;
+        }
     }
 
     printf("Shutting down...\n");

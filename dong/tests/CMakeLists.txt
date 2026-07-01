@@ -19,8 +19,6 @@ target_include_directories(test_image_decoder PRIVATE
 # For standalone test, we compile the sources directly
 target_sources(test_image_decoder PRIVATE
     ${CMAKE_SOURCE_DIR}/../backends/sdl/dong_sdl_image_decoder.c
-    ${CMAKE_SOURCE_DIR}/../backends/sdl/dong_astc_encoder.c
-    ${CMAKE_SOURCE_DIR}/../backends/sdl/dong_bc_encoder.c
 )
 
 # Math library (Linux)

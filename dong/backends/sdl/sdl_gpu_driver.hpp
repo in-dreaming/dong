@@ -31,10 +31,24 @@ namespace dong {
 namespace sdl_backend {
 class GPUDevice;
 class ShaderManager;
-class GPUTextureCompressor;
 }
 
 namespace render {
+
+namespace detail {
+
+inline SDL_GPUTextureFormat render_target_format_from_swapchain(SDL_GPUTextureFormat swapchain_format,
+                                                                bool hdr_requested) {
+    if (hdr_requested || swapchain_format == SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT) {
+        return SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT;
+    }
+    if (swapchain_format != SDL_GPU_TEXTUREFORMAT_INVALID) {
+        return swapchain_format;
+    }
+    return SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+}
+
+} // namespace detail
 
 // Core types (forward declarations, will be decoupled in future phases)
 class ResourceManager;
@@ -137,7 +151,6 @@ private:
     sdl_backend::ShaderManager* shader_manager_;
     ResourceManager* image_resource_manager_ = nullptr;
     DongGPUDriver* dong_gpu_driver_ = nullptr;  // C API driver for GlyphAtlas
-    std::unique_ptr<sdl_backend::GPUTextureCompressor> gpu_compressor_;  // GPU texture compression
 
     // SDL GPU state
     SDL_GPUCommandBuffer* current_cmd_buf_ = nullptr;
@@ -154,6 +167,7 @@ private:
     // HDR support
     bool hdr_enabled_ = false;
     SDL_GPUTextureFormat render_target_format_ = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    SDL_GPUTextureFormat swapchain_format_ = SDL_GPU_TEXTUREFORMAT_INVALID;
 
     // Frame counter
     unsigned long long frame_index_ = 0;

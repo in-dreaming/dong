@@ -6,6 +6,7 @@
  */
 
 #include "dong_sdl_image_atlas.h"
+#include "dong_image_decoder.h"
 #include <SDL3/SDL_gpu.h>
 #include <SDL3/SDL_log.h>
 #include <stdlib.h>
@@ -101,7 +102,10 @@ static AtlasPage* create_page(SDLImageAtlas* atlas) {
     tex_info.height = atlas->base.config.height;
     tex_info.layer_count_or_depth = 1;
     tex_info.num_levels = 1;
-    tex_info.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER | SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_WRITE;
+    tex_info.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    if (!dong_image_format_is_compressed(atlas->base.config.format)) {
+        tex_info.usage |= SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_WRITE;
+    }
 
     SDL_GPUTexture* texture = SDL_CreateGPUTexture(atlas->device, &tex_info);
     if (!texture) {

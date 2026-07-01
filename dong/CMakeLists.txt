@@ -30,6 +30,13 @@ set_property(CACHE DONG_BACKEND PROPERTY STRINGS sdl gpu none)
 if(NOT DONG_BACKEND MATCHES "^(sdl|gpu|none)$")
     message(FATAL_ERROR "Invalid DONG_BACKEND='${DONG_BACKEND}' (expected sdl, gpu, or none)")
 endif()
+if(DONG_BACKEND STREQUAL "gpu")
+    add_compile_definitions(DONG_BACKEND_GPU=1)
+elseif(DONG_BACKEND STREQUAL "sdl")
+    add_compile_definitions(DONG_BACKEND_SDL=1)
+else()
+    add_compile_definitions(DONG_BACKEND_NONE=1)
+endif()
 
 # Windows MSVC runtime
 if(WIN32 AND NOT MINGW)
@@ -84,6 +91,7 @@ set(DXC_INCLUDE_PATH "third_party/dxc/include" CACHE PATH "DXC include path")
 # =============================================================================
 # Third-party dependencies (built by zig build or manually)
 # =============================================================================
+include(${CMAKE_SOURCE_DIR}/cmake/DongGtc.cmake)
 set(FREETYPE_PREFIX "${CMAKE_SOURCE_DIR}/zig-out/freetype")
 set(HARFBUZZ_PREFIX "${CMAKE_SOURCE_DIR}/zig-out/harfbuzz")
 set(MSDFGEN_PREFIX "${CMAKE_SOURCE_DIR}/zig-out/msdfgen")
@@ -369,6 +377,8 @@ add_library(dong_render STATIC
     src/core/global_shared_c_api.cpp
     src/core/glyph_atlas_c_api.cpp
     src/render/glyph_atlas.cpp
+    src/render/dong_ui_graph.cpp
+    src/render/ui_pass_compiler.cpp
 
     # Input
     src/input/spatial_nav.cpp
@@ -500,6 +510,8 @@ endif()
 
 target_link_libraries(dong_render PUBLIC dong quickjs lexbor yoga)
 
+dong_apply_gtc_target(dong_render)
+
 
 if(WIN32)
     target_link_libraries(dong_render PUBLIC
@@ -542,27 +554,27 @@ elseif(DONG_BACKEND STREQUAL "gpu")
   if(WIN32 AND NOT MINGW)
     add_compile_options(/MD /permissive-)
   endif()
-  # Stub backend only. Full in-dreaming/gpu (slang-rhi) builds standalone in
-  # third_party/gpu; embedding it under dong+clang-cl needs upstream/toolchain alignment.
   add_subdirectory(backends/gpu)
 endif()
 
 # =============================================================================
-# AppCore (SDL backend only)
+# AppCore (SDL or native GPU backend)
 # =============================================================================
 option(BUILD_APPCORE "Build dong appcore library" ON)
-if(BUILD_APPCORE AND DONG_BACKEND STREQUAL "sdl")
+if(BUILD_APPCORE AND (DONG_BACKEND STREQUAL "sdl" OR DONG_BACKEND STREQUAL "gpu"))
     add_subdirectory(appcore)
 elseif(BUILD_APPCORE)
-    message(STATUS "Skipping AppCore: requires DONG_BACKEND=sdl")
+    message(STATUS "Skipping AppCore: requires DONG_BACKEND=sdl or gpu")
 endif()
 
 # =============================================================================
-# Plugins (SDL backend only)
+# Plugins (SDL backend only — video decode; GPU backend uses external image path)
 # =============================================================================
 option(BUILD_PLUGINS "Build dong plugins" ON)
 if(BUILD_PLUGINS AND DONG_BACKEND STREQUAL "sdl")
     add_subdirectory(plugins/sdl)
+elseif(BUILD_PLUGINS AND DONG_BACKEND STREQUAL "gpu")
+    message(STATUS "Skipping SDL plugins in GPU build (no dong_sdl_backend)")
 elseif(BUILD_PLUGINS)
     message(STATUS "Skipping plugins: requires DONG_BACKEND=sdl")
 endif()
@@ -790,8 +802,224 @@ if(BUILD_EXAMPLES AND DONG_BACKEND STREQUAL "sdl")
         install(TARGETS run_feature_tests RUNTIME DESTINATION bin)
     endif()
 
+elseif(BUILD_EXAMPLES AND DONG_BACKEND STREQUAL "gpu")
+    # dong_gpu_backend.dll implicitly links zig-out/sdl3's SDL3 (used by dong_render's image
+    # decoder path, independent of in-dreaming/gpu's own vendored/static SDL3 windowing layer).
+    # Windows' DLL search order always includes the *process exe's* directory for every module
+    # load (including transitive dependencies pulled in by other DLLs), so copying SDL3.dll next
+    # to the example executables makes the raw CMake build tree runnable without relying on
+    # ambient PATH or a separate `cmake --install` step. All GPU examples share the same output
+    # directory (CMAKE_BINARY_DIR), so this is done once via a single custom target/command
+    # (rather than one POST_BUILD copy per executable) to avoid concurrent ninja edges racing to
+    # write the same destination files.
+    if(WIN32)
+        set(_dong_gpu_runtime_dll_sources)
+        if(EXISTS "${SDL3_PREFIX}/bin/SDL3.dll")
+            list(APPEND _dong_gpu_runtime_dll_sources "${SDL3_PREFIX}/bin/SDL3.dll")
+        endif()
+        if(EXISTS "${CMAKE_SOURCE_DIR}/third_party/dxc/bin/x64/dxcompiler.dll")
+            list(APPEND _dong_gpu_runtime_dll_sources
+                "${CMAKE_SOURCE_DIR}/third_party/dxc/bin/x64/dxcompiler.dll"
+                "${CMAKE_SOURCE_DIR}/third_party/dxc/bin/x64/dxil.dll")
+        endif()
+        if(_dong_gpu_runtime_dll_sources)
+            set(_dong_gpu_runtime_dll_stamp "${CMAKE_BINARY_DIR}/.dong_gpu_runtime_dlls_stamp")
+            add_custom_command(
+                OUTPUT "${_dong_gpu_runtime_dll_stamp}"
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different ${_dong_gpu_runtime_dll_sources} "${CMAKE_BINARY_DIR}"
+                COMMAND ${CMAKE_COMMAND} -E touch "${_dong_gpu_runtime_dll_stamp}"
+                DEPENDS ${_dong_gpu_runtime_dll_sources}
+                COMMENT "Copying GPU backend runtime DLLs (SDL3/dxcompiler/dxil) to build output"
+            )
+            add_custom_target(dong_gpu_runtime_dlls DEPENDS "${_dong_gpu_runtime_dll_stamp}")
+        endif()
+    endif()
+
+    function(dong_gpu_copy_runtime_dlls target)
+        if(WIN32 AND TARGET dong_gpu_runtime_dlls)
+            add_dependencies(${target} dong_gpu_runtime_dlls)
+        endif()
+    endfunction()
+
+    function(dong_gpu_link_sdl_deps target)
+        target_include_directories(${target} PRIVATE
+            "${SDL3_PREFIX}/include"
+            "${CMAKE_SOURCE_DIR}/backends/sdl"
+        )
+        if(WIN32)
+            target_link_directories(${target} PRIVATE "${SDL3_PREFIX}/lib")
+            target_link_libraries(${target} PRIVATE SDL3)
+        elseif(APPLE)
+            target_link_directories(${target} PRIVATE "${SDL3_PREFIX}/lib")
+            target_link_libraries(${target} PRIVATE SDL3)
+        else()
+            target_link_directories(${target} PRIVATE "${SDL3_PREFIX}/lib")
+            target_link_libraries(${target} PRIVATE SDL3)
+        endif()
+        if(VULKAN_SDK_PATH)
+            if(WIN32)
+                target_link_directories(${target} PRIVATE "${VULKAN_SDK_PATH}/Lib")
+            else()
+                target_link_directories(${target} PRIVATE "${VULKAN_SDK_PATH}/lib")
+            endif()
+        endif()
+        target_link_libraries(${target} PRIVATE spirv-cross-c-shared)
+        if(WIN32 OR APPLE)
+            target_link_directories(${target} PRIVATE ${DXC_LIB_PATH})
+            target_link_libraries(${target} PRIVATE dxcompiler)
+        endif()
+        if(WIN32)
+            target_link_libraries(${target} PRIVATE user32 gdi32 ole32 shell32 advapi32)
+        elseif(APPLE)
+            target_link_libraries(${target} PRIVATE
+                "-framework CoreFoundation"
+                "-framework CoreGraphics"
+                "-framework CoreText"
+            )
+        else()
+            target_link_libraries(${target} PRIVATE ubsan stdc++)
+        endif()
+    endfunction()
+
+    function(add_dong_gpu_html_example name source)
+        add_executable(${name}
+            ${source}
+            examples/shared/demo_gpu_platform.c
+        )
+        target_include_directories(${name} PRIVATE
+            ${CMAKE_SOURCE_DIR}/backends/gpu
+            ${CMAKE_SOURCE_DIR}/third_party/gpu/src
+            ${CMAKE_SOURCE_DIR}/examples/shared
+            ${CMAKE_SOURCE_DIR}/include
+        )
+        target_compile_definitions(${name} PRIVATE DONG_BACKEND_GPU=1)
+        target_link_libraries(${name} PRIVATE dong dong_render dong_gpu_backend)
+        if(TARGET gpu)
+            target_link_libraries(${name} PRIVATE gpu)
+        endif()
+        dong_gpu_link_sdl_deps(${name})
+        dong_gpu_copy_runtime_dlls(${name})
+        install(TARGETS ${name} RUNTIME DESTINATION bin)
+    endfunction()
+
+    function(add_dong_gpu_native_example name source)
+        add_executable(${name} ${source})
+        target_include_directories(${name} PRIVATE ${CMAKE_SOURCE_DIR}/backends/gpu)
+        target_compile_definitions(${name} PRIVATE DONG_BACKEND_GPU=1)
+        target_link_libraries(${name} PRIVATE dong dong_render dong_gpu_backend)
+        if(TARGET gpu)
+            target_include_directories(${name} PRIVATE ${CMAKE_SOURCE_DIR}/third_party/gpu/src)
+            target_link_libraries(${name} PRIVATE gpu)
+        endif()
+        dong_gpu_copy_runtime_dlls(${name})
+        install(TARGETS ${name} RUNTIME DESTINATION bin)
+    endfunction()
+
+    function(add_dong_gpu_sdl_stub name)
+        add_executable(${name} examples/stubs/sdl_only_stub.c)
+        target_compile_definitions(${name} PRIVATE DONG_BACKEND_GPU=1)
+        install(TARGETS ${name} RUNTIME DESTINATION bin)
+    endfunction()
+
+    function(add_dong_gpu_appcore_example name source)
+        add_executable(${name} ${source})
+        target_compile_definitions(${name} PRIVATE DONG_BACKEND_GPU=1)
+        target_include_directories(${name} PRIVATE
+            ${CMAKE_SOURCE_DIR}/backends/gpu
+            ${CMAKE_SOURCE_DIR}/third_party/gpu/src
+        )
+        target_link_libraries(${name} PRIVATE dong_appcore)
+        if(TARGET gpu)
+            target_link_libraries(${name} PRIVATE gpu)
+        endif()
+        if(VULKAN_SDK_PATH)
+            if(WIN32)
+                target_link_directories(${name} PRIVATE "${VULKAN_SDK_PATH}/Lib")
+            else()
+                target_link_directories(${name} PRIVATE "${VULKAN_SDK_PATH}/lib")
+            endif()
+            target_link_libraries(${name} PRIVATE spirv-cross-c-shared)
+        endif()
+        if(WIN32 OR APPLE)
+            target_link_directories(${name} PRIVATE ${DXC_LIB_PATH})
+            target_link_libraries(${name} PRIVATE dxcompiler)
+        endif()
+        if(WIN32)
+            target_link_libraries(${name} PRIVATE user32 gdi32 ole32 shell32 advapi32)
+        elseif(APPLE)
+            target_link_libraries(${name} PRIVATE
+                "-framework CoreFoundation"
+                "-framework CoreGraphics"
+                "-framework CoreText"
+            )
+        else()
+            target_link_libraries(${name} PRIVATE ubsan stdc++)
+        endif()
+        dong_gpu_copy_runtime_dlls(${name})
+        install(TARGETS ${name} RUNTIME DESTINATION bin)
+    endfunction()
+
+    add_dong_gpu_html_example(dong_app examples/dong_app_gpu/main.c)
+    add_dong_gpu_html_example(minimal_dong_demo examples/minimal_gpu/main.c)
+    add_dong_gpu_native_example(gpu_ui_inject examples/gpu_ui_inject/main.c)
+
+    if(EXISTS "${CMAKE_SOURCE_DIR}/examples/html_render_test_gpu.cpp")
+        add_executable(html_render_test examples/html_render_test_gpu.cpp)
+        target_include_directories(html_render_test PRIVATE
+            ${CMAKE_SOURCE_DIR}/backends/gpu
+            ${CMAKE_SOURCE_DIR}/third_party/gpu/src
+        )
+        target_compile_definitions(html_render_test PRIVATE DONG_BACKEND_GPU=1)
+        target_link_libraries(html_render_test PRIVATE dong dong_render dong_gpu_backend)
+        if(TARGET gpu)
+            target_link_libraries(html_render_test PRIVATE gpu)
+        endif()
+        dong_gpu_copy_runtime_dlls(html_render_test)
+        install(TARGETS html_render_test RUNTIME DESTINATION bin)
+    endif()
+
+    if(BUILD_APPCORE AND EXISTS "${CMAKE_SOURCE_DIR}/examples/3d_screens_simple/main.c")
+        add_dong_gpu_appcore_example(3d_screens_simple "examples/3d_screens_simple/main.c")
+    else()
+        add_dong_gpu_sdl_stub(3d_screens_simple)
+    endif()
+
+    add_dong_gpu_sdl_stub(interactive_demo_new)
+    add_dong_gpu_sdl_stub(hdr_demo)
+    add_dong_gpu_sdl_stub(dock_demo)
+    add_dong_gpu_sdl_stub(multiview_1js)
+
+    if(EXISTS "${CMAKE_SOURCE_DIR}/examples/data")
+        install(DIRECTORY "${CMAKE_SOURCE_DIR}/examples/data"
+            DESTINATION bin
+            FILES_MATCHING
+                PATTERN "*.html"
+                PATTERN "*.js"
+                PATTERN "*.css"
+                PATTERN "*.json"
+                PATTERN "*.txt"
+                PATTERN "*.png"
+                PATTERN "*.mp4"
+                PATTERN "*.woff"
+                PATTERN "*.woff2"
+                PATTERN "*.ttf"
+        )
+    endif()
+    if(EXISTS "${CMAKE_SOURCE_DIR}/data")
+        install(DIRECTORY "${CMAKE_SOURCE_DIR}/data"
+            DESTINATION bin
+            FILES_MATCHING
+                PATTERN "*.html"
+                PATTERN "*.js"
+                PATTERN "*.css"
+                PATTERN "*.json"
+                PATTERN "*.txt"
+                PATTERN "*.png"
+                PATTERN "*.mp4"
+        )
+    endif()
 elseif(BUILD_EXAMPLES)
-    message(STATUS "Skipping examples: requires DONG_BACKEND=sdl")
+    message(STATUS "Skipping examples: requires DONG_BACKEND=sdl or gpu")
 endif()
 
 # =============================================================================
@@ -861,10 +1089,16 @@ if(BUILD_EXAMPLES AND DONG_BACKEND STREQUAL "sdl")
     endif()
 endif()
 
-# Copy SDL3 DLL/dylib to bin (SDL backend only)
-if(DONG_BACKEND STREQUAL "sdl")
+# Copy SDL3 DLL/dylib to bin (SDL backend, or GPU platform window via in-dreaming/gpu SDL layer)
+if(DONG_BACKEND STREQUAL "sdl" OR DONG_BACKEND STREQUAL "gpu")
     if(WIN32)
         install(FILES "${SDL3_PREFIX}/bin/SDL3.dll" DESTINATION bin)
+        if(EXISTS "${CMAKE_SOURCE_DIR}/third_party/dxc/bin/x64/dxcompiler.dll")
+            install(FILES
+                "${CMAKE_SOURCE_DIR}/third_party/dxc/bin/x64/dxcompiler.dll"
+                "${CMAKE_SOURCE_DIR}/third_party/dxc/bin/x64/dxil.dll"
+                DESTINATION bin)
+        endif()
     elseif(APPLE)
         file(GLOB SDL3_DYLIBS "${SDL3_PREFIX}/lib/libSDL3*.dylib")
         # dylib needs executable bit on macOS, so treat as PROGRAMS to preserve runnable perms

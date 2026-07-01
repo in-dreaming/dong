@@ -2633,8 +2633,20 @@ void Engine::applyDOMStylesToYoga(dom::DOMNodePtr dom_node, YGNode* yoga_node) {
     }
 
     const bool is_inline_level = (style.display == dom::CSSDisplay::Inline || style.display == dom::CSSDisplay::InlineBlock);
-    // 为所有包含文本的 inline 元素设置最小宽度，防止被压缩导致文本截断
-    if (is_inline_level && (style.width.isAuto() || style.height.isAuto())) {
+    // Block-level children of a flex container are still flex items and must get
+    // content-based auto-sizing just like inline/inline-block ones - otherwise a
+    // plain `<div>` (default display:block) tab/button with no explicit width
+    // collapses to padding-only width and its text overlaps neighboring siblings
+    // (e.g. a `.tab-header { display:flex }` of unstyled `.tab-btn` divs).
+    // Exclude nodes that are themselves a flex container: getTextContent() below
+    // aggregates ALL descendant text (like DOM textContent), so a flex item that
+    // is also a `display:flex` parent (e.g. `.tab-header` itself, one level up)
+    // must size from its children via normal flex layout, not from the
+    // concatenated text of every descendant treated as a single text run.
+    const bool is_own_flex_container = (style.layout_mode == dom::LayoutMode::Flex);
+    const bool needs_text_intrinsic_size = (is_inline_level || parent_is_flex) && !is_own_flex_container;
+    // 为所有包含文本的 inline 元素（或 flex item）设置最小宽度，防止被压缩导致文本截断
+    if (needs_text_intrinsic_size && (style.width.isAuto() || style.height.isAuto())) {
         std::string text = collapseWhitespace(dom_node->getTextContent());
         if (!text.empty()) {
             float font_size_px = style.font_size > 0.0f ? style.font_size : 16.0f;

@@ -2,6 +2,8 @@
  * Scene3D Implementation - 3D scene with HTML screens
  */
 
+#ifndef DONG_BACKEND_GPU
+
 #include "dong_scene3d.h"
 #include "dong_math.h"
 #include "dong.h"
@@ -2537,3 +2539,5 @@ static void destroy_pipelines(dong_scene3d_t* scene) {
     if (scene->msaa_color_texture) SDL_ReleaseGPUTexture(scene->device, scene->msaa_color_texture);
     if (scene->depth_texture) SDL_ReleaseGPUTexture(scene->device, scene->depth_texture);
 }
+
+#endif /* !DONG_BACKEND_GPU */

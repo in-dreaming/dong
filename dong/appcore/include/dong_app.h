@@ -200,6 +200,11 @@ DONG_APPCORE_API void* dong_app_get_gpu_device(dong_app_t* app);
 // Get the native SDL_Window pointer (cast from void*).
 DONG_APPCORE_API void* dong_app_get_window(dong_app_t* app);
 
+// GPU backend accessors (NULL when not using DONG_BACKEND_GPU).
+DONG_APPCORE_API void* dong_app_get_gpu_surface(dong_app_t* app);
+DONG_APPCORE_API void* dong_app_get_gpu_queue(dong_app_t* app);
+DONG_APPCORE_API uint32_t dong_app_get_gpu_surface_format(dong_app_t* app);
+
 // Get the dong_engine_t pointer (if enable_dong was set).
 DONG_APPCORE_API void* dong_app_get_dong_engine(dong_app_t* app);
 

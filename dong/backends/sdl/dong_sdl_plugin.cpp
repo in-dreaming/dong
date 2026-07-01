@@ -5,6 +5,7 @@
 
 #include "dong_sdl_platform.h"
 #include "dong_gpu_driver.h"
+#include "dong_sdl_gpu_formats.h"
 
 #include <cstring>
 #include <string>
@@ -187,9 +188,7 @@ static dong_gpu_device_t* sdl_plugin_renderer_init(void* user, dong_window_t* wi
 #ifdef __APPLE__
     SDL_GPUShaderFormat format_flags = SDL_GPU_SHADERFORMAT_MSL;
 #else
-    SDL_GPUShaderFormat format_flags =
-        SDL_GPU_SHADERFORMAT_SPIRV |
-        SDL_GPU_SHADERFORMAT_DXIL;
+    SDL_GPUShaderFormat format_flags = dong_sdl_default_shader_formats();
 #endif
 
     // Create GPU device

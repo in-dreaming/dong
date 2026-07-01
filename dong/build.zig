@@ -1913,7 +1913,6 @@ fn buildSDLBackend(
             "backends/sdl/sdl_input_adapter.cpp",
             "backends/sdl/dong_sdl_plugin.cpp",
             "backends/sdl/dong_sdl_gpu_bridge.cpp",
-            "backends/sdl/gpu_texture_compressor.cpp",
         },
         .flags = &.{
             "-std=c++20",

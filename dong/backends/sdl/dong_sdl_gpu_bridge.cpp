@@ -1,5 +1,7 @@
 #include "dong_sdl_gpu_bridge.h"
 
+#include "dong_sdl_gpu_formats.h"
+
 #include "sdl_gpu_driver.hpp"
 
 #include "core/log.h"
@@ -19,12 +21,8 @@
 
 namespace {
 
-static inline SDL_GPUShaderFormat chooseShaderFormat() {
-#ifdef __APPLE__
-    return SDL_GPU_SHADERFORMAT_MSL;
-#else
-    return SDL_GPU_SHADERFORMAT_SPIRV;
-#endif
+static inline SDL_GPUShaderFormat chooseShaderFormat(SDL_GPUDevice* dev) {
+    return dong_sdl_shader_formats_for_device(dev);
 }
 
 static inline const dong::render::GPUCommandList* asCommandList(const void* command_list) {
@@ -59,9 +57,10 @@ DongSDLGPUBridge* dong_sdl_gpu_bridge_create(void* sdl_device, void* sdl_window,
         bridge->sdl_window = win;
 
         bridge->gpu_device = std::make_unique<dong::sdl_backend::GPUDevice>();
-        bridge->gpu_device->adoptExternal(dev, chooseShaderFormat());
+        bridge->gpu_device->adoptExternal(dev, chooseShaderFormat(dev));
 
         bridge->shader_manager = std::make_unique<dong::sdl_backend::ShaderManager>(bridge->gpu_device.get());
+        dong::sdl_backend::ShaderManager::clearGlobalCache(dev);
         bridge->driver = std::make_unique<dong::render::SDLGPUDriver>(bridge->gpu_device.get(), win, bridge->shader_manager.get());
 
         // Set the C API driver for GlyphAtlas creation

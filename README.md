@@ -49,20 +49,34 @@ export DONG_SCRIPT_TIMEOUT_MS=10000
 backend
 ```bash
 zig build -Dbackend=sdl|gpu|none
-zig build dong-core -Dbackend=none    # 已通过
-zig build gpu-backend -Dbackend=gpu   # 已通过（stub DLL）
-zig build examples -Dbackend=sdl   
+
+# SDL backend（AppCore、3D 场景、SDL GPU 驱动）
+zig build examples -Dbackend=sdl
+.\zig-out\bin\dong_app.exe --html data\gamelikeui\game_ui_offline.html
+.\zig-out\bin\3d_screens_simple.exe
+
+# GPU backend（in-dreaming/gpu 原生；无 dong_sdl_backend 委托）
+zig build -Dbackend=gpu
+.\zig-out\bin\dong_app.exe --html data\gamelikeui\game_ui_offline.html
+.\zig-out\bin\3d_screens_simple.exe
+.\zig-out\bin\gpu_ui_inject.exe
+.\zig-out\bin\html_render_test.exe data\gamelikeui\game_ui_offline.html out.bmp 800 600
+
+# 需要 Vulkan SDK（in-dreaming/gpu / Slang）
+zig build dong-core -Dbackend=none
 ```
 
 ## 示例程序
 
-| 程序 | 说明 |
-|------|------|
-| `dong_app` | 通用 HTML 查看器（`--html` / `--watch`） |
-| `minimal_dong_demo` | 最小 AppCore 示例（~50 行） |
-| `interactive_demo_new` | 交互式 demo（~200 行） |
-| `3d_screens_simple` | 3D 场景中嵌入多个 HTML 屏幕 |
-| `html_render_test` | 无头渲染，输出 BMP 截图 |
+| 程序 | SDL (`-Dbackend=sdl`) | GPU (`-Dbackend=gpu`) |
+|------|----------------------|------------------------|
+| `dong_app` | AppCore + SDL GPU | AppCore + in-dreaming/gpu |
+| `minimal_dong_demo` | AppCore 最小示例 | GPU 最小示例 |
+| `3d_screens_simple` | 3D 多 HTML 屏幕 | 原生 GPU Scene3D |
+| `gpu_ui_inject` | 不构建 | Tier-2 UI Graph 注入测试 |
+| `html_render_test` | 无头 BMP 截图 | 无头 BMP 截图（原生 GPU） |
+
+同一 `zig-out/bin` 目录：切换 backend 后请重新 `zig build`，避免混用旧 exe。
 
 ## 文档
 

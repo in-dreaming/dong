@@ -5,23 +5,87 @@
 
 #include "dong.h"
 #include "dong_plugin_api.h"
-#include "dong_sdl_platform.h"
 
+#if defined(DONG_BACKEND_GPU)
+#include "dong_gpu_app_platform.h"
+#include "gpu/platform/gpu_platform.h"
+#else
+#include "dong_sdl_platform.h"
+#include "dong_sdl_gpu_formats.h"
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_gpu.h>
+#endif
 
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 
+#if defined(DONG_BACKEND_GPU) && defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
+
 #define MAX_PATH_LEN 1024
+
+static void extract_dir_from_path(const char* path, char* out_dir, size_t out_size);
 
 // Plugin loading (optional: video, etc.)
 static const dong_plugin_vtable_t* s_plugin_vtable = NULL;
 
 static void* s_plugin_module = NULL;
 
+#if defined(DONG_BACKEND_GPU) && defined(_WIN32)
+static const dong_plugin_vtable_t* try_load_plugin_gpu(void) {
+    if (s_plugin_vtable) return s_plugin_vtable;
+    if (s_plugin_module) return NULL;
+
+    char exe_path[MAX_PATH_LEN];
+    DWORD len = GetModuleFileNameA(NULL, exe_path, (DWORD)sizeof(exe_path));
+    if (len == 0 || len >= sizeof(exe_path)) {
+        s_plugin_module = (void*)1;
+        return NULL;
+    }
+    char dir[MAX_PATH_LEN];
+    extract_dir_from_path(exe_path, dir, sizeof(dir));
+
+    char path[MAX_PATH_LEN];
+    snprintf(path, sizeof(path), "%s\\dong_plugin_sdl.dll", dir);
+
+    HMODULE mod = LoadLibraryA(path);
+    if (!mod) {
+        printf("[DongApp] Plugin not found: %s\n", path);
+        s_plugin_module = (void*)1;
+        return NULL;
+    }
+    s_plugin_module = (void*)mod;
+
+    typedef const dong_plugin_vtable_t* (*get_api_fn)(void);
+    get_api_fn fn = (get_api_fn)GetProcAddress(mod, "dong_plugin_get_api");
+    if (!fn) {
+        printf("[DongApp] Plugin missing symbol: dong_plugin_get_api\n");
+        FreeLibrary(mod);
+        s_plugin_module = (void*)1;
+        return NULL;
+    }
+
+    s_plugin_vtable = fn();
+    if (s_plugin_vtable) {
+        printf("[DongApp] Plugin loaded: %s\n", path);
+    }
+    return s_plugin_vtable;
+}
+#endif
+
 static const dong_plugin_vtable_t* try_load_plugin(void) {
+#if defined(DONG_BACKEND_GPU)
+#if defined(_WIN32)
+    return try_load_plugin_gpu();
+#else
+    return NULL;
+#endif
+#else
     if (s_plugin_vtable) return s_plugin_vtable;
     if (s_plugin_module) return NULL;
 
@@ -67,6 +131,7 @@ static const dong_plugin_vtable_t* try_load_plugin(void) {
         printf("[DongApp] Plugin loaded: %s\n", path);
     }
     return s_plugin_vtable;
+#endif
 }
 
 static void extract_dir_from_path(const char* path, char* out_dir, size_t out_size) {
@@ -94,8 +159,12 @@ static void extract_dir_from_path(const char* path, char* out_dir, size_t out_si
 
 
 typedef struct dong_app_impl_t {
+#if defined(DONG_BACKEND_GPU)
+    DongGpuAppPlatform gpu;
+#else
     SDL_Window* window;
     SDL_GPUDevice* gpu_device;
+#endif
 
     uint32_t width;
     uint32_t height;
@@ -137,6 +206,55 @@ typedef struct dong_app_impl_t {
     int64_t hot_reload_mtime;           // last known modification time
 } dong_app_impl_t;
 
+static void app_send_event_callback(dong_app_impl_t* app, const dong_app_event_t* ev) {
+    if (!app || !app->event_callback || !ev) {
+        return;
+    }
+    app->event_callback(app->event_callback_user_data, ev);
+}
+
+static void app_forward_event_to_engine(dong_app_impl_t* app, const dong_app_event_t* ev) {
+    if (!app || !app->engine || !ev) {
+        return;
+    }
+
+    switch (ev->type) {
+        case DONG_APP_EVENT_WINDOW_RESIZED:
+            (void)dong_engine_resize(app->engine, ev->window_resized.width, ev->window_resized.height);
+            break;
+        case DONG_APP_EVENT_MOUSE_MOVE:
+            (void)dong_engine_send_mouse_move(app->engine, ev->mouse_move.x, ev->mouse_move.y);
+            break;
+        case DONG_APP_EVENT_MOUSE_BUTTON:
+            (void)dong_engine_send_mouse_move(app->engine, ev->mouse_button.x, ev->mouse_button.y);
+            (void)dong_engine_send_mouse_button(app->engine, ev->mouse_button.button, ev->mouse_button.pressed);
+            break;
+        case DONG_APP_EVENT_MOUSE_WHEEL:
+            (void)dong_engine_send_mouse_move(app->engine, ev->mouse_wheel.x, ev->mouse_wheel.y);
+            (void)dong_engine_send_mouse_wheel(app->engine, ev->mouse_wheel.delta_x, ev->mouse_wheel.delta_y);
+            break;
+        case DONG_APP_EVENT_KEY:
+            (void)dong_engine_send_key(app->engine, ev->key.key_code, ev->key.pressed);
+            break;
+        case DONG_APP_EVENT_TEXT:
+            (void)dong_engine_send_text(app->engine, ev->text.text);
+            break;
+        case DONG_APP_EVENT_TEXT_EDITING:
+            (void)dong_engine_send_text_editing(app->engine, ev->text_editing.text,
+                                                ev->text_editing.cursor,
+                                                ev->text_editing.selection_length);
+            break;
+        case DONG_APP_EVENT_GAMEPAD_BUTTON:
+            (void)dong_engine_send_gamepad_button(app->engine, ev->gamepad_button.gamepad_id,
+                                                  (dong_gamepad_button_t)ev->gamepad_button.button,
+                                                  ev->gamepad_button.pressed);
+            break;
+        default:
+            break;
+    }
+}
+
+#if !defined(DONG_BACKEND_GPU)
 static void app_set_present_mode(dong_app_impl_t* app) {
     if (!app || !app->gpu_device || !app->window) {
         return;
@@ -169,13 +287,6 @@ static void app_set_present_mode(dong_app_impl_t* app) {
             printf("[DongApp] Fell back to SDR mode\n");
         }
     }
-}
-
-static void app_send_event_callback(dong_app_impl_t* app, const dong_app_event_t* ev) {
-    if (!app || !app->event_callback || !ev) {
-        return;
-    }
-    app->event_callback(app->event_callback_user_data, ev);
 }
 
 static SDL_SystemCursor app_map_cursor(const char* cursor_name_cstr) {
@@ -247,50 +358,6 @@ static void app_update_cursor(dong_app_impl_t* app) {
     app_apply_cursor(css_cursor);
 }
 
-
-static void app_forward_event_to_engine(dong_app_impl_t* app, const dong_app_event_t* ev) {
-    if (!app || !app->engine || !ev) {
-        return;
-    }
-
-    switch (ev->type) {
-        case DONG_APP_EVENT_WINDOW_RESIZED:
-            (void)dong_engine_resize(app->engine, ev->window_resized.width, ev->window_resized.height);
-            break;
-        case DONG_APP_EVENT_MOUSE_MOVE:
-            (void)dong_engine_send_mouse_move(app->engine, ev->mouse_move.x, ev->mouse_move.y);
-            break;
-        case DONG_APP_EVENT_MOUSE_BUTTON:
-            // 重要：engine_view 的 mouse down/up 会基于最近一次 mouse_move 的坐标做 hit-test。
-            // 如果用户“点击但鼠标没动”，仅发送 mouse_button 会导致 last_mouse_x/y 过期，出现点不开/点不准。
-            (void)dong_engine_send_mouse_move(app->engine, ev->mouse_button.x, ev->mouse_button.y);
-            (void)dong_engine_send_mouse_button(app->engine, ev->mouse_button.button, ev->mouse_button.pressed);
-            break;
-        case DONG_APP_EVENT_MOUSE_WHEEL:
-            // 同上：滚轮滚动需要准确的鼠标位置来找到 scroll container。
-            (void)dong_engine_send_mouse_move(app->engine, ev->mouse_wheel.x, ev->mouse_wheel.y);
-            (void)dong_engine_send_mouse_wheel(app->engine, ev->mouse_wheel.delta_x, ev->mouse_wheel.delta_y);
-            break;
-        case DONG_APP_EVENT_KEY:
-            (void)dong_engine_send_key(app->engine, ev->key.key_code, ev->key.pressed);
-            break;
-        case DONG_APP_EVENT_TEXT:
-            (void)dong_engine_send_text(app->engine, ev->text.text);
-            break;
-        case DONG_APP_EVENT_TEXT_EDITING:
-            (void)dong_engine_send_text_editing(app->engine, ev->text_editing.text,
-                                                ev->text_editing.cursor,
-                                                ev->text_editing.selection_length);
-            break;
-        case DONG_APP_EVENT_GAMEPAD_BUTTON:
-            (void)dong_engine_send_gamepad_button(app->engine, ev->gamepad_button.gamepad_id,
-                                                  (dong_gamepad_button_t)ev->gamepad_button.button,
-                                                  ev->gamepad_button.pressed);
-            break;
-        default:
-            break;
-    }
-}
 
 static int debug_input_enabled(void) {
     const char* v = getenv("DONG_DEBUG_INPUT");
@@ -413,12 +480,37 @@ static dong_app_event_t app_translate_sdl_event(dong_app_impl_t* app, const SDL_
             return out;
     }
 }
+#endif
 
 static int app_create_engine(dong_app_impl_t* app) {
     if (!app) {
         return 0;
     }
 
+#if defined(DONG_BACKEND_GPU)
+    dong_engine_desc_t desc;
+    memset(&desc, 0, sizeof(desc));
+    desc.api_version = DONG_API_VERSION;
+    desc.plugin_api_version = DONG_PLUGIN_API_VERSION;
+    desc.plugin = try_load_plugin();
+    desc.plugin_user = NULL;
+    desc.html = NULL;
+    desc.width = app->width;
+    desc.height = app->height;
+
+    if (dong_engine_create(&desc, &app->engine) != DONG_OK || !app->engine) {
+        fprintf(stderr, "[DongApp] dong_engine_create failed\n");
+        return 0;
+    }
+
+    if (dong_engine_set_gpu(app->engine, app->gpu.device, app->gpu.window) != DONG_OK) {
+        fprintf(stderr, "[DongApp] dong_engine_set_gpu failed\n");
+        return 0;
+    }
+
+    printf("[DongApp] dong_engine created (GPU enabled)\n");
+    return 1;
+#else
     if (!dong_sdl_platform_init(app->gpu_device, app->window)) {
         fprintf(stderr, "[DongApp] dong_sdl_platform_init failed\n");
         return 0;
@@ -446,23 +538,14 @@ static int app_create_engine(dong_app_impl_t* app) {
 
     printf("[DongApp] dong_engine created (GPU enabled)\n");
     return 1;
+#endif
 }
-
-// =============================================================================
-// Public API
-// =============================================================================
 
 DONG_APPCORE_API dong_app_t* dong_app_create(const dong_app_config_t* config) {
     if (!config) return NULL;
 
     dong_app_impl_t* app = (dong_app_impl_t*)calloc(1, sizeof(dong_app_impl_t));
     if (!app) return NULL;
-
-    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS)) {
-        fprintf(stderr, "[DongApp] SDL_Init failed: %s\n", SDL_GetError());
-        free(app);
-        return NULL;
-    }
 
     app->width = config->width > 0 ? config->width : 800;
     app->height = config->height > 0 ? config->height : 600;
@@ -472,11 +555,33 @@ DONG_APPCORE_API dong_app_t* dong_app_create(const dong_app_config_t* config) {
     app->hdr_enabled = 0;
     app->hdr_max_luminance = config->hdr_max_luminance > 0.0f ? config->hdr_max_luminance : 1000.0f;
 
+    const char* title = config->title ? config->title : "Dong Application";
+
+#if defined(DONG_BACKEND_GPU)
+    DongGpuAppPlatformConfig gpu_cfg = {0};
+    gpu_cfg.title = title;
+    gpu_cfg.width = app->width;
+    gpu_cfg.height = app->height;
+    gpu_cfg.vsync = config->vsync;
+    gpu_cfg.resizable = config->resizable;
+    gpu_cfg.fullscreen = config->fullscreen;
+    if (!dong_gpu_app_platform_init(&app->gpu, &gpu_cfg)) {
+        free(app);
+        return NULL;
+    }
+    app->width = app->gpu.width;
+    app->height = app->gpu.height;
+#else
+    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS)) {
+        fprintf(stderr, "[DongApp] SDL_Init failed: %s\n", SDL_GetError());
+        free(app);
+        return NULL;
+    }
+
     SDL_WindowFlags window_flags = 0;
     if (config->resizable) window_flags |= SDL_WINDOW_RESIZABLE;
     if (config->fullscreen) window_flags |= SDL_WINDOW_FULLSCREEN;
 
-    const char* title = config->title ? config->title : "Dong Application";
     app->window = SDL_CreateWindow(title, app->width, app->height, window_flags);
     if (!app->window) {
         fprintf(stderr, "[DongApp] SDL_CreateWindow failed: %s\n", SDL_GetError());
@@ -485,11 +590,10 @@ DONG_APPCORE_API dong_app_t* dong_app_create(const dong_app_config_t* config) {
         return NULL;
     }
 
-    // Enable text input by default so HTML input/textarea works without extra setup.
     SDL_StartTextInput(app->window);
 
     app->gpu_device = SDL_CreateGPUDevice(
-        SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_DXIL | SDL_GPU_SHADERFORMAT_MSL,
+        dong_sdl_default_shader_formats(),
         false,
         NULL);
     if (!app->gpu_device) {
@@ -511,16 +615,28 @@ DONG_APPCORE_API dong_app_t* dong_app_create(const dong_app_config_t* config) {
 
     app_set_present_mode(app);
 
-    // When vsync is off, prefer non-blocking swapchain acquisition to reduce GPU stalls
     if (!app->vsync) {
         SDL_SetEnvironmentVariable(SDL_GetEnvironment(), "DONG_GPU_SWAPCHAIN_NOWAIT", "1", false);
     }
+#endif
 
     if (app->enable_dong) {
         (void)app_create_engine(app);
     }
 
+#if defined(DONG_BACKEND_GPU)
+    {
+        static LARGE_INTEGER freq = {0};
+        if (freq.QuadPart == 0) QueryPerformanceFrequency(&freq);
+        LARGE_INTEGER now;
+        QueryPerformanceCounter(&now);
+        app->last_frame_time = (uint64_t)now.QuadPart;
+        app->fps_last_time = app->last_frame_time;
+    }
+#else
     app->last_frame_time = SDL_GetPerformanceCounter();
+    app->fps_last_time = app->last_frame_time;
+#endif
     app->delta_time = 0.016f;
     app->running = 1;
 
@@ -539,7 +655,13 @@ DONG_APPCORE_API dong_app_t* dong_app_create(const dong_app_config_t* config) {
             const char* run = getenv("DONG_BENCH_RUN_MS");
             app->bench_warmup_ms = warmup ? (uint32_t)atoi(warmup) : 2000;
             app->bench_run_ms = run ? (uint32_t)atoi(run) : 5000;
+#if defined(DONG_BACKEND_GPU) && defined(_WIN32)
+            LARGE_INTEGER now;
+            QueryPerformanceCounter(&now);
+            app->bench_start_time = (uint64_t)now.QuadPart;
+#else
             app->bench_start_time = SDL_GetPerformanceCounter();
+#endif
             app->bench_warmup_done = 0;
             printf("[DongApp] BENCH_AUTOSTOP: warmup=%ums run=%ums\n",
                    app->bench_warmup_ms, app->bench_run_ms);
@@ -558,6 +680,9 @@ DONG_APPCORE_API void dong_app_destroy(dong_app_t* app_handle) {
         app->engine = NULL;
     }
 
+#if defined(DONG_BACKEND_GPU)
+    dong_gpu_app_platform_shutdown(&app->gpu);
+#else
     dong_sdl_platform_shutdown();
 
     if (app->gpu_device) {
@@ -571,13 +696,14 @@ DONG_APPCORE_API void dong_app_destroy(dong_app_t* app_handle) {
     }
 
     SDL_Quit();
+#endif
     free(app);
 }
 
 DONG_APPCORE_API int dong_app_is_running(dong_app_t* app_handle) {
     dong_app_impl_t* app = (dong_app_impl_t*)app_handle;
     if (!app) return 0;
-    // Bench autostop check
+#if !defined(DONG_BACKEND_GPU)
     if (app->bench_autostop && app->running) {
         uint64_t now = SDL_GetPerformanceCounter();
         double elapsed_ms = (double)(now - app->bench_start_time) * 1000.0
@@ -589,6 +715,7 @@ DONG_APPCORE_API int dong_app_is_running(dong_app_t* app_handle) {
             app->running = 0;
         }
     }
+#endif
     return app->running;
 }
 
@@ -606,7 +733,7 @@ DONG_APPCORE_API void dong_app_run(dong_app_t* app_handle, dong_app_tick_fn tick
             break;
         }
 
-        // Bench autostop: check elapsed time and quit when done
+#if !defined(DONG_BACKEND_GPU)
         if (app->bench_autostop) {
             uint64_t now = SDL_GetPerformanceCounter();
             double elapsed_ms = (double)(now - app->bench_start_time) * 1000.0
@@ -619,13 +746,14 @@ DONG_APPCORE_API void dong_app_run(dong_app_t* app_handle, dong_app_tick_fn tick
                 break;
             }
         }
+#endif
 
         float dt = dong_app_get_delta_time(app_handle);
         if (tick) {
             tick(app_handle, dt, user_data);
         }
 
-        // Hot reload (P1-4): poll file mtime every 500ms
+#if !defined(DONG_BACKEND_GPU)
         if (app->hot_reload && app->hot_reload_path[0]) {
             uint64_t now_ms = SDL_GetTicks();
             if (now_ms - app->hot_reload_last_check_ms >= 500) {
@@ -641,15 +769,92 @@ DONG_APPCORE_API void dong_app_run(dong_app_t* app_handle, dong_app_tick_fn tick
                 }
             }
         }
+#endif
 
         dong_app_present(app_handle);
     }
 }
 
+#if defined(DONG_BACKEND_GPU)
+// Mirrors app_update_cursor() (SDL path, above): queries the CSS `cursor` keyword under the
+// mouse and forwards it to the native OS cursor via gpuWindowSetCursor(). Without this, the
+// GPU backend's dong_app_poll_events() never updates the cursor at all (feature_test.html's
+// CSS cursor property test showed no cursor change on hover under DONG_BACKEND_GPU builds).
+static void app_update_cursor_gpu(dong_app_impl_t* app) {
+    if (!app || !app->engine || !app->gpu.window) {
+        return;
+    }
+    // 当上层接管事件回调（如 Scene3D）时，cursor 由回调逻辑决定，避免被默认 engine 覆盖。
+    if (app->event_callback) {
+        return;
+    }
+    const char* css_cursor = dong_engine_get_cursor_at(app->engine, app->mouse_x, app->mouse_y);
+    gpuWindowSetCursor((GpuWindow)app->gpu.window, css_cursor);
+}
+#endif
+
 DONG_APPCORE_API int dong_app_poll_events(dong_app_t* app_handle) {
     dong_app_impl_t* app = (dong_app_impl_t*)app_handle;
     if (!app) return 0;
 
+#if defined(DONG_BACKEND_GPU)
+    for (;;) {
+        dong_app_event_t ev;
+        int alive = dong_gpu_app_platform_poll_event(&app->gpu, &ev, app->engine);
+        if (!alive) {
+            app->running = 0;
+            return 0;
+        }
+        if (ev.type == DONG_APP_EVENT_NONE) {
+            break;
+        }
+
+        if (ev.type == DONG_APP_EVENT_QUIT) {
+            app->running = 0;
+            return 0;
+        }
+
+        if (ev.type == DONG_APP_EVENT_WINDOW_RESIZED) {
+            app->width = ev.window_resized.width;
+            app->height = ev.window_resized.height;
+        }
+
+        if (ev.type == DONG_APP_EVENT_MOUSE_MOVE) {
+            app->mouse_x = ev.mouse_move.x;
+            app->mouse_y = ev.mouse_move.y;
+        } else if (ev.type == DONG_APP_EVENT_MOUSE_BUTTON) {
+            app->mouse_x = ev.mouse_button.x;
+            app->mouse_y = ev.mouse_button.y;
+        } else if (ev.type == DONG_APP_EVENT_MOUSE_WHEEL) {
+            app->mouse_x = ev.mouse_wheel.x;
+            app->mouse_y = ev.mouse_wheel.y;
+        }
+
+        if (ev.type != DONG_APP_EVENT_NONE) {
+            if (!app->event_callback) {
+                app_forward_event_to_engine(app, &ev);
+            }
+            app_send_event_callback(app, &ev);
+        }
+    }
+
+    LARGE_INTEGER freq, now;
+    QueryPerformanceFrequency(&freq);
+    QueryPerformanceCounter(&now);
+    app->delta_time = (float)(now.QuadPart - (LONGLONG)app->last_frame_time) / (float)freq.QuadPart;
+    app->last_frame_time = (uint64_t)now.QuadPart;
+
+    app->fps_frame_count++;
+    float fps_elapsed = (float)(now.QuadPart - (LONGLONG)app->fps_last_time) / (float)freq.QuadPart;
+    if (fps_elapsed >= 1.0f) {
+        app->fps_value = (float)app->fps_frame_count / fps_elapsed;
+        app->fps_frame_count = 0;
+        app->fps_last_time = (uint64_t)now.QuadPart;
+        printf("[DongApp] %.1f fps\n", (double)app->fps_value);
+    }
+
+    app_update_cursor_gpu(app);
+#else
     SDL_Event e;
     while (SDL_PollEvent(&e)) {
         dong_app_event_t ev = app_translate_sdl_event(app, &e);
@@ -676,9 +881,6 @@ DONG_APPCORE_API int dong_app_poll_events(dong_app_t* app_handle) {
         }
 
         if (ev.type != DONG_APP_EVENT_NONE) {
-            // 若注册了 event_callback（例如 Scene3D 接管输入），不要再把同一事件投递给
-            // dong_app 自带的 engine：该 engine 常为 html=NULL 的占位视图，用窗口坐标做
-            // hit-test 会与 Scene3D 的屏幕局部坐标路由冲突，点击时可能崩溃。
             if (!app->event_callback) {
                 app_forward_event_to_engine(app, &ev);
             }
@@ -704,6 +906,7 @@ DONG_APPCORE_API int dong_app_poll_events(dong_app_t* app_handle) {
     }
 
     app_update_cursor(app);
+#endif
 
     return app->running;
 }
@@ -721,13 +924,19 @@ DONG_APPCORE_API int dong_app_begin_frame(dong_app_t* app_handle) {
 
 DONG_APPCORE_API void dong_app_present(dong_app_t* app_handle) {
     dong_app_impl_t* app = (dong_app_impl_t*)app_handle;
-    if (!app || !app->gpu_device || !app->window) return;
+    if (!app) return;
+
+#if defined(DONG_BACKEND_GPU)
+    if (app->engine) {
+        (void)dong_engine_tick(app->engine);
+        return;
+    }
+    dong_gpu_app_platform_present_clear(&app->gpu);
+#else
+    if (!app->gpu_device || !app->window) return;
 
     if (app->engine) {
-        // Tick engine (handles rendering to swapchain internally via dong_engine_set_gpu)
         (void)dong_engine_tick(app->engine);
-        // Engine rendering is done, submit any remaining GPU work
-        // Note: The engine uses dong_gpu_execute which handles submission
         return;
     }
 
@@ -758,6 +967,7 @@ DONG_APPCORE_API void dong_app_present(dong_app_t* app_handle) {
     }
 
     SDL_SubmitGPUCommandBuffer(cmd);
+#endif
 }
 
 DONG_APPCORE_API void dong_app_get_size(dong_app_t* app_handle, uint32_t* out_width, uint32_t* out_height) {
@@ -779,12 +989,47 @@ DONG_APPCORE_API dong_renderer_t* dong_app_get_renderer(dong_app_t* app_handle) 
 
 DONG_APPCORE_API void* dong_app_get_gpu_device(dong_app_t* app_handle) {
     dong_app_impl_t* app = (dong_app_impl_t*)app_handle;
+#if defined(DONG_BACKEND_GPU)
+    return app ? app->gpu.device : NULL;
+#else
     return app ? app->gpu_device : NULL;
+#endif
 }
 
 DONG_APPCORE_API void* dong_app_get_window(dong_app_t* app_handle) {
     dong_app_impl_t* app = (dong_app_impl_t*)app_handle;
+#if defined(DONG_BACKEND_GPU)
+    return app ? app->gpu.window : NULL;
+#else
     return app ? app->window : NULL;
+#endif
+}
+
+DONG_APPCORE_API void* dong_app_get_gpu_surface(dong_app_t* app_handle) {
+    dong_app_impl_t* app = (dong_app_impl_t*)app_handle;
+#if defined(DONG_BACKEND_GPU)
+    return app ? app->gpu.surface : NULL;
+#else
+    return NULL;
+#endif
+}
+
+DONG_APPCORE_API void* dong_app_get_gpu_queue(dong_app_t* app_handle) {
+    dong_app_impl_t* app = (dong_app_impl_t*)app_handle;
+#if defined(DONG_BACKEND_GPU)
+    return app ? app->gpu.queue : NULL;
+#else
+    return NULL;
+#endif
+}
+
+DONG_APPCORE_API uint32_t dong_app_get_gpu_surface_format(dong_app_t* app_handle) {
+    dong_app_impl_t* app = (dong_app_impl_t*)app_handle;
+#if defined(DONG_BACKEND_GPU)
+    return app ? app->gpu.surface_fmt : 0;
+#else
+    return 0;
+#endif
 }
 
 DONG_APPCORE_API void* dong_app_get_dong_engine(dong_app_t* app_handle) {
@@ -836,19 +1081,20 @@ DONG_APPCORE_API int dong_app_load_html_file(dong_app_t* app_handle, const char*
 
     // Hot reload (P1-4): remember file path for polling
     if (result) {
+#if !defined(DONG_BACKEND_GPU)
         const char* hot = getenv("DONG_HOT_RELOAD");
         if (hot && hot[0] == '1') {
             app->hot_reload = 1;
             strncpy(app->hot_reload_path, path, MAX_PATH_LEN - 1);
             app->hot_reload_path[MAX_PATH_LEN - 1] = '\0';
             app->hot_reload_last_check_ms = SDL_GetTicks();
-            // Get initial mtime via SDL
             SDL_PathInfo info;
             if (SDL_GetPathInfo(path, &info)) {
                 app->hot_reload_mtime = info.modify_time;
             }
             printf("[DongApp] HOT_RELOAD: watching %s\n", path);
         }
+#endif
     }
 
     return result;
@@ -856,13 +1102,14 @@ DONG_APPCORE_API int dong_app_load_html_file(dong_app_t* app_handle, const char*
 
 DONG_APPCORE_API void dong_app_enable_text_input(dong_app_t* app_handle, int enable) {
     dong_app_impl_t* app = (dong_app_impl_t*)app_handle;
-    if (!app || !app->window) return;
-
-    if (enable) {
-        SDL_StartTextInput(app->window);
-    } else {
-        SDL_StopTextInput(app->window);
-    }
+    if (!app) return;
+#if defined(DONG_BACKEND_GPU)
+    dong_gpu_app_platform_set_text_input(&app->gpu, enable);
+#else
+    if (!app->window) return;
+    if (enable) SDL_StartTextInput(app->window);
+    else SDL_StopTextInput(app->window);
+#endif
 }
 
 DONG_APPCORE_API void dong_app_set_event_callback(dong_app_t* app_handle, dong_app_event_callback_t callback, void* user_data) {

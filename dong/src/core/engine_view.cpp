@@ -2401,6 +2401,21 @@ struct EngineView::Impl {
             tickSyncVideos(current_time);
         }
 
+        // Upload any decoded video frames to GPU textures BEFORE command
+        // generation. uploadPendingVideoFrames() calls invalidate(Paint),
+        // which sets commands_dirty_ = true; this must happen before
+        // tickGenerateCommandsIfNeeded() runs (and clears the dirty flag)
+        // so that the same tick's GPU execute step actually sees the new
+        // frame. If done after command generation (as before), the dirty
+        // flag set by the upload would block tickExecuteGPUCommandsIfReady()
+        // (which requires !commands_dirty_) every single tick, silently
+        // starving GPU submission for as long as video keeps playing.
+        DONG_LOG_DEBUG("[tick] step: video_upload");
+        {
+            DONG_PROFILE_SCOPE_CAT("UploadVideoFrames", "tick");
+            tickUploadVideoFramesIfNeeded();
+        }
+
         DONG_LOG_DEBUG("[tick] step: script_tasks");
         {
             DONG_PROFILE_SCOPE_CAT("ScriptTasks", "tick");
@@ -2494,12 +2509,6 @@ struct EngineView::Impl {
             DONG_LOG_DEBUG("[P0-6 metrics] style=%.2fms layout=%.2fms paint+compile=%.2fms total=%.2fms",
                           style_ms, layout_ms, paint_ms,
                           style_ms + layout_ms + paint_ms);
-        }
-
-        DONG_LOG_DEBUG("[tick] step: video_upload");
-        {
-            DONG_PROFILE_SCOPE_CAT("UploadVideoFrames", "tick");
-            tickUploadVideoFramesIfNeeded();
         }
 
         DONG_LOG_DEBUG("[tick] step: gpu_execute");

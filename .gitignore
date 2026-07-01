@@ -42,3 +42,7 @@ dong/.worktrees/
 .mypy_cache/
 __pycache__/
 tmp/
+.pytest_cache/
+tmp_check/
+dump_2d/
+dong/third_party/harfbuzz/build-zig/

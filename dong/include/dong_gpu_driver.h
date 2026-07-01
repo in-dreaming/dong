@@ -34,6 +34,7 @@ extern "C" {
 
 // Forward declarations
 typedef struct DongGPUDriver DongGPUDriver;
+typedef struct DongUiGraphContext DongUiGraphContext;
 typedef struct DongGPUCommandList DongGPUCommandList;
 
 // =============================================================================
@@ -53,7 +54,21 @@ typedef enum DongGPUTextureFormat {
     DONG_GPU_TEXTURE_FORMAT_RGBA8_UNORM = 0,
     DONG_GPU_TEXTURE_FORMAT_BGRA8_UNORM = 1,
     DONG_GPU_TEXTURE_FORMAT_R8_UNORM = 2,
+    DONG_GPU_TEXTURE_FORMAT_RGBA32_FLOAT = 3,
     DONG_GPU_TEXTURE_FORMAT_DEPTH24_STENCIL8 = 10,
+    DONG_GPU_TEXTURE_FORMAT_BC7_UNORM = 20,
+    DONG_GPU_TEXTURE_FORMAT_BC7_UNORM_SRGB,
+    DONG_GPU_TEXTURE_FORMAT_BC5_UNORM,
+    DONG_GPU_TEXTURE_FORMAT_BC4_UNORM,
+    DONG_GPU_TEXTURE_FORMAT_BC1_UNORM,
+    DONG_GPU_TEXTURE_FORMAT_BC3_UNORM,
+    DONG_GPU_TEXTURE_FORMAT_BC6H_UNORM,
+    DONG_GPU_TEXTURE_FORMAT_ASTC_4x4_UNORM,
+    DONG_GPU_TEXTURE_FORMAT_ASTC_4x4_UNORM_SRGB,
+    DONG_GPU_TEXTURE_FORMAT_ASTC_5x5_UNORM,
+    DONG_GPU_TEXTURE_FORMAT_ASTC_6x6_UNORM,
+    DONG_GPU_TEXTURE_FORMAT_ASTC_6x6_UNORM_SRGB,
+    DONG_GPU_TEXTURE_FORMAT_ASTC_8x8_UNORM,
 } DongGPUTextureFormat;
 
 typedef enum DongGPUTextureUsage {
@@ -196,6 +211,9 @@ typedef struct DongGPUDriverVTable {
     // Returns the backend-specific native texture handle (e.g., SDL_GPUTexture*)
     // This is needed for shader binding in backend-specific code.
     void* (*get_native_texture_handle)(DongGPUDriver* driver, DongGPUTexture texture);
+
+    // Tier-2: register Dong UI passes into a host-owned GpuGraph (optional).
+    void (*ui_graph_add_passes)(DongGPUDriver* driver, DongUiGraphContext* ctx);
 } DongGPUDriverVTable;
 
 
@@ -207,6 +225,9 @@ typedef struct DongGPUDriverVTable {
 struct DongGPUDriver {
     const DongGPUDriverVTable* vtable;
     void* user_data;  // Backend-specific data
+    void* external_device;       // Host GpuDevice (Tier-2), optional
+    int owns_external_device;    // 1 if Dong should destroy external_device
+    int embedded_mode;           // 1 = host owns RenderGraph (default for games)
 };
 
 // =============================================================================
@@ -296,6 +317,13 @@ static inline void dong_gpu_set_resource_root(DongGPUDriver* d, const char* root
 
 static inline void* dong_gpu_get_native_device(DongGPUDriver* d) {
     return (d && d->vtable && d->vtable->get_native_device) ? d->vtable->get_native_device(d) : NULL;
+}
+
+struct DongUiGraphContext;
+static inline void dong_gpu_ui_graph_add_passes(DongGPUDriver* d, DongUiGraphContext* ctx) {
+    if (d && d->vtable && d->vtable->ui_graph_add_passes) {
+        d->vtable->ui_graph_add_passes(d, ctx);
+    }
 }
 
 // Atlas Upload (subrect with stride)
