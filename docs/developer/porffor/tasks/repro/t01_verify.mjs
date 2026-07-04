@@ -50,6 +50,7 @@ async function assert2cOutput() {
 
   process.argv = argvBackup;
   process.exit = _realExit;
+  globalThis.argvChanged?.();
 
   if (!fs.existsSync(outC)) fail(`missing generated C: ${outC}`);
   const c = fs.readFileSync(outC, 'utf8');

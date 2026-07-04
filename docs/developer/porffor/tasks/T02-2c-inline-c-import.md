@@ -41,3 +41,19 @@ createImport('dong_add', 2, 1, (a, b) => a + b, 'return p0 + p1;');
 
 - `c` 的类型约定：params/returns 是 wasm valtype（`f64`/`i32`），生成的 C 形参类型用 2c 现成的 `CValtype` 映射。
 - 若实现中发现 `c` 参数在上游有其它隐含约定（搜索上游历史），以兼容上游为先。
+
+## 完成记录
+
+- **日期**: 2026-07-04
+- **commit**: porffor fork `a5f4bb53`（enjin_porffor）；Dong `32f411f`（feature/porffor）
+- **摘要**: `compiler/2c.js` 在 `Opcodes.call` import 分支新增 `importFunc.c` 内联路径：`static __porf_import_<name>(p0,…)` 写入 `prepend`，调用点直接调用；优先级 `c` > `--2c-wasm-imports` extern > 内置 > warning；`--2c-strict-imports` 对未知 import 硬错误。新增 `t02_inline_c_import.js`、`t02_verify.mjs`。
+- **变更文件**:
+  - `dong/third_party/porffor/compiler/2c.js`
+  - `docs/developer/porffor/tasks/repro/t02_inline_c_import.js`
+  - `docs/developer/porffor/tasks/repro/t02_verify.mjs`
+  - `docs/developer/porffor/tasks/repro/t01_verify.mjs`（`argvChanged` 复位 prefs，修复 2c 后 wasm 回归）
+- **验收命令**:
+  - `node docs/developer/porffor/tasks/repro/t02_verify.mjs`
+  - `node docs/developer/porffor/tasks/repro/t01_verify.mjs`
+  - `node docs/developer/porffor/tasks/repro/t03/t03_verify.mjs`
+- **遗留问题**: 本环境无 clang，T02 原生编译/多模块链接为 SKIP；有 clang 时可补跑 `tryNativeRun` / `assertMultiModuleStatic` 链接段。
