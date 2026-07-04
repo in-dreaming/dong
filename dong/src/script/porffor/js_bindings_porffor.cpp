@@ -7,6 +7,8 @@
 
 #include "../../dom/input_element.hpp"
 #include "../../dom/select_element.hpp"
+#include "../../dom/css/style_engine.hpp"
+#include <algorithm>
 #include <cmath>
 #include <sstream>
 
@@ -126,6 +128,7 @@ void JSBindings::scanAndRegisterInlineEventHandlers() {
 
 void JSBindings::resetForNewDOM() {
     node_by_id_.clear();
+    id_by_node_ptr_.clear();
     named_listeners_.clear();
     event_bridge_ids_.clear();
     next_node_id_ = 1;
@@ -135,17 +138,40 @@ void JSBindings::registerAsNamedView() {
     // Multi-view registry not implemented for Porffor MVP.
 }
 
+void JSBindings::registerNodeId(uint64_t id, const dom::DOMNodePtr& node) {
+    if (!node || id == 0) {
+        return;
+    }
+    node_by_id_[id] = node;
+    id_by_node_ptr_[node.get()] = id;
+}
+
+void JSBindings::releaseNodeId(uint64_t node_id) {
+    const auto it = node_by_id_.find(node_id);
+    if (it == node_by_id_.end()) {
+        return;
+    }
+    if (it->second) {
+        id_by_node_ptr_.erase(it->second.get());
+    }
+    node_by_id_.erase(it);
+
+    named_listeners_.erase(
+        std::remove_if(named_listeners_.begin(), named_listeners_.end(),
+                       [node_id](const NamedListener& l) { return l.node_id == node_id; }),
+        named_listeners_.end());
+}
+
 uint64_t JSBindings::getNodeIdFor(const dom::DOMNodePtr& node) {
     if (!node) {
         return 0;
     }
-    for (const auto& pair : node_by_id_) {
-        if (pair.second == node) {
-            return pair.first;
-        }
+    const auto it = id_by_node_ptr_.find(node.get());
+    if (it != id_by_node_ptr_.end()) {
+        return it->second;
     }
     const uint64_t id = next_node_id_++;
-    node_by_id_[id] = node;
+    registerNodeId(id, node);
     return id;
 }
 
@@ -271,6 +297,31 @@ dom::DOMNodePtr JSBindings::findNodeById(uint64_t node_id) const {
         return it->second;
     }
     return nullptr;
+}
+
+dom::DOMNodePtr JSBindings::resolveNode(uint64_t node_id, const char* op) const {
+    if (node_id == 0) {
+        DONG_LOG_DEBUG("[JSBindings/Porffor] %s: invalid nodeId=0 (no-op)", op ? op : "op");
+        return nullptr;
+    }
+    const auto node = findNodeById(node_id);
+    if (!node) {
+        DONG_LOG_DEBUG("[JSBindings/Porffor] %s: stale nodeId=%llu (no-op)",
+                       op ? op : "op", static_cast<unsigned long long>(node_id));
+    }
+    return node;
+}
+
+void JSBindings::markNodeTreeDirty(const dom::DOMNodePtr& node) {
+    if (!node) {
+        return;
+    }
+    node->markStyleDirty();
+    node->markLayoutDirty();
+    if (auto parent = node->getParent()) {
+        parent->markStyleDirty();
+        parent->markLayoutDirty();
+    }
 }
 
 void JSBindings::ensureLayoutFresh() const {
@@ -630,6 +681,118 @@ uint64_t JSBindings::closestSelector(uint64_t node_id, const std::string& select
         return 0;
     }
     return const_cast<JSBindings*>(this)->getNodeIdFor(found);
+}
+
+uint64_t JSBindings::createElement(const std::string& tag) {
+    auto node = std::make_shared<dom::DOMNode>(dom::DOMNode::NodeType::ELEMENT, tag);
+    dom::StyleEngine::applyDefaultStyleForNode(node);
+    return getNodeIdFor(node);
+}
+
+uint64_t JSBindings::createTextNode(const std::string& text) {
+    auto node = std::make_shared<dom::DOMNode>(dom::DOMNode::NodeType::TEXT, "");
+    node->setTextContent(text);
+    return getNodeIdFor(node);
+}
+
+void JSBindings::appendChild(uint64_t parent_id, uint64_t child_id) {
+    const auto parent = resolveNode(parent_id, "appendChild(parent)");
+    const auto child = resolveNode(child_id, "appendChild(child)");
+    if (!parent || !child) {
+        return;
+    }
+    parent->appendChild(child);
+    markNodeTreeDirty(parent);
+}
+
+void JSBindings::insertBefore(uint64_t parent_id, uint64_t new_id, uint64_t ref_id) {
+    const auto parent = resolveNode(parent_id, "insertBefore(parent)");
+    const auto new_child = resolveNode(new_id, "insertBefore(new)");
+    if (!parent || !new_child) {
+        return;
+    }
+    dom::DOMNodePtr ref_child;
+    if (ref_id != 0) {
+        ref_child = resolveNode(ref_id, "insertBefore(ref)");
+        if (!ref_child) {
+            return;
+        }
+    }
+    parent->insertBefore(new_child, ref_child);
+    markNodeTreeDirty(parent);
+}
+
+void JSBindings::removeNode(uint64_t node_id) {
+    const auto node = resolveNode(node_id, "remove");
+    if (!node) {
+        return;
+    }
+    if (auto parent = node->getParent()) {
+        parent->markStyleDirty();
+        parent->markLayoutDirty();
+    }
+    node->remove();
+    releaseNodeId(node_id);
+}
+
+void JSBindings::replaceChild(uint64_t parent_id, uint64_t new_id, uint64_t old_id) {
+    const auto parent = resolveNode(parent_id, "replaceChild(parent)");
+    const auto new_child = resolveNode(new_id, "replaceChild(new)");
+    const auto old_child = resolveNode(old_id, "replaceChild(old)");
+    if (!parent || !new_child || !old_child) {
+        return;
+    }
+    parent->replaceChild(new_child, old_child);
+    markNodeTreeDirty(parent);
+    releaseNodeId(old_id);
+}
+
+uint64_t JSBindings::getParentId(uint64_t node_id) const {
+    const auto node = resolveNode(node_id, "parent");
+    if (!node) {
+        return 0;
+    }
+    const auto parent = node->getParent();
+    if (!parent) {
+        return 0;
+    }
+    return const_cast<JSBindings*>(this)->getNodeIdFor(parent);
+}
+
+uint64_t JSBindings::getFirstChildId(uint64_t node_id) const {
+    const auto node = resolveNode(node_id, "firstChild");
+    if (!node) {
+        return 0;
+    }
+    const auto child = node->getFirstChild();
+    if (!child) {
+        return 0;
+    }
+    return const_cast<JSBindings*>(this)->getNodeIdFor(child);
+}
+
+uint64_t JSBindings::getNextSiblingId(uint64_t node_id) const {
+    const auto node = resolveNode(node_id, "nextSibling");
+    if (!node) {
+        return 0;
+    }
+    const auto sibling = node->getNextSibling();
+    if (!sibling) {
+        return 0;
+    }
+    return const_cast<JSBindings*>(this)->getNodeIdFor(sibling);
+}
+
+uint64_t JSBindings::cloneNodeId(uint64_t node_id, bool deep) const {
+    const auto node = resolveNode(node_id, "cloneNode");
+    if (!node) {
+        return 0;
+    }
+    const auto clone = node->cloneNode(deep);
+    if (!clone) {
+        return 0;
+    }
+    return const_cast<JSBindings*>(this)->getNodeIdFor(clone);
 }
 
 void resetFetchState(void* /*ctx*/) {}

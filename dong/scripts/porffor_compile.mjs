@@ -83,6 +83,17 @@ function registerAllImports() {
   imp('dong_click', 1, 0);
   imp('dong_matches', 2, 1);
   imp('dong_closest', 2, 1);
+
+  imp('dong_create_element', 1, 1);
+  imp('dong_create_text_node', 1, 1);
+  imp('dong_append_child', 2, 0);
+  imp('dong_insert_before', 3, 0);
+  imp('dong_remove', 1, 0);
+  imp('dong_replace_child', 3, 0);
+  imp('dong_parent', 1, 1);
+  imp('dong_first_child', 1, 1);
+  imp('dong_next_sibling', 1, 1);
+  imp('dong_clone_node', 2, 1);
 }
 
 registerAllImports();

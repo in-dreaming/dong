@@ -280,3 +280,43 @@ function matchesSelector(nodeId, selector) {
 function closestSelector(nodeId, selector) {
   return dong_closest(nodeId, toUtf8(selector));
 }
+
+function createElement(tag) {
+  return dong_create_element(toUtf8(tag));
+}
+
+function createTextNode(text) {
+  return dong_create_text_node(toUtf8(text));
+}
+
+function appendChild(parentId, childId) {
+  dong_append_child(parentId, childId);
+}
+
+function insertBefore(parentId, newId, refId) {
+  dong_insert_before(parentId, newId, refId);
+}
+
+function removeNode(nodeId) {
+  dong_remove(nodeId);
+}
+
+function replaceChild(parentId, newId, oldId) {
+  dong_replace_child(parentId, newId, oldId);
+}
+
+function getParentId(nodeId) {
+  return dong_parent(nodeId);
+}
+
+function getFirstChildId(nodeId) {
+  return dong_first_child(nodeId);
+}
+
+function getNextSiblingId(nodeId) {
+  return dong_next_sibling(nodeId);
+}
+
+function cloneNodeId(nodeId, deep) {
+  return dong_clone_node(nodeId, deep ? 1 : 0);
+}

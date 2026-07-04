@@ -442,6 +442,80 @@ double PorfforHost::closestSelector(double node_id, double selector_ptr) const {
         bindings->closestSelector(static_cast<uint64_t>(node_id), readByteString(selector_ptr)));
 }
 
+double PorfforHost::createElement(double tag_ptr) {
+    auto* bindings = activeBindings();
+    if (!bindings) {
+        return 0.0;
+    }
+    return static_cast<double>(bindings->createElement(readByteString(tag_ptr)));
+}
+
+double PorfforHost::createTextNode(double text_ptr) {
+    auto* bindings = activeBindings();
+    if (!bindings) {
+        return 0.0;
+    }
+    return static_cast<double>(bindings->createTextNode(readByteString(text_ptr)));
+}
+
+void PorfforHost::appendChild(double parent_id, double child_id) {
+    auto* bindings = activeBindings();
+    if (bindings) {
+        bindings->appendChild(static_cast<uint64_t>(parent_id), static_cast<uint64_t>(child_id));
+    }
+}
+
+void PorfforHost::insertBefore(double parent_id, double new_id, double ref_id) {
+    auto* bindings = activeBindings();
+    if (bindings) {
+        bindings->insertBefore(static_cast<uint64_t>(parent_id), static_cast<uint64_t>(new_id),
+                               static_cast<uint64_t>(ref_id));
+    }
+}
+
+void PorfforHost::removeNode(double node_id) {
+    auto* bindings = activeBindings();
+    if (bindings) {
+        bindings->removeNode(static_cast<uint64_t>(node_id));
+    }
+}
+
+void PorfforHost::replaceChild(double parent_id, double new_id, double old_id) {
+    auto* bindings = activeBindings();
+    if (bindings) {
+        bindings->replaceChild(static_cast<uint64_t>(parent_id), static_cast<uint64_t>(new_id),
+                             static_cast<uint64_t>(old_id));
+    }
+}
+
+double PorfforHost::getParentId(double node_id) const {
+    auto* bindings = activeBindings();
+    return bindings ? static_cast<double>(bindings->getParentId(static_cast<uint64_t>(node_id)))
+                    : 0.0;
+}
+
+double PorfforHost::getFirstChildId(double node_id) const {
+    auto* bindings = activeBindings();
+    return bindings ? static_cast<double>(bindings->getFirstChildId(static_cast<uint64_t>(node_id)))
+                    : 0.0;
+}
+
+double PorfforHost::getNextSiblingId(double node_id) const {
+    auto* bindings = activeBindings();
+    return bindings
+               ? static_cast<double>(bindings->getNextSiblingId(static_cast<uint64_t>(node_id)))
+               : 0.0;
+}
+
+double PorfforHost::cloneNodeId(double node_id, double deep) const {
+    auto* bindings = activeBindings();
+    if (!bindings) {
+        return 0.0;
+    }
+    return static_cast<double>(
+        bindings->cloneNodeId(static_cast<uint64_t>(node_id), deep != 0.0));
+}
+
 void PorfforHost::processTimers(double now_ms) {
     if (timers_.empty() || !g_registry) {
         return;
@@ -745,6 +819,54 @@ f64 __porf_import_dong_matches(f64 node_id, f64 selector_ptr) {
 
 f64 __porf_import_dong_closest(f64 node_id, f64 selector_ptr) {
     return g_host ? g_host->closestSelector(node_id, selector_ptr) : 0.0;
+}
+
+f64 __porf_import_dong_create_element(f64 tag_ptr) {
+    return g_host ? g_host->createElement(tag_ptr) : 0.0;
+}
+
+f64 __porf_import_dong_create_text_node(f64 text_ptr) {
+    return g_host ? g_host->createTextNode(text_ptr) : 0.0;
+}
+
+void __porf_import_dong_append_child(f64 parent_id, f64 child_id) {
+    if (g_host) {
+        g_host->appendChild(parent_id, child_id);
+    }
+}
+
+void __porf_import_dong_insert_before(f64 parent_id, f64 new_id, f64 ref_id) {
+    if (g_host) {
+        g_host->insertBefore(parent_id, new_id, ref_id);
+    }
+}
+
+void __porf_import_dong_remove(f64 node_id) {
+    if (g_host) {
+        g_host->removeNode(node_id);
+    }
+}
+
+void __porf_import_dong_replace_child(f64 parent_id, f64 new_id, f64 old_id) {
+    if (g_host) {
+        g_host->replaceChild(parent_id, new_id, old_id);
+    }
+}
+
+f64 __porf_import_dong_parent(f64 node_id) {
+    return g_host ? g_host->getParentId(node_id) : 0.0;
+}
+
+f64 __porf_import_dong_first_child(f64 node_id) {
+    return g_host ? g_host->getFirstChildId(node_id) : 0.0;
+}
+
+f64 __porf_import_dong_next_sibling(f64 node_id) {
+    return g_host ? g_host->getNextSiblingId(node_id) : 0.0;
+}
+
+f64 __porf_import_dong_clone_node(f64 node_id, f64 deep) {
+    return g_host ? g_host->cloneNodeId(node_id, deep) : 0.0;
 }
 
 } // extern "C"

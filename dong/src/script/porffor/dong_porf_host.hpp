@@ -83,6 +83,17 @@ public:
     double matchesSelector(double node_id, double selector_ptr) const;
     double closestSelector(double node_id, double selector_ptr) const;
 
+    double createElement(double tag_ptr);
+    double createTextNode(double text_ptr);
+    void appendChild(double parent_id, double child_id);
+    void insertBefore(double parent_id, double new_id, double ref_id);
+    void removeNode(double node_id);
+    void replaceChild(double parent_id, double new_id, double old_id);
+    double getParentId(double node_id) const;
+    double getFirstChildId(double node_id) const;
+    double getNextSiblingId(double node_id) const;
+    double cloneNodeId(double node_id, double deep) const;
+
 private:
     JSBindings* bindings_ = nullptr;
     char* memory_ = nullptr;

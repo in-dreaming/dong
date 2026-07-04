@@ -119,10 +119,23 @@ public:
     bool matchesSelector(uint64_t node_id, const std::string& selector) const;
     uint64_t closestSelector(uint64_t node_id, const std::string& selector) const;
 
+    uint64_t createElement(const std::string& tag);
+    uint64_t createTextNode(const std::string& text);
+    void appendChild(uint64_t parent_id, uint64_t child_id);
+    void insertBefore(uint64_t parent_id, uint64_t new_id, uint64_t ref_id);
+    void removeNode(uint64_t node_id);
+    void replaceChild(uint64_t parent_id, uint64_t new_id, uint64_t old_id);
+    uint64_t getParentId(uint64_t node_id) const;
+    uint64_t getFirstChildId(uint64_t node_id) const;
+    uint64_t getNextSiblingId(uint64_t node_id) const;
+    uint64_t cloneNodeId(uint64_t node_id, bool deep) const;
+    size_t liveNodeCount() const { return node_by_id_.size(); }
+
 private:
     void ensureLayoutFresh() const;
     std::string view_name_;
     std::unordered_map<uint64_t, dom::DOMNodePtr> node_by_id_;
+    std::unordered_map<void*, uint64_t> id_by_node_ptr_;
     uint64_t next_node_id_ = 1;
 
     struct NamedListener {
@@ -137,6 +150,10 @@ private:
                                   uint64_t node_id);
 
     dom::DOMNodePtr findNodeById(uint64_t node_id) const;
+    dom::DOMNodePtr resolveNode(uint64_t node_id, const char* op) const;
+    void registerNodeId(uint64_t id, const dom::DOMNodePtr& node);
+    void releaseNodeId(uint64_t node_id);
+    void markNodeTreeDirty(const dom::DOMNodePtr& node);
 };
 
 void resetFetchState(void* /*ctx*/);
