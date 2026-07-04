@@ -37,3 +37,20 @@
 
 - hash 对齐若改运行期侧，会影响 wasm 路径已有对象布局——优先改 2c 翻译或编译期侧。
 - 溢出语义：JS 数字运算在 C 里用 f64/i32 混合实现时，`imul`/移位边界行为最容易错。
+
+## 完成记录
+
+- **日期**: 2026-07-04
+- **commit**: `1713533`（Dong）；porffor fork `ab4ca68e`（enjin_porffor，cherry-pick 上游 PR #338）
+- **摘要**: cherry-pick 上游 PR [#338](https://github.com/CanadaHonk/porffor/pull/338)（`6ec69590` + `84999b31`）：修复 2c/native 对 `>>>` 无符号右移的 C 翻译（`(u32)` 逻辑移位）及 wasm 侧 `f64ifyUSHR`/位运算 ToInt32  coercion。编译期 `ctHash`（codegen.js）与运行期 `__Porffor_object_hash`（builtins/_internal_object.ts）的 hash 在 2c 产物中重新对齐，修复 #333 点/括号属性访问不一致及对象方法查找。
+- **变更文件**:
+  - `dong/third_party/porffor/compiler/2c.js`
+  - `dong/third_party/porffor/compiler/expression.js`
+  - `docs/developer/porffor/tasks/repro/t04_prop_hash.js`
+  - `docs/developer/porffor/tasks/repro/t04_verify.mjs`
+- **验收命令**（在 `dong/third_party/porffor` 下）:
+  - `E:\ws\infra\dong\.tools\node-v22.16.0-win-x64\node.exe ..\..\..\docs\developer\porffor\tasks\repro\t04_verify.mjs`
+  - `node ..\..\..\docs\developer\porffor\tasks\repro\t01_verify.mjs`（回归）
+  - `node ..\..\..\docs\developer\porffor\tasks\repro\t03\t03_verify.mjs`（回归）
+- **上游状态**: PR #338 尚未合入 upstream main（2026-07-04）；本 fork 已 cherry-pick。
+- **验收**: wasm 路径 repro 通过（exit 0）；2c 编译通过且生成 C 含 `(u32)` 逻辑移位；clang native 运行本机不可用（SKIP）。
