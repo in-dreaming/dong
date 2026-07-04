@@ -204,6 +204,244 @@ double PorfforHost::commitSetTimeout() {
     return timerSetTimeout(stage_1_, stage_0_);
 }
 
+void PorfforHost::getValue(double node_id) {
+    auto* bindings = activeBindings();
+    if (!bindings) {
+        setResultString({});
+        return;
+    }
+    setResultString(bindings->getNodeValue(static_cast<uint64_t>(node_id)));
+}
+
+void PorfforHost::setValue(double node_id, double value_ptr) {
+    auto* bindings = activeBindings();
+    if (!bindings) {
+        return;
+    }
+    bindings->setNodeValue(static_cast<uint64_t>(node_id), readByteString(value_ptr));
+}
+
+double PorfforHost::getChecked(double node_id) const {
+    auto* bindings = activeBindings();
+    return bindings && bindings->getNodeChecked(static_cast<uint64_t>(node_id)) ? 1.0 : 0.0;
+}
+
+void PorfforHost::setChecked(double node_id, double checked) {
+    auto* bindings = activeBindings();
+    if (bindings) {
+        bindings->setNodeChecked(static_cast<uint64_t>(node_id), checked != 0.0);
+    }
+}
+
+double PorfforHost::getDisabled(double node_id) const {
+    auto* bindings = activeBindings();
+    return bindings && bindings->getNodeDisabled(static_cast<uint64_t>(node_id)) ? 1.0 : 0.0;
+}
+
+void PorfforHost::setDisabled(double node_id, double disabled) {
+    auto* bindings = activeBindings();
+    if (bindings) {
+        bindings->setNodeDisabled(static_cast<uint64_t>(node_id), disabled != 0.0);
+    }
+}
+
+void PorfforHost::getAttribute(double node_id, double name_ptr) {
+    auto* bindings = activeBindings();
+    if (!bindings) {
+        setResultString({});
+        return;
+    }
+    setResultString(bindings->getNodeAttribute(static_cast<uint64_t>(node_id),
+                                               readByteString(name_ptr)));
+}
+
+void PorfforHost::setAttribute(double node_id, double name_ptr, double value_ptr) {
+    auto* bindings = activeBindings();
+    if (bindings) {
+        bindings->setNodeAttribute(static_cast<uint64_t>(node_id), readByteString(name_ptr),
+                                   readByteString(value_ptr));
+    }
+}
+
+void PorfforHost::removeAttribute(double node_id, double name_ptr) {
+    auto* bindings = activeBindings();
+    if (bindings) {
+        bindings->removeNodeAttribute(static_cast<uint64_t>(node_id), readByteString(name_ptr));
+    }
+}
+
+void PorfforHost::setInnerHTML(double node_id, double html_ptr) {
+    auto* bindings = activeBindings();
+    if (bindings) {
+        bindings->setNodeInnerHTML(static_cast<uint64_t>(node_id), readByteString(html_ptr));
+    }
+}
+
+double PorfforHost::querySelector(double root_id, double selector_ptr) const {
+    auto* bindings = activeBindings();
+    if (!bindings) {
+        return 0.0;
+    }
+    return static_cast<double>(
+        bindings->querySelector(static_cast<uint64_t>(root_id), readByteString(selector_ptr)));
+}
+
+void PorfforHost::querySelectorAll(double root_id, double selector_ptr) {
+    auto* bindings = activeBindings();
+    if (!bindings) {
+        setResultString("[]");
+        return;
+    }
+    setResultString(bindings->querySelectorAllJson(static_cast<uint64_t>(root_id),
+                                                   readByteString(selector_ptr)));
+}
+
+void PorfforHost::getElementsByTagName(double root_id, double tag_ptr) {
+    auto* bindings = activeBindings();
+    if (!bindings) {
+        setResultString("[]");
+        return;
+    }
+    setResultString(bindings->getElementsByTagNameJson(static_cast<uint64_t>(root_id),
+                                                       readByteString(tag_ptr)));
+}
+
+void PorfforHost::classAdd(double node_id, double cls_ptr) {
+    auto* bindings = activeBindings();
+    if (bindings) {
+        bindings->classAdd(static_cast<uint64_t>(node_id), readByteString(cls_ptr));
+    }
+}
+
+void PorfforHost::classRemove(double node_id, double cls_ptr) {
+    auto* bindings = activeBindings();
+    if (bindings) {
+        bindings->classRemove(static_cast<uint64_t>(node_id), readByteString(cls_ptr));
+    }
+}
+
+double PorfforHost::classToggle(double node_id, double cls_ptr) const {
+    auto* bindings = activeBindings();
+    return bindings && bindings->classToggle(static_cast<uint64_t>(node_id),
+                                             readByteString(cls_ptr))
+               ? 1.0
+               : 0.0;
+}
+
+double PorfforHost::classContains(double node_id, double cls_ptr) const {
+    auto* bindings = activeBindings();
+    return bindings && bindings->classContains(static_cast<uint64_t>(node_id),
+                                               readByteString(cls_ptr))
+               ? 1.0
+               : 0.0;
+}
+
+void PorfforHost::styleSet(double node_id, double prop_ptr, double value_ptr) {
+    auto* bindings = activeBindings();
+    if (bindings) {
+        bindings->styleSet(static_cast<uint64_t>(node_id), readByteString(prop_ptr),
+                           readByteString(value_ptr));
+    }
+}
+
+void PorfforHost::styleGet(double node_id, double prop_ptr) {
+    auto* bindings = activeBindings();
+    if (!bindings) {
+        setResultString({});
+        return;
+    }
+    setResultString(bindings->styleGet(static_cast<uint64_t>(node_id), readByteString(prop_ptr)));
+}
+
+void PorfforHost::computedStyleGet(double node_id, double prop_ptr) {
+    auto* bindings = activeBindings();
+    if (!bindings) {
+        setResultString({});
+        return;
+    }
+    setResultString(
+        bindings->computedStyleGet(static_cast<uint64_t>(node_id), readByteString(prop_ptr)));
+}
+
+void PorfforHost::getRect(double node_id) {
+    auto* bindings = activeBindings();
+    if (!bindings) {
+        setResultString(R"({"x":0,"y":0,"w":0,"h":0})");
+        return;
+    }
+    setResultString(bindings->getRectJson(static_cast<uint64_t>(node_id)));
+}
+
+double PorfforHost::getMetric(double node_id, double metric_id) const {
+    auto* bindings = activeBindings();
+    if (!bindings) {
+        return 0.0;
+    }
+    return bindings->getMetric(static_cast<uint64_t>(node_id), static_cast<int>(metric_id));
+}
+
+double PorfforHost::getScrollTop(double node_id) const {
+    auto* bindings = activeBindings();
+    return bindings ? bindings->getScrollTop(static_cast<uint64_t>(node_id)) : 0.0;
+}
+
+void PorfforHost::setScrollTop(double node_id, double value) {
+    auto* bindings = activeBindings();
+    if (bindings) {
+        bindings->setScrollTop(static_cast<uint64_t>(node_id), value);
+    }
+}
+
+double PorfforHost::getScrollLeft(double node_id) const {
+    auto* bindings = activeBindings();
+    return bindings ? bindings->getScrollLeft(static_cast<uint64_t>(node_id)) : 0.0;
+}
+
+void PorfforHost::setScrollLeft(double node_id, double value) {
+    auto* bindings = activeBindings();
+    if (bindings) {
+        bindings->setScrollLeft(static_cast<uint64_t>(node_id), value);
+    }
+}
+
+void PorfforHost::focusNode(double node_id) {
+    auto* bindings = activeBindings();
+    if (bindings) {
+        bindings->focusNode(static_cast<uint64_t>(node_id));
+    }
+}
+
+void PorfforHost::blurNode(double node_id) {
+    auto* bindings = activeBindings();
+    if (bindings) {
+        bindings->blurNode(static_cast<uint64_t>(node_id));
+    }
+}
+
+void PorfforHost::clickNode(double node_id) {
+    auto* bindings = activeBindings();
+    if (bindings) {
+        bindings->clickNode(static_cast<uint64_t>(node_id));
+    }
+}
+
+double PorfforHost::matchesSelector(double node_id, double selector_ptr) const {
+    auto* bindings = activeBindings();
+    return bindings && bindings->matchesSelector(static_cast<uint64_t>(node_id),
+                                                 readByteString(selector_ptr))
+               ? 1.0
+               : 0.0;
+}
+
+double PorfforHost::closestSelector(double node_id, double selector_ptr) const {
+    auto* bindings = activeBindings();
+    if (!bindings) {
+        return 0.0;
+    }
+    return static_cast<double>(
+        bindings->closestSelector(static_cast<uint64_t>(node_id), readByteString(selector_ptr)));
+}
+
 void PorfforHost::processTimers(double now_ms) {
     if (timers_.empty() || !g_registry) {
         return;
@@ -341,6 +579,172 @@ f64 __porf_import_dong_state_get_num(f64 slot) {
         return g_state_nums[idx];
     }
     return 0.0;
+}
+
+void __porf_import_dong_get_value(f64 node_id) {
+    if (g_host) {
+        g_host->getValue(node_id);
+    }
+}
+
+void __porf_import_dong_set_value(f64 node_id, f64 value_ptr) {
+    if (g_host) {
+        g_host->setValue(node_id, value_ptr);
+    }
+}
+
+f64 __porf_import_dong_get_checked(f64 node_id) {
+    return g_host ? g_host->getChecked(node_id) : 0.0;
+}
+
+void __porf_import_dong_set_checked(f64 node_id, f64 checked) {
+    if (g_host) {
+        g_host->setChecked(node_id, checked);
+    }
+}
+
+f64 __porf_import_dong_get_disabled(f64 node_id) {
+    return g_host ? g_host->getDisabled(node_id) : 0.0;
+}
+
+void __porf_import_dong_set_disabled(f64 node_id, f64 disabled) {
+    if (g_host) {
+        g_host->setDisabled(node_id, disabled);
+    }
+}
+
+void __porf_import_dong_get_attribute(f64 node_id, f64 name_ptr) {
+    if (g_host) {
+        g_host->getAttribute(node_id, name_ptr);
+    }
+}
+
+void __porf_import_dong_set_attribute(f64 node_id, f64 name_ptr, f64 value_ptr) {
+    if (g_host) {
+        g_host->setAttribute(node_id, name_ptr, value_ptr);
+    }
+}
+
+void __porf_import_dong_remove_attribute(f64 node_id, f64 name_ptr) {
+    if (g_host) {
+        g_host->removeAttribute(node_id, name_ptr);
+    }
+}
+
+void __porf_import_dong_set_inner_html(f64 node_id, f64 html_ptr) {
+    if (g_host) {
+        g_host->setInnerHTML(node_id, html_ptr);
+    }
+}
+
+f64 __porf_import_dong_query_selector(f64 root_id, f64 selector_ptr) {
+    return g_host ? g_host->querySelector(root_id, selector_ptr) : 0.0;
+}
+
+void __porf_import_dong_query_selector_all(f64 root_id, f64 selector_ptr) {
+    if (g_host) {
+        g_host->querySelectorAll(root_id, selector_ptr);
+    }
+}
+
+void __porf_import_dong_get_elements_by_tag_name(f64 root_id, f64 tag_ptr) {
+    if (g_host) {
+        g_host->getElementsByTagName(root_id, tag_ptr);
+    }
+}
+
+void __porf_import_dong_class_add(f64 node_id, f64 cls_ptr) {
+    if (g_host) {
+        g_host->classAdd(node_id, cls_ptr);
+    }
+}
+
+void __porf_import_dong_class_remove(f64 node_id, f64 cls_ptr) {
+    if (g_host) {
+        g_host->classRemove(node_id, cls_ptr);
+    }
+}
+
+f64 __porf_import_dong_class_toggle(f64 node_id, f64 cls_ptr) {
+    return g_host ? g_host->classToggle(node_id, cls_ptr) : 0.0;
+}
+
+f64 __porf_import_dong_class_contains(f64 node_id, f64 cls_ptr) {
+    return g_host ? g_host->classContains(node_id, cls_ptr) : 0.0;
+}
+
+void __porf_import_dong_style_set(f64 node_id, f64 prop_ptr, f64 value_ptr) {
+    if (g_host) {
+        g_host->styleSet(node_id, prop_ptr, value_ptr);
+    }
+}
+
+void __porf_import_dong_style_get(f64 node_id, f64 prop_ptr) {
+    if (g_host) {
+        g_host->styleGet(node_id, prop_ptr);
+    }
+}
+
+void __porf_import_dong_computed_style_get(f64 node_id, f64 prop_ptr) {
+    if (g_host) {
+        g_host->computedStyleGet(node_id, prop_ptr);
+    }
+}
+
+void __porf_import_dong_get_rect(f64 node_id) {
+    if (g_host) {
+        g_host->getRect(node_id);
+    }
+}
+
+f64 __porf_import_dong_get_metric(f64 node_id, f64 metric_id) {
+    return g_host ? g_host->getMetric(node_id, metric_id) : 0.0;
+}
+
+f64 __porf_import_dong_get_scroll_top(f64 node_id) {
+    return g_host ? g_host->getScrollTop(node_id) : 0.0;
+}
+
+void __porf_import_dong_set_scroll_top(f64 node_id, f64 value) {
+    if (g_host) {
+        g_host->setScrollTop(node_id, value);
+    }
+}
+
+f64 __porf_import_dong_get_scroll_left(f64 node_id) {
+    return g_host ? g_host->getScrollLeft(node_id) : 0.0;
+}
+
+void __porf_import_dong_set_scroll_left(f64 node_id, f64 value) {
+    if (g_host) {
+        g_host->setScrollLeft(node_id, value);
+    }
+}
+
+void __porf_import_dong_focus(f64 node_id) {
+    if (g_host) {
+        g_host->focusNode(node_id);
+    }
+}
+
+void __porf_import_dong_blur(f64 node_id) {
+    if (g_host) {
+        g_host->blurNode(node_id);
+    }
+}
+
+void __porf_import_dong_click(f64 node_id) {
+    if (g_host) {
+        g_host->clickNode(node_id);
+    }
+}
+
+f64 __porf_import_dong_matches(f64 node_id, f64 selector_ptr) {
+    return g_host ? g_host->matchesSelector(node_id, selector_ptr) : 0.0;
+}
+
+f64 __porf_import_dong_closest(f64 node_id, f64 selector_ptr) {
+    return g_host ? g_host->closestSelector(node_id, selector_ptr) : 0.0;
 }
 
 } // extern "C"

@@ -51,6 +51,38 @@ function registerAllImports() {
   imp('dong_commit_set_textContent', 0, 0);
   imp('dong_commit_addEventListener', 0, 0);
   imp('dong_commit_setTimeout', 0, 1);
+
+  imp('dong_get_value', 1, 0);
+  imp('dong_set_value', 2, 0);
+  imp('dong_get_checked', 1, 1);
+  imp('dong_set_checked', 2, 0);
+  imp('dong_get_disabled', 1, 1);
+  imp('dong_set_disabled', 2, 0);
+  imp('dong_get_attribute', 2, 0);
+  imp('dong_set_attribute', 3, 0);
+  imp('dong_remove_attribute', 2, 0);
+  imp('dong_set_inner_html', 2, 0);
+  imp('dong_query_selector', 2, 1);
+  imp('dong_query_selector_all', 2, 0);
+  imp('dong_get_elements_by_tag_name', 2, 0);
+  imp('dong_class_add', 2, 0);
+  imp('dong_class_remove', 2, 0);
+  imp('dong_class_toggle', 2, 1);
+  imp('dong_class_contains', 2, 1);
+  imp('dong_style_set', 3, 0);
+  imp('dong_style_get', 2, 0);
+  imp('dong_computed_style_get', 2, 0);
+  imp('dong_get_rect', 1, 0);
+  imp('dong_get_metric', 2, 1);
+  imp('dong_get_scroll_top', 1, 1);
+  imp('dong_set_scroll_top', 2, 0);
+  imp('dong_get_scroll_left', 1, 1);
+  imp('dong_set_scroll_left', 2, 0);
+  imp('dong_focus', 1, 0);
+  imp('dong_blur', 1, 0);
+  imp('dong_click', 1, 0);
+  imp('dong_matches', 2, 1);
+  imp('dong_closest', 2, 1);
 }
 
 registerAllImports();

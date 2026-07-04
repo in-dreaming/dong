@@ -82,7 +82,45 @@ public:
     void setNodeTextContent(uint64_t node_id, const std::string& text);
     std::string getNodeTextContent(uint64_t node_id) const;
 
+    std::string getNodeValue(uint64_t node_id) const;
+    void setNodeValue(uint64_t node_id, const std::string& value);
+    bool getNodeChecked(uint64_t node_id) const;
+    void setNodeChecked(uint64_t node_id, bool checked);
+    bool getNodeDisabled(uint64_t node_id) const;
+    void setNodeDisabled(uint64_t node_id, bool disabled);
+    std::string getNodeAttribute(uint64_t node_id, const std::string& name) const;
+    void setNodeAttribute(uint64_t node_id, const std::string& name, const std::string& value);
+    void removeNodeAttribute(uint64_t node_id, const std::string& name);
+    void setNodeInnerHTML(uint64_t node_id, const std::string& html);
+
+    uint64_t querySelector(uint64_t root_id, const std::string& selector) const;
+    std::string querySelectorAllJson(uint64_t root_id, const std::string& selector) const;
+    std::string getElementsByTagNameJson(uint64_t root_id, const std::string& tag) const;
+
+    void classAdd(uint64_t node_id, const std::string& cls);
+    void classRemove(uint64_t node_id, const std::string& cls);
+    bool classToggle(uint64_t node_id, const std::string& cls);
+    bool classContains(uint64_t node_id, const std::string& cls) const;
+
+    void styleSet(uint64_t node_id, const std::string& prop, const std::string& value);
+    std::string styleGet(uint64_t node_id, const std::string& prop) const;
+    std::string computedStyleGet(uint64_t node_id, const std::string& prop) const;
+
+    std::string getRectJson(uint64_t node_id) const;
+    double getMetric(uint64_t node_id, int metric_id) const;
+    double getScrollTop(uint64_t node_id) const;
+    void setScrollTop(uint64_t node_id, double value);
+    double getScrollLeft(uint64_t node_id) const;
+    void setScrollLeft(uint64_t node_id, double value);
+
+    void focusNode(uint64_t node_id);
+    void blurNode(uint64_t node_id);
+    void clickNode(uint64_t node_id);
+    bool matchesSelector(uint64_t node_id, const std::string& selector) const;
+    uint64_t closestSelector(uint64_t node_id, const std::string& selector) const;
+
 private:
+    void ensureLayoutFresh() const;
     std::string view_name_;
     std::unordered_map<uint64_t, dom::DOMNodePtr> node_by_id_;
     uint64_t next_node_id_ = 1;

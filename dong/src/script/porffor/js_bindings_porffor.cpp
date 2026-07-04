@@ -5,13 +5,95 @@
 #include "../porffor/porffor_script_registry.hpp"
 #include "../../core/log.h"
 
-#include <algorithm>
-#include <cctype>
+#include "../../dom/input_element.hpp"
+#include "../../dom/select_element.hpp"
+#include <cmath>
+#include <sstream>
 
 namespace dong::script {
 namespace {
 
 thread_local JSBindings* g_active_bindings = nullptr;
+
+std::string camelToCss(const std::string& property) {
+    std::string css;
+    css.reserve(property.size() * 2);
+    for (char c : property) {
+        if (std::isupper(static_cast<unsigned char>(c))) {
+            css.push_back('-');
+            css.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+        } else {
+            css.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+        }
+    }
+    return css;
+}
+
+std::string getComputedStyleValue(const dom::ComputedStyle& style, const std::string& css_prop) {
+    if (css_prop == "display") return dong::dom::toString(style.display);
+    if (css_prop == "color") return style.color;
+    if (css_prop == "background-color") return style.background_color;
+    if (css_prop == "font-size") return std::to_string(style.font_size);
+    if (css_prop == "font-weight") return dong::dom::toString(style.font_weight);
+    if (css_prop == "text-align") return dong::dom::toString(style.text_align);
+    if (css_prop == "position") return dong::dom::toString(style.position);
+    if (css_prop == "opacity") return std::to_string(style.opacity);
+    if (css_prop == "border-radius") return std::to_string(style.border_radius);
+    if (css_prop == "border-width") return std::to_string(style.border_width);
+    if (css_prop == "border-color") return style.border_color;
+    return "";
+}
+
+std::string formatCssLengthPx(float value) {
+    if (std::fabs(value - std::round(value)) < 0.001f) {
+        return std::to_string(static_cast<int>(std::round(value))) + "px";
+    }
+    std::ostringstream oss;
+    oss << value << "px";
+    return oss.str();
+}
+
+std::string getStyleValueForNode(const dom::DOMNodePtr& node, const std::string& css_prop) {
+    if (!node) return "";
+    std::string inline_value = node->getInlineStyleProperty(css_prop);
+    if (!inline_value.empty()) {
+        return inline_value;
+    }
+    const auto& style = node->getComputedStyle();
+    if (css_prop == "padding") {
+        return formatCssLengthPx(style.padding_top.resolvePixels(0.0f, 16.0f, 800.0f, 600.0f));
+    }
+    if (css_prop == "border-width") {
+        const float width = style.border_top_width >= 0.0f ? style.border_top_width : style.border_width;
+        return formatCssLengthPx(width);
+    }
+    return getComputedStyleValue(style, css_prop);
+}
+
+std::string nodeIdsToJson(const std::vector<uint64_t>& ids) {
+    std::string s = "[";
+    for (size_t i = 0; i < ids.size(); ++i) {
+        if (i > 0) {
+            s += ',';
+        }
+        s += std::to_string(ids[i]);
+    }
+    s += ']';
+    return s;
+}
+
+void collectElementsByTagName(const dom::DOMNodePtr& node, const std::string& tag,
+                              std::vector<dom::DOMNodePtr>& out) {
+    if (!node) {
+        return;
+    }
+    if (node->getTagName() == tag) {
+        out.push_back(node);
+    }
+    for (const auto& child : node->getChildren()) {
+        collectElementsByTagName(child, tag, out);
+    }
+}
 
 } // namespace
 
@@ -189,6 +271,365 @@ dom::DOMNodePtr JSBindings::findNodeById(uint64_t node_id) const {
         return it->second;
     }
     return nullptr;
+}
+
+void JSBindings::ensureLayoutFresh() const {
+    if (!layout_engine_ || !dom_manager_) {
+        return;
+    }
+    auto root = dom_manager_->getRoot();
+    const float vw = layout_engine_->getViewportWidth();
+    const float vh = layout_engine_->getViewportHeight();
+    if (root && vw > 0.0f && vh > 0.0f) {
+        layout_engine_->calculateLayout(root, vw, vh);
+        root->clearLayoutDirtyRecursive();
+    }
+}
+
+std::string JSBindings::getNodeValue(uint64_t node_id) const {
+    const auto node = findNodeById(node_id);
+    if (!node) {
+        return {};
+    }
+    if (node->getNodeName() == "select") {
+        if (auto* state = dom::getSelectState(node)) {
+            return state->getSelectedValue();
+        }
+    }
+    if (auto* state = dom::getInputState(node)) {
+        return state->getValue();
+    }
+    return node->getAttribute("value");
+}
+
+void JSBindings::setNodeValue(uint64_t node_id, const std::string& value) {
+    const auto node = findNodeById(node_id);
+    if (!node) {
+        return;
+    }
+    if (node->getTagName() == "select") {
+        if (auto* sel_state = dom::getSelectState(node)) {
+            sel_state->syncFromDOM(node);
+            const size_t prev = sel_state->getSelectedIndex();
+            sel_state->selectByValue(value);
+            if (sel_state->getSelectedIndex() != prev) {
+                sel_state->applySelectionToDOM(node);
+            } else {
+                node->setAttribute("value", value);
+            }
+        } else {
+            node->setAttribute("value", value);
+        }
+        node->markLayoutDirty();
+        return;
+    }
+    if (auto* state = dom::getInputState(node)) {
+        state->setValue(value);
+    }
+    node->setAttribute("value", value);
+    node->markLayoutDirty();
+}
+
+bool JSBindings::getNodeChecked(uint64_t node_id) const {
+    const auto node = findNodeById(node_id);
+    return node && node->hasAttribute("checked");
+}
+
+void JSBindings::setNodeChecked(uint64_t node_id, bool checked) {
+    const auto node = findNodeById(node_id);
+    if (!node) {
+        return;
+    }
+    if (checked) {
+        node->setAttribute("checked", "");
+    } else {
+        node->removeAttribute("checked");
+    }
+}
+
+bool JSBindings::getNodeDisabled(uint64_t node_id) const {
+    const auto node = findNodeById(node_id);
+    return node && node->hasAttribute("disabled");
+}
+
+void JSBindings::setNodeDisabled(uint64_t node_id, bool disabled) {
+    const auto node = findNodeById(node_id);
+    if (!node) {
+        return;
+    }
+    if (disabled) {
+        node->setAttribute("disabled", "");
+    } else {
+        node->removeAttribute("disabled");
+    }
+}
+
+std::string JSBindings::getNodeAttribute(uint64_t node_id, const std::string& name) const {
+    const auto node = findNodeById(node_id);
+    if (!node || !node->hasAttribute(name)) {
+        return {};
+    }
+    return node->getAttribute(name);
+}
+
+void JSBindings::setNodeAttribute(uint64_t node_id, const std::string& name,
+                                  const std::string& value) {
+    const auto node = findNodeById(node_id);
+    if (!node) {
+        return;
+    }
+    node->setAttribute(name, value);
+    node->markStyleDirty();
+    node->markLayoutDirty();
+}
+
+void JSBindings::removeNodeAttribute(uint64_t node_id, const std::string& name) {
+    const auto node = findNodeById(node_id);
+    if (!node) {
+        return;
+    }
+    node->removeAttribute(name);
+    node->markStyleDirty();
+    node->markLayoutDirty();
+}
+
+void JSBindings::setNodeInnerHTML(uint64_t node_id, const std::string& html) {
+    const auto node = findNodeById(node_id);
+    if (!node) {
+        return;
+    }
+    node->setInnerHTML(html);
+    node->markStyleDirty();
+    node->markLayoutDirty();
+}
+
+uint64_t JSBindings::querySelector(uint64_t root_id, const std::string& selector) const {
+    dom::DOMNodePtr root = findNodeById(root_id);
+    if (!root && dom_manager_) {
+        root = dom_manager_->getRoot();
+    }
+    if (!root) {
+        return 0;
+    }
+    auto found = root->querySelector(selector);
+    if (!found) {
+        return 0;
+    }
+    return const_cast<JSBindings*>(this)->getNodeIdFor(found);
+}
+
+std::string JSBindings::querySelectorAllJson(uint64_t root_id, const std::string& selector) const {
+    dom::DOMNodePtr root = findNodeById(root_id);
+    if (!root && dom_manager_) {
+        root = dom_manager_->getRoot();
+    }
+    if (!root) {
+        return "[]";
+    }
+    auto results = root->querySelectorAll(selector);
+    std::vector<uint64_t> ids;
+    ids.reserve(results.size());
+    for (const auto& n : results) {
+        ids.push_back(const_cast<JSBindings*>(this)->getNodeIdFor(n));
+    }
+    return nodeIdsToJson(ids);
+}
+
+std::string JSBindings::getElementsByTagNameJson(uint64_t root_id, const std::string& tag) const {
+    dom::DOMNodePtr root = findNodeById(root_id);
+    if (!root && dom_manager_) {
+        root = dom_manager_->getRoot();
+    }
+    if (!root) {
+        return "[]";
+    }
+    std::vector<dom::DOMNodePtr> nodes;
+    collectElementsByTagName(root, tag, nodes);
+    std::vector<uint64_t> ids;
+    ids.reserve(nodes.size());
+    for (const auto& n : nodes) {
+        ids.push_back(const_cast<JSBindings*>(this)->getNodeIdFor(n));
+    }
+    return nodeIdsToJson(ids);
+}
+
+void JSBindings::classAdd(uint64_t node_id, const std::string& cls) {
+    const auto node = findNodeById(node_id);
+    if (!node) {
+        return;
+    }
+    node->getClassList().add(cls);
+    if (dom_manager_) {
+        dom_manager_->recomputeNodeStyle(node);
+    }
+    node->markStyleDirty();
+    node->markLayoutDirty();
+}
+
+void JSBindings::classRemove(uint64_t node_id, const std::string& cls) {
+    const auto node = findNodeById(node_id);
+    if (!node) {
+        return;
+    }
+    node->getClassList().remove(cls);
+    if (dom_manager_) {
+        dom_manager_->recomputeNodeStyle(node);
+    }
+    node->markStyleDirty();
+    node->markLayoutDirty();
+}
+
+bool JSBindings::classToggle(uint64_t node_id, const std::string& cls) {
+    const auto node = findNodeById(node_id);
+    if (!node) {
+        return false;
+    }
+    const bool had = node->getClassList().contains(cls);
+    node->getClassList().toggle(cls);
+    if (dom_manager_) {
+        dom_manager_->recomputeNodeStyle(node);
+    }
+    node->markStyleDirty();
+    node->markLayoutDirty();
+    return !had;
+}
+
+bool JSBindings::classContains(uint64_t node_id, const std::string& cls) const {
+    const auto node = findNodeById(node_id);
+    return node && node->getClassList().contains(cls);
+}
+
+void JSBindings::styleSet(uint64_t node_id, const std::string& prop, const std::string& value) {
+    const auto node = findNodeById(node_id);
+    if (!node) {
+        return;
+    }
+    std::string css_prop = prop;
+    if (prop.find('-') == std::string::npos) {
+        css_prop = camelToCss(prop);
+    }
+    node->setInlineStyleProperty(css_prop, value);
+    node->markStyleDirty();
+    node->markLayoutDirty();
+}
+
+std::string JSBindings::styleGet(uint64_t node_id, const std::string& prop) const {
+    const auto node = findNodeById(node_id);
+    if (!node) {
+        return {};
+    }
+    std::string css_prop = prop;
+    if (prop.find('-') == std::string::npos) {
+        css_prop = camelToCss(prop);
+    }
+    return getStyleValueForNode(node, css_prop);
+}
+
+std::string JSBindings::computedStyleGet(uint64_t node_id, const std::string& prop) const {
+    const auto node = findNodeById(node_id);
+    if (!node) {
+        return {};
+    }
+    ensureLayoutFresh();
+    std::string css_prop = prop;
+    if (prop.find('-') == std::string::npos) {
+        css_prop = camelToCss(prop);
+    }
+    return getComputedStyleValue(node->getComputedStyle(), css_prop);
+}
+
+std::string JSBindings::getRectJson(uint64_t node_id) const {
+    const auto node = findNodeById(node_id);
+    if (!node) {
+        return R"({"x":0,"y":0,"w":0,"h":0})";
+    }
+    ensureLayoutFresh();
+    const auto rect = node->getBoundingClientRect();
+    std::ostringstream oss;
+    oss << "{\"x\":" << rect.x << ",\"y\":" << rect.y << ",\"w\":" << rect.width
+        << ",\"h\":" << rect.height << "}";
+    return oss.str();
+}
+
+double JSBindings::getMetric(uint64_t node_id, int metric_id) const {
+    const auto node = findNodeById(node_id);
+    if (!node) {
+        return 0.0;
+    }
+    ensureLayoutFresh();
+    switch (metric_id) {
+    case 0: return static_cast<double>(node->getOffsetWidth());
+    case 1: return static_cast<double>(node->getOffsetHeight());
+    case 2: return static_cast<double>(node->getOffsetTop());
+    case 3: return static_cast<double>(node->getOffsetLeft());
+    case 4: return static_cast<double>(node->getClientWidth());
+    case 5: return static_cast<double>(node->getClientHeight());
+    case 6: return static_cast<double>(node->getScrollWidth());
+    case 7: return static_cast<double>(node->getScrollHeight());
+    default: return 0.0;
+    }
+}
+
+double JSBindings::getScrollTop(uint64_t node_id) const {
+    const auto node = findNodeById(node_id);
+    return node ? static_cast<double>(node->getScrollTop()) : 0.0;
+}
+
+void JSBindings::setScrollTop(uint64_t node_id, double value) {
+    const auto node = findNodeById(node_id);
+    if (node) {
+        node->setScrollTop(static_cast<float>(value));
+    }
+}
+
+double JSBindings::getScrollLeft(uint64_t node_id) const {
+    const auto node = findNodeById(node_id);
+    return node ? static_cast<double>(node->getScrollLeft()) : 0.0;
+}
+
+void JSBindings::setScrollLeft(uint64_t node_id, double value) {
+    const auto node = findNodeById(node_id);
+    if (node) {
+        node->setScrollLeft(static_cast<float>(value));
+    }
+}
+
+void JSBindings::focusNode(uint64_t node_id) {
+    const auto node = findNodeById(node_id);
+    if (node) {
+        node->focus();
+    }
+}
+
+void JSBindings::blurNode(uint64_t node_id) {
+    const auto node = findNodeById(node_id);
+    if (node) {
+        node->blur();
+    }
+}
+
+void JSBindings::clickNode(uint64_t node_id) {
+    const auto node = findNodeById(node_id);
+    if (node) {
+        node->click();
+    }
+}
+
+bool JSBindings::matchesSelector(uint64_t node_id, const std::string& selector) const {
+    const auto node = findNodeById(node_id);
+    return node && node->matches(selector);
+}
+
+uint64_t JSBindings::closestSelector(uint64_t node_id, const std::string& selector) const {
+    const auto node = findNodeById(node_id);
+    if (!node) {
+        return 0;
+    }
+    auto found = node->closest(selector);
+    if (!found) {
+        return 0;
+    }
+    return const_cast<JSBindings*>(this)->getNodeIdFor(found);
 }
 
 void resetFetchState(void* /*ctx*/) {}

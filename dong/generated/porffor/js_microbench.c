@@ -255,6 +255,22 @@ static struct ReturnValue dong_porf_js_microbench__String_prototype_trim(i32 _th
 static struct ReturnValue dong_porf_js_microbench__String_prototype_trimEnd(i32 _this, i32 _thisjjtype);
 static struct ReturnValue dong_porf_js_microbench__String_prototype_trimStart(i32 _this, i32 _thisjjtype);
 
+static f64 dong_porf_js_microbench_METRIC_OFFSET_WIDTH = 0;
+static i32 dong_porf_js_microbench_METRIC_OFFSET_WIDTHjjtype = 0;
+static f64 dong_porf_js_microbench_METRIC_OFFSET_HEIGHT = 0;
+static i32 dong_porf_js_microbench_METRIC_OFFSET_HEIGHTjjtype = 0;
+static f64 dong_porf_js_microbench_METRIC_OFFSET_TOP = 0;
+static i32 dong_porf_js_microbench_METRIC_OFFSET_TOPjjtype = 0;
+static f64 dong_porf_js_microbench_METRIC_OFFSET_LEFT = 0;
+static i32 dong_porf_js_microbench_METRIC_OFFSET_LEFTjjtype = 0;
+static f64 dong_porf_js_microbench_METRIC_CLIENT_WIDTH = 0;
+static i32 dong_porf_js_microbench_METRIC_CLIENT_WIDTHjjtype = 0;
+static f64 dong_porf_js_microbench_METRIC_CLIENT_HEIGHT = 0;
+static i32 dong_porf_js_microbench_METRIC_CLIENT_HEIGHTjjtype = 0;
+static f64 dong_porf_js_microbench_METRIC_SCROLL_WIDTH = 0;
+static i32 dong_porf_js_microbench_METRIC_SCROLL_WIDTHjjtype = 0;
+static f64 dong_porf_js_microbench_METRIC_SCROLL_HEIGHT = 0;
+static i32 dong_porf_js_microbench_METRIC_SCROLL_HEIGHTjjtype = 0;
 static f64 dong_porf_js_microbench_bench_name = 0;
 static i32 dong_porf_js_microbench_bench_namejjtype = 0;
 static f64 dong_porf_js_microbench_bench_iterations = 0;
@@ -14761,6 +14777,22 @@ int dong_porf_js_microbench_main() {
   f64 jjmember_prop_12 = 0;
   i32 jjobjectexpr_24 = 0;
 
+  dong_porf_js_microbench_METRIC_OFFSET_WIDTH = 0;
+  dong_porf_js_microbench_METRIC_OFFSET_WIDTHjjtype = 1;
+  dong_porf_js_microbench_METRIC_OFFSET_HEIGHT = 1;
+  dong_porf_js_microbench_METRIC_OFFSET_HEIGHTjjtype = 1;
+  dong_porf_js_microbench_METRIC_OFFSET_TOP = 2;
+  dong_porf_js_microbench_METRIC_OFFSET_TOPjjtype = 1;
+  dong_porf_js_microbench_METRIC_OFFSET_LEFT = 3;
+  dong_porf_js_microbench_METRIC_OFFSET_LEFTjjtype = 1;
+  dong_porf_js_microbench_METRIC_CLIENT_WIDTH = 4;
+  dong_porf_js_microbench_METRIC_CLIENT_WIDTHjjtype = 1;
+  dong_porf_js_microbench_METRIC_CLIENT_HEIGHT = 5;
+  dong_porf_js_microbench_METRIC_CLIENT_HEIGHTjjtype = 1;
+  dong_porf_js_microbench_METRIC_SCROLL_WIDTH = 6;
+  dong_porf_js_microbench_METRIC_SCROLL_WIDTHjjtype = 1;
+  dong_porf_js_microbench_METRIC_SCROLL_HEIGHT = 7;
+  dong_porf_js_microbench_METRIC_SCROLL_HEIGHTjjtype = 1;
   dong_porf_js_microbench_bench_name = 0;
   dong_porf_js_microbench_bench_namejjtype = 195;
   dong_porf_js_microbench_bench_iterations = 0;

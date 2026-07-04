@@ -46,6 +46,43 @@ public:
     void commitAddEventListener();
     double commitSetTimeout();
 
+    void getValue(double node_id);
+    void setValue(double node_id, double value_ptr);
+    double getChecked(double node_id) const;
+    void setChecked(double node_id, double checked);
+    double getDisabled(double node_id) const;
+    void setDisabled(double node_id, double disabled);
+    void getAttribute(double node_id, double name_ptr);
+    void setAttribute(double node_id, double name_ptr, double value_ptr);
+    void removeAttribute(double node_id, double name_ptr);
+    void setInnerHTML(double node_id, double html_ptr);
+
+    double querySelector(double root_id, double selector_ptr) const;
+    void querySelectorAll(double root_id, double selector_ptr);
+    void getElementsByTagName(double root_id, double tag_ptr);
+
+    void classAdd(double node_id, double cls_ptr);
+    void classRemove(double node_id, double cls_ptr);
+    double classToggle(double node_id, double cls_ptr) const;
+    double classContains(double node_id, double cls_ptr) const;
+
+    void styleSet(double node_id, double prop_ptr, double value_ptr);
+    void styleGet(double node_id, double prop_ptr);
+    void computedStyleGet(double node_id, double prop_ptr);
+
+    void getRect(double node_id);
+    double getMetric(double node_id, double metric_id) const;
+    double getScrollTop(double node_id) const;
+    void setScrollTop(double node_id, double value);
+    double getScrollLeft(double node_id) const;
+    void setScrollLeft(double node_id, double value);
+
+    void focusNode(double node_id);
+    void blurNode(double node_id);
+    void clickNode(double node_id);
+    double matchesSelector(double node_id, double selector_ptr) const;
+    double closestSelector(double node_id, double selector_ptr) const;
+
 private:
     JSBindings* bindings_ = nullptr;
     char* memory_ = nullptr;

@@ -226,6 +226,22 @@ static struct ReturnValue dong_porf_hello_dom__String_prototype_trim(i32 _this, 
 static struct ReturnValue dong_porf_hello_dom__String_prototype_trimEnd(i32 _this, i32 _thisjjtype);
 static struct ReturnValue dong_porf_hello_dom__String_prototype_trimStart(i32 _this, i32 _thisjjtype);
 
+static f64 dong_porf_hello_dom_METRIC_OFFSET_WIDTH = 0;
+static i32 dong_porf_hello_dom_METRIC_OFFSET_WIDTHjjtype = 0;
+static f64 dong_porf_hello_dom_METRIC_OFFSET_HEIGHT = 0;
+static i32 dong_porf_hello_dom_METRIC_OFFSET_HEIGHTjjtype = 0;
+static f64 dong_porf_hello_dom_METRIC_OFFSET_TOP = 0;
+static i32 dong_porf_hello_dom_METRIC_OFFSET_TOPjjtype = 0;
+static f64 dong_porf_hello_dom_METRIC_OFFSET_LEFT = 0;
+static i32 dong_porf_hello_dom_METRIC_OFFSET_LEFTjjtype = 0;
+static f64 dong_porf_hello_dom_METRIC_CLIENT_WIDTH = 0;
+static i32 dong_porf_hello_dom_METRIC_CLIENT_WIDTHjjtype = 0;
+static f64 dong_porf_hello_dom_METRIC_CLIENT_HEIGHT = 0;
+static i32 dong_porf_hello_dom_METRIC_CLIENT_HEIGHTjjtype = 0;
+static f64 dong_porf_hello_dom_METRIC_SCROLL_WIDTH = 0;
+static i32 dong_porf_hello_dom_METRIC_SCROLL_WIDTHjjtype = 0;
+static f64 dong_porf_hello_dom_METRIC_SCROLL_HEIGHT = 0;
+static i32 dong_porf_hello_dom_METRIC_SCROLL_HEIGHTjjtype = 0;
 static f64 dong_porf_hello_dom_statusId = 0;
 static i32 dong_porf_hello_dom_statusIdjjtype = 0;
 static i32 dong_porf_hello_dom_jjporfjjcurrentPtr = 0;
@@ -11679,6 +11695,22 @@ int dong_porf_hello_dom_main() {
 
   i32 jjlast_type = 0;
 
+  dong_porf_hello_dom_METRIC_OFFSET_WIDTH = 0;
+  dong_porf_hello_dom_METRIC_OFFSET_WIDTHjjtype = 1;
+  dong_porf_hello_dom_METRIC_OFFSET_HEIGHT = 1;
+  dong_porf_hello_dom_METRIC_OFFSET_HEIGHTjjtype = 1;
+  dong_porf_hello_dom_METRIC_OFFSET_TOP = 2;
+  dong_porf_hello_dom_METRIC_OFFSET_TOPjjtype = 1;
+  dong_porf_hello_dom_METRIC_OFFSET_LEFT = 3;
+  dong_porf_hello_dom_METRIC_OFFSET_LEFTjjtype = 1;
+  dong_porf_hello_dom_METRIC_CLIENT_WIDTH = 4;
+  dong_porf_hello_dom_METRIC_CLIENT_WIDTHjjtype = 1;
+  dong_porf_hello_dom_METRIC_CLIENT_HEIGHT = 5;
+  dong_porf_hello_dom_METRIC_CLIENT_HEIGHTjjtype = 1;
+  dong_porf_hello_dom_METRIC_SCROLL_WIDTH = 6;
+  dong_porf_hello_dom_METRIC_SCROLL_WIDTHjjtype = 1;
+  dong_porf_hello_dom_METRIC_SCROLL_HEIGHT = 7;
+  dong_porf_hello_dom_METRIC_SCROLL_HEIGHTjjtype = 1;
   const struct ReturnValue _0 = dong_porf_hello_dom_getElementById(0, 0, 0, 0, 1799, 195);
   jjlast_type = _0.type;
   _get0 = jjlast_type;
