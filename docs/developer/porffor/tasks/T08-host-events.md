@@ -62,7 +62,7 @@
 ## 完成记录
 
 - **日期**: 2026-07-04
-- **Commit**: (feature/porffor T08)
+- **Commit**: e273b9d
 - **事件类型 × 可读字段覆盖表**:
 
 | 事件类型 | type | target | key/keyCode | x/y/button | modifiers | value | preventDefault |
