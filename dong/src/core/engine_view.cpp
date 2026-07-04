@@ -34,7 +34,11 @@
 #include "../dom/scene_compiler.hpp"
 #include "../script/script_engine.hpp"
 #include "../script/js_bindings.hpp"
+#ifdef DONG_SCRIPT_ENGINE_PORFFOR
+#include "../script/porffor/dong_porf_host.hpp"
+#else
 #include "../script/js_fetch_bindings.hpp"
+#endif
 #include "../devtools/devtools_overlay.hpp"
 
 #include <cstdlib>
@@ -535,6 +539,7 @@ struct EngineView::Impl {
     uint32_t paint_only_tick_count_ = 0;  // ticks where only Paint invalidations were pending
     uint32_t layout_skip_count_ = 0;     // ticks where layout was skipped due to Paint-only
     bool js_bindings_initialized = false;
+    std::string porffor_module_;
 
     // Top-layer: modal dialogs rendered above everything
     std::vector<dong::dom::DOMNodePtr> top_layer;
@@ -686,12 +691,20 @@ struct EngineView::Impl {
         if (js_bindings_initialized || !js_bindings || !script_engine) {
             return;
         }
+#ifdef DONG_SCRIPT_ENGINE_PORFFOR
+        js_bindings->initialize();
+        if (script_engine->host() && js_bindings) {
+            script_engine->host()->setBindings(js_bindings.get());
+        }
+        js_bindings_initialized = true;
+#else
         JSContext* qjs = script_engine->getContext();
         if (!qjs) {
             return;
         }
         js_bindings->initialize();
         js_bindings_initialized = true;
+#endif
     }
 
     // --- P0-6 S1: Invalidation tracking ---
@@ -1677,8 +1690,12 @@ struct EngineView::Impl {
         if (js_bindings) {
             js_bindings->resetForNewDOM();
         }
-        if (script_engine && script_engine->getContext()) {
+        if (script_engine && js_bindings) {
+#ifndef DONG_SCRIPT_ENGINE_PORFFOR
+        if (script_engine->getContext()) {
             dong::script::resetFetchState(script_engine->getContext());
+        }
+#endif
         }
 
         invalidate(InvalidationKind::Full, nullptr, "loadHTML");
@@ -1735,7 +1752,34 @@ struct EngineView::Impl {
             } else {
                 ensureJSBindingsInitialized();
 
-            // Scan DOM tree for inline event handlers (onclick, onchange, etc.) and register them
+#ifdef DONG_SCRIPT_ENGINE_PORFFOR
+            if (js_bindings) {
+                js_bindings->scanAndRegisterInlineEventHandlers();
+            }
+
+            std::string mod = porffor_module_;
+            if (mod.empty()) {
+                if (auto root = dom_manager->getRoot()) {
+                    mod = root->getAttribute("data-porffor-module");
+                }
+            }
+            if (mod.empty()) {
+                const char* env_mod = std::getenv("DONG_PORFFOR_MODULE");
+                if (env_mod && env_mod[0] != '\0') {
+                    mod = env_mod;
+                }
+            }
+            if (mod.empty()) {
+                mod = script_engine->defaultModule();
+            }
+            if (!mod.empty()) {
+                DONG_LOG_INFO("[EngineView] Running Porffor module: %s", mod.c_str());
+                script_engine->setDefaultModule(mod);
+                script_engine->runModule(mod);
+            } else {
+                DONG_LOG_WARN("[EngineView] No Porffor module configured (set DONG_PORFFOR_MODULE or data-porffor-module)");
+            }
+#else
             if (js_bindings) {
                 DONG_LOG_INFO("[EngineView] Scanning for inline event handlers...");
                 js_bindings->scanAndRegisterInlineEventHandlers();
@@ -1841,7 +1885,10 @@ struct EngineView::Impl {
                 }
             }
 
+#endif // DONG_SCRIPT_ENGINE_PORFFOR
+
             // Dispatch DOMContentLoaded event on document (body)
+#ifndef DONG_SCRIPT_ENGINE_PORFFOR
             if (js_bindings) {
                 auto bodies = dom_manager->getElementsByTagName("body");
                 dong::dom::DOMNodePtr doc_target;
@@ -1866,6 +1913,7 @@ struct EngineView::Impl {
                     }
                 }
             }
+#endif // !DONG_SCRIPT_ENGINE_PORFFOR
             }
         } else {
             DONG_LOG_WARN("[EngineView] Cannot execute scripts: script_engine or dom_manager is null");
@@ -2043,12 +2091,14 @@ struct EngineView::Impl {
         DONG_PROFILE_SCOPE_CAT("Script::processTasks", "script");
         script_engine->processPendingTasks();
 
+#ifndef DONG_SCRIPT_ENGINE_PORFFOR
         // Drain completed async fetch requests
         JSContext* ctx = script_engine->getContext();
         if (ctx) {
             dong::script::tickPendingFetches(ctx);
             script_engine->processPendingTasks();
         }
+#endif
 
         if (js_bindings) {
             auto now = std::chrono::steady_clock::now();
@@ -2990,12 +3040,16 @@ struct EngineView::Impl {
         uint64_t node_id = js_bindings->getNodeIdFor(node);
         if (node_id) return node_id;
 
+#ifndef DONG_SCRIPT_ENGINE_PORFFOR
         JSContext* qjs = script_engine->getContext();
         if (!qjs) return 0;
 
         JSValue tmp = js_bindings->createJSElement(qjs, node);
         JS_FreeValue(qjs, tmp);
         return js_bindings->getNodeIdFor(node);
+#else
+        return js_bindings->getNodeIdFor(node);
+#endif
     }
 
     void dispatchSimpleEventForNode(const DOMNodePtr& node, const char* type) {
@@ -4310,6 +4364,7 @@ private:
 
     // Dispatch 'gamepadbutton' JS event on focused element. Returns true if preventDefault'd.
     bool dispatchGamepadButtonEvent(int32_t gamepad_id, int button, bool pressed) {
+#ifndef DONG_SCRIPT_ENGINE_PORFFOR
         if (!js_bindings || !script_engine) return false;
         ensureJSBindingsInitialized();
 
@@ -4361,6 +4416,12 @@ private:
         bool not_prevented = js_bindings->dispatchEventObject(node_id, ev);
         JS_FreeValue(ctx, ev);
         return !not_prevented; // return true if prevented
+#else
+        (void)gamepad_id;
+        (void)button;
+        (void)pressed;
+        return false;
+#endif
     }
 
     // Simulate a click on the currently focused element
@@ -4387,6 +4448,7 @@ private:
 
     // Handle gamepad B button: dispatch 'gamepadcancel', default close topmost dialog
     bool handleGamepadCancel() {
+#ifndef DONG_SCRIPT_ENGINE_PORFFOR
         // Dispatch 'gamepadcancel' event on focused element
         if (js_bindings && script_engine) {
             ensureJSBindingsInitialized();
@@ -4416,6 +4478,8 @@ private:
                 }
             }
         }
+
+#endif // !DONG_SCRIPT_ENGINE_PORFFOR
 
         // Default: close topmost dialog
         if (!top_layer.empty()) {
@@ -4511,8 +4575,16 @@ public:
         }
         DONG_PROFILE_SCOPE_CAT("Script::evalScript", "script");
         ensureJSBindingsInitialized();
+#ifdef DONG_SCRIPT_ENGINE_PORFFOR
+        DONG_LOG_WARN("[EngineView] evalScript unsupported in Porffor mode");
+        (void)code;
+        return false;
+#else
         return script_engine->eval(std::string(code));
+#endif
     }
+
+    void setPorfforModule(const std::string& module) { porffor_module_ = module; }
 };
 
 EngineView::EngineView(uint32_t width, uint32_t height)
@@ -4638,6 +4710,12 @@ bool EngineView::sendGamepadButton(int32_t gamepad_id, int button, bool pressed)
 
 bool EngineView::evalScript(const char* code) {
     return impl_ ? impl_->evalScript(code) : false;
+}
+
+void EngineView::setPorfforModule(const char* module_name) {
+    if (impl_) {
+        impl_->setPorfforModule(module_name ? std::string(module_name) : std::string{});
+    }
 }
 
 const void* EngineView::getCommandList() const {

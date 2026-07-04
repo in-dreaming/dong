@@ -30,6 +30,13 @@ set_property(CACHE DONG_BACKEND PROPERTY STRINGS sdl gpu none)
 if(NOT DONG_BACKEND MATCHES "^(sdl|gpu|none)$")
     message(FATAL_ERROR "Invalid DONG_BACKEND='${DONG_BACKEND}' (expected sdl, gpu, or none)")
 endif()
+
+# Script engine: porffor (AOT, default) or quickjs (interpreter)
+set(DONG_SCRIPT_ENGINE "porffor" CACHE STRING "Script engine backend: porffor | quickjs")
+set_property(CACHE DONG_SCRIPT_ENGINE PROPERTY STRINGS porffor quickjs)
+if(NOT DONG_SCRIPT_ENGINE MATCHES "^(porffor|quickjs)$")
+    message(FATAL_ERROR "Invalid DONG_SCRIPT_ENGINE='${DONG_SCRIPT_ENGINE}' (expected porffor or quickjs)")
+endif()
 if(DONG_BACKEND STREQUAL "gpu")
     add_compile_definitions(DONG_BACKEND_GPU=1)
 elseif(DONG_BACKEND STREQUAL "sdl")
@@ -99,8 +106,9 @@ set(SDL3_PREFIX "${CMAKE_SOURCE_DIR}/zig-out/sdl3")
 set(ZIG_OUT_PREFIX "${CMAKE_SOURCE_DIR}/zig-out")
 
 # =============================================================================
-# QuickJS library (static for all platforms - ensures ABI compatibility)
+# QuickJS library (static) — only when DONG_SCRIPT_ENGINE=quickjs
 # =============================================================================
+if(DONG_SCRIPT_ENGINE STREQUAL "quickjs")
 add_library(quickjs STATIC IMPORTED GLOBAL)
 if(WIN32)
     set_target_properties(quickjs PROPERTIES
@@ -112,6 +120,14 @@ else()
         IMPORTED_LOCATION "${ZIG_OUT_PREFIX}/lib/libquickjs.a"
         INTERFACE_INCLUDE_DIRECTORIES "${ZIG_OUT_PREFIX}/include"
     )
+endif()
+endif()
+
+# =============================================================================
+# Porffor AOT scripts (when DONG_SCRIPT_ENGINE=porffor)
+# =============================================================================
+if(DONG_SCRIPT_ENGINE STREQUAL "porffor")
+    include(${CMAKE_SOURCE_DIR}/cmake/PorfforScripts.cmake)
 endif()
 
 # =============================================================================
@@ -238,17 +254,6 @@ add_library(dong SHARED
     src/layout/display_contents.cpp
     src/layout/table_layout.cpp
     src/layout/grid_layout.cpp
-    # Script
-    src/script/module_loader.cpp
-    src/script/script_engine.cpp
-    src/script/js_bindings.cpp
-    src/script/js_node_bindings.cpp
-    src/script/js_observer_bindings.cpp
-    src/script/js_clipboard_bindings.cpp
-    src/script/js_selection_bindings.cpp
-    src/script/js_fetch_bindings.cpp
-    src/script/js_text_layout_bindings.cpp
-    src/script/js_scene_bindings.cpp
     src/render/scene_graph.cpp
     src/dom/scene_compiler.cpp
     # Core utilities
@@ -277,6 +282,23 @@ add_library(dong SHARED
     src/render/slug/slug_font_cache.cpp
 )
 
+if(DONG_SCRIPT_ENGINE STREQUAL "quickjs")
+    target_sources(dong PRIVATE
+        src/script/module_loader.cpp
+        src/script/script_engine.cpp
+        src/script/js_bindings.cpp
+        src/script/js_node_bindings.cpp
+        src/script/js_observer_bindings.cpp
+        src/script/js_clipboard_bindings.cpp
+        src/script/js_selection_bindings.cpp
+        src/script/js_fetch_bindings.cpp
+        src/script/js_text_layout_bindings.cpp
+        src/script/js_scene_bindings.cpp
+    )
+elseif(DONG_SCRIPT_ENGINE STREQUAL "porffor")
+    dong_attach_porffor_scripts(dong)
+endif()
+
 target_include_directories(dong PUBLIC
     include
     src
@@ -299,7 +321,10 @@ target_compile_definitions(dong PRIVATE DONG_BUILDING_DLL)
 # Define MSDFGEN_PUBLIC to disable msdfgen-config.h requirement
 target_compile_definitions(dong PUBLIC MSDFGEN_PUBLIC= MSDFGEN_EXT_PUBLIC=)
 
-target_link_libraries(dong PUBLIC quickjs lexbor yoga)
+target_link_libraries(dong PUBLIC lexbor yoga)
+if(DONG_SCRIPT_ENGINE STREQUAL "quickjs")
+    target_link_libraries(dong PUBLIC quickjs)
+endif()
 if(WIN32)
     target_link_libraries(dong PUBLIC winhttp)
 endif()
@@ -330,7 +355,7 @@ if(WIN32)
             set(CLANG_RT_BUILTIN "${CLANG_RT_BUILTIN}" CACHE FILEPATH "Clang RT builtins library" FORCE)
         endif()
     endif()
-    if(CLANG_RT_BUILTIN)
+    if(CLANG_RT_BUILTIN AND DONG_SCRIPT_ENGINE STREQUAL "quickjs")
         target_link_libraries(dong PUBLIC "${CLANG_RT_BUILTIN}")
     endif()
 else()
@@ -424,17 +449,6 @@ add_library(dong_render STATIC
     src/layout/display_contents.cpp
     src/layout/table_layout.cpp
     src/layout/grid_layout.cpp
-    # Script
-    src/script/module_loader.cpp
-    src/script/script_engine.cpp
-    src/script/js_bindings.cpp
-    src/script/js_node_bindings.cpp
-    src/script/js_observer_bindings.cpp
-    src/script/js_clipboard_bindings.cpp
-    src/script/js_selection_bindings.cpp
-    src/script/js_fetch_bindings.cpp
-    src/script/js_text_layout_bindings.cpp
-    src/script/js_scene_bindings.cpp
     src/render/scene_graph.cpp
     src/dom/scene_compiler.cpp
     # Core utilities
@@ -472,6 +486,21 @@ add_library(dong_render STATIC
     third_party/SDL_shadercross/src/SDL_shadercross.c
 )
 
+if(DONG_SCRIPT_ENGINE STREQUAL "quickjs")
+    target_sources(dong_render PRIVATE
+        src/script/module_loader.cpp
+        src/script/script_engine.cpp
+        src/script/js_bindings.cpp
+        src/script/js_node_bindings.cpp
+        src/script/js_observer_bindings.cpp
+        src/script/js_clipboard_bindings.cpp
+        src/script/js_selection_bindings.cpp
+        src/script/js_fetch_bindings.cpp
+        src/script/js_text_layout_bindings.cpp
+        src/script/js_scene_bindings.cpp
+    )
+endif()
+
 set_target_properties(dong_render PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 target_include_directories(dong_render PUBLIC
@@ -508,7 +537,10 @@ if(WIN32 OR APPLE)
     target_compile_definitions(dong_render PRIVATE SDL_SHADERCROSS_DXC)
 endif()
 
-target_link_libraries(dong_render PUBLIC dong quickjs lexbor yoga)
+target_link_libraries(dong_render PUBLIC dong lexbor yoga)
+if(DONG_SCRIPT_ENGINE STREQUAL "quickjs")
+    target_link_libraries(dong_render PUBLIC quickjs)
+endif()
 
 dong_apply_gtc_target(dong_render)
 

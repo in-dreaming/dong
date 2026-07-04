@@ -34,3 +34,7 @@
 	path = dong/third_party/gpu_texture_compress
 	url = https://github.com/in-dreaming/gpu_texture_compress.git
 	branch = main
+[submodule "dong/third_party/porffor"]
+	path = dong/third_party/porffor
+	url = https://github.com/in-dreaming/porffor.git
+	branch = enjin_porffor

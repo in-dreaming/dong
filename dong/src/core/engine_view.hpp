@@ -70,6 +70,7 @@ public:
 
     // Script
     bool evalScript(const char* code);
+    void setPorfforModule(const char* module_name);
 
     // Set a name for this view (used by dong.getView(name) in JS).
     void setViewName(const char* name);

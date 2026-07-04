@@ -29,16 +29,20 @@ def find_exe(exe_dir: Path) -> Path:
     raise FileNotFoundError(f"dong_app not found at {exe}")
 
 
-def run_benchmark(exe: Path, html: Path, timeout_s: float = 60.0) -> str:
+def run_benchmark(exe: Path, html: Path, timeout_s: float = 60.0, porffor_module: str | None = None) -> str:
     """Run dong_app with the benchmark HTML and capture output."""
     env = os.environ.copy()
     env["DONG_BENCH_AUTOSTOP"] = "1"
     env["DONG_BENCH_WARMUP_MS"] = "500"
-    env["DONG_BENCH_RUN_MS"] = "30000"  # Give JS time to complete
+    env["DONG_BENCH_RUN_MS"] = "30000"
     env["DONG_LOG_TO_STDOUT"] = "1"
     env["DONG_SCRIPT_TIMEOUT_MS"] = "60000"
+    if porffor_module:
+        env["DONG_PORFFOR_MODULE"] = porffor_module
 
     cmd = [str(exe), "--html", str(html)]
+    if porffor_module:
+        cmd.extend(["--porffor-module", porffor_module])
     proc = subprocess.run(
         cmd,
         env=env,
@@ -96,12 +100,12 @@ def merge_results(all_runs: list[dict]) -> dict:
     return merged
 
 
-def generate_markdown_report(results: dict, machine: str, num_runs: int) -> str:
+def generate_markdown_report(results: dict, machine: str, num_runs: int, engine: str) -> str:
     """Generate a markdown formatted report."""
     lines = [
         "# Dong JS Engine Benchmark Report",
         "",
-        f"**Engine**: QuickJS (baseline)",
+        f"**Engine**: {engine}",
         f"**Machine**: {machine}",
         f"**Timestamp**: {datetime.now().isoformat()}",
         f"**Runs**: {num_runs}",
@@ -142,6 +146,12 @@ def main():
         "--runs", type=int, default=1, help="Number of runs to average (default: 1)"
     )
     ap.add_argument(
+        "--engine",
+        choices=["quickjs", "porffor"],
+        default="porffor",
+        help="Script engine to benchmark (default: porffor)",
+    )
+    ap.add_argument(
         "--html",
         default=None,
         help="Override benchmark HTML path",
@@ -157,8 +167,13 @@ def main():
     html_path = (
         Path(args.html)
         if args.html
-        else dong_dir / "examples" / "data" / "benchmarks" / "js_microbench.html"
+        else (
+            dong_dir / "examples" / "data" / "benchmarks" / "js_microbench_porffor.html"
+            if args.engine == "porffor"
+            else dong_dir / "examples" / "data" / "benchmarks" / "js_microbench.html"
+        )
     )
+    porffor_module = "js_microbench" if args.engine == "porffor" else None
 
     try:
         exe = find_exe(exe_dir)
@@ -179,6 +194,7 @@ def main():
 
     print(f"Running JS benchmarks...")
     print(f"  exe:   {exe}")
+    print(f"  engine: {args.engine}")
     print(f"  html:  {html_path}")
     print(f"  runs:  {args.runs}")
     print()
@@ -189,7 +205,7 @@ def main():
             print(f"  Run {run_idx + 1}/{args.runs}...", end=" ", flush=True)
 
         try:
-            output = run_benchmark(exe, Path(rel_html), timeout_s=args.timeout)
+            output = run_benchmark(exe, Path(rel_html), timeout_s=args.timeout, porffor_module=porffor_module)
         except subprocess.TimeoutExpired:
             print(f"ERROR: Benchmark timed out after {args.timeout}s")
             return 1
@@ -212,13 +228,13 @@ def main():
     machine = os.environ.get("COMPUTERNAME", os.environ.get("HOSTNAME", "unknown"))
 
     # Print report
-    report = generate_markdown_report(merged, machine, args.runs)
+    report = generate_markdown_report(merged, machine, args.runs, args.engine)
     print(report)
 
     # Save JSON
     if args.output:
         out_data = {
-            "engine": "quickjs",
+            "engine": args.engine,
             "machine": machine,
             "timestamp": datetime.now().isoformat(),
             "runs": args.runs,

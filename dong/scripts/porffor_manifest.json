@@ -1,0 +1,16 @@
+{
+  "prelude": "src/script/porffor/dong_porffor_prelude.js",
+  "scripts": [
+    {
+      "name": "hello_dom",
+      "path": "examples/porffor/hello_dom.js",
+      "handlers": {
+        "onBtnClick": "examples/porffor/handlers/hello_dom_onBtnClick.js"
+      }
+    },
+    {
+      "name": "js_microbench",
+      "path": "examples/data/benchmarks/js_microbench_porffor.js"
+    }
+  ]
+}

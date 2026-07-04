@@ -72,17 +72,19 @@ static const char* DEFAULT_HTML =
 
 static void print_usage(void) {
     fprintf(stderr,
-        "Usage: dong_app [--html <file.html>] [--width <w>] [--height <h>]\n"
+        "Usage: dong_app [--html <file.html>] [--width <w>] [--height <h>] [--porffor-module <name>]\n"
         "\n"
         "Options:\n"
-        "  --html <file>  HTML file to load\n"
-        "  --width <w>    Window width (default: 960)\n"
-        "  --height <h>   Window height (default: 540)\n"
-        "  --help         Show this help\n");
+        "  --html <file>           HTML file to load\n"
+        "  --porffor-module <name> Porffor AOT module (also DONG_PORFFOR_MODULE)\n"
+        "  --width <w>             Window width (default: 960)\n"
+        "  --height <h>            Window height (default: 540)\n"
+        "  --help                  Show this help\n");
 }
 
 int main(int argc, char** argv) {
     const char* html_file = NULL;
+    const char* porffor_module = NULL;
     uint32_t width = 960;
     uint32_t height = 540;
     int watch_mode = 0;
@@ -91,6 +93,8 @@ int main(int argc, char** argv) {
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--html") == 0 && i + 1 < argc) {
             html_file = argv[++i];
+        } else if (strcmp(argv[i], "--porffor-module") == 0 && i + 1 < argc) {
+            porffor_module = argv[++i];
         } else if (strcmp(argv[i], "--width") == 0 && i + 1 < argc) {
             width = (uint32_t)atoi(argv[++i]);
         } else if (strcmp(argv[i], "--height") == 0 && i + 1 < argc) {
@@ -109,6 +113,14 @@ int main(int argc, char** argv) {
         _putenv_s("DONG_HOT_RELOAD", "1");
         #else
         setenv("DONG_HOT_RELOAD", "1", 1);
+        #endif
+    }
+
+    if (porffor_module) {
+        #if defined(_WIN32)
+        _putenv_s("DONG_PORFFOR_MODULE", porffor_module);
+        #else
+        setenv("DONG_PORFFOR_MODULE", porffor_module, 1);
         #endif
     }
 

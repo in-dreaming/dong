@@ -184,6 +184,7 @@ const BuildOptions = struct {
     libs_only: bool, // Only build static libraries (for mobile)
     optimize_size: bool, // Optimize for binary size (LTO, /O1, no RTTI, etc.)
     package_only: bool, // Skip examples/apps (Zig package dependency mode)
+    script_engine: []const u8, // porffor (default) or quickjs
 };
 
 fn resolveBackend(b: *std.Build, platform: PlatformInfo) Backend {
@@ -209,6 +210,7 @@ fn getBuildOptions(b: *std.Build, platform: PlatformInfo) BuildOptions {
     const libs_only = b.option(bool, "libs-only", "Only build static libraries") orelse platform.is_mobile;
     const optimize_size = b.option(bool, "optimize-size", "Optimize for binary size (LTO, /O1, no RTTI, etc.)") orelse false;
     const package_only = b.option(bool, "package-only", "Skip examples/apps (for Zig package consumers)") orelse false;
+    const script_engine = b.option([]const u8, "script-engine", "Script engine: porffor (default) or quickjs") orelse "porffor";
 
     return .{
         .enable_ffmpeg = enable_ffmpeg,
@@ -218,6 +220,7 @@ fn getBuildOptions(b: *std.Build, platform: PlatformInfo) BuildOptions {
         .libs_only = libs_only,
         .optimize_size = optimize_size,
         .package_only = package_only,
+        .script_engine = script_engine,
     };
 }
 
@@ -250,6 +253,7 @@ pub fn build(b: *std.Build) void {
     // Print build info
     std.debug.print("Building for: {s} (native: {})\n", .{ platform.target_triple, platform.is_native });
     std.debug.print("  Backend: {s}\n", .{backendToCMake(options.backend)});
+    std.debug.print("  Script engine: {s}\n", .{options.script_engine});
     if (platform.is_android) {
         std.debug.print("  Android API level: {}\n", .{options.android_api_level});
     }
@@ -280,9 +284,12 @@ pub fn build(b: *std.Build) void {
         optimize;
 
     // ==========================================================================
-    // QuickJS (Pure Zig Build)
+    // QuickJS (Pure Zig Build) — optional when -Dscript-engine=quickjs
     // ==========================================================================
-    const quickjs = buildQuickJS(b, target, deps_optimize, platform);
+    const quickjs = if (std.mem.eql(u8, options.script_engine, "quickjs"))
+        buildQuickJS(b, target, deps_optimize, platform)
+    else
+        null;
 
     // ==========================================================================
     // Lexbor (Pure Zig Build)
@@ -356,7 +363,7 @@ pub fn build(b: *std.Build) void {
 
         // For mobile/cross-compile, just install the static libraries
         const libs_only_step = b.step("libs", "Build only static libraries (for mobile integration)");
-        libs_only_step.dependOn(&quickjs.step);
+        if (quickjs) |qj| libs_only_step.dependOn(&qj.step);
         libs_only_step.dependOn(&lexbor.step);
         libs_only_step.dependOn(&yoga.step);
         libs_only_step.dependOn(&freetype.step);
@@ -367,8 +374,10 @@ pub fn build(b: *std.Build) void {
         b.getInstallStep().dependOn(libs_only_step);
 
         // Still provide individual build steps for libs-only mode
-        const quickjs_step = b.step("quickjs", "Build QuickJS only");
-        quickjs_step.dependOn(&quickjs.step);
+        if (quickjs) |qj| {
+            const quickjs_step = b.step("quickjs", "Build QuickJS only");
+            quickjs_step.dependOn(&qj.step);
+        }
 
         const lexbor_step = b.step("lexbor", "Build Lexbor only");
         lexbor_step.dependOn(&lexbor.step);
@@ -535,9 +544,35 @@ pub fn build(b: *std.Build) void {
         b.fmt("-DDONG_BACKEND={s}", .{backendToCMake(options.backend)}),
     ) catch unreachable;
 
+    dong_cmake_args.append(
+        b.fmt("-DDONG_SCRIPT_ENGINE={s}", .{options.script_engine}),
+    ) catch unreachable;
+
+    const porffor_deps = b.addSystemCommand(if (host_is_windows) &.{
+        "powershell",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        "if (-not (Test-Path third_party/porffor/node_modules/acorn)) { Push-Location third_party/porffor; npm install; Pop-Location }",
+    } else &.{
+        "sh",
+        "-c",
+        "[ -d third_party/porffor/node_modules/acorn ] || (cd third_party/porffor && npm install)",
+    });
+    porffor_deps.setCwd(b.path("."));
+
+    const porffor_compile = b.addSystemCommand(&.{ "node", "scripts/porffor_compile.mjs" });
+    porffor_compile.setCwd(b.path("."));
+    porffor_compile.step.dependOn(&porffor_deps.step);
+
     const cmake_config = b.addSystemCommand(dong_cmake_args.items);
-    // Depend on Zig-built libraries being installed first
-    cmake_config.step.dependOn(&quickjs.step);
+    if (quickjs) |qj| {
+        cmake_config.step.dependOn(&qj.step);
+    }
+    if (std.mem.eql(u8, options.script_engine, "porffor")) {
+        cmake_config.step.dependOn(&porffor_compile.step);
+    }
     cmake_config.step.dependOn(&lexbor.step);
     cmake_config.step.dependOn(&yoga.step);
     cmake_config.step.dependOn(&freetype.step);
@@ -878,7 +913,7 @@ pub fn build(b: *std.Build) void {
 
     // Individual dependency build steps
     const deps_step = b.step("deps", "Build all third-party dependencies only");
-    deps_step.dependOn(&quickjs.step);
+    if (quickjs) |qj| deps_step.dependOn(&qj.step);
     deps_step.dependOn(&lexbor.step);
     deps_step.dependOn(&yoga.step);
     deps_step.dependOn(&freetype.step);
@@ -889,8 +924,10 @@ pub fn build(b: *std.Build) void {
         deps_step.dependOn(&sdl_install.step);
     }
 
-    const quickjs_step = b.step("quickjs", "Build QuickJS only");
-    quickjs_step.dependOn(&quickjs.step);
+    if (quickjs) |qj| {
+        const quickjs_step = b.step("quickjs", "Build QuickJS only");
+        quickjs_step.dependOn(&qj.step);
+    }
 
     const lexbor_step = b.step("lexbor", "Build Lexbor only");
     lexbor_step.dependOn(&lexbor.step);
@@ -1713,7 +1750,7 @@ fn buildDongCore(
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     platform: PlatformInfo,
-    quickjs_artifact: *std.Build.Step.InstallArtifact,
+    quickjs_artifact: ?*std.Build.Step.InstallArtifact,
     lexbor_artifact: *std.Build.Step.InstallArtifact,
     yoga_artifact: *std.Build.Step.InstallArtifact,
     freetype_artifact: *std.Build.Step.InstallArtifact,
@@ -1870,7 +1907,9 @@ fn buildDongCore(
     }
 
     // Dependencies
-    dong_core.step.dependOn(&quickjs_artifact.step);
+    if (quickjs_artifact) |qj| {
+        dong_core.step.dependOn(&qj.step);
+    }
     dong_core.step.dependOn(&lexbor_artifact.step);
     dong_core.step.dependOn(&yoga_artifact.step);
     dong_core.step.dependOn(&freetype_artifact.step);
