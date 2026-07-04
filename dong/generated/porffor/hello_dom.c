@@ -11760,3 +11760,96 @@ int dong_porf_hello_dom_export_onBtnClick(void) {
   (void)dong_porf_hello_dom_onBtnClick(0, 0, 0, 0);
   return 0;
 }
+
+typedef struct {
+  f64 dong_porf_hello_dom_METRIC_OFFSET_WIDTH;
+  i32 dong_porf_hello_dom_METRIC_OFFSET_WIDTHjjtype;
+  f64 dong_porf_hello_dom_METRIC_OFFSET_HEIGHT;
+  i32 dong_porf_hello_dom_METRIC_OFFSET_HEIGHTjjtype;
+  f64 dong_porf_hello_dom_METRIC_OFFSET_TOP;
+  i32 dong_porf_hello_dom_METRIC_OFFSET_TOPjjtype;
+  f64 dong_porf_hello_dom_METRIC_OFFSET_LEFT;
+  i32 dong_porf_hello_dom_METRIC_OFFSET_LEFTjjtype;
+  f64 dong_porf_hello_dom_METRIC_CLIENT_WIDTH;
+  i32 dong_porf_hello_dom_METRIC_CLIENT_WIDTHjjtype;
+  f64 dong_porf_hello_dom_METRIC_CLIENT_HEIGHT;
+  i32 dong_porf_hello_dom_METRIC_CLIENT_HEIGHTjjtype;
+  f64 dong_porf_hello_dom_METRIC_SCROLL_WIDTH;
+  i32 dong_porf_hello_dom_METRIC_SCROLL_WIDTHjjtype;
+  f64 dong_porf_hello_dom_METRIC_SCROLL_HEIGHT;
+  i32 dong_porf_hello_dom_METRIC_SCROLL_HEIGHTjjtype;
+  f64 dong_porf_hello_dom_statusId;
+  i32 dong_porf_hello_dom_statusIdjjtype;
+  i32 dong_porf_hello_dom_jjporfjjcurrentPtr;
+  i32 dong_porf_hello_dom_jjporfjjcurrentPtrjjglbl_inited;
+  i32 dong_porf_hello_dom_jjporfjjendPtr;
+  i32 dong_porf_hello_dom_jjporfjjendPtrjjglbl_inited;
+  i32 dong_porf_hello_dom_jjporfjjunderlyingStore;
+  i32 dong_porf_hello_dom_jjporfjjunderlyingStorejjglbl_inited;
+  i32 dong_porf_hello_dom_jjporfjjgetptr___Object_prototype;
+  i32 dong_porf_hello_dom_jjporfjjgetptr___Object_prototypejjglbl_inited;
+  f64 dong_porf_hello_dom_btnId;
+  i32 dong_porf_hello_dom_btnIdjjtype;
+} dong_porf_hello_dom_state_t;
+
+void dong_porf_hello_dom_state_capture(dong_porf_hello_dom_state_t* out) {
+  out->dong_porf_hello_dom_METRIC_OFFSET_WIDTH = dong_porf_hello_dom_METRIC_OFFSET_WIDTH;
+  out->dong_porf_hello_dom_METRIC_OFFSET_WIDTHjjtype = dong_porf_hello_dom_METRIC_OFFSET_WIDTHjjtype;
+  out->dong_porf_hello_dom_METRIC_OFFSET_HEIGHT = dong_porf_hello_dom_METRIC_OFFSET_HEIGHT;
+  out->dong_porf_hello_dom_METRIC_OFFSET_HEIGHTjjtype = dong_porf_hello_dom_METRIC_OFFSET_HEIGHTjjtype;
+  out->dong_porf_hello_dom_METRIC_OFFSET_TOP = dong_porf_hello_dom_METRIC_OFFSET_TOP;
+  out->dong_porf_hello_dom_METRIC_OFFSET_TOPjjtype = dong_porf_hello_dom_METRIC_OFFSET_TOPjjtype;
+  out->dong_porf_hello_dom_METRIC_OFFSET_LEFT = dong_porf_hello_dom_METRIC_OFFSET_LEFT;
+  out->dong_porf_hello_dom_METRIC_OFFSET_LEFTjjtype = dong_porf_hello_dom_METRIC_OFFSET_LEFTjjtype;
+  out->dong_porf_hello_dom_METRIC_CLIENT_WIDTH = dong_porf_hello_dom_METRIC_CLIENT_WIDTH;
+  out->dong_porf_hello_dom_METRIC_CLIENT_WIDTHjjtype = dong_porf_hello_dom_METRIC_CLIENT_WIDTHjjtype;
+  out->dong_porf_hello_dom_METRIC_CLIENT_HEIGHT = dong_porf_hello_dom_METRIC_CLIENT_HEIGHT;
+  out->dong_porf_hello_dom_METRIC_CLIENT_HEIGHTjjtype = dong_porf_hello_dom_METRIC_CLIENT_HEIGHTjjtype;
+  out->dong_porf_hello_dom_METRIC_SCROLL_WIDTH = dong_porf_hello_dom_METRIC_SCROLL_WIDTH;
+  out->dong_porf_hello_dom_METRIC_SCROLL_WIDTHjjtype = dong_porf_hello_dom_METRIC_SCROLL_WIDTHjjtype;
+  out->dong_porf_hello_dom_METRIC_SCROLL_HEIGHT = dong_porf_hello_dom_METRIC_SCROLL_HEIGHT;
+  out->dong_porf_hello_dom_METRIC_SCROLL_HEIGHTjjtype = dong_porf_hello_dom_METRIC_SCROLL_HEIGHTjjtype;
+  out->dong_porf_hello_dom_statusId = dong_porf_hello_dom_statusId;
+  out->dong_porf_hello_dom_statusIdjjtype = dong_porf_hello_dom_statusIdjjtype;
+  out->dong_porf_hello_dom_jjporfjjcurrentPtr = dong_porf_hello_dom_jjporfjjcurrentPtr;
+  out->dong_porf_hello_dom_jjporfjjcurrentPtrjjglbl_inited = dong_porf_hello_dom_jjporfjjcurrentPtrjjglbl_inited;
+  out->dong_porf_hello_dom_jjporfjjendPtr = dong_porf_hello_dom_jjporfjjendPtr;
+  out->dong_porf_hello_dom_jjporfjjendPtrjjglbl_inited = dong_porf_hello_dom_jjporfjjendPtrjjglbl_inited;
+  out->dong_porf_hello_dom_jjporfjjunderlyingStore = dong_porf_hello_dom_jjporfjjunderlyingStore;
+  out->dong_porf_hello_dom_jjporfjjunderlyingStorejjglbl_inited = dong_porf_hello_dom_jjporfjjunderlyingStorejjglbl_inited;
+  out->dong_porf_hello_dom_jjporfjjgetptr___Object_prototype = dong_porf_hello_dom_jjporfjjgetptr___Object_prototype;
+  out->dong_porf_hello_dom_jjporfjjgetptr___Object_prototypejjglbl_inited = dong_porf_hello_dom_jjporfjjgetptr___Object_prototypejjglbl_inited;
+  out->dong_porf_hello_dom_btnId = dong_porf_hello_dom_btnId;
+  out->dong_porf_hello_dom_btnIdjjtype = dong_porf_hello_dom_btnIdjjtype;
+}
+
+void dong_porf_hello_dom_state_apply(const dong_porf_hello_dom_state_t* in) {
+  dong_porf_hello_dom_METRIC_OFFSET_WIDTH = in->dong_porf_hello_dom_METRIC_OFFSET_WIDTH;
+  dong_porf_hello_dom_METRIC_OFFSET_WIDTHjjtype = in->dong_porf_hello_dom_METRIC_OFFSET_WIDTHjjtype;
+  dong_porf_hello_dom_METRIC_OFFSET_HEIGHT = in->dong_porf_hello_dom_METRIC_OFFSET_HEIGHT;
+  dong_porf_hello_dom_METRIC_OFFSET_HEIGHTjjtype = in->dong_porf_hello_dom_METRIC_OFFSET_HEIGHTjjtype;
+  dong_porf_hello_dom_METRIC_OFFSET_TOP = in->dong_porf_hello_dom_METRIC_OFFSET_TOP;
+  dong_porf_hello_dom_METRIC_OFFSET_TOPjjtype = in->dong_porf_hello_dom_METRIC_OFFSET_TOPjjtype;
+  dong_porf_hello_dom_METRIC_OFFSET_LEFT = in->dong_porf_hello_dom_METRIC_OFFSET_LEFT;
+  dong_porf_hello_dom_METRIC_OFFSET_LEFTjjtype = in->dong_porf_hello_dom_METRIC_OFFSET_LEFTjjtype;
+  dong_porf_hello_dom_METRIC_CLIENT_WIDTH = in->dong_porf_hello_dom_METRIC_CLIENT_WIDTH;
+  dong_porf_hello_dom_METRIC_CLIENT_WIDTHjjtype = in->dong_porf_hello_dom_METRIC_CLIENT_WIDTHjjtype;
+  dong_porf_hello_dom_METRIC_CLIENT_HEIGHT = in->dong_porf_hello_dom_METRIC_CLIENT_HEIGHT;
+  dong_porf_hello_dom_METRIC_CLIENT_HEIGHTjjtype = in->dong_porf_hello_dom_METRIC_CLIENT_HEIGHTjjtype;
+  dong_porf_hello_dom_METRIC_SCROLL_WIDTH = in->dong_porf_hello_dom_METRIC_SCROLL_WIDTH;
+  dong_porf_hello_dom_METRIC_SCROLL_WIDTHjjtype = in->dong_porf_hello_dom_METRIC_SCROLL_WIDTHjjtype;
+  dong_porf_hello_dom_METRIC_SCROLL_HEIGHT = in->dong_porf_hello_dom_METRIC_SCROLL_HEIGHT;
+  dong_porf_hello_dom_METRIC_SCROLL_HEIGHTjjtype = in->dong_porf_hello_dom_METRIC_SCROLL_HEIGHTjjtype;
+  dong_porf_hello_dom_statusId = in->dong_porf_hello_dom_statusId;
+  dong_porf_hello_dom_statusIdjjtype = in->dong_porf_hello_dom_statusIdjjtype;
+  dong_porf_hello_dom_jjporfjjcurrentPtr = in->dong_porf_hello_dom_jjporfjjcurrentPtr;
+  dong_porf_hello_dom_jjporfjjcurrentPtrjjglbl_inited = in->dong_porf_hello_dom_jjporfjjcurrentPtrjjglbl_inited;
+  dong_porf_hello_dom_jjporfjjendPtr = in->dong_porf_hello_dom_jjporfjjendPtr;
+  dong_porf_hello_dom_jjporfjjendPtrjjglbl_inited = in->dong_porf_hello_dom_jjporfjjendPtrjjglbl_inited;
+  dong_porf_hello_dom_jjporfjjunderlyingStore = in->dong_porf_hello_dom_jjporfjjunderlyingStore;
+  dong_porf_hello_dom_jjporfjjunderlyingStorejjglbl_inited = in->dong_porf_hello_dom_jjporfjjunderlyingStorejjglbl_inited;
+  dong_porf_hello_dom_jjporfjjgetptr___Object_prototype = in->dong_porf_hello_dom_jjporfjjgetptr___Object_prototype;
+  dong_porf_hello_dom_jjporfjjgetptr___Object_prototypejjglbl_inited = in->dong_porf_hello_dom_jjporfjjgetptr___Object_prototypejjglbl_inited;
+  dong_porf_hello_dom_btnId = in->dong_porf_hello_dom_btnId;
+  dong_porf_hello_dom_btnIdjjtype = in->dong_porf_hello_dom_btnIdjjtype;
+}

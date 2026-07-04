@@ -16,13 +16,12 @@
 namespace dong::script {
 namespace {
 
-PorfforHost* g_host = nullptr;
-PorfforScriptRegistry* g_registry = nullptr;
+PorfforHost* g_active_host = nullptr;
 thread_local const struct dong_porf_module* g_active_module = nullptr;
 std::array<double, 256> g_state_nums{};
 
 JSBindings* activeBindings() {
-    return g_host ? g_host->bindings() : nullptr;
+    return g_active_host ? g_active_host->bindings() : nullptr;
 }
 
 } // namespace
@@ -175,8 +174,8 @@ void PorfforHost::domAddEventListener(double node_id, double type_ptr, double ha
     const std::string type = readByteString(type_ptr);
     const std::string export_name = readByteString(handler_ptr);
     std::string module_name;
-    if (g_registry) {
-        module_name = g_registry->activeModule();
+    if (registry_) {
+        module_name = registry_->activeModule();
     }
     bindings->registerExportHandler(static_cast<uint64_t>(node_id), type, export_name,
                                     module_name);
@@ -194,8 +193,8 @@ uint64_t PorfforHost::scheduleTimer(double handler_ptr, double delay_ms, double 
     task.export_name = readByteString(handler_ptr);
     task.fire_at_ms = timeNow() + delay_ms;
     task.interval_ms = interval_ms;
-    if (g_registry) {
-        task.module_name = g_registry->activeModule();
+    if (registry_) {
+        task.module_name = registry_->activeModule();
     }
 
     const uint64_t id = next_timer_id_++;
@@ -223,8 +222,8 @@ double PorfforHost::requestAnimationFrame(double handler_ptr) {
     RafTask task;
     task.id = next_raf_id_++;
     task.export_name = readByteString(handler_ptr);
-    if (g_registry) {
-        task.module_name = g_registry->activeModule();
+    if (registry_) {
+        task.module_name = registry_->activeModule();
     }
     raf_queue_.push_back(std::move(task));
     return static_cast<double>(task.id);
@@ -246,13 +245,13 @@ double PorfforHost::rafTimestamp() const {
 
 void PorfforHost::invokeExport(const std::string& module_name, const std::string& export_name,
                                double timestamp_ms, bool has_timestamp) {
-    if (!g_registry || export_name.empty()) {
+    if (!registry_ || export_name.empty()) {
         return;
     }
     if (has_timestamp) {
-        g_registry->callExport(module_name, export_name, &timestamp_ms, 1);
+        registry_->callExport(module_name, export_name, &timestamp_ms, 1);
     } else {
-        g_registry->callExport(module_name, export_name);
+        registry_->callExport(module_name, export_name);
     }
 }
 
@@ -705,7 +704,7 @@ void PorfforHost::eventStopPropagationFlag() {
 }
 
 void PorfforHost::processTimers(double now_ms) {
-    if (timers_.empty() || !g_registry) {
+    if (timers_.empty() || !registry_) {
         return;
     }
 
@@ -735,7 +734,7 @@ void PorfforHost::processTimers(double now_ms) {
 }
 
 void PorfforHost::processAnimationFrames(double timestamp_ms) {
-    if (raf_queue_.empty() || !g_registry) {
+    if (raf_queue_.empty() || !registry_) {
         return;
     }
 
@@ -766,135 +765,134 @@ JSBindings* PorfforHost::bindings() const {
 } // namespace dong::script
 
 using dong::script::g_active_module;
-using dong::script::g_host;
-using dong::script::g_registry;
+using dong::script::g_active_host;
 
 extern "C" {
 
 void __porf_import_dong_print(f64 arg) {
-    if (g_host) {
-        g_host->printString(arg);
+    if (g_active_host) {
+        g_active_host->printString(arg);
     }
 }
 
 void __porf_import_dong_bench_log(f64 arg) {
-    if (g_host) {
-        g_host->benchLog(arg);
+    if (g_active_host) {
+        g_active_host->benchLog(arg);
     }
 }
 
 f64 __porf_import_dong_time_now(void) {
-    return g_host ? g_host->timeNow() : 0.0;
+    return g_active_host ? g_active_host->timeNow() : 0.0;
 }
 
 f64 __porf_import_dong_dom_getElementById(f64 id_ptr) {
-    return g_host ? g_host->domGetElementById(id_ptr) : 0.0;
+    return g_active_host ? g_active_host->domGetElementById(id_ptr) : 0.0;
 }
 
 void __porf_import_dong_dom_set_textContent(f64 node_id, f64 text_ptr) {
-    if (g_host) {
-        g_host->domSetTextContent(node_id, text_ptr);
+    if (g_active_host) {
+        g_active_host->domSetTextContent(node_id, text_ptr);
     }
 }
 
 void __porf_import_dong_dom_get_textContent(f64 node_id) {
-    if (g_host) {
-        g_host->domPrepareTextContent(node_id);
+    if (g_active_host) {
+        g_active_host->domPrepareTextContent(node_id);
     }
 }
 
 f64 __porf_import_dong_str_len(void) {
-    return g_host ? g_host->strLen() : 0.0;
+    return g_active_host ? g_active_host->strLen() : 0.0;
 }
 
 f64 __porf_import_dong_str_read(f64 dest_ptr, f64 max_len) {
-    return g_host ? g_host->strRead(dest_ptr, max_len) : 0.0;
+    return g_active_host ? g_active_host->strRead(dest_ptr, max_len) : 0.0;
 }
 
 f64 __porf_import_dong_str_byte_at(f64 index) {
-    return g_host ? g_host->strByteAt(index) : -1.0;
+    return g_active_host ? g_active_host->strByteAt(index) : -1.0;
 }
 
 void __porf_import_dong_dom_addEventListener(f64 node_id, f64 type_ptr, f64 handler_ptr) {
-    if (g_host) {
-        g_host->domAddEventListener(node_id, type_ptr, handler_ptr);
+    if (g_active_host) {
+        g_active_host->domAddEventListener(node_id, type_ptr, handler_ptr);
     }
 }
 
 f64 __porf_import_dong_timer_setTimeout(f64 handler_ptr, f64 delay_ms) {
-    return g_host ? g_host->timerSetTimeout(handler_ptr, delay_ms) : 0.0;
+    return g_active_host ? g_active_host->timerSetTimeout(handler_ptr, delay_ms) : 0.0;
 }
 
 void __porf_import_dong_stage_0(f64 v) {
-    if (g_host) {
-        g_host->stage0(v);
+    if (g_active_host) {
+        g_active_host->stage0(v);
     }
 }
 
 void __porf_import_dong_stage_1(f64 v) {
-    if (g_host) {
-        g_host->stage1(v);
+    if (g_active_host) {
+        g_active_host->stage1(v);
     }
 }
 
 void __porf_import_dong_stage_2(f64 v) {
-    if (g_host) {
-        g_host->stage2(v);
+    if (g_active_host) {
+        g_active_host->stage2(v);
     }
 }
 
 void __porf_import_dong_commit_set_textContent(void) {
-    if (g_host) {
-        g_host->commitSetTextContent();
+    if (g_active_host) {
+        g_active_host->commitSetTextContent();
     }
 }
 
 void __porf_import_dong_commit_addEventListener(void) {
-    if (g_host) {
-        g_host->commitAddEventListener();
+    if (g_active_host) {
+        g_active_host->commitAddEventListener();
     }
 }
 
 f64 __porf_import_dong_commit_setTimeout(void) {
-    return g_host ? g_host->commitSetTimeout() : 0.0;
+    return g_active_host ? g_active_host->commitSetTimeout() : 0.0;
 }
 
 f64 __porf_import_dong_set_interval(f64 handler_ptr, f64 interval_ms) {
-    return g_host ? g_host->timerSetInterval(handler_ptr, interval_ms) : 0.0;
+    return g_active_host ? g_active_host->timerSetInterval(handler_ptr, interval_ms) : 0.0;
 }
 
 void __porf_import_dong_clear_interval(f64 timer_id) {
-    if (g_host) {
-        g_host->timerClear(timer_id);
+    if (g_active_host) {
+        g_active_host->timerClear(timer_id);
     }
 }
 
 void __porf_import_dong_clear_timeout(f64 timer_id) {
-    if (g_host) {
-        g_host->timerClear(timer_id);
+    if (g_active_host) {
+        g_active_host->timerClear(timer_id);
     }
 }
 
 f64 __porf_import_dong_commit_setInterval(void) {
-    return g_host ? g_host->commitSetInterval() : 0.0;
+    return g_active_host ? g_active_host->commitSetInterval() : 0.0;
 }
 
 f64 __porf_import_dong_request_animation_frame(f64 handler_ptr) {
-    return g_host ? g_host->requestAnimationFrame(handler_ptr) : 0.0;
+    return g_active_host ? g_active_host->requestAnimationFrame(handler_ptr) : 0.0;
 }
 
 void __porf_import_dong_cancel_animation_frame(f64 raf_id) {
-    if (g_host) {
-        g_host->cancelAnimationFrame(raf_id);
+    if (g_active_host) {
+        g_active_host->cancelAnimationFrame(raf_id);
     }
 }
 
 f64 __porf_import_dong_commit_requestAnimationFrame(void) {
-    return g_host ? g_host->commitRequestAnimationFrame() : 0.0;
+    return g_active_host ? g_active_host->commitRequestAnimationFrame() : 0.0;
 }
 
 f64 __porf_import_dong_raf_timestamp(void) {
-    return g_host ? g_host->rafTimestamp() : 0.0;
+    return g_active_host ? g_active_host->rafTimestamp() : 0.0;
 }
 
 void __porf_import_dong_state_set_num(f64 slot, f64 value) {
@@ -913,270 +911,270 @@ f64 __porf_import_dong_state_get_num(f64 slot) {
 }
 
 void __porf_import_dong_get_value(f64 node_id) {
-    if (g_host) {
-        g_host->getValue(node_id);
+    if (g_active_host) {
+        g_active_host->getValue(node_id);
     }
 }
 
 void __porf_import_dong_set_value(f64 node_id, f64 value_ptr) {
-    if (g_host) {
-        g_host->setValue(node_id, value_ptr);
+    if (g_active_host) {
+        g_active_host->setValue(node_id, value_ptr);
     }
 }
 
 f64 __porf_import_dong_get_checked(f64 node_id) {
-    return g_host ? g_host->getChecked(node_id) : 0.0;
+    return g_active_host ? g_active_host->getChecked(node_id) : 0.0;
 }
 
 void __porf_import_dong_set_checked(f64 node_id, f64 checked) {
-    if (g_host) {
-        g_host->setChecked(node_id, checked);
+    if (g_active_host) {
+        g_active_host->setChecked(node_id, checked);
     }
 }
 
 f64 __porf_import_dong_get_disabled(f64 node_id) {
-    return g_host ? g_host->getDisabled(node_id) : 0.0;
+    return g_active_host ? g_active_host->getDisabled(node_id) : 0.0;
 }
 
 void __porf_import_dong_set_disabled(f64 node_id, f64 disabled) {
-    if (g_host) {
-        g_host->setDisabled(node_id, disabled);
+    if (g_active_host) {
+        g_active_host->setDisabled(node_id, disabled);
     }
 }
 
 void __porf_import_dong_get_attribute(f64 node_id, f64 name_ptr) {
-    if (g_host) {
-        g_host->getAttribute(node_id, name_ptr);
+    if (g_active_host) {
+        g_active_host->getAttribute(node_id, name_ptr);
     }
 }
 
 void __porf_import_dong_set_attribute(f64 node_id, f64 name_ptr, f64 value_ptr) {
-    if (g_host) {
-        g_host->setAttribute(node_id, name_ptr, value_ptr);
+    if (g_active_host) {
+        g_active_host->setAttribute(node_id, name_ptr, value_ptr);
     }
 }
 
 void __porf_import_dong_remove_attribute(f64 node_id, f64 name_ptr) {
-    if (g_host) {
-        g_host->removeAttribute(node_id, name_ptr);
+    if (g_active_host) {
+        g_active_host->removeAttribute(node_id, name_ptr);
     }
 }
 
 void __porf_import_dong_set_inner_html(f64 node_id, f64 html_ptr) {
-    if (g_host) {
-        g_host->setInnerHTML(node_id, html_ptr);
+    if (g_active_host) {
+        g_active_host->setInnerHTML(node_id, html_ptr);
     }
 }
 
 f64 __porf_import_dong_query_selector(f64 root_id, f64 selector_ptr) {
-    return g_host ? g_host->querySelector(root_id, selector_ptr) : 0.0;
+    return g_active_host ? g_active_host->querySelector(root_id, selector_ptr) : 0.0;
 }
 
 void __porf_import_dong_query_selector_all(f64 root_id, f64 selector_ptr) {
-    if (g_host) {
-        g_host->querySelectorAll(root_id, selector_ptr);
+    if (g_active_host) {
+        g_active_host->querySelectorAll(root_id, selector_ptr);
     }
 }
 
 void __porf_import_dong_get_elements_by_tag_name(f64 root_id, f64 tag_ptr) {
-    if (g_host) {
-        g_host->getElementsByTagName(root_id, tag_ptr);
+    if (g_active_host) {
+        g_active_host->getElementsByTagName(root_id, tag_ptr);
     }
 }
 
 void __porf_import_dong_class_add(f64 node_id, f64 cls_ptr) {
-    if (g_host) {
-        g_host->classAdd(node_id, cls_ptr);
+    if (g_active_host) {
+        g_active_host->classAdd(node_id, cls_ptr);
     }
 }
 
 void __porf_import_dong_class_remove(f64 node_id, f64 cls_ptr) {
-    if (g_host) {
-        g_host->classRemove(node_id, cls_ptr);
+    if (g_active_host) {
+        g_active_host->classRemove(node_id, cls_ptr);
     }
 }
 
 f64 __porf_import_dong_class_toggle(f64 node_id, f64 cls_ptr) {
-    return g_host ? g_host->classToggle(node_id, cls_ptr) : 0.0;
+    return g_active_host ? g_active_host->classToggle(node_id, cls_ptr) : 0.0;
 }
 
 f64 __porf_import_dong_class_contains(f64 node_id, f64 cls_ptr) {
-    return g_host ? g_host->classContains(node_id, cls_ptr) : 0.0;
+    return g_active_host ? g_active_host->classContains(node_id, cls_ptr) : 0.0;
 }
 
 void __porf_import_dong_style_set(f64 node_id, f64 prop_ptr, f64 value_ptr) {
-    if (g_host) {
-        g_host->styleSet(node_id, prop_ptr, value_ptr);
+    if (g_active_host) {
+        g_active_host->styleSet(node_id, prop_ptr, value_ptr);
     }
 }
 
 void __porf_import_dong_style_get(f64 node_id, f64 prop_ptr) {
-    if (g_host) {
-        g_host->styleGet(node_id, prop_ptr);
+    if (g_active_host) {
+        g_active_host->styleGet(node_id, prop_ptr);
     }
 }
 
 void __porf_import_dong_computed_style_get(f64 node_id, f64 prop_ptr) {
-    if (g_host) {
-        g_host->computedStyleGet(node_id, prop_ptr);
+    if (g_active_host) {
+        g_active_host->computedStyleGet(node_id, prop_ptr);
     }
 }
 
 void __porf_import_dong_get_rect(f64 node_id) {
-    if (g_host) {
-        g_host->getRect(node_id);
+    if (g_active_host) {
+        g_active_host->getRect(node_id);
     }
 }
 
 f64 __porf_import_dong_get_metric(f64 node_id, f64 metric_id) {
-    return g_host ? g_host->getMetric(node_id, metric_id) : 0.0;
+    return g_active_host ? g_active_host->getMetric(node_id, metric_id) : 0.0;
 }
 
 f64 __porf_import_dong_get_scroll_top(f64 node_id) {
-    return g_host ? g_host->getScrollTop(node_id) : 0.0;
+    return g_active_host ? g_active_host->getScrollTop(node_id) : 0.0;
 }
 
 void __porf_import_dong_set_scroll_top(f64 node_id, f64 value) {
-    if (g_host) {
-        g_host->setScrollTop(node_id, value);
+    if (g_active_host) {
+        g_active_host->setScrollTop(node_id, value);
     }
 }
 
 f64 __porf_import_dong_get_scroll_left(f64 node_id) {
-    return g_host ? g_host->getScrollLeft(node_id) : 0.0;
+    return g_active_host ? g_active_host->getScrollLeft(node_id) : 0.0;
 }
 
 void __porf_import_dong_set_scroll_left(f64 node_id, f64 value) {
-    if (g_host) {
-        g_host->setScrollLeft(node_id, value);
+    if (g_active_host) {
+        g_active_host->setScrollLeft(node_id, value);
     }
 }
 
 void __porf_import_dong_focus(f64 node_id) {
-    if (g_host) {
-        g_host->focusNode(node_id);
+    if (g_active_host) {
+        g_active_host->focusNode(node_id);
     }
 }
 
 void __porf_import_dong_blur(f64 node_id) {
-    if (g_host) {
-        g_host->blurNode(node_id);
+    if (g_active_host) {
+        g_active_host->blurNode(node_id);
     }
 }
 
 void __porf_import_dong_click(f64 node_id) {
-    if (g_host) {
-        g_host->clickNode(node_id);
+    if (g_active_host) {
+        g_active_host->clickNode(node_id);
     }
 }
 
 f64 __porf_import_dong_matches(f64 node_id, f64 selector_ptr) {
-    return g_host ? g_host->matchesSelector(node_id, selector_ptr) : 0.0;
+    return g_active_host ? g_active_host->matchesSelector(node_id, selector_ptr) : 0.0;
 }
 
 f64 __porf_import_dong_closest(f64 node_id, f64 selector_ptr) {
-    return g_host ? g_host->closestSelector(node_id, selector_ptr) : 0.0;
+    return g_active_host ? g_active_host->closestSelector(node_id, selector_ptr) : 0.0;
 }
 
 f64 __porf_import_dong_create_element(f64 tag_ptr) {
-    return g_host ? g_host->createElement(tag_ptr) : 0.0;
+    return g_active_host ? g_active_host->createElement(tag_ptr) : 0.0;
 }
 
 f64 __porf_import_dong_create_text_node(f64 text_ptr) {
-    return g_host ? g_host->createTextNode(text_ptr) : 0.0;
+    return g_active_host ? g_active_host->createTextNode(text_ptr) : 0.0;
 }
 
 void __porf_import_dong_append_child(f64 parent_id, f64 child_id) {
-    if (g_host) {
-        g_host->appendChild(parent_id, child_id);
+    if (g_active_host) {
+        g_active_host->appendChild(parent_id, child_id);
     }
 }
 
 void __porf_import_dong_insert_before(f64 parent_id, f64 new_id, f64 ref_id) {
-    if (g_host) {
-        g_host->insertBefore(parent_id, new_id, ref_id);
+    if (g_active_host) {
+        g_active_host->insertBefore(parent_id, new_id, ref_id);
     }
 }
 
 void __porf_import_dong_remove(f64 node_id) {
-    if (g_host) {
-        g_host->removeNode(node_id);
+    if (g_active_host) {
+        g_active_host->removeNode(node_id);
     }
 }
 
 void __porf_import_dong_replace_child(f64 parent_id, f64 new_id, f64 old_id) {
-    if (g_host) {
-        g_host->replaceChild(parent_id, new_id, old_id);
+    if (g_active_host) {
+        g_active_host->replaceChild(parent_id, new_id, old_id);
     }
 }
 
 f64 __porf_import_dong_parent(f64 node_id) {
-    return g_host ? g_host->getParentId(node_id) : 0.0;
+    return g_active_host ? g_active_host->getParentId(node_id) : 0.0;
 }
 
 f64 __porf_import_dong_first_child(f64 node_id) {
-    return g_host ? g_host->getFirstChildId(node_id) : 0.0;
+    return g_active_host ? g_active_host->getFirstChildId(node_id) : 0.0;
 }
 
 f64 __porf_import_dong_next_sibling(f64 node_id) {
-    return g_host ? g_host->getNextSiblingId(node_id) : 0.0;
+    return g_active_host ? g_active_host->getNextSiblingId(node_id) : 0.0;
 }
 
 f64 __porf_import_dong_clone_node(f64 node_id, f64 deep) {
-    return g_host ? g_host->cloneNodeId(node_id, deep) : 0.0;
+    return g_active_host ? g_active_host->cloneNodeId(node_id, deep) : 0.0;
 }
 
 void __porf_import_dong_event_type(void) {
-    if (g_host) {
-        g_host->eventPrepareType();
+    if (g_active_host) {
+        g_active_host->eventPrepareType();
     }
 }
 
 f64 __porf_import_dong_event_target(void) {
-    return g_host ? g_host->eventTarget() : 0.0;
+    return g_active_host ? g_active_host->eventTarget() : 0.0;
 }
 
 void __porf_import_dong_event_key(void) {
-    if (g_host) {
-        g_host->eventPrepareKey();
+    if (g_active_host) {
+        g_active_host->eventPrepareKey();
     }
 }
 
 f64 __porf_import_dong_event_key_code(void) {
-    return g_host ? g_host->eventKeyCode() : 0.0;
+    return g_active_host ? g_active_host->eventKeyCode() : 0.0;
 }
 
 f64 __porf_import_dong_event_x(void) {
-    return g_host ? g_host->eventX() : 0.0;
+    return g_active_host ? g_active_host->eventX() : 0.0;
 }
 
 f64 __porf_import_dong_event_y(void) {
-    return g_host ? g_host->eventY() : 0.0;
+    return g_active_host ? g_active_host->eventY() : 0.0;
 }
 
 f64 __porf_import_dong_event_button(void) {
-    return g_host ? g_host->eventButton() : 0.0;
+    return g_active_host ? g_active_host->eventButton() : 0.0;
 }
 
 f64 __porf_import_dong_event_modifiers(void) {
-    return g_host ? g_host->eventModifiers() : 0.0;
+    return g_active_host ? g_active_host->eventModifiers() : 0.0;
 }
 
 void __porf_import_dong_event_value(void) {
-    if (g_host) {
-        g_host->eventPrepareValue();
+    if (g_active_host) {
+        g_active_host->eventPrepareValue();
     }
 }
 
 void __porf_import_dong_event_prevent_default(void) {
-    if (g_host) {
-        g_host->eventPreventDefaultFlag();
+    if (g_active_host) {
+        g_active_host->eventPreventDefaultFlag();
     }
 }
 
 void __porf_import_dong_event_stop_propagation(void) {
-    if (g_host) {
-        g_host->eventStopPropagationFlag();
+    if (g_active_host) {
+        g_active_host->eventStopPropagationFlag();
     }
 }
 
@@ -1184,20 +1182,23 @@ void __porf_import_dong_event_stop_propagation(void) {
 
 namespace dong::script {
 
-void PorfforHost_setGlobals(PorfforHost* host, PorfforScriptRegistry* registry) {
-    g_host = host;
-    g_registry = registry;
-}
-
 void PorfforHost_setActiveModule(const struct dong_porf_module* mod) {
     g_active_module = mod;
-    if (g_host && mod) {
-        g_host->setActiveMemory(*mod->memory, mod->memory_pages);
+    if (g_active_host && mod) {
+        g_active_host->setActiveMemory(*mod->memory, mod->memory_pages);
     }
 }
 
 const struct dong_porf_module* PorfforHost_activeModule() {
     return g_active_module;
+}
+
+void PorfforHost_setActiveHost(PorfforHost* host) {
+    g_active_host = host;
+}
+
+PorfforHost* PorfforHost_active() {
+    return g_active_host;
 }
 
 } // namespace dong::script

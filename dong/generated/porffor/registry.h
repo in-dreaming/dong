@@ -11,11 +11,19 @@ typedef int (*dong_porf_main_fn)(void);
 typedef int (*dong_porf_export_fn0)(void);
 typedef int (*dong_porf_export_fn1)(double);
 
+typedef void (*dong_porf_init_fn)(void);
+typedef void (*dong_porf_state_capture_fn)(void* out);
+typedef void (*dong_porf_state_apply_fn)(const void* in);
+
 typedef struct dong_porf_module {
     const char* name;
     dong_porf_main_fn main_fn;
     char** memory;
     unsigned int* memory_pages;
+    dong_porf_init_fn init_fn;
+    dong_porf_state_capture_fn state_capture;
+    dong_porf_state_apply_fn state_apply;
+    size_t state_size;
 } dong_porf_module_t;
 
 typedef struct dong_porf_handler {

@@ -5,16 +5,22 @@
 extern int dong_porf_hello_dom_main(void);
 extern char* dong_porf_hello_dom_memory;
 extern unsigned int dong_porf_hello_dom_memory_pages;
+extern void dong_porf_hello_dom__porf_init(void);
+extern void dong_porf_hello_dom_state_capture(dong_porf_hello_dom_state_t* out);
+extern void dong_porf_hello_dom_state_apply(const dong_porf_hello_dom_state_t* in);
 
 extern int dong_porf_js_microbench_main(void);
 extern char* dong_porf_js_microbench_memory;
 extern unsigned int dong_porf_js_microbench_memory_pages;
+extern void dong_porf_js_microbench__porf_init(void);
+extern void dong_porf_js_microbench_state_capture(dong_porf_js_microbench_state_t* out);
+extern void dong_porf_js_microbench_state_apply(const dong_porf_js_microbench_state_t* in);
 
 extern int dong_porf_hello_dom_export_onBtnClick(void);
 
 const dong_porf_module_t dong_porf_modules[] = {
-  { "hello_dom", dong_porf_hello_dom_main, &dong_porf_hello_dom_memory, &dong_porf_hello_dom_memory_pages },
-  { "js_microbench", dong_porf_js_microbench_main, &dong_porf_js_microbench_memory, &dong_porf_js_microbench_memory_pages },
+  { "hello_dom", dong_porf_hello_dom_main, &dong_porf_hello_dom_memory, &dong_porf_hello_dom_memory_pages, dong_porf_hello_dom__porf_init, dong_porf_hello_dom_state_capture, dong_porf_hello_dom_state_apply, sizeof(dong_porf_hello_dom_state_t) },
+  { "js_microbench", dong_porf_js_microbench_main, &dong_porf_js_microbench_memory, &dong_porf_js_microbench_memory_pages, dong_porf_js_microbench__porf_init, dong_porf_js_microbench_state_capture, dong_porf_js_microbench_state_apply, sizeof(dong_porf_js_microbench_state_t) },
 };
 
 const size_t dong_porf_module_count = 2;

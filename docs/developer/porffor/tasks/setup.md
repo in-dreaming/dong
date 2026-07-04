@@ -76,7 +76,7 @@ Dong 不在浏览器里跑 Porffor wasm，而是 `porf c`（2c 路径）生成 C
 | F7 | ~~Porffor 跳过 `DOMContentLoaded`/`load`~~ **已修（T08）**：Porffor 与 QuickJS 共用 lifecycle 分发；约定 **module `main()` = 内联脚本时机**，`DOMContentLoaded`/`load` 在 main 之后对 body 监听者分发 | `engine_view.cpp` | T08 |
 | F8 | `getNodeIdFor` 是对 map 的线性反查 O(n) | `js_bindings_porffor.cpp::getNodeIdFor` | T07 |
 | F9 | timer id = `timers_.size() + 1`，删除后会重复，不能直接做 clearTimeout | `dong_porf_host.cpp::timerSetTimeout` | T09 |
-| F10 | 模块 memory 是**全局 C 变量**（`dong_porf_<mod>_memory`），host / registry 是进程级单例 → 同一模块无法被多个 View 实例化 | `dong_porf_host.cpp` 匿名命名空间、`registry.c` | **T17** |
+| F10 | ~~模块 memory / host / registry 进程级单例~~ **已修（T17）**：`PorfforHost`/`PorfforScriptRegistry` per-View；每 (View,module) 独立 memory + `state_capture`/`state_apply` swap；C import 经 `thread_local g_active_host` | `porffor_script_registry.cpp`、`porffor_compile.mjs`、`dong_porf_host.cpp` | T17 |
 | F11 | 引擎每帧钩子顺序已固定：`processPendingTasks`（timers）→ `tickTimers` → `tickAnimationFrames`（Porffor 下为空实现）→ flush 布局 | `engine_view.cpp::tickProcessScriptTasks` | T09 |
 | F12 | 内联 handler 扫描在 Porffor 分支是打 warning 的 stub，但仍被 `engine_view` 调用 | `js_bindings_porffor.cpp::scanAndRegisterInlineEventHandlers` | T12 |
 | F13 | 模块 / handler 静态注册管线见上「编译管线」 | `scripts/porffor_compile.mjs` | T03 T12 T13 |

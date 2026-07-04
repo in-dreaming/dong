@@ -125,8 +125,12 @@ public:
     void pushResultSlot();
     void popResultSlot();
 
+    void setRegistry(PorfforScriptRegistry* registry) { registry_ = registry; }
+    PorfforScriptRegistry* registry() const { return registry_; }
+
 private:
     JSBindings* bindings_ = nullptr;
+    PorfforScriptRegistry* registry_ = nullptr;
     char* memory_ = nullptr;
     unsigned int* memory_pages_ = nullptr;
 
@@ -182,8 +186,9 @@ private:
                       double timestamp_ms, bool has_timestamp);
 };
 
-void PorfforHost_setGlobals(PorfforHost* host, PorfforScriptRegistry* registry);
 void PorfforHost_setActiveModule(const struct dong_porf_module* mod);
 const struct dong_porf_module* PorfforHost_activeModule();
+void PorfforHost_setActiveHost(PorfforHost* host);
+PorfforHost* PorfforHost_active();
 
 } // namespace dong::script

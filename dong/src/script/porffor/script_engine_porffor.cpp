@@ -9,7 +9,7 @@ namespace dong::script {
 ScriptEngine::ScriptEngine()
     : host_(std::make_unique<PorfforHost>()),
       registry_(std::make_unique<PorfforScriptRegistry>(host_.get())) {
-    PorfforHost_setGlobals(host_.get(), registry_.get());
+    host_->setRegistry(registry_.get());
     default_module_ = "hello_dom";
 }
 
