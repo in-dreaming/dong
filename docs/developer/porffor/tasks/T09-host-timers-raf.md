@@ -40,7 +40,7 @@
 ## 完成记录
 
 - **日期**: 2026-07-04
-- **commit**: (见下方 git log)
+- **commit**: `e273b9d`（host 实现）、`5edaaef`（repro + 完成记录）
 - **摘要**: 实现 `setInterval`/`clearInterval`/`clearTimeout`、`requestAnimationFrame`/`cancelAnimationFrame`；timer id 改为单调递增 map（修复 F9）；rAF 支持 `dong_raf_timestamp()` 全局槽与 T15 f64 带参 export；`tickAnimationFrames` 接入 PorfforHost；回调中修改 timer 列表安全。
 - **变更文件**:
   - `dong/src/script/porffor/dong_porf_host.hpp/cpp`
