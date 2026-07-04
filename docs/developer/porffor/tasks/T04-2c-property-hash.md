@@ -41,7 +41,7 @@
 ## 完成记录
 
 - **日期**: 2026-07-04
-- **commit**: `1713533`（Dong）；porffor fork `ab4ca68e`（enjin_porffor，cherry-pick 上游 PR #338）
+- **commit**: `78cb0a6`（Dong）；porffor fork `ab4ca68e`（enjin_porffor，cherry-pick 上游 PR #338）
 - **摘要**: cherry-pick 上游 PR [#338](https://github.com/CanadaHonk/porffor/pull/338)（`6ec69590` + `84999b31`）：修复 2c/native 对 `>>>` 无符号右移的 C 翻译（`(u32)` 逻辑移位）及 wasm 侧 `f64ifyUSHR`/位运算 ToInt32  coercion。编译期 `ctHash`（codegen.js）与运行期 `__Porffor_object_hash`（builtins/_internal_object.ts）的 hash 在 2c 产物中重新对齐，修复 #333 点/括号属性访问不一致及对象方法查找。
 - **变更文件**:
   - `dong/third_party/porffor/compiler/2c.js`
