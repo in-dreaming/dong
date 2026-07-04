@@ -14,7 +14,7 @@ const manifestPath = path.join(dongRoot, 'scripts', 'porffor_manifest.json');
 
 const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
 
-process.argv.push('-O1', '--target=c', '--2c-wasm-imports', '--no-run', '--no-opt-unused');
+process.argv.push('-O1', '--target=c', '--2c-wasm-imports', '--no-run', '--no-opt-unused', '--quiet');
 
 const _realExit = process.exit.bind(process);
 process.exit = (code) => {
@@ -59,62 +59,17 @@ function stripDuplicateTypes(cSource) {
   return cSource.slice(after + 2);
 }
 
-function prefixModule(cSource, moduleName) {
-  const p = `dong_porf_${moduleName}_`;
-  let c = cSource;
-
-  c = c.replace(/\bint main\(/g, `int ${p}main(`);
-  c = c.replace(/\b_memoryPages\b/g, `${p}memory_pages`);
-  c = c.replace(/\b_memory\b/g, `${p}memory`);
-
-  c = c.replace(
-    /^(struct ReturnValue|f64|i32|void|u8|u16|u32|i64|u64|f32) ([A-Za-z_][A-Za-z0-9_]*)\(/gm,
-    (m, ty, name) => {
-      if (name.startsWith('dong_porf_') || name.startsWith('__porf_import_')) return m;
-      if (name === 'main') return m;
-      return `${ty} ${p}${name}(`;
-    },
-  );
-
-  c = c.replace(/^(f64|i32) ([A-Za-z_][A-Za-z0-9_]*)\s*=/gm, (m, ty, name) => {
-    if (name.startsWith('dong_porf_')) return m;
-    return `${ty} ${p}${name} =`;
-  });
-
-  const ids = new Set();
-  for (const m of c.matchAll(new RegExp(`\\b${p}([A-Za-z0-9_]+)\\b`, 'g'))) {
-    ids.add(m[1]);
-  }
-  for (const id of [...ids].sort((a, b) => b.length - a.length)) {
-    if (id === 'main' || id === 'memory' || id === 'memory_pages') continue;
-    const re = new RegExp(`(?<!${p})\\b${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g');
-    c = c.replace(re, `${p}${id}`);
-  }
-
-  return c;
-}
-
-/** Mark module-local Porffor helpers static (per-file linkage). */
-function privatizeHelpers(cSource, moduleName) {
-  const p = `dong_porf_${moduleName}_`;
-  return cSource.replace(
-    /^(struct ReturnValue|f64|i32|void|u8|u16|u32|i64|u64|f32) (dong_porf_[A-Za-z0-9_]+)\(/gm,
-    (m, ty, name) => {
-      if (name === `${p}main`) return m;
-      return `static ${ty} ${name}(`;
-    },
-  );
-}
-
 function emitModuleC(item) {
-  let prefixed = prefixModule(item.c, item.name);
-  prefixed = prefixed.replace(/\bNaN\b/g, '(0.0/0.0)').replace(/\bInfinity\b/g, '(1.0/0.0)');
-  const body = privatizeHelpers(stripDuplicateTypes(prefixed), item.name);
+  const body = stripDuplicateTypes(item.c);
   const out = `// Porffor module: ${item.name}\n#include "dong_porf_runtime.h"\n${body}`;
   fs.writeFileSync(path.join(outDir, `${item.name}.c`), out);
 }
 
 function compileSource(entry, source, logicalName) {
+  process.argv = process.argv.filter(a => !a.startsWith('--2c-prefix='));
+  process.argv.push(`--2c-prefix=dong_porf_${logicalName}_`);
+  globalThis.argvChanged?.();
+
   globalThis.file = entry.path ?? logicalName;
   const result = compile(source);
   const c = result?.c;
