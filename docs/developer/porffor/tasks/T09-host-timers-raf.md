@@ -36,3 +36,17 @@
 1. 用例：`setInterval` 每 100ms 更新计数文本，5 次后回调内自我 `clearInterval`，最终文本 = "5"。
 2. 用例：rAF 链式自续（回调里再次 `requestAnimationFrame` 自己）驱动一个属性动画 60 帧，帧计数正确，`cancelAnimationFrame` 能停。
 3. 回调 export 不存在时（拼写错误）：debug 日志 + no-op，不 crash。
+
+## 完成记录
+
+- **日期**: 2026-07-04
+- **commit**: (见下方 git log)
+- **摘要**: 实现 `setInterval`/`clearInterval`/`clearTimeout`、`requestAnimationFrame`/`cancelAnimationFrame`；timer id 改为单调递增 map（修复 F9）；rAF 支持 `dong_raf_timestamp()` 全局槽与 T15 f64 带参 export；`tickAnimationFrames` 接入 PorfforHost；回调中修改 timer 列表安全。
+- **变更文件**:
+  - `dong/src/script/porffor/dong_porf_host.hpp/cpp`
+  - `dong/src/script/porffor/js_bindings_porffor.cpp`
+  - `dong/src/script/porffor/dong_porffor_prelude.js`
+  - `dong/scripts/porffor_compile.mjs`
+  - `docs/developer/porffor/tasks/repro/t09/`
+- **验收命令**: `E:\ws\infra\dong\.tools\node-v22.16.0-win-x64\node.exe docs/developer/porffor/tasks/repro/t09/t09_verify.mjs`
+- **遗留问题**: clang native 集成测试需本机 clang；engine 内端到端 timer/rAF 待 T13。
