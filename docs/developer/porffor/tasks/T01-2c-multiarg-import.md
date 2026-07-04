@@ -53,3 +53,19 @@ extern 声明部分（L621–623）已经正确输出全部参数类型，只有
 
 - 参数顺序易错：wasm 栈顶是**最后一个**参数，必须 `unshift`（逆序恢复）。
 - 修完后 Dong 侧可逐步退役 stage/commit，但那是 Dong 仓库的后续工作，本任务不涉及。
+
+## 完成记录
+
+- **日期**: 2026-07-04
+- **摘要**: 修复 `compiler/2c.js` 中 `Opcodes.call` 对 wasm import 的代码生成：与普通函数调用一致，按 `importFunc.params.length` 逆序 `vals.pop()` 收集参数后 join。新增复现脚本 `docs/developer/porffor/tasks/repro/t01_multiarg_import.js`、`t01_verify.mjs`（2c 断言 + wasm 执行 + hello.js 回归 + 可选 clang 运行）、`t01_wasm_run.mjs`（wasm 路径验收）。
+- **变更文件**:
+  - `dong/third_party/porffor/compiler/2c.js`
+  - `docs/developer/porffor/tasks/repro/t01_multiarg_import.js`
+  - `docs/developer/porffor/tasks/repro/t01_verify.mjs`
+  - `docs/developer/porffor/tasks/repro/t01_wasm_run.mjs`
+- **验收命令**（在 `dong/third_party/porffor` 下）:
+  - `node ../../../docs/developer/porffor/tasks/repro/t01_verify.mjs`
+  - `node ../../../docs/developer/porffor/tasks/repro/t01_wasm_run.mjs`
+  - `node runtime/index.js c --2c-wasm-imports bench/hello.js /tmp/t01_hello.c`
+- **遗留问题**: Dong 侧 stage/commit 样板退役留待后续任务。
+- **验收**: 2026-07-04 已通过 `t01_verify.mjs`（2c 多参调用模式、wasm sum=19、hello.js 回归）与 `t01_wasm_run.mjs`。
