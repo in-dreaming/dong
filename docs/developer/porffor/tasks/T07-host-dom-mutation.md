@@ -40,7 +40,7 @@
 ## 完成记录
 
 - **日期**: 2026-07-04
-- **commit**: （见下方 git commit）
+- **commit**: `cfa25cc`（feature/porffor）
 - **摘要**: 实现 T07 DOM 结构修改 import 全集；`getNodeIdFor` 补 F8 反向索引 O(1)；无效/已释放 nodeId 静默 no-op + debug 日志；remove/replace 后释放 id。
 - **变更文件**:
   - `dong/src/script/porffor/js_bindings_porffor.hpp/cpp`
