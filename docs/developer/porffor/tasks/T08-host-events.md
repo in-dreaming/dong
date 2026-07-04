@@ -58,3 +58,23 @@
 
 - 事件槽 re-entrancy 是主要设计坑，验收 3 必须二选一明确（并与 F6 的 active module 栈一起处理）。
 - `dong_event_value` 的字符串编码/通道依赖 T05/T16 约定（中文输入法场景归 T20 的 IME 决策，本任务不含 composition 事件）。
+
+## 完成记录
+
+- **日期**: 2026-07-04
+- **Commit**: (feature/porffor T08)
+- **事件类型 × 可读字段覆盖表**:
+
+| 事件类型 | type | target | key/keyCode | x/y/button | modifiers | value | preventDefault |
+|----------|------|--------|-------------|------------|-----------|-------|----------------|
+| click, dblclick | ✓ | ✓ | | ✓ | ✓ | | ✓ |
+| mousedown, mouseup, mousemove | ✓ | ✓ | | ✓ | ✓ | | ✓ |
+| pointerdown/up/move | ✓ | ✓ | | ✓ | ✓ | | ✓ |
+| keydown, keyup, keypress | ✓ | ✓ | ✓ | | ✓ | | ✓ |
+| focus, blur | ✓ | ✓ | | | | | ✓ |
+| input, change | ✓ | ✓ | | | | ✓ | ✓ |
+| DOMContentLoaded, load | ✓ | ✓ | | | | | ✓ |
+
+- **Lifecycle 约定**: Porffor module `main()` 在 HTML 解析后同步执行（等同内联脚本）；`DOMContentLoaded` 与 `load` 在 main 返回后对 `<body>`（或 root）上已注册的 export 名 listener 分发。
+- **Re-entrancy**: 事件槽栈式 save/restore（`pushEventSlot`/`popEventSlot`）；`callExport` 同时 save/restore active module 与 `result_slot`。
+- **遗留**: composition/IME 事件未覆盖（T20）；`load` 未入 `EventDispatcher` enum（Porffor 走 `dispatchSimpleEvent` 字符串匹配，足够 lifecycle listener）。

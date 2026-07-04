@@ -42,6 +42,9 @@ bool PorfforScriptRegistry::run(const std::string& module_name) {
 bool PorfforScriptRegistry::callExport(const std::string& module_name,
                                        const std::string& export_name, const double* args,
                                        int arg_count) {
+    const std::string prev_active = active_module_;
+    const dong_porf_module_t* prev_mod = PorfforHost_activeModule();
+
     const dong_porf_handler_t* handler =
         dong_porf_find_handler(module_name.c_str(), export_name.c_str());
     if (!handler) {
@@ -62,9 +65,18 @@ bool PorfforScriptRegistry::callExport(const std::string& module_name,
         handler->memory,
         handler->memory_pages,
     };
+    active_module_ = module_name;
     PorfforHost_setActiveModule(&shim);
     if (!ensureModuleMemory(&shim)) {
+        active_module_ = prev_active;
+        if (prev_mod) {
+            PorfforHost_setActiveModule(prev_mod);
+        }
         return false;
+    }
+
+    if (host_) {
+        host_->pushResultSlot();
     }
 
     int rc = -1;
@@ -72,6 +84,13 @@ bool PorfforScriptRegistry::callExport(const std::string& module_name,
         if (!handler->fn0) {
             DONG_LOG_WARN("[PorfforRegistry] handler %s::%s missing fn0", module_name.c_str(),
                           export_name.c_str());
+            if (host_) {
+                host_->popResultSlot();
+            }
+            active_module_ = prev_active;
+            if (prev_mod) {
+                PorfforHost_setActiveModule(prev_mod);
+            }
             return false;
         }
         rc = handler->fn0();
@@ -79,13 +98,41 @@ bool PorfforScriptRegistry::callExport(const std::string& module_name,
         if (!handler->fn1 || !args) {
             DONG_LOG_WARN("[PorfforRegistry] handler %s::%s missing fn1", module_name.c_str(),
                           export_name.c_str());
+            if (host_) {
+                host_->popResultSlot();
+            }
+            active_module_ = prev_active;
+            if (prev_mod) {
+                PorfforHost_setActiveModule(prev_mod);
+            }
             return false;
         }
         rc = handler->fn1(args[0]);
     } else {
         DONG_LOG_WARN("[PorfforRegistry] handler %s::%s unsupported arg_count %d",
                       module_name.c_str(), export_name.c_str(), arg_count);
+        if (host_) {
+            host_->popResultSlot();
+        }
+        active_module_ = prev_active;
+        if (prev_mod) {
+            PorfforHost_setActiveModule(prev_mod);
+        }
         return false;
+    }
+
+    if (host_) {
+        host_->popResultSlot();
+    }
+
+    active_module_ = prev_active;
+    if (prev_mod) {
+        PorfforHost_setActiveModule(prev_mod);
+    } else if (!prev_active.empty()) {
+        const dong_porf_module_t* restore = dong_porf_find_module(prev_active.c_str());
+        if (restore) {
+            PorfforHost_setActiveModule(restore);
+        }
     }
 
     DONG_LOG_DEBUG("[PorfforRegistry] callExport %s::%s rc=%d", module_name.c_str(),

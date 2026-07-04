@@ -71,9 +71,9 @@ Dong 不在浏览器里跑 Porffor wasm，而是 `porf c`（2c 路径）生成 C
 | F2 | `callExport` 支持 **0 或 1 个 `f64` 参数**（`param_count` + `fn0`/`fn1`）；仍不支持 N>1 | `registry.h`、`porffor_script_registry.cpp` | T09、T15 |
 | F3 | ~~host→wasm `makeByteString` static bump~~ **已修（T16）**：host→wasm 改 **拉取式** `result_slot_` + `dong_str_len/read/byte_at`；host 不写模块 memory | `dong_porf_host.cpp`、`dong_porffor_prelude.js` | T06 T08 T10 |
 | F4 | import 边界只传 f64、**丢失类型 tag**（仍在）；**已修（T16）**：prelude 强制 `toUtf8()`；`readByteString` UTF-8 + 边界校验 | `dong_porf_host.cpp`、`dong_porffor_prelude.js` | T05 |
-| F5 | 事件分发按 `registry()->activeModule()`（= 最后 run 的模块）找 handler，多模块页面会路由错；listener 未记录所属模块 | `js_bindings_porffor.cpp::dispatchPorfforEvent` | T08 |
-| F6 | `callExport` 切换 active module / memory 后**不恢复**，嵌套调用会顶掉外层模块的内存指针 | `porffor_script_registry.cpp::callExport` | T08 |
-| F7 | Porffor 分支跳过 `DOMContentLoaded` / `load` 事件分发（整段 `#ifndef` 掉） | `engine_view.cpp` ~L1891–1916 | T08 |
+| F5 | ~~事件分发按 `registry()->activeModule()`~~ **已修（T08）**：`registerExportHandler` 记录 `module_name`，分发按 listener 所属模块 `callExport` | `js_bindings_porffor.cpp` | T08 |
+| F6 | ~~`callExport` 切换 active module 后不恢复~~ **已修（T08）**：`callExport` save/restore active module + `result_slot` 栈；事件槽 `pushEventSlot`/`popEventSlot` 支持 re-entrancy | `porffor_script_registry.cpp`、`dong_porf_host.cpp` | T08 |
+| F7 | ~~Porffor 跳过 `DOMContentLoaded`/`load`~~ **已修（T08）**：Porffor 与 QuickJS 共用 lifecycle 分发；约定 **module `main()` = 内联脚本时机**，`DOMContentLoaded`/`load` 在 main 之后对 body 监听者分发 | `engine_view.cpp` | T08 |
 | F8 | `getNodeIdFor` 是对 map 的线性反查 O(n) | `js_bindings_porffor.cpp::getNodeIdFor` | T07 |
 | F9 | timer id = `timers_.size() + 1`，删除后会重复，不能直接做 clearTimeout | `dong_porf_host.cpp::timerSetTimeout` | T09 |
 | F10 | 模块 memory 是**全局 C 变量**（`dong_porf_<mod>_memory`），host / registry 是进程级单例 → 同一模块无法被多个 View 实例化 | `dong_porf_host.cpp` 匿名命名空间、`registry.c` | **T17** |

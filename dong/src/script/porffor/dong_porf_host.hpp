@@ -2,7 +2,10 @@
 
 #include <cstdint>
 #include <string>
+#include <unordered_map>
 #include <vector>
+
+#include "../../dom/event_system.hpp"
 
 struct dong_porf_module;
 
@@ -25,6 +28,7 @@ public:
     unsigned int* activeMemoryPages() const { return memory_pages_; }
 
     void processTimers(double now_ms);
+    void processAnimationFrames(double timestamp_ms);
 
     void printString(double str_ptr);
     void benchLog(double str_ptr);
@@ -34,6 +38,11 @@ public:
     void domPrepareTextContent(double node_id);
     void domAddEventListener(double node_id, double type_ptr, double handler_ptr);
     double timerSetTimeout(double handler_ptr, double delay_ms);
+    double timerSetInterval(double handler_ptr, double interval_ms);
+    void timerClear(double timer_id);
+    double requestAnimationFrame(double handler_ptr);
+    void cancelAnimationFrame(double raf_id);
+    double rafTimestamp() const;
 
     double strLen() const;
     double strRead(double dest_ptr, double max_len);
@@ -45,6 +54,8 @@ public:
     void commitSetTextContent();
     void commitAddEventListener();
     double commitSetTimeout();
+    double commitSetInterval();
+    double commitRequestAnimationFrame();
 
     void getValue(double node_id);
     void setValue(double node_id, double value_ptr);
@@ -94,6 +105,26 @@ public:
     double getNextSiblingId(double node_id) const;
     double cloneNodeId(double node_id, double deep) const;
 
+    void pushEventSlot(const dom::Event* dom_event, uint64_t target_node_id, const std::string& type);
+    void popEventSlot();
+    bool eventPreventDefault() const;
+    bool eventStopPropagation() const;
+
+    void eventPrepareType();
+    double eventTarget() const;
+    void eventPrepareKey();
+    double eventKeyCode() const;
+    double eventX() const;
+    double eventY() const;
+    double eventButton() const;
+    double eventModifiers() const;
+    void eventPrepareValue();
+    void eventPreventDefaultFlag();
+    void eventStopPropagationFlag();
+
+    void pushResultSlot();
+    void popResultSlot();
+
 private:
     JSBindings* bindings_ = nullptr;
     char* memory_ = nullptr;
@@ -106,19 +137,49 @@ private:
     std::string result_slot_;
     std::vector<std::string> result_slot_stack_;
 
+    struct EventSlot {
+        std::string type;
+        uint64_t target_node_id = 0;
+        std::string key;
+        uint32_t key_code = 0;
+        double x = 0;
+        double y = 0;
+        int32_t button = 0;
+        int32_t modifiers = 0;
+        std::string value;
+        bool prevent_default = false;
+        bool stop_propagation = false;
+        const dom::Event* dom_event = nullptr;
+    };
+    EventSlot event_slot_;
+    std::vector<EventSlot> event_slot_stack_;
+
     size_t memoryCapacityBytes() const;
     std::string readByteString(double ptr) const;
     void setResultString(std::string s);
-    void pushResultSlot();
-    void popResultSlot();
 
     struct TimerTask {
         double fire_at_ms = 0;
+        double interval_ms = -1.0;
         std::string module_name;
         std::string export_name;
     };
-    std::vector<TimerTask> timers_;
+    struct RafTask {
+        uint64_t id = 0;
+        std::string module_name;
+        std::string export_name;
+    };
+
+    std::unordered_map<uint64_t, TimerTask> timers_;
+    uint64_t next_timer_id_ = 1;
+    std::vector<RafTask> raf_queue_;
+    uint64_t next_raf_id_ = 1;
+    double raf_timestamp_ = 0.0;
     double start_ms_ = 0;
+
+    uint64_t scheduleTimer(double handler_ptr, double delay_ms, double interval_ms);
+    void invokeExport(const std::string& module_name, const std::string& export_name,
+                      double timestamp_ms, bool has_timestamp);
 };
 
 void PorfforHost_setGlobals(PorfforHost* host, PorfforScriptRegistry* registry);

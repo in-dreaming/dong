@@ -130,7 +130,34 @@ function benchLog(msg) {
 function setTimeout(handlerName, ms) {
   dong_stage_0(ms);
   dong_stage_1(toUtf8(handlerName));
-  dong_commit_setTimeout();
+  return dong_commit_setTimeout();
+}
+
+function setInterval(handlerName, ms) {
+  dong_stage_0(ms);
+  dong_stage_1(toUtf8(handlerName));
+  return dong_commit_setInterval();
+}
+
+function clearTimeout(timerId) {
+  dong_clear_timeout(timerId);
+}
+
+function clearInterval(timerId) {
+  dong_clear_interval(timerId);
+}
+
+function requestAnimationFrame(handlerName) {
+  dong_stage_0(toUtf8(handlerName));
+  return dong_commit_requestAnimationFrame();
+}
+
+function cancelAnimationFrame(rafId) {
+  dong_cancel_animation_frame(rafId);
+}
+
+function rafTimestamp() {
+  return dong_raf_timestamp();
 }
 
 function dongStateSetNum(slot, v) {
@@ -319,4 +346,51 @@ function getNextSiblingId(nodeId) {
 
 function cloneNodeId(nodeId, deep) {
   return dong_clone_node(nodeId, deep ? 1 : 0);
+}
+
+function eventType() {
+  dong_event_type();
+  return pullHostString();
+}
+
+function eventTarget() {
+  return dong_event_target();
+}
+
+function eventKey() {
+  dong_event_key();
+  return pullHostString();
+}
+
+function eventKeyCode() {
+  return dong_event_key_code();
+}
+
+function eventX() {
+  return dong_event_x();
+}
+
+function eventY() {
+  return dong_event_y();
+}
+
+function eventButton() {
+  return dong_event_button();
+}
+
+function eventModifiers() {
+  return dong_event_modifiers();
+}
+
+function eventValue() {
+  dong_event_value();
+  return pullHostString();
+}
+
+function preventDefault() {
+  dong_event_prevent_default();
+}
+
+function stopPropagation() {
+  dong_event_stop_propagation();
 }

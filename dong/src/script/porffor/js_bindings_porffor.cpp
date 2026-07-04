@@ -204,19 +204,28 @@ void JSBindings::tickTimers(double /*current_time_sec*/) {
     engine_->host()->processTimers(now);
 }
 
-void JSBindings::tickAnimationFrames(double /*timestamp_ms*/) {
-    // No rAF queue in Porffor MVP.
+void JSBindings::tickAnimationFrames(double timestamp_ms) {
+    if (!engine_ || !engine_->host()) {
+        return;
+    }
+    engine_->host()->processAnimationFrames(timestamp_ms);
 }
 
 void JSBindings::registerExportHandler(uint64_t node_id, const std::string& type,
-                                       const std::string& export_name) {
+                                       const std::string& export_name,
+                                       const std::string& module_name) {
     NamedListener l;
     l.node_id = node_id;
     l.type = type;
     l.export_name = export_name;
+    l.module_name = module_name;
+    if (l.module_name.empty() && engine_ && engine_->registry()) {
+        l.module_name = engine_->registry()->activeModule();
+    }
+    DONG_LOG_INFO("[JSBindings/Porffor] listener node=%llu type=%s export=%s module=%s",
+                  static_cast<unsigned long long>(node_id), type.c_str(), export_name.c_str(),
+                  l.module_name.c_str());
     named_listeners_.push_back(std::move(l));
-    DONG_LOG_INFO("[JSBindings/Porffor] listener node=%llu type=%s export=%s",
-                  static_cast<unsigned long long>(node_id), type.c_str(), export_name.c_str());
 
     const auto node = findNodeById(node_id);
     if (node) {
@@ -236,8 +245,8 @@ void JSBindings::ensureEventBridgeForNode(const dom::DOMNodePtr& node, const std
         return;
     }
 
-    dom::EventListener callback = [this, node_id, type](const dom::Event&) {
-        dispatchPorfforEvent(node_id, type);
+    dom::EventListener callback = [this, node_id, type](const dom::Event& ev) {
+        dispatchPorfforEvent(node_id, type, &ev);
     };
 
     const uint64_t bridge_id = event_dispatcher_->addEventListener(node, type, callback);
@@ -265,17 +274,34 @@ bool JSBindings::dispatchBeforeInputEvent(uint64_t /*node_id*/, const char* /*in
 void JSBindings::dispatchClipboardEvent(uint64_t /*node_id*/, const char* /*type*/,
                                         const char* /*data*/) {}
 
-void JSBindings::dispatchPorfforEvent(uint64_t node_id, const std::string& type) {
+void JSBindings::dispatchPorfforEvent(uint64_t node_id, const std::string& type,
+                                        const dom::Event* dom_event) {
     if (!engine_ || !engine_->registry()) {
         return;
     }
-  std::string norm = type;
-  std::transform(norm.begin(), norm.end(), norm.begin(),
-                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    std::string norm = type;
+    std::transform(norm.begin(), norm.end(), norm.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+    PorfforHost* host = engine_->host();
+    if (host) {
+        host->pushEventSlot(dom_event, node_id, norm);
+    }
+
     for (const auto& l : named_listeners_) {
-        if (l.node_id == node_id && l.type == norm) {
-            engine_->registry()->callExport(engine_->registry()->activeModule(), l.export_name);
+        if (l.node_id != node_id || l.type != norm) {
+            continue;
         }
+        const std::string& mod =
+            l.module_name.empty() ? engine_->registry()->activeModule() : l.module_name;
+        engine_->registry()->callExport(mod, l.export_name);
+        if (host && host->eventStopPropagation()) {
+            break;
+        }
+    }
+
+    if (host) {
+        host->popEventSlot();
     }
 }
 

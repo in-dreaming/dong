@@ -6,6 +6,7 @@
 #include "porffor_script_registry.hpp"
 #include "js_bindings_porffor.hpp"
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -173,19 +174,86 @@ void PorfforHost::domAddEventListener(double node_id, double type_ptr, double ha
     }
     const std::string type = readByteString(type_ptr);
     const std::string export_name = readByteString(handler_ptr);
-    bindings->registerExportHandler(static_cast<uint64_t>(node_id), type, export_name);
+    std::string module_name;
+    if (g_registry) {
+        module_name = g_registry->activeModule();
+    }
+    bindings->registerExportHandler(static_cast<uint64_t>(node_id), type, export_name,
+                                    module_name);
 }
 
-double PorfforHost::timerSetTimeout(double handler_ptr, double delay_ms) {
+uint64_t PorfforHost::scheduleTimer(double handler_ptr, double delay_ms, double interval_ms) {
+    if (delay_ms < 0.0) {
+        delay_ms = 0.0;
+    }
+    if (interval_ms >= 0.0 && interval_ms < 4.0) {
+        interval_ms = 4.0;
+    }
+
     TimerTask task;
     task.export_name = readByteString(handler_ptr);
     task.fire_at_ms = timeNow() + delay_ms;
+    task.interval_ms = interval_ms;
     if (g_registry) {
         task.module_name = g_registry->activeModule();
     }
-    const double id = static_cast<double>(timers_.size() + 1);
-    timers_.push_back(std::move(task));
+
+    const uint64_t id = next_timer_id_++;
+    timers_.emplace(id, std::move(task));
     return id;
+}
+
+double PorfforHost::timerSetTimeout(double handler_ptr, double delay_ms) {
+    return static_cast<double>(scheduleTimer(handler_ptr, delay_ms, -1.0));
+}
+
+double PorfforHost::timerSetInterval(double handler_ptr, double interval_ms) {
+    const double delay = interval_ms < 0.0 ? 0.0 : interval_ms;
+    return static_cast<double>(scheduleTimer(handler_ptr, delay, interval_ms));
+}
+
+void PorfforHost::timerClear(double timer_id) {
+    if (timer_id <= 0.0) {
+        return;
+    }
+    timers_.erase(static_cast<uint64_t>(timer_id));
+}
+
+double PorfforHost::requestAnimationFrame(double handler_ptr) {
+    RafTask task;
+    task.id = next_raf_id_++;
+    task.export_name = readByteString(handler_ptr);
+    if (g_registry) {
+        task.module_name = g_registry->activeModule();
+    }
+    raf_queue_.push_back(std::move(task));
+    return static_cast<double>(task.id);
+}
+
+void PorfforHost::cancelAnimationFrame(double raf_id) {
+    if (raf_id <= 0.0) {
+        return;
+    }
+    const uint64_t id = static_cast<uint64_t>(raf_id);
+    raf_queue_.erase(std::remove_if(raf_queue_.begin(), raf_queue_.end(),
+                                    [id](const RafTask& t) { return t.id == id; }),
+                      raf_queue_.end());
+}
+
+double PorfforHost::rafTimestamp() const {
+    return raf_timestamp_;
+}
+
+void PorfforHost::invokeExport(const std::string& module_name, const std::string& export_name,
+                               double timestamp_ms, bool has_timestamp) {
+    if (!g_registry || export_name.empty()) {
+        return;
+    }
+    if (has_timestamp) {
+        g_registry->callExport(module_name, export_name, &timestamp_ms, 1);
+    } else {
+        g_registry->callExport(module_name, export_name);
+    }
 }
 
 void PorfforHost::stage0(double v) { stage_0_ = v; }
@@ -202,6 +270,14 @@ void PorfforHost::commitAddEventListener() {
 
 double PorfforHost::commitSetTimeout() {
     return timerSetTimeout(stage_1_, stage_0_);
+}
+
+double PorfforHost::commitSetInterval() {
+    return timerSetInterval(stage_1_, stage_0_);
+}
+
+double PorfforHost::commitRequestAnimationFrame() {
+    return requestAnimationFrame(stage_0_);
 }
 
 void PorfforHost::getValue(double node_id) {
@@ -516,20 +592,163 @@ double PorfforHost::cloneNodeId(double node_id, double deep) const {
         bindings->cloneNodeId(static_cast<uint64_t>(node_id), deep != 0.0));
 }
 
+static int32_t eventModifiersFrom(const dom::Event* ev) {
+    if (!ev) {
+        return 0;
+    }
+    int32_t m = 0;
+    if (ev->shift_key) {
+        m |= 1;
+    }
+    if (ev->ctrl_key) {
+        m |= 2;
+    }
+    if (ev->alt_key) {
+        m |= 4;
+    }
+    if (ev->meta_key) {
+        m |= 8;
+    }
+    return m;
+}
+
+void PorfforHost::pushEventSlot(const dom::Event* dom_event, uint64_t target_node_id,
+                                const std::string& type) {
+    event_slot_stack_.push_back(std::move(event_slot_));
+    event_slot_ = EventSlot{};
+    event_slot_.dom_event = dom_event;
+    event_slot_.target_node_id = target_node_id;
+    event_slot_.type = type;
+    if (dom_event) {
+        if (!dom_event->type_name.empty()) {
+            event_slot_.type = dom_event->type_name;
+        }
+        event_slot_.key = dom_event->key_string.empty() ? dom_event->key_name : dom_event->key_string;
+        event_slot_.key_code = dom_event->key_code;
+        event_slot_.x = static_cast<double>(dom_event->mouse_x);
+        event_slot_.y = static_cast<double>(dom_event->mouse_y);
+        event_slot_.button = dom_event->mouse_button;
+        event_slot_.modifiers = eventModifiersFrom(dom_event);
+        if (!dom_event->input_data.empty()) {
+            event_slot_.value = dom_event->input_data;
+        } else if (bindings_ && target_node_id != 0) {
+            event_slot_.value = bindings_->getNodeValue(target_node_id);
+        }
+    }
+}
+
+void PorfforHost::popEventSlot() {
+    if (event_slot_stack_.empty()) {
+        event_slot_ = EventSlot{};
+        return;
+    }
+    event_slot_ = std::move(event_slot_stack_.back());
+    event_slot_stack_.pop_back();
+}
+
+bool PorfforHost::eventPreventDefault() const {
+    return event_slot_.prevent_default;
+}
+
+bool PorfforHost::eventStopPropagation() const {
+    return event_slot_.stop_propagation;
+}
+
+void PorfforHost::eventPrepareType() {
+    setResultString(event_slot_.type);
+}
+
+double PorfforHost::eventTarget() const {
+    return static_cast<double>(event_slot_.target_node_id);
+}
+
+void PorfforHost::eventPrepareKey() {
+    setResultString(event_slot_.key);
+}
+
+double PorfforHost::eventKeyCode() const {
+    return static_cast<double>(event_slot_.key_code);
+}
+
+double PorfforHost::eventX() const {
+    return event_slot_.x;
+}
+
+double PorfforHost::eventY() const {
+    return event_slot_.y;
+}
+
+double PorfforHost::eventButton() const {
+    return static_cast<double>(event_slot_.button);
+}
+
+double PorfforHost::eventModifiers() const {
+    return static_cast<double>(event_slot_.modifiers);
+}
+
+void PorfforHost::eventPrepareValue() {
+    setResultString(event_slot_.value);
+}
+
+void PorfforHost::eventPreventDefaultFlag() {
+    event_slot_.prevent_default = true;
+    if (event_slot_.dom_event) {
+        const_cast<dom::Event*>(event_slot_.dom_event)->preventDefault();
+    }
+}
+
+void PorfforHost::eventStopPropagationFlag() {
+    event_slot_.stop_propagation = true;
+    if (event_slot_.dom_event) {
+        const_cast<dom::Event*>(event_slot_.dom_event)->stopPropagation();
+    }
+}
+
 void PorfforHost::processTimers(double now_ms) {
     if (timers_.empty() || !g_registry) {
         return;
     }
-    std::vector<TimerTask> remaining;
-    remaining.reserve(timers_.size());
-    for (auto& t : timers_) {
-        if (t.fire_at_ms <= now_ms) {
-            g_registry->callExport(t.module_name, t.export_name);
-        } else {
-            remaining.push_back(std::move(t));
+
+    std::vector<uint64_t> due_ids;
+    due_ids.reserve(timers_.size());
+    for (const auto& [id, task] : timers_) {
+        if (task.fire_at_ms <= now_ms) {
+            due_ids.push_back(id);
         }
     }
-    timers_ = std::move(remaining);
+
+    for (const uint64_t id : due_ids) {
+        auto it = timers_.find(id);
+        if (it == timers_.end()) {
+            continue;
+        }
+
+        if (it->second.interval_ms >= 0.0) {
+            it->second.fire_at_ms = now_ms + it->second.interval_ms;
+            invokeExport(it->second.module_name, it->second.export_name, 0.0, false);
+        } else {
+            TimerTask task = std::move(it->second);
+            timers_.erase(it);
+            invokeExport(task.module_name, task.export_name, 0.0, false);
+        }
+    }
+}
+
+void PorfforHost::processAnimationFrames(double timestamp_ms) {
+    if (raf_queue_.empty() || !g_registry) {
+        return;
+    }
+
+    raf_timestamp_ = timestamp_ms;
+    std::vector<RafTask> callbacks = std::move(raf_queue_);
+    raf_queue_.clear();
+
+    for (const auto& task : callbacks) {
+        const dong_porf_handler_t* handler =
+            dong_porf_find_handler(task.module_name.c_str(), task.export_name.c_str());
+        const bool has_timestamp = handler && handler->param_count == 1;
+        invokeExport(task.module_name, task.export_name, timestamp_ms, has_timestamp);
+    }
 }
 
 void PorfforHost::setBindings(JSBindings* bindings) {
@@ -638,6 +857,44 @@ void __porf_import_dong_commit_addEventListener(void) {
 
 f64 __porf_import_dong_commit_setTimeout(void) {
     return g_host ? g_host->commitSetTimeout() : 0.0;
+}
+
+f64 __porf_import_dong_set_interval(f64 handler_ptr, f64 interval_ms) {
+    return g_host ? g_host->timerSetInterval(handler_ptr, interval_ms) : 0.0;
+}
+
+void __porf_import_dong_clear_interval(f64 timer_id) {
+    if (g_host) {
+        g_host->timerClear(timer_id);
+    }
+}
+
+void __porf_import_dong_clear_timeout(f64 timer_id) {
+    if (g_host) {
+        g_host->timerClear(timer_id);
+    }
+}
+
+f64 __porf_import_dong_commit_setInterval(void) {
+    return g_host ? g_host->commitSetInterval() : 0.0;
+}
+
+f64 __porf_import_dong_request_animation_frame(f64 handler_ptr) {
+    return g_host ? g_host->requestAnimationFrame(handler_ptr) : 0.0;
+}
+
+void __porf_import_dong_cancel_animation_frame(f64 raf_id) {
+    if (g_host) {
+        g_host->cancelAnimationFrame(raf_id);
+    }
+}
+
+f64 __porf_import_dong_commit_requestAnimationFrame(void) {
+    return g_host ? g_host->commitRequestAnimationFrame() : 0.0;
+}
+
+f64 __porf_import_dong_raf_timestamp(void) {
+    return g_host ? g_host->rafTimestamp() : 0.0;
 }
 
 void __porf_import_dong_state_set_num(f64 slot, f64 value) {
@@ -867,6 +1124,60 @@ f64 __porf_import_dong_next_sibling(f64 node_id) {
 
 f64 __porf_import_dong_clone_node(f64 node_id, f64 deep) {
     return g_host ? g_host->cloneNodeId(node_id, deep) : 0.0;
+}
+
+void __porf_import_dong_event_type(void) {
+    if (g_host) {
+        g_host->eventPrepareType();
+    }
+}
+
+f64 __porf_import_dong_event_target(void) {
+    return g_host ? g_host->eventTarget() : 0.0;
+}
+
+void __porf_import_dong_event_key(void) {
+    if (g_host) {
+        g_host->eventPrepareKey();
+    }
+}
+
+f64 __porf_import_dong_event_key_code(void) {
+    return g_host ? g_host->eventKeyCode() : 0.0;
+}
+
+f64 __porf_import_dong_event_x(void) {
+    return g_host ? g_host->eventX() : 0.0;
+}
+
+f64 __porf_import_dong_event_y(void) {
+    return g_host ? g_host->eventY() : 0.0;
+}
+
+f64 __porf_import_dong_event_button(void) {
+    return g_host ? g_host->eventButton() : 0.0;
+}
+
+f64 __porf_import_dong_event_modifiers(void) {
+    return g_host ? g_host->eventModifiers() : 0.0;
+}
+
+void __porf_import_dong_event_value(void) {
+    if (g_host) {
+        g_host->eventPrepareValue();
+    }
+}
+
+void __porf_import_dong_event_prevent_default(void) {
+    if (g_host) {
+        g_host->eventPreventDefaultFlag();
+    }
+}
+
+void __porf_import_dong_event_stop_propagation(void) {
+    if (g_host) {
+        g_host->eventStopPropagationFlag();
+    }
 }
 
 } // extern "C"

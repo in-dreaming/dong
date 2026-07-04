@@ -70,8 +70,10 @@ public:
     std::chrono::steady_clock::time_point script_start_time_;
 
     void registerExportHandler(uint64_t node_id, const std::string& type,
-                               const std::string& export_name);
-    void dispatchPorfforEvent(uint64_t node_id, const std::string& type);
+                               const std::string& export_name,
+                               const std::string& module_name = {});
+    void dispatchPorfforEvent(uint64_t node_id, const std::string& type,
+                              const dom::Event* dom_event = nullptr);
     void dispatchSimpleEvent(uint64_t node_id, const char* type_name);
 
     void dispatchCompositionEvent(uint64_t node_id, const char* type, const char* data);
@@ -142,6 +144,7 @@ private:
         uint64_t node_id = 0;
         std::string type;
         std::string export_name;
+        std::string module_name;
     };
     std::vector<NamedListener> named_listeners_;
     std::unordered_map<void*, std::unordered_map<std::string, uint64_t>> event_bridge_ids_;

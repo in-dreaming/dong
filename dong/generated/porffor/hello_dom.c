@@ -45,19 +45,19 @@ static void f64_store(i32 align, i32 offset, i32 pointer, f64 value) {
 __attribute__((import_module(""), import_name("h")))
 extern f64 __porf_import_dong_dom_getElementById(f64);
 
-__attribute__((import_module(""), import_name("r")))
+__attribute__((import_module(""), import_name("z")))
 extern void __porf_import_dong_stage_0(f64);
 
-__attribute__((import_module(""), import_name("s")))
+__attribute__((import_module(""), import_name("{")))
 extern void __porf_import_dong_stage_1(f64);
 
-__attribute__((import_module(""), import_name("t")))
+__attribute__((import_module(""), import_name("|")))
 extern void __porf_import_dong_stage_2(f64);
 
-__attribute__((import_module(""), import_name("v")))
+__attribute__((import_module(""), import_name("~")))
 extern void __porf_import_dong_commit_addEventListener();
 
-__attribute__((import_module(""), import_name("u")))
+__attribute__((import_module(""), import_name("}")))
 extern void __porf_import_dong_commit_set_textContent();
 
 __attribute__((import_module(""), import_name("e")))

@@ -43,6 +43,14 @@ function registerAllImports() {
   imp('dong_str_byte_at', 1, 1);
   imp('dong_dom_addEventListener', 3, 0);
   imp('dong_timer_setTimeout', 2, 1);
+  imp('dong_set_interval', 2, 1);
+  imp('dong_clear_interval', 1, 0);
+  imp('dong_clear_timeout', 1, 0);
+  imp('dong_commit_setInterval', 0, 1);
+  imp('dong_request_animation_frame', 1, 1);
+  imp('dong_cancel_animation_frame', 1, 0);
+  imp('dong_commit_requestAnimationFrame', 0, 1);
+  imp('dong_raf_timestamp', 0, 1);
   imp('dong_state_set_num', 2, 0);
   imp('dong_state_get_num', 1, 1);
   imp('dong_stage_0', 1, 0);
@@ -94,6 +102,18 @@ function registerAllImports() {
   imp('dong_first_child', 1, 1);
   imp('dong_next_sibling', 1, 1);
   imp('dong_clone_node', 2, 1);
+
+  imp('dong_event_type', 0, 0);
+  imp('dong_event_target', 0, 1);
+  imp('dong_event_key', 0, 0);
+  imp('dong_event_key_code', 0, 1);
+  imp('dong_event_x', 0, 1);
+  imp('dong_event_y', 0, 1);
+  imp('dong_event_button', 0, 1);
+  imp('dong_event_modifiers', 0, 1);
+  imp('dong_event_value', 0, 0);
+  imp('dong_event_prevent_default', 0, 0);
+  imp('dong_event_stop_propagation', 0, 0);
 }
 
 registerAllImports();

@@ -1887,8 +1887,8 @@ struct EngineView::Impl {
 
 #endif // DONG_SCRIPT_ENGINE_PORFFOR
 
-            // Dispatch DOMContentLoaded event on document (body)
-#ifndef DONG_SCRIPT_ENGINE_PORFFOR
+            // Dispatch DOMContentLoaded / load on document (body).
+            // Porffor: module main() runs first (inline-script equivalent); lifecycle listeners fire here.
             if (js_bindings) {
                 auto bodies = dom_manager->getElementsByTagName("body");
                 dong::dom::DOMNodePtr doc_target;
@@ -1913,7 +1913,6 @@ struct EngineView::Impl {
                     }
                 }
             }
-#endif // !DONG_SCRIPT_ENGINE_PORFFOR
             }
         } else {
             DONG_LOG_WARN("[EngineView] Cannot execute scripts: script_engine or dom_manager is null");
@@ -2571,8 +2570,8 @@ struct EngineView::Impl {
     }
 
 
-    void dispatchMouseEvent(const char* type, int32_t x, int32_t y, int32_t button) {
-        if (!script_engine || !js_bindings || !event_dispatcher) return;
+    bool dispatchMouseEvent(const char* type, int32_t x, int32_t y, int32_t button) {
+        if (!script_engine || !js_bindings || !event_dispatcher) return false;
 
         // Scene graph gets first chance at events
         {
@@ -2580,13 +2579,13 @@ struct EngineView::Impl {
             if (!sg.empty()) {
                 std::string t = type ? type : "";
                 if (sg.dispatchEvent(t, (float)x, (float)y)) {
-                    return;
+                    return false;
                 }
             }
         }
 
         auto target = hitTestElementAt(dom_manager.get(), layout_engine.get(), x, y);
-        if (!target) return;
+        if (!target) return false;
 
         // P1-9: Block events on disabled elements and their descendants.
         // In HTML, disabled form elements (<input>, <button>, <select>, <textarea>)
@@ -2597,7 +2596,7 @@ struct EngineView::Impl {
                 if (check->hasAttribute("disabled")) {
                     const std::string& t = check->getTagName();
                     if (t == "input" || t == "button" || t == "select" || t == "textarea" || t == "fieldset") {
-                        return;  // Swallow the event
+                        return false;
                     }
                 }
                 check = check->getParent();
@@ -2621,7 +2620,7 @@ struct EngineView::Impl {
         } else if (type_str == "mousemove") {
             ev_type = dong::dom::EventType::MOUSE_MOVE;
         } else {
-            return;
+            return false;
         }
 
         dong::dom::Event event = event_dispatcher->createMouseEvent(ev_type, x, y, button);
@@ -2649,6 +2648,7 @@ struct EngineView::Impl {
         }
 
         event_dispatcher->dispatch(event);
+        return event.prevented;
     }
 
     void dispatchDragStartEvent(const dong::dom::DOMNodePtr& source, int32_t x, int32_t y) {
@@ -3518,7 +3518,8 @@ struct EngineView::Impl {
         }
 
         clearActiveElement();
-        dispatchMouseEvent("click", last_mouse_x, last_mouse_y, button);
+        const bool click_default_prevented =
+            dispatchMouseEvent("click", last_mouse_x, last_mouse_y, button);
 
         // Handle <label> for attribute - clicking label focuses associated element
         if (dom_manager && layout_engine && focus_manager) {
@@ -3539,8 +3540,8 @@ struct EngineView::Impl {
             }
         }
 
-        // Checkbox/radio toggle on click
-        if (dom_manager && layout_engine) {
+        // Checkbox/radio toggle on click (skip if click handler called preventDefault)
+        if (!click_default_prevented && dom_manager && layout_engine) {
             auto clicked = hitTestElementAt(dom_manager.get(), layout_engine.get(), last_mouse_x, last_mouse_y);
             if (clicked && clicked->getTagName() == "input" && !clicked->hasAttribute("disabled")) {
                 std::string type = clicked->getAttribute("type");
