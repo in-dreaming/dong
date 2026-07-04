@@ -5,6 +5,7 @@
 #include "../../core/log.h"
 #include "porffor_script_registry.hpp"
 #include "js_bindings_porffor.hpp"
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -34,42 +35,82 @@ void PorfforHost::setActiveMemory(char* memory, unsigned int* memory_pages) {
     memory_pages_ = memory_pages;
 }
 
+size_t PorfforHost::memoryCapacityBytes() const {
+    if (!memory_pages_) {
+        return 0;
+    }
+    return static_cast<size_t>(*memory_pages_) * 65536u;
+}
+
 std::string PorfforHost::readByteString(double ptr) const {
     if (!memory_ || ptr < 0) {
         return {};
     }
-    const auto offset = static_cast<size_t>(ptr);
-    const u32 len = *reinterpret_cast<u32*>(memory_ + offset);
-    std::string out;
-    out.reserve(len);
-    for (u32 i = 0; i < len; ++i) {
-        out.push_back(static_cast<char>(memory_[offset + 4 + i]));
+    const size_t offset = static_cast<size_t>(ptr);
+    const size_t cap = memoryCapacityBytes();
+    if (offset + 4 > cap) {
+        return {};
     }
-    return out;
+    const u32 len = *reinterpret_cast<u32*>(memory_ + offset);
+    if (len > kMaxImportStringBytes || offset + 4 + len > cap) {
+        return {};
+    }
+    return std::string(memory_ + offset + 4, memory_ + offset + 4 + len);
 }
 
-double PorfforHost::makeByteString(const std::string& s) {
-    if (!memory_) {
+void PorfforHost::setResultString(std::string s) {
+    result_slot_ = std::move(s);
+}
+
+void PorfforHost::pushResultSlot() {
+    result_slot_stack_.push_back(std::move(result_slot_));
+    result_slot_.clear();
+}
+
+void PorfforHost::popResultSlot() {
+    if (result_slot_stack_.empty()) {
+        result_slot_.clear();
+        return;
+    }
+    result_slot_ = std::move(result_slot_stack_.back());
+    result_slot_stack_.pop_back();
+}
+
+double PorfforHost::strLen() const {
+    return static_cast<double>(result_slot_.size());
+}
+
+double PorfforHost::strRead(double dest_ptr, double max_len) {
+    if (!memory_ || dest_ptr < 0 || max_len <= 0 || result_slot_.empty()) {
         return 0;
     }
-    // Simple bump allocator in module memory (after page 0 guard).
-    static size_t bump = 4096;
-    const size_t offset = bump;
-    const u32 len = static_cast<u32>(s.size());
-    if (memory_pages_) {
-        const size_t need = offset + 4 + s.size();
-        const size_t cap = static_cast<size_t>(*memory_pages_) * 65536;
-        if (need > cap && memory_pages_) {
-            *memory_pages_ = static_cast<unsigned int>((need + 65535) / 65536);
-            memory_ = static_cast<char*>(std::realloc(memory_, static_cast<size_t>(*memory_pages_) * 65536));
-        }
+    const size_t offset = static_cast<size_t>(dest_ptr);
+    const size_t cap = memoryCapacityBytes();
+    if (offset >= cap) {
+        return 0;
     }
-    *reinterpret_cast<u32*>(memory_ + offset) = len;
-    for (u32 i = 0; i < len; ++i) {
-        memory_[offset + 4 + i] = s[i];
+    const size_t avail = cap - offset;
+    const size_t want = std::min({
+        result_slot_.size(),
+        static_cast<size_t>(max_len),
+        avail,
+    });
+    if (want == 0) {
+        return 0;
     }
-    bump = offset + 4 + s.size();
-    return static_cast<double>(offset);
+    std::memcpy(memory_ + offset, result_slot_.data(), want);
+    return static_cast<double>(want);
+}
+
+double PorfforHost::strByteAt(double index) const {
+    if (index < 0) {
+        return -1;
+    }
+    const size_t i = static_cast<size_t>(index);
+    if (i >= result_slot_.size()) {
+        return -1;
+    }
+    return static_cast<double>(static_cast<unsigned char>(result_slot_[i]));
 }
 
 void PorfforHost::printString(double str_ptr) {
@@ -116,12 +157,13 @@ void PorfforHost::domSetTextContent(double node_id, double text_ptr) {
     bindings->setNodeTextContent(static_cast<uint64_t>(node_id), readByteString(text_ptr));
 }
 
-double PorfforHost::domGetTextContent(double node_id) {
+void PorfforHost::domPrepareTextContent(double node_id) {
     auto* bindings = activeBindings();
     if (!bindings) {
-        return 0;
+        setResultString({});
+        return;
     }
-    return makeByteString(bindings->getNodeTextContent(static_cast<uint64_t>(node_id)));
+    setResultString(bindings->getNodeTextContent(static_cast<uint64_t>(node_id)));
 }
 
 void PorfforHost::domAddEventListener(double node_id, double type_ptr, double handler_ptr) {
@@ -192,9 +234,6 @@ JSBindings* PorfforHost::bindings() const {
 
 } // namespace dong::script
 
-// ---------------------------------------------------------------------------
-// C ABI: Porffor import stubs (linked from generated module code).
-// ---------------------------------------------------------------------------
 using dong::script::g_active_module;
 using dong::script::g_host;
 using dong::script::g_registry;
@@ -227,8 +266,22 @@ void __porf_import_dong_dom_set_textContent(f64 node_id, f64 text_ptr) {
     }
 }
 
-f64 __porf_import_dong_dom_get_textContent(f64 node_id) {
-    return g_host ? g_host->domGetTextContent(node_id) : 0.0;
+void __porf_import_dong_dom_get_textContent(f64 node_id) {
+    if (g_host) {
+        g_host->domPrepareTextContent(node_id);
+    }
+}
+
+f64 __porf_import_dong_str_len(void) {
+    return g_host ? g_host->strLen() : 0.0;
+}
+
+f64 __porf_import_dong_str_read(f64 dest_ptr, f64 max_len) {
+    return g_host ? g_host->strRead(dest_ptr, max_len) : 0.0;
+}
+
+f64 __porf_import_dong_str_byte_at(f64 index) {
+    return g_host ? g_host->strByteAt(index) : -1.0;
 }
 
 void __porf_import_dong_dom_addEventListener(f64 node_id, f64 type_ptr, f64 handler_ptr) {

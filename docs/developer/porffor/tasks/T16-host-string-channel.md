@@ -50,3 +50,8 @@ host 向 wasm 返回字符串的现有通道 `PorfforHost::makeByteString`（`do
 
 - 方案 b 的「稳定地址全局 buffer」在 Porffor 的内存模型下可能不成立（GC / 内存整理），spike 阶段优先证伪；
 - UTF-16 string → UTF-8 的转换成本在热路径（每帧事件字段读取）上要测一下，必要时事件槽字段用纯 ASCII 快路径。
+
+## 完成记录
+
+- **2026-07-04**：阶段 0 定稿 [T16-string-channel-protocol.md](T16-string-channel-protocol.md)，选用 **方案 A 拉取式**。阶段 1：`dong_str_len/read/byte_at` + `result_slot_`；`dong_dom_get_textContent` 改 void + prelude `pullHostString`/`getTextContent`/`toUtf8`；F3 static bump 移除；F4 边界校验 + UTF-8 契约。验证：`t16_verify.mjs` + t01/t05/t15 回归。
+- **遗留**：`result_slot_` 嵌套压栈（T08 事件槽）待 T08 一并接线；`dong_state_set_str/get_str`（T15）待接同一 pull 协议。

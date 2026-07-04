@@ -13,6 +13,8 @@ class PorfforScriptRegistry;
 
 class PorfforHost {
 public:
+    static constexpr size_t kMaxImportStringBytes = 4 * 1024 * 1024;
+
     PorfforHost();
 
     void setBindings(JSBindings* bindings);
@@ -29,9 +31,13 @@ public:
     double timeNow() const;
     double domGetElementById(double id_ptr);
     void domSetTextContent(double node_id, double text_ptr);
-    double domGetTextContent(double node_id);
+    void domPrepareTextContent(double node_id);
     void domAddEventListener(double node_id, double type_ptr, double handler_ptr);
     double timerSetTimeout(double handler_ptr, double delay_ms);
+
+    double strLen() const;
+    double strRead(double dest_ptr, double max_len);
+    double strByteAt(double index) const;
 
     void stage0(double v);
     void stage1(double v);
@@ -49,8 +55,14 @@ private:
     double stage_1_ = 0;
     double stage_2_ = 0;
 
+    std::string result_slot_;
+    std::vector<std::string> result_slot_stack_;
+
+    size_t memoryCapacityBytes() const;
     std::string readByteString(double ptr) const;
-    double makeByteString(const std::string& s);
+    void setResultString(std::string s);
+    void pushResultSlot();
+    void popResultSlot();
 
     struct TimerTask {
         double fire_at_ms = 0;

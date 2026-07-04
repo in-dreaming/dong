@@ -37,7 +37,10 @@ function registerAllImports() {
   imp('dong_time_now', 0, 1);
   imp('dong_dom_getElementById', 1, 1);
   imp('dong_dom_set_textContent', 2, 0);
-  imp('dong_dom_get_textContent', 1, 1);
+  imp('dong_dom_get_textContent', 1, 0);
+  imp('dong_str_len', 0, 1);
+  imp('dong_str_read', 2, 1);
+  imp('dong_str_byte_at', 1, 1);
   imp('dong_dom_addEventListener', 3, 0);
   imp('dong_timer_setTimeout', 2, 1);
   imp('dong_state_set_num', 2, 0);

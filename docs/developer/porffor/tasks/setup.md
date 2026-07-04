@@ -69,8 +69,8 @@ Dong 不在浏览器里跑 Porffor wasm，而是 `porf c`（2c 路径）生成 C
 |---|------|----------|----------|
 | F1 | 事件 handler 可与主模块**同编译单元**：manifest `exports[]` 指向同模块 `{prefix}export_*` shim，**共享 `_memory` 与 static 全局**；旧 `handlers` 独立子模块仍支持过渡 | `porffor_compile.mjs`、`registry.h`、`2c.js` | T08 T12 T18 |
 | F2 | `callExport` 支持 **0 或 1 个 `f64` 参数**（`param_count` + `fn0`/`fn1`）；仍不支持 N>1 | `registry.h`、`porffor_script_registry.cpp` | T09、T15 |
-| F3 | host→wasm 字符串通道 `makeByteString` 是 `static` bump 分配器：跨模块共享且从不重置；从固定偏移 4096 写入，会覆盖模块自身数据；扩容 `realloc` 后**不写回**模块的 `char** memory` 全局（use-after-free） | `dong_porf_host.cpp` L49–71 | **T16**（根治）、T06 T08 T10 |
-| F4 | import 边界只传 f64，**丢失 Porffor 值类型**；host 把一切字符串按 bytestring（latin1）读，UTF-16 `string`（如中文字面量）会被误读 | `dong_porf_host.cpp::readByteString` | T16、T05 |
+| F3 | ~~host→wasm `makeByteString` static bump~~ **已修（T16）**：host→wasm 改 **拉取式** `result_slot_` + `dong_str_len/read/byte_at`；host 不写模块 memory | `dong_porf_host.cpp`、`dong_porffor_prelude.js` | T06 T08 T10 |
+| F4 | import 边界只传 f64、**丢失类型 tag**（仍在）；**已修（T16）**：prelude 强制 `toUtf8()`；`readByteString` UTF-8 + 边界校验 | `dong_porf_host.cpp`、`dong_porffor_prelude.js` | T05 |
 | F5 | 事件分发按 `registry()->activeModule()`（= 最后 run 的模块）找 handler，多模块页面会路由错；listener 未记录所属模块 | `js_bindings_porffor.cpp::dispatchPorfforEvent` | T08 |
 | F6 | `callExport` 切换 active module / memory 后**不恢复**，嵌套调用会顶掉外层模块的内存指针 | `porffor_script_registry.cpp::callExport` | T08 |
 | F7 | Porffor 分支跳过 `DOMContentLoaded` / `load` 事件分发（整段 `#ifndef` 掉） | `engine_view.cpp` ~L1891–1916 | T08 |
