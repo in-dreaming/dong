@@ -45,7 +45,7 @@ createImport('dong_add', 2, 1, (a, b) => a + b, 'return p0 + p1;');
 ## 完成记录
 
 - **日期**: 2026-07-04
-- **commit**: porffor fork `a5f4bb53`（enjin_porffor）；Dong `32f411f`（feature/porffor）
+- **commit**: porffor fork `a5f4bb53`（enjin_porffor）；Dong `32842bb`（feature/porffor）
 - **摘要**: `compiler/2c.js` 在 `Opcodes.call` import 分支新增 `importFunc.c` 内联路径：`static __porf_import_<name>(p0,…)` 写入 `prepend`，调用点直接调用；优先级 `c` > `--2c-wasm-imports` extern > 内置 > warning；`--2c-strict-imports` 对未知 import 硬错误。新增 `t02_inline_c_import.js`、`t02_verify.mjs`。
 - **变更文件**:
   - `dong/third_party/porffor/compiler/2c.js`
