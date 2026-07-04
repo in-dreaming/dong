@@ -57,6 +57,7 @@ extern 声明部分（L621–623）已经正确输出全部参数类型，只有
 ## 完成记录
 
 - **日期**: 2026-07-04
+- **commit**: `9f04efd`（Dong）；porffor fork `053f3051`（enjin_porffor）
 - **摘要**: 修复 `compiler/2c.js` 中 `Opcodes.call` 对 wasm import 的代码生成：与普通函数调用一致，按 `importFunc.params.length` 逆序 `vals.pop()` 收集参数后 join。新增复现脚本 `docs/developer/porffor/tasks/repro/t01_multiarg_import.js`、`t01_verify.mjs`（2c 断言 + wasm 执行 + hello.js 回归 + 可选 clang 运行）、`t01_wasm_run.mjs`（wasm 路径验收）。
 - **变更文件**:
   - `dong/third_party/porffor/compiler/2c.js`
