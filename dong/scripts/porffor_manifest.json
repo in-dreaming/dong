@@ -4,9 +4,7 @@
     {
       "name": "hello_dom",
       "path": "examples/porffor/hello_dom.js",
-      "handlers": {
-        "onBtnClick": "examples/porffor/handlers/hello_dom_onBtnClick.js"
-      }
+      "exports": ["onBtnClick"]
     },
     {
       "name": "js_microbench",

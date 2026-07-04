@@ -8,6 +8,8 @@ extern "C" {
 #endif
 
 typedef int (*dong_porf_main_fn)(void);
+typedef int (*dong_porf_export_fn0)(void);
+typedef int (*dong_porf_export_fn1)(double);
 
 typedef struct dong_porf_module {
     const char* name;
@@ -19,8 +21,10 @@ typedef struct dong_porf_module {
 typedef struct dong_porf_handler {
     const char* parent_module;
     const char* export_name;
-    const char* handler_module;
-    dong_porf_main_fn main_fn;
+    const char* legacy_handler_module;
+    int param_count;
+    dong_porf_export_fn0 fn0;
+    dong_porf_export_fn1 fn1;
     char** memory;
     unsigned int* memory_pages;
 } dong_porf_handler_t;

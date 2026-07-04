@@ -40,18 +40,25 @@ bool PorfforScriptRegistry::run(const std::string& module_name) {
 }
 
 bool PorfforScriptRegistry::callExport(const std::string& module_name,
-                                       const std::string& export_name) {
+                                       const std::string& export_name, const double* args,
+                                       int arg_count) {
     const dong_porf_handler_t* handler =
         dong_porf_find_handler(module_name.c_str(), export_name.c_str());
-    if (!handler || !handler->main_fn) {
+    if (!handler) {
         DONG_LOG_WARN("[PorfforRegistry] handler not found: %s::%s", module_name.c_str(),
                       export_name.c_str());
         return false;
     }
 
+    if (handler->param_count != arg_count) {
+        DONG_LOG_WARN("[PorfforRegistry] handler %s::%s expected %d args, got %d",
+                      module_name.c_str(), export_name.c_str(), handler->param_count, arg_count);
+        return false;
+    }
+
     const dong_porf_module_t shim = {
-        handler->handler_module,
-        handler->main_fn,
+        handler->legacy_handler_module ? handler->legacy_handler_module : module_name.c_str(),
+        nullptr,
         handler->memory,
         handler->memory_pages,
     };
@@ -60,7 +67,27 @@ bool PorfforScriptRegistry::callExport(const std::string& module_name,
         return false;
     }
 
-    const int rc = handler->main_fn();
+    int rc = -1;
+    if (arg_count == 0) {
+        if (!handler->fn0) {
+            DONG_LOG_WARN("[PorfforRegistry] handler %s::%s missing fn0", module_name.c_str(),
+                          export_name.c_str());
+            return false;
+        }
+        rc = handler->fn0();
+    } else if (arg_count == 1) {
+        if (!handler->fn1 || !args) {
+            DONG_LOG_WARN("[PorfforRegistry] handler %s::%s missing fn1", module_name.c_str(),
+                          export_name.c_str());
+            return false;
+        }
+        rc = handler->fn1(args[0]);
+    } else {
+        DONG_LOG_WARN("[PorfforRegistry] handler %s::%s unsupported arg_count %d",
+                      module_name.c_str(), export_name.c_str(), arg_count);
+        return false;
+    }
+
     DONG_LOG_DEBUG("[PorfforRegistry] callExport %s::%s rc=%d", module_name.c_str(),
                    export_name.c_str(), rc);
     return rc == 0;

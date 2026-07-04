@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
+#include <array>
 
 namespace dong::script {
 namespace {
@@ -16,6 +17,7 @@ namespace {
 PorfforHost* g_host = nullptr;
 PorfforScriptRegistry* g_registry = nullptr;
 thread_local const struct dong_porf_module* g_active_module = nullptr;
+std::array<double, 256> g_state_nums{};
 
 JSBindings* activeBindings() {
     return g_host ? g_host->bindings() : nullptr;
@@ -271,6 +273,21 @@ void __porf_import_dong_commit_addEventListener(void) {
 
 f64 __porf_import_dong_commit_setTimeout(void) {
     return g_host ? g_host->commitSetTimeout() : 0.0;
+}
+
+void __porf_import_dong_state_set_num(f64 slot, f64 value) {
+    const size_t idx = static_cast<size_t>(slot);
+    if (idx < g_state_nums.size()) {
+        g_state_nums[idx] = value;
+    }
+}
+
+f64 __porf_import_dong_state_get_num(f64 slot) {
+    const size_t idx = static_cast<size_t>(slot);
+    if (idx < g_state_nums.size()) {
+        return g_state_nums[idx];
+    }
+    return 0.0;
 }
 
 } // extern "C"

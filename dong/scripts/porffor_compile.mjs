@@ -40,6 +40,8 @@ function registerAllImports() {
   imp('dong_dom_get_textContent', 1, 1);
   imp('dong_dom_addEventListener', 3, 0);
   imp('dong_timer_setTimeout', 2, 1);
+  imp('dong_state_set_num', 2, 0);
+  imp('dong_state_get_num', 1, 1);
   imp('dong_stage_0', 1, 0);
   imp('dong_stage_1', 1, 0);
   imp('dong_stage_2', 1, 0);
@@ -59,15 +61,52 @@ function stripDuplicateTypes(cSource) {
   return cSource.slice(after + 2);
 }
 
+function detectExports(source) {
+  const names = [];
+  const re = /export\s+function\s+(\w+)/g;
+  let m;
+  while ((m = re.exec(source)) !== null) {
+    names.push(m[1]);
+  }
+  return names;
+}
+
+function parseExportShims(cSource, modPrefix) {
+  const shims = new Map();
+  const esc = modPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const reVoid = new RegExp(`int ${esc}export_(\\w+)\\(void\\)`, 'g');
+  let m;
+  while ((m = reVoid.exec(cSource)) !== null) {
+    shims.set(m[1], { symbol: `${modPrefix}export_${m[1]}`, params: 0 });
+  }
+  const re1 = new RegExp(`int ${esc}export_(\\w+)\\(f64 p0\\)`, 'g');
+  while ((m = re1.exec(cSource)) !== null) {
+    shims.set(m[1], { symbol: `${modPrefix}export_${m[1]}`, params: 1 });
+  }
+  const reN = new RegExp(`int ${esc}export_(\\w+)_p(\\d+)\\(`, 'g');
+  while ((m = reN.exec(cSource)) !== null) {
+    shims.set(m[1], {
+      symbol: `${modPrefix}export_${m[1]}_p${m[2]}`,
+      params: parseInt(m[2], 10),
+    });
+  }
+  return shims;
+}
+
 function emitModuleC(item) {
   const body = stripDuplicateTypes(item.c);
   const out = `// Porffor module: ${item.name}\n#include "dong_porf_runtime.h"\n${body}`;
   fs.writeFileSync(path.join(outDir, `${item.name}.c`), out);
 }
 
-function compileSource(entry, source, logicalName) {
-  process.argv = process.argv.filter(a => !a.startsWith('--2c-prefix='));
+function compileSource(entry, source, logicalName, useModule) {
+  process.argv = process.argv.filter(
+    (a) => !a.startsWith('--2c-prefix=') && a !== '--module',
+  );
   process.argv.push(`--2c-prefix=dong_porf_${logicalName}_`);
+  if (useModule) {
+    process.argv.push('--module');
+  }
   globalThis.argvChanged?.();
 
   globalThis.file = entry.path ?? logicalName;
@@ -84,7 +123,16 @@ function compileScript(entry) {
   const preludePath = path.join(dongRoot, manifest.prelude);
   const prelude = fs.readFileSync(preludePath, 'utf8');
   const user = fs.readFileSync(scriptPath, 'utf8');
-  return compileSource(entry, `${prelude}\n${user}`, entry.name);
+  const manifestExports = entry.exports ?? [];
+  const detectedExports = detectExports(user);
+  const exports = manifestExports.length > 0 ? manifestExports : detectedExports;
+  const useModule = exports.length > 0;
+  const item = compileSource(entry, `${prelude}\n${user}`, entry.name, useModule);
+  item.exports = exports;
+  item.exportShims = useModule
+    ? parseExportShims(item.c, `dong_porf_${entry.name}_`)
+    : new Map();
+  return item;
 }
 
 function compileHandler(parentName, handlerName, handlerPath) {
@@ -92,7 +140,7 @@ function compileHandler(parentName, handlerName, handlerPath) {
   const preludePath = path.join(dongRoot, manifest.prelude);
   const prelude = fs.readFileSync(preludePath, 'utf8');
   const user = fs.readFileSync(path.join(dongRoot, handlerPath), 'utf8');
-  return compileSource({ path: handlerPath }, `${prelude}\n${user}`, logicalName);
+  return compileSource({ path: handlerPath }, `${prelude}\n${user}`, logicalName, false);
 }
 
 fs.mkdirSync(outDir, { recursive: true });
@@ -109,6 +157,20 @@ for (const entry of manifest.scripts) {
     process.argv.push(`-o=${path.join(outDir, '_unused.c')}`);
   }
 
+  for (const exportName of item.exports ?? []) {
+    const shim = item.exportShims.get(exportName);
+    if (!shim) {
+      throw new Error(`export ${exportName} not found in ${entry.name} 2c output`);
+    }
+    handlers.push({
+      parent: entry.name,
+      export_name: exportName,
+      module_name: null,
+      symbol: shim.symbol,
+      params: shim.params,
+    });
+  }
+
   if (entry.handlers) {
     for (const [handlerName, handlerPath] of Object.entries(entry.handlers)) {
       const h = compileHandler(entry.name, handlerName, handlerPath);
@@ -119,6 +181,7 @@ for (const entry of manifest.scripts) {
         export_name: handlerName,
         module_name: h.name,
         symbol: `dong_porf_${h.name}_main`,
+        params: 0,
       });
     }
   }
@@ -130,7 +193,9 @@ const modules = compiled
 
 const generatedSources = modules.map((m) => m.name);
 for (const h of handlers) {
-  generatedSources.push(h.module_name);
+  if (h.module_name) {
+    generatedSources.push(h.module_name);
+  }
 }
 fs.writeFileSync(
   path.join(outDir, 'sources.cmake'),
@@ -147,6 +212,8 @@ extern "C" {
 #endif
 
 typedef int (*dong_porf_main_fn)(void);
+typedef int (*dong_porf_export_fn0)(void);
+typedef int (*dong_porf_export_fn1)(double);
 
 typedef struct dong_porf_module {
     const char* name;
@@ -158,8 +225,10 @@ typedef struct dong_porf_module {
 typedef struct dong_porf_handler {
     const char* parent_module;
     const char* export_name;
-    const char* handler_module;
-    dong_porf_main_fn main_fn;
+    const char* legacy_handler_module;
+    int param_count;
+    dong_porf_export_fn0 fn0;
+    dong_porf_export_fn1 fn1;
     char** memory;
     unsigned int* memory_pages;
 } dong_porf_handler_t;
@@ -191,9 +260,17 @@ for (const m of modules) {
 }
 
 for (const h of handlers) {
-  registryC += `extern int ${h.symbol}(void);\n`;
-  registryC += `extern char* dong_porf_${h.module_name}_memory;\n`;
-  registryC += `extern unsigned int dong_porf_${h.module_name}_memory_pages;\n\n`;
+  if (h.params === 0) {
+    registryC += `extern int ${h.symbol}(void);\n`;
+  } else if (h.params === 1) {
+    registryC += `extern int ${h.symbol}(double);\n`;
+  }
+  if (h.module_name) {
+    registryC += `extern char* dong_porf_${h.module_name}_memory;\n`;
+    registryC += `extern unsigned int dong_porf_${h.module_name}_memory_pages;\n\n`;
+  } else {
+    registryC += `\n`;
+  }
 }
 
 registryC += `const dong_porf_module_t dong_porf_modules[] = {\n`;
@@ -205,7 +282,11 @@ registryC += `const size_t dong_porf_module_count = ${modules.length};\n\n`;
 
 registryC += `const dong_porf_handler_t dong_porf_handlers[] = {\n`;
 for (const h of handlers) {
-  registryC += `  { "${h.parent}", "${h.export_name}", "${h.module_name}", ${h.symbol}, &dong_porf_${h.module_name}_memory, &dong_porf_${h.module_name}_memory_pages },\n`;
+  const legacy = h.module_name ? `"${h.module_name}"` : 'NULL';
+  const memMod = h.module_name ?? h.parent;
+  const fn0 = h.params === 0 ? `(dong_porf_export_fn0)${h.symbol}` : 'NULL';
+  const fn1 = h.params === 1 ? `(dong_porf_export_fn1)${h.symbol}` : 'NULL';
+  registryC += `  { "${h.parent}", "${h.export_name}", ${legacy}, ${h.params}, ${fn0}, ${fn1}, &dong_porf_${memMod}_memory, &dong_porf_${memMod}_memory_pages },\n`;
 }
 registryC += `};\n\n`;
 registryC += `const size_t dong_porf_handler_count = ${handlers.length};\n\n`;

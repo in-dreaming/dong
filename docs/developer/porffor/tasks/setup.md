@@ -52,7 +52,7 @@ Dong 不在浏览器里跑 Porffor wasm，而是 `porf c`（2c 路径）生成 C
 | AOT 模块启动 | manifest + HTML 中 `data-porffor-module` 属性 |
 | `getElementById` | host import，返回 `nodeId`（数字句柄，**不是** DOM 对象） |
 | `setTextContent` / 读文本 | stage/commit import（见下） |
-| `addEventListener` | handler 不是函数引用，而是 **export 名字符串**；handler 编译为独立子模块，C++ 侧按名调用 |
+| `addEventListener` | handler 为 **export 名字符串**；优先同模块 `exports[]`（T15），过渡仍支持独立 `handlers` 子模块 |
 | `setTimeout` | 同上，回调 = export 名 |
 | 时间 / 日志 | `dong_time_now`、`dongLog` host import |
 | 定时器驱动 | C++ `PorfforHost::processTimers` 每帧 tick |
@@ -67,8 +67,8 @@ Dong 不在浏览器里跑 Porffor wasm，而是 `porf c`（2c 路径）生成 C
 
 | # | 事实 | 代码位置 | 相关任务 |
 |---|------|----------|----------|
-| F1 | 每个事件 handler 被编译为**独立模块**，有独立 `_memory`——**主模块与 handler 不共享全局变量 / 内存**。「状态放全局变量」只在同一模块内成立 | `generated/porffor/registry.h`（handler 独立 memory 字段）、`porffor_script_registry.cpp::callExport` | **T15**（根治）、T08 T12 T18 |
-| F2 | `callExport` 只能调 `int(*)(void)`，**不支持带参** | `registry.h` 的 `dong_porf_main_fn` | T09、T15 |
+| F1 | 事件 handler 可与主模块**同编译单元**：manifest `exports[]` 指向同模块 `{prefix}export_*` shim，**共享 `_memory` 与 static 全局**；旧 `handlers` 独立子模块仍支持过渡 | `porffor_compile.mjs`、`registry.h`、`2c.js` | T08 T12 T18 |
+| F2 | `callExport` 支持 **0 或 1 个 `f64` 参数**（`param_count` + `fn0`/`fn1`）；仍不支持 N>1 | `registry.h`、`porffor_script_registry.cpp` | T09、T15 |
 | F3 | host→wasm 字符串通道 `makeByteString` 是 `static` bump 分配器：跨模块共享且从不重置；从固定偏移 4096 写入，会覆盖模块自身数据；扩容 `realloc` 后**不写回**模块的 `char** memory` 全局（use-after-free） | `dong_porf_host.cpp` L49–71 | **T16**（根治）、T06 T08 T10 |
 | F4 | import 边界只传 f64，**丢失 Porffor 值类型**；host 把一切字符串按 bytestring（latin1）读，UTF-16 `string`（如中文字面量）会被误读 | `dong_porf_host.cpp::readByteString` | T16、T05 |
 | F5 | 事件分发按 `registry()->activeModule()`（= 最后 run 的模块）找 handler，多模块页面会路由错；listener 未记录所属模块 | `js_bindings_porffor.cpp::dispatchPorfforEvent` | T08 |

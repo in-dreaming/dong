@@ -31,3 +31,11 @@ function setTimeout(handlerName, ms) {
   dong_stage_1(handlerName);
   dong_commit_setTimeout();
 }
+
+function dongStateSetNum(slot, v) {
+  dong_state_set_num(slot, v);
+}
+
+function dongStateGetNum(slot) {
+  return dong_state_get_num(slot);
+}

@@ -12,7 +12,8 @@ public:
     explicit PorfforScriptRegistry(PorfforHost* host);
 
     bool run(const std::string& module_name);
-    bool callExport(const std::string& module_name, const std::string& export_name);
+    bool callExport(const std::string& module_name, const std::string& export_name,
+                    const double* args = nullptr, int arg_count = 0);
 
     const std::string& activeModule() const { return active_module_; }
 
