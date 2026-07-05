@@ -41,15 +41,9 @@
 ## 完成记录
 
 - **日期**: 2026-07-05
-- **决策**: `T20-decision.md`
-- **(a) 实现**: `parseHtml` / `formSerialize` / `selectionText` + repro `t20/`
-- **遗留**: CE/IME/(b) 类测试 C++ 驱动 — 见 `WAVE3-LEFTOVER.md`
-
-## 完成记录
-
-- **日期**: 2026-07-05
+- **Commit**: `8d34b91`
 - **决策矩阵**: `T20-decision.md`（评审合入）
 - **(a) 实现**: `dong_parse_html`、`dong_form_serialize`、`dong_selection_text` + prelude `parseHtml` / `formSerialize` / `selectionText`
 - **T13 对齐**: `T13-inventory-t20.md`（(b) blocked(T14)、(a) blocked(T06)）
 - **Repro**: `docs/developer/porffor/tasks/repro/t20/t20_verify.mjs`
-- **遗留**: CE/IME 多帧 C++ 驱动待 T14；`innerhtml_*` 测试迁移待 T06 试点
+- **遗留**: CE/IME/(b) 类测试 C++ 驱动 — 见 `WAVE3-LEFTOVER.md`

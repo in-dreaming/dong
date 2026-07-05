@@ -43,6 +43,7 @@
 ## 完成记录
 
 - **日期**: 2026-07-05
+- **Commit**: `8d34b91`
 - **决策**: **禁用 Promise**（修复成本 8–12+ 人天，超 5 人天阈值）
 - **文档**: `docs/developer/porffor/async-convention.md`（统一 T08/T09/T10 callback 模型）、`T19-promise-evaluation.md`（评估矩阵）
 - **Lint**: `dong/scripts/porffor_lint.mjs`；接入 `porffor_compile.mjs`、`porffor_inline_handlers.mjs`
