@@ -78,7 +78,7 @@ Dong 不在浏览器里跑 Porffor wasm，而是 `porf c`（2c 路径）生成 C
 | F9 | timer id = `timers_.size() + 1`，删除后会重复，不能直接做 clearTimeout | `dong_porf_host.cpp::timerSetTimeout` | T09 |
 | F10 | ~~模块 memory / host / registry 进程级单例~~ **已修（T17）**：`PorfforHost`/`PorfforScriptRegistry` per-View；每 (View,module) 独立 memory + `state_capture`/`state_apply` swap；C import 经 `thread_local g_active_host` | `porffor_script_registry.cpp`、`porffor_compile.mjs`、`dong_porf_host.cpp` | T17 |
 | F11 | 引擎每帧钩子顺序已固定：`processPendingTasks`（timers）→ `tickTimers` → `tickAnimationFrames`（Porffor 下为空实现）→ flush 布局 | `engine_view.cpp::tickProcessScriptTasks` | T09 |
-| F12 | 内联 handler 扫描在 Porffor 分支是打 warning 的 stub，但仍被 `engine_view` 调用 | `js_bindings_porffor.cpp::scanAndRegisterInlineEventHandlers` | T12 |
+| F12 | ~~内联 handler 扫描在 Porffor 分支是打 warning 的 stub~~ **已修（T12）**：build 期 `porffor_inline_handlers.mjs` 提取 `on*` → 同模块 export；运行时不再扫描 | `porffor_inline_handlers.mjs`、`engine_view.cpp` | T12 |
 | F13 | 模块 / handler 静态注册管线见上「编译管线」 | `scripts/porffor_compile.mjs` | T03 T12 T13 |
 | F14 | headless 多帧交互测试的实际 flag 是 `--eval-after-frame0-file <path>`（读文件，不是内联字符串） | `examples/html_render_test.cpp` | T14 |
 | F15 | HTML 测试共 **279** 个，其中约 150 个带 `<script>` | `dong/examples/data/tests/` | T13 |

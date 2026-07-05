@@ -1753,10 +1753,6 @@ struct EngineView::Impl {
                 ensureJSBindingsInitialized();
 
 #ifdef DONG_SCRIPT_ENGINE_PORFFOR
-            if (js_bindings) {
-                js_bindings->scanAndRegisterInlineEventHandlers();
-            }
-
             std::string mod = porffor_module_;
             if (mod.empty()) {
                 if (auto root = dom_manager->getRoot()) {
@@ -4585,6 +4581,23 @@ public:
 #endif
     }
 
+    bool callPorfforExport(const char* module_name, const char* export_name) {
+        activateViewContext();
+        if (!module_name || !export_name || !script_engine) {
+            return false;
+        }
+#ifdef DONG_SCRIPT_ENGINE_PORFFOR
+        DONG_PROFILE_SCOPE_CAT("Script::callPorfforExport", "script");
+        ensureJSBindingsInitialized();
+        return script_engine->callExport(std::string(module_name), std::string(export_name));
+#else
+        (void)module_name;
+        (void)export_name;
+        DONG_LOG_WARN("[EngineView] callPorfforExport only supported in Porffor mode");
+        return false;
+#endif
+    }
+
     void setPorfforModule(const std::string& module) { porffor_module_ = module; }
 };
 
@@ -4711,6 +4724,10 @@ bool EngineView::sendGamepadButton(int32_t gamepad_id, int button, bool pressed)
 
 bool EngineView::evalScript(const char* code) {
     return impl_ ? impl_->evalScript(code) : false;
+}
+
+bool EngineView::callPorfforExport(const char* module_name, const char* export_name) {
+    return impl_ ? impl_->callPorfforExport(module_name, export_name) : false;
 }
 
 void EngineView::setPorfforModule(const char* module_name) {

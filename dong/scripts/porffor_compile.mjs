@@ -6,6 +6,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { dongRoot, ensurePorfforDeps, porfforCompilerUrls } from './porffor_paths.mjs';
+import { lintPorfforSource } from './porffor_lint.mjs';
+import { extractInlineHandlers } from './porffor_inline_handlers.mjs';
 
 ensurePorfforDeps();
 
@@ -13,6 +15,12 @@ const outDir = path.join(dongRoot, 'generated', 'porffor');
 const manifestPath = path.join(dongRoot, 'scripts', 'porffor_manifest.json');
 
 const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+const inlineScripts = await extractInlineHandlers(manifest);
+const inlineNames = new Set(inlineScripts.map((s) => s.name));
+const scriptEntries = [
+  ...manifest.scripts.filter((s) => !inlineNames.has(s.name)),
+  ...inlineScripts,
+];
 
 process.argv.push('-O1', '--target=c', '--2c-wasm-imports', '--no-run', '--no-opt-unused', '--quiet');
 
@@ -103,6 +111,10 @@ function registerAllImports() {
   imp('dong_next_sibling', 1, 1);
   imp('dong_clone_node', 2, 1);
 
+  imp('dong_parse_html', 1, 0);
+  imp('dong_form_serialize', 1, 0);
+  imp('dong_selection_text', 0, 0);
+
   imp('dong_event_type', 0, 0);
   imp('dong_event_target', 0, 1);
   imp('dong_event_key', 0, 0);
@@ -114,6 +126,38 @@ function registerAllImports() {
   imp('dong_event_value', 0, 0);
   imp('dong_event_prevent_default', 0, 0);
   imp('dong_event_stop_propagation', 0, 0);
+
+  imp('dong_fetch_start', 2, 1);
+  imp('dong_commit_fetch_start', 0, 1);
+  imp('dong_fetch_abort', 1, 0);
+  imp('dong_fetch_request_id', 0, 1);
+  imp('dong_fetch_status', 0, 1);
+  imp('dong_fetch_ok', 0, 1);
+  imp('dong_fetch_body', 0, 0);
+  imp('dong_fetch_error', 0, 0);
+  imp('dong_fetch_header', 1, 0);
+
+  imp('dong_clipboard_write', 1, 0);
+  imp('dong_clipboard_read', 0, 0);
+  imp('dong_match_media', 1, 1);
+  imp('dong_css_supports', 2, 1);
+  imp('dong_dialog_show', 1, 0);
+  imp('dong_dialog_show_modal', 1, 0);
+  imp('dong_dialog_close', 2, 0);
+  imp('dong_dialog_return_value', 1, 0);
+  imp('dong_dialog_open', 1, 1);
+  imp('dong_scene_add_node', 1, 1);
+  imp('dong_scene_remove', 1, 0);
+  imp('dong_scene_set', 3, 0);
+  imp('dong_scene_find', 1, 1);
+  imp('dong_scene_on', 3, 0);
+  imp('dong_scene_clear', 0, 0);
+  imp('dong_scene_count', 0, 1);
+  imp('dong_text_layout', 1, 0);
+  imp('dong_clear_overlay', 0, 0);
+  imp('dong_render_text', 1, 0);
+  imp('dong_draw_rect', 1, 0);
+  imp('dong_draw_circle', 1, 0);
 }
 
 registerAllImports();
@@ -209,6 +253,7 @@ function emitModuleC(item) {
 }
 
 function compileSource(entry, source, logicalName, useModule) {
+  lintPorfforSource(source, entry.path ?? logicalName);
   process.argv = process.argv.filter(
     (a) => !a.startsWith('--2c-prefix=') && a !== '--module',
   );
@@ -231,6 +276,7 @@ function compileScript(entry) {
   const scriptPath = path.join(dongRoot, entry.path);
   const preludePath = path.join(dongRoot, manifest.prelude);
   const prelude = fs.readFileSync(preludePath, 'utf8');
+  lintPorfforSource(prelude, manifest.prelude);
   const user = fs.readFileSync(scriptPath, 'utf8');
   const manifestExports = entry.exports ?? [];
   const detectedExports = detectExports(user);
@@ -257,7 +303,7 @@ fs.mkdirSync(outDir, { recursive: true });
 const compiled = [];
 const handlers = [];
 
-for (const entry of manifest.scripts) {
+for (const entry of scriptEntries) {
   const item = compileScript(entry);
   compiled.push(item);
   emitModuleC(item);

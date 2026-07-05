@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html data-porffor-module="t12_inline">
+<head>
+  <meta charset="utf-8">
+  <title>T12 inline handlers</title>
+  <style>
+    body { font-family: sans-serif; padding: 24px; }
+    #status { margin-top: 12px; font-size: 24px; }
+    button { margin-right: 8px; padding: 8px 16px; }
+  </style>
+</head>
+<body>
+  <h1>T12 inline handlers</h1>
+  <button id="inc" onclick="count = count + 1; setTextContent(statusId, String(count))">+1 (id)</button>
+  <button onclick="count = count + 1; setTextContent(statusId, String(count))">+1 (auto id)</button>
+  <p id="status">0</p>
+</body>
+</html>

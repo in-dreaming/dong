@@ -47,3 +47,7 @@ export function inc__onclick() {
 4. 编译失败的 handler 报错信息含源 HTML 位置。
 5. 标记为 `dropped`（T13 约定）的 HTML 被整体跳过。
 6. 运行时 stub 调用点被接管/移除（F12）。
+
+## 完成记录
+
+- **2026-07-05**: build 期内联 handler 提取合入。新增 `dong/scripts/porffor_inline_handlers.mjs`（扫描 `on*`、自动 `__porf_auto_N` id、`{id}__{event}` export、T15 同模块多 export + 共享全局）；`porffor_compile.mjs` 在编译前调用；manifest `inline_html[]`；产物 HTML 剥离 `on*`。Porffor 路径移除 `scanAndRegisterInlineEventHandlers` 调用与 warning stub（F12）。验证：`docs/developer/porffor/tasks/repro/t12/t12_verify.mjs`。

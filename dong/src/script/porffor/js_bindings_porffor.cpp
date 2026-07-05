@@ -1,16 +1,23 @@
 #include "js_bindings_porffor.hpp"
 
 #include "dong_porf_host.hpp"
+#include "js_scene_porffor.hpp"
+#include "js_text_layout_porffor.hpp"
 #include "../porffor/script_engine_porffor.hpp"
 #include "../porffor/porffor_script_registry.hpp"
 #include "../../core/log.h"
 
 #include "../../dom/input_element.hpp"
 #include "../../dom/select_element.hpp"
+#include "../../dom/dialog_element.hpp"
 #include "../../dom/css/style_engine.hpp"
+#include "dong_platform.h"
+#include "dong_clipboard.h"
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <sstream>
+#include <unordered_set>
 
 namespace dong::script {
 namespace {
@@ -73,15 +80,115 @@ std::string getStyleValueForNode(const dom::DOMNodePtr& node, const std::string&
 }
 
 std::string nodeIdsToJson(const std::vector<uint64_t>& ids) {
-    std::string s = "[";
-    for (size_t i = 0; i < ids.size(); ++i) {
-        if (i > 0) {
-            s += ',';
-        }
-        s += std::to_string(ids[i]);
+  std::string s = "[";
+  for (size_t i = 0; i < ids.size(); ++i) {
+    if (i > 0) {
+      s += ',';
     }
-    s += ']';
-    return s;
+    s += std::to_string(ids[i]);
+  }
+  s += ']';
+  return s;
+}
+
+void collectFormControls(const dom::DOMNodePtr& node, std::vector<dom::DOMNodePtr>& out) {
+  if (!node) {
+    return;
+  }
+  for (const auto& ch : node->getChildren()) {
+    if (!ch) {
+      continue;
+    }
+    if (ch->getType() == dom::DOMNode::NodeType::ELEMENT) {
+      const std::string& tag = ch->getTagName();
+      if (tag == "input" || tag == "textarea" || tag == "select" || tag == "button") {
+        out.push_back(ch);
+      }
+    }
+    collectFormControls(ch, out);
+  }
+}
+
+bool serializeFormControl(const dom::DOMNodePtr& control,
+                          std::vector<std::pair<std::string, std::string>>& entries) {
+  if (!control || control->hasAttribute("disabled") || !control->hasAttribute("name")) {
+    return false;
+  }
+
+  const std::string& name = control->getAttribute("name");
+  const std::string& tag = control->getTagName();
+
+  if (tag == "input") {
+    std::string input_type = control->hasAttribute("type") ? control->getAttribute("type") : "text";
+    if (input_type == "checkbox" || input_type == "radio") {
+      if (!control->hasAttribute("checked")) {
+        return false;
+      }
+    }
+    std::string value;
+    if (input_type == "checkbox" || input_type == "radio") {
+      value = control->hasAttribute("value") ? control->getAttribute("value") : "on";
+    } else if (auto* st = dom::getInputState(control)) {
+      value = st->getValue();
+    } else if (control->hasAttribute("value")) {
+      value = control->getAttribute("value");
+    }
+    entries.push_back({name, value});
+    return true;
+  }
+
+  if (tag == "textarea") {
+    std::string value;
+    if (auto* st = dom::getInputState(control)) {
+      value = st->getValue();
+    } else {
+      value = control->getTextContent();
+    }
+    entries.push_back({name, value});
+    return true;
+  }
+
+  if (tag == "select") {
+    if (auto* st = dom::getSelectState(control)) {
+      entries.push_back({name, st->getSelectedValue()});
+      return true;
+    }
+    if (control->hasAttribute("value")) {
+      entries.push_back({name, control->getAttribute("value")});
+      return true;
+    }
+  }
+
+  return false;
+}
+
+std::string jsonEscape(const std::string& s) {
+  std::string out;
+  out.reserve(s.size() + 8);
+  for (char c : s) {
+    switch (c) {
+      case '\\': out += "\\\\"; break;
+      case '"': out += "\\\""; break;
+      case '\n': out += "\\n"; break;
+      case '\r': out += "\\r"; break;
+      case '\t': out += "\\t"; break;
+      default: out.push_back(c); break;
+    }
+  }
+  return out;
+}
+
+std::string formEntriesToJson(const std::vector<std::pair<std::string, std::string>>& entries) {
+  std::string out = "[";
+  for (size_t i = 0; i < entries.size(); ++i) {
+    if (i > 0) {
+      out += ',';
+    }
+    out += "{\"name\":\"" + jsonEscape(entries[i].first) + "\",\"value\":\"" +
+           jsonEscape(entries[i].second) + "\"}";
+  }
+  out += ']';
+  return out;
 }
 
 void collectElementsByTagName(const dom::DOMNodePtr& node, const std::string& tag,
@@ -123,7 +230,6 @@ void JSBindings::initialize() {
 }
 
 void JSBindings::scanAndRegisterInlineEventHandlers() {
-    DONG_LOG_WARN("[JSBindings/Porffor] inline event handlers not supported (AOT only)");
 }
 
 void JSBindings::resetForNewDOM() {
@@ -132,6 +238,9 @@ void JSBindings::resetForNewDOM() {
     named_listeners_.clear();
     event_bridge_ids_.clear();
     next_node_id_ = 1;
+    if (engine_ && engine_->host()) {
+        engine_->host()->resetFetches();
+    }
 }
 
 void JSBindings::registerAsNamedView() {
@@ -200,6 +309,7 @@ void JSBindings::tickTimers(double /*current_time_sec*/) {
     if (!engine_ || !engine_->host()) {
         return;
     }
+    engine_->host()->processFetches();
     const double now = engine_->host()->timeNow();
     engine_->host()->processTimers(now);
 }
@@ -819,6 +929,216 @@ uint64_t JSBindings::cloneNodeId(uint64_t node_id, bool deep) const {
         return 0;
     }
     return const_cast<JSBindings*>(this)->getNodeIdFor(clone);
+}
+
+void JSBindings::registerNodeTree(const dom::DOMNodePtr& node) {
+    if (!node) {
+        return;
+    }
+    getNodeIdFor(node);
+    for (const auto& child : node->getChildren()) {
+        registerNodeTree(child);
+    }
+}
+
+uint64_t JSBindings::parseHtmlDetached(const std::string& html) {
+    dom::HTMLParser parser;
+    const auto root = parser.parse(html);
+    if (!root) {
+        return 0;
+    }
+    registerNodeTree(root);
+    return getNodeIdFor(root);
+}
+
+std::string JSBindings::formSerializeJson(uint64_t form_id) const {
+    const auto form = findNodeById(form_id);
+    if (!form || form->getTagName() != "form") {
+        return "[]";
+    }
+    std::vector<dom::DOMNodePtr> controls;
+    collectFormControls(form, controls);
+    std::vector<std::pair<std::string, std::string>> entries;
+    for (const auto& control : controls) {
+        serializeFormControl(control, entries);
+    }
+    return formEntriesToJson(entries);
+}
+
+std::string JSBindings::getSelectionText() const {
+    if (!selection_) {
+        return {};
+    }
+    return selection_->toString();
+}
+
+std::string JSBindings::clipboardRead() const {
+    DongClipboard* cb = dong_platform_get_clipboard(dong_platform_get());
+    if (!cb) {
+        return {};
+    }
+    char* text = dong_clipboard_get_text(cb);
+    std::string result = text ? text : "";
+    free(text);
+    return result;
+}
+
+void JSBindings::clipboardWrite(const std::string& text) {
+    DongClipboard* cb = dong_platform_get_clipboard(dong_platform_get());
+    if (cb) {
+        dong_clipboard_set_text(cb, text.c_str());
+    }
+}
+
+bool JSBindings::matchMedia(const std::string& query) const {
+    if (!dom_manager_) {
+        return false;
+    }
+    auto* se = dom_manager_->getStyleEngine();
+    if (!se) {
+        return false;
+    }
+    float vw = layout_engine_ ? layout_engine_->getViewportWidth() : 800.0f;
+    float vh = layout_engine_ ? layout_engine_->getViewportHeight() : 600.0f;
+    const_cast<dom::StyleEngine*>(se)->setViewportSize(vw, vh);
+    return se->evaluateMediaQuery(query);
+}
+
+bool JSBindings::cssSupports(const std::string& property, const std::string& value) const {
+    std::string prop = property;
+    std::transform(prop.begin(), prop.end(), prop.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    static const std::unordered_set<std::string> supported = {
+        "display", "position", "width", "height", "margin", "padding", "border", "background",
+        "color", "font-size", "font-weight", "flex", "flex-direction", "justify-content",
+        "align-items", "overflow", "opacity", "z-index", "text-align", "line-height",
+        "border-radius", "cursor", "visibility",
+    };
+    if (!supported.count(prop)) {
+        return false;
+    }
+    if (value.empty()) {
+        return true;
+    }
+    std::string val = value;
+    std::transform(val.begin(), val.end(), val.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    return val.find("grid") == std::string::npos;
+}
+
+void JSBindings::dialogShow(uint64_t node_id) {
+    const auto node = resolveNode(node_id, "dialog.show");
+    if (!node) {
+        return;
+    }
+    auto* state = dom::getDialogState(node);
+    if (state && !state->isOpen()) {
+        state->show();
+        node->setAttribute("open", "");
+        node->markStyleDirty();
+        node->markLayoutDirty();
+    }
+}
+
+void JSBindings::dialogShowModal(uint64_t node_id) {
+    const auto node = resolveNode(node_id, "dialog.showModal");
+    if (!node) {
+        return;
+    }
+    auto* state = dom::getDialogState(node);
+    if (state && !state->isOpen()) {
+        state->showModal();
+        node->setAttribute("open", "");
+        node->markStyleDirty();
+        node->markLayoutDirty();
+    }
+}
+
+void JSBindings::dialogClose(uint64_t node_id, const std::string& return_value) {
+    const auto node = resolveNode(node_id, "dialog.close");
+    if (!node) {
+        return;
+    }
+    auto* state = dom::getDialogState(node);
+    if (state && state->isOpen()) {
+        state->close(return_value);
+        node->removeAttribute("open");
+        node->markStyleDirty();
+        node->markLayoutDirty();
+    }
+}
+
+std::string JSBindings::dialogReturnValue(uint64_t node_id) const {
+    const auto node = findNodeById(node_id);
+    if (!node) {
+        return {};
+    }
+    auto* state = dom::getDialogState(node);
+    return state ? state->getReturnValue() : std::string{};
+}
+
+bool JSBindings::dialogOpen(uint64_t node_id) const {
+    const auto node = findNodeById(node_id);
+    if (!node) {
+        return false;
+    }
+    auto* state = dom::getDialogState(node);
+    return state && state->isOpen();
+}
+
+uint32_t JSBindings::sceneAddNode(const std::string& config_json) {
+    return porfforSceneAddNode(config_json);
+}
+
+void JSBindings::sceneRemove(uint32_t id) {
+    porfforSceneRemove(id);
+}
+
+void JSBindings::sceneSet(uint32_t id, const std::string& prop, const std::string& value) {
+    porfforSceneSet(id, prop, value);
+}
+
+int32_t JSBindings::sceneFind(const std::string& name) {
+    return porfforSceneFind(name);
+}
+
+void JSBindings::sceneOn(uint32_t id, const std::string& type, const std::string& export_name,
+                         const std::string& module_name) {
+    PorfforScriptRegistry* registry = nullptr;
+    if (engine_) {
+        registry = engine_->registry();
+    }
+    porfforSceneOn(id, type, export_name, module_name, registry);
+}
+
+void JSBindings::sceneClear() {
+    porfforSceneClear();
+}
+
+uint32_t JSBindings::sceneCount() const {
+    return porfforSceneCount();
+}
+
+std::string JSBindings::textLayout(const std::string& config_json) {
+    return porfforTextLayout(config_json);
+}
+
+void JSBindings::clearOverlay() {
+    porfforClearOverlay(overlay_draw_);
+}
+
+void JSBindings::renderText(const std::string& config_json) {
+    porfforRenderText(config_json, overlay_draw_);
+}
+
+void JSBindings::drawRect(const std::string& config_json) {
+    porfforDrawRect(config_json, overlay_draw_);
+}
+
+void JSBindings::drawCircle(const std::string& config_json) {
+    porfforDrawCircle(config_json, overlay_draw_);
 }
 
 void resetFetchState(void* /*ctx*/) {}

@@ -1,4 +1,14 @@
 set(DONG_PORFFOR_MODULE_SOURCES
   "${DONG_PORFFOR_OUT_DIR}/hello_dom.c"
   "${DONG_PORFFOR_OUT_DIR}/js_microbench.c"
+  "${DONG_PORFFOR_OUT_DIR}/test_hidden_attr.c"
+  "${DONG_PORFFOR_OUT_DIR}/test_checkbox_toggle.c"
+  "${DONG_PORFFOR_OUT_DIR}/test_dom_content_loaded.c"
+  "${DONG_PORFFOR_OUT_DIR}/test_porffor_greeting.c"
+  "${DONG_PORFFOR_OUT_DIR}/test_class_demo.c"
+  "${DONG_PORFFOR_OUT_DIR}/test_input_value.c"
+  "${DONG_PORFFOR_OUT_DIR}/test_mf_text.c"
+  "${DONG_PORFFOR_OUT_DIR}/test_mf_class.c"
+  "${DONG_PORFFOR_OUT_DIR}/test_mf_style.c"
+  "${DONG_PORFFOR_OUT_DIR}/t12_inline.c"
 )

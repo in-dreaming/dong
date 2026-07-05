@@ -26,6 +26,7 @@ add_custom_command(
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
     DEPENDS
         "${DONG_PORFFOR_COMPILE_SCRIPT}"
+        "${CMAKE_SOURCE_DIR}/scripts/porffor_inline_handlers.mjs"
         "${CMAKE_SOURCE_DIR}/scripts/porffor_paths.mjs"
         "${DONG_PORFFOR_MANIFEST}"
         "${CMAKE_SOURCE_DIR}/third_party/porffor/compiler/index.js"
@@ -50,7 +51,8 @@ function(dong_attach_porffor_scripts target_name)
         src/script/porffor/porffor_script_registry.cpp
         src/script/porffor/script_engine_porffor.cpp
         src/script/porffor/js_bindings_porffor.cpp
-        src/script/porffor/js_scene_stub_porffor.cpp
+        src/script/porffor/js_scene_porffor.cpp
+        src/script/porffor/js_text_layout_porffor.cpp
     )
     target_include_directories(${target_name} PRIVATE
         "${DONG_PORFFOR_OUT_DIR}"

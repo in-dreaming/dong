@@ -16,20 +16,115 @@ extern void dong_porf_js_microbench__porf_init(void);
 extern void dong_porf_js_microbench_state_capture(dong_porf_js_microbench_state_t* out);
 extern void dong_porf_js_microbench_state_apply(const dong_porf_js_microbench_state_t* in);
 
+extern int dong_porf_test_hidden_attr_main(void);
+extern char* dong_porf_test_hidden_attr_memory;
+extern unsigned int dong_porf_test_hidden_attr_memory_pages;
+extern void dong_porf_test_hidden_attr__porf_init(void);
+extern void dong_porf_test_hidden_attr_state_capture(dong_porf_test_hidden_attr_state_t* out);
+extern void dong_porf_test_hidden_attr_state_apply(const dong_porf_test_hidden_attr_state_t* in);
+
+extern int dong_porf_test_checkbox_toggle_main(void);
+extern char* dong_porf_test_checkbox_toggle_memory;
+extern unsigned int dong_porf_test_checkbox_toggle_memory_pages;
+extern void dong_porf_test_checkbox_toggle__porf_init(void);
+extern void dong_porf_test_checkbox_toggle_state_capture(dong_porf_test_checkbox_toggle_state_t* out);
+extern void dong_porf_test_checkbox_toggle_state_apply(const dong_porf_test_checkbox_toggle_state_t* in);
+
+extern int dong_porf_test_dom_content_loaded_main(void);
+extern char* dong_porf_test_dom_content_loaded_memory;
+extern unsigned int dong_porf_test_dom_content_loaded_memory_pages;
+extern void dong_porf_test_dom_content_loaded__porf_init(void);
+extern void dong_porf_test_dom_content_loaded_state_capture(dong_porf_test_dom_content_loaded_state_t* out);
+extern void dong_porf_test_dom_content_loaded_state_apply(const dong_porf_test_dom_content_loaded_state_t* in);
+
+extern int dong_porf_test_porffor_greeting_main(void);
+extern char* dong_porf_test_porffor_greeting_memory;
+extern unsigned int dong_porf_test_porffor_greeting_memory_pages;
+extern void dong_porf_test_porffor_greeting__porf_init(void);
+extern void dong_porf_test_porffor_greeting_state_capture(dong_porf_test_porffor_greeting_state_t* out);
+extern void dong_porf_test_porffor_greeting_state_apply(const dong_porf_test_porffor_greeting_state_t* in);
+
+extern int dong_porf_test_class_demo_main(void);
+extern char* dong_porf_test_class_demo_memory;
+extern unsigned int dong_porf_test_class_demo_memory_pages;
+extern void dong_porf_test_class_demo__porf_init(void);
+extern void dong_porf_test_class_demo_state_capture(dong_porf_test_class_demo_state_t* out);
+extern void dong_porf_test_class_demo_state_apply(const dong_porf_test_class_demo_state_t* in);
+
+extern int dong_porf_test_input_value_main(void);
+extern char* dong_porf_test_input_value_memory;
+extern unsigned int dong_porf_test_input_value_memory_pages;
+extern void dong_porf_test_input_value__porf_init(void);
+extern void dong_porf_test_input_value_state_capture(dong_porf_test_input_value_state_t* out);
+extern void dong_porf_test_input_value_state_apply(const dong_porf_test_input_value_state_t* in);
+
+extern int dong_porf_test_mf_text_main(void);
+extern char* dong_porf_test_mf_text_memory;
+extern unsigned int dong_porf_test_mf_text_memory_pages;
+extern void dong_porf_test_mf_text__porf_init(void);
+extern void dong_porf_test_mf_text_state_capture(dong_porf_test_mf_text_state_t* out);
+extern void dong_porf_test_mf_text_state_apply(const dong_porf_test_mf_text_state_t* in);
+
+extern int dong_porf_test_mf_class_main(void);
+extern char* dong_porf_test_mf_class_memory;
+extern unsigned int dong_porf_test_mf_class_memory_pages;
+extern void dong_porf_test_mf_class__porf_init(void);
+extern void dong_porf_test_mf_class_state_capture(dong_porf_test_mf_class_state_t* out);
+extern void dong_porf_test_mf_class_state_apply(const dong_porf_test_mf_class_state_t* in);
+
+extern int dong_porf_test_mf_style_main(void);
+extern char* dong_porf_test_mf_style_memory;
+extern unsigned int dong_porf_test_mf_style_memory_pages;
+extern void dong_porf_test_mf_style__porf_init(void);
+extern void dong_porf_test_mf_style_state_capture(dong_porf_test_mf_style_state_t* out);
+extern void dong_porf_test_mf_style_state_apply(const dong_porf_test_mf_style_state_t* in);
+
+extern int dong_porf_t12_inline_main(void);
+extern char* dong_porf_t12_inline_memory;
+extern unsigned int dong_porf_t12_inline_memory_pages;
+extern void dong_porf_t12_inline__porf_init(void);
+extern void dong_porf_t12_inline_state_capture(dong_porf_t12_inline_state_t* out);
+extern void dong_porf_t12_inline_state_apply(const dong_porf_t12_inline_state_t* in);
+
 extern int dong_porf_hello_dom_export_onBtnClick(void);
+
+extern int dong_porf_test_mf_text_export_afterFrame0(void);
+
+extern int dong_porf_test_mf_class_export_afterFrame0(void);
+
+extern int dong_porf_test_mf_style_export_afterFrame0(void);
+
+extern int dong_porf_t12_inline_export_inc__onclick(void);
+
+extern int dong_porf_t12_inline_export___porf_auto_0__onclick(void);
 
 const dong_porf_module_t dong_porf_modules[] = {
   { "hello_dom", dong_porf_hello_dom_main, &dong_porf_hello_dom_memory, &dong_porf_hello_dom_memory_pages, dong_porf_hello_dom__porf_init, dong_porf_hello_dom_state_capture, dong_porf_hello_dom_state_apply, sizeof(dong_porf_hello_dom_state_t) },
   { "js_microbench", dong_porf_js_microbench_main, &dong_porf_js_microbench_memory, &dong_porf_js_microbench_memory_pages, dong_porf_js_microbench__porf_init, dong_porf_js_microbench_state_capture, dong_porf_js_microbench_state_apply, sizeof(dong_porf_js_microbench_state_t) },
+  { "test_hidden_attr", dong_porf_test_hidden_attr_main, &dong_porf_test_hidden_attr_memory, &dong_porf_test_hidden_attr_memory_pages, dong_porf_test_hidden_attr__porf_init, dong_porf_test_hidden_attr_state_capture, dong_porf_test_hidden_attr_state_apply, sizeof(dong_porf_test_hidden_attr_state_t) },
+  { "test_checkbox_toggle", dong_porf_test_checkbox_toggle_main, &dong_porf_test_checkbox_toggle_memory, &dong_porf_test_checkbox_toggle_memory_pages, dong_porf_test_checkbox_toggle__porf_init, dong_porf_test_checkbox_toggle_state_capture, dong_porf_test_checkbox_toggle_state_apply, sizeof(dong_porf_test_checkbox_toggle_state_t) },
+  { "test_dom_content_loaded", dong_porf_test_dom_content_loaded_main, &dong_porf_test_dom_content_loaded_memory, &dong_porf_test_dom_content_loaded_memory_pages, dong_porf_test_dom_content_loaded__porf_init, dong_porf_test_dom_content_loaded_state_capture, dong_porf_test_dom_content_loaded_state_apply, sizeof(dong_porf_test_dom_content_loaded_state_t) },
+  { "test_porffor_greeting", dong_porf_test_porffor_greeting_main, &dong_porf_test_porffor_greeting_memory, &dong_porf_test_porffor_greeting_memory_pages, dong_porf_test_porffor_greeting__porf_init, dong_porf_test_porffor_greeting_state_capture, dong_porf_test_porffor_greeting_state_apply, sizeof(dong_porf_test_porffor_greeting_state_t) },
+  { "test_class_demo", dong_porf_test_class_demo_main, &dong_porf_test_class_demo_memory, &dong_porf_test_class_demo_memory_pages, dong_porf_test_class_demo__porf_init, dong_porf_test_class_demo_state_capture, dong_porf_test_class_demo_state_apply, sizeof(dong_porf_test_class_demo_state_t) },
+  { "test_input_value", dong_porf_test_input_value_main, &dong_porf_test_input_value_memory, &dong_porf_test_input_value_memory_pages, dong_porf_test_input_value__porf_init, dong_porf_test_input_value_state_capture, dong_porf_test_input_value_state_apply, sizeof(dong_porf_test_input_value_state_t) },
+  { "test_mf_text", dong_porf_test_mf_text_main, &dong_porf_test_mf_text_memory, &dong_porf_test_mf_text_memory_pages, dong_porf_test_mf_text__porf_init, dong_porf_test_mf_text_state_capture, dong_porf_test_mf_text_state_apply, sizeof(dong_porf_test_mf_text_state_t) },
+  { "test_mf_class", dong_porf_test_mf_class_main, &dong_porf_test_mf_class_memory, &dong_porf_test_mf_class_memory_pages, dong_porf_test_mf_class__porf_init, dong_porf_test_mf_class_state_capture, dong_porf_test_mf_class_state_apply, sizeof(dong_porf_test_mf_class_state_t) },
+  { "test_mf_style", dong_porf_test_mf_style_main, &dong_porf_test_mf_style_memory, &dong_porf_test_mf_style_memory_pages, dong_porf_test_mf_style__porf_init, dong_porf_test_mf_style_state_capture, dong_porf_test_mf_style_state_apply, sizeof(dong_porf_test_mf_style_state_t) },
+  { "t12_inline", dong_porf_t12_inline_main, &dong_porf_t12_inline_memory, &dong_porf_t12_inline_memory_pages, dong_porf_t12_inline__porf_init, dong_porf_t12_inline_state_capture, dong_porf_t12_inline_state_apply, sizeof(dong_porf_t12_inline_state_t) },
 };
 
-const size_t dong_porf_module_count = 2;
+const size_t dong_porf_module_count = 12;
 
 const dong_porf_handler_t dong_porf_handlers[] = {
   { "hello_dom", "onBtnClick", NULL, 0, (dong_porf_export_fn0)dong_porf_hello_dom_export_onBtnClick, NULL, &dong_porf_hello_dom_memory, &dong_porf_hello_dom_memory_pages },
+  { "test_mf_text", "afterFrame0", NULL, 0, (dong_porf_export_fn0)dong_porf_test_mf_text_export_afterFrame0, NULL, &dong_porf_test_mf_text_memory, &dong_porf_test_mf_text_memory_pages },
+  { "test_mf_class", "afterFrame0", NULL, 0, (dong_porf_export_fn0)dong_porf_test_mf_class_export_afterFrame0, NULL, &dong_porf_test_mf_class_memory, &dong_porf_test_mf_class_memory_pages },
+  { "test_mf_style", "afterFrame0", NULL, 0, (dong_porf_export_fn0)dong_porf_test_mf_style_export_afterFrame0, NULL, &dong_porf_test_mf_style_memory, &dong_porf_test_mf_style_memory_pages },
+  { "t12_inline", "inc__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_inline_export_inc__onclick, NULL, &dong_porf_t12_inline_memory, &dong_porf_t12_inline_memory_pages },
+  { "t12_inline", "__porf_auto_0__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_inline_export___porf_auto_0__onclick, NULL, &dong_porf_t12_inline_memory, &dong_porf_t12_inline_memory_pages },
 };
 
-const size_t dong_porf_handler_count = 1;
+const size_t dong_porf_handler_count = 6;
 
 const dong_porf_module_t* dong_porf_find_module(const char* name) {
   if (!name) return NULL;

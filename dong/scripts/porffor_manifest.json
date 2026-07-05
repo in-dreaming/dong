@@ -1,5 +1,13 @@
 {
   "prelude": "src/script/porffor/dong_porffor_prelude.js",
+  "inline_html": [
+    {
+      "name": "t12_inline",
+      "html": "../docs/developer/porffor/tasks/repro/t12/t12_inline.html",
+      "out_js": "generated/porffor/t12_inline.js",
+      "out_html": "generated/porffor/t12_inline.html"
+    }
+  ],
   "scripts": [
     {
       "name": "hello_dom",
@@ -9,6 +17,46 @@
     {
       "name": "js_microbench",
       "path": "examples/data/benchmarks/js_microbench_porffor.js"
+    },
+    {
+      "name": "test_hidden_attr",
+      "path": "examples/porffor/tests/test_hidden_attr.js"
+    },
+    {
+      "name": "test_checkbox_toggle",
+      "path": "examples/porffor/tests/test_checkbox_toggle.js"
+    },
+    {
+      "name": "test_dom_content_loaded",
+      "path": "examples/porffor/tests/test_dom_content_loaded.js"
+    },
+    {
+      "name": "test_porffor_greeting",
+      "path": "examples/porffor/tests/test_porffor_greeting.js"
+    },
+    {
+      "name": "test_class_demo",
+      "path": "examples/porffor/tests/test_class_demo.js"
+    },
+    {
+      "name": "test_input_value",
+      "path": "examples/porffor/tests/test_input_value.js"
+    },
+    {
+      "name": "test_mf_text",
+      "path": "examples/porffor/tests/test_mf_text.js",
+      "exports": ["afterFrame0"]
+    },
+    {
+      "name": "test_mf_class",
+      "path": "examples/porffor/tests/test_mf_class.js",
+      "exports": ["afterFrame0"]
+    },
+    {
+      "name": "test_mf_style",
+      "path": "examples/porffor/tests/test_mf_style.js",
+      "exports": ["afterFrame0"]
     }
-  ]
+  ],
+  "snippets": []
 }
