@@ -51,7 +51,7 @@ C++ 侧：请求完成后，在**下一帧主线程**把结果写入"当前 fetc
 ## 完成记录
 
 - **日期**: 2026-07-05
-- **Commit**: (见 feature/porffor 分支)
+- **Commit**: `8d34b91`
 - **实现要点**:
   - callback 版 fetch：`dong_fetch_start(url, exportName) -> requestId`，下一帧 `processFetches` 写入 fetch 结果槽并 `callExport`
   - 结果槽：`fetchRequestId` / `fetchStatus` / `fetchOk` + T16 `pullHostString` 读 `fetchBody` / `fetchError`；回调外读空 + debug 日志

@@ -31,10 +31,9 @@ Dong 的多帧回归测试（contentEditable bold 等）在指定帧后向 Quick
 
 ## 完成记录
 
-- `dong/scripts/porffor_test_tags.mjs`：标记解析（ready/pending/blocked/dropped）+ 默认规则；`porffor_test_tags.test.mjs` 单测。
-- `dong/scripts/porffor_test_inventory.mjs` + `generate_t13_inventory.ps1` → `T13-test-inventory.md`（285 测，ready 138 / pending 147）。
-- 构建组织选型：方案 a) 单 runner 全量 registry，写入盘点 doc。
-- 试点迁移 11 个 ready：2 静态显式标记 + 6 script 模块 + 3 T14 多帧 pilot；`porffor_manifest.json` 注册 8 个新模块。
-- `zig build run-porffor-tests` + `scripts/run-porffor-tests.mjs` CI runner（ready 集 + 覆盖率摘要）。
-- `docs/developer/porffor/porffor-migration-checklist.md` 迁移 checklist。
-- 验证：`porffor_test_tags.test.mjs`（需 node）；盘点由 PS1 生成。全量渲染需 `zig build` 后 `run-porffor-tests`。
+- **Commit**: `8d34b91`
+- **runner**: `html_render_test --call-export-after-frame0 module::exportName`（Porffor 替代 `--eval-after-frame0-file`）
+- **生成器**: `porffor_snippet_compile.mjs`、`porffor_snippet_inventory.mjs` → `T14-snippet-inventory.md`
+- **试点**: 3 个多帧 pilot（`test_porffor_mf_{text,class,style}.html` + `.mf.json`）；`run-porffor-tests.mjs` 自动传 flag
+- **方案 B**: 5 个 CE snippet 归入 T20 / C++ 输入驱动，无悬空项
+- **遗留**: 试点多帧与 QuickJS baseline 逐帧对比需 `zig build` 后本机跑 — 见 `WAVE3-LEFTOVER.md`

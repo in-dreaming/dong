@@ -68,6 +68,7 @@ Porffor 模块是**静态链接**进引擎的（事实 F13：manifest → `porff
 
 ## 完成记录
 
+- **Commit**: `8d34b91`
 - 标记解析：`porffor_test_tags.mjs` + `porffor_test_tags.test.mjs`。
 - 全量盘点：`T13-test-inventory.md`（285 文件，ready 138 = 48.4%）。
 - 构建选型：方案 a) 记入盘点 §构建组织选型。

@@ -50,4 +50,4 @@ export function inc__onclick() {
 
 ## 完成记录
 
-- **2026-07-05**: build 期内联 handler 提取合入。新增 `dong/scripts/porffor_inline_handlers.mjs`（扫描 `on*`、自动 `__porf_auto_N` id、`{id}__{event}` export、T15 同模块多 export + 共享全局）；`porffor_compile.mjs` 在编译前调用；manifest `inline_html[]`；产物 HTML 剥离 `on*`。Porffor 路径移除 `scanAndRegisterInlineEventHandlers` 调用与 warning stub（F12）。验证：`docs/developer/porffor/tasks/repro/t12/t12_verify.mjs`。
+- **2026-07-05**（commit `8d34b91`）: build 期内联 handler 提取合入。新增 `dong/scripts/porffor_inline_handlers.mjs`（扫描 `on*`、自动 `__porf_auto_N` id、`{id}__{event}` export、T15 同模块多 export + 共享全局）；`porffor_compile.mjs` 在编译前调用；manifest `inline_html[]`；产物 HTML 剥离 `on*`。Porffor 路径移除 `scanAndRegisterInlineEventHandlers` 调用与 warning stub（F12）。验证：`docs/developer/porffor/tasks/repro/t12/t12_verify.mjs`。

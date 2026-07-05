@@ -49,6 +49,20 @@
 ## 完成记录
 
 - **日期**: 2026-07-05
+- **Commit**: (见 git log)
+- **子项**:
+  - 11.1 clipboard：`dong_clipboard_read/write` + prelude `clipboardRead/Write`；`test_porffor_clipboard_cn.html` 中文往返
+  - 11.2 matchMedia / CSS.supports：`dong_match_media`（`StyleEngine::evaluateMediaQuery` + viewport）、`dong_css_supports`；prelude `matchMedia` / `cssSupports`
+  - 11.3 dialog：`dong_dialog_show/show_modal/close/return_value/open` + prelude 包装
+  - 11.4 scene graph：替换 `js_scene_stub_porffor.cpp` → `js_scene_porffor.cpp`（JSON config flat imports）
+  - 11.5 textLayout / overlay：`js_text_layout_porffor.cpp` + `dong_text_layout/clear_overlay/render_text/draw_rect/draw_circle`
+- **验证**: `docs/developer/porffor/tasks/repro/t11/t11_verify.mjs`（portable node）；t08 回归通过；clang native smoke 在无 clang 环境 SKIP
+- **遗留**: dialog `close` 事件仍走 T08 扩展；`renderText/drawRect/drawCircle` 仅 host 直通，无 QuickJS 对象 API 对等
+
+## 完成记录
+
+- **日期**: 2026-07-05
+- **Commit**: `8d34b91`
 - **实现**: clipboard / matchMedia / cssSupports / dialog / scene graph / textLayout 扁平 import + prelude；`js_scene_porffor.cpp`、`js_text_layout_porffor.cpp`
 - **验证**: repro `t11/`（若存在）；`porffor_compile` import 注册
 - **遗留**: `test_scene_graph.html` Porffor CI smoke；overlay drawRect/renderText 示例对齐 — 见 `WAVE3-LEFTOVER.md`

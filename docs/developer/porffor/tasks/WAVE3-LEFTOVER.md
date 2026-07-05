@@ -1,6 +1,6 @@
 # Wave 3 遗留事项（2026-07-05）
 
-Wave 3 任务 T10–T14、T19、T20 已合入 `feature/porffor`。以下为**未在本波完成**或需后续 wave 承接的项。
+Wave 3 任务 T10–T14、T19、T20 已合入 `feature/porffor`（**commit `8d34b91`**）。以下为**未在本波完成**或需后续 wave 承接的项。
 
 ## 合入摘要
 
