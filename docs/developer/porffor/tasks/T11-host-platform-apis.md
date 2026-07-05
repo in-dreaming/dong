@@ -49,7 +49,7 @@
 ## 完成记录
 
 - **日期**: 2026-07-05
-- **Commit**: `8d34b91`（实现）、`3eef718`（完成记录）
+- **Commit**: `8d34b91`（实现）、`88d0413`（完成记录）
 - **子项**:
   - 11.1 clipboard：`dong_clipboard_read/write` + prelude `clipboardRead/Write`；`test_porffor_clipboard_cn.html` 中文往返
   - 11.2 matchMedia / CSS.supports：`dong_match_media`（`StyleEngine::evaluateMediaQuery` + viewport）、`dong_css_supports`；prelude `matchMedia` / `cssSupports`
