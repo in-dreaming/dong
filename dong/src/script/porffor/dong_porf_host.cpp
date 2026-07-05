@@ -3,15 +3,24 @@
 #include "registry.h"
 #include "dong_porf_runtime.h"
 #include "../../core/log.h"
+#include "../../core/resource_loader.hpp"
 #include "porffor_script_registry.hpp"
 #include "js_bindings_porffor.hpp"
+#include "dong_clipboard.h"
+#include "dong_platform.h"
+#include "../../dom/dialog_element.hpp"
+#include "../../dom/html/html_parser.hpp"
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
 #include <array>
+#include <mutex>
+#include <thread>
+#include <unordered_set>
 
 namespace dong::script {
 namespace {
@@ -22,6 +31,90 @@ std::array<double, 256> g_state_nums{};
 
 JSBindings* activeBindings() {
     return g_active_host ? g_active_host->bindings() : nullptr;
+}
+
+std::string normalizeFetchUrl(const std::string& url) {
+    if (url.rfind("ui://", 0) == 0) {
+        return url.substr(5);
+    }
+    return url;
+}
+
+bool matchMediaQuery(const std::string& query, JSBindings* bindings) {
+    std::string q = query;
+    std::transform(q.begin(), q.end(), q.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    if (q.find(',') != std::string::npos || q.find(" and ") != std::string::npos ||
+        q.find(" or ") != std::string::npos) {
+        return false;
+    }
+    if (q.find("(prefers-color-scheme: light)") != std::string::npos) {
+        return true;
+    }
+    if (q.find("(prefers-color-scheme: dark)") != std::string::npos) {
+        return false;
+    }
+    if (q.find("(prefers-reduced-motion: reduce)") != std::string::npos) {
+        return false;
+    }
+    const float vw =
+        bindings && bindings->layout_engine_ ? bindings->layout_engine_->getViewportWidth() : 800.0f;
+    const float vh =
+        bindings && bindings->layout_engine_ ? bindings->layout_engine_->getViewportHeight() : 600.0f;
+    if (q.find("(orientation: portrait)") != std::string::npos) {
+        return vh >= vw;
+    }
+    if (q.find("(orientation: landscape)") != std::string::npos) {
+        return vw > vh;
+    }
+    if (q.find("(min-width:") != std::string::npos) {
+        const size_t width_start = q.find("(min-width:") + 11;
+        const size_t width_end = q.find(')', width_start);
+        if (width_end != std::string::npos) {
+            std::string width_str = q.substr(width_start, width_end - width_start);
+            const size_t px_pos = width_str.find("px");
+            if (px_pos != std::string::npos) {
+                width_str = width_str.substr(0, px_pos);
+            }
+            try {
+                return static_cast<int>(vw) >= std::stoi(width_str);
+            } catch (...) {
+                return false;
+            }
+        }
+    }
+    if (q.find("(max-width:") != std::string::npos) {
+        const size_t width_start = q.find("(max-width:") + 11;
+        const size_t width_end = q.find(')', width_start);
+        if (width_end != std::string::npos) {
+            std::string width_str = q.substr(width_start, width_end - width_start);
+            const size_t px_pos = width_str.find("px");
+            if (px_pos != std::string::npos) {
+                width_str = width_str.substr(0, px_pos);
+            }
+            try {
+                return static_cast<int>(vw) <= std::stoi(width_str);
+            } catch (...) {
+                return false;
+            }
+        }
+    }
+    return false;
+}
+
+bool cssPropertySupported(const std::string& prop) {
+    static const std::unordered_set<std::string> supported = {
+        "display",       "position",    "width",         "height",        "margin",
+        "padding",       "border",      "background",    "color",         "font-size",
+        "font-weight",   "flex",        "flex-direction","justify-content","align-items",
+        "overflow",      "opacity",     "transform",     "z-index",       "top",
+        "left",          "right",       "bottom",        "text-align",    "line-height",
+        "border-radius", "box-shadow",  "cursor",        "visibility",    "white-space",
+    };
+    std::string key = prop;
+    std::transform(key.begin(), key.end(), key.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return supported.count(key) > 0;
 }
 
 } // namespace
@@ -703,6 +796,384 @@ void PorfforHost::eventStopPropagationFlag() {
     }
 }
 
+void PorfforHost::pushFetchSlot() {
+    fetch_slot_stack_.push_back(std::move(fetch_slot_));
+    fetch_slot_ = FetchSlot{};
+}
+
+void PorfforHost::popFetchSlot() {
+    if (fetch_slot_stack_.empty()) {
+        fetch_slot_ = FetchSlot{};
+        return;
+    }
+    fetch_slot_ = std::move(fetch_slot_stack_.back());
+    fetch_slot_stack_.pop_back();
+}
+
+bool PorfforHost::fetchSlotReadable() const {
+    return fetch_slot_active_;
+}
+
+double PorfforHost::fetchStart(double url_ptr, double export_ptr) {
+    const std::string url = readByteString(url_ptr);
+    const std::string export_name = readByteString(export_ptr);
+    if (url.empty() || export_name.empty()) {
+        return 0.0;
+    }
+
+    const uint64_t id = next_fetch_id_++;
+    PendingFetch pending;
+    pending.export_name = export_name;
+    if (registry_) {
+        pending.module_name = registry_->activeModule();
+    }
+    {
+        std::lock_guard<std::mutex> lock(fetch_mutex_);
+        pending_fetches_.emplace(id, std::move(pending));
+    }
+
+    std::string resource_root;
+    if (auto* bindings = activeBindings()) {
+        if (bindings->dom_manager_) {
+            resource_root = bindings->dom_manager_->getResourceRoot();
+        }
+    }
+    const std::string norm_url = normalizeFetchUrl(url);
+
+    auto load_and_queue = [this, id, norm_url, resource_root]() {
+        dong::ResourceLoadResult result = dong::loadTextResource(norm_url, resource_root);
+
+        FetchCompletion completion;
+        completion.id = id;
+        completion.result = std::move(result);
+
+        std::lock_guard<std::mutex> lock(fetch_mutex_);
+        const auto it = pending_fetches_.find(id);
+        if (it != pending_fetches_.end()) {
+            completion.module_name = it->second.module_name;
+            completion.export_name = it->second.export_name;
+        }
+        fetch_completions_.push_back(std::move(completion));
+    };
+
+    if (dong::isHttpUrl(norm_url)) {
+        std::thread(load_and_queue).detach();
+    } else {
+        load_and_queue();
+    }
+
+    return static_cast<double>(id);
+}
+
+double PorfforHost::commitFetchStart() {
+    return fetchStart(stage_0_, stage_1_);
+}
+
+void PorfforHost::fetchAbort(double request_id) {
+    if (request_id <= 0.0) {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(fetch_mutex_);
+    const auto it = pending_fetches_.find(static_cast<uint64_t>(request_id));
+    if (it != pending_fetches_.end()) {
+        it->second.aborted = true;
+        pending_fetches_.erase(it);
+    }
+}
+
+void PorfforHost::resetFetches() {
+    {
+        std::lock_guard<std::mutex> lock(fetch_mutex_);
+        pending_fetches_.clear();
+        fetch_completions_.clear();
+    }
+    fetch_slot_ = FetchSlot{};
+    fetch_slot_stack_.clear();
+    fetch_slot_active_ = false;
+}
+
+double PorfforHost::fetchRequestId() const {
+    if (!fetchSlotReadable()) {
+        DONG_LOG_DEBUG("[PorfforHost] fetchRequestId outside callback");
+        return 0.0;
+    }
+    return static_cast<double>(fetch_slot_.request_id);
+}
+
+double PorfforHost::fetchStatus() const {
+    if (!fetchSlotReadable()) {
+        DONG_LOG_DEBUG("[PorfforHost] fetchStatus outside callback");
+        return 0.0;
+    }
+    return static_cast<double>(fetch_slot_.status);
+}
+
+double PorfforHost::fetchOk() const {
+    if (!fetchSlotReadable()) {
+        DONG_LOG_DEBUG("[PorfforHost] fetchOk outside callback");
+        return 0.0;
+    }
+    return fetch_slot_.ok ? 1.0 : 0.0;
+}
+
+void PorfforHost::fetchPrepareBody() {
+    if (!fetchSlotReadable()) {
+        DONG_LOG_DEBUG("[PorfforHost] fetchBody outside callback");
+        setResultString({});
+        return;
+    }
+    setResultString(fetch_slot_.body);
+}
+
+void PorfforHost::fetchPrepareError() {
+    if (!fetchSlotReadable()) {
+        DONG_LOG_DEBUG("[PorfforHost] fetchError outside callback");
+        setResultString({});
+        return;
+    }
+    setResultString(fetch_slot_.error);
+}
+
+void PorfforHost::fetchPrepareHeader(double /*name_ptr*/) {
+    if (!fetchSlotReadable()) {
+        DONG_LOG_DEBUG("[PorfforHost] fetchHeader outside callback");
+        setResultString({});
+        return;
+    }
+    setResultString(fetch_slot_.header_value);
+}
+
+void PorfforHost::processFetches() {
+    if (!registry_) {
+        return;
+    }
+
+    std::vector<FetchCompletion> completions;
+    {
+        std::lock_guard<std::mutex> lock(fetch_mutex_);
+        completions.swap(fetch_completions_);
+    }
+
+    for (auto& completion : completions) {
+        std::string module_name;
+        std::string export_name;
+        {
+            std::lock_guard<std::mutex> lock(fetch_mutex_);
+            const auto it = pending_fetches_.find(completion.id);
+            if (it == pending_fetches_.end() || it->second.aborted) {
+                pending_fetches_.erase(completion.id);
+                continue;
+            }
+            module_name = it->second.module_name;
+            export_name = it->second.export_name;
+            pending_fetches_.erase(it);
+        }
+
+        if (completion.module_name.empty()) {
+            completion.module_name = module_name;
+        }
+        if (completion.export_name.empty()) {
+            completion.export_name = export_name;
+        }
+
+        pushFetchSlot();
+        fetch_slot_active_ = true;
+        fetch_slot_.request_id = static_cast<int32_t>(completion.id);
+        if (completion.result.status_code > 0) {
+            fetch_slot_.status = completion.result.status_code;
+        } else {
+            fetch_slot_.status = completion.result.success ? 200 : 0;
+        }
+        fetch_slot_.ok = completion.result.success;
+        fetch_slot_.body = completion.result.content;
+        fetch_slot_.error = completion.result.error_msg;
+
+        invokeExport(completion.module_name, completion.export_name, 0.0, false);
+
+        fetch_slot_active_ = false;
+        popFetchSlot();
+    }
+}
+
+void PorfforHost::clipboardWrite(double text_ptr) {
+    if (auto* bindings = activeBindings()) {
+        bindings->clipboardWrite(readByteString(text_ptr));
+    }
+}
+
+void PorfforHost::clipboardRead() {
+    if (auto* bindings = activeBindings()) {
+        setResultString(bindings->clipboardRead());
+    } else {
+        setResultString({});
+    }
+}
+
+double PorfforHost::matchMedia(double query_ptr) const {
+    if (auto* bindings = activeBindings()) {
+        return bindings->matchMedia(readByteString(query_ptr)) ? 1.0 : 0.0;
+    }
+    return 0.0;
+}
+
+double PorfforHost::cssSupportsProp(double prop_ptr, double value_ptr) const {
+    if (auto* bindings = activeBindings()) {
+        return bindings->cssSupports(readByteString(prop_ptr), readByteString(value_ptr)) ? 1.0 : 0.0;
+    }
+    return 0.0;
+}
+
+void PorfforHost::dialogShow(double node_id) {
+    if (auto* bindings = activeBindings()) {
+        bindings->dialogShow(static_cast<uint64_t>(node_id));
+    }
+}
+
+void PorfforHost::dialogShowModal(double node_id) {
+    if (auto* bindings = activeBindings()) {
+        bindings->dialogShowModal(static_cast<uint64_t>(node_id));
+    }
+}
+
+void PorfforHost::dialogClose(double node_id, double return_value_ptr) {
+    if (auto* bindings = activeBindings()) {
+        bindings->dialogClose(static_cast<uint64_t>(node_id), readByteString(return_value_ptr));
+    }
+}
+
+void PorfforHost::dialogPrepareReturnValue(double node_id) {
+    if (auto* bindings = activeBindings()) {
+        setResultString(bindings->dialogReturnValue(static_cast<uint64_t>(node_id)));
+    } else {
+        setResultString({});
+    }
+}
+
+double PorfforHost::dialogIsOpen(double node_id) const {
+    if (auto* bindings = activeBindings()) {
+        return bindings->dialogOpen(static_cast<uint64_t>(node_id)) ? 1.0 : 0.0;
+    }
+    return 0.0;
+}
+
+double PorfforHost::sceneAddNode(double config_ptr) {
+    auto* bindings = activeBindings();
+    if (!bindings) {
+        return 0.0;
+    }
+    return static_cast<double>(bindings->sceneAddNode(readByteString(config_ptr)));
+}
+
+void PorfforHost::sceneRemove(double id) {
+    if (auto* bindings = activeBindings()) {
+        bindings->sceneRemove(static_cast<uint32_t>(id));
+    }
+}
+
+void PorfforHost::sceneSet(double id, double prop_ptr, double value_ptr) {
+    if (auto* bindings = activeBindings()) {
+        bindings->sceneSet(static_cast<uint32_t>(id), readByteString(prop_ptr),
+                          readByteString(value_ptr));
+    }
+}
+
+double PorfforHost::sceneFind(double name_ptr) const {
+    if (auto* bindings = activeBindings()) {
+        return static_cast<double>(bindings->sceneFind(readByteString(name_ptr)));
+    }
+    return -1.0;
+}
+
+void PorfforHost::sceneOn(double id, double type_ptr, double handler_ptr) {
+    auto* bindings = activeBindings();
+    if (!bindings) {
+        return;
+    }
+    std::string module_name;
+    if (registry_) {
+        module_name = registry_->activeModule();
+    }
+    bindings->sceneOn(static_cast<uint32_t>(id), readByteString(type_ptr), readByteString(handler_ptr),
+                      module_name);
+}
+
+void PorfforHost::sceneClear() {
+    if (auto* bindings = activeBindings()) {
+        bindings->sceneClear();
+    }
+}
+
+double PorfforHost::sceneCount() const {
+    if (auto* bindings = activeBindings()) {
+        return static_cast<double>(bindings->sceneCount());
+    }
+    return 0.0;
+}
+
+void PorfforHost::textLayoutPrepare(double config_ptr) {
+    if (auto* bindings = activeBindings()) {
+        setResultString(bindings->textLayout(readByteString(config_ptr)));
+    } else {
+        setResultString("{}");
+    }
+}
+
+void PorfforHost::clearOverlay() {
+    if (auto* bindings = activeBindings()) {
+        bindings->clearOverlay();
+    }
+}
+
+void PorfforHost::renderText(double config_ptr) {
+    if (auto* bindings = activeBindings()) {
+        bindings->renderText(readByteString(config_ptr));
+    }
+}
+
+void PorfforHost::drawRect(double config_ptr) {
+    if (auto* bindings = activeBindings()) {
+        bindings->drawRect(readByteString(config_ptr));
+    }
+}
+
+void PorfforHost::drawCircle(double config_ptr) {
+    if (auto* bindings = activeBindings()) {
+        bindings->drawCircle(readByteString(config_ptr));
+    }
+}
+
+void PorfforHost::parseHtml(double html_ptr) {
+    setResultString({});
+    auto* bindings = activeBindings();
+    if (!bindings) {
+        return;
+    }
+    const std::string html = readByteString(html_ptr);
+    const uint64_t id = bindings->parseHtmlDetached(html);
+    if (id == 0) {
+        return;
+    }
+    setResultString(std::to_string(id));
+}
+
+void PorfforHost::formSerialize(double form_node_id) {
+    setResultString("[]");
+    auto* bindings = activeBindings();
+    if (!bindings) {
+        return;
+    }
+    setResultString(bindings->formSerializeJson(static_cast<uint64_t>(form_node_id)));
+}
+
+void PorfforHost::selectionText() {
+    setResultString({});
+    auto* bindings = activeBindings();
+    if (!bindings) {
+        return;
+    }
+    setResultString(bindings->getSelectionText());
+}
+
 void PorfforHost::processTimers(double now_ms) {
     if (timers_.empty() || !registry_) {
         return;
@@ -1124,6 +1595,24 @@ f64 __porf_import_dong_clone_node(f64 node_id, f64 deep) {
     return g_active_host ? g_active_host->cloneNodeId(node_id, deep) : 0.0;
 }
 
+void __porf_import_dong_parse_html(f64 html_ptr) {
+    if (g_active_host) {
+        g_active_host->parseHtml(html_ptr);
+    }
+}
+
+void __porf_import_dong_form_serialize(f64 form_id) {
+    if (g_active_host) {
+        g_active_host->formSerialize(form_id);
+    }
+}
+
+void __porf_import_dong_selection_text(void) {
+    if (g_active_host) {
+        g_active_host->selectionText();
+    }
+}
+
 void __porf_import_dong_event_type(void) {
     if (g_active_host) {
         g_active_host->eventPrepareType();
@@ -1175,6 +1664,201 @@ void __porf_import_dong_event_prevent_default(void) {
 void __porf_import_dong_event_stop_propagation(void) {
     if (g_active_host) {
         g_active_host->eventStopPropagationFlag();
+    }
+}
+
+f64 __porf_import_dong_fetch_start(f64 url_ptr, f64 export_ptr) {
+    return g_active_host ? g_active_host->fetchStart(url_ptr, export_ptr) : 0.0;
+}
+
+f64 __porf_import_dong_commit_fetch_start(void) {
+    return g_active_host ? g_active_host->commitFetchStart() : 0.0;
+}
+
+void __porf_import_dong_fetch_abort(f64 request_id) {
+    if (g_active_host) {
+        g_active_host->fetchAbort(request_id);
+    }
+}
+
+f64 __porf_import_dong_fetch_request_id(void) {
+    return g_active_host ? g_active_host->fetchRequestId() : 0.0;
+}
+
+f64 __porf_import_dong_fetch_status(void) {
+    return g_active_host ? g_active_host->fetchStatus() : 0.0;
+}
+
+f64 __porf_import_dong_fetch_ok(void) {
+    return g_active_host ? g_active_host->fetchOk() : 0.0;
+}
+
+void __porf_import_dong_fetch_body(void) {
+    if (g_active_host) {
+        g_active_host->fetchPrepareBody();
+    }
+}
+
+void __porf_import_dong_fetch_error(void) {
+    if (g_active_host) {
+        g_active_host->fetchPrepareError();
+    }
+}
+
+void __porf_import_dong_fetch_header(f64 name_ptr) {
+    if (g_active_host) {
+        g_active_host->fetchPrepareHeader(name_ptr);
+    }
+}
+
+void __porf_import_dong_clipboard_write(f64 text_ptr) {
+    if (g_active_host) {
+        g_active_host->clipboardWrite(text_ptr);
+    }
+}
+
+void __porf_import_dong_clipboard_read(void) {
+    if (g_active_host) {
+        g_active_host->clipboardRead();
+    }
+}
+
+f64 __porf_import_dong_match_media(f64 query_ptr) {
+    return g_active_host ? g_active_host->matchMedia(query_ptr) : 0.0;
+}
+
+f64 __porf_import_dong_css_supports(f64 prop_ptr, f64 value_ptr) {
+    return g_active_host ? g_active_host->cssSupportsProp(prop_ptr, value_ptr) : 0.0;
+}
+
+void __porf_import_dong_dialog_show(f64 node_id) {
+    if (g_active_host) {
+        g_active_host->dialogShow(node_id);
+    }
+}
+
+void __porf_import_dong_dialog_show_modal(f64 node_id) {
+    if (g_active_host) {
+        g_active_host->dialogShowModal(node_id);
+    }
+}
+
+void __porf_import_dong_dialog_close(f64 node_id, f64 return_value_ptr) {
+    if (g_active_host) {
+        g_active_host->dialogClose(node_id, return_value_ptr);
+    }
+}
+
+void __porf_import_dong_dialog_return_value(f64 node_id) {
+    if (g_active_host) {
+        g_active_host->dialogPrepareReturnValue(node_id);
+    }
+}
+
+f64 __porf_import_dong_dialog_open(f64 node_id) {
+    return g_active_host ? g_active_host->dialogIsOpen(node_id) : 0.0;
+}
+
+f64 __porf_import_dong_scene_add_node(f64 config_ptr) {
+    if (!g_active_host) {
+        return 0.0;
+    }
+    auto* bindings = g_active_host->bindings();
+    if (!bindings) {
+        return 0.0;
+    }
+    return static_cast<f64>(bindings->sceneAddNode(g_active_host->readImportString(config_ptr)));
+}
+
+void __porf_import_dong_scene_remove(f64 id) {
+    if (g_active_host) {
+        if (auto* bindings = g_active_host->bindings()) {
+            bindings->sceneRemove(static_cast<uint32_t>(id));
+        }
+    }
+}
+
+void __porf_import_dong_scene_set(f64 id, f64 prop_ptr, f64 value_ptr) {
+    if (!g_active_host) {
+        return;
+    }
+    if (auto* bindings = g_active_host->bindings()) {
+        bindings->sceneSet(static_cast<uint32_t>(id),
+                           g_active_host->readImportString(prop_ptr),
+                           g_active_host->readImportString(value_ptr));
+    }
+}
+
+f64 __porf_import_dong_scene_find(f64 name_ptr) {
+    if (!g_active_host) {
+        return -1.0;
+    }
+    if (auto* bindings = g_active_host->bindings()) {
+        return static_cast<f64>(bindings->sceneFind(g_active_host->readImportString(name_ptr)));
+    }
+    return -1.0;
+}
+
+void __porf_import_dong_scene_on(f64 id, f64 type_ptr, f64 export_ptr) {
+    if (!g_active_host || !g_active_host->registry()) {
+        return;
+    }
+    if (auto* bindings = g_active_host->bindings()) {
+        bindings->sceneOn(static_cast<uint32_t>(id),
+                          g_active_host->readImportString(type_ptr),
+                          g_active_host->readImportString(export_ptr),
+                          g_active_host->registry()->activeModule());
+    }
+}
+
+void __porf_import_dong_scene_clear(void) {
+    if (g_active_host) {
+        if (auto* bindings = g_active_host->bindings()) {
+            bindings->sceneClear();
+        }
+    }
+}
+
+f64 __porf_import_dong_scene_count(void) {
+    if (!g_active_host) {
+        return 0.0;
+    }
+    if (auto* bindings = g_active_host->bindings()) {
+        return static_cast<f64>(bindings->sceneCount());
+    }
+    return 0.0;
+}
+
+void __porf_import_dong_text_layout(f64 config_ptr) {
+    if (!g_active_host) {
+        return;
+    }
+    if (auto* bindings = g_active_host->bindings()) {
+        g_active_host->setImportResult(bindings->textLayout(g_active_host->readImportString(config_ptr)));
+    }
+}
+
+void __porf_import_dong_clear_overlay(void) {
+    if (g_active_host) {
+        g_active_host->clearOverlay();
+    }
+}
+
+void __porf_import_dong_render_text(f64 config_ptr) {
+    if (g_active_host) {
+        g_active_host->renderText(config_ptr);
+    }
+}
+
+void __porf_import_dong_draw_rect(f64 config_ptr) {
+    if (g_active_host) {
+        g_active_host->drawRect(config_ptr);
+    }
+}
+
+void __porf_import_dong_draw_circle(f64 config_ptr) {
+    if (g_active_host) {
+        g_active_host->drawCircle(config_ptr);
     }
 }
 

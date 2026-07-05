@@ -65,3 +65,12 @@ Porffor 模块是**静态链接**进引擎的（事实 F13：manifest → `porff
 3. 全量分类盘点表合入（含 dropped 候选与理由）。
 4. 构建组织选型记录（含实测数据）合入。
 5. 5–10 个试点迁移合入 + 迁移 checklist 文档。
+
+## 完成记录
+
+- 标记解析：`porffor_test_tags.mjs` + `porffor_test_tags.test.mjs`。
+- 全量盘点：`T13-test-inventory.md`（285 文件，ready 138 = 48.4%）。
+- 构建选型：方案 a) 记入盘点 §构建组织选型。
+- 试点：test_hidden_attr、test_checkbox_toggle、test_dom_content_loaded、test_porffor_greeting、test_class_demo、test_input_value、test_title_tooltip、test_list_markers_basic + 3× mf pilot。
+- CI：`zig build run-porffor-tests`；`porffor-migration-checklist.md`。
+- 验证：PS1 生成盘点；node 单测待本机 node 环境执行。

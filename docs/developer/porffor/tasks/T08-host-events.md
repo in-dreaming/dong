@@ -77,4 +77,5 @@
 
 - **Lifecycle 约定**: Porffor module `main()` 在 HTML 解析后同步执行（等同内联脚本）；`DOMContentLoaded` 与 `load` 在 main 返回后对 `<body>`（或 root）上已注册的 export 名 listener 分发。
 - **Re-entrancy**: 事件槽栈式 save/restore（`pushEventSlot`/`popEventSlot`）；`callExport` 同时 save/restore active module 与 `result_slot`。
+- **异步约定**: 见 `docs/developer/porffor/async-convention.md`（T19 定稿）。
 - **遗留**: composition/IME 事件未覆盖（T20）；`load` 未入 `EventDispatcher` enum（Porffor 走 `dispatchSimpleEvent` 字符串匹配，足够 lifecycle listener）。

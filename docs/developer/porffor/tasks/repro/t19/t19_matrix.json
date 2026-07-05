@@ -1,0 +1,42 @@
+{
+  "then_resolve": {
+    "wasm": "no-output",
+    "2c+clang": "skip",
+    "2c-compile": "ok"
+  },
+  "catch_reject": {
+    "wasm": "no-output",
+    "2c+clang": "skip",
+    "2c-compile": "ok"
+  },
+  "finally": {
+    "wasm": "no-output",
+    "2c+clang": "skip",
+    "2c-compile": "ok"
+  },
+  "chain": {
+    "wasm": "no-output",
+    "2c+clang": "skip",
+    "2c-compile": "ok"
+  },
+  "all": {
+    "wasm": "no-output",
+    "2c+clang": "skip",
+    "2c-compile": "ok"
+  },
+  "race": {
+    "wasm": "no-output",
+    "2c+clang": "skip",
+    "2c-compile": "ok"
+  },
+  "settled_sync": {
+    "wasm": "no-output",
+    "2c+clang": "skip",
+    "2c-compile": "ok"
+  },
+  "microtask_order": {
+    "wasm": "no-output",
+    "2c+clang": "skip",
+    "2c-compile": "ok"
+  }
+}

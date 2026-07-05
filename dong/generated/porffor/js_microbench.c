@@ -10,7 +10,7 @@
 char* dong_porf_js_microbench_memory; u32 dong_porf_js_microbench_memory_pages = 2;
 
 
-__attribute__((import_module(""), import_name("g")))
+__attribute__((import_module(""), import_name("r")))
 extern f64 __porf_import_dong_time_now();
 static i32 i32_load(i32 align, i32 offset, i32 pointer) {
   return *((i32*)(dong_porf_js_microbench_memory + offset + pointer));
@@ -45,10 +45,10 @@ static void i32_store8(i32 align, i32 offset, i32 pointer, u8 value) {
 }
 
 
-__attribute__((import_module(""), import_name("f")))
+__attribute__((import_module(""), import_name("q")))
 extern void __porf_import_dong_bench_log(f64);
 
-__attribute__((import_module(""), import_name("e")))
+__attribute__((import_module(""), import_name("i")))
 extern void __porf_import_dong_print(f64);
 void dong_porf_js_microbench__porf_init(void) {
   if (dong_porf_js_microbench_memory) return;
@@ -11735,27 +11735,27 @@ static struct ReturnValue dong_porf_js_microbench_toUtf8(f64 jjnewtarget, i32 jj
   i32 lenjjtype = 0;
   i32 jjlength_tmp = 0;
   i32 jjlast_type = 0;
-  f64 jjmember_obj_15 = 0;
-  f64 jjmember_prop_15 = 0;
+  f64 jjmember_obj_35 = 0;
+  f64 jjmember_prop_35 = 0;
   f64 cp = 0;
   i32 cpjjtype = 0;
   f64 jjproto_target = 0;
   i32 jjproto_targetjjtype = 0;
-  f64 jjindirect_16_callee = 0;
-  f64 jjindirect_16_caller = 0;
-  i32 jjindirect_16_callerjjtype = 0;
-  f64 jjmember_obj_17 = 0;
-  f64 jjmember_prop_17 = 0;
+  f64 jjindirect_36_callee = 0;
+  f64 jjindirect_36_caller = 0;
+  i32 jjindirect_36_callerjjtype = 0;
+  f64 jjmember_obj_37 = 0;
+  f64 jjmember_prop_37 = 0;
   i32 jjtypeswitch_tmp1 = 0;
   i32 logictmpi = 0;
   i32 jjlogicinner_tmp_int = 0;
   f64 next = 0;
   i32 nextjjtype = 0;
-  f64 jjindirect_18_callee = 0;
-  f64 jjindirect_18_caller = 0;
-  i32 jjindirect_18_callerjjtype = 0;
-  f64 jjmember_obj_19 = 0;
-  f64 jjmember_prop_19 = 0;
+  f64 jjindirect_38_callee = 0;
+  f64 jjindirect_38_caller = 0;
+  i32 jjindirect_38_callerjjtype = 0;
+  f64 jjmember_obj_39 = 0;
+  f64 jjmember_prop_39 = 0;
   f64 jjbitwise_left = 0;
   f64 jjbitwise_right = 0;
   f64 jjreturn = 0;
@@ -11775,18 +11775,18 @@ static struct ReturnValue dong_porf_js_microbench_toUtf8(f64 jjnewtarget, i32 jj
       jjlast_type = 1;
       _r595 = (f64)(i32_load(1, 0, _get2));
     } else {
-      jjmember_prop_15 = 44;
+      jjmember_prop_35 = 44;
       _get3 = s;
-      jjmember_obj_15 = _get3;
+      jjmember_obj_35 = _get3;
       _get4 = sjjtype;
       // if f64
       f64 _r596;
         if (_get4 == 0) {
           _r596 = 0;
         } else {
-          _get5 = jjmember_obj_15;
+          _get5 = jjmember_obj_35;
           _get6 = sjjtype;
-          _get7 = jjmember_prop_15;
+          _get7 = jjmember_prop_35;
           const struct ReturnValue _0 = dong_porf_js_microbench__Porffor_object_get_withHash((i32)(_get5), _get6, (u32)(_get7), 195, -2086110260, 1);
           jjlast_type = _0.type;
           _r596 = _0.value;
@@ -11856,38 +11856,38 @@ static struct ReturnValue dong_porf_js_microbench_toUtf8(f64 jjnewtarget, i32 jj
             }
           // end
           j602:;
-          jjmember_prop_17 = 1939;
+          jjmember_prop_37 = 1939;
           _get29 = s;
-          jjindirect_16_caller = _get29;
-          _get30 = jjindirect_16_caller;
+          jjindirect_36_caller = _get29;
+          _get30 = jjindirect_36_caller;
           _get31 = sjjtype;
-          jjindirect_16_callerjjtype = _get31;
-          jjmember_obj_17 = _get30;
-          _get32 = jjindirect_16_callerjjtype;
+          jjindirect_36_callerjjtype = _get31;
+          jjmember_obj_37 = _get30;
+          _get32 = jjindirect_36_callerjjtype;
           // if f64
           f64 _r603;
             if (_get32 == 0) {
               _r603 = 0;
             } else {
-              _get33 = jjmember_obj_17;
-              _get34 = jjindirect_16_callerjjtype;
-              _get35 = jjmember_prop_17;
+              _get33 = jjmember_obj_37;
+              _get34 = jjindirect_36_callerjjtype;
+              _get35 = jjmember_prop_37;
               const struct ReturnValue _4 = dong_porf_js_microbench__Porffor_object_get_withHash((i32)(_get33), _get34, (u32)(_get35), 195, -1592872053, 1);
               jjlast_type = _4.type;
               _r603 = _4.value;
             }
           // end
           j603:;
-          jjindirect_16_callee = _r603;
+          jjindirect_36_callee = _r603;
           _get36 = jjlast_type;
           // if f64
           f64 _r604;
             if (_get36 == 6) {
-              _get37 = jjindirect_16_caller;
-              _get38 = jjindirect_16_callerjjtype;
+              _get37 = jjindirect_36_caller;
+              _get38 = jjindirect_36_callerjjtype;
               _get39 = i;
               _get40 = ijjtype;
-              _get41 = jjindirect_16_callee;
+              _get41 = jjindirect_36_callee;
               jjlast_type = 0;
               _r604 = 0;
             } else {
@@ -12011,37 +12011,37 @@ static struct ReturnValue dong_porf_js_microbench_toUtf8(f64 jjnewtarget, i32 jj
                 }
               // end
               j614:;
-              jjmember_prop_19 = 1939;
+              jjmember_prop_39 = 1939;
               _get74 = s;
-              jjindirect_18_caller = _get74;
-              _get75 = jjindirect_18_caller;
+              jjindirect_38_caller = _get74;
+              _get75 = jjindirect_38_caller;
               _get76 = sjjtype;
-              jjindirect_18_callerjjtype = _get76;
-              jjmember_obj_19 = _get75;
-              _get77 = jjindirect_18_callerjjtype;
+              jjindirect_38_callerjjtype = _get76;
+              jjmember_obj_39 = _get75;
+              _get77 = jjindirect_38_callerjjtype;
               // if f64
               f64 _r615;
                 if (_get77 == 0) {
                   _r615 = 0;
                 } else {
-                  _get78 = jjmember_obj_19;
-                  _get79 = jjindirect_18_callerjjtype;
-                  _get80 = jjmember_prop_19;
+                  _get78 = jjmember_obj_39;
+                  _get79 = jjindirect_38_callerjjtype;
+                  _get80 = jjmember_prop_39;
                   const struct ReturnValue _8 = dong_porf_js_microbench__Porffor_object_get_withHash((i32)(_get78), _get79, (u32)(_get80), 195, -1592872053, 1);
                   jjlast_type = _8.type;
                   _r615 = _8.value;
                 }
               // end
               j615:;
-              jjindirect_18_callee = _r615;
+              jjindirect_38_callee = _r615;
               _get81 = jjlast_type;
               // if f64
               f64 _r616;
                 if (_get81 == 6) {
-                  _get82 = jjindirect_18_caller;
-                  _get83 = jjindirect_18_callerjjtype;
+                  _get82 = jjindirect_38_caller;
+                  _get83 = jjindirect_38_callerjjtype;
                   _get84 = i;
-                  _get85 = jjindirect_18_callee;
+                  _get85 = jjindirect_38_callee;
                   jjlast_type = 0;
                   _r616 = 0;
                 } else {
@@ -12208,11 +12208,11 @@ static struct ReturnValue dong_porf_js_microbench_bench_finish(f64 jjnewtarget, 
   i32 nsPerIterjjtype = 0;
   f64 jjproto_target = 0;
   i32 jjproto_targetjjtype = 0;
-  f64 jjindirect_13_callee = 0;
-  f64 jjindirect_13_caller = 0;
-  i32 jjindirect_13_callerjjtype = 0;
-  f64 jjmember_obj_14 = 0;
-  f64 jjmember_prop_14 = 0;
+  f64 jjindirect_33_callee = 0;
+  f64 jjindirect_33_caller = 0;
+  i32 jjindirect_33_callerjjtype = 0;
+  f64 jjmember_obj_34 = 0;
+  f64 jjmember_prop_34 = 0;
   i32 jjlast_type = 0;
   f64 line = 0;
   i32 linejjtype = 0;
@@ -14765,17 +14765,17 @@ int dong_porf_js_microbench_main() {
   i32 _get0;
   dong_porf_js_microbench__porf_init();
 
-  i32 jjobjectexpr_9 = 0;
-  f64 jjmember_obj_10 = 0;
-  f64 jjmember_prop_10 = 0;
+  i32 jjobjectexpr_29 = 0;
+  f64 jjmember_obj_30 = 0;
+  f64 jjmember_prop_30 = 0;
   i32 jjlast_type = 0;
-  f64 jjmember_obj_11 = 0;
-  f64 jjmember_prop_11 = 0;
+  f64 jjmember_obj_31 = 0;
+  f64 jjmember_prop_31 = 0;
   f64 __tmpop_left = 0;
   f64 __tmpop_right = 0;
-  f64 jjmember_obj_12 = 0;
-  f64 jjmember_prop_12 = 0;
-  i32 jjobjectexpr_24 = 0;
+  f64 jjmember_obj_32 = 0;
+  f64 jjmember_prop_32 = 0;
+  i32 jjobjectexpr_44 = 0;
 
   dong_porf_js_microbench_METRIC_OFFSET_WIDTH = 0;
   dong_porf_js_microbench_METRIC_OFFSET_WIDTHjjtype = 1;
@@ -14817,13 +14817,13 @@ int dong_porf_js_microbench_main() {
   j0:;
     // if 
       if (dong_porf_js_microbench_i < dong_porf_js_microbench_bench_iterations) {
-        jjobjectexpr_9 = dong_porf_js_microbench__Porffor_malloc(16384);
-        _get1 = jjobjectexpr_9;
-        _get2 = jjobjectexpr_9;
+        jjobjectexpr_29 = dong_porf_js_microbench__Porffor_malloc(16384);
+        _get1 = jjobjectexpr_29;
+        _get2 = jjobjectexpr_29;
         dong_porf_js_microbench__Porffor_object_expr_init(_get2, 7, 37, 195, 1, 1);
-        _get3 = jjobjectexpr_9;
+        _get3 = jjobjectexpr_29;
         dong_porf_js_microbench__Porffor_object_expr_init(_get3, 7, 1657, 195, 2, 1);
-        _get4 = jjobjectexpr_9;
+        _get4 = jjobjectexpr_29;
         dong_porf_js_microbench__Porffor_object_expr_init(_get4, 7, 1664, 195, 3, 1);
         dong_porf_js_microbench_obj = (f64)(_get1);
         dong_porf_js_microbench_objjjtype = 7;
@@ -14831,15 +14831,15 @@ int dong_porf_js_microbench_main() {
         f64 _r567;
           // block f64
           f64 _r568;
-            jjmember_prop_10 = 37;
-            jjmember_obj_10 = dong_porf_js_microbench_obj;
+            jjmember_prop_30 = 37;
+            jjmember_obj_30 = dong_porf_js_microbench_obj;
             // if f64
             f64 _r569;
               if (dong_porf_js_microbench_objjjtype == 0) {
                 _r569 = 0;
               } else {
-                _get5 = jjmember_obj_10;
-                _get6 = jjmember_prop_10;
+                _get5 = jjmember_obj_30;
+                _get6 = jjmember_prop_30;
                 const struct ReturnValue _0 = dong_porf_js_microbench__Porffor_object_get_withHash((i32)(_get5), dong_porf_js_microbench_objjjtype, (u32)(_get6), 195, -155065054, 1);
                 jjlast_type = _0.type;
                 _r569 = _0.value;
@@ -14848,15 +14848,15 @@ int dong_porf_js_microbench_main() {
             j569:;
             __tmpop_left = _r569;
             _get7 = __tmpop_left;
-            jjmember_prop_11 = 1657;
-            jjmember_obj_11 = dong_porf_js_microbench_obj;
+            jjmember_prop_31 = 1657;
+            jjmember_obj_31 = dong_porf_js_microbench_obj;
             // if f64
             f64 _r570;
               if (dong_porf_js_microbench_objjjtype == 0) {
                 _r570 = 0;
               } else {
-                _get8 = jjmember_obj_11;
-                _get9 = jjmember_prop_11;
+                _get8 = jjmember_obj_31;
+                _get9 = jjmember_prop_31;
                 const struct ReturnValue _1 = dong_porf_js_microbench__Porffor_object_get_withHash((i32)(_get8), dong_porf_js_microbench_objjjtype, (u32)(_get9), 195, 309633745, 1);
                 jjlast_type = _1.type;
                 _r570 = _1.value;
@@ -14886,15 +14886,15 @@ int dong_porf_js_microbench_main() {
           j568:;
           __tmpop_left = _r568;
           _get17 = __tmpop_left;
-          jjmember_prop_12 = 1664;
-          jjmember_obj_12 = dong_porf_js_microbench_obj;
+          jjmember_prop_32 = 1664;
+          jjmember_obj_32 = dong_porf_js_microbench_obj;
           // if f64
           f64 _r572;
             if (dong_porf_js_microbench_objjjtype == 0) {
               _r572 = 0;
             } else {
-              _get18 = jjmember_obj_12;
-              _get19 = jjmember_prop_12;
+              _get18 = jjmember_obj_32;
+              _get19 = jjmember_prop_32;
               const struct ReturnValue _3 = dong_porf_js_microbench__Porffor_object_get_withHash((i32)(_get18), dong_porf_js_microbench_objjjtype, (u32)(_get19), 195, -1854417746, 1);
               jjlast_type = _3.type;
               _r572 = _3.value;
@@ -15060,13 +15060,13 @@ int dong_porf_js_microbench_main() {
   j695:;
     // if 
       if (dong_porf_js_microbench_i < dong_porf_js_microbench_bench_iterations) {
-        jjobjectexpr_24 = dong_porf_js_microbench__Porffor_malloc(16384);
-        _get30 = jjobjectexpr_24;
-        _get31 = jjobjectexpr_24;
+        jjobjectexpr_44 = dong_porf_js_microbench__Porffor_malloc(16384);
+        _get30 = jjobjectexpr_44;
+        _get31 = jjobjectexpr_44;
         dong_porf_js_microbench__Porffor_object_expr_init(_get31, 7, 2059, 195, 1, 1);
-        _get32 = jjobjectexpr_24;
+        _get32 = jjobjectexpr_44;
         dong_porf_js_microbench__Porffor_object_expr_init(_get32, 7, 2066, 195, 2, 1);
-        _get33 = jjobjectexpr_24;
+        _get33 = jjobjectexpr_44;
         dong_porf_js_microbench__Porffor_object_expr_init(_get33, 7, 2073, 195, 3, 1);
         dong_porf_js_microbench_o = (f64)(_get30);
         dong_porf_js_microbench_ojjtype = 7;
@@ -15076,13 +15076,13 @@ int dong_porf_js_microbench_main() {
         if (!(dong_porf_js_microbench_i < dong_porf_js_microbench_bench_iterations)) {
           goto j696;
         }
-        jjobjectexpr_24 = dong_porf_js_microbench__Porffor_malloc(16384);
-        _get34 = jjobjectexpr_24;
-        _get35 = jjobjectexpr_24;
+        jjobjectexpr_44 = dong_porf_js_microbench__Porffor_malloc(16384);
+        _get34 = jjobjectexpr_44;
+        _get35 = jjobjectexpr_44;
         dong_porf_js_microbench__Porffor_object_expr_init(_get35, 7, 2059, 195, 1, 1);
-        _get36 = jjobjectexpr_24;
+        _get36 = jjobjectexpr_44;
         dong_porf_js_microbench__Porffor_object_expr_init(_get36, 7, 2066, 195, 2, 1);
-        _get37 = jjobjectexpr_24;
+        _get37 = jjobjectexpr_44;
         dong_porf_js_microbench__Porffor_object_expr_init(_get37, 7, 2073, 195, 3, 1);
         dong_porf_js_microbench_o = (f64)(_get34);
         dong_porf_js_microbench_ojjtype = 7;
@@ -15092,13 +15092,13 @@ int dong_porf_js_microbench_main() {
         if (!(dong_porf_js_microbench_i < dong_porf_js_microbench_bench_iterations)) {
           goto j696;
         }
-        jjobjectexpr_24 = dong_porf_js_microbench__Porffor_malloc(16384);
-        _get38 = jjobjectexpr_24;
-        _get39 = jjobjectexpr_24;
+        jjobjectexpr_44 = dong_porf_js_microbench__Porffor_malloc(16384);
+        _get38 = jjobjectexpr_44;
+        _get39 = jjobjectexpr_44;
         dong_porf_js_microbench__Porffor_object_expr_init(_get39, 7, 2059, 195, 1, 1);
-        _get40 = jjobjectexpr_24;
+        _get40 = jjobjectexpr_44;
         dong_porf_js_microbench__Porffor_object_expr_init(_get40, 7, 2066, 195, 2, 1);
-        _get41 = jjobjectexpr_24;
+        _get41 = jjobjectexpr_44;
         dong_porf_js_microbench__Porffor_object_expr_init(_get41, 7, 2073, 195, 3, 1);
         dong_porf_js_microbench_o = (f64)(_get38);
         dong_porf_js_microbench_ojjtype = 7;
@@ -15108,13 +15108,13 @@ int dong_porf_js_microbench_main() {
         if (!(dong_porf_js_microbench_i < dong_porf_js_microbench_bench_iterations)) {
           goto j696;
         }
-        jjobjectexpr_24 = dong_porf_js_microbench__Porffor_malloc(16384);
-        _get42 = jjobjectexpr_24;
-        _get43 = jjobjectexpr_24;
+        jjobjectexpr_44 = dong_porf_js_microbench__Porffor_malloc(16384);
+        _get42 = jjobjectexpr_44;
+        _get43 = jjobjectexpr_44;
         dong_porf_js_microbench__Porffor_object_expr_init(_get43, 7, 2059, 195, 1, 1);
-        _get44 = jjobjectexpr_24;
+        _get44 = jjobjectexpr_44;
         dong_porf_js_microbench__Porffor_object_expr_init(_get44, 7, 2066, 195, 2, 1);
-        _get45 = jjobjectexpr_24;
+        _get45 = jjobjectexpr_44;
         dong_porf_js_microbench__Porffor_object_expr_init(_get45, 7, 2073, 195, 3, 1);
         dong_porf_js_microbench_o = (f64)(_get42);
         dong_porf_js_microbench_ojjtype = 7;

@@ -394,3 +394,150 @@ function preventDefault() {
 function stopPropagation() {
   dong_event_stop_propagation();
 }
+
+function parseHtml(html) {
+  dong_parse_html(toUtf8(html));
+  var idStr = pullHostString();
+  if (idStr === "") {
+    return 0;
+  }
+  return idStr - 0;
+}
+
+function formSerialize(formId) {
+  dong_form_serialize(formId);
+  return pullHostString();
+}
+
+function selectionText() {
+  dong_selection_text();
+  return pullHostString();
+}
+
+function dongFetch(url, exportName) {
+  return dong_fetch_start(toUtf8(url), toUtf8(exportName));
+}
+
+function fetchAbort(requestId) {
+  dong_fetch_abort(requestId);
+}
+
+function fetchRequestId() {
+  return dong_fetch_request_id();
+}
+
+function fetchStatus() {
+  return dong_fetch_status();
+}
+
+function fetchOk() {
+  return dong_fetch_ok();
+}
+
+function fetchBody() {
+  dong_fetch_body();
+  return pullHostString();
+}
+
+function fetchError() {
+  dong_fetch_error();
+  return pullHostString();
+}
+
+function fetchHeader(name) {
+  dong_fetch_header(toUtf8(name));
+  return pullHostString();
+}
+
+function clipboardWrite(text) {
+  dong_clipboard_write(toUtf8(text));
+}
+
+function clipboardRead() {
+  dong_clipboard_read();
+  return pullHostString();
+}
+
+function matchMedia(query) {
+  return dong_match_media(toUtf8(query)) !== 0;
+}
+
+function cssSupports(prop, value) {
+  return dong_css_supports(toUtf8(prop), toUtf8(value)) !== 0;
+}
+
+function dialogShow(nodeId) {
+  dong_dialog_show(nodeId);
+}
+
+function dialogShowModal(nodeId) {
+  dong_dialog_show_modal(nodeId);
+}
+
+function dialogClose(nodeId, returnValue) {
+  dong_dialog_close(nodeId, toUtf8(returnValue || ""));
+}
+
+function dialogReturnValue(nodeId) {
+  dong_dialog_return_value(nodeId);
+  return pullHostString();
+}
+
+function dialogOpen(nodeId) {
+  return dong_dialog_open(nodeId) !== 0;
+}
+
+function sceneAddNode(configJson) {
+  return dong_scene_add_node(toUtf8(configJson));
+}
+
+function sceneRemove(id) {
+  dong_scene_remove(id);
+}
+
+function sceneSet(id, prop, value) {
+  dong_stage_0(id);
+  dong_stage_1(toUtf8(prop));
+  dong_stage_2(toUtf8(value));
+  dong_scene_set(id, toUtf8(prop), toUtf8(value));
+}
+
+function sceneFind(name) {
+  return dong_scene_find(toUtf8(name));
+}
+
+function sceneOn(id, type, exportName) {
+  dong_stage_0(id);
+  dong_stage_1(toUtf8(type));
+  dong_stage_2(toUtf8(exportName));
+  dong_scene_on(id, toUtf8(type), toUtf8(exportName));
+}
+
+function sceneClear() {
+  dong_scene_clear();
+}
+
+function sceneCount() {
+  return dong_scene_count();
+}
+
+function textLayout(configJson) {
+  dong_text_layout(toUtf8(configJson));
+  return pullHostString();
+}
+
+function clearOverlay() {
+  dong_clear_overlay();
+}
+
+function renderText(configJson) {
+  dong_render_text(toUtf8(configJson));
+}
+
+function drawRect(configJson) {
+  dong_draw_rect(toUtf8(configJson));
+}
+
+function drawCircle(configJson) {
+  dong_draw_circle(toUtf8(configJson));
+}

@@ -1,10 +1,12 @@
 #pragma once
 
 #include <cstdint>
+#include <mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
+#include "../../core/resource_loader.hpp"
 #include "../../dom/event_system.hpp"
 
 struct dong_porf_module;
@@ -29,6 +31,47 @@ public:
 
     void processTimers(double now_ms);
     void processAnimationFrames(double timestamp_ms);
+    void processFetches();
+    void processPendingFetches() { processFetches(); }
+
+    double fetchStart(double url_ptr, double export_ptr);
+    double commitFetchStart();
+    void fetchAbort(double request_id);
+    void resetFetches();
+
+    double fetchRequestId() const;
+    double fetchStatus() const;
+    double fetchOk() const;
+    void fetchPrepareBody();
+    void fetchPrepareError();
+    void fetchPrepareHeader(double name_ptr);
+
+    void clipboardWrite(double text_ptr);
+    void clipboardRead();
+    double matchMedia(double query_ptr) const;
+    double cssSupportsProp(double prop_ptr, double value_ptr) const;
+    void dialogShow(double node_id);
+    void dialogShowModal(double node_id);
+    void dialogClose(double node_id, double return_value_ptr);
+    void dialogPrepareReturnValue(double node_id);
+    double dialogIsOpen(double node_id) const;
+
+    double sceneAddNode(double config_ptr);
+    void sceneRemove(double id);
+    void sceneSet(double id, double prop_ptr, double value_ptr);
+    double sceneFind(double name_ptr) const;
+    void sceneOn(double id, double type_ptr, double handler_ptr);
+    void sceneClear();
+    double sceneCount() const;
+    void textLayoutPrepare(double config_ptr);
+    void clearOverlay();
+    void renderText(double config_ptr);
+    void drawRect(double config_ptr);
+    void drawCircle(double config_ptr);
+
+    void parseHtml(double html_ptr);
+    void formSerialize(double form_node_id);
+    void selectionText();
 
     void printString(double str_ptr);
     void benchLog(double str_ptr);
@@ -125,6 +168,9 @@ public:
     void pushResultSlot();
     void popResultSlot();
 
+    std::string readImportString(double ptr) const { return readByteString(ptr); }
+    void setImportResult(std::string s) { setResultString(std::move(s)); }
+
     void setRegistry(PorfforScriptRegistry* registry) { registry_ = registry; }
     PorfforScriptRegistry* registry() const { return registry_; }
 
@@ -158,6 +204,40 @@ private:
     EventSlot event_slot_;
     std::vector<EventSlot> event_slot_stack_;
 
+    struct FetchSlot {
+        int32_t request_id = 0;
+        int32_t status = 0;
+        bool ok = false;
+        std::string body;
+        std::string error;
+        std::string header_value;
+    };
+    FetchSlot fetch_slot_;
+    std::vector<FetchSlot> fetch_slot_stack_;
+    bool fetch_slot_active_ = false;
+
+    struct PendingFetch {
+        std::string module_name;
+        std::string export_name;
+        bool aborted = false;
+    };
+
+    struct FetchCompletion {
+        uint64_t id = 0;
+        std::string module_name;
+        std::string export_name;
+        dong::ResourceLoadResult result;
+    };
+
+    std::unordered_map<uint64_t, PendingFetch> pending_fetches_;
+    std::mutex fetch_mutex_;
+    std::vector<FetchCompletion> fetch_completions_;
+    uint64_t next_fetch_id_ = 1;
+
+    void pushFetchSlot();
+    void popFetchSlot();
+    bool fetchSlotReadable() const;
+
     size_t memoryCapacityBytes() const;
     std::string readByteString(double ptr) const;
     void setResultString(std::string s);
@@ -183,7 +263,7 @@ private:
 
     uint64_t scheduleTimer(double handler_ptr, double delay_ms, double interval_ms);
     void invokeExport(const std::string& module_name, const std::string& export_name,
-                      double timestamp_ms, bool has_timestamp);
+                      double timestamp_ms = 0.0, bool has_timestamp = false);
 };
 
 void PorfforHost_setActiveModule(const struct dong_porf_module* mod);

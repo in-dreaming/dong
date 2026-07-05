@@ -92,7 +92,7 @@ Dong 不在浏览器里跑 Porffor wasm，而是 `porf c`（2c 路径）生成 C
 | **无跨作用域闭包**（除参数和全局变量） | `lookupName()`（codegen.js ~L545）只查 `scope.locals` 和 `globals` | 同模块内状态放全局变量；**跨 handler 状态走 T15**（2c 多 export 同模块 / host 状态槽）；框架层由 T18 在**编译期**变换规避闭包 |
 | **无运行时 `eval()` / `Function()`** | AOT 根约束。注意：**编译期已知字符串**的 eval 是支持的（codegen.js ~L2242 `knownValue` 路径） | 一切脚本 build 期确定：内联 handler 提取（T12）、测试 snippet 预编译（T14）、交互逻辑必要时下沉 C++ |
 | **无 ES Module 运行时 loader** | 无动态加载机制 | build 期 bundle / manifest 多模块（T13、T18 生成器） |
-| **`Promise`/`async` 有 known bugs** | `builtins/promise.ts` 有实现但 README 明言不稳定 | **callback（export 名）是唯一官方异步模型**（T09/T10）；Promise 子集是否开放由 **T19** 评估定夺，评估通过前一律禁用 |
+| **`Promise`/`async` 有 known bugs** | `builtins/promise.ts` 有实现但 README 明言不稳定 | **正式禁用**（T19）：callback（export 名）是唯一官方异步模型（T08–T10）；`porffor_lint` 构建期拒绝 `Promise`/`async`/`await`；见 `async-convention.md` |
 | **React / Preact 等框架** | 依赖闭包 + 动态性 | **不迁移、不兜底**：T18 自研 AOT 友好框架替代，全部 React/Preact 示例重写 |
 
 ## 5. Porffor 源码地图（`dong/third_party/porffor`）
@@ -208,7 +208,7 @@ node runtime/index.js native test.js out.exe --compiler=clang   # 原生编译
 
 - **fork 修改原则**：改动尽量小且局部，每个修复附最小复现用例（放 `docs/developer/porffor/tasks/repro/`），方便未来 rebase 上游或向上游提 PR。
 - **Dong host API 命名**：全部 `dong_` 前缀 + snake_case，例如 `dong_get_value(nodeId)`。参数与返回值只用数字（f64/i32）和字符串指针（编码与传递协议以 **T16 定稿**为准；未定稿前沿用现有 stage 槽机制）。复杂结构一律 JSON 字符串。
-- **回调模型**：一律「export 名字符串 + C++ callExport」，不引入函数引用；Promise 在 T19 评估通过前禁用。
+- **回调模型**：一律「export 名字符串 + C++ callExport」，不引入函数引用；Promise/async/await 已禁用（T19，`docs/developer/porffor/async-convention.md`）。
 - **验收**：每个任务文件都有「验收标准」小节；完成后在任务文件末尾追加 `## 完成记录`（日期、commit、遗留问题）。
 - **事实清单维护**：任务修复了 §3 事实清单（F1–F15）中的某条，或发现新的关键事实，随任务 PR 更新本文件。
 

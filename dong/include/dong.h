@@ -95,6 +95,10 @@ DONG_API dong_result_t dong_engine_send_text_editing(dong_engine_t* engine, cons
 // Script evaluation
 DONG_API dong_result_t dong_engine_eval_script(dong_engine_t* engine, const char* code);
 
+// Porffor AOT: call a compiled module export (module::export or export only with DONG_PORFFOR_MODULE)
+DONG_API dong_result_t dong_engine_call_porffor_export(
+    dong_engine_t* engine, const char* module_name, const char* export_name);
+
 // =============================================================================
 // Multi-View Shared JS
 // =============================================================================

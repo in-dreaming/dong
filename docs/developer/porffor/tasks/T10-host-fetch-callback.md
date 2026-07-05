@@ -47,3 +47,16 @@ C++ 侧：请求完成后，在**下一帧主线程**把结果写入"当前 fetc
 2. 用例：404 与非法 url，回调收到 `ok=0`，页面显示错误文本，不 crash。
 3. 并发 2 个请求各自回调正确配对（requestId 断言）。
 4. abort 后回调不触发。
+
+## 完成记录
+
+- **日期**: 2026-07-05
+- **Commit**: (见 feature/porffor 分支)
+- **实现要点**:
+  - callback 版 fetch：`dong_fetch_start(url, exportName) -> requestId`，下一帧 `processFetches` 写入 fetch 结果槽并 `callExport`
+  - 结果槽：`fetchRequestId` / `fetchStatus` / `fetchOk` + T16 `pullHostString` 读 `fetchBody` / `fetchError`；回调外读空 + debug 日志
+  - 网络：`ResourceLoader::loadTextResource`（本地/`ui://`/http）；HTTP 工作线程，主线程 dispatch
+  - `fetchAbort` 取消 pending，完成时不触发回调
+- **Prelude**: `dongFetch`, `fetchStatus`, `fetchBody`, `fetchError`, `fetchAbort`, `fetchRequestId`, `fetchHeader`
+- **验证**: `node docs/developer/porffor/tasks/repro/t10/t10_verify.mjs`（2c codegen + host wiring + T08/T16 回归）
+- **遗留**: 二进制 body 未支持；`fetch_header` 暂无响应头（ResourceLoader 未返回 headers）；`dong_fetch_start_ex` 未实现

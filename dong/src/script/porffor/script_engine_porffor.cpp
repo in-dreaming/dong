@@ -33,11 +33,16 @@ bool ScriptEngine::evalModule(const std::string& module_path, const std::string&
 }
 
 void ScriptEngine::processPendingTasks() {
+    host_->processFetches();
     host_->processTimers(host_->timeNow());
 }
 
 bool ScriptEngine::runModule(const std::string& module_name) {
     return registry_->run(module_name);
+}
+
+bool ScriptEngine::callExport(const std::string& module_name, const std::string& export_name) {
+    return registry_->callExport(module_name, export_name, nullptr, 0);
 }
 
 } // namespace dong::script

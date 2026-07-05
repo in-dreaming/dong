@@ -11,6 +11,7 @@
 #include "../../dom/dom_manager.hpp"
 #include "../../dom/event_system.hpp"
 #include "../../dom/dom/dom_node.hpp"
+#include "../../dom/html/html_parser.hpp"
 
 namespace dong::dom {
 class Selection;
@@ -133,7 +134,38 @@ public:
     uint64_t cloneNodeId(uint64_t node_id, bool deep) const;
     size_t liveNodeCount() const { return node_by_id_.size(); }
 
+    uint64_t parseHtmlDetached(const std::string& html);
+    std::string formSerializeJson(uint64_t form_id) const;
+    std::string getSelectionText() const;
+
+    std::string clipboardRead() const;
+    void clipboardWrite(const std::string& text);
+    bool matchMedia(const std::string& query) const;
+    bool cssSupports(const std::string& property, const std::string& value) const;
+
+    void dialogShow(uint64_t node_id);
+    void dialogShowModal(uint64_t node_id);
+    void dialogClose(uint64_t node_id, const std::string& return_value);
+    std::string dialogReturnValue(uint64_t node_id) const;
+    bool dialogOpen(uint64_t node_id) const;
+
+    uint32_t sceneAddNode(const std::string& config_json);
+    void sceneRemove(uint32_t id);
+    void sceneSet(uint32_t id, const std::string& prop, const std::string& value);
+    int32_t sceneFind(const std::string& name);
+    void sceneOn(uint32_t id, const std::string& type, const std::string& export_name,
+                 const std::string& module_name);
+    void sceneClear();
+    uint32_t sceneCount() const;
+
+    std::string textLayout(const std::string& config_json);
+    void clearOverlay();
+    void renderText(const std::string& config_json);
+    void drawRect(const std::string& config_json);
+    void drawCircle(const std::string& config_json);
+
 private:
+    void registerNodeTree(const dom::DOMNodePtr& node);
     void ensureLayoutFresh() const;
     std::string view_name_;
     std::unordered_map<uint64_t, dom::DOMNodePtr> node_by_id_;

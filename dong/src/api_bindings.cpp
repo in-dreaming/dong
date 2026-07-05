@@ -272,6 +272,15 @@ dong_result_t dong_engine_eval_script(dong_engine_t* engine, const char* code) {
     return e->view->evalScript(code) ? DONG_OK : DONG_ERR_INTERNAL;
 }
 
+dong_result_t dong_engine_call_porffor_export(dong_engine_t* engine, const char* module_name,
+                                              const char* export_name) {
+    auto* e = asEngine(engine);
+    if (!e || !e->view || !module_name || !export_name) {
+        return DONG_ERR_INVALID_ARG;
+    }
+    return e->view->callPorfforExport(module_name, export_name) ? DONG_OK : DONG_ERR_INTERNAL;
+}
+
 const void* dong_engine_get_command_list(dong_engine_t* engine) {
     const auto* e = asEngineConst(engine);
     if (!e || !e->view) {

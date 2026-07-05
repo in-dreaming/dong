@@ -39,3 +39,12 @@
 2. Promise 评估矩阵（用例 × 路径 × 结果）与决策记录合入。
 3. 决策对应的执行项落地：开放子集 → 后续任务已立；禁用 → lint 卡口进 CI。
 4. setup §4 的 Promise 行按决策更新。
+
+## 完成记录
+
+- **日期**: 2026-07-05
+- **决策**: **禁用 Promise**（修复成本 8–12+ 人天，超 5 人天阈值）
+- **文档**: `docs/developer/porffor/async-convention.md`（统一 T08/T09/T10 callback 模型）、`T19-promise-evaluation.md`（评估矩阵）
+- **Lint**: `dong/scripts/porffor_lint.mjs`；接入 `porffor_compile.mjs`、`porffor_inline_handlers.mjs`
+- **Repro**: `docs/developer/porffor/tasks/repro/t19/t19_verify.mjs`
+- **遗留**: Porffor fork 内 Promise 实现未删除（仅 Dong 产品路径禁用）；微任务泵未做

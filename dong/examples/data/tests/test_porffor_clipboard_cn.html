@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Porffor Clipboard CN Test</title>
+<style>
+body { font-family: sans-serif; padding: 16px; }
+#out { margin-top: 12px; color: #333; }
+</style>
+</head>
+<body>
+<p id="out">pending</p>
+<script data-porffor-module="hello_dom">
+(function() {
+  var sample = "你好，Dong 剪贴板测试";
+  clipboardWrite(sample);
+  var readBack = clipboardRead();
+  var ok = readBack === sample;
+  setTextContent(getElementById("out"), ok ? "PASS: " + readBack : "FAIL: " + readBack);
+})();
+</script>
+</body>
+</html>

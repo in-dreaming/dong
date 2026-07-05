@@ -45,3 +45,10 @@
 3. `dong_match_media("(min-width: ...)")` 在窗口 resize 后再次调用返回新结果。
 4. scene / textLayout 子项若认领：`test_scene_graph.html` 的 Porffor 版 smoke 通过；未认领则在完成记录中注明并保留子项开放。
 5. prelude 文档更新全部签名。
+
+## 完成记录
+
+- **日期**: 2026-07-05
+- **实现**: clipboard / matchMedia / cssSupports / dialog / scene graph / textLayout 扁平 import + prelude；`js_scene_porffor.cpp`、`js_text_layout_porffor.cpp`
+- **验证**: repro `t11/`（若存在）；`porffor_compile` import 注册
+- **遗留**: `test_scene_graph.html` Porffor CI smoke；overlay drawRect/renderText 示例对齐 — 见 `WAVE3-LEFTOVER.md`

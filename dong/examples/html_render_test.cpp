@@ -8,6 +8,8 @@
  * 两帧对比 + 横向拼接（contenteditable / execCommand 等）:
  *   html_render_test page.html out.bmp 800 600 2 ^
  *     --eval-after-frame0-file snippets/ce_bold_after_frame0.js --stitch-horizontal [--stitch-output merged.bmp]
+ * Porffor 多帧（替代 eval）:
+ *     --call-export-after-frame0 module::exportName
  * - 第 1 帧：操作前；执行脚本后第 2 帧：操作后；仍写出 out_f000.bmp / out_f001.bmp。
  * - --stitch-horizontal 生成宽为 2*width 的拼接图：若输出参数为具体 *.bmp 文件路径，则写入该路径；否则写入 <stem>_stitched.bmp。
  *
@@ -44,6 +46,48 @@
 #endif
 
 namespace fs = std::filesystem;
+
+struct PorfforExportCall {
+    std::string module;
+    std::string export_name;
+};
+
+static std::string extractPorfforModuleFromHtml(const std::string& html) {
+    const std::string key = "data-porffor-module=\"";
+    auto pos = html.find(key);
+    if (pos == std::string::npos) {
+        pos = html.find("data-porffor-module='");
+        if (pos != std::string::npos) {
+            pos += 22;
+            const auto end = html.find('\'', pos);
+            if (end != std::string::npos) return html.substr(pos, end - pos);
+        }
+        return {};
+    }
+    pos += key.size();
+    const auto end = html.find('"', pos);
+    if (end == std::string::npos) return {};
+    return html.substr(pos, end - pos);
+}
+
+static bool parsePorfforExportCall(const std::string& spec, const std::string& html,
+                                   PorfforExportCall& out) {
+    if (spec.empty()) return false;
+    const auto sep = spec.find("::");
+    if (sep != std::string::npos) {
+        out.module = spec.substr(0, sep);
+        out.export_name = spec.substr(sep + 2);
+        return !out.module.empty() && !out.export_name.empty();
+    }
+    out.export_name = spec;
+    out.module = extractPorfforModuleFromHtml(html);
+    if (out.module.empty()) {
+        if (const char* env_mod = std::getenv("DONG_PORFFOR_MODULE")) {
+            if (env_mod[0] != '\0') out.module = env_mod;
+        }
+    }
+    return !out.module.empty() && !out.export_name.empty();
+}
 
 // Optional: load SDL plugin for video support.
 static const dong_plugin_vtable_t* try_load_plugin() {
@@ -675,6 +719,7 @@ void printUsage(const char* prog) {
     SDL_Log("  --frame-ms MS        - Sleep MS milliseconds between frames (default: 0)");
     SDL_Log("  --no-update          - Do NOT update scripts/layout between frames");
     SDL_Log("  --eval-after-frame0-file PATH - After saving frame 0, run JS from file (needs frames>=2)");
+    SDL_Log("  --call-export-after-frame0 SPEC - Porffor: call module::export after frame 0");
     SDL_Log("  --stitch-horizontal  - After 2 frames, write stitched BMP (2*width): see resolve rules below");
     SDL_Log("  --stitch-output PATH - Stitched BMP path (optional; overrides default target)");
     SDL_Log("  Stitched path: if output is a .bmp file (not dir), stitched -> that file; else -> <stem>_stitched.bmp");
@@ -730,6 +775,7 @@ int main(int argc, char* argv[]) {
     uint32_t frame_ms = 0;
     bool do_update = true;
     std::string eval_after_frame0_file;
+    std::string call_export_after_frame0;
     bool stitch_horizontal = false;
     std::string stitch_output_path;
 
@@ -771,6 +817,15 @@ int main(int argc, char* argv[]) {
                 return 1;
             }
             eval_after_frame0_file = argv[++i];
+            continue;
+        }
+
+        if (a == "--call-export-after-frame0") {
+            if (i + 1 >= argc) {
+                SDL_Log("ERROR: --call-export-after-frame0 requires module::exportName");
+                return 1;
+            }
+            call_export_after_frame0 = argv[++i];
             continue;
         }
 
@@ -823,8 +878,22 @@ int main(int argc, char* argv[]) {
         frames = 2;
         SDL_Log("[Config] --eval-after-frame0-file: frames set to 2");
     }
+    if (!call_export_after_frame0.empty() && frames == 1) {
+        frames = 2;
+        SDL_Log("[Config] --call-export-after-frame0: frames set to 2");
+    }
     if (!eval_after_frame0_file.empty() && frames < 2) {
         SDL_Log("ERROR: --eval-after-frame0-file requires at least 2 frames");
+        return 1;
+    }
+    if (!call_export_after_frame0.empty() && frames < 2) {
+        SDL_Log("ERROR: --call-export-after-frame0 requires at least 2 frames");
+        return 1;
+    }
+    if (eval_after_frame0_file.empty() != call_export_after_frame0.empty()) {
+        /* ok: at most one post-frame0 action */
+    } else if (!eval_after_frame0_file.empty() && !call_export_after_frame0.empty()) {
+        SDL_Log("ERROR: --eval-after-frame0-file and --call-export-after-frame0 are mutually exclusive");
         return 1;
     }
     if (stitch_horizontal && frames != 2) {
@@ -833,6 +902,10 @@ int main(int argc, char* argv[]) {
     }
     if (!eval_after_frame0_file.empty() && !do_update) {
         SDL_Log("ERROR: --eval-after-frame0-file is incompatible with --no-update");
+        return 1;
+    }
+    if (!call_export_after_frame0.empty() && !do_update) {
+        SDL_Log("ERROR: --call-export-after-frame0 is incompatible with --no-update");
         return 1;
     }
 
@@ -854,6 +927,16 @@ int main(int argc, char* argv[]) {
     if (html_content.empty()) {
         SDL_Log("ERROR: Cannot read HTML file: %s", html_file.c_str());
         return 1;
+    }
+
+    PorfforExportCall porffor_export_call{};
+    if (!call_export_after_frame0.empty()) {
+        if (!parsePorfforExportCall(call_export_after_frame0, html_content, porffor_export_call)) {
+            SDL_Log("ERROR: invalid --call-export-after-frame0 (need module::export or data-porffor-module)");
+            return 1;
+        }
+        SDL_Log("[Porffor] after frame 0: %s::%s",
+                porffor_export_call.module.c_str(), porffor_export_call.export_name.c_str());
     }
 
     SDL_Log("[Input]  HTML: %s (%zu bytes)", html_file.c_str(), html_content.size());
@@ -1054,6 +1137,14 @@ int main(int argc, char* argv[]) {
             cached_cmd_list = nullptr;
             if (dong_engine_eval_script(engine, eval_after_frame0_script.c_str()) != DONG_OK) {
                 SDL_Log("WARN: dong_engine_eval_script after frame 0 failed");
+            }
+        }
+
+        if (fi == 0 && !call_export_after_frame0.empty()) {
+            cached_cmd_list = nullptr;
+            if (dong_engine_call_porffor_export(engine, porffor_export_call.module.c_str(),
+                                                porffor_export_call.export_name.c_str()) != DONG_OK) {
+                SDL_Log("WARN: dong_engine_call_porffor_export after frame 0 failed");
             }
         }
 

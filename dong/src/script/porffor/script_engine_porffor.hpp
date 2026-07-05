@@ -40,6 +40,7 @@ public:
     void processPendingTasks();
 
     bool runModule(const std::string& module_name);
+    bool callExport(const std::string& module_name, const std::string& export_name);
     void setDefaultModule(const std::string& module_name) { default_module_ = module_name; }
     const std::string& defaultModule() const { return default_module_; }
 

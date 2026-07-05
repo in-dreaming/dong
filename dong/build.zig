@@ -1019,6 +1019,12 @@ pub fn build(b: *std.Build) void {
     const run_html_test_step = b.step("run-html-test", "Run HTML render test (pass args with --)");
     run_html_test_step.dependOn(&run_html_test.step);
 
+    const run_porffor_tests = b.addSystemCommand(&.{ "node", "scripts/run-porffor-tests.mjs" });
+    run_porffor_tests.setCwd(b.path("."));
+    run_porffor_tests.step.dependOn(&cmake_install.step);
+    const run_porffor_tests_step = b.step("run-porffor-tests", "Run Porffor-ready HTML tests (CI gate)");
+    run_porffor_tests_step.dependOn(&run_porffor_tests.step);
+
     // Batch render all test HTML files
     const render_all_tests = b.addSystemCommand(if (platform.is_windows) &.{
         "cmd", "/c", "for %f in (zig-out\\bin\\data\\tests\\*.html) do zig-out\\bin\\html_render_test.exe %f zig-out\\tmp\\tests\\%~nf.bmp 800 600",
