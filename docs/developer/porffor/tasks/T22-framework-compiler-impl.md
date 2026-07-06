@@ -24,6 +24,15 @@
 4. 编译器有独立单测与错误信息质量要求（模板语法错误报文件/行号）。
 5. 实现中触发的规格修订（若有）在 T18 完成记录中留痕，规格与实现无漂移。
 
+## 完成记录
+
+- **Commit**: (见 feature/porffor Wave 4)
+- **编译器**: `porffor_framework_compile.mjs`、`porffor_framework_lint.mjs`
+- **单测**: `porffor_framework_compile.test.mjs`（bind/event/if + 反例）
+- **管线**: `porffor_manifest.json` `framework[]` → `porffor_compile.mjs`
+- **示例**: `porf_counter`（.porf 编译）；`porf_todo` / `porf_game_ui`（手写 store 模式）
+- **遗留**: todo `{#each}` 编译器化、Preact baseline 截图 — 见 `WAVE4-LEFTOVER.md`
+
 ## 风险
 
 - T15 若只落地方案 B（状态槽），store 热路径经 host import，性能要实测（对标 checklist 里 game-ui 的帧率项提前关注）；

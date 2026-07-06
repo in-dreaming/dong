@@ -1,5 +1,12 @@
 {
   "prelude": "src/script/porffor/dong_porffor_prelude.js",
+  "framework": [
+    {
+      "name": "porf_counter",
+      "porf": "examples/porffor-ui/counter.porf",
+      "path": "examples/porffor-ui/porf_counter.js"
+    }
+  ],
   "inline_html": [
     {
       "name": "t12_inline",
@@ -56,6 +63,30 @@
       "name": "test_mf_style",
       "path": "examples/porffor/tests/test_mf_style.js",
       "exports": ["afterFrame0"]
+    },
+    {
+      "name": "porf_counter",
+      "path": "examples/porffor-ui/porf_counter.js",
+      "exports": ["onInc", "onDec", "onReset"]
+    },
+    {
+      "name": "porf_todo",
+      "path": "examples/porffor-ui/porf_todo.js",
+      "exports": [
+        "onAdd",
+        "onInputChange",
+        "onKeyDown",
+        "onFilterAll",
+        "onFilterActive",
+        "onFilterDone",
+        "onClearDone",
+        "onListClick"
+      ]
+    },
+    {
+      "name": "porf_game_ui",
+      "path": "examples/porffor-ui/porf_game_ui.js",
+      "exports": ["onDamage", "onHeal", "onScoreTick"]
     }
   ],
   "snippets": []

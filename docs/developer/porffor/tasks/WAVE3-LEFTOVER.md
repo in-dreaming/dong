@@ -47,7 +47,11 @@ Wave 3 任务 T10–T14、T19、T20 已合入 `feature/porffor`（**commit `8d34
 1. **setup.md F 表**：可增 F16 fetch 槽、F17 测试标记约定（可选）。
 2. **T13 盘点表编码**：重新生成时确保 UTF-8（`node scripts/porffor_test_inventory.mjs`）。
 
-## Wave 4 入口
+## Wave 4 状态（2026-07-06）
+
+T18–T23 已合入；详见 [`WAVE4-LEFTOVER.md`](./WAVE4-LEFTOVER.md)。T21 QuickJS 退役 **未执行**（T13 pending 未清零）。
+
+## Wave 4 入口（归档）
 
 - T18 规格评审 → T22/T23 框架
 - T21 QuickJS 退役（以 T13 ready 清零 + 框架示例替换为前提）

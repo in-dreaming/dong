@@ -22,6 +22,14 @@
 3. T13 盘点表中 `blocked(T18)` 的测试全部转 `ready` 或给出剩余阻塞说明。
 4. 组件文档合入。
 
+## 完成记录
+
+- **Commit**: (见 feature/porffor Wave 4)
+- **组件文档**: `docs/developer/porffor/components.md`
+- **示例**: `data/porf-counter|porf-todo-classic|porf-game-ui`
+- **模块**: manifest 注册 `porf_counter` / `porf_todo` / `porf_game_ui`
+- **遗留**: 组件 partial 内联、game-ui 随机分数 — 见 `WAVE4-LEFTOVER.md`
+
 ## 风险
 
 - 组件样式契约若在复刻中发现与引擎 CSS 子集冲突（如某组件依赖未实现的 CSS 特性），走「回 T18 修订」流程调整契约，不在组件里堆 workaround；

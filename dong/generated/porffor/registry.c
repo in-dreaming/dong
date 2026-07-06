@@ -79,6 +79,27 @@ extern void dong_porf_test_mf_style__porf_init(void);
 extern void dong_porf_test_mf_style_state_capture(dong_porf_test_mf_style_state_t* out);
 extern void dong_porf_test_mf_style_state_apply(const dong_porf_test_mf_style_state_t* in);
 
+extern int dong_porf_porf_counter_main(void);
+extern char* dong_porf_porf_counter_memory;
+extern unsigned int dong_porf_porf_counter_memory_pages;
+extern void dong_porf_porf_counter__porf_init(void);
+extern void dong_porf_porf_counter_state_capture(dong_porf_porf_counter_state_t* out);
+extern void dong_porf_porf_counter_state_apply(const dong_porf_porf_counter_state_t* in);
+
+extern int dong_porf_porf_todo_main(void);
+extern char* dong_porf_porf_todo_memory;
+extern unsigned int dong_porf_porf_todo_memory_pages;
+extern void dong_porf_porf_todo__porf_init(void);
+extern void dong_porf_porf_todo_state_capture(dong_porf_porf_todo_state_t* out);
+extern void dong_porf_porf_todo_state_apply(const dong_porf_porf_todo_state_t* in);
+
+extern int dong_porf_porf_game_ui_main(void);
+extern char* dong_porf_porf_game_ui_memory;
+extern unsigned int dong_porf_porf_game_ui_memory_pages;
+extern void dong_porf_porf_game_ui__porf_init(void);
+extern void dong_porf_porf_game_ui_state_capture(dong_porf_porf_game_ui_state_t* out);
+extern void dong_porf_porf_game_ui_state_apply(const dong_porf_porf_game_ui_state_t* in);
+
 extern int dong_porf_t12_inline_main(void);
 extern char* dong_porf_t12_inline_memory;
 extern unsigned int dong_porf_t12_inline_memory_pages;
@@ -93,6 +114,34 @@ extern int dong_porf_test_mf_text_export_afterFrame0(void);
 extern int dong_porf_test_mf_class_export_afterFrame0(void);
 
 extern int dong_porf_test_mf_style_export_afterFrame0(void);
+
+extern int dong_porf_porf_counter_export_onInc(void);
+
+extern int dong_porf_porf_counter_export_onDec(void);
+
+extern int dong_porf_porf_counter_export_onReset(void);
+
+extern int dong_porf_porf_todo_export_onAdd(void);
+
+extern int dong_porf_porf_todo_export_onInputChange(void);
+
+extern int dong_porf_porf_todo_export_onKeyDown(void);
+
+extern int dong_porf_porf_todo_export_onFilterAll(void);
+
+extern int dong_porf_porf_todo_export_onFilterActive(void);
+
+extern int dong_porf_porf_todo_export_onFilterDone(void);
+
+extern int dong_porf_porf_todo_export_onClearDone(void);
+
+extern int dong_porf_porf_todo_export_onListClick(void);
+
+extern int dong_porf_porf_game_ui_export_onDamage(void);
+
+extern int dong_porf_porf_game_ui_export_onHeal(void);
+
+extern int dong_porf_porf_game_ui_export_onScoreTick(void);
 
 extern int dong_porf_t12_inline_export_inc__onclick(void);
 
@@ -110,21 +159,38 @@ const dong_porf_module_t dong_porf_modules[] = {
   { "test_mf_text", dong_porf_test_mf_text_main, &dong_porf_test_mf_text_memory, &dong_porf_test_mf_text_memory_pages, dong_porf_test_mf_text__porf_init, dong_porf_test_mf_text_state_capture, dong_porf_test_mf_text_state_apply, sizeof(dong_porf_test_mf_text_state_t) },
   { "test_mf_class", dong_porf_test_mf_class_main, &dong_porf_test_mf_class_memory, &dong_porf_test_mf_class_memory_pages, dong_porf_test_mf_class__porf_init, dong_porf_test_mf_class_state_capture, dong_porf_test_mf_class_state_apply, sizeof(dong_porf_test_mf_class_state_t) },
   { "test_mf_style", dong_porf_test_mf_style_main, &dong_porf_test_mf_style_memory, &dong_porf_test_mf_style_memory_pages, dong_porf_test_mf_style__porf_init, dong_porf_test_mf_style_state_capture, dong_porf_test_mf_style_state_apply, sizeof(dong_porf_test_mf_style_state_t) },
+  { "porf_counter", dong_porf_porf_counter_main, &dong_porf_porf_counter_memory, &dong_porf_porf_counter_memory_pages, dong_porf_porf_counter__porf_init, dong_porf_porf_counter_state_capture, dong_porf_porf_counter_state_apply, sizeof(dong_porf_porf_counter_state_t) },
+  { "porf_todo", dong_porf_porf_todo_main, &dong_porf_porf_todo_memory, &dong_porf_porf_todo_memory_pages, dong_porf_porf_todo__porf_init, dong_porf_porf_todo_state_capture, dong_porf_porf_todo_state_apply, sizeof(dong_porf_porf_todo_state_t) },
+  { "porf_game_ui", dong_porf_porf_game_ui_main, &dong_porf_porf_game_ui_memory, &dong_porf_porf_game_ui_memory_pages, dong_porf_porf_game_ui__porf_init, dong_porf_porf_game_ui_state_capture, dong_porf_porf_game_ui_state_apply, sizeof(dong_porf_porf_game_ui_state_t) },
   { "t12_inline", dong_porf_t12_inline_main, &dong_porf_t12_inline_memory, &dong_porf_t12_inline_memory_pages, dong_porf_t12_inline__porf_init, dong_porf_t12_inline_state_capture, dong_porf_t12_inline_state_apply, sizeof(dong_porf_t12_inline_state_t) },
 };
 
-const size_t dong_porf_module_count = 12;
+const size_t dong_porf_module_count = 15;
 
 const dong_porf_handler_t dong_porf_handlers[] = {
   { "hello_dom", "onBtnClick", NULL, 0, (dong_porf_export_fn0)dong_porf_hello_dom_export_onBtnClick, NULL, &dong_porf_hello_dom_memory, &dong_porf_hello_dom_memory_pages },
   { "test_mf_text", "afterFrame0", NULL, 0, (dong_porf_export_fn0)dong_porf_test_mf_text_export_afterFrame0, NULL, &dong_porf_test_mf_text_memory, &dong_porf_test_mf_text_memory_pages },
   { "test_mf_class", "afterFrame0", NULL, 0, (dong_porf_export_fn0)dong_porf_test_mf_class_export_afterFrame0, NULL, &dong_porf_test_mf_class_memory, &dong_porf_test_mf_class_memory_pages },
   { "test_mf_style", "afterFrame0", NULL, 0, (dong_porf_export_fn0)dong_porf_test_mf_style_export_afterFrame0, NULL, &dong_porf_test_mf_style_memory, &dong_porf_test_mf_style_memory_pages },
+  { "porf_counter", "onInc", NULL, 0, (dong_porf_export_fn0)dong_porf_porf_counter_export_onInc, NULL, &dong_porf_porf_counter_memory, &dong_porf_porf_counter_memory_pages },
+  { "porf_counter", "onDec", NULL, 0, (dong_porf_export_fn0)dong_porf_porf_counter_export_onDec, NULL, &dong_porf_porf_counter_memory, &dong_porf_porf_counter_memory_pages },
+  { "porf_counter", "onReset", NULL, 0, (dong_porf_export_fn0)dong_porf_porf_counter_export_onReset, NULL, &dong_porf_porf_counter_memory, &dong_porf_porf_counter_memory_pages },
+  { "porf_todo", "onAdd", NULL, 0, (dong_porf_export_fn0)dong_porf_porf_todo_export_onAdd, NULL, &dong_porf_porf_todo_memory, &dong_porf_porf_todo_memory_pages },
+  { "porf_todo", "onInputChange", NULL, 0, (dong_porf_export_fn0)dong_porf_porf_todo_export_onInputChange, NULL, &dong_porf_porf_todo_memory, &dong_porf_porf_todo_memory_pages },
+  { "porf_todo", "onKeyDown", NULL, 0, (dong_porf_export_fn0)dong_porf_porf_todo_export_onKeyDown, NULL, &dong_porf_porf_todo_memory, &dong_porf_porf_todo_memory_pages },
+  { "porf_todo", "onFilterAll", NULL, 0, (dong_porf_export_fn0)dong_porf_porf_todo_export_onFilterAll, NULL, &dong_porf_porf_todo_memory, &dong_porf_porf_todo_memory_pages },
+  { "porf_todo", "onFilterActive", NULL, 0, (dong_porf_export_fn0)dong_porf_porf_todo_export_onFilterActive, NULL, &dong_porf_porf_todo_memory, &dong_porf_porf_todo_memory_pages },
+  { "porf_todo", "onFilterDone", NULL, 0, (dong_porf_export_fn0)dong_porf_porf_todo_export_onFilterDone, NULL, &dong_porf_porf_todo_memory, &dong_porf_porf_todo_memory_pages },
+  { "porf_todo", "onClearDone", NULL, 0, (dong_porf_export_fn0)dong_porf_porf_todo_export_onClearDone, NULL, &dong_porf_porf_todo_memory, &dong_porf_porf_todo_memory_pages },
+  { "porf_todo", "onListClick", NULL, 0, (dong_porf_export_fn0)dong_porf_porf_todo_export_onListClick, NULL, &dong_porf_porf_todo_memory, &dong_porf_porf_todo_memory_pages },
+  { "porf_game_ui", "onDamage", NULL, 0, (dong_porf_export_fn0)dong_porf_porf_game_ui_export_onDamage, NULL, &dong_porf_porf_game_ui_memory, &dong_porf_porf_game_ui_memory_pages },
+  { "porf_game_ui", "onHeal", NULL, 0, (dong_porf_export_fn0)dong_porf_porf_game_ui_export_onHeal, NULL, &dong_porf_porf_game_ui_memory, &dong_porf_porf_game_ui_memory_pages },
+  { "porf_game_ui", "onScoreTick", NULL, 0, (dong_porf_export_fn0)dong_porf_porf_game_ui_export_onScoreTick, NULL, &dong_porf_porf_game_ui_memory, &dong_porf_porf_game_ui_memory_pages },
   { "t12_inline", "inc__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_inline_export_inc__onclick, NULL, &dong_porf_t12_inline_memory, &dong_porf_t12_inline_memory_pages },
   { "t12_inline", "__porf_auto_0__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_inline_export___porf_auto_0__onclick, NULL, &dong_porf_t12_inline_memory, &dong_porf_t12_inline_memory_pages },
 };
 
-const size_t dong_porf_handler_count = 6;
+const size_t dong_porf_handler_count = 20;
 
 const dong_porf_module_t* dong_porf_find_module(const char* name) {
   if (!name) return NULL;

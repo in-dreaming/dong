@@ -8,6 +8,7 @@ import path from 'node:path';
 import { dongRoot, ensurePorfforDeps, porfforCompilerUrls } from './porffor_paths.mjs';
 import { lintPorfforSource } from './porffor_lint.mjs';
 import { extractInlineHandlers } from './porffor_inline_handlers.mjs';
+import { compilePorfFile } from './porffor_framework_compile.mjs';
 
 ensurePorfforDeps();
 
@@ -15,6 +16,14 @@ const outDir = path.join(dongRoot, 'generated', 'porffor');
 const manifestPath = path.join(dongRoot, 'scripts', 'porffor_manifest.json');
 
 const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+
+for (const fw of manifest.framework ?? []) {
+  const porfPath = path.join(dongRoot, fw.porf);
+  const outJs = path.join(dongRoot, fw.path ?? `generated/porffor/${fw.name}.js`);
+  compilePorfFile(porfPath, { outJs });
+  console.log(`[porffor_compile] framework ${fw.name} <- ${fw.porf}`);
+}
+
 const inlineScripts = await extractInlineHandlers(manifest);
 const inlineNames = new Set(inlineScripts.map((s) => s.name));
 const scriptEntries = [

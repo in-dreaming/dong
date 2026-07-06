@@ -1019,6 +1019,11 @@ pub fn build(b: *std.Build) void {
     const run_html_test_step = b.step("run-html-test", "Run HTML render test (pass args with --)");
     run_html_test_step.dependOn(&run_html_test.step);
 
+    const run_porffor_framework_test = b.addSystemCommand(&.{ "node", "scripts/porffor_framework_compile.test.mjs" });
+    run_porffor_framework_test.setCwd(b.path("."));
+    const run_porffor_framework_test_step = b.step("run-porffor-framework-test", "Run Porffor UI framework compiler unit tests");
+    run_porffor_framework_test_step.dependOn(&run_porffor_framework_test.step);
+
     const run_porffor_tests = b.addSystemCommand(&.{ "node", "scripts/run-porffor-tests.mjs" });
     run_porffor_tests.setCwd(b.path("."));
     run_porffor_tests.step.dependOn(&cmake_install.step);

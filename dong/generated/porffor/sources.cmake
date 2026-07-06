@@ -10,5 +10,8 @@ set(DONG_PORFFOR_MODULE_SOURCES
   "${DONG_PORFFOR_OUT_DIR}/test_mf_text.c"
   "${DONG_PORFFOR_OUT_DIR}/test_mf_class.c"
   "${DONG_PORFFOR_OUT_DIR}/test_mf_style.c"
+  "${DONG_PORFFOR_OUT_DIR}/porf_counter.c"
+  "${DONG_PORFFOR_OUT_DIR}/porf_todo.c"
+  "${DONG_PORFFOR_OUT_DIR}/porf_game_ui.c"
   "${DONG_PORFFOR_OUT_DIR}/t12_inline.c"
 )
