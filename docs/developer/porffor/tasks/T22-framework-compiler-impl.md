@@ -26,7 +26,7 @@
 
 ## 完成记录
 
-- **Commit**: (见 feature/porffor Wave 4)
+- **Commit**: `394884a`
 - **编译器**: `porffor_framework_compile.mjs`、`porffor_framework_lint.mjs`
 - **单测**: `porffor_framework_compile.test.mjs`（bind/event/if + 反例）
 - **管线**: `porffor_manifest.json` `framework[]` → `porffor_compile.mjs`

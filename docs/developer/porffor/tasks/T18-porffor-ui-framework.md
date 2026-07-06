@@ -38,6 +38,7 @@
 ## 完成记录
 
 - **日期**: 2026-07-06
+- **Commit**: `394884a`
 - **产出**: `docs/developer/porffor/framework-spec.md`（9 节完整 + 评审记录）
 - **Spike**: `repro/t18/spike-verify.mjs`（counter/if 样例 `porf c` 可编译）
 - **决议**: 进入 T22/T23；第一版 `{#each}` 用 rebuild 槽位模型

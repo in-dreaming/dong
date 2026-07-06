@@ -1,6 +1,6 @@
 # Wave 4 遗留事项（2026-07-06）
 
-Wave 4 任务 T18–T23 主体已合入 `feature/porffor`。**T21 QuickJS 退役** 未执行（硬门槛未满足）。
+Wave 4 任务 T18–T23 主体已合入 `feature/porffor`（**commit `394884a`**）。**T21 QuickJS 退役** 未执行（硬门槛未满足）。
 
 ## 合入摘要
 
