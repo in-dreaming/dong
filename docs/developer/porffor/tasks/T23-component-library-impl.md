@@ -24,7 +24,7 @@
 
 ## 完成记录
 
-- **Commit**: (见 feature/porffor Wave 4)
+- **Commit**: `394884a`
 - **组件文档**: `docs/developer/porffor/components.md`
 - **示例**: `data/porf-counter|porf-todo-classic|porf-game-ui`
 - **模块**: manifest 注册 `porf_counter` / `porf_todo` / `porf_game_ui`
