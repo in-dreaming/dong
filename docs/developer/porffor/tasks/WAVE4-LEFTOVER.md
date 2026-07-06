@@ -1,6 +1,6 @@
 # Wave 4 遗留事项（2026-07-06）
 
-Wave 4 任务 T18–T23 主体已合入 `feature/porffor`（**commit `394884a`**）。**T21 QuickJS 退役** 未执行（硬门槛未满足）。
+Wave 4 任务 T18–T23 主体已合入 `feature/porffor`（**commit `394884a`**）。本地可运行验证：**`87b5789`**（Porffor 内存初始化 + Windows 构建修复）。**T21 QuickJS 退役** 未执行。
 
 ## 合入摘要
 
@@ -32,7 +32,7 @@ Wave 4 任务 T18–T23 主体已合入 `feature/porffor`（**commit `394884a`**
 
 ## 遗留 — 测试
 
-1. 新增示例 HTML 可标 `porffor: ready` 进 T13 runner（待注册 manifest 试点）。
+1. ~~新增示例 HTML 可标 `porffor: ready` 进 T13 runner~~ — `run-porffor-tests.mjs` 已扫描 `data/porf-*`（`87b5789` 后续提交）。
 2. CE/selection 类仍 blocked(T20)。
 
 ## Wave 5 入口

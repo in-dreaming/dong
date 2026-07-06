@@ -14,6 +14,33 @@ import { parsePorfforTagFromHtml, extractPorfforModule } from './porffor_test_ta
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const testsDir = path.join(dongRoot, 'examples', 'data', 'tests');
+const dataDir = path.join(dongRoot, 'examples', 'data');
+
+function discoverReadyHtml() {
+  const entries = [];
+
+  const scanFile = (htmlPath, id) => {
+    const html = fs.readFileSync(htmlPath, 'utf8');
+    const tag = parsePorfforTagFromHtml(html);
+    entries.push({ id, htmlPath, tag, module: extractPorfforModule(html) });
+  };
+
+  for (const file of fs.readdirSync(testsDir).filter((f) => f.endsWith('.html'))) {
+    scanFile(path.join(testsDir, file), file);
+  }
+
+  if (fs.existsSync(dataDir)) {
+    for (const name of fs.readdirSync(dataDir)) {
+      if (!name.startsWith('porf-')) continue;
+      const indexHtml = path.join(dataDir, name, 'index.html');
+      if (fs.existsSync(indexHtml)) {
+        scanFile(indexHtml, path.join(name, 'index.html').replace(/\\/g, '/'));
+      }
+    }
+  }
+
+  return entries;
+}
 const defaultExe = process.platform === 'win32'
   ? path.join(dongRoot, 'zig-out', 'bin', 'html_render_test.exe')
   : path.join(dongRoot, 'zig-out', 'bin', 'html_render_test');
@@ -38,16 +65,15 @@ if (!fs.existsSync(exe)) {
 const outDir = path.join(dongRoot, 'zig-out', 'tmp', 'porffor-tests');
 fs.mkdirSync(outDir, { recursive: true });
 
-const allHtml = fs.readdirSync(testsDir).filter((f) => f.endsWith('.html'));
-const inventory = { total: allHtml.length, ready: 0, pending: 0, blocked: 0, dropped: 0 };
+const discovered = discoverReadyHtml();
+const inventory = { total: discovered.length, ready: 0, pending: 0, blocked: 0, dropped: 0 };
 const readyTests = [];
 
-for (const file of allHtml) {
-  const html = fs.readFileSync(path.join(testsDir, file), 'utf8');
-  const tag = parsePorfforTagFromHtml(html);
+for (const item of discovered) {
+  const { tag } = item;
   inventory[tag.status] = (inventory[tag.status] ?? 0) + 1;
   if (tag.status === 'ready') {
-    readyTests.push({ file, module: extractPorfforModule(html) });
+    readyTests.push(item);
   }
 }
 
@@ -59,31 +85,40 @@ console.log(
 let failed = 0;
 let passed = 0;
 
-for (const { file, module } of readyTests) {
-  const htmlPath = path.join(testsDir, file);
-  const outBmp = path.join(outDir, `${path.basename(file, '.html')}.bmp`);
+for (const { id, htmlPath, module } of readyTests) {
+  const safeName = id.replace(/[\\/]/g, '_').replace(/\.html$/, '');
+  const outBmp = path.join(outDir, `${safeName}.bmp`);
   const cmd = [exe, htmlPath, outBmp, '800', '600', '1'];
   const env = { ...process.env };
   if (module) env.DONG_PORFFOR_MODULE = module;
 
-  const mfMetaPath = path.join(dongRoot, 'examples', 'porffor', 'tests', `${path.basename(file, '.html')}.mf.json`);
-  if (fs.existsSync(mfMetaPath)) {
+  const baseName = path.basename(htmlPath, '.html');
+  const parentDir = path.basename(path.dirname(htmlPath));
+  const mfCandidates = [
+    path.join(path.dirname(htmlPath), `${baseName}.mf.json`),
+    path.join(path.dirname(htmlPath), 'mf.json'),
+    path.join(dongRoot, 'examples', 'porffor', 'tests', `${parentDir}.mf.json`),
+    path.join(dongRoot, 'examples', 'porffor', 'tests', `${path.basename(id, '.html')}.mf.json`),
+  ];
+  for (const mfMetaPath of mfCandidates) {
+    if (!fs.existsSync(mfMetaPath)) continue;
     const meta = JSON.parse(fs.readFileSync(mfMetaPath, 'utf8'));
     if (meta.frames) cmd[5] = String(meta.frames);
     if (meta.callExportAfterFrame0) {
       cmd.push('--call-export-after-frame0', meta.callExportAfterFrame0);
     }
+    break;
   }
 
   if (verbose) console.log('+', cmd.join(' '));
   const r = spawnSync(cmd[0], cmd.slice(1), { env, stdio: verbose ? 'inherit' : 'pipe', cwd: dongRoot });
   if (r.status !== 0) {
     failed++;
-    console.error(`FAIL ${file}`);
+    console.error(`FAIL ${id}`);
     if (!verbose && r.stderr) process.stderr.write(r.stderr);
   } else {
     passed++;
-    if (verbose) console.log(`ok ${file}`);
+    if (verbose) console.log(`ok ${id}`);
   }
 }
 

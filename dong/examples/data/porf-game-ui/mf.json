@@ -1,0 +1,4 @@
+{
+  "frames": 3,
+  "note": "Allow setInterval onScoreTick to fire between headless frames"
+}

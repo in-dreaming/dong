@@ -36,10 +36,20 @@
 | preact-todo-classic | `data/porf-todo-classic/index.html` |
 | preact-game-ui | `data/porf-game-ui/index.html` |
 
-运行（Porffor 构建后）:
+运行（`zig build` 后，从 `dong/zig-out/bin`）:
 
 ```powershell
-.\zig-out\bin\dong_app.exe --html data\porf-counter\index.html
-.\zig-out\bin\dong_app.exe --html data\porf-todo-classic\index.html
-.\zig-out\bin\dong_app.exe --html data\porf-game-ui\index.html
+. E:\env\activate-dong-build.ps1
+$env:PATH = "E:\VulkanSDK\1.4.350.0\Bin;" + $env:PATH
+cd E:\ws\infra\dong\dong\zig-out\bin
+.\dong_app.exe --html data/porf-counter/index.html
+.\dong_app.exe --html data/porf-todo-classic/index.html
+.\dong_app.exe --html data/porf-game-ui/index.html
+```
+
+无头冒烟（`html_render_test`）:
+
+```powershell
+cd E:\ws\infra\dong\dong
+node scripts/run-porffor-tests.mjs --verbose
 ```
