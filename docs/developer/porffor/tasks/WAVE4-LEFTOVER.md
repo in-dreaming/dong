@@ -47,5 +47,13 @@ Wave 4 任务 T18–T23 主体已合入 `feature/porffor`（**commit `394884a`**
 $node = "E:\ws\infra\dong\.tools\node-v22.16.0-win-x64\node.exe"
 & $node dong\scripts\porffor_framework_compile.test.mjs
 & $node dong\scripts\porffor_compile.mjs
-cd dong; zig build
+cd dong; zig build run-porffor-framework-test
+# 全量 native 构建需：CMake + Ninja + clang-cl + Windows SDK（见 build.env.windows.example）
 ```
+
+## 构建环境备注（2026-07-06）
+
+- **子模块**：`gpu` 指针已从失效 commit 更新至 `origin/main`（`8b0f2bc`）；`git submodule update --init --recursive` 初始化 ffmpeg/sdl/harfbuzz 等。
+- **Node**：`build.zig` 自动探测 `../.tools/node-v22.16.0-win-x64/node.exe`；可设 `NODE_EXE` in `build.env`。
+- **HarfBuzz**：无 amalgamation 时 Windows 走 CMake 路径（不再要求预编译 `.lib`）。
+- **示例**：`zig build` 安装时复制 `porf-counter` / `porf-todo-classic` / `porf-game-ui` 至 `zig-out/bin/data/`。

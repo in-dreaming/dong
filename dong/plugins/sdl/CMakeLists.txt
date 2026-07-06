@@ -55,7 +55,18 @@ if(DONG_PLUGIN_SDL_ENABLE_FFMPEG)
             "C:/msys32/usr/bin"
             "C:/Program Files/Git/bin"
             "C:/Program Files/Git/usr/bin"
+            "E:/Program Files/Git/bin"
+            "E:/Program Files/Git/usr/bin"
         )
+        find_program(GIT_EXECUTABLE NAMES git git.exe)
+        if(GIT_EXECUTABLE)
+            get_filename_component(_git_bin_dir "${GIT_EXECUTABLE}" DIRECTORY)
+            get_filename_component(_git_root_dir "${_git_bin_dir}/.." ABSOLUTE)
+            list(PREPEND _bash_hints
+                "${_git_root_dir}/bin"
+                "${_git_root_dir}/usr/bin"
+            )
+        endif()
         find_program(BASH_EXECUTABLE NAMES bash.exe bash HINTS ${_bash_hints})
         if(NOT BASH_EXECUTABLE)
             find_program(BASH_EXECUTABLE NAMES bash.exe bash)

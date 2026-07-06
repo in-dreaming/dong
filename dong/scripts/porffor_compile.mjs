@@ -190,6 +190,20 @@ function detectExports(source) {
   return names;
 }
 
+function estimateStructSize(globals) {
+  const sizeOf = { f64: 8, i32: 4, u32: 4, u8: 1, u16: 2, i64: 8, u64: 8 };
+  let offset = 0;
+  for (const g of globals) {
+    const sz = sizeOf[g.type] ?? 4;
+    const align = sz >= 8 ? 8 : sz >= 4 ? 4 : sz;
+    offset = Math.ceil(offset / align) * align;
+    offset += sz;
+  }
+  if (offset === 0) return 0;
+  const tailAlign = 8;
+  return Math.ceil(offset / tailAlign) * tailAlign;
+}
+
 function parseModuleStateGlobals(cSource, modPrefix) {
   const globals = [];
   const esc = modPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -254,8 +268,10 @@ function emitModuleC(item) {
   const modPrefix = `dong_porf_${item.name}_`;
   const globals = parseModuleStateGlobals(item.c, modPrefix);
   item.stateGlobals = globals;
+  item.stateSizeBytes = estimateStructSize(globals);
   item.modPrefix = modPrefix;
   let body = stripDuplicateTypes(item.c);
+  body = body.replace(/\bNaN\b/g, 'NAN').replace(/\bInfinity\b/g, 'INFINITY');
   body = appendModuleStateSnapshot(body, modPrefix, globals);
   const out = `// Porffor module: ${item.name}\n#include "dong_porf_runtime.h"\n${body}`;
   fs.writeFileSync(path.join(outDir, `${item.name}.c`), out);
@@ -433,8 +449,8 @@ for (const m of modules) {
   registryC += `extern unsigned int ${prefix}memory_pages;\n`;
   registryC += `extern void ${prefix}_porf_init(void);\n`;
   if (item?.stateGlobals?.length) {
-    registryC += `extern void ${prefix}state_capture(${prefix}state_t* out);\n`;
-    registryC += `extern void ${prefix}state_apply(const ${prefix}state_t* in);\n`;
+    registryC += `extern void ${prefix}state_capture(void* out);\n`;
+    registryC += `extern void ${prefix}state_apply(const void* in);\n`;
   }
   registryC += `\n`;
 }
@@ -460,7 +476,7 @@ for (const m of modules) {
   const hasState = item?.stateGlobals?.length > 0;
   const capture = hasState ? `${prefix}state_capture` : 'NULL';
   const apply = hasState ? `${prefix}state_apply` : 'NULL';
-  const stateSize = hasState ? `sizeof(${prefix}state_t)` : '0';
+  const stateSize = hasState ? String(item.stateSizeBytes ?? 0) : '0';
   registryC += `  { "${m.name}", ${m.symbol}, &${prefix}memory, &${prefix}memory_pages, ${prefix}_porf_init, ${capture}, ${apply}, ${stateSize} },\n`;
 }
 registryC += `};\n\n`;

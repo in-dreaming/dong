@@ -26,8 +26,8 @@ public:
     JSBindings* bindings() const;
 
     void setActiveMemory(char* memory, unsigned int* memory_pages);
-    char* activeMemory() const { return memory_; }
-    unsigned int* activeMemoryPages() const { return memory_pages_; }
+    char* activeMemory() const;
+    unsigned int activeMemoryPageCount() const;
 
     void processTimers(double now_ms);
     void processAnimationFrames(double timestamp_ms);

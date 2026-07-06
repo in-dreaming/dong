@@ -9,6 +9,7 @@
 #include "dong_clipboard.h"
 #include "dong_platform.h"
 #include "../../dom/dialog_element.hpp"
+#include "../../layout/layout_engine.hpp"
 #include "../../dom/html/html_parser.hpp"
 #include <algorithm>
 #include <atomic>
@@ -128,15 +129,30 @@ void PorfforHost::setActiveMemory(char* memory, unsigned int* memory_pages) {
     memory_pages_ = memory_pages;
 }
 
-size_t PorfforHost::memoryCapacityBytes() const {
-    if (!memory_pages_) {
-        return 0;
+char* PorfforHost::activeMemory() const {
+    if (g_active_module && g_active_module->memory && *g_active_module->memory) {
+        return *g_active_module->memory;
     }
-    return static_cast<size_t>(*memory_pages_) * 65536u;
+    return memory_;
+}
+
+unsigned int PorfforHost::activeMemoryPageCount() const {
+    if (g_active_module && g_active_module->memory_pages) {
+        return *g_active_module->memory_pages;
+    }
+    if (memory_pages_) {
+        return *memory_pages_;
+    }
+    return 0;
+}
+
+size_t PorfforHost::memoryCapacityBytes() const {
+    return static_cast<size_t>(activeMemoryPageCount()) * 65536u;
 }
 
 std::string PorfforHost::readByteString(double ptr) const {
-    if (!memory_ || ptr < 0) {
+    char* memory = activeMemory();
+    if (!memory || ptr < 0) {
         return {};
     }
     const size_t offset = static_cast<size_t>(ptr);
@@ -144,11 +160,11 @@ std::string PorfforHost::readByteString(double ptr) const {
     if (offset + 4 > cap) {
         return {};
     }
-    const u32 len = *reinterpret_cast<u32*>(memory_ + offset);
+    const u32 len = *reinterpret_cast<u32*>(memory + offset);
     if (len > kMaxImportStringBytes || offset + 4 + len > cap) {
         return {};
     }
-    return std::string(memory_ + offset + 4, memory_ + offset + 4 + len);
+    return std::string(memory + offset + 4, memory + offset + 4 + len);
 }
 
 void PorfforHost::setResultString(std::string s) {
@@ -174,7 +190,8 @@ double PorfforHost::strLen() const {
 }
 
 double PorfforHost::strRead(double dest_ptr, double max_len) {
-    if (!memory_ || dest_ptr < 0 || max_len <= 0 || result_slot_.empty()) {
+    char* memory = activeMemory();
+    if (!memory || dest_ptr < 0 || max_len <= 0 || result_slot_.empty()) {
         return 0;
     }
     const size_t offset = static_cast<size_t>(dest_ptr);
@@ -191,7 +208,7 @@ double PorfforHost::strRead(double dest_ptr, double max_len) {
     if (want == 0) {
         return 0;
     }
-    std::memcpy(memory_ + offset, result_slot_.data(), want);
+    std::memcpy(memory + offset, result_slot_.data(), want);
     return static_cast<double>(want);
 }
 
@@ -1237,6 +1254,7 @@ JSBindings* PorfforHost::bindings() const {
 
 using dong::script::g_active_module;
 using dong::script::g_active_host;
+using dong::script::g_state_nums;
 
 extern "C" {
 

@@ -87,6 +87,10 @@ if(VULKAN_SDK_PATH)
         target_include_directories(dong_sdl_backend PRIVATE "${VULKAN_SDK_PATH}/include/spirv_cross")
     endif()
 endif()
+set(SPIRV_CROSS_VENDOR "${CMAKE_SOURCE_DIR}/third_party/SDL_shadercross/external/SPIRV-Cross")
+if(EXISTS "${SPIRV_CROSS_VENDOR}/spirv_cross_c.h")
+    target_include_directories(dong_sdl_backend PRIVATE "${SPIRV_CROSS_VENDOR}")
+endif()
 
 
 

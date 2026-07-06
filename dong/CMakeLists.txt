@@ -499,6 +499,8 @@ if(DONG_SCRIPT_ENGINE STREQUAL "quickjs")
         src/script/js_text_layout_bindings.cpp
         src/script/js_scene_bindings.cpp
     )
+elseif(DONG_SCRIPT_ENGINE STREQUAL "porffor")
+    target_compile_definitions(dong_render PRIVATE DONG_SCRIPT_ENGINE_PORFFOR=1)
 endif()
 
 set_target_properties(dong_render PROPERTIES POSITION_INDEPENDENT_CODE ON)
@@ -528,6 +530,10 @@ if(VULKAN_SDK_PATH)
     else()
         target_include_directories(dong_render PUBLIC "${VULKAN_SDK_PATH}/include/spirv_cross")
     endif()
+endif()
+set(SPIRV_CROSS_VENDOR "${CMAKE_SOURCE_DIR}/third_party/SDL_shadercross/external/SPIRV-Cross")
+if(EXISTS "${SPIRV_CROSS_VENDOR}/spirv_cross_c.h")
+    target_include_directories(dong_render PUBLIC "${SPIRV_CROSS_VENDOR}")
 endif()
 
 target_compile_definitions(dong_render PRIVATE DONG_USE_SDL_IMAGE DONG_SDL_SHADER_DIR=\"${CMAKE_SOURCE_DIR}/src/render/sdl_render/shaders\" MSDFGEN_PUBLIC= MSDFGEN_EXT_PUBLIC=)

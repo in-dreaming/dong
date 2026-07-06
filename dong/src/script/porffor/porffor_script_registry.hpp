@@ -15,6 +15,7 @@ class PorfforHost;
 class PorfforScriptRegistry {
 public:
     explicit PorfforScriptRegistry(PorfforHost* host);
+    ~PorfforScriptRegistry();
 
     bool run(const std::string& module_name);
     bool callExport(const std::string& module_name, const std::string& export_name,
@@ -27,7 +28,9 @@ public:
 
 private:
     struct ModuleInstance {
-        std::vector<char> memory;
+        // Heap block owned by the Porffor module (calloc/realloc in generated code).
+        // Must not point into std::vector — generated __Porffor_malloc calls realloc.
+        char* memory = nullptr;
         unsigned int memory_pages = 0;
         std::vector<uint8_t> state_snapshot;
         bool initialized = false;

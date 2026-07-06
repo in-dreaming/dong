@@ -21,6 +21,7 @@ const BuildConfig = struct {
     dxc_include_path: []const u8 = DXC_DIR ++ "/inc",
     android_ndk_path: ?[]const u8 = null,
     ios_sdk_path: ?[]const u8 = null,
+    node_exe_path: ?[]const u8 = null,
     enable_ffmpeg: bool = true, // auto-detected if not set in build.env
 };
 
@@ -64,6 +65,8 @@ fn loadBuildConfig(allocator: std.mem.Allocator, io: Io) BuildConfig {
                     std.ascii.eqlIgnoreCase(value, "ON") or
                     std.ascii.eqlIgnoreCase(value, "TRUE") or
                     std.ascii.eqlIgnoreCase(value, "YES");
+            } else if (std.mem.eql(u8, key, "NODE_EXE")) {
+                config.node_exe_path = allocator.dupe(u8, value) catch null;
             }
         }
     }
@@ -524,6 +527,18 @@ pub fn build(b: *std.Build) void {
             "-DCMAKE_C_COMPILER=clang-cl",                   "-DCMAKE_CXX_COMPILER=clang-cl",
             "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL",
         }) catch unreachable;
+        if (config.enable_ffmpeg) {
+            const git_bash_paths = [_][]const u8{
+                "E:/Program Files/Git/bin/bash.exe",
+                "C:/Program Files/Git/bin/bash.exe",
+            };
+            for (git_bash_paths) |bash_path| {
+                if (IoDir.cwd().access(io, bash_path, .{})) |_| continue else |_| {
+                    dong_cmake_args.append(b.fmt("-DBASH_EXECUTABLE={s}", .{bash_path})) catch unreachable;
+                    break;
+                }
+            }
+        }
     } else if (platform.is_linux) {
         dong_cmake_args.appendSlice(&.{
             "-G", "Ninja",
@@ -554,7 +569,12 @@ pub fn build(b: *std.Build) void {
         "-ExecutionPolicy",
         "Bypass",
         "-Command",
-        "if (-not (Test-Path third_party/porffor/node_modules/acorn)) { Push-Location third_party/porffor; npm install; Pop-Location }",
+        b.fmt(
+            "& {{ $node = '{s}'; $npm = Join-Path (Split-Path $node -Parent) 'npm.cmd'; " ++
+                "if (-not (Test-Path third_party/porffor/node_modules/acorn)) {{ " ++
+                "Push-Location third_party/porffor; & $npm install; Pop-Location }} }}",
+            .{resolveNodeExecutable(io, config)},
+        ),
     } else &.{
         "sh",
         "-c",
@@ -562,7 +582,8 @@ pub fn build(b: *std.Build) void {
     });
     porffor_deps.setCwd(b.path("."));
 
-    const porffor_compile = b.addSystemCommand(&.{ "node", "scripts/porffor_compile.mjs" });
+    const node_exe = resolveNodeExecutable(io, config);
+    const porffor_compile = b.addSystemCommand(&.{ node_exe, "scripts/porffor_compile.mjs" });
     porffor_compile.setCwd(b.path("."));
     porffor_compile.step.dependOn(&porffor_deps.step);
 
@@ -819,6 +840,50 @@ pub fn build(b: *std.Build) void {
     preact_step.dependOn(&preact_build_and_install.step);
 
     // ==========================================================================
+    // Porffor UI examples (HTML only; modules compiled via porffor_compile)
+    // ==========================================================================
+    if (std.mem.eql(u8, options.script_engine, "porffor")) {
+        const porf_copy = b.addSystemCommand(if (host_is_windows) &.{
+            "powershell",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            b.fmt(
+                "& {{ $ErrorActionPreference = 'Stop'; " ++
+                    "$examples = @('porf-counter', 'porf-todo-classic', 'porf-game-ui'); " ++
+                    "foreach ($ex in $examples) {{ " ++
+                    "  $src = 'examples/data/' + $ex + '/index.html'; " ++
+                    "  if (Test-Path $src) {{ " ++
+                    "    $dst = '{s}/bin/data/' + $ex; " ++
+                    "    New-Item -ItemType Directory -Force -Path $dst | Out-Null; " ++
+                    "    Copy-Item -Force $src (Join-Path $dst 'index.html'); " ++
+                    "    Write-Host ('  Installed ' + $ex); " ++
+                    "  }} " ++
+                    "}} }}",
+                .{install_prefix},
+            ),
+        } else &.{
+            "sh",
+            "-c",
+            b.fmt(
+                "for ex in porf-counter porf-todo-classic porf-game-ui; do " ++
+                    "  src=\"examples/data/$ex/index.html\"; " ++
+                    "  if [ -f \"$src\" ]; then " ++
+                    "    dst='{s}/bin/data/$ex'; " ++
+                    "    mkdir -p \"$dst\"; " ++
+                    "    cp \"$src\" \"$dst/index.html\"; " ++
+                    "    echo \"  Installed $ex\"; " ++
+                    "  fi; " ++
+                    "done",
+                .{install_prefix},
+            ),
+        });
+        porf_copy.step.dependOn(&porffor_compile.step);
+        b.getInstallStep().dependOn(&porf_copy.step);
+    }
+
+    // ==========================================================================
     // Build Steps
     // ==========================================================================
     const examples_step = b.step("examples", "Build all examples and install to zig-out/bin");
@@ -1019,12 +1084,12 @@ pub fn build(b: *std.Build) void {
     const run_html_test_step = b.step("run-html-test", "Run HTML render test (pass args with --)");
     run_html_test_step.dependOn(&run_html_test.step);
 
-    const run_porffor_framework_test = b.addSystemCommand(&.{ "node", "scripts/porffor_framework_compile.test.mjs" });
+    const run_porffor_framework_test = b.addSystemCommand(&.{ node_exe, "scripts/porffor_framework_compile.test.mjs" });
     run_porffor_framework_test.setCwd(b.path("."));
     const run_porffor_framework_test_step = b.step("run-porffor-framework-test", "Run Porffor UI framework compiler unit tests");
     run_porffor_framework_test_step.dependOn(&run_porffor_framework_test.step);
 
-    const run_porffor_tests = b.addSystemCommand(&.{ "node", "scripts/run-porffor-tests.mjs" });
+    const run_porffor_tests = b.addSystemCommand(&.{ node_exe, "scripts/run-porffor-tests.mjs" });
     run_porffor_tests.setCwd(b.path("."));
     run_porffor_tests.step.dependOn(&cmake_install.step);
     const run_porffor_tests_step = b.step("run-porffor-tests", "Run Porffor-ready HTML tests (CI gate)");
@@ -1443,6 +1508,21 @@ fn fileExists(io: Io, rel_path: []const u8) bool {
     return true;
 }
 
+/// Prefer build.env NODE_EXE, then repo `.tools/node-*`, else PATH `node`.
+fn resolveNodeExecutable(io: Io, config: BuildConfig) []const u8 {
+    if (config.node_exe_path) |configured| {
+        if (fileExists(io, configured)) return configured;
+    }
+    const bundled_candidates = [_][]const u8{
+        "../.tools/node-v22.16.0-win-x64/node.exe",
+        "../.tools/node-v22.16.0-win-x64/node",
+    };
+    for (bundled_candidates) |candidate| {
+        if (fileExists(io, candidate)) return candidate;
+    }
+    return "node";
+}
+
 fn buildHarfBuzz(
     b: *std.Build,
     target: std.Build.ResolvedTarget,
@@ -1461,35 +1541,38 @@ fn buildHarfBuzz(
     const file_exists = fileExists(io, hb_amalgamation);
     std.debug.print("File exists: {}\n", .{file_exists});
     if (!file_exists) {
-        const prebuilt = b.step("harfbuzz_prebuilt", "Use prebuilt harfbuzz from zig-out/");
-        prebuilt.dependOn(&freetype_artifact.step);
+        const use_cmake_hb = platform.is_windows and platform.is_native and fileExists(io, "third_party/harfbuzz/CMakeLists.txt");
+        if (!use_cmake_hb) {
+            const prebuilt = b.step("harfbuzz_prebuilt", "Use prebuilt harfbuzz from zig-out/");
+            prebuilt.dependOn(&freetype_artifact.step);
 
-        if (platform.is_windows) {
-            const src_lib = if (fileExists(io, "zig-out/harfbuzz/lib/harfbuzz.lib"))
-                "zig-out/harfbuzz/lib/harfbuzz.lib"
-            else
-                "zig-out/lib/harfbuzz.lib";
+            if (platform.is_windows) {
+                const src_lib = if (fileExists(io, "zig-out/harfbuzz/lib/harfbuzz.lib"))
+                    "zig-out/harfbuzz/lib/harfbuzz.lib"
+                else
+                    "zig-out/lib/harfbuzz.lib";
 
-            if (!fileExists(io, src_lib)) {
-                @panic("harfbuzz sources missing (third_party/harfbuzz) and no prebuilt harfbuzz.lib found under zig-out/harfbuzz/lib or zig-out/lib");
+                if (!fileExists(io, src_lib)) {
+                    @panic("harfbuzz sources missing (third_party/harfbuzz) and no prebuilt harfbuzz.lib found under zig-out/harfbuzz/lib or zig-out/lib");
+                }
+
+                const install_hb = b.addInstallFileWithDir(b.path(src_lib), .lib, "harfbuzz.lib");
+                prebuilt.dependOn(&install_hb.step);
+                return prebuilt;
             }
 
-            const install_hb = b.addInstallFileWithDir(b.path(src_lib), .lib, "harfbuzz.lib");
-            prebuilt.dependOn(&install_hb.step);
-            return prebuilt;
-        }
+            if (fileExists(io, "zig-out/harfbuzz/lib/libharfbuzz.a")) {
+                const install_hb = b.addInstallFileWithDir(b.path("zig-out/harfbuzz/lib/libharfbuzz.a"), .lib, "libharfbuzz.a");
+                prebuilt.dependOn(&install_hb.step);
+                return prebuilt;
+            }
 
-        if (fileExists(io, "zig-out/harfbuzz/lib/libharfbuzz.a")) {
-            const install_hb = b.addInstallFileWithDir(b.path("zig-out/harfbuzz/lib/libharfbuzz.a"), .lib, "libharfbuzz.a");
-            prebuilt.dependOn(&install_hb.step);
-            return prebuilt;
-        }
+            if (fileExists(io, "zig-out/lib/libharfbuzz.a")) {
+                return prebuilt;
+            }
 
-        if (fileExists(io, "zig-out/lib/libharfbuzz.a")) {
-            return prebuilt;
+            @panic("harfbuzz sources missing (third_party/harfbuzz) and no prebuilt libharfbuzz.a found under zig-out");
         }
-
-        @panic("harfbuzz sources missing (third_party/harfbuzz) and no prebuilt libharfbuzz.a found under zig-out");
     }
 
     // On Windows native builds, build HarfBuzz via its CMake to avoid libc++ linkage surprises.
@@ -1539,8 +1622,28 @@ fn buildHarfBuzz(
         });
         copy_lib.step.dependOn(&cmake_build.step);
 
+        const hb_dst = b.fmt("{s}/harfbuzz/include/harfbuzz", .{b.install_prefix});
+        const copy_headers = b.addSystemCommand(&.{
+            "powershell",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            b.fmt(
+                "& {{ " ++
+                    "$ErrorActionPreference = 'Stop'; " ++
+                    "$src = '{s}'; " ++
+                    "$dst = '{s}'; " ++
+                    "New-Item -ItemType Directory -Force -Path $dst | Out-Null; " ++
+                    "Copy-Item -Recurse -Force (Join-Path $src '*') $dst; " ++
+                "}}",
+                .{ hb_src, hb_dst },
+            ),
+        });
+        copy_headers.step.dependOn(&copy_lib.step);
+
         const hb_step = b.step("harfbuzz_build", "Build HarfBuzz (CMake, internal)");
-        hb_step.dependOn(&copy_lib.step);
+        hb_step.dependOn(&copy_headers.step);
         hb_step.dependOn(&freetype_artifact.step);
         return hb_step;
     }
@@ -2021,6 +2124,7 @@ fn buildSDLBackend(
             sdl_backend.root_module.addIncludePath(.{ .cwd_relative = vk_include });
         }
     }
+    sdl_backend.root_module.addIncludePath(b.path("third_party/SDL_shadercross/external/SPIRV-Cross"));
 
     linkLibCpp(sdl_backend);
     linkLibC(sdl_backend);

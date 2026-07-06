@@ -11,6 +11,8 @@
 #include "../../dom/select_element.hpp"
 #include "../../dom/dialog_element.hpp"
 #include "../../dom/css/style_engine.hpp"
+#include "../../dom/selection.hpp"
+#include "../../layout/layout_engine.hpp"
 #include "dong_platform.h"
 #include "dong_clipboard.h"
 #include <algorithm>

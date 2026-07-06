@@ -660,7 +660,7 @@ static struct ReturnValue dong_porf_test_porffor_greeting__Number_prototype_toSt
       j17:;
       _get10 = _this;
       // if 
-        if (_get10 == Infinity) {
+        if (_get10 == INFINITY) {
           return (struct ReturnValue){ 235, 195 };
         }
       // end
@@ -4739,7 +4739,7 @@ static struct ReturnValue dong_porf_test_porffor_greeting__String_prototype_char
   _get12 = len;
   // if 
     if (((_get10 < 0) | (_get11 >= _get12)) != 0) {
-      return (struct ReturnValue){ NaN, 1 };
+      return (struct ReturnValue){ NAN, 1 };
     }
   // end
   j294:;
@@ -4767,7 +4767,7 @@ static struct ReturnValue dong_porf_test_porffor_greeting__ByteString_prototype_
   _get4 = len;
   // if 
     if (((_get2 < 0) | (_get3 >= _get4)) != 0) {
-      return (struct ReturnValue){ NaN, 1 };
+      return (struct ReturnValue){ NAN, 1 };
     }
   // end
   j297:;
@@ -4854,7 +4854,7 @@ static f64 dong_porf_test_porffor_greeting__Porffor_stn_int(f64 str, i32 strjjty
   _get4 = i;
   // if 
     if ((_get3 - _get4) == 0) {
-      return NaN;
+      return NAN;
     }
   // end
   j306:;
@@ -4996,7 +4996,7 @@ static f64 dong_porf_test_porffor_greeting__Porffor_stn_int(f64 str, i32 strjjty
                         _get49 = chr;
                         n = ((_get47 * _get48) + _get49) - 55;
                       } else {
-                        return NaN;
+                        return NAN;
                       }
                     // end
                     j319:;
@@ -5004,7 +5004,7 @@ static f64 dong_porf_test_porffor_greeting__Porffor_stn_int(f64 str, i32 strjjty
                 // end
                 j317:;
               } else {
-                return NaN;
+                return NAN;
               }
             // end
             j315:;
@@ -5211,7 +5211,7 @@ static f64 dong_porf_test_porffor_greeting__Porffor_parseExp(f64 str, i32 strjjt
   j400:;
   // if 
     if ((_r400) != 0) {
-      return NaN;
+      return NAN;
     }
   // end
   j402:;
@@ -5300,7 +5300,7 @@ static f64 dong_porf_test_porffor_greeting__Porffor_parseExp(f64 str, i32 strjjt
             _get55 = strict;
             // if 
               if (((u32)(_get55)) != 0) {
-                return NaN;
+                return NAN;
               }
             // end
             j411:;
@@ -5316,7 +5316,7 @@ static f64 dong_porf_test_porffor_greeting__Porffor_parseExp(f64 str, i32 strjjt
   _get56 = hasDigit;
   // if 
     if (_get56 == 0) {
-      return NaN;
+      return NAN;
     }
   // end
   j412:;
@@ -5386,7 +5386,7 @@ static f64 dong_porf_test_porffor_greeting__Math_exp(f64 x, i32 xjjtype) {
     if (dong_porf_test_porffor_greeting__Number_isFinite(_get0) == 0) {
       _get1 = x;
       // if 
-        if (_get1 == (-Infinity)) {
+        if (_get1 == (-INFINITY)) {
           return 0;
         }
       // end
@@ -5480,7 +5480,7 @@ static f64 dong_porf_test_porffor_greeting__Math_log2(f64 y, i32 yjjtype) {
   _get0 = y;
   // if 
     if (_get0 <= 0) {
-      return NaN;
+      return NAN;
     }
   // end
   j457:;
@@ -5603,11 +5603,11 @@ static f64 dong_porf_test_porffor_greeting__Math_log(f64 y, i32 yjjtype) {
       _get1 = y;
       // if 
         if (_get1 == 0) {
-          return -Infinity;
+          return -INFINITY;
         }
       // end
       j454:;
-      return NaN;
+      return NAN;
     }
   // end
   j453:;
@@ -5782,7 +5782,7 @@ static f64 dong_porf_test_porffor_greeting__Math_pow(f64 base, i32 basejjtype, f
   _get0 = exponent;
   // if 
     if (((u32)(dong_porf_test_porffor_greeting__Number_isNaN(_get0))) != 0) {
-      return NaN;
+      return NAN;
     }
   // end
   j416:;
@@ -5822,7 +5822,7 @@ static f64 dong_porf_test_porffor_greeting__Math_pow(f64 base, i32 basejjtype, f
       j421:;
       _get10 = base;
       // if 
-        if (_get10 == Infinity) {
+        if (_get10 == INFINITY) {
           _get11 = exponent;
           // if 
             if (_get11 > 0) {
@@ -5850,11 +5850,11 @@ static f64 dong_porf_test_porffor_greeting__Math_pow(f64 base, i32 basejjtype, f
           _get19 = isOdd;
           // if 
             if (((u32)(_get19)) != 0) {
-              return -Infinity;
+              return -INFINITY;
             }
           // end
           j425:;
-          return Infinity;
+          return INFINITY;
         }
       // end
       j424:;
@@ -5874,7 +5874,7 @@ static f64 dong_porf_test_porffor_greeting__Math_pow(f64 base, i32 basejjtype, f
     if (_get21 == 0) {
       _get22 = base;
       // if 
-        if ((1 / _get22) == Infinity) {
+        if ((1 / _get22) == INFINITY) {
           _get23 = exponent;
           // if 
             if (_get23 > 0) {
@@ -5882,7 +5882,7 @@ static f64 dong_porf_test_porffor_greeting__Math_pow(f64 base, i32 basejjtype, f
             }
           // end
           j429:;
-          return Infinity;
+          return INFINITY;
         }
       // end
       j428:;
@@ -5912,31 +5912,31 @@ static f64 dong_porf_test_porffor_greeting__Math_pow(f64 base, i32 basejjtype, f
       _get31 = isOdd;
       // if 
         if (((u32)(_get31)) != 0) {
-          return -Infinity;
+          return -INFINITY;
         }
       // end
       j432:;
-      return Infinity;
+      return INFINITY;
     }
   // end
   j427:;
   _get32 = exponent;
   // if 
-    if (_get32 == Infinity) {
+    if (_get32 == INFINITY) {
       _get33 = base;
       abs = dong_porf_test_porffor_greeting__Math_abs(_get33);
       absjjtype = 1;
       _get34 = abs;
       // if 
         if (_get34 > 1) {
-          return Infinity;
+          return INFINITY;
         }
       // end
       j434:;
       _get35 = abs;
       // if 
         if (_get35 == 1) {
-          return NaN;
+          return NAN;
         }
       // end
       j435:;
@@ -5946,7 +5946,7 @@ static f64 dong_porf_test_porffor_greeting__Math_pow(f64 base, i32 basejjtype, f
   j433:;
   _get36 = exponent;
   // if 
-    if (_get36 == (-Infinity)) {
+    if (_get36 == (-INFINITY)) {
       _get37 = base;
       abs = dong_porf_test_porffor_greeting__Math_abs(_get37);
       absjjtype = 1;
@@ -5960,11 +5960,11 @@ static f64 dong_porf_test_porffor_greeting__Math_pow(f64 base, i32 basejjtype, f
       _get39 = abs;
       // if 
         if (_get39 == 1) {
-          return NaN;
+          return NAN;
         }
       // end
       j438:;
-      return Infinity;
+      return INFINITY;
     }
   // end
   j436:;
@@ -5974,7 +5974,7 @@ static f64 dong_porf_test_porffor_greeting__Math_pow(f64 base, i32 basejjtype, f
       _get41 = exponent;
       // if 
         if (dong_porf_test_porffor_greeting__Number_isInteger(_get41) == 0) {
-          return NaN;
+          return NAN;
         }
       // end
       j440:;
@@ -6116,7 +6116,7 @@ static f64 dong_porf_test_porffor_greeting__Porffor_stn_float(f64 str, i32 strjj
   _get2 = i;
   // if 
     if ((_get1 - _get2) == 0) {
-      return NaN;
+      return NAN;
     }
   // end
   j378:;
@@ -6224,7 +6224,7 @@ static f64 dong_porf_test_porffor_greeting__Porffor_stn_float(f64 str, i32 strjj
                 _get35 = dec;
                 // if 
                   if (((u32)(_get35)) != 0) {
-                    return NaN;
+                    return NAN;
                   }
                 // end
                 j389:;
@@ -6256,7 +6256,7 @@ static f64 dong_porf_test_porffor_greeting__Porffor_stn_float(f64 str, i32 strjj
                     _get44 = exp;
                     // if 
                       if (((u32)(dong_porf_test_porffor_greeting__Number_isNaN(_get44))) != 0) {
-                        return NaN;
+                        return NAN;
                       }
                     // end
                     j414:;
@@ -6273,7 +6273,7 @@ static f64 dong_porf_test_porffor_greeting__Porffor_stn_float(f64 str, i32 strjj
                     _get49 = exp;
                     return _get48 * dong_porf_test_porffor_greeting__Math_pow(10, 1, _get49, 1);
                   } else {
-                    return NaN;
+                    return NAN;
                   }
                 // end
                 j391:;
@@ -7391,7 +7391,7 @@ static f64 dong_porf_test_porffor_greeting__ecma262_StringToNumber(f64 str, i32 
       j371:;
       // if 
         if ((_r371) != 0) {
-          n = Infinity;
+          n = INFINITY;
           _get225 = negative;
           // if f64
           f64 _r377;
@@ -7410,7 +7410,7 @@ static f64 dong_porf_test_porffor_greeting__ecma262_StringToNumber(f64 str, i32 
         }
       // end
       j376:;
-      return NaN;
+      return NAN;
     }
   // end
   j331:;
@@ -8250,7 +8250,7 @@ static f64 dong_porf_test_porffor_greeting__ecma262_ToNumber(f64 argument, i32 a
   _get4 = argumentjjtype;
   // if 
     if ((f64)(_get4) == 0) {
-      return NaN;
+      return NAN;
     }
   // end
   j255:;

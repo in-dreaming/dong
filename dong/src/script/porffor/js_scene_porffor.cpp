@@ -9,7 +9,7 @@
 namespace dong::script {
 namespace {
 
-using json = porffor_json;
+namespace pj = porffor_json;
 
 static render::SceneGraph& sceneInstance() {
     static render::SceneGraph sg;
@@ -31,72 +31,72 @@ render::SceneGraph& getGlobalSceneGraph() {
 
 uint32_t porfforSceneAddNode(const std::string& config_json) {
     render::SceneNode node;
-    json::extractString(config_json, "name", node.name);
+    pj::extractString(config_json, "name", node.name);
 
     double num = 0;
-    if (json::extractNumber(config_json, "x", num)) {
+    if (pj::extractNumber(config_json, "x", num)) {
         node.x = static_cast<float>(num);
     }
-    if (json::extractNumber(config_json, "y", num)) {
+    if (pj::extractNumber(config_json, "y", num)) {
         node.y = static_cast<float>(num);
     }
-    if (json::extractNumber(config_json, "w", num) || json::extractNumber(config_json, "width", num)) {
+    if (pj::extractNumber(config_json, "w", num) || pj::extractNumber(config_json, "width", num)) {
         node.width = static_cast<float>(num);
     }
-    if (json::extractNumber(config_json, "h", num) || json::extractNumber(config_json, "height", num)) {
+    if (pj::extractNumber(config_json, "h", num) || pj::extractNumber(config_json, "height", num)) {
         node.height = static_cast<float>(num);
     }
-    if (json::extractNumber(config_json, "zOrder", num)) {
+    if (pj::extractNumber(config_json, "zOrder", num)) {
         node.z_order = static_cast<int>(num);
     }
-    if (json::extractNumber(config_json, "opacity", num)) {
+    if (pj::extractNumber(config_json, "opacity", num)) {
         node.opacity = static_cast<float>(num);
     }
-    if (json::extractNumber(config_json, "borderWidth", num)) {
+    if (pj::extractNumber(config_json, "borderWidth", num)) {
         node.border_width = static_cast<float>(num);
     }
-    if (json::extractNumber(config_json, "borderRadius", num)) {
+    if (pj::extractNumber(config_json, "borderRadius", num)) {
         node.border_radius = static_cast<float>(num);
     }
-    if (json::extractNumber(config_json, "fontSize", num)) {
+    if (pj::extractNumber(config_json, "fontSize", num)) {
         node.font_size = static_cast<float>(num);
     }
-    if (json::extractNumber(config_json, "lineHeight", num)) {
+    if (pj::extractNumber(config_json, "lineHeight", num)) {
         node.line_height = static_cast<float>(num);
     }
 
     bool visible = true;
-    if (json::extractBool(config_json, "visible", visible)) {
+    if (pj::extractBool(config_json, "visible", visible)) {
         node.visible = visible;
     }
 
     std::string s;
-    if (json::extractString(config_json, "fontFamily", s)) {
+    if (pj::extractString(config_json, "fontFamily", s)) {
         node.font_family = s;
     }
-    if (json::extractString(config_json, "fontWeight", s)) {
+    if (pj::extractString(config_json, "fontWeight", s)) {
         node.font_weight = s;
     }
-    if (json::extractString(config_json, "textAlign", s)) {
+    if (pj::extractString(config_json, "textAlign", s)) {
         node.text_align = s;
     }
-    if (json::extractString(config_json, "text", s)) {
+    if (pj::extractString(config_json, "text", s)) {
         node.text = s;
     }
-    if (json::extractString(config_json, "imageSrc", s)) {
+    if (pj::extractString(config_json, "imageSrc", s)) {
         node.image_src = s;
     }
-    if (json::extractString(config_json, "background", s)) {
+    if (pj::extractString(config_json, "background", s)) {
         node.background_color = parseSceneColor(s);
     }
-    if (json::extractString(config_json, "border", s)) {
+    if (pj::extractString(config_json, "border", s)) {
         node.border_color = parseSceneColor(s);
     }
-    if (json::extractString(config_json, "color", s)) {
+    if (pj::extractString(config_json, "color", s)) {
         node.text_color = parseSceneColor(s, {1, 1, 1, 1});
     }
 
-    if (json::extractNumber(config_json, "parent", num)) {
+    if (pj::extractNumber(config_json, "parent", num)) {
         node.parent = static_cast<uint32_t>(num);
     }
 

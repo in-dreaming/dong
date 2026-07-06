@@ -4,6 +4,7 @@
 #include "dong_porf_host.hpp"
 #include "../../core/log.h"
 
+#include <cstdlib>
 #include <cstring>
 #include <utility>
 
@@ -79,6 +80,16 @@ private:
 
 PorfforScriptRegistry::PorfforScriptRegistry(PorfforHost* host) : host_(host) {}
 
+PorfforScriptRegistry::~PorfforScriptRegistry() {
+    for (auto& [name, inst] : instances_) {
+        (void)name;
+        if (inst.memory) {
+            std::free(inst.memory);
+            inst.memory = nullptr;
+        }
+    }
+}
+
 PorfforScriptRegistry::ModuleInstance& PorfforScriptRegistry::instanceFor(
     const std::string& module_name) {
     return instances_[module_name];
@@ -95,23 +106,22 @@ void PorfforScriptRegistry::ensureInstanceInitialized(const std::string& module_
         return;
     }
 
-    inst.memory_pages = *mod->memory_pages;
-    if (inst.memory_pages == 0) {
-        inst.memory_pages = 2;
-    }
-    inst.memory.assign(static_cast<size_t>(inst.memory_pages) * 65536u, 0);
-
-    char* previous_memory = *mod->memory;
     *mod->memory = nullptr;
     if (mod->init_fn) {
         mod->init_fn();
     }
-    if (mod->memory && *mod->memory) {
-        const size_t bytes = static_cast<size_t>(inst.memory_pages) * 65536u;
-        std::memcpy(inst.memory.data(), *mod->memory, bytes);
-        std::free(*mod->memory);
+    if (!mod->memory || !*mod->memory) {
+        DONG_LOG_ERROR("[PorfforRegistry] module %s init did not allocate memory",
+                       module_name.c_str());
+        return;
     }
-    *mod->memory = inst.memory.data();
+
+    inst.memory = *mod->memory;
+    inst.memory_pages = *mod->memory_pages;
+    if (inst.memory_pages == 0) {
+        inst.memory_pages = 2;
+        *mod->memory_pages = inst.memory_pages;
+    }
 
     if (mod->state_capture && mod->state_size > 0) {
         inst.state_snapshot.assign(mod->state_size, 0);
@@ -132,6 +142,12 @@ void PorfforScriptRegistry::captureModuleInstance(const std::string& module_name
     }
 
     ModuleInstance& inst = it->second;
+    if (mod->memory && *mod->memory) {
+        inst.memory = *mod->memory;
+    }
+    if (mod->memory_pages) {
+        inst.memory_pages = *mod->memory_pages;
+    }
     if (mod->state_capture && mod->state_size > 0) {
         if (inst.state_snapshot.size() != mod->state_size) {
             inst.state_snapshot.assign(mod->state_size, 0);
@@ -148,7 +164,10 @@ void PorfforScriptRegistry::applyModuleInstance(const std::string& module_name,
 
     ensureInstanceInitialized(module_name, mod);
     ModuleInstance& inst = instanceFor(module_name);
-    *mod->memory = inst.memory.data();
+    if (!inst.memory) {
+        return;
+    }
+    *mod->memory = inst.memory;
     *mod->memory_pages = inst.memory_pages;
     if (host_) {
         host_->setActiveMemory(*mod->memory, mod->memory_pages);

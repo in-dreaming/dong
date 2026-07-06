@@ -3533,7 +3533,7 @@ static struct ReturnValue dong_porf_js_microbench__String_prototype_charCodeAt(f
   _get12 = len;
   // if 
     if (((_get10 < 0) | (_get11 >= _get12)) != 0) {
-      return (struct ReturnValue){ NaN, 1 };
+      return (struct ReturnValue){ NAN, 1 };
     }
   // end
   j234:;
@@ -3561,7 +3561,7 @@ static struct ReturnValue dong_porf_js_microbench__ByteString_prototype_charCode
   _get4 = len;
   // if 
     if (((_get2 < 0) | (_get3 >= _get4)) != 0) {
-      return (struct ReturnValue){ NaN, 1 };
+      return (struct ReturnValue){ NAN, 1 };
     }
   // end
   j237:;
@@ -3648,7 +3648,7 @@ static f64 dong_porf_js_microbench__Porffor_stn_int(f64 str, i32 strjjtype, f64 
   _get4 = i;
   // if 
     if ((_get3 - _get4) == 0) {
-      return NaN;
+      return NAN;
     }
   // end
   j246:;
@@ -3790,7 +3790,7 @@ static f64 dong_porf_js_microbench__Porffor_stn_int(f64 str, i32 strjjtype, f64 
                         _get49 = chr;
                         n = ((_get47 * _get48) + _get49) - 55;
                       } else {
-                        return NaN;
+                        return NAN;
                       }
                     // end
                     j259:;
@@ -3798,7 +3798,7 @@ static f64 dong_porf_js_microbench__Porffor_stn_int(f64 str, i32 strjjtype, f64 
                 // end
                 j257:;
               } else {
-                return NaN;
+                return NAN;
               }
             // end
             j255:;
@@ -4005,7 +4005,7 @@ static f64 dong_porf_js_microbench__Porffor_parseExp(f64 str, i32 strjjtype, f64
   j340:;
   // if 
     if ((_r340) != 0) {
-      return NaN;
+      return NAN;
     }
   // end
   j342:;
@@ -4094,7 +4094,7 @@ static f64 dong_porf_js_microbench__Porffor_parseExp(f64 str, i32 strjjtype, f64
             _get55 = strict;
             // if 
               if (((u32)(_get55)) != 0) {
-                return NaN;
+                return NAN;
               }
             // end
             j351:;
@@ -4110,7 +4110,7 @@ static f64 dong_porf_js_microbench__Porffor_parseExp(f64 str, i32 strjjtype, f64
   _get56 = hasDigit;
   // if 
     if (_get56 == 0) {
-      return NaN;
+      return NAN;
     }
   // end
   j352:;
@@ -4203,7 +4203,7 @@ static f64 dong_porf_js_microbench__Math_exp(f64 x, i32 xjjtype) {
     if (dong_porf_js_microbench__Number_isFinite(_get0) == 0) {
       _get1 = x;
       // if 
-        if (_get1 == (-Infinity)) {
+        if (_get1 == (-INFINITY)) {
           return 0;
         }
       // end
@@ -4297,7 +4297,7 @@ static f64 dong_porf_js_microbench__Math_log2(f64 y, i32 yjjtype) {
   _get0 = y;
   // if 
     if (_get0 <= 0) {
-      return NaN;
+      return NAN;
     }
   // end
   j397:;
@@ -4420,11 +4420,11 @@ static f64 dong_porf_js_microbench__Math_log(f64 y, i32 yjjtype) {
       _get1 = y;
       // if 
         if (_get1 == 0) {
-          return -Infinity;
+          return -INFINITY;
         }
       // end
       j394:;
-      return NaN;
+      return NAN;
     }
   // end
   j393:;
@@ -4599,7 +4599,7 @@ static f64 dong_porf_js_microbench__Math_pow(f64 base, i32 basejjtype, f64 expon
   _get0 = exponent;
   // if 
     if (((u32)(dong_porf_js_microbench__Number_isNaN(_get0))) != 0) {
-      return NaN;
+      return NAN;
     }
   // end
   j356:;
@@ -4639,7 +4639,7 @@ static f64 dong_porf_js_microbench__Math_pow(f64 base, i32 basejjtype, f64 expon
       j361:;
       _get10 = base;
       // if 
-        if (_get10 == Infinity) {
+        if (_get10 == INFINITY) {
           _get11 = exponent;
           // if 
             if (_get11 > 0) {
@@ -4667,11 +4667,11 @@ static f64 dong_porf_js_microbench__Math_pow(f64 base, i32 basejjtype, f64 expon
           _get19 = isOdd;
           // if 
             if (((u32)(_get19)) != 0) {
-              return -Infinity;
+              return -INFINITY;
             }
           // end
           j365:;
-          return Infinity;
+          return INFINITY;
         }
       // end
       j364:;
@@ -4691,7 +4691,7 @@ static f64 dong_porf_js_microbench__Math_pow(f64 base, i32 basejjtype, f64 expon
     if (_get21 == 0) {
       _get22 = base;
       // if 
-        if ((1 / _get22) == Infinity) {
+        if ((1 / _get22) == INFINITY) {
           _get23 = exponent;
           // if 
             if (_get23 > 0) {
@@ -4699,7 +4699,7 @@ static f64 dong_porf_js_microbench__Math_pow(f64 base, i32 basejjtype, f64 expon
             }
           // end
           j369:;
-          return Infinity;
+          return INFINITY;
         }
       // end
       j368:;
@@ -4729,31 +4729,31 @@ static f64 dong_porf_js_microbench__Math_pow(f64 base, i32 basejjtype, f64 expon
       _get31 = isOdd;
       // if 
         if (((u32)(_get31)) != 0) {
-          return -Infinity;
+          return -INFINITY;
         }
       // end
       j372:;
-      return Infinity;
+      return INFINITY;
     }
   // end
   j367:;
   _get32 = exponent;
   // if 
-    if (_get32 == Infinity) {
+    if (_get32 == INFINITY) {
       _get33 = base;
       abs = dong_porf_js_microbench__Math_abs(_get33);
       absjjtype = 1;
       _get34 = abs;
       // if 
         if (_get34 > 1) {
-          return Infinity;
+          return INFINITY;
         }
       // end
       j374:;
       _get35 = abs;
       // if 
         if (_get35 == 1) {
-          return NaN;
+          return NAN;
         }
       // end
       j375:;
@@ -4763,7 +4763,7 @@ static f64 dong_porf_js_microbench__Math_pow(f64 base, i32 basejjtype, f64 expon
   j373:;
   _get36 = exponent;
   // if 
-    if (_get36 == (-Infinity)) {
+    if (_get36 == (-INFINITY)) {
       _get37 = base;
       abs = dong_porf_js_microbench__Math_abs(_get37);
       absjjtype = 1;
@@ -4777,11 +4777,11 @@ static f64 dong_porf_js_microbench__Math_pow(f64 base, i32 basejjtype, f64 expon
       _get39 = abs;
       // if 
         if (_get39 == 1) {
-          return NaN;
+          return NAN;
         }
       // end
       j378:;
-      return Infinity;
+      return INFINITY;
     }
   // end
   j376:;
@@ -4791,7 +4791,7 @@ static f64 dong_porf_js_microbench__Math_pow(f64 base, i32 basejjtype, f64 expon
       _get41 = exponent;
       // if 
         if (dong_porf_js_microbench__Number_isInteger(_get41) == 0) {
-          return NaN;
+          return NAN;
         }
       // end
       j380:;
@@ -4933,7 +4933,7 @@ static f64 dong_porf_js_microbench__Porffor_stn_float(f64 str, i32 strjjtype, f6
   _get2 = i;
   // if 
     if ((_get1 - _get2) == 0) {
-      return NaN;
+      return NAN;
     }
   // end
   j318:;
@@ -5041,7 +5041,7 @@ static f64 dong_porf_js_microbench__Porffor_stn_float(f64 str, i32 strjjtype, f6
                 _get35 = dec;
                 // if 
                   if (((u32)(_get35)) != 0) {
-                    return NaN;
+                    return NAN;
                   }
                 // end
                 j329:;
@@ -5073,7 +5073,7 @@ static f64 dong_porf_js_microbench__Porffor_stn_float(f64 str, i32 strjjtype, f6
                     _get44 = exp;
                     // if 
                       if (((u32)(dong_porf_js_microbench__Number_isNaN(_get44))) != 0) {
-                        return NaN;
+                        return NAN;
                       }
                     // end
                     j354:;
@@ -5090,7 +5090,7 @@ static f64 dong_porf_js_microbench__Porffor_stn_float(f64 str, i32 strjjtype, f6
                     _get49 = exp;
                     return _get48 * dong_porf_js_microbench__Math_pow(10, 1, _get49, 1);
                   } else {
-                    return NaN;
+                    return NAN;
                   }
                 // end
                 j331:;
@@ -6208,7 +6208,7 @@ static f64 dong_porf_js_microbench__ecma262_StringToNumber(f64 str, i32 strjjtyp
       j311:;
       // if 
         if ((_r311) != 0) {
-          n = Infinity;
+          n = INFINITY;
           _get225 = negative;
           // if f64
           f64 _r317;
@@ -6227,7 +6227,7 @@ static f64 dong_porf_js_microbench__ecma262_StringToNumber(f64 str, i32 strjjtyp
         }
       // end
       j316:;
-      return NaN;
+      return NAN;
     }
   // end
   j271:;
@@ -7082,7 +7082,7 @@ static f64 dong_porf_js_microbench__ecma262_ToNumber(f64 argument, i32 argumentj
   _get4 = argumentjjtype;
   // if 
     if ((f64)(_get4) == 0) {
-      return NaN;
+      return NAN;
     }
   // end
   j195:;
@@ -9063,7 +9063,7 @@ static struct ReturnValue dong_porf_js_microbench__Number_prototype_toString(f64
       j506:;
       _get10 = _this;
       // if 
-        if (_get10 == Infinity) {
+        if (_get10 == INFINITY) {
           return (struct ReturnValue){ 1621, 195 };
         }
       // end
@@ -10270,7 +10270,7 @@ static struct ReturnValue dong_porf_js_microbench__Number_prototype_toFixed(f64 
       j578:;
       _get9 = _this;
       // if 
-        if (_get9 == Infinity) {
+        if (_get9 == INFINITY) {
           return (struct ReturnValue){ 1621, 195 };
         }
       // end

@@ -76,6 +76,33 @@ namespace {
 
 using dong::dom::DOMNodePtr;
 
+static std::string resolvePorfforModuleFromDom(const dom::Manager* dom_manager) {
+    if (!dom_manager) {
+        return {};
+    }
+    const auto root = dom_manager->getRoot();
+    if (!root) {
+        return {};
+    }
+    std::string mod = root->getAttribute("data-porffor-module");
+    if (!mod.empty()) {
+        return mod;
+    }
+    for (const auto& body : root->getElementsByTagName("body")) {
+        if (!body) {
+            continue;
+        }
+        mod = body->getAttribute("data-porffor-module");
+        if (!mod.empty()) {
+            return mod;
+        }
+    }
+    if (auto node = root->querySelector("[data-porffor-module]")) {
+        mod = node->getAttribute("data-porffor-module");
+    }
+    return mod;
+}
+
 // --- P0-6 S1: Invalidation tracking (behavioral equivalence) ---
 // All invalidations still trigger full repaint. This tracks WHAT caused it.
 enum class InvalidationKind : uint8_t {
@@ -1755,9 +1782,7 @@ struct EngineView::Impl {
 #ifdef DONG_SCRIPT_ENGINE_PORFFOR
             std::string mod = porffor_module_;
             if (mod.empty()) {
-                if (auto root = dom_manager->getRoot()) {
-                    mod = root->getAttribute("data-porffor-module");
-                }
+                mod = resolvePorfforModuleFromDom(dom_manager.get());
             }
             if (mod.empty()) {
                 const char* env_mod = std::getenv("DONG_PORFFOR_MODULE");
@@ -1895,6 +1920,7 @@ struct EngineView::Impl {
                 }
                 if (doc_target) {
                     uint64_t nid = js_bindings->getNodeIdFor(doc_target);
+#ifndef DONG_SCRIPT_ENGINE_PORFFOR
                     if (!nid) {
                         JSContext* qctx = script_engine->getContext();
                         if (qctx) {
@@ -1903,6 +1929,7 @@ struct EngineView::Impl {
                             nid = js_bindings->getNodeIdFor(doc_target);
                         }
                     }
+#endif
                     if (nid) {
                         js_bindings->dispatchSimpleEvent(nid, "DOMContentLoaded");
                         js_bindings->dispatchSimpleEvent(nid, "load");

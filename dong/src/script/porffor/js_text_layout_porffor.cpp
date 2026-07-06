@@ -12,7 +12,7 @@
 namespace dong::script {
 namespace {
 
-using json = porffor_json;
+namespace pj = porffor_json;
 
 struct Slot {
     float left;
@@ -139,19 +139,19 @@ static void parseObstacles(const std::string& json, std::vector<CircleDef>& circ
                 std::string item = arr.substr(pos, end - pos + 1);
                 CircleDef c{};
                 double d = 0;
-                if (json::extractNumber(item, "cx", d)) {
+                if (pj::extractNumber(item, "cx", d)) {
                     c.cx = static_cast<float>(d);
                 }
-                if (json::extractNumber(item, "cy", d)) {
+                if (pj::extractNumber(item, "cy", d)) {
                     c.cy = static_cast<float>(d);
                 }
-                if (json::extractNumber(item, "r", d)) {
+                if (pj::extractNumber(item, "r", d)) {
                     c.r = static_cast<float>(d);
                 }
-                if (json::extractNumber(item, "hPad", d)) {
+                if (pj::extractNumber(item, "hPad", d)) {
                     c.h_pad = static_cast<float>(d);
                 }
-                if (json::extractNumber(item, "vPad", d)) {
+                if (pj::extractNumber(item, "vPad", d)) {
                     c.v_pad = static_cast<float>(d);
                 }
                 circles.push_back(c);
@@ -174,22 +174,22 @@ static void parseObstacles(const std::string& json, std::vector<CircleDef>& circ
                 std::string item = arr.substr(pos, end - pos + 1);
                 RectDef r{};
                 double d = 0;
-                if (json::extractNumber(item, "x", d)) {
+                if (pj::extractNumber(item, "x", d)) {
                     r.x = static_cast<float>(d);
                 }
-                if (json::extractNumber(item, "y", d)) {
+                if (pj::extractNumber(item, "y", d)) {
                     r.y = static_cast<float>(d);
                 }
-                if (json::extractNumber(item, "w", d)) {
+                if (pj::extractNumber(item, "w", d)) {
                     r.w = static_cast<float>(d);
                 }
-                if (json::extractNumber(item, "h", d)) {
+                if (pj::extractNumber(item, "h", d)) {
                     r.h = static_cast<float>(d);
                 }
-                if (json::extractNumber(item, "hPad", d)) {
+                if (pj::extractNumber(item, "hPad", d)) {
                     r.h_pad = static_cast<float>(d);
                 }
-                if (json::extractNumber(item, "vPad", d)) {
+                if (pj::extractNumber(item, "vPad", d)) {
                     r.v_pad = static_cast<float>(d);
                 }
                 rects.push_back(r);
@@ -203,7 +203,7 @@ static void parseObstacles(const std::string& json, std::vector<CircleDef>& circ
 
 std::string porfforTextLayout(const std::string& config_json) {
     std::string text;
-    if (!json::extractString(config_json, "text", text)) {
+    if (!pj::extractString(config_json, "text", text)) {
         return "{\"columns\":[]}";
     }
 
@@ -220,24 +220,24 @@ std::string porfforTextLayout(const std::string& config_json) {
         if (obj_start != std::string::npos && obj_end != std::string::npos) {
             std::string font_obj = config_json.substr(obj_start, obj_end - obj_start + 1);
             std::string s;
-            if (json::extractString(font_obj, "family", s)) {
+            if (pj::extractString(font_obj, "family", s)) {
                 family = s;
             }
-            if (json::extractString(font_obj, "weight", s)) {
+            if (pj::extractString(font_obj, "weight", s)) {
                 weight = s;
             }
-            if (json::extractString(font_obj, "style", s)) {
+            if (pj::extractString(font_obj, "style", s)) {
                 style = s;
             }
             double d = 0;
-            if (json::extractNumber(font_obj, "size", d)) {
+            if (pj::extractNumber(font_obj, "size", d)) {
                 font_size = static_cast<float>(d);
             }
         }
     }
 
     double d = 0;
-    if (json::extractNumber(config_json, "lineHeight", d)) {
+    if (pj::extractNumber(config_json, "lineHeight", d)) {
         line_height = static_cast<float>(d);
     }
 
@@ -273,16 +273,16 @@ std::string porfforTextLayout(const std::string& config_json) {
                 }
                 std::string col_cfg = cols_arr.substr(pos, end - pos + 1);
                 float rx = 0, ry = 0, rw = 300, rh_val = 600;
-                if (json::extractNumber(col_cfg, "x", d)) {
+                if (pj::extractNumber(col_cfg, "x", d)) {
                     rx = static_cast<float>(d);
                 }
-                if (json::extractNumber(col_cfg, "y", d)) {
+                if (pj::extractNumber(col_cfg, "y", d)) {
                     ry = static_cast<float>(d);
                 }
-                if (json::extractNumber(col_cfg, "width", d)) {
+                if (pj::extractNumber(col_cfg, "width", d)) {
                     rw = static_cast<float>(d);
                 }
-                if (json::extractNumber(col_cfg, "height", d)) {
+                if (pj::extractNumber(col_cfg, "height", d)) {
                     rh_val = static_cast<float>(d);
                 }
 
@@ -330,7 +330,7 @@ std::string porfforTextLayout(const std::string& config_json) {
                             }
                             first_line = false;
                             out << "{\"x\":" << slot.left << ",\"y\":" << y << ",\"width\":" << line.width
-                                << ",\"text\":\"" << json::escapeJson(line.text) << "\"}";
+                                << ",\"text\":\"" << pj::escapeJson(line.text) << "\"}";
                         }
                     }
                     y += lh;
@@ -371,24 +371,24 @@ void porfforRenderText(const std::string& config_json, dong::render::OverlayDraw
         if (obj_start != std::string::npos && obj_end != std::string::npos) {
             std::string font_obj = config_json.substr(obj_start, obj_end - obj_start + 1);
             std::string s;
-            if (json::extractString(font_obj, "family", s)) {
+            if (pj::extractString(font_obj, "family", s)) {
                 family = s;
             }
-            if (json::extractString(font_obj, "weight", s)) {
+            if (pj::extractString(font_obj, "weight", s)) {
                 weight = s;
             }
-            if (json::extractString(font_obj, "style", s)) {
+            if (pj::extractString(font_obj, "style", s)) {
                 style = s;
             }
             double d = 0;
-            if (json::extractNumber(font_obj, "size", d)) {
+            if (pj::extractNumber(font_obj, "size", d)) {
                 font_size = static_cast<float>(d);
             }
         }
     }
 
     std::string color_str = "#333333";
-    json::extractString(config_json, "color", color_str);
+    pj::extractString(config_json, "color", color_str);
     render::Color color = parseHexColor(color_str);
 
     size_t lines_pos = config_json.find("\"lines\"");
@@ -422,14 +422,14 @@ void porfforRenderText(const std::string& config_json, dong::render::OverlayDraw
         std::string line_obj = lines_arr.substr(pos, end - pos + 1);
         double d = 0;
         float x = 0, y = 0;
-        if (json::extractNumber(line_obj, "x", d)) {
+        if (pj::extractNumber(line_obj, "x", d)) {
             x = static_cast<float>(d);
         }
-        if (json::extractNumber(line_obj, "y", d)) {
+        if (pj::extractNumber(line_obj, "y", d)) {
             y = static_cast<float>(d);
         }
         std::string text;
-        json::extractString(line_obj, "text", text);
+        pj::extractString(line_obj, "text", text);
         if (!text.empty()) {
             render::TextShapeRequest req;
             req.text = text;
@@ -487,26 +487,26 @@ void porfforDrawRect(const std::string& config_json, dong::render::OverlayDraw* 
     }
     double d = 0;
     float x = 0, y = 0, w = 0, h = 0, radius = 0, strokeWidth = 0;
-    if (json::extractNumber(config_json, "x", d)) {
+    if (pj::extractNumber(config_json, "x", d)) {
         x = static_cast<float>(d);
     }
-    if (json::extractNumber(config_json, "y", d)) {
+    if (pj::extractNumber(config_json, "y", d)) {
         y = static_cast<float>(d);
     }
-    if (json::extractNumber(config_json, "w", d)) {
+    if (pj::extractNumber(config_json, "w", d)) {
         w = static_cast<float>(d);
     }
-    if (json::extractNumber(config_json, "h", d)) {
+    if (pj::extractNumber(config_json, "h", d)) {
         h = static_cast<float>(d);
     }
-    if (json::extractNumber(config_json, "radius", d)) {
+    if (pj::extractNumber(config_json, "radius", d)) {
         radius = static_cast<float>(d);
     }
-    if (json::extractNumber(config_json, "strokeWidth", d)) {
+    if (pj::extractNumber(config_json, "strokeWidth", d)) {
         strokeWidth = static_cast<float>(d);
     }
     std::string color_str = "#ffffff";
-    json::extractString(config_json, "color", color_str);
+    pj::extractString(config_json, "color", color_str);
     render::Color color = parseHexColor(color_str);
 
     if (radius > 0.01f || strokeWidth > 0.01f) {
@@ -522,20 +522,20 @@ void porfforDrawCircle(const std::string& config_json, dong::render::OverlayDraw
     }
     double d = 0;
     float cx = 0, cy = 0, r = 0, strokeWidth = 0;
-    if (json::extractNumber(config_json, "cx", d)) {
+    if (pj::extractNumber(config_json, "cx", d)) {
         cx = static_cast<float>(d);
     }
-    if (json::extractNumber(config_json, "cy", d)) {
+    if (pj::extractNumber(config_json, "cy", d)) {
         cy = static_cast<float>(d);
     }
-    if (json::extractNumber(config_json, "r", d)) {
+    if (pj::extractNumber(config_json, "r", d)) {
         r = static_cast<float>(d);
     }
-    if (json::extractNumber(config_json, "strokeWidth", d)) {
+    if (pj::extractNumber(config_json, "strokeWidth", d)) {
         strokeWidth = static_cast<float>(d);
     }
     std::string color_str = "#ffffff";
-    json::extractString(config_json, "color", color_str);
+    pj::extractString(config_json, "color", color_str);
     render::Color color = parseHexColor(color_str);
     overlay->addCircle(cx, cy, r, color, strokeWidth);
 }
