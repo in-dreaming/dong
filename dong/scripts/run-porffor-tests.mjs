@@ -90,7 +90,11 @@ for (const { id, htmlPath, module } of readyTests) {
   const outBmp = path.join(outDir, `${safeName}.bmp`);
   const cmd = [exe, htmlPath, outBmp, '800', '600', '1'];
   const env = { ...process.env };
-  if (module) env.DONG_PORFFOR_MODULE = module;
+  if (module) {
+    env.DONG_PORFFOR_MODULE = module;
+  } else {
+    delete env.DONG_PORFFOR_MODULE;
+  }
 
   const baseName = path.basename(htmlPath, '.html');
   const parentDir = path.basename(path.dirname(htmlPath));

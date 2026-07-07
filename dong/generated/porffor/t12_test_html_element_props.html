@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<!-- porffor: blocked(T12) -->
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            font-family: Arial;
+            padding: 20px;
+            background: #f0f0f0;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .test-section {
+            margin: 15px 0;
+            padding: 15px;
+            background: #f9f9f9;
+            border-left: 3px solid #2196f3;
+        }
+        button {
+            padding: 8px 16px;
+            margin: 5px;
+            background: #2196f3;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #1976d2;
+        }
+        .result {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            margin-top: 10px;
+            font-size: 14px;
+        }
+        a {
+            color: #2196f3;
+            padding: 8px 16px;
+            text-decoration: underline;
+            display: inline-block;
+        }
+        img {
+            max-width: 200px;
+            border: 1px solid #ddd;
+            padding: 5px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>HTMLAnchorElement & HTMLImageElement Properties Test</h1>
+
+    <div class="container">
+        <h2>HTMLAnchorElement Properties</h2>
+
+        <div class="test-section">
+            <h3>Test 1: Read href and target</h3>
+            <a id="link1" href="https://example.com" target="_blank">Example Link</a>
+            <br>
+            <button id="__porf_auto_0">Read Properties</button>
+            <div id="result1" class="result"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>Test 2: Set href dynamically</h3>
+            <a id="link2" href="#">Click me</a>
+            <br>
+            <button id="__porf_auto_1">Change href to Google</button>
+            <div id="result2" class="result"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>Test 3: Set target dynamically</h3>
+            <a id="link3" href="https://example.com">Link</a>
+            <br>
+            <button id="__porf_auto_2">Set target="_blank"</button>
+            <div id="result3" class="result"></div>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>HTMLImageElement Properties</h2>
+
+        <div class="test-section">
+            <h3>Test 4: Read img src and alt</h3>
+            <img id="img1" src="test.png" alt="Test image">
+            <br>
+            <button id="__porf_auto_3">Read Properties</button>
+            <div id="result4" class="result"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>Test 5: Set img src dynamically</h3>
+            <img id="img2" src="original.png" alt="Original">
+            <br>
+            <button id="__porf_auto_4">Change src</button>
+            <div id="result5" class="result"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>Test 6: Set img alt dynamically</h3>
+            <img id="img3" src="test.png" alt="Original alt">
+            <br>
+            <button id="__porf_auto_5">Change alt text</button>
+            <div id="result6" class="result"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>Test 7: Natural dimensions and complete status</h3>
+            <img id="img4" src="test.png" alt="Dimension test">
+            <br>
+            <button id="__porf_auto_6">Check naturalWidth/Height/complete</button>
+            <div id="result7" class="result"></div>
+        </div>
+    </div>
+
+    <script>
+        function testReadAnchor() {
+            const link = document.getElementById('link1');
+            document.getElementById('result1').innerHTML =
+                'href: ' + link.href + '<br>' +
+                'target: ' + link.target + '<br>' +
+                'tagName: ' + link.tagName;
+        }
+
+        function testSetHref() {
+            const link = document.getElementById('link2');
+            const oldHref = link.href;
+            link.href = 'https://www.google.com';
+            document.getElementById('result2').innerHTML =
+                'Old href: ' + oldHref + '<br>' +
+                'New href: ' + link.href + '<br>' +
+                'Link updated successfully!';
+        }
+
+        function testSetTarget() {
+            const link = document.getElementById('link3');
+            const oldTarget = link.target;
+            link.target = '_blank';
+            document.getElementById('result3').innerHTML =
+                'Old target: "' + oldTarget + '"<br>' +
+                'New target: "' + link.target + '"<br>' +
+                'Target updated successfully!';
+        }
+
+        function testReadImage() {
+            const img = document.getElementById('img1');
+            document.getElementById('result4').innerHTML =
+                'src: ' + img.src + '<br>' +
+                'alt: ' + img.alt + '<br>' +
+                'tagName: ' + img.tagName;
+        }
+
+        function testSetSrc() {
+            const img = document.getElementById('img2');
+            const oldSrc = img.src;
+            img.src = 'new_image.png';
+            document.getElementById('result5').innerHTML =
+                'Old src: ' + oldSrc + '<br>' +
+                'New src: ' + img.src + '<br>' +
+                'Src updated successfully!';
+        }
+
+        function testSetAlt() {
+            const img = document.getElementById('img3');
+            const oldAlt = img.alt;
+            img.alt = 'Updated alt text';
+            document.getElementById('result6').innerHTML =
+                'Old alt: "' + oldAlt + '"<br>' +
+                'New alt: "' + img.alt + '"<br>' +
+                'Alt updated successfully!';
+        }
+
+        function testImageMeta() {
+            const img = document.getElementById('img4');
+            document.getElementById('result7').innerHTML =
+                'naturalWidth: ' + img.naturalWidth + '<br>' +
+                'naturalHeight: ' + img.naturalHeight + '<br>' +
+                'complete: ' + img.complete + '<br>' +
+                '<em>Note: naturalWidth/Height currently return 0 (not yet implemented)</em>';
+        }
+
+        // Initial property check
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('HTMLAnchorElement properties test loaded');
+            const link = document.getElementById('link1');
+            const img = document.getElementById('img1');
+            console.log('Link href:', link.href);
+            console.log('Image src:', img.src);
+        });
+    </script>
+</body>
+</html>

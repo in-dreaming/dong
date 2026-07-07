@@ -25,7 +25,7 @@
 
 ## PorfHealthBar / PorfScoreDisplay / PorfHotbar / PorfMinimap
 
-- **实现**: `examples/data/porf-game-ui/index.html` 静态结构 + `porf_game_ui.js` 绑定
+- **实现**: `examples/porffor-ui/game-ui.porf`（`HealthBar` / `ScoreDisplay` / `Minimap` / `Hotbar` partial）→ `porf_game_ui.js`
 - **动态**: HP/MP 条宽度、`setInterval('onScoreTick', 1000)` 分数 tick
 
 ## 示例入口

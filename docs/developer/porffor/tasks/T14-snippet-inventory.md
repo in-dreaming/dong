@@ -13,28 +13,27 @@
 
 ## snippet 文件分类
 
-| 文件 | 方案 | 说明 |
-|------|------|------|
-| snippets/ce_bold_after_frame0.js | B | execCommand + Selection — 待 T20 |
-| snippets/ce_bold_like_button_click.js | B | execCommand + button focus |
-| snippets/ce_bold_try_typing_after_frame0.js | B | execCommand + text node walk |
-| snippets/ce_bold_try_typing_caret_before_t.js | B | execCommand + range |
-| snippets/ce_underline_try_typing_after_frame0.js | B | execCommand underline |
+| 文件 | 方案 | 说明 | 大小 |
+|------|------|------|------|
+| snippets/ce_bold_after_frame0.js | B | CE/selection — C++ input or T20 | 782B |
+| snippets/ce_bold_like_button_click.js | B | CE/selection — C++ input or T20 | 835B |
+| snippets/ce_bold_try_typing_after_frame0.js | B | CE/selection — C++ input or T20 | 857B |
+| snippets/ce_bold_try_typing_caret_before_t.js | B | CE/selection — C++ input or T20 | 1639B |
+| snippets/ce_underline_try_typing_after_frame0.js | B | CE/selection — C++ input or T20 | 862B |
 
 ## 引用位置（--eval-after-frame0-file）
 
 | 来源 | snippet 路径 |
 |------|-------------|
 | scripts/tools/verify_ce_bold_headless.py | snippets/ce_bold_after_frame0.js |
-| scripts/tools/verify_ce_enter_cursor_headless.py | snippets/ce_bold_try_typing_after_frame0.js |
-| examples/data/tests/test_contenteditable_bold_auto.html | snippets/ce_bold_after_frame0.js（文档引用） |
+| examples/data/tests/test_contenteditable_bold_auto.html | snippets/ce_bold_after_frame0.js |
 
-## 试点（Porffor ready，方案 A）
+## 试点（Porffor ready）
 
-| 测试 HTML | 模块 | export | runner flag |
-|-----------|------|--------|-------------|
-| test_porffor_mf_text.html | test_mf_text | afterFrame0 | `--call-export-after-frame0 test_mf_text::afterFrame0` |
-| test_porffor_mf_class.html | test_mf_class | afterFrame0 | `--call-export-after-frame0 test_mf_class::afterFrame0` |
-| test_porffor_mf_style.html | test_mf_style | afterFrame0 | `--call-export-after-frame0 test_mf_style::afterFrame0` |
+| 测试 HTML | 模块 | export | 说明 |
+|-----------|------|--------|------|
+| test_porffor_mf_text.html | test_mf_text | afterFrame0 | 帧后改 textContent |
+| test_porffor_mf_class.html | test_mf_class | afterFrame0 | 帧后 classAdd |
+| test_porffor_mf_style.html | test_mf_style | afterFrame0 | 帧后 setStyle |
 
-CE 类 snippet 归方案 B，去向：T20 Selection/CE 或 C++ `DONG_TEST_*` 输入注入；`porffor_snippet_compile.mjs` 为 QuickJS snippet 生成 plan_b_stub 占位。
+CE 类 snippet（`ce_bold_*`）归方案 B，待 T20；不阻塞 T14 runner 基建验收。

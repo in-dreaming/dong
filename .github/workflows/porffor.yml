@@ -1,0 +1,41 @@
+name: Porffor
+
+on:
+  push:
+    paths:
+      - 'dong/scripts/porffor*.mjs'
+      - 'dong/scripts/porffor/**'
+      - 'dong/examples/porffor/**'
+      - 'dong/examples/porffor-ui/**'
+      - 'dong/examples/data/tests/**'
+      - 'dong/examples/data/porf-*/**'
+      - 'dong/src/script/porffor/**'
+      - '.github/workflows/porffor.yml'
+  pull_request:
+    paths:
+      - 'dong/scripts/porffor*.mjs'
+      - 'dong/scripts/porffor/**'
+      - 'dong/examples/porffor/**'
+      - 'dong/examples/porffor-ui/**'
+      - 'dong/examples/data/tests/**'
+      - 'dong/examples/data/porf-*/**'
+      - 'dong/src/script/porffor/**'
+      - '.github/workflows/porffor.yml'
+
+jobs:
+  porffor-tooling:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dong
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Framework compiler tests
+        run: node scripts/porffor_framework_compile.test.mjs
+      - name: Porffor compile (JS modules only)
+        run: node scripts/porffor_compile.mjs
+      - name: Test inventory (smoke)
+        run: node scripts/porffor_test_inventory.mjs

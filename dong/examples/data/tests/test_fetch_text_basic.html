@@ -1,5 +1,6 @@
 <!DOCTYPE html>
-<html>
+<!-- porffor: ready -->
+<html data-porffor-module="t10_fetch_text">
 <head>
 <style>
 body { font-family: sans-serif; padding: 20px; }
@@ -12,31 +13,5 @@ body { font-family: sans-serif; padding: 20px; }
 <h2>fetch() Text Basic Test</h2>
 <div id="result">Loading...</div>
 
-<script>
-var result = document.getElementById('result');
-
-fetch('test_fetch_local.txt')
-    .then(function(response) {
-        if (!response.ok) {
-            result.textContent = 'FAIL: response.ok is false, status=' + response.status;
-            result.className = 'fail';
-            return;
-        }
-        return response.text();
-    })
-    .then(function(text) {
-        if (text && text.indexOf('local text file') >= 0) {
-            result.textContent = 'PASS: ' + text.trim();
-            result.className = 'pass';
-        } else {
-            result.textContent = 'FAIL: unexpected content: ' + text;
-            result.className = 'fail';
-        }
-    })
-    .catch(function(err) {
-        result.textContent = 'FAIL: ' + err;
-        result.className = 'fail';
-    });
-</script>
 </body>
 </html>

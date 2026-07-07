@@ -1,5 +1,6 @@
 <!DOCTYPE html>
-<html>
+<!-- porffor: ready -->
+<html data-porffor-module="t12_test_select_basic">
 <head>
     <style>
         body {
@@ -48,7 +49,7 @@
     <div class="test-box">
         <h2>Test 1: Default Select</h2>
         <p>Should show "United States" with dropdown arrow</p>
-        <select id="country" onchange="__dongLogSelect('[change]', this)" onmousedown="__dongLogSelect('[mousedown]', this)">
+        <select id="country">
             <option value="us">United States</option>
             <option value="uk">United Kingdom</option>
             <option value="ca">Canada</option>
@@ -58,7 +59,7 @@
     <div class="test-box">
         <h2>Test 2: Red Border Select</h2>
         <p>Should show "Red" with red border and text</p>
-        <select class="red-select" id="color" onchange="__dongLogSelect('[change]', this)" onmousedown="__dongLogSelect('[mousedown]', this)">
+        <select class="red-select" id="color">
             <option value="red">Red</option>
             <option value="blue">Blue</option>
             <option value="green">Green</option>
@@ -68,7 +69,7 @@
     <div class="test-box">
         <h2>Test 3: Blue Background Select</h2>
         <p>Should show "Apple" with blue background</p>
-        <select class="blue-select" id="fruit" onchange="__dongLogSelect('[change]', this)" onmousedown="__dongLogSelect('[mousedown]', this)">
+        <select class="blue-select" id="fruit">
             <option value="apple">Apple</option>
             <option value="banana">Banana</option>
             <option value="orange">Orange</option>

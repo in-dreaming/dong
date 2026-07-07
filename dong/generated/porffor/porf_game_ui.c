@@ -57,13 +57,13 @@ extern void __porf_import_dong_stage_2(f64);
 __attribute__((import_module(""), import_name("h")))
 extern void __porf_import_dong_commit_addEventListener();
 
-__attribute__((import_module(""), import_name("")))
+__attribute__((import_module(""), import_name("")))
 extern void __porf_import_dong_style_set(f64, f64, f64);
 
 __attribute__((import_module(""), import_name("g")))
 extern void __porf_import_dong_commit_set_textContent();
 
-__attribute__((import_module(""), import_name("x")))
+__attribute__((import_module(""), import_name("y")))
 extern f64 __porf_import_dong_commit_setInterval();
 
 __attribute__((import_module(""), import_name("i")))
@@ -139,22 +139,23 @@ void dong_porf_porf_game_ui__porf_init(void) {
   dong_porf_porf_game_ui_memory[1852]=(u8)7;dong_porf_porf_game_ui_memory[1856]=(u8)35;dong_porf_porf_game_ui_memory[1857]=(u8)102;dong_porf_porf_game_ui_memory[1858]=(u8)51;dong_porf_porf_game_ui_memory[1859]=(u8)57;dong_porf_porf_game_ui_memory[1860]=(u8)99;dong_porf_porf_game_ui_memory[1861]=(u8)49;dong_porf_porf_game_ui_memory[1862]=(u8)50;
   dong_porf_porf_game_ui_memory[1865]=(u8)7;dong_porf_porf_game_ui_memory[1869]=(u8)35;dong_porf_porf_game_ui_memory[1870]=(u8)101;dong_porf_porf_game_ui_memory[1871]=(u8)55;dong_porf_porf_game_ui_memory[1872]=(u8)52;dong_porf_porf_game_ui_memory[1873]=(u8)99;dong_porf_porf_game_ui_memory[1874]=(u8)51;dong_porf_porf_game_ui_memory[1875]=(u8)99;
   dong_porf_porf_game_ui_memory[1878]=(u8)4;dong_porf_porf_game_ui_memory[1882]=(u8)47;dong_porf_porf_game_ui_memory[1883]=(u8)49;dong_porf_porf_game_ui_memory[1884]=(u8)48;dong_porf_porf_game_ui_memory[1885]=(u8)48;
-  dong_porf_porf_game_ui_memory[1888]=(u8)7;dong_porf_porf_game_ui_memory[1892]=(u8)104;dong_porf_porf_game_ui_memory[1893]=(u8)112;dong_porf_porf_game_ui_memory[1894]=(u8)45;dong_porf_porf_game_ui_memory[1895]=(u8)102;dong_porf_porf_game_ui_memory[1896]=(u8)105;dong_porf_porf_game_ui_memory[1897]=(u8)108;dong_porf_porf_game_ui_memory[1898]=(u8)108;
-  dong_porf_porf_game_ui_memory[1901]=(u8)7;dong_porf_porf_game_ui_memory[1905]=(u8)109;dong_porf_porf_game_ui_memory[1906]=(u8)112;dong_porf_porf_game_ui_memory[1907]=(u8)45;dong_porf_porf_game_ui_memory[1908]=(u8)102;dong_porf_porf_game_ui_memory[1909]=(u8)105;dong_porf_porf_game_ui_memory[1910]=(u8)108;dong_porf_porf_game_ui_memory[1911]=(u8)108;
-  dong_porf_porf_game_ui_memory[1914]=(u8)12;dong_porf_porf_game_ui_memory[1918]=(u8)104;dong_porf_porf_game_ui_memory[1919]=(u8)112;dong_porf_porf_game_ui_memory[1920]=(u8)45;dong_porf_porf_game_ui_memory[1921]=(u8)108;dong_porf_porf_game_ui_memory[1922]=(u8)97;dong_porf_porf_game_ui_memory[1923]=(u8)98;dong_porf_porf_game_ui_memory[1924]=(u8)101;dong_porf_porf_game_ui_memory[1925]=(u8)108;dong_porf_porf_game_ui_memory[1926]=(u8)45;dong_porf_porf_game_ui_memory[1927]=(u8)118;dong_porf_porf_game_ui_memory[1928]=(u8)97;dong_porf_porf_game_ui_memory[1929]=(u8)108;
-  dong_porf_porf_game_ui_memory[1932]=(u8)12;dong_porf_porf_game_ui_memory[1936]=(u8)109;dong_porf_porf_game_ui_memory[1937]=(u8)112;dong_porf_porf_game_ui_memory[1938]=(u8)45;dong_porf_porf_game_ui_memory[1939]=(u8)108;dong_porf_porf_game_ui_memory[1940]=(u8)97;dong_porf_porf_game_ui_memory[1941]=(u8)98;dong_porf_porf_game_ui_memory[1942]=(u8)101;dong_porf_porf_game_ui_memory[1943]=(u8)108;dong_porf_porf_game_ui_memory[1944]=(u8)45;dong_porf_porf_game_ui_memory[1945]=(u8)118;dong_porf_porf_game_ui_memory[1946]=(u8)97;dong_porf_porf_game_ui_memory[1947]=(u8)108;
-  dong_porf_porf_game_ui_memory[1950]=(u8)10;dong_porf_porf_game_ui_memory[1954]=(u8)115;dong_porf_porf_game_ui_memory[1955]=(u8)99;dong_porf_porf_game_ui_memory[1956]=(u8)111;dong_porf_porf_game_ui_memory[1957]=(u8)114;dong_porf_porf_game_ui_memory[1958]=(u8)101;dong_porf_porf_game_ui_memory[1959]=(u8)45;dong_porf_porf_game_ui_memory[1960]=(u8)109;dong_porf_porf_game_ui_memory[1961]=(u8)97;dong_porf_porf_game_ui_memory[1962]=(u8)105;dong_porf_porf_game_ui_memory[1963]=(u8)110;
-  dong_porf_porf_game_ui_memory[1966]=(u8)10;dong_porf_porf_game_ui_memory[1970]=(u8)98;dong_porf_porf_game_ui_memory[1971]=(u8)116;dong_porf_porf_game_ui_memory[1972]=(u8)110;dong_porf_porf_game_ui_memory[1973]=(u8)45;dong_porf_porf_game_ui_memory[1974]=(u8)100;dong_porf_porf_game_ui_memory[1975]=(u8)97;dong_porf_porf_game_ui_memory[1976]=(u8)109;dong_porf_porf_game_ui_memory[1977]=(u8)97;dong_porf_porf_game_ui_memory[1978]=(u8)103;dong_porf_porf_game_ui_memory[1979]=(u8)101;
-  dong_porf_porf_game_ui_memory[1982]=(u8)8;dong_porf_porf_game_ui_memory[1986]=(u8)98;dong_porf_porf_game_ui_memory[1987]=(u8)116;dong_porf_porf_game_ui_memory[1988]=(u8)110;dong_porf_porf_game_ui_memory[1989]=(u8)45;dong_porf_porf_game_ui_memory[1990]=(u8)104;dong_porf_porf_game_ui_memory[1991]=(u8)101;dong_porf_porf_game_ui_memory[1992]=(u8)97;dong_porf_porf_game_ui_memory[1993]=(u8)108;
-  dong_porf_porf_game_ui_memory[1996]=(u8)5;dong_porf_porf_game_ui_memory[2000]=(u8)99;dong_porf_porf_game_ui_memory[2001]=(u8)108;dong_porf_porf_game_ui_memory[2002]=(u8)105;dong_porf_porf_game_ui_memory[2003]=(u8)99;dong_porf_porf_game_ui_memory[2004]=(u8)107;
-  dong_porf_porf_game_ui_memory[2007]=(u8)8;dong_porf_porf_game_ui_memory[2011]=(u8)111;dong_porf_porf_game_ui_memory[2012]=(u8)110;dong_porf_porf_game_ui_memory[2013]=(u8)68;dong_porf_porf_game_ui_memory[2014]=(u8)97;dong_porf_porf_game_ui_memory[2015]=(u8)109;dong_porf_porf_game_ui_memory[2016]=(u8)97;dong_porf_porf_game_ui_memory[2017]=(u8)103;dong_porf_porf_game_ui_memory[2018]=(u8)101;
-  dong_porf_porf_game_ui_memory[2021]=(u8)6;dong_porf_porf_game_ui_memory[2025]=(u8)111;dong_porf_porf_game_ui_memory[2026]=(u8)110;dong_porf_porf_game_ui_memory[2027]=(u8)72;dong_porf_porf_game_ui_memory[2028]=(u8)101;dong_porf_porf_game_ui_memory[2029]=(u8)97;dong_porf_porf_game_ui_memory[2030]=(u8)108;
-  dong_porf_porf_game_ui_memory[2033]=(u8)11;dong_porf_porf_game_ui_memory[2037]=(u8)111;dong_porf_porf_game_ui_memory[2038]=(u8)110;dong_porf_porf_game_ui_memory[2039]=(u8)83;dong_porf_porf_game_ui_memory[2040]=(u8)99;dong_porf_porf_game_ui_memory[2041]=(u8)111;dong_porf_porf_game_ui_memory[2042]=(u8)114;dong_porf_porf_game_ui_memory[2043]=(u8)101;dong_porf_porf_game_ui_memory[2044]=(u8)84;dong_porf_porf_game_ui_memory[2045]=(u8)105;dong_porf_porf_game_ui_memory[2046]=(u8)99;dong_porf_porf_game_ui_memory[2047]=(u8)107;
-  dong_porf_porf_game_ui_memory[2050]=(u8)19;dong_porf_porf_game_ui_memory[2054]=(u8)112;dong_porf_porf_game_ui_memory[2055]=(u8)111;dong_porf_porf_game_ui_memory[2056]=(u8)114;dong_porf_porf_game_ui_memory[2057]=(u8)102;dong_porf_porf_game_ui_memory[2058]=(u8)95;dong_porf_porf_game_ui_memory[2059]=(u8)103;dong_porf_porf_game_ui_memory[2060]=(u8)97;dong_porf_porf_game_ui_memory[2061]=(u8)109;dong_porf_porf_game_ui_memory[2062]=(u8)101;dong_porf_porf_game_ui_memory[2063]=(u8)95;dong_porf_porf_game_ui_memory[2064]=(u8)117;dong_porf_porf_game_ui_memory[2065]=(u8)105;dong_porf_porf_game_ui_memory[2066]=(u8)32;dong_porf_porf_game_ui_memory[2067]=(u8)108;dong_porf_porf_game_ui_memory[2068]=(u8)111;dong_porf_porf_game_ui_memory[2069]=(u8)97;dong_porf_porf_game_ui_memory[2070]=(u8)100;dong_porf_porf_game_ui_memory[2071]=(u8)101;dong_porf_porf_game_ui_memory[2072]=(u8)100;
-  dong_porf_porf_game_ui_memory[2075]=(u8)58;dong_porf_porf_game_ui_memory[2079]=(u8)83;dong_porf_porf_game_ui_memory[2080]=(u8)116;dong_porf_porf_game_ui_memory[2081]=(u8)114;dong_porf_porf_game_ui_memory[2082]=(u8)105;dong_porf_porf_game_ui_memory[2083]=(u8)110;dong_porf_porf_game_ui_memory[2084]=(u8)103;dong_porf_porf_game_ui_memory[2085]=(u8)46;dong_porf_porf_game_ui_memory[2086]=(u8)112;dong_porf_porf_game_ui_memory[2087]=(u8)114;dong_porf_porf_game_ui_memory[2088]=(u8)111;dong_porf_porf_game_ui_memory[2089]=(u8)116;dong_porf_porf_game_ui_memory[2090]=(u8)111;dong_porf_porf_game_ui_memory[2091]=(u8)116;dong_porf_porf_game_ui_memory[2092]=(u8)121;dong_porf_porf_game_ui_memory[2093]=(u8)112;dong_porf_porf_game_ui_memory[2094]=(u8)101;dong_porf_porf_game_ui_memory[2095]=(u8)46;dong_porf_porf_game_ui_memory[2096]=(u8)116;dong_porf_porf_game_ui_memory[2097]=(u8)111;dong_porf_porf_game_ui_memory[2098]=(u8)83;dong_porf_porf_game_ui_memory[2099]=(u8)116;dong_porf_porf_game_ui_memory[2100]=(u8)114;dong_porf_porf_game_ui_memory[2101]=(u8)105;dong_porf_porf_game_ui_memory[2102]=(u8)110;dong_porf_porf_game_ui_memory[2103]=(u8)103;dong_porf_porf_game_ui_memory[2104]=(u8)32;dong_porf_porf_game_ui_memory[2105]=(u8)101;dong_porf_porf_game_ui_memory[2106]=(u8)120;dong_porf_porf_game_ui_memory[2107]=(u8)112;dong_porf_porf_game_ui_memory[2108]=(u8)101;dong_porf_porf_game_ui_memory[2109]=(u8)99;dong_porf_porf_game_ui_memory[2110]=(u8)116;dong_porf_porf_game_ui_memory[2111]=(u8)115;dong_porf_porf_game_ui_memory[2112]=(u8)32;dong_porf_porf_game_ui_memory[2113]=(u8)39;dong_porf_porf_game_ui_memory[2114]=(u8)116;dong_porf_porf_game_ui_memory[2115]=(u8)104;dong_porf_porf_game_ui_memory[2116]=(u8)105;dong_porf_porf_game_ui_memory[2117]=(u8)115;dong_porf_porf_game_ui_memory[2118]=(u8)39;dong_porf_porf_game_ui_memory[2119]=(u8)32;dong_porf_porf_game_ui_memory[2120]=(u8)116;dong_porf_porf_game_ui_memory[2121]=(u8)111;dong_porf_porf_game_ui_memory[2122]=(u8)32;dong_porf_porf_game_ui_memory[2123]=(u8)98;dong_porf_porf_game_ui_memory[2124]=(u8)101;dong_porf_porf_game_ui_memory[2125]=(u8)32;dong_porf_porf_game_ui_memory[2126]=(u8)110;dong_porf_porf_game_ui_memory[2127]=(u8)111;dong_porf_porf_game_ui_memory[2128]=(u8)110;dong_porf_porf_game_ui_memory[2129]=(u8)45;dong_porf_porf_game_ui_memory[2130]=(u8)110;dong_porf_porf_game_ui_memory[2131]=(u8)117;dong_porf_porf_game_ui_memory[2132]=(u8)108;dong_porf_porf_game_ui_memory[2133]=(u8)108;dong_porf_porf_game_ui_memory[2134]=(u8)105;dong_porf_porf_game_ui_memory[2135]=(u8)115;dong_porf_porf_game_ui_memory[2136]=(u8)104;
-  dong_porf_porf_game_ui_memory[2139]=(u8)54;dong_porf_porf_game_ui_memory[2143]=(u8)83;dong_porf_porf_game_ui_memory[2144]=(u8)116;dong_porf_porf_game_ui_memory[2145]=(u8)114;dong_porf_porf_game_ui_memory[2146]=(u8)105;dong_porf_porf_game_ui_memory[2147]=(u8)110;dong_porf_porf_game_ui_memory[2148]=(u8)103;dong_porf_porf_game_ui_memory[2149]=(u8)46;dong_porf_porf_game_ui_memory[2150]=(u8)112;dong_porf_porf_game_ui_memory[2151]=(u8)114;dong_porf_porf_game_ui_memory[2152]=(u8)111;dong_porf_porf_game_ui_memory[2153]=(u8)116;dong_porf_porf_game_ui_memory[2154]=(u8)111;dong_porf_porf_game_ui_memory[2155]=(u8)116;dong_porf_porf_game_ui_memory[2156]=(u8)121;dong_porf_porf_game_ui_memory[2157]=(u8)112;dong_porf_porf_game_ui_memory[2158]=(u8)101;dong_porf_porf_game_ui_memory[2159]=(u8)46;dong_porf_porf_game_ui_memory[2160]=(u8)116;dong_porf_porf_game_ui_memory[2161]=(u8)114;dong_porf_porf_game_ui_memory[2162]=(u8)105;dong_porf_porf_game_ui_memory[2163]=(u8)109;dong_porf_porf_game_ui_memory[2164]=(u8)32;dong_porf_porf_game_ui_memory[2165]=(u8)101;dong_porf_porf_game_ui_memory[2166]=(u8)120;dong_porf_porf_game_ui_memory[2167]=(u8)112;dong_porf_porf_game_ui_memory[2168]=(u8)101;dong_porf_porf_game_ui_memory[2169]=(u8)99;dong_porf_porf_game_ui_memory[2170]=(u8)116;dong_porf_porf_game_ui_memory[2171]=(u8)115;dong_porf_porf_game_ui_memory[2172]=(u8)32;dong_porf_porf_game_ui_memory[2173]=(u8)39;dong_porf_porf_game_ui_memory[2174]=(u8)116;dong_porf_porf_game_ui_memory[2175]=(u8)104;dong_porf_porf_game_ui_memory[2176]=(u8)105;dong_porf_porf_game_ui_memory[2177]=(u8)115;dong_porf_porf_game_ui_memory[2178]=(u8)39;dong_porf_porf_game_ui_memory[2179]=(u8)32;dong_porf_porf_game_ui_memory[2180]=(u8)116;dong_porf_porf_game_ui_memory[2181]=(u8)111;dong_porf_porf_game_ui_memory[2182]=(u8)32;dong_porf_porf_game_ui_memory[2183]=(u8)98;dong_porf_porf_game_ui_memory[2184]=(u8)101;dong_porf_porf_game_ui_memory[2185]=(u8)32;dong_porf_porf_game_ui_memory[2186]=(u8)110;dong_porf_porf_game_ui_memory[2187]=(u8)111;dong_porf_porf_game_ui_memory[2188]=(u8)110;dong_porf_porf_game_ui_memory[2189]=(u8)45;dong_porf_porf_game_ui_memory[2190]=(u8)110;dong_porf_porf_game_ui_memory[2191]=(u8)117;dong_porf_porf_game_ui_memory[2192]=(u8)108;dong_porf_porf_game_ui_memory[2193]=(u8)108;dong_porf_porf_game_ui_memory[2194]=(u8)105;dong_porf_porf_game_ui_memory[2195]=(u8)115;dong_porf_porf_game_ui_memory[2196]=(u8)104;
-  dong_porf_porf_game_ui_memory[2199]=(u8)57;dong_porf_porf_game_ui_memory[2203]=(u8)83;dong_porf_porf_game_ui_memory[2204]=(u8)116;dong_porf_porf_game_ui_memory[2205]=(u8)114;dong_porf_porf_game_ui_memory[2206]=(u8)105;dong_porf_porf_game_ui_memory[2207]=(u8)110;dong_porf_porf_game_ui_memory[2208]=(u8)103;dong_porf_porf_game_ui_memory[2209]=(u8)46;dong_porf_porf_game_ui_memory[2210]=(u8)112;dong_porf_porf_game_ui_memory[2211]=(u8)114;dong_porf_porf_game_ui_memory[2212]=(u8)111;dong_porf_porf_game_ui_memory[2213]=(u8)116;dong_porf_porf_game_ui_memory[2214]=(u8)111;dong_porf_porf_game_ui_memory[2215]=(u8)116;dong_porf_porf_game_ui_memory[2216]=(u8)121;dong_porf_porf_game_ui_memory[2217]=(u8)112;dong_porf_porf_game_ui_memory[2218]=(u8)101;dong_porf_porf_game_ui_memory[2219]=(u8)46;dong_porf_porf_game_ui_memory[2220]=(u8)116;dong_porf_porf_game_ui_memory[2221]=(u8)114;dong_porf_porf_game_ui_memory[2222]=(u8)105;dong_porf_porf_game_ui_memory[2223]=(u8)109;dong_porf_porf_game_ui_memory[2224]=(u8)69;dong_porf_porf_game_ui_memory[2225]=(u8)110;dong_porf_porf_game_ui_memory[2226]=(u8)100;dong_porf_porf_game_ui_memory[2227]=(u8)32;dong_porf_porf_game_ui_memory[2228]=(u8)101;dong_porf_porf_game_ui_memory[2229]=(u8)120;dong_porf_porf_game_ui_memory[2230]=(u8)112;dong_porf_porf_game_ui_memory[2231]=(u8)101;dong_porf_porf_game_ui_memory[2232]=(u8)99;dong_porf_porf_game_ui_memory[2233]=(u8)116;dong_porf_porf_game_ui_memory[2234]=(u8)115;dong_porf_porf_game_ui_memory[2235]=(u8)32;dong_porf_porf_game_ui_memory[2236]=(u8)39;dong_porf_porf_game_ui_memory[2237]=(u8)116;dong_porf_porf_game_ui_memory[2238]=(u8)104;dong_porf_porf_game_ui_memory[2239]=(u8)105;dong_porf_porf_game_ui_memory[2240]=(u8)115;dong_porf_porf_game_ui_memory[2241]=(u8)39;dong_porf_porf_game_ui_memory[2242]=(u8)32;dong_porf_porf_game_ui_memory[2243]=(u8)116;dong_porf_porf_game_ui_memory[2244]=(u8)111;dong_porf_porf_game_ui_memory[2245]=(u8)32;dong_porf_porf_game_ui_memory[2246]=(u8)98;dong_porf_porf_game_ui_memory[2247]=(u8)101;dong_porf_porf_game_ui_memory[2248]=(u8)32;dong_porf_porf_game_ui_memory[2249]=(u8)110;dong_porf_porf_game_ui_memory[2250]=(u8)111;dong_porf_porf_game_ui_memory[2251]=(u8)110;dong_porf_porf_game_ui_memory[2252]=(u8)45;dong_porf_porf_game_ui_memory[2253]=(u8)110;dong_porf_porf_game_ui_memory[2254]=(u8)117;dong_porf_porf_game_ui_memory[2255]=(u8)108;dong_porf_porf_game_ui_memory[2256]=(u8)108;dong_porf_porf_game_ui_memory[2257]=(u8)105;dong_porf_porf_game_ui_memory[2258]=(u8)115;dong_porf_porf_game_ui_memory[2259]=(u8)104;
-  dong_porf_porf_game_ui_memory[2262]=(u8)59;dong_porf_porf_game_ui_memory[2266]=(u8)83;dong_porf_porf_game_ui_memory[2267]=(u8)116;dong_porf_porf_game_ui_memory[2268]=(u8)114;dong_porf_porf_game_ui_memory[2269]=(u8)105;dong_porf_porf_game_ui_memory[2270]=(u8)110;dong_porf_porf_game_ui_memory[2271]=(u8)103;dong_porf_porf_game_ui_memory[2272]=(u8)46;dong_porf_porf_game_ui_memory[2273]=(u8)112;dong_porf_porf_game_ui_memory[2274]=(u8)114;dong_porf_porf_game_ui_memory[2275]=(u8)111;dong_porf_porf_game_ui_memory[2276]=(u8)116;dong_porf_porf_game_ui_memory[2277]=(u8)111;dong_porf_porf_game_ui_memory[2278]=(u8)116;dong_porf_porf_game_ui_memory[2279]=(u8)121;dong_porf_porf_game_ui_memory[2280]=(u8)112;dong_porf_porf_game_ui_memory[2281]=(u8)101;dong_porf_porf_game_ui_memory[2282]=(u8)46;dong_porf_porf_game_ui_memory[2283]=(u8)116;dong_porf_porf_game_ui_memory[2284]=(u8)114;dong_porf_porf_game_ui_memory[2285]=(u8)105;dong_porf_porf_game_ui_memory[2286]=(u8)109;dong_porf_porf_game_ui_memory[2287]=(u8)83;dong_porf_porf_game_ui_memory[2288]=(u8)116;dong_porf_porf_game_ui_memory[2289]=(u8)97;dong_porf_porf_game_ui_memory[2290]=(u8)114;dong_porf_porf_game_ui_memory[2291]=(u8)116;dong_porf_porf_game_ui_memory[2292]=(u8)32;dong_porf_porf_game_ui_memory[2293]=(u8)101;dong_porf_porf_game_ui_memory[2294]=(u8)120;dong_porf_porf_game_ui_memory[2295]=(u8)112;dong_porf_porf_game_ui_memory[2296]=(u8)101;dong_porf_porf_game_ui_memory[2297]=(u8)99;dong_porf_porf_game_ui_memory[2298]=(u8)116;dong_porf_porf_game_ui_memory[2299]=(u8)115;dong_porf_porf_game_ui_memory[2300]=(u8)32;dong_porf_porf_game_ui_memory[2301]=(u8)39;dong_porf_porf_game_ui_memory[2302]=(u8)116;dong_porf_porf_game_ui_memory[2303]=(u8)104;dong_porf_porf_game_ui_memory[2304]=(u8)105;dong_porf_porf_game_ui_memory[2305]=(u8)115;dong_porf_porf_game_ui_memory[2306]=(u8)39;dong_porf_porf_game_ui_memory[2307]=(u8)32;dong_porf_porf_game_ui_memory[2308]=(u8)116;dong_porf_porf_game_ui_memory[2309]=(u8)111;dong_porf_porf_game_ui_memory[2310]=(u8)32;dong_porf_porf_game_ui_memory[2311]=(u8)98;dong_porf_porf_game_ui_memory[2312]=(u8)101;dong_porf_porf_game_ui_memory[2313]=(u8)32;dong_porf_porf_game_ui_memory[2314]=(u8)110;dong_porf_porf_game_ui_memory[2315]=(u8)111;dong_porf_porf_game_ui_memory[2316]=(u8)110;dong_porf_porf_game_ui_memory[2317]=(u8)45;dong_porf_porf_game_ui_memory[2318]=(u8)110;dong_porf_porf_game_ui_memory[2319]=(u8)117;dong_porf_porf_game_ui_memory[2320]=(u8)108;dong_porf_porf_game_ui_memory[2321]=(u8)108;dong_porf_porf_game_ui_memory[2322]=(u8)105;dong_porf_porf_game_ui_memory[2323]=(u8)115;dong_porf_porf_game_ui_memory[2324]=(u8)104;
+  dong_porf_porf_game_ui_memory[1888]=(u8)8;dong_porf_porf_game_ui_memory[1892]=(u8)104;dong_porf_porf_game_ui_memory[1893]=(u8)117;dong_porf_porf_game_ui_memory[1894]=(u8)100;dong_porf_porf_game_ui_memory[1895]=(u8)45;dong_porf_porf_game_ui_memory[1896]=(u8)114;dong_porf_porf_game_ui_memory[1897]=(u8)111;dong_porf_porf_game_ui_memory[1898]=(u8)111;dong_porf_porf_game_ui_memory[1899]=(u8)116;
+  dong_porf_porf_game_ui_memory[1902]=(u8)12;dong_porf_porf_game_ui_memory[1906]=(u8)104;dong_porf_porf_game_ui_memory[1907]=(u8)112;dong_porf_porf_game_ui_memory[1908]=(u8)45;dong_porf_porf_game_ui_memory[1909]=(u8)108;dong_porf_porf_game_ui_memory[1910]=(u8)97;dong_porf_porf_game_ui_memory[1911]=(u8)98;dong_porf_porf_game_ui_memory[1912]=(u8)101;dong_porf_porf_game_ui_memory[1913]=(u8)108;dong_porf_porf_game_ui_memory[1914]=(u8)45;dong_porf_porf_game_ui_memory[1915]=(u8)118;dong_porf_porf_game_ui_memory[1916]=(u8)97;dong_porf_porf_game_ui_memory[1917]=(u8)108;
+  dong_porf_porf_game_ui_memory[1920]=(u8)7;dong_porf_porf_game_ui_memory[1924]=(u8)104;dong_porf_porf_game_ui_memory[1925]=(u8)112;dong_porf_porf_game_ui_memory[1926]=(u8)45;dong_porf_porf_game_ui_memory[1927]=(u8)102;dong_porf_porf_game_ui_memory[1928]=(u8)105;dong_porf_porf_game_ui_memory[1929]=(u8)108;dong_porf_porf_game_ui_memory[1930]=(u8)108;
+  dong_porf_porf_game_ui_memory[1933]=(u8)12;dong_porf_porf_game_ui_memory[1937]=(u8)109;dong_porf_porf_game_ui_memory[1938]=(u8)112;dong_porf_porf_game_ui_memory[1939]=(u8)45;dong_porf_porf_game_ui_memory[1940]=(u8)108;dong_porf_porf_game_ui_memory[1941]=(u8)97;dong_porf_porf_game_ui_memory[1942]=(u8)98;dong_porf_porf_game_ui_memory[1943]=(u8)101;dong_porf_porf_game_ui_memory[1944]=(u8)108;dong_porf_porf_game_ui_memory[1945]=(u8)45;dong_porf_porf_game_ui_memory[1946]=(u8)118;dong_porf_porf_game_ui_memory[1947]=(u8)97;dong_porf_porf_game_ui_memory[1948]=(u8)108;
+  dong_porf_porf_game_ui_memory[1951]=(u8)7;dong_porf_porf_game_ui_memory[1955]=(u8)109;dong_porf_porf_game_ui_memory[1956]=(u8)112;dong_porf_porf_game_ui_memory[1957]=(u8)45;dong_porf_porf_game_ui_memory[1958]=(u8)102;dong_porf_porf_game_ui_memory[1959]=(u8)105;dong_porf_porf_game_ui_memory[1960]=(u8)108;dong_porf_porf_game_ui_memory[1961]=(u8)108;
+  dong_porf_porf_game_ui_memory[1964]=(u8)10;dong_porf_porf_game_ui_memory[1968]=(u8)98;dong_porf_porf_game_ui_memory[1969]=(u8)116;dong_porf_porf_game_ui_memory[1970]=(u8)110;dong_porf_porf_game_ui_memory[1971]=(u8)45;dong_porf_porf_game_ui_memory[1972]=(u8)100;dong_porf_porf_game_ui_memory[1973]=(u8)97;dong_porf_porf_game_ui_memory[1974]=(u8)109;dong_porf_porf_game_ui_memory[1975]=(u8)97;dong_porf_porf_game_ui_memory[1976]=(u8)103;dong_porf_porf_game_ui_memory[1977]=(u8)101;
+  dong_porf_porf_game_ui_memory[1980]=(u8)8;dong_porf_porf_game_ui_memory[1984]=(u8)98;dong_porf_porf_game_ui_memory[1985]=(u8)116;dong_porf_porf_game_ui_memory[1986]=(u8)110;dong_porf_porf_game_ui_memory[1987]=(u8)45;dong_porf_porf_game_ui_memory[1988]=(u8)104;dong_porf_porf_game_ui_memory[1989]=(u8)101;dong_porf_porf_game_ui_memory[1990]=(u8)97;dong_porf_porf_game_ui_memory[1991]=(u8)108;
+  dong_porf_porf_game_ui_memory[1994]=(u8)10;dong_porf_porf_game_ui_memory[1998]=(u8)115;dong_porf_porf_game_ui_memory[1999]=(u8)99;dong_porf_porf_game_ui_memory[2000]=(u8)111;dong_porf_porf_game_ui_memory[2001]=(u8)114;dong_porf_porf_game_ui_memory[2002]=(u8)101;dong_porf_porf_game_ui_memory[2003]=(u8)45;dong_porf_porf_game_ui_memory[2004]=(u8)109;dong_porf_porf_game_ui_memory[2005]=(u8)97;dong_porf_porf_game_ui_memory[2006]=(u8)105;dong_porf_porf_game_ui_memory[2007]=(u8)110;
+  dong_porf_porf_game_ui_memory[2010]=(u8)5;dong_porf_porf_game_ui_memory[2014]=(u8)99;dong_porf_porf_game_ui_memory[2015]=(u8)108;dong_porf_porf_game_ui_memory[2016]=(u8)105;dong_porf_porf_game_ui_memory[2017]=(u8)99;dong_porf_porf_game_ui_memory[2018]=(u8)107;
+  dong_porf_porf_game_ui_memory[2021]=(u8)8;dong_porf_porf_game_ui_memory[2025]=(u8)111;dong_porf_porf_game_ui_memory[2026]=(u8)110;dong_porf_porf_game_ui_memory[2027]=(u8)68;dong_porf_porf_game_ui_memory[2028]=(u8)97;dong_porf_porf_game_ui_memory[2029]=(u8)109;dong_porf_porf_game_ui_memory[2030]=(u8)97;dong_porf_porf_game_ui_memory[2031]=(u8)103;dong_porf_porf_game_ui_memory[2032]=(u8)101;
+  dong_porf_porf_game_ui_memory[2035]=(u8)6;dong_porf_porf_game_ui_memory[2039]=(u8)111;dong_porf_porf_game_ui_memory[2040]=(u8)110;dong_porf_porf_game_ui_memory[2041]=(u8)72;dong_porf_porf_game_ui_memory[2042]=(u8)101;dong_porf_porf_game_ui_memory[2043]=(u8)97;dong_porf_porf_game_ui_memory[2044]=(u8)108;
+  dong_porf_porf_game_ui_memory[2047]=(u8)11;dong_porf_porf_game_ui_memory[2051]=(u8)111;dong_porf_porf_game_ui_memory[2052]=(u8)110;dong_porf_porf_game_ui_memory[2053]=(u8)83;dong_porf_porf_game_ui_memory[2054]=(u8)99;dong_porf_porf_game_ui_memory[2055]=(u8)111;dong_porf_porf_game_ui_memory[2056]=(u8)114;dong_porf_porf_game_ui_memory[2057]=(u8)101;dong_porf_porf_game_ui_memory[2058]=(u8)84;dong_porf_porf_game_ui_memory[2059]=(u8)105;dong_porf_porf_game_ui_memory[2060]=(u8)99;dong_porf_porf_game_ui_memory[2061]=(u8)107;
+  dong_porf_porf_game_ui_memory[2064]=(u8)8;dong_porf_porf_game_ui_memory[2068]=(u8)112;dong_porf_porf_game_ui_memory[2069]=(u8)111;dong_porf_porf_game_ui_memory[2070]=(u8)114;dong_porf_porf_game_ui_memory[2071]=(u8)102;dong_porf_porf_game_ui_memory[2072]=(u8)73;dong_porf_porf_game_ui_memory[2073]=(u8)110;dong_porf_porf_game_ui_memory[2074]=(u8)105;dong_porf_porf_game_ui_memory[2075]=(u8)116;
+  dong_porf_porf_game_ui_memory[2078]=(u8)58;dong_porf_porf_game_ui_memory[2082]=(u8)83;dong_porf_porf_game_ui_memory[2083]=(u8)116;dong_porf_porf_game_ui_memory[2084]=(u8)114;dong_porf_porf_game_ui_memory[2085]=(u8)105;dong_porf_porf_game_ui_memory[2086]=(u8)110;dong_porf_porf_game_ui_memory[2087]=(u8)103;dong_porf_porf_game_ui_memory[2088]=(u8)46;dong_porf_porf_game_ui_memory[2089]=(u8)112;dong_porf_porf_game_ui_memory[2090]=(u8)114;dong_porf_porf_game_ui_memory[2091]=(u8)111;dong_porf_porf_game_ui_memory[2092]=(u8)116;dong_porf_porf_game_ui_memory[2093]=(u8)111;dong_porf_porf_game_ui_memory[2094]=(u8)116;dong_porf_porf_game_ui_memory[2095]=(u8)121;dong_porf_porf_game_ui_memory[2096]=(u8)112;dong_porf_porf_game_ui_memory[2097]=(u8)101;dong_porf_porf_game_ui_memory[2098]=(u8)46;dong_porf_porf_game_ui_memory[2099]=(u8)116;dong_porf_porf_game_ui_memory[2100]=(u8)111;dong_porf_porf_game_ui_memory[2101]=(u8)83;dong_porf_porf_game_ui_memory[2102]=(u8)116;dong_porf_porf_game_ui_memory[2103]=(u8)114;dong_porf_porf_game_ui_memory[2104]=(u8)105;dong_porf_porf_game_ui_memory[2105]=(u8)110;dong_porf_porf_game_ui_memory[2106]=(u8)103;dong_porf_porf_game_ui_memory[2107]=(u8)32;dong_porf_porf_game_ui_memory[2108]=(u8)101;dong_porf_porf_game_ui_memory[2109]=(u8)120;dong_porf_porf_game_ui_memory[2110]=(u8)112;dong_porf_porf_game_ui_memory[2111]=(u8)101;dong_porf_porf_game_ui_memory[2112]=(u8)99;dong_porf_porf_game_ui_memory[2113]=(u8)116;dong_porf_porf_game_ui_memory[2114]=(u8)115;dong_porf_porf_game_ui_memory[2115]=(u8)32;dong_porf_porf_game_ui_memory[2116]=(u8)39;dong_porf_porf_game_ui_memory[2117]=(u8)116;dong_porf_porf_game_ui_memory[2118]=(u8)104;dong_porf_porf_game_ui_memory[2119]=(u8)105;dong_porf_porf_game_ui_memory[2120]=(u8)115;dong_porf_porf_game_ui_memory[2121]=(u8)39;dong_porf_porf_game_ui_memory[2122]=(u8)32;dong_porf_porf_game_ui_memory[2123]=(u8)116;dong_porf_porf_game_ui_memory[2124]=(u8)111;dong_porf_porf_game_ui_memory[2125]=(u8)32;dong_porf_porf_game_ui_memory[2126]=(u8)98;dong_porf_porf_game_ui_memory[2127]=(u8)101;dong_porf_porf_game_ui_memory[2128]=(u8)32;dong_porf_porf_game_ui_memory[2129]=(u8)110;dong_porf_porf_game_ui_memory[2130]=(u8)111;dong_porf_porf_game_ui_memory[2131]=(u8)110;dong_porf_porf_game_ui_memory[2132]=(u8)45;dong_porf_porf_game_ui_memory[2133]=(u8)110;dong_porf_porf_game_ui_memory[2134]=(u8)117;dong_porf_porf_game_ui_memory[2135]=(u8)108;dong_porf_porf_game_ui_memory[2136]=(u8)108;dong_porf_porf_game_ui_memory[2137]=(u8)105;dong_porf_porf_game_ui_memory[2138]=(u8)115;dong_porf_porf_game_ui_memory[2139]=(u8)104;
+  dong_porf_porf_game_ui_memory[2142]=(u8)54;dong_porf_porf_game_ui_memory[2146]=(u8)83;dong_porf_porf_game_ui_memory[2147]=(u8)116;dong_porf_porf_game_ui_memory[2148]=(u8)114;dong_porf_porf_game_ui_memory[2149]=(u8)105;dong_porf_porf_game_ui_memory[2150]=(u8)110;dong_porf_porf_game_ui_memory[2151]=(u8)103;dong_porf_porf_game_ui_memory[2152]=(u8)46;dong_porf_porf_game_ui_memory[2153]=(u8)112;dong_porf_porf_game_ui_memory[2154]=(u8)114;dong_porf_porf_game_ui_memory[2155]=(u8)111;dong_porf_porf_game_ui_memory[2156]=(u8)116;dong_porf_porf_game_ui_memory[2157]=(u8)111;dong_porf_porf_game_ui_memory[2158]=(u8)116;dong_porf_porf_game_ui_memory[2159]=(u8)121;dong_porf_porf_game_ui_memory[2160]=(u8)112;dong_porf_porf_game_ui_memory[2161]=(u8)101;dong_porf_porf_game_ui_memory[2162]=(u8)46;dong_porf_porf_game_ui_memory[2163]=(u8)116;dong_porf_porf_game_ui_memory[2164]=(u8)114;dong_porf_porf_game_ui_memory[2165]=(u8)105;dong_porf_porf_game_ui_memory[2166]=(u8)109;dong_porf_porf_game_ui_memory[2167]=(u8)32;dong_porf_porf_game_ui_memory[2168]=(u8)101;dong_porf_porf_game_ui_memory[2169]=(u8)120;dong_porf_porf_game_ui_memory[2170]=(u8)112;dong_porf_porf_game_ui_memory[2171]=(u8)101;dong_porf_porf_game_ui_memory[2172]=(u8)99;dong_porf_porf_game_ui_memory[2173]=(u8)116;dong_porf_porf_game_ui_memory[2174]=(u8)115;dong_porf_porf_game_ui_memory[2175]=(u8)32;dong_porf_porf_game_ui_memory[2176]=(u8)39;dong_porf_porf_game_ui_memory[2177]=(u8)116;dong_porf_porf_game_ui_memory[2178]=(u8)104;dong_porf_porf_game_ui_memory[2179]=(u8)105;dong_porf_porf_game_ui_memory[2180]=(u8)115;dong_porf_porf_game_ui_memory[2181]=(u8)39;dong_porf_porf_game_ui_memory[2182]=(u8)32;dong_porf_porf_game_ui_memory[2183]=(u8)116;dong_porf_porf_game_ui_memory[2184]=(u8)111;dong_porf_porf_game_ui_memory[2185]=(u8)32;dong_porf_porf_game_ui_memory[2186]=(u8)98;dong_porf_porf_game_ui_memory[2187]=(u8)101;dong_porf_porf_game_ui_memory[2188]=(u8)32;dong_porf_porf_game_ui_memory[2189]=(u8)110;dong_porf_porf_game_ui_memory[2190]=(u8)111;dong_porf_porf_game_ui_memory[2191]=(u8)110;dong_porf_porf_game_ui_memory[2192]=(u8)45;dong_porf_porf_game_ui_memory[2193]=(u8)110;dong_porf_porf_game_ui_memory[2194]=(u8)117;dong_porf_porf_game_ui_memory[2195]=(u8)108;dong_porf_porf_game_ui_memory[2196]=(u8)108;dong_porf_porf_game_ui_memory[2197]=(u8)105;dong_porf_porf_game_ui_memory[2198]=(u8)115;dong_porf_porf_game_ui_memory[2199]=(u8)104;
+  dong_porf_porf_game_ui_memory[2202]=(u8)57;dong_porf_porf_game_ui_memory[2206]=(u8)83;dong_porf_porf_game_ui_memory[2207]=(u8)116;dong_porf_porf_game_ui_memory[2208]=(u8)114;dong_porf_porf_game_ui_memory[2209]=(u8)105;dong_porf_porf_game_ui_memory[2210]=(u8)110;dong_porf_porf_game_ui_memory[2211]=(u8)103;dong_porf_porf_game_ui_memory[2212]=(u8)46;dong_porf_porf_game_ui_memory[2213]=(u8)112;dong_porf_porf_game_ui_memory[2214]=(u8)114;dong_porf_porf_game_ui_memory[2215]=(u8)111;dong_porf_porf_game_ui_memory[2216]=(u8)116;dong_porf_porf_game_ui_memory[2217]=(u8)111;dong_porf_porf_game_ui_memory[2218]=(u8)116;dong_porf_porf_game_ui_memory[2219]=(u8)121;dong_porf_porf_game_ui_memory[2220]=(u8)112;dong_porf_porf_game_ui_memory[2221]=(u8)101;dong_porf_porf_game_ui_memory[2222]=(u8)46;dong_porf_porf_game_ui_memory[2223]=(u8)116;dong_porf_porf_game_ui_memory[2224]=(u8)114;dong_porf_porf_game_ui_memory[2225]=(u8)105;dong_porf_porf_game_ui_memory[2226]=(u8)109;dong_porf_porf_game_ui_memory[2227]=(u8)69;dong_porf_porf_game_ui_memory[2228]=(u8)110;dong_porf_porf_game_ui_memory[2229]=(u8)100;dong_porf_porf_game_ui_memory[2230]=(u8)32;dong_porf_porf_game_ui_memory[2231]=(u8)101;dong_porf_porf_game_ui_memory[2232]=(u8)120;dong_porf_porf_game_ui_memory[2233]=(u8)112;dong_porf_porf_game_ui_memory[2234]=(u8)101;dong_porf_porf_game_ui_memory[2235]=(u8)99;dong_porf_porf_game_ui_memory[2236]=(u8)116;dong_porf_porf_game_ui_memory[2237]=(u8)115;dong_porf_porf_game_ui_memory[2238]=(u8)32;dong_porf_porf_game_ui_memory[2239]=(u8)39;dong_porf_porf_game_ui_memory[2240]=(u8)116;dong_porf_porf_game_ui_memory[2241]=(u8)104;dong_porf_porf_game_ui_memory[2242]=(u8)105;dong_porf_porf_game_ui_memory[2243]=(u8)115;dong_porf_porf_game_ui_memory[2244]=(u8)39;dong_porf_porf_game_ui_memory[2245]=(u8)32;dong_porf_porf_game_ui_memory[2246]=(u8)116;dong_porf_porf_game_ui_memory[2247]=(u8)111;dong_porf_porf_game_ui_memory[2248]=(u8)32;dong_porf_porf_game_ui_memory[2249]=(u8)98;dong_porf_porf_game_ui_memory[2250]=(u8)101;dong_porf_porf_game_ui_memory[2251]=(u8)32;dong_porf_porf_game_ui_memory[2252]=(u8)110;dong_porf_porf_game_ui_memory[2253]=(u8)111;dong_porf_porf_game_ui_memory[2254]=(u8)110;dong_porf_porf_game_ui_memory[2255]=(u8)45;dong_porf_porf_game_ui_memory[2256]=(u8)110;dong_porf_porf_game_ui_memory[2257]=(u8)117;dong_porf_porf_game_ui_memory[2258]=(u8)108;dong_porf_porf_game_ui_memory[2259]=(u8)108;dong_porf_porf_game_ui_memory[2260]=(u8)105;dong_porf_porf_game_ui_memory[2261]=(u8)115;dong_porf_porf_game_ui_memory[2262]=(u8)104;
+  dong_porf_porf_game_ui_memory[2265]=(u8)59;dong_porf_porf_game_ui_memory[2269]=(u8)83;dong_porf_porf_game_ui_memory[2270]=(u8)116;dong_porf_porf_game_ui_memory[2271]=(u8)114;dong_porf_porf_game_ui_memory[2272]=(u8)105;dong_porf_porf_game_ui_memory[2273]=(u8)110;dong_porf_porf_game_ui_memory[2274]=(u8)103;dong_porf_porf_game_ui_memory[2275]=(u8)46;dong_porf_porf_game_ui_memory[2276]=(u8)112;dong_porf_porf_game_ui_memory[2277]=(u8)114;dong_porf_porf_game_ui_memory[2278]=(u8)111;dong_porf_porf_game_ui_memory[2279]=(u8)116;dong_porf_porf_game_ui_memory[2280]=(u8)111;dong_porf_porf_game_ui_memory[2281]=(u8)116;dong_porf_porf_game_ui_memory[2282]=(u8)121;dong_porf_porf_game_ui_memory[2283]=(u8)112;dong_porf_porf_game_ui_memory[2284]=(u8)101;dong_porf_porf_game_ui_memory[2285]=(u8)46;dong_porf_porf_game_ui_memory[2286]=(u8)116;dong_porf_porf_game_ui_memory[2287]=(u8)114;dong_porf_porf_game_ui_memory[2288]=(u8)105;dong_porf_porf_game_ui_memory[2289]=(u8)109;dong_porf_porf_game_ui_memory[2290]=(u8)83;dong_porf_porf_game_ui_memory[2291]=(u8)116;dong_porf_porf_game_ui_memory[2292]=(u8)97;dong_porf_porf_game_ui_memory[2293]=(u8)114;dong_porf_porf_game_ui_memory[2294]=(u8)116;dong_porf_porf_game_ui_memory[2295]=(u8)32;dong_porf_porf_game_ui_memory[2296]=(u8)101;dong_porf_porf_game_ui_memory[2297]=(u8)120;dong_porf_porf_game_ui_memory[2298]=(u8)112;dong_porf_porf_game_ui_memory[2299]=(u8)101;dong_porf_porf_game_ui_memory[2300]=(u8)99;dong_porf_porf_game_ui_memory[2301]=(u8)116;dong_porf_porf_game_ui_memory[2302]=(u8)115;dong_porf_porf_game_ui_memory[2303]=(u8)32;dong_porf_porf_game_ui_memory[2304]=(u8)39;dong_porf_porf_game_ui_memory[2305]=(u8)116;dong_porf_porf_game_ui_memory[2306]=(u8)104;dong_porf_porf_game_ui_memory[2307]=(u8)105;dong_porf_porf_game_ui_memory[2308]=(u8)115;dong_porf_porf_game_ui_memory[2309]=(u8)39;dong_porf_porf_game_ui_memory[2310]=(u8)32;dong_porf_porf_game_ui_memory[2311]=(u8)116;dong_porf_porf_game_ui_memory[2312]=(u8)111;dong_porf_porf_game_ui_memory[2313]=(u8)32;dong_porf_porf_game_ui_memory[2314]=(u8)98;dong_porf_porf_game_ui_memory[2315]=(u8)101;dong_porf_porf_game_ui_memory[2316]=(u8)32;dong_porf_porf_game_ui_memory[2317]=(u8)110;dong_porf_porf_game_ui_memory[2318]=(u8)111;dong_porf_porf_game_ui_memory[2319]=(u8)110;dong_porf_porf_game_ui_memory[2320]=(u8)45;dong_porf_porf_game_ui_memory[2321]=(u8)110;dong_porf_porf_game_ui_memory[2322]=(u8)117;dong_porf_porf_game_ui_memory[2323]=(u8)108;dong_porf_porf_game_ui_memory[2324]=(u8)108;dong_porf_porf_game_ui_memory[2325]=(u8)105;dong_porf_porf_game_ui_memory[2326]=(u8)115;dong_porf_porf_game_ui_memory[2327]=(u8)104;
   dong_porf_porf_game_ui_memory[16501]=(u8)7;dong_porf_porf_game_ui_memory[16505]=(u8)118;dong_porf_porf_game_ui_memory[16506]=(u8)97;dong_porf_porf_game_ui_memory[16507]=(u8)108;dong_porf_porf_game_ui_memory[16508]=(u8)117;dong_porf_porf_game_ui_memory[16509]=(u8)101;dong_porf_porf_game_ui_memory[16510]=(u8)79;dong_porf_porf_game_ui_memory[16511]=(u8)102;dong_porf_porf_game_ui_memory[16555]=(u8)1;dong_porf_porf_game_ui_memory[16558]=(u8)14;dong_porf_porf_game_ui_memory[16562]=(u8)104;dong_porf_porf_game_ui_memory[16563]=(u8)97;dong_porf_porf_game_ui_memory[16564]=(u8)115;dong_porf_porf_game_ui_memory[16565]=(u8)79;dong_porf_porf_game_ui_memory[16566]=(u8)119;dong_porf_porf_game_ui_memory[16567]=(u8)110;dong_porf_porf_game_ui_memory[16568]=(u8)80;dong_porf_porf_game_ui_memory[16569]=(u8)114;dong_porf_porf_game_ui_memory[16570]=(u8)111;dong_porf_porf_game_ui_memory[16571]=(u8)112;dong_porf_porf_game_ui_memory[16572]=(u8)101;dong_porf_porf_game_ui_memory[16573]=(u8)114;dong_porf_porf_game_ui_memory[16574]=(u8)116;dong_porf_porf_game_ui_memory[16575]=(u8)121;dong_porf_porf_game_ui_memory[16612]=(u8)1;dong_porf_porf_game_ui_memory[16615]=(u8)20;dong_porf_porf_game_ui_memory[16619]=(u8)112;dong_porf_porf_game_ui_memory[16620]=(u8)114;dong_porf_porf_game_ui_memory[16621]=(u8)111;dong_porf_porf_game_ui_memory[16622]=(u8)112;dong_porf_porf_game_ui_memory[16623]=(u8)101;dong_porf_porf_game_ui_memory[16624]=(u8)114;dong_porf_porf_game_ui_memory[16625]=(u8)116;dong_porf_porf_game_ui_memory[16626]=(u8)121;dong_porf_porf_game_ui_memory[16627]=(u8)73;dong_porf_porf_game_ui_memory[16628]=(u8)115;dong_porf_porf_game_ui_memory[16629]=(u8)69;dong_porf_porf_game_ui_memory[16630]=(u8)110;dong_porf_porf_game_ui_memory[16631]=(u8)117;dong_porf_porf_game_ui_memory[16632]=(u8)109;dong_porf_porf_game_ui_memory[16633]=(u8)101;dong_porf_porf_game_ui_memory[16634]=(u8)114;dong_porf_porf_game_ui_memory[16635]=(u8)97;dong_porf_porf_game_ui_memory[16636]=(u8)98;dong_porf_porf_game_ui_memory[16637]=(u8)108;dong_porf_porf_game_ui_memory[16638]=(u8)101;dong_porf_porf_game_ui_memory[16669]=(u8)1;dong_porf_porf_game_ui_memory[16672]=(u8)13;dong_porf_porf_game_ui_memory[16676]=(u8)105;dong_porf_porf_game_ui_memory[16677]=(u8)115;dong_porf_porf_game_ui_memory[16678]=(u8)80;dong_porf_porf_game_ui_memory[16679]=(u8)114;dong_porf_porf_game_ui_memory[16680]=(u8)111;dong_porf_porf_game_ui_memory[16681]=(u8)116;dong_porf_porf_game_ui_memory[16682]=(u8)111;dong_porf_porf_game_ui_memory[16683]=(u8)116;dong_porf_porf_game_ui_memory[16684]=(u8)121;dong_porf_porf_game_ui_memory[16685]=(u8)112;dong_porf_porf_game_ui_memory[16686]=(u8)101;dong_porf_porf_game_ui_memory[16687]=(u8)79;dong_porf_porf_game_ui_memory[16688]=(u8)102;dong_porf_porf_game_ui_memory[16729]=(u8)8;dong_porf_porf_game_ui_memory[16733]=(u8)116;dong_porf_porf_game_ui_memory[16734]=(u8)111;dong_porf_porf_game_ui_memory[16735]=(u8)83;dong_porf_porf_game_ui_memory[16736]=(u8)116;dong_porf_porf_game_ui_memory[16737]=(u8)114;dong_porf_porf_game_ui_memory[16738]=(u8)105;dong_porf_porf_game_ui_memory[16739]=(u8)110;dong_porf_porf_game_ui_memory[16740]=(u8)103;dong_porf_porf_game_ui_memory[16786]=(u8)14;dong_porf_porf_game_ui_memory[16790]=(u8)116;dong_porf_porf_game_ui_memory[16791]=(u8)111;dong_porf_porf_game_ui_memory[16792]=(u8)76;dong_porf_porf_game_ui_memory[16793]=(u8)111;dong_porf_porf_game_ui_memory[16794]=(u8)99;dong_porf_porf_game_ui_memory[16795]=(u8)97;dong_porf_porf_game_ui_memory[16796]=(u8)108;dong_porf_porf_game_ui_memory[16797]=(u8)101;dong_porf_porf_game_ui_memory[16798]=(u8)83;dong_porf_porf_game_ui_memory[16799]=(u8)116;dong_porf_porf_game_ui_memory[16800]=(u8)114;dong_porf_porf_game_ui_memory[16801]=(u8)105;dong_porf_porf_game_ui_memory[16802]=(u8)110;dong_porf_porf_game_ui_memory[16803]=(u8)103;dong_porf_porf_game_ui_memory[16840]=(u8)1;dong_porf_porf_game_ui_memory[16842]=(u8)2;dong_porf_porf_game_ui_memory[16843]=(u8)6;dong_porf_porf_game_ui_memory[16847]=(u8)79;dong_porf_porf_game_ui_memory[16848]=(u8)98;dong_porf_porf_game_ui_memory[16849]=(u8)106;dong_porf_porf_game_ui_memory[16850]=(u8)101;dong_porf_porf_game_ui_memory[16851]=(u8)99;dong_porf_porf_game_ui_memory[16852]=(u8)116;
 }
 
@@ -166,10 +167,12 @@ static struct ReturnValue dong_porf_porf_game_ui_addEventListener(f64 jjnewtarge
 static struct ReturnValue dong_porf_porf_game_ui_dongLog(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype, f64 msg, i32 msgjjtype);
 static struct ReturnValue dong_porf_porf_game_ui_setInterval(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype, f64 handlerName, i32 handlerNamejjtype, f64 ms, i32 msjjtype);
 static struct ReturnValue dong_porf_porf_game_ui_setStyle(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype, f64 nodeId, i32 nodeIdjjtype, f64 prop, i32 propjjtype, f64 value, i32 valuejjtype);
+static struct ReturnValue dong_porf_porf_game_ui_porfInit(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype);
 static struct ReturnValue dong_porf_porf_game_ui_hpBarColor(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype, f64 pct, i32 pctjjtype);
 static struct ReturnValue dong_porf_porf_game_ui_porfPatchHp(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype);
 static struct ReturnValue dong_porf_porf_game_ui_porfPatchMp(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype);
 static struct ReturnValue dong_porf_porf_game_ui_porfPatchScore(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype);
+static struct ReturnValue dong_porf_porf_game_ui_porfRefresh(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype);
 struct ReturnValue dong_porf_porf_game_ui_onDamage(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype);
 static f64 dong_porf_porf_game_ui_TypeError(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype, f64 message, i32 messagejjtype);
 static struct ReturnValue dong_porf_porf_game_ui__ecma262_ToString(f64 argument, i32 argumentjjtype);
@@ -271,6 +274,22 @@ static f64 dong_porf_porf_game_ui_METRIC_SCROLL_WIDTH = 0;
 static i32 dong_porf_porf_game_ui_METRIC_SCROLL_WIDTHjjtype = 0;
 static f64 dong_porf_porf_game_ui_METRIC_SCROLL_HEIGHT = 0;
 static i32 dong_porf_porf_game_ui_METRIC_SCROLL_HEIGHTjjtype = 0;
+static f64 dong_porf_porf_game_ui_hud_rootId = 0;
+static i32 dong_porf_porf_game_ui_hud_rootIdjjtype = 0;
+static f64 dong_porf_porf_game_ui_hp_label_valId = 0;
+static i32 dong_porf_porf_game_ui_hp_label_valIdjjtype = 0;
+static f64 dong_porf_porf_game_ui_hp_fillId = 0;
+static i32 dong_porf_porf_game_ui_hp_fillIdjjtype = 0;
+static f64 dong_porf_porf_game_ui_mp_label_valId = 0;
+static i32 dong_porf_porf_game_ui_mp_label_valIdjjtype = 0;
+static f64 dong_porf_porf_game_ui_mp_fillId = 0;
+static i32 dong_porf_porf_game_ui_mp_fillIdjjtype = 0;
+static f64 dong_porf_porf_game_ui_btn_damageId = 0;
+static i32 dong_porf_porf_game_ui_btn_damageIdjjtype = 0;
+static f64 dong_porf_porf_game_ui_btn_healId = 0;
+static i32 dong_porf_porf_game_ui_btn_healIdjjtype = 0;
+static f64 dong_porf_porf_game_ui_score_mainId = 0;
+static i32 dong_porf_porf_game_ui_score_mainIdjjtype = 0;
 static f64 dong_porf_porf_game_ui_hp = 0;
 static i32 dong_porf_porf_game_ui_hpjjtype = 0;
 static f64 dong_porf_porf_game_ui_mp = 0;
@@ -281,20 +300,8 @@ static f64 dong_porf_porf_game_ui_highScore = 0;
 static i32 dong_porf_porf_game_ui_highScorejjtype = 0;
 static f64 dong_porf_porf_game_ui_scoreTimerId = 0;
 static i32 dong_porf_porf_game_ui_scoreTimerIdjjtype = 0;
-static f64 dong_porf_porf_game_ui_hpFillId = 0;
-static i32 dong_porf_porf_game_ui_hpFillIdjjtype = 0;
-static f64 dong_porf_porf_game_ui_mpFillId = 0;
-static i32 dong_porf_porf_game_ui_mpFillIdjjtype = 0;
-static f64 dong_porf_porf_game_ui_hpLabelId = 0;
-static i32 dong_porf_porf_game_ui_hpLabelIdjjtype = 0;
-static f64 dong_porf_porf_game_ui_mpLabelId = 0;
-static i32 dong_porf_porf_game_ui_mpLabelIdjjtype = 0;
-static f64 dong_porf_porf_game_ui_scoreMainId = 0;
-static i32 dong_porf_porf_game_ui_scoreMainIdjjtype = 0;
-static f64 dong_porf_porf_game_ui_btnDamageId = 0;
-static i32 dong_porf_porf_game_ui_btnDamageIdjjtype = 0;
-static f64 dong_porf_porf_game_ui_btnHealId = 0;
-static i32 dong_porf_porf_game_ui_btnHealIdjjtype = 0;
+static f64 dong_porf_porf_game_ui_scoreTick = 0;
+static i32 dong_porf_porf_game_ui_scoreTickjjtype = 0;
 static i32 dong_porf_porf_game_ui_jjporfjjcurrentPtr = 0;
 static i32 dong_porf_porf_game_ui_jjporfjjcurrentPtrjjglbl_inited = 0;
 static i32 dong_porf_porf_game_ui_jjporfjjendPtr = 0;
@@ -11180,27 +11187,27 @@ static struct ReturnValue dong_porf_porf_game_ui_toUtf8(f64 jjnewtarget, i32 jjn
   i32 lenjjtype = 0;
   i32 jjlength_tmp = 0;
   i32 jjlast_type = 0;
-  f64 jjmember_obj_170 = 0;
-  f64 jjmember_prop_170 = 0;
+  f64 jjmember_obj_155 = 0;
+  f64 jjmember_prop_155 = 0;
   f64 cp = 0;
   i32 cpjjtype = 0;
   f64 jjproto_target = 0;
   i32 jjproto_targetjjtype = 0;
-  f64 jjindirect_171_callee = 0;
-  f64 jjindirect_171_caller = 0;
-  i32 jjindirect_171_callerjjtype = 0;
-  f64 jjmember_obj_172 = 0;
-  f64 jjmember_prop_172 = 0;
+  f64 jjindirect_156_callee = 0;
+  f64 jjindirect_156_caller = 0;
+  i32 jjindirect_156_callerjjtype = 0;
+  f64 jjmember_obj_157 = 0;
+  f64 jjmember_prop_157 = 0;
   i32 jjtypeswitch_tmp1 = 0;
   i32 logictmpi = 0;
   i32 jjlogicinner_tmp_int = 0;
   f64 next = 0;
   i32 nextjjtype = 0;
-  f64 jjindirect_173_callee = 0;
-  f64 jjindirect_173_caller = 0;
-  i32 jjindirect_173_callerjjtype = 0;
-  f64 jjmember_obj_174 = 0;
-  f64 jjmember_prop_174 = 0;
+  f64 jjindirect_158_callee = 0;
+  f64 jjindirect_158_caller = 0;
+  i32 jjindirect_158_callerjjtype = 0;
+  f64 jjmember_obj_159 = 0;
+  f64 jjmember_prop_159 = 0;
   f64 jjbitwise_left = 0;
   f64 jjbitwise_right = 0;
   f64 jjreturn = 0;
@@ -11220,18 +11227,18 @@ static struct ReturnValue dong_porf_porf_game_ui_toUtf8(f64 jjnewtarget, i32 jjn
       jjlast_type = 1;
       _r0 = (f64)(i32_load(1, 0, _get2));
     } else {
-      jjmember_prop_170 = 430;
+      jjmember_prop_155 = 430;
       _get3 = s;
-      jjmember_obj_170 = _get3;
+      jjmember_obj_155 = _get3;
       _get4 = sjjtype;
       // if f64
       f64 _r1;
         if (_get4 == 0) {
           _r1 = 0;
         } else {
-          _get5 = jjmember_obj_170;
+          _get5 = jjmember_obj_155;
           _get6 = sjjtype;
-          _get7 = jjmember_prop_170;
+          _get7 = jjmember_prop_155;
           const struct ReturnValue _0 = dong_porf_porf_game_ui__Porffor_object_get_withHash((i32)(_get5), _get6, (u32)(_get7), 195, -2086110260, 1);
           jjlast_type = _0.type;
           _r1 = _0.value;
@@ -11301,38 +11308,38 @@ static struct ReturnValue dong_porf_porf_game_ui_toUtf8(f64 jjnewtarget, i32 jjn
             }
           // end
           j565:;
-          jjmember_prop_172 = 1684;
+          jjmember_prop_157 = 1684;
           _get29 = s;
-          jjindirect_171_caller = _get29;
-          _get30 = jjindirect_171_caller;
+          jjindirect_156_caller = _get29;
+          _get30 = jjindirect_156_caller;
           _get31 = sjjtype;
-          jjindirect_171_callerjjtype = _get31;
-          jjmember_obj_172 = _get30;
-          _get32 = jjindirect_171_callerjjtype;
+          jjindirect_156_callerjjtype = _get31;
+          jjmember_obj_157 = _get30;
+          _get32 = jjindirect_156_callerjjtype;
           // if f64
           f64 _r566;
             if (_get32 == 0) {
               _r566 = 0;
             } else {
-              _get33 = jjmember_obj_172;
-              _get34 = jjindirect_171_callerjjtype;
-              _get35 = jjmember_prop_172;
+              _get33 = jjmember_obj_157;
+              _get34 = jjindirect_156_callerjjtype;
+              _get35 = jjmember_prop_157;
               const struct ReturnValue _4 = dong_porf_porf_game_ui__Porffor_object_get_withHash((i32)(_get33), _get34, (u32)(_get35), 195, -1592872053, 1);
               jjlast_type = _4.type;
               _r566 = _4.value;
             }
           // end
           j566:;
-          jjindirect_171_callee = _r566;
+          jjindirect_156_callee = _r566;
           _get36 = jjlast_type;
           // if f64
           f64 _r567;
             if (_get36 == 6) {
-              _get37 = jjindirect_171_caller;
-              _get38 = jjindirect_171_callerjjtype;
+              _get37 = jjindirect_156_caller;
+              _get38 = jjindirect_156_callerjjtype;
               _get39 = i;
               _get40 = ijjtype;
-              _get41 = jjindirect_171_callee;
+              _get41 = jjindirect_156_callee;
               jjlast_type = 0;
               _r567 = 0;
             } else {
@@ -11456,37 +11463,37 @@ static struct ReturnValue dong_porf_porf_game_ui_toUtf8(f64 jjnewtarget, i32 jjn
                 }
               // end
               j577:;
-              jjmember_prop_174 = 1684;
+              jjmember_prop_159 = 1684;
               _get74 = s;
-              jjindirect_173_caller = _get74;
-              _get75 = jjindirect_173_caller;
+              jjindirect_158_caller = _get74;
+              _get75 = jjindirect_158_caller;
               _get76 = sjjtype;
-              jjindirect_173_callerjjtype = _get76;
-              jjmember_obj_174 = _get75;
-              _get77 = jjindirect_173_callerjjtype;
+              jjindirect_158_callerjjtype = _get76;
+              jjmember_obj_159 = _get75;
+              _get77 = jjindirect_158_callerjjtype;
               // if f64
               f64 _r578;
                 if (_get77 == 0) {
                   _r578 = 0;
                 } else {
-                  _get78 = jjmember_obj_174;
-                  _get79 = jjindirect_173_callerjjtype;
-                  _get80 = jjmember_prop_174;
+                  _get78 = jjmember_obj_159;
+                  _get79 = jjindirect_158_callerjjtype;
+                  _get80 = jjmember_prop_159;
                   const struct ReturnValue _8 = dong_porf_porf_game_ui__Porffor_object_get_withHash((i32)(_get78), _get79, (u32)(_get80), 195, -1592872053, 1);
                   jjlast_type = _8.type;
                   _r578 = _8.value;
                 }
               // end
               j578:;
-              jjindirect_173_callee = _r578;
+              jjindirect_158_callee = _r578;
               _get81 = jjlast_type;
               // if f64
               f64 _r579;
                 if (_get81 == 6) {
-                  _get82 = jjindirect_173_caller;
-                  _get83 = jjindirect_173_callerjjtype;
+                  _get82 = jjindirect_158_caller;
+                  _get83 = jjindirect_158_callerjjtype;
                   _get84 = i;
-                  _get85 = jjindirect_173_callee;
+                  _get85 = jjindirect_158_callee;
                   jjlast_type = 0;
                   _r579 = 0;
                 } else {
@@ -12214,7 +12221,7 @@ static struct ReturnValue dong_porf_porf_game_ui_porfPatchHp(f64 jjnewtarget, i3
   const struct ReturnValue _1 = dong_porf_porf_game_ui__Porffor_concatStrings(_0.value, _get6, 1810, 195);
   jjlast_type = _1.type;
   _get7 = jjlast_type;
-  const struct ReturnValue _2 = dong_porf_porf_game_ui_setStyle(0, 0, 0, 0, dong_porf_porf_game_ui_hpFillId, 1, 1799, 195, _1.value, _get7);
+  const struct ReturnValue _2 = dong_porf_porf_game_ui_setStyle(0, 0, 0, 0, dong_porf_porf_game_ui_hp_fillId, 1, 1799, 195, _1.value, _get7);
   jjlast_type = _2.type;
   (void) _2.value;
   _get8 = pct;
@@ -12222,7 +12229,7 @@ static struct ReturnValue dong_porf_porf_game_ui_porfPatchHp(f64 jjnewtarget, i3
   const struct ReturnValue _3 = dong_porf_porf_game_ui_hpBarColor(0, 0, 0, 0, _get8, _get9);
   jjlast_type = _3.type;
   _get10 = jjlast_type;
-  const struct ReturnValue _4 = dong_porf_porf_game_ui_setStyle(0, 0, 0, 0, dong_porf_porf_game_ui_hpFillId, 1, 1817, 195, _3.value, _get10);
+  const struct ReturnValue _4 = dong_porf_porf_game_ui_setStyle(0, 0, 0, 0, dong_porf_porf_game_ui_hp_fillId, 1, 1817, 195, _3.value, _get10);
   jjlast_type = _4.type;
   (void) _4.value;
   f64_store(0, 4, 147456, dong_porf_porf_game_ui_hp);
@@ -12234,7 +12241,7 @@ static struct ReturnValue dong_porf_porf_game_ui_porfPatchHp(f64 jjnewtarget, i3
   const struct ReturnValue _6 = dong_porf_porf_game_ui__Porffor_concatStrings(_5.value, _get11, 1878, 195);
   jjlast_type = _6.type;
   _get12 = jjlast_type;
-  const struct ReturnValue _7 = dong_porf_porf_game_ui_setTextContent(0, 0, 0, 0, dong_porf_porf_game_ui_hpLabelId, 1, _6.value, _get12);
+  const struct ReturnValue _7 = dong_porf_porf_game_ui_setTextContent(0, 0, 0, 0, dong_porf_porf_game_ui_hp_label_valId, 1, _6.value, _get12);
   jjlast_type = _7.type;
   (void) _7.value;
   _get13 = jjnewtarget;
@@ -12300,14 +12307,14 @@ static struct ReturnValue dong_porf_porf_game_ui_porfPatchMp(f64 jjnewtarget, i3
   const struct ReturnValue _1 = dong_porf_porf_game_ui__Porffor_concatStrings(_0.value, _get5, 1810, 195);
   jjlast_type = _1.type;
   _get6 = jjlast_type;
-  const struct ReturnValue _2 = dong_porf_porf_game_ui_setStyle(0, 0, 0, 0, dong_porf_porf_game_ui_mpFillId, dong_porf_porf_game_ui_mpFillIdjjtype, 1799, 195, _1.value, _get6);
+  const struct ReturnValue _2 = dong_porf_porf_game_ui_setStyle(0, 0, 0, 0, dong_porf_porf_game_ui_mp_fillId, dong_porf_porf_game_ui_mp_fillIdjjtype, 1799, 195, _1.value, _get6);
   jjlast_type = _2.type;
   (void) _2.value;
   _get7 = pct;
   const struct ReturnValue _3 = dong_porf_porf_game_ui_hpBarColor(0, 0, 0, 0, _get7, 1);
   jjlast_type = _3.type;
   _get8 = jjlast_type;
-  const struct ReturnValue _4 = dong_porf_porf_game_ui_setStyle(0, 0, 0, 0, dong_porf_porf_game_ui_mpFillId, dong_porf_porf_game_ui_mpFillIdjjtype, 1817, 195, _3.value, _get8);
+  const struct ReturnValue _4 = dong_porf_porf_game_ui_setStyle(0, 0, 0, 0, dong_porf_porf_game_ui_mp_fillId, dong_porf_porf_game_ui_mp_fillIdjjtype, 1817, 195, _3.value, _get8);
   jjlast_type = _4.type;
   (void) _4.value;
   f64_store(0, 4, 196608, dong_porf_porf_game_ui_mp);
@@ -12319,7 +12326,7 @@ static struct ReturnValue dong_porf_porf_game_ui_porfPatchMp(f64 jjnewtarget, i3
   const struct ReturnValue _6 = dong_porf_porf_game_ui__Porffor_concatStrings(_5.value, _get9, 1878, 195);
   jjlast_type = _6.type;
   _get10 = jjlast_type;
-  const struct ReturnValue _7 = dong_porf_porf_game_ui_setTextContent(0, 0, 0, 0, dong_porf_porf_game_ui_mpLabelId, dong_porf_porf_game_ui_mpLabelIdjjtype, _6.value, _get10);
+  const struct ReturnValue _7 = dong_porf_porf_game_ui_setTextContent(0, 0, 0, 0, dong_porf_porf_game_ui_mp_label_valId, dong_porf_porf_game_ui_mp_label_valIdjjtype, _6.value, _get10);
   jjlast_type = _7.type;
   (void) _7.value;
   _get11 = jjnewtarget;
@@ -12347,7 +12354,7 @@ static struct ReturnValue dong_porf_porf_game_ui_porfPatchScore(f64 jjnewtarget,
   const struct ReturnValue _0 = dong_porf_porf_game_ui_String(0, 0, 0, 0, 163840, 72);
   jjlast_type = _0.type;
   _get0 = jjlast_type;
-  const struct ReturnValue _1 = dong_porf_porf_game_ui_setTextContent(0, 0, 0, 0, dong_porf_porf_game_ui_scoreMainId, 1, _0.value, _get0);
+  const struct ReturnValue _1 = dong_porf_porf_game_ui_setTextContent(0, 0, 0, 0, dong_porf_porf_game_ui_score_mainId, 1, _0.value, _get0);
   jjlast_type = _1.type;
   (void) _1.value;
   _get1 = jjnewtarget;
@@ -12400,13 +12407,51 @@ static struct ReturnValue dong_porf_porf_game_ui_setInterval(f64 jjnewtarget, i3
           return (struct ReturnValue){ _get7, _get8 };
         }
       // end
-      j690:;
+      j691:;
     }
   // end
-  j689:;
+  j690:;
   _get9 = jjreturn;
   _get10 = jjreturnjjtype;
   return (struct ReturnValue){ _get9, _get10 };
+}
+
+static struct ReturnValue dong_porf_porf_game_ui_porfRefresh(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype) {
+  i32 _get3;
+  f64 _get2;
+  f64 _get1;
+  i32 _get0;
+  i32 jjlast_type = 0;
+
+  const struct ReturnValue _0 = dong_porf_porf_game_ui_porfPatchHp(0, 0, 0, 0);
+  (void) _0.type;
+  (void) _0.value;
+  const struct ReturnValue _1 = dong_porf_porf_game_ui_porfPatchMp(0, 0, 0, 0);
+  (void) _1.type;
+  (void) _1.value;
+  const struct ReturnValue _2 = dong_porf_porf_game_ui_porfPatchScore(0, 0, 0, 0);
+  (void) _2.type;
+  (void) _2.value;
+  // if 
+    if ((f64)(dong_porf_porf_game_ui_scoreTimerId == 0) != 0) {
+      const struct ReturnValue _3 = dong_porf_porf_game_ui_setInterval(0, 0, 0, 0, 2047, 195, 1000, 1);
+      jjlast_type = _3.type;
+      _get0 = jjlast_type;
+      dong_porf_porf_game_ui_scoreTimerIdjjtype = _get0;
+      dong_porf_porf_game_ui_scoreTimerId = _3.value;
+    }
+  // end
+  j689:;
+  _get1 = jjnewtarget;
+  // if 
+    if (((u32)(_get1)) != 0) {
+      _get2 = jjthis;
+      _get3 = jjthisjjtype;
+      return (struct ReturnValue){ _get2, _get3 };
+    }
+  // end
+  j692:;
+  return (struct ReturnValue){ 0, 0 };
 }
 
 static struct ReturnValue dong_porf_porf_game_ui_dongLog(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype, f64 msg, i32 msgjjtype) {
@@ -12430,12 +12475,14 @@ static struct ReturnValue dong_porf_porf_game_ui_dongLog(f64 jjnewtarget, i32 jj
       return (struct ReturnValue){ _get3, _get4 };
     }
   // end
-  j691:;
+  j693:;
   return (struct ReturnValue){ 0, 0 };
 }
 
-int dong_porf_porf_game_ui_main() {
-  i32 _get8;
+static struct ReturnValue dong_porf_porf_game_ui_porfInit(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype) {
+  i32 _get10;
+  f64 _get9;
+  f64 _get8;
   i32 _get7;
   i32 _get6;
   i32 _get5;
@@ -12443,6 +12490,74 @@ int dong_porf_porf_game_ui_main() {
   i32 _get3;
   i32 _get2;
   i32 _get1;
+  i32 _get0;
+  i32 jjlast_type = 0;
+
+  const struct ReturnValue _0 = dong_porf_porf_game_ui_getElementById(0, 0, 0, 0, 1888, 195);
+  jjlast_type = _0.type;
+  _get0 = jjlast_type;
+  dong_porf_porf_game_ui_hud_rootIdjjtype = _get0;
+  dong_porf_porf_game_ui_hud_rootId = _0.value;
+  const struct ReturnValue _1 = dong_porf_porf_game_ui_getElementById(0, 0, 0, 0, 1902, 195);
+  jjlast_type = _1.type;
+  _get1 = jjlast_type;
+  dong_porf_porf_game_ui_hp_label_valIdjjtype = _get1;
+  dong_porf_porf_game_ui_hp_label_valId = _1.value;
+  const struct ReturnValue _2 = dong_porf_porf_game_ui_getElementById(0, 0, 0, 0, 1920, 195);
+  jjlast_type = _2.type;
+  _get2 = jjlast_type;
+  dong_porf_porf_game_ui_hp_fillIdjjtype = _get2;
+  dong_porf_porf_game_ui_hp_fillId = _2.value;
+  const struct ReturnValue _3 = dong_porf_porf_game_ui_getElementById(0, 0, 0, 0, 1933, 195);
+  jjlast_type = _3.type;
+  _get3 = jjlast_type;
+  dong_porf_porf_game_ui_mp_label_valIdjjtype = _get3;
+  dong_porf_porf_game_ui_mp_label_valId = _3.value;
+  const struct ReturnValue _4 = dong_porf_porf_game_ui_getElementById(0, 0, 0, 0, 1951, 195);
+  jjlast_type = _4.type;
+  _get4 = jjlast_type;
+  dong_porf_porf_game_ui_mp_fillIdjjtype = _get4;
+  dong_porf_porf_game_ui_mp_fillId = _4.value;
+  const struct ReturnValue _5 = dong_porf_porf_game_ui_getElementById(0, 0, 0, 0, 1964, 195);
+  jjlast_type = _5.type;
+  _get5 = jjlast_type;
+  dong_porf_porf_game_ui_btn_damageIdjjtype = _get5;
+  dong_porf_porf_game_ui_btn_damageId = _5.value;
+  const struct ReturnValue _6 = dong_porf_porf_game_ui_getElementById(0, 0, 0, 0, 1980, 195);
+  jjlast_type = _6.type;
+  _get6 = jjlast_type;
+  dong_porf_porf_game_ui_btn_healIdjjtype = _get6;
+  dong_porf_porf_game_ui_btn_healId = _6.value;
+  const struct ReturnValue _7 = dong_porf_porf_game_ui_getElementById(0, 0, 0, 0, 1994, 195);
+  jjlast_type = _7.type;
+  _get7 = jjlast_type;
+  dong_porf_porf_game_ui_score_mainIdjjtype = _get7;
+  dong_porf_porf_game_ui_score_mainId = _7.value;
+  const struct ReturnValue _8 = dong_porf_porf_game_ui_addEventListener(0, 0, 0, 0, dong_porf_porf_game_ui_btn_damageId, dong_porf_porf_game_ui_btn_damageIdjjtype, 2010, 195, 2021, 195);
+  (void) _8.type;
+  (void) _8.value;
+  const struct ReturnValue _9 = dong_porf_porf_game_ui_addEventListener(0, 0, 0, 0, dong_porf_porf_game_ui_btn_healId, dong_porf_porf_game_ui_btn_healIdjjtype, 2010, 195, 2035, 195);
+  (void) _9.type;
+  (void) _9.value;
+  const struct ReturnValue _10 = dong_porf_porf_game_ui_porfRefresh(0, 0, 0, 0);
+  (void) _10.type;
+  (void) _10.value;
+  const struct ReturnValue _11 = dong_porf_porf_game_ui_dongLog(0, 0, 0, 0, 2064, 195);
+  (void) _11.type;
+  (void) _11.value;
+  _get8 = jjnewtarget;
+  // if 
+    if (((u32)(_get8)) != 0) {
+      _get9 = jjthis;
+      _get10 = jjthisjjtype;
+      return (struct ReturnValue){ _get9, _get10 };
+    }
+  // end
+  j694:;
+  return (struct ReturnValue){ 0, 0 };
+}
+
+int dong_porf_porf_game_ui_main() {
   i32 _get0;
   dong_porf_porf_game_ui__porf_init();
 
@@ -12464,6 +12579,22 @@ int dong_porf_porf_game_ui_main() {
   dong_porf_porf_game_ui_METRIC_SCROLL_WIDTHjjtype = 1;
   dong_porf_porf_game_ui_METRIC_SCROLL_HEIGHT = 7;
   dong_porf_porf_game_ui_METRIC_SCROLL_HEIGHTjjtype = 1;
+  dong_porf_porf_game_ui_hud_rootId = 0;
+  dong_porf_porf_game_ui_hud_rootIdjjtype = 1;
+  dong_porf_porf_game_ui_hp_label_valId = 0;
+  dong_porf_porf_game_ui_hp_label_valIdjjtype = 1;
+  dong_porf_porf_game_ui_hp_fillId = 0;
+  dong_porf_porf_game_ui_hp_fillIdjjtype = 1;
+  dong_porf_porf_game_ui_mp_label_valId = 0;
+  dong_porf_porf_game_ui_mp_label_valIdjjtype = 1;
+  dong_porf_porf_game_ui_mp_fillId = 0;
+  dong_porf_porf_game_ui_mp_fillIdjjtype = 1;
+  dong_porf_porf_game_ui_btn_damageId = 0;
+  dong_porf_porf_game_ui_btn_damageIdjjtype = 1;
+  dong_porf_porf_game_ui_btn_healId = 0;
+  dong_porf_porf_game_ui_btn_healIdjjtype = 1;
+  dong_porf_porf_game_ui_score_mainId = 0;
+  dong_porf_porf_game_ui_score_mainIdjjtype = 1;
   dong_porf_porf_game_ui_hp = 85;
   dong_porf_porf_game_ui_hpjjtype = 1;
   dong_porf_porf_game_ui_mp = 60;
@@ -12474,78 +12605,11 @@ int dong_porf_porf_game_ui_main() {
   dong_porf_porf_game_ui_highScorejjtype = 1;
   dong_porf_porf_game_ui_scoreTimerId = 0;
   dong_porf_porf_game_ui_scoreTimerIdjjtype = 1;
-  dong_porf_porf_game_ui_hpFillId = 0;
-  dong_porf_porf_game_ui_hpFillIdjjtype = 1;
-  dong_porf_porf_game_ui_mpFillId = 0;
-  dong_porf_porf_game_ui_mpFillIdjjtype = 1;
-  dong_porf_porf_game_ui_hpLabelId = 0;
-  dong_porf_porf_game_ui_hpLabelIdjjtype = 1;
-  dong_porf_porf_game_ui_mpLabelId = 0;
-  dong_porf_porf_game_ui_mpLabelIdjjtype = 1;
-  dong_porf_porf_game_ui_scoreMainId = 0;
-  dong_porf_porf_game_ui_scoreMainIdjjtype = 1;
-  dong_porf_porf_game_ui_btnDamageId = 0;
-  dong_porf_porf_game_ui_btnDamageIdjjtype = 1;
-  dong_porf_porf_game_ui_btnHealId = 0;
-  dong_porf_porf_game_ui_btnHealIdjjtype = 1;
-  const struct ReturnValue _0 = dong_porf_porf_game_ui_getElementById(0, 0, 0, 0, 1888, 195);
+  dong_porf_porf_game_ui_scoreTick = 0;
+  dong_porf_porf_game_ui_scoreTickjjtype = 1;
+  const struct ReturnValue _0 = dong_porf_porf_game_ui_porfInit(0, 0, 0, 0);
   jjlast_type = _0.type;
   _get0 = jjlast_type;
-  dong_porf_porf_game_ui_hpFillIdjjtype = _get0;
-  dong_porf_porf_game_ui_hpFillId = _0.value;
-  const struct ReturnValue _1 = dong_porf_porf_game_ui_getElementById(0, 0, 0, 0, 1901, 195);
-  jjlast_type = _1.type;
-  _get1 = jjlast_type;
-  dong_porf_porf_game_ui_mpFillIdjjtype = _get1;
-  dong_porf_porf_game_ui_mpFillId = _1.value;
-  const struct ReturnValue _2 = dong_porf_porf_game_ui_getElementById(0, 0, 0, 0, 1914, 195);
-  jjlast_type = _2.type;
-  _get2 = jjlast_type;
-  dong_porf_porf_game_ui_hpLabelIdjjtype = _get2;
-  dong_porf_porf_game_ui_hpLabelId = _2.value;
-  const struct ReturnValue _3 = dong_porf_porf_game_ui_getElementById(0, 0, 0, 0, 1932, 195);
-  jjlast_type = _3.type;
-  _get3 = jjlast_type;
-  dong_porf_porf_game_ui_mpLabelIdjjtype = _get3;
-  dong_porf_porf_game_ui_mpLabelId = _3.value;
-  const struct ReturnValue _4 = dong_porf_porf_game_ui_getElementById(0, 0, 0, 0, 1950, 195);
-  jjlast_type = _4.type;
-  _get4 = jjlast_type;
-  dong_porf_porf_game_ui_scoreMainIdjjtype = _get4;
-  dong_porf_porf_game_ui_scoreMainId = _4.value;
-  const struct ReturnValue _5 = dong_porf_porf_game_ui_getElementById(0, 0, 0, 0, 1966, 195);
-  jjlast_type = _5.type;
-  _get5 = jjlast_type;
-  dong_porf_porf_game_ui_btnDamageIdjjtype = _get5;
-  dong_porf_porf_game_ui_btnDamageId = _5.value;
-  const struct ReturnValue _6 = dong_porf_porf_game_ui_getElementById(0, 0, 0, 0, 1982, 195);
-  jjlast_type = _6.type;
-  _get6 = jjlast_type;
-  dong_porf_porf_game_ui_btnHealIdjjtype = _get6;
-  dong_porf_porf_game_ui_btnHealId = _6.value;
-  const struct ReturnValue _7 = dong_porf_porf_game_ui_addEventListener(0, 0, 0, 0, dong_porf_porf_game_ui_btnDamageId, dong_porf_porf_game_ui_btnDamageIdjjtype, 1996, 195, 2007, 195);
-  jjlast_type = _7.type;
-  (void) _7.value;
-  const struct ReturnValue _8 = dong_porf_porf_game_ui_addEventListener(0, 0, 0, 0, dong_porf_porf_game_ui_btnHealId, dong_porf_porf_game_ui_btnHealIdjjtype, 1996, 195, 2021, 195);
-  jjlast_type = _8.type;
-  (void) _8.value;
-  const struct ReturnValue _9 = dong_porf_porf_game_ui_porfPatchHp(0, 0, 0, 0);
-  jjlast_type = _9.type;
-  (void) _9.value;
-  const struct ReturnValue _10 = dong_porf_porf_game_ui_porfPatchMp(0, 0, 0, 0);
-  jjlast_type = _10.type;
-  (void) _10.value;
-  const struct ReturnValue _11 = dong_porf_porf_game_ui_porfPatchScore(0, 0, 0, 0);
-  jjlast_type = _11.type;
-  (void) _11.value;
-  const struct ReturnValue _12 = dong_porf_porf_game_ui_setInterval(0, 0, 0, 0, 2033, 195, 1000, 1);
-  jjlast_type = _12.type;
-  _get7 = jjlast_type;
-  dong_porf_porf_game_ui_scoreTimerIdjjtype = _get7;
-  dong_porf_porf_game_ui_scoreTimerId = _12.value;
-  const struct ReturnValue _13 = dong_porf_porf_game_ui_dongLog(0, 0, 0, 0, 2050, 195);
-  jjlast_type = _13.type;
-  _get8 = jjlast_type;
 
   return 0;
 }
@@ -12566,7 +12630,7 @@ struct ReturnValue dong_porf_porf_game_ui_onDamage(f64 jjnewtarget, i32 jjnewtar
       (void) dong_porf_porf_game_ui_hp;
     }
   // end
-  j692:;
+  j695:;
   const struct ReturnValue _0 = dong_porf_porf_game_ui_porfPatchHp(0, 0, 0, 0);
   (void) _0.type;
   (void) _0.value;
@@ -12578,7 +12642,7 @@ struct ReturnValue dong_porf_porf_game_ui_onDamage(f64 jjnewtarget, i32 jjnewtar
       return (struct ReturnValue){ _get1, _get2 };
     }
   // end
-  j693:;
+  j696:;
   return (struct ReturnValue){ 0, 0 };
 }
 
@@ -12598,7 +12662,7 @@ struct ReturnValue dong_porf_porf_game_ui_onHeal(f64 jjnewtarget, i32 jjnewtarge
       (void) dong_porf_porf_game_ui_hp;
     }
   // end
-  j694:;
+  j697:;
   const struct ReturnValue _0 = dong_porf_porf_game_ui_porfPatchHp(0, 0, 0, 0);
   (void) _0.type;
   (void) _0.value;
@@ -12610,37 +12674,52 @@ struct ReturnValue dong_porf_porf_game_ui_onHeal(f64 jjnewtarget, i32 jjnewtarge
       return (struct ReturnValue){ _get1, _get2 };
     }
   // end
-  j695:;
+  j698:;
   return (struct ReturnValue){ 0, 0 };
 }
 
 struct ReturnValue dong_porf_porf_game_ui_onScoreTick(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype) {
-  i32 _get3;
+  i32 _get7;
+  f64 _get6;
+  f64 _get5;
+  f64 _get4;
+  f64 _get3;
   f64 _get2;
   f64 _get1;
   f64 _get0;
   f64 bump = 0;
   i32 bumpjjtype = 0;
+  f64 jjmath_a = 0;
+  f64 jjmath_b = 0;
   i32 jjlast_type = 0;
 
-  bump = 5;
+  dong_porf_porf_game_ui_scoreTick = dong_porf_porf_game_ui_scoreTick + 1;
+  dong_porf_porf_game_ui_scoreTickjjtype = 1;
+  (void) dong_porf_porf_game_ui_scoreTick;
+  jjmath_a = dong_porf_porf_game_ui_scoreTick;
+  _get0 = jjmath_a;
+  jjmath_b = 5;
+  _get1 = jjmath_b;
+  _get2 = jjmath_a;
+  _get3 = jjmath_b;
+  bump = 5 + (_get0 - (_get1 * trunc((_get2 / _get3))));
   bumpjjtype = 1;
-  _get0 = bump;
-  dong_porf_porf_game_ui_score = dong_porf_porf_game_ui_score + _get0;
+  _get4 = bump;
+  dong_porf_porf_game_ui_score = dong_porf_porf_game_ui_score + _get4;
   dong_porf_porf_game_ui_scorejjtype = 1;
   (void) dong_porf_porf_game_ui_score;
   const struct ReturnValue _0 = dong_porf_porf_game_ui_porfPatchScore(0, 0, 0, 0);
   (void) _0.type;
   (void) _0.value;
-  _get1 = jjnewtarget;
+  _get5 = jjnewtarget;
   // if 
-    if (((u32)(_get1)) != 0) {
-      _get2 = jjthis;
-      _get3 = jjthisjjtype;
-      return (struct ReturnValue){ _get2, _get3 };
+    if (((u32)(_get5)) != 0) {
+      _get6 = jjthis;
+      _get7 = jjthisjjtype;
+      return (struct ReturnValue){ _get6, _get7 };
     }
   // end
-  j696:;
+  j699:;
   return (struct ReturnValue){ 0, 0 };
 }
 
@@ -12679,6 +12758,22 @@ typedef struct {
   i32 dong_porf_porf_game_ui_METRIC_SCROLL_WIDTHjjtype;
   f64 dong_porf_porf_game_ui_METRIC_SCROLL_HEIGHT;
   i32 dong_porf_porf_game_ui_METRIC_SCROLL_HEIGHTjjtype;
+  f64 dong_porf_porf_game_ui_hud_rootId;
+  i32 dong_porf_porf_game_ui_hud_rootIdjjtype;
+  f64 dong_porf_porf_game_ui_hp_label_valId;
+  i32 dong_porf_porf_game_ui_hp_label_valIdjjtype;
+  f64 dong_porf_porf_game_ui_hp_fillId;
+  i32 dong_porf_porf_game_ui_hp_fillIdjjtype;
+  f64 dong_porf_porf_game_ui_mp_label_valId;
+  i32 dong_porf_porf_game_ui_mp_label_valIdjjtype;
+  f64 dong_porf_porf_game_ui_mp_fillId;
+  i32 dong_porf_porf_game_ui_mp_fillIdjjtype;
+  f64 dong_porf_porf_game_ui_btn_damageId;
+  i32 dong_porf_porf_game_ui_btn_damageIdjjtype;
+  f64 dong_porf_porf_game_ui_btn_healId;
+  i32 dong_porf_porf_game_ui_btn_healIdjjtype;
+  f64 dong_porf_porf_game_ui_score_mainId;
+  i32 dong_porf_porf_game_ui_score_mainIdjjtype;
   f64 dong_porf_porf_game_ui_hp;
   i32 dong_porf_porf_game_ui_hpjjtype;
   f64 dong_porf_porf_game_ui_mp;
@@ -12689,20 +12784,8 @@ typedef struct {
   i32 dong_porf_porf_game_ui_highScorejjtype;
   f64 dong_porf_porf_game_ui_scoreTimerId;
   i32 dong_porf_porf_game_ui_scoreTimerIdjjtype;
-  f64 dong_porf_porf_game_ui_hpFillId;
-  i32 dong_porf_porf_game_ui_hpFillIdjjtype;
-  f64 dong_porf_porf_game_ui_mpFillId;
-  i32 dong_porf_porf_game_ui_mpFillIdjjtype;
-  f64 dong_porf_porf_game_ui_hpLabelId;
-  i32 dong_porf_porf_game_ui_hpLabelIdjjtype;
-  f64 dong_porf_porf_game_ui_mpLabelId;
-  i32 dong_porf_porf_game_ui_mpLabelIdjjtype;
-  f64 dong_porf_porf_game_ui_scoreMainId;
-  i32 dong_porf_porf_game_ui_scoreMainIdjjtype;
-  f64 dong_porf_porf_game_ui_btnDamageId;
-  i32 dong_porf_porf_game_ui_btnDamageIdjjtype;
-  f64 dong_porf_porf_game_ui_btnHealId;
-  i32 dong_porf_porf_game_ui_btnHealIdjjtype;
+  f64 dong_porf_porf_game_ui_scoreTick;
+  i32 dong_porf_porf_game_ui_scoreTickjjtype;
   i32 dong_porf_porf_game_ui_jjporfjjcurrentPtr;
   i32 dong_porf_porf_game_ui_jjporfjjcurrentPtrjjglbl_inited;
   i32 dong_porf_porf_game_ui_jjporfjjendPtr;
@@ -12730,6 +12813,22 @@ void dong_porf_porf_game_ui_state_capture(dong_porf_porf_game_ui_state_t* out) {
   out->dong_porf_porf_game_ui_METRIC_SCROLL_WIDTHjjtype = dong_porf_porf_game_ui_METRIC_SCROLL_WIDTHjjtype;
   out->dong_porf_porf_game_ui_METRIC_SCROLL_HEIGHT = dong_porf_porf_game_ui_METRIC_SCROLL_HEIGHT;
   out->dong_porf_porf_game_ui_METRIC_SCROLL_HEIGHTjjtype = dong_porf_porf_game_ui_METRIC_SCROLL_HEIGHTjjtype;
+  out->dong_porf_porf_game_ui_hud_rootId = dong_porf_porf_game_ui_hud_rootId;
+  out->dong_porf_porf_game_ui_hud_rootIdjjtype = dong_porf_porf_game_ui_hud_rootIdjjtype;
+  out->dong_porf_porf_game_ui_hp_label_valId = dong_porf_porf_game_ui_hp_label_valId;
+  out->dong_porf_porf_game_ui_hp_label_valIdjjtype = dong_porf_porf_game_ui_hp_label_valIdjjtype;
+  out->dong_porf_porf_game_ui_hp_fillId = dong_porf_porf_game_ui_hp_fillId;
+  out->dong_porf_porf_game_ui_hp_fillIdjjtype = dong_porf_porf_game_ui_hp_fillIdjjtype;
+  out->dong_porf_porf_game_ui_mp_label_valId = dong_porf_porf_game_ui_mp_label_valId;
+  out->dong_porf_porf_game_ui_mp_label_valIdjjtype = dong_porf_porf_game_ui_mp_label_valIdjjtype;
+  out->dong_porf_porf_game_ui_mp_fillId = dong_porf_porf_game_ui_mp_fillId;
+  out->dong_porf_porf_game_ui_mp_fillIdjjtype = dong_porf_porf_game_ui_mp_fillIdjjtype;
+  out->dong_porf_porf_game_ui_btn_damageId = dong_porf_porf_game_ui_btn_damageId;
+  out->dong_porf_porf_game_ui_btn_damageIdjjtype = dong_porf_porf_game_ui_btn_damageIdjjtype;
+  out->dong_porf_porf_game_ui_btn_healId = dong_porf_porf_game_ui_btn_healId;
+  out->dong_porf_porf_game_ui_btn_healIdjjtype = dong_porf_porf_game_ui_btn_healIdjjtype;
+  out->dong_porf_porf_game_ui_score_mainId = dong_porf_porf_game_ui_score_mainId;
+  out->dong_porf_porf_game_ui_score_mainIdjjtype = dong_porf_porf_game_ui_score_mainIdjjtype;
   out->dong_porf_porf_game_ui_hp = dong_porf_porf_game_ui_hp;
   out->dong_porf_porf_game_ui_hpjjtype = dong_porf_porf_game_ui_hpjjtype;
   out->dong_porf_porf_game_ui_mp = dong_porf_porf_game_ui_mp;
@@ -12740,20 +12839,8 @@ void dong_porf_porf_game_ui_state_capture(dong_porf_porf_game_ui_state_t* out) {
   out->dong_porf_porf_game_ui_highScorejjtype = dong_porf_porf_game_ui_highScorejjtype;
   out->dong_porf_porf_game_ui_scoreTimerId = dong_porf_porf_game_ui_scoreTimerId;
   out->dong_porf_porf_game_ui_scoreTimerIdjjtype = dong_porf_porf_game_ui_scoreTimerIdjjtype;
-  out->dong_porf_porf_game_ui_hpFillId = dong_porf_porf_game_ui_hpFillId;
-  out->dong_porf_porf_game_ui_hpFillIdjjtype = dong_porf_porf_game_ui_hpFillIdjjtype;
-  out->dong_porf_porf_game_ui_mpFillId = dong_porf_porf_game_ui_mpFillId;
-  out->dong_porf_porf_game_ui_mpFillIdjjtype = dong_porf_porf_game_ui_mpFillIdjjtype;
-  out->dong_porf_porf_game_ui_hpLabelId = dong_porf_porf_game_ui_hpLabelId;
-  out->dong_porf_porf_game_ui_hpLabelIdjjtype = dong_porf_porf_game_ui_hpLabelIdjjtype;
-  out->dong_porf_porf_game_ui_mpLabelId = dong_porf_porf_game_ui_mpLabelId;
-  out->dong_porf_porf_game_ui_mpLabelIdjjtype = dong_porf_porf_game_ui_mpLabelIdjjtype;
-  out->dong_porf_porf_game_ui_scoreMainId = dong_porf_porf_game_ui_scoreMainId;
-  out->dong_porf_porf_game_ui_scoreMainIdjjtype = dong_porf_porf_game_ui_scoreMainIdjjtype;
-  out->dong_porf_porf_game_ui_btnDamageId = dong_porf_porf_game_ui_btnDamageId;
-  out->dong_porf_porf_game_ui_btnDamageIdjjtype = dong_porf_porf_game_ui_btnDamageIdjjtype;
-  out->dong_porf_porf_game_ui_btnHealId = dong_porf_porf_game_ui_btnHealId;
-  out->dong_porf_porf_game_ui_btnHealIdjjtype = dong_porf_porf_game_ui_btnHealIdjjtype;
+  out->dong_porf_porf_game_ui_scoreTick = dong_porf_porf_game_ui_scoreTick;
+  out->dong_porf_porf_game_ui_scoreTickjjtype = dong_porf_porf_game_ui_scoreTickjjtype;
   out->dong_porf_porf_game_ui_jjporfjjcurrentPtr = dong_porf_porf_game_ui_jjporfjjcurrentPtr;
   out->dong_porf_porf_game_ui_jjporfjjcurrentPtrjjglbl_inited = dong_porf_porf_game_ui_jjporfjjcurrentPtrjjglbl_inited;
   out->dong_porf_porf_game_ui_jjporfjjendPtr = dong_porf_porf_game_ui_jjporfjjendPtr;
@@ -12781,6 +12868,22 @@ void dong_porf_porf_game_ui_state_apply(const dong_porf_porf_game_ui_state_t* in
   dong_porf_porf_game_ui_METRIC_SCROLL_WIDTHjjtype = in->dong_porf_porf_game_ui_METRIC_SCROLL_WIDTHjjtype;
   dong_porf_porf_game_ui_METRIC_SCROLL_HEIGHT = in->dong_porf_porf_game_ui_METRIC_SCROLL_HEIGHT;
   dong_porf_porf_game_ui_METRIC_SCROLL_HEIGHTjjtype = in->dong_porf_porf_game_ui_METRIC_SCROLL_HEIGHTjjtype;
+  dong_porf_porf_game_ui_hud_rootId = in->dong_porf_porf_game_ui_hud_rootId;
+  dong_porf_porf_game_ui_hud_rootIdjjtype = in->dong_porf_porf_game_ui_hud_rootIdjjtype;
+  dong_porf_porf_game_ui_hp_label_valId = in->dong_porf_porf_game_ui_hp_label_valId;
+  dong_porf_porf_game_ui_hp_label_valIdjjtype = in->dong_porf_porf_game_ui_hp_label_valIdjjtype;
+  dong_porf_porf_game_ui_hp_fillId = in->dong_porf_porf_game_ui_hp_fillId;
+  dong_porf_porf_game_ui_hp_fillIdjjtype = in->dong_porf_porf_game_ui_hp_fillIdjjtype;
+  dong_porf_porf_game_ui_mp_label_valId = in->dong_porf_porf_game_ui_mp_label_valId;
+  dong_porf_porf_game_ui_mp_label_valIdjjtype = in->dong_porf_porf_game_ui_mp_label_valIdjjtype;
+  dong_porf_porf_game_ui_mp_fillId = in->dong_porf_porf_game_ui_mp_fillId;
+  dong_porf_porf_game_ui_mp_fillIdjjtype = in->dong_porf_porf_game_ui_mp_fillIdjjtype;
+  dong_porf_porf_game_ui_btn_damageId = in->dong_porf_porf_game_ui_btn_damageId;
+  dong_porf_porf_game_ui_btn_damageIdjjtype = in->dong_porf_porf_game_ui_btn_damageIdjjtype;
+  dong_porf_porf_game_ui_btn_healId = in->dong_porf_porf_game_ui_btn_healId;
+  dong_porf_porf_game_ui_btn_healIdjjtype = in->dong_porf_porf_game_ui_btn_healIdjjtype;
+  dong_porf_porf_game_ui_score_mainId = in->dong_porf_porf_game_ui_score_mainId;
+  dong_porf_porf_game_ui_score_mainIdjjtype = in->dong_porf_porf_game_ui_score_mainIdjjtype;
   dong_porf_porf_game_ui_hp = in->dong_porf_porf_game_ui_hp;
   dong_porf_porf_game_ui_hpjjtype = in->dong_porf_porf_game_ui_hpjjtype;
   dong_porf_porf_game_ui_mp = in->dong_porf_porf_game_ui_mp;
@@ -12791,20 +12894,8 @@ void dong_porf_porf_game_ui_state_apply(const dong_porf_porf_game_ui_state_t* in
   dong_porf_porf_game_ui_highScorejjtype = in->dong_porf_porf_game_ui_highScorejjtype;
   dong_porf_porf_game_ui_scoreTimerId = in->dong_porf_porf_game_ui_scoreTimerId;
   dong_porf_porf_game_ui_scoreTimerIdjjtype = in->dong_porf_porf_game_ui_scoreTimerIdjjtype;
-  dong_porf_porf_game_ui_hpFillId = in->dong_porf_porf_game_ui_hpFillId;
-  dong_porf_porf_game_ui_hpFillIdjjtype = in->dong_porf_porf_game_ui_hpFillIdjjtype;
-  dong_porf_porf_game_ui_mpFillId = in->dong_porf_porf_game_ui_mpFillId;
-  dong_porf_porf_game_ui_mpFillIdjjtype = in->dong_porf_porf_game_ui_mpFillIdjjtype;
-  dong_porf_porf_game_ui_hpLabelId = in->dong_porf_porf_game_ui_hpLabelId;
-  dong_porf_porf_game_ui_hpLabelIdjjtype = in->dong_porf_porf_game_ui_hpLabelIdjjtype;
-  dong_porf_porf_game_ui_mpLabelId = in->dong_porf_porf_game_ui_mpLabelId;
-  dong_porf_porf_game_ui_mpLabelIdjjtype = in->dong_porf_porf_game_ui_mpLabelIdjjtype;
-  dong_porf_porf_game_ui_scoreMainId = in->dong_porf_porf_game_ui_scoreMainId;
-  dong_porf_porf_game_ui_scoreMainIdjjtype = in->dong_porf_porf_game_ui_scoreMainIdjjtype;
-  dong_porf_porf_game_ui_btnDamageId = in->dong_porf_porf_game_ui_btnDamageId;
-  dong_porf_porf_game_ui_btnDamageIdjjtype = in->dong_porf_porf_game_ui_btnDamageIdjjtype;
-  dong_porf_porf_game_ui_btnHealId = in->dong_porf_porf_game_ui_btnHealId;
-  dong_porf_porf_game_ui_btnHealIdjjtype = in->dong_porf_porf_game_ui_btnHealIdjjtype;
+  dong_porf_porf_game_ui_scoreTick = in->dong_porf_porf_game_ui_scoreTick;
+  dong_porf_porf_game_ui_scoreTickjjtype = in->dong_porf_porf_game_ui_scoreTickjjtype;
   dong_porf_porf_game_ui_jjporfjjcurrentPtr = in->dong_porf_porf_game_ui_jjporfjjcurrentPtr;
   dong_porf_porf_game_ui_jjporfjjcurrentPtrjjglbl_inited = in->dong_porf_porf_game_ui_jjporfjjcurrentPtrjjglbl_inited;
   dong_porf_porf_game_ui_jjporfjjendPtr = in->dong_porf_porf_game_ui_jjporfjjendPtr;

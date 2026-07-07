@@ -1,0 +1,316 @@
+---
+module: porf_todo
+exports: onAdd, onInputChange, onKeyDown, onFilterAll, onFilterActive, onFilterDone, onClearDone, onListClick
+---
+
+<template>
+<div id="porf-root" style="width:100%;height:100%;display:flex;align-items:flex-start;justify-content:center;background:#f0f3f5;font-family:sans-serif;padding-top:40px;">
+  <div style="width:480px;padding:24px;">
+    <h1 id="title" style="font-size:28px;color:#2c3e50;margin-bottom:24px;text-align:center;">Dong Porf Todo</h1>
+    <div style="display:flex;gap:8px;margin-bottom:20px;">
+      <input id="todo-input" data-porf-on="input:onInputChange,keydown:onKeyDown" placeholder="Add a new task..." style="flex:1;padding:12px 16px;font-size:15px;border:2px solid #dcdde1;border-radius:8px;background:#fff;" />
+      <button id="btn-add" data-porf-on="click:onAdd" style="padding:12px 20px;background:#3498db;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:bold;">Add</button>
+    </div>
+    <div id="filter-bar" style="display:flex;gap:8px;margin-bottom:16px;">
+      <button id="filter-all" data-porf-on="click:onFilterAll" style="padding:8px 16px;border:none;border-radius:6px;font-size:13px;">All</button>
+      <button id="filter-active" data-porf-on="click:onFilterActive" style="padding:8px 16px;border:none;border-radius:6px;font-size:13px;">Active</button>
+      <button id="filter-done" data-porf-on="click:onFilterDone" style="padding:8px 16px;border:none;border-radius:6px;font-size:13px;">Done</button>
+    </div>
+    <div id="todo-list" data-porf-on="click:onListClick"></div>
+    <!-- porf-each todos as todo key id container=todo-list filter=shouldShow(i) row-fn=buildTodoRow -->
+    <span style="display:none">{todoText}{todoDone}</span>
+    <!-- /porf-each -->
+    <div id="clear-wrap" data-porf-if="showClear" style="margin-top:16px;text-align:center;" hidden="1">
+      <button id="btn-clear" data-porf-on="click:onClearDone" style="padding:8px 16px;background:#e74c3c;color:#fff;border:none;border-radius:6px;font-size:13px;">Clear done</button>
+    </div>
+  </div>
+</div>
+</template>
+
+<script>
+var MAX_TODOS = 16;
+var todoCount = 4;
+var nextId = 5;
+var filterMode = 0;
+var inputText = '';
+var showClear = 0;
+
+var todoId0 = 1;
+var todoText0 = 'Learn Porffor class components';
+var todoDone0 = 1;
+var todoId1 = 2;
+var todoText1 = 'Compare bundle size with React';
+var todoDone1 = 1;
+var todoId2 = 3;
+var todoText2 = 'Integrate Porffor with Dong engine';
+var todoDone2 = 0;
+var todoId3 = 4;
+var todoText3 = 'Ship the game UI';
+var todoDone3 = 0;
+
+var todoId4 = 0;
+var todoText4 = '';
+var todoDone4 = 0;
+var todoId5 = 0;
+var todoText5 = '';
+var todoDone5 = 0;
+var todoId6 = 0;
+var todoText6 = '';
+var todoDone6 = 0;
+var todoId7 = 0;
+var todoText7 = '';
+var todoDone7 = 0;
+var todoId8 = 0;
+var todoText8 = '';
+var todoDone8 = 0;
+var todoId9 = 0;
+var todoText9 = '';
+var todoDone9 = 0;
+var todoId10 = 0;
+var todoText10 = '';
+var todoDone10 = 0;
+var todoId11 = 0;
+var todoText11 = '';
+var todoDone11 = 0;
+var todoId12 = 0;
+var todoText12 = '';
+var todoDone12 = 0;
+var todoId13 = 0;
+var todoText13 = '';
+var todoDone13 = 0;
+var todoId14 = 0;
+var todoText14 = '';
+var todoDone14 = 0;
+var todoId15 = 0;
+var todoText15 = '';
+var todoDone15 = 0;
+
+function countActive() {
+  var n = 0;
+  var i = 0;
+  while (i < todoCount) {
+    if (!todoDoneAt(i)) {
+      n = n + 1;
+    }
+    i = i + 1;
+  }
+  return n;
+}
+
+function countDone() {
+  var d = 0;
+  var i = 0;
+  while (i < todoCount) {
+    if (todoDoneAt(i)) {
+      d = d + 1;
+    }
+    i = i + 1;
+  }
+  return d;
+}
+
+function shouldShow(i) {
+  var done = todoDoneAt(i);
+  if (filterMode === 1) {
+    if (done) return 0;
+    return 1;
+  }
+  if (filterMode === 2) {
+    if (done) return 1;
+    return 0;
+  }
+  return 1;
+}
+
+function buildTodoRow(i) {
+  var text = todoTextAt(i);
+  var done = todoDoneAt(i);
+  var strike = '';
+  var color = '#2c3e50';
+  var checkBg = 'transparent';
+  var checkBorder = '2px solid #bdc3c7';
+  var checkMark = '';
+  if (done) {
+    strike = 'line-through';
+    color = '#95a5a6';
+    checkBg = '#27ae60';
+    checkBorder = 'none';
+    checkMark = 'V';
+  }
+  var html = '';
+  html = html + '<div style="display:flex;align-items:center;padding:12px 16px;background:#fff;border-radius:8px;margin-bottom:8px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">';
+  html = html + '<div data-todo-toggle-index="' + String(i) + '" style="width:24px;height:24px;border-radius:50%;border:' + checkBorder + ';background:' + checkBg + ';margin-right:12px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;font-weight:bold;cursor:pointer;">' + checkMark + '</div>';
+  html = html + '<span style="flex:1;font-size:16px;color:' + color + ';text-decoration:' + strike + ';">' + text + '</span>';
+  html = html + '<button data-todo-delete-index="' + String(i) + '" style="background:transparent;border:none;color:#e74c3c;font-size:18px;padding:4px 8px;cursor:pointer;">X</button>';
+  html = html + '</div>';
+  return html;
+}
+
+function parseIndexStr(s) {
+  if (s === '0') return 0;
+  if (s === '1') return 1;
+  if (s === '2') return 2;
+  if (s === '3') return 3;
+  if (s === '4') return 4;
+  if (s === '5') return 5;
+  if (s === '6') return 6;
+  if (s === '7') return 7;
+  if (s === '8') return 8;
+  if (s === '9') return 9;
+  if (s === '10') return 10;
+  if (s === '11') return 11;
+  if (s === '12') return 12;
+  if (s === '13') return 13;
+  if (s === '14') return 14;
+  if (s === '15') return 15;
+  return -1;
+}
+
+function readToggleIndex() {
+  var target = eventTarget();
+  if (target === 0) {
+    return -1;
+  }
+  var v = getAttribute(target, 'data-todo-toggle-index');
+  if (v.length > 0) {
+    return parseIndexStr(v);
+  }
+  var hit = closestSelector(target, '[data-todo-toggle-index]');
+  if (hit !== 0) {
+    v = getAttribute(hit, 'data-todo-toggle-index');
+    return parseIndexStr(v);
+  }
+  return -1;
+}
+
+function readDeleteIndex() {
+  var target = eventTarget();
+  if (target === 0) {
+    return -1;
+  }
+  var v = getAttribute(target, 'data-todo-delete-index');
+  if (v.length > 0) {
+    return parseIndexStr(v);
+  }
+  var hit = closestSelector(target, '[data-todo-delete-index]');
+  if (hit !== 0) {
+    v = getAttribute(hit, 'data-todo-delete-index');
+    return parseIndexStr(v);
+  }
+  return -1;
+}
+
+function porfPatchFilters() {
+  var total = todoCount;
+  var active = countActive();
+  var done = countDone();
+  setTextContent(filter_allId, 'All (' + String(total) + ')');
+  setTextContent(filter_activeId, 'Active (' + String(active) + ')');
+  setTextContent(filter_doneId, 'Done (' + String(done) + ')');
+  var allBg = filterMode === 0 ? '#3498db' : '#ecf0f1';
+  var allColor = filterMode === 0 ? '#fff' : '#7f8c8d';
+  var actBg = filterMode === 1 ? '#3498db' : '#ecf0f1';
+  var actColor = filterMode === 1 ? '#fff' : '#7f8c8d';
+  var doneBg = filterMode === 2 ? '#3498db' : '#ecf0f1';
+  var doneColor = filterMode === 2 ? '#fff' : '#7f8c8d';
+  setStyle(filter_allId, 'background-color', allBg);
+  setStyle(filter_allId, 'color', allColor);
+  setStyle(filter_activeId, 'background-color', actBg);
+  setStyle(filter_activeId, 'color', actColor);
+  setStyle(filter_doneId, 'background-color', doneBg);
+  setStyle(filter_doneId, 'color', doneColor);
+  if (done > 0) {
+    showClear = 1;
+    setTextContent(btn_clearId, 'Clear done (' + String(done) + ')');
+  } else {
+    showClear = 0;
+  }
+  porfPatchIf_clear_wrap();
+}
+
+function porfRefresh() {
+  porfPatchFilters();
+  porfRebuild_todos();
+}
+
+function removeAtIndex(idx) {
+  var j = idx;
+  while (j + 1 < todoCount) {
+    setTodoSlot(j, todoIdAt(j + 1), todoTextAt(j + 1), todoDoneAt(j + 1));
+    j = j + 1;
+  }
+  todoCount = todoCount - 1;
+}
+
+export function onAdd() {
+  var text = getValue(todo_inputId);
+  if (text.length === 0) {
+    return;
+  }
+  if (todoCount >= MAX_TODOS) {
+    dongLog('todo max reached');
+    return;
+  }
+  setTodoSlot(todoCount, nextId, text, 0);
+  todoCount = todoCount + 1;
+  nextId = nextId + 1;
+  setValue(todo_inputId, '');
+  porfRefresh();
+}
+
+export function onInputChange() {
+  inputText = getValue(todo_inputId);
+}
+
+export function onKeyDown() {
+  var key = eventKey();
+  if (key === 'Enter') {
+    onAdd();
+  }
+}
+
+export function onFilterAll() {
+  filterMode = 0;
+  porfRefresh();
+}
+
+export function onFilterActive() {
+  filterMode = 1;
+  porfRefresh();
+}
+
+export function onFilterDone() {
+  filterMode = 2;
+  porfRefresh();
+}
+
+export function onClearDone() {
+  var i = todoCount - 1;
+  while (i >= 0) {
+    if (todoDoneAt(i)) {
+      removeAtIndex(i);
+    }
+    i = i - 1;
+  }
+  porfRefresh();
+}
+
+export function onListClick() {
+  var idx = readToggleIndex();
+  if (idx >= 0 && idx < todoCount) {
+    var d = todoDoneAt(idx);
+    if (d) {
+      setTodoDoneAt(idx, 0);
+    } else {
+      setTodoDoneAt(idx, 1);
+    }
+    porfRefresh();
+    return;
+  }
+  var idx2 = readDeleteIndex();
+  if (idx2 >= 0 && idx2 < todoCount) {
+    removeAtIndex(idx2);
+    porfRefresh();
+  }
+}
+</script>

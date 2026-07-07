@@ -1973,6 +1973,12 @@ fn buildDongCore(
         .flags = &.{
             "-std=c++20",
             "-DDONG_BUILDING_DLL",
+            // msdfgen/core/base.h requires msdfgen-config.h unless MSDFGEN_PUBLIC is
+            // defined (see third_party/msdfgen/CMakeLists.txt); the pure-Zig/CMake
+            // msdfgen build here does not generate that header, so disable the
+            // requirement the same way the top-level CMakeLists.txt does.
+            "-DMSDFGEN_PUBLIC=",
+            "-DMSDFGEN_EXT_PUBLIC=",
         },
     });
 
@@ -2070,6 +2076,10 @@ fn buildSDLBackend(
         .flags = &.{
             "-std=c++20",
             "-DDONG_SDL_BUILDING_DLL",
+            // Keep in sync with buildDongCore(): msdfgen headers require this unless
+            // the generated msdfgen-config.h is present (it isn't in our build).
+            "-DMSDFGEN_PUBLIC=",
+            "-DMSDFGEN_EXT_PUBLIC=",
         },
     });
 

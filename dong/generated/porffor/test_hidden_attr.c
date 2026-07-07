@@ -7,7 +7,7 @@
 #define __porf_infinity (INFINITY)
 #endif
 
-char* dong_porf_test_hidden_attr_memory; u32 dong_porf_test_hidden_attr_memory_pages = 4;
+char* dong_porf_test_hidden_attr_memory; u32 dong_porf_test_hidden_attr_memory_pages = 2;
 
 static i32 i32_load(i32 align, i32 offset, i32 pointer) {
   return *((i32*)(dong_porf_test_hidden_attr_memory + offset + pointer));
@@ -45,19 +45,16 @@ static void f64_store(i32 align, i32 offset, i32 pointer, f64 value) {
 __attribute__((import_module(""), import_name("a")))
 extern f64 __porf_import_dong_dom_getElementById(f64);
 
-__attribute__((import_module(""), import_name("")))
+__attribute__((import_module(""), import_name("")))
 extern void __porf_import_dong_get_attribute(f64, f64);
 
-__attribute__((import_module(""), import_name("j")))
-extern f64 __porf_import_dong_str_len();
-
-__attribute__((import_module(""), import_name("l")))
-extern f64 __porf_import_dong_str_byte_at(f64);
-
-__attribute__((import_module(""), import_name("")))
-extern void __porf_import_dong_set_attribute(f64, f64, f64);
+__attribute__((import_module(""), import_name("m")))
+extern f64 __porf_import_dong_str_pull();
 
 __attribute__((import_module(""), import_name("")))
+extern void __porf_import_dong_set_attribute(f64, f64, f64);
+
+__attribute__((import_module(""), import_name("")))
 extern void __porf_import_dong_remove_attribute(f64, f64);
 
 __attribute__((import_module(""), import_name("d")))
@@ -11625,1427 +11622,37 @@ static struct ReturnValue dong_porf_test_hidden_attr_getElementById(f64 jjnewtar
 }
 
 static struct ReturnValue dong_porf_test_hidden_attr_pullHostString(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype) {
-  i32 _get294;
-  f64 _get293;
-  i32 _get292;
-  f64 _get291;
-  i32 _get290;
-  f64 _get289;
-  f64 _get288;
-  f64 _get287;
-  f64 _get286;
-  f64 _get285;
-  f64 _get284;
-  f64 _get283;
-  i32 _get282;
-  f64 _get281;
-  i32 _get280;
-  f64 _get279;
-  i32 _get278;
-  f64 _get277;
-  i32 _get276;
-  i32 _get275;
-  f64 _get274;
-  f64 _get273;
-  f64 _get272;
-  f64 _get271;
-  i32 _get270;
-  f64 _get269;
-  i32 _get268;
-  f64 _get267;
-  i32 _get266;
-  f64 _get265;
-  i32 _get264;
-  i32 _get263;
-  f64 _get262;
-  f64 _get261;
-  f64 _get260;
-  f64 _get259;
-  f64 _get258;
-  f64 _get257;
-  f64 _get256;
-  f64 _get255;
-  f64 _get254;
-  f64 _get253;
-  f64 _get252;
-  f64 _get251;
-  f64 _get250;
-  f64 _get249;
-  f64 _get248;
-  f64 _get247;
-  f64 _get246;
-  f64 _get245;
-  f64 _get244;
-  f64 _get243;
-  f64 _get242;
-  f64 _get241;
-  f64 _get240;
-  f64 _get239;
-  f64 _get238;
-  f64 _get237;
-  f64 _get236;
-  f64 _get235;
-  f64 _get234;
-  f64 _get233;
-  f64 _get232;
-  f64 _get231;
-  f64 _get230;
-  f64 _get229;
-  f64 _get228;
-  f64 _get227;
-  f64 _get226;
-  f64 _get225;
-  f64 _get224;
-  f64 _get223;
-  f64 _get222;
-  f64 _get221;
-  f64 _get220;
-  f64 _get219;
-  f64 _get218;
-  f64 _get217;
-  f64 _get216;
-  f64 _get215;
-  f64 _get214;
-  f64 _get213;
-  f64 _get212;
-  f64 _get211;
-  f64 _get210;
-  f64 _get209;
-  f64 _get208;
-  f64 _get207;
-  f64 _get206;
-  f64 _get205;
-  f64 _get204;
-  f64 _get203;
-  f64 _get202;
-  f64 _get201;
-  f64 _get200;
-  f64 _get199;
-  f64 _get198;
-  f64 _get197;
-  f64 _get196;
-  f64 _get195;
-  f64 _get194;
-  f64 _get193;
-  f64 _get192;
-  f64 _get191;
-  f64 _get190;
-  f64 _get189;
-  f64 _get188;
-  f64 _get187;
-  f64 _get186;
-  f64 _get185;
-  f64 _get184;
-  f64 _get183;
-  f64 _get182;
-  f64 _get181;
-  f64 _get180;
-  f64 _get179;
-  f64 _get178;
-  i32 _get177;
-  f64 _get176;
-  f64 _get175;
-  i32 _get174;
-  f64 _get173;
-  f64 _get172;
-  i32 _get171;
-  f64 _get170;
-  f64 _get169;
-  f64 _get168;
-  f64 _get167;
-  f64 _get166;
-  f64 _get165;
-  f64 _get164;
-  f64 _get163;
-  f64 _get162;
-  f64 _get161;
-  f64 _get160;
-  f64 _get159;
-  f64 _get158;
-  i32 _get157;
-  f64 _get156;
-  i32 _get155;
-  f64 _get154;
-  i32 _get153;
-  f64 _get152;
-  i32 _get151;
-  i32 _get150;
-  f64 _get149;
-  f64 _get148;
-  f64 _get147;
-  f64 _get146;
-  f64 _get145;
-  f64 _get144;
-  f64 _get143;
-  f64 _get142;
-  f64 _get141;
-  f64 _get140;
-  f64 _get139;
-  f64 _get138;
-  f64 _get137;
-  f64 _get136;
-  f64 _get135;
-  f64 _get134;
-  f64 _get133;
-  f64 _get132;
-  f64 _get131;
-  f64 _get130;
-  f64 _get129;
-  f64 _get128;
-  f64 _get127;
-  f64 _get126;
-  f64 _get125;
-  f64 _get124;
-  f64 _get123;
-  f64 _get122;
-  f64 _get121;
-  f64 _get120;
-  f64 _get119;
-  f64 _get118;
-  f64 _get117;
-  f64 _get116;
-  f64 _get115;
-  f64 _get114;
-  f64 _get113;
-  f64 _get112;
-  f64 _get111;
-  f64 _get110;
-  f64 _get109;
-  f64 _get108;
-  f64 _get107;
-  f64 _get106;
-  f64 _get105;
-  f64 _get104;
-  f64 _get103;
-  f64 _get102;
-  f64 _get101;
-  f64 _get100;
-  i32 _get99;
-  f64 _get98;
-  f64 _get97;
-  i32 _get96;
-  f64 _get95;
-  f64 _get94;
-  f64 _get93;
-  f64 _get92;
-  f64 _get91;
-  f64 _get90;
-  f64 _get89;
-  f64 _get88;
-  f64 _get87;
-  f64 _get86;
-  f64 _get85;
-  f64 _get84;
-  f64 _get83;
-  i32 _get82;
-  f64 _get81;
-  i32 _get80;
-  f64 _get79;
-  i32 _get78;
-  f64 _get77;
-  i32 _get76;
-  i32 _get75;
-  f64 _get74;
-  f64 _get73;
-  f64 _get72;
-  f64 _get71;
-  f64 _get70;
-  f64 _get69;
-  f64 _get68;
-  f64 _get67;
-  f64 _get66;
-  f64 _get65;
-  f64 _get64;
-  f64 _get63;
-  f64 _get62;
-  f64 _get61;
-  f64 _get60;
-  f64 _get59;
-  f64 _get58;
-  f64 _get57;
-  f64 _get56;
-  f64 _get55;
-  f64 _get54;
-  f64 _get53;
-  f64 _get52;
-  f64 _get51;
-  f64 _get50;
-  f64 _get49;
-  f64 _get48;
-  f64 _get47;
-  f64 _get46;
-  f64 _get45;
-  f64 _get44;
-  i32 _get43;
-  f64 _get42;
-  f64 _get41;
-  f64 _get40;
-  f64 _get39;
-  f64 _get38;
-  f64 _get37;
-  f64 _get36;
-  f64 _get35;
-  f64 _get34;
-  f64 _get33;
-  f64 _get32;
-  f64 _get31;
-  f64 _get30;
-  i32 _get29;
-  f64 _get28;
-  i32 _get27;
-  f64 _get26;
-  i32 _get25;
-  f64 _get24;
-  i32 _get23;
-  i32 _get22;
-  f64 _get21;
-  i32 _get20;
-  f64 _get19;
-  f64 _get18;
-  f64 _get17;
-  f64 _get16;
-  f64 _get15;
-  i32 _get14;
-  f64 _get13;
-  f64 _get12;
-  f64 _get11;
-  f64 _get10;
-  i32 _get9;
-  f64 _get8;
-  i32 _get7;
-  f64 _get6;
-  i32 _get5;
-  f64 _get4;
+  i32 _get6;
+  f64 _get5;
+  i32 _get4;
   f64 _get3;
   i32 _get2;
   f64 _get1;
-  i32 _get0;
-  f64 len = 0;
-  i32 lenjjtype = 0;
+  f64 _get0;
   f64 jjreturn = 0;
   i32 jjreturnjjtype = 0;
-  f64 out = 0;
-  i32 outjjtype = 0;
-  f64 i = 0;
-  i32 ijjtype = 0;
-  f64 b0 = 0;
-  i32 b0jjtype = 0;
-  f64 b1 = 0;
-  i32 b1jjtype = 0;
-  f64 b2 = 0;
-  i32 b2jjtype = 0;
-  f64 b3 = 0;
-  i32 b3jjtype = 0;
-  f64 cp = 0;
-  i32 cpjjtype = 0;
-  i32 jjlast_type = 0;
-  f64 __tmpop_left = 0;
-  f64 __tmpop_right = 0;
-  f64 jjbitwise_left = 0;
-  f64 jjbitwise_right = 0;
 
-  len = __porf_import_dong_str_len();
-  _get0 = jjlast_type;
-  lenjjtype = _get0;
-  _get1 = len;
-  _get2 = lenjjtype;
+  jjreturn = __porf_import_dong_str_pull();
+  jjreturnjjtype = 1;
+  _get0 = jjnewtarget;
   // if 
-    if ((f64)((_get1 == 0) & ((_get2 | 128) == (1 | 128))) != 0) {
-      jjreturn = 0;
-      jjreturnjjtype = 195;
-      _get3 = jjnewtarget;
+    if (((u32)(_get0)) != 0) {
+      _get1 = jjreturn;
+      _get2 = jjreturnjjtype;
       // if 
-        if (((u32)(_get3)) != 0) {
-          _get4 = jjreturn;
-          _get5 = jjreturnjjtype;
-          // if 
-            if ((dong_porf_test_hidden_attr__Porffor_object_isObject((i32)(_get4), _get5)) == 0) {
-              _get6 = jjthis;
-              _get7 = jjthisjjtype;
-              return (struct ReturnValue){ _get6, _get7 };
-            }
-          // end
-          j657:;
+        if ((dong_porf_test_hidden_attr__Porffor_object_isObject((i32)(_get1), _get2)) == 0) {
+          _get3 = jjthis;
+          _get4 = jjthisjjtype;
+          return (struct ReturnValue){ _get3, _get4 };
         }
       // end
       j656:;
-      _get8 = jjreturn;
-      _get9 = jjreturnjjtype;
-      return (struct ReturnValue){ _get8, _get9 };
     }
   // end
   j655:;
-  out = 0;
-  outjjtype = 195;
-  i = 0;
-  ijjtype = 1;
-  b0 = 0;
-  b0jjtype = 1;
-  b1 = 0;
-  b1jjtype = 1;
-  b2 = 0;
-  b2jjtype = 1;
-  b3 = 0;
-  b3jjtype = 1;
-  cp = 0;
-  cpjjtype = 1;
-  // loop 
-  j658:;
-    _get10 = i;
-    _get11 = len;
-    // if 
-      if (_get10 < _get11) {
-        _get12 = i;
-        b0 = __porf_import_dong_str_byte_at(_get12);
-        _get13 = b0;
-        _get14 = jjlast_type;
-        b0jjtype = _get14;
-        (void) _get13;
-        _get15 = b0;
-        // if 
-          if ((f64)(_get15 < 0) != 0) {
-            goto j659;
-          }
-        // end
-        j660:;
-        _get16 = b0;
-        // if 
-          if ((f64)(_get16 < 128) != 0) {
-            // block f64
-            f64 _r662;
-              _get17 = out;
-              __tmpop_left = _get17;
-              _get18 = __tmpop_left;
-              _get19 = b0;
-              f64_store(0, 4, 131072, _get19);
-              _get20 = b0jjtype;
-              i32_store8(0, 12, 131072, _get20);
-              i32_store(1, 0, 131072, 1);
-              const struct ReturnValue _0 = dong_porf_test_hidden_attr__String_fromCharCode(131072, 72);
-              jjlast_type = _0.type;
-              __tmpop_right = _0.value;
-              _get21 = __tmpop_right;
-              _get22 = outjjtype;
-              _get23 = jjlast_type;
-              // if 
-                if ((((_get22 | 128) == 195) | ((_get23 | 128) == 195)) != 0) {
-                  _get24 = __tmpop_left;
-                  _get25 = outjjtype;
-                  _get26 = __tmpop_right;
-                  _get27 = jjlast_type;
-                  const struct ReturnValue _1 = dong_porf_test_hidden_attr__Porffor_concatStrings(_get24, _get25, _get26, _get27);
-                  jjlast_type = _1.type;
-                  _r662 = _1.value;
-                  goto j662;
-                }
-              // end
-              j663:;
-              jjlast_type = 1;
-              _r662 = _get18 + _get21;
-            // end
-            j662:;
-            out = _r662;
-            _get28 = out;
-            _get29 = jjlast_type;
-            outjjtype = _get29;
-            (void) _get28;
-            _get30 = i;
-            i = _get30 + 1;
-            _get31 = i;
-            ijjtype = 1;
-            (void) _get31;
-          } else {
-            _get32 = b0;
-            jjbitwise_left = _get32;
-            _get33 = jjbitwise_left;
-            _get34 = jjbitwise_left;
-            // if i32
-            i32 _r664;
-              if ((_get33 - _get34) == 0) {
-                _get35 = jjbitwise_left;
-                _r664 = (i32)((i64)(_get35));
-              } else {
-                _r664 = 0;
-              }
-            // end
-            j664:;
-            jjbitwise_right = 224;
-            _get36 = jjbitwise_right;
-            _get37 = jjbitwise_right;
-            // if i32
-            i32 _r665;
-              if ((_get36 - _get37) == 0) {
-                _get38 = jjbitwise_right;
-                _r665 = (i32)((i64)(_get38));
-              } else {
-                _r665 = 0;
-              }
-            // end
-            j665:;
-            // if 
-              if ((f64)((f64)(_r664 & _r665) == 192) != 0) {
-                _get39 = i;
-                _get40 = len;
-                // if 
-                  if ((f64)((_get39 + 1) >= _get40) != 0) {
-                    goto j659;
-                  }
-                // end
-                j667:;
-                _get41 = i;
-                b1 = __porf_import_dong_str_byte_at(_get41 + 1);
-                _get42 = b1;
-                _get43 = jjlast_type;
-                b1jjtype = _get43;
-                (void) _get42;
-                _get44 = b0;
-                jjbitwise_left = _get44;
-                _get45 = jjbitwise_left;
-                _get46 = jjbitwise_left;
-                // if i32
-                i32 _r668;
-                  if ((_get45 - _get46) == 0) {
-                    _get47 = jjbitwise_left;
-                    _r668 = (i32)((i64)(_get47));
-                  } else {
-                    _r668 = 0;
-                  }
-                // end
-                j668:;
-                jjbitwise_right = 31;
-                _get48 = jjbitwise_right;
-                _get49 = jjbitwise_right;
-                // if i32
-                i32 _r669;
-                  if ((_get48 - _get49) == 0) {
-                    _get50 = jjbitwise_right;
-                    _r669 = (i32)((i64)(_get50));
-                  } else {
-                    _r669 = 0;
-                  }
-                // end
-                j669:;
-                jjbitwise_left = (f64)(_r668 & _r669);
-                _get51 = jjbitwise_left;
-                _get52 = jjbitwise_left;
-                // if i32
-                i32 _r670;
-                  if ((_get51 - _get52) == 0) {
-                    _get53 = jjbitwise_left;
-                    _r670 = (i32)((i64)(_get53));
-                  } else {
-                    _r670 = 0;
-                  }
-                // end
-                j670:;
-                jjbitwise_right = 6;
-                _get54 = jjbitwise_right;
-                _get55 = jjbitwise_right;
-                // if i32
-                i32 _r671;
-                  if ((_get54 - _get55) == 0) {
-                    _get56 = jjbitwise_right;
-                    _r671 = (i32)((i64)(_get56));
-                  } else {
-                    _r671 = 0;
-                  }
-                // end
-                j671:;
-                jjbitwise_left = (f64)(_r670 << _r671);
-                _get57 = jjbitwise_left;
-                _get58 = jjbitwise_left;
-                // if i32
-                i32 _r672;
-                  if ((_get57 - _get58) == 0) {
-                    _get59 = jjbitwise_left;
-                    _r672 = (i32)((i64)(_get59));
-                  } else {
-                    _r672 = 0;
-                  }
-                // end
-                j672:;
-                _get60 = b1;
-                jjbitwise_left = _get60;
-                _get61 = jjbitwise_left;
-                _get62 = jjbitwise_left;
-                // if i32
-                i32 _r673;
-                  if ((_get61 - _get62) == 0) {
-                    _get63 = jjbitwise_left;
-                    _r673 = (i32)((i64)(_get63));
-                  } else {
-                    _r673 = 0;
-                  }
-                // end
-                j673:;
-                jjbitwise_right = 63;
-                _get64 = jjbitwise_right;
-                _get65 = jjbitwise_right;
-                // if i32
-                i32 _r674;
-                  if ((_get64 - _get65) == 0) {
-                    _get66 = jjbitwise_right;
-                    _r674 = (i32)((i64)(_get66));
-                  } else {
-                    _r674 = 0;
-                  }
-                // end
-                j674:;
-                jjbitwise_right = (f64)(_r673 & _r674);
-                _get67 = jjbitwise_right;
-                _get68 = jjbitwise_right;
-                // if i32
-                i32 _r675;
-                  if ((_get67 - _get68) == 0) {
-                    _get69 = jjbitwise_right;
-                    _r675 = (i32)((i64)(_get69));
-                  } else {
-                    _r675 = 0;
-                  }
-                // end
-                j675:;
-                cp = (f64)(_r672 | _r675);
-                _get70 = cp;
-                cpjjtype = 1;
-                (void) _get70;
-                // block f64
-                f64 _r676;
-                  _get71 = out;
-                  __tmpop_left = _get71;
-                  _get72 = __tmpop_left;
-                  _get73 = cp;
-                  f64_store(0, 4, 147456, _get73);
-                  i32_store8(0, 12, 147456, 1);
-                  i32_store(1, 0, 147456, 1);
-                  const struct ReturnValue _2 = dong_porf_test_hidden_attr__String_fromCharCode(147456, 72);
-                  jjlast_type = _2.type;
-                  __tmpop_right = _2.value;
-                  _get74 = __tmpop_right;
-                  _get75 = outjjtype;
-                  _get76 = jjlast_type;
-                  // if 
-                    if ((((_get75 | 128) == 195) | ((_get76 | 128) == 195)) != 0) {
-                      _get77 = __tmpop_left;
-                      _get78 = outjjtype;
-                      _get79 = __tmpop_right;
-                      _get80 = jjlast_type;
-                      const struct ReturnValue _3 = dong_porf_test_hidden_attr__Porffor_concatStrings(_get77, _get78, _get79, _get80);
-                      jjlast_type = _3.type;
-                      _r676 = _3.value;
-                      goto j676;
-                    }
-                  // end
-                  j677:;
-                  jjlast_type = 1;
-                  _r676 = _get72 + _get74;
-                // end
-                j676:;
-                out = _r676;
-                _get81 = out;
-                _get82 = jjlast_type;
-                outjjtype = _get82;
-                (void) _get81;
-                _get83 = i;
-                i = _get83 + 2;
-                _get84 = i;
-                ijjtype = 1;
-                (void) _get84;
-              } else {
-                _get85 = b0;
-                jjbitwise_left = _get85;
-                _get86 = jjbitwise_left;
-                _get87 = jjbitwise_left;
-                // if i32
-                i32 _r678;
-                  if ((_get86 - _get87) == 0) {
-                    _get88 = jjbitwise_left;
-                    _r678 = (i32)((i64)(_get88));
-                  } else {
-                    _r678 = 0;
-                  }
-                // end
-                j678:;
-                jjbitwise_right = 240;
-                _get89 = jjbitwise_right;
-                _get90 = jjbitwise_right;
-                // if i32
-                i32 _r679;
-                  if ((_get89 - _get90) == 0) {
-                    _get91 = jjbitwise_right;
-                    _r679 = (i32)((i64)(_get91));
-                  } else {
-                    _r679 = 0;
-                  }
-                // end
-                j679:;
-                // if 
-                  if ((f64)((f64)(_r678 & _r679) == 224) != 0) {
-                    _get92 = i;
-                    _get93 = len;
-                    // if 
-                      if ((f64)((_get92 + 2) >= _get93) != 0) {
-                        goto j659;
-                      }
-                    // end
-                    j681:;
-                    _get94 = i;
-                    b1 = __porf_import_dong_str_byte_at(_get94 + 1);
-                    _get95 = b1;
-                    _get96 = jjlast_type;
-                    b1jjtype = _get96;
-                    (void) _get95;
-                    _get97 = i;
-                    b2 = __porf_import_dong_str_byte_at(_get97 + 2);
-                    _get98 = b2;
-                    _get99 = jjlast_type;
-                    b2jjtype = _get99;
-                    (void) _get98;
-                    _get100 = b0;
-                    jjbitwise_left = _get100;
-                    _get101 = jjbitwise_left;
-                    _get102 = jjbitwise_left;
-                    // if i32
-                    i32 _r682;
-                      if ((_get101 - _get102) == 0) {
-                        _get103 = jjbitwise_left;
-                        _r682 = (i32)((i64)(_get103));
-                      } else {
-                        _r682 = 0;
-                      }
-                    // end
-                    j682:;
-                    jjbitwise_right = 15;
-                    _get104 = jjbitwise_right;
-                    _get105 = jjbitwise_right;
-                    // if i32
-                    i32 _r683;
-                      if ((_get104 - _get105) == 0) {
-                        _get106 = jjbitwise_right;
-                        _r683 = (i32)((i64)(_get106));
-                      } else {
-                        _r683 = 0;
-                      }
-                    // end
-                    j683:;
-                    jjbitwise_left = (f64)(_r682 & _r683);
-                    _get107 = jjbitwise_left;
-                    _get108 = jjbitwise_left;
-                    // if i32
-                    i32 _r684;
-                      if ((_get107 - _get108) == 0) {
-                        _get109 = jjbitwise_left;
-                        _r684 = (i32)((i64)(_get109));
-                      } else {
-                        _r684 = 0;
-                      }
-                    // end
-                    j684:;
-                    jjbitwise_right = 12;
-                    _get110 = jjbitwise_right;
-                    _get111 = jjbitwise_right;
-                    // if i32
-                    i32 _r685;
-                      if ((_get110 - _get111) == 0) {
-                        _get112 = jjbitwise_right;
-                        _r685 = (i32)((i64)(_get112));
-                      } else {
-                        _r685 = 0;
-                      }
-                    // end
-                    j685:;
-                    jjbitwise_left = (f64)(_r684 << _r685);
-                    _get113 = jjbitwise_left;
-                    _get114 = jjbitwise_left;
-                    // if i32
-                    i32 _r686;
-                      if ((_get113 - _get114) == 0) {
-                        _get115 = jjbitwise_left;
-                        _r686 = (i32)((i64)(_get115));
-                      } else {
-                        _r686 = 0;
-                      }
-                    // end
-                    j686:;
-                    _get116 = b1;
-                    jjbitwise_left = _get116;
-                    _get117 = jjbitwise_left;
-                    _get118 = jjbitwise_left;
-                    // if i32
-                    i32 _r687;
-                      if ((_get117 - _get118) == 0) {
-                        _get119 = jjbitwise_left;
-                        _r687 = (i32)((i64)(_get119));
-                      } else {
-                        _r687 = 0;
-                      }
-                    // end
-                    j687:;
-                    jjbitwise_right = 63;
-                    _get120 = jjbitwise_right;
-                    _get121 = jjbitwise_right;
-                    // if i32
-                    i32 _r688;
-                      if ((_get120 - _get121) == 0) {
-                        _get122 = jjbitwise_right;
-                        _r688 = (i32)((i64)(_get122));
-                      } else {
-                        _r688 = 0;
-                      }
-                    // end
-                    j688:;
-                    jjbitwise_left = (f64)(_r687 & _r688);
-                    _get123 = jjbitwise_left;
-                    _get124 = jjbitwise_left;
-                    // if i32
-                    i32 _r689;
-                      if ((_get123 - _get124) == 0) {
-                        _get125 = jjbitwise_left;
-                        _r689 = (i32)((i64)(_get125));
-                      } else {
-                        _r689 = 0;
-                      }
-                    // end
-                    j689:;
-                    jjbitwise_right = 6;
-                    _get126 = jjbitwise_right;
-                    _get127 = jjbitwise_right;
-                    // if i32
-                    i32 _r690;
-                      if ((_get126 - _get127) == 0) {
-                        _get128 = jjbitwise_right;
-                        _r690 = (i32)((i64)(_get128));
-                      } else {
-                        _r690 = 0;
-                      }
-                    // end
-                    j690:;
-                    jjbitwise_right = (f64)(_r689 << _r690);
-                    _get129 = jjbitwise_right;
-                    _get130 = jjbitwise_right;
-                    // if i32
-                    i32 _r691;
-                      if ((_get129 - _get130) == 0) {
-                        _get131 = jjbitwise_right;
-                        _r691 = (i32)((i64)(_get131));
-                      } else {
-                        _r691 = 0;
-                      }
-                    // end
-                    j691:;
-                    jjbitwise_left = (f64)(_r686 | _r691);
-                    _get132 = jjbitwise_left;
-                    _get133 = jjbitwise_left;
-                    // if i32
-                    i32 _r692;
-                      if ((_get132 - _get133) == 0) {
-                        _get134 = jjbitwise_left;
-                        _r692 = (i32)((i64)(_get134));
-                      } else {
-                        _r692 = 0;
-                      }
-                    // end
-                    j692:;
-                    _get135 = b2;
-                    jjbitwise_left = _get135;
-                    _get136 = jjbitwise_left;
-                    _get137 = jjbitwise_left;
-                    // if i32
-                    i32 _r693;
-                      if ((_get136 - _get137) == 0) {
-                        _get138 = jjbitwise_left;
-                        _r693 = (i32)((i64)(_get138));
-                      } else {
-                        _r693 = 0;
-                      }
-                    // end
-                    j693:;
-                    jjbitwise_right = 63;
-                    _get139 = jjbitwise_right;
-                    _get140 = jjbitwise_right;
-                    // if i32
-                    i32 _r694;
-                      if ((_get139 - _get140) == 0) {
-                        _get141 = jjbitwise_right;
-                        _r694 = (i32)((i64)(_get141));
-                      } else {
-                        _r694 = 0;
-                      }
-                    // end
-                    j694:;
-                    jjbitwise_right = (f64)(_r693 & _r694);
-                    _get142 = jjbitwise_right;
-                    _get143 = jjbitwise_right;
-                    // if i32
-                    i32 _r695;
-                      if ((_get142 - _get143) == 0) {
-                        _get144 = jjbitwise_right;
-                        _r695 = (i32)((i64)(_get144));
-                      } else {
-                        _r695 = 0;
-                      }
-                    // end
-                    j695:;
-                    cp = (f64)(_r692 | _r695);
-                    _get145 = cp;
-                    cpjjtype = 1;
-                    (void) _get145;
-                    // block f64
-                    f64 _r696;
-                      _get146 = out;
-                      __tmpop_left = _get146;
-                      _get147 = __tmpop_left;
-                      _get148 = cp;
-                      f64_store(0, 4, 163840, _get148);
-                      i32_store8(0, 12, 163840, 1);
-                      i32_store(1, 0, 163840, 1);
-                      const struct ReturnValue _4 = dong_porf_test_hidden_attr__String_fromCharCode(163840, 72);
-                      jjlast_type = _4.type;
-                      __tmpop_right = _4.value;
-                      _get149 = __tmpop_right;
-                      _get150 = outjjtype;
-                      _get151 = jjlast_type;
-                      // if 
-                        if ((((_get150 | 128) == 195) | ((_get151 | 128) == 195)) != 0) {
-                          _get152 = __tmpop_left;
-                          _get153 = outjjtype;
-                          _get154 = __tmpop_right;
-                          _get155 = jjlast_type;
-                          const struct ReturnValue _5 = dong_porf_test_hidden_attr__Porffor_concatStrings(_get152, _get153, _get154, _get155);
-                          jjlast_type = _5.type;
-                          _r696 = _5.value;
-                          goto j696;
-                        }
-                      // end
-                      j697:;
-                      jjlast_type = 1;
-                      _r696 = _get147 + _get149;
-                    // end
-                    j696:;
-                    out = _r696;
-                    _get156 = out;
-                    _get157 = jjlast_type;
-                    outjjtype = _get157;
-                    (void) _get156;
-                    _get158 = i;
-                    i = _get158 + 3;
-                    _get159 = i;
-                    ijjtype = 1;
-                    (void) _get159;
-                  } else {
-                    _get160 = b0;
-                    jjbitwise_left = _get160;
-                    _get161 = jjbitwise_left;
-                    _get162 = jjbitwise_left;
-                    // if i32
-                    i32 _r698;
-                      if ((_get161 - _get162) == 0) {
-                        _get163 = jjbitwise_left;
-                        _r698 = (i32)((i64)(_get163));
-                      } else {
-                        _r698 = 0;
-                      }
-                    // end
-                    j698:;
-                    jjbitwise_right = 248;
-                    _get164 = jjbitwise_right;
-                    _get165 = jjbitwise_right;
-                    // if i32
-                    i32 _r699;
-                      if ((_get164 - _get165) == 0) {
-                        _get166 = jjbitwise_right;
-                        _r699 = (i32)((i64)(_get166));
-                      } else {
-                        _r699 = 0;
-                      }
-                    // end
-                    j699:;
-                    // if 
-                      if ((f64)((f64)(_r698 & _r699) == 240) != 0) {
-                        _get167 = i;
-                        _get168 = len;
-                        // if 
-                          if ((f64)((_get167 + 3) >= _get168) != 0) {
-                            goto j659;
-                          }
-                        // end
-                        j701:;
-                        _get169 = i;
-                        b1 = __porf_import_dong_str_byte_at(_get169 + 1);
-                        _get170 = b1;
-                        _get171 = jjlast_type;
-                        b1jjtype = _get171;
-                        (void) _get170;
-                        _get172 = i;
-                        b2 = __porf_import_dong_str_byte_at(_get172 + 2);
-                        _get173 = b2;
-                        _get174 = jjlast_type;
-                        b2jjtype = _get174;
-                        (void) _get173;
-                        _get175 = i;
-                        b3 = __porf_import_dong_str_byte_at(_get175 + 3);
-                        _get176 = b3;
-                        _get177 = jjlast_type;
-                        b3jjtype = _get177;
-                        (void) _get176;
-                        _get178 = b0;
-                        jjbitwise_left = _get178;
-                        _get179 = jjbitwise_left;
-                        _get180 = jjbitwise_left;
-                        // if i32
-                        i32 _r702;
-                          if ((_get179 - _get180) == 0) {
-                            _get181 = jjbitwise_left;
-                            _r702 = (i32)((i64)(_get181));
-                          } else {
-                            _r702 = 0;
-                          }
-                        // end
-                        j702:;
-                        jjbitwise_right = 7;
-                        _get182 = jjbitwise_right;
-                        _get183 = jjbitwise_right;
-                        // if i32
-                        i32 _r703;
-                          if ((_get182 - _get183) == 0) {
-                            _get184 = jjbitwise_right;
-                            _r703 = (i32)((i64)(_get184));
-                          } else {
-                            _r703 = 0;
-                          }
-                        // end
-                        j703:;
-                        jjbitwise_left = (f64)(_r702 & _r703);
-                        _get185 = jjbitwise_left;
-                        _get186 = jjbitwise_left;
-                        // if i32
-                        i32 _r704;
-                          if ((_get185 - _get186) == 0) {
-                            _get187 = jjbitwise_left;
-                            _r704 = (i32)((i64)(_get187));
-                          } else {
-                            _r704 = 0;
-                          }
-                        // end
-                        j704:;
-                        jjbitwise_right = 18;
-                        _get188 = jjbitwise_right;
-                        _get189 = jjbitwise_right;
-                        // if i32
-                        i32 _r705;
-                          if ((_get188 - _get189) == 0) {
-                            _get190 = jjbitwise_right;
-                            _r705 = (i32)((i64)(_get190));
-                          } else {
-                            _r705 = 0;
-                          }
-                        // end
-                        j705:;
-                        jjbitwise_left = (f64)(_r704 << _r705);
-                        _get191 = jjbitwise_left;
-                        _get192 = jjbitwise_left;
-                        // if i32
-                        i32 _r706;
-                          if ((_get191 - _get192) == 0) {
-                            _get193 = jjbitwise_left;
-                            _r706 = (i32)((i64)(_get193));
-                          } else {
-                            _r706 = 0;
-                          }
-                        // end
-                        j706:;
-                        _get194 = b1;
-                        jjbitwise_left = _get194;
-                        _get195 = jjbitwise_left;
-                        _get196 = jjbitwise_left;
-                        // if i32
-                        i32 _r707;
-                          if ((_get195 - _get196) == 0) {
-                            _get197 = jjbitwise_left;
-                            _r707 = (i32)((i64)(_get197));
-                          } else {
-                            _r707 = 0;
-                          }
-                        // end
-                        j707:;
-                        jjbitwise_right = 63;
-                        _get198 = jjbitwise_right;
-                        _get199 = jjbitwise_right;
-                        // if i32
-                        i32 _r708;
-                          if ((_get198 - _get199) == 0) {
-                            _get200 = jjbitwise_right;
-                            _r708 = (i32)((i64)(_get200));
-                          } else {
-                            _r708 = 0;
-                          }
-                        // end
-                        j708:;
-                        jjbitwise_left = (f64)(_r707 & _r708);
-                        _get201 = jjbitwise_left;
-                        _get202 = jjbitwise_left;
-                        // if i32
-                        i32 _r709;
-                          if ((_get201 - _get202) == 0) {
-                            _get203 = jjbitwise_left;
-                            _r709 = (i32)((i64)(_get203));
-                          } else {
-                            _r709 = 0;
-                          }
-                        // end
-                        j709:;
-                        jjbitwise_right = 12;
-                        _get204 = jjbitwise_right;
-                        _get205 = jjbitwise_right;
-                        // if i32
-                        i32 _r710;
-                          if ((_get204 - _get205) == 0) {
-                            _get206 = jjbitwise_right;
-                            _r710 = (i32)((i64)(_get206));
-                          } else {
-                            _r710 = 0;
-                          }
-                        // end
-                        j710:;
-                        jjbitwise_right = (f64)(_r709 << _r710);
-                        _get207 = jjbitwise_right;
-                        _get208 = jjbitwise_right;
-                        // if i32
-                        i32 _r711;
-                          if ((_get207 - _get208) == 0) {
-                            _get209 = jjbitwise_right;
-                            _r711 = (i32)((i64)(_get209));
-                          } else {
-                            _r711 = 0;
-                          }
-                        // end
-                        j711:;
-                        jjbitwise_left = (f64)(_r706 | _r711);
-                        _get210 = jjbitwise_left;
-                        _get211 = jjbitwise_left;
-                        // if i32
-                        i32 _r712;
-                          if ((_get210 - _get211) == 0) {
-                            _get212 = jjbitwise_left;
-                            _r712 = (i32)((i64)(_get212));
-                          } else {
-                            _r712 = 0;
-                          }
-                        // end
-                        j712:;
-                        _get213 = b2;
-                        jjbitwise_left = _get213;
-                        _get214 = jjbitwise_left;
-                        _get215 = jjbitwise_left;
-                        // if i32
-                        i32 _r713;
-                          if ((_get214 - _get215) == 0) {
-                            _get216 = jjbitwise_left;
-                            _r713 = (i32)((i64)(_get216));
-                          } else {
-                            _r713 = 0;
-                          }
-                        // end
-                        j713:;
-                        jjbitwise_right = 63;
-                        _get217 = jjbitwise_right;
-                        _get218 = jjbitwise_right;
-                        // if i32
-                        i32 _r714;
-                          if ((_get217 - _get218) == 0) {
-                            _get219 = jjbitwise_right;
-                            _r714 = (i32)((i64)(_get219));
-                          } else {
-                            _r714 = 0;
-                          }
-                        // end
-                        j714:;
-                        jjbitwise_left = (f64)(_r713 & _r714);
-                        _get220 = jjbitwise_left;
-                        _get221 = jjbitwise_left;
-                        // if i32
-                        i32 _r715;
-                          if ((_get220 - _get221) == 0) {
-                            _get222 = jjbitwise_left;
-                            _r715 = (i32)((i64)(_get222));
-                          } else {
-                            _r715 = 0;
-                          }
-                        // end
-                        j715:;
-                        jjbitwise_right = 6;
-                        _get223 = jjbitwise_right;
-                        _get224 = jjbitwise_right;
-                        // if i32
-                        i32 _r716;
-                          if ((_get223 - _get224) == 0) {
-                            _get225 = jjbitwise_right;
-                            _r716 = (i32)((i64)(_get225));
-                          } else {
-                            _r716 = 0;
-                          }
-                        // end
-                        j716:;
-                        jjbitwise_right = (f64)(_r715 << _r716);
-                        _get226 = jjbitwise_right;
-                        _get227 = jjbitwise_right;
-                        // if i32
-                        i32 _r717;
-                          if ((_get226 - _get227) == 0) {
-                            _get228 = jjbitwise_right;
-                            _r717 = (i32)((i64)(_get228));
-                          } else {
-                            _r717 = 0;
-                          }
-                        // end
-                        j717:;
-                        jjbitwise_left = (f64)(_r712 | _r717);
-                        _get229 = jjbitwise_left;
-                        _get230 = jjbitwise_left;
-                        // if i32
-                        i32 _r718;
-                          if ((_get229 - _get230) == 0) {
-                            _get231 = jjbitwise_left;
-                            _r718 = (i32)((i64)(_get231));
-                          } else {
-                            _r718 = 0;
-                          }
-                        // end
-                        j718:;
-                        _get232 = b3;
-                        jjbitwise_left = _get232;
-                        _get233 = jjbitwise_left;
-                        _get234 = jjbitwise_left;
-                        // if i32
-                        i32 _r719;
-                          if ((_get233 - _get234) == 0) {
-                            _get235 = jjbitwise_left;
-                            _r719 = (i32)((i64)(_get235));
-                          } else {
-                            _r719 = 0;
-                          }
-                        // end
-                        j719:;
-                        jjbitwise_right = 63;
-                        _get236 = jjbitwise_right;
-                        _get237 = jjbitwise_right;
-                        // if i32
-                        i32 _r720;
-                          if ((_get236 - _get237) == 0) {
-                            _get238 = jjbitwise_right;
-                            _r720 = (i32)((i64)(_get238));
-                          } else {
-                            _r720 = 0;
-                          }
-                        // end
-                        j720:;
-                        jjbitwise_right = (f64)(_r719 & _r720);
-                        _get239 = jjbitwise_right;
-                        _get240 = jjbitwise_right;
-                        // if i32
-                        i32 _r721;
-                          if ((_get239 - _get240) == 0) {
-                            _get241 = jjbitwise_right;
-                            _r721 = (i32)((i64)(_get241));
-                          } else {
-                            _r721 = 0;
-                          }
-                        // end
-                        j721:;
-                        cp = (f64)(_r718 | _r721);
-                        _get242 = cp;
-                        cpjjtype = 1;
-                        (void) _get242;
-                        _get243 = cp;
-                        // if 
-                          if ((f64)(_get243 > 65535) != 0) {
-                            _get244 = cp;
-                            cp = _get244 - 65536;
-                            _get245 = cp;
-                            cpjjtype = 1;
-                            (void) _get245;
-                            // block f64
-                            f64 _r723;
-                              _get246 = out;
-                              __tmpop_left = _get246;
-                              _get247 = __tmpop_left;
-                              _get248 = cp;
-                              jjbitwise_left = _get248;
-                              _get249 = jjbitwise_left;
-                              _get250 = jjbitwise_left;
-                              // if i32
-                              i32 _r724;
-                                if ((_get249 - _get250) == 0) {
-                                  _get251 = jjbitwise_left;
-                                  _r724 = (i32)((i64)(_get251));
-                                } else {
-                                  _r724 = 0;
-                                }
-                              // end
-                              j724:;
-                              jjbitwise_right = 10;
-                              _get252 = jjbitwise_right;
-                              _get253 = jjbitwise_right;
-                              // if i32
-                              i32 _r725;
-                                if ((_get252 - _get253) == 0) {
-                                  _get254 = jjbitwise_right;
-                                  _r725 = (i32)((i64)(_get254));
-                                } else {
-                                  _r725 = 0;
-                                }
-                              // end
-                              j725:;
-                              f64_store(0, 4, 180224, 55296 + (f64)(_r724 >> _r725));
-                              i32_store8(0, 12, 180224, 1);
-                              _get255 = cp;
-                              jjbitwise_left = _get255;
-                              _get256 = jjbitwise_left;
-                              _get257 = jjbitwise_left;
-                              // if i32
-                              i32 _r726;
-                                if ((_get256 - _get257) == 0) {
-                                  _get258 = jjbitwise_left;
-                                  _r726 = (i32)((i64)(_get258));
-                                } else {
-                                  _r726 = 0;
-                                }
-                              // end
-                              j726:;
-                              jjbitwise_right = 1023;
-                              _get259 = jjbitwise_right;
-                              _get260 = jjbitwise_right;
-                              // if i32
-                              i32 _r727;
-                                if ((_get259 - _get260) == 0) {
-                                  _get261 = jjbitwise_right;
-                                  _r727 = (i32)((i64)(_get261));
-                                } else {
-                                  _r727 = 0;
-                                }
-                              // end
-                              j727:;
-                              f64_store(0, 13, 180224, 56320 + (f64)(_r726 & _r727));
-                              i32_store8(0, 21, 180224, 1);
-                              i32_store(1, 0, 180224, 2);
-                              const struct ReturnValue _6 = dong_porf_test_hidden_attr__String_fromCharCode(180224, 72);
-                              jjlast_type = _6.type;
-                              __tmpop_right = _6.value;
-                              _get262 = __tmpop_right;
-                              _get263 = outjjtype;
-                              _get264 = jjlast_type;
-                              // if 
-                                if ((((_get263 | 128) == 195) | ((_get264 | 128) == 195)) != 0) {
-                                  _get265 = __tmpop_left;
-                                  _get266 = outjjtype;
-                                  _get267 = __tmpop_right;
-                                  _get268 = jjlast_type;
-                                  const struct ReturnValue _7 = dong_porf_test_hidden_attr__Porffor_concatStrings(_get265, _get266, _get267, _get268);
-                                  jjlast_type = _7.type;
-                                  _r723 = _7.value;
-                                  goto j723;
-                                }
-                              // end
-                              j728:;
-                              jjlast_type = 1;
-                              _r723 = _get247 + _get262;
-                            // end
-                            j723:;
-                            out = _r723;
-                            _get269 = out;
-                            _get270 = jjlast_type;
-                            outjjtype = _get270;
-                            (void) _get269;
-                          } else {
-                            // block f64
-                            f64 _r729;
-                              _get271 = out;
-                              __tmpop_left = _get271;
-                              _get272 = __tmpop_left;
-                              _get273 = cp;
-                              f64_store(0, 4, 196608, _get273);
-                              i32_store8(0, 12, 196608, 1);
-                              i32_store(1, 0, 196608, 1);
-                              const struct ReturnValue _8 = dong_porf_test_hidden_attr__String_fromCharCode(196608, 72);
-                              jjlast_type = _8.type;
-                              __tmpop_right = _8.value;
-                              _get274 = __tmpop_right;
-                              _get275 = outjjtype;
-                              _get276 = jjlast_type;
-                              // if 
-                                if ((((_get275 | 128) == 195) | ((_get276 | 128) == 195)) != 0) {
-                                  _get277 = __tmpop_left;
-                                  _get278 = outjjtype;
-                                  _get279 = __tmpop_right;
-                                  _get280 = jjlast_type;
-                                  const struct ReturnValue _9 = dong_porf_test_hidden_attr__Porffor_concatStrings(_get277, _get278, _get279, _get280);
-                                  jjlast_type = _9.type;
-                                  _r729 = _9.value;
-                                  goto j729;
-                                }
-                              // end
-                              j730:;
-                              jjlast_type = 1;
-                              _r729 = _get272 + _get274;
-                            // end
-                            j729:;
-                            out = _r729;
-                            _get281 = out;
-                            _get282 = jjlast_type;
-                            outjjtype = _get282;
-                            (void) _get281;
-                          }
-                        // end
-                        j722:;
-                        _get283 = i;
-                        i = _get283 + 4;
-                        _get284 = i;
-                        ijjtype = 1;
-                        (void) _get284;
-                      } else {
-                        _get285 = i;
-                        i = _get285 + 1;
-                        _get286 = i;
-                        ijjtype = 1;
-                        (void) _get286;
-                      }
-                    // end
-                    j700:;
-                  }
-                // end
-                j680:;
-              }
-            // end
-            j666:;
-          }
-        // end
-        j661:;
-        goto j658;
-      }
-    // end
-    j659:;
-  // end
-  _get287 = out;
-  jjreturn = _get287;
-  jjreturnjjtype = 195;
-  _get288 = jjnewtarget;
-  // if 
-    if (((u32)(_get288)) != 0) {
-      _get289 = jjreturn;
-      _get290 = jjreturnjjtype;
-      // if 
-        if ((dong_porf_test_hidden_attr__Porffor_object_isObject((i32)(_get289), _get290)) == 0) {
-          _get291 = jjthis;
-          _get292 = jjthisjjtype;
-          return (struct ReturnValue){ _get291, _get292 };
-        }
-      // end
-      j732:;
-    }
-  // end
-  j731:;
-  _get293 = jjreturn;
-  _get294 = jjreturnjjtype;
-  return (struct ReturnValue){ _get293, _get294 };
+  _get5 = jjreturn;
+  _get6 = jjreturnjjtype;
+  return (struct ReturnValue){ _get5, _get6 };
 }
 
 static struct ReturnValue dong_porf_test_hidden_attr_getAttribute(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype, f64 nodeId, i32 nodeIdjjtype, f64 name, i32 namejjtype) {
@@ -13087,10 +11694,10 @@ static struct ReturnValue dong_porf_test_hidden_attr_getAttribute(f64 jjnewtarge
           return (struct ReturnValue){ _get7, _get8 };
         }
       // end
-      j734:;
+      j658:;
     }
   // end
-  j733:;
+  j657:;
   _get9 = jjreturn;
   _get10 = jjreturnjjtype;
   return (struct ReturnValue){ _get9, _get10 };
@@ -13135,35 +11742,35 @@ static f64 dong_porf_test_hidden_attr__Porffor_compareStrings(f64 a, i32 ajjtype
       _get2 = ajjtype;
       jjtypeswitch_tmp1 = _get2;
       // block i32
-      i32 _r736;
+      i32 _r660;
         _get3 = jjtypeswitch_tmp1;
         // if 
           if (_get3 == 0) {
-            _r736 = 1;
-            goto j736;
+            _r660 = 1;
+            goto j660;
           }
         // end
-        j737:;
+        j661:;
         _get4 = jjtypeswitch_tmp1;
         // if 
           if (_get4 == 7) {
             _get5 = jjlogicinner_tmp;
-            _r736 = _get5 == 0;
-            goto j736;
+            _r660 = _get5 == 0;
+            goto j660;
           }
         // end
-        j738:;
-        _r736 = 0;
+        j662:;
+        _r660 = 0;
       // end
-      j736:;
+      j660:;
       _get6 = ajjtype;
       _get7 = ajjtype;
       // if 
-        if (((_r736 | ((f64)(_get6) == 5)) | ((f64)(_get7) == 2)) != 0) {
+        if (((_r660 | ((f64)(_get6) == 5)) | ((f64)(_get7) == 2)) != 0) {
           return 0;
         }
       // end
-      j739:;
+      j663:;
       _get8 = a;
       _get9 = ajjtype;
       const struct ReturnValue _0 = dong_porf_test_hidden_attr__ecma262_ToString(_get8, _get9);
@@ -13173,7 +11780,7 @@ static f64 dong_porf_test_hidden_attr__Porffor_compareStrings(f64 a, i32 ajjtype
       a = _0.value;
     }
   // end
-  j735:;
+  j659:;
   _get11 = bjjtype;
   // if 
     if ((f64)(_get11 | 128) != 195) {
@@ -13182,35 +11789,35 @@ static f64 dong_porf_test_hidden_attr__Porffor_compareStrings(f64 a, i32 ajjtype
       _get13 = bjjtype;
       jjtypeswitch_tmp1 = _get13;
       // block i32
-      i32 _r741;
+      i32 _r665;
         _get14 = jjtypeswitch_tmp1;
         // if 
           if (_get14 == 0) {
-            _r741 = 1;
-            goto j741;
+            _r665 = 1;
+            goto j665;
           }
         // end
-        j742:;
+        j666:;
         _get15 = jjtypeswitch_tmp1;
         // if 
           if (_get15 == 7) {
             _get16 = jjlogicinner_tmp;
-            _r741 = _get16 == 0;
-            goto j741;
+            _r665 = _get16 == 0;
+            goto j665;
           }
         // end
-        j743:;
-        _r741 = 0;
+        j667:;
+        _r665 = 0;
       // end
-      j741:;
+      j665:;
       _get17 = bjjtype;
       _get18 = bjjtype;
       // if 
-        if (((_r741 | ((f64)(_get17) == 5)) | ((f64)(_get18) == 2)) != 0) {
+        if (((_r665 | ((f64)(_get17) == 5)) | ((f64)(_get18) == 2)) != 0) {
           return 0;
         }
       // end
-      j744:;
+      j668:;
       _get19 = b;
       _get20 = bjjtype;
       const struct ReturnValue _1 = dong_porf_test_hidden_attr__ecma262_ToString(_get19, _get20);
@@ -13220,7 +11827,7 @@ static f64 dong_porf_test_hidden_attr__Porffor_compareStrings(f64 a, i32 ajjtype
       b = _1.value;
     }
   // end
-  j740:;
+  j664:;
   _get22 = a;
   _get23 = ajjtype;
   _get24 = b;
@@ -13257,7 +11864,7 @@ static struct ReturnValue dong_porf_test_hidden_attr_setAttribute(f64 jjnewtarge
       return (struct ReturnValue){ _get6, _get7 };
     }
   // end
-  j746:;
+  j670:;
   return (struct ReturnValue){ 0, 0 };
 }
 
@@ -13284,7 +11891,7 @@ static struct ReturnValue dong_porf_test_hidden_attr_removeAttribute(f64 jjnewta
       return (struct ReturnValue){ _get4, _get5 };
     }
   // end
-  j748:;
+  j672:;
   return (struct ReturnValue){ 0, 0 };
 }
 
@@ -13313,7 +11920,7 @@ static struct ReturnValue dong_porf_test_hidden_attr_setTextContent(f64 jjnewtar
       return (struct ReturnValue){ _get4, _get5 };
     }
   // end
-  j750:;
+  j674:;
   return (struct ReturnValue){ 0, 0 };
 }
 
@@ -13338,7 +11945,7 @@ static struct ReturnValue dong_porf_test_hidden_attr_dongLog(f64 jjnewtarget, i3
       return (struct ReturnValue){ _get3, _get4 };
     }
   // end
-  j751:;
+  j675:;
   return (struct ReturnValue){ 0, 0 };
 }
 
@@ -13412,7 +12019,7 @@ int dong_porf_test_hidden_attr_main() {
       dong_porf_test_hidden_attr_r = _5.value;
     }
   // end
-  j745:;
+  j669:;
   const struct ReturnValue _6 = dong_porf_test_hidden_attr_setAttribute(0, 0, 0, 0, dong_porf_test_hidden_attr_toggleId, dong_porf_test_hidden_attr_toggleIdjjtype, 1831, 195, 0, 195);
   jjlast_type = _6.type;
   (void) _6.value;
@@ -13436,7 +12043,7 @@ int dong_porf_test_hidden_attr_main() {
       dong_porf_test_hidden_attr_r = _9.value;
     }
   // end
-  j747:;
+  j671:;
   const struct ReturnValue _10 = dong_porf_test_hidden_attr_removeAttribute(0, 0, 0, 0, dong_porf_test_hidden_attr_toggleId, dong_porf_test_hidden_attr_toggleIdjjtype, 1831, 195);
   jjlast_type = _10.type;
   (void) _10.value;
@@ -13460,7 +12067,7 @@ int dong_porf_test_hidden_attr_main() {
       dong_porf_test_hidden_attr_r = _13.value;
     }
   // end
-  j749:;
+  j673:;
   const struct ReturnValue _14 = dong_porf_test_hidden_attr_setTextContent(0, 0, 0, 0, dong_porf_test_hidden_attr_resultId, dong_porf_test_hidden_attr_resultIdjjtype, dong_porf_test_hidden_attr_r, dong_porf_test_hidden_attr_rjjtype);
   jjlast_type = _14.type;
   (void) _14.value;

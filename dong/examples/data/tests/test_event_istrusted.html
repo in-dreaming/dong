@@ -1,5 +1,6 @@
 <!DOCTYPE html>
-<html>
+<!-- porffor: ready -->
+<html data-porffor-module="t12_test_event_istrusted">
 <head>
 <style>
   body { font-size: 16px; padding: 20px; }
@@ -81,7 +82,7 @@
     r += '- 脚本触发的事件 isTrusted=false\n';
     r += '- dispatchEvent() 触发的事件 isTrusted=false\n';
     r += '\n点击下方按钮测试脚本触发事件:\n';
-    r += '<button onclick="testScriptTriggeredEvent()">测试脚本事件</button>\n';
+    r += '<button id="__porf_auto_0">测试脚本事件</button>\n';
     result.innerHTML = r;
     console.log('Event.isTrusted 属性测试已加载');
   </script>

@@ -1,5 +1,6 @@
 <!DOCTYPE html>
-<html>
+<!-- porffor: ready -->
+<html data-porffor-module="t12_test_form_validation_comprehensive">
 <head>
     <meta charset="utf-8">
     <title>Form Validation - Comprehensive Test</title>
@@ -50,8 +51,8 @@
                 <textarea required>Sample text</textarea>
             </div>
 
-            <button type="button" onclick="testFormValidity()">Check Form Validity</button>
-            <button type="button" onclick="testIndividualValidity()">Check Individual Validity</button>
+            <button id="__porf_auto_0" type="button">Check Form Validity</button>
+            <button id="__porf_auto_1" type="button">Check Individual Validity</button>
         </form>
     </div>
 
@@ -74,7 +75,7 @@
                 <input type="text" required value="">
             </div>
 
-            <button type="button" onclick="testInvalidForm()">Check Invalid Form</button>
+            <button id="__porf_auto_2" type="button">Check Invalid Form</button>
         </form>
     </div>
 
@@ -83,8 +84,8 @@
         <div>
             <label>Dynamic Pattern Test:</label>
             <input type="text" id="dynamicPattern" pattern="[A-Z]{3}" value="ABC">
-            <button onclick="changePattern()">Change Pattern to [0-9]{3}</button>
-            <button onclick="changeValue()">Change Value to abc</button>
+            <button id="__porf_auto_3">Change Pattern to [0-9]{3}</button>
+            <button id="__porf_auto_4">Change Value to abc</button>
         </div>
     </div>
 
@@ -93,8 +94,8 @@
         <div>
             <label>Custom Validation:</label>
             <input type="text" id="customInput" value="test">
-            <button onclick="setCustomValidity('Custom error message')">Set Custom Error</button>
-            <button onclick="clearCustomValidity()">Clear Custom Error</button>
+            <button id="__porf_auto_5">Set Custom Error</button>
+            <button id="__porf_auto_6">Clear Custom Error</button>
         </div>
     </div>
 

@@ -100,6 +100,181 @@ extern void dong_porf_porf_game_ui__porf_init(void);
 extern void dong_porf_porf_game_ui_state_capture(void* out);
 extern void dong_porf_porf_game_ui_state_apply(const void* in);
 
+extern int dong_porf_t12_focus_visible_test_main(void);
+extern char* dong_porf_t12_focus_visible_test_memory;
+extern unsigned int dong_porf_t12_focus_visible_test_memory_pages;
+extern void dong_porf_t12_focus_visible_test__porf_init(void);
+extern void dong_porf_t12_focus_visible_test_state_capture(void* out);
+extern void dong_porf_t12_focus_visible_test_state_apply(const void* in);
+
+extern int dong_porf_t12_test_disabled_main(void);
+extern char* dong_porf_t12_test_disabled_memory;
+extern unsigned int dong_porf_t12_test_disabled_memory_pages;
+extern void dong_porf_t12_test_disabled__porf_init(void);
+extern void dong_porf_t12_test_disabled_state_capture(void* out);
+extern void dong_porf_t12_test_disabled_state_apply(const void* in);
+
+extern int dong_porf_t12_test_document_methods_main(void);
+extern char* dong_porf_t12_test_document_methods_memory;
+extern unsigned int dong_porf_t12_test_document_methods_memory_pages;
+extern void dong_porf_t12_test_document_methods__porf_init(void);
+extern void dong_porf_t12_test_document_methods_state_capture(void* out);
+extern void dong_porf_t12_test_document_methods_state_apply(const void* in);
+
+extern int dong_porf_t12_test_document_props_main(void);
+extern char* dong_porf_t12_test_document_props_memory;
+extern unsigned int dong_porf_t12_test_document_props_memory_pages;
+extern void dong_porf_t12_test_document_props__porf_init(void);
+extern void dong_porf_t12_test_document_props_state_capture(void* out);
+extern void dong_porf_t12_test_document_props_state_apply(const void* in);
+
+extern int dong_porf_t12_test_dom_manipulation_main(void);
+extern char* dong_porf_t12_test_dom_manipulation_memory;
+extern unsigned int dong_porf_t12_test_dom_manipulation_memory_pages;
+extern void dong_porf_t12_test_dom_manipulation__porf_init(void);
+extern void dong_porf_t12_test_dom_manipulation_state_capture(void* out);
+extern void dong_porf_t12_test_dom_manipulation_state_apply(const void* in);
+
+extern int dong_porf_t12_test_event_istrusted_main(void);
+extern char* dong_porf_t12_test_event_istrusted_memory;
+extern unsigned int dong_porf_t12_test_event_istrusted_memory_pages;
+extern void dong_porf_t12_test_event_istrusted__porf_init(void);
+extern void dong_porf_t12_test_event_istrusted_state_capture(void* out);
+extern void dong_porf_t12_test_event_istrusted_state_apply(const void* in);
+
+extern int dong_porf_t12_test_form_validation_comprehensive_main(void);
+extern char* dong_porf_t12_test_form_validation_comprehensive_memory;
+extern unsigned int dong_porf_t12_test_form_validation_comprehensive_memory_pages;
+extern void dong_porf_t12_test_form_validation_comprehensive__porf_init(void);
+extern void dong_porf_t12_test_form_validation_comprehensive_state_capture(void* out);
+extern void dong_porf_t12_test_form_validation_comprehensive_state_apply(const void* in);
+
+extern int dong_porf_t12_test_html_element_props_main(void);
+extern char* dong_porf_t12_test_html_element_props_memory;
+extern unsigned int dong_porf_t12_test_html_element_props_memory_pages;
+extern void dong_porf_t12_test_html_element_props__porf_init(void);
+extern void dong_porf_t12_test_html_element_props_state_capture(void* out);
+extern void dong_porf_t12_test_html_element_props_state_apply(const void* in);
+
+extern int dong_porf_t12_test_performance_now_main(void);
+extern char* dong_porf_t12_test_performance_now_memory;
+extern unsigned int dong_porf_t12_test_performance_now_memory_pages;
+extern void dong_porf_t12_test_performance_now__porf_init(void);
+extern void dong_porf_t12_test_performance_now_state_capture(void* out);
+extern void dong_porf_t12_test_performance_now_state_apply(const void* in);
+
+extern int dong_porf_t12_test_scroll_behavior_smooth_main(void);
+extern char* dong_porf_t12_test_scroll_behavior_smooth_memory;
+extern unsigned int dong_porf_t12_test_scroll_behavior_smooth_memory_pages;
+extern void dong_porf_t12_test_scroll_behavior_smooth__porf_init(void);
+extern void dong_porf_t12_test_scroll_behavior_smooth_state_capture(void* out);
+extern void dong_porf_t12_test_scroll_behavior_smooth_state_apply(const void* in);
+
+extern int dong_porf_t12_test_scroll_behavior_smooth_autoscroll_auto_bottom_main(void);
+extern char* dong_porf_t12_test_scroll_behavior_smooth_autoscroll_auto_bottom_memory;
+extern unsigned int dong_porf_t12_test_scroll_behavior_smooth_autoscroll_auto_bottom_memory_pages;
+extern void dong_porf_t12_test_scroll_behavior_smooth_autoscroll_auto_bottom__porf_init(void);
+extern void dong_porf_t12_test_scroll_behavior_smooth_autoscroll_auto_bottom_state_capture(void* out);
+extern void dong_porf_t12_test_scroll_behavior_smooth_autoscroll_auto_bottom_state_apply(const void* in);
+
+extern int dong_porf_t12_test_scroll_properties_main(void);
+extern char* dong_porf_t12_test_scroll_properties_memory;
+extern unsigned int dong_porf_t12_test_scroll_properties_memory_pages;
+extern void dong_porf_t12_test_scroll_properties__porf_init(void);
+extern void dong_porf_t12_test_scroll_properties_state_capture(void* out);
+extern void dong_porf_t12_test_scroll_properties_state_apply(const void* in);
+
+extern int dong_porf_t12_test_select_basic_main(void);
+extern char* dong_porf_t12_test_select_basic_memory;
+extern unsigned int dong_porf_t12_test_select_basic_memory_pages;
+extern void dong_porf_t12_test_select_basic__porf_init(void);
+extern void dong_porf_t12_test_select_basic_state_capture(void* out);
+extern void dong_porf_t12_test_select_basic_state_apply(const void* in);
+
+extern int dong_porf_t12_test_submit_event_main(void);
+extern char* dong_porf_t12_test_submit_event_memory;
+extern unsigned int dong_porf_t12_test_submit_event_memory_pages;
+extern void dong_porf_t12_test_submit_event__porf_init(void);
+extern void dong_porf_t12_test_submit_event_state_capture(void* out);
+extern void dong_porf_t12_test_submit_event_state_apply(const void* in);
+
+extern int dong_porf_t12_test_tabindex_main(void);
+extern char* dong_porf_t12_test_tabindex_memory;
+extern unsigned int dong_porf_t12_test_tabindex_memory_pages;
+extern void dong_porf_t12_test_tabindex__porf_init(void);
+extern void dong_porf_t12_test_tabindex_state_capture(void* out);
+extern void dong_porf_t12_test_tabindex_state_apply(const void* in);
+
+extern int dong_porf_t10_fetch_json_main(void);
+extern char* dong_porf_t10_fetch_json_memory;
+extern unsigned int dong_porf_t10_fetch_json_memory_pages;
+extern void dong_porf_t10_fetch_json__porf_init(void);
+extern void dong_porf_t10_fetch_json_state_capture(void* out);
+extern void dong_porf_t10_fetch_json_state_apply(const void* in);
+
+extern int dong_porf_t10_fetch_reject_main(void);
+extern char* dong_porf_t10_fetch_reject_memory;
+extern unsigned int dong_porf_t10_fetch_reject_memory_pages;
+extern void dong_porf_t10_fetch_reject__porf_init(void);
+extern void dong_porf_t10_fetch_reject_state_capture(void* out);
+extern void dong_porf_t10_fetch_reject_state_apply(const void* in);
+
+extern int dong_porf_t10_fetch_text_main(void);
+extern char* dong_porf_t10_fetch_text_memory;
+extern unsigned int dong_porf_t10_fetch_text_memory_pages;
+extern void dong_porf_t10_fetch_text__porf_init(void);
+extern void dong_porf_t10_fetch_text_state_capture(void* out);
+extern void dong_porf_t10_fetch_text_state_apply(const void* in);
+
+extern int dong_porf_t20_bold_dynamic_main(void);
+extern char* dong_porf_t20_bold_dynamic_memory;
+extern unsigned int dong_porf_t20_bold_dynamic_memory_pages;
+extern void dong_porf_t20_bold_dynamic__porf_init(void);
+extern void dong_porf_t20_bold_dynamic_state_capture(void* out);
+extern void dong_porf_t20_bold_dynamic_state_apply(const void* in);
+
+extern int dong_porf_t20_bold_layout_debug_main(void);
+extern char* dong_porf_t20_bold_layout_debug_memory;
+extern unsigned int dong_porf_t20_bold_layout_debug_memory_pages;
+extern void dong_porf_t20_bold_layout_debug__porf_init(void);
+extern void dong_porf_t20_bold_layout_debug_state_capture(void* out);
+extern void dong_porf_t20_bold_layout_debug_state_apply(const void* in);
+
+extern int dong_porf_t20_ce_interactive_sim_main(void);
+extern char* dong_porf_t20_ce_interactive_sim_memory;
+extern unsigned int dong_porf_t20_ce_interactive_sim_memory_pages;
+extern void dong_porf_t20_ce_interactive_sim__porf_init(void);
+extern void dong_porf_t20_ce_interactive_sim_state_capture(void* out);
+extern void dong_porf_t20_ce_interactive_sim_state_apply(const void* in);
+
+extern int dong_porf_t20_ce_simulate_main(void);
+extern char* dong_porf_t20_ce_simulate_memory;
+extern unsigned int dong_porf_t20_ce_simulate_memory_pages;
+extern void dong_porf_t20_ce_simulate__porf_init(void);
+extern void dong_porf_t20_ce_simulate_state_capture(void* out);
+extern void dong_porf_t20_ce_simulate_state_apply(const void* in);
+
+extern int dong_porf_t20_contenteditable_auto_main(void);
+extern char* dong_porf_t20_contenteditable_auto_memory;
+extern unsigned int dong_porf_t20_contenteditable_auto_memory_pages;
+extern void dong_porf_t20_contenteditable_auto__porf_init(void);
+extern void dong_porf_t20_contenteditable_auto_state_capture(void* out);
+extern void dong_porf_t20_contenteditable_auto_state_apply(const void* in);
+
+extern int dong_porf_t20_contenteditable_bold_auto_main(void);
+extern char* dong_porf_t20_contenteditable_bold_auto_memory;
+extern unsigned int dong_porf_t20_contenteditable_bold_auto_memory_pages;
+extern void dong_porf_t20_contenteditable_bold_auto__porf_init(void);
+extern void dong_porf_t20_contenteditable_bold_auto_state_capture(void* out);
+extern void dong_porf_t20_contenteditable_bold_auto_state_apply(const void* in);
+
+extern int dong_porf_t20_contenteditable_features_main(void);
+extern char* dong_porf_t20_contenteditable_features_memory;
+extern unsigned int dong_porf_t20_contenteditable_features_memory_pages;
+extern void dong_porf_t20_contenteditable_features__porf_init(void);
+extern void dong_porf_t20_contenteditable_features_state_capture(void* out);
+extern void dong_porf_t20_contenteditable_features_state_apply(const void* in);
+
 extern int dong_porf_t12_inline_main(void);
 extern char* dong_porf_t12_inline_memory;
 extern unsigned int dong_porf_t12_inline_memory_pages;
@@ -143,6 +318,154 @@ extern int dong_porf_porf_game_ui_export_onHeal(void);
 
 extern int dong_porf_porf_game_ui_export_onScoreTick(void);
 
+extern int dong_porf_t12_focus_visible_test_export___porf_auto_0__onclick(void);
+
+extern int dong_porf_t12_test_disabled_export___porf_auto_0__onclick(void);
+
+extern int dong_porf_t12_test_disabled_export___porf_auto_1__onclick(void);
+
+extern int dong_porf_t12_test_disabled_export___porf_auto_2__onclick(void);
+
+extern int dong_porf_t12_test_disabled_export___porf_auto_3__onclick(void);
+
+extern int dong_porf_t12_test_disabled_export___porf_auto_4__onclick(void);
+
+extern int dong_porf_t12_test_disabled_export___porf_auto_5__onclick(void);
+
+extern int dong_porf_t12_test_disabled_export_button1__onclick(void);
+
+extern int dong_porf_t12_test_disabled_export___porf_auto_6__onclick(void);
+
+extern int dong_porf_t12_test_disabled_export_submitBtn__onclick(void);
+
+extern int dong_porf_t12_test_disabled_export___porf_auto_7__onclick(void);
+
+extern int dong_porf_t12_test_disabled_export___porf_auto_8__onclick(void);
+
+extern int dong_porf_t12_test_document_methods_export___porf_auto_0__onclick(void);
+
+extern int dong_porf_t12_test_document_methods_export___porf_auto_1__onclick(void);
+
+extern int dong_porf_t12_test_document_methods_export___porf_auto_2__onclick(void);
+
+extern int dong_porf_t12_test_document_props_export___porf_auto_0__onclick(void);
+
+extern int dong_porf_t12_test_document_props_export___porf_auto_1__onclick(void);
+
+extern int dong_porf_t12_test_document_props_export___porf_auto_2__onclick(void);
+
+extern int dong_porf_t12_test_dom_manipulation_export___porf_auto_0__onclick(void);
+
+extern int dong_porf_t12_test_dom_manipulation_export___porf_auto_1__onclick(void);
+
+extern int dong_porf_t12_test_dom_manipulation_export___porf_auto_2__onclick(void);
+
+extern int dong_porf_t12_test_dom_manipulation_export___porf_auto_3__onclick(void);
+
+extern int dong_porf_t12_test_dom_manipulation_export___porf_auto_4__onclick(void);
+
+extern int dong_porf_t12_test_dom_manipulation_export___porf_auto_5__onclick(void);
+
+extern int dong_porf_t12_test_event_istrusted_export___porf_auto_0__onclick(void);
+
+extern int dong_porf_t12_test_form_validation_comprehensive_export___porf_auto_0__onclick(void);
+
+extern int dong_porf_t12_test_form_validation_comprehensive_export___porf_auto_1__onclick(void);
+
+extern int dong_porf_t12_test_form_validation_comprehensive_export___porf_auto_2__onclick(void);
+
+extern int dong_porf_t12_test_form_validation_comprehensive_export___porf_auto_3__onclick(void);
+
+extern int dong_porf_t12_test_form_validation_comprehensive_export___porf_auto_4__onclick(void);
+
+extern int dong_porf_t12_test_form_validation_comprehensive_export___porf_auto_5__onclick(void);
+
+extern int dong_porf_t12_test_form_validation_comprehensive_export___porf_auto_6__onclick(void);
+
+extern int dong_porf_t12_test_html_element_props_export___porf_auto_0__onclick(void);
+
+extern int dong_porf_t12_test_html_element_props_export___porf_auto_1__onclick(void);
+
+extern int dong_porf_t12_test_html_element_props_export___porf_auto_2__onclick(void);
+
+extern int dong_porf_t12_test_html_element_props_export___porf_auto_3__onclick(void);
+
+extern int dong_porf_t12_test_html_element_props_export___porf_auto_4__onclick(void);
+
+extern int dong_porf_t12_test_html_element_props_export___porf_auto_5__onclick(void);
+
+extern int dong_porf_t12_test_html_element_props_export___porf_auto_6__onclick(void);
+
+extern int dong_porf_t12_test_performance_now_export___porf_auto_0__onclick(void);
+
+extern int dong_porf_t12_test_performance_now_export___porf_auto_1__onclick(void);
+
+extern int dong_porf_t12_test_scroll_behavior_smooth_export___porf_auto_0__onclick(void);
+
+extern int dong_porf_t12_test_scroll_behavior_smooth_export___porf_auto_1__onclick(void);
+
+extern int dong_porf_t12_test_scroll_behavior_smooth_export___porf_auto_2__onclick(void);
+
+extern int dong_porf_t12_test_scroll_behavior_smooth_export___porf_auto_3__onclick(void);
+
+extern int dong_porf_t12_test_scroll_behavior_smooth_autoscroll_auto_bottom_export___porf_auto_0__onclick(void);
+
+extern int dong_porf_t12_test_scroll_behavior_smooth_autoscroll_auto_bottom_export___porf_auto_1__onclick(void);
+
+extern int dong_porf_t12_test_scroll_behavior_smooth_autoscroll_auto_bottom_export___porf_auto_2__onclick(void);
+
+extern int dong_porf_t12_test_scroll_behavior_smooth_autoscroll_auto_bottom_export___porf_auto_3__onclick(void);
+
+extern int dong_porf_t12_test_scroll_properties_export___porf_auto_0__onclick(void);
+
+extern int dong_porf_t12_test_scroll_properties_export___porf_auto_1__onclick(void);
+
+extern int dong_porf_t12_test_scroll_properties_export___porf_auto_2__onclick(void);
+
+extern int dong_porf_t12_test_scroll_properties_export___porf_auto_3__onclick(void);
+
+extern int dong_porf_t12_test_scroll_properties_export___porf_auto_4__onclick(void);
+
+extern int dong_porf_t12_test_scroll_properties_export___porf_auto_5__onclick(void);
+
+extern int dong_porf_t12_test_scroll_properties_export___porf_auto_6__onclick(void);
+
+extern int dong_porf_t12_test_select_basic_export_country__onmousedown(void);
+
+extern int dong_porf_t12_test_select_basic_export_country__onchange(void);
+
+extern int dong_porf_t12_test_select_basic_export_color__onmousedown(void);
+
+extern int dong_porf_t12_test_select_basic_export_color__onchange(void);
+
+extern int dong_porf_t12_test_select_basic_export_fruit__onmousedown(void);
+
+extern int dong_porf_t12_test_select_basic_export_fruit__onchange(void);
+
+extern int dong_porf_t12_test_submit_event_export___porf_auto_0__onclick(void);
+
+extern int dong_porf_t12_test_tabindex_export___porf_auto_0__onclick(void);
+
+extern int dong_porf_t12_test_tabindex_export___porf_auto_1__onclick(void);
+
+extern int dong_porf_t12_test_tabindex_export___porf_auto_2__onclick(void);
+
+extern int dong_porf_t12_test_tabindex_export___porf_auto_3__onclick(void);
+
+extern int dong_porf_t12_test_tabindex_export___porf_auto_4__onclick(void);
+
+extern int dong_porf_t10_fetch_json_export_onFetchDone(void);
+
+extern int dong_porf_t10_fetch_reject_export_onFetchDone(void);
+
+extern int dong_porf_t10_fetch_text_export_onFetchDone(void);
+
+extern int dong_porf_t20_ce_interactive_sim_export_onBold(void);
+
+extern int dong_porf_t20_ce_interactive_sim_export_onItalic(void);
+
+extern int dong_porf_t20_ce_interactive_sim_export_onUnderline(void);
+
 extern int dong_porf_t12_inline_export_inc__onclick(void);
 
 extern int dong_porf_t12_inline_export___porf_auto_0__onclick(void);
@@ -160,12 +483,37 @@ const dong_porf_module_t dong_porf_modules[] = {
   { "test_mf_class", dong_porf_test_mf_class_main, &dong_porf_test_mf_class_memory, &dong_porf_test_mf_class_memory_pages, dong_porf_test_mf_class__porf_init, dong_porf_test_mf_class_state_capture, dong_porf_test_mf_class_state_apply, 176 },
   { "test_mf_style", dong_porf_test_mf_style_main, &dong_porf_test_mf_style_memory, &dong_porf_test_mf_style_memory_pages, dong_porf_test_mf_style__porf_init, dong_porf_test_mf_style_state_capture, dong_porf_test_mf_style_state_apply, 176 },
   { "porf_counter", dong_porf_porf_counter_main, &dong_porf_porf_counter_memory, &dong_porf_porf_counter_memory_pages, dong_porf_porf_counter__porf_init, dong_porf_porf_counter_state_capture, dong_porf_porf_counter_state_apply, 288 },
-  { "porf_todo", dong_porf_porf_todo_main, &dong_porf_porf_todo_memory, &dong_porf_porf_todo_memory_pages, dong_porf_porf_todo__porf_init, dong_porf_porf_todo_state_capture, dong_porf_porf_todo_state_apply, 1136 },
-  { "porf_game_ui", dong_porf_porf_game_ui_main, &dong_porf_porf_game_ui_memory, &dong_porf_porf_game_ui_memory_pages, dong_porf_porf_game_ui__porf_init, dong_porf_porf_game_ui_state_capture, dong_porf_porf_game_ui_state_apply, 352 },
+  { "porf_todo", dong_porf_porf_todo_main, &dong_porf_porf_todo_memory, &dong_porf_porf_todo_memory_pages, dong_porf_porf_todo__porf_init, dong_porf_porf_todo_state_capture, dong_porf_porf_todo_state_apply, 1968 },
+  { "porf_game_ui", dong_porf_porf_game_ui_main, &dong_porf_porf_game_ui_memory, &dong_porf_porf_game_ui_memory_pages, dong_porf_porf_game_ui__porf_init, dong_porf_porf_game_ui_state_capture, dong_porf_porf_game_ui_state_apply, 384 },
+  { "t12_focus_visible_test", dong_porf_t12_focus_visible_test_main, &dong_porf_t12_focus_visible_test_memory, &dong_porf_t12_focus_visible_test_memory_pages, dong_porf_t12_focus_visible_test__porf_init, dong_porf_t12_focus_visible_test_state_capture, dong_porf_t12_focus_visible_test_state_apply, 192 },
+  { "t12_test_disabled", dong_porf_t12_test_disabled_main, &dong_porf_t12_test_disabled_memory, &dong_porf_t12_test_disabled_memory_pages, dong_porf_t12_test_disabled__porf_init, dong_porf_t12_test_disabled_state_capture, dong_porf_t12_test_disabled_state_apply, 384 },
+  { "t12_test_document_methods", dong_porf_t12_test_document_methods_main, &dong_porf_t12_test_document_methods_memory, &dong_porf_t12_test_document_methods_memory_pages, dong_porf_t12_test_document_methods__porf_init, dong_porf_t12_test_document_methods_state_capture, dong_porf_t12_test_document_methods_state_apply, 256 },
+  { "t12_test_document_props", dong_porf_t12_test_document_props_main, &dong_porf_t12_test_document_props_memory, &dong_porf_t12_test_document_props_memory_pages, dong_porf_t12_test_document_props__porf_init, dong_porf_t12_test_document_props_state_capture, dong_porf_t12_test_document_props_state_apply, 256 },
+  { "t12_test_dom_manipulation", dong_porf_t12_test_dom_manipulation_main, &dong_porf_t12_test_dom_manipulation_memory, &dong_porf_t12_test_dom_manipulation_memory_pages, dong_porf_t12_test_dom_manipulation__porf_init, dong_porf_t12_test_dom_manipulation_state_capture, dong_porf_t12_test_dom_manipulation_state_apply, 352 },
+  { "t12_test_event_istrusted", dong_porf_t12_test_event_istrusted_main, &dong_porf_t12_test_event_istrusted_memory, &dong_porf_t12_test_event_istrusted_memory_pages, dong_porf_t12_test_event_istrusted__porf_init, dong_porf_t12_test_event_istrusted_state_capture, dong_porf_t12_test_event_istrusted_state_apply, 192 },
+  { "t12_test_form_validation_comprehensive", dong_porf_t12_test_form_validation_comprehensive_main, &dong_porf_t12_test_form_validation_comprehensive_memory, &dong_porf_t12_test_form_validation_comprehensive_memory_pages, dong_porf_t12_test_form_validation_comprehensive__porf_init, dong_porf_t12_test_form_validation_comprehensive_state_capture, dong_porf_t12_test_form_validation_comprehensive_state_apply, 384 },
+  { "t12_test_html_element_props", dong_porf_t12_test_html_element_props_main, &dong_porf_t12_test_html_element_props_memory, &dong_porf_t12_test_html_element_props_memory_pages, dong_porf_t12_test_html_element_props__porf_init, dong_porf_t12_test_html_element_props_state_capture, dong_porf_t12_test_html_element_props_state_apply, 384 },
+  { "t12_test_performance_now", dong_porf_t12_test_performance_now_main, &dong_porf_t12_test_performance_now_memory, &dong_porf_t12_test_performance_now_memory_pages, dong_porf_t12_test_performance_now__porf_init, dong_porf_t12_test_performance_now_state_capture, dong_porf_t12_test_performance_now_state_apply, 224 },
+  { "t12_test_scroll_behavior_smooth", dong_porf_t12_test_scroll_behavior_smooth_main, &dong_porf_t12_test_scroll_behavior_smooth_memory, &dong_porf_t12_test_scroll_behavior_smooth_memory_pages, dong_porf_t12_test_scroll_behavior_smooth__porf_init, dong_porf_t12_test_scroll_behavior_smooth_state_capture, dong_porf_t12_test_scroll_behavior_smooth_state_apply, 288 },
+  { "t12_test_scroll_behavior_smooth_autoscroll_auto_bottom", dong_porf_t12_test_scroll_behavior_smooth_autoscroll_auto_bottom_main, &dong_porf_t12_test_scroll_behavior_smooth_autoscroll_auto_bottom_memory, &dong_porf_t12_test_scroll_behavior_smooth_autoscroll_auto_bottom_memory_pages, dong_porf_t12_test_scroll_behavior_smooth_autoscroll_auto_bottom__porf_init, dong_porf_t12_test_scroll_behavior_smooth_autoscroll_auto_bottom_state_capture, dong_porf_t12_test_scroll_behavior_smooth_autoscroll_auto_bottom_state_apply, 288 },
+  { "t12_test_scroll_properties", dong_porf_t12_test_scroll_properties_main, &dong_porf_t12_test_scroll_properties_memory, &dong_porf_t12_test_scroll_properties_memory_pages, dong_porf_t12_test_scroll_properties__porf_init, dong_porf_t12_test_scroll_properties_state_capture, dong_porf_t12_test_scroll_properties_state_apply, 384 },
+  { "t12_test_select_basic", dong_porf_t12_test_select_basic_main, &dong_porf_t12_test_select_basic_memory, &dong_porf_t12_test_select_basic_memory_pages, dong_porf_t12_test_select_basic__porf_init, dong_porf_t12_test_select_basic_state_capture, dong_porf_t12_test_select_basic_state_apply, 224 },
+  { "t12_test_submit_event", dong_porf_t12_test_submit_event_main, &dong_porf_t12_test_submit_event_memory, &dong_porf_t12_test_submit_event_memory_pages, dong_porf_t12_test_submit_event__porf_init, dong_porf_t12_test_submit_event_state_capture, dong_porf_t12_test_submit_event_state_apply, 192 },
+  { "t12_test_tabindex", dong_porf_t12_test_tabindex_main, &dong_porf_t12_test_tabindex_memory, &dong_porf_t12_test_tabindex_memory_pages, dong_porf_t12_test_tabindex__porf_init, dong_porf_t12_test_tabindex_state_capture, dong_porf_t12_test_tabindex_state_apply, 288 },
+  { "t10_fetch_json", dong_porf_t10_fetch_json_main, &dong_porf_t10_fetch_json_memory, &dong_porf_t10_fetch_json_memory_pages, dong_porf_t10_fetch_json__porf_init, dong_porf_t10_fetch_json_state_capture, dong_porf_t10_fetch_json_state_apply, 176 },
+  { "t10_fetch_reject", dong_porf_t10_fetch_reject_main, &dong_porf_t10_fetch_reject_memory, &dong_porf_t10_fetch_reject_memory_pages, dong_porf_t10_fetch_reject__porf_init, dong_porf_t10_fetch_reject_state_capture, dong_porf_t10_fetch_reject_state_apply, 176 },
+  { "t10_fetch_text", dong_porf_t10_fetch_text_main, &dong_porf_t10_fetch_text_memory, &dong_porf_t10_fetch_text_memory_pages, dong_porf_t10_fetch_text__porf_init, dong_porf_t10_fetch_text_state_capture, dong_porf_t10_fetch_text_state_apply, 176 },
+  { "t20_bold_dynamic", dong_porf_t20_bold_dynamic_main, &dong_porf_t20_bold_dynamic_memory, &dong_porf_t20_bold_dynamic_memory_pages, dong_porf_t20_bold_dynamic__porf_init, dong_porf_t20_bold_dynamic_state_capture, dong_porf_t20_bold_dynamic_state_apply, 208 },
+  { "t20_bold_layout_debug", dong_porf_t20_bold_layout_debug_main, &dong_porf_t20_bold_layout_debug_memory, &dong_porf_t20_bold_layout_debug_memory_pages, dong_porf_t20_bold_layout_debug__porf_init, dong_porf_t20_bold_layout_debug_state_capture, dong_porf_t20_bold_layout_debug_state_apply, 208 },
+  { "t20_ce_interactive_sim", dong_porf_t20_ce_interactive_sim_main, &dong_porf_t20_ce_interactive_sim_memory, &dong_porf_t20_ce_interactive_sim_memory_pages, dong_porf_t20_ce_interactive_sim__porf_init, dong_porf_t20_ce_interactive_sim_state_capture, dong_porf_t20_ce_interactive_sim_state_apply, 240 },
+  { "t20_ce_simulate", dong_porf_t20_ce_simulate_main, &dong_porf_t20_ce_simulate_memory, &dong_porf_t20_ce_simulate_memory_pages, dong_porf_t20_ce_simulate__porf_init, dong_porf_t20_ce_simulate_state_capture, dong_porf_t20_ce_simulate_state_apply, 192 },
+  { "t20_contenteditable_auto", dong_porf_t20_contenteditable_auto_main, &dong_porf_t20_contenteditable_auto_memory, &dong_porf_t20_contenteditable_auto_memory_pages, dong_porf_t20_contenteditable_auto__porf_init, dong_porf_t20_contenteditable_auto_state_capture, dong_porf_t20_contenteditable_auto_state_apply, 192 },
+  { "t20_contenteditable_bold_auto", dong_porf_t20_contenteditable_bold_auto_main, &dong_porf_t20_contenteditable_bold_auto_memory, &dong_porf_t20_contenteditable_bold_auto_memory_pages, dong_porf_t20_contenteditable_bold_auto__porf_init, dong_porf_t20_contenteditable_bold_auto_state_capture, dong_porf_t20_contenteditable_bold_auto_state_apply, 208 },
+  { "t20_contenteditable_features", dong_porf_t20_contenteditable_features_main, &dong_porf_t20_contenteditable_features_memory, &dong_porf_t20_contenteditable_features_memory_pages, dong_porf_t20_contenteditable_features__porf_init, dong_porf_t20_contenteditable_features_state_capture, dong_porf_t20_contenteditable_features_state_apply, 192 },
   { "t12_inline", dong_porf_t12_inline_main, &dong_porf_t12_inline_memory, &dong_porf_t12_inline_memory_pages, dong_porf_t12_inline__porf_init, dong_porf_t12_inline_state_capture, dong_porf_t12_inline_state_apply, 224 },
 };
 
-const size_t dong_porf_module_count = 15;
+const size_t dong_porf_module_count = 40;
 
 const dong_porf_handler_t dong_porf_handlers[] = {
   { "hello_dom", "onBtnClick", NULL, 0, (dong_porf_export_fn0)dong_porf_hello_dom_export_onBtnClick, NULL, &dong_porf_hello_dom_memory, &dong_porf_hello_dom_memory_pages },
@@ -186,11 +534,85 @@ const dong_porf_handler_t dong_porf_handlers[] = {
   { "porf_game_ui", "onDamage", NULL, 0, (dong_porf_export_fn0)dong_porf_porf_game_ui_export_onDamage, NULL, &dong_porf_porf_game_ui_memory, &dong_porf_porf_game_ui_memory_pages },
   { "porf_game_ui", "onHeal", NULL, 0, (dong_porf_export_fn0)dong_porf_porf_game_ui_export_onHeal, NULL, &dong_porf_porf_game_ui_memory, &dong_porf_porf_game_ui_memory_pages },
   { "porf_game_ui", "onScoreTick", NULL, 0, (dong_porf_export_fn0)dong_porf_porf_game_ui_export_onScoreTick, NULL, &dong_porf_porf_game_ui_memory, &dong_porf_porf_game_ui_memory_pages },
+  { "t12_focus_visible_test", "__porf_auto_0__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_focus_visible_test_export___porf_auto_0__onclick, NULL, &dong_porf_t12_focus_visible_test_memory, &dong_porf_t12_focus_visible_test_memory_pages },
+  { "t12_test_disabled", "__porf_auto_0__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_disabled_export___porf_auto_0__onclick, NULL, &dong_porf_t12_test_disabled_memory, &dong_porf_t12_test_disabled_memory_pages },
+  { "t12_test_disabled", "__porf_auto_1__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_disabled_export___porf_auto_1__onclick, NULL, &dong_porf_t12_test_disabled_memory, &dong_porf_t12_test_disabled_memory_pages },
+  { "t12_test_disabled", "__porf_auto_2__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_disabled_export___porf_auto_2__onclick, NULL, &dong_porf_t12_test_disabled_memory, &dong_porf_t12_test_disabled_memory_pages },
+  { "t12_test_disabled", "__porf_auto_3__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_disabled_export___porf_auto_3__onclick, NULL, &dong_porf_t12_test_disabled_memory, &dong_porf_t12_test_disabled_memory_pages },
+  { "t12_test_disabled", "__porf_auto_4__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_disabled_export___porf_auto_4__onclick, NULL, &dong_porf_t12_test_disabled_memory, &dong_porf_t12_test_disabled_memory_pages },
+  { "t12_test_disabled", "__porf_auto_5__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_disabled_export___porf_auto_5__onclick, NULL, &dong_porf_t12_test_disabled_memory, &dong_porf_t12_test_disabled_memory_pages },
+  { "t12_test_disabled", "button1__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_disabled_export_button1__onclick, NULL, &dong_porf_t12_test_disabled_memory, &dong_porf_t12_test_disabled_memory_pages },
+  { "t12_test_disabled", "__porf_auto_6__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_disabled_export___porf_auto_6__onclick, NULL, &dong_porf_t12_test_disabled_memory, &dong_porf_t12_test_disabled_memory_pages },
+  { "t12_test_disabled", "submitBtn__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_disabled_export_submitBtn__onclick, NULL, &dong_porf_t12_test_disabled_memory, &dong_porf_t12_test_disabled_memory_pages },
+  { "t12_test_disabled", "__porf_auto_7__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_disabled_export___porf_auto_7__onclick, NULL, &dong_porf_t12_test_disabled_memory, &dong_porf_t12_test_disabled_memory_pages },
+  { "t12_test_disabled", "__porf_auto_8__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_disabled_export___porf_auto_8__onclick, NULL, &dong_porf_t12_test_disabled_memory, &dong_porf_t12_test_disabled_memory_pages },
+  { "t12_test_document_methods", "__porf_auto_0__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_document_methods_export___porf_auto_0__onclick, NULL, &dong_porf_t12_test_document_methods_memory, &dong_porf_t12_test_document_methods_memory_pages },
+  { "t12_test_document_methods", "__porf_auto_1__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_document_methods_export___porf_auto_1__onclick, NULL, &dong_porf_t12_test_document_methods_memory, &dong_porf_t12_test_document_methods_memory_pages },
+  { "t12_test_document_methods", "__porf_auto_2__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_document_methods_export___porf_auto_2__onclick, NULL, &dong_porf_t12_test_document_methods_memory, &dong_porf_t12_test_document_methods_memory_pages },
+  { "t12_test_document_props", "__porf_auto_0__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_document_props_export___porf_auto_0__onclick, NULL, &dong_porf_t12_test_document_props_memory, &dong_porf_t12_test_document_props_memory_pages },
+  { "t12_test_document_props", "__porf_auto_1__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_document_props_export___porf_auto_1__onclick, NULL, &dong_porf_t12_test_document_props_memory, &dong_porf_t12_test_document_props_memory_pages },
+  { "t12_test_document_props", "__porf_auto_2__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_document_props_export___porf_auto_2__onclick, NULL, &dong_porf_t12_test_document_props_memory, &dong_porf_t12_test_document_props_memory_pages },
+  { "t12_test_dom_manipulation", "__porf_auto_0__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_dom_manipulation_export___porf_auto_0__onclick, NULL, &dong_porf_t12_test_dom_manipulation_memory, &dong_porf_t12_test_dom_manipulation_memory_pages },
+  { "t12_test_dom_manipulation", "__porf_auto_1__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_dom_manipulation_export___porf_auto_1__onclick, NULL, &dong_porf_t12_test_dom_manipulation_memory, &dong_porf_t12_test_dom_manipulation_memory_pages },
+  { "t12_test_dom_manipulation", "__porf_auto_2__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_dom_manipulation_export___porf_auto_2__onclick, NULL, &dong_porf_t12_test_dom_manipulation_memory, &dong_porf_t12_test_dom_manipulation_memory_pages },
+  { "t12_test_dom_manipulation", "__porf_auto_3__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_dom_manipulation_export___porf_auto_3__onclick, NULL, &dong_porf_t12_test_dom_manipulation_memory, &dong_porf_t12_test_dom_manipulation_memory_pages },
+  { "t12_test_dom_manipulation", "__porf_auto_4__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_dom_manipulation_export___porf_auto_4__onclick, NULL, &dong_porf_t12_test_dom_manipulation_memory, &dong_porf_t12_test_dom_manipulation_memory_pages },
+  { "t12_test_dom_manipulation", "__porf_auto_5__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_dom_manipulation_export___porf_auto_5__onclick, NULL, &dong_porf_t12_test_dom_manipulation_memory, &dong_porf_t12_test_dom_manipulation_memory_pages },
+  { "t12_test_event_istrusted", "__porf_auto_0__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_event_istrusted_export___porf_auto_0__onclick, NULL, &dong_porf_t12_test_event_istrusted_memory, &dong_porf_t12_test_event_istrusted_memory_pages },
+  { "t12_test_form_validation_comprehensive", "__porf_auto_0__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_form_validation_comprehensive_export___porf_auto_0__onclick, NULL, &dong_porf_t12_test_form_validation_comprehensive_memory, &dong_porf_t12_test_form_validation_comprehensive_memory_pages },
+  { "t12_test_form_validation_comprehensive", "__porf_auto_1__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_form_validation_comprehensive_export___porf_auto_1__onclick, NULL, &dong_porf_t12_test_form_validation_comprehensive_memory, &dong_porf_t12_test_form_validation_comprehensive_memory_pages },
+  { "t12_test_form_validation_comprehensive", "__porf_auto_2__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_form_validation_comprehensive_export___porf_auto_2__onclick, NULL, &dong_porf_t12_test_form_validation_comprehensive_memory, &dong_porf_t12_test_form_validation_comprehensive_memory_pages },
+  { "t12_test_form_validation_comprehensive", "__porf_auto_3__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_form_validation_comprehensive_export___porf_auto_3__onclick, NULL, &dong_porf_t12_test_form_validation_comprehensive_memory, &dong_porf_t12_test_form_validation_comprehensive_memory_pages },
+  { "t12_test_form_validation_comprehensive", "__porf_auto_4__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_form_validation_comprehensive_export___porf_auto_4__onclick, NULL, &dong_porf_t12_test_form_validation_comprehensive_memory, &dong_porf_t12_test_form_validation_comprehensive_memory_pages },
+  { "t12_test_form_validation_comprehensive", "__porf_auto_5__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_form_validation_comprehensive_export___porf_auto_5__onclick, NULL, &dong_porf_t12_test_form_validation_comprehensive_memory, &dong_porf_t12_test_form_validation_comprehensive_memory_pages },
+  { "t12_test_form_validation_comprehensive", "__porf_auto_6__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_form_validation_comprehensive_export___porf_auto_6__onclick, NULL, &dong_porf_t12_test_form_validation_comprehensive_memory, &dong_porf_t12_test_form_validation_comprehensive_memory_pages },
+  { "t12_test_html_element_props", "__porf_auto_0__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_html_element_props_export___porf_auto_0__onclick, NULL, &dong_porf_t12_test_html_element_props_memory, &dong_porf_t12_test_html_element_props_memory_pages },
+  { "t12_test_html_element_props", "__porf_auto_1__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_html_element_props_export___porf_auto_1__onclick, NULL, &dong_porf_t12_test_html_element_props_memory, &dong_porf_t12_test_html_element_props_memory_pages },
+  { "t12_test_html_element_props", "__porf_auto_2__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_html_element_props_export___porf_auto_2__onclick, NULL, &dong_porf_t12_test_html_element_props_memory, &dong_porf_t12_test_html_element_props_memory_pages },
+  { "t12_test_html_element_props", "__porf_auto_3__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_html_element_props_export___porf_auto_3__onclick, NULL, &dong_porf_t12_test_html_element_props_memory, &dong_porf_t12_test_html_element_props_memory_pages },
+  { "t12_test_html_element_props", "__porf_auto_4__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_html_element_props_export___porf_auto_4__onclick, NULL, &dong_porf_t12_test_html_element_props_memory, &dong_porf_t12_test_html_element_props_memory_pages },
+  { "t12_test_html_element_props", "__porf_auto_5__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_html_element_props_export___porf_auto_5__onclick, NULL, &dong_porf_t12_test_html_element_props_memory, &dong_porf_t12_test_html_element_props_memory_pages },
+  { "t12_test_html_element_props", "__porf_auto_6__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_html_element_props_export___porf_auto_6__onclick, NULL, &dong_porf_t12_test_html_element_props_memory, &dong_porf_t12_test_html_element_props_memory_pages },
+  { "t12_test_performance_now", "__porf_auto_0__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_performance_now_export___porf_auto_0__onclick, NULL, &dong_porf_t12_test_performance_now_memory, &dong_porf_t12_test_performance_now_memory_pages },
+  { "t12_test_performance_now", "__porf_auto_1__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_performance_now_export___porf_auto_1__onclick, NULL, &dong_porf_t12_test_performance_now_memory, &dong_porf_t12_test_performance_now_memory_pages },
+  { "t12_test_scroll_behavior_smooth", "__porf_auto_0__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_scroll_behavior_smooth_export___porf_auto_0__onclick, NULL, &dong_porf_t12_test_scroll_behavior_smooth_memory, &dong_porf_t12_test_scroll_behavior_smooth_memory_pages },
+  { "t12_test_scroll_behavior_smooth", "__porf_auto_1__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_scroll_behavior_smooth_export___porf_auto_1__onclick, NULL, &dong_porf_t12_test_scroll_behavior_smooth_memory, &dong_porf_t12_test_scroll_behavior_smooth_memory_pages },
+  { "t12_test_scroll_behavior_smooth", "__porf_auto_2__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_scroll_behavior_smooth_export___porf_auto_2__onclick, NULL, &dong_porf_t12_test_scroll_behavior_smooth_memory, &dong_porf_t12_test_scroll_behavior_smooth_memory_pages },
+  { "t12_test_scroll_behavior_smooth", "__porf_auto_3__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_scroll_behavior_smooth_export___porf_auto_3__onclick, NULL, &dong_porf_t12_test_scroll_behavior_smooth_memory, &dong_porf_t12_test_scroll_behavior_smooth_memory_pages },
+  { "t12_test_scroll_behavior_smooth_autoscroll_auto_bottom", "__porf_auto_0__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_scroll_behavior_smooth_autoscroll_auto_bottom_export___porf_auto_0__onclick, NULL, &dong_porf_t12_test_scroll_behavior_smooth_autoscroll_auto_bottom_memory, &dong_porf_t12_test_scroll_behavior_smooth_autoscroll_auto_bottom_memory_pages },
+  { "t12_test_scroll_behavior_smooth_autoscroll_auto_bottom", "__porf_auto_1__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_scroll_behavior_smooth_autoscroll_auto_bottom_export___porf_auto_1__onclick, NULL, &dong_porf_t12_test_scroll_behavior_smooth_autoscroll_auto_bottom_memory, &dong_porf_t12_test_scroll_behavior_smooth_autoscroll_auto_bottom_memory_pages },
+  { "t12_test_scroll_behavior_smooth_autoscroll_auto_bottom", "__porf_auto_2__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_scroll_behavior_smooth_autoscroll_auto_bottom_export___porf_auto_2__onclick, NULL, &dong_porf_t12_test_scroll_behavior_smooth_autoscroll_auto_bottom_memory, &dong_porf_t12_test_scroll_behavior_smooth_autoscroll_auto_bottom_memory_pages },
+  { "t12_test_scroll_behavior_smooth_autoscroll_auto_bottom", "__porf_auto_3__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_scroll_behavior_smooth_autoscroll_auto_bottom_export___porf_auto_3__onclick, NULL, &dong_porf_t12_test_scroll_behavior_smooth_autoscroll_auto_bottom_memory, &dong_porf_t12_test_scroll_behavior_smooth_autoscroll_auto_bottom_memory_pages },
+  { "t12_test_scroll_properties", "__porf_auto_0__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_scroll_properties_export___porf_auto_0__onclick, NULL, &dong_porf_t12_test_scroll_properties_memory, &dong_porf_t12_test_scroll_properties_memory_pages },
+  { "t12_test_scroll_properties", "__porf_auto_1__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_scroll_properties_export___porf_auto_1__onclick, NULL, &dong_porf_t12_test_scroll_properties_memory, &dong_porf_t12_test_scroll_properties_memory_pages },
+  { "t12_test_scroll_properties", "__porf_auto_2__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_scroll_properties_export___porf_auto_2__onclick, NULL, &dong_porf_t12_test_scroll_properties_memory, &dong_porf_t12_test_scroll_properties_memory_pages },
+  { "t12_test_scroll_properties", "__porf_auto_3__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_scroll_properties_export___porf_auto_3__onclick, NULL, &dong_porf_t12_test_scroll_properties_memory, &dong_porf_t12_test_scroll_properties_memory_pages },
+  { "t12_test_scroll_properties", "__porf_auto_4__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_scroll_properties_export___porf_auto_4__onclick, NULL, &dong_porf_t12_test_scroll_properties_memory, &dong_porf_t12_test_scroll_properties_memory_pages },
+  { "t12_test_scroll_properties", "__porf_auto_5__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_scroll_properties_export___porf_auto_5__onclick, NULL, &dong_porf_t12_test_scroll_properties_memory, &dong_porf_t12_test_scroll_properties_memory_pages },
+  { "t12_test_scroll_properties", "__porf_auto_6__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_scroll_properties_export___porf_auto_6__onclick, NULL, &dong_porf_t12_test_scroll_properties_memory, &dong_porf_t12_test_scroll_properties_memory_pages },
+  { "t12_test_select_basic", "country__onmousedown", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_select_basic_export_country__onmousedown, NULL, &dong_porf_t12_test_select_basic_memory, &dong_porf_t12_test_select_basic_memory_pages },
+  { "t12_test_select_basic", "country__onchange", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_select_basic_export_country__onchange, NULL, &dong_porf_t12_test_select_basic_memory, &dong_porf_t12_test_select_basic_memory_pages },
+  { "t12_test_select_basic", "color__onmousedown", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_select_basic_export_color__onmousedown, NULL, &dong_porf_t12_test_select_basic_memory, &dong_porf_t12_test_select_basic_memory_pages },
+  { "t12_test_select_basic", "color__onchange", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_select_basic_export_color__onchange, NULL, &dong_porf_t12_test_select_basic_memory, &dong_porf_t12_test_select_basic_memory_pages },
+  { "t12_test_select_basic", "fruit__onmousedown", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_select_basic_export_fruit__onmousedown, NULL, &dong_porf_t12_test_select_basic_memory, &dong_porf_t12_test_select_basic_memory_pages },
+  { "t12_test_select_basic", "fruit__onchange", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_select_basic_export_fruit__onchange, NULL, &dong_porf_t12_test_select_basic_memory, &dong_porf_t12_test_select_basic_memory_pages },
+  { "t12_test_submit_event", "__porf_auto_0__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_submit_event_export___porf_auto_0__onclick, NULL, &dong_porf_t12_test_submit_event_memory, &dong_porf_t12_test_submit_event_memory_pages },
+  { "t12_test_tabindex", "__porf_auto_0__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_tabindex_export___porf_auto_0__onclick, NULL, &dong_porf_t12_test_tabindex_memory, &dong_porf_t12_test_tabindex_memory_pages },
+  { "t12_test_tabindex", "__porf_auto_1__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_tabindex_export___porf_auto_1__onclick, NULL, &dong_porf_t12_test_tabindex_memory, &dong_porf_t12_test_tabindex_memory_pages },
+  { "t12_test_tabindex", "__porf_auto_2__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_tabindex_export___porf_auto_2__onclick, NULL, &dong_porf_t12_test_tabindex_memory, &dong_porf_t12_test_tabindex_memory_pages },
+  { "t12_test_tabindex", "__porf_auto_3__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_tabindex_export___porf_auto_3__onclick, NULL, &dong_porf_t12_test_tabindex_memory, &dong_porf_t12_test_tabindex_memory_pages },
+  { "t12_test_tabindex", "__porf_auto_4__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_test_tabindex_export___porf_auto_4__onclick, NULL, &dong_porf_t12_test_tabindex_memory, &dong_porf_t12_test_tabindex_memory_pages },
+  { "t10_fetch_json", "onFetchDone", NULL, 0, (dong_porf_export_fn0)dong_porf_t10_fetch_json_export_onFetchDone, NULL, &dong_porf_t10_fetch_json_memory, &dong_porf_t10_fetch_json_memory_pages },
+  { "t10_fetch_reject", "onFetchDone", NULL, 0, (dong_porf_export_fn0)dong_porf_t10_fetch_reject_export_onFetchDone, NULL, &dong_porf_t10_fetch_reject_memory, &dong_porf_t10_fetch_reject_memory_pages },
+  { "t10_fetch_text", "onFetchDone", NULL, 0, (dong_porf_export_fn0)dong_porf_t10_fetch_text_export_onFetchDone, NULL, &dong_porf_t10_fetch_text_memory, &dong_porf_t10_fetch_text_memory_pages },
+  { "t20_ce_interactive_sim", "onBold", NULL, 0, (dong_porf_export_fn0)dong_porf_t20_ce_interactive_sim_export_onBold, NULL, &dong_porf_t20_ce_interactive_sim_memory, &dong_porf_t20_ce_interactive_sim_memory_pages },
+  { "t20_ce_interactive_sim", "onItalic", NULL, 0, (dong_porf_export_fn0)dong_porf_t20_ce_interactive_sim_export_onItalic, NULL, &dong_porf_t20_ce_interactive_sim_memory, &dong_porf_t20_ce_interactive_sim_memory_pages },
+  { "t20_ce_interactive_sim", "onUnderline", NULL, 0, (dong_porf_export_fn0)dong_porf_t20_ce_interactive_sim_export_onUnderline, NULL, &dong_porf_t20_ce_interactive_sim_memory, &dong_porf_t20_ce_interactive_sim_memory_pages },
   { "t12_inline", "inc__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_inline_export_inc__onclick, NULL, &dong_porf_t12_inline_memory, &dong_porf_t12_inline_memory_pages },
   { "t12_inline", "__porf_auto_0__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_inline_export___porf_auto_0__onclick, NULL, &dong_porf_t12_inline_memory, &dong_porf_t12_inline_memory_pages },
 };
 
-const size_t dong_porf_handler_count = 20;
+const size_t dong_porf_handler_count = 94;
 
 const dong_porf_module_t* dong_porf_find_module(const char* name) {
   if (!name) return NULL;

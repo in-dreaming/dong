@@ -58,6 +58,7 @@ function registerAllImports() {
   imp('dong_str_len', 0, 1);
   imp('dong_str_read', 2, 1);
   imp('dong_str_byte_at', 1, 1);
+  imp('dong_str_pull', 0, 1);
   imp('dong_dom_addEventListener', 3, 0);
   imp('dong_timer_setTimeout', 2, 1);
   imp('dong_set_interval', 2, 1);
@@ -123,6 +124,9 @@ function registerAllImports() {
   imp('dong_parse_html', 1, 0);
   imp('dong_form_serialize', 1, 0);
   imp('dong_selection_text', 0, 0);
+  imp('dong_select_all', 0, 1);
+  imp('dong_exec_command', 2, 1);
+  imp('dong_query_command_supported', 1, 1);
 
   imp('dong_event_type', 0, 0);
   imp('dong_event_target', 0, 1);

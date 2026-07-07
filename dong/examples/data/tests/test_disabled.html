@@ -1,5 +1,6 @@
 <!DOCTYPE html>
-<html>
+<!-- porffor: ready -->
+<html data-porffor-module="t12_test_disabled">
 <head>
     <meta charset="UTF-8">
     <style>
@@ -92,22 +93,22 @@
         <div class="form-group">
             <label>Text Input:</label>
             <input type="text" id="textInput" value="Normal text input" placeholder="Type here">
-            <button class="toggle-btn" onclick="toggleDisabled('textInput')">Toggle Disabled</button>
+            <button id="__porf_auto_0" class="toggle-btn">Toggle Disabled</button>
         </div>
 
         <div class="form-group">
             <label>Checkbox:</label>
             <input type="checkbox" id="checkbox1" checked>
             <label for="checkbox1">Click me (can be disabled)</label>
-            <button class="toggle-btn" onclick="toggleDisabled('checkbox1')">Toggle Disabled</button>
+            <button id="__porf_auto_1" class="toggle-btn">Toggle Disabled</button>
         </div>
 
         <div class="form-group">
             <label>Radio Buttons:</label>
             <input type="radio" name="radio" id="radio1" checked> Option 1
-            <button class="toggle-btn" onclick="toggleDisabled('radio1')">Toggle Radio 1</button><br>
+            <button id="__porf_auto_2" class="toggle-btn">Toggle Radio 1</button><br>
             <input type="radio" name="radio" id="radio2"> Option 2
-            <button class="toggle-btn" onclick="toggleDisabled('radio2')">Toggle Radio 2</button>
+            <button id="__porf_auto_3" class="toggle-btn">Toggle Radio 2</button>
         </div>
 
         <div class="form-group">
@@ -117,25 +118,25 @@
                 <option>Choice B</option>
                 <option>Choice C</option>
             </select>
-            <button class="toggle-btn" onclick="toggleDisabled('select1')">Toggle Disabled</button>
+            <button id="__porf_auto_4" class="toggle-btn">Toggle Disabled</button>
         </div>
 
         <div class="form-group">
             <label>Textarea:</label>
             <textarea id="textarea1" rows="3">This is a textarea that can be disabled</textarea><br>
-            <button class="toggle-btn" onclick="toggleDisabled('textarea1')">Toggle Disabled</button>
+            <button id="__porf_auto_5" class="toggle-btn">Toggle Disabled</button>
         </div>
 
         <div class="form-group">
             <label>Button:</label>
-            <button id="button1" onclick="logClick('button1')">Click Me Button</button>
-            <button class="toggle-btn" onclick="toggleDisabled('button1')">Toggle Disabled</button>
+            <button id="button1">Click Me Button</button>
+            <button id="__porf_auto_6" class="toggle-btn">Toggle Disabled</button>
         </div>
 
         <div class="form-group">
             <label>Submit Button:</label>
-            <button id="submitBtn" type="submit" onclick="logClick('submitBtn')">Submit</button>
-            <button class="toggle-btn" onclick="toggleDisabled('submitBtn')">Toggle Disabled</button>
+            <button id="submitBtn" type="submit">Submit</button>
+            <button id="__porf_auto_7" class="toggle-btn">Toggle Disabled</button>
         </div>
     </div>
 
@@ -144,7 +145,7 @@
         <div class="log" id="interactionLog">
             <div style="color: #999;">Interactions will be logged here...</div>
         </div>
-        <button onclick="clearLog()" style="margin-top: 10px;">Clear Log</button>
+        <button id="__porf_auto_8" style="margin-top: 10px;">Clear Log</button>
     </div>
 
     <div class="container">

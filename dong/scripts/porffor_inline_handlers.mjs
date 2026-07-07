@@ -382,6 +382,7 @@ async function validateHandlerExport(prelude, exportName, body) {
   imp('dong_str_len', 0, 1);
   imp('dong_str_read', 2, 1);
   imp('dong_str_byte_at', 1, 1);
+  imp('dong_str_pull', 0, 1);
 
   globalThis.file = '__probe__';
   try {

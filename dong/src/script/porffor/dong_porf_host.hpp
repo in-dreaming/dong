@@ -72,6 +72,9 @@ public:
     void parseHtml(double html_ptr);
     void formSerialize(double form_node_id);
     void selectionText();
+    double selectAll();
+    double execCommand(double command_ptr, double value_ptr);
+    double queryCommandSupported(double command_ptr) const;
 
     void printString(double str_ptr);
     void benchLog(double str_ptr);
@@ -90,6 +93,7 @@ public:
     double strLen() const;
     double strRead(double dest_ptr, double max_len);
     double strByteAt(double index) const;
+    double strPull();
 
     void stage0(double v);
     void stage1(double v);
@@ -179,6 +183,7 @@ private:
     PorfforScriptRegistry* registry_ = nullptr;
     char* memory_ = nullptr;
     unsigned int* memory_pages_ = nullptr;
+    size_t pull_bump_ = 49152;
 
     double stage_0_ = 0;
     double stage_1_ = 0;

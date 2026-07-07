@@ -1,5 +1,6 @@
 <!DOCTYPE html>
-<html>
+<!-- porffor: ready -->
+<html data-porffor-module="t10_fetch_reject">
 <head>
 <style>
 body { font-family: sans-serif; padding: 20px; }
@@ -12,23 +13,5 @@ body { font-family: sans-serif; padding: 20px; }
 <h2>fetch() Rejection Test</h2>
 <div id="result">Loading...</div>
 
-<script>
-var result = document.getElementById('result');
-
-fetch('nonexistent_file_xyz.txt')
-    .then(function(response) {
-        result.textContent = 'FAIL: fetch should have rejected but got response';
-        result.className = 'fail';
-    })
-    .catch(function(err) {
-        if (typeof err === 'string' && err.length > 0) {
-            result.textContent = 'PASS: fetch correctly rejected: ' + err;
-            result.className = 'pass';
-        } else {
-            result.textContent = 'FAIL: rejection error is empty or wrong type';
-            result.className = 'fail';
-        }
-    });
-</script>
 </body>
 </html>

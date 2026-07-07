@@ -63,6 +63,37 @@ let md = `# T13 — 全量测试迁移盘点
 | 无 script（静态渲染） | ${rows.filter((r) => r.hasScript === 'no').length} |
 | 有 script | ${rows.filter((r) => r.hasScript === 'yes').length} |
 
+## blocked 分批（显式标记）
+
+| 阻塞任务 | 数量 |
+|----------|------|
+${Object.entries(
+  rows
+    .filter((r) => r.status === 'blocked' && r.reason)
+    .reduce((acc, r) => {
+      acc[r.reason] = (acc[r.reason] ?? 0) + 1;
+      return acc;
+    }, {}),
+)
+  .sort((a, b) => b[1] - a[1])
+  .map(([k, v]) => `| blocked(${k}) | ${v} |`)
+  .join('\n')}
+
+| dropped 原因 | 数量 |
+|-------------|------|
+${Object.entries(
+  rows
+    .filter((r) => r.status === 'dropped' && r.reason)
+    .reduce((acc, r) => {
+      acc[r.reason] = (acc[r.reason] ?? 0) + 1;
+      return acc;
+    }, {}),
+)
+  .map(([k, v]) => `| ${k} | ${v} |`)
+  .join('\n') || '| — | 0 |'}
+
+详见 [T13-pending-batches.md](./T13-pending-batches.md)。
+
 ## 构建组织选型（阶段 0 定稿）
 
 **选定方案：a) 单 test runner 链接全部 Porffor 模块**

@@ -1,0 +1,7 @@
+{
+  "frames": 2,
+  "_t14Note": "auto bold on parse; needs C++ drive or ce_bold snippet (Plan B)",
+  "_snippetSource": "snippets/ce_bold_after_frame0.js",
+  "callExportAfterFrame0": "qj_ce_bold_after_frame0::__snippet_ce_bold_after_frame0",
+  "_status": "plan_b_pending"
+}

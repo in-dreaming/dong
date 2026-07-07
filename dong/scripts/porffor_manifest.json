@@ -5,6 +5,31 @@
       "name": "porf_counter",
       "porf": "examples/porffor-ui/counter.porf",
       "path": "examples/porffor-ui/porf_counter.js"
+    },
+    {
+      "name": "porf_todo",
+      "porf": "examples/porffor-ui/todo.porf",
+      "path": "examples/porffor-ui/porf_todo.js",
+      "exports": [
+        "onAdd",
+        "onInputChange",
+        "onKeyDown",
+        "onFilterAll",
+        "onFilterActive",
+        "onFilterDone",
+        "onClearDone",
+        "onListClick"
+      ]
+    },
+    {
+      "name": "porf_game_ui",
+      "porf": "examples/porffor-ui/game-ui.porf",
+      "path": "examples/porffor-ui/porf_game_ui.js",
+      "exports": [
+        "onDamage",
+        "onHeal",
+        "onScoreTick"
+      ]
     }
   ],
   "inline_html": [
@@ -19,7 +44,9 @@
     {
       "name": "hello_dom",
       "path": "examples/porffor/hello_dom.js",
-      "exports": ["onBtnClick"]
+      "exports": [
+        "onBtnClick"
+      ]
     },
     {
       "name": "js_microbench",
@@ -52,22 +79,32 @@
     {
       "name": "test_mf_text",
       "path": "examples/porffor/tests/test_mf_text.js",
-      "exports": ["afterFrame0"]
+      "exports": [
+        "afterFrame0"
+      ]
     },
     {
       "name": "test_mf_class",
       "path": "examples/porffor/tests/test_mf_class.js",
-      "exports": ["afterFrame0"]
+      "exports": [
+        "afterFrame0"
+      ]
     },
     {
       "name": "test_mf_style",
       "path": "examples/porffor/tests/test_mf_style.js",
-      "exports": ["afterFrame0"]
+      "exports": [
+        "afterFrame0"
+      ]
     },
     {
       "name": "porf_counter",
       "path": "examples/porffor-ui/porf_counter.js",
-      "exports": ["onInc", "onDec", "onReset"]
+      "exports": [
+        "onInc",
+        "onDec",
+        "onReset"
+      ]
     },
     {
       "name": "porf_todo",
@@ -86,7 +123,223 @@
     {
       "name": "porf_game_ui",
       "path": "examples/porffor-ui/porf_game_ui.js",
-      "exports": ["onDamage", "onHeal", "onScoreTick"]
+      "exports": [
+        "onDamage",
+        "onHeal",
+        "onScoreTick"
+      ]
+    },
+    {
+      "name": "t12_focus_visible_test",
+      "path": "generated/porffor/t12_focus_visible_test.js",
+      "exports": [
+        "__porf_auto_0__onclick"
+      ]
+    },
+    {
+      "name": "t12_test_disabled",
+      "path": "generated/porffor/t12_test_disabled.js",
+      "exports": [
+        "__porf_auto_0__onclick",
+        "__porf_auto_1__onclick",
+        "__porf_auto_2__onclick",
+        "__porf_auto_3__onclick",
+        "__porf_auto_4__onclick",
+        "__porf_auto_5__onclick",
+        "button1__onclick",
+        "__porf_auto_6__onclick",
+        "submitBtn__onclick",
+        "__porf_auto_7__onclick",
+        "__porf_auto_8__onclick"
+      ]
+    },
+    {
+      "name": "t12_test_document_methods",
+      "path": "generated/porffor/t12_test_document_methods.js",
+      "exports": [
+        "__porf_auto_0__onclick",
+        "__porf_auto_1__onclick",
+        "__porf_auto_2__onclick"
+      ]
+    },
+    {
+      "name": "t12_test_document_props",
+      "path": "generated/porffor/t12_test_document_props.js",
+      "exports": [
+        "__porf_auto_0__onclick",
+        "__porf_auto_1__onclick",
+        "__porf_auto_2__onclick"
+      ]
+    },
+    {
+      "name": "t12_test_dom_manipulation",
+      "path": "generated/porffor/t12_test_dom_manipulation.js",
+      "exports": [
+        "__porf_auto_0__onclick",
+        "__porf_auto_1__onclick",
+        "__porf_auto_2__onclick",
+        "__porf_auto_3__onclick",
+        "__porf_auto_4__onclick",
+        "__porf_auto_5__onclick"
+      ]
+    },
+    {
+      "name": "t12_test_event_istrusted",
+      "path": "generated/porffor/t12_test_event_istrusted.js",
+      "exports": [
+        "__porf_auto_0__onclick"
+      ]
+    },
+    {
+      "name": "t12_test_form_validation_comprehensive",
+      "path": "generated/porffor/t12_test_form_validation_comprehensive.js",
+      "exports": [
+        "__porf_auto_0__onclick",
+        "__porf_auto_1__onclick",
+        "__porf_auto_2__onclick",
+        "__porf_auto_3__onclick",
+        "__porf_auto_4__onclick",
+        "__porf_auto_5__onclick",
+        "__porf_auto_6__onclick"
+      ]
+    },
+    {
+      "name": "t12_test_html_element_props",
+      "path": "generated/porffor/t12_test_html_element_props.js",
+      "exports": [
+        "__porf_auto_0__onclick",
+        "__porf_auto_1__onclick",
+        "__porf_auto_2__onclick",
+        "__porf_auto_3__onclick",
+        "__porf_auto_4__onclick",
+        "__porf_auto_5__onclick",
+        "__porf_auto_6__onclick"
+      ]
+    },
+    {
+      "name": "t12_test_performance_now",
+      "path": "generated/porffor/t12_test_performance_now.js",
+      "exports": [
+        "__porf_auto_0__onclick",
+        "__porf_auto_1__onclick"
+      ]
+    },
+    {
+      "name": "t12_test_scroll_behavior_smooth",
+      "path": "generated/porffor/t12_test_scroll_behavior_smooth.js",
+      "exports": [
+        "__porf_auto_0__onclick",
+        "__porf_auto_1__onclick",
+        "__porf_auto_2__onclick",
+        "__porf_auto_3__onclick"
+      ]
+    },
+    {
+      "name": "t12_test_scroll_behavior_smooth_autoscroll_auto_bottom",
+      "path": "generated/porffor/t12_test_scroll_behavior_smooth_autoscroll_auto_bottom.js",
+      "exports": [
+        "__porf_auto_0__onclick",
+        "__porf_auto_1__onclick",
+        "__porf_auto_2__onclick",
+        "__porf_auto_3__onclick"
+      ]
+    },
+    {
+      "name": "t12_test_scroll_properties",
+      "path": "generated/porffor/t12_test_scroll_properties.js",
+      "exports": [
+        "__porf_auto_0__onclick",
+        "__porf_auto_1__onclick",
+        "__porf_auto_2__onclick",
+        "__porf_auto_3__onclick",
+        "__porf_auto_4__onclick",
+        "__porf_auto_5__onclick",
+        "__porf_auto_6__onclick"
+      ]
+    },
+    {
+      "name": "t12_test_select_basic",
+      "path": "generated/porffor/t12_test_select_basic.js",
+      "exports": [
+        "country__onmousedown",
+        "country__onchange",
+        "color__onmousedown",
+        "color__onchange",
+        "fruit__onmousedown",
+        "fruit__onchange"
+      ]
+    },
+    {
+      "name": "t12_test_submit_event",
+      "path": "generated/porffor/t12_test_submit_event.js",
+      "exports": [
+        "__porf_auto_0__onclick"
+      ]
+    },
+    {
+      "name": "t12_test_tabindex",
+      "path": "generated/porffor/t12_test_tabindex.js",
+      "exports": [
+        "__porf_auto_0__onclick",
+        "__porf_auto_1__onclick",
+        "__porf_auto_2__onclick",
+        "__porf_auto_3__onclick",
+        "__porf_auto_4__onclick"
+      ]
+    },
+    {
+      "name": "t10_fetch_json",
+      "path": "examples/porffor/tests/t10_fetch_json.js",
+      "exports": [
+        "onFetchDone"
+      ]
+    },
+    {
+      "name": "t10_fetch_reject",
+      "path": "examples/porffor/tests/t10_fetch_reject.js",
+      "exports": [
+        "onFetchDone"
+      ]
+    },
+    {
+      "name": "t10_fetch_text",
+      "path": "examples/porffor/tests/t10_fetch_text.js",
+      "exports": [
+        "onFetchDone"
+      ]
+    },
+    {
+      "name": "t20_bold_dynamic",
+      "path": "examples/porffor/tests/t20_bold_dynamic.js"
+    },
+    {
+      "name": "t20_bold_layout_debug",
+      "path": "examples/porffor/tests/t20_bold_layout_debug.js"
+    },
+    {
+      "name": "t20_ce_interactive_sim",
+      "path": "examples/porffor/tests/t20_ce_interactive_sim.js",
+      "exports": [
+        "onBold",
+        "onItalic",
+        "onUnderline"
+      ]
+    },
+    {
+      "name": "t20_ce_simulate",
+      "path": "examples/porffor/tests/t20_ce_simulate.js"
+    },
+    {
+      "name": "t20_contenteditable_auto",
+      "path": "examples/porffor/tests/t20_contenteditable_auto.js"
+    },
+    {
+      "name": "t20_contenteditable_bold_auto",
+      "path": "examples/porffor/tests/t20_contenteditable_bold_auto.js"
+    },
+    {
+      "name": "t20_contenteditable_features",
+      "path": "examples/porffor/tests/t20_contenteditable_features.js"
     }
   ],
   "snippets": []

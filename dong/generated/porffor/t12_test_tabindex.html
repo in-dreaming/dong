@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<!-- porffor: blocked(T12) -->
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            font-family: Arial;
+            padding: 20px;
+            background: #f0f0f0;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .test-section {
+            margin: 15px 0;
+            padding: 15px;
+            background: #f9f9f9;
+            border-left: 3px solid #2196f3;
+        }
+        button {
+            padding: 8px 16px;
+            margin: 5px;
+            background: #2196f3;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #1976d2;
+        }
+        .result {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            margin-top: 10px;
+            font-size: 14px;
+        }
+        .focusable {
+            padding: 10px;
+            margin: 5px;
+            background: #e3f2fd;
+            border: 2px solid #2196f3;
+            border-radius: 4px;
+        }
+        .focusable:focus {
+            outline: 3px solid #ff9800;
+            outline-offset: 2px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Element.tabIndex Property Test</h1>
+
+    <div class="container">
+        <h2>Tab Order Control</h2>
+        <p>tabIndex controls keyboard navigation order (Tab key). -1 means not in tab order but focusable programmatically.</p>
+
+        <div class="test-section">
+            <h3>Test 1: Read tabIndex values</h3>
+            <div id="elem1" class="focusable" tabindex="0">Element with tabIndex=0</div>
+            <div id="elem2" class="focusable" tabindex="1">Element with tabIndex=1</div>
+            <div id="elem3" class="focusable" tabindex="-1">Element with tabIndex=-1</div>
+            <div id="elem4" class="focusable">Element without tabindex attribute</div>
+            <br>
+            <button id="__porf_auto_0">Read tabIndex Values</button>
+            <div id="result1" class="result"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>Test 2: Set tabIndex dynamically</h3>
+            <div id="elem5" class="focusable">Element to modify</div>
+            <br>
+            <button id="__porf_auto_1">Set tabIndex=0</button>
+            <button id="__porf_auto_2">Set tabIndex=1</button>
+            <button id="__porf_auto_3">Set tabIndex=-1</button>
+            <div id="result2" class="result"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>Test 3: Tab order demonstration</h3>
+            <p>Use Tab key to navigate. Order should be: 1 → 2 → 3 → 0</p>
+            <div id="order1" class="focusable" tabindex="1">Tab order: 1</div>
+            <div id="order2" class="focusable" tabindex="2">Tab order: 2</div>
+            <div id="order3" class="focusable" tabindex="3">Tab order: 3</div>
+            <div id="order0" class="focusable" tabindex="0">Tab order: 0 (natural order)</div>
+        </div>
+
+        <div class="test-section">
+            <h3>Test 4: Programmatic focus with tabIndex=-1</h3>
+            <p>tabIndex=-1 elements can't be reached by Tab but can be focused programmatically</p>
+            <div id="hiddenFocus" class="focusable" tabindex="-1">Click button to focus me</div>
+            <br>
+            <button id="__porf_auto_4">Focus the hidden element</button>
+            <div id="result4" class="result"></div>
+        </div>
+    </div>
+
+    <script>
+        function testReadTabIndex() {
+            const elem1 = document.getElementById('elem1');
+            const elem2 = document.getElementById('elem2');
+            const elem3 = document.getElementById('elem3');
+            const elem4 = document.getElementById('elem4');
+
+            document.getElementById('result1').innerHTML =
+                'elem1 (tabindex="0"): ' + elem1.tabIndex + '<br>' +
+                'elem2 (tabindex="1"): ' + elem2.tabIndex + '<br>' +
+                'elem3 (tabindex="-1"): ' + elem3.tabIndex + '<br>' +
+                'elem4 (no tabindex): ' + elem4.tabIndex;
+        }
+
+        function setTabIndex(value) {
+            const elem = document.getElementById('elem5');
+            const oldValue = elem.tabIndex;
+            elem.tabIndex = value;
+            const newValue = elem.tabIndex;
+
+            document.getElementById('result2').innerHTML =
+                'Old tabIndex: ' + oldValue + '<br>' +
+                'Set to: ' + value + '<br>' +
+                'New tabIndex: ' + newValue + '<br>' +
+                'Attribute: ' + elem.getAttribute('tabindex');
+        }
+
+        function focusHiddenElement() {
+            const elem = document.getElementById('hiddenFocus');
+            elem.focus();
+
+            document.getElementById('result4').innerHTML =
+                'Element focused programmatically<br>' +
+                'tabIndex: ' + elem.tabIndex + '<br>' +
+                'Can be focused by Tab: No (because tabIndex=-1)';
+        }
+
+        // Track focus events to show tab order
+        document.querySelectorAll('.focusable').forEach(elem => {
+            elem.addEventListener('focus', function() {
+                console.log('Focused:', this.id, 'tabIndex:', this.tabIndex);
+            });
+        });
+
+        // Initial logging
+        console.log('tabIndex test page loaded');
+        console.log('Test elements:', {
+            elem1: document.getElementById('elem1').tabIndex,
+            elem2: document.getElementById('elem2').tabIndex,
+            elem3: document.getElementById('elem3').tabIndex,
+            elem4: document.getElementById('elem4').tabIndex
+        });
+    </script>
+</body>
+</html>

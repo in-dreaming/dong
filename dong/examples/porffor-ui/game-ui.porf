@@ -1,0 +1,140 @@
+---
+module: porf_game_ui
+exports: onDamage, onHeal, onScoreTick
+body-style: width: 100%; height: 100%; background: #0a1628;
+---
+
+<template>
+<!-- porf-partial name="HealthBar" -->
+<div style="margin-bottom:8px;">
+  <div style="display:flex;justify-content:space-between;font-size:12px;color:#bdc3c7;margin-bottom:4px;">
+    <span>{{label}}</span>
+    <span id="{{labelValId}}">85/100</span>
+  </div>
+  <div style="width:200px;height:8px;background:#2c3e50;border-radius:4px;overflow:hidden;">
+    <div id="{{fillId}}" style="width:85%;height:100%;background:#27ae60;border-radius:4px;"></div>
+  </div>
+</div>
+<!-- /porf-partial -->
+
+<!-- porf-partial name="ScoreDisplay" -->
+<div style="text-align:right;padding:10px;">
+  <div style="font-size:14px;color:#95a5a6;">SCORE</div>
+  <div id="{{scoreMainId}}" style="font-size:28px;font-weight:bold;color:#ecf0f1;">12750</div>
+  <div style="font-size:11px;color:#7f8c8d;">HI: {{highScore}}</div>
+</div>
+<!-- /porf-partial -->
+
+<!-- porf-partial name="Minimap" -->
+<div style="width:120px;height:120px;background:#1a252f;border:2px solid #34495e;border-radius:4px;display:flex;align-items:center;justify-content:center;position:relative;">
+  <div style="width:6px;height:6px;background:#3498db;border-radius:50%;"></div>
+  <div style="position:absolute;bottom:2px;right:4px;font-size:9px;color:#7f8c8d;">MAP</div>
+</div>
+<!-- /porf-partial -->
+
+<!-- porf-partial name="Hotbar" -->
+<div style="display:flex;gap:4px;">
+  <div style="width:48px;height:48px;background:#2c3e50;border:1px solid #34495e;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:20px;position:relative;">&#9876;<span style="position:absolute;top:1px;left:3px;font-size:8px;color:#7f8c8d;">1</span></div>
+  <div style="width:48px;height:48px;background:#2c3e50;border:1px solid #34495e;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:20px;position:relative;">&#128737;<span style="position:absolute;top:1px;left:3px;font-size:8px;color:#7f8c8d;">2</span></div>
+  <div style="width:48px;height:48px;background:#2c3e50;border:1px solid #34495e;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:20px;position:relative;">&#10084;<span style="position:absolute;bottom:1px;right:3px;font-size:10px;color:#bdc3c7;">3</span><span style="position:absolute;top:1px;left:3px;font-size:8px;color:#7f8c8d;">3</span></div>
+  <div style="width:48px;height:48px;background:#2c3e50;border:1px solid #34495e;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:20px;position:relative;">&#9733;<span style="position:absolute;bottom:1px;right:3px;font-size:10px;color:#bdc3c7;">7</span><span style="position:absolute;top:1px;left:3px;font-size:8px;color:#7f8c8d;">4</span></div>
+  <div style="width:48px;height:48px;background:#1a252f;border:1px solid #34495e;border-radius:4px;position:relative;"><span style="position:absolute;top:1px;left:3px;font-size:8px;color:#7f8c8d;">5</span></div>
+  <div style="width:48px;height:48px;background:#1a252f;border:1px solid #34495e;border-radius:4px;position:relative;"><span style="position:absolute;top:1px;left:3px;font-size:8px;color:#7f8c8d;">6</span></div>
+  <div style="width:48px;height:48px;background:#1a252f;border:1px solid #34495e;border-radius:4px;position:relative;"><span style="position:absolute;top:1px;left:3px;font-size:8px;color:#7f8c8d;">7</span></div>
+  <div style="width:48px;height:48px;background:#1a252f;border:1px solid #34495e;border-radius:4px;position:relative;"><span style="position:absolute;top:1px;left:3px;font-size:8px;color:#7f8c8d;">8</span></div>
+</div>
+<!-- /porf-partial -->
+
+<div id="hud-root" style="width:100%;height:100%;font-family:sans-serif;color:#ecf0f1;position:relative;background:#0a1628;">
+  <div style="position:absolute;top:15px;left:15px;">
+    <!-- porf-use partial="HealthBar" props="label=HP fillId=hp-fill labelValId=hp-label-val" -->
+    <!-- porf-use partial="HealthBar" props="label=MP fillId=mp-fill labelValId=mp-label-val" -->
+    <div style="display:flex;gap:6px;margin-top:8px;">
+      <button id="btn-damage" data-porf-on="click:onDamage" style="padding:4px 10px;font-size:11px;background:#e74c3c;color:white;border:none;border-radius:3px;">Damage</button>
+      <button id="btn-heal" data-porf-on="click:onHeal" style="padding:4px 10px;font-size:11px;background:#27ae60;color:white;border:none;border-radius:3px;">Heal</button>
+    </div>
+  </div>
+  <div style="position:absolute;top:15px;right:15px;">
+    <!-- porf-use partial="ScoreDisplay" props="scoreMainId=score-main highScore=50000" -->
+  </div>
+  <div style="position:absolute;bottom:15px;right:15px;">
+    <!-- porf-use partial="Minimap" props="" -->
+  </div>
+  <div style="position:absolute;bottom:15px;left:50%;margin-left:-208px;">
+    <!-- porf-use partial="Hotbar" props="" -->
+  </div>
+</div>
+</template>
+
+<script>
+var hp = 85;
+var mp = 60;
+var score = 12750;
+var highScore = 50000;
+var scoreTimerId = 0;
+var scoreTick = 0;
+
+function hpBarColor(pct) {
+  if (pct > 60) {
+    return '#27ae60';
+  }
+  if (pct > 30) {
+    return '#f39c12';
+  }
+  return '#e74c3c';
+}
+
+function porfPatchHp() {
+  var pct = hp;
+  if (pct < 0) { pct = 0; }
+  if (pct > 100) { pct = 100; }
+  setStyle(hp_fillId, 'width', String(pct) + '%');
+  setStyle(hp_fillId, 'background-color', hpBarColor(pct));
+  setTextContent(hp_label_valId, String(hp) + '/100');
+}
+
+function porfPatchMp() {
+  var pct = mp;
+  if (pct < 0) { pct = 0; }
+  if (pct > 100) { pct = 100; }
+  setStyle(mp_fillId, 'width', String(pct) + '%');
+  setStyle(mp_fillId, 'background-color', hpBarColor(pct));
+  setTextContent(mp_label_valId, String(mp) + '/100');
+}
+
+function porfPatchScore() {
+  setTextContent(score_mainId, String(score));
+}
+
+function porfRefresh() {
+  porfPatchHp();
+  porfPatchMp();
+  porfPatchScore();
+  if (scoreTimerId === 0) {
+    scoreTimerId = setInterval('onScoreTick', 1000);
+  }
+}
+
+export function onDamage() {
+  hp = hp - 10;
+  if (hp < 0) {
+    hp = 0;
+  }
+  porfPatchHp();
+}
+
+export function onHeal() {
+  hp = hp + 15;
+  if (hp > 100) {
+    hp = 100;
+  }
+  porfPatchHp();
+}
+
+export function onScoreTick() {
+  scoreTick = scoreTick + 1;
+  var bump = 5 + (scoreTick % 5);
+  score = score + bump;
+  porfPatchScore();
+}
+</script>

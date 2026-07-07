@@ -127,6 +127,7 @@ PorfforHost::PorfforHost() {
 void PorfforHost::setActiveMemory(char* memory, unsigned int* memory_pages) {
     memory_ = memory;
     memory_pages_ = memory_pages;
+    pull_bump_ = 49152;
 }
 
 char* PorfforHost::activeMemory() const {
@@ -221,6 +222,33 @@ double PorfforHost::strByteAt(double index) const {
         return -1;
     }
     return static_cast<double>(static_cast<unsigned char>(result_slot_[i]));
+}
+
+double PorfforHost::strPull() {
+    char* memory = activeMemory();
+    if (!memory) {
+        return 0.0;
+    }
+    const size_t len = result_slot_.size();
+    if (len > kMaxImportStringBytes) {
+        return 0.0;
+    }
+    const size_t need = 4 + len;
+    pull_bump_ = (pull_bump_ + 7) & ~size_t(7);
+    const size_t cap = memoryCapacityBytes();
+    if (pull_bump_ + need > cap) {
+        pull_bump_ = 49152;
+        if (pull_bump_ + need > cap) {
+            return 0.0;
+        }
+    }
+    const size_t ptr = pull_bump_;
+    *reinterpret_cast<u32*>(memory + ptr) = static_cast<u32>(len);
+    if (len > 0) {
+        std::memcpy(memory + ptr + 4, result_slot_.data(), len);
+    }
+    pull_bump_ += need;
+    return static_cast<double>(ptr);
 }
 
 void PorfforHost::printString(double str_ptr) {
@@ -1191,6 +1219,39 @@ void PorfforHost::selectionText() {
     setResultString(bindings->getSelectionText());
 }
 
+double PorfforHost::selectAll() {
+    auto* bindings = activeBindings();
+    if (!bindings) {
+        return 0.0;
+    }
+    return bindings->selectAllEditable() ? 1.0 : 0.0;
+}
+
+double PorfforHost::execCommand(double command_ptr, double value_ptr) {
+    auto* bindings = activeBindings();
+    if (!bindings) {
+        return 0.0;
+    }
+    const std::string command = readByteString(command_ptr);
+    const std::string value = readByteString(value_ptr);
+    if (command.empty()) {
+        return 0.0;
+    }
+    return bindings->execCommand(command, value) ? 1.0 : 0.0;
+}
+
+double PorfforHost::queryCommandSupported(double command_ptr) const {
+    auto* bindings = activeBindings();
+    if (!bindings) {
+        return 0.0;
+    }
+    const std::string command = readByteString(command_ptr);
+    if (command.empty()) {
+        return 0.0;
+    }
+    return bindings->queryCommandSupported(command) ? 1.0 : 0.0;
+}
+
 void PorfforHost::processTimers(double now_ms) {
     if (timers_.empty() || !registry_) {
         return;
@@ -1300,6 +1361,10 @@ f64 __porf_import_dong_str_read(f64 dest_ptr, f64 max_len) {
 
 f64 __porf_import_dong_str_byte_at(f64 index) {
     return g_active_host ? g_active_host->strByteAt(index) : -1.0;
+}
+
+f64 __porf_import_dong_str_pull(void) {
+    return g_active_host ? g_active_host->strPull() : 0.0;
 }
 
 void __porf_import_dong_dom_addEventListener(f64 node_id, f64 type_ptr, f64 handler_ptr) {
@@ -1629,6 +1694,18 @@ void __porf_import_dong_selection_text(void) {
     if (g_active_host) {
         g_active_host->selectionText();
     }
+}
+
+f64 __porf_import_dong_select_all(void) {
+    return g_active_host ? g_active_host->selectAll() : 0.0;
+}
+
+f64 __porf_import_dong_exec_command(f64 command_ptr, f64 value_ptr) {
+    return g_active_host ? g_active_host->execCommand(command_ptr, value_ptr) : 0.0;
+}
+
+f64 __porf_import_dong_query_command_supported(f64 command_ptr) {
+    return g_active_host ? g_active_host->queryCommandSupported(command_ptr) : 0.0;
 }
 
 void __porf_import_dong_event_type(void) {

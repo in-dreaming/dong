@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<!-- porffor: blocked(T12) -->
+<html>
+<head>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        h1 {
+            color: #333;
+        }
+        .test-box {
+            background-color: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        select {
+            padding: 10px;
+            font-size: 16px;
+            border: 2px solid #4caf50;
+            border-radius: 4px;
+            background-color: white;
+            width: 250px;
+            margin: 10px 0;
+        }
+        .red-select {
+            border-color: #f44336;
+            color: #f44336;
+        }
+        .blue-select {
+            border-color: #2196f3;
+            background-color: #e3f2fd;
+        }
+    </style>
+</head>
+<body>
+    <h1>Select Element Basic Rendering Test</h1>
+
+    <div class="test-box" style="border-left:6px solid #ff9800;">
+        <h2>Event Log (Top)</h2>
+        <p>点击/切换后日志会追加到这里（无需滚动页面）</p>
+        <div id="event-log" style="background:#111;color:#f5f5f5;padding:10px;border-radius:6px;max-height:140px;overflow:auto;font-family:Menlo,Monaco,Consolas,'Courier New',monospace;font-size:14px;line-height:18px;"></div>
+    </div>
+
+    <div class="test-box">
+        <h2>Test 1: Default Select</h2>
+        <p>Should show "United States" with dropdown arrow</p>
+        <select id="country">
+            <option value="us">United States</option>
+            <option value="uk">United Kingdom</option>
+            <option value="ca">Canada</option>
+        </select>
+    </div>
+
+    <div class="test-box">
+        <h2>Test 2: Red Border Select</h2>
+        <p>Should show "Red" with red border and text</p>
+        <select class="red-select" id="color">
+            <option value="red">Red</option>
+            <option value="blue">Blue</option>
+            <option value="green">Green</option>
+        </select>
+    </div>
+
+    <div class="test-box">
+        <h2>Test 3: Blue Background Select</h2>
+        <p>Should show "Apple" with blue background</p>
+        <select class="blue-select" id="fruit">
+            <option value="apple">Apple</option>
+            <option value="banana">Banana</option>
+            <option value="orange">Orange</option>
+        </select>
+    </div>
+
+    <div class="test-box">
+        <h2>Event Log</h2>
+        <p>Change/select events should append logs here (and also console.log)</p>
+        <div id="event-log-bottom" style="background:#111;color:#f5f5f5;padding:10px;border-radius:6px;max-height:180px;overflow:auto;font-family:Menlo,Monaco,Consolas,'Courier New',monospace;font-size:14px;line-height:18px;"></div>
+    </div>
+
+    <script>
+        function __dongAppendLogTo(id, line) {
+            var el = document.getElementById(id);
+            if (!el) return;
+
+            // 用 DOM 节点逐条追加，避免依赖 "\n" 渲染/换行规则
+            if (document && document.createElement) {
+                var entry = document.createElement('div');
+                entry.textContent = String(line);
+                entry.style.padding = '2px 0';
+                entry.style.borderBottom = '1px solid rgba(255,255,255,0.12)';
+                el.appendChild(entry);
+
+                // 限制条数，避免无限增长
+                while (el.childNodes && el.childNodes.length > 120) {
+                    el.removeChild(el.firstChild);
+                }
+            } else {
+                el.textContent = (el.textContent || '') + String(line) + "\n";
+            }
+
+            el.scrollTop = el.scrollHeight;
+        }
+
+        function __dongAppendLog(line) {
+            __dongAppendLogTo('event-log', line);
+            __dongAppendLogTo('event-log-bottom', line);
+        }
+
+        // 供 inline handler 调用（注意：dong 的 JS 环境可能没有 window）
+        function __dongLogSelect(prefix, sel) {
+            try {
+                if (!sel) return;
+                var line = String(prefix) + ' id=' + sel.id + ' value="' + sel.value + '" selectedIndex=' + sel.selectedIndex;
+                if (typeof console !== 'undefined' && console && console.log) {
+                    console.log(line);
+                }
+                __dongAppendLog(line);
+            } catch (e) {
+                __dongAppendLog('[error] __dongLogSelect exception');
+            }
+        }
+
+        function __dongInitSelectLogger(id) {
+            var sel = document.getElementById(id);
+            if (!sel) return;
+            __dongLogSelect('[init]', sel);
+
+            // 冗余注册：如果 addEventListener 可用，额外打一份日志
+            if (sel.addEventListener) {
+                sel.addEventListener('change', function () { __dongLogSelect('[change:addEventListener]', sel); });
+                sel.addEventListener('mousedown', function () { __dongLogSelect('[mousedown:addEventListener]', sel); });
+            }
+        }
+
+        __dongAppendLog('Select basic rendering test loaded');
+        __dongAppendLog('JS OK');
+
+        __dongInitSelectLogger('country');
+        __dongInitSelectLogger('color');
+        __dongInitSelectLogger('fruit');
+    </script>
+</body>
+</html>

@@ -5,6 +5,7 @@ var btn_decId = 0;
 var btn_resetId = 0;
 var btn_incId = 0;
 
+
 function porfPatch_count() {
   setTextContent(count_displayId, String(count));
 }

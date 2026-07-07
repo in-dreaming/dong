@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- porffor: ready -->
 <html>
 <head>
 <meta charset="utf-8">
@@ -16,7 +17,7 @@ body { font-family: sans-serif; padding: 20px; }
 #log { margin-top: 10px; padding: 10px; border: 1px solid #ccc; min-height: 40px; font-family: monospace; font-size: 12px; white-space: pre-wrap; }
 </style>
 </head>
-<body>
+<body data-porffor-module="t20_contenteditable_bold_auto">
 <h2>ContentEditable — auto bold (regression)</h2>
 <p id="note">No buttons: on parse we focus the editor, selectAll, then bold. Single BMP: run-html-test on this file. Before/after + stitched: test_contenteditable_basic.html with html_render_test --frames 2 --eval-after-frame0-file snippets/ce_bold_after_frame0.js --stitch-horizontal. To mimic clicking Bold (focus on button), use snippets/ce_bold_like_button_click.js instead. For DOM logs set DONG_LOG_LEVEL=WARN and watch [BOLD-DOM].</p>
 

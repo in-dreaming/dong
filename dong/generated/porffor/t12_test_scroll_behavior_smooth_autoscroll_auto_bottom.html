@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<!-- porffor: blocked(T12) -->
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Scroll Behavior Smooth - AutoScroll Auto Bottom</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+        }
+        .legend {
+            margin-bottom: 20px;
+            padding: 10px;
+            background: #e8f4f8;
+            border: 1px solid #4a9eba;
+        }
+        .controls {
+            margin-bottom: 20px;
+        }
+        button {
+            padding: 8px 16px;
+            margin-right: 10px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        .container-auto {
+            width: 400px;
+            height: 300px;
+            border: 2px solid #333;
+            overflow: auto;
+            background-color: #f0f0f0;
+            margin-bottom: 20px;
+            scroll-behavior: auto;
+        }
+        .container-smooth {
+            width: 400px;
+            height: 300px;
+            border: 2px solid #c00;
+            overflow: auto;
+            background-color: #fff3cd;
+            scroll-behavior: smooth;
+        }
+        .content {
+            padding: 10px;
+        }
+        .section {
+            height: 250px;
+            padding: 20px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            background: white;
+        }
+        h1 {
+            margin: 0 0 10px 0;
+            font-size: 18px;
+        }
+        h2 {
+            margin: 0 0 10px 0;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="legend">
+        <h1>Test: scroll-behavior (auto vs smooth) + autoscroll autoContainer</h1>
+        <p><strong>Gray box:</strong> scroll-behavior: auto (instant scroll)</p>
+        <p><strong>Yellow box:</strong> scroll-behavior: smooth (animated scroll)</p>
+        <p><strong>Autoscroll:</strong> on load, autoContainer executes <code>scrollTop = scrollHeight</code>.</p>
+    </div>
+
+    <div class="controls">
+        <button id="__porf_auto_0">Scroll Auto to Top</button>
+        <button id="__porf_auto_1">Scroll Auto to Bottom</button>
+        <button id="__porf_auto_2">Scroll Smooth to Top</button>
+        <button id="__porf_auto_3">Scroll Smooth to Bottom</button>
+    </div>
+
+    <h2>Container 1: scroll-behavior: auto</h2>
+    <div class="container-auto" id="autoContainer">
+        <div class="content">
+            <div class="section">
+                <h2>Section 1 (Top)</h2>
+                <p>This container uses scroll-behavior: auto</p>
+                <p>Scrolling should be instant (no animation)</p>
+            </div>
+            <div class="section">
+                <h2>Section 2</h2>
+                <p>Middle content</p>
+            </div>
+            <div class="section">
+                <h2>Section 3 (Bottom)</h2>
+                <p>End of content</p>
+            </div>
+        </div>
+    </div>
+
+    <h2>Container 2: scroll-behavior: smooth</h2>
+    <div class="container-smooth" id="smoothContainer">
+        <div class="content">
+            <div class="section">
+                <h2>Section 1 (Top)</h2>
+                <p>This container uses scroll-behavior: smooth</p>
+                <p>Scrolling should be animated (TODO: not yet implemented)</p>
+            </div>
+            <div class="section">
+                <h2>Section 2</h2>
+                <p>Middle content</p>
+            </div>
+            <div class="section">
+                <h2>Section 3 (Bottom)</h2>
+                <p>End of content</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function scrollAutoTop() {
+            document.getElementById('autoContainer').scrollTop = 0;
+        }
+        function scrollAutoBottom() {
+            var container = document.getElementById('autoContainer');
+            container.scrollTop = container.scrollHeight;
+        }
+        function scrollSmoothTop() {
+            document.getElementById('smoothContainer').scrollTop = 0;
+        }
+        function scrollSmoothBottom() {
+            var container = document.getElementById('smoothContainer');
+            container.scrollTop = container.scrollHeight;
+        }
+
+        // Autoscroll to exercise scrollHeight/maxScroll clamp behavior.
+        // dong 的 JS runtime 没有 setTimeout，因此这里保持同步执行。
+        scrollAutoBottom();
+    </script>
+</body>
+</html>

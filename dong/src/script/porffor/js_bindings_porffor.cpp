@@ -10,6 +10,9 @@
 #include "../../dom/input_element.hpp"
 #include "../../dom/select_element.hpp"
 #include "../../dom/dialog_element.hpp"
+#include "../../dom/contenteditable.hpp"
+#include "../../dom/editing_commands.hpp"
+#include "../../dom/focus_manager.hpp"
 #include "../../dom/css/style_engine.hpp"
 #include "../../dom/selection.hpp"
 #include "../../layout/layout_engine.hpp"
@@ -972,6 +975,51 @@ std::string JSBindings::getSelectionText() const {
         return {};
     }
     return selection_->toString();
+}
+
+bool JSBindings::selectAllEditable() {
+    if (!selection_) {
+        return false;
+    }
+    dom::DOMNodePtr editable_root;
+    if (focus_manager_) {
+        auto focused = focus_manager_->getFocusedElement();
+        if (focused && focused->isContentEditable()) {
+            editable_root = dom::ContentEditableState::findEditableRoot(focused);
+        }
+    }
+    if (!editable_root && last_editable_root_) {
+        editable_root = last_editable_root_;
+    }
+    if (!editable_root) {
+        return false;
+    }
+    selection_->selectAllChildren(editable_root);
+    return true;
+}
+
+bool JSBindings::execCommand(const std::string& command, const std::string& value) {
+    if (!selection_) {
+        return false;
+    }
+    dom::DOMNodePtr editable_root;
+    if (focus_manager_) {
+        auto focused = focus_manager_->getFocusedElement();
+        if (focused && focused->isContentEditable()) {
+            editable_root = dom::ContentEditableState::findEditableRoot(focused);
+        }
+    }
+    if (!editable_root && last_editable_root_) {
+        editable_root = last_editable_root_;
+    }
+    if (!editable_root) {
+        return false;
+    }
+    return dom::execCommand(editable_root, *selection_, command, value);
+}
+
+bool JSBindings::queryCommandSupported(const std::string& command) const {
+    return dom::queryCommandSupported(command);
 }
 
 std::string JSBindings::clipboardRead() const {

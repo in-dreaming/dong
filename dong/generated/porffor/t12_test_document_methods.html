@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<!-- porffor: blocked(T12) -->
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Document Methods Test</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+        }
+        .test-container {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        .test-result {
+            margin-top: 10px;
+            padding: 10px;
+            background: #f5f5f5;
+            border-radius: 3px;
+        }
+        .pass { color: green; }
+        .fail { color: red; }
+        .element {
+            width: 100px;
+            height: 50px;
+            margin: 10px;
+            padding: 10px;
+            background: #e0e0e0;
+            border: 1px solid #999;
+        }
+        #element1 { background: #ffcccc; }
+        #element2 { background: #ccffcc; }
+        #element3 { background: #ccccff; }
+    </style>
+</head>
+<body>
+    <h1>Document Methods Test</h1>
+
+    <div class="test-container">
+        <h2>Test 1: document.elementFromPoint(x, y)</h2>
+        <div class="element" id="element1">Element 1</div>
+        <div class="element" id="element2">Element 2</div>
+        <div class="element" id="element3">Element 3</div>
+
+        <button id="__porf_auto_0">Run elementFromPoint Test</button>
+        <div class="test-result" id="elementFromPointResult"></div>
+    </div>
+
+    <div class="test-container">
+        <h2>Test 2: document.hasFocus()</h2>
+        <button id="__porf_auto_1">Run hasFocus Test</button>
+        <div class="test-result" id="hasFocusResult"></div>
+    </div>
+
+    <div class="test-container">
+        <h2>Test 3: document.scrollingElement</h2>
+        <button id="__porf_auto_2">Run scrollingElement Test</button>
+        <div class="test-result" id="scrollingElementResult"></div>
+    </div>
+
+    <script>
+        function logResult(elementId, message, isSuccess) {
+            const element = document.getElementById(elementId);
+            element.innerHTML = `<span class="${isSuccess ? 'pass' : 'fail'}">${message}</span>`;
+        }
+
+        function testElementFromPoint() {
+            const resultElement = document.getElementById('elementFromPointResult');
+            resultElement.innerHTML = 'Testing...';
+
+            try {
+                // Test elementFromPoint with known coordinates
+                const elem1 = document.getElementById('element1');
+                const rect1 = elem1.getBoundingClientRect();
+                const centerX1 = rect1.left + rect1.width / 2;
+                const centerY1 = rect1.top + rect1.height / 2;
+
+                const hit1 = document.elementFromPoint(centerX1, centerY1);
+                const test1 = hit1 && hit1.id === 'element1';
+
+                // Test another element
+                const elem2 = document.getElementById('element2');
+                const rect2 = elem2.getBoundingClientRect();
+                const centerX2 = rect2.left + rect2.width / 2;
+                const centerY2 = rect2.top + rect2.height / 2;
+
+                const hit2 = document.elementFromPoint(centerX2, centerY2);
+                const test2 = hit2 && hit2.id === 'element2';
+
+                // Test outside of any element (should return null)
+                const hit3 = document.elementFromPoint(-100, -100);
+                const test3 = hit3 === null;
+
+                const allTestsPassed = test1 && test2 && test3;
+                const message = `elementFromPoint test: ${allTestsPassed ? 'PASS' : 'FAIL'}<br>` +
+                               `- Element 1 hit: ${test1 ? 'PASS' : 'FAIL'}<br>` +
+                               `- Element 2 hit: ${test2 ? 'PASS' : 'FAIL'}<br>` +
+                               `- Outside bounds: ${test3 ? 'PASS' : 'FAIL'}`;
+
+                logResult('elementFromPointResult', message, allTestsPassed);
+
+            } catch (error) {
+                logResult('elementFromPointResult', `ERROR: ${error.message}`, false);
+            }
+        }
+
+        function testHasFocus() {
+            const resultElement = document.getElementById('hasFocusResult');
+            resultElement.innerHTML = 'Testing...';
+
+            try {
+                // Test hasFocus method
+                const hasFocus = document.hasFocus();
+
+                // Note: hasFocus() returns true if the document has focus
+                // This test is more about API availability than actual focus state
+                const message = `hasFocus() returned: ${hasFocus}<br>` +
+                               `(Note: This tests API availability, actual focus state depends on window focus)`;
+
+                logResult('hasFocusResult', message, true);
+
+            } catch (error) {
+                logResult('hasFocusResult', `ERROR: ${error.message}`, false);
+            }
+        }
+
+        function testScrollingElement() {
+            const resultElement = document.getElementById('scrollingElementResult');
+            resultElement.innerHTML = 'Testing...';
+
+            try {
+                // Test scrollingElement property
+                const scrollingElement = document.scrollingElement;
+
+                // scrollingElement should be either document.documentElement or document.body
+                const isHtmlElement = scrollingElement === document.documentElement;
+                const isBodyElement = scrollingElement === document.body;
+                const isValid = isHtmlElement || isBodyElement;
+
+                const message = `scrollingElement test: ${isValid ? 'PASS' : 'FAIL'}<br>` +
+                               `- scrollingElement is: ${scrollingElement ? scrollingElement.tagName : 'null'}<br>` +
+                               `- Expected: html or body element`;
+
+                logResult('scrollingElementResult', message, isValid);
+
+            } catch (error) {
+                logResult('scrollingElementResult', `ERROR: ${error.message}`, false);
+            }
+        }
+
+        // Run all tests on load
+        window.addEventListener('load', function() {
+            setTimeout(() => {
+                testElementFromPoint();
+                testHasFocus();
+                testScrollingElement();
+            }, 100);
+        });
+    </script>
+</body>
+</html>

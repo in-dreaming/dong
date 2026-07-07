@@ -137,6 +137,9 @@ public:
     uint64_t parseHtmlDetached(const std::string& html);
     std::string formSerializeJson(uint64_t form_id) const;
     std::string getSelectionText() const;
+    bool selectAllEditable();
+    bool execCommand(const std::string& command, const std::string& value = "");
+    bool queryCommandSupported(const std::string& command) const;
 
     std::string clipboardRead() const;
     void clipboardWrite(const std::string& text);

@@ -13,7 +13,7 @@
 | `data-porf-on="input:onInput"` | 输入事件 | `on:input` | 读值用 `getValue(nodeId)` / `eventValue()` | `golden/input_bind.txt` |
 | `data-porf-on="keydown:onKey"` | 键盘 | `on:keydown` | 读键名 `eventKey()` | `golden/key_bind.txt` |
 | `data-porf-if="flag"` … | 条件显示 | `{#if}` | 用 `setAttribute(nodeId,'hidden', flag?0:1)` 或 `hidden` attr | `golden/if_block.txt` |
-| `<!-- porf-each list as item key id -->` | 列表 | `{#each}` | **第一版**：固定 `MAX_ITEMS` 槽位 + 全量 rebuild；key 为数字 id | `golden/each_block.txt` |
+| `<!-- porf-each list as item key id -->` | 列表 | `{#each}` | **第一版**：固定 `MAX_ITEMS` 槽位 + 全量 rebuild；`container=id`；可选 `filter=expr`、`row-fn=buildRow` | `golden/each_block.txt` |
 | `data-porf-style="prop:expr"` | 单属性样式 | `style:` | 调用 `setStyle(nodeId, prop, value)` | `golden/style_bind.txt` |
 | `data-porf-width-pct="expr"` | 宽度百分比 | — | game-ui 血条；`setStyle(...,'width', pct+'%')` | `golden/width_pct.txt` |
 | `<script>` 块 | 模块逻辑 | `<script>` | 禁止闭包捕获、Promise、eval；状态用模块全局 `var` | — |

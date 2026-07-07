@@ -10,7 +10,7 @@
 char* dong_porf_js_microbench_memory; u32 dong_porf_js_microbench_memory_pages = 2;
 
 
-__attribute__((import_module(""), import_name("r")))
+__attribute__((import_module(""), import_name("s")))
 extern f64 __porf_import_dong_time_now();
 static i32 i32_load(i32 align, i32 offset, i32 pointer) {
   return *((i32*)(dong_porf_js_microbench_memory + offset + pointer));
@@ -45,7 +45,7 @@ static void i32_store8(i32 align, i32 offset, i32 pointer, u8 value) {
 }
 
 
-__attribute__((import_module(""), import_name("q")))
+__attribute__((import_module(""), import_name("r")))
 extern void __porf_import_dong_bench_log(f64);
 
 __attribute__((import_module(""), import_name("i")))
