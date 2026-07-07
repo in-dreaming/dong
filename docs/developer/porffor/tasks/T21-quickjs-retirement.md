@@ -29,7 +29,7 @@
 
 ## 完成记录
 
-- **状态**: **已完成**（2026-07-07，commit `92923c2`）
+- **状态**: **已完成**（2026-07-07，commit `6854386`）
 - **前置**: T13 盘点 **280 ready / 0 blocked / 6 dropped**；T20 execCommand 七例已迁移
 - **变更摘要**:
   - 删除 `dong/third_party/quickjs` submodule 及全部 QuickJS 绑定源文件（`js_bindings.cpp`、`js_node_bindings.*` 等）
