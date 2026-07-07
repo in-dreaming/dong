@@ -53,7 +53,6 @@ zig build examples -Doptimize-size=true   # 二进制体积优化
 
 | 命令 | 说明 |
 |------|------|
-| `zig build quickjs` | QuickJS |
 | `zig build lexbor` | HTML 解析 |
 | `zig build yoga` | Flexbox 布局 |
 | `zig build freetype` | 字体 |
@@ -144,9 +143,10 @@ zig build run-html-test -- <html> [out.bmp] [w] [h]
 
 | 依赖 | 构建方式 |
 |------|----------|
-| QuickJS, Lexbor, Yoga, FreeType, HarfBuzz, msdfgen | Pure Zig |
+| Lexbor, Yoga, FreeType, HarfBuzz, msdfgen | Pure Zig |
 | Dong Core, SDL Backend | Pure Zig (C++20) |
 | SDL3 | CMake |
+| Porffor（脚本引擎） | Node.js AOT 编译（JS → Wasm → C），产物随 Dong Core 一起编译 |
 
 ## 输出路径
 

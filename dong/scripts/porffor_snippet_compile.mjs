@@ -41,9 +41,9 @@ if (fs.existsSync(pilotSnippetsDir)) {
   }
 }
 
-const quickJsDir = path.join(dongRoot, 'examples', 'data', 'tests', 'snippets');
-if (fs.existsSync(quickJsDir)) {
-  for (const file of fs.readdirSync(quickJsDir).filter((f) => f.endsWith('.js'))) {
+const snippetDir = path.join(dongRoot, 'examples', 'data', 'tests', 'snippets');
+if (fs.existsSync(snippetDir)) {
+  for (const file of fs.readdirSync(snippetDir).filter((f) => f.endsWith('.js'))) {
     const name = `qj_${file.replace(/\.js$/, '')}`;
     if (existing.has(name)) continue;
     const srcPath = `examples/data/tests/snippets/${file}`;
@@ -55,7 +55,7 @@ if (fs.existsSync(quickJsDir)) {
     if (!raw.includes('export function')) {
       fs.writeFileSync(
         wrappedFull,
-        `// Auto-wrapped QuickJS snippet — needs prelude rewrite before Porffor use\n// Source: ${srcPath}\n${wrapSnippetAsModule(`// TODO prelude rewrite\n`, exportName)}`,
+        `// Auto-wrapped legacy snippet — needs prelude rewrite before Porffor use\n// Source: ${srcPath}\n${wrapSnippetAsModule(`// TODO prelude rewrite\n`, exportName)}`,
       );
     }
     manifest.snippets.push({

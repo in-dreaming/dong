@@ -2,7 +2,7 @@
 /**
  * T13 Wave 5 — mark pending `direct` script tests as porffor-ready (render smoke).
  *
- * Strategy: Porffor runs `data-porffor-module` only; inline QuickJS `<script>` is ignored.
+ * Strategy: Porffor runs `data-porffor-module` only; inline `<script>` is ignored.
  * Most `direct` tests are CSS/DOM layout smokes where frame-0 appearance does not depend
  * on inline script side effects. Interaction-only scripts (listeners) are safe to ignore
  * for html_render_test frame 0.

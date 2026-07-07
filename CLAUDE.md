@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Dong** is a GPU-accelerated HTML/CSS rendering engine written in C++20, designed for embedding in games and interactive applications. It provides a complete web-like UI system with DOM, CSS styling, layout (Yoga), JavaScript (QuickJS), and hardware-accelerated rendering via SDL_GPU.
+**Dong** is a GPU-accelerated HTML/CSS rendering engine written in C++20, designed for embedding in games and interactive applications. It provides a complete web-like UI system with DOM, CSS styling, layout (Yoga), JavaScript (Porffor AOT compiler), and hardware-accelerated rendering via SDL_GPU.
 
 ## Build System
 
@@ -21,7 +21,6 @@ zig build examples           # Build all examples to zig-out/bin
 zig build deps               # Build only third-party dependencies
 
 # Individual dependency builds (pure Zig)
-zig build quickjs            # Build QuickJS only
 zig build lexbor             # Build Lexbor only
 zig build yoga               # Build Yoga only
 zig build freetype           # Build FreeType only
@@ -103,7 +102,6 @@ Copy `build.env.example` to `build.env` and configure paths (VULKAN_SDK_PATH, DX
 
 | Dependency | Build Method | Notes |
 |------------|--------------|-------|
-| QuickJS | Pure Zig | GNU C11, Windows compat headers |
 | Lexbor | Pure Zig | Platform-specific ports |
 | Yoga | Pure Zig | C++20, -fno-exceptions |
 | FreeType | Pure Zig | Module-based compilation |
@@ -112,6 +110,7 @@ Copy `build.env.example` to `build.env` and configure paths (VULKAN_SDK_PATH, DX
 | Dong Core | Pure Zig | Main C++ library (C++20) |
 | SDL Backend | Pure Zig | SDL GPU driver (C++20) |
 | SDL3 | CMake | Complex platform code |
+| Porffor | Node.js AOT compile | JS→Wasm→C script engine; sole script engine (see `docs/developer/porffor/`) |
 
 ### Pure Zig Build Steps
 
@@ -169,7 +168,7 @@ Applications (dong_appcore)
 
 | Library | Purpose | Dependencies |
 |---------|---------|--------------|
-| **dong.dll** | Platform-agnostic core (DOM/CSS/Layout/Script) | QuickJS, Lexbor, Yoga, FreeType, HarfBuzz |
+| **dong.dll** | Platform-agnostic core (DOM/CSS/Layout/Script) | Porffor (AOT script engine), Lexbor, Yoga, FreeType, HarfBuzz |
 | **dong_sdl_backend.dll** | SDL backend (GPU渲染/窗口/输入) | SDL3, SDL_ShaderCross, DXC |
 | **dong_appcore.dll** | High-level application framework | dong.dll, dong_sdl_backend.dll |
 | **dong_plugin_sdl.dll** | Platform plugin for video/FFmpeg | SDL3, FFmpeg |
@@ -442,7 +441,7 @@ All built via CMake, orchestrated by Zig:
 - **HarfBuzz**: Text shaping (depends on FreeType)
 - **msdfgen**: Multi-channel signed distance field glyph generation
 - **SDL3**: Window/input/GPU abstraction
-- **QuickJS**: JavaScript engine
+- **Porffor**: JS→Wasm→C AOT compiler; sole JavaScript engine (Node.js-based, invoked at build time)
 - **lexbor**: Fast HTML parser
 - **Yoga**: Flexbox layout engine
 - **FFmpeg**: Video decoding (in SDL plugin)

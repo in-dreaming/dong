@@ -92,7 +92,10 @@ DONG_API dong_result_t dong_engine_send_key(dong_engine_t* engine, uint32_t key_
 DONG_API dong_result_t dong_engine_send_text(dong_engine_t* engine, const char* text);
 DONG_API dong_result_t dong_engine_send_text_editing(dong_engine_t* engine, const char* text, int32_t cursor, int32_t selection_length);
 
-// Script evaluation
+// Deprecated (T21): Porffor is an AOT-compiled script engine
+// with no runtime eval. This always returns DONG_ERR_INTERNAL. Use
+// dong_engine_call_porffor_export() to invoke a compiled module's export instead.
+// Kept for ABI compatibility (no signature change; DONG_API_VERSION not bumped).
 DONG_API dong_result_t dong_engine_eval_script(dong_engine_t* engine, const char* code);
 
 // Porffor AOT: call a compiled module export (module::export or export only with DONG_PORFFOR_MODULE)
@@ -103,9 +106,9 @@ DONG_API dong_result_t dong_engine_call_porffor_export(
 // Multi-View Shared JS
 // =============================================================================
 
-// Create an engine that shares the JavaScript environment (JSRuntime+JSContext)
+// Create an engine that shares the script engine (Porffor host + module registry)
 // with an existing engine. The new engine has its own DOM/Layout/Render but runs
-// JS in the same context as script_source.
+// scripts against the same Porffor host as script_source.
 //
 // In JS, the default `window`/`document` globals point to script_source's DOM.
 // The new view is accessible via `dong.getView(view_name).document`.

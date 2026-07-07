@@ -1,15 +1,17 @@
 # React / Preact 集成
 
-Dong 内嵌 QuickJS，提供浏览器级 DOM/CSS/Layout。通过 **react-reconciler**（或 Preact 兼容层）可将 JSX 组件直接映射到 Dong DOM。
+> **历史文档**：本文档描述的是 QuickJS 时代（T21 退役前）的 React/Preact 集成方案。QuickJS 已完全移除，Dong 现在的唯一脚本引擎是 **Porffor**（AOT 编译，无运行时 eval），不再支持运行时加载任意 React/Preact bundle。等价能力见自研的 AOT 友好框架编译器（`docs/developer/porffor/tasks/T22-framework-compiler-impl.md`），预构建的 `preact-*` / `react-*` 示例已迁移为 `porf-*` 示例（见 `docs/developer/porffor/`）。以下内容仅作历史参考。
 
-## 架构
+Dong 曾内嵌 QuickJS，提供浏览器级 DOM/CSS/Layout。通过 **react-reconciler**（或 Preact 兼容层）可将 JSX 组件直接映射到 Dong DOM。
+
+## 架构（历史）
 
 ```
 用户 JSX → react / preact → Host Config 适配层 → Dong DOM API → Layout → GPU
 ```
 
 - **不用 ReactDOM**：跳过浏览器 quirks，直接操作 Dong DOM
-- **Bundle 外置构建**：esbuild 打成 IIFE，`<script src>` 加载到 QuickJS
+- **Bundle 外置构建**：esbuild 打成 IIFE，`<script src>` 加载到 QuickJS（已移除）
 - **Core 零修改**：适配在 JS 层；缺失 binding 按需补齐
 
 完整 Host Config 规格见 [react-reconciler-spec.md](../developer/arch/react-reconciler-spec.md)。

@@ -79,10 +79,10 @@ pub fn build(b: *std.Build) void {
 
 ## 传递依赖说明
 
-`dong_core` 依赖 QuickJS、Lexbor、Yoga、FreeType、HarfBuzz、msdfgen 等静态库。作为 Zig 依赖构建时，这些库会安装到依赖包的 `zig-out/lib/`。消费方通常需要：
+`dong_core` 依赖 Lexbor、Yoga、FreeType、HarfBuzz、msdfgen 等静态库（脚本引擎 Porffor 的 AOT 编译产物直接编译进 `dong_core`，不是独立静态库）。作为 Zig 依赖构建时，这些库会安装到依赖包的 `zig-out/lib/`。消费方通常需要：
 
 1. 链接 `dong.artifact("dong_core")`
-2. 按目标平台补链 `quickjs`、`lexbor`、`yoga` 等同前缀下的库（或预构建 `zig build package` SDK）
+2. 按目标平台补链 `lexbor`、`yoga` 等同前缀下的库（或预构建 `zig build package` SDK）
 
 推荐引擎集成场景使用：
 

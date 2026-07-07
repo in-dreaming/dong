@@ -1,6 +1,3 @@
-[submodule "dong/third_party/quickjs"]
-	path = dong/third_party/quickjs
-	url = https://github.com/bellard/quickjs
 [submodule "dong/third_party/lexbor"]
 	path = dong/third_party/lexbor
 	url = https://github.com/lexbor/lexbor

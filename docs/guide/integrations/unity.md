@@ -296,7 +296,7 @@ Unity 的 `TouchScreenKeyboard` / `Input.imeCompositionMode` 与 dong compositio
 ## 11. 不在本草案范围
 
 - ❌ Editor extension（让美术在 Unity Inspector 里直接预览 / 编辑 HTML）。
-- ❌ Unity 主线程外的 dong 调用（dong 与 QuickJS 都不是线程安全的；只能在主线程）。
+- ❌ Unity 主线程外的 dong 调用（dong 与其 Porffor 脚本引擎都不是线程安全的；只能在主线程）。
 - ❌ Asset Bundle 内的 HTML 资源管理 —— 业务层用 `TextAsset` 即可。
 - ❌ HDR 输出 —— Unity HDRP / URP 自带，dong 这边只要走线性空间颜色就行（Phase 1 P1-6）。
 

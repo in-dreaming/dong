@@ -187,7 +187,6 @@ const BuildOptions = struct {
     libs_only: bool, // Only build static libraries (for mobile)
     optimize_size: bool, // Optimize for binary size (LTO, /O1, no RTTI, etc.)
     package_only: bool, // Skip examples/apps (Zig package dependency mode)
-    script_engine: []const u8, // porffor (default) or quickjs
 };
 
 fn resolveBackend(b: *std.Build, platform: PlatformInfo) Backend {
@@ -213,7 +212,6 @@ fn getBuildOptions(b: *std.Build, platform: PlatformInfo) BuildOptions {
     const libs_only = b.option(bool, "libs-only", "Only build static libraries") orelse platform.is_mobile;
     const optimize_size = b.option(bool, "optimize-size", "Optimize for binary size (LTO, /O1, no RTTI, etc.)") orelse false;
     const package_only = b.option(bool, "package-only", "Skip examples/apps (for Zig package consumers)") orelse false;
-    const script_engine = b.option([]const u8, "script-engine", "Script engine: porffor (default) or quickjs") orelse "porffor";
 
     return .{
         .enable_ffmpeg = enable_ffmpeg,
@@ -223,7 +221,6 @@ fn getBuildOptions(b: *std.Build, platform: PlatformInfo) BuildOptions {
         .libs_only = libs_only,
         .optimize_size = optimize_size,
         .package_only = package_only,
-        .script_engine = script_engine,
     };
 }
 
@@ -237,7 +234,7 @@ pub fn build(b: *std.Build) void {
     const host_is_windows = builtin.os.tag == .windows;
 
     // On Windows we build the CMake parts with clang-cl (MSVC ABI). Ensure Zig-built
-    // static libs (QuickJS/FreeType/etc.) use the same ABI to avoid link/runtime mismatches.
+    // static libs (FreeType/etc.) use the same ABI to avoid link/runtime mismatches.
     if (target.result.os.tag == .windows and target.result.abi == .gnu) {
         target = b.resolveTargetQuery(.{
             .cpu_arch = target.result.cpu.arch,
@@ -256,7 +253,7 @@ pub fn build(b: *std.Build) void {
     // Print build info
     std.debug.print("Building for: {s} (native: {})\n", .{ platform.target_triple, platform.is_native });
     std.debug.print("  Backend: {s}\n", .{backendToCMake(options.backend)});
-    std.debug.print("  Script engine: {s}\n", .{options.script_engine});
+    std.debug.print("  Script engine: porffor\n", .{});
     if (platform.is_android) {
         std.debug.print("  Android API level: {}\n", .{options.android_api_level});
     }
@@ -285,14 +282,6 @@ pub fn build(b: *std.Build) void {
         .ReleaseFast
     else
         optimize;
-
-    // ==========================================================================
-    // QuickJS (Pure Zig Build) — optional when -Dscript-engine=quickjs
-    // ==========================================================================
-    const quickjs = if (std.mem.eql(u8, options.script_engine, "quickjs"))
-        buildQuickJS(b, target, deps_optimize, platform)
-    else
-        null;
 
     // ==========================================================================
     // Lexbor (Pure Zig Build)
@@ -362,11 +351,10 @@ pub fn build(b: *std.Build) void {
     // ==========================================================================
     if (core_only) {
         // Build Dong Core for mobile
-        const dong_core = buildDongCore(b, target, optimize, platform, quickjs, lexbor, yoga, freetype, harfbuzz, msdfgen);
+        const dong_core = buildDongCore(b, target, optimize, platform, lexbor, yoga, freetype, harfbuzz, msdfgen);
 
         // For mobile/cross-compile, just install the static libraries
         const libs_only_step = b.step("libs", "Build only static libraries (for mobile integration)");
-        if (quickjs) |qj| libs_only_step.dependOn(&qj.step);
         libs_only_step.dependOn(&lexbor.step);
         libs_only_step.dependOn(&yoga.step);
         libs_only_step.dependOn(&freetype.step);
@@ -377,11 +365,6 @@ pub fn build(b: *std.Build) void {
         b.getInstallStep().dependOn(libs_only_step);
 
         // Still provide individual build steps for libs-only mode
-        if (quickjs) |qj| {
-            const quickjs_step = b.step("quickjs", "Build QuickJS only");
-            quickjs_step.dependOn(&qj.step);
-        }
-
         const lexbor_step = b.step("lexbor", "Build Lexbor only");
         lexbor_step.dependOn(&lexbor.step);
 
@@ -559,10 +542,6 @@ pub fn build(b: *std.Build) void {
         b.fmt("-DDONG_BACKEND={s}", .{backendToCMake(options.backend)}),
     ) catch unreachable;
 
-    dong_cmake_args.append(
-        b.fmt("-DDONG_SCRIPT_ENGINE={s}", .{options.script_engine}),
-    ) catch unreachable;
-
     const porffor_deps = b.addSystemCommand(if (host_is_windows) &.{
         "powershell",
         "-NoProfile",
@@ -588,12 +567,7 @@ pub fn build(b: *std.Build) void {
     porffor_compile.step.dependOn(&porffor_deps.step);
 
     const cmake_config = b.addSystemCommand(dong_cmake_args.items);
-    if (quickjs) |qj| {
-        cmake_config.step.dependOn(&qj.step);
-    }
-    if (std.mem.eql(u8, options.script_engine, "porffor")) {
-        cmake_config.step.dependOn(&porffor_compile.step);
-    }
+    cmake_config.step.dependOn(&porffor_compile.step);
     cmake_config.step.dependOn(&lexbor.step);
     cmake_config.step.dependOn(&yoga.step);
     cmake_config.step.dependOn(&freetype.step);
@@ -842,46 +816,44 @@ pub fn build(b: *std.Build) void {
     // ==========================================================================
     // Porffor UI examples (HTML only; modules compiled via porffor_compile)
     // ==========================================================================
-    if (std.mem.eql(u8, options.script_engine, "porffor")) {
-        const porf_copy = b.addSystemCommand(if (host_is_windows) &.{
-            "powershell",
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-Command",
-            b.fmt(
-                "& {{ $ErrorActionPreference = 'Stop'; " ++
-                    "$examples = @('porf-counter', 'porf-todo-classic', 'porf-game-ui'); " ++
-                    "foreach ($ex in $examples) {{ " ++
-                    "  $src = 'examples/data/' + $ex + '/index.html'; " ++
-                    "  if (Test-Path $src) {{ " ++
-                    "    $dst = '{s}/bin/data/' + $ex; " ++
-                    "    New-Item -ItemType Directory -Force -Path $dst | Out-Null; " ++
-                    "    Copy-Item -Force $src (Join-Path $dst 'index.html'); " ++
-                    "    Write-Host ('  Installed ' + $ex); " ++
-                    "  }} " ++
-                    "}} }}",
-                .{install_prefix},
-            ),
-        } else &.{
-            "sh",
-            "-c",
-            b.fmt(
-                "for ex in porf-counter porf-todo-classic porf-game-ui; do " ++
-                    "  src=\"examples/data/$ex/index.html\"; " ++
-                    "  if [ -f \"$src\" ]; then " ++
-                    "    dst='{s}/bin/data/$ex'; " ++
-                    "    mkdir -p \"$dst\"; " ++
-                    "    cp \"$src\" \"$dst/index.html\"; " ++
-                    "    echo \"  Installed $ex\"; " ++
-                    "  fi; " ++
-                    "done",
-                .{install_prefix},
-            ),
-        });
-        porf_copy.step.dependOn(&porffor_compile.step);
-        b.getInstallStep().dependOn(&porf_copy.step);
-    }
+    const porf_copy = b.addSystemCommand(if (host_is_windows) &.{
+        "powershell",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        b.fmt(
+            "& {{ $ErrorActionPreference = 'Stop'; " ++
+                "$examples = @('porf-counter', 'porf-todo-classic', 'porf-game-ui'); " ++
+                "foreach ($ex in $examples) {{ " ++
+                "  $src = 'examples/data/' + $ex + '/index.html'; " ++
+                "  if (Test-Path $src) {{ " ++
+                "    $dst = '{s}/bin/data/' + $ex; " ++
+                "    New-Item -ItemType Directory -Force -Path $dst | Out-Null; " ++
+                "    Copy-Item -Force $src (Join-Path $dst 'index.html'); " ++
+                "    Write-Host ('  Installed ' + $ex); " ++
+                "  }} " ++
+                "}} }}",
+            .{install_prefix},
+        ),
+    } else &.{
+        "sh",
+        "-c",
+        b.fmt(
+            "for ex in porf-counter porf-todo-classic porf-game-ui; do " ++
+                "  src=\"examples/data/$ex/index.html\"; " ++
+                "  if [ -f \"$src\" ]; then " ++
+                "    dst='{s}/bin/data/$ex'; " ++
+                "    mkdir -p \"$dst\"; " ++
+                "    cp \"$src\" \"$dst/index.html\"; " ++
+                "    echo \"  Installed $ex\"; " ++
+                "  fi; " ++
+                "done",
+            .{install_prefix},
+        ),
+    });
+    porf_copy.step.dependOn(&porffor_compile.step);
+    b.getInstallStep().dependOn(&porf_copy.step);
 
     // ==========================================================================
     // Build Steps
@@ -978,7 +950,6 @@ pub fn build(b: *std.Build) void {
 
     // Individual dependency build steps
     const deps_step = b.step("deps", "Build all third-party dependencies only");
-    if (quickjs) |qj| deps_step.dependOn(&qj.step);
     deps_step.dependOn(&lexbor.step);
     deps_step.dependOn(&yoga.step);
     deps_step.dependOn(&freetype.step);
@@ -987,11 +958,6 @@ pub fn build(b: *std.Build) void {
 
     if (sdl3_cmake_install) |sdl_install| {
         deps_step.dependOn(&sdl_install.step);
-    }
-
-    if (quickjs) |qj| {
-        const quickjs_step = b.step("quickjs", "Build QuickJS only");
-        quickjs_step.dependOn(&qj.step);
     }
 
     const lexbor_step = b.step("lexbor", "Build Lexbor only");
@@ -1017,7 +983,7 @@ pub fn build(b: *std.Build) void {
     // ==========================================================================
     // Dong Core (Pure Zig Build)
     // ==========================================================================
-    const dong_core = buildDongCore(b, target, optimize, platform, quickjs, lexbor, yoga, freetype, harfbuzz, msdfgen);
+    const dong_core = buildDongCore(b, target, optimize, platform, lexbor, yoga, freetype, harfbuzz, msdfgen);
     const dong_core_step = b.step("dong-core", "Build Dong Core (pure Zig)");
     dong_core_step.dependOn(&dong_core.step);
 
@@ -1135,74 +1101,6 @@ fn exportDongPackage(
     });
     dong_mod.addIncludePath(b.path("include"));
     dong_mod.link_libc = true;
-}
-
-// =============================================================================
-// QuickJS Build
-// =============================================================================
-fn buildQuickJS(
-    b: *std.Build,
-    target: std.Build.ResolvedTarget,
-    optimize: std.builtin.OptimizeMode,
-    platform: PlatformInfo,
-) *std.Build.Step.InstallArtifact {
-    const quickjs = b.addLibrary(.{
-        .name = "quickjs",
-        .linkage = .static,
-        .root_module = createRootModule(b, target, optimize),
-    });
-
-    const quickjs_src = "third_party/quickjs";
-    const quickjs_compat = "third_party/quickjs_make/compat";
-
-    var c_flags = std.array_list.Managed([]const u8).init(b.allocator);
-    c_flags.appendSlice(&.{
-        "-std=gnu11", // Use GNU C extensions for inline assembly support
-        "-D_GNU_SOURCE",
-    }) catch unreachable;
-
-    if (platform.is_windows) {
-        // Zig's MSVC-targeted clang invocation may pass flags that clang considers
-        // unused during compilation; don't fail the build because of that.
-        c_flags.appendSlice(&.{
-            "-Wno-unused-command-line-argument",
-            "-fms-extensions",
-            // Ensure alloca() is available on Windows.
-            "-include",
-            quickjs_compat ++ "/alloca.h",
-        }) catch unreachable;
-    }
-
-    const c_flags_slice = c_flags.toOwnedSlice() catch unreachable;
-
-    quickjs.root_module.addCSourceFiles(.{
-        .files = &.{
-            quickjs_src ++ "/quickjs.c",
-            quickjs_src ++ "/libregexp.c",
-            quickjs_src ++ "/libunicode.c",
-            quickjs_src ++ "/cutils.c",
-            quickjs_src ++ "/dtoa.c",
-        },
-        .flags = c_flags_slice,
-    });
-
-    quickjs.root_module.addIncludePath(b.path(quickjs_src));
-    linkLibC(quickjs);
-
-    if (platform.is_windows) {
-        // Windows-specific settings
-        quickjs.root_module.addIncludePath(b.path(quickjs_compat));
-        quickjs.root_module.addCMacro("_CRT_SECURE_NO_WARNINGS", "");
-        quickjs.root_module.addCMacro("_CRT_NONSTDC_NO_DEPRECATE", "");
-        // Use EMSCRIPTEN=1 to disable CONFIG_ATOMICS (avoids pthread_cond dependency)
-        quickjs.root_module.addCMacro("EMSCRIPTEN", "1");
-        quickjs.root_module.addCMacro("CONFIG_STACK_CHECK", "");
-    }
-
-    quickjs.installHeader(b.path(quickjs_src ++ "/quickjs.h"), "quickjs.h");
-    quickjs.installHeader(b.path(quickjs_src ++ "/quickjs-libc.h"), "quickjs-libc.h");
-
-    return b.addInstallArtifact(quickjs, .{});
 }
 
 // =============================================================================
@@ -1864,7 +1762,6 @@ fn buildDongCore(
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     platform: PlatformInfo,
-    quickjs_artifact: ?*std.Build.Step.InstallArtifact,
     lexbor_artifact: *std.Build.Step.InstallArtifact,
     yoga_artifact: *std.Build.Step.InstallArtifact,
     freetype_artifact: *std.Build.Step.InstallArtifact,
@@ -1930,16 +1827,13 @@ fn buildDongCore(
             "src/layout/sticky_positioning.cpp",
             "src/layout/table_layout.cpp",
             "src/layout/grid_layout.cpp",
-            // Script
-            "src/script/script_engine.cpp",
-            "src/script/js_bindings.cpp",
-            "src/script/js_node_bindings.cpp",
-            "src/script/js_observer_bindings.cpp",
-            "src/script/js_clipboard_bindings.cpp",
-            "src/script/js_selection_bindings.cpp",
-            "src/script/js_fetch_bindings.cpp",
-            "src/script/js_text_layout_bindings.cpp",
-            "src/script/js_scene_bindings.cpp",
+            // Script (Porffor AOT — sole script engine)
+            "src/script/porffor/dong_porf_host.cpp",
+            "src/script/porffor/porffor_script_registry.cpp",
+            "src/script/porffor/script_engine_porffor.cpp",
+            "src/script/porffor/js_bindings_porffor.cpp",
+            "src/script/porffor/js_scene_porffor.cpp",
+            "src/script/porffor/js_text_layout_porffor.cpp",
             "src/dom/scene_compiler.cpp",
             // Render (platform-agnostic)
             "src/render/scene_graph.cpp",
@@ -1990,11 +1884,39 @@ fn buildDongCore(
         .flags = &.{"-std=c11"},
     });
 
-    // Include directories
+    // Porffor AOT-compiled module sources (generated/committed C, see
+    // cmake/PorfforScripts.cmake for the CMake-side equivalent; `zig build
+    // dong-core`/libs-only mode reuses whatever has already been generated
+    // under generated/porffor/ rather than re-invoking Node.js).
     const io = b.graph.io;
+    {
+        var porffor_sources = std.array_list.Managed([]const u8).init(b.allocator);
+        var dir = IoDir.cwd().openDir(io, "generated/porffor", .{ .iterate = true }) catch null;
+        if (dir) |*d| {
+            defer d.close(io);
+            var iter = d.iterate();
+            while (iter.next(io) catch null) |entry| {
+                if (entry.kind == .file and std.mem.endsWith(u8, entry.name, ".c")) {
+                    const full_path = b.fmt("generated/porffor/{s}", .{entry.name});
+                    porffor_sources.append(b.allocator.dupe(u8, full_path) catch unreachable) catch unreachable;
+                }
+            }
+        } else {
+            std.debug.print("Warning: generated/porffor/ not found; run cmake/node porffor_compile.mjs first for a functional script engine\n", .{});
+        }
+        if (porffor_sources.items.len > 0) {
+            dong_core.root_module.addCSourceFiles(.{
+                .files = porffor_sources.toOwnedSlice() catch unreachable,
+                .flags = &.{"-std=c11"},
+            });
+        }
+    }
+
+    // Include directories
     dong_core.root_module.addIncludePath(b.path("include"));
     dong_core.root_module.addIncludePath(b.path("src"));
-    dong_core.root_module.addIncludePath(b.path("third_party/quickjs"));
+    dong_core.root_module.addIncludePath(b.path("src/script/porffor"));
+    dong_core.root_module.addIncludePath(b.path("generated/porffor"));
     dong_core.root_module.addIncludePath(b.path("third_party/lexbor/source"));
     dong_core.root_module.addIncludePath(b.path("third_party/yoga"));
     dong_core.root_module.addIncludePath(b.path("third_party/freetype/include"));
@@ -2027,9 +1949,6 @@ fn buildDongCore(
     }
 
     // Dependencies
-    if (quickjs_artifact) |qj| {
-        dong_core.step.dependOn(&qj.step);
-    }
     dong_core.step.dependOn(&lexbor_artifact.step);
     dong_core.step.dependOn(&yoga_artifact.step);
     dong_core.step.dependOn(&freetype_artifact.step);
@@ -2100,7 +2019,6 @@ fn buildSDLBackend(
     sdl_backend.root_module.addIncludePath(b.path("backends/sdl"));
     sdl_backend.root_module.addIncludePath(b.path("third_party/sdl/include"));
     sdl_backend.root_module.addIncludePath(b.path("third_party/SDL_shadercross/include"));
-    sdl_backend.root_module.addIncludePath(b.path("third_party/quickjs"));
     sdl_backend.root_module.addIncludePath(b.path("third_party/lexbor/source"));
     sdl_backend.root_module.addIncludePath(b.path("third_party/yoga"));
     sdl_backend.root_module.addIncludePath(b.path("third_party/freetype/include"));

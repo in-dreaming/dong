@@ -29,9 +29,17 @@
 
 ## 完成记录
 
-- **状态**: **未执行**（2026-07-06）— T13 pending ≈147，硬门槛未满足
-- **前置**: Wave 4 框架示例已 land；QuickJS 仍作 baseline
-- **下一步**: T13 盘点清零 → 按本文 §工作内容 删除 QuickJS
+- **状态**: **已完成**（2026-07-07，commit `92923c2`）
+- **前置**: T13 盘点 **280 ready / 0 blocked / 6 dropped**；T20 execCommand 七例已迁移
+- **变更摘要**:
+  - 删除 `dong/third_party/quickjs` submodule 及全部 QuickJS 绑定源文件（`js_bindings.cpp`、`js_node_bindings.*` 等）
+  - `script_engine.hpp` 仅 re-export Porffor；`engine_view.cpp` 移除双引擎 ifdef
+  - `dong_engine_eval_script` 保留 ABI、恒返回 `DONG_ERR_INTERNAL`；推荐 `dong_engine_call_porffor_export`
+  - CMake / `build.zig` 移除 QuickJS 目标与链接；`.gitmodules` 移除 quickjs 条目
+  - 用户文档（`README.md`、`AGENTS.md`、`CLAUDE.md`、getting-started 等）更新为 Porffor
+- **构建验证**: Windows `zig build` 绿（2026-07-07）
+- **二进制**: `dong.dll` ≈ **5.96 MiB**（6,247,936 bytes，Release，含 Porffor 生成 C）
+- **遗留引用**: 任务组历史文档（`setup.md`、`调研1.md`、T06–T20 规格）仍含 QuickJS 作迁移参照说明——属归档文档，符合验收 §1
 
 ## 风险
 

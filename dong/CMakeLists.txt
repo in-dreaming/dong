@@ -31,12 +31,6 @@ if(NOT DONG_BACKEND MATCHES "^(sdl|gpu|none)$")
     message(FATAL_ERROR "Invalid DONG_BACKEND='${DONG_BACKEND}' (expected sdl, gpu, or none)")
 endif()
 
-# Script engine: porffor (AOT, default) or quickjs (interpreter)
-set(DONG_SCRIPT_ENGINE "porffor" CACHE STRING "Script engine backend: porffor | quickjs")
-set_property(CACHE DONG_SCRIPT_ENGINE PROPERTY STRINGS porffor quickjs)
-if(NOT DONG_SCRIPT_ENGINE MATCHES "^(porffor|quickjs)$")
-    message(FATAL_ERROR "Invalid DONG_SCRIPT_ENGINE='${DONG_SCRIPT_ENGINE}' (expected porffor or quickjs)")
-endif()
 if(DONG_BACKEND STREQUAL "gpu")
     add_compile_definitions(DONG_BACKEND_GPU=1)
 elseif(DONG_BACKEND STREQUAL "sdl")
@@ -106,29 +100,9 @@ set(SDL3_PREFIX "${CMAKE_SOURCE_DIR}/zig-out/sdl3")
 set(ZIG_OUT_PREFIX "${CMAKE_SOURCE_DIR}/zig-out")
 
 # =============================================================================
-# QuickJS library (static) — only when DONG_SCRIPT_ENGINE=quickjs
+# Porffor AOT scripts (sole script engine)
 # =============================================================================
-if(DONG_SCRIPT_ENGINE STREQUAL "quickjs")
-add_library(quickjs STATIC IMPORTED GLOBAL)
-if(WIN32)
-    set_target_properties(quickjs PROPERTIES
-        IMPORTED_LOCATION "${ZIG_OUT_PREFIX}/lib/quickjs.lib"
-        INTERFACE_INCLUDE_DIRECTORIES "${ZIG_OUT_PREFIX}/include"
-    )
-else()
-    set_target_properties(quickjs PROPERTIES
-        IMPORTED_LOCATION "${ZIG_OUT_PREFIX}/lib/libquickjs.a"
-        INTERFACE_INCLUDE_DIRECTORIES "${ZIG_OUT_PREFIX}/include"
-    )
-endif()
-endif()
-
-# =============================================================================
-# Porffor AOT scripts (when DONG_SCRIPT_ENGINE=porffor)
-# =============================================================================
-if(DONG_SCRIPT_ENGINE STREQUAL "porffor")
-    include(${CMAKE_SOURCE_DIR}/cmake/PorfforScripts.cmake)
-endif()
+include(${CMAKE_SOURCE_DIR}/cmake/PorfforScripts.cmake)
 
 # =============================================================================
 # Lexbor library
@@ -282,22 +256,7 @@ add_library(dong SHARED
     src/render/slug/slug_font_cache.cpp
 )
 
-if(DONG_SCRIPT_ENGINE STREQUAL "quickjs")
-    target_sources(dong PRIVATE
-        src/script/module_loader.cpp
-        src/script/script_engine.cpp
-        src/script/js_bindings.cpp
-        src/script/js_node_bindings.cpp
-        src/script/js_observer_bindings.cpp
-        src/script/js_clipboard_bindings.cpp
-        src/script/js_selection_bindings.cpp
-        src/script/js_fetch_bindings.cpp
-        src/script/js_text_layout_bindings.cpp
-        src/script/js_scene_bindings.cpp
-    )
-elseif(DONG_SCRIPT_ENGINE STREQUAL "porffor")
-    dong_attach_porffor_scripts(dong)
-endif()
+dong_attach_porffor_scripts(dong)
 
 target_include_directories(dong PUBLIC
     include
@@ -322,9 +281,6 @@ target_compile_definitions(dong PRIVATE DONG_BUILDING_DLL)
 target_compile_definitions(dong PUBLIC MSDFGEN_PUBLIC= MSDFGEN_EXT_PUBLIC=)
 
 target_link_libraries(dong PUBLIC lexbor yoga)
-if(DONG_SCRIPT_ENGINE STREQUAL "quickjs")
-    target_link_libraries(dong PUBLIC quickjs)
-endif()
 if(WIN32)
     target_link_libraries(dong PUBLIC winhttp)
 endif()
@@ -337,27 +293,6 @@ if(WIN32)
         "${ZIG_OUT_PREFIX}/lib/msdfgen-core.lib"
         "${ZIG_OUT_PREFIX}/lib/msdfgen-ext.lib"
     )
-    # Link clang compiler-rt builtins for __udivti3 etc (used by QuickJS BigInt)
-    # QuickJS is built with Zig/Clang, so we always need builtins regardless of host compiler
-    # Try LLVM installation first (has __udivti3), then fallback to VS bundled version
-    if(NOT DEFINED CLANG_RT_BUILTIN)
-        file(GLOB CLANG_RT_BUILTINS_LLVM
-            "C:/env/llvm/*/lib/clang/*/lib/windows/clang_rt.builtins-x86_64.lib"
-        )
-        file(GLOB CLANG_RT_BUILTINS_VS
-            "C:/Program Files/Microsoft Visual Studio/2022/*/VC/Tools/MSVC/*/lib/x64/clang_rt.builtins-x86_64.lib"
-        )
-        if(CLANG_RT_BUILTINS_LLVM)
-            list(GET CLANG_RT_BUILTINS_LLVM 0 CLANG_RT_BUILTIN)
-            set(CLANG_RT_BUILTIN "${CLANG_RT_BUILTIN}" CACHE FILEPATH "Clang RT builtins library" FORCE)
-        elseif(CLANG_RT_BUILTINS_VS)
-            list(GET CLANG_RT_BUILTINS_VS 0 CLANG_RT_BUILTIN)
-            set(CLANG_RT_BUILTIN "${CLANG_RT_BUILTIN}" CACHE FILEPATH "Clang RT builtins library" FORCE)
-        endif()
-    endif()
-    if(CLANG_RT_BUILTIN AND DONG_SCRIPT_ENGINE STREQUAL "quickjs")
-        target_link_libraries(dong PUBLIC "${CLANG_RT_BUILTIN}")
-    endif()
 else()
     target_link_libraries(dong PUBLIC
         "${ZIG_OUT_PREFIX}/lib/libfreetype.a"
@@ -486,23 +421,6 @@ add_library(dong_render STATIC
     third_party/SDL_shadercross/src/SDL_shadercross.c
 )
 
-if(DONG_SCRIPT_ENGINE STREQUAL "quickjs")
-    target_sources(dong_render PRIVATE
-        src/script/module_loader.cpp
-        src/script/script_engine.cpp
-        src/script/js_bindings.cpp
-        src/script/js_node_bindings.cpp
-        src/script/js_observer_bindings.cpp
-        src/script/js_clipboard_bindings.cpp
-        src/script/js_selection_bindings.cpp
-        src/script/js_fetch_bindings.cpp
-        src/script/js_text_layout_bindings.cpp
-        src/script/js_scene_bindings.cpp
-    )
-elseif(DONG_SCRIPT_ENGINE STREQUAL "porffor")
-    target_compile_definitions(dong_render PRIVATE DONG_SCRIPT_ENGINE_PORFFOR=1)
-endif()
-
 set_target_properties(dong_render PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 target_include_directories(dong_render PUBLIC
@@ -544,9 +462,6 @@ if(WIN32 OR APPLE)
 endif()
 
 target_link_libraries(dong_render PUBLIC dong lexbor yoga)
-if(DONG_SCRIPT_ENGINE STREQUAL "quickjs")
-    target_link_libraries(dong_render PUBLIC quickjs)
-endif()
 
 dong_apply_gtc_target(dong_render)
 
@@ -558,10 +473,6 @@ if(WIN32)
         "${ZIG_OUT_PREFIX}/lib/msdfgen-core.lib"
         "${ZIG_OUT_PREFIX}/lib/msdfgen-ext.lib"
     )
-    # Link clang compiler-rt builtins for __udivti3 etc (used by QuickJS BigInt)
-    if(CLANG_RT_BUILTIN)
-        target_link_libraries(dong_render PUBLIC "${CLANG_RT_BUILTIN}")
-    endif()
 else()
     target_link_libraries(dong_render PUBLIC
         "${ZIG_OUT_PREFIX}/lib/libfreetype.a"

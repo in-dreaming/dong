@@ -51,5 +51,4 @@ function(dong_attach_porffor_scripts target_name)
         "${DONG_PORFFOR_OUT_DIR}"
         "${CMAKE_SOURCE_DIR}/src/script/porffor"
     )
-    target_compile_definitions(${target_name} PRIVATE DONG_SCRIPT_ENGINE_PORFFOR=1)
 endfunction()

@@ -29,7 +29,7 @@ const T14_DISPOSITION = {
   'test_ce_enter_offset.html': { action: 'ready', note: 'static CE blocks + log placeholder' },
   'test_ce_mixed_multiline.html': { action: 'ready', note: 'mixed CE sections layout' },
 
-  // 解析期 execCommand — 帧 0 视觉依赖 QuickJS，Porffor 无 execCommand
+  // 解析期 execCommand — 已迁移为 Porffor host import（T20）
   'test_contenteditable_bold_auto.html': {
     action: 'multiframe-stub',
     note: 'auto bold on parse; needs C++ drive or ce_bold snippet (Plan B)',

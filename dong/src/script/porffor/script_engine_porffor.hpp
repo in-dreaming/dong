@@ -47,10 +47,6 @@ public:
     PorfforScriptRegistry* registry() { return registry_.get(); }
     PorfforHost* host() { return host_.get(); }
 
-    // QuickJS-compat stubs (always null / no-op in Porffor mode).
-    void* getContext() const { return nullptr; }
-    void* getRuntime() const { return nullptr; }
-
 private:
     std::unique_ptr<PorfforHost> host_;
     std::unique_ptr<PorfforScriptRegistry> registry_;

@@ -147,9 +147,9 @@ def main():
     )
     ap.add_argument(
         "--engine",
-        choices=["quickjs", "porffor"],
+        choices=["porffor"],
         default="porffor",
-        help="Script engine to benchmark (default: porffor)",
+        help="Script engine to benchmark (Porffor AOT; default: porffor)",
     )
     ap.add_argument(
         "--html",
@@ -167,13 +167,9 @@ def main():
     html_path = (
         Path(args.html)
         if args.html
-        else (
-            dong_dir / "examples" / "data" / "benchmarks" / "js_microbench_porffor.html"
-            if args.engine == "porffor"
-            else dong_dir / "examples" / "data" / "benchmarks" / "js_microbench.html"
-        )
+        else dong_dir / "examples" / "data" / "benchmarks" / "js_microbench_porffor.html"
     )
-    porffor_module = "js_microbench" if args.engine == "porffor" else None
+    porffor_module = "js_microbench"
 
     try:
         exe = find_exe(exe_dir)

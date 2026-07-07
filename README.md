@@ -12,7 +12,7 @@ GPU-accelerated HTML/CSS UI engine for games and interactive applications.
 
 - **三轨渲染**：DOM（默认）、Scene Graph（高密度 HUD）、Direct Draw（即时 overlay）
 - **现代 CSS 子集**：Flexbox、Grid、sticky/fixed、gradient、mask、animation 等
-- **JavaScript**：QuickJS 引擎，支持 React / Preact 示例
+- **JavaScript**：Porffor AOT 脚本引擎，支持 `porf-*` 框架示例
 - **文本渲染**：MSDF + Slug 双渲染器，Color Emoji 支持
 - **嵌入友好**：平台无关 Core（`dong.dll`）+ 可插拔 Backend
 - **3D 集成**：多 HTML 屏幕、World Text / Decal / Overlay C API

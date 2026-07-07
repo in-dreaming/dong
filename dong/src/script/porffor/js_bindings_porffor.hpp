@@ -30,7 +30,7 @@ namespace dong::script {
 class ScriptEngine;
 class PorfforScriptRegistry;
 
-// Minimal bindings for Porffor host (no QuickJS).
+// Minimal bindings for Porffor host.
 class JSBindings {
 public:
     JSBindings(ScriptEngine* engine,

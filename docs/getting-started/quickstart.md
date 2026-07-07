@@ -21,7 +21,7 @@ zig build examples
 
 构建产物位于 `zig-out/bin/`。
 
-首次构建会编译第三方依赖（QuickJS、Lexbor、Yoga、SDL3 等），可能需要数分钟。
+首次构建会编译第三方依赖与 Porffor 脚本（Lexbor、Yoga、SDL3、Porffor 等，需要 Node.js），可能需要数分钟。
 
 ## 运行 dong_app
 

@@ -40,7 +40,7 @@ Applications (dong_app / 游戏引擎)
 | `src/core/` | EngineView、GlobalShared、热重载 |
 | `src/dom/` | DOM 树、HTML/CSS 解析 |
 | `src/layout/` | Yoga 封装、Grid、sticky、aspect-ratio |
-| `src/script/` | QuickJS 绑定 |
+| `src/script/` | Porffor AOT 脚本引擎与 host 绑定 |
 | `src/render/` | Painter、DisplayList、OverlayDraw |
 | `backends/sdl/` | GPU 驱动、着色器、输入适配 |
 | `include/` | 公开 C API |

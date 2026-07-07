@@ -1,4 +1,4 @@
-// Polyfills for Preact scheduler in QuickJS/Dong environment.
+// Polyfills for Preact scheduler in Dong/Porffor environment.
 // requestAnimationFrame is natively implemented in Dong (js_bindings.cpp),
 // these polyfills are fallbacks in case the native version is unavailable.
 

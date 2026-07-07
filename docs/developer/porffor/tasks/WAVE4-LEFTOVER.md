@@ -1,6 +1,6 @@
-# Wave 4 遗留事项（2026-07-06）
+# Wave 4 遗留事项（2026-07-07）
 
-Wave 4 任务 T18–T23 主体已合入 `feature/porffor`（**commit `394884a`**）。本地可运行验证：**`87b5789`**（Porffor 内存初始化 + Windows 构建修复）。**T21 QuickJS 退役** 未执行。
+Wave 4 任务 T18–T23 主体已合入 `feature/porffor`（**commit `394884a`**）。本地可运行验证：**`87b5789`**（Porffor 内存初始化 + Windows 构建修复）。**T21 QuickJS 退役** 已于 2026-07-07 完成。
 
 ## 合入摘要
 
@@ -9,13 +9,13 @@ Wave 4 任务 T18–T23 主体已合入 `feature/porffor`（**commit `394884a`**
 | T18 | ✅ | `framework-spec.md` 评审通过 |
 | T22 | ✅ | `porffor_framework_compile.mjs` + lint + 快照单测；`porf_counter` 编译链路 |
 | T23 | ✅ | 三示例 + `components.md`；todo/game-ui 手写 Porffor 模块 |
-| T21 | ⏸ | **blocked** — T13 ready **280/286**；blocked **0**；dropped **6** |
+| T21 | ✅ | QuickJS 完全移除；Porffor 为唯一脚本引擎；`dong.dll` ≈ 5.96 MiB |
 
-## 遗留 — T21 QuickJS 退役
+## T21 完成要点
 
-1. **T13 盘点**：ready **280/286 (97.9%)**；pending **0**；blocked **0**；dropped **6**。见 `T13-remaining-batch-result.md`。
-2. **`rg -i quickjs`** 仍大量命中 `src/script/`、`third_party/quickjs`。
-3. **`dong_engine_eval_script`** 公开 API 语义变更需 API version 升级。
+1. **T13 盘点**：ready **280/286 (97.9%)**；pending **0**；blocked **0**；dropped **6**。
+2. **代码库**：`src/script/` QuickJS 绑定与 `third_party/quickjs` submodule 已删除；`rg -i quickjs` 在代码/构建脚本中零命中。
+3. **C API**：`dong_engine_eval_script` 保留签名、返回 `DONG_ERR_INTERNAL`；使用 `dong_engine_call_porffor_export`。
 
 ## 遗留 — 框架 / 工具链
 
@@ -39,7 +39,7 @@ Wave 4 任务 T18–T23 主体已合入 `feature/porffor`（**commit `394884a`**
 
 - T13：**280 ready / 0 blocked(T20) / 6 dropped** — 批处理脚本链见下
 - T10 fetch：**3** 个 callback 模块（`t10_fetch_*`）+ `frames:2` mf.json
-- T21 QuickJS 退役（`execCommand` 七例已不再是阻塞项）
+- ~~T21 QuickJS 退役~~ — **完成**（2026-07-07）
 
 ### T13 批处理脚本
 

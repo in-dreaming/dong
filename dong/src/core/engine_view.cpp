@@ -34,11 +34,7 @@
 #include "../dom/scene_compiler.hpp"
 #include "../script/script_engine.hpp"
 #include "../script/js_bindings.hpp"
-#ifdef DONG_SCRIPT_ENGINE_PORFFOR
 #include "../script/porffor/dong_porf_host.hpp"
-#else
-#include "../script/js_fetch_bindings.hpp"
-#endif
 #include "../devtools/devtools_overlay.hpp"
 
 #include <cstdlib>
@@ -718,20 +714,11 @@ struct EngineView::Impl {
         if (js_bindings_initialized || !js_bindings || !script_engine) {
             return;
         }
-#ifdef DONG_SCRIPT_ENGINE_PORFFOR
         js_bindings->initialize();
         if (script_engine->host() && js_bindings) {
             script_engine->host()->setBindings(js_bindings.get());
         }
         js_bindings_initialized = true;
-#else
-        JSContext* qjs = script_engine->getContext();
-        if (!qjs) {
-            return;
-        }
-        js_bindings->initialize();
-        js_bindings_initialized = true;
-#endif
     }
 
     // --- P0-6 S1: Invalidation tracking ---
@@ -1717,14 +1704,6 @@ struct EngineView::Impl {
         if (js_bindings) {
             js_bindings->resetForNewDOM();
         }
-        if (script_engine && js_bindings) {
-#ifndef DONG_SCRIPT_ENGINE_PORFFOR
-        if (script_engine->getContext()) {
-            dong::script::resetFetchState(script_engine->getContext());
-        }
-#endif
-        }
-
         invalidate(InvalidationKind::Full, nullptr, "loadHTML");
 
         auto root = dom_manager->getRoot();
@@ -1779,7 +1758,6 @@ struct EngineView::Impl {
             } else {
                 ensureJSBindingsInitialized();
 
-#ifdef DONG_SCRIPT_ENGINE_PORFFOR
             std::string mod = porffor_module_;
             if (mod.empty()) {
                 mod = resolvePorfforModuleFromDom(dom_manager.get());
@@ -1800,113 +1778,6 @@ struct EngineView::Impl {
             } else {
                 DONG_LOG_WARN("[EngineView] No Porffor module configured (set DONG_PORFFOR_MODULE or data-porffor-module)");
             }
-#else
-            if (js_bindings) {
-                DONG_LOG_INFO("[EngineView] Scanning for inline event handlers...");
-                js_bindings->scanAndRegisterInlineEventHandlers();
-                DONG_LOG_INFO("[EngineView] Inline event handler scan completed");
-            } else {
-                DONG_LOG_WARN("[EngineView] js_bindings is null, skipping inline handler registration");
-            }
-
-            auto scripts = dom_manager->getElementsByTagName("script");
-            DONG_LOG_INFO("[EngineView] Found %zu script tag(s)", scripts.size());
-
-            // Phase 1: Separate module scripts from regular scripts
-            std::vector<DOMNodePtr> module_scripts;
-            std::vector<DOMNodePtr> regular_scripts;
-
-            for (const auto& script : scripts) {
-                if (!script) continue;
-                if (isModuleScript(script)) {
-                    module_scripts.push_back(script);
-                } else {
-                    regular_scripts.push_back(script);
-                }
-            }
-
-            DONG_LOG_INFO("[EngineView] Found %zu regular script(s) and %zu ES module script(s)",
-                          regular_scripts.size(), module_scripts.size());
-
-            // Phase 2: Execute regular scripts first
-            for (const auto& script : regular_scripts) {
-                if (!script) continue;
-
-                std::string code;
-                std::string src = script->getAttribute("src");
-                DONG_LOG_INFO("[EngineView] Processing regular script tag, src='%s'", src.c_str());
-
-                if (!src.empty()) {
-                    (void)readTextFileFromPlatformFS(src, resource_root, code);
-                } else {
-                    for (const auto& child : script->getChildren()) {
-                        if (child && child->getType() == dong::dom::DOMNode::NodeType::TEXT) {
-                            code += child->getTextContent();
-                        }
-                    }
-                }
-
-                DONG_LOG_INFO("[EngineView] Script code length: %zu bytes", code.length());
-                if (!code.empty()) {
-                    DONG_LOG_INFO("[EngineView] Executing regular script...");
-                    DONG_PROFILE_SCOPE_CAT("Script::eval", "init");
-                    if (js_bindings) {
-                        js_bindings->setCurrentExecutingScript(script);
-                    }
-                    script_engine->eval(code);
-                    if (js_bindings) {
-                        js_bindings->clearCurrentExecutingScript();
-                    }
-                    DONG_LOG_INFO("[EngineView] Regular script execution completed");
-                }
-            }
-
-            // Phase 3: Execute ES module scripts
-            for (const auto& script : module_scripts) {
-                if (!script) continue;
-
-                std::string src = script->getAttribute("src");
-                DONG_LOG_INFO("[EngineView] Processing ES module script, src='%s'", src.c_str());
-
-                if (src.empty()) {
-                    DONG_LOG_WARN("[EngineView] Module script without src attribute (inline modules not supported)");
-                    continue;
-                }
-
-                std::string code;
-                bool loaded = readTextFileFromPlatformFS(src, resource_root, code);
-                if (!loaded) {
-                    DONG_LOG_ERROR("[EngineView] Failed to load module script: %s", src.c_str());
-                    continue;
-                }
-
-                DONG_LOG_INFO("[EngineView] Loaded ES module: %zu bytes", code.length());
-
-                if (!code.empty()) {
-                    DONG_LOG_INFO("[EngineView] Executing ES module script...");
-                    DONG_PROFILE_SCOPE_CAT("Script::eval_module", "init");
-                    if (js_bindings) {
-                        js_bindings->setCurrentExecutingScript(script);
-                    }
-
-                    // Execute module using ES module evaluation
-                    bool module_ok = script_engine->evalModule(src, code);
-
-                    if (js_bindings) {
-                        js_bindings->clearCurrentExecutingScript();
-                    }
-
-                    if (module_ok) {
-                        DONG_LOG_INFO("[EngineView] ES module execution completed: %s", src.c_str());
-                    } else {
-                        DONG_LOG_ERROR("[EngineView] ES module execution failed: %s", src.c_str());
-                    }
-                } else {
-                    DONG_LOG_WARN("[EngineView] Empty module script: %s", src.c_str());
-                }
-            }
-
-#endif // DONG_SCRIPT_ENGINE_PORFFOR
 
             // Dispatch DOMContentLoaded / load on document (body).
             // Porffor: module main() runs first (inline-script equivalent); lifecycle listeners fire here.
@@ -1920,16 +1791,6 @@ struct EngineView::Impl {
                 }
                 if (doc_target) {
                     uint64_t nid = js_bindings->getNodeIdFor(doc_target);
-#ifndef DONG_SCRIPT_ENGINE_PORFFOR
-                    if (!nid) {
-                        JSContext* qctx = script_engine->getContext();
-                        if (qctx) {
-                            JSValue tmp = js_bindings->createJSElement(qctx, doc_target);
-                            JS_FreeValue(qctx, tmp);
-                            nid = js_bindings->getNodeIdFor(doc_target);
-                        }
-                    }
-#endif
                     if (nid) {
                         js_bindings->dispatchSimpleEvent(nid, "DOMContentLoaded");
                         js_bindings->dispatchSimpleEvent(nid, "load");
@@ -2112,15 +1973,6 @@ struct EngineView::Impl {
         if (!script_engine) return;
         DONG_PROFILE_SCOPE_CAT("Script::processTasks", "script");
         script_engine->processPendingTasks();
-
-#ifndef DONG_SCRIPT_ENGINE_PORFFOR
-        // Drain completed async fetch requests
-        JSContext* ctx = script_engine->getContext();
-        if (ctx) {
-            dong::script::tickPendingFetches(ctx);
-            script_engine->processPendingTasks();
-        }
-#endif
 
         if (js_bindings) {
             auto now = std::chrono::steady_clock::now();
@@ -3063,16 +2915,7 @@ struct EngineView::Impl {
         uint64_t node_id = js_bindings->getNodeIdFor(node);
         if (node_id) return node_id;
 
-#ifndef DONG_SCRIPT_ENGINE_PORFFOR
-        JSContext* qjs = script_engine->getContext();
-        if (!qjs) return 0;
-
-        JSValue tmp = js_bindings->createJSElement(qjs, node);
-        JS_FreeValue(qjs, tmp);
         return js_bindings->getNodeIdFor(node);
-#else
-        return js_bindings->getNodeIdFor(node);
-#endif
     }
 
     void dispatchSimpleEventForNode(const DOMNodePtr& node, const char* type) {
@@ -4388,64 +4231,13 @@ private:
 
     // Dispatch 'gamepadbutton' JS event on focused element. Returns true if preventDefault'd.
     bool dispatchGamepadButtonEvent(int32_t gamepad_id, int button, bool pressed) {
-#ifndef DONG_SCRIPT_ENGINE_PORFFOR
-        if (!js_bindings || !script_engine) return false;
-        ensureJSBindingsInitialized();
-
-        JSContext* ctx = script_engine->getContext();
-        if (!ctx) return false;
-
-        // Target: focused element or document body
-        dong::dom::DOMNodePtr target;
-        if (focus_manager) {
-            target = focus_manager->getFocusedElement();
-        }
-        if (!target && dom_manager) {
-            target = dom_manager->getRoot();
-        }
-        if (!target) return false;
-
-        uint64_t node_id = ensureNodeIdForJS(target);
-        if (!node_id) return false;
-
-        // Build event object
-        JSValue ev = JS_NewObject(ctx);
-        JS_SetPropertyStr(ctx, ev, "type", JS_NewString(ctx, "gamepadbutton"));
-        JS_SetPropertyStr(ctx, ev, "bubbles", JS_TRUE);
-        JS_SetPropertyStr(ctx, ev, "cancelable", JS_TRUE);
-        JS_SetPropertyStr(ctx, ev, "isTrusted", JS_TRUE);
-        JS_SetPropertyStr(ctx, ev, "gamepadId", JS_NewInt32(ctx, gamepad_id));
-        JS_SetPropertyStr(ctx, ev, "button", JS_NewInt32(ctx, button));
-        JS_SetPropertyStr(ctx, ev, "pressed", pressed ? JS_TRUE : JS_FALSE);
-
-        // Map button to name string
-        const char* button_name = "unknown";
-        switch (button) {
-            case 0: button_name = "dpad_up"; break;
-            case 1: button_name = "dpad_down"; break;
-            case 2: button_name = "dpad_left"; break;
-            case 3: button_name = "dpad_right"; break;
-            case 4: button_name = "a"; break;
-            case 5: button_name = "b"; break;
-            case 6: button_name = "x"; break;
-            case 7: button_name = "y"; break;
-            case 8: button_name = "lb"; break;
-            case 9: button_name = "rb"; break;
-            case 10: button_name = "start"; break;
-            case 11: button_name = "back"; break;
-        }
-        JS_SetPropertyStr(ctx, ev, "buttonName", JS_NewString(ctx, button_name));
-
-        // dispatchEventObject returns true if NOT prevented
-        bool not_prevented = js_bindings->dispatchEventObject(node_id, ev);
-        JS_FreeValue(ctx, ev);
-        return !not_prevented; // return true if prevented
-#else
+        // Gamepad event dispatch requires building a JS event object generically;
+        // the Porffor AOT script engine has no runtime object construction API, so
+        // this is a no-op until a Porffor-native gamepad host import is added.
         (void)gamepad_id;
         (void)button;
         (void)pressed;
         return false;
-#endif
     }
 
     // Simulate a click on the currently focused element
@@ -4472,38 +4264,9 @@ private:
 
     // Handle gamepad B button: dispatch 'gamepadcancel', default close topmost dialog
     bool handleGamepadCancel() {
-#ifndef DONG_SCRIPT_ENGINE_PORFFOR
-        // Dispatch 'gamepadcancel' event on focused element
-        if (js_bindings && script_engine) {
-            ensureJSBindingsInitialized();
-            JSContext* ctx = script_engine->getContext();
-            if (ctx) {
-                dong::dom::DOMNodePtr target;
-                if (focus_manager) {
-                    target = focus_manager->getFocusedElement();
-                }
-                if (!target && dom_manager) {
-                    target = dom_manager->getRoot();
-                }
-                if (target) {
-                    uint64_t node_id = ensureNodeIdForJS(target);
-                    if (node_id) {
-                        JSValue ev = JS_NewObject(ctx);
-                        JS_SetPropertyStr(ctx, ev, "type", JS_NewString(ctx, "gamepadcancel"));
-                        JS_SetPropertyStr(ctx, ev, "bubbles", JS_TRUE);
-                        JS_SetPropertyStr(ctx, ev, "cancelable", JS_TRUE);
-                        JS_SetPropertyStr(ctx, ev, "isTrusted", JS_TRUE);
-
-                        // dispatchEventObject returns true if NOT prevented
-                        bool not_prevented = js_bindings->dispatchEventObject(node_id, ev);
-                        JS_FreeValue(ctx, ev);
-                        if (!not_prevented) return true; // prevented
-                    }
-                }
-            }
-        }
-
-#endif // !DONG_SCRIPT_ENGINE_PORFFOR
+        // 'gamepadcancel' JS event dispatch requires generic JS object construction,
+        // unsupported by the Porffor AOT script engine; falls through to the default
+        // action (close topmost dialog) until a Porffor-native host import exists.
 
         // Default: close topmost dialog
         if (!top_layer.empty()) {
@@ -4599,13 +4362,11 @@ public:
         }
         DONG_PROFILE_SCOPE_CAT("Script::evalScript", "script");
         ensureJSBindingsInitialized();
-#ifdef DONG_SCRIPT_ENGINE_PORFFOR
-        DONG_LOG_WARN("[EngineView] evalScript unsupported in Porffor mode");
+        // Deprecated (T21): Porffor is an AOT script engine with no runtime eval.
+        // Kept as a stable no-op for API compatibility; use callPorfforExport instead.
+        DONG_LOG_WARN("[EngineView] evalScript is deprecated and unsupported (Porffor is AOT-only); use dong_engine_call_export");
         (void)code;
         return false;
-#else
-        return script_engine->eval(std::string(code));
-#endif
     }
 
     bool callPorfforExport(const char* module_name, const char* export_name) {
@@ -4613,16 +4374,9 @@ public:
         if (!module_name || !export_name || !script_engine) {
             return false;
         }
-#ifdef DONG_SCRIPT_ENGINE_PORFFOR
         DONG_PROFILE_SCOPE_CAT("Script::callPorfforExport", "script");
         ensureJSBindingsInitialized();
         return script_engine->callExport(std::string(module_name), std::string(export_name));
-#else
-        (void)module_name;
-        (void)export_name;
-        DONG_LOG_WARN("[EngineView] callPorfforExport only supported in Porffor mode");
-        return false;
-#endif
     }
 
     void setPorfforModule(const std::string& module) { porffor_module_ = module; }
