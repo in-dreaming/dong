@@ -417,6 +417,10 @@ function compileHandler(parentName, handlerName, handlerPath) {
 }
 
 fs.mkdirSync(outDir, { recursive: true });
+if (!process.argv.some((a) => a.startsWith('-o='))) {
+  process.argv.push(`-o=${path.join(outDir, '_unused.c')}`);
+  globalThis.argvChanged?.();
+}
 
 const compiled = [];
 const handlers = [];
@@ -425,10 +429,6 @@ for (const entry of scriptEntries) {
   const item = compileScript(entry);
   compiled.push(item);
   emitModuleC(item);
-
-  if (!process.argv.some((a) => a.startsWith('-o='))) {
-    process.argv.push(`-o=${path.join(outDir, '_unused.c')}`);
-  }
 
   for (const exportName of item.exports ?? []) {
     const shim = item.exportShims.get(exportName);

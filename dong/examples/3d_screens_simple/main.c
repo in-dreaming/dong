@@ -78,9 +78,9 @@ static const FloorPanel k_component_showcase[] = {
     {"porf-game-ui/index.html", 960, 640, 4.5f, 2.8f},
     {"porf-todo-classic/index.html", 960, 640, 4.5f, 2.8f},
     {"feature_test.html", 960, 640, 4.5f, 2.8f},
-    {"pretext/test_text_flow.html", 960, 640, 4.5f, 2.8f},
-    {"pretext/test_text_flow_dynamic.html", 960, 640, 4.5f, 2.8f},
-    {"pretext/test_dual_mode.html", 960, 640, 4.5f, 2.8f},
+    {"tests/test_porffor_greeting.html", 960, 640, 4.5f, 2.8f},
+    {"tests/test_class_demo.html", 960, 640, 4.5f, 2.8f},
+    {"tests/test_checkbox_toggle.html", 960, 640, 4.5f, 2.8f},
 };
 
 static const FloorPanel k_forms[] = {
@@ -97,6 +97,7 @@ static const FloorPanel k_layout[] = {
 
 static const FloorPanel k_text[] = {
     {"tests/text_wrap_test.html", 960, 640, 4.2f, 2.6f},
+    {"pretext/test_text_flow.html", 960, 640, 4.2f, 2.6f},
     {"pretext/test_text_flow_directdraw.html", 960, 640, 4.2f, 2.6f},
     {"tests/test_colr_emoji.html", 960, 640, 4.2f, 2.6f},
     {"tests/test_colr_v0_emoji.html", 960, 640, 4.2f, 2.6f},
