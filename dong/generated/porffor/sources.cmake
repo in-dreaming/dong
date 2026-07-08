@@ -1,6 +1,7 @@
 set(DONG_PORFFOR_MODULE_SOURCES
   "${DONG_PORFFOR_OUT_DIR}/hello_dom.c"
   "${DONG_PORFFOR_OUT_DIR}/scene3d_hud.c"
+  "${DONG_PORFFOR_OUT_DIR}/feature_test.c"
   "${DONG_PORFFOR_OUT_DIR}/js_microbench.c"
   "${DONG_PORFFOR_OUT_DIR}/test_hidden_attr.c"
   "${DONG_PORFFOR_OUT_DIR}/test_checkbox_toggle.c"

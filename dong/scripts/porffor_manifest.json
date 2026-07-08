@@ -58,6 +58,18 @@
       ]
     },
     {
+      "name": "feature_test",
+      "path": "examples/porffor/feature_test.js",
+      "exports": [
+        "onTab1",
+        "onTab2",
+        "onTab3",
+        "onTab4",
+        "onTab5",
+        "onTab6"
+      ]
+    },
+    {
       "name": "js_microbench",
       "path": "examples/data/benchmarks/js_microbench_porffor.js"
     },

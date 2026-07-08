@@ -11500,27 +11500,27 @@ static struct ReturnValue dong_porf_porf_todo_toUtf8(f64 jjnewtarget, i32 jjnewt
   i32 lenjjtype = 0;
   i32 jjlength_tmp = 0;
   i32 jjlast_type = 0;
-  f64 jjmember_obj_146 = 0;
-  f64 jjmember_prop_146 = 0;
+  f64 jjmember_obj_155 = 0;
+  f64 jjmember_prop_155 = 0;
   f64 cp = 0;
   i32 cpjjtype = 0;
   f64 jjproto_target = 0;
   i32 jjproto_targetjjtype = 0;
-  f64 jjindirect_147_callee = 0;
-  f64 jjindirect_147_caller = 0;
-  i32 jjindirect_147_callerjjtype = 0;
-  f64 jjmember_obj_148 = 0;
-  f64 jjmember_prop_148 = 0;
+  f64 jjindirect_156_callee = 0;
+  f64 jjindirect_156_caller = 0;
+  i32 jjindirect_156_callerjjtype = 0;
+  f64 jjmember_obj_157 = 0;
+  f64 jjmember_prop_157 = 0;
   i32 jjtypeswitch_tmp1 = 0;
   i32 logictmpi = 0;
   i32 jjlogicinner_tmp_int = 0;
   f64 next = 0;
   i32 nextjjtype = 0;
-  f64 jjindirect_149_callee = 0;
-  f64 jjindirect_149_caller = 0;
-  i32 jjindirect_149_callerjjtype = 0;
-  f64 jjmember_obj_150 = 0;
-  f64 jjmember_prop_150 = 0;
+  f64 jjindirect_158_callee = 0;
+  f64 jjindirect_158_caller = 0;
+  i32 jjindirect_158_callerjjtype = 0;
+  f64 jjmember_obj_159 = 0;
+  f64 jjmember_prop_159 = 0;
   f64 jjbitwise_left = 0;
   f64 jjbitwise_right = 0;
   f64 jjreturn = 0;
@@ -11540,18 +11540,18 @@ static struct ReturnValue dong_porf_porf_todo_toUtf8(f64 jjnewtarget, i32 jjnewt
       jjlast_type = 1;
       _r0 = (f64)(i32_load(1, 0, _get2));
     } else {
-      jjmember_prop_146 = 564;
+      jjmember_prop_155 = 564;
       _get3 = s;
-      jjmember_obj_146 = _get3;
+      jjmember_obj_155 = _get3;
       _get4 = sjjtype;
       // if f64
       f64 _r1;
         if (_get4 == 0) {
           _r1 = 0;
         } else {
-          _get5 = jjmember_obj_146;
+          _get5 = jjmember_obj_155;
           _get6 = sjjtype;
-          _get7 = jjmember_prop_146;
+          _get7 = jjmember_prop_155;
           const struct ReturnValue _0 = dong_porf_porf_todo__Porffor_object_get_withHash((i32)(_get5), _get6, (u32)(_get7), 195, -2086110260, 1);
           jjlast_type = _0.type;
           _r1 = _0.value;
@@ -11621,38 +11621,38 @@ static struct ReturnValue dong_porf_porf_todo_toUtf8(f64 jjnewtarget, i32 jjnewt
             }
           // end
           j565:;
-          jjmember_prop_148 = 1818;
+          jjmember_prop_157 = 1818;
           _get29 = s;
-          jjindirect_147_caller = _get29;
-          _get30 = jjindirect_147_caller;
+          jjindirect_156_caller = _get29;
+          _get30 = jjindirect_156_caller;
           _get31 = sjjtype;
-          jjindirect_147_callerjjtype = _get31;
-          jjmember_obj_148 = _get30;
-          _get32 = jjindirect_147_callerjjtype;
+          jjindirect_156_callerjjtype = _get31;
+          jjmember_obj_157 = _get30;
+          _get32 = jjindirect_156_callerjjtype;
           // if f64
           f64 _r566;
             if (_get32 == 0) {
               _r566 = 0;
             } else {
-              _get33 = jjmember_obj_148;
-              _get34 = jjindirect_147_callerjjtype;
-              _get35 = jjmember_prop_148;
+              _get33 = jjmember_obj_157;
+              _get34 = jjindirect_156_callerjjtype;
+              _get35 = jjmember_prop_157;
               const struct ReturnValue _4 = dong_porf_porf_todo__Porffor_object_get_withHash((i32)(_get33), _get34, (u32)(_get35), 195, -1592872053, 1);
               jjlast_type = _4.type;
               _r566 = _4.value;
             }
           // end
           j566:;
-          jjindirect_147_callee = _r566;
+          jjindirect_156_callee = _r566;
           _get36 = jjlast_type;
           // if f64
           f64 _r567;
             if (_get36 == 6) {
-              _get37 = jjindirect_147_caller;
-              _get38 = jjindirect_147_callerjjtype;
+              _get37 = jjindirect_156_caller;
+              _get38 = jjindirect_156_callerjjtype;
               _get39 = i;
               _get40 = ijjtype;
-              _get41 = jjindirect_147_callee;
+              _get41 = jjindirect_156_callee;
               jjlast_type = 0;
               _r567 = 0;
             } else {
@@ -11776,37 +11776,37 @@ static struct ReturnValue dong_porf_porf_todo_toUtf8(f64 jjnewtarget, i32 jjnewt
                 }
               // end
               j577:;
-              jjmember_prop_150 = 1818;
+              jjmember_prop_159 = 1818;
               _get74 = s;
-              jjindirect_149_caller = _get74;
-              _get75 = jjindirect_149_caller;
+              jjindirect_158_caller = _get74;
+              _get75 = jjindirect_158_caller;
               _get76 = sjjtype;
-              jjindirect_149_callerjjtype = _get76;
-              jjmember_obj_150 = _get75;
-              _get77 = jjindirect_149_callerjjtype;
+              jjindirect_158_callerjjtype = _get76;
+              jjmember_obj_159 = _get75;
+              _get77 = jjindirect_158_callerjjtype;
               // if f64
               f64 _r578;
                 if (_get77 == 0) {
                   _r578 = 0;
                 } else {
-                  _get78 = jjmember_obj_150;
-                  _get79 = jjindirect_149_callerjjtype;
-                  _get80 = jjmember_prop_150;
+                  _get78 = jjmember_obj_159;
+                  _get79 = jjindirect_158_callerjjtype;
+                  _get80 = jjmember_prop_159;
                   const struct ReturnValue _8 = dong_porf_porf_todo__Porffor_object_get_withHash((i32)(_get78), _get79, (u32)(_get80), 195, -1592872053, 1);
                   jjlast_type = _8.type;
                   _r578 = _8.value;
                 }
               // end
               j578:;
-              jjindirect_149_callee = _r578;
+              jjindirect_158_callee = _r578;
               _get81 = jjlast_type;
               // if f64
               f64 _r579;
                 if (_get81 == 6) {
-                  _get82 = jjindirect_149_caller;
-                  _get83 = jjindirect_149_callerjjtype;
+                  _get82 = jjindirect_158_caller;
+                  _get83 = jjindirect_158_callerjjtype;
                   _get84 = i;
-                  _get85 = jjindirect_149_callee;
+                  _get85 = jjindirect_158_callee;
                   jjlast_type = 0;
                   _r579 = 0;
                 } else {
@@ -18486,8 +18486,8 @@ struct ReturnValue dong_porf_porf_todo_onAdd(f64 jjnewtarget, i32 jjnewtargetjjt
   i32 textjjtype = 0;
   i32 jjlast_type = 0;
   i32 jjlength_tmp = 0;
-  f64 jjmember_obj_155 = 0;
-  f64 jjmember_prop_155 = 0;
+  f64 jjmember_obj_164 = 0;
+  f64 jjmember_prop_164 = 0;
 
   const struct ReturnValue _0 = dong_porf_porf_todo_getValue(0, 0, 0, 0, dong_porf_porf_todo_todo_inputId, 1);
   jjlast_type = _0.type;
@@ -18507,18 +18507,18 @@ struct ReturnValue dong_porf_porf_todo_onAdd(f64 jjnewtarget, i32 jjnewtargetjjt
       jjlast_type = 1;
       _r974 = (f64)(i32_load(1, 0, _get4));
     } else {
-      jjmember_prop_155 = 564;
+      jjmember_prop_164 = 564;
       _get5 = text;
-      jjmember_obj_155 = _get5;
+      jjmember_obj_164 = _get5;
       _get6 = textjjtype;
       // if f64
       f64 _r975;
         if (_get6 == 0) {
           _r975 = 0;
         } else {
-          _get7 = jjmember_obj_155;
+          _get7 = jjmember_obj_164;
           _get8 = textjjtype;
-          _get9 = jjmember_prop_155;
+          _get9 = jjmember_prop_164;
           const struct ReturnValue _2 = dong_porf_porf_todo__Porffor_object_get_withHash((i32)(_get7), _get8, (u32)(_get9), 195, -2086110260, 1);
           jjlast_type = _2.type;
           _r975 = _2.value;
@@ -21476,8 +21476,8 @@ static struct ReturnValue dong_porf_porf_todo_readToggleIndex(f64 jjnewtarget, i
   f64 v = 0;
   i32 vjjtype = 0;
   i32 jjlength_tmp = 0;
-  f64 jjmember_obj_160 = 0;
-  f64 jjmember_prop_160 = 0;
+  f64 jjmember_obj_169 = 0;
+  f64 jjmember_prop_169 = 0;
   f64 hit = 0;
   i32 hitjjtype = 0;
 
@@ -21531,18 +21531,18 @@ static struct ReturnValue dong_porf_porf_todo_readToggleIndex(f64 jjnewtarget, i
       jjlast_type = 1;
       _r1193 = (f64)(i32_load(1, 0, _get15));
     } else {
-      jjmember_prop_160 = 564;
+      jjmember_prop_169 = 564;
       _get16 = v;
-      jjmember_obj_160 = _get16;
+      jjmember_obj_169 = _get16;
       _get17 = vjjtype;
       // if f64
       f64 _r1194;
         if (_get17 == 0) {
           _r1194 = 0;
         } else {
-          _get18 = jjmember_obj_160;
+          _get18 = jjmember_obj_169;
           _get19 = vjjtype;
-          _get20 = jjmember_prop_160;
+          _get20 = jjmember_prop_169;
           const struct ReturnValue _2 = dong_porf_porf_todo__Porffor_object_get_withHash((i32)(_get18), _get19, (u32)(_get20), 195, -2086110260, 1);
           jjlast_type = _2.type;
           _r1194 = _2.value;
@@ -22670,8 +22670,8 @@ static struct ReturnValue dong_porf_porf_todo_readDeleteIndex(f64 jjnewtarget, i
   f64 v = 0;
   i32 vjjtype = 0;
   i32 jjlength_tmp = 0;
-  f64 jjmember_obj_161 = 0;
-  f64 jjmember_prop_161 = 0;
+  f64 jjmember_obj_170 = 0;
+  f64 jjmember_prop_170 = 0;
   f64 hit = 0;
   i32 hitjjtype = 0;
 
@@ -22725,18 +22725,18 @@ static struct ReturnValue dong_porf_porf_todo_readDeleteIndex(f64 jjnewtarget, i
       jjlast_type = 1;
       _r1330 = (f64)(i32_load(1, 0, _get15));
     } else {
-      jjmember_prop_161 = 564;
+      jjmember_prop_170 = 564;
       _get16 = v;
-      jjmember_obj_161 = _get16;
+      jjmember_obj_170 = _get16;
       _get17 = vjjtype;
       // if f64
       f64 _r1331;
         if (_get17 == 0) {
           _r1331 = 0;
         } else {
-          _get18 = jjmember_obj_161;
+          _get18 = jjmember_obj_170;
           _get19 = vjjtype;
-          _get20 = jjmember_prop_161;
+          _get20 = jjmember_prop_170;
           const struct ReturnValue _2 = dong_porf_porf_todo__Porffor_object_get_withHash((i32)(_get18), _get19, (u32)(_get20), 195, -2086110260, 1);
           jjlast_type = _2.type;
           _r1331 = _2.value;

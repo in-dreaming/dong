@@ -11148,27 +11148,27 @@ static struct ReturnValue dong_porf_t20_contenteditable_features_toUtf8(f64 jjne
   i32 lenjjtype = 0;
   i32 jjlength_tmp = 0;
   i32 jjlast_type = 0;
-  f64 jjmember_obj_460 = 0;
-  f64 jjmember_prop_460 = 0;
+  f64 jjmember_obj_469 = 0;
+  f64 jjmember_prop_469 = 0;
   f64 cp = 0;
   i32 cpjjtype = 0;
   f64 jjproto_target = 0;
   i32 jjproto_targetjjtype = 0;
-  f64 jjindirect_461_callee = 0;
-  f64 jjindirect_461_caller = 0;
-  i32 jjindirect_461_callerjjtype = 0;
-  f64 jjmember_obj_462 = 0;
-  f64 jjmember_prop_462 = 0;
+  f64 jjindirect_470_callee = 0;
+  f64 jjindirect_470_caller = 0;
+  i32 jjindirect_470_callerjjtype = 0;
+  f64 jjmember_obj_471 = 0;
+  f64 jjmember_prop_471 = 0;
   i32 jjtypeswitch_tmp1 = 0;
   i32 logictmpi = 0;
   i32 jjlogicinner_tmp_int = 0;
   f64 next = 0;
   i32 nextjjtype = 0;
-  f64 jjindirect_463_callee = 0;
-  f64 jjindirect_463_caller = 0;
-  i32 jjindirect_463_callerjjtype = 0;
-  f64 jjmember_obj_464 = 0;
-  f64 jjmember_prop_464 = 0;
+  f64 jjindirect_472_callee = 0;
+  f64 jjindirect_472_caller = 0;
+  i32 jjindirect_472_callerjjtype = 0;
+  f64 jjmember_obj_473 = 0;
+  f64 jjmember_prop_473 = 0;
   f64 jjbitwise_left = 0;
   f64 jjbitwise_right = 0;
   f64 jjreturn = 0;
@@ -11188,18 +11188,18 @@ static struct ReturnValue dong_porf_t20_contenteditable_features_toUtf8(f64 jjne
       jjlast_type = 1;
       _r0 = (f64)(i32_load(1, 0, _get2));
     } else {
-      jjmember_prop_460 = 430;
+      jjmember_prop_469 = 430;
       _get3 = s;
-      jjmember_obj_460 = _get3;
+      jjmember_obj_469 = _get3;
       _get4 = sjjtype;
       // if f64
       f64 _r1;
         if (_get4 == 0) {
           _r1 = 0;
         } else {
-          _get5 = jjmember_obj_460;
+          _get5 = jjmember_obj_469;
           _get6 = sjjtype;
-          _get7 = jjmember_prop_460;
+          _get7 = jjmember_prop_469;
           const struct ReturnValue _0 = dong_porf_t20_contenteditable_features__Porffor_object_get_withHash((i32)(_get5), _get6, (u32)(_get7), 195, -2086110260, 1);
           jjlast_type = _0.type;
           _r1 = _0.value;
@@ -11269,38 +11269,38 @@ static struct ReturnValue dong_porf_t20_contenteditable_features_toUtf8(f64 jjne
             }
           // end
           j565:;
-          jjmember_prop_462 = 1684;
+          jjmember_prop_471 = 1684;
           _get29 = s;
-          jjindirect_461_caller = _get29;
-          _get30 = jjindirect_461_caller;
+          jjindirect_470_caller = _get29;
+          _get30 = jjindirect_470_caller;
           _get31 = sjjtype;
-          jjindirect_461_callerjjtype = _get31;
-          jjmember_obj_462 = _get30;
-          _get32 = jjindirect_461_callerjjtype;
+          jjindirect_470_callerjjtype = _get31;
+          jjmember_obj_471 = _get30;
+          _get32 = jjindirect_470_callerjjtype;
           // if f64
           f64 _r566;
             if (_get32 == 0) {
               _r566 = 0;
             } else {
-              _get33 = jjmember_obj_462;
-              _get34 = jjindirect_461_callerjjtype;
-              _get35 = jjmember_prop_462;
+              _get33 = jjmember_obj_471;
+              _get34 = jjindirect_470_callerjjtype;
+              _get35 = jjmember_prop_471;
               const struct ReturnValue _4 = dong_porf_t20_contenteditable_features__Porffor_object_get_withHash((i32)(_get33), _get34, (u32)(_get35), 195, -1592872053, 1);
               jjlast_type = _4.type;
               _r566 = _4.value;
             }
           // end
           j566:;
-          jjindirect_461_callee = _r566;
+          jjindirect_470_callee = _r566;
           _get36 = jjlast_type;
           // if f64
           f64 _r567;
             if (_get36 == 6) {
-              _get37 = jjindirect_461_caller;
-              _get38 = jjindirect_461_callerjjtype;
+              _get37 = jjindirect_470_caller;
+              _get38 = jjindirect_470_callerjjtype;
               _get39 = i;
               _get40 = ijjtype;
-              _get41 = jjindirect_461_callee;
+              _get41 = jjindirect_470_callee;
               jjlast_type = 0;
               _r567 = 0;
             } else {
@@ -11424,37 +11424,37 @@ static struct ReturnValue dong_porf_t20_contenteditable_features_toUtf8(f64 jjne
                 }
               // end
               j577:;
-              jjmember_prop_464 = 1684;
+              jjmember_prop_473 = 1684;
               _get74 = s;
-              jjindirect_463_caller = _get74;
-              _get75 = jjindirect_463_caller;
+              jjindirect_472_caller = _get74;
+              _get75 = jjindirect_472_caller;
               _get76 = sjjtype;
-              jjindirect_463_callerjjtype = _get76;
-              jjmember_obj_464 = _get75;
-              _get77 = jjindirect_463_callerjjtype;
+              jjindirect_472_callerjjtype = _get76;
+              jjmember_obj_473 = _get75;
+              _get77 = jjindirect_472_callerjjtype;
               // if f64
               f64 _r578;
                 if (_get77 == 0) {
                   _r578 = 0;
                 } else {
-                  _get78 = jjmember_obj_464;
-                  _get79 = jjindirect_463_callerjjtype;
-                  _get80 = jjmember_prop_464;
+                  _get78 = jjmember_obj_473;
+                  _get79 = jjindirect_472_callerjjtype;
+                  _get80 = jjmember_prop_473;
                   const struct ReturnValue _8 = dong_porf_t20_contenteditable_features__Porffor_object_get_withHash((i32)(_get78), _get79, (u32)(_get80), 195, -1592872053, 1);
                   jjlast_type = _8.type;
                   _r578 = _8.value;
                 }
               // end
               j578:;
-              jjindirect_463_callee = _r578;
+              jjindirect_472_callee = _r578;
               _get81 = jjlast_type;
               // if f64
               f64 _r579;
                 if (_get81 == 6) {
-                  _get82 = jjindirect_463_caller;
-                  _get83 = jjindirect_463_callerjjtype;
+                  _get82 = jjindirect_472_caller;
+                  _get83 = jjindirect_472_callerjjtype;
                   _get84 = i;
-                  _get85 = jjindirect_463_callee;
+                  _get85 = jjindirect_472_callee;
                   jjlast_type = 0;
                   _r579 = 0;
                 } else {

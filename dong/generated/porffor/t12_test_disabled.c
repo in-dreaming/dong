@@ -11182,27 +11182,27 @@ static struct ReturnValue dong_porf_t12_test_disabled_toUtf8(f64 jjnewtarget, i3
   i32 lenjjtype = 0;
   i32 jjlength_tmp = 0;
   i32 jjlast_type = 0;
-  f64 jjmember_obj_197 = 0;
-  f64 jjmember_prop_197 = 0;
+  f64 jjmember_obj_206 = 0;
+  f64 jjmember_prop_206 = 0;
   f64 cp = 0;
   i32 cpjjtype = 0;
   f64 jjproto_target = 0;
   i32 jjproto_targetjjtype = 0;
-  f64 jjindirect_198_callee = 0;
-  f64 jjindirect_198_caller = 0;
-  i32 jjindirect_198_callerjjtype = 0;
-  f64 jjmember_obj_199 = 0;
-  f64 jjmember_prop_199 = 0;
+  f64 jjindirect_207_callee = 0;
+  f64 jjindirect_207_caller = 0;
+  i32 jjindirect_207_callerjjtype = 0;
+  f64 jjmember_obj_208 = 0;
+  f64 jjmember_prop_208 = 0;
   i32 jjtypeswitch_tmp1 = 0;
   i32 logictmpi = 0;
   i32 jjlogicinner_tmp_int = 0;
   f64 next = 0;
   i32 nextjjtype = 0;
-  f64 jjindirect_200_callee = 0;
-  f64 jjindirect_200_caller = 0;
-  i32 jjindirect_200_callerjjtype = 0;
-  f64 jjmember_obj_201 = 0;
-  f64 jjmember_prop_201 = 0;
+  f64 jjindirect_209_callee = 0;
+  f64 jjindirect_209_caller = 0;
+  i32 jjindirect_209_callerjjtype = 0;
+  f64 jjmember_obj_210 = 0;
+  f64 jjmember_prop_210 = 0;
   f64 jjbitwise_left = 0;
   f64 jjbitwise_right = 0;
   f64 jjreturn = 0;
@@ -11222,18 +11222,18 @@ static struct ReturnValue dong_porf_t12_test_disabled_toUtf8(f64 jjnewtarget, i3
       jjlast_type = 1;
       _r0 = (f64)(i32_load(1, 0, _get2));
     } else {
-      jjmember_prop_197 = 445;
+      jjmember_prop_206 = 445;
       _get3 = s;
-      jjmember_obj_197 = _get3;
+      jjmember_obj_206 = _get3;
       _get4 = sjjtype;
       // if f64
       f64 _r1;
         if (_get4 == 0) {
           _r1 = 0;
         } else {
-          _get5 = jjmember_obj_197;
+          _get5 = jjmember_obj_206;
           _get6 = sjjtype;
-          _get7 = jjmember_prop_197;
+          _get7 = jjmember_prop_206;
           const struct ReturnValue _0 = dong_porf_t12_test_disabled__Porffor_object_get_withHash((i32)(_get5), _get6, (u32)(_get7), 195, -2086110260, 1);
           jjlast_type = _0.type;
           _r1 = _0.value;
@@ -11303,38 +11303,38 @@ static struct ReturnValue dong_porf_t12_test_disabled_toUtf8(f64 jjnewtarget, i3
             }
           // end
           j565:;
-          jjmember_prop_199 = 1896;
+          jjmember_prop_208 = 1896;
           _get29 = s;
-          jjindirect_198_caller = _get29;
-          _get30 = jjindirect_198_caller;
+          jjindirect_207_caller = _get29;
+          _get30 = jjindirect_207_caller;
           _get31 = sjjtype;
-          jjindirect_198_callerjjtype = _get31;
-          jjmember_obj_199 = _get30;
-          _get32 = jjindirect_198_callerjjtype;
+          jjindirect_207_callerjjtype = _get31;
+          jjmember_obj_208 = _get30;
+          _get32 = jjindirect_207_callerjjtype;
           // if f64
           f64 _r566;
             if (_get32 == 0) {
               _r566 = 0;
             } else {
-              _get33 = jjmember_obj_199;
-              _get34 = jjindirect_198_callerjjtype;
-              _get35 = jjmember_prop_199;
+              _get33 = jjmember_obj_208;
+              _get34 = jjindirect_207_callerjjtype;
+              _get35 = jjmember_prop_208;
               const struct ReturnValue _4 = dong_porf_t12_test_disabled__Porffor_object_get_withHash((i32)(_get33), _get34, (u32)(_get35), 195, -1592872053, 1);
               jjlast_type = _4.type;
               _r566 = _4.value;
             }
           // end
           j566:;
-          jjindirect_198_callee = _r566;
+          jjindirect_207_callee = _r566;
           _get36 = jjlast_type;
           // if f64
           f64 _r567;
             if (_get36 == 6) {
-              _get37 = jjindirect_198_caller;
-              _get38 = jjindirect_198_callerjjtype;
+              _get37 = jjindirect_207_caller;
+              _get38 = jjindirect_207_callerjjtype;
               _get39 = i;
               _get40 = ijjtype;
-              _get41 = jjindirect_198_callee;
+              _get41 = jjindirect_207_callee;
               jjlast_type = 0;
               _r567 = 0;
             } else {
@@ -11458,37 +11458,37 @@ static struct ReturnValue dong_porf_t12_test_disabled_toUtf8(f64 jjnewtarget, i3
                 }
               // end
               j577:;
-              jjmember_prop_201 = 1896;
+              jjmember_prop_210 = 1896;
               _get74 = s;
-              jjindirect_200_caller = _get74;
-              _get75 = jjindirect_200_caller;
+              jjindirect_209_caller = _get74;
+              _get75 = jjindirect_209_caller;
               _get76 = sjjtype;
-              jjindirect_200_callerjjtype = _get76;
-              jjmember_obj_201 = _get75;
-              _get77 = jjindirect_200_callerjjtype;
+              jjindirect_209_callerjjtype = _get76;
+              jjmember_obj_210 = _get75;
+              _get77 = jjindirect_209_callerjjtype;
               // if f64
               f64 _r578;
                 if (_get77 == 0) {
                   _r578 = 0;
                 } else {
-                  _get78 = jjmember_obj_201;
-                  _get79 = jjindirect_200_callerjjtype;
-                  _get80 = jjmember_prop_201;
+                  _get78 = jjmember_obj_210;
+                  _get79 = jjindirect_209_callerjjtype;
+                  _get80 = jjmember_prop_210;
                   const struct ReturnValue _8 = dong_porf_t12_test_disabled__Porffor_object_get_withHash((i32)(_get78), _get79, (u32)(_get80), 195, -1592872053, 1);
                   jjlast_type = _8.type;
                   _r578 = _8.value;
                 }
               // end
               j578:;
-              jjindirect_200_callee = _r578;
+              jjindirect_209_callee = _r578;
               _get81 = jjlast_type;
               // if f64
               f64 _r579;
                 if (_get81 == 6) {
-                  _get82 = jjindirect_200_caller;
-                  _get83 = jjindirect_200_callerjjtype;
+                  _get82 = jjindirect_209_caller;
+                  _get83 = jjindirect_209_callerjjtype;
                   _get84 = i;
-                  _get85 = jjindirect_200_callee;
+                  _get85 = jjindirect_209_callee;
                   jjlast_type = 0;
                   _r579 = 0;
                 } else {
@@ -11842,9 +11842,9 @@ struct ReturnValue dong_porf_t12_test_disabled__porf_auto_0__onclick(f64 jjnewta
   i32 _get2;
   f64 _get1;
   f64 _get0;
-  f64 jjindirect_186_callee = 0;
+  f64 jjindirect_195_callee = 0;
 
-  jjindirect_186_callee = dong_porf_t12_test_disabled_toggleDisabled;
+  jjindirect_195_callee = dong_porf_t12_test_disabled_toggleDisabled;
   _get0 = jjnewtarget;
   // if 
     if (((u32)(_get0)) != 0) {
@@ -11861,9 +11861,9 @@ struct ReturnValue dong_porf_t12_test_disabled__porf_auto_1__onclick(f64 jjnewta
   i32 _get2;
   f64 _get1;
   f64 _get0;
-  f64 jjindirect_187_callee = 0;
+  f64 jjindirect_196_callee = 0;
 
-  jjindirect_187_callee = dong_porf_t12_test_disabled_toggleDisabled;
+  jjindirect_196_callee = dong_porf_t12_test_disabled_toggleDisabled;
   _get0 = jjnewtarget;
   // if 
     if (((u32)(_get0)) != 0) {
@@ -11880,9 +11880,9 @@ struct ReturnValue dong_porf_t12_test_disabled__porf_auto_2__onclick(f64 jjnewta
   i32 _get2;
   f64 _get1;
   f64 _get0;
-  f64 jjindirect_188_callee = 0;
+  f64 jjindirect_197_callee = 0;
 
-  jjindirect_188_callee = dong_porf_t12_test_disabled_toggleDisabled;
+  jjindirect_197_callee = dong_porf_t12_test_disabled_toggleDisabled;
   _get0 = jjnewtarget;
   // if 
     if (((u32)(_get0)) != 0) {
@@ -11899,9 +11899,9 @@ struct ReturnValue dong_porf_t12_test_disabled__porf_auto_3__onclick(f64 jjnewta
   i32 _get2;
   f64 _get1;
   f64 _get0;
-  f64 jjindirect_189_callee = 0;
+  f64 jjindirect_198_callee = 0;
 
-  jjindirect_189_callee = dong_porf_t12_test_disabled_toggleDisabled;
+  jjindirect_198_callee = dong_porf_t12_test_disabled_toggleDisabled;
   _get0 = jjnewtarget;
   // if 
     if (((u32)(_get0)) != 0) {
@@ -11918,9 +11918,9 @@ struct ReturnValue dong_porf_t12_test_disabled__porf_auto_4__onclick(f64 jjnewta
   i32 _get2;
   f64 _get1;
   f64 _get0;
-  f64 jjindirect_190_callee = 0;
+  f64 jjindirect_199_callee = 0;
 
-  jjindirect_190_callee = dong_porf_t12_test_disabled_toggleDisabled;
+  jjindirect_199_callee = dong_porf_t12_test_disabled_toggleDisabled;
   _get0 = jjnewtarget;
   // if 
     if (((u32)(_get0)) != 0) {
@@ -11937,9 +11937,9 @@ struct ReturnValue dong_porf_t12_test_disabled__porf_auto_5__onclick(f64 jjnewta
   i32 _get2;
   f64 _get1;
   f64 _get0;
-  f64 jjindirect_191_callee = 0;
+  f64 jjindirect_200_callee = 0;
 
-  jjindirect_191_callee = dong_porf_t12_test_disabled_toggleDisabled;
+  jjindirect_200_callee = dong_porf_t12_test_disabled_toggleDisabled;
   _get0 = jjnewtarget;
   // if 
     if (((u32)(_get0)) != 0) {
@@ -11956,9 +11956,9 @@ struct ReturnValue dong_porf_t12_test_disabled_button1__onclick(f64 jjnewtarget,
   i32 _get2;
   f64 _get1;
   f64 _get0;
-  f64 jjindirect_192_callee = 0;
+  f64 jjindirect_201_callee = 0;
 
-  jjindirect_192_callee = dong_porf_t12_test_disabled_logClick;
+  jjindirect_201_callee = dong_porf_t12_test_disabled_logClick;
   _get0 = jjnewtarget;
   // if 
     if (((u32)(_get0)) != 0) {
@@ -11975,9 +11975,9 @@ struct ReturnValue dong_porf_t12_test_disabled__porf_auto_6__onclick(f64 jjnewta
   i32 _get2;
   f64 _get1;
   f64 _get0;
-  f64 jjindirect_193_callee = 0;
+  f64 jjindirect_202_callee = 0;
 
-  jjindirect_193_callee = dong_porf_t12_test_disabled_toggleDisabled;
+  jjindirect_202_callee = dong_porf_t12_test_disabled_toggleDisabled;
   _get0 = jjnewtarget;
   // if 
     if (((u32)(_get0)) != 0) {
@@ -11994,9 +11994,9 @@ struct ReturnValue dong_porf_t12_test_disabled_submitBtn__onclick(f64 jjnewtarge
   i32 _get2;
   f64 _get1;
   f64 _get0;
-  f64 jjindirect_194_callee = 0;
+  f64 jjindirect_203_callee = 0;
 
-  jjindirect_194_callee = dong_porf_t12_test_disabled_logClick;
+  jjindirect_203_callee = dong_porf_t12_test_disabled_logClick;
   _get0 = jjnewtarget;
   // if 
     if (((u32)(_get0)) != 0) {
@@ -12013,9 +12013,9 @@ struct ReturnValue dong_porf_t12_test_disabled__porf_auto_7__onclick(f64 jjnewta
   i32 _get2;
   f64 _get1;
   f64 _get0;
-  f64 jjindirect_195_callee = 0;
+  f64 jjindirect_204_callee = 0;
 
-  jjindirect_195_callee = dong_porf_t12_test_disabled_toggleDisabled;
+  jjindirect_204_callee = dong_porf_t12_test_disabled_toggleDisabled;
   _get0 = jjnewtarget;
   // if 
     if (((u32)(_get0)) != 0) {
@@ -12032,9 +12032,9 @@ struct ReturnValue dong_porf_t12_test_disabled__porf_auto_8__onclick(f64 jjnewta
   i32 _get2;
   f64 _get1;
   f64 _get0;
-  f64 jjindirect_196_callee = 0;
+  f64 jjindirect_205_callee = 0;
 
-  jjindirect_196_callee = dong_porf_t12_test_disabled_clearLog;
+  jjindirect_205_callee = dong_porf_t12_test_disabled_clearLog;
   _get0 = jjnewtarget;
   // if 
     if (((u32)(_get0)) != 0) {
