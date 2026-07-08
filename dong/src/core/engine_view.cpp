@@ -1768,15 +1768,12 @@ struct EngineView::Impl {
                     mod = env_mod;
                 }
             }
-            if (mod.empty()) {
-                mod = script_engine->defaultModule();
-            }
             if (!mod.empty()) {
                 DONG_LOG_INFO("[EngineView] Running Porffor module: %s", mod.c_str());
                 script_engine->setDefaultModule(mod);
                 script_engine->runModule(mod);
             } else {
-                DONG_LOG_WARN("[EngineView] No Porffor module configured (set DONG_PORFFOR_MODULE or data-porffor-module)");
+                DONG_LOG_INFO("[EngineView] No Porffor module configured; treating page as static HTML");
             }
 
             // Dispatch DOMContentLoaded / load on document (body).
@@ -4379,6 +4376,16 @@ public:
         return script_engine->callExport(std::string(module_name), std::string(export_name));
     }
 
+    bool callPorfforExport1(const char* module_name, const char* export_name, double arg0) {
+        activateViewContext();
+        if (!module_name || !export_name || !script_engine) {
+            return false;
+        }
+        DONG_PROFILE_SCOPE_CAT("Script::callPorfforExport1", "script");
+        ensureJSBindingsInitialized();
+        return script_engine->callExport1(std::string(module_name), std::string(export_name), arg0);
+    }
+
     void setPorfforModule(const std::string& module) { porffor_module_ = module; }
 };
 
@@ -4509,6 +4516,10 @@ bool EngineView::evalScript(const char* code) {
 
 bool EngineView::callPorfforExport(const char* module_name, const char* export_name) {
     return impl_ ? impl_->callPorfforExport(module_name, export_name) : false;
+}
+
+bool EngineView::callPorfforExport1(const char* module_name, const char* export_name, double arg0) {
+    return impl_ ? impl_->callPorfforExport1(module_name, export_name, arg0) : false;
 }
 
 void EngineView::setPorfforModule(const char* module_name) {

@@ -1,5 +1,6 @@
 set(DONG_PORFFOR_MODULE_SOURCES
   "${DONG_PORFFOR_OUT_DIR}/hello_dom.c"
+  "${DONG_PORFFOR_OUT_DIR}/scene3d_hud.c"
   "${DONG_PORFFOR_OUT_DIR}/js_microbench.c"
   "${DONG_PORFFOR_OUT_DIR}/test_hidden_attr.c"
   "${DONG_PORFFOR_OUT_DIR}/test_checkbox_toggle.c"
@@ -38,5 +39,10 @@ set(DONG_PORFFOR_MODULE_SOURCES
   "${DONG_PORFFOR_OUT_DIR}/t20_contenteditable_auto.c"
   "${DONG_PORFFOR_OUT_DIR}/t20_contenteditable_bold_auto.c"
   "${DONG_PORFFOR_OUT_DIR}/t20_contenteditable_features.c"
+  "${DONG_PORFFOR_OUT_DIR}/pretext_text_flow.c"
+  "${DONG_PORFFOR_OUT_DIR}/pretext_text_flow_dynamic.c"
+  "${DONG_PORFFOR_OUT_DIR}/pretext_text_flow_directdraw.c"
+  "${DONG_PORFFOR_OUT_DIR}/pretext_dual_mode.c"
+  "${DONG_PORFFOR_OUT_DIR}/pretext_dual_mode_domonly.c"
   "${DONG_PORFFOR_OUT_DIR}/t12_inline.c"
 )

@@ -1,11 +1,15 @@
 #include "js_text_layout_porffor.hpp"
 
+#include "js_bindings_porffor.hpp"
 #include "porffor_mini_json.hpp"
+#include "../../core/log.h"
 #include "../../render/text_layout_core.hpp"
 #include "../../render/overlay_draw.hpp"
 #include "../../render/text_shaper.hpp"
 
+#include <chrono>
 #include <cmath>
+#include <cstdlib>
 #include <sstream>
 #include <vector>
 
@@ -30,6 +34,16 @@ struct RectDef {
 static render::TextLayoutCore s_layout_core;
 static size_t s_cached_key = 0;
 static render::PreparedText s_cached_prepared;
+
+static bool pretextTimingEnabled() {
+    static const bool enabled = std::getenv("DONG_DEBUG_PRETEXT_TIMING") != nullptr;
+    return enabled;
+}
+
+static double elapsedMs(std::chrono::steady_clock::time_point start) {
+    return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start)
+        .count();
+}
 
 static size_t makeKey(const std::string& text, const std::string& family, const std::string& weight,
                       const std::string& style, float font_size, float line_height) {
@@ -202,6 +216,7 @@ static void parseObstacles(const std::string& json, std::vector<CircleDef>& circ
 } // namespace
 
 std::string porfforTextLayout(const std::string& config_json) {
+    const auto total_start = std::chrono::steady_clock::now();
     std::string text;
     if (!pj::extractString(config_json, "text", text)) {
         return "{\"columns\":[]}";
@@ -242,8 +257,11 @@ std::string porfforTextLayout(const std::string& config_json) {
     }
 
     size_t key = makeKey(text, family, weight, style, font_size, line_height);
+    double prepare_ms = 0.0;
     if (key != s_cached_key) {
+        const auto prepare_start = std::chrono::steady_clock::now();
         s_cached_prepared = s_layout_core.prepare(text, family, weight, style, font_size, line_height);
+        prepare_ms = elapsedMs(prepare_start);
         s_cached_key = key;
     }
     const auto& prepared = s_cached_prepared;
@@ -340,12 +358,22 @@ std::string porfforTextLayout(const std::string& config_json) {
             }
 
             out << "],\"lineHeight\":" << lh << ",\"ascent\":" << prepared.ascent_px << "}";
-            return out.str();
+            std::string result = out.str();
+            if (pretextTimingEnabled()) {
+                DONG_LOG_INFO("[pretext timing] textLayout total=%.3f prepare=%.3f bytes=%zu",
+                              elapsedMs(total_start), prepare_ms, result.size());
+            }
+            return result;
         }
     }
 
     out << "],\"lineHeight\":0,\"ascent\":0}";
-    return out.str();
+    std::string result = out.str();
+    if (pretextTimingEnabled()) {
+        DONG_LOG_INFO("[pretext timing] textLayout total=%.3f prepare=%.3f bytes=%zu",
+                      elapsedMs(total_start), prepare_ms, result.size());
+    }
+    return result;
 }
 
 void porfforClearOverlay(dong::render::OverlayDraw* overlay) {
@@ -538,6 +566,301 @@ void porfforDrawCircle(const std::string& config_json, dong::render::OverlayDraw
     pj::extractString(config_json, "color", color_str);
     render::Color color = parseHexColor(color_str);
     overlay->addCircle(cx, cy, r, color, strokeWidth);
+}
+
+static const char* kPretextTypoText =
+    "Typography is the art and technique of arranging type to make written "
+    "language legible, readable, and appealing when displayed. The arrangement "
+    "of type involves selecting typefaces, point sizes, line lengths, line "
+    "spacing, and letter spacing, as well as adjusting the space between "
+    "pairs of letters. The term typography is also applied to the style, "
+    "arrangement, and appearance of the letters, numbers, and symbols created "
+    "by the process. Type design is a closely related craft, sometimes "
+    "considered part of typography; most typographers do not design typefaces, "
+    "and some type designers do not consider themselves typographers. "
+    "Typography is the work of typesetters, compositors, typographers, "
+    "graphic designers, art directors, manga artists, comic book artists, "
+    "and now anyone who arranges words, letters, numbers, and symbols for "
+    "publication, display, or distribution. Until the Digital Age, typography "
+    "was a specialized occupation. Digitization opened up typography to new "
+    "generations of previously unrelated designers and lay users. As the "
+    "capability to create typography has become ubiquitous, the application "
+    "of principles and best practices developed over generations of skilled "
+    "workers and professionals has diminished. So at a time when scientific "
+    "knowledge of how typefaces affect readability has flourished, an "
+    "understanding of conventional wisdom accumulated since Gutenberg has "
+    "simultaneously diminished. Yet the craft endures, and each new generation "
+    "discovers anew the profound satisfaction of placing words upon a page with "
+    "care, precision, and an eye for beauty that transcends the merely functional.";
+
+static const char* kPretextDualModeText =
+    "In a dual-mode rendering engine, static UI structure lives in the DOM — "
+    "menus, panels, labels, and interactive elements are described in HTML/CSS "
+    "and rendered through the retained pipeline. But dynamic content — particles, "
+    "animated text, real-time visualizations — bypasses the DOM entirely. "
+    "The immediate-mode overlay API (dong.drawRect, dong.drawCircle, dong.renderText) "
+    "injects GPU commands directly into the display list, achieving zero DOM tax "
+    "on animation frames. This is the architecture pretext envisions: free from "
+    "DOM-based layout constraints, while keeping DOM for what it does best.";
+
+static std::string escapeHtml(const std::string& s) {
+    std::string out;
+    out.reserve(s.size());
+    for (char c : s) {
+        switch (c) {
+        case '&':
+            out += "&amp;";
+            break;
+        case '<':
+            out += "&lt;";
+            break;
+        case '>':
+            out += "&gt;";
+            break;
+        case '"':
+            out += "&quot;";
+            break;
+        default:
+            out.push_back(c);
+            break;
+        }
+    }
+    return out;
+}
+
+struct LayoutLine {
+    float x = 0;
+    float y = 0;
+    float width = 0;
+    std::string text;
+};
+
+static std::vector<LayoutLine> parseLayoutLinesInternal(const std::string& layout_json) {
+    std::vector<LayoutLine> lines;
+    size_t cols_pos = layout_json.find("\"columns\"");
+    if (cols_pos == std::string::npos) {
+        return lines;
+    }
+    size_t pos = cols_pos;
+    while ((pos = layout_json.find("\"lines\"", pos)) != std::string::npos) {
+        size_t arr_start = layout_json.find('[', pos);
+        size_t arr_end = layout_json.find(']', arr_start);
+        if (arr_start == std::string::npos || arr_end == std::string::npos) {
+            break;
+        }
+        std::string lines_arr = layout_json.substr(arr_start, arr_end - arr_start + 1);
+        size_t lp = 0;
+        while ((lp = lines_arr.find('{', lp)) != std::string::npos) {
+            size_t end = lines_arr.find('}', lp);
+            if (end == std::string::npos) {
+                break;
+            }
+            std::string line_obj = lines_arr.substr(lp, end - lp + 1);
+            LayoutLine ln;
+            double d = 0;
+            if (pj::extractNumber(line_obj, "x", d)) {
+                ln.x = static_cast<float>(d);
+            }
+            if (pj::extractNumber(line_obj, "y", d)) {
+                ln.y = static_cast<float>(d);
+            }
+            if (pj::extractNumber(line_obj, "width", d)) {
+                ln.width = static_cast<float>(d);
+            }
+            pj::extractString(line_obj, "text", ln.text);
+            if (!ln.text.empty()) {
+                lines.push_back(std::move(ln));
+            }
+            lp = end + 1;
+        }
+        pos = arr_end + 1;
+    }
+    return lines;
+}
+
+std::vector<PretextLayoutLine> pretextParseLayoutLines(const std::string& layout_json) {
+    const auto internal = parseLayoutLinesInternal(layout_json);
+    std::vector<PretextLayoutLine> out;
+    out.reserve(internal.size());
+    for (const auto& ln : internal) {
+        out.push_back({ln.x, ln.y, ln.width, ln.text});
+    }
+    return out;
+}
+
+static std::vector<LayoutLine> parseLayoutLines(const std::string& layout_json) {
+    return parseLayoutLinesInternal(layout_json);
+}
+
+static int g_last_layout_line_count = 0;
+
+int porfforLastLayoutLineCount() {
+    return g_last_layout_line_count;
+}
+
+static std::string buildTypoConfig(const char* text, const std::string& columns_json,
+                                   const std::string& obstacles_json, float font_size,
+                                   float line_height) {
+    std::ostringstream out;
+    out << "{\"text\":\"" << pj::escapeJson(text) << "\""
+        << ",\"font\":{\"family\":\"sans-serif\",\"weight\":\"normal\",\"style\":\"normal\",\"size\":"
+        << font_size << "}"
+        << ",\"lineHeight\":" << line_height << ",\"columns\":" << columns_json << ",\"obstacles\":"
+        << obstacles_json << "}";
+    return out.str();
+}
+
+std::string pretextTypoConfig(const std::string& columns_json, const std::string& obstacles_json) {
+    return buildTypoConfig(kPretextTypoText, columns_json, obstacles_json, 14.0f, 20.0f);
+}
+
+std::string pretextDualModeTextConfig(const std::string& columns_json,
+                                      const std::string& circles_json) {
+    std::ostringstream obstacles;
+    obstacles << "{\"circles\":" << circles_json << ",\"rects\":[]}";
+    return buildTypoConfig(kPretextDualModeText, columns_json, obstacles.str(), 13.0f, 19.0f);
+}
+
+std::string pretextFlowObstaclesJson(float obs_a_cx, float obs_a_cy, float obs_a_r, float bx,
+                                     float by, float obs_b_w, float obs_b_h, float obs_c_cx,
+                                     float obs_c_cy, float obs_c_r) {
+    std::ostringstream out;
+    out << "{\"circles\":["
+        << "{\"cx\":" << obs_a_cx << ",\"cy\":" << obs_a_cy << ",\"r\":" << obs_a_r
+        << ",\"hPad\":8,\"vPad\":2}"
+        << ",{\"cx\":" << obs_c_cx << ",\"cy\":" << obs_c_cy << ",\"r\":" << obs_c_r
+        << ",\"hPad\":8,\"vPad\":2}"
+        << "],\"rects\":[{\"x\":" << bx << ",\"y\":" << by << ",\"w\":" << obs_b_w
+        << ",\"h\":" << obs_b_h << ",\"hPad\":8,\"vPad\":2}]}";
+    return out.str();
+}
+
+std::string pretextFlowColumnsStatic() {
+    return "[{\"x\":20,\"y\":56,\"width\":402,\"height\":390},{\"x\":444,\"y\":56,\"width\":436,"
+           "\"height\":390}]";
+}
+
+std::string pretextFlowColumnsDynamic() {
+    return "[{\"x\":20,\"y\":46,\"width\":402,\"height\":510},{\"x\":444,\"y\":46,\"width\":436,"
+           "\"height\":510}]";
+}
+
+int porfforTextLayoutMountLines(uint64_t node_id, const std::string& config_json,
+                                const std::string& line_class, bool stats_footer,
+                                JSBindings* bindings) {
+    const auto total_start = std::chrono::steady_clock::now();
+    if (!bindings) {
+        g_last_layout_line_count = 0;
+        return 0;
+    }
+    const auto layout_start = std::chrono::steady_clock::now();
+    const std::string layout_json = porfforTextLayout(config_json);
+    const double layout_ms = elapsedMs(layout_start);
+    const auto parse_start = std::chrono::steady_clock::now();
+    const auto lines = parseLayoutLines(layout_json);
+    const double parse_ms = elapsedMs(parse_start);
+
+    const auto html_start = std::chrono::steady_clock::now();
+    std::ostringstream html;
+    const std::string cls = line_class.empty() ? "line" : line_class;
+    for (const auto& ln : lines) {
+        html << "<div class=\"" << cls
+             << "\" style=\"position:absolute;left:" << static_cast<int>(std::lround(ln.x))
+             << "px;top:" << static_cast<int>(std::lround(ln.y)) << "px;width:"
+             << static_cast<int>(std::ceil(ln.width + 4.0f))
+             << "px;color:#c9d1d9;font-size:14px;line-height:20px;white-space:nowrap;height:20px;font-family:sans-serif;\">"
+             << escapeHtml(ln.text) << "</div>";
+    }
+
+    if (stats_footer) {
+        int col_a = 0;
+        int col_b = 0;
+        size_t cols_pos = layout_json.find("\"columns\"");
+        if (cols_pos != std::string::npos) {
+            size_t pos = cols_pos;
+            int col_idx = 0;
+            while ((pos = layout_json.find("\"lines\"", pos)) != std::string::npos) {
+                size_t arr_start = layout_json.find('[', pos);
+                size_t arr_end = layout_json.find(']', arr_start);
+                if (arr_start == std::string::npos || arr_end == std::string::npos) {
+                    break;
+                }
+                int count = 0;
+                size_t lp = arr_start;
+                while ((lp = layout_json.find('{', lp)) != std::string::npos && lp < arr_end) {
+                    ++count;
+                    lp = layout_json.find('}', lp) + 1;
+                }
+                if (col_idx == 0) {
+                    col_a = count;
+                } else if (col_idx == 1) {
+                    col_b = count;
+                }
+                ++col_idx;
+                pos = arr_end + 1;
+            }
+        }
+        html << "<div class=\"phase-label\" style=\"position:absolute;left:20px;bottom:8px;"
+             << "width:300px;color:#3d5a80;font-size:10px;white-space:nowrap;\">A: "
+             << col_a << " lines | B: " << col_b << " lines | total: " << lines.size() << "</div>";
+    }
+
+    const std::string html_str = html.str();
+    const double html_ms = elapsedMs(html_start);
+    const auto dom_start = std::chrono::steady_clock::now();
+    bindings->setNodeInnerHTML(node_id, html_str);
+    const double dom_ms = elapsedMs(dom_start);
+    g_last_layout_line_count = static_cast<int>(lines.size());
+    if (pretextTimingEnabled()) {
+        DONG_LOG_INFO("[pretext timing] mountLines total=%.3f layout=%.3f parse=%.3f html=%.3f dom=%.3f node=%llu lines=%d html_bytes=%zu",
+                      elapsedMs(total_start), layout_ms, parse_ms, html_ms, dom_ms,
+                      static_cast<unsigned long long>(node_id), g_last_layout_line_count,
+                      html_str.size());
+    }
+    return g_last_layout_line_count;
+}
+
+int porfforTextLayoutRenderOverlay(const std::string& config_json, const std::string& color,
+                                   dong::render::OverlayDraw* overlay) {
+    const auto total_start = std::chrono::steady_clock::now();
+    if (!overlay) {
+        g_last_layout_line_count = 0;
+        return 0;
+    }
+    const auto layout_start = std::chrono::steady_clock::now();
+    const std::string layout_json = porfforTextLayout(config_json);
+    const double layout_ms = elapsedMs(layout_start);
+    const auto parse_start = std::chrono::steady_clock::now();
+    const auto lines = parseLayoutLines(layout_json);
+    const double parse_ms = elapsedMs(parse_start);
+
+    const auto json_start = std::chrono::steady_clock::now();
+    std::ostringstream rt;
+    rt << "{\"font\":{\"family\":\"sans-serif\",\"weight\":\"normal\",\"style\":\"normal\",\"size\":"
+          "14},\"color\":\""
+       << color << "\",\"lines\":[";
+    bool first = true;
+    for (const auto& ln : lines) {
+        if (!first) {
+            rt << ',';
+        }
+        first = false;
+        rt << "{\"x\":" << ln.x << ",\"y\":" << ln.y << ",\"text\":\"" << pj::escapeJson(ln.text)
+           << "\"}";
+    }
+    rt << "]}";
+    const std::string render_json = rt.str();
+    const double json_ms = elapsedMs(json_start);
+    const auto overlay_start = std::chrono::steady_clock::now();
+    porfforRenderText(render_json, overlay);
+    const double overlay_ms = elapsedMs(overlay_start);
+    g_last_layout_line_count = static_cast<int>(lines.size());
+    if (pretextTimingEnabled()) {
+        DONG_LOG_INFO("[pretext timing] renderOverlay total=%.3f layout=%.3f parse=%.3f json=%.3f overlay=%.3f lines=%d json_bytes=%zu",
+                      elapsedMs(total_start), layout_ms, parse_ms, json_ms, overlay_ms,
+                      g_last_layout_line_count, render_json.size());
+    }
+    return g_last_layout_line_count;
 }
 
 } // namespace dong::script

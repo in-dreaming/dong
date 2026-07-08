@@ -42,6 +42,11 @@ function pullHostString() {
   return dong_str_pull();
 }
 
+// Copy a host/bump string onto the Porffor heap (survives later pullHostString calls).
+function persistStr(s) {
+  return toUtf8(s);
+}
+
 function getElementById(id) {
   return dong_dom_getElementById(toUtf8(id));
 }
@@ -341,12 +346,7 @@ function stopPropagation() {
 }
 
 function parseHtml(html) {
-  dong_parse_html(toUtf8(html));
-  var idStr = pullHostString();
-  if (idStr === "") {
-    return 0;
-  }
-  return idStr - 0;
+  return dong_parse_html(toUtf8(html));
 }
 
 function formSerialize(formId) {
@@ -497,4 +497,78 @@ function drawRect(configJson) {
 
 function drawCircle(configJson) {
   dong_draw_circle(toUtf8(configJson));
+}
+
+function pretextTypoConfig(columnsJson, obstaclesJson) {
+  dong_pretext_typo_config(toUtf8(columnsJson), toUtf8(obstaclesJson));
+  return pullHostString();
+}
+
+function pretextFlowColumnsStatic() {
+  dong_pretext_flow_columns_static();
+  return pullHostString();
+}
+
+function pretextFlowColumnsDynamic() {
+  dong_pretext_flow_columns_dynamic();
+  return pullHostString();
+}
+
+function pretextFlowObstacles(obsAcx, obsAcy, obsAr, bx, by, obsBw, obsBh, obsCcx, obsCcy, obsCr) {
+  dong_pretext_flow_obstacles(obsAcx, obsAcy, obsAr, bx, by, obsBw, obsBh, obsCcx, obsCcy, obsCr);
+  return pullHostString();
+}
+
+function textLayoutMountLines(nodeId, configJson, lineClass, statsFooter) {
+  return dong_text_layout_mount_lines(nodeId, toUtf8(configJson), toUtf8(lineClass), statsFooter ? 1 : 0);
+}
+
+function textLayoutRenderOverlay(configJson, color) {
+  return dong_text_layout_render_overlay(toUtf8(configJson), toUtf8(color));
+}
+
+function pretextDynamicHud(fps, lines, poolSize) {
+  dong_pretext_dynamic_hud(fps, lines, poolSize);
+  return pullHostString();
+}
+
+function pretextFlowDynamicTick(mode, linesId, hudId, obsAId, obsBId, obsCId, t, fps) {
+  return dong_pretext_flow_dynamic_tick(mode, linesId, hudId, obsAId, obsBId, obsCId, t, fps);
+}
+
+function pretextDualModeTick(mode, t) {
+  dong_pretext_dual_mode_tick(mode, t);
+}
+
+function pretextDomOnlyInit() {
+  dong_pretext_domonly_init();
+}
+
+function pretextDomOnlyTick(t) {
+  dong_pretext_domonly_tick(t);
+}
+
+function mathSin(x) {
+  return dong_math_sin(x);
+}
+
+function mathCos(x) {
+  return dong_math_cos(x);
+}
+
+function mathRandom() {
+  return dong_math_random();
+}
+
+function nowMs() {
+  return dong_now_ms();
+}
+
+function setStylePx(nodeId, prop, value) {
+  dong_style_set_px(nodeId, toUtf8(prop), value);
+}
+
+function numToStr(n) {
+  dong_num_to_str(n);
+  return pullHostString();
 }

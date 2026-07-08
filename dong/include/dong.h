@@ -102,6 +102,10 @@ DONG_API dong_result_t dong_engine_eval_script(dong_engine_t* engine, const char
 DONG_API dong_result_t dong_engine_call_porffor_export(
     dong_engine_t* engine, const char* module_name, const char* export_name);
 
+// Porffor AOT: call a compiled module export with one numeric argument.
+DONG_API dong_result_t dong_engine_call_porffor_export1(
+    dong_engine_t* engine, const char* module_name, const char* export_name, double arg0);
+
 // =============================================================================
 // Multi-View Shared JS
 // =============================================================================

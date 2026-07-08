@@ -18,7 +18,8 @@
         "onFilterActive",
         "onFilterDone",
         "onClearDone",
-        "onListClick"
+        "onListClick",
+        "headlessAddSample"
       ]
     },
     {
@@ -46,6 +47,14 @@
       "path": "examples/porffor/hello_dom.js",
       "exports": [
         "onBtnClick"
+      ]
+    },
+    {
+      "name": "scene3d_hud",
+      "path": "examples/porffor/scene3d_hud.js",
+      "exports": [
+        "setFps",
+        "toggleHelp"
       ]
     },
     {
@@ -117,7 +126,8 @@
         "onFilterActive",
         "onFilterDone",
         "onClearDone",
-        "onListClick"
+        "onListClick",
+        "headlessAddSample"
       ]
     },
     {
@@ -340,6 +350,43 @@
     {
       "name": "t20_contenteditable_features",
       "path": "examples/porffor/tests/t20_contenteditable_features.js"
+    },
+    {
+      "name": "pretext_text_flow",
+      "path": "examples/porffor/pretext_text_flow.js"
+    },
+    {
+      "name": "pretext_text_flow_dynamic",
+      "path": "examples/porffor/pretext_text_flow_dynamic.js",
+      "exports": [
+        "tick"
+      ]
+    },
+    {
+      "name": "pretext_text_flow_directdraw",
+      "path": "examples/porffor/pretext_text_flow_directdraw.js",
+      "exports": [
+        "tick"
+      ]
+    },
+    {
+      "name": "pretext_dual_mode",
+      "path": "examples/porffor/pretext_dual_mode.js",
+      "exports": [
+        "tick",
+        "onModeDashboard",
+        "onModeTextflow",
+        "onModeParticles",
+        "onModeCharts",
+        "onModeSettings"
+      ]
+    },
+    {
+      "name": "pretext_dual_mode_domonly",
+      "path": "examples/porffor/pretext_dual_mode_domonly.js",
+      "exports": [
+        "tick"
+      ]
     }
   ],
   "snippets": []

@@ -46,6 +46,7 @@ function(dong_attach_porffor_scripts target_name)
         src/script/porffor/js_bindings_porffor.cpp
         src/script/porffor/js_scene_porffor.cpp
         src/script/porffor/js_text_layout_porffor.cpp
+        src/script/porffor/pretext_demo_host.cpp
     )
     target_include_directories(${target_name} PRIVATE
         "${DONG_PORFFOR_OUT_DIR}"

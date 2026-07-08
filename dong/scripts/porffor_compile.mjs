@@ -121,7 +121,7 @@ function registerAllImports() {
   imp('dong_next_sibling', 1, 1);
   imp('dong_clone_node', 2, 1);
 
-  imp('dong_parse_html', 1, 0);
+  imp('dong_parse_html', 1, 1);
   imp('dong_form_serialize', 1, 0);
   imp('dong_selection_text', 0, 0);
   imp('dong_select_all', 0, 1);
@@ -171,6 +171,23 @@ function registerAllImports() {
   imp('dong_render_text', 1, 0);
   imp('dong_draw_rect', 1, 0);
   imp('dong_draw_circle', 1, 0);
+  imp('dong_pretext_typo_config', 2, 0);
+  imp('dong_pretext_flow_columns_static', 0, 0);
+  imp('dong_pretext_flow_columns_dynamic', 0, 0);
+  imp('dong_pretext_flow_obstacles', 10, 0);
+  imp('dong_text_layout_mount_lines', 4, 1);
+  imp('dong_text_layout_render_overlay', 2, 1);
+  imp('dong_pretext_dynamic_hud', 3, 0);
+  imp('dong_pretext_flow_dynamic_tick', 8, 1);
+  imp('dong_pretext_dual_mode_tick', 2, 0);
+  imp('dong_pretext_domonly_init', 0, 0);
+  imp('dong_pretext_domonly_tick', 1, 0);
+  imp('dong_math_sin', 1, 1);
+  imp('dong_math_cos', 1, 1);
+  imp('dong_math_random', 0, 1);
+  imp('dong_now_ms', 0, 1);
+  imp('dong_style_set_px', 3, 0);
+  imp('dong_num_to_str', 1, 0);
 }
 
 registerAllImports();
@@ -246,6 +263,60 @@ ${applyBody}
 `;
 }
 
+function fixHostPulledStringTypes(cSource) {
+  return cSource.replace(
+    /(jjreturn\s*=\s*__porf_import_dong_str_pull\(\);\s*\n\s*jjreturnjjtype\s*=\s*)1(\s*;)/g,
+    (_m, prefix, suffix) => `${prefix}195${suffix}`,
+  );
+}
+
+function fixSetInnerHTMLStringTypes(cSource) {
+  let out = cSource.replace(
+    /(extern void __porf_import_dong_set_inner_html\(f64,\s*f64\);\n)/,
+    `$1extern void __porf_import_dong_set_inner_html_typed(f64, f64, f64);\n`,
+  );
+  out = out.replace(
+    /(_get0\s*=\s*nodeId;\s*\n\s*_get1\s*=\s*html;\s*\n\s*_get2\s*=\s*htmljjtype;\s*\n)\s*const struct ReturnValue _0 = ([A-Za-z0-9_]+)_toUtf8\(0, 0, 0, 0, _get1, _get2\);\s*\n\s*\(void\) _0\.type;\s*\n\s*__porf_import_dong_set_inner_html\(_get0, _0\.value\);/g,
+    (_m, prefix) => `${prefix}    __porf_import_dong_set_inner_html_typed(_get0, _get1, _get2);`,
+  );
+  out = out.replace(
+    /(_get\d+\s*=\s*html;\s*\n\s*const struct ReturnValue _\d+ = [A-Za-z0-9_]+_setInnerHTML\(0, 0, 0, 0, [^;]+, )195(\);)/g,
+    '$1htmljjtype$2',
+  );
+  return out;
+}
+
+function fixStrcatResultTypes(cSource) {
+  let out = cSource.replace(
+    /(([A-Za-z0-9_]+__Porffor_strcat\()\s*(?:\(u32\)\()?(_\d+)\.value\)?\s*,\s*)195(\s*,)/g,
+    (_m, prefix, _fn, retVar, suffix) => `${prefix}${retVar}.type${suffix}`,
+  );
+  out = out.replace(
+    /(([A-Za-z0-9_]+__Porffor_concatStrings\()\s*(?:\(f64\)\()?(_\d+)\.value\)?\s*,\s*)195(\s*,)/g,
+    (_m, prefix, _fn, retVar, suffix) => `${prefix}${retVar}.type${suffix}`,
+  );
+  return out;
+}
+
+function fixHtmlResultTypeAssignments(cSource) {
+  let out = cSource.replace(
+    /(html\s*=\s*(?:\(f64\))?\((_\d+)\.value\);\s*\n\s*_get\d+\s*=\s*html;\s*\n\s*)htmljjtype\s*=\s*195(\s*;)/g,
+    (_m, prefix, retVar, suffix) => `${prefix}htmljjtype = ${retVar}.type${suffix}`,
+  );
+  out = out.replace(
+    /(_get\d+\s*=\s*html;\s*\n\s*const struct ReturnValue _\d+ = [A-Za-z0-9_]+__Porffor_strcat\(\(u32\)\(_get\d+\),\s*)195(\s*,)/g,
+    '$1htmljjtype$2',
+  );
+  return out;
+}
+
+function fixMallocReturnPointers(cSource) {
+  return cSource.replace(
+    /(\b([A-Za-z0-9_]+jjporfjjcurrentPtr)\s*=\s*\2\s*\+\s*(_get\d+);\s*\n\s*_r\d+\s*=\s*)\2(\s*;)/g,
+    (_m, prefix, _currentPtr, lenVar, suffix) => `${prefix}${_currentPtr} - ${lenVar}${suffix}`,
+  );
+}
+
 function parseExportShims(cSource, modPrefix) {
   const shims = new Map();
   const esc = modPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -298,7 +369,14 @@ function compileSource(entry, source, logicalName, useModule) {
   if (!c) {
     throw new Error(`Porffor compile produced no C for ${logicalName}`);
   }
-  return { name: logicalName, c };
+  return {
+    name: logicalName,
+    c: fixMallocReturnPointers(
+      fixHtmlResultTypeAssignments(
+        fixStrcatResultTypes(fixSetInnerHTMLStringTypes(fixHostPulledStringTypes(c))),
+      ),
+    ),
+  };
 }
 
 function compileScript(entry) {

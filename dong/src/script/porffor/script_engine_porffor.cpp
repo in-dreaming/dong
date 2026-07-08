@@ -10,7 +10,6 @@ ScriptEngine::ScriptEngine()
     : host_(std::make_unique<PorfforHost>()),
       registry_(std::make_unique<PorfforScriptRegistry>(host_.get())) {
     host_->setRegistry(registry_.get());
-    default_module_ = "hello_dom";
 }
 
 ScriptEngine::~ScriptEngine() = default;
@@ -43,6 +42,11 @@ bool ScriptEngine::runModule(const std::string& module_name) {
 
 bool ScriptEngine::callExport(const std::string& module_name, const std::string& export_name) {
     return registry_->callExport(module_name, export_name, nullptr, 0);
+}
+
+bool ScriptEngine::callExport1(const std::string& module_name, const std::string& export_name,
+                               double arg0) {
+    return registry_->callExport(module_name, export_name, &arg0, 1);
 }
 
 } // namespace dong::script

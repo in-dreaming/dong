@@ -191,7 +191,7 @@ function todoIdAt(i) {
 }
 
 function porfRebuild_todos() {
-  var html = '';
+  var html = '<div>';
   var i = 0;
   while (i < todoCount) {
     if (i >= 32) {
@@ -203,6 +203,7 @@ function porfRebuild_todos() {
     }
     i = i + 1;
   }
+  html = html + '</div>';
   setInnerHTML(todo_listId, html);
 }
 
@@ -333,6 +334,13 @@ var todoId15 = 0;
 var todoText15 = '';
 var todoDone15 = 0;
 
+function normalizeInitialTodoText() {
+  todoText0 = persistStr(todoText0);
+  todoText1 = persistStr(todoText1);
+  todoText2 = persistStr(todoText2);
+  todoText3 = persistStr(todoText3);
+}
+
 function countActive() {
   var n = 0;
   var i = 0;
@@ -373,23 +381,17 @@ function shouldShow(i) {
 function buildTodoRow(i) {
   var text = todoTextAt(i);
   var done = todoDoneAt(i);
-  var strike = '';
-  var color = '#2c3e50';
-  var checkBg = 'transparent';
-  var checkBorder = '2px solid #bdc3c7';
+  var doneClass = '';
   var checkMark = '';
   if (done) {
-    strike = 'line-through';
-    color = '#95a5a6';
-    checkBg = '#27ae60';
-    checkBorder = 'none';
+    doneClass = ' done';
     checkMark = 'V';
   }
   var html = '';
-  html = html + '<div style="display:flex;align-items:center;padding:12px 16px;background:#fff;border-radius:8px;margin-bottom:8px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">';
-  html = html + '<div data-todo-toggle-index="' + String(i) + '" style="width:24px;height:24px;border-radius:50%;border:' + checkBorder + ';background:' + checkBg + ';margin-right:12px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;font-weight:bold;cursor:pointer;">' + checkMark + '</div>';
-  html = html + '<span style="flex:1;font-size:16px;color:' + color + ';text-decoration:' + strike + ';">' + text + '</span>';
-  html = html + '<button data-todo-delete-index="' + String(i) + '" style="background:transparent;border:none;color:#e74c3c;font-size:18px;padding:4px 8px;cursor:pointer;">X</button>';
+  html = html + '<div class="todo-row' + doneClass + '">';
+  html = html + '<div class="todo-check" data-todo-toggle-index="' + numToStr(i) + '">' + checkMark + '</div>';
+  html = html + '<span class="todo-text">' + text + '</span>';
+  html = html + '<button class="todo-delete" data-todo-delete-index="' + numToStr(i) + '">X</button>';
   html = html + '</div>';
   return html;
 }
@@ -484,14 +486,14 @@ function porfRefresh() {
 function removeAtIndex(idx) {
   var j = idx;
   while (j + 1 < todoCount) {
-    setTodoSlot(j, todoIdAt(j + 1), todoTextAt(j + 1), todoDoneAt(j + 1));
+    setTodoSlot(j, todoTextAt(j + 1), todoDoneAt(j + 1), todoIdAt(j + 1));
     j = j + 1;
   }
   todoCount = todoCount - 1;
 }
 
 export function onAdd() {
-  var text = getValue(todo_inputId);
+  var text = persistStr(getValue(todo_inputId));
   if (text.length === 0) {
     return;
   }
@@ -499,7 +501,7 @@ export function onAdd() {
     dongLog('todo max reached');
     return;
   }
-  setTodoSlot(todoCount, nextId, text, 0);
+  setTodoSlot(todoCount, text, 0, nextId);
   todoCount = todoCount + 1;
   nextId = nextId + 1;
   setValue(todo_inputId, '');
@@ -507,7 +509,12 @@ export function onAdd() {
 }
 
 export function onInputChange() {
-  inputText = getValue(todo_inputId);
+  inputText = persistStr(getValue(todo_inputId));
+}
+
+export function headlessAddSample() {
+  setValue(todo_inputId, 'Porffor smoke task');
+  onAdd();
 }
 
 export function onKeyDown() {
@@ -561,5 +568,7 @@ export function onListClick() {
     porfRefresh();
   }
 }
+
+normalizeInitialTodoText();
 
 porfInit();

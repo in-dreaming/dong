@@ -96,7 +96,11 @@ test('compiles each block rebuild', () => {
   const r = compilePorfSource(EACH_PORF);
   assert.match(r.js, /function porfRebuild_items/);
   assert.match(r.js, /function itemTextAt\(i\)/);
+  assert.match(r.js, /var html = '<div>'/);
+  assert.match(r.js, /html = html \+ /);
+  assert.match(r.js, /html = html \+ '<\/div>'/);
   assert.match(r.js, /setInnerHTML\(listId, html\)/);
+  assert.doesNotMatch(r.js, /appendChild\(listId, parseHtml/);
   assert.match(r.html, /id="list"/);
   assert.ok(!r.html.includes('porf-each'));
 });
@@ -125,6 +129,7 @@ test('compiles each with filter and row-fn', () => {
   const r = compilePorfSource(EACH_FILTER_PORF);
   assert.match(r.js, /if \(show\(i\)\)/);
   assert.match(r.js, /html = html \+ buildRow\(i\)/);
+  assert.match(r.js, /setInnerHTML\(listId, html\)/);
 });
 
 const PARTIAL_PORF = `---

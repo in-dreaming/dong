@@ -1,8 +1,8 @@
 /**
- * Dong Engine - 3D HTML Screens Demo (floor layout + Preact + curated cases)
+ * Dong Engine - 3D HTML Screens Demo (floor layout + Porffor + curated cases)
  *
  * Features:
- *   - Preact bundles + engine feature tests laid on the XZ floor (pitch)
+ *   - Porffor-ready UI demos + engine feature tests laid on the XZ floor (pitch)
  *   - Vertical HTML "billboards" as zone titles
  *   - First-person camera (WASD + mouse); optional overview camera preset
  *   - HUD overlay with FPS / help
@@ -13,7 +13,7 @@
  *   - Space/E: Up, Ctrl/Q: Down
  *   - Shift: Sprint
  *   - Left click: Interact with HTML screens
- *   - F1/H: Toggle help panel
+ *   - F1/H: Toggle HUD controls
  *   - ESC: Exit
  */
 
@@ -45,7 +45,7 @@
 #endif
 
 static dong_scene3d_t* g_scene = NULL;
-static int g_toggle_help_requested = 0;
+static int g_help_requested = 0;
 
 static void on_app_event(void* user_data, const dong_app_event_t* event) {
     (void)user_data;
@@ -54,7 +54,7 @@ static void on_app_event(void* user_data, const dong_app_event_t* event) {
     }
     if (event && event->type == DONG_APP_EVENT_KEY && event->key.pressed) {
         if (event->key.key_code == DONG_KEY_F1 || event->key.key_code == DONG_KEY_H) {
-            g_toggle_help_requested = 1;
+            g_help_requested = 1;
         }
     }
 }
@@ -73,23 +73,22 @@ typedef struct {
     const FloorPanel* panels;
 } ZoneRow;
 
-static const FloorPanel k_preact[] = {
-    {"preact-counter/index.html", 960, 640, 4.5f, 2.8f},
-    {"preact-game-ui/index.html", 960, 640, 4.5f, 2.8f},
-    {"preact-todo-classic/index.html", 960, 640, 4.5f, 2.8f},
-    {"preact-ui-components/index.html", 960, 640, 4.5f, 2.8f},
+static const FloorPanel k_porffor_ui[] = {
+    {"porf-counter/index.html", 960, 640, 4.5f, 2.8f},
+    {"porf-game-ui/index.html", 960, 640, 4.5f, 2.8f},
+    {"porf-todo-classic/index.html", 960, 640, 4.5f, 2.8f},
 };
 
 static const FloorPanel k_scripts[] = {
-    {"feature_test.html", 960, 640, 4.2f, 2.6f},
-    {"screen1_script.html", 800, 1280, 3.2f, 5.0f},
-    {"screen2_script.html", 960, 640, 4.2f, 2.6f},
+    {"tests/test_document_methods.html", 960, 640, 4.2f, 2.6f},
+    {"tests/test_document_props.html", 960, 640, 4.2f, 2.6f},
+    {"tests/test_dom_manipulation.html", 960, 640, 4.2f, 2.6f},
 };
 
 static const FloorPanel k_forms[] = {
-    {"tests/test_select_keyboard.html", 960, 640, 4.2f, 2.6f},
-    {"tests/test_form_element_bindings.html", 960, 640, 4.2f, 2.6f},
-    {"tests/test_textarea_element_bindings.html", 960, 640, 4.2f, 2.6f},
+    {"tests/test_select_basic.html", 960, 640, 4.2f, 2.6f},
+    {"tests/test_submit_event.html", 960, 640, 4.2f, 2.6f},
+    {"tests/test_input_value.html", 960, 640, 4.2f, 2.6f},
 };
 
 static const FloorPanel k_layout[] = {
@@ -106,15 +105,11 @@ static const FloorPanel k_text[] = {
 };
 
 static const FloorPanel k_video[] = {
-    {"video/video_play_test.html", 960, 640, 4.0f, 2.5f},
     {"video/video_test.html", 960, 640, 4.0f, 2.5f},
-    {"video/video_events_test.html", 960, 640, 4.0f, 2.5f},
-    {"video/video_acceptance.html", 960, 640, 4.0f, 2.5f},
-    {"video/video_js_api_smoke_test.html", 960, 640, 4.0f, 2.5f},
 };
 
 static const ZoneRow ZONE_ROWS[] = {
-    {"Preact", (int)(sizeof(k_preact) / sizeof(k_preact[0])), k_preact},
+    {"Porffor UI", (int)(sizeof(k_porffor_ui) / sizeof(k_porffor_ui[0])), k_porffor_ui},
     {"Scripts / DOM", (int)(sizeof(k_scripts) / sizeof(k_scripts[0])), k_scripts},
     {"Forms", (int)(sizeof(k_forms) / sizeof(k_forms[0])), k_forms},
     {"Layout / CSS", (int)(sizeof(k_layout) / sizeof(k_layout[0])), k_layout},
@@ -242,15 +237,17 @@ static void ensure_scene3d_msaa_env(void) {
 #endif
 }
 
-static const char* FALLBACK_HUD =
-    "<html><body style='background:transparent;font-family:Arial;'>"
+static const char* HUD_MODULE = "scene3d_hud";
+
+static const char* PORFFOR_HUD_FALLBACK =
+    "<html><body data-porffor-module='scene3d_hud' style='background:transparent;font-family:Arial;'>"
     "<div id='fps' style='position:absolute;top:12px;left:12px;color:#00ff88;font-size:18px;text-shadow:1px 1px 0 rgba(0,0,0,0.9);'>"
-    "FPS: <span id='fps-value' style='color:#ffff00;font-weight:bold;background:rgba(0,0,0,0.5);padding:2px 6px;border-radius:3px;'>0</span>"
+    "FPS: <span id='fps-value' style='color:#ffff00;font-weight:bold;background:rgba(0,0,0,0.7);padding:2px 6px;border-radius:3px;'>0</span>"
     "</div>"
-    "<div id='help-hint' style='position:absolute;bottom:12px;left:12px;font-size:14px;color:white;text-shadow:1px 1px 0 rgba(0,0,0,0.9);background:rgba(0,0,0,0.5);padding:6px 12px;border-radius:4px;'>"
-    "Press F1 or H for help"
+    "<div id='help-panel' style='opacity:0;position:absolute;top:80px;left:12px;font-size:14px;color:white;background:rgba(0,0,0,0.75);padding:10px 14px;border-radius:4px;line-height:1.5;'>"
+    "<b>Controls</b><br/>RMB+Mouse look<br/>WASD move<br/>Space/E up<br/>Ctrl/Q down<br/>Shift sprint<br/>ESC exit"
     "</div>"
-    "<script>function toggleHelp(){}</script>"
+    "<div id='help-hint' style='position:absolute;bottom:12px;left:12px;font-size:14px;color:white;background:rgba(0,0,0,0.5);padding:6px 12px;border-radius:4px;'>Press F1 or H for help</div>"
     "</body></html>";
 
 int main(int argc, char* argv[]) {
@@ -265,7 +262,7 @@ int main(int argc, char* argv[]) {
         total_floor += ZONE_ROWS[r].panel_count;
     }
 
-    printf("=== Dong 3D Floor Gallery (Preact + curated tests) ===\n");
+    printf("=== Dong 3D Floor Gallery (Porffor + curated tests) ===\n");
 #if defined(DONG_BACKEND_GPU)
     printf("[Dong] backend=gpu (native in-dreaming/gpu Scene3D)\n");
 #endif
@@ -402,12 +399,11 @@ int main(int argc, char* argv[]) {
 
     dong_overlay_t* hud = dong_scene3d_add_overlay_file(scene, "hud.html", 0, 0);
     if (!hud) {
-        hud = dong_scene3d_add_overlay(scene, FALLBACK_HUD, 0, 0);
-        if (hud) {
-            printf("[HUD] Using fallback HUD\n");
-        }
-    } else {
-        printf("[HUD] Loaded hud.html\n");
+        hud = dong_scene3d_add_overlay(scene, PORFFOR_HUD_FALLBACK, 0, 0);
+    }
+    if (hud) {
+        printf("[HUD] Using Porffor HUD module: %s\n", HUD_MODULE);
+        (void)dong_overlay_call_porffor_export1(hud, HUD_MODULE, "setFps", 0.0);
     }
 
     int frame_count = 0;
@@ -424,10 +420,10 @@ int main(int argc, char* argv[]) {
 
         float dt = dong_app_get_delta_time(app);
 
-        if (g_toggle_help_requested) {
-            g_toggle_help_requested = 0;
-            if (hud) {
-                dong_overlay_eval_script(hud, "if(typeof toggleHelp==='function')toggleHelp();");
+        if (g_help_requested) {
+            g_help_requested = 0;
+            if (!hud || !dong_overlay_call_porffor_export(hud, HUD_MODULE, "toggleHelp")) {
+                printf("Controls: RMB+Mouse=Look, WASD=Move, Space/E=Up, Ctrl/Q=Down, Shift=Sprint, ESC=Exit\n");
             }
         }
 
@@ -439,11 +435,7 @@ int main(int argc, char* argv[]) {
             fps_timer = 0.0f;
 
             if (hud) {
-                char js[256];
-                snprintf(js, sizeof(js),
-                    "var e=document.getElementById('fps-value');if(e)e.textContent='%d';",
-                    (int)fps);
-                dong_overlay_eval_script(hud, js);
+                (void)dong_overlay_call_porffor_export1(hud, HUD_MODULE, "setFps", (double)fps);
             }
             printf("[FPS] %.1f\n", fps);
             fflush(stdout);

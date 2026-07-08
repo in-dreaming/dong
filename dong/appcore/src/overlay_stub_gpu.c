@@ -34,6 +34,23 @@ DONG_APPCORE_API int dong_overlay_eval_script(dong_overlay_t* overlay, const cha
     return 0;
 }
 
+DONG_APPCORE_API int dong_overlay_call_porffor_export(dong_overlay_t* overlay, const char* module_name,
+                                                      const char* export_name) {
+    (void)overlay;
+    (void)module_name;
+    (void)export_name;
+    return 0;
+}
+
+DONG_APPCORE_API int dong_overlay_call_porffor_export1(dong_overlay_t* overlay, const char* module_name,
+                                                       const char* export_name, double arg0) {
+    (void)overlay;
+    (void)module_name;
+    (void)export_name;
+    (void)arg0;
+    return 0;
+}
+
 DONG_APPCORE_API void dong_overlay_update(dong_overlay_t* overlay, float dt) {
     (void)overlay;
     (void)dt;

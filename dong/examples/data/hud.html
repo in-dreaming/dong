@@ -50,13 +50,16 @@ body {
     border: 2px solid rgba(100, 150, 255, 0.6);
     border-radius: 12px;
     padding: 24px 32px;
-    min-width: 320px;
-    display: none;
+    width: 520px;
+    max-width: calc(100% - 32px);
+    display: block;
+    opacity: 0;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 }
 
 #help-panel.visible {
     display: block;
+    opacity: 1;
 }
 
 #help-panel h2 {
@@ -118,7 +121,7 @@ body {
 }
 </style>
 </head>
-<body>
+<body data-porffor-module="scene3d_hud">
 
 <!-- FPS 显示 -->
 <div id="fps">
@@ -128,45 +131,20 @@ body {
 <!-- 操作说明面板 -->
 <div id="help-panel">
     <h2>Controls</h2>
-    
+
     <div class="help-section">
-        <h3>Camera</h3>
         <div class="help-row">
             <span class="help-key">RMB + Mouse</span>
             <span class="help-desc">Look around</span>
         </div>
         <div class="help-row">
-            <span class="help-key">W A S D</span>
-            <span class="help-desc">Move forward/left/back/right</span>
+            <span class="help-key">Move</span>
+            <span class="help-desc">WASD | Space/E up | Ctrl/Q down | Shift</span>
         </div>
         <div class="help-row">
-            <span class="help-key">Q / E</span>
-            <span class="help-desc">Move down / up</span>
+            <span class="help-key">LMB / Scroll</span>
+            <span class="help-desc">Click and scroll HTML screens</span>
         </div>
-        <div class="help-row">
-            <span class="help-key">Space / Ctrl</span>
-            <span class="help-desc">Move up / down</span>
-        </div>
-        <div class="help-row">
-            <span class="help-key">Shift</span>
-            <span class="help-desc">Sprint (move faster)</span>
-        </div>
-    </div>
-    
-    <div class="help-section">
-        <h3>Interaction</h3>
-        <div class="help-row">
-            <span class="help-key">LMB</span>
-            <span class="help-desc">Click on HTML screens</span>
-        </div>
-        <div class="help-row">
-            <span class="help-key">Scroll</span>
-            <span class="help-desc">Scroll content on screens</span>
-        </div>
-    </div>
-    
-    <div class="help-section">
-        <h3>General</h3>
         <div class="help-row">
             <span class="help-key">F1 / H</span>
             <span class="help-desc">Toggle this help panel</span>

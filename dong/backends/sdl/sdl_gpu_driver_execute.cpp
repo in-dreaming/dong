@@ -2731,7 +2731,7 @@ void SDLGPUDriver::executeDrawTextMsdf(ExecuteContext& ctx, const GPUCommand& cm
     }
 
     if (prepared_main.empty()) {
-        DONG_LOG_WARN("[DrawText] frame=%llu ABORT: no glyphs prepared!", ctx.frame_index);
+        DONG_LOG_DEBUG("[DrawText] frame=%llu skipped: no glyphs prepared", ctx.frame_index);
         return;
     }
 

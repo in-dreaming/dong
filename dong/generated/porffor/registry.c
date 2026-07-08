@@ -9,6 +9,13 @@ extern void dong_porf_hello_dom__porf_init(void);
 extern void dong_porf_hello_dom_state_capture(void* out);
 extern void dong_porf_hello_dom_state_apply(const void* in);
 
+extern int dong_porf_scene3d_hud_main(void);
+extern char* dong_porf_scene3d_hud_memory;
+extern unsigned int dong_porf_scene3d_hud_memory_pages;
+extern void dong_porf_scene3d_hud__porf_init(void);
+extern void dong_porf_scene3d_hud_state_capture(void* out);
+extern void dong_porf_scene3d_hud_state_apply(const void* in);
+
 extern int dong_porf_js_microbench_main(void);
 extern char* dong_porf_js_microbench_memory;
 extern unsigned int dong_porf_js_microbench_memory_pages;
@@ -275,6 +282,41 @@ extern void dong_porf_t20_contenteditable_features__porf_init(void);
 extern void dong_porf_t20_contenteditable_features_state_capture(void* out);
 extern void dong_porf_t20_contenteditable_features_state_apply(const void* in);
 
+extern int dong_porf_pretext_text_flow_main(void);
+extern char* dong_porf_pretext_text_flow_memory;
+extern unsigned int dong_porf_pretext_text_flow_memory_pages;
+extern void dong_porf_pretext_text_flow__porf_init(void);
+extern void dong_porf_pretext_text_flow_state_capture(void* out);
+extern void dong_porf_pretext_text_flow_state_apply(const void* in);
+
+extern int dong_porf_pretext_text_flow_dynamic_main(void);
+extern char* dong_porf_pretext_text_flow_dynamic_memory;
+extern unsigned int dong_porf_pretext_text_flow_dynamic_memory_pages;
+extern void dong_porf_pretext_text_flow_dynamic__porf_init(void);
+extern void dong_porf_pretext_text_flow_dynamic_state_capture(void* out);
+extern void dong_porf_pretext_text_flow_dynamic_state_apply(const void* in);
+
+extern int dong_porf_pretext_text_flow_directdraw_main(void);
+extern char* dong_porf_pretext_text_flow_directdraw_memory;
+extern unsigned int dong_porf_pretext_text_flow_directdraw_memory_pages;
+extern void dong_porf_pretext_text_flow_directdraw__porf_init(void);
+extern void dong_porf_pretext_text_flow_directdraw_state_capture(void* out);
+extern void dong_porf_pretext_text_flow_directdraw_state_apply(const void* in);
+
+extern int dong_porf_pretext_dual_mode_main(void);
+extern char* dong_porf_pretext_dual_mode_memory;
+extern unsigned int dong_porf_pretext_dual_mode_memory_pages;
+extern void dong_porf_pretext_dual_mode__porf_init(void);
+extern void dong_porf_pretext_dual_mode_state_capture(void* out);
+extern void dong_porf_pretext_dual_mode_state_apply(const void* in);
+
+extern int dong_porf_pretext_dual_mode_domonly_main(void);
+extern char* dong_porf_pretext_dual_mode_domonly_memory;
+extern unsigned int dong_porf_pretext_dual_mode_domonly_memory_pages;
+extern void dong_porf_pretext_dual_mode_domonly__porf_init(void);
+extern void dong_porf_pretext_dual_mode_domonly_state_capture(void* out);
+extern void dong_porf_pretext_dual_mode_domonly_state_apply(const void* in);
+
 extern int dong_porf_t12_inline_main(void);
 extern char* dong_porf_t12_inline_memory;
 extern unsigned int dong_porf_t12_inline_memory_pages;
@@ -283,6 +325,10 @@ extern void dong_porf_t12_inline_state_capture(void* out);
 extern void dong_porf_t12_inline_state_apply(const void* in);
 
 extern int dong_porf_hello_dom_export_onBtnClick(void);
+
+extern int dong_porf_scene3d_hud_export_setFps(double);
+
+extern int dong_porf_scene3d_hud_export_toggleHelp(void);
 
 extern int dong_porf_test_mf_text_export_afterFrame0(void);
 
@@ -311,6 +357,8 @@ extern int dong_porf_porf_todo_export_onFilterDone(void);
 extern int dong_porf_porf_todo_export_onClearDone(void);
 
 extern int dong_porf_porf_todo_export_onListClick(void);
+
+extern int dong_porf_porf_todo_export_headlessAddSample(void);
 
 extern int dong_porf_porf_game_ui_export_onDamage(void);
 
@@ -466,12 +514,31 @@ extern int dong_porf_t20_ce_interactive_sim_export_onItalic(void);
 
 extern int dong_porf_t20_ce_interactive_sim_export_onUnderline(void);
 
+extern int dong_porf_pretext_text_flow_dynamic_export_tick(void);
+
+extern int dong_porf_pretext_text_flow_directdraw_export_tick(void);
+
+extern int dong_porf_pretext_dual_mode_export_tick(void);
+
+extern int dong_porf_pretext_dual_mode_export_onModeDashboard(void);
+
+extern int dong_porf_pretext_dual_mode_export_onModeTextflow(void);
+
+extern int dong_porf_pretext_dual_mode_export_onModeParticles(void);
+
+extern int dong_porf_pretext_dual_mode_export_onModeCharts(void);
+
+extern int dong_porf_pretext_dual_mode_export_onModeSettings(void);
+
+extern int dong_porf_pretext_dual_mode_domonly_export_tick(void);
+
 extern int dong_porf_t12_inline_export_inc__onclick(void);
 
 extern int dong_porf_t12_inline_export___porf_auto_0__onclick(void);
 
 const dong_porf_module_t dong_porf_modules[] = {
   { "hello_dom", dong_porf_hello_dom_main, &dong_porf_hello_dom_memory, &dong_porf_hello_dom_memory_pages, dong_porf_hello_dom__porf_init, dong_porf_hello_dom_state_capture, dong_porf_hello_dom_state_apply, 192 },
+  { "scene3d_hud", dong_porf_scene3d_hud_main, &dong_porf_scene3d_hud_memory, &dong_porf_scene3d_hud_memory_pages, dong_porf_scene3d_hud__porf_init, dong_porf_scene3d_hud_state_capture, dong_porf_scene3d_hud_state_apply, 224 },
   { "js_microbench", dong_porf_js_microbench_main, &dong_porf_js_microbench_memory, &dong_porf_js_microbench_memory_pages, dong_porf_js_microbench__porf_init, dong_porf_js_microbench_state_capture, dong_porf_js_microbench_state_apply, 384 },
   { "test_hidden_attr", dong_porf_test_hidden_attr_main, &dong_porf_test_hidden_attr_memory, &dong_porf_test_hidden_attr_memory_pages, dong_porf_test_hidden_attr__porf_init, dong_porf_test_hidden_attr_state_capture, dong_porf_test_hidden_attr_state_apply, 272 },
   { "test_checkbox_toggle", dong_porf_test_checkbox_toggle_main, &dong_porf_test_checkbox_toggle_memory, &dong_porf_test_checkbox_toggle_memory_pages, dong_porf_test_checkbox_toggle__porf_init, dong_porf_test_checkbox_toggle_state_capture, dong_porf_test_checkbox_toggle_state_apply, 224 },
@@ -510,13 +577,20 @@ const dong_porf_module_t dong_porf_modules[] = {
   { "t20_contenteditable_auto", dong_porf_t20_contenteditable_auto_main, &dong_porf_t20_contenteditable_auto_memory, &dong_porf_t20_contenteditable_auto_memory_pages, dong_porf_t20_contenteditable_auto__porf_init, dong_porf_t20_contenteditable_auto_state_capture, dong_porf_t20_contenteditable_auto_state_apply, 192 },
   { "t20_contenteditable_bold_auto", dong_porf_t20_contenteditable_bold_auto_main, &dong_porf_t20_contenteditable_bold_auto_memory, &dong_porf_t20_contenteditable_bold_auto_memory_pages, dong_porf_t20_contenteditable_bold_auto__porf_init, dong_porf_t20_contenteditable_bold_auto_state_capture, dong_porf_t20_contenteditable_bold_auto_state_apply, 208 },
   { "t20_contenteditable_features", dong_porf_t20_contenteditable_features_main, &dong_porf_t20_contenteditable_features_memory, &dong_porf_t20_contenteditable_features_memory_pages, dong_porf_t20_contenteditable_features__porf_init, dong_porf_t20_contenteditable_features_state_capture, dong_porf_t20_contenteditable_features_state_apply, 192 },
+  { "pretext_text_flow", dong_porf_pretext_text_flow_main, &dong_porf_pretext_text_flow_memory, &dong_porf_pretext_text_flow_memory_pages, dong_porf_pretext_text_flow__porf_init, dong_porf_pretext_text_flow_state_capture, dong_porf_pretext_text_flow_state_apply, 176 },
+  { "pretext_text_flow_dynamic", dong_porf_pretext_text_flow_dynamic_main, &dong_porf_pretext_text_flow_dynamic_memory, &dong_porf_pretext_text_flow_dynamic_memory_pages, dong_porf_pretext_text_flow_dynamic__porf_init, dong_porf_pretext_text_flow_dynamic_state_capture, dong_porf_pretext_text_flow_dynamic_state_apply, 304 },
+  { "pretext_text_flow_directdraw", dong_porf_pretext_text_flow_directdraw_main, &dong_porf_pretext_text_flow_directdraw_memory, &dong_porf_pretext_text_flow_directdraw_memory_pages, dong_porf_pretext_text_flow_directdraw__porf_init, dong_porf_pretext_text_flow_directdraw_state_capture, dong_porf_pretext_text_flow_directdraw_state_apply, 288 },
+  { "pretext_dual_mode", dong_porf_pretext_dual_mode_main, &dong_porf_pretext_dual_mode_memory, &dong_porf_pretext_dual_mode_memory_pages, dong_porf_pretext_dual_mode__porf_init, dong_porf_pretext_dual_mode_state_capture, dong_porf_pretext_dual_mode_state_apply, 320 },
+  { "pretext_dual_mode_domonly", dong_porf_pretext_dual_mode_domonly_main, &dong_porf_pretext_dual_mode_domonly_memory, &dong_porf_pretext_dual_mode_domonly_memory_pages, dong_porf_pretext_dual_mode_domonly__porf_init, dong_porf_pretext_dual_mode_domonly_state_capture, dong_porf_pretext_dual_mode_domonly_state_apply, 176 },
   { "t12_inline", dong_porf_t12_inline_main, &dong_porf_t12_inline_memory, &dong_porf_t12_inline_memory_pages, dong_porf_t12_inline__porf_init, dong_porf_t12_inline_state_capture, dong_porf_t12_inline_state_apply, 224 },
 };
 
-const size_t dong_porf_module_count = 40;
+const size_t dong_porf_module_count = 46;
 
 const dong_porf_handler_t dong_porf_handlers[] = {
   { "hello_dom", "onBtnClick", NULL, 0, (dong_porf_export_fn0)dong_porf_hello_dom_export_onBtnClick, NULL, &dong_porf_hello_dom_memory, &dong_porf_hello_dom_memory_pages },
+  { "scene3d_hud", "setFps", NULL, 1, NULL, (dong_porf_export_fn1)dong_porf_scene3d_hud_export_setFps, &dong_porf_scene3d_hud_memory, &dong_porf_scene3d_hud_memory_pages },
+  { "scene3d_hud", "toggleHelp", NULL, 0, (dong_porf_export_fn0)dong_porf_scene3d_hud_export_toggleHelp, NULL, &dong_porf_scene3d_hud_memory, &dong_porf_scene3d_hud_memory_pages },
   { "test_mf_text", "afterFrame0", NULL, 0, (dong_porf_export_fn0)dong_porf_test_mf_text_export_afterFrame0, NULL, &dong_porf_test_mf_text_memory, &dong_porf_test_mf_text_memory_pages },
   { "test_mf_class", "afterFrame0", NULL, 0, (dong_porf_export_fn0)dong_porf_test_mf_class_export_afterFrame0, NULL, &dong_porf_test_mf_class_memory, &dong_porf_test_mf_class_memory_pages },
   { "test_mf_style", "afterFrame0", NULL, 0, (dong_porf_export_fn0)dong_porf_test_mf_style_export_afterFrame0, NULL, &dong_porf_test_mf_style_memory, &dong_porf_test_mf_style_memory_pages },
@@ -531,6 +605,7 @@ const dong_porf_handler_t dong_porf_handlers[] = {
   { "porf_todo", "onFilterDone", NULL, 0, (dong_porf_export_fn0)dong_porf_porf_todo_export_onFilterDone, NULL, &dong_porf_porf_todo_memory, &dong_porf_porf_todo_memory_pages },
   { "porf_todo", "onClearDone", NULL, 0, (dong_porf_export_fn0)dong_porf_porf_todo_export_onClearDone, NULL, &dong_porf_porf_todo_memory, &dong_porf_porf_todo_memory_pages },
   { "porf_todo", "onListClick", NULL, 0, (dong_porf_export_fn0)dong_porf_porf_todo_export_onListClick, NULL, &dong_porf_porf_todo_memory, &dong_porf_porf_todo_memory_pages },
+  { "porf_todo", "headlessAddSample", NULL, 0, (dong_porf_export_fn0)dong_porf_porf_todo_export_headlessAddSample, NULL, &dong_porf_porf_todo_memory, &dong_porf_porf_todo_memory_pages },
   { "porf_game_ui", "onDamage", NULL, 0, (dong_porf_export_fn0)dong_porf_porf_game_ui_export_onDamage, NULL, &dong_porf_porf_game_ui_memory, &dong_porf_porf_game_ui_memory_pages },
   { "porf_game_ui", "onHeal", NULL, 0, (dong_porf_export_fn0)dong_porf_porf_game_ui_export_onHeal, NULL, &dong_porf_porf_game_ui_memory, &dong_porf_porf_game_ui_memory_pages },
   { "porf_game_ui", "onScoreTick", NULL, 0, (dong_porf_export_fn0)dong_porf_porf_game_ui_export_onScoreTick, NULL, &dong_porf_porf_game_ui_memory, &dong_porf_porf_game_ui_memory_pages },
@@ -608,11 +683,20 @@ const dong_porf_handler_t dong_porf_handlers[] = {
   { "t20_ce_interactive_sim", "onBold", NULL, 0, (dong_porf_export_fn0)dong_porf_t20_ce_interactive_sim_export_onBold, NULL, &dong_porf_t20_ce_interactive_sim_memory, &dong_porf_t20_ce_interactive_sim_memory_pages },
   { "t20_ce_interactive_sim", "onItalic", NULL, 0, (dong_porf_export_fn0)dong_porf_t20_ce_interactive_sim_export_onItalic, NULL, &dong_porf_t20_ce_interactive_sim_memory, &dong_porf_t20_ce_interactive_sim_memory_pages },
   { "t20_ce_interactive_sim", "onUnderline", NULL, 0, (dong_porf_export_fn0)dong_porf_t20_ce_interactive_sim_export_onUnderline, NULL, &dong_porf_t20_ce_interactive_sim_memory, &dong_porf_t20_ce_interactive_sim_memory_pages },
+  { "pretext_text_flow_dynamic", "tick", NULL, 0, (dong_porf_export_fn0)dong_porf_pretext_text_flow_dynamic_export_tick, NULL, &dong_porf_pretext_text_flow_dynamic_memory, &dong_porf_pretext_text_flow_dynamic_memory_pages },
+  { "pretext_text_flow_directdraw", "tick", NULL, 0, (dong_porf_export_fn0)dong_porf_pretext_text_flow_directdraw_export_tick, NULL, &dong_porf_pretext_text_flow_directdraw_memory, &dong_porf_pretext_text_flow_directdraw_memory_pages },
+  { "pretext_dual_mode", "tick", NULL, 0, (dong_porf_export_fn0)dong_porf_pretext_dual_mode_export_tick, NULL, &dong_porf_pretext_dual_mode_memory, &dong_porf_pretext_dual_mode_memory_pages },
+  { "pretext_dual_mode", "onModeDashboard", NULL, 0, (dong_porf_export_fn0)dong_porf_pretext_dual_mode_export_onModeDashboard, NULL, &dong_porf_pretext_dual_mode_memory, &dong_porf_pretext_dual_mode_memory_pages },
+  { "pretext_dual_mode", "onModeTextflow", NULL, 0, (dong_porf_export_fn0)dong_porf_pretext_dual_mode_export_onModeTextflow, NULL, &dong_porf_pretext_dual_mode_memory, &dong_porf_pretext_dual_mode_memory_pages },
+  { "pretext_dual_mode", "onModeParticles", NULL, 0, (dong_porf_export_fn0)dong_porf_pretext_dual_mode_export_onModeParticles, NULL, &dong_porf_pretext_dual_mode_memory, &dong_porf_pretext_dual_mode_memory_pages },
+  { "pretext_dual_mode", "onModeCharts", NULL, 0, (dong_porf_export_fn0)dong_porf_pretext_dual_mode_export_onModeCharts, NULL, &dong_porf_pretext_dual_mode_memory, &dong_porf_pretext_dual_mode_memory_pages },
+  { "pretext_dual_mode", "onModeSettings", NULL, 0, (dong_porf_export_fn0)dong_porf_pretext_dual_mode_export_onModeSettings, NULL, &dong_porf_pretext_dual_mode_memory, &dong_porf_pretext_dual_mode_memory_pages },
+  { "pretext_dual_mode_domonly", "tick", NULL, 0, (dong_porf_export_fn0)dong_porf_pretext_dual_mode_domonly_export_tick, NULL, &dong_porf_pretext_dual_mode_domonly_memory, &dong_porf_pretext_dual_mode_domonly_memory_pages },
   { "t12_inline", "inc__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_inline_export_inc__onclick, NULL, &dong_porf_t12_inline_memory, &dong_porf_t12_inline_memory_pages },
   { "t12_inline", "__porf_auto_0__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_inline_export___porf_auto_0__onclick, NULL, &dong_porf_t12_inline_memory, &dong_porf_t12_inline_memory_pages },
 };
 
-const size_t dong_porf_handler_count = 94;
+const size_t dong_porf_handler_count = 106;
 
 const dong_porf_module_t* dong_porf_find_module(const char* name) {
   if (!name) return NULL;

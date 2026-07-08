@@ -415,6 +415,26 @@ DONG_APPCORE_API int dong_overlay_eval_script(dong_overlay_t* overlay, const cha
     return result;
 }
 
+DONG_APPCORE_API int dong_overlay_call_porffor_export(
+    dong_overlay_t* overlay, const char* module_name, const char* export_name) {
+    if (!overlay || !overlay->engine || !module_name || !export_name) return 0;
+    int result = (dong_engine_call_porffor_export(overlay->engine, module_name, export_name) == DONG_OK) ? 1 : 0;
+    if (result) {
+        overlay->dirty = 1;
+    }
+    return result;
+}
+
+DONG_APPCORE_API int dong_overlay_call_porffor_export1(
+    dong_overlay_t* overlay, const char* module_name, const char* export_name, double arg0) {
+    if (!overlay || !overlay->engine || !module_name || !export_name) return 0;
+    int result = (dong_engine_call_porffor_export1(overlay->engine, module_name, export_name, arg0) == DONG_OK) ? 1 : 0;
+    if (result) {
+        overlay->dirty = 1;
+    }
+    return result;
+}
+
 
 DONG_APPCORE_API void dong_overlay_update(dong_overlay_t* overlay, float dt) {
     (void)dt;

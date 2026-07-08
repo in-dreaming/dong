@@ -192,6 +192,7 @@ private:
     void registerNodeId(uint64_t id, const dom::DOMNodePtr& node);
     void releaseNodeId(uint64_t node_id);
     void markNodeTreeDirty(const dom::DOMNodePtr& node);
+    void markNodeTreeDirtyRecursive(const dom::DOMNodePtr& node);
 };
 
 void resetFetchState(void* /*ctx*/);

@@ -833,8 +833,15 @@ pub fn build(b: *std.Build) void {
                 "    Copy-Item -Force $src (Join-Path $dst 'index.html'); " ++
                 "    Write-Host ('  Installed ' + $ex); " ++
                 "  }} " ++
+                "}}; " ++
+                "$pretextSrc = 'examples/data/pretext'; " ++
+                "if (Test-Path $pretextSrc) {{ " ++
+                "  $pretextDst = '{s}/bin/data/pretext'; " ++
+                "  New-Item -ItemType Directory -Force -Path $pretextDst | Out-Null; " ++
+                "  Copy-Item -Force -Recurse (Join-Path $pretextSrc '*') $pretextDst; " ++
+                "  Write-Host '  Installed pretext'; " ++
                 "}} }}",
-            .{install_prefix},
+            .{ install_prefix, install_prefix },
         ),
     } else &.{
         "sh",
@@ -848,8 +855,13 @@ pub fn build(b: *std.Build) void {
                 "    cp \"$src\" \"$dst/index.html\"; " ++
                 "    echo \"  Installed $ex\"; " ++
                 "  fi; " ++
-                "done",
-            .{install_prefix},
+                "done; " ++
+                "if [ -d examples/data/pretext ]; then " ++
+                "  mkdir -p '{s}/bin/data/pretext'; " ++
+                "  cp -R examples/data/pretext/* '{s}/bin/data/pretext/'; " ++
+                "  echo '  Installed pretext'; " ++
+                "fi",
+            .{ install_prefix, install_prefix, install_prefix },
         ),
     });
     porf_copy.step.dependOn(&porffor_compile.step);
@@ -1834,6 +1846,7 @@ fn buildDongCore(
             "src/script/porffor/js_bindings_porffor.cpp",
             "src/script/porffor/js_scene_porffor.cpp",
             "src/script/porffor/js_text_layout_porffor.cpp",
+            "src/script/porffor/pretext_demo_host.cpp",
             "src/dom/scene_compiler.cpp",
             // Render (platform-agnostic)
             "src/render/scene_graph.cpp",

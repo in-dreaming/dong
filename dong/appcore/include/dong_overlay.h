@@ -49,6 +49,14 @@ DONG_APPCORE_API void dong_overlay_set_resource_root(dong_overlay_t* overlay, co
 // Execute JavaScript in the overlay.
 DONG_APPCORE_API int dong_overlay_eval_script(dong_overlay_t* overlay, const char* script);
 
+// Call a compiled Porffor export in the overlay.
+DONG_APPCORE_API int dong_overlay_call_porffor_export(
+    dong_overlay_t* overlay, const char* module_name, const char* export_name);
+
+// Call a compiled Porffor export in the overlay with one numeric argument.
+DONG_APPCORE_API int dong_overlay_call_porffor_export1(
+    dong_overlay_t* overlay, const char* module_name, const char* export_name, double arg0);
+
 // =============================================================================
 // Rendering
 // =============================================================================

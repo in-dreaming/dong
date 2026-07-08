@@ -284,7 +284,7 @@ static i32 dong_porf_hello_dom__Porffor_malloc(i32 l0) {
     } else {
       _get5 = l0;
       dong_porf_hello_dom_jjporfjjcurrentPtr = dong_porf_hello_dom_jjporfjjcurrentPtr + _get5;
-      _r15 = dong_porf_hello_dom_jjporfjjcurrentPtr;
+      _r15 = dong_porf_hello_dom_jjporfjjcurrentPtr - _get5;
     }
   // end
   j15:;

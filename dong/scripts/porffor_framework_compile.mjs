@@ -293,18 +293,17 @@ function genEachRebuild(block) {
   const containerVar = idToVar(containerId);
   const filterGuard = filterExpr ? `if (${filterExpr}) {` : '';
   const filterClose = filterExpr ? '}' : '';
-  let rowStmt;
+  let rowExpr;
   if (rowFn) {
-    rowStmt = `html = html + ${rowFn}(i);`;
+    rowExpr = `${rowFn}(i)`;
   } else {
     const cleanTpl = stripFrameworkAttrs(itemTemplate);
-    const rowExpr = templateToHtmlExpr(cleanTpl, itemAlias);
-    rowStmt = `html = html + ${rowExpr};`;
+    rowExpr = templateToHtmlExpr(cleanTpl, itemAlias);
   }
   return {
     fn,
     code: `function ${fn}() {
-  var html = '';
+  var html = '<div>';
   var i = 0;
   while (i < ${countVar}) {
     if (i >= ${MAX_EACH_ITEMS}) {
@@ -312,10 +311,11 @@ function genEachRebuild(block) {
       break;
     }
     ${filterGuard}
-    ${rowStmt}
+    html = html + ${rowExpr};
     ${filterClose}
     i = i + 1;
   }
+  html = html + '</div>';
   setInnerHTML(${containerVar}, html);
 }
 `,

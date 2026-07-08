@@ -114,6 +114,7 @@ public:
     void setAttribute(double node_id, double name_ptr, double value_ptr);
     void removeAttribute(double node_id, double name_ptr);
     void setInnerHTML(double node_id, double html_ptr);
+    void setInnerHTMLTyped(double node_id, double html_ptr, double html_type);
 
     double querySelector(double root_id, double selector_ptr) const;
     void querySelectorAll(double root_id, double selector_ptr);
@@ -245,6 +246,7 @@ private:
 
     size_t memoryCapacityBytes() const;
     std::string readByteString(double ptr) const;
+    std::string readPorfforString(double ptr, int type) const;
     void setResultString(std::string s);
 
     struct TimerTask {

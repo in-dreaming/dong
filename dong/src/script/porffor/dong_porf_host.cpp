@@ -6,6 +6,8 @@
 #include "../../core/resource_loader.hpp"
 #include "porffor_script_registry.hpp"
 #include "js_bindings_porffor.hpp"
+#include "js_text_layout_porffor.hpp"
+#include "pretext_demo_host.hpp"
 #include "dong_clipboard.h"
 #include "dong_platform.h"
 #include "../../dom/dialog_element.hpp"
@@ -103,6 +105,31 @@ bool matchMediaQuery(const std::string& query, JSBindings* bindings) {
     return false;
 }
 
+void appendUtf8(std::string& out, uint32_t cp) {
+    if (cp <= 0x7F) {
+        out.push_back(static_cast<char>(cp));
+    } else if (cp <= 0x7FF) {
+        out.push_back(static_cast<char>(0xC0 | (cp >> 6)));
+        out.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+    } else if (cp <= 0xFFFF) {
+        out.push_back(static_cast<char>(0xE0 | (cp >> 12)));
+        out.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
+        out.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+    } else {
+        out.push_back(static_cast<char>(0xF0 | (cp >> 18)));
+        out.push_back(static_cast<char>(0x80 | ((cp >> 12) & 0x3F)));
+        out.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
+        out.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+    }
+}
+
+std::string stripNuls(std::string s) {
+    if (s.find('\0') != std::string::npos) {
+        s.erase(std::remove(s.begin(), s.end(), '\0'), s.end());
+    }
+    return s;
+}
+
 bool cssPropertySupported(const std::string& prop) {
     static const std::unordered_set<std::string> supported = {
         "display",       "position",    "width",         "height",        "margin",
@@ -166,6 +193,40 @@ std::string PorfforHost::readByteString(double ptr) const {
         return {};
     }
     return std::string(memory + offset + 4, memory + offset + 4 + len);
+}
+
+std::string PorfforHost::readPorfforString(double ptr, int type) const {
+    if (type == 195) {
+        return stripNuls(readByteString(ptr));
+    }
+    char* memory = activeMemory();
+    if (!memory || ptr < 0) {
+        return {};
+    }
+    const size_t offset = static_cast<size_t>(ptr);
+    const size_t cap = memoryCapacityBytes();
+    if (offset + 4 > cap) {
+        return {};
+    }
+    const u32 len = *reinterpret_cast<u32*>(memory + offset);
+    if (len > kMaxImportStringBytes || offset + 4 + (static_cast<size_t>(len) * 2) > cap) {
+        return {};
+    }
+    std::string out;
+    out.reserve(len);
+    const auto* units = reinterpret_cast<const uint16_t*>(memory + offset + 4);
+    for (u32 i = 0; i < len; ++i) {
+        uint32_t cp = units[i];
+        if (cp >= 0xD800 && cp <= 0xDBFF && i + 1 < len) {
+            const uint32_t lo = units[i + 1];
+            if (lo >= 0xDC00 && lo <= 0xDFFF) {
+                cp = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00);
+                ++i;
+            }
+        }
+        appendUtf8(out, cp);
+    }
+    return stripNuls(std::move(out));
 }
 
 void PorfforHost::setResultString(std::string s) {
@@ -386,10 +447,20 @@ void PorfforHost::invokeExport(const std::string& module_name, const std::string
     if (!registry_ || export_name.empty()) {
         return;
     }
+    const bool debug_pretext_timing =
+        std::getenv("DONG_DEBUG_PRETEXT_TIMING") && module_name.rfind("pretext_", 0) == 0;
+    const auto start = std::chrono::steady_clock::now();
     if (has_timestamp) {
         registry_->callExport(module_name, export_name, &timestamp_ms, 1);
     } else {
         registry_->callExport(module_name, export_name);
+    }
+    if (debug_pretext_timing) {
+        const double ms = std::chrono::duration<double, std::milli>(
+                              std::chrono::steady_clock::now() - start)
+                              .count();
+        DONG_LOG_INFO("[pretext timing] export %s::%s %.3f ms",
+                      module_name.c_str(), export_name.c_str(), ms);
     }
 }
 
@@ -487,6 +558,14 @@ void PorfforHost::setInnerHTML(double node_id, double html_ptr) {
     auto* bindings = activeBindings();
     if (bindings) {
         bindings->setNodeInnerHTML(static_cast<uint64_t>(node_id), readByteString(html_ptr));
+    }
+}
+
+void PorfforHost::setInnerHTMLTyped(double node_id, double html_ptr, double html_type) {
+    auto* bindings = activeBindings();
+    if (bindings) {
+        const std::string html = readPorfforString(html_ptr, static_cast<int>(html_type));
+        bindings->setNodeInnerHTML(static_cast<uint64_t>(node_id), html);
     }
 }
 
@@ -1520,6 +1599,12 @@ void __porf_import_dong_set_inner_html(f64 node_id, f64 html_ptr) {
     }
 }
 
+void __porf_import_dong_set_inner_html_typed(f64 node_id, f64 html_ptr, f64 html_type) {
+    if (g_active_host) {
+        g_active_host->setInnerHTMLTyped(node_id, html_ptr, html_type);
+    }
+}
+
 f64 __porf_import_dong_query_selector(f64 root_id, f64 selector_ptr) {
     return g_active_host ? g_active_host->querySelector(root_id, selector_ptr) : 0.0;
 }
@@ -1678,10 +1763,16 @@ f64 __porf_import_dong_clone_node(f64 node_id, f64 deep) {
     return g_active_host ? g_active_host->cloneNodeId(node_id, deep) : 0.0;
 }
 
-void __porf_import_dong_parse_html(f64 html_ptr) {
-    if (g_active_host) {
-        g_active_host->parseHtml(html_ptr);
+f64 __porf_import_dong_parse_html(f64 html_ptr) {
+    if (!g_active_host) {
+        return 0.0;
     }
+    auto* bindings = g_active_host->bindings();
+    if (!bindings) {
+        return 0.0;
+    }
+    const std::string html = g_active_host->readImportString(html_ptr);
+    return static_cast<f64>(bindings->parseHtmlDetached(html));
 }
 
 void __porf_import_dong_form_serialize(f64 form_id) {
@@ -1954,6 +2045,151 @@ void __porf_import_dong_draw_rect(f64 config_ptr) {
 void __porf_import_dong_draw_circle(f64 config_ptr) {
     if (g_active_host) {
         g_active_host->drawCircle(config_ptr);
+    }
+}
+
+void __porf_import_dong_pretext_typo_config(f64 columns_ptr, f64 obstacles_ptr) {
+    if (!g_active_host) {
+        return;
+    }
+    g_active_host->setImportResult(
+        ::dong::script::pretextTypoConfig(g_active_host->readImportString(columns_ptr),
+                                          g_active_host->readImportString(obstacles_ptr)));
+}
+
+void __porf_import_dong_pretext_flow_columns_static(void) {
+    if (g_active_host) {
+        g_active_host->setImportResult(::dong::script::pretextFlowColumnsStatic());
+    }
+}
+
+void __porf_import_dong_pretext_flow_columns_dynamic(void) {
+    if (g_active_host) {
+        g_active_host->setImportResult(::dong::script::pretextFlowColumnsDynamic());
+    }
+}
+
+void __porf_import_dong_pretext_flow_obstacles(f64 obs_a_cx, f64 obs_a_cy, f64 obs_a_r, f64 bx, f64 by,
+                                               f64 obs_b_w, f64 obs_b_h, f64 obs_c_cx, f64 obs_c_cy,
+                                               f64 obs_c_r) {
+    if (!g_active_host) {
+        return;
+    }
+    g_active_host->setImportResult(::dong::script::pretextFlowObstaclesJson(
+        static_cast<float>(obs_a_cx), static_cast<float>(obs_a_cy), static_cast<float>(obs_a_r),
+        static_cast<float>(bx), static_cast<float>(by), static_cast<float>(obs_b_w),
+        static_cast<float>(obs_b_h), static_cast<float>(obs_c_cx), static_cast<float>(obs_c_cy),
+        static_cast<float>(obs_c_r)));
+}
+
+f64 __porf_import_dong_text_layout_mount_lines(f64 node_id, f64 config_ptr, f64 class_ptr,
+                                               f64 stats_footer) {
+    if (!g_active_host) {
+        return 0.0;
+    }
+    if (auto* bindings = g_active_host->bindings()) {
+        return static_cast<f64>(::dong::script::porfforTextLayoutMountLines(
+            static_cast<uint64_t>(node_id), g_active_host->readImportString(config_ptr),
+            g_active_host->readImportString(class_ptr), stats_footer != 0.0, bindings));
+    }
+    return 0.0;
+}
+
+f64 __porf_import_dong_text_layout_render_overlay(f64 config_ptr, f64 color_ptr) {
+    if (!g_active_host) {
+        return 0.0;
+    }
+    if (auto* bindings = g_active_host->bindings()) {
+        return static_cast<f64>(::dong::script::porfforTextLayoutRenderOverlay(
+            g_active_host->readImportString(config_ptr), g_active_host->readImportString(color_ptr),
+            bindings->overlay_draw_));
+    }
+    return 0.0;
+}
+
+void __porf_import_dong_pretext_dynamic_hud(f64 fps, f64 lines, f64 pool_size) {
+    if (g_active_host) {
+        g_active_host->setImportResult(
+            ::dong::script::pretextDynamicHud(static_cast<int>(fps), static_cast<int>(lines),
+                                              static_cast<int>(pool_size)));
+    }
+}
+
+f64 __porf_import_dong_pretext_flow_dynamic_tick(f64 mode, f64 lines_id, f64 hud_id, f64 obs_a_id,
+                                                 f64 obs_b_id, f64 obs_c_id, f64 t, f64 fps) {
+    if (!g_active_host) {
+        return 0.0;
+    }
+    if (auto* bindings = g_active_host->bindings()) {
+        return static_cast<f64>(::dong::script::pretextFlowDynamicTick(
+            static_cast<int>(mode), static_cast<uint64_t>(lines_id),
+            static_cast<uint64_t>(hud_id), static_cast<uint64_t>(obs_a_id),
+            static_cast<uint64_t>(obs_b_id), static_cast<uint64_t>(obs_c_id),
+            static_cast<int>(t), static_cast<int>(fps), bindings, bindings->overlay_draw_));
+    }
+    return 0.0;
+}
+
+void __porf_import_dong_pretext_dual_mode_tick(f64 mode, f64 t) {
+    if (!g_active_host) {
+        return;
+    }
+    if (auto* bindings = g_active_host->bindings()) {
+        ::dong::script::pretextDualModeOverlayTick(static_cast<int>(mode), static_cast<int>(t), bindings,
+                                                   bindings->overlay_draw_);
+    }
+}
+
+void __porf_import_dong_pretext_domonly_init(void) {
+    if (g_active_host) {
+        if (auto* bindings = g_active_host->bindings()) {
+            ::dong::script::pretextDomOnlyInit(bindings);
+        }
+    }
+}
+
+void __porf_import_dong_pretext_domonly_tick(f64 t) {
+    if (g_active_host) {
+        if (auto* bindings = g_active_host->bindings()) {
+            ::dong::script::pretextDomOnlyTick(static_cast<int>(t), bindings);
+        }
+    }
+}
+
+f64 __porf_import_dong_math_sin(f64 x) {
+    return std::sin(x);
+}
+
+f64 __porf_import_dong_math_cos(f64 x) {
+    return std::cos(x);
+}
+
+f64 __porf_import_dong_math_random(void) {
+    return static_cast<f64>(std::rand()) / static_cast<f64>(RAND_MAX);
+}
+
+f64 __porf_import_dong_now_ms(void) {
+    if (!g_active_host) {
+        return 0.0;
+    }
+    return g_active_host->timeNow() * 1000.0;
+}
+
+void __porf_import_dong_style_set_px(f64 node_id, f64 prop_ptr, f64 value) {
+    if (!g_active_host) {
+        return;
+    }
+    if (auto* bindings = g_active_host->bindings()) {
+        char buf[32];
+        std::snprintf(buf, sizeof(buf), "%dpx", static_cast<int>(std::lround(value)));
+        bindings->styleSet(static_cast<uint64_t>(node_id), g_active_host->readImportString(prop_ptr),
+                           buf);
+    }
+}
+
+void __porf_import_dong_num_to_str(f64 n) {
+    if (g_active_host) {
+        g_active_host->setImportResult(std::to_string(static_cast<int>(std::lround(n))));
     }
 }
 

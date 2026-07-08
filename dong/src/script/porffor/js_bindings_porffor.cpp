@@ -20,7 +20,9 @@
 #include "dong_clipboard.h"
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
+#include <functional>
 #include <sstream>
 #include <unordered_set>
 
@@ -465,6 +467,21 @@ void JSBindings::markNodeTreeDirty(const dom::DOMNodePtr& node) {
     }
 }
 
+void JSBindings::markNodeTreeDirtyRecursive(const dom::DOMNodePtr& node) {
+    if (!node) {
+        return;
+    }
+    node->markStyleDirty();
+    node->markLayoutDirty();
+    for (const auto& child : node->getChildren()) {
+        markNodeTreeDirtyRecursive(child);
+    }
+    if (auto parent = node->getParent()) {
+        parent->markStyleDirty();
+        parent->markLayoutDirty();
+    }
+}
+
 void JSBindings::ensureLayoutFresh() const {
     if (!layout_engine_ || !dom_manager_) {
         return;
@@ -590,9 +607,27 @@ void JSBindings::setNodeInnerHTML(uint64_t node_id, const std::string& html) {
     if (!node) {
         return;
     }
-    node->setInnerHTML(html);
-    node->markStyleDirty();
-    node->markLayoutDirty();
+    std::string clean_html = html;
+    if (clean_html.find('\0') != std::string::npos) {
+        clean_html.erase(std::remove(clean_html.begin(), clean_html.end(), '\0'), clean_html.end());
+    }
+    node->setInnerHTML(clean_html);
+    registerNodeTree(node);
+    if (dom_manager_) {
+        std::function<void(const dom::DOMNodePtr&)> recompute_styles;
+        recompute_styles = [&](const dom::DOMNodePtr& n) {
+            if (!n) {
+                return;
+            }
+            dom_manager_->recomputeNodeStyle(n);
+            for (const auto& child : n->getChildren()) {
+                recompute_styles(child);
+            }
+        };
+        recompute_styles(node);
+    }
+    markNodeTreeDirtyRecursive(node);
+    ensureLayoutFresh();
 }
 
 uint64_t JSBindings::querySelector(uint64_t root_id, const std::string& selector) const {
@@ -843,7 +878,9 @@ void JSBindings::appendChild(uint64_t parent_id, uint64_t child_id) {
         return;
     }
     parent->appendChild(child);
+    registerNodeTree(child);
     markNodeTreeDirty(parent);
+    ensureLayoutFresh();
 }
 
 void JSBindings::insertBefore(uint64_t parent_id, uint64_t new_id, uint64_t ref_id) {
