@@ -2,7 +2,7 @@
  * Dong Engine - 3D HTML Screens Demo (floor layout + Porffor + curated cases)
  *
  * Features:
- *   - Porffor-ready UI demos + engine feature tests laid on the XZ floor (pitch)
+ *   - Porffor-ready component demos + engine feature tests laid on the XZ floor (pitch)
  *   - Vertical HTML "billboards" as zone titles
  *   - First-person camera (WASD + mouse); optional overview camera preset
  *   - HUD overlay with FPS / help
@@ -73,16 +73,14 @@ typedef struct {
     const FloorPanel* panels;
 } ZoneRow;
 
-static const FloorPanel k_porffor_ui[] = {
+static const FloorPanel k_component_showcase[] = {
     {"porf-counter/index.html", 960, 640, 4.5f, 2.8f},
     {"porf-game-ui/index.html", 960, 640, 4.5f, 2.8f},
     {"porf-todo-classic/index.html", 960, 640, 4.5f, 2.8f},
-};
-
-static const FloorPanel k_scripts[] = {
-    {"tests/test_document_methods.html", 960, 640, 4.2f, 2.6f},
-    {"tests/test_document_props.html", 960, 640, 4.2f, 2.6f},
-    {"tests/test_dom_manipulation.html", 960, 640, 4.2f, 2.6f},
+    {"feature_test.html", 960, 640, 4.5f, 2.8f},
+    {"pretext/test_text_flow.html", 960, 640, 4.5f, 2.8f},
+    {"pretext/test_text_flow_dynamic.html", 960, 640, 4.5f, 2.8f},
+    {"pretext/test_dual_mode.html", 960, 640, 4.5f, 2.8f},
 };
 
 static const FloorPanel k_forms[] = {
@@ -104,17 +102,11 @@ static const FloorPanel k_text[] = {
     {"tests/test_colr_v0_emoji.html", 960, 640, 4.2f, 2.6f},
 };
 
-static const FloorPanel k_video[] = {
-    {"video/video_test.html", 960, 640, 4.0f, 2.5f},
-};
-
 static const ZoneRow ZONE_ROWS[] = {
-    {"Porffor UI", (int)(sizeof(k_porffor_ui) / sizeof(k_porffor_ui[0])), k_porffor_ui},
-    {"Scripts / DOM", (int)(sizeof(k_scripts) / sizeof(k_scripts[0])), k_scripts},
+    {"Components / Porffor", (int)(sizeof(k_component_showcase) / sizeof(k_component_showcase[0])), k_component_showcase},
     {"Forms", (int)(sizeof(k_forms) / sizeof(k_forms[0])), k_forms},
     {"Layout / CSS", (int)(sizeof(k_layout) / sizeof(k_layout[0])), k_layout},
     {"Text / Emoji", (int)(sizeof(k_text) / sizeof(k_text[0])), k_text},
-    {"Video", (int)(sizeof(k_video) / sizeof(k_video[0])), k_video},
 };
 
 static const int NUM_ZONE_ROWS = (int)(sizeof(ZONE_ROWS) / sizeof(ZONE_ROWS[0]));

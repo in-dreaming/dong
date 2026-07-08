@@ -383,64 +383,6 @@
             </div>
         </div>
     </div>
-    
-    <script>
-        // Tab switching logic（避免 querySelectorAll 兼容性问题）
-        var tabs = document.getElementsByClassName('tab-btn');
-        var pages = document.getElementsByClassName('tab-page');
-        
-        function clearActive() {
-            for (var i = 0; i < tabs.length; i++) {
-                tabs[i].className = tabs[i].className.replace(' active', '');
-            }
-            for (var j = 0; j < pages.length; j++) {
-                pages[j].className = pages[j].className.replace(' active', '');
-                pages[j].style.display = 'none';
-            }
-        }
-        
-        function switchTab(tabId) {
-            clearActive();
-            var tab = document.getElementById(tabId);
-            if (!tab) return;
-            var pageId = tab.getAttribute('data-page');
-            tab.className = tab.className + ' active';
-            var page = document.getElementById(pageId);
-            if (page) {
-                page.className = page.className + ' active';
-                page.style.display = 'block';
-            }
-        }
-        
-        function attachTabHandler(id) {
-            var tab = document.getElementById(id);
-            if (tab) {
-                tab.addEventListener('click', function() {
-                    console.log('[Feature Test] switchTab -> ' + id);
-                    switchTab(id);
-                });
-            }
-        }
-        
-        attachTabHandler('tab-1');
-        attachTabHandler('tab-2');
-        attachTabHandler('tab-3');
-        attachTabHandler('tab-4');
-        attachTabHandler('tab-5');
-        attachTabHandler('tab-6');
-        
-        var demoItems = document.getElementsByClassName('demo-item');
-        console.log('[Feature Test] demo-item count = ' + demoItems.length);
-        for (var i = 0; i < demoItems.length && i < 5; i++) {
-            console.log('[Feature Test] demo-item[' + i + '] text = ' + demoItems[i].textContent);
-        }
-        
-        switchTab('tab-1');
-        
-        console.log('[Feature Test] Tab demo loaded. Click tabs to switch pages.');
-    </script>
-
-
 </body>
 </html>
 
