@@ -354,20 +354,31 @@ function emitModuleC(item) {
 
 function compileSource(entry, source, logicalName, useModule) {
   lintPorfforSource(source, entry.path ?? logicalName);
+  const cPrefix = `dong_porf_${logicalName}_`;
   process.argv = process.argv.filter(
-    (a) => !a.startsWith('--2c-prefix=') && a !== '--module',
+    (a) => !a.startsWith('--2c-prefix=') && !a.startsWith('--2cPrefix=') && a !== '--module',
   );
-  process.argv.push(`--2c-prefix=dong_porf_${logicalName}_`);
+  process.argv.push(`--2c-prefix=${cPrefix}`);
+  process.argv.push(`--2cPrefix=${cPrefix}`);
   if (useModule) {
     process.argv.push('--module');
   }
   globalThis.argvChanged?.();
+  if (globalThis.Prefs) {
+    globalThis.Prefs['2cPrefix'] = cPrefix;
+    globalThis.Prefs.module = useModule;
+  }
 
   globalThis.file = entry.path ?? logicalName;
   const result = compile(source);
   const c = result?.c;
   if (!c) {
     throw new Error(`Porffor compile produced no C for ${logicalName}`);
+  }
+  if (!c.includes(`int ${cPrefix}main(`)) {
+    throw new Error(
+      `Porffor 2c prefix failed for ${logicalName}; expected symbol ${cPrefix}main in generated C`,
+    );
   }
   return {
     name: logicalName,
