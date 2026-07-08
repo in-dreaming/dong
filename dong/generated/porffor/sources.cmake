@@ -45,5 +45,9 @@ set(DONG_PORFFOR_MODULE_SOURCES
   "${DONG_PORFFOR_OUT_DIR}/pretext_text_flow_directdraw.c"
   "${DONG_PORFFOR_OUT_DIR}/pretext_dual_mode.c"
   "${DONG_PORFFOR_OUT_DIR}/pretext_dual_mode_domonly.c"
+  "${DONG_PORFFOR_OUT_DIR}/video_play_test.c"
+  "${DONG_PORFFOR_OUT_DIR}/video_js_api_smoke_test.c"
+  "${DONG_PORFFOR_OUT_DIR}/video_events_test.c"
+  "${DONG_PORFFOR_OUT_DIR}/video_acceptance.c"
   "${DONG_PORFFOR_OUT_DIR}/t12_inline.c"
 )

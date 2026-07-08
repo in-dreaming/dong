@@ -181,6 +181,7 @@ fn backendToCMake(backend: Backend) []const u8 {
 
 const BuildOptions = struct {
     enable_ffmpeg: bool,
+    ffmpeg_explicit: bool,
     backend: Backend,
     android_api_level: u32,
     ios_deployment_target: []const u8,
@@ -205,7 +206,8 @@ fn resolveBackend(b: *std.Build, platform: PlatformInfo) Backend {
 }
 
 fn getBuildOptions(b: *std.Build, platform: PlatformInfo) BuildOptions {
-    const enable_ffmpeg = b.option(bool, "ffmpeg", "Enable FFmpeg support (default: true on desktop)") orelse platform.is_desktop;
+    const ffmpeg_opt = b.option(bool, "ffmpeg", "Enable FFmpeg support (default: true on desktop)");
+    const enable_ffmpeg = ffmpeg_opt orelse platform.is_desktop;
     const backend = resolveBackend(b, platform);
     const android_api_level = b.option(u32, "android-api", "Android API level (default: 21)") orelse 21;
     const ios_target = b.option([]const u8, "ios-target", "iOS deployment target (default: 12.0)") orelse "12.0";
@@ -215,6 +217,7 @@ fn getBuildOptions(b: *std.Build, platform: PlatformInfo) BuildOptions {
 
     return .{
         .enable_ffmpeg = enable_ffmpeg,
+        .ffmpeg_explicit = ffmpeg_opt != null,
         .backend = backend,
         .android_api_level = android_api_level,
         .ios_deployment_target = ios_target,
@@ -249,6 +252,9 @@ pub fn build(b: *std.Build) void {
     // Load build configuration
     const io = b.graph.io;
     var config = loadBuildConfig(b.allocator, io);
+    if (options.ffmpeg_explicit) {
+        config.enable_ffmpeg = options.enable_ffmpeg;
+    }
 
     // Print build info
     std.debug.print("Building for: {s} (native: {})\n", .{ platform.target_triple, platform.is_native });
@@ -516,10 +522,10 @@ pub fn build(b: *std.Build) void {
                 "C:/Program Files/Git/bin/bash.exe",
             };
             for (git_bash_paths) |bash_path| {
-                if (IoDir.cwd().access(io, bash_path, .{})) |_| continue else |_| {
+                if (IoDir.cwd().access(io, bash_path, .{})) |_| {
                     dong_cmake_args.append(b.fmt("-DBASH_EXECUTABLE={s}", .{bash_path})) catch unreachable;
                     break;
-                }
+                } else |_| continue;
             }
         }
     } else if (platform.is_linux) {

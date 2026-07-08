@@ -373,7 +373,8 @@ static constexpr dong_plugin_caps_t k_caps =
                          DONG_PLUGIN_CAP_WINDOW |
                          DONG_PLUGIN_CAP_INPUT |
                          DONG_PLUGIN_CAP_RENDERER
-#if defined(DONG_PLUGIN_SDL_HAS_FFMPEG) && DONG_PLUGIN_SDL_HAS_FFMPEG
+#if (defined(DONG_PLUGIN_SDL_HAS_FFMPEG) && DONG_PLUGIN_SDL_HAS_FFMPEG) || \
+    (defined(DONG_PLUGIN_SDL_HAS_NATIVE_VIDEO) && DONG_PLUGIN_SDL_HAS_NATIVE_VIDEO)
                          | DONG_PLUGIN_CAP_VIDEO
 #endif
     );
@@ -402,7 +403,8 @@ static const dong_plugin_vtable_t g_vtable = {
     /*get_native_window_handle*/ sdl_get_native_window_handle,
     /*get_native_gpu_device*/ sdl_get_native_gpu_device,
 
-#if defined(DONG_PLUGIN_SDL_HAS_FFMPEG) && DONG_PLUGIN_SDL_HAS_FFMPEG
+#if (defined(DONG_PLUGIN_SDL_HAS_FFMPEG) && DONG_PLUGIN_SDL_HAS_FFMPEG) || \
+    (defined(DONG_PLUGIN_SDL_HAS_NATIVE_VIDEO) && DONG_PLUGIN_SDL_HAS_NATIVE_VIDEO)
     /*video_open*/ sdl_video_open,
     /*video_close*/ sdl_video_close,
     /*video_get_metadata*/ sdl_video_get_metadata,

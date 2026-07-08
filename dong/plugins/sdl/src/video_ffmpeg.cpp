@@ -1068,6 +1068,319 @@ int sdl_video_seek(void* /*user*/, dong_video_player_t* player, double time_seco
 
 } // extern "C"
 
+#elif defined(_WIN32) && defined(DONG_PLUGIN_SDL_HAS_NATIVE_VIDEO) && DONG_PLUGIN_SDL_HAS_NATIVE_VIDEO
+
+#include <SDL3/SDL_log.h>
+
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <mfapi.h>
+#include <mferror.h>
+#include <mfidl.h>
+#include <mfreadwrite.h>
+#include <propvarutil.h>
+
+#include <algorithm>
+#include <cstdint>
+#include <cstring>
+#include <mutex>
+#include <string>
+#include <vector>
+
+struct dong_video_player_t {
+    IMFSourceReader* reader = nullptr;
+    uint32_t width = 0;
+    uint32_t height = 0;
+    LONG stride = 0;
+    double current_pts = 0.0;
+    std::vector<uint8_t> rgba;
+    dong_video_metadata_t meta = {};
+};
+
+namespace {
+
+static std::once_flag g_mf_once;
+static bool g_mf_ok = false;
+
+static void safe_release(IUnknown* p) {
+    if (p) p->Release();
+}
+
+static std::wstring utf8_to_wide(const char* s) {
+    if (!s || !s[0]) return {};
+    const int need = MultiByteToWideChar(CP_UTF8, 0, s, -1, nullptr, 0);
+    if (need <= 0) return {};
+    std::wstring out;
+    out.resize((size_t)need - 1u);
+    MultiByteToWideChar(CP_UTF8, 0, s, -1, out.data(), need);
+    return out;
+}
+
+static void mf_init_once() {
+    std::call_once(g_mf_once, []() {
+        HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+        if (FAILED(hr) && hr != RPC_E_CHANGED_MODE) {
+            SDL_Log("[dong_plugin_sdl][video] CoInitializeEx failed: 0x%08lx", (unsigned long)hr);
+            g_mf_ok = false;
+            return;
+        }
+
+        hr = MFStartup(MF_VERSION, MFSTARTUP_LITE);
+        if (FAILED(hr)) {
+            SDL_Log("[dong_plugin_sdl][video] MFStartup failed: 0x%08lx", (unsigned long)hr);
+            g_mf_ok = false;
+            return;
+        }
+
+        g_mf_ok = true;
+        SDL_Log("[dong_plugin_sdl][video] Media Foundation loaded");
+    });
+}
+
+static bool set_rgb32_output(IMFSourceReader* reader, uint32_t* out_w, uint32_t* out_h, LONG* out_stride) {
+    IMFMediaType* mt = nullptr;
+    HRESULT hr = MFCreateMediaType(&mt);
+    if (FAILED(hr)) return false;
+
+    hr = mt->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
+    if (SUCCEEDED(hr)) hr = mt->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_RGB32);
+    if (SUCCEEDED(hr)) {
+        hr = reader->SetCurrentMediaType((DWORD)MF_SOURCE_READER_FIRST_VIDEO_STREAM, nullptr, mt);
+    }
+    safe_release(mt);
+    if (FAILED(hr)) {
+        SDL_Log("[dong_plugin_sdl][video] SetCurrentMediaType RGB32 failed: 0x%08lx", (unsigned long)hr);
+        return false;
+    }
+
+    IMFMediaType* cur = nullptr;
+    hr = reader->GetCurrentMediaType((DWORD)MF_SOURCE_READER_FIRST_VIDEO_STREAM, &cur);
+    if (FAILED(hr) || !cur) return false;
+
+    UINT32 w = 0;
+    UINT32 h = 0;
+    hr = MFGetAttributeSize(cur, MF_MT_FRAME_SIZE, &w, &h);
+    LONG stride = 0;
+    if (SUCCEEDED(hr)) {
+        (void)MFGetStrideForBitmapInfoHeader(MFVideoFormat_RGB32.Data1, w, &stride);
+        if (stride == 0) stride = (LONG)w * 4;
+    }
+    safe_release(cur);
+
+    if (FAILED(hr) || w == 0 || h == 0) {
+        return false;
+    }
+    if (out_w) *out_w = w;
+    if (out_h) *out_h = h;
+    if (out_stride) *out_stride = stride;
+    return true;
+}
+
+static double read_duration_seconds(IMFSourceReader* reader) {
+    PROPVARIANT var;
+    PropVariantInit(&var);
+    double seconds = 0.0;
+    HRESULT hr = reader->GetPresentationAttribute((DWORD)MF_SOURCE_READER_MEDIASOURCE, MF_PD_DURATION, &var);
+    if (SUCCEEDED(hr)) {
+        if (var.vt == VT_UI8) {
+            seconds = (double)var.uhVal.QuadPart / 10000000.0;
+        } else if (var.vt == VT_I8) {
+            seconds = (double)var.hVal.QuadPart / 10000000.0;
+        }
+    }
+    PropVariantClear(&var);
+    return seconds;
+}
+
+} // namespace
+
+extern "C" {
+
+dong_video_player_t* sdl_video_open(void* /*user*/, const char* url) {
+    mf_init_once();
+    if (!g_mf_ok || !url || !url[0]) {
+        return nullptr;
+    }
+
+    std::wstring wurl = utf8_to_wide(url);
+    if (wurl.empty()) {
+        return nullptr;
+    }
+
+    IMFAttributes* attrs = nullptr;
+    HRESULT hr = MFCreateAttributes(&attrs, 1);
+    if (SUCCEEDED(hr) && attrs) {
+        (void)attrs->SetUINT32(MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING, TRUE);
+    }
+
+    IMFSourceReader* reader = nullptr;
+    hr = MFCreateSourceReaderFromURL(wurl.c_str(), attrs, &reader);
+    safe_release(attrs);
+    if (FAILED(hr) || !reader) {
+        SDL_Log("[dong_plugin_sdl][video] MFCreateSourceReaderFromURL failed: 0x%08lx (%s)", (unsigned long)hr, url);
+        return nullptr;
+    }
+
+    auto* p = new dong_video_player_t();
+    p->reader = reader;
+    if (!set_rgb32_output(reader, &p->width, &p->height, &p->stride)) {
+        sdl_video_close(nullptr, p);
+        return nullptr;
+    }
+
+    p->meta.video_width = p->width;
+    p->meta.video_height = p->height;
+    p->meta.duration_seconds = read_duration_seconds(reader);
+    p->meta.has_video = 1;
+    p->meta.has_audio = 0;
+    p->rgba.resize((size_t)p->width * (size_t)p->height * 4u);
+    return p;
+}
+
+void sdl_video_close(void* /*user*/, dong_video_player_t* player) {
+    if (!player) return;
+    safe_release(player->reader);
+    delete player;
+}
+
+int sdl_video_get_metadata(void* /*user*/, dong_video_player_t* player, dong_video_metadata_t* out) {
+    if (!player || !out) return 0;
+    *out = player->meta;
+    return 1;
+}
+
+int sdl_video_read_frame(void* /*user*/, dong_video_player_t* player, dong_video_frame_t* out_frame) {
+    if (!player || !player->reader || !out_frame) return -1;
+    std::memset(out_frame, 0, sizeof(*out_frame));
+
+    IMFSample* sample = nullptr;
+    DWORD flags = 0;
+    LONGLONG timestamp = 0;
+
+    while (true) {
+        HRESULT hr = player->reader->ReadSample(
+            (DWORD)MF_SOURCE_READER_FIRST_VIDEO_STREAM,
+            0,
+            nullptr,
+            &flags,
+            &timestamp,
+            &sample);
+        if (FAILED(hr)) {
+            SDL_Log("[dong_plugin_sdl][video] ReadSample failed: 0x%08lx", (unsigned long)hr);
+            return -1;
+        }
+        if (flags & MF_SOURCE_READERF_ENDOFSTREAM) {
+            return 0;
+        }
+        if (sample) {
+            break;
+        }
+        if (flags & MF_SOURCE_READERF_STREAMTICK) {
+            continue;
+        }
+        return -1;
+    }
+
+    IMFMediaBuffer* buffer = nullptr;
+    HRESULT hr = sample->ConvertToContiguousBuffer(&buffer);
+    if (FAILED(hr) || !buffer) {
+        safe_release(sample);
+        return -1;
+    }
+
+    BYTE* src = nullptr;
+    DWORD max_len = 0;
+    DWORD cur_len = 0;
+    hr = buffer->Lock(&src, &max_len, &cur_len);
+    if (FAILED(hr) || !src) {
+        safe_release(buffer);
+        safe_release(sample);
+        return -1;
+    }
+
+    const uint32_t w = player->width;
+    const uint32_t h = player->height;
+    LONG src_stride = player->stride != 0 ? player->stride : (LONG)w * 4;
+    bool bottom_up = true;
+    if (src_stride < 0) {
+        src_stride = -src_stride;
+        bottom_up = false;
+    }
+    const size_t row_bytes = (size_t)w * 4u;
+    if ((size_t)src_stride < row_bytes) {
+        SDL_Log("[dong_plugin_sdl][video] invalid RGB32 stride %ld for %ux%u", (long)src_stride, w, h);
+        buffer->Unlock();
+        safe_release(buffer);
+        safe_release(sample);
+        return -1;
+    }
+    const size_t available_bytes = (size_t)(cur_len != 0 ? cur_len : max_len);
+    const size_t required_src_bytes = h > 0 ? ((size_t)(h - 1u) * (size_t)src_stride + row_bytes) : 0u;
+    if (available_bytes < required_src_bytes) {
+        SDL_Log("[dong_plugin_sdl][video] RGB32 buffer too small: have=%zu need=%zu", available_bytes, required_src_bytes);
+        buffer->Unlock();
+        safe_release(buffer);
+        safe_release(sample);
+        return -1;
+    }
+
+    const size_t required = (size_t)w * (size_t)h * 4u;
+    if (player->rgba.size() != required) {
+        player->rgba.resize(required);
+    }
+
+    for (uint32_t y = 0; y < h; ++y) {
+        const uint32_t src_y = bottom_up ? (h - 1u - y) : y;
+        const BYTE* srow = src + (size_t)src_y * (size_t)src_stride;
+        uint8_t* drow = player->rgba.data() + (size_t)y * (size_t)w * 4u;
+        for (uint32_t x = 0; x < w; ++x) {
+            const BYTE b = srow[x * 4u + 0u];
+            const BYTE g = srow[x * 4u + 1u];
+            const BYTE r = srow[x * 4u + 2u];
+            const BYTE a = srow[x * 4u + 3u];
+            drow[x * 4u + 0u] = r;
+            drow[x * 4u + 1u] = g;
+            drow[x * 4u + 2u] = b;
+            drow[x * 4u + 3u] = a ? a : 255u;
+        }
+    }
+
+    buffer->Unlock();
+    safe_release(buffer);
+    safe_release(sample);
+
+    player->current_pts = (double)timestamp / 10000000.0;
+
+    out_frame->format = DONG_VIDEO_PIXEL_FORMAT_RGBA8;
+    out_frame->width = w;
+    out_frame->height = h;
+    out_frame->stride_bytes = w * 4u;
+    out_frame->data = player->rgba.data();
+    out_frame->plane_data[0] = player->rgba.data();
+    out_frame->plane_stride_bytes[0] = w * 4u;
+    out_frame->pts_seconds = player->current_pts;
+    return 1;
+}
+
+int sdl_video_seek(void* /*user*/, dong_video_player_t* player, double time_seconds) {
+    if (!player || !player->reader) return -1;
+    if (time_seconds < 0.0) time_seconds = 0.0;
+    PROPVARIANT var;
+    PropVariantInit(&var);
+    var.vt = VT_I8;
+    var.hVal.QuadPart = (LONGLONG)(time_seconds * 10000000.0);
+    HRESULT hr = player->reader->SetCurrentPosition(GUID_NULL, var);
+    PropVariantClear(&var);
+    if (FAILED(hr)) {
+        SDL_Log("[dong_plugin_sdl][video] SetCurrentPosition failed: 0x%08lx", (unsigned long)hr);
+        return -1;
+    }
+    player->current_pts = time_seconds;
+    return 1;
+}
+
+}
+
 #else
 
 extern "C" {

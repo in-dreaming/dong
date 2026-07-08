@@ -1473,6 +1473,9 @@ struct EngineView::Impl {
                     vs.wall_clock_start = wall_time_sec;
                     vs.ended = false;
                     dispatchMediaEvent(vs, "seeking");
+                    if (vs.node) {
+                        vs.node->setAttribute("__dong_video_seek", "");
+                    }
                 }
             }
 

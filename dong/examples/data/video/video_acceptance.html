@@ -92,7 +92,7 @@
     .bad { color: var(--bad); }
   </style>
 </head>
-<body>
+<body data-porffor-module="video_acceptance">
   <h1>&lt;video&gt; acceptance (plugin backend + poster/controls + events)</h1>
 
   <div class="grid">
@@ -128,58 +128,5 @@
     </div>
   </div>
 
-  <script>
-    (function () {
-      const v = document.getElementById('v');
-      const log = document.getElementById('log');
-
-      function inc(id) {
-        const el = document.getElementById(id);
-        if (!el) return;
-        const n = (parseInt(el.textContent || '0', 10) || 0) + 1;
-        el.textContent = String(n);
-      }
-
-      const lines = [];
-      function appendLine(s) {
-        const old = log.textContent || '';
-        if (old && old !== '(waiting for events...)' && lines.length === 0) {
-          lines.push(...old.split('\n'));
-        }
-        lines.push(s);
-        const kMaxLines = 40;
-        if (lines.length > kMaxLines) {
-          lines.splice(0, lines.length - kMaxLines);
-        }
-        log.textContent = lines.join('\n');
-      }
-
-
-      const watched = [
-        'loadedmetadata', 'loadeddata', 'canplay',
-        'play', 'playing', 'pause',
-        'timeupdate', 'ended', 'error',
-      ];
-
-      watched.forEach((t) => {
-        v.addEventListener(t, (e) => {
-          inc('c_' + t);
-          const ct = (e && typeof e.currentTime === 'number') ? e.currentTime.toFixed(3) : 'n/a';
-          const dur = (e && typeof e.duration === 'number') ? e.duration.toFixed(3) : 'n/a';
-          const msg = (e && (e.message || e.error)) ? (e.message || e.error) : '';
-          appendLine(t + '  currentTime=' + ct + '  duration=' + dur + (msg ? ('  msg=' + msg) : ''));
-        });
-      });
-
-      // Click video to toggle play/pause (avoid UA controls differences across renderers).
-      v.addEventListener('click', () => {
-        if (v.paused) v.play();
-        else v.pause();
-      });
-
-      // Show basic state derived from events only.
-      appendLine('listeners installed');
-    })();
-  </script>
 </body>
 </html>

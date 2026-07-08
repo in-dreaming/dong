@@ -2,8 +2,9 @@
 
 #include "dong_plugin_api.h"
 
-// FFmpeg-backed video implementation for dong_plugin_sdl.
-// NOTE: This module is optional; build is controlled by DONG_PLUGIN_SDL_HAS_FFMPEG.
+// Video implementation for dong_plugin_sdl.
+// FFmpeg is used when DONG_PLUGIN_SDL_HAS_FFMPEG is enabled; Windows builds can
+// fall back to Media Foundation via DONG_PLUGIN_SDL_HAS_NATIVE_VIDEO.
 
 #ifdef __cplusplus
 extern "C" {

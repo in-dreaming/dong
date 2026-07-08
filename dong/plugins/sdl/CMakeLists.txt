@@ -12,7 +12,8 @@ target_include_directories(dong_plugin_sdl PRIVATE
 
 if(WIN32)
     target_link_directories(dong_plugin_sdl PRIVATE "${SDL3_PREFIX}/lib")
-    target_link_libraries(dong_plugin_sdl PRIVATE SDL3)
+    target_link_libraries(dong_plugin_sdl PRIVATE SDL3 mfplat mfreadwrite mfuuid propsys ole32)
+    target_compile_definitions(dong_plugin_sdl PRIVATE DONG_PLUGIN_SDL_HAS_NATIVE_VIDEO=1)
 elseif(APPLE)
     target_link_directories(dong_plugin_sdl PRIVATE "${SDL3_PREFIX}/lib")
     target_link_libraries(dong_plugin_sdl PRIVATE SDL3)

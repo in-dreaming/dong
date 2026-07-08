@@ -57,7 +57,7 @@
     }
   </style>
 </head>
-<body>
+<body data-porffor-module="video_events_test">
   <div class="card">
     <div class="title">video events test (counters should update across frames)</div>
 
@@ -78,57 +78,5 @@
     <div id="log" class="log">(waiting)</div>
   </div>
 
-  <script>
-    (function () {
-      const v = document.getElementById('v');
-      const log = document.getElementById('log');
-
-      function inc(name) {
-        const el = document.getElementById('c_' + name);
-        if (!el) return;
-        const n = (parseInt(el.textContent || '0', 10) || 0) + 1;
-        el.textContent = String(n);
-      }
-
-      const lines = [];
-      function line(s) {
-        const old = log.textContent || '';
-        if (old && old !== '(waiting)' && lines.length === 0) {
-          lines.push(...old.split('\n'));
-        }
-        lines.push(s);
-        const kMaxLines = 40;
-        if (lines.length > kMaxLines) {
-          lines.splice(0, lines.length - kMaxLines);
-        }
-        log.textContent = lines.join('\n');
-      }
-
-
-      const watched = [
-        'loadedmetadata', 'loadeddata', 'canplay',
-        'play', 'playing', 'pause',
-        'timeupdate', 'ended', 'error',
-      ];
-
-      watched.forEach((t) => {
-        v.addEventListener(t, (e) => {
-          inc(t);
-          const ct = (e && typeof e.currentTime === 'number') ? e.currentTime.toFixed(3) : 'n/a';
-          const dur = (e && typeof e.duration === 'number') ? e.duration.toFixed(3) : 'n/a';
-          const msg = (e && (e.message || e.error)) ? (e.message || e.error) : '';
-          line(t + ' ct=' + ct + ' dur=' + dur + (msg ? (' msg=' + msg) : ''));
-        });
-      });
-
-      // Click video to toggle play/pause (avoid UA controls differences across renderers).
-      v.addEventListener('click', () => {
-        if (v.paused) v.play();
-        else v.pause();
-      });
-
-      line('listeners installed');
-    })();
-  </script>
 </body>
 </html>

@@ -324,6 +324,34 @@ extern void dong_porf_pretext_dual_mode_domonly__porf_init(void);
 extern void dong_porf_pretext_dual_mode_domonly_state_capture(void* out);
 extern void dong_porf_pretext_dual_mode_domonly_state_apply(const void* in);
 
+extern int dong_porf_video_play_test_main(void);
+extern char* dong_porf_video_play_test_memory;
+extern unsigned int dong_porf_video_play_test_memory_pages;
+extern void dong_porf_video_play_test__porf_init(void);
+extern void dong_porf_video_play_test_state_capture(void* out);
+extern void dong_porf_video_play_test_state_apply(const void* in);
+
+extern int dong_porf_video_js_api_smoke_test_main(void);
+extern char* dong_porf_video_js_api_smoke_test_memory;
+extern unsigned int dong_porf_video_js_api_smoke_test_memory_pages;
+extern void dong_porf_video_js_api_smoke_test__porf_init(void);
+extern void dong_porf_video_js_api_smoke_test_state_capture(void* out);
+extern void dong_porf_video_js_api_smoke_test_state_apply(const void* in);
+
+extern int dong_porf_video_events_test_main(void);
+extern char* dong_porf_video_events_test_memory;
+extern unsigned int dong_porf_video_events_test_memory_pages;
+extern void dong_porf_video_events_test__porf_init(void);
+extern void dong_porf_video_events_test_state_capture(void* out);
+extern void dong_porf_video_events_test_state_apply(const void* in);
+
+extern int dong_porf_video_acceptance_main(void);
+extern char* dong_porf_video_acceptance_memory;
+extern unsigned int dong_porf_video_acceptance_memory_pages;
+extern void dong_porf_video_acceptance__porf_init(void);
+extern void dong_porf_video_acceptance_state_capture(void* out);
+extern void dong_porf_video_acceptance_state_apply(const void* in);
+
 extern int dong_porf_t12_inline_main(void);
 extern char* dong_porf_t12_inline_memory;
 extern unsigned int dong_porf_t12_inline_memory_pages;
@@ -551,6 +579,50 @@ extern int dong_porf_pretext_dual_mode_export_onModeSettings(void);
 
 extern int dong_porf_pretext_dual_mode_domonly_export_tick(void);
 
+extern int dong_porf_video_play_test_export_onAutoClick(void);
+
+extern int dong_porf_video_play_test_export_onPauseClick(void);
+
+extern int dong_porf_video_events_test_export_onLoadedmetadata(void);
+
+extern int dong_porf_video_events_test_export_onLoadeddata(void);
+
+extern int dong_porf_video_events_test_export_onCanplay(void);
+
+extern int dong_porf_video_events_test_export_onPlay(void);
+
+extern int dong_porf_video_events_test_export_onPlaying(void);
+
+extern int dong_porf_video_events_test_export_onPause(void);
+
+extern int dong_porf_video_events_test_export_onTimeupdate(void);
+
+extern int dong_porf_video_events_test_export_onEnded(void);
+
+extern int dong_porf_video_events_test_export_onError(void);
+
+extern int dong_porf_video_events_test_export_onVideoClick(void);
+
+extern int dong_porf_video_acceptance_export_onLoadedmetadata(void);
+
+extern int dong_porf_video_acceptance_export_onLoadeddata(void);
+
+extern int dong_porf_video_acceptance_export_onCanplay(void);
+
+extern int dong_porf_video_acceptance_export_onPlay(void);
+
+extern int dong_porf_video_acceptance_export_onPlaying(void);
+
+extern int dong_porf_video_acceptance_export_onPause(void);
+
+extern int dong_porf_video_acceptance_export_onTimeupdate(void);
+
+extern int dong_porf_video_acceptance_export_onEnded(void);
+
+extern int dong_porf_video_acceptance_export_onError(void);
+
+extern int dong_porf_video_acceptance_export_onVideoClick(void);
+
 extern int dong_porf_t12_inline_export_inc__onclick(void);
 
 extern int dong_porf_t12_inline_export___porf_auto_0__onclick(void);
@@ -602,10 +674,14 @@ const dong_porf_module_t dong_porf_modules[] = {
   { "pretext_text_flow_directdraw", dong_porf_pretext_text_flow_directdraw_main, &dong_porf_pretext_text_flow_directdraw_memory, &dong_porf_pretext_text_flow_directdraw_memory_pages, dong_porf_pretext_text_flow_directdraw__porf_init, dong_porf_pretext_text_flow_directdraw_state_capture, dong_porf_pretext_text_flow_directdraw_state_apply, 288 },
   { "pretext_dual_mode", dong_porf_pretext_dual_mode_main, &dong_porf_pretext_dual_mode_memory, &dong_porf_pretext_dual_mode_memory_pages, dong_porf_pretext_dual_mode__porf_init, dong_porf_pretext_dual_mode_state_capture, dong_porf_pretext_dual_mode_state_apply, 320 },
   { "pretext_dual_mode_domonly", dong_porf_pretext_dual_mode_domonly_main, &dong_porf_pretext_dual_mode_domonly_memory, &dong_porf_pretext_dual_mode_domonly_memory_pages, dong_porf_pretext_dual_mode_domonly__porf_init, dong_porf_pretext_dual_mode_domonly_state_capture, dong_porf_pretext_dual_mode_domonly_state_apply, 176 },
+  { "video_play_test", dong_porf_video_play_test_main, &dong_porf_video_play_test_memory, &dong_porf_video_play_test_memory_pages, dong_porf_video_play_test__porf_init, dong_porf_video_play_test_state_capture, dong_porf_video_play_test_state_apply, 192 },
+  { "video_js_api_smoke_test", dong_porf_video_js_api_smoke_test_main, &dong_porf_video_js_api_smoke_test_memory, &dong_porf_video_js_api_smoke_test_memory_pages, dong_porf_video_js_api_smoke_test__porf_init, dong_porf_video_js_api_smoke_test_state_capture, dong_porf_video_js_api_smoke_test_state_apply, 224 },
+  { "video_events_test", dong_porf_video_events_test_main, &dong_porf_video_events_test_memory, &dong_porf_video_events_test_memory_pages, dong_porf_video_events_test__porf_init, dong_porf_video_events_test_state_capture, dong_porf_video_events_test_state_apply, 352 },
+  { "video_acceptance", dong_porf_video_acceptance_main, &dong_porf_video_acceptance_memory, &dong_porf_video_acceptance_memory_pages, dong_porf_video_acceptance__porf_init, dong_porf_video_acceptance_state_capture, dong_porf_video_acceptance_state_apply, 352 },
   { "t12_inline", dong_porf_t12_inline_main, &dong_porf_t12_inline_memory, &dong_porf_t12_inline_memory_pages, dong_porf_t12_inline__porf_init, dong_porf_t12_inline_state_capture, dong_porf_t12_inline_state_apply, 224 },
 };
 
-const size_t dong_porf_module_count = 47;
+const size_t dong_porf_module_count = 51;
 
 const dong_porf_handler_t dong_porf_handlers[] = {
   { "hello_dom", "onBtnClick", NULL, 0, (dong_porf_export_fn0)dong_porf_hello_dom_export_onBtnClick, NULL, &dong_porf_hello_dom_memory, &dong_porf_hello_dom_memory_pages },
@@ -718,11 +794,33 @@ const dong_porf_handler_t dong_porf_handlers[] = {
   { "pretext_dual_mode", "onModeCharts", NULL, 0, (dong_porf_export_fn0)dong_porf_pretext_dual_mode_export_onModeCharts, NULL, &dong_porf_pretext_dual_mode_memory, &dong_porf_pretext_dual_mode_memory_pages },
   { "pretext_dual_mode", "onModeSettings", NULL, 0, (dong_porf_export_fn0)dong_porf_pretext_dual_mode_export_onModeSettings, NULL, &dong_porf_pretext_dual_mode_memory, &dong_porf_pretext_dual_mode_memory_pages },
   { "pretext_dual_mode_domonly", "tick", NULL, 0, (dong_porf_export_fn0)dong_porf_pretext_dual_mode_domonly_export_tick, NULL, &dong_porf_pretext_dual_mode_domonly_memory, &dong_porf_pretext_dual_mode_domonly_memory_pages },
+  { "video_play_test", "onAutoClick", NULL, 0, (dong_porf_export_fn0)dong_porf_video_play_test_export_onAutoClick, NULL, &dong_porf_video_play_test_memory, &dong_porf_video_play_test_memory_pages },
+  { "video_play_test", "onPauseClick", NULL, 0, (dong_porf_export_fn0)dong_porf_video_play_test_export_onPauseClick, NULL, &dong_porf_video_play_test_memory, &dong_porf_video_play_test_memory_pages },
+  { "video_events_test", "onLoadedmetadata", NULL, 0, (dong_porf_export_fn0)dong_porf_video_events_test_export_onLoadedmetadata, NULL, &dong_porf_video_events_test_memory, &dong_porf_video_events_test_memory_pages },
+  { "video_events_test", "onLoadeddata", NULL, 0, (dong_porf_export_fn0)dong_porf_video_events_test_export_onLoadeddata, NULL, &dong_porf_video_events_test_memory, &dong_porf_video_events_test_memory_pages },
+  { "video_events_test", "onCanplay", NULL, 0, (dong_porf_export_fn0)dong_porf_video_events_test_export_onCanplay, NULL, &dong_porf_video_events_test_memory, &dong_porf_video_events_test_memory_pages },
+  { "video_events_test", "onPlay", NULL, 0, (dong_porf_export_fn0)dong_porf_video_events_test_export_onPlay, NULL, &dong_porf_video_events_test_memory, &dong_porf_video_events_test_memory_pages },
+  { "video_events_test", "onPlaying", NULL, 0, (dong_porf_export_fn0)dong_porf_video_events_test_export_onPlaying, NULL, &dong_porf_video_events_test_memory, &dong_porf_video_events_test_memory_pages },
+  { "video_events_test", "onPause", NULL, 0, (dong_porf_export_fn0)dong_porf_video_events_test_export_onPause, NULL, &dong_porf_video_events_test_memory, &dong_porf_video_events_test_memory_pages },
+  { "video_events_test", "onTimeupdate", NULL, 0, (dong_porf_export_fn0)dong_porf_video_events_test_export_onTimeupdate, NULL, &dong_porf_video_events_test_memory, &dong_porf_video_events_test_memory_pages },
+  { "video_events_test", "onEnded", NULL, 0, (dong_porf_export_fn0)dong_porf_video_events_test_export_onEnded, NULL, &dong_porf_video_events_test_memory, &dong_porf_video_events_test_memory_pages },
+  { "video_events_test", "onError", NULL, 0, (dong_porf_export_fn0)dong_porf_video_events_test_export_onError, NULL, &dong_porf_video_events_test_memory, &dong_porf_video_events_test_memory_pages },
+  { "video_events_test", "onVideoClick", NULL, 0, (dong_porf_export_fn0)dong_porf_video_events_test_export_onVideoClick, NULL, &dong_porf_video_events_test_memory, &dong_porf_video_events_test_memory_pages },
+  { "video_acceptance", "onLoadedmetadata", NULL, 0, (dong_porf_export_fn0)dong_porf_video_acceptance_export_onLoadedmetadata, NULL, &dong_porf_video_acceptance_memory, &dong_porf_video_acceptance_memory_pages },
+  { "video_acceptance", "onLoadeddata", NULL, 0, (dong_porf_export_fn0)dong_porf_video_acceptance_export_onLoadeddata, NULL, &dong_porf_video_acceptance_memory, &dong_porf_video_acceptance_memory_pages },
+  { "video_acceptance", "onCanplay", NULL, 0, (dong_porf_export_fn0)dong_porf_video_acceptance_export_onCanplay, NULL, &dong_porf_video_acceptance_memory, &dong_porf_video_acceptance_memory_pages },
+  { "video_acceptance", "onPlay", NULL, 0, (dong_porf_export_fn0)dong_porf_video_acceptance_export_onPlay, NULL, &dong_porf_video_acceptance_memory, &dong_porf_video_acceptance_memory_pages },
+  { "video_acceptance", "onPlaying", NULL, 0, (dong_porf_export_fn0)dong_porf_video_acceptance_export_onPlaying, NULL, &dong_porf_video_acceptance_memory, &dong_porf_video_acceptance_memory_pages },
+  { "video_acceptance", "onPause", NULL, 0, (dong_porf_export_fn0)dong_porf_video_acceptance_export_onPause, NULL, &dong_porf_video_acceptance_memory, &dong_porf_video_acceptance_memory_pages },
+  { "video_acceptance", "onTimeupdate", NULL, 0, (dong_porf_export_fn0)dong_porf_video_acceptance_export_onTimeupdate, NULL, &dong_porf_video_acceptance_memory, &dong_porf_video_acceptance_memory_pages },
+  { "video_acceptance", "onEnded", NULL, 0, (dong_porf_export_fn0)dong_porf_video_acceptance_export_onEnded, NULL, &dong_porf_video_acceptance_memory, &dong_porf_video_acceptance_memory_pages },
+  { "video_acceptance", "onError", NULL, 0, (dong_porf_export_fn0)dong_porf_video_acceptance_export_onError, NULL, &dong_porf_video_acceptance_memory, &dong_porf_video_acceptance_memory_pages },
+  { "video_acceptance", "onVideoClick", NULL, 0, (dong_porf_export_fn0)dong_porf_video_acceptance_export_onVideoClick, NULL, &dong_porf_video_acceptance_memory, &dong_porf_video_acceptance_memory_pages },
   { "t12_inline", "inc__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_inline_export_inc__onclick, NULL, &dong_porf_t12_inline_memory, &dong_porf_t12_inline_memory_pages },
   { "t12_inline", "__porf_auto_0__onclick", NULL, 0, (dong_porf_export_fn0)dong_porf_t12_inline_export___porf_auto_0__onclick, NULL, &dong_porf_t12_inline_memory, &dong_porf_t12_inline_memory_pages },
 };
 
-const size_t dong_porf_handler_count = 112;
+const size_t dong_porf_handler_count = 134;
 
 const dong_porf_module_t* dong_porf_find_module(const char* name) {
   if (!name) return NULL;

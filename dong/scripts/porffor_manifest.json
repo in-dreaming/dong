@@ -399,6 +399,50 @@
       "exports": [
         "tick"
       ]
+    },
+    {
+      "name": "video_play_test",
+      "path": "examples/porffor/video_play_test.js",
+      "exports": [
+        "onAutoClick",
+        "onPauseClick"
+      ]
+    },
+    {
+      "name": "video_js_api_smoke_test",
+      "path": "examples/porffor/video_js_api_smoke_test.js"
+    },
+    {
+      "name": "video_events_test",
+      "path": "examples/porffor/video_events_test.js",
+      "exports": [
+        "onLoadedmetadata",
+        "onLoadeddata",
+        "onCanplay",
+        "onPlay",
+        "onPlaying",
+        "onPause",
+        "onTimeupdate",
+        "onEnded",
+        "onError",
+        "onVideoClick"
+      ]
+    },
+    {
+      "name": "video_acceptance",
+      "path": "examples/porffor/video_acceptance.js",
+      "exports": [
+        "onLoadedmetadata",
+        "onLoadeddata",
+        "onCanplay",
+        "onPlay",
+        "onPlaying",
+        "onPause",
+        "onTimeupdate",
+        "onEnded",
+        "onError",
+        "onVideoClick"
+      ]
     }
   ],
   "snippets": []

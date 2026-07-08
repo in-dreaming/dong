@@ -1,4 +1,4 @@
-// Porffor module: t12_inline
+// Porffor module: video_js_api_smoke_test
 #include "dong_porf_runtime.h"
 #ifndef __porf_nan
 #define __porf_nan (NAN)
@@ -7,38 +7,38 @@
 #define __porf_infinity (INFINITY)
 #endif
 
-char* dong_porf_t12_inline_memory; u32 dong_porf_t12_inline_memory_pages = 3;
+char* dong_porf_video_js_api_smoke_test_memory; u32 dong_porf_video_js_api_smoke_test_memory_pages = 2;
 
 static i32 i32_load(i32 align, i32 offset, i32 pointer) {
-  return *((i32*)(dong_porf_t12_inline_memory + offset + pointer));
+  return *((i32*)(dong_porf_video_js_api_smoke_test_memory + offset + pointer));
 }
 
 static void i32_store(i32 align, i32 offset, i32 pointer, i32 value) {
-  *((i32*)(dong_porf_t12_inline_memory + offset + pointer)) = value;
+  *((i32*)(dong_porf_video_js_api_smoke_test_memory + offset + pointer)) = value;
 }
 
 static void i32_store8(i32 align, i32 offset, i32 pointer, u8 value) {
-  *((u8*)(dong_porf_t12_inline_memory + offset + pointer)) = value;
+  *((u8*)(dong_porf_video_js_api_smoke_test_memory + offset + pointer)) = value;
 }
 
 static i32 i32_load8_u(i32 align, i32 offset, i32 pointer) {
-  return *((u8*)(dong_porf_t12_inline_memory + offset + pointer));
+  return *((u8*)(dong_porf_video_js_api_smoke_test_memory + offset + pointer));
 }
 
 static f64 f64_load(i32 align, i32 offset, i32 pointer) {
-  return *((f64*)(dong_porf_t12_inline_memory + offset + pointer));
+  return *((f64*)(dong_porf_video_js_api_smoke_test_memory + offset + pointer));
 }
 
 static i32 i32_load16_u(i32 align, i32 offset, i32 pointer) {
-  return *((u16*)(dong_porf_t12_inline_memory + offset + pointer));
+  return *((u16*)(dong_porf_video_js_api_smoke_test_memory + offset + pointer));
 }
 
 static void i32_store16(i32 align, i32 offset, i32 pointer, u16 value) {
-  *((u16*)(dong_porf_t12_inline_memory + offset + pointer)) = value;
+  *((u16*)(dong_porf_video_js_api_smoke_test_memory + offset + pointer)) = value;
 }
 
 static void f64_store(i32 align, i32 offset, i32 pointer, f64 value) {
-  *((f64*)(dong_porf_t12_inline_memory + offset + pointer)) = value;
+  *((f64*)(dong_porf_video_js_api_smoke_test_memory + offset + pointer)) = value;
 }
 
 
@@ -51,220 +51,247 @@ extern void __porf_import_dong_stage_0(f64);
 __attribute__((import_module(""), import_name("e")))
 extern void __porf_import_dong_stage_1(f64);
 
-__attribute__((import_module(""), import_name("f")))
-extern void __porf_import_dong_stage_2(f64);
-
-__attribute__((import_module(""), import_name("h")))
-extern void __porf_import_dong_commit_addEventListener();
-
 __attribute__((import_module(""), import_name("g")))
 extern void __porf_import_dong_commit_set_textContent();
-void dong_porf_t12_inline__porf_init(void) {
-  if (dong_porf_t12_inline_memory) return;
-  dong_porf_t12_inline_memory = calloc(1, dong_porf_t12_inline_memory_pages * 65536);
 
-  dong_porf_t12_inline_memory[16]=(u8)41;dong_porf_t12_inline_memory[20]=(u8)67;dong_porf_t12_inline_memory[21]=(u8)97;dong_porf_t12_inline_memory[22]=(u8)110;dong_porf_t12_inline_memory[23]=(u8)110;dong_porf_t12_inline_memory[24]=(u8)111;dong_porf_t12_inline_memory[25]=(u8)116;dong_porf_t12_inline_memory[26]=(u8)32;dong_porf_t12_inline_memory[27]=(u8)99;dong_porf_t12_inline_memory[28]=(u8)111;dong_porf_t12_inline_memory[29]=(u8)110;dong_porf_t12_inline_memory[30]=(u8)118;dong_porf_t12_inline_memory[31]=(u8)101;dong_porf_t12_inline_memory[32]=(u8)114;dong_porf_t12_inline_memory[33]=(u8)116;dong_porf_t12_inline_memory[34]=(u8)32;dong_porf_t12_inline_memory[35]=(u8)97;dong_porf_t12_inline_memory[36]=(u8)32;dong_porf_t12_inline_memory[37]=(u8)83;dong_porf_t12_inline_memory[38]=(u8)121;dong_porf_t12_inline_memory[39]=(u8)109;dong_porf_t12_inline_memory[40]=(u8)98;dong_porf_t12_inline_memory[41]=(u8)111;dong_porf_t12_inline_memory[42]=(u8)108;dong_porf_t12_inline_memory[43]=(u8)32;dong_porf_t12_inline_memory[44]=(u8)118;dong_porf_t12_inline_memory[45]=(u8)97;dong_porf_t12_inline_memory[46]=(u8)108;dong_porf_t12_inline_memory[47]=(u8)117;dong_porf_t12_inline_memory[48]=(u8)101;dong_porf_t12_inline_memory[49]=(u8)32;dong_porf_t12_inline_memory[50]=(u8)116;dong_porf_t12_inline_memory[51]=(u8)111;dong_porf_t12_inline_memory[52]=(u8)32;dong_porf_t12_inline_memory[53]=(u8)97;dong_porf_t12_inline_memory[54]=(u8)32;dong_porf_t12_inline_memory[55]=(u8)115;dong_porf_t12_inline_memory[56]=(u8)116;dong_porf_t12_inline_memory[57]=(u8)114;dong_porf_t12_inline_memory[58]=(u8)105;dong_porf_t12_inline_memory[59]=(u8)110;dong_porf_t12_inline_memory[60]=(u8)103;
-  dong_porf_t12_inline_memory[63]=(u8)9;dong_porf_t12_inline_memory[67]=(u8)117;dong_porf_t12_inline_memory[68]=(u8)110;dong_porf_t12_inline_memory[69]=(u8)100;dong_porf_t12_inline_memory[70]=(u8)101;dong_porf_t12_inline_memory[71]=(u8)102;dong_porf_t12_inline_memory[72]=(u8)105;dong_porf_t12_inline_memory[73]=(u8)110;dong_porf_t12_inline_memory[74]=(u8)101;dong_porf_t12_inline_memory[75]=(u8)100;
-  dong_porf_t12_inline_memory[78]=(u8)4;dong_porf_t12_inline_memory[82]=(u8)110;dong_porf_t12_inline_memory[83]=(u8)117;dong_porf_t12_inline_memory[84]=(u8)108;dong_porf_t12_inline_memory[85]=(u8)108;
-  dong_porf_t12_inline_memory[88]=(u8)4;dong_porf_t12_inline_memory[92]=(u8)116;dong_porf_t12_inline_memory[93]=(u8)114;dong_porf_t12_inline_memory[94]=(u8)117;dong_porf_t12_inline_memory[95]=(u8)101;
-  dong_porf_t12_inline_memory[98]=(u8)5;dong_porf_t12_inline_memory[102]=(u8)102;dong_porf_t12_inline_memory[103]=(u8)97;dong_porf_t12_inline_memory[104]=(u8)108;dong_porf_t12_inline_memory[105]=(u8)115;dong_porf_t12_inline_memory[106]=(u8)101;
-  dong_porf_t12_inline_memory[109]=(u8)55;dong_porf_t12_inline_memory[113]=(u8)78;dong_porf_t12_inline_memory[114]=(u8)117;dong_porf_t12_inline_memory[115]=(u8)109;dong_porf_t12_inline_memory[116]=(u8)98;dong_porf_t12_inline_memory[117]=(u8)101;dong_porf_t12_inline_memory[118]=(u8)114;dong_porf_t12_inline_memory[119]=(u8)46;dong_porf_t12_inline_memory[120]=(u8)112;dong_porf_t12_inline_memory[121]=(u8)114;dong_porf_t12_inline_memory[122]=(u8)111;dong_porf_t12_inline_memory[123]=(u8)116;dong_porf_t12_inline_memory[124]=(u8)111;dong_porf_t12_inline_memory[125]=(u8)116;dong_porf_t12_inline_memory[126]=(u8)121;dong_porf_t12_inline_memory[127]=(u8)112;dong_porf_t12_inline_memory[128]=(u8)101;dong_porf_t12_inline_memory[129]=(u8)46;dong_porf_t12_inline_memory[130]=(u8)116;dong_porf_t12_inline_memory[131]=(u8)111;dong_porf_t12_inline_memory[132]=(u8)83;dong_porf_t12_inline_memory[133]=(u8)116;dong_porf_t12_inline_memory[134]=(u8)114;dong_porf_t12_inline_memory[135]=(u8)105;dong_porf_t12_inline_memory[136]=(u8)110;dong_porf_t12_inline_memory[137]=(u8)103;dong_porf_t12_inline_memory[138]=(u8)32;dong_porf_t12_inline_memory[139]=(u8)101;dong_porf_t12_inline_memory[140]=(u8)120;dong_porf_t12_inline_memory[141]=(u8)112;dong_porf_t12_inline_memory[142]=(u8)101;dong_porf_t12_inline_memory[143]=(u8)99;dong_porf_t12_inline_memory[144]=(u8)116;dong_porf_t12_inline_memory[145]=(u8)115;dong_porf_t12_inline_memory[146]=(u8)32;dong_porf_t12_inline_memory[147]=(u8)39;dong_porf_t12_inline_memory[148]=(u8)116;dong_porf_t12_inline_memory[149]=(u8)104;dong_porf_t12_inline_memory[150]=(u8)105;dong_porf_t12_inline_memory[151]=(u8)115;dong_porf_t12_inline_memory[152]=(u8)39;dong_porf_t12_inline_memory[153]=(u8)32;dong_porf_t12_inline_memory[154]=(u8)116;dong_porf_t12_inline_memory[155]=(u8)111;dong_porf_t12_inline_memory[156]=(u8)32;dong_porf_t12_inline_memory[157]=(u8)98;dong_porf_t12_inline_memory[158]=(u8)101;dong_porf_t12_inline_memory[159]=(u8)32;dong_porf_t12_inline_memory[160]=(u8)97;dong_porf_t12_inline_memory[161]=(u8)32;dong_porf_t12_inline_memory[162]=(u8)78;dong_porf_t12_inline_memory[163]=(u8)117;dong_porf_t12_inline_memory[164]=(u8)109;dong_porf_t12_inline_memory[165]=(u8)98;dong_porf_t12_inline_memory[166]=(u8)101;dong_porf_t12_inline_memory[167]=(u8)114;
-  dong_porf_t12_inline_memory[170]=(u8)50;dong_porf_t12_inline_memory[174]=(u8)116;dong_porf_t12_inline_memory[175]=(u8)111;dong_porf_t12_inline_memory[176]=(u8)83;dong_porf_t12_inline_memory[177]=(u8)116;dong_porf_t12_inline_memory[178]=(u8)114;dong_porf_t12_inline_memory[179]=(u8)105;dong_porf_t12_inline_memory[180]=(u8)110;dong_porf_t12_inline_memory[181]=(u8)103;dong_porf_t12_inline_memory[182]=(u8)40;dong_porf_t12_inline_memory[183]=(u8)41;dong_porf_t12_inline_memory[184]=(u8)32;dong_porf_t12_inline_memory[185]=(u8)114;dong_porf_t12_inline_memory[186]=(u8)97;dong_porf_t12_inline_memory[187]=(u8)100;dong_porf_t12_inline_memory[188]=(u8)105;dong_porf_t12_inline_memory[189]=(u8)120;dong_porf_t12_inline_memory[190]=(u8)32;dong_porf_t12_inline_memory[191]=(u8)97;dong_porf_t12_inline_memory[192]=(u8)114;dong_porf_t12_inline_memory[193]=(u8)103;dong_porf_t12_inline_memory[194]=(u8)117;dong_porf_t12_inline_memory[195]=(u8)109;dong_porf_t12_inline_memory[196]=(u8)101;dong_porf_t12_inline_memory[197]=(u8)110;dong_porf_t12_inline_memory[198]=(u8)116;dong_porf_t12_inline_memory[199]=(u8)32;dong_porf_t12_inline_memory[200]=(u8)109;dong_porf_t12_inline_memory[201]=(u8)117;dong_porf_t12_inline_memory[202]=(u8)115;dong_porf_t12_inline_memory[203]=(u8)116;dong_porf_t12_inline_memory[204]=(u8)32;dong_porf_t12_inline_memory[205]=(u8)98;dong_porf_t12_inline_memory[206]=(u8)101;dong_porf_t12_inline_memory[207]=(u8)32;dong_porf_t12_inline_memory[208]=(u8)98;dong_porf_t12_inline_memory[209]=(u8)101;dong_porf_t12_inline_memory[210]=(u8)116;dong_porf_t12_inline_memory[211]=(u8)119;dong_porf_t12_inline_memory[212]=(u8)101;dong_porf_t12_inline_memory[213]=(u8)101;dong_porf_t12_inline_memory[214]=(u8)110;dong_porf_t12_inline_memory[215]=(u8)32;dong_porf_t12_inline_memory[216]=(u8)50;dong_porf_t12_inline_memory[217]=(u8)32;dong_porf_t12_inline_memory[218]=(u8)97;dong_porf_t12_inline_memory[219]=(u8)110;dong_porf_t12_inline_memory[220]=(u8)100;dong_porf_t12_inline_memory[221]=(u8)32;dong_porf_t12_inline_memory[222]=(u8)51;dong_porf_t12_inline_memory[223]=(u8)54;
-  dong_porf_t12_inline_memory[226]=(u8)3;dong_porf_t12_inline_memory[230]=(u8)78;dong_porf_t12_inline_memory[231]=(u8)97;dong_porf_t12_inline_memory[232]=(u8)78;
-  dong_porf_t12_inline_memory[235]=(u8)8;dong_porf_t12_inline_memory[239]=(u8)73;dong_porf_t12_inline_memory[240]=(u8)110;dong_porf_t12_inline_memory[241]=(u8)102;dong_porf_t12_inline_memory[242]=(u8)105;dong_porf_t12_inline_memory[243]=(u8)110;dong_porf_t12_inline_memory[244]=(u8)105;dong_porf_t12_inline_memory[245]=(u8)116;dong_porf_t12_inline_memory[246]=(u8)121;
-  dong_porf_t12_inline_memory[249]=(u8)9;dong_porf_t12_inline_memory[253]=(u8)45;dong_porf_t12_inline_memory[254]=(u8)73;dong_porf_t12_inline_memory[255]=(u8)110;dong_porf_t12_inline_memory[256]=(u8)102;dong_porf_t12_inline_memory[257]=(u8)105;dong_porf_t12_inline_memory[258]=(u8)110;dong_porf_t12_inline_memory[259]=(u8)105;dong_porf_t12_inline_memory[260]=(u8)116;dong_porf_t12_inline_memory[261]=(u8)121;
-  dong_porf_t12_inline_memory[264]=(u8)1;dong_porf_t12_inline_memory[268]=(u8)48;
-  dong_porf_t12_inline_memory[271]=(u8)59;dong_porf_t12_inline_memory[275]=(u8)70;dong_porf_t12_inline_memory[276]=(u8)117;dong_porf_t12_inline_memory[277]=(u8)110;dong_porf_t12_inline_memory[278]=(u8)99;dong_porf_t12_inline_memory[279]=(u8)116;dong_porf_t12_inline_memory[280]=(u8)105;dong_porf_t12_inline_memory[281]=(u8)111;dong_porf_t12_inline_memory[282]=(u8)110;dong_porf_t12_inline_memory[283]=(u8)46;dong_porf_t12_inline_memory[284]=(u8)112;dong_porf_t12_inline_memory[285]=(u8)114;dong_porf_t12_inline_memory[286]=(u8)111;dong_porf_t12_inline_memory[287]=(u8)116;dong_porf_t12_inline_memory[288]=(u8)111;dong_porf_t12_inline_memory[289]=(u8)116;dong_porf_t12_inline_memory[290]=(u8)121;dong_porf_t12_inline_memory[291]=(u8)112;dong_porf_t12_inline_memory[292]=(u8)101;dong_porf_t12_inline_memory[293]=(u8)46;dong_porf_t12_inline_memory[294]=(u8)116;dong_porf_t12_inline_memory[295]=(u8)111;dong_porf_t12_inline_memory[296]=(u8)83;dong_porf_t12_inline_memory[297]=(u8)116;dong_porf_t12_inline_memory[298]=(u8)114;dong_porf_t12_inline_memory[299]=(u8)105;dong_porf_t12_inline_memory[300]=(u8)110;dong_porf_t12_inline_memory[301]=(u8)103;dong_porf_t12_inline_memory[302]=(u8)32;dong_porf_t12_inline_memory[303]=(u8)101;dong_porf_t12_inline_memory[304]=(u8)120;dong_porf_t12_inline_memory[305]=(u8)112;dong_porf_t12_inline_memory[306]=(u8)101;dong_porf_t12_inline_memory[307]=(u8)99;dong_porf_t12_inline_memory[308]=(u8)116;dong_porf_t12_inline_memory[309]=(u8)115;dong_porf_t12_inline_memory[310]=(u8)32;dong_porf_t12_inline_memory[311]=(u8)39;dong_porf_t12_inline_memory[312]=(u8)116;dong_porf_t12_inline_memory[313]=(u8)104;dong_porf_t12_inline_memory[314]=(u8)105;dong_porf_t12_inline_memory[315]=(u8)115;dong_porf_t12_inline_memory[316]=(u8)39;dong_porf_t12_inline_memory[317]=(u8)32;dong_porf_t12_inline_memory[318]=(u8)116;dong_porf_t12_inline_memory[319]=(u8)111;dong_porf_t12_inline_memory[320]=(u8)32;dong_porf_t12_inline_memory[321]=(u8)98;dong_porf_t12_inline_memory[322]=(u8)101;dong_porf_t12_inline_memory[323]=(u8)32;dong_porf_t12_inline_memory[324]=(u8)97;dong_porf_t12_inline_memory[325]=(u8)32;dong_porf_t12_inline_memory[326]=(u8)70;dong_porf_t12_inline_memory[327]=(u8)117;dong_porf_t12_inline_memory[328]=(u8)110;dong_porf_t12_inline_memory[329]=(u8)99;dong_porf_t12_inline_memory[330]=(u8)116;dong_porf_t12_inline_memory[331]=(u8)105;dong_porf_t12_inline_memory[332]=(u8)111;dong_porf_t12_inline_memory[333]=(u8)110;
-  dong_porf_t12_inline_memory[336]=(u8)9;dong_porf_t12_inline_memory[340]=(u8)102;dong_porf_t12_inline_memory[341]=(u8)117;dong_porf_t12_inline_memory[342]=(u8)110;dong_porf_t12_inline_memory[343]=(u8)99;dong_porf_t12_inline_memory[344]=(u8)116;dong_porf_t12_inline_memory[345]=(u8)105;dong_porf_t12_inline_memory[346]=(u8)111;dong_porf_t12_inline_memory[347]=(u8)110;dong_porf_t12_inline_memory[348]=(u8)32;
-  dong_porf_t12_inline_memory[351]=(u8)20;dong_porf_t12_inline_memory[355]=(u8)40;dong_porf_t12_inline_memory[356]=(u8)41;dong_porf_t12_inline_memory[357]=(u8)32;dong_porf_t12_inline_memory[358]=(u8)123;dong_porf_t12_inline_memory[359]=(u8)32;dong_porf_t12_inline_memory[360]=(u8)91;dong_porf_t12_inline_memory[361]=(u8)110;dong_porf_t12_inline_memory[362]=(u8)97;dong_porf_t12_inline_memory[363]=(u8)116;dong_porf_t12_inline_memory[364]=(u8)105;dong_porf_t12_inline_memory[365]=(u8)118;dong_porf_t12_inline_memory[366]=(u8)101;dong_porf_t12_inline_memory[367]=(u8)32;dong_porf_t12_inline_memory[368]=(u8)99;dong_porf_t12_inline_memory[369]=(u8)111;dong_porf_t12_inline_memory[370]=(u8)100;dong_porf_t12_inline_memory[371]=(u8)101;dong_porf_t12_inline_memory[372]=(u8)93;dong_porf_t12_inline_memory[373]=(u8)32;dong_porf_t12_inline_memory[374]=(u8)125;
-  dong_porf_t12_inline_memory[377]=(u8)9;dong_porf_t12_inline_memory[381]=(u8)84;dong_porf_t12_inline_memory[382]=(u8)121;dong_porf_t12_inline_memory[383]=(u8)112;dong_porf_t12_inline_memory[384]=(u8)101;dong_porf_t12_inline_memory[385]=(u8)69;dong_porf_t12_inline_memory[386]=(u8)114;dong_porf_t12_inline_memory[387]=(u8)114;dong_porf_t12_inline_memory[388]=(u8)111;dong_porf_t12_inline_memory[389]=(u8)114;
-  dong_porf_t12_inline_memory[392]=(u8)2;dong_porf_t12_inline_memory[396]=(u8)58;dong_porf_t12_inline_memory[397]=(u8)32;
-  dong_porf_t12_inline_memory[400]=(u8)10;dong_porf_t12_inline_memory[404]=(u8)82;dong_porf_t12_inline_memory[405]=(u8)97;dong_porf_t12_inline_memory[406]=(u8)110;dong_porf_t12_inline_memory[407]=(u8)103;dong_porf_t12_inline_memory[408]=(u8)101;dong_porf_t12_inline_memory[409]=(u8)69;dong_porf_t12_inline_memory[410]=(u8)114;dong_porf_t12_inline_memory[411]=(u8)114;dong_porf_t12_inline_memory[412]=(u8)111;dong_porf_t12_inline_memory[413]=(u8)114;
-  dong_porf_t12_inline_memory[416]=(u8)8;dong_porf_t12_inline_memory[420]=(u8)116;dong_porf_t12_inline_memory[421]=(u8)111;dong_porf_t12_inline_memory[422]=(u8)83;dong_porf_t12_inline_memory[423]=(u8)116;dong_porf_t12_inline_memory[424]=(u8)114;dong_porf_t12_inline_memory[425]=(u8)105;dong_porf_t12_inline_memory[426]=(u8)110;dong_porf_t12_inline_memory[427]=(u8)103;
-  dong_porf_t12_inline_memory[430]=(u8)6;dong_porf_t12_inline_memory[434]=(u8)108;dong_porf_t12_inline_memory[435]=(u8)101;dong_porf_t12_inline_memory[436]=(u8)110;dong_porf_t12_inline_memory[437]=(u8)103;dong_porf_t12_inline_memory[438]=(u8)116;dong_porf_t12_inline_memory[439]=(u8)104;
-  dong_porf_t12_inline_memory[442]=(u8)4;dong_porf_t12_inline_memory[446]=(u8)110;dong_porf_t12_inline_memory[447]=(u8)97;dong_porf_t12_inline_memory[448]=(u8)109;dong_porf_t12_inline_memory[449]=(u8)101;
-  dong_porf_t12_inline_memory[452]=(u8)9;dong_porf_t12_inline_memory[456]=(u8)112;dong_porf_t12_inline_memory[457]=(u8)114;dong_porf_t12_inline_memory[458]=(u8)111;dong_porf_t12_inline_memory[459]=(u8)116;dong_porf_t12_inline_memory[460]=(u8)111;dong_porf_t12_inline_memory[461]=(u8)116;dong_porf_t12_inline_memory[462]=(u8)121;dong_porf_t12_inline_memory[463]=(u8)112;dong_porf_t12_inline_memory[464]=(u8)101;
-  dong_porf_t12_inline_memory[467]=(u8)11;dong_porf_t12_inline_memory[471]=(u8)99;dong_porf_t12_inline_memory[472]=(u8)111;dong_porf_t12_inline_memory[473]=(u8)110;dong_porf_t12_inline_memory[474]=(u8)115;dong_porf_t12_inline_memory[475]=(u8)116;dong_porf_t12_inline_memory[476]=(u8)114;dong_porf_t12_inline_memory[477]=(u8)117;dong_porf_t12_inline_memory[478]=(u8)99;dong_porf_t12_inline_memory[479]=(u8)116;dong_porf_t12_inline_memory[480]=(u8)111;dong_porf_t12_inline_memory[481]=(u8)114;
-  dong_porf_t12_inline_memory[484]=(u8)27;dong_porf_t12_inline_memory[488]=(u8)67;dong_porf_t12_inline_memory[489]=(u8)97;dong_porf_t12_inline_memory[490]=(u8)110;dong_porf_t12_inline_memory[491]=(u8)110;dong_porf_t12_inline_memory[492]=(u8)111;dong_porf_t12_inline_memory[493]=(u8)116;dong_porf_t12_inline_memory[494]=(u8)32;dong_porf_t12_inline_memory[495]=(u8)103;dong_porf_t12_inline_memory[496]=(u8)101;dong_porf_t12_inline_memory[497]=(u8)116;dong_porf_t12_inline_memory[498]=(u8)32;dong_porf_t12_inline_memory[499]=(u8)112;dong_porf_t12_inline_memory[500]=(u8)114;dong_porf_t12_inline_memory[501]=(u8)111;dong_porf_t12_inline_memory[502]=(u8)112;dong_porf_t12_inline_memory[503]=(u8)101;dong_porf_t12_inline_memory[504]=(u8)114;dong_porf_t12_inline_memory[505]=(u8)116;dong_porf_t12_inline_memory[506]=(u8)121;dong_porf_t12_inline_memory[507]=(u8)32;dong_porf_t12_inline_memory[508]=(u8)111;dong_porf_t12_inline_memory[509]=(u8)102;dong_porf_t12_inline_memory[510]=(u8)32;dong_porf_t12_inline_memory[511]=(u8)110;dong_porf_t12_inline_memory[512]=(u8)117;dong_porf_t12_inline_memory[513]=(u8)108;dong_porf_t12_inline_memory[514]=(u8)108;
-  dong_porf_t12_inline_memory[517]=(u8)14;dong_porf_t12_inline_memory[521]=(u8)104;dong_porf_t12_inline_memory[522]=(u8)97;dong_porf_t12_inline_memory[523]=(u8)115;dong_porf_t12_inline_memory[524]=(u8)79;dong_porf_t12_inline_memory[525]=(u8)119;dong_porf_t12_inline_memory[526]=(u8)110;dong_porf_t12_inline_memory[527]=(u8)80;dong_porf_t12_inline_memory[528]=(u8)114;dong_porf_t12_inline_memory[529]=(u8)111;dong_porf_t12_inline_memory[530]=(u8)112;dong_porf_t12_inline_memory[531]=(u8)101;dong_porf_t12_inline_memory[532]=(u8)114;dong_porf_t12_inline_memory[533]=(u8)116;dong_porf_t12_inline_memory[534]=(u8)121;
-  dong_porf_t12_inline_memory[537]=(u8)36;dong_porf_t12_inline_memory[541]=(u8)65;dong_porf_t12_inline_memory[542]=(u8)114;dong_porf_t12_inline_memory[543]=(u8)103;dong_porf_t12_inline_memory[544]=(u8)117;dong_porf_t12_inline_memory[545]=(u8)109;dong_porf_t12_inline_memory[546]=(u8)101;dong_porf_t12_inline_memory[547]=(u8)110;dong_porf_t12_inline_memory[548]=(u8)116;dong_porf_t12_inline_memory[549]=(u8)32;dong_porf_t12_inline_memory[550]=(u8)105;dong_porf_t12_inline_memory[551]=(u8)115;dong_porf_t12_inline_memory[552]=(u8)32;dong_porf_t12_inline_memory[553]=(u8)110;dong_porf_t12_inline_memory[554]=(u8)117;dong_porf_t12_inline_memory[555]=(u8)108;dong_porf_t12_inline_memory[556]=(u8)108;dong_porf_t12_inline_memory[557]=(u8)105;dong_porf_t12_inline_memory[558]=(u8)115;dong_porf_t12_inline_memory[559]=(u8)104;dong_porf_t12_inline_memory[560]=(u8)44;dong_porf_t12_inline_memory[561]=(u8)32;dong_porf_t12_inline_memory[562]=(u8)101;dong_porf_t12_inline_memory[563]=(u8)120;dong_porf_t12_inline_memory[564]=(u8)112;dong_porf_t12_inline_memory[565]=(u8)101;dong_porf_t12_inline_memory[566]=(u8)99;dong_porf_t12_inline_memory[567]=(u8)116;dong_porf_t12_inline_memory[568]=(u8)101;dong_porf_t12_inline_memory[569]=(u8)100;dong_porf_t12_inline_memory[570]=(u8)32;dong_porf_t12_inline_memory[571]=(u8)111;dong_porf_t12_inline_memory[572]=(u8)98;dong_porf_t12_inline_memory[573]=(u8)106;dong_porf_t12_inline_memory[574]=(u8)101;dong_porf_t12_inline_memory[575]=(u8)99;dong_porf_t12_inline_memory[576]=(u8)116;
-  dong_porf_t12_inline_memory[579]=(u8)26;dong_porf_t12_inline_memory[583]=(u8)65;dong_porf_t12_inline_memory[584]=(u8)114;dong_porf_t12_inline_memory[585]=(u8)103;dong_porf_t12_inline_memory[586]=(u8)117;dong_porf_t12_inline_memory[587]=(u8)109;dong_porf_t12_inline_memory[588]=(u8)101;dong_porf_t12_inline_memory[589]=(u8)110;dong_porf_t12_inline_memory[590]=(u8)116;dong_porf_t12_inline_memory[591]=(u8)32;dong_porf_t12_inline_memory[592]=(u8)99;dong_porf_t12_inline_memory[593]=(u8)97;dong_porf_t12_inline_memory[594]=(u8)110;dong_porf_t12_inline_memory[595]=(u8)110;dong_porf_t12_inline_memory[596]=(u8)111;dong_porf_t12_inline_memory[597]=(u8)116;dong_porf_t12_inline_memory[598]=(u8)32;dong_porf_t12_inline_memory[599]=(u8)98;dong_porf_t12_inline_memory[600]=(u8)101;dong_porf_t12_inline_memory[601]=(u8)32;dong_porf_t12_inline_memory[602]=(u8)110;dong_porf_t12_inline_memory[603]=(u8)117;dong_porf_t12_inline_memory[604]=(u8)108;dong_porf_t12_inline_memory[605]=(u8)108;dong_porf_t12_inline_memory[606]=(u8)105;dong_porf_t12_inline_memory[607]=(u8)115;dong_porf_t12_inline_memory[608]=(u8)104;
-  dong_porf_t12_inline_memory[611]=(u8)43;dong_porf_t12_inline_memory[615]=(u8)67;dong_porf_t12_inline_memory[616]=(u8)97;dong_porf_t12_inline_memory[617]=(u8)108;dong_porf_t12_inline_memory[618]=(u8)108;dong_porf_t12_inline_memory[619]=(u8)101;dong_porf_t12_inline_memory[620]=(u8)100;dong_porf_t12_inline_memory[621]=(u8)32;dong_porf_t12_inline_memory[622]=(u8)65;dong_porf_t12_inline_memory[623]=(u8)114;dong_porf_t12_inline_memory[624]=(u8)114;dong_porf_t12_inline_memory[625]=(u8)97;dong_porf_t12_inline_memory[626]=(u8)121;dong_porf_t12_inline_memory[627]=(u8)46;dong_porf_t12_inline_memory[628]=(u8)102;dong_porf_t12_inline_memory[629]=(u8)114;dong_porf_t12_inline_memory[630]=(u8)111;dong_porf_t12_inline_memory[631]=(u8)109;dong_porf_t12_inline_memory[632]=(u8)32;dong_porf_t12_inline_memory[633]=(u8)119;dong_porf_t12_inline_memory[634]=(u8)105;dong_porf_t12_inline_memory[635]=(u8)116;dong_porf_t12_inline_memory[636]=(u8)104;dong_porf_t12_inline_memory[637]=(u8)32;dong_porf_t12_inline_memory[638]=(u8)97;dong_porf_t12_inline_memory[639]=(u8)32;dong_porf_t12_inline_memory[640]=(u8)110;dong_porf_t12_inline_memory[641]=(u8)111;dong_porf_t12_inline_memory[642]=(u8)110;dong_porf_t12_inline_memory[643]=(u8)45;dong_porf_t12_inline_memory[644]=(u8)102;dong_porf_t12_inline_memory[645]=(u8)117;dong_porf_t12_inline_memory[646]=(u8)110;dong_porf_t12_inline_memory[647]=(u8)99;dong_porf_t12_inline_memory[648]=(u8)116;dong_porf_t12_inline_memory[649]=(u8)105;dong_porf_t12_inline_memory[650]=(u8)111;dong_porf_t12_inline_memory[651]=(u8)110;dong_porf_t12_inline_memory[652]=(u8)32;dong_porf_t12_inline_memory[653]=(u8)109;dong_porf_t12_inline_memory[654]=(u8)97;dong_porf_t12_inline_memory[655]=(u8)112;dong_porf_t12_inline_memory[656]=(u8)70;dong_porf_t12_inline_memory[657]=(u8)110;
-  dong_porf_t12_inline_memory[660]=(u8)34;dong_porf_t12_inline_memory[664]=(u8)84;dong_porf_t12_inline_memory[665]=(u8)114;dong_porf_t12_inline_memory[666]=(u8)105;dong_porf_t12_inline_memory[667]=(u8)101;dong_porf_t12_inline_memory[668]=(u8)100;dong_porf_t12_inline_memory[669]=(u8)32;dong_porf_t12_inline_memory[670]=(u8)102;dong_porf_t12_inline_memory[671]=(u8)111;dong_porf_t12_inline_memory[672]=(u8)114;dong_porf_t12_inline_memory[673]=(u8)46;dong_porf_t12_inline_memory[674]=(u8)46;dong_porf_t12_inline_memory[675]=(u8)111;dong_porf_t12_inline_memory[676]=(u8)102;dong_porf_t12_inline_memory[677]=(u8)32;dong_porf_t12_inline_memory[678]=(u8)111;dong_porf_t12_inline_memory[679]=(u8)110;dong_porf_t12_inline_memory[680]=(u8)32;dong_porf_t12_inline_memory[681]=(u8)110;dong_porf_t12_inline_memory[682]=(u8)111;dong_porf_t12_inline_memory[683]=(u8)110;dong_porf_t12_inline_memory[684]=(u8)45;dong_porf_t12_inline_memory[685]=(u8)105;dong_porf_t12_inline_memory[686]=(u8)116;dong_porf_t12_inline_memory[687]=(u8)101;dong_porf_t12_inline_memory[688]=(u8)114;dong_porf_t12_inline_memory[689]=(u8)97;dong_porf_t12_inline_memory[690]=(u8)98;dong_porf_t12_inline_memory[691]=(u8)108;dong_porf_t12_inline_memory[692]=(u8)101;dong_porf_t12_inline_memory[693]=(u8)32;dong_porf_t12_inline_memory[694]=(u8)116;dong_porf_t12_inline_memory[695]=(u8)121;dong_porf_t12_inline_memory[696]=(u8)112;dong_porf_t12_inline_memory[697]=(u8)101;
-  dong_porf_t12_inline_memory[700]=(u8)23;dong_porf_t12_inline_memory[704]=(u8)109;dong_porf_t12_inline_memory[705]=(u8)97;dong_porf_t12_inline_memory[706]=(u8)112;dong_porf_t12_inline_memory[707]=(u8)70;dong_porf_t12_inline_memory[708]=(u8)110;dong_porf_t12_inline_memory[709]=(u8)32;dong_porf_t12_inline_memory[710]=(u8)105;dong_porf_t12_inline_memory[711]=(u8)115;dong_porf_t12_inline_memory[712]=(u8)32;dong_porf_t12_inline_memory[713]=(u8)110;dong_porf_t12_inline_memory[714]=(u8)111;dong_porf_t12_inline_memory[715]=(u8)116;dong_porf_t12_inline_memory[716]=(u8)32;dong_porf_t12_inline_memory[717]=(u8)97;dong_porf_t12_inline_memory[718]=(u8)32;dong_porf_t12_inline_memory[719]=(u8)102;dong_porf_t12_inline_memory[720]=(u8)117;dong_porf_t12_inline_memory[721]=(u8)110;dong_porf_t12_inline_memory[722]=(u8)99;dong_porf_t12_inline_memory[723]=(u8)116;dong_porf_t12_inline_memory[724]=(u8)105;dong_porf_t12_inline_memory[725]=(u8)111;dong_porf_t12_inline_memory[726]=(u8)110;
-  dong_porf_t12_inline_memory[729]=(u8)9;dong_porf_t12_inline_memory[733]=(u8)95;dong_porf_t12_inline_memory[734]=(u8)95;dong_porf_t12_inline_memory[735]=(u8)112;dong_porf_t12_inline_memory[736]=(u8)114;dong_porf_t12_inline_memory[737]=(u8)111;dong_porf_t12_inline_memory[738]=(u8)116;dong_porf_t12_inline_memory[739]=(u8)111;dong_porf_t12_inline_memory[740]=(u8)95;dong_porf_t12_inline_memory[741]=(u8)95;
-  dong_porf_t12_inline_memory[744]=(u8)43;dong_porf_t12_inline_memory[748]=(u8)67;dong_porf_t12_inline_memory[749]=(u8)97;dong_porf_t12_inline_memory[750]=(u8)110;dong_porf_t12_inline_memory[751]=(u8)110;dong_porf_t12_inline_memory[752]=(u8)111;dong_porf_t12_inline_memory[753]=(u8)116;dong_porf_t12_inline_memory[754]=(u8)32;dong_porf_t12_inline_memory[755]=(u8)99;dong_porf_t12_inline_memory[756]=(u8)111;dong_porf_t12_inline_memory[757]=(u8)110;dong_porf_t12_inline_memory[758]=(u8)118;dong_porf_t12_inline_memory[759]=(u8)101;dong_porf_t12_inline_memory[760]=(u8)114;dong_porf_t12_inline_memory[761]=(u8)116;dong_porf_t12_inline_memory[762]=(u8)32;dong_porf_t12_inline_memory[763]=(u8)83;dong_porf_t12_inline_memory[764]=(u8)121;dong_porf_t12_inline_memory[765]=(u8)109;dong_porf_t12_inline_memory[766]=(u8)98;dong_porf_t12_inline_memory[767]=(u8)111;dong_porf_t12_inline_memory[768]=(u8)108;dong_porf_t12_inline_memory[769]=(u8)32;dong_porf_t12_inline_memory[770]=(u8)111;dong_porf_t12_inline_memory[771]=(u8)114;dong_porf_t12_inline_memory[772]=(u8)32;dong_porf_t12_inline_memory[773]=(u8)66;dong_porf_t12_inline_memory[774]=(u8)105;dong_porf_t12_inline_memory[775]=(u8)103;dong_porf_t12_inline_memory[776]=(u8)73;dong_porf_t12_inline_memory[777]=(u8)110;dong_porf_t12_inline_memory[778]=(u8)116;dong_porf_t12_inline_memory[779]=(u8)32;dong_porf_t12_inline_memory[780]=(u8)116;dong_porf_t12_inline_memory[781]=(u8)111;dong_porf_t12_inline_memory[782]=(u8)32;dong_porf_t12_inline_memory[783]=(u8)97;dong_porf_t12_inline_memory[784]=(u8)32;dong_porf_t12_inline_memory[785]=(u8)110;dong_porf_t12_inline_memory[786]=(u8)117;dong_porf_t12_inline_memory[787]=(u8)109;dong_porf_t12_inline_memory[788]=(u8)98;dong_porf_t12_inline_memory[789]=(u8)101;dong_porf_t12_inline_memory[790]=(u8)114;
-  dong_porf_t12_inline_memory[793]=(u8)62;dong_porf_t12_inline_memory[797]=(u8)39;dong_porf_t12_inline_memory[798]=(u8)116;dong_porf_t12_inline_memory[799]=(u8)114;dong_porf_t12_inline_memory[800]=(u8)105;dong_porf_t12_inline_memory[801]=(u8)109;dong_porf_t12_inline_memory[802]=(u8)39;dong_porf_t12_inline_memory[803]=(u8)32;dong_porf_t12_inline_memory[804]=(u8)112;dong_porf_t12_inline_memory[805]=(u8)114;dong_porf_t12_inline_memory[806]=(u8)111;dong_porf_t12_inline_memory[807]=(u8)116;dong_porf_t12_inline_memory[808]=(u8)111;dong_porf_t12_inline_memory[809]=(u8)32;dong_porf_t12_inline_memory[810]=(u8)102;dong_porf_t12_inline_memory[811]=(u8)117;dong_porf_t12_inline_memory[812]=(u8)110;dong_porf_t12_inline_memory[813]=(u8)99;dong_porf_t12_inline_memory[814]=(u8)32;dong_porf_t12_inline_memory[815]=(u8)116;dong_porf_t12_inline_memory[816]=(u8)114;dong_porf_t12_inline_memory[817]=(u8)105;dong_porf_t12_inline_memory[818]=(u8)101;dong_porf_t12_inline_memory[819]=(u8)100;dong_porf_t12_inline_memory[820]=(u8)32;dong_porf_t12_inline_memory[821]=(u8)116;dong_porf_t12_inline_memory[822]=(u8)111;dong_porf_t12_inline_memory[823]=(u8)32;dong_porf_t12_inline_memory[824]=(u8)98;dong_porf_t12_inline_memory[825]=(u8)101;dong_porf_t12_inline_memory[826]=(u8)32;dong_porf_t12_inline_memory[827]=(u8)99;dong_porf_t12_inline_memory[828]=(u8)97;dong_porf_t12_inline_memory[829]=(u8)108;dong_porf_t12_inline_memory[830]=(u8)108;dong_porf_t12_inline_memory[831]=(u8)101;dong_porf_t12_inline_memory[832]=(u8)100;dong_porf_t12_inline_memory[833]=(u8)32;dong_porf_t12_inline_memory[834]=(u8)111;dong_porf_t12_inline_memory[835]=(u8)110;dong_porf_t12_inline_memory[836]=(u8)32;dong_porf_t12_inline_memory[837]=(u8)97;dong_porf_t12_inline_memory[838]=(u8)32;dong_porf_t12_inline_memory[839]=(u8)116;dong_porf_t12_inline_memory[840]=(u8)121;dong_porf_t12_inline_memory[841]=(u8)112;dong_porf_t12_inline_memory[842]=(u8)101;dong_porf_t12_inline_memory[843]=(u8)32;dong_porf_t12_inline_memory[844]=(u8)119;dong_porf_t12_inline_memory[845]=(u8)105;dong_porf_t12_inline_memory[846]=(u8)116;dong_porf_t12_inline_memory[847]=(u8)104;dong_porf_t12_inline_memory[848]=(u8)111;dong_porf_t12_inline_memory[849]=(u8)117;dong_porf_t12_inline_memory[850]=(u8)116;dong_porf_t12_inline_memory[851]=(u8)32;dong_porf_t12_inline_memory[852]=(u8)97;dong_porf_t12_inline_memory[853]=(u8)110;dong_porf_t12_inline_memory[854]=(u8)32;dong_porf_t12_inline_memory[855]=(u8)105;dong_porf_t12_inline_memory[856]=(u8)109;dong_porf_t12_inline_memory[857]=(u8)112;dong_porf_t12_inline_memory[858]=(u8)108;
-  dong_porf_t12_inline_memory[861]=(u8)68;dong_porf_t12_inline_memory[865]=(u8)39;dong_porf_t12_inline_memory[866]=(u8)99;dong_porf_t12_inline_memory[867]=(u8)104;dong_porf_t12_inline_memory[868]=(u8)97;dong_porf_t12_inline_memory[869]=(u8)114;dong_porf_t12_inline_memory[870]=(u8)67;dong_porf_t12_inline_memory[871]=(u8)111;dong_porf_t12_inline_memory[872]=(u8)100;dong_porf_t12_inline_memory[873]=(u8)101;dong_porf_t12_inline_memory[874]=(u8)65;dong_porf_t12_inline_memory[875]=(u8)116;dong_porf_t12_inline_memory[876]=(u8)39;dong_porf_t12_inline_memory[877]=(u8)32;dong_porf_t12_inline_memory[878]=(u8)112;dong_porf_t12_inline_memory[879]=(u8)114;dong_porf_t12_inline_memory[880]=(u8)111;dong_porf_t12_inline_memory[881]=(u8)116;dong_porf_t12_inline_memory[882]=(u8)111;dong_porf_t12_inline_memory[883]=(u8)32;dong_porf_t12_inline_memory[884]=(u8)102;dong_porf_t12_inline_memory[885]=(u8)117;dong_porf_t12_inline_memory[886]=(u8)110;dong_porf_t12_inline_memory[887]=(u8)99;dong_porf_t12_inline_memory[888]=(u8)32;dong_porf_t12_inline_memory[889]=(u8)116;dong_porf_t12_inline_memory[890]=(u8)114;dong_porf_t12_inline_memory[891]=(u8)105;dong_porf_t12_inline_memory[892]=(u8)101;dong_porf_t12_inline_memory[893]=(u8)100;dong_porf_t12_inline_memory[894]=(u8)32;dong_porf_t12_inline_memory[895]=(u8)116;dong_porf_t12_inline_memory[896]=(u8)111;dong_porf_t12_inline_memory[897]=(u8)32;dong_porf_t12_inline_memory[898]=(u8)98;dong_porf_t12_inline_memory[899]=(u8)101;dong_porf_t12_inline_memory[900]=(u8)32;dong_porf_t12_inline_memory[901]=(u8)99;dong_porf_t12_inline_memory[902]=(u8)97;dong_porf_t12_inline_memory[903]=(u8)108;dong_porf_t12_inline_memory[904]=(u8)108;dong_porf_t12_inline_memory[905]=(u8)101;dong_porf_t12_inline_memory[906]=(u8)100;dong_porf_t12_inline_memory[907]=(u8)32;dong_porf_t12_inline_memory[908]=(u8)111;dong_porf_t12_inline_memory[909]=(u8)110;dong_porf_t12_inline_memory[910]=(u8)32;dong_porf_t12_inline_memory[911]=(u8)97;dong_porf_t12_inline_memory[912]=(u8)32;dong_porf_t12_inline_memory[913]=(u8)116;dong_porf_t12_inline_memory[914]=(u8)121;dong_porf_t12_inline_memory[915]=(u8)112;dong_porf_t12_inline_memory[916]=(u8)101;dong_porf_t12_inline_memory[917]=(u8)32;dong_porf_t12_inline_memory[918]=(u8)119;dong_porf_t12_inline_memory[919]=(u8)105;dong_porf_t12_inline_memory[920]=(u8)116;dong_porf_t12_inline_memory[921]=(u8)104;dong_porf_t12_inline_memory[922]=(u8)111;dong_porf_t12_inline_memory[923]=(u8)117;dong_porf_t12_inline_memory[924]=(u8)116;dong_porf_t12_inline_memory[925]=(u8)32;dong_porf_t12_inline_memory[926]=(u8)97;dong_porf_t12_inline_memory[927]=(u8)110;dong_porf_t12_inline_memory[928]=(u8)32;dong_porf_t12_inline_memory[929]=(u8)105;dong_porf_t12_inline_memory[930]=(u8)109;dong_porf_t12_inline_memory[931]=(u8)112;dong_porf_t12_inline_memory[932]=(u8)108;
-  dong_porf_t12_inline_memory[935]=(u8)54;dong_porf_t12_inline_memory[939]=(u8)78;dong_porf_t12_inline_memory[940]=(u8)117;dong_porf_t12_inline_memory[941]=(u8)109;dong_porf_t12_inline_memory[942]=(u8)98;dong_porf_t12_inline_memory[943]=(u8)101;dong_porf_t12_inline_memory[944]=(u8)114;dong_porf_t12_inline_memory[945]=(u8)46;dong_porf_t12_inline_memory[946]=(u8)112;dong_porf_t12_inline_memory[947]=(u8)114;dong_porf_t12_inline_memory[948]=(u8)111;dong_porf_t12_inline_memory[949]=(u8)116;dong_porf_t12_inline_memory[950]=(u8)111;dong_porf_t12_inline_memory[951]=(u8)116;dong_porf_t12_inline_memory[952]=(u8)121;dong_porf_t12_inline_memory[953]=(u8)112;dong_porf_t12_inline_memory[954]=(u8)101;dong_porf_t12_inline_memory[955]=(u8)46;dong_porf_t12_inline_memory[956]=(u8)118;dong_porf_t12_inline_memory[957]=(u8)97;dong_porf_t12_inline_memory[958]=(u8)108;dong_porf_t12_inline_memory[959]=(u8)117;dong_porf_t12_inline_memory[960]=(u8)101;dong_porf_t12_inline_memory[961]=(u8)79;dong_porf_t12_inline_memory[962]=(u8)102;dong_porf_t12_inline_memory[963]=(u8)32;dong_porf_t12_inline_memory[964]=(u8)101;dong_porf_t12_inline_memory[965]=(u8)120;dong_porf_t12_inline_memory[966]=(u8)112;dong_porf_t12_inline_memory[967]=(u8)101;dong_porf_t12_inline_memory[968]=(u8)99;dong_porf_t12_inline_memory[969]=(u8)116;dong_porf_t12_inline_memory[970]=(u8)115;dong_porf_t12_inline_memory[971]=(u8)32;dong_porf_t12_inline_memory[972]=(u8)39;dong_porf_t12_inline_memory[973]=(u8)116;dong_porf_t12_inline_memory[974]=(u8)104;dong_porf_t12_inline_memory[975]=(u8)105;dong_porf_t12_inline_memory[976]=(u8)115;dong_porf_t12_inline_memory[977]=(u8)39;dong_porf_t12_inline_memory[978]=(u8)32;dong_porf_t12_inline_memory[979]=(u8)116;dong_porf_t12_inline_memory[980]=(u8)111;dong_porf_t12_inline_memory[981]=(u8)32;dong_porf_t12_inline_memory[982]=(u8)98;dong_porf_t12_inline_memory[983]=(u8)101;dong_porf_t12_inline_memory[984]=(u8)32;dong_porf_t12_inline_memory[985]=(u8)97;dong_porf_t12_inline_memory[986]=(u8)32;dong_porf_t12_inline_memory[987]=(u8)78;dong_porf_t12_inline_memory[988]=(u8)117;dong_porf_t12_inline_memory[989]=(u8)109;dong_porf_t12_inline_memory[990]=(u8)98;dong_porf_t12_inline_memory[991]=(u8)101;dong_porf_t12_inline_memory[992]=(u8)114;
-  dong_porf_t12_inline_memory[995]=(u8)7;dong_porf_t12_inline_memory[999]=(u8)118;dong_porf_t12_inline_memory[1000]=(u8)97;dong_porf_t12_inline_memory[1001]=(u8)108;dong_porf_t12_inline_memory[1002]=(u8)117;dong_porf_t12_inline_memory[1003]=(u8)101;dong_porf_t12_inline_memory[1004]=(u8)79;dong_porf_t12_inline_memory[1005]=(u8)102;
-  dong_porf_t12_inline_memory[1008]=(u8)29;dong_porf_t12_inline_memory[1012]=(u8)70;dong_porf_t12_inline_memory[1013]=(u8)117;dong_porf_t12_inline_memory[1014]=(u8)110;dong_porf_t12_inline_memory[1015]=(u8)99;dong_porf_t12_inline_memory[1016]=(u8)116;dong_porf_t12_inline_memory[1017]=(u8)105;dong_porf_t12_inline_memory[1018]=(u8)111;dong_porf_t12_inline_memory[1019]=(u8)110;dong_porf_t12_inline_memory[1020]=(u8)32;dong_porf_t12_inline_memory[1021]=(u8)105;dong_porf_t12_inline_memory[1022]=(u8)115;dong_porf_t12_inline_memory[1023]=(u8)32;dong_porf_t12_inline_memory[1024]=(u8)110;dong_porf_t12_inline_memory[1025]=(u8)111;dong_porf_t12_inline_memory[1026]=(u8)116;dong_porf_t12_inline_memory[1027]=(u8)32;dong_porf_t12_inline_memory[1028]=(u8)97;dong_porf_t12_inline_memory[1029]=(u8)32;dong_porf_t12_inline_memory[1030]=(u8)99;dong_porf_t12_inline_memory[1031]=(u8)111;dong_porf_t12_inline_memory[1032]=(u8)110;dong_porf_t12_inline_memory[1033]=(u8)115;dong_porf_t12_inline_memory[1034]=(u8)116;dong_porf_t12_inline_memory[1035]=(u8)114;dong_porf_t12_inline_memory[1036]=(u8)117;dong_porf_t12_inline_memory[1037]=(u8)99;dong_porf_t12_inline_memory[1038]=(u8)116;dong_porf_t12_inline_memory[1039]=(u8)111;dong_porf_t12_inline_memory[1040]=(u8)114;
-  dong_porf_t12_inline_memory[1043]=(u8)21;dong_porf_t12_inline_memory[1047]=(u8)111;dong_porf_t12_inline_memory[1048]=(u8)118;dong_porf_t12_inline_memory[1049]=(u8)114;dong_porf_t12_inline_memory[1050]=(u8)32;dong_porf_t12_inline_memory[1051]=(u8)105;dong_porf_t12_inline_memory[1052]=(u8)115;dong_porf_t12_inline_memory[1053]=(u8)32;dong_porf_t12_inline_memory[1054]=(u8)110;dong_porf_t12_inline_memory[1055]=(u8)111;dong_porf_t12_inline_memory[1056]=(u8)116;dong_porf_t12_inline_memory[1057]=(u8)32;dong_porf_t12_inline_memory[1058]=(u8)97;dong_porf_t12_inline_memory[1059]=(u8)32;dong_porf_t12_inline_memory[1060]=(u8)102;dong_porf_t12_inline_memory[1061]=(u8)117;dong_porf_t12_inline_memory[1062]=(u8)110;dong_porf_t12_inline_memory[1063]=(u8)99;dong_porf_t12_inline_memory[1064]=(u8)116;dong_porf_t12_inline_memory[1065]=(u8)105;dong_porf_t12_inline_memory[1066]=(u8)111;dong_porf_t12_inline_memory[1067]=(u8)110;
-  dong_porf_t12_inline_memory[1070]=(u8)37;dong_porf_t12_inline_memory[1074]=(u8)67;dong_porf_t12_inline_memory[1075]=(u8)97;dong_porf_t12_inline_memory[1076]=(u8)110;dong_porf_t12_inline_memory[1077]=(u8)110;dong_porf_t12_inline_memory[1078]=(u8)111;dong_porf_t12_inline_memory[1079]=(u8)116;dong_porf_t12_inline_memory[1080]=(u8)32;dong_porf_t12_inline_memory[1081]=(u8)99;dong_porf_t12_inline_memory[1082]=(u8)111;dong_porf_t12_inline_memory[1083]=(u8)110;dong_porf_t12_inline_memory[1084]=(u8)118;dong_porf_t12_inline_memory[1085]=(u8)101;dong_porf_t12_inline_memory[1086]=(u8)114;dong_porf_t12_inline_memory[1087]=(u8)116;dong_porf_t12_inline_memory[1088]=(u8)32;dong_porf_t12_inline_memory[1089]=(u8)97;dong_porf_t12_inline_memory[1090]=(u8)110;dong_porf_t12_inline_memory[1091]=(u8)32;dong_porf_t12_inline_memory[1092]=(u8)111;dong_porf_t12_inline_memory[1093]=(u8)98;dong_porf_t12_inline_memory[1094]=(u8)106;dong_porf_t12_inline_memory[1095]=(u8)101;dong_porf_t12_inline_memory[1096]=(u8)99;dong_porf_t12_inline_memory[1097]=(u8)116;dong_porf_t12_inline_memory[1098]=(u8)32;dong_porf_t12_inline_memory[1099]=(u8)116;dong_porf_t12_inline_memory[1100]=(u8)111;dong_porf_t12_inline_memory[1101]=(u8)32;dong_porf_t12_inline_memory[1102]=(u8)112;dong_porf_t12_inline_memory[1103]=(u8)114;dong_porf_t12_inline_memory[1104]=(u8)105;dong_porf_t12_inline_memory[1105]=(u8)109;dong_porf_t12_inline_memory[1106]=(u8)105;dong_porf_t12_inline_memory[1107]=(u8)116;dong_porf_t12_inline_memory[1108]=(u8)105;dong_porf_t12_inline_memory[1109]=(u8)118;dong_porf_t12_inline_memory[1110]=(u8)101;
-  dong_porf_t12_inline_memory[1113]=(u8)20;dong_porf_t12_inline_memory[1117]=(u8)73;dong_porf_t12_inline_memory[1118]=(u8)110;dong_porf_t12_inline_memory[1119]=(u8)118;dong_porf_t12_inline_memory[1120]=(u8)97;dong_porf_t12_inline_memory[1121]=(u8)108;dong_porf_t12_inline_memory[1122]=(u8)105;dong_porf_t12_inline_memory[1123]=(u8)100;dong_porf_t12_inline_memory[1124]=(u8)32;dong_porf_t12_inline_memory[1125]=(u8)97;dong_porf_t12_inline_memory[1126]=(u8)114;dong_porf_t12_inline_memory[1127]=(u8)114;dong_porf_t12_inline_memory[1128]=(u8)97;dong_porf_t12_inline_memory[1129]=(u8)121;dong_porf_t12_inline_memory[1130]=(u8)32;dong_porf_t12_inline_memory[1131]=(u8)108;dong_porf_t12_inline_memory[1132]=(u8)101;dong_porf_t12_inline_memory[1133]=(u8)110;dong_porf_t12_inline_memory[1134]=(u8)103;dong_porf_t12_inline_memory[1135]=(u8)116;dong_porf_t12_inline_memory[1136]=(u8)104;
-  dong_porf_t12_inline_memory[1139]=(u8)20;dong_porf_t12_inline_memory[1143]=(u8)112;dong_porf_t12_inline_memory[1144]=(u8)114;dong_porf_t12_inline_memory[1145]=(u8)111;dong_porf_t12_inline_memory[1146]=(u8)112;dong_porf_t12_inline_memory[1147]=(u8)101;dong_porf_t12_inline_memory[1148]=(u8)114;dong_porf_t12_inline_memory[1149]=(u8)116;dong_porf_t12_inline_memory[1150]=(u8)121;dong_porf_t12_inline_memory[1151]=(u8)73;dong_porf_t12_inline_memory[1152]=(u8)115;dong_porf_t12_inline_memory[1153]=(u8)69;dong_porf_t12_inline_memory[1154]=(u8)110;dong_porf_t12_inline_memory[1155]=(u8)117;dong_porf_t12_inline_memory[1156]=(u8)109;dong_porf_t12_inline_memory[1157]=(u8)101;dong_porf_t12_inline_memory[1158]=(u8)114;dong_porf_t12_inline_memory[1159]=(u8)97;dong_porf_t12_inline_memory[1160]=(u8)98;dong_porf_t12_inline_memory[1161]=(u8)108;dong_porf_t12_inline_memory[1162]=(u8)101;
-  dong_porf_t12_inline_memory[1165]=(u8)13;dong_porf_t12_inline_memory[1169]=(u8)105;dong_porf_t12_inline_memory[1170]=(u8)115;dong_porf_t12_inline_memory[1171]=(u8)80;dong_porf_t12_inline_memory[1172]=(u8)114;dong_porf_t12_inline_memory[1173]=(u8)111;dong_porf_t12_inline_memory[1174]=(u8)116;dong_porf_t12_inline_memory[1175]=(u8)111;dong_porf_t12_inline_memory[1176]=(u8)116;dong_porf_t12_inline_memory[1177]=(u8)121;dong_porf_t12_inline_memory[1178]=(u8)112;dong_porf_t12_inline_memory[1179]=(u8)101;dong_porf_t12_inline_memory[1180]=(u8)79;dong_porf_t12_inline_memory[1181]=(u8)102;
-  dong_porf_t12_inline_memory[1184]=(u8)32;dong_porf_t12_inline_memory[1188]=(u8)84;dong_porf_t12_inline_memory[1189]=(u8)104;dong_porf_t12_inline_memory[1190]=(u8)105;dong_porf_t12_inline_memory[1191]=(u8)115;dong_porf_t12_inline_memory[1192]=(u8)32;dong_porf_t12_inline_memory[1193]=(u8)105;dong_porf_t12_inline_memory[1194]=(u8)115;dong_porf_t12_inline_memory[1195]=(u8)32;dong_porf_t12_inline_memory[1196]=(u8)110;dong_porf_t12_inline_memory[1197]=(u8)117;dong_porf_t12_inline_memory[1198]=(u8)108;dong_porf_t12_inline_memory[1199]=(u8)108;dong_porf_t12_inline_memory[1200]=(u8)105;dong_porf_t12_inline_memory[1201]=(u8)115;dong_porf_t12_inline_memory[1202]=(u8)104;dong_porf_t12_inline_memory[1203]=(u8)44;dong_porf_t12_inline_memory[1204]=(u8)32;dong_porf_t12_inline_memory[1205]=(u8)101;dong_porf_t12_inline_memory[1206]=(u8)120;dong_porf_t12_inline_memory[1207]=(u8)112;dong_porf_t12_inline_memory[1208]=(u8)101;dong_porf_t12_inline_memory[1209]=(u8)99;dong_porf_t12_inline_memory[1210]=(u8)116;dong_porf_t12_inline_memory[1211]=(u8)101;dong_porf_t12_inline_memory[1212]=(u8)100;dong_porf_t12_inline_memory[1213]=(u8)32;dong_porf_t12_inline_memory[1214]=(u8)111;dong_porf_t12_inline_memory[1215]=(u8)98;dong_porf_t12_inline_memory[1216]=(u8)106;dong_porf_t12_inline_memory[1217]=(u8)101;dong_porf_t12_inline_memory[1218]=(u8)99;dong_porf_t12_inline_memory[1219]=(u8)116;
-  dong_porf_t12_inline_memory[1222]=(u8)14;dong_porf_t12_inline_memory[1226]=(u8)116;dong_porf_t12_inline_memory[1227]=(u8)111;dong_porf_t12_inline_memory[1228]=(u8)76;dong_porf_t12_inline_memory[1229]=(u8)111;dong_porf_t12_inline_memory[1230]=(u8)99;dong_porf_t12_inline_memory[1231]=(u8)97;dong_porf_t12_inline_memory[1232]=(u8)108;dong_porf_t12_inline_memory[1233]=(u8)101;dong_porf_t12_inline_memory[1234]=(u8)83;dong_porf_t12_inline_memory[1235]=(u8)116;dong_porf_t12_inline_memory[1236]=(u8)114;dong_porf_t12_inline_memory[1237]=(u8)105;dong_porf_t12_inline_memory[1238]=(u8)110;dong_porf_t12_inline_memory[1239]=(u8)103;
-  dong_porf_t12_inline_memory[1242]=(u8)55;dong_porf_t12_inline_memory[1246]=(u8)83;dong_porf_t12_inline_memory[1247]=(u8)121;dong_porf_t12_inline_memory[1248]=(u8)109;dong_porf_t12_inline_memory[1249]=(u8)98;dong_porf_t12_inline_memory[1250]=(u8)111;dong_porf_t12_inline_memory[1251]=(u8)108;dong_porf_t12_inline_memory[1252]=(u8)46;dong_porf_t12_inline_memory[1253]=(u8)112;dong_porf_t12_inline_memory[1254]=(u8)114;dong_porf_t12_inline_memory[1255]=(u8)111;dong_porf_t12_inline_memory[1256]=(u8)116;dong_porf_t12_inline_memory[1257]=(u8)111;dong_porf_t12_inline_memory[1258]=(u8)116;dong_porf_t12_inline_memory[1259]=(u8)121;dong_porf_t12_inline_memory[1260]=(u8)112;dong_porf_t12_inline_memory[1261]=(u8)101;dong_porf_t12_inline_memory[1262]=(u8)46;dong_porf_t12_inline_memory[1263]=(u8)116;dong_porf_t12_inline_memory[1264]=(u8)111;dong_porf_t12_inline_memory[1265]=(u8)83;dong_porf_t12_inline_memory[1266]=(u8)116;dong_porf_t12_inline_memory[1267]=(u8)114;dong_porf_t12_inline_memory[1268]=(u8)105;dong_porf_t12_inline_memory[1269]=(u8)110;dong_porf_t12_inline_memory[1270]=(u8)103;dong_porf_t12_inline_memory[1271]=(u8)32;dong_porf_t12_inline_memory[1272]=(u8)101;dong_porf_t12_inline_memory[1273]=(u8)120;dong_porf_t12_inline_memory[1274]=(u8)112;dong_porf_t12_inline_memory[1275]=(u8)101;dong_porf_t12_inline_memory[1276]=(u8)99;dong_porf_t12_inline_memory[1277]=(u8)116;dong_porf_t12_inline_memory[1278]=(u8)115;dong_porf_t12_inline_memory[1279]=(u8)32;dong_porf_t12_inline_memory[1280]=(u8)39;dong_porf_t12_inline_memory[1281]=(u8)116;dong_porf_t12_inline_memory[1282]=(u8)104;dong_porf_t12_inline_memory[1283]=(u8)105;dong_porf_t12_inline_memory[1284]=(u8)115;dong_porf_t12_inline_memory[1285]=(u8)39;dong_porf_t12_inline_memory[1286]=(u8)32;dong_porf_t12_inline_memory[1287]=(u8)116;dong_porf_t12_inline_memory[1288]=(u8)111;dong_porf_t12_inline_memory[1289]=(u8)32;dong_porf_t12_inline_memory[1290]=(u8)98;dong_porf_t12_inline_memory[1291]=(u8)101;dong_porf_t12_inline_memory[1292]=(u8)32;dong_porf_t12_inline_memory[1293]=(u8)97;dong_porf_t12_inline_memory[1294]=(u8)32;dong_porf_t12_inline_memory[1295]=(u8)83;dong_porf_t12_inline_memory[1296]=(u8)121;dong_porf_t12_inline_memory[1297]=(u8)109;dong_porf_t12_inline_memory[1298]=(u8)98;dong_porf_t12_inline_memory[1299]=(u8)111;dong_porf_t12_inline_memory[1300]=(u8)108;
-  dong_porf_t12_inline_memory[1303]=(u8)62;dong_porf_t12_inline_memory[1307]=(u8)83;dong_porf_t12_inline_memory[1308]=(u8)121;dong_porf_t12_inline_memory[1309]=(u8)109;dong_porf_t12_inline_memory[1310]=(u8)98;dong_porf_t12_inline_memory[1311]=(u8)111;dong_porf_t12_inline_memory[1312]=(u8)108;dong_porf_t12_inline_memory[1313]=(u8)46;dong_porf_t12_inline_memory[1314]=(u8)112;dong_porf_t12_inline_memory[1315]=(u8)114;dong_porf_t12_inline_memory[1316]=(u8)111;dong_porf_t12_inline_memory[1317]=(u8)116;dong_porf_t12_inline_memory[1318]=(u8)111;dong_porf_t12_inline_memory[1319]=(u8)116;dong_porf_t12_inline_memory[1320]=(u8)121;dong_porf_t12_inline_memory[1321]=(u8)112;dong_porf_t12_inline_memory[1322]=(u8)101;dong_porf_t12_inline_memory[1323]=(u8)46;dong_porf_t12_inline_memory[1324]=(u8)100;dong_porf_t12_inline_memory[1325]=(u8)101;dong_porf_t12_inline_memory[1326]=(u8)115;dong_porf_t12_inline_memory[1327]=(u8)99;dong_porf_t12_inline_memory[1328]=(u8)114;dong_porf_t12_inline_memory[1329]=(u8)105;dong_porf_t12_inline_memory[1330]=(u8)112;dong_porf_t12_inline_memory[1331]=(u8)116;dong_porf_t12_inline_memory[1332]=(u8)105;dong_porf_t12_inline_memory[1333]=(u8)111;dong_porf_t12_inline_memory[1334]=(u8)110;dong_porf_t12_inline_memory[1335]=(u8)36;dong_porf_t12_inline_memory[1336]=(u8)103;dong_porf_t12_inline_memory[1337]=(u8)101;dong_porf_t12_inline_memory[1338]=(u8)116;dong_porf_t12_inline_memory[1339]=(u8)32;dong_porf_t12_inline_memory[1340]=(u8)101;dong_porf_t12_inline_memory[1341]=(u8)120;dong_porf_t12_inline_memory[1342]=(u8)112;dong_porf_t12_inline_memory[1343]=(u8)101;dong_porf_t12_inline_memory[1344]=(u8)99;dong_porf_t12_inline_memory[1345]=(u8)116;dong_porf_t12_inline_memory[1346]=(u8)115;dong_porf_t12_inline_memory[1347]=(u8)32;dong_porf_t12_inline_memory[1348]=(u8)39;dong_porf_t12_inline_memory[1349]=(u8)116;dong_porf_t12_inline_memory[1350]=(u8)104;dong_porf_t12_inline_memory[1351]=(u8)105;dong_porf_t12_inline_memory[1352]=(u8)115;dong_porf_t12_inline_memory[1353]=(u8)39;dong_porf_t12_inline_memory[1354]=(u8)32;dong_porf_t12_inline_memory[1355]=(u8)116;dong_porf_t12_inline_memory[1356]=(u8)111;dong_porf_t12_inline_memory[1357]=(u8)32;dong_porf_t12_inline_memory[1358]=(u8)98;dong_porf_t12_inline_memory[1359]=(u8)101;dong_porf_t12_inline_memory[1360]=(u8)32;dong_porf_t12_inline_memory[1361]=(u8)97;dong_porf_t12_inline_memory[1362]=(u8)32;dong_porf_t12_inline_memory[1363]=(u8)83;dong_porf_t12_inline_memory[1364]=(u8)121;dong_porf_t12_inline_memory[1365]=(u8)109;dong_porf_t12_inline_memory[1366]=(u8)98;dong_porf_t12_inline_memory[1367]=(u8)111;dong_porf_t12_inline_memory[1368]=(u8)108;
-  dong_porf_t12_inline_memory[1371]=(u8)18;dong_porf_t12_inline_memory[1375]=(u8)91;dong_porf_t12_inline_memory[1376]=(u8)111;dong_porf_t12_inline_memory[1377]=(u8)98;dong_porf_t12_inline_memory[1378]=(u8)106;dong_porf_t12_inline_memory[1379]=(u8)101;dong_porf_t12_inline_memory[1380]=(u8)99;dong_porf_t12_inline_memory[1381]=(u8)116;dong_porf_t12_inline_memory[1382]=(u8)32;dong_porf_t12_inline_memory[1383]=(u8)85;dong_porf_t12_inline_memory[1384]=(u8)110;dong_porf_t12_inline_memory[1385]=(u8)100;dong_porf_t12_inline_memory[1386]=(u8)101;dong_porf_t12_inline_memory[1387]=(u8)102;dong_porf_t12_inline_memory[1388]=(u8)105;dong_porf_t12_inline_memory[1389]=(u8)110;dong_porf_t12_inline_memory[1390]=(u8)101;dong_porf_t12_inline_memory[1391]=(u8)100;dong_porf_t12_inline_memory[1392]=(u8)93;
-  dong_porf_t12_inline_memory[1395]=(u8)13;dong_porf_t12_inline_memory[1399]=(u8)91;dong_porf_t12_inline_memory[1400]=(u8)111;dong_porf_t12_inline_memory[1401]=(u8)98;dong_porf_t12_inline_memory[1402]=(u8)106;dong_porf_t12_inline_memory[1403]=(u8)101;dong_porf_t12_inline_memory[1404]=(u8)99;dong_porf_t12_inline_memory[1405]=(u8)116;dong_porf_t12_inline_memory[1406]=(u8)32;dong_porf_t12_inline_memory[1407]=(u8)78;dong_porf_t12_inline_memory[1408]=(u8)117;dong_porf_t12_inline_memory[1409]=(u8)108;dong_porf_t12_inline_memory[1410]=(u8)108;dong_porf_t12_inline_memory[1411]=(u8)93;
-  dong_porf_t12_inline_memory[1414]=(u8)14;dong_porf_t12_inline_memory[1418]=(u8)91;dong_porf_t12_inline_memory[1419]=(u8)111;dong_porf_t12_inline_memory[1420]=(u8)98;dong_porf_t12_inline_memory[1421]=(u8)106;dong_porf_t12_inline_memory[1422]=(u8)101;dong_porf_t12_inline_memory[1423]=(u8)99;dong_porf_t12_inline_memory[1424]=(u8)116;dong_porf_t12_inline_memory[1425]=(u8)32;dong_porf_t12_inline_memory[1426]=(u8)65;dong_porf_t12_inline_memory[1427]=(u8)114;dong_porf_t12_inline_memory[1428]=(u8)114;dong_porf_t12_inline_memory[1429]=(u8)97;dong_porf_t12_inline_memory[1430]=(u8)121;dong_porf_t12_inline_memory[1431]=(u8)93;
-  dong_porf_t12_inline_memory[1434]=(u8)17;dong_porf_t12_inline_memory[1438]=(u8)91;dong_porf_t12_inline_memory[1439]=(u8)111;dong_porf_t12_inline_memory[1440]=(u8)98;dong_porf_t12_inline_memory[1441]=(u8)106;dong_porf_t12_inline_memory[1442]=(u8)101;dong_porf_t12_inline_memory[1443]=(u8)99;dong_porf_t12_inline_memory[1444]=(u8)116;dong_porf_t12_inline_memory[1445]=(u8)32;dong_porf_t12_inline_memory[1446]=(u8)70;dong_porf_t12_inline_memory[1447]=(u8)117;dong_porf_t12_inline_memory[1448]=(u8)110;dong_porf_t12_inline_memory[1449]=(u8)99;dong_porf_t12_inline_memory[1450]=(u8)116;dong_porf_t12_inline_memory[1451]=(u8)105;dong_porf_t12_inline_memory[1452]=(u8)111;dong_porf_t12_inline_memory[1453]=(u8)110;dong_porf_t12_inline_memory[1454]=(u8)93;
-  dong_porf_t12_inline_memory[1457]=(u8)16;dong_porf_t12_inline_memory[1461]=(u8)91;dong_porf_t12_inline_memory[1462]=(u8)111;dong_porf_t12_inline_memory[1463]=(u8)98;dong_porf_t12_inline_memory[1464]=(u8)106;dong_porf_t12_inline_memory[1465]=(u8)101;dong_porf_t12_inline_memory[1466]=(u8)99;dong_porf_t12_inline_memory[1467]=(u8)116;dong_porf_t12_inline_memory[1468]=(u8)32;dong_porf_t12_inline_memory[1469]=(u8)66;dong_porf_t12_inline_memory[1470]=(u8)111;dong_porf_t12_inline_memory[1471]=(u8)111;dong_porf_t12_inline_memory[1472]=(u8)108;dong_porf_t12_inline_memory[1473]=(u8)101;dong_porf_t12_inline_memory[1474]=(u8)97;dong_porf_t12_inline_memory[1475]=(u8)110;dong_porf_t12_inline_memory[1476]=(u8)93;
-  dong_porf_t12_inline_memory[1479]=(u8)15;dong_porf_t12_inline_memory[1483]=(u8)91;dong_porf_t12_inline_memory[1484]=(u8)111;dong_porf_t12_inline_memory[1485]=(u8)98;dong_porf_t12_inline_memory[1486]=(u8)106;dong_porf_t12_inline_memory[1487]=(u8)101;dong_porf_t12_inline_memory[1488]=(u8)99;dong_porf_t12_inline_memory[1489]=(u8)116;dong_porf_t12_inline_memory[1490]=(u8)32;dong_porf_t12_inline_memory[1491]=(u8)78;dong_porf_t12_inline_memory[1492]=(u8)117;dong_porf_t12_inline_memory[1493]=(u8)109;dong_porf_t12_inline_memory[1494]=(u8)98;dong_porf_t12_inline_memory[1495]=(u8)101;dong_porf_t12_inline_memory[1496]=(u8)114;dong_porf_t12_inline_memory[1497]=(u8)93;
-  dong_porf_t12_inline_memory[1500]=(u8)15;dong_porf_t12_inline_memory[1504]=(u8)91;dong_porf_t12_inline_memory[1505]=(u8)111;dong_porf_t12_inline_memory[1506]=(u8)98;dong_porf_t12_inline_memory[1507]=(u8)106;dong_porf_t12_inline_memory[1508]=(u8)101;dong_porf_t12_inline_memory[1509]=(u8)99;dong_porf_t12_inline_memory[1510]=(u8)116;dong_porf_t12_inline_memory[1511]=(u8)32;dong_porf_t12_inline_memory[1512]=(u8)83;dong_porf_t12_inline_memory[1513]=(u8)116;dong_porf_t12_inline_memory[1514]=(u8)114;dong_porf_t12_inline_memory[1515]=(u8)105;dong_porf_t12_inline_memory[1516]=(u8)110;dong_porf_t12_inline_memory[1517]=(u8)103;dong_porf_t12_inline_memory[1518]=(u8)93;
-  dong_porf_t12_inline_memory[1521]=(u8)13;dong_porf_t12_inline_memory[1525]=(u8)91;dong_porf_t12_inline_memory[1526]=(u8)111;dong_porf_t12_inline_memory[1527]=(u8)98;dong_porf_t12_inline_memory[1528]=(u8)106;dong_porf_t12_inline_memory[1529]=(u8)101;dong_porf_t12_inline_memory[1530]=(u8)99;dong_porf_t12_inline_memory[1531]=(u8)116;dong_porf_t12_inline_memory[1532]=(u8)32;dong_porf_t12_inline_memory[1533]=(u8)68;dong_porf_t12_inline_memory[1534]=(u8)97;dong_porf_t12_inline_memory[1535]=(u8)116;dong_porf_t12_inline_memory[1536]=(u8)101;dong_porf_t12_inline_memory[1537]=(u8)93;
-  dong_porf_t12_inline_memory[1540]=(u8)15;dong_porf_t12_inline_memory[1544]=(u8)91;dong_porf_t12_inline_memory[1545]=(u8)111;dong_porf_t12_inline_memory[1546]=(u8)98;dong_porf_t12_inline_memory[1547]=(u8)106;dong_porf_t12_inline_memory[1548]=(u8)101;dong_porf_t12_inline_memory[1549]=(u8)99;dong_porf_t12_inline_memory[1550]=(u8)116;dong_porf_t12_inline_memory[1551]=(u8)32;dong_porf_t12_inline_memory[1552]=(u8)82;dong_porf_t12_inline_memory[1553]=(u8)101;dong_porf_t12_inline_memory[1554]=(u8)103;dong_porf_t12_inline_memory[1555]=(u8)69;dong_porf_t12_inline_memory[1556]=(u8)120;dong_porf_t12_inline_memory[1557]=(u8)112;dong_porf_t12_inline_memory[1558]=(u8)93;
-  dong_porf_t12_inline_memory[1561]=(u8)15;dong_porf_t12_inline_memory[1565]=(u8)91;dong_porf_t12_inline_memory[1566]=(u8)111;dong_porf_t12_inline_memory[1567]=(u8)98;dong_porf_t12_inline_memory[1568]=(u8)106;dong_porf_t12_inline_memory[1569]=(u8)101;dong_porf_t12_inline_memory[1570]=(u8)99;dong_porf_t12_inline_memory[1571]=(u8)116;dong_porf_t12_inline_memory[1572]=(u8)32;dong_porf_t12_inline_memory[1573]=(u8)79;dong_porf_t12_inline_memory[1574]=(u8)98;dong_porf_t12_inline_memory[1575]=(u8)106;dong_porf_t12_inline_memory[1576]=(u8)101;dong_porf_t12_inline_memory[1577]=(u8)99;dong_porf_t12_inline_memory[1578]=(u8)116;dong_porf_t12_inline_memory[1579]=(u8)93;
-  dong_porf_t12_inline_memory[1582]=(u8)57;dong_porf_t12_inline_memory[1586]=(u8)83;dong_porf_t12_inline_memory[1587]=(u8)116;dong_porf_t12_inline_memory[1588]=(u8)114;dong_porf_t12_inline_memory[1589]=(u8)105;dong_porf_t12_inline_memory[1590]=(u8)110;dong_porf_t12_inline_memory[1591]=(u8)103;dong_porf_t12_inline_memory[1592]=(u8)46;dong_porf_t12_inline_memory[1593]=(u8)112;dong_porf_t12_inline_memory[1594]=(u8)114;dong_porf_t12_inline_memory[1595]=(u8)111;dong_porf_t12_inline_memory[1596]=(u8)116;dong_porf_t12_inline_memory[1597]=(u8)111;dong_porf_t12_inline_memory[1598]=(u8)116;dong_porf_t12_inline_memory[1599]=(u8)121;dong_porf_t12_inline_memory[1600]=(u8)112;dong_porf_t12_inline_memory[1601]=(u8)101;dong_porf_t12_inline_memory[1602]=(u8)46;dong_porf_t12_inline_memory[1603]=(u8)118;dong_porf_t12_inline_memory[1604]=(u8)97;dong_porf_t12_inline_memory[1605]=(u8)108;dong_porf_t12_inline_memory[1606]=(u8)117;dong_porf_t12_inline_memory[1607]=(u8)101;dong_porf_t12_inline_memory[1608]=(u8)79;dong_porf_t12_inline_memory[1609]=(u8)102;dong_porf_t12_inline_memory[1610]=(u8)32;dong_porf_t12_inline_memory[1611]=(u8)101;dong_porf_t12_inline_memory[1612]=(u8)120;dong_porf_t12_inline_memory[1613]=(u8)112;dong_porf_t12_inline_memory[1614]=(u8)101;dong_porf_t12_inline_memory[1615]=(u8)99;dong_porf_t12_inline_memory[1616]=(u8)116;dong_porf_t12_inline_memory[1617]=(u8)115;dong_porf_t12_inline_memory[1618]=(u8)32;dong_porf_t12_inline_memory[1619]=(u8)39;dong_porf_t12_inline_memory[1620]=(u8)116;dong_porf_t12_inline_memory[1621]=(u8)104;dong_porf_t12_inline_memory[1622]=(u8)105;dong_porf_t12_inline_memory[1623]=(u8)115;dong_porf_t12_inline_memory[1624]=(u8)39;dong_porf_t12_inline_memory[1625]=(u8)32;dong_porf_t12_inline_memory[1626]=(u8)116;dong_porf_t12_inline_memory[1627]=(u8)111;dong_porf_t12_inline_memory[1628]=(u8)32;dong_porf_t12_inline_memory[1629]=(u8)98;dong_porf_t12_inline_memory[1630]=(u8)101;dong_porf_t12_inline_memory[1631]=(u8)32;dong_porf_t12_inline_memory[1632]=(u8)110;dong_porf_t12_inline_memory[1633]=(u8)111;dong_porf_t12_inline_memory[1634]=(u8)110;dong_porf_t12_inline_memory[1635]=(u8)45;dong_porf_t12_inline_memory[1636]=(u8)110;dong_porf_t12_inline_memory[1637]=(u8)117;dong_porf_t12_inline_memory[1638]=(u8)108;dong_porf_t12_inline_memory[1639]=(u8)108;dong_porf_t12_inline_memory[1640]=(u8)105;dong_porf_t12_inline_memory[1641]=(u8)115;dong_porf_t12_inline_memory[1642]=(u8)104;
-  dong_porf_t12_inline_memory[1645]=(u8)33;dong_porf_t12_inline_memory[1649]=(u8)67;dong_porf_t12_inline_memory[1650]=(u8)97;dong_porf_t12_inline_memory[1651]=(u8)110;dong_porf_t12_inline_memory[1652]=(u8)110;dong_porf_t12_inline_memory[1653]=(u8)111;dong_porf_t12_inline_memory[1654]=(u8)116;dong_porf_t12_inline_memory[1655]=(u8)32;dong_porf_t12_inline_memory[1656]=(u8)114;dong_porf_t12_inline_memory[1657]=(u8)101;dong_porf_t12_inline_memory[1658]=(u8)97;dong_porf_t12_inline_memory[1659]=(u8)100;dong_porf_t12_inline_memory[1660]=(u8)32;dong_porf_t12_inline_memory[1661]=(u8)112;dong_porf_t12_inline_memory[1662]=(u8)114;dong_porf_t12_inline_memory[1663]=(u8)111;dong_porf_t12_inline_memory[1664]=(u8)112;dong_porf_t12_inline_memory[1665]=(u8)101;dong_porf_t12_inline_memory[1666]=(u8)114;dong_porf_t12_inline_memory[1667]=(u8)116;dong_porf_t12_inline_memory[1668]=(u8)121;dong_porf_t12_inline_memory[1669]=(u8)32;dong_porf_t12_inline_memory[1670]=(u8)111;dong_porf_t12_inline_memory[1671]=(u8)102;dong_porf_t12_inline_memory[1672]=(u8)32;dong_porf_t12_inline_memory[1673]=(u8)117;dong_porf_t12_inline_memory[1674]=(u8)110;dong_porf_t12_inline_memory[1675]=(u8)100;dong_porf_t12_inline_memory[1676]=(u8)101;dong_porf_t12_inline_memory[1677]=(u8)102;dong_porf_t12_inline_memory[1678]=(u8)105;dong_porf_t12_inline_memory[1679]=(u8)110;dong_porf_t12_inline_memory[1680]=(u8)101;dong_porf_t12_inline_memory[1681]=(u8)100;
-  dong_porf_t12_inline_memory[1684]=(u8)10;dong_porf_t12_inline_memory[1688]=(u8)99;dong_porf_t12_inline_memory[1689]=(u8)104;dong_porf_t12_inline_memory[1690]=(u8)97;dong_porf_t12_inline_memory[1691]=(u8)114;dong_porf_t12_inline_memory[1692]=(u8)67;dong_porf_t12_inline_memory[1693]=(u8)111;dong_porf_t12_inline_memory[1694]=(u8)100;dong_porf_t12_inline_memory[1695]=(u8)101;dong_porf_t12_inline_memory[1696]=(u8)65;dong_porf_t12_inline_memory[1697]=(u8)116;
-  dong_porf_t12_inline_memory[1700]=(u8)27;dong_porf_t12_inline_memory[1704]=(u8)117;dong_porf_t12_inline_memory[1705]=(u8)110;dong_porf_t12_inline_memory[1706]=(u8)100;dong_porf_t12_inline_memory[1707]=(u8)101;dong_porf_t12_inline_memory[1708]=(u8)102;dong_porf_t12_inline_memory[1709]=(u8)105;dong_porf_t12_inline_memory[1710]=(u8)110;dong_porf_t12_inline_memory[1711]=(u8)101;dong_porf_t12_inline_memory[1712]=(u8)100;dong_porf_t12_inline_memory[1713]=(u8)32;dong_porf_t12_inline_memory[1714]=(u8)105;dong_porf_t12_inline_memory[1715]=(u8)115;dong_porf_t12_inline_memory[1716]=(u8)32;dong_porf_t12_inline_memory[1717]=(u8)110;dong_porf_t12_inline_memory[1718]=(u8)111;dong_porf_t12_inline_memory[1719]=(u8)116;dong_porf_t12_inline_memory[1720]=(u8)32;dong_porf_t12_inline_memory[1721]=(u8)97;dong_porf_t12_inline_memory[1722]=(u8)32;dong_porf_t12_inline_memory[1723]=(u8)102;dong_porf_t12_inline_memory[1724]=(u8)117;dong_porf_t12_inline_memory[1725]=(u8)110;dong_porf_t12_inline_memory[1726]=(u8)99;dong_porf_t12_inline_memory[1727]=(u8)116;dong_porf_t12_inline_memory[1728]=(u8)105;dong_porf_t12_inline_memory[1729]=(u8)111;dong_porf_t12_inline_memory[1730]=(u8)110;
-  dong_porf_t12_inline_memory[1733]=(u8)60;dong_porf_t12_inline_memory[1737]=(u8)83;dong_porf_t12_inline_memory[1738]=(u8)116;dong_porf_t12_inline_memory[1739]=(u8)114;dong_porf_t12_inline_memory[1740]=(u8)105;dong_porf_t12_inline_memory[1741]=(u8)110;dong_porf_t12_inline_memory[1742]=(u8)103;dong_porf_t12_inline_memory[1743]=(u8)46;dong_porf_t12_inline_memory[1744]=(u8)112;dong_porf_t12_inline_memory[1745]=(u8)114;dong_porf_t12_inline_memory[1746]=(u8)111;dong_porf_t12_inline_memory[1747]=(u8)116;dong_porf_t12_inline_memory[1748]=(u8)111;dong_porf_t12_inline_memory[1749]=(u8)116;dong_porf_t12_inline_memory[1750]=(u8)121;dong_porf_t12_inline_memory[1751]=(u8)112;dong_porf_t12_inline_memory[1752]=(u8)101;dong_porf_t12_inline_memory[1753]=(u8)46;dong_porf_t12_inline_memory[1754]=(u8)99;dong_porf_t12_inline_memory[1755]=(u8)104;dong_porf_t12_inline_memory[1756]=(u8)97;dong_porf_t12_inline_memory[1757]=(u8)114;dong_porf_t12_inline_memory[1758]=(u8)67;dong_porf_t12_inline_memory[1759]=(u8)111;dong_porf_t12_inline_memory[1760]=(u8)100;dong_porf_t12_inline_memory[1761]=(u8)101;dong_porf_t12_inline_memory[1762]=(u8)65;dong_porf_t12_inline_memory[1763]=(u8)116;dong_porf_t12_inline_memory[1764]=(u8)32;dong_porf_t12_inline_memory[1765]=(u8)101;dong_porf_t12_inline_memory[1766]=(u8)120;dong_porf_t12_inline_memory[1767]=(u8)112;dong_porf_t12_inline_memory[1768]=(u8)101;dong_porf_t12_inline_memory[1769]=(u8)99;dong_porf_t12_inline_memory[1770]=(u8)116;dong_porf_t12_inline_memory[1771]=(u8)115;dong_porf_t12_inline_memory[1772]=(u8)32;dong_porf_t12_inline_memory[1773]=(u8)39;dong_porf_t12_inline_memory[1774]=(u8)116;dong_porf_t12_inline_memory[1775]=(u8)104;dong_porf_t12_inline_memory[1776]=(u8)105;dong_porf_t12_inline_memory[1777]=(u8)115;dong_porf_t12_inline_memory[1778]=(u8)39;dong_porf_t12_inline_memory[1779]=(u8)32;dong_porf_t12_inline_memory[1780]=(u8)116;dong_porf_t12_inline_memory[1781]=(u8)111;dong_porf_t12_inline_memory[1782]=(u8)32;dong_porf_t12_inline_memory[1783]=(u8)98;dong_porf_t12_inline_memory[1784]=(u8)101;dong_porf_t12_inline_memory[1785]=(u8)32;dong_porf_t12_inline_memory[1786]=(u8)110;dong_porf_t12_inline_memory[1787]=(u8)111;dong_porf_t12_inline_memory[1788]=(u8)110;dong_porf_t12_inline_memory[1789]=(u8)45;dong_porf_t12_inline_memory[1790]=(u8)110;dong_porf_t12_inline_memory[1791]=(u8)117;dong_porf_t12_inline_memory[1792]=(u8)108;dong_porf_t12_inline_memory[1793]=(u8)108;dong_porf_t12_inline_memory[1794]=(u8)105;dong_porf_t12_inline_memory[1795]=(u8)115;dong_porf_t12_inline_memory[1796]=(u8)104;
-  dong_porf_t12_inline_memory[1799]=(u8)13;dong_porf_t12_inline_memory[1803]=(u8)95;dong_porf_t12_inline_memory[1804]=(u8)95;dong_porf_t12_inline_memory[1805]=(u8)112;dong_porf_t12_inline_memory[1806]=(u8)111;dong_porf_t12_inline_memory[1807]=(u8)114;dong_porf_t12_inline_memory[1808]=(u8)102;dong_porf_t12_inline_memory[1809]=(u8)95;dong_porf_t12_inline_memory[1810]=(u8)97;dong_porf_t12_inline_memory[1811]=(u8)117;dong_porf_t12_inline_memory[1812]=(u8)116;dong_porf_t12_inline_memory[1813]=(u8)111;dong_porf_t12_inline_memory[1814]=(u8)95;dong_porf_t12_inline_memory[1815]=(u8)48;
-  dong_porf_t12_inline_memory[1818]=(u8)3;dong_porf_t12_inline_memory[1822]=(u8)105;dong_porf_t12_inline_memory[1823]=(u8)110;dong_porf_t12_inline_memory[1824]=(u8)99;
-  dong_porf_t12_inline_memory[1827]=(u8)6;dong_porf_t12_inline_memory[1831]=(u8)115;dong_porf_t12_inline_memory[1832]=(u8)116;dong_porf_t12_inline_memory[1833]=(u8)97;dong_porf_t12_inline_memory[1834]=(u8)116;dong_porf_t12_inline_memory[1835]=(u8)117;dong_porf_t12_inline_memory[1836]=(u8)115;
-  dong_porf_t12_inline_memory[1839]=(u8)5;dong_porf_t12_inline_memory[1843]=(u8)99;dong_porf_t12_inline_memory[1844]=(u8)108;dong_porf_t12_inline_memory[1845]=(u8)105;dong_porf_t12_inline_memory[1846]=(u8)99;dong_porf_t12_inline_memory[1847]=(u8)107;
-  dong_porf_t12_inline_memory[1850]=(u8)12;dong_porf_t12_inline_memory[1854]=(u8)105;dong_porf_t12_inline_memory[1855]=(u8)110;dong_porf_t12_inline_memory[1856]=(u8)99;dong_porf_t12_inline_memory[1857]=(u8)95;dong_porf_t12_inline_memory[1858]=(u8)95;dong_porf_t12_inline_memory[1859]=(u8)111;dong_porf_t12_inline_memory[1860]=(u8)110;dong_porf_t12_inline_memory[1861]=(u8)99;dong_porf_t12_inline_memory[1862]=(u8)108;dong_porf_t12_inline_memory[1863]=(u8)105;dong_porf_t12_inline_memory[1864]=(u8)99;dong_porf_t12_inline_memory[1865]=(u8)107;
-  dong_porf_t12_inline_memory[1868]=(u8)22;dong_porf_t12_inline_memory[1872]=(u8)95;dong_porf_t12_inline_memory[1873]=(u8)95;dong_porf_t12_inline_memory[1874]=(u8)112;dong_porf_t12_inline_memory[1875]=(u8)111;dong_porf_t12_inline_memory[1876]=(u8)114;dong_porf_t12_inline_memory[1877]=(u8)102;dong_porf_t12_inline_memory[1878]=(u8)95;dong_porf_t12_inline_memory[1879]=(u8)97;dong_porf_t12_inline_memory[1880]=(u8)117;dong_porf_t12_inline_memory[1881]=(u8)116;dong_porf_t12_inline_memory[1882]=(u8)111;dong_porf_t12_inline_memory[1883]=(u8)95;dong_porf_t12_inline_memory[1884]=(u8)48;dong_porf_t12_inline_memory[1885]=(u8)95;dong_porf_t12_inline_memory[1886]=(u8)95;dong_porf_t12_inline_memory[1887]=(u8)111;dong_porf_t12_inline_memory[1888]=(u8)110;dong_porf_t12_inline_memory[1889]=(u8)99;dong_porf_t12_inline_memory[1890]=(u8)108;dong_porf_t12_inline_memory[1891]=(u8)105;dong_porf_t12_inline_memory[1892]=(u8)99;dong_porf_t12_inline_memory[1893]=(u8)107;
-  dong_porf_t12_inline_memory[1896]=(u8)58;dong_porf_t12_inline_memory[1900]=(u8)83;dong_porf_t12_inline_memory[1901]=(u8)116;dong_porf_t12_inline_memory[1902]=(u8)114;dong_porf_t12_inline_memory[1903]=(u8)105;dong_porf_t12_inline_memory[1904]=(u8)110;dong_porf_t12_inline_memory[1905]=(u8)103;dong_porf_t12_inline_memory[1906]=(u8)46;dong_porf_t12_inline_memory[1907]=(u8)112;dong_porf_t12_inline_memory[1908]=(u8)114;dong_porf_t12_inline_memory[1909]=(u8)111;dong_porf_t12_inline_memory[1910]=(u8)116;dong_porf_t12_inline_memory[1911]=(u8)111;dong_porf_t12_inline_memory[1912]=(u8)116;dong_porf_t12_inline_memory[1913]=(u8)121;dong_porf_t12_inline_memory[1914]=(u8)112;dong_porf_t12_inline_memory[1915]=(u8)101;dong_porf_t12_inline_memory[1916]=(u8)46;dong_porf_t12_inline_memory[1917]=(u8)116;dong_porf_t12_inline_memory[1918]=(u8)111;dong_porf_t12_inline_memory[1919]=(u8)83;dong_porf_t12_inline_memory[1920]=(u8)116;dong_porf_t12_inline_memory[1921]=(u8)114;dong_porf_t12_inline_memory[1922]=(u8)105;dong_porf_t12_inline_memory[1923]=(u8)110;dong_porf_t12_inline_memory[1924]=(u8)103;dong_porf_t12_inline_memory[1925]=(u8)32;dong_porf_t12_inline_memory[1926]=(u8)101;dong_porf_t12_inline_memory[1927]=(u8)120;dong_porf_t12_inline_memory[1928]=(u8)112;dong_porf_t12_inline_memory[1929]=(u8)101;dong_porf_t12_inline_memory[1930]=(u8)99;dong_porf_t12_inline_memory[1931]=(u8)116;dong_porf_t12_inline_memory[1932]=(u8)115;dong_porf_t12_inline_memory[1933]=(u8)32;dong_porf_t12_inline_memory[1934]=(u8)39;dong_porf_t12_inline_memory[1935]=(u8)116;dong_porf_t12_inline_memory[1936]=(u8)104;dong_porf_t12_inline_memory[1937]=(u8)105;dong_porf_t12_inline_memory[1938]=(u8)115;dong_porf_t12_inline_memory[1939]=(u8)39;dong_porf_t12_inline_memory[1940]=(u8)32;dong_porf_t12_inline_memory[1941]=(u8)116;dong_porf_t12_inline_memory[1942]=(u8)111;dong_porf_t12_inline_memory[1943]=(u8)32;dong_porf_t12_inline_memory[1944]=(u8)98;dong_porf_t12_inline_memory[1945]=(u8)101;dong_porf_t12_inline_memory[1946]=(u8)32;dong_porf_t12_inline_memory[1947]=(u8)110;dong_porf_t12_inline_memory[1948]=(u8)111;dong_porf_t12_inline_memory[1949]=(u8)110;dong_porf_t12_inline_memory[1950]=(u8)45;dong_porf_t12_inline_memory[1951]=(u8)110;dong_porf_t12_inline_memory[1952]=(u8)117;dong_porf_t12_inline_memory[1953]=(u8)108;dong_porf_t12_inline_memory[1954]=(u8)108;dong_porf_t12_inline_memory[1955]=(u8)105;dong_porf_t12_inline_memory[1956]=(u8)115;dong_porf_t12_inline_memory[1957]=(u8)104;
-  dong_porf_t12_inline_memory[1960]=(u8)54;dong_porf_t12_inline_memory[1964]=(u8)83;dong_porf_t12_inline_memory[1965]=(u8)116;dong_porf_t12_inline_memory[1966]=(u8)114;dong_porf_t12_inline_memory[1967]=(u8)105;dong_porf_t12_inline_memory[1968]=(u8)110;dong_porf_t12_inline_memory[1969]=(u8)103;dong_porf_t12_inline_memory[1970]=(u8)46;dong_porf_t12_inline_memory[1971]=(u8)112;dong_porf_t12_inline_memory[1972]=(u8)114;dong_porf_t12_inline_memory[1973]=(u8)111;dong_porf_t12_inline_memory[1974]=(u8)116;dong_porf_t12_inline_memory[1975]=(u8)111;dong_porf_t12_inline_memory[1976]=(u8)116;dong_porf_t12_inline_memory[1977]=(u8)121;dong_porf_t12_inline_memory[1978]=(u8)112;dong_porf_t12_inline_memory[1979]=(u8)101;dong_porf_t12_inline_memory[1980]=(u8)46;dong_porf_t12_inline_memory[1981]=(u8)116;dong_porf_t12_inline_memory[1982]=(u8)114;dong_porf_t12_inline_memory[1983]=(u8)105;dong_porf_t12_inline_memory[1984]=(u8)109;dong_porf_t12_inline_memory[1985]=(u8)32;dong_porf_t12_inline_memory[1986]=(u8)101;dong_porf_t12_inline_memory[1987]=(u8)120;dong_porf_t12_inline_memory[1988]=(u8)112;dong_porf_t12_inline_memory[1989]=(u8)101;dong_porf_t12_inline_memory[1990]=(u8)99;dong_porf_t12_inline_memory[1991]=(u8)116;dong_porf_t12_inline_memory[1992]=(u8)115;dong_porf_t12_inline_memory[1993]=(u8)32;dong_porf_t12_inline_memory[1994]=(u8)39;dong_porf_t12_inline_memory[1995]=(u8)116;dong_porf_t12_inline_memory[1996]=(u8)104;dong_porf_t12_inline_memory[1997]=(u8)105;dong_porf_t12_inline_memory[1998]=(u8)115;dong_porf_t12_inline_memory[1999]=(u8)39;dong_porf_t12_inline_memory[2000]=(u8)32;dong_porf_t12_inline_memory[2001]=(u8)116;dong_porf_t12_inline_memory[2002]=(u8)111;dong_porf_t12_inline_memory[2003]=(u8)32;dong_porf_t12_inline_memory[2004]=(u8)98;dong_porf_t12_inline_memory[2005]=(u8)101;dong_porf_t12_inline_memory[2006]=(u8)32;dong_porf_t12_inline_memory[2007]=(u8)110;dong_porf_t12_inline_memory[2008]=(u8)111;dong_porf_t12_inline_memory[2009]=(u8)110;dong_porf_t12_inline_memory[2010]=(u8)45;dong_porf_t12_inline_memory[2011]=(u8)110;dong_porf_t12_inline_memory[2012]=(u8)117;dong_porf_t12_inline_memory[2013]=(u8)108;dong_porf_t12_inline_memory[2014]=(u8)108;dong_porf_t12_inline_memory[2015]=(u8)105;dong_porf_t12_inline_memory[2016]=(u8)115;dong_porf_t12_inline_memory[2017]=(u8)104;
-  dong_porf_t12_inline_memory[2020]=(u8)57;dong_porf_t12_inline_memory[2024]=(u8)83;dong_porf_t12_inline_memory[2025]=(u8)116;dong_porf_t12_inline_memory[2026]=(u8)114;dong_porf_t12_inline_memory[2027]=(u8)105;dong_porf_t12_inline_memory[2028]=(u8)110;dong_porf_t12_inline_memory[2029]=(u8)103;dong_porf_t12_inline_memory[2030]=(u8)46;dong_porf_t12_inline_memory[2031]=(u8)112;dong_porf_t12_inline_memory[2032]=(u8)114;dong_porf_t12_inline_memory[2033]=(u8)111;dong_porf_t12_inline_memory[2034]=(u8)116;dong_porf_t12_inline_memory[2035]=(u8)111;dong_porf_t12_inline_memory[2036]=(u8)116;dong_porf_t12_inline_memory[2037]=(u8)121;dong_porf_t12_inline_memory[2038]=(u8)112;dong_porf_t12_inline_memory[2039]=(u8)101;dong_porf_t12_inline_memory[2040]=(u8)46;dong_porf_t12_inline_memory[2041]=(u8)116;dong_porf_t12_inline_memory[2042]=(u8)114;dong_porf_t12_inline_memory[2043]=(u8)105;dong_porf_t12_inline_memory[2044]=(u8)109;dong_porf_t12_inline_memory[2045]=(u8)69;dong_porf_t12_inline_memory[2046]=(u8)110;dong_porf_t12_inline_memory[2047]=(u8)100;dong_porf_t12_inline_memory[2048]=(u8)32;dong_porf_t12_inline_memory[2049]=(u8)101;dong_porf_t12_inline_memory[2050]=(u8)120;dong_porf_t12_inline_memory[2051]=(u8)112;dong_porf_t12_inline_memory[2052]=(u8)101;dong_porf_t12_inline_memory[2053]=(u8)99;dong_porf_t12_inline_memory[2054]=(u8)116;dong_porf_t12_inline_memory[2055]=(u8)115;dong_porf_t12_inline_memory[2056]=(u8)32;dong_porf_t12_inline_memory[2057]=(u8)39;dong_porf_t12_inline_memory[2058]=(u8)116;dong_porf_t12_inline_memory[2059]=(u8)104;dong_porf_t12_inline_memory[2060]=(u8)105;dong_porf_t12_inline_memory[2061]=(u8)115;dong_porf_t12_inline_memory[2062]=(u8)39;dong_porf_t12_inline_memory[2063]=(u8)32;dong_porf_t12_inline_memory[2064]=(u8)116;dong_porf_t12_inline_memory[2065]=(u8)111;dong_porf_t12_inline_memory[2066]=(u8)32;dong_porf_t12_inline_memory[2067]=(u8)98;dong_porf_t12_inline_memory[2068]=(u8)101;dong_porf_t12_inline_memory[2069]=(u8)32;dong_porf_t12_inline_memory[2070]=(u8)110;dong_porf_t12_inline_memory[2071]=(u8)111;dong_porf_t12_inline_memory[2072]=(u8)110;dong_porf_t12_inline_memory[2073]=(u8)45;dong_porf_t12_inline_memory[2074]=(u8)110;dong_porf_t12_inline_memory[2075]=(u8)117;dong_porf_t12_inline_memory[2076]=(u8)108;dong_porf_t12_inline_memory[2077]=(u8)108;dong_porf_t12_inline_memory[2078]=(u8)105;dong_porf_t12_inline_memory[2079]=(u8)115;dong_porf_t12_inline_memory[2080]=(u8)104;
-  dong_porf_t12_inline_memory[2083]=(u8)59;dong_porf_t12_inline_memory[2087]=(u8)83;dong_porf_t12_inline_memory[2088]=(u8)116;dong_porf_t12_inline_memory[2089]=(u8)114;dong_porf_t12_inline_memory[2090]=(u8)105;dong_porf_t12_inline_memory[2091]=(u8)110;dong_porf_t12_inline_memory[2092]=(u8)103;dong_porf_t12_inline_memory[2093]=(u8)46;dong_porf_t12_inline_memory[2094]=(u8)112;dong_porf_t12_inline_memory[2095]=(u8)114;dong_porf_t12_inline_memory[2096]=(u8)111;dong_porf_t12_inline_memory[2097]=(u8)116;dong_porf_t12_inline_memory[2098]=(u8)111;dong_porf_t12_inline_memory[2099]=(u8)116;dong_porf_t12_inline_memory[2100]=(u8)121;dong_porf_t12_inline_memory[2101]=(u8)112;dong_porf_t12_inline_memory[2102]=(u8)101;dong_porf_t12_inline_memory[2103]=(u8)46;dong_porf_t12_inline_memory[2104]=(u8)116;dong_porf_t12_inline_memory[2105]=(u8)114;dong_porf_t12_inline_memory[2106]=(u8)105;dong_porf_t12_inline_memory[2107]=(u8)109;dong_porf_t12_inline_memory[2108]=(u8)83;dong_porf_t12_inline_memory[2109]=(u8)116;dong_porf_t12_inline_memory[2110]=(u8)97;dong_porf_t12_inline_memory[2111]=(u8)114;dong_porf_t12_inline_memory[2112]=(u8)116;dong_porf_t12_inline_memory[2113]=(u8)32;dong_porf_t12_inline_memory[2114]=(u8)101;dong_porf_t12_inline_memory[2115]=(u8)120;dong_porf_t12_inline_memory[2116]=(u8)112;dong_porf_t12_inline_memory[2117]=(u8)101;dong_porf_t12_inline_memory[2118]=(u8)99;dong_porf_t12_inline_memory[2119]=(u8)116;dong_porf_t12_inline_memory[2120]=(u8)115;dong_porf_t12_inline_memory[2121]=(u8)32;dong_porf_t12_inline_memory[2122]=(u8)39;dong_porf_t12_inline_memory[2123]=(u8)116;dong_porf_t12_inline_memory[2124]=(u8)104;dong_porf_t12_inline_memory[2125]=(u8)105;dong_porf_t12_inline_memory[2126]=(u8)115;dong_porf_t12_inline_memory[2127]=(u8)39;dong_porf_t12_inline_memory[2128]=(u8)32;dong_porf_t12_inline_memory[2129]=(u8)116;dong_porf_t12_inline_memory[2130]=(u8)111;dong_porf_t12_inline_memory[2131]=(u8)32;dong_porf_t12_inline_memory[2132]=(u8)98;dong_porf_t12_inline_memory[2133]=(u8)101;dong_porf_t12_inline_memory[2134]=(u8)32;dong_porf_t12_inline_memory[2135]=(u8)110;dong_porf_t12_inline_memory[2136]=(u8)111;dong_porf_t12_inline_memory[2137]=(u8)110;dong_porf_t12_inline_memory[2138]=(u8)45;dong_porf_t12_inline_memory[2139]=(u8)110;dong_porf_t12_inline_memory[2140]=(u8)117;dong_porf_t12_inline_memory[2141]=(u8)108;dong_porf_t12_inline_memory[2142]=(u8)108;dong_porf_t12_inline_memory[2143]=(u8)105;dong_porf_t12_inline_memory[2144]=(u8)115;dong_porf_t12_inline_memory[2145]=(u8)104;
-  dong_porf_t12_inline_memory[16501]=(u8)7;dong_porf_t12_inline_memory[16505]=(u8)118;dong_porf_t12_inline_memory[16506]=(u8)97;dong_porf_t12_inline_memory[16507]=(u8)108;dong_porf_t12_inline_memory[16508]=(u8)117;dong_porf_t12_inline_memory[16509]=(u8)101;dong_porf_t12_inline_memory[16510]=(u8)79;dong_porf_t12_inline_memory[16511]=(u8)102;dong_porf_t12_inline_memory[16555]=(u8)1;dong_porf_t12_inline_memory[16558]=(u8)14;dong_porf_t12_inline_memory[16562]=(u8)104;dong_porf_t12_inline_memory[16563]=(u8)97;dong_porf_t12_inline_memory[16564]=(u8)115;dong_porf_t12_inline_memory[16565]=(u8)79;dong_porf_t12_inline_memory[16566]=(u8)119;dong_porf_t12_inline_memory[16567]=(u8)110;dong_porf_t12_inline_memory[16568]=(u8)80;dong_porf_t12_inline_memory[16569]=(u8)114;dong_porf_t12_inline_memory[16570]=(u8)111;dong_porf_t12_inline_memory[16571]=(u8)112;dong_porf_t12_inline_memory[16572]=(u8)101;dong_porf_t12_inline_memory[16573]=(u8)114;dong_porf_t12_inline_memory[16574]=(u8)116;dong_porf_t12_inline_memory[16575]=(u8)121;dong_porf_t12_inline_memory[16612]=(u8)1;dong_porf_t12_inline_memory[16615]=(u8)20;dong_porf_t12_inline_memory[16619]=(u8)112;dong_porf_t12_inline_memory[16620]=(u8)114;dong_porf_t12_inline_memory[16621]=(u8)111;dong_porf_t12_inline_memory[16622]=(u8)112;dong_porf_t12_inline_memory[16623]=(u8)101;dong_porf_t12_inline_memory[16624]=(u8)114;dong_porf_t12_inline_memory[16625]=(u8)116;dong_porf_t12_inline_memory[16626]=(u8)121;dong_porf_t12_inline_memory[16627]=(u8)73;dong_porf_t12_inline_memory[16628]=(u8)115;dong_porf_t12_inline_memory[16629]=(u8)69;dong_porf_t12_inline_memory[16630]=(u8)110;dong_porf_t12_inline_memory[16631]=(u8)117;dong_porf_t12_inline_memory[16632]=(u8)109;dong_porf_t12_inline_memory[16633]=(u8)101;dong_porf_t12_inline_memory[16634]=(u8)114;dong_porf_t12_inline_memory[16635]=(u8)97;dong_porf_t12_inline_memory[16636]=(u8)98;dong_porf_t12_inline_memory[16637]=(u8)108;dong_porf_t12_inline_memory[16638]=(u8)101;dong_porf_t12_inline_memory[16669]=(u8)1;dong_porf_t12_inline_memory[16672]=(u8)13;dong_porf_t12_inline_memory[16676]=(u8)105;dong_porf_t12_inline_memory[16677]=(u8)115;dong_porf_t12_inline_memory[16678]=(u8)80;dong_porf_t12_inline_memory[16679]=(u8)114;dong_porf_t12_inline_memory[16680]=(u8)111;dong_porf_t12_inline_memory[16681]=(u8)116;dong_porf_t12_inline_memory[16682]=(u8)111;dong_porf_t12_inline_memory[16683]=(u8)116;dong_porf_t12_inline_memory[16684]=(u8)121;dong_porf_t12_inline_memory[16685]=(u8)112;dong_porf_t12_inline_memory[16686]=(u8)101;dong_porf_t12_inline_memory[16687]=(u8)79;dong_porf_t12_inline_memory[16688]=(u8)102;dong_porf_t12_inline_memory[16729]=(u8)8;dong_porf_t12_inline_memory[16733]=(u8)116;dong_porf_t12_inline_memory[16734]=(u8)111;dong_porf_t12_inline_memory[16735]=(u8)83;dong_porf_t12_inline_memory[16736]=(u8)116;dong_porf_t12_inline_memory[16737]=(u8)114;dong_porf_t12_inline_memory[16738]=(u8)105;dong_porf_t12_inline_memory[16739]=(u8)110;dong_porf_t12_inline_memory[16740]=(u8)103;dong_porf_t12_inline_memory[16786]=(u8)14;dong_porf_t12_inline_memory[16790]=(u8)116;dong_porf_t12_inline_memory[16791]=(u8)111;dong_porf_t12_inline_memory[16792]=(u8)76;dong_porf_t12_inline_memory[16793]=(u8)111;dong_porf_t12_inline_memory[16794]=(u8)99;dong_porf_t12_inline_memory[16795]=(u8)97;dong_porf_t12_inline_memory[16796]=(u8)108;dong_porf_t12_inline_memory[16797]=(u8)101;dong_porf_t12_inline_memory[16798]=(u8)83;dong_porf_t12_inline_memory[16799]=(u8)116;dong_porf_t12_inline_memory[16800]=(u8)114;dong_porf_t12_inline_memory[16801]=(u8)105;dong_porf_t12_inline_memory[16802]=(u8)110;dong_porf_t12_inline_memory[16803]=(u8)103;dong_porf_t12_inline_memory[16840]=(u8)1;dong_porf_t12_inline_memory[16842]=(u8)2;dong_porf_t12_inline_memory[16843]=(u8)6;dong_porf_t12_inline_memory[16847]=(u8)79;dong_porf_t12_inline_memory[16848]=(u8)98;dong_porf_t12_inline_memory[16849]=(u8)106;dong_porf_t12_inline_memory[16850]=(u8)101;dong_porf_t12_inline_memory[16851]=(u8)99;dong_porf_t12_inline_memory[16852]=(u8)116;
+__attribute__((import_module(""), import_name("")))
+extern void __porf_import_dong_set_attribute(f64, f64, f64);
+
+__attribute__((import_module(""), import_name("")))
+extern void __porf_import_dong_get_attribute(f64, f64);
+
+__attribute__((import_module(""), import_name("m")))
+extern f64 __porf_import_dong_str_pull();
+
+__attribute__((import_module(""), import_name("c")))
+extern void __porf_import_dong_dom_get_textContent(f64);
+
+__attribute__((import_module(""), import_name("i")))
+extern void __porf_import_dong_print(f64);
+void dong_porf_video_js_api_smoke_test__porf_init(void) {
+  if (dong_porf_video_js_api_smoke_test_memory) return;
+  dong_porf_video_js_api_smoke_test_memory = calloc(1, dong_porf_video_js_api_smoke_test_memory_pages * 65536);
+
+  dong_porf_video_js_api_smoke_test_memory[16]=(u8)41;dong_porf_video_js_api_smoke_test_memory[20]=(u8)67;dong_porf_video_js_api_smoke_test_memory[21]=(u8)97;dong_porf_video_js_api_smoke_test_memory[22]=(u8)110;dong_porf_video_js_api_smoke_test_memory[23]=(u8)110;dong_porf_video_js_api_smoke_test_memory[24]=(u8)111;dong_porf_video_js_api_smoke_test_memory[25]=(u8)116;dong_porf_video_js_api_smoke_test_memory[26]=(u8)32;dong_porf_video_js_api_smoke_test_memory[27]=(u8)99;dong_porf_video_js_api_smoke_test_memory[28]=(u8)111;dong_porf_video_js_api_smoke_test_memory[29]=(u8)110;dong_porf_video_js_api_smoke_test_memory[30]=(u8)118;dong_porf_video_js_api_smoke_test_memory[31]=(u8)101;dong_porf_video_js_api_smoke_test_memory[32]=(u8)114;dong_porf_video_js_api_smoke_test_memory[33]=(u8)116;dong_porf_video_js_api_smoke_test_memory[34]=(u8)32;dong_porf_video_js_api_smoke_test_memory[35]=(u8)97;dong_porf_video_js_api_smoke_test_memory[36]=(u8)32;dong_porf_video_js_api_smoke_test_memory[37]=(u8)83;dong_porf_video_js_api_smoke_test_memory[38]=(u8)121;dong_porf_video_js_api_smoke_test_memory[39]=(u8)109;dong_porf_video_js_api_smoke_test_memory[40]=(u8)98;dong_porf_video_js_api_smoke_test_memory[41]=(u8)111;dong_porf_video_js_api_smoke_test_memory[42]=(u8)108;dong_porf_video_js_api_smoke_test_memory[43]=(u8)32;dong_porf_video_js_api_smoke_test_memory[44]=(u8)118;dong_porf_video_js_api_smoke_test_memory[45]=(u8)97;dong_porf_video_js_api_smoke_test_memory[46]=(u8)108;dong_porf_video_js_api_smoke_test_memory[47]=(u8)117;dong_porf_video_js_api_smoke_test_memory[48]=(u8)101;dong_porf_video_js_api_smoke_test_memory[49]=(u8)32;dong_porf_video_js_api_smoke_test_memory[50]=(u8)116;dong_porf_video_js_api_smoke_test_memory[51]=(u8)111;dong_porf_video_js_api_smoke_test_memory[52]=(u8)32;dong_porf_video_js_api_smoke_test_memory[53]=(u8)97;dong_porf_video_js_api_smoke_test_memory[54]=(u8)32;dong_porf_video_js_api_smoke_test_memory[55]=(u8)115;dong_porf_video_js_api_smoke_test_memory[56]=(u8)116;dong_porf_video_js_api_smoke_test_memory[57]=(u8)114;dong_porf_video_js_api_smoke_test_memory[58]=(u8)105;dong_porf_video_js_api_smoke_test_memory[59]=(u8)110;dong_porf_video_js_api_smoke_test_memory[60]=(u8)103;
+  dong_porf_video_js_api_smoke_test_memory[63]=(u8)9;dong_porf_video_js_api_smoke_test_memory[67]=(u8)117;dong_porf_video_js_api_smoke_test_memory[68]=(u8)110;dong_porf_video_js_api_smoke_test_memory[69]=(u8)100;dong_porf_video_js_api_smoke_test_memory[70]=(u8)101;dong_porf_video_js_api_smoke_test_memory[71]=(u8)102;dong_porf_video_js_api_smoke_test_memory[72]=(u8)105;dong_porf_video_js_api_smoke_test_memory[73]=(u8)110;dong_porf_video_js_api_smoke_test_memory[74]=(u8)101;dong_porf_video_js_api_smoke_test_memory[75]=(u8)100;
+  dong_porf_video_js_api_smoke_test_memory[78]=(u8)4;dong_porf_video_js_api_smoke_test_memory[82]=(u8)110;dong_porf_video_js_api_smoke_test_memory[83]=(u8)117;dong_porf_video_js_api_smoke_test_memory[84]=(u8)108;dong_porf_video_js_api_smoke_test_memory[85]=(u8)108;
+  dong_porf_video_js_api_smoke_test_memory[88]=(u8)4;dong_porf_video_js_api_smoke_test_memory[92]=(u8)116;dong_porf_video_js_api_smoke_test_memory[93]=(u8)114;dong_porf_video_js_api_smoke_test_memory[94]=(u8)117;dong_porf_video_js_api_smoke_test_memory[95]=(u8)101;
+  dong_porf_video_js_api_smoke_test_memory[98]=(u8)5;dong_porf_video_js_api_smoke_test_memory[102]=(u8)102;dong_porf_video_js_api_smoke_test_memory[103]=(u8)97;dong_porf_video_js_api_smoke_test_memory[104]=(u8)108;dong_porf_video_js_api_smoke_test_memory[105]=(u8)115;dong_porf_video_js_api_smoke_test_memory[106]=(u8)101;
+  dong_porf_video_js_api_smoke_test_memory[109]=(u8)55;dong_porf_video_js_api_smoke_test_memory[113]=(u8)78;dong_porf_video_js_api_smoke_test_memory[114]=(u8)117;dong_porf_video_js_api_smoke_test_memory[115]=(u8)109;dong_porf_video_js_api_smoke_test_memory[116]=(u8)98;dong_porf_video_js_api_smoke_test_memory[117]=(u8)101;dong_porf_video_js_api_smoke_test_memory[118]=(u8)114;dong_porf_video_js_api_smoke_test_memory[119]=(u8)46;dong_porf_video_js_api_smoke_test_memory[120]=(u8)112;dong_porf_video_js_api_smoke_test_memory[121]=(u8)114;dong_porf_video_js_api_smoke_test_memory[122]=(u8)111;dong_porf_video_js_api_smoke_test_memory[123]=(u8)116;dong_porf_video_js_api_smoke_test_memory[124]=(u8)111;dong_porf_video_js_api_smoke_test_memory[125]=(u8)116;dong_porf_video_js_api_smoke_test_memory[126]=(u8)121;dong_porf_video_js_api_smoke_test_memory[127]=(u8)112;dong_porf_video_js_api_smoke_test_memory[128]=(u8)101;dong_porf_video_js_api_smoke_test_memory[129]=(u8)46;dong_porf_video_js_api_smoke_test_memory[130]=(u8)116;dong_porf_video_js_api_smoke_test_memory[131]=(u8)111;dong_porf_video_js_api_smoke_test_memory[132]=(u8)83;dong_porf_video_js_api_smoke_test_memory[133]=(u8)116;dong_porf_video_js_api_smoke_test_memory[134]=(u8)114;dong_porf_video_js_api_smoke_test_memory[135]=(u8)105;dong_porf_video_js_api_smoke_test_memory[136]=(u8)110;dong_porf_video_js_api_smoke_test_memory[137]=(u8)103;dong_porf_video_js_api_smoke_test_memory[138]=(u8)32;dong_porf_video_js_api_smoke_test_memory[139]=(u8)101;dong_porf_video_js_api_smoke_test_memory[140]=(u8)120;dong_porf_video_js_api_smoke_test_memory[141]=(u8)112;dong_porf_video_js_api_smoke_test_memory[142]=(u8)101;dong_porf_video_js_api_smoke_test_memory[143]=(u8)99;dong_porf_video_js_api_smoke_test_memory[144]=(u8)116;dong_porf_video_js_api_smoke_test_memory[145]=(u8)115;dong_porf_video_js_api_smoke_test_memory[146]=(u8)32;dong_porf_video_js_api_smoke_test_memory[147]=(u8)39;dong_porf_video_js_api_smoke_test_memory[148]=(u8)116;dong_porf_video_js_api_smoke_test_memory[149]=(u8)104;dong_porf_video_js_api_smoke_test_memory[150]=(u8)105;dong_porf_video_js_api_smoke_test_memory[151]=(u8)115;dong_porf_video_js_api_smoke_test_memory[152]=(u8)39;dong_porf_video_js_api_smoke_test_memory[153]=(u8)32;dong_porf_video_js_api_smoke_test_memory[154]=(u8)116;dong_porf_video_js_api_smoke_test_memory[155]=(u8)111;dong_porf_video_js_api_smoke_test_memory[156]=(u8)32;dong_porf_video_js_api_smoke_test_memory[157]=(u8)98;dong_porf_video_js_api_smoke_test_memory[158]=(u8)101;dong_porf_video_js_api_smoke_test_memory[159]=(u8)32;dong_porf_video_js_api_smoke_test_memory[160]=(u8)97;dong_porf_video_js_api_smoke_test_memory[161]=(u8)32;dong_porf_video_js_api_smoke_test_memory[162]=(u8)78;dong_porf_video_js_api_smoke_test_memory[163]=(u8)117;dong_porf_video_js_api_smoke_test_memory[164]=(u8)109;dong_porf_video_js_api_smoke_test_memory[165]=(u8)98;dong_porf_video_js_api_smoke_test_memory[166]=(u8)101;dong_porf_video_js_api_smoke_test_memory[167]=(u8)114;
+  dong_porf_video_js_api_smoke_test_memory[170]=(u8)50;dong_porf_video_js_api_smoke_test_memory[174]=(u8)116;dong_porf_video_js_api_smoke_test_memory[175]=(u8)111;dong_porf_video_js_api_smoke_test_memory[176]=(u8)83;dong_porf_video_js_api_smoke_test_memory[177]=(u8)116;dong_porf_video_js_api_smoke_test_memory[178]=(u8)114;dong_porf_video_js_api_smoke_test_memory[179]=(u8)105;dong_porf_video_js_api_smoke_test_memory[180]=(u8)110;dong_porf_video_js_api_smoke_test_memory[181]=(u8)103;dong_porf_video_js_api_smoke_test_memory[182]=(u8)40;dong_porf_video_js_api_smoke_test_memory[183]=(u8)41;dong_porf_video_js_api_smoke_test_memory[184]=(u8)32;dong_porf_video_js_api_smoke_test_memory[185]=(u8)114;dong_porf_video_js_api_smoke_test_memory[186]=(u8)97;dong_porf_video_js_api_smoke_test_memory[187]=(u8)100;dong_porf_video_js_api_smoke_test_memory[188]=(u8)105;dong_porf_video_js_api_smoke_test_memory[189]=(u8)120;dong_porf_video_js_api_smoke_test_memory[190]=(u8)32;dong_porf_video_js_api_smoke_test_memory[191]=(u8)97;dong_porf_video_js_api_smoke_test_memory[192]=(u8)114;dong_porf_video_js_api_smoke_test_memory[193]=(u8)103;dong_porf_video_js_api_smoke_test_memory[194]=(u8)117;dong_porf_video_js_api_smoke_test_memory[195]=(u8)109;dong_porf_video_js_api_smoke_test_memory[196]=(u8)101;dong_porf_video_js_api_smoke_test_memory[197]=(u8)110;dong_porf_video_js_api_smoke_test_memory[198]=(u8)116;dong_porf_video_js_api_smoke_test_memory[199]=(u8)32;dong_porf_video_js_api_smoke_test_memory[200]=(u8)109;dong_porf_video_js_api_smoke_test_memory[201]=(u8)117;dong_porf_video_js_api_smoke_test_memory[202]=(u8)115;dong_porf_video_js_api_smoke_test_memory[203]=(u8)116;dong_porf_video_js_api_smoke_test_memory[204]=(u8)32;dong_porf_video_js_api_smoke_test_memory[205]=(u8)98;dong_porf_video_js_api_smoke_test_memory[206]=(u8)101;dong_porf_video_js_api_smoke_test_memory[207]=(u8)32;dong_porf_video_js_api_smoke_test_memory[208]=(u8)98;dong_porf_video_js_api_smoke_test_memory[209]=(u8)101;dong_porf_video_js_api_smoke_test_memory[210]=(u8)116;dong_porf_video_js_api_smoke_test_memory[211]=(u8)119;dong_porf_video_js_api_smoke_test_memory[212]=(u8)101;dong_porf_video_js_api_smoke_test_memory[213]=(u8)101;dong_porf_video_js_api_smoke_test_memory[214]=(u8)110;dong_porf_video_js_api_smoke_test_memory[215]=(u8)32;dong_porf_video_js_api_smoke_test_memory[216]=(u8)50;dong_porf_video_js_api_smoke_test_memory[217]=(u8)32;dong_porf_video_js_api_smoke_test_memory[218]=(u8)97;dong_porf_video_js_api_smoke_test_memory[219]=(u8)110;dong_porf_video_js_api_smoke_test_memory[220]=(u8)100;dong_porf_video_js_api_smoke_test_memory[221]=(u8)32;dong_porf_video_js_api_smoke_test_memory[222]=(u8)51;dong_porf_video_js_api_smoke_test_memory[223]=(u8)54;
+  dong_porf_video_js_api_smoke_test_memory[226]=(u8)3;dong_porf_video_js_api_smoke_test_memory[230]=(u8)78;dong_porf_video_js_api_smoke_test_memory[231]=(u8)97;dong_porf_video_js_api_smoke_test_memory[232]=(u8)78;
+  dong_porf_video_js_api_smoke_test_memory[235]=(u8)8;dong_porf_video_js_api_smoke_test_memory[239]=(u8)73;dong_porf_video_js_api_smoke_test_memory[240]=(u8)110;dong_porf_video_js_api_smoke_test_memory[241]=(u8)102;dong_porf_video_js_api_smoke_test_memory[242]=(u8)105;dong_porf_video_js_api_smoke_test_memory[243]=(u8)110;dong_porf_video_js_api_smoke_test_memory[244]=(u8)105;dong_porf_video_js_api_smoke_test_memory[245]=(u8)116;dong_porf_video_js_api_smoke_test_memory[246]=(u8)121;
+  dong_porf_video_js_api_smoke_test_memory[249]=(u8)9;dong_porf_video_js_api_smoke_test_memory[253]=(u8)45;dong_porf_video_js_api_smoke_test_memory[254]=(u8)73;dong_porf_video_js_api_smoke_test_memory[255]=(u8)110;dong_porf_video_js_api_smoke_test_memory[256]=(u8)102;dong_porf_video_js_api_smoke_test_memory[257]=(u8)105;dong_porf_video_js_api_smoke_test_memory[258]=(u8)110;dong_porf_video_js_api_smoke_test_memory[259]=(u8)105;dong_porf_video_js_api_smoke_test_memory[260]=(u8)116;dong_porf_video_js_api_smoke_test_memory[261]=(u8)121;
+  dong_porf_video_js_api_smoke_test_memory[264]=(u8)1;dong_porf_video_js_api_smoke_test_memory[268]=(u8)48;
+  dong_porf_video_js_api_smoke_test_memory[271]=(u8)59;dong_porf_video_js_api_smoke_test_memory[275]=(u8)70;dong_porf_video_js_api_smoke_test_memory[276]=(u8)117;dong_porf_video_js_api_smoke_test_memory[277]=(u8)110;dong_porf_video_js_api_smoke_test_memory[278]=(u8)99;dong_porf_video_js_api_smoke_test_memory[279]=(u8)116;dong_porf_video_js_api_smoke_test_memory[280]=(u8)105;dong_porf_video_js_api_smoke_test_memory[281]=(u8)111;dong_porf_video_js_api_smoke_test_memory[282]=(u8)110;dong_porf_video_js_api_smoke_test_memory[283]=(u8)46;dong_porf_video_js_api_smoke_test_memory[284]=(u8)112;dong_porf_video_js_api_smoke_test_memory[285]=(u8)114;dong_porf_video_js_api_smoke_test_memory[286]=(u8)111;dong_porf_video_js_api_smoke_test_memory[287]=(u8)116;dong_porf_video_js_api_smoke_test_memory[288]=(u8)111;dong_porf_video_js_api_smoke_test_memory[289]=(u8)116;dong_porf_video_js_api_smoke_test_memory[290]=(u8)121;dong_porf_video_js_api_smoke_test_memory[291]=(u8)112;dong_porf_video_js_api_smoke_test_memory[292]=(u8)101;dong_porf_video_js_api_smoke_test_memory[293]=(u8)46;dong_porf_video_js_api_smoke_test_memory[294]=(u8)116;dong_porf_video_js_api_smoke_test_memory[295]=(u8)111;dong_porf_video_js_api_smoke_test_memory[296]=(u8)83;dong_porf_video_js_api_smoke_test_memory[297]=(u8)116;dong_porf_video_js_api_smoke_test_memory[298]=(u8)114;dong_porf_video_js_api_smoke_test_memory[299]=(u8)105;dong_porf_video_js_api_smoke_test_memory[300]=(u8)110;dong_porf_video_js_api_smoke_test_memory[301]=(u8)103;dong_porf_video_js_api_smoke_test_memory[302]=(u8)32;dong_porf_video_js_api_smoke_test_memory[303]=(u8)101;dong_porf_video_js_api_smoke_test_memory[304]=(u8)120;dong_porf_video_js_api_smoke_test_memory[305]=(u8)112;dong_porf_video_js_api_smoke_test_memory[306]=(u8)101;dong_porf_video_js_api_smoke_test_memory[307]=(u8)99;dong_porf_video_js_api_smoke_test_memory[308]=(u8)116;dong_porf_video_js_api_smoke_test_memory[309]=(u8)115;dong_porf_video_js_api_smoke_test_memory[310]=(u8)32;dong_porf_video_js_api_smoke_test_memory[311]=(u8)39;dong_porf_video_js_api_smoke_test_memory[312]=(u8)116;dong_porf_video_js_api_smoke_test_memory[313]=(u8)104;dong_porf_video_js_api_smoke_test_memory[314]=(u8)105;dong_porf_video_js_api_smoke_test_memory[315]=(u8)115;dong_porf_video_js_api_smoke_test_memory[316]=(u8)39;dong_porf_video_js_api_smoke_test_memory[317]=(u8)32;dong_porf_video_js_api_smoke_test_memory[318]=(u8)116;dong_porf_video_js_api_smoke_test_memory[319]=(u8)111;dong_porf_video_js_api_smoke_test_memory[320]=(u8)32;dong_porf_video_js_api_smoke_test_memory[321]=(u8)98;dong_porf_video_js_api_smoke_test_memory[322]=(u8)101;dong_porf_video_js_api_smoke_test_memory[323]=(u8)32;dong_porf_video_js_api_smoke_test_memory[324]=(u8)97;dong_porf_video_js_api_smoke_test_memory[325]=(u8)32;dong_porf_video_js_api_smoke_test_memory[326]=(u8)70;dong_porf_video_js_api_smoke_test_memory[327]=(u8)117;dong_porf_video_js_api_smoke_test_memory[328]=(u8)110;dong_porf_video_js_api_smoke_test_memory[329]=(u8)99;dong_porf_video_js_api_smoke_test_memory[330]=(u8)116;dong_porf_video_js_api_smoke_test_memory[331]=(u8)105;dong_porf_video_js_api_smoke_test_memory[332]=(u8)111;dong_porf_video_js_api_smoke_test_memory[333]=(u8)110;
+  dong_porf_video_js_api_smoke_test_memory[336]=(u8)9;dong_porf_video_js_api_smoke_test_memory[340]=(u8)102;dong_porf_video_js_api_smoke_test_memory[341]=(u8)117;dong_porf_video_js_api_smoke_test_memory[342]=(u8)110;dong_porf_video_js_api_smoke_test_memory[343]=(u8)99;dong_porf_video_js_api_smoke_test_memory[344]=(u8)116;dong_porf_video_js_api_smoke_test_memory[345]=(u8)105;dong_porf_video_js_api_smoke_test_memory[346]=(u8)111;dong_porf_video_js_api_smoke_test_memory[347]=(u8)110;dong_porf_video_js_api_smoke_test_memory[348]=(u8)32;
+  dong_porf_video_js_api_smoke_test_memory[351]=(u8)20;dong_porf_video_js_api_smoke_test_memory[355]=(u8)40;dong_porf_video_js_api_smoke_test_memory[356]=(u8)41;dong_porf_video_js_api_smoke_test_memory[357]=(u8)32;dong_porf_video_js_api_smoke_test_memory[358]=(u8)123;dong_porf_video_js_api_smoke_test_memory[359]=(u8)32;dong_porf_video_js_api_smoke_test_memory[360]=(u8)91;dong_porf_video_js_api_smoke_test_memory[361]=(u8)110;dong_porf_video_js_api_smoke_test_memory[362]=(u8)97;dong_porf_video_js_api_smoke_test_memory[363]=(u8)116;dong_porf_video_js_api_smoke_test_memory[364]=(u8)105;dong_porf_video_js_api_smoke_test_memory[365]=(u8)118;dong_porf_video_js_api_smoke_test_memory[366]=(u8)101;dong_porf_video_js_api_smoke_test_memory[367]=(u8)32;dong_porf_video_js_api_smoke_test_memory[368]=(u8)99;dong_porf_video_js_api_smoke_test_memory[369]=(u8)111;dong_porf_video_js_api_smoke_test_memory[370]=(u8)100;dong_porf_video_js_api_smoke_test_memory[371]=(u8)101;dong_porf_video_js_api_smoke_test_memory[372]=(u8)93;dong_porf_video_js_api_smoke_test_memory[373]=(u8)32;dong_porf_video_js_api_smoke_test_memory[374]=(u8)125;
+  dong_porf_video_js_api_smoke_test_memory[377]=(u8)9;dong_porf_video_js_api_smoke_test_memory[381]=(u8)84;dong_porf_video_js_api_smoke_test_memory[382]=(u8)121;dong_porf_video_js_api_smoke_test_memory[383]=(u8)112;dong_porf_video_js_api_smoke_test_memory[384]=(u8)101;dong_porf_video_js_api_smoke_test_memory[385]=(u8)69;dong_porf_video_js_api_smoke_test_memory[386]=(u8)114;dong_porf_video_js_api_smoke_test_memory[387]=(u8)114;dong_porf_video_js_api_smoke_test_memory[388]=(u8)111;dong_porf_video_js_api_smoke_test_memory[389]=(u8)114;
+  dong_porf_video_js_api_smoke_test_memory[392]=(u8)2;dong_porf_video_js_api_smoke_test_memory[396]=(u8)58;dong_porf_video_js_api_smoke_test_memory[397]=(u8)32;
+  dong_porf_video_js_api_smoke_test_memory[400]=(u8)10;dong_porf_video_js_api_smoke_test_memory[404]=(u8)82;dong_porf_video_js_api_smoke_test_memory[405]=(u8)97;dong_porf_video_js_api_smoke_test_memory[406]=(u8)110;dong_porf_video_js_api_smoke_test_memory[407]=(u8)103;dong_porf_video_js_api_smoke_test_memory[408]=(u8)101;dong_porf_video_js_api_smoke_test_memory[409]=(u8)69;dong_porf_video_js_api_smoke_test_memory[410]=(u8)114;dong_porf_video_js_api_smoke_test_memory[411]=(u8)114;dong_porf_video_js_api_smoke_test_memory[412]=(u8)111;dong_porf_video_js_api_smoke_test_memory[413]=(u8)114;
+  dong_porf_video_js_api_smoke_test_memory[416]=(u8)8;dong_porf_video_js_api_smoke_test_memory[420]=(u8)116;dong_porf_video_js_api_smoke_test_memory[421]=(u8)111;dong_porf_video_js_api_smoke_test_memory[422]=(u8)83;dong_porf_video_js_api_smoke_test_memory[423]=(u8)116;dong_porf_video_js_api_smoke_test_memory[424]=(u8)114;dong_porf_video_js_api_smoke_test_memory[425]=(u8)105;dong_porf_video_js_api_smoke_test_memory[426]=(u8)110;dong_porf_video_js_api_smoke_test_memory[427]=(u8)103;
+  dong_porf_video_js_api_smoke_test_memory[430]=(u8)6;dong_porf_video_js_api_smoke_test_memory[434]=(u8)108;dong_porf_video_js_api_smoke_test_memory[435]=(u8)101;dong_porf_video_js_api_smoke_test_memory[436]=(u8)110;dong_porf_video_js_api_smoke_test_memory[437]=(u8)103;dong_porf_video_js_api_smoke_test_memory[438]=(u8)116;dong_porf_video_js_api_smoke_test_memory[439]=(u8)104;
+  dong_porf_video_js_api_smoke_test_memory[442]=(u8)4;dong_porf_video_js_api_smoke_test_memory[446]=(u8)110;dong_porf_video_js_api_smoke_test_memory[447]=(u8)97;dong_porf_video_js_api_smoke_test_memory[448]=(u8)109;dong_porf_video_js_api_smoke_test_memory[449]=(u8)101;
+  dong_porf_video_js_api_smoke_test_memory[452]=(u8)9;dong_porf_video_js_api_smoke_test_memory[456]=(u8)112;dong_porf_video_js_api_smoke_test_memory[457]=(u8)114;dong_porf_video_js_api_smoke_test_memory[458]=(u8)111;dong_porf_video_js_api_smoke_test_memory[459]=(u8)116;dong_porf_video_js_api_smoke_test_memory[460]=(u8)111;dong_porf_video_js_api_smoke_test_memory[461]=(u8)116;dong_porf_video_js_api_smoke_test_memory[462]=(u8)121;dong_porf_video_js_api_smoke_test_memory[463]=(u8)112;dong_porf_video_js_api_smoke_test_memory[464]=(u8)101;
+  dong_porf_video_js_api_smoke_test_memory[467]=(u8)11;dong_porf_video_js_api_smoke_test_memory[471]=(u8)99;dong_porf_video_js_api_smoke_test_memory[472]=(u8)111;dong_porf_video_js_api_smoke_test_memory[473]=(u8)110;dong_porf_video_js_api_smoke_test_memory[474]=(u8)115;dong_porf_video_js_api_smoke_test_memory[475]=(u8)116;dong_porf_video_js_api_smoke_test_memory[476]=(u8)114;dong_porf_video_js_api_smoke_test_memory[477]=(u8)117;dong_porf_video_js_api_smoke_test_memory[478]=(u8)99;dong_porf_video_js_api_smoke_test_memory[479]=(u8)116;dong_porf_video_js_api_smoke_test_memory[480]=(u8)111;dong_porf_video_js_api_smoke_test_memory[481]=(u8)114;
+  dong_porf_video_js_api_smoke_test_memory[484]=(u8)27;dong_porf_video_js_api_smoke_test_memory[488]=(u8)67;dong_porf_video_js_api_smoke_test_memory[489]=(u8)97;dong_porf_video_js_api_smoke_test_memory[490]=(u8)110;dong_porf_video_js_api_smoke_test_memory[491]=(u8)110;dong_porf_video_js_api_smoke_test_memory[492]=(u8)111;dong_porf_video_js_api_smoke_test_memory[493]=(u8)116;dong_porf_video_js_api_smoke_test_memory[494]=(u8)32;dong_porf_video_js_api_smoke_test_memory[495]=(u8)103;dong_porf_video_js_api_smoke_test_memory[496]=(u8)101;dong_porf_video_js_api_smoke_test_memory[497]=(u8)116;dong_porf_video_js_api_smoke_test_memory[498]=(u8)32;dong_porf_video_js_api_smoke_test_memory[499]=(u8)112;dong_porf_video_js_api_smoke_test_memory[500]=(u8)114;dong_porf_video_js_api_smoke_test_memory[501]=(u8)111;dong_porf_video_js_api_smoke_test_memory[502]=(u8)112;dong_porf_video_js_api_smoke_test_memory[503]=(u8)101;dong_porf_video_js_api_smoke_test_memory[504]=(u8)114;dong_porf_video_js_api_smoke_test_memory[505]=(u8)116;dong_porf_video_js_api_smoke_test_memory[506]=(u8)121;dong_porf_video_js_api_smoke_test_memory[507]=(u8)32;dong_porf_video_js_api_smoke_test_memory[508]=(u8)111;dong_porf_video_js_api_smoke_test_memory[509]=(u8)102;dong_porf_video_js_api_smoke_test_memory[510]=(u8)32;dong_porf_video_js_api_smoke_test_memory[511]=(u8)110;dong_porf_video_js_api_smoke_test_memory[512]=(u8)117;dong_porf_video_js_api_smoke_test_memory[513]=(u8)108;dong_porf_video_js_api_smoke_test_memory[514]=(u8)108;
+  dong_porf_video_js_api_smoke_test_memory[517]=(u8)14;dong_porf_video_js_api_smoke_test_memory[521]=(u8)104;dong_porf_video_js_api_smoke_test_memory[522]=(u8)97;dong_porf_video_js_api_smoke_test_memory[523]=(u8)115;dong_porf_video_js_api_smoke_test_memory[524]=(u8)79;dong_porf_video_js_api_smoke_test_memory[525]=(u8)119;dong_porf_video_js_api_smoke_test_memory[526]=(u8)110;dong_porf_video_js_api_smoke_test_memory[527]=(u8)80;dong_porf_video_js_api_smoke_test_memory[528]=(u8)114;dong_porf_video_js_api_smoke_test_memory[529]=(u8)111;dong_porf_video_js_api_smoke_test_memory[530]=(u8)112;dong_porf_video_js_api_smoke_test_memory[531]=(u8)101;dong_porf_video_js_api_smoke_test_memory[532]=(u8)114;dong_porf_video_js_api_smoke_test_memory[533]=(u8)116;dong_porf_video_js_api_smoke_test_memory[534]=(u8)121;
+  dong_porf_video_js_api_smoke_test_memory[537]=(u8)36;dong_porf_video_js_api_smoke_test_memory[541]=(u8)65;dong_porf_video_js_api_smoke_test_memory[542]=(u8)114;dong_porf_video_js_api_smoke_test_memory[543]=(u8)103;dong_porf_video_js_api_smoke_test_memory[544]=(u8)117;dong_porf_video_js_api_smoke_test_memory[545]=(u8)109;dong_porf_video_js_api_smoke_test_memory[546]=(u8)101;dong_porf_video_js_api_smoke_test_memory[547]=(u8)110;dong_porf_video_js_api_smoke_test_memory[548]=(u8)116;dong_porf_video_js_api_smoke_test_memory[549]=(u8)32;dong_porf_video_js_api_smoke_test_memory[550]=(u8)105;dong_porf_video_js_api_smoke_test_memory[551]=(u8)115;dong_porf_video_js_api_smoke_test_memory[552]=(u8)32;dong_porf_video_js_api_smoke_test_memory[553]=(u8)110;dong_porf_video_js_api_smoke_test_memory[554]=(u8)117;dong_porf_video_js_api_smoke_test_memory[555]=(u8)108;dong_porf_video_js_api_smoke_test_memory[556]=(u8)108;dong_porf_video_js_api_smoke_test_memory[557]=(u8)105;dong_porf_video_js_api_smoke_test_memory[558]=(u8)115;dong_porf_video_js_api_smoke_test_memory[559]=(u8)104;dong_porf_video_js_api_smoke_test_memory[560]=(u8)44;dong_porf_video_js_api_smoke_test_memory[561]=(u8)32;dong_porf_video_js_api_smoke_test_memory[562]=(u8)101;dong_porf_video_js_api_smoke_test_memory[563]=(u8)120;dong_porf_video_js_api_smoke_test_memory[564]=(u8)112;dong_porf_video_js_api_smoke_test_memory[565]=(u8)101;dong_porf_video_js_api_smoke_test_memory[566]=(u8)99;dong_porf_video_js_api_smoke_test_memory[567]=(u8)116;dong_porf_video_js_api_smoke_test_memory[568]=(u8)101;dong_porf_video_js_api_smoke_test_memory[569]=(u8)100;dong_porf_video_js_api_smoke_test_memory[570]=(u8)32;dong_porf_video_js_api_smoke_test_memory[571]=(u8)111;dong_porf_video_js_api_smoke_test_memory[572]=(u8)98;dong_porf_video_js_api_smoke_test_memory[573]=(u8)106;dong_porf_video_js_api_smoke_test_memory[574]=(u8)101;dong_porf_video_js_api_smoke_test_memory[575]=(u8)99;dong_porf_video_js_api_smoke_test_memory[576]=(u8)116;
+  dong_porf_video_js_api_smoke_test_memory[579]=(u8)26;dong_porf_video_js_api_smoke_test_memory[583]=(u8)65;dong_porf_video_js_api_smoke_test_memory[584]=(u8)114;dong_porf_video_js_api_smoke_test_memory[585]=(u8)103;dong_porf_video_js_api_smoke_test_memory[586]=(u8)117;dong_porf_video_js_api_smoke_test_memory[587]=(u8)109;dong_porf_video_js_api_smoke_test_memory[588]=(u8)101;dong_porf_video_js_api_smoke_test_memory[589]=(u8)110;dong_porf_video_js_api_smoke_test_memory[590]=(u8)116;dong_porf_video_js_api_smoke_test_memory[591]=(u8)32;dong_porf_video_js_api_smoke_test_memory[592]=(u8)99;dong_porf_video_js_api_smoke_test_memory[593]=(u8)97;dong_porf_video_js_api_smoke_test_memory[594]=(u8)110;dong_porf_video_js_api_smoke_test_memory[595]=(u8)110;dong_porf_video_js_api_smoke_test_memory[596]=(u8)111;dong_porf_video_js_api_smoke_test_memory[597]=(u8)116;dong_porf_video_js_api_smoke_test_memory[598]=(u8)32;dong_porf_video_js_api_smoke_test_memory[599]=(u8)98;dong_porf_video_js_api_smoke_test_memory[600]=(u8)101;dong_porf_video_js_api_smoke_test_memory[601]=(u8)32;dong_porf_video_js_api_smoke_test_memory[602]=(u8)110;dong_porf_video_js_api_smoke_test_memory[603]=(u8)117;dong_porf_video_js_api_smoke_test_memory[604]=(u8)108;dong_porf_video_js_api_smoke_test_memory[605]=(u8)108;dong_porf_video_js_api_smoke_test_memory[606]=(u8)105;dong_porf_video_js_api_smoke_test_memory[607]=(u8)115;dong_porf_video_js_api_smoke_test_memory[608]=(u8)104;
+  dong_porf_video_js_api_smoke_test_memory[611]=(u8)43;dong_porf_video_js_api_smoke_test_memory[615]=(u8)67;dong_porf_video_js_api_smoke_test_memory[616]=(u8)97;dong_porf_video_js_api_smoke_test_memory[617]=(u8)108;dong_porf_video_js_api_smoke_test_memory[618]=(u8)108;dong_porf_video_js_api_smoke_test_memory[619]=(u8)101;dong_porf_video_js_api_smoke_test_memory[620]=(u8)100;dong_porf_video_js_api_smoke_test_memory[621]=(u8)32;dong_porf_video_js_api_smoke_test_memory[622]=(u8)65;dong_porf_video_js_api_smoke_test_memory[623]=(u8)114;dong_porf_video_js_api_smoke_test_memory[624]=(u8)114;dong_porf_video_js_api_smoke_test_memory[625]=(u8)97;dong_porf_video_js_api_smoke_test_memory[626]=(u8)121;dong_porf_video_js_api_smoke_test_memory[627]=(u8)46;dong_porf_video_js_api_smoke_test_memory[628]=(u8)102;dong_porf_video_js_api_smoke_test_memory[629]=(u8)114;dong_porf_video_js_api_smoke_test_memory[630]=(u8)111;dong_porf_video_js_api_smoke_test_memory[631]=(u8)109;dong_porf_video_js_api_smoke_test_memory[632]=(u8)32;dong_porf_video_js_api_smoke_test_memory[633]=(u8)119;dong_porf_video_js_api_smoke_test_memory[634]=(u8)105;dong_porf_video_js_api_smoke_test_memory[635]=(u8)116;dong_porf_video_js_api_smoke_test_memory[636]=(u8)104;dong_porf_video_js_api_smoke_test_memory[637]=(u8)32;dong_porf_video_js_api_smoke_test_memory[638]=(u8)97;dong_porf_video_js_api_smoke_test_memory[639]=(u8)32;dong_porf_video_js_api_smoke_test_memory[640]=(u8)110;dong_porf_video_js_api_smoke_test_memory[641]=(u8)111;dong_porf_video_js_api_smoke_test_memory[642]=(u8)110;dong_porf_video_js_api_smoke_test_memory[643]=(u8)45;dong_porf_video_js_api_smoke_test_memory[644]=(u8)102;dong_porf_video_js_api_smoke_test_memory[645]=(u8)117;dong_porf_video_js_api_smoke_test_memory[646]=(u8)110;dong_porf_video_js_api_smoke_test_memory[647]=(u8)99;dong_porf_video_js_api_smoke_test_memory[648]=(u8)116;dong_porf_video_js_api_smoke_test_memory[649]=(u8)105;dong_porf_video_js_api_smoke_test_memory[650]=(u8)111;dong_porf_video_js_api_smoke_test_memory[651]=(u8)110;dong_porf_video_js_api_smoke_test_memory[652]=(u8)32;dong_porf_video_js_api_smoke_test_memory[653]=(u8)109;dong_porf_video_js_api_smoke_test_memory[654]=(u8)97;dong_porf_video_js_api_smoke_test_memory[655]=(u8)112;dong_porf_video_js_api_smoke_test_memory[656]=(u8)70;dong_porf_video_js_api_smoke_test_memory[657]=(u8)110;
+  dong_porf_video_js_api_smoke_test_memory[660]=(u8)34;dong_porf_video_js_api_smoke_test_memory[664]=(u8)84;dong_porf_video_js_api_smoke_test_memory[665]=(u8)114;dong_porf_video_js_api_smoke_test_memory[666]=(u8)105;dong_porf_video_js_api_smoke_test_memory[667]=(u8)101;dong_porf_video_js_api_smoke_test_memory[668]=(u8)100;dong_porf_video_js_api_smoke_test_memory[669]=(u8)32;dong_porf_video_js_api_smoke_test_memory[670]=(u8)102;dong_porf_video_js_api_smoke_test_memory[671]=(u8)111;dong_porf_video_js_api_smoke_test_memory[672]=(u8)114;dong_porf_video_js_api_smoke_test_memory[673]=(u8)46;dong_porf_video_js_api_smoke_test_memory[674]=(u8)46;dong_porf_video_js_api_smoke_test_memory[675]=(u8)111;dong_porf_video_js_api_smoke_test_memory[676]=(u8)102;dong_porf_video_js_api_smoke_test_memory[677]=(u8)32;dong_porf_video_js_api_smoke_test_memory[678]=(u8)111;dong_porf_video_js_api_smoke_test_memory[679]=(u8)110;dong_porf_video_js_api_smoke_test_memory[680]=(u8)32;dong_porf_video_js_api_smoke_test_memory[681]=(u8)110;dong_porf_video_js_api_smoke_test_memory[682]=(u8)111;dong_porf_video_js_api_smoke_test_memory[683]=(u8)110;dong_porf_video_js_api_smoke_test_memory[684]=(u8)45;dong_porf_video_js_api_smoke_test_memory[685]=(u8)105;dong_porf_video_js_api_smoke_test_memory[686]=(u8)116;dong_porf_video_js_api_smoke_test_memory[687]=(u8)101;dong_porf_video_js_api_smoke_test_memory[688]=(u8)114;dong_porf_video_js_api_smoke_test_memory[689]=(u8)97;dong_porf_video_js_api_smoke_test_memory[690]=(u8)98;dong_porf_video_js_api_smoke_test_memory[691]=(u8)108;dong_porf_video_js_api_smoke_test_memory[692]=(u8)101;dong_porf_video_js_api_smoke_test_memory[693]=(u8)32;dong_porf_video_js_api_smoke_test_memory[694]=(u8)116;dong_porf_video_js_api_smoke_test_memory[695]=(u8)121;dong_porf_video_js_api_smoke_test_memory[696]=(u8)112;dong_porf_video_js_api_smoke_test_memory[697]=(u8)101;
+  dong_porf_video_js_api_smoke_test_memory[700]=(u8)23;dong_porf_video_js_api_smoke_test_memory[704]=(u8)109;dong_porf_video_js_api_smoke_test_memory[705]=(u8)97;dong_porf_video_js_api_smoke_test_memory[706]=(u8)112;dong_porf_video_js_api_smoke_test_memory[707]=(u8)70;dong_porf_video_js_api_smoke_test_memory[708]=(u8)110;dong_porf_video_js_api_smoke_test_memory[709]=(u8)32;dong_porf_video_js_api_smoke_test_memory[710]=(u8)105;dong_porf_video_js_api_smoke_test_memory[711]=(u8)115;dong_porf_video_js_api_smoke_test_memory[712]=(u8)32;dong_porf_video_js_api_smoke_test_memory[713]=(u8)110;dong_porf_video_js_api_smoke_test_memory[714]=(u8)111;dong_porf_video_js_api_smoke_test_memory[715]=(u8)116;dong_porf_video_js_api_smoke_test_memory[716]=(u8)32;dong_porf_video_js_api_smoke_test_memory[717]=(u8)97;dong_porf_video_js_api_smoke_test_memory[718]=(u8)32;dong_porf_video_js_api_smoke_test_memory[719]=(u8)102;dong_porf_video_js_api_smoke_test_memory[720]=(u8)117;dong_porf_video_js_api_smoke_test_memory[721]=(u8)110;dong_porf_video_js_api_smoke_test_memory[722]=(u8)99;dong_porf_video_js_api_smoke_test_memory[723]=(u8)116;dong_porf_video_js_api_smoke_test_memory[724]=(u8)105;dong_porf_video_js_api_smoke_test_memory[725]=(u8)111;dong_porf_video_js_api_smoke_test_memory[726]=(u8)110;
+  dong_porf_video_js_api_smoke_test_memory[729]=(u8)9;dong_porf_video_js_api_smoke_test_memory[733]=(u8)95;dong_porf_video_js_api_smoke_test_memory[734]=(u8)95;dong_porf_video_js_api_smoke_test_memory[735]=(u8)112;dong_porf_video_js_api_smoke_test_memory[736]=(u8)114;dong_porf_video_js_api_smoke_test_memory[737]=(u8)111;dong_porf_video_js_api_smoke_test_memory[738]=(u8)116;dong_porf_video_js_api_smoke_test_memory[739]=(u8)111;dong_porf_video_js_api_smoke_test_memory[740]=(u8)95;dong_porf_video_js_api_smoke_test_memory[741]=(u8)95;
+  dong_porf_video_js_api_smoke_test_memory[744]=(u8)43;dong_porf_video_js_api_smoke_test_memory[748]=(u8)67;dong_porf_video_js_api_smoke_test_memory[749]=(u8)97;dong_porf_video_js_api_smoke_test_memory[750]=(u8)110;dong_porf_video_js_api_smoke_test_memory[751]=(u8)110;dong_porf_video_js_api_smoke_test_memory[752]=(u8)111;dong_porf_video_js_api_smoke_test_memory[753]=(u8)116;dong_porf_video_js_api_smoke_test_memory[754]=(u8)32;dong_porf_video_js_api_smoke_test_memory[755]=(u8)99;dong_porf_video_js_api_smoke_test_memory[756]=(u8)111;dong_porf_video_js_api_smoke_test_memory[757]=(u8)110;dong_porf_video_js_api_smoke_test_memory[758]=(u8)118;dong_porf_video_js_api_smoke_test_memory[759]=(u8)101;dong_porf_video_js_api_smoke_test_memory[760]=(u8)114;dong_porf_video_js_api_smoke_test_memory[761]=(u8)116;dong_porf_video_js_api_smoke_test_memory[762]=(u8)32;dong_porf_video_js_api_smoke_test_memory[763]=(u8)83;dong_porf_video_js_api_smoke_test_memory[764]=(u8)121;dong_porf_video_js_api_smoke_test_memory[765]=(u8)109;dong_porf_video_js_api_smoke_test_memory[766]=(u8)98;dong_porf_video_js_api_smoke_test_memory[767]=(u8)111;dong_porf_video_js_api_smoke_test_memory[768]=(u8)108;dong_porf_video_js_api_smoke_test_memory[769]=(u8)32;dong_porf_video_js_api_smoke_test_memory[770]=(u8)111;dong_porf_video_js_api_smoke_test_memory[771]=(u8)114;dong_porf_video_js_api_smoke_test_memory[772]=(u8)32;dong_porf_video_js_api_smoke_test_memory[773]=(u8)66;dong_porf_video_js_api_smoke_test_memory[774]=(u8)105;dong_porf_video_js_api_smoke_test_memory[775]=(u8)103;dong_porf_video_js_api_smoke_test_memory[776]=(u8)73;dong_porf_video_js_api_smoke_test_memory[777]=(u8)110;dong_porf_video_js_api_smoke_test_memory[778]=(u8)116;dong_porf_video_js_api_smoke_test_memory[779]=(u8)32;dong_porf_video_js_api_smoke_test_memory[780]=(u8)116;dong_porf_video_js_api_smoke_test_memory[781]=(u8)111;dong_porf_video_js_api_smoke_test_memory[782]=(u8)32;dong_porf_video_js_api_smoke_test_memory[783]=(u8)97;dong_porf_video_js_api_smoke_test_memory[784]=(u8)32;dong_porf_video_js_api_smoke_test_memory[785]=(u8)110;dong_porf_video_js_api_smoke_test_memory[786]=(u8)117;dong_porf_video_js_api_smoke_test_memory[787]=(u8)109;dong_porf_video_js_api_smoke_test_memory[788]=(u8)98;dong_porf_video_js_api_smoke_test_memory[789]=(u8)101;dong_porf_video_js_api_smoke_test_memory[790]=(u8)114;
+  dong_porf_video_js_api_smoke_test_memory[793]=(u8)62;dong_porf_video_js_api_smoke_test_memory[797]=(u8)39;dong_porf_video_js_api_smoke_test_memory[798]=(u8)116;dong_porf_video_js_api_smoke_test_memory[799]=(u8)114;dong_porf_video_js_api_smoke_test_memory[800]=(u8)105;dong_porf_video_js_api_smoke_test_memory[801]=(u8)109;dong_porf_video_js_api_smoke_test_memory[802]=(u8)39;dong_porf_video_js_api_smoke_test_memory[803]=(u8)32;dong_porf_video_js_api_smoke_test_memory[804]=(u8)112;dong_porf_video_js_api_smoke_test_memory[805]=(u8)114;dong_porf_video_js_api_smoke_test_memory[806]=(u8)111;dong_porf_video_js_api_smoke_test_memory[807]=(u8)116;dong_porf_video_js_api_smoke_test_memory[808]=(u8)111;dong_porf_video_js_api_smoke_test_memory[809]=(u8)32;dong_porf_video_js_api_smoke_test_memory[810]=(u8)102;dong_porf_video_js_api_smoke_test_memory[811]=(u8)117;dong_porf_video_js_api_smoke_test_memory[812]=(u8)110;dong_porf_video_js_api_smoke_test_memory[813]=(u8)99;dong_porf_video_js_api_smoke_test_memory[814]=(u8)32;dong_porf_video_js_api_smoke_test_memory[815]=(u8)116;dong_porf_video_js_api_smoke_test_memory[816]=(u8)114;dong_porf_video_js_api_smoke_test_memory[817]=(u8)105;dong_porf_video_js_api_smoke_test_memory[818]=(u8)101;dong_porf_video_js_api_smoke_test_memory[819]=(u8)100;dong_porf_video_js_api_smoke_test_memory[820]=(u8)32;dong_porf_video_js_api_smoke_test_memory[821]=(u8)116;dong_porf_video_js_api_smoke_test_memory[822]=(u8)111;dong_porf_video_js_api_smoke_test_memory[823]=(u8)32;dong_porf_video_js_api_smoke_test_memory[824]=(u8)98;dong_porf_video_js_api_smoke_test_memory[825]=(u8)101;dong_porf_video_js_api_smoke_test_memory[826]=(u8)32;dong_porf_video_js_api_smoke_test_memory[827]=(u8)99;dong_porf_video_js_api_smoke_test_memory[828]=(u8)97;dong_porf_video_js_api_smoke_test_memory[829]=(u8)108;dong_porf_video_js_api_smoke_test_memory[830]=(u8)108;dong_porf_video_js_api_smoke_test_memory[831]=(u8)101;dong_porf_video_js_api_smoke_test_memory[832]=(u8)100;dong_porf_video_js_api_smoke_test_memory[833]=(u8)32;dong_porf_video_js_api_smoke_test_memory[834]=(u8)111;dong_porf_video_js_api_smoke_test_memory[835]=(u8)110;dong_porf_video_js_api_smoke_test_memory[836]=(u8)32;dong_porf_video_js_api_smoke_test_memory[837]=(u8)97;dong_porf_video_js_api_smoke_test_memory[838]=(u8)32;dong_porf_video_js_api_smoke_test_memory[839]=(u8)116;dong_porf_video_js_api_smoke_test_memory[840]=(u8)121;dong_porf_video_js_api_smoke_test_memory[841]=(u8)112;dong_porf_video_js_api_smoke_test_memory[842]=(u8)101;dong_porf_video_js_api_smoke_test_memory[843]=(u8)32;dong_porf_video_js_api_smoke_test_memory[844]=(u8)119;dong_porf_video_js_api_smoke_test_memory[845]=(u8)105;dong_porf_video_js_api_smoke_test_memory[846]=(u8)116;dong_porf_video_js_api_smoke_test_memory[847]=(u8)104;dong_porf_video_js_api_smoke_test_memory[848]=(u8)111;dong_porf_video_js_api_smoke_test_memory[849]=(u8)117;dong_porf_video_js_api_smoke_test_memory[850]=(u8)116;dong_porf_video_js_api_smoke_test_memory[851]=(u8)32;dong_porf_video_js_api_smoke_test_memory[852]=(u8)97;dong_porf_video_js_api_smoke_test_memory[853]=(u8)110;dong_porf_video_js_api_smoke_test_memory[854]=(u8)32;dong_porf_video_js_api_smoke_test_memory[855]=(u8)105;dong_porf_video_js_api_smoke_test_memory[856]=(u8)109;dong_porf_video_js_api_smoke_test_memory[857]=(u8)112;dong_porf_video_js_api_smoke_test_memory[858]=(u8)108;
+  dong_porf_video_js_api_smoke_test_memory[861]=(u8)68;dong_porf_video_js_api_smoke_test_memory[865]=(u8)39;dong_porf_video_js_api_smoke_test_memory[866]=(u8)99;dong_porf_video_js_api_smoke_test_memory[867]=(u8)104;dong_porf_video_js_api_smoke_test_memory[868]=(u8)97;dong_porf_video_js_api_smoke_test_memory[869]=(u8)114;dong_porf_video_js_api_smoke_test_memory[870]=(u8)67;dong_porf_video_js_api_smoke_test_memory[871]=(u8)111;dong_porf_video_js_api_smoke_test_memory[872]=(u8)100;dong_porf_video_js_api_smoke_test_memory[873]=(u8)101;dong_porf_video_js_api_smoke_test_memory[874]=(u8)65;dong_porf_video_js_api_smoke_test_memory[875]=(u8)116;dong_porf_video_js_api_smoke_test_memory[876]=(u8)39;dong_porf_video_js_api_smoke_test_memory[877]=(u8)32;dong_porf_video_js_api_smoke_test_memory[878]=(u8)112;dong_porf_video_js_api_smoke_test_memory[879]=(u8)114;dong_porf_video_js_api_smoke_test_memory[880]=(u8)111;dong_porf_video_js_api_smoke_test_memory[881]=(u8)116;dong_porf_video_js_api_smoke_test_memory[882]=(u8)111;dong_porf_video_js_api_smoke_test_memory[883]=(u8)32;dong_porf_video_js_api_smoke_test_memory[884]=(u8)102;dong_porf_video_js_api_smoke_test_memory[885]=(u8)117;dong_porf_video_js_api_smoke_test_memory[886]=(u8)110;dong_porf_video_js_api_smoke_test_memory[887]=(u8)99;dong_porf_video_js_api_smoke_test_memory[888]=(u8)32;dong_porf_video_js_api_smoke_test_memory[889]=(u8)116;dong_porf_video_js_api_smoke_test_memory[890]=(u8)114;dong_porf_video_js_api_smoke_test_memory[891]=(u8)105;dong_porf_video_js_api_smoke_test_memory[892]=(u8)101;dong_porf_video_js_api_smoke_test_memory[893]=(u8)100;dong_porf_video_js_api_smoke_test_memory[894]=(u8)32;dong_porf_video_js_api_smoke_test_memory[895]=(u8)116;dong_porf_video_js_api_smoke_test_memory[896]=(u8)111;dong_porf_video_js_api_smoke_test_memory[897]=(u8)32;dong_porf_video_js_api_smoke_test_memory[898]=(u8)98;dong_porf_video_js_api_smoke_test_memory[899]=(u8)101;dong_porf_video_js_api_smoke_test_memory[900]=(u8)32;dong_porf_video_js_api_smoke_test_memory[901]=(u8)99;dong_porf_video_js_api_smoke_test_memory[902]=(u8)97;dong_porf_video_js_api_smoke_test_memory[903]=(u8)108;dong_porf_video_js_api_smoke_test_memory[904]=(u8)108;dong_porf_video_js_api_smoke_test_memory[905]=(u8)101;dong_porf_video_js_api_smoke_test_memory[906]=(u8)100;dong_porf_video_js_api_smoke_test_memory[907]=(u8)32;dong_porf_video_js_api_smoke_test_memory[908]=(u8)111;dong_porf_video_js_api_smoke_test_memory[909]=(u8)110;dong_porf_video_js_api_smoke_test_memory[910]=(u8)32;dong_porf_video_js_api_smoke_test_memory[911]=(u8)97;dong_porf_video_js_api_smoke_test_memory[912]=(u8)32;dong_porf_video_js_api_smoke_test_memory[913]=(u8)116;dong_porf_video_js_api_smoke_test_memory[914]=(u8)121;dong_porf_video_js_api_smoke_test_memory[915]=(u8)112;dong_porf_video_js_api_smoke_test_memory[916]=(u8)101;dong_porf_video_js_api_smoke_test_memory[917]=(u8)32;dong_porf_video_js_api_smoke_test_memory[918]=(u8)119;dong_porf_video_js_api_smoke_test_memory[919]=(u8)105;dong_porf_video_js_api_smoke_test_memory[920]=(u8)116;dong_porf_video_js_api_smoke_test_memory[921]=(u8)104;dong_porf_video_js_api_smoke_test_memory[922]=(u8)111;dong_porf_video_js_api_smoke_test_memory[923]=(u8)117;dong_porf_video_js_api_smoke_test_memory[924]=(u8)116;dong_porf_video_js_api_smoke_test_memory[925]=(u8)32;dong_porf_video_js_api_smoke_test_memory[926]=(u8)97;dong_porf_video_js_api_smoke_test_memory[927]=(u8)110;dong_porf_video_js_api_smoke_test_memory[928]=(u8)32;dong_porf_video_js_api_smoke_test_memory[929]=(u8)105;dong_porf_video_js_api_smoke_test_memory[930]=(u8)109;dong_porf_video_js_api_smoke_test_memory[931]=(u8)112;dong_porf_video_js_api_smoke_test_memory[932]=(u8)108;
+  dong_porf_video_js_api_smoke_test_memory[935]=(u8)54;dong_porf_video_js_api_smoke_test_memory[939]=(u8)78;dong_porf_video_js_api_smoke_test_memory[940]=(u8)117;dong_porf_video_js_api_smoke_test_memory[941]=(u8)109;dong_porf_video_js_api_smoke_test_memory[942]=(u8)98;dong_porf_video_js_api_smoke_test_memory[943]=(u8)101;dong_porf_video_js_api_smoke_test_memory[944]=(u8)114;dong_porf_video_js_api_smoke_test_memory[945]=(u8)46;dong_porf_video_js_api_smoke_test_memory[946]=(u8)112;dong_porf_video_js_api_smoke_test_memory[947]=(u8)114;dong_porf_video_js_api_smoke_test_memory[948]=(u8)111;dong_porf_video_js_api_smoke_test_memory[949]=(u8)116;dong_porf_video_js_api_smoke_test_memory[950]=(u8)111;dong_porf_video_js_api_smoke_test_memory[951]=(u8)116;dong_porf_video_js_api_smoke_test_memory[952]=(u8)121;dong_porf_video_js_api_smoke_test_memory[953]=(u8)112;dong_porf_video_js_api_smoke_test_memory[954]=(u8)101;dong_porf_video_js_api_smoke_test_memory[955]=(u8)46;dong_porf_video_js_api_smoke_test_memory[956]=(u8)118;dong_porf_video_js_api_smoke_test_memory[957]=(u8)97;dong_porf_video_js_api_smoke_test_memory[958]=(u8)108;dong_porf_video_js_api_smoke_test_memory[959]=(u8)117;dong_porf_video_js_api_smoke_test_memory[960]=(u8)101;dong_porf_video_js_api_smoke_test_memory[961]=(u8)79;dong_porf_video_js_api_smoke_test_memory[962]=(u8)102;dong_porf_video_js_api_smoke_test_memory[963]=(u8)32;dong_porf_video_js_api_smoke_test_memory[964]=(u8)101;dong_porf_video_js_api_smoke_test_memory[965]=(u8)120;dong_porf_video_js_api_smoke_test_memory[966]=(u8)112;dong_porf_video_js_api_smoke_test_memory[967]=(u8)101;dong_porf_video_js_api_smoke_test_memory[968]=(u8)99;dong_porf_video_js_api_smoke_test_memory[969]=(u8)116;dong_porf_video_js_api_smoke_test_memory[970]=(u8)115;dong_porf_video_js_api_smoke_test_memory[971]=(u8)32;dong_porf_video_js_api_smoke_test_memory[972]=(u8)39;dong_porf_video_js_api_smoke_test_memory[973]=(u8)116;dong_porf_video_js_api_smoke_test_memory[974]=(u8)104;dong_porf_video_js_api_smoke_test_memory[975]=(u8)105;dong_porf_video_js_api_smoke_test_memory[976]=(u8)115;dong_porf_video_js_api_smoke_test_memory[977]=(u8)39;dong_porf_video_js_api_smoke_test_memory[978]=(u8)32;dong_porf_video_js_api_smoke_test_memory[979]=(u8)116;dong_porf_video_js_api_smoke_test_memory[980]=(u8)111;dong_porf_video_js_api_smoke_test_memory[981]=(u8)32;dong_porf_video_js_api_smoke_test_memory[982]=(u8)98;dong_porf_video_js_api_smoke_test_memory[983]=(u8)101;dong_porf_video_js_api_smoke_test_memory[984]=(u8)32;dong_porf_video_js_api_smoke_test_memory[985]=(u8)97;dong_porf_video_js_api_smoke_test_memory[986]=(u8)32;dong_porf_video_js_api_smoke_test_memory[987]=(u8)78;dong_porf_video_js_api_smoke_test_memory[988]=(u8)117;dong_porf_video_js_api_smoke_test_memory[989]=(u8)109;dong_porf_video_js_api_smoke_test_memory[990]=(u8)98;dong_porf_video_js_api_smoke_test_memory[991]=(u8)101;dong_porf_video_js_api_smoke_test_memory[992]=(u8)114;
+  dong_porf_video_js_api_smoke_test_memory[995]=(u8)7;dong_porf_video_js_api_smoke_test_memory[999]=(u8)118;dong_porf_video_js_api_smoke_test_memory[1000]=(u8)97;dong_porf_video_js_api_smoke_test_memory[1001]=(u8)108;dong_porf_video_js_api_smoke_test_memory[1002]=(u8)117;dong_porf_video_js_api_smoke_test_memory[1003]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1004]=(u8)79;dong_porf_video_js_api_smoke_test_memory[1005]=(u8)102;
+  dong_porf_video_js_api_smoke_test_memory[1008]=(u8)29;dong_porf_video_js_api_smoke_test_memory[1012]=(u8)70;dong_porf_video_js_api_smoke_test_memory[1013]=(u8)117;dong_porf_video_js_api_smoke_test_memory[1014]=(u8)110;dong_porf_video_js_api_smoke_test_memory[1015]=(u8)99;dong_porf_video_js_api_smoke_test_memory[1016]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1017]=(u8)105;dong_porf_video_js_api_smoke_test_memory[1018]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1019]=(u8)110;dong_porf_video_js_api_smoke_test_memory[1020]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1021]=(u8)105;dong_porf_video_js_api_smoke_test_memory[1022]=(u8)115;dong_porf_video_js_api_smoke_test_memory[1023]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1024]=(u8)110;dong_porf_video_js_api_smoke_test_memory[1025]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1026]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1027]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1028]=(u8)97;dong_porf_video_js_api_smoke_test_memory[1029]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1030]=(u8)99;dong_porf_video_js_api_smoke_test_memory[1031]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1032]=(u8)110;dong_porf_video_js_api_smoke_test_memory[1033]=(u8)115;dong_porf_video_js_api_smoke_test_memory[1034]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1035]=(u8)114;dong_porf_video_js_api_smoke_test_memory[1036]=(u8)117;dong_porf_video_js_api_smoke_test_memory[1037]=(u8)99;dong_porf_video_js_api_smoke_test_memory[1038]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1039]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1040]=(u8)114;
+  dong_porf_video_js_api_smoke_test_memory[1043]=(u8)21;dong_porf_video_js_api_smoke_test_memory[1047]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1048]=(u8)118;dong_porf_video_js_api_smoke_test_memory[1049]=(u8)114;dong_porf_video_js_api_smoke_test_memory[1050]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1051]=(u8)105;dong_porf_video_js_api_smoke_test_memory[1052]=(u8)115;dong_porf_video_js_api_smoke_test_memory[1053]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1054]=(u8)110;dong_porf_video_js_api_smoke_test_memory[1055]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1056]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1057]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1058]=(u8)97;dong_porf_video_js_api_smoke_test_memory[1059]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1060]=(u8)102;dong_porf_video_js_api_smoke_test_memory[1061]=(u8)117;dong_porf_video_js_api_smoke_test_memory[1062]=(u8)110;dong_porf_video_js_api_smoke_test_memory[1063]=(u8)99;dong_porf_video_js_api_smoke_test_memory[1064]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1065]=(u8)105;dong_porf_video_js_api_smoke_test_memory[1066]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1067]=(u8)110;
+  dong_porf_video_js_api_smoke_test_memory[1070]=(u8)37;dong_porf_video_js_api_smoke_test_memory[1074]=(u8)67;dong_porf_video_js_api_smoke_test_memory[1075]=(u8)97;dong_porf_video_js_api_smoke_test_memory[1076]=(u8)110;dong_porf_video_js_api_smoke_test_memory[1077]=(u8)110;dong_porf_video_js_api_smoke_test_memory[1078]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1079]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1080]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1081]=(u8)99;dong_porf_video_js_api_smoke_test_memory[1082]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1083]=(u8)110;dong_porf_video_js_api_smoke_test_memory[1084]=(u8)118;dong_porf_video_js_api_smoke_test_memory[1085]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1086]=(u8)114;dong_porf_video_js_api_smoke_test_memory[1087]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1088]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1089]=(u8)97;dong_porf_video_js_api_smoke_test_memory[1090]=(u8)110;dong_porf_video_js_api_smoke_test_memory[1091]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1092]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1093]=(u8)98;dong_porf_video_js_api_smoke_test_memory[1094]=(u8)106;dong_porf_video_js_api_smoke_test_memory[1095]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1096]=(u8)99;dong_porf_video_js_api_smoke_test_memory[1097]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1098]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1099]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1100]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1101]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1102]=(u8)112;dong_porf_video_js_api_smoke_test_memory[1103]=(u8)114;dong_porf_video_js_api_smoke_test_memory[1104]=(u8)105;dong_porf_video_js_api_smoke_test_memory[1105]=(u8)109;dong_porf_video_js_api_smoke_test_memory[1106]=(u8)105;dong_porf_video_js_api_smoke_test_memory[1107]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1108]=(u8)105;dong_porf_video_js_api_smoke_test_memory[1109]=(u8)118;dong_porf_video_js_api_smoke_test_memory[1110]=(u8)101;
+  dong_porf_video_js_api_smoke_test_memory[1113]=(u8)20;dong_porf_video_js_api_smoke_test_memory[1117]=(u8)73;dong_porf_video_js_api_smoke_test_memory[1118]=(u8)110;dong_porf_video_js_api_smoke_test_memory[1119]=(u8)118;dong_porf_video_js_api_smoke_test_memory[1120]=(u8)97;dong_porf_video_js_api_smoke_test_memory[1121]=(u8)108;dong_porf_video_js_api_smoke_test_memory[1122]=(u8)105;dong_porf_video_js_api_smoke_test_memory[1123]=(u8)100;dong_porf_video_js_api_smoke_test_memory[1124]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1125]=(u8)97;dong_porf_video_js_api_smoke_test_memory[1126]=(u8)114;dong_porf_video_js_api_smoke_test_memory[1127]=(u8)114;dong_porf_video_js_api_smoke_test_memory[1128]=(u8)97;dong_porf_video_js_api_smoke_test_memory[1129]=(u8)121;dong_porf_video_js_api_smoke_test_memory[1130]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1131]=(u8)108;dong_porf_video_js_api_smoke_test_memory[1132]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1133]=(u8)110;dong_porf_video_js_api_smoke_test_memory[1134]=(u8)103;dong_porf_video_js_api_smoke_test_memory[1135]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1136]=(u8)104;
+  dong_porf_video_js_api_smoke_test_memory[1139]=(u8)20;dong_porf_video_js_api_smoke_test_memory[1143]=(u8)112;dong_porf_video_js_api_smoke_test_memory[1144]=(u8)114;dong_porf_video_js_api_smoke_test_memory[1145]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1146]=(u8)112;dong_porf_video_js_api_smoke_test_memory[1147]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1148]=(u8)114;dong_porf_video_js_api_smoke_test_memory[1149]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1150]=(u8)121;dong_porf_video_js_api_smoke_test_memory[1151]=(u8)73;dong_porf_video_js_api_smoke_test_memory[1152]=(u8)115;dong_porf_video_js_api_smoke_test_memory[1153]=(u8)69;dong_porf_video_js_api_smoke_test_memory[1154]=(u8)110;dong_porf_video_js_api_smoke_test_memory[1155]=(u8)117;dong_porf_video_js_api_smoke_test_memory[1156]=(u8)109;dong_porf_video_js_api_smoke_test_memory[1157]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1158]=(u8)114;dong_porf_video_js_api_smoke_test_memory[1159]=(u8)97;dong_porf_video_js_api_smoke_test_memory[1160]=(u8)98;dong_porf_video_js_api_smoke_test_memory[1161]=(u8)108;dong_porf_video_js_api_smoke_test_memory[1162]=(u8)101;
+  dong_porf_video_js_api_smoke_test_memory[1165]=(u8)13;dong_porf_video_js_api_smoke_test_memory[1169]=(u8)105;dong_porf_video_js_api_smoke_test_memory[1170]=(u8)115;dong_porf_video_js_api_smoke_test_memory[1171]=(u8)80;dong_porf_video_js_api_smoke_test_memory[1172]=(u8)114;dong_porf_video_js_api_smoke_test_memory[1173]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1174]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1175]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1176]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1177]=(u8)121;dong_porf_video_js_api_smoke_test_memory[1178]=(u8)112;dong_porf_video_js_api_smoke_test_memory[1179]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1180]=(u8)79;dong_porf_video_js_api_smoke_test_memory[1181]=(u8)102;
+  dong_porf_video_js_api_smoke_test_memory[1184]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1188]=(u8)84;dong_porf_video_js_api_smoke_test_memory[1189]=(u8)104;dong_porf_video_js_api_smoke_test_memory[1190]=(u8)105;dong_porf_video_js_api_smoke_test_memory[1191]=(u8)115;dong_porf_video_js_api_smoke_test_memory[1192]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1193]=(u8)105;dong_porf_video_js_api_smoke_test_memory[1194]=(u8)115;dong_porf_video_js_api_smoke_test_memory[1195]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1196]=(u8)110;dong_porf_video_js_api_smoke_test_memory[1197]=(u8)117;dong_porf_video_js_api_smoke_test_memory[1198]=(u8)108;dong_porf_video_js_api_smoke_test_memory[1199]=(u8)108;dong_porf_video_js_api_smoke_test_memory[1200]=(u8)105;dong_porf_video_js_api_smoke_test_memory[1201]=(u8)115;dong_porf_video_js_api_smoke_test_memory[1202]=(u8)104;dong_porf_video_js_api_smoke_test_memory[1203]=(u8)44;dong_porf_video_js_api_smoke_test_memory[1204]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1205]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1206]=(u8)120;dong_porf_video_js_api_smoke_test_memory[1207]=(u8)112;dong_porf_video_js_api_smoke_test_memory[1208]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1209]=(u8)99;dong_porf_video_js_api_smoke_test_memory[1210]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1211]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1212]=(u8)100;dong_porf_video_js_api_smoke_test_memory[1213]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1214]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1215]=(u8)98;dong_porf_video_js_api_smoke_test_memory[1216]=(u8)106;dong_porf_video_js_api_smoke_test_memory[1217]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1218]=(u8)99;dong_porf_video_js_api_smoke_test_memory[1219]=(u8)116;
+  dong_porf_video_js_api_smoke_test_memory[1222]=(u8)14;dong_porf_video_js_api_smoke_test_memory[1226]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1227]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1228]=(u8)76;dong_porf_video_js_api_smoke_test_memory[1229]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1230]=(u8)99;dong_porf_video_js_api_smoke_test_memory[1231]=(u8)97;dong_porf_video_js_api_smoke_test_memory[1232]=(u8)108;dong_porf_video_js_api_smoke_test_memory[1233]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1234]=(u8)83;dong_porf_video_js_api_smoke_test_memory[1235]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1236]=(u8)114;dong_porf_video_js_api_smoke_test_memory[1237]=(u8)105;dong_porf_video_js_api_smoke_test_memory[1238]=(u8)110;dong_porf_video_js_api_smoke_test_memory[1239]=(u8)103;
+  dong_porf_video_js_api_smoke_test_memory[1242]=(u8)55;dong_porf_video_js_api_smoke_test_memory[1246]=(u8)83;dong_porf_video_js_api_smoke_test_memory[1247]=(u8)121;dong_porf_video_js_api_smoke_test_memory[1248]=(u8)109;dong_porf_video_js_api_smoke_test_memory[1249]=(u8)98;dong_porf_video_js_api_smoke_test_memory[1250]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1251]=(u8)108;dong_porf_video_js_api_smoke_test_memory[1252]=(u8)46;dong_porf_video_js_api_smoke_test_memory[1253]=(u8)112;dong_porf_video_js_api_smoke_test_memory[1254]=(u8)114;dong_porf_video_js_api_smoke_test_memory[1255]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1256]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1257]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1258]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1259]=(u8)121;dong_porf_video_js_api_smoke_test_memory[1260]=(u8)112;dong_porf_video_js_api_smoke_test_memory[1261]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1262]=(u8)46;dong_porf_video_js_api_smoke_test_memory[1263]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1264]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1265]=(u8)83;dong_porf_video_js_api_smoke_test_memory[1266]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1267]=(u8)114;dong_porf_video_js_api_smoke_test_memory[1268]=(u8)105;dong_porf_video_js_api_smoke_test_memory[1269]=(u8)110;dong_porf_video_js_api_smoke_test_memory[1270]=(u8)103;dong_porf_video_js_api_smoke_test_memory[1271]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1272]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1273]=(u8)120;dong_porf_video_js_api_smoke_test_memory[1274]=(u8)112;dong_porf_video_js_api_smoke_test_memory[1275]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1276]=(u8)99;dong_porf_video_js_api_smoke_test_memory[1277]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1278]=(u8)115;dong_porf_video_js_api_smoke_test_memory[1279]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1280]=(u8)39;dong_porf_video_js_api_smoke_test_memory[1281]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1282]=(u8)104;dong_porf_video_js_api_smoke_test_memory[1283]=(u8)105;dong_porf_video_js_api_smoke_test_memory[1284]=(u8)115;dong_porf_video_js_api_smoke_test_memory[1285]=(u8)39;dong_porf_video_js_api_smoke_test_memory[1286]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1287]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1288]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1289]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1290]=(u8)98;dong_porf_video_js_api_smoke_test_memory[1291]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1292]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1293]=(u8)97;dong_porf_video_js_api_smoke_test_memory[1294]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1295]=(u8)83;dong_porf_video_js_api_smoke_test_memory[1296]=(u8)121;dong_porf_video_js_api_smoke_test_memory[1297]=(u8)109;dong_porf_video_js_api_smoke_test_memory[1298]=(u8)98;dong_porf_video_js_api_smoke_test_memory[1299]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1300]=(u8)108;
+  dong_porf_video_js_api_smoke_test_memory[1303]=(u8)62;dong_porf_video_js_api_smoke_test_memory[1307]=(u8)83;dong_porf_video_js_api_smoke_test_memory[1308]=(u8)121;dong_porf_video_js_api_smoke_test_memory[1309]=(u8)109;dong_porf_video_js_api_smoke_test_memory[1310]=(u8)98;dong_porf_video_js_api_smoke_test_memory[1311]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1312]=(u8)108;dong_porf_video_js_api_smoke_test_memory[1313]=(u8)46;dong_porf_video_js_api_smoke_test_memory[1314]=(u8)112;dong_porf_video_js_api_smoke_test_memory[1315]=(u8)114;dong_porf_video_js_api_smoke_test_memory[1316]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1317]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1318]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1319]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1320]=(u8)121;dong_porf_video_js_api_smoke_test_memory[1321]=(u8)112;dong_porf_video_js_api_smoke_test_memory[1322]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1323]=(u8)46;dong_porf_video_js_api_smoke_test_memory[1324]=(u8)100;dong_porf_video_js_api_smoke_test_memory[1325]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1326]=(u8)115;dong_porf_video_js_api_smoke_test_memory[1327]=(u8)99;dong_porf_video_js_api_smoke_test_memory[1328]=(u8)114;dong_porf_video_js_api_smoke_test_memory[1329]=(u8)105;dong_porf_video_js_api_smoke_test_memory[1330]=(u8)112;dong_porf_video_js_api_smoke_test_memory[1331]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1332]=(u8)105;dong_porf_video_js_api_smoke_test_memory[1333]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1334]=(u8)110;dong_porf_video_js_api_smoke_test_memory[1335]=(u8)36;dong_porf_video_js_api_smoke_test_memory[1336]=(u8)103;dong_porf_video_js_api_smoke_test_memory[1337]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1338]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1339]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1340]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1341]=(u8)120;dong_porf_video_js_api_smoke_test_memory[1342]=(u8)112;dong_porf_video_js_api_smoke_test_memory[1343]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1344]=(u8)99;dong_porf_video_js_api_smoke_test_memory[1345]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1346]=(u8)115;dong_porf_video_js_api_smoke_test_memory[1347]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1348]=(u8)39;dong_porf_video_js_api_smoke_test_memory[1349]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1350]=(u8)104;dong_porf_video_js_api_smoke_test_memory[1351]=(u8)105;dong_porf_video_js_api_smoke_test_memory[1352]=(u8)115;dong_porf_video_js_api_smoke_test_memory[1353]=(u8)39;dong_porf_video_js_api_smoke_test_memory[1354]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1355]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1356]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1357]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1358]=(u8)98;dong_porf_video_js_api_smoke_test_memory[1359]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1360]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1361]=(u8)97;dong_porf_video_js_api_smoke_test_memory[1362]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1363]=(u8)83;dong_porf_video_js_api_smoke_test_memory[1364]=(u8)121;dong_porf_video_js_api_smoke_test_memory[1365]=(u8)109;dong_porf_video_js_api_smoke_test_memory[1366]=(u8)98;dong_porf_video_js_api_smoke_test_memory[1367]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1368]=(u8)108;
+  dong_porf_video_js_api_smoke_test_memory[1371]=(u8)18;dong_porf_video_js_api_smoke_test_memory[1375]=(u8)91;dong_porf_video_js_api_smoke_test_memory[1376]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1377]=(u8)98;dong_porf_video_js_api_smoke_test_memory[1378]=(u8)106;dong_porf_video_js_api_smoke_test_memory[1379]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1380]=(u8)99;dong_porf_video_js_api_smoke_test_memory[1381]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1382]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1383]=(u8)85;dong_porf_video_js_api_smoke_test_memory[1384]=(u8)110;dong_porf_video_js_api_smoke_test_memory[1385]=(u8)100;dong_porf_video_js_api_smoke_test_memory[1386]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1387]=(u8)102;dong_porf_video_js_api_smoke_test_memory[1388]=(u8)105;dong_porf_video_js_api_smoke_test_memory[1389]=(u8)110;dong_porf_video_js_api_smoke_test_memory[1390]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1391]=(u8)100;dong_porf_video_js_api_smoke_test_memory[1392]=(u8)93;
+  dong_porf_video_js_api_smoke_test_memory[1395]=(u8)13;dong_porf_video_js_api_smoke_test_memory[1399]=(u8)91;dong_porf_video_js_api_smoke_test_memory[1400]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1401]=(u8)98;dong_porf_video_js_api_smoke_test_memory[1402]=(u8)106;dong_porf_video_js_api_smoke_test_memory[1403]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1404]=(u8)99;dong_porf_video_js_api_smoke_test_memory[1405]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1406]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1407]=(u8)78;dong_porf_video_js_api_smoke_test_memory[1408]=(u8)117;dong_porf_video_js_api_smoke_test_memory[1409]=(u8)108;dong_porf_video_js_api_smoke_test_memory[1410]=(u8)108;dong_porf_video_js_api_smoke_test_memory[1411]=(u8)93;
+  dong_porf_video_js_api_smoke_test_memory[1414]=(u8)14;dong_porf_video_js_api_smoke_test_memory[1418]=(u8)91;dong_porf_video_js_api_smoke_test_memory[1419]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1420]=(u8)98;dong_porf_video_js_api_smoke_test_memory[1421]=(u8)106;dong_porf_video_js_api_smoke_test_memory[1422]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1423]=(u8)99;dong_porf_video_js_api_smoke_test_memory[1424]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1425]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1426]=(u8)65;dong_porf_video_js_api_smoke_test_memory[1427]=(u8)114;dong_porf_video_js_api_smoke_test_memory[1428]=(u8)114;dong_porf_video_js_api_smoke_test_memory[1429]=(u8)97;dong_porf_video_js_api_smoke_test_memory[1430]=(u8)121;dong_porf_video_js_api_smoke_test_memory[1431]=(u8)93;
+  dong_porf_video_js_api_smoke_test_memory[1434]=(u8)17;dong_porf_video_js_api_smoke_test_memory[1438]=(u8)91;dong_porf_video_js_api_smoke_test_memory[1439]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1440]=(u8)98;dong_porf_video_js_api_smoke_test_memory[1441]=(u8)106;dong_porf_video_js_api_smoke_test_memory[1442]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1443]=(u8)99;dong_porf_video_js_api_smoke_test_memory[1444]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1445]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1446]=(u8)70;dong_porf_video_js_api_smoke_test_memory[1447]=(u8)117;dong_porf_video_js_api_smoke_test_memory[1448]=(u8)110;dong_porf_video_js_api_smoke_test_memory[1449]=(u8)99;dong_porf_video_js_api_smoke_test_memory[1450]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1451]=(u8)105;dong_porf_video_js_api_smoke_test_memory[1452]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1453]=(u8)110;dong_porf_video_js_api_smoke_test_memory[1454]=(u8)93;
+  dong_porf_video_js_api_smoke_test_memory[1457]=(u8)16;dong_porf_video_js_api_smoke_test_memory[1461]=(u8)91;dong_porf_video_js_api_smoke_test_memory[1462]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1463]=(u8)98;dong_porf_video_js_api_smoke_test_memory[1464]=(u8)106;dong_porf_video_js_api_smoke_test_memory[1465]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1466]=(u8)99;dong_porf_video_js_api_smoke_test_memory[1467]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1468]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1469]=(u8)66;dong_porf_video_js_api_smoke_test_memory[1470]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1471]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1472]=(u8)108;dong_porf_video_js_api_smoke_test_memory[1473]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1474]=(u8)97;dong_porf_video_js_api_smoke_test_memory[1475]=(u8)110;dong_porf_video_js_api_smoke_test_memory[1476]=(u8)93;
+  dong_porf_video_js_api_smoke_test_memory[1479]=(u8)15;dong_porf_video_js_api_smoke_test_memory[1483]=(u8)91;dong_porf_video_js_api_smoke_test_memory[1484]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1485]=(u8)98;dong_porf_video_js_api_smoke_test_memory[1486]=(u8)106;dong_porf_video_js_api_smoke_test_memory[1487]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1488]=(u8)99;dong_porf_video_js_api_smoke_test_memory[1489]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1490]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1491]=(u8)78;dong_porf_video_js_api_smoke_test_memory[1492]=(u8)117;dong_porf_video_js_api_smoke_test_memory[1493]=(u8)109;dong_porf_video_js_api_smoke_test_memory[1494]=(u8)98;dong_porf_video_js_api_smoke_test_memory[1495]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1496]=(u8)114;dong_porf_video_js_api_smoke_test_memory[1497]=(u8)93;
+  dong_porf_video_js_api_smoke_test_memory[1500]=(u8)15;dong_porf_video_js_api_smoke_test_memory[1504]=(u8)91;dong_porf_video_js_api_smoke_test_memory[1505]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1506]=(u8)98;dong_porf_video_js_api_smoke_test_memory[1507]=(u8)106;dong_porf_video_js_api_smoke_test_memory[1508]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1509]=(u8)99;dong_porf_video_js_api_smoke_test_memory[1510]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1511]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1512]=(u8)83;dong_porf_video_js_api_smoke_test_memory[1513]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1514]=(u8)114;dong_porf_video_js_api_smoke_test_memory[1515]=(u8)105;dong_porf_video_js_api_smoke_test_memory[1516]=(u8)110;dong_porf_video_js_api_smoke_test_memory[1517]=(u8)103;dong_porf_video_js_api_smoke_test_memory[1518]=(u8)93;
+  dong_porf_video_js_api_smoke_test_memory[1521]=(u8)13;dong_porf_video_js_api_smoke_test_memory[1525]=(u8)91;dong_porf_video_js_api_smoke_test_memory[1526]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1527]=(u8)98;dong_porf_video_js_api_smoke_test_memory[1528]=(u8)106;dong_porf_video_js_api_smoke_test_memory[1529]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1530]=(u8)99;dong_porf_video_js_api_smoke_test_memory[1531]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1532]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1533]=(u8)68;dong_porf_video_js_api_smoke_test_memory[1534]=(u8)97;dong_porf_video_js_api_smoke_test_memory[1535]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1536]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1537]=(u8)93;
+  dong_porf_video_js_api_smoke_test_memory[1540]=(u8)15;dong_porf_video_js_api_smoke_test_memory[1544]=(u8)91;dong_porf_video_js_api_smoke_test_memory[1545]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1546]=(u8)98;dong_porf_video_js_api_smoke_test_memory[1547]=(u8)106;dong_porf_video_js_api_smoke_test_memory[1548]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1549]=(u8)99;dong_porf_video_js_api_smoke_test_memory[1550]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1551]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1552]=(u8)82;dong_porf_video_js_api_smoke_test_memory[1553]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1554]=(u8)103;dong_porf_video_js_api_smoke_test_memory[1555]=(u8)69;dong_porf_video_js_api_smoke_test_memory[1556]=(u8)120;dong_porf_video_js_api_smoke_test_memory[1557]=(u8)112;dong_porf_video_js_api_smoke_test_memory[1558]=(u8)93;
+  dong_porf_video_js_api_smoke_test_memory[1561]=(u8)15;dong_porf_video_js_api_smoke_test_memory[1565]=(u8)91;dong_porf_video_js_api_smoke_test_memory[1566]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1567]=(u8)98;dong_porf_video_js_api_smoke_test_memory[1568]=(u8)106;dong_porf_video_js_api_smoke_test_memory[1569]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1570]=(u8)99;dong_porf_video_js_api_smoke_test_memory[1571]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1572]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1573]=(u8)79;dong_porf_video_js_api_smoke_test_memory[1574]=(u8)98;dong_porf_video_js_api_smoke_test_memory[1575]=(u8)106;dong_porf_video_js_api_smoke_test_memory[1576]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1577]=(u8)99;dong_porf_video_js_api_smoke_test_memory[1578]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1579]=(u8)93;
+  dong_porf_video_js_api_smoke_test_memory[1582]=(u8)57;dong_porf_video_js_api_smoke_test_memory[1586]=(u8)83;dong_porf_video_js_api_smoke_test_memory[1587]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1588]=(u8)114;dong_porf_video_js_api_smoke_test_memory[1589]=(u8)105;dong_porf_video_js_api_smoke_test_memory[1590]=(u8)110;dong_porf_video_js_api_smoke_test_memory[1591]=(u8)103;dong_porf_video_js_api_smoke_test_memory[1592]=(u8)46;dong_porf_video_js_api_smoke_test_memory[1593]=(u8)112;dong_porf_video_js_api_smoke_test_memory[1594]=(u8)114;dong_porf_video_js_api_smoke_test_memory[1595]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1596]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1597]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1598]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1599]=(u8)121;dong_porf_video_js_api_smoke_test_memory[1600]=(u8)112;dong_porf_video_js_api_smoke_test_memory[1601]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1602]=(u8)46;dong_porf_video_js_api_smoke_test_memory[1603]=(u8)118;dong_porf_video_js_api_smoke_test_memory[1604]=(u8)97;dong_porf_video_js_api_smoke_test_memory[1605]=(u8)108;dong_porf_video_js_api_smoke_test_memory[1606]=(u8)117;dong_porf_video_js_api_smoke_test_memory[1607]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1608]=(u8)79;dong_porf_video_js_api_smoke_test_memory[1609]=(u8)102;dong_porf_video_js_api_smoke_test_memory[1610]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1611]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1612]=(u8)120;dong_porf_video_js_api_smoke_test_memory[1613]=(u8)112;dong_porf_video_js_api_smoke_test_memory[1614]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1615]=(u8)99;dong_porf_video_js_api_smoke_test_memory[1616]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1617]=(u8)115;dong_porf_video_js_api_smoke_test_memory[1618]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1619]=(u8)39;dong_porf_video_js_api_smoke_test_memory[1620]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1621]=(u8)104;dong_porf_video_js_api_smoke_test_memory[1622]=(u8)105;dong_porf_video_js_api_smoke_test_memory[1623]=(u8)115;dong_porf_video_js_api_smoke_test_memory[1624]=(u8)39;dong_porf_video_js_api_smoke_test_memory[1625]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1626]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1627]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1628]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1629]=(u8)98;dong_porf_video_js_api_smoke_test_memory[1630]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1631]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1632]=(u8)110;dong_porf_video_js_api_smoke_test_memory[1633]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1634]=(u8)110;dong_porf_video_js_api_smoke_test_memory[1635]=(u8)45;dong_porf_video_js_api_smoke_test_memory[1636]=(u8)110;dong_porf_video_js_api_smoke_test_memory[1637]=(u8)117;dong_porf_video_js_api_smoke_test_memory[1638]=(u8)108;dong_porf_video_js_api_smoke_test_memory[1639]=(u8)108;dong_porf_video_js_api_smoke_test_memory[1640]=(u8)105;dong_porf_video_js_api_smoke_test_memory[1641]=(u8)115;dong_porf_video_js_api_smoke_test_memory[1642]=(u8)104;
+  dong_porf_video_js_api_smoke_test_memory[1645]=(u8)33;dong_porf_video_js_api_smoke_test_memory[1649]=(u8)67;dong_porf_video_js_api_smoke_test_memory[1650]=(u8)97;dong_porf_video_js_api_smoke_test_memory[1651]=(u8)110;dong_porf_video_js_api_smoke_test_memory[1652]=(u8)110;dong_porf_video_js_api_smoke_test_memory[1653]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1654]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1655]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1656]=(u8)114;dong_porf_video_js_api_smoke_test_memory[1657]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1658]=(u8)97;dong_porf_video_js_api_smoke_test_memory[1659]=(u8)100;dong_porf_video_js_api_smoke_test_memory[1660]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1661]=(u8)112;dong_porf_video_js_api_smoke_test_memory[1662]=(u8)114;dong_porf_video_js_api_smoke_test_memory[1663]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1664]=(u8)112;dong_porf_video_js_api_smoke_test_memory[1665]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1666]=(u8)114;dong_porf_video_js_api_smoke_test_memory[1667]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1668]=(u8)121;dong_porf_video_js_api_smoke_test_memory[1669]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1670]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1671]=(u8)102;dong_porf_video_js_api_smoke_test_memory[1672]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1673]=(u8)117;dong_porf_video_js_api_smoke_test_memory[1674]=(u8)110;dong_porf_video_js_api_smoke_test_memory[1675]=(u8)100;dong_porf_video_js_api_smoke_test_memory[1676]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1677]=(u8)102;dong_porf_video_js_api_smoke_test_memory[1678]=(u8)105;dong_porf_video_js_api_smoke_test_memory[1679]=(u8)110;dong_porf_video_js_api_smoke_test_memory[1680]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1681]=(u8)100;
+  dong_porf_video_js_api_smoke_test_memory[1684]=(u8)10;dong_porf_video_js_api_smoke_test_memory[1688]=(u8)99;dong_porf_video_js_api_smoke_test_memory[1689]=(u8)104;dong_porf_video_js_api_smoke_test_memory[1690]=(u8)97;dong_porf_video_js_api_smoke_test_memory[1691]=(u8)114;dong_porf_video_js_api_smoke_test_memory[1692]=(u8)67;dong_porf_video_js_api_smoke_test_memory[1693]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1694]=(u8)100;dong_porf_video_js_api_smoke_test_memory[1695]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1696]=(u8)65;dong_porf_video_js_api_smoke_test_memory[1697]=(u8)116;
+  dong_porf_video_js_api_smoke_test_memory[1700]=(u8)27;dong_porf_video_js_api_smoke_test_memory[1704]=(u8)117;dong_porf_video_js_api_smoke_test_memory[1705]=(u8)110;dong_porf_video_js_api_smoke_test_memory[1706]=(u8)100;dong_porf_video_js_api_smoke_test_memory[1707]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1708]=(u8)102;dong_porf_video_js_api_smoke_test_memory[1709]=(u8)105;dong_porf_video_js_api_smoke_test_memory[1710]=(u8)110;dong_porf_video_js_api_smoke_test_memory[1711]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1712]=(u8)100;dong_porf_video_js_api_smoke_test_memory[1713]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1714]=(u8)105;dong_porf_video_js_api_smoke_test_memory[1715]=(u8)115;dong_porf_video_js_api_smoke_test_memory[1716]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1717]=(u8)110;dong_porf_video_js_api_smoke_test_memory[1718]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1719]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1720]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1721]=(u8)97;dong_porf_video_js_api_smoke_test_memory[1722]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1723]=(u8)102;dong_porf_video_js_api_smoke_test_memory[1724]=(u8)117;dong_porf_video_js_api_smoke_test_memory[1725]=(u8)110;dong_porf_video_js_api_smoke_test_memory[1726]=(u8)99;dong_porf_video_js_api_smoke_test_memory[1727]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1728]=(u8)105;dong_porf_video_js_api_smoke_test_memory[1729]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1730]=(u8)110;
+  dong_porf_video_js_api_smoke_test_memory[1733]=(u8)60;dong_porf_video_js_api_smoke_test_memory[1737]=(u8)83;dong_porf_video_js_api_smoke_test_memory[1738]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1739]=(u8)114;dong_porf_video_js_api_smoke_test_memory[1740]=(u8)105;dong_porf_video_js_api_smoke_test_memory[1741]=(u8)110;dong_porf_video_js_api_smoke_test_memory[1742]=(u8)103;dong_porf_video_js_api_smoke_test_memory[1743]=(u8)46;dong_porf_video_js_api_smoke_test_memory[1744]=(u8)112;dong_porf_video_js_api_smoke_test_memory[1745]=(u8)114;dong_porf_video_js_api_smoke_test_memory[1746]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1747]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1748]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1749]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1750]=(u8)121;dong_porf_video_js_api_smoke_test_memory[1751]=(u8)112;dong_porf_video_js_api_smoke_test_memory[1752]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1753]=(u8)46;dong_porf_video_js_api_smoke_test_memory[1754]=(u8)99;dong_porf_video_js_api_smoke_test_memory[1755]=(u8)104;dong_porf_video_js_api_smoke_test_memory[1756]=(u8)97;dong_porf_video_js_api_smoke_test_memory[1757]=(u8)114;dong_porf_video_js_api_smoke_test_memory[1758]=(u8)67;dong_porf_video_js_api_smoke_test_memory[1759]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1760]=(u8)100;dong_porf_video_js_api_smoke_test_memory[1761]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1762]=(u8)65;dong_porf_video_js_api_smoke_test_memory[1763]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1764]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1765]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1766]=(u8)120;dong_porf_video_js_api_smoke_test_memory[1767]=(u8)112;dong_porf_video_js_api_smoke_test_memory[1768]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1769]=(u8)99;dong_porf_video_js_api_smoke_test_memory[1770]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1771]=(u8)115;dong_porf_video_js_api_smoke_test_memory[1772]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1773]=(u8)39;dong_porf_video_js_api_smoke_test_memory[1774]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1775]=(u8)104;dong_porf_video_js_api_smoke_test_memory[1776]=(u8)105;dong_porf_video_js_api_smoke_test_memory[1777]=(u8)115;dong_porf_video_js_api_smoke_test_memory[1778]=(u8)39;dong_porf_video_js_api_smoke_test_memory[1779]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1780]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1781]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1782]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1783]=(u8)98;dong_porf_video_js_api_smoke_test_memory[1784]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1785]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1786]=(u8)110;dong_porf_video_js_api_smoke_test_memory[1787]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1788]=(u8)110;dong_porf_video_js_api_smoke_test_memory[1789]=(u8)45;dong_porf_video_js_api_smoke_test_memory[1790]=(u8)110;dong_porf_video_js_api_smoke_test_memory[1791]=(u8)117;dong_porf_video_js_api_smoke_test_memory[1792]=(u8)108;dong_porf_video_js_api_smoke_test_memory[1793]=(u8)108;dong_porf_video_js_api_smoke_test_memory[1794]=(u8)105;dong_porf_video_js_api_smoke_test_memory[1795]=(u8)115;dong_porf_video_js_api_smoke_test_memory[1796]=(u8)104;
+  dong_porf_video_js_api_smoke_test_memory[1799]=(u8)4;dong_porf_video_js_api_smoke_test_memory[1803]=(u8)98;dong_porf_video_js_api_smoke_test_memory[1804]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1805]=(u8)100;dong_porf_video_js_api_smoke_test_memory[1806]=(u8)121;
+  dong_porf_video_js_api_smoke_test_memory[1809]=(u8)5;dong_porf_video_js_api_smoke_test_memory[1813]=(u8)98;dong_porf_video_js_api_smoke_test_memory[1814]=(u8)97;dong_porf_video_js_api_smoke_test_memory[1815]=(u8)100;dong_porf_video_js_api_smoke_test_memory[1816]=(u8)103;dong_porf_video_js_api_smoke_test_memory[1817]=(u8)101;
+  dong_porf_video_js_api_smoke_test_memory[1820]=(u8)3;dong_porf_video_js_api_smoke_test_memory[1824]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1825]=(u8)117;dong_porf_video_js_api_smoke_test_memory[1826]=(u8)116;
+  dong_porf_video_js_api_smoke_test_memory[1829]=(u8)1;dong_porf_video_js_api_smoke_test_memory[1833]=(u8)118;
+  dong_porf_video_js_api_smoke_test_memory[1836]=(u8)20;dong_porf_video_js_api_smoke_test_memory[1840]=(u8)95;dong_porf_video_js_api_smoke_test_memory[1841]=(u8)95;dong_porf_video_js_api_smoke_test_memory[1842]=(u8)100;dong_porf_video_js_api_smoke_test_memory[1843]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1844]=(u8)110;dong_porf_video_js_api_smoke_test_memory[1845]=(u8)103;dong_porf_video_js_api_smoke_test_memory[1846]=(u8)95;dong_porf_video_js_api_smoke_test_memory[1847]=(u8)118;dong_porf_video_js_api_smoke_test_memory[1848]=(u8)105;dong_porf_video_js_api_smoke_test_memory[1849]=(u8)100;dong_porf_video_js_api_smoke_test_memory[1850]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1851]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1852]=(u8)95;dong_porf_video_js_api_smoke_test_memory[1853]=(u8)112;dong_porf_video_js_api_smoke_test_memory[1854]=(u8)108;dong_porf_video_js_api_smoke_test_memory[1855]=(u8)97;dong_porf_video_js_api_smoke_test_memory[1856]=(u8)121;dong_porf_video_js_api_smoke_test_memory[1857]=(u8)105;dong_porf_video_js_api_smoke_test_memory[1858]=(u8)110;dong_porf_video_js_api_smoke_test_memory[1859]=(u8)103;
+  dong_porf_video_js_api_smoke_test_memory[1862]=(u8)20;dong_porf_video_js_api_smoke_test_memory[1866]=(u8)95;dong_porf_video_js_api_smoke_test_memory[1867]=(u8)95;dong_porf_video_js_api_smoke_test_memory[1868]=(u8)100;dong_porf_video_js_api_smoke_test_memory[1869]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1870]=(u8)110;dong_porf_video_js_api_smoke_test_memory[1871]=(u8)103;dong_porf_video_js_api_smoke_test_memory[1872]=(u8)95;dong_porf_video_js_api_smoke_test_memory[1873]=(u8)118;dong_porf_video_js_api_smoke_test_memory[1874]=(u8)105;dong_porf_video_js_api_smoke_test_memory[1875]=(u8)100;dong_porf_video_js_api_smoke_test_memory[1876]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1877]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1878]=(u8)95;dong_porf_video_js_api_smoke_test_memory[1879]=(u8)115;dong_porf_video_js_api_smoke_test_memory[1880]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1881]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1882]=(u8)107;dong_porf_video_js_api_smoke_test_memory[1883]=(u8)105;dong_porf_video_js_api_smoke_test_memory[1884]=(u8)110;dong_porf_video_js_api_smoke_test_memory[1885]=(u8)103;
+  dong_porf_video_js_api_smoke_test_memory[1888]=(u8)24;dong_porf_video_js_api_smoke_test_memory[1892]=(u8)95;dong_porf_video_js_api_smoke_test_memory[1893]=(u8)95;dong_porf_video_js_api_smoke_test_memory[1894]=(u8)100;dong_porf_video_js_api_smoke_test_memory[1895]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1896]=(u8)110;dong_porf_video_js_api_smoke_test_memory[1897]=(u8)103;dong_porf_video_js_api_smoke_test_memory[1898]=(u8)95;dong_porf_video_js_api_smoke_test_memory[1899]=(u8)118;dong_porf_video_js_api_smoke_test_memory[1900]=(u8)105;dong_porf_video_js_api_smoke_test_memory[1901]=(u8)100;dong_porf_video_js_api_smoke_test_memory[1902]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1903]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1904]=(u8)95;dong_porf_video_js_api_smoke_test_memory[1905]=(u8)99;dong_porf_video_js_api_smoke_test_memory[1906]=(u8)117;dong_porf_video_js_api_smoke_test_memory[1907]=(u8)114;dong_porf_video_js_api_smoke_test_memory[1908]=(u8)114;dong_porf_video_js_api_smoke_test_memory[1909]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1910]=(u8)110;dong_porf_video_js_api_smoke_test_memory[1911]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1912]=(u8)84;dong_porf_video_js_api_smoke_test_memory[1913]=(u8)105;dong_porf_video_js_api_smoke_test_memory[1914]=(u8)109;dong_porf_video_js_api_smoke_test_memory[1915]=(u8)101;
+  dong_porf_video_js_api_smoke_test_memory[1918]=(u8)1;dong_porf_video_js_api_smoke_test_memory[1922]=(u8)49;
+  dong_porf_video_js_api_smoke_test_memory[1925]=(u8)17;dong_porf_video_js_api_smoke_test_memory[1929]=(u8)95;dong_porf_video_js_api_smoke_test_memory[1930]=(u8)95;dong_porf_video_js_api_smoke_test_memory[1931]=(u8)100;dong_porf_video_js_api_smoke_test_memory[1932]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1933]=(u8)110;dong_porf_video_js_api_smoke_test_memory[1934]=(u8)103;dong_porf_video_js_api_smoke_test_memory[1935]=(u8)95;dong_porf_video_js_api_smoke_test_memory[1936]=(u8)118;dong_porf_video_js_api_smoke_test_memory[1937]=(u8)105;dong_porf_video_js_api_smoke_test_memory[1938]=(u8)100;dong_porf_video_js_api_smoke_test_memory[1939]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1940]=(u8)111;dong_porf_video_js_api_smoke_test_memory[1941]=(u8)95;dong_porf_video_js_api_smoke_test_memory[1942]=(u8)115;dong_porf_video_js_api_smoke_test_memory[1943]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1944]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1945]=(u8)107;
+  dong_porf_video_js_api_smoke_test_memory[1948]=(u8)3;dong_porf_video_js_api_smoke_test_memory[1952]=(u8)49;dong_porf_video_js_api_smoke_test_memory[1953]=(u8)46;dong_porf_video_js_api_smoke_test_memory[1954]=(u8)48;
+  dong_porf_video_js_api_smoke_test_memory[1957]=(u8)1;dong_porf_video_js_api_smoke_test_memory[1961]=(u8)10;
+  dong_porf_video_js_api_smoke_test_memory[1964]=(u8)16;dong_porf_video_js_api_smoke_test_memory[1968]=(u8)100;dong_porf_video_js_api_smoke_test_memory[1969]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1970]=(u8)102;dong_porf_video_js_api_smoke_test_memory[1971]=(u8)97;dong_porf_video_js_api_smoke_test_memory[1972]=(u8)117;dong_porf_video_js_api_smoke_test_memory[1973]=(u8)108;dong_porf_video_js_api_smoke_test_memory[1974]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1975]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1976]=(u8)112;dong_porf_video_js_api_smoke_test_memory[1977]=(u8)97;dong_porf_video_js_api_smoke_test_memory[1978]=(u8)117;dong_porf_video_js_api_smoke_test_memory[1979]=(u8)115;dong_porf_video_js_api_smoke_test_memory[1980]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1981]=(u8)100;dong_porf_video_js_api_smoke_test_memory[1982]=(u8)58;dong_porf_video_js_api_smoke_test_memory[1983]=(u8)32;
+  dong_porf_video_js_api_smoke_test_memory[1986]=(u8)19;dong_porf_video_js_api_smoke_test_memory[1990]=(u8)97;dong_porf_video_js_api_smoke_test_memory[1991]=(u8)102;dong_porf_video_js_api_smoke_test_memory[1992]=(u8)116;dong_porf_video_js_api_smoke_test_memory[1993]=(u8)101;dong_porf_video_js_api_smoke_test_memory[1994]=(u8)114;dong_porf_video_js_api_smoke_test_memory[1995]=(u8)32;dong_porf_video_js_api_smoke_test_memory[1996]=(u8)112;dong_porf_video_js_api_smoke_test_memory[1997]=(u8)108;dong_porf_video_js_api_smoke_test_memory[1998]=(u8)97;dong_porf_video_js_api_smoke_test_memory[1999]=(u8)121;dong_porf_video_js_api_smoke_test_memory[2000]=(u8)32;dong_porf_video_js_api_smoke_test_memory[2001]=(u8)112;dong_porf_video_js_api_smoke_test_memory[2002]=(u8)97;dong_porf_video_js_api_smoke_test_memory[2003]=(u8)117;dong_porf_video_js_api_smoke_test_memory[2004]=(u8)115;dong_porf_video_js_api_smoke_test_memory[2005]=(u8)101;dong_porf_video_js_api_smoke_test_memory[2006]=(u8)100;dong_porf_video_js_api_smoke_test_memory[2007]=(u8)58;dong_porf_video_js_api_smoke_test_memory[2008]=(u8)32;
+  dong_porf_video_js_api_smoke_test_memory[2011]=(u8)20;dong_porf_video_js_api_smoke_test_memory[2015]=(u8)97;dong_porf_video_js_api_smoke_test_memory[2016]=(u8)102;dong_porf_video_js_api_smoke_test_memory[2017]=(u8)116;dong_porf_video_js_api_smoke_test_memory[2018]=(u8)101;dong_porf_video_js_api_smoke_test_memory[2019]=(u8)114;dong_porf_video_js_api_smoke_test_memory[2020]=(u8)32;dong_porf_video_js_api_smoke_test_memory[2021]=(u8)112;dong_porf_video_js_api_smoke_test_memory[2022]=(u8)97;dong_porf_video_js_api_smoke_test_memory[2023]=(u8)117;dong_porf_video_js_api_smoke_test_memory[2024]=(u8)115;dong_porf_video_js_api_smoke_test_memory[2025]=(u8)101;dong_porf_video_js_api_smoke_test_memory[2026]=(u8)32;dong_porf_video_js_api_smoke_test_memory[2027]=(u8)112;dong_porf_video_js_api_smoke_test_memory[2028]=(u8)97;dong_porf_video_js_api_smoke_test_memory[2029]=(u8)117;dong_porf_video_js_api_smoke_test_memory[2030]=(u8)115;dong_porf_video_js_api_smoke_test_memory[2031]=(u8)101;dong_porf_video_js_api_smoke_test_memory[2032]=(u8)100;dong_porf_video_js_api_smoke_test_memory[2033]=(u8)58;dong_porf_video_js_api_smoke_test_memory[2034]=(u8)32;
+  dong_porf_video_js_api_smoke_test_memory[2037]=(u8)31;dong_porf_video_js_api_smoke_test_memory[2041]=(u8)97;dong_porf_video_js_api_smoke_test_memory[2042]=(u8)102;dong_porf_video_js_api_smoke_test_memory[2043]=(u8)116;dong_porf_video_js_api_smoke_test_memory[2044]=(u8)101;dong_porf_video_js_api_smoke_test_memory[2045]=(u8)114;dong_porf_video_js_api_smoke_test_memory[2046]=(u8)32;dong_porf_video_js_api_smoke_test_memory[2047]=(u8)115;dong_porf_video_js_api_smoke_test_memory[2048]=(u8)101;dong_porf_video_js_api_smoke_test_memory[2049]=(u8)116;dong_porf_video_js_api_smoke_test_memory[2050]=(u8)32;dong_porf_video_js_api_smoke_test_memory[2051]=(u8)99;dong_porf_video_js_api_smoke_test_memory[2052]=(u8)117;dong_porf_video_js_api_smoke_test_memory[2053]=(u8)114;dong_porf_video_js_api_smoke_test_memory[2054]=(u8)114;dong_porf_video_js_api_smoke_test_memory[2055]=(u8)101;dong_porf_video_js_api_smoke_test_memory[2056]=(u8)110;dong_porf_video_js_api_smoke_test_memory[2057]=(u8)116;dong_porf_video_js_api_smoke_test_memory[2058]=(u8)84;dong_porf_video_js_api_smoke_test_memory[2059]=(u8)105;dong_porf_video_js_api_smoke_test_memory[2060]=(u8)109;dong_porf_video_js_api_smoke_test_memory[2061]=(u8)101;dong_porf_video_js_api_smoke_test_memory[2062]=(u8)32;dong_porf_video_js_api_smoke_test_memory[2063]=(u8)115;dong_porf_video_js_api_smoke_test_memory[2064]=(u8)101;dong_porf_video_js_api_smoke_test_memory[2065]=(u8)101;dong_porf_video_js_api_smoke_test_memory[2066]=(u8)107;dong_porf_video_js_api_smoke_test_memory[2067]=(u8)105;dong_porf_video_js_api_smoke_test_memory[2068]=(u8)110;dong_porf_video_js_api_smoke_test_memory[2069]=(u8)103;dong_porf_video_js_api_smoke_test_memory[2070]=(u8)58;dong_porf_video_js_api_smoke_test_memory[2071]=(u8)32;
+  dong_porf_video_js_api_smoke_test_memory[2074]=(u8)5;dong_porf_video_js_api_smoke_test_memory[2078]=(u8)99;dong_porf_video_js_api_smoke_test_memory[2079]=(u8)108;dong_porf_video_js_api_smoke_test_memory[2080]=(u8)97;dong_porf_video_js_api_smoke_test_memory[2081]=(u8)115;dong_porf_video_js_api_smoke_test_memory[2082]=(u8)115;
+  dong_porf_video_js_api_smoke_test_memory[2085]=(u8)2;dong_porf_video_js_api_smoke_test_memory[2089]=(u8)111;dong_porf_video_js_api_smoke_test_memory[2090]=(u8)107;
+  dong_porf_video_js_api_smoke_test_memory[2093]=(u8)16;dong_porf_video_js_api_smoke_test_memory[2097]=(u8)86;dong_porf_video_js_api_smoke_test_memory[2098]=(u8)73;dong_porf_video_js_api_smoke_test_memory[2099]=(u8)68;dong_porf_video_js_api_smoke_test_memory[2100]=(u8)69;dong_porf_video_js_api_smoke_test_memory[2101]=(u8)79;dong_porf_video_js_api_smoke_test_memory[2102]=(u8)32;dong_porf_video_js_api_smoke_test_memory[2103]=(u8)74;dong_porf_video_js_api_smoke_test_memory[2104]=(u8)83;dong_porf_video_js_api_smoke_test_memory[2105]=(u8)32;dong_porf_video_js_api_smoke_test_memory[2106]=(u8)65;dong_porf_video_js_api_smoke_test_memory[2107]=(u8)80;dong_porf_video_js_api_smoke_test_memory[2108]=(u8)73;dong_porf_video_js_api_smoke_test_memory[2109]=(u8)58;dong_porf_video_js_api_smoke_test_memory[2110]=(u8)32;dong_porf_video_js_api_smoke_test_memory[2111]=(u8)79;dong_porf_video_js_api_smoke_test_memory[2112]=(u8)75;
+  dong_porf_video_js_api_smoke_test_memory[2115]=(u8)18;dong_porf_video_js_api_smoke_test_memory[2119]=(u8)86;dong_porf_video_js_api_smoke_test_memory[2120]=(u8)73;dong_porf_video_js_api_smoke_test_memory[2121]=(u8)68;dong_porf_video_js_api_smoke_test_memory[2122]=(u8)69;dong_porf_video_js_api_smoke_test_memory[2123]=(u8)79;dong_porf_video_js_api_smoke_test_memory[2124]=(u8)32;dong_porf_video_js_api_smoke_test_memory[2125]=(u8)74;dong_porf_video_js_api_smoke_test_memory[2126]=(u8)83;dong_porf_video_js_api_smoke_test_memory[2127]=(u8)32;dong_porf_video_js_api_smoke_test_memory[2128]=(u8)65;dong_porf_video_js_api_smoke_test_memory[2129]=(u8)80;dong_porf_video_js_api_smoke_test_memory[2130]=(u8)73;dong_porf_video_js_api_smoke_test_memory[2131]=(u8)58;dong_porf_video_js_api_smoke_test_memory[2132]=(u8)32;dong_porf_video_js_api_smoke_test_memory[2133]=(u8)70;dong_porf_video_js_api_smoke_test_memory[2134]=(u8)65;dong_porf_video_js_api_smoke_test_memory[2135]=(u8)73;dong_porf_video_js_api_smoke_test_memory[2136]=(u8)76;
+  dong_porf_video_js_api_smoke_test_memory[2139]=(u8)30;dong_porf_video_js_api_smoke_test_memory[2143]=(u8)118;dong_porf_video_js_api_smoke_test_memory[2144]=(u8)105;dong_porf_video_js_api_smoke_test_memory[2145]=(u8)100;dong_porf_video_js_api_smoke_test_memory[2146]=(u8)101;dong_porf_video_js_api_smoke_test_memory[2147]=(u8)111;dong_porf_video_js_api_smoke_test_memory[2148]=(u8)95;dong_porf_video_js_api_smoke_test_memory[2149]=(u8)106;dong_porf_video_js_api_smoke_test_memory[2150]=(u8)115;dong_porf_video_js_api_smoke_test_memory[2151]=(u8)95;dong_porf_video_js_api_smoke_test_memory[2152]=(u8)97;dong_porf_video_js_api_smoke_test_memory[2153]=(u8)112;dong_porf_video_js_api_smoke_test_memory[2154]=(u8)105;dong_porf_video_js_api_smoke_test_memory[2155]=(u8)95;dong_porf_video_js_api_smoke_test_memory[2156]=(u8)115;dong_porf_video_js_api_smoke_test_memory[2157]=(u8)109;dong_porf_video_js_api_smoke_test_memory[2158]=(u8)111;dong_porf_video_js_api_smoke_test_memory[2159]=(u8)107;dong_porf_video_js_api_smoke_test_memory[2160]=(u8)101;dong_porf_video_js_api_smoke_test_memory[2161]=(u8)95;dong_porf_video_js_api_smoke_test_memory[2162]=(u8)116;dong_porf_video_js_api_smoke_test_memory[2163]=(u8)101;dong_porf_video_js_api_smoke_test_memory[2164]=(u8)115;dong_porf_video_js_api_smoke_test_memory[2165]=(u8)116;dong_porf_video_js_api_smoke_test_memory[2166]=(u8)32;dong_porf_video_js_api_smoke_test_memory[2167]=(u8)108;dong_porf_video_js_api_smoke_test_memory[2168]=(u8)111;dong_porf_video_js_api_smoke_test_memory[2169]=(u8)97;dong_porf_video_js_api_smoke_test_memory[2170]=(u8)100;dong_porf_video_js_api_smoke_test_memory[2171]=(u8)101;dong_porf_video_js_api_smoke_test_memory[2172]=(u8)100;
+  dong_porf_video_js_api_smoke_test_memory[2175]=(u8)58;dong_porf_video_js_api_smoke_test_memory[2179]=(u8)83;dong_porf_video_js_api_smoke_test_memory[2180]=(u8)116;dong_porf_video_js_api_smoke_test_memory[2181]=(u8)114;dong_porf_video_js_api_smoke_test_memory[2182]=(u8)105;dong_porf_video_js_api_smoke_test_memory[2183]=(u8)110;dong_porf_video_js_api_smoke_test_memory[2184]=(u8)103;dong_porf_video_js_api_smoke_test_memory[2185]=(u8)46;dong_porf_video_js_api_smoke_test_memory[2186]=(u8)112;dong_porf_video_js_api_smoke_test_memory[2187]=(u8)114;dong_porf_video_js_api_smoke_test_memory[2188]=(u8)111;dong_porf_video_js_api_smoke_test_memory[2189]=(u8)116;dong_porf_video_js_api_smoke_test_memory[2190]=(u8)111;dong_porf_video_js_api_smoke_test_memory[2191]=(u8)116;dong_porf_video_js_api_smoke_test_memory[2192]=(u8)121;dong_porf_video_js_api_smoke_test_memory[2193]=(u8)112;dong_porf_video_js_api_smoke_test_memory[2194]=(u8)101;dong_porf_video_js_api_smoke_test_memory[2195]=(u8)46;dong_porf_video_js_api_smoke_test_memory[2196]=(u8)116;dong_porf_video_js_api_smoke_test_memory[2197]=(u8)111;dong_porf_video_js_api_smoke_test_memory[2198]=(u8)83;dong_porf_video_js_api_smoke_test_memory[2199]=(u8)116;dong_porf_video_js_api_smoke_test_memory[2200]=(u8)114;dong_porf_video_js_api_smoke_test_memory[2201]=(u8)105;dong_porf_video_js_api_smoke_test_memory[2202]=(u8)110;dong_porf_video_js_api_smoke_test_memory[2203]=(u8)103;dong_porf_video_js_api_smoke_test_memory[2204]=(u8)32;dong_porf_video_js_api_smoke_test_memory[2205]=(u8)101;dong_porf_video_js_api_smoke_test_memory[2206]=(u8)120;dong_porf_video_js_api_smoke_test_memory[2207]=(u8)112;dong_porf_video_js_api_smoke_test_memory[2208]=(u8)101;dong_porf_video_js_api_smoke_test_memory[2209]=(u8)99;dong_porf_video_js_api_smoke_test_memory[2210]=(u8)116;dong_porf_video_js_api_smoke_test_memory[2211]=(u8)115;dong_porf_video_js_api_smoke_test_memory[2212]=(u8)32;dong_porf_video_js_api_smoke_test_memory[2213]=(u8)39;dong_porf_video_js_api_smoke_test_memory[2214]=(u8)116;dong_porf_video_js_api_smoke_test_memory[2215]=(u8)104;dong_porf_video_js_api_smoke_test_memory[2216]=(u8)105;dong_porf_video_js_api_smoke_test_memory[2217]=(u8)115;dong_porf_video_js_api_smoke_test_memory[2218]=(u8)39;dong_porf_video_js_api_smoke_test_memory[2219]=(u8)32;dong_porf_video_js_api_smoke_test_memory[2220]=(u8)116;dong_porf_video_js_api_smoke_test_memory[2221]=(u8)111;dong_porf_video_js_api_smoke_test_memory[2222]=(u8)32;dong_porf_video_js_api_smoke_test_memory[2223]=(u8)98;dong_porf_video_js_api_smoke_test_memory[2224]=(u8)101;dong_porf_video_js_api_smoke_test_memory[2225]=(u8)32;dong_porf_video_js_api_smoke_test_memory[2226]=(u8)110;dong_porf_video_js_api_smoke_test_memory[2227]=(u8)111;dong_porf_video_js_api_smoke_test_memory[2228]=(u8)110;dong_porf_video_js_api_smoke_test_memory[2229]=(u8)45;dong_porf_video_js_api_smoke_test_memory[2230]=(u8)110;dong_porf_video_js_api_smoke_test_memory[2231]=(u8)117;dong_porf_video_js_api_smoke_test_memory[2232]=(u8)108;dong_porf_video_js_api_smoke_test_memory[2233]=(u8)108;dong_porf_video_js_api_smoke_test_memory[2234]=(u8)105;dong_porf_video_js_api_smoke_test_memory[2235]=(u8)115;dong_porf_video_js_api_smoke_test_memory[2236]=(u8)104;
+  dong_porf_video_js_api_smoke_test_memory[2239]=(u8)54;dong_porf_video_js_api_smoke_test_memory[2243]=(u8)83;dong_porf_video_js_api_smoke_test_memory[2244]=(u8)116;dong_porf_video_js_api_smoke_test_memory[2245]=(u8)114;dong_porf_video_js_api_smoke_test_memory[2246]=(u8)105;dong_porf_video_js_api_smoke_test_memory[2247]=(u8)110;dong_porf_video_js_api_smoke_test_memory[2248]=(u8)103;dong_porf_video_js_api_smoke_test_memory[2249]=(u8)46;dong_porf_video_js_api_smoke_test_memory[2250]=(u8)112;dong_porf_video_js_api_smoke_test_memory[2251]=(u8)114;dong_porf_video_js_api_smoke_test_memory[2252]=(u8)111;dong_porf_video_js_api_smoke_test_memory[2253]=(u8)116;dong_porf_video_js_api_smoke_test_memory[2254]=(u8)111;dong_porf_video_js_api_smoke_test_memory[2255]=(u8)116;dong_porf_video_js_api_smoke_test_memory[2256]=(u8)121;dong_porf_video_js_api_smoke_test_memory[2257]=(u8)112;dong_porf_video_js_api_smoke_test_memory[2258]=(u8)101;dong_porf_video_js_api_smoke_test_memory[2259]=(u8)46;dong_porf_video_js_api_smoke_test_memory[2260]=(u8)116;dong_porf_video_js_api_smoke_test_memory[2261]=(u8)114;dong_porf_video_js_api_smoke_test_memory[2262]=(u8)105;dong_porf_video_js_api_smoke_test_memory[2263]=(u8)109;dong_porf_video_js_api_smoke_test_memory[2264]=(u8)32;dong_porf_video_js_api_smoke_test_memory[2265]=(u8)101;dong_porf_video_js_api_smoke_test_memory[2266]=(u8)120;dong_porf_video_js_api_smoke_test_memory[2267]=(u8)112;dong_porf_video_js_api_smoke_test_memory[2268]=(u8)101;dong_porf_video_js_api_smoke_test_memory[2269]=(u8)99;dong_porf_video_js_api_smoke_test_memory[2270]=(u8)116;dong_porf_video_js_api_smoke_test_memory[2271]=(u8)115;dong_porf_video_js_api_smoke_test_memory[2272]=(u8)32;dong_porf_video_js_api_smoke_test_memory[2273]=(u8)39;dong_porf_video_js_api_smoke_test_memory[2274]=(u8)116;dong_porf_video_js_api_smoke_test_memory[2275]=(u8)104;dong_porf_video_js_api_smoke_test_memory[2276]=(u8)105;dong_porf_video_js_api_smoke_test_memory[2277]=(u8)115;dong_porf_video_js_api_smoke_test_memory[2278]=(u8)39;dong_porf_video_js_api_smoke_test_memory[2279]=(u8)32;dong_porf_video_js_api_smoke_test_memory[2280]=(u8)116;dong_porf_video_js_api_smoke_test_memory[2281]=(u8)111;dong_porf_video_js_api_smoke_test_memory[2282]=(u8)32;dong_porf_video_js_api_smoke_test_memory[2283]=(u8)98;dong_porf_video_js_api_smoke_test_memory[2284]=(u8)101;dong_porf_video_js_api_smoke_test_memory[2285]=(u8)32;dong_porf_video_js_api_smoke_test_memory[2286]=(u8)110;dong_porf_video_js_api_smoke_test_memory[2287]=(u8)111;dong_porf_video_js_api_smoke_test_memory[2288]=(u8)110;dong_porf_video_js_api_smoke_test_memory[2289]=(u8)45;dong_porf_video_js_api_smoke_test_memory[2290]=(u8)110;dong_porf_video_js_api_smoke_test_memory[2291]=(u8)117;dong_porf_video_js_api_smoke_test_memory[2292]=(u8)108;dong_porf_video_js_api_smoke_test_memory[2293]=(u8)108;dong_porf_video_js_api_smoke_test_memory[2294]=(u8)105;dong_porf_video_js_api_smoke_test_memory[2295]=(u8)115;dong_porf_video_js_api_smoke_test_memory[2296]=(u8)104;
+  dong_porf_video_js_api_smoke_test_memory[2299]=(u8)57;dong_porf_video_js_api_smoke_test_memory[2303]=(u8)83;dong_porf_video_js_api_smoke_test_memory[2304]=(u8)116;dong_porf_video_js_api_smoke_test_memory[2305]=(u8)114;dong_porf_video_js_api_smoke_test_memory[2306]=(u8)105;dong_porf_video_js_api_smoke_test_memory[2307]=(u8)110;dong_porf_video_js_api_smoke_test_memory[2308]=(u8)103;dong_porf_video_js_api_smoke_test_memory[2309]=(u8)46;dong_porf_video_js_api_smoke_test_memory[2310]=(u8)112;dong_porf_video_js_api_smoke_test_memory[2311]=(u8)114;dong_porf_video_js_api_smoke_test_memory[2312]=(u8)111;dong_porf_video_js_api_smoke_test_memory[2313]=(u8)116;dong_porf_video_js_api_smoke_test_memory[2314]=(u8)111;dong_porf_video_js_api_smoke_test_memory[2315]=(u8)116;dong_porf_video_js_api_smoke_test_memory[2316]=(u8)121;dong_porf_video_js_api_smoke_test_memory[2317]=(u8)112;dong_porf_video_js_api_smoke_test_memory[2318]=(u8)101;dong_porf_video_js_api_smoke_test_memory[2319]=(u8)46;dong_porf_video_js_api_smoke_test_memory[2320]=(u8)116;dong_porf_video_js_api_smoke_test_memory[2321]=(u8)114;dong_porf_video_js_api_smoke_test_memory[2322]=(u8)105;dong_porf_video_js_api_smoke_test_memory[2323]=(u8)109;dong_porf_video_js_api_smoke_test_memory[2324]=(u8)69;dong_porf_video_js_api_smoke_test_memory[2325]=(u8)110;dong_porf_video_js_api_smoke_test_memory[2326]=(u8)100;dong_porf_video_js_api_smoke_test_memory[2327]=(u8)32;dong_porf_video_js_api_smoke_test_memory[2328]=(u8)101;dong_porf_video_js_api_smoke_test_memory[2329]=(u8)120;dong_porf_video_js_api_smoke_test_memory[2330]=(u8)112;dong_porf_video_js_api_smoke_test_memory[2331]=(u8)101;dong_porf_video_js_api_smoke_test_memory[2332]=(u8)99;dong_porf_video_js_api_smoke_test_memory[2333]=(u8)116;dong_porf_video_js_api_smoke_test_memory[2334]=(u8)115;dong_porf_video_js_api_smoke_test_memory[2335]=(u8)32;dong_porf_video_js_api_smoke_test_memory[2336]=(u8)39;dong_porf_video_js_api_smoke_test_memory[2337]=(u8)116;dong_porf_video_js_api_smoke_test_memory[2338]=(u8)104;dong_porf_video_js_api_smoke_test_memory[2339]=(u8)105;dong_porf_video_js_api_smoke_test_memory[2340]=(u8)115;dong_porf_video_js_api_smoke_test_memory[2341]=(u8)39;dong_porf_video_js_api_smoke_test_memory[2342]=(u8)32;dong_porf_video_js_api_smoke_test_memory[2343]=(u8)116;dong_porf_video_js_api_smoke_test_memory[2344]=(u8)111;dong_porf_video_js_api_smoke_test_memory[2345]=(u8)32;dong_porf_video_js_api_smoke_test_memory[2346]=(u8)98;dong_porf_video_js_api_smoke_test_memory[2347]=(u8)101;dong_porf_video_js_api_smoke_test_memory[2348]=(u8)32;dong_porf_video_js_api_smoke_test_memory[2349]=(u8)110;dong_porf_video_js_api_smoke_test_memory[2350]=(u8)111;dong_porf_video_js_api_smoke_test_memory[2351]=(u8)110;dong_porf_video_js_api_smoke_test_memory[2352]=(u8)45;dong_porf_video_js_api_smoke_test_memory[2353]=(u8)110;dong_porf_video_js_api_smoke_test_memory[2354]=(u8)117;dong_porf_video_js_api_smoke_test_memory[2355]=(u8)108;dong_porf_video_js_api_smoke_test_memory[2356]=(u8)108;dong_porf_video_js_api_smoke_test_memory[2357]=(u8)105;dong_porf_video_js_api_smoke_test_memory[2358]=(u8)115;dong_porf_video_js_api_smoke_test_memory[2359]=(u8)104;
+  dong_porf_video_js_api_smoke_test_memory[2362]=(u8)59;dong_porf_video_js_api_smoke_test_memory[2366]=(u8)83;dong_porf_video_js_api_smoke_test_memory[2367]=(u8)116;dong_porf_video_js_api_smoke_test_memory[2368]=(u8)114;dong_porf_video_js_api_smoke_test_memory[2369]=(u8)105;dong_porf_video_js_api_smoke_test_memory[2370]=(u8)110;dong_porf_video_js_api_smoke_test_memory[2371]=(u8)103;dong_porf_video_js_api_smoke_test_memory[2372]=(u8)46;dong_porf_video_js_api_smoke_test_memory[2373]=(u8)112;dong_porf_video_js_api_smoke_test_memory[2374]=(u8)114;dong_porf_video_js_api_smoke_test_memory[2375]=(u8)111;dong_porf_video_js_api_smoke_test_memory[2376]=(u8)116;dong_porf_video_js_api_smoke_test_memory[2377]=(u8)111;dong_porf_video_js_api_smoke_test_memory[2378]=(u8)116;dong_porf_video_js_api_smoke_test_memory[2379]=(u8)121;dong_porf_video_js_api_smoke_test_memory[2380]=(u8)112;dong_porf_video_js_api_smoke_test_memory[2381]=(u8)101;dong_porf_video_js_api_smoke_test_memory[2382]=(u8)46;dong_porf_video_js_api_smoke_test_memory[2383]=(u8)116;dong_porf_video_js_api_smoke_test_memory[2384]=(u8)114;dong_porf_video_js_api_smoke_test_memory[2385]=(u8)105;dong_porf_video_js_api_smoke_test_memory[2386]=(u8)109;dong_porf_video_js_api_smoke_test_memory[2387]=(u8)83;dong_porf_video_js_api_smoke_test_memory[2388]=(u8)116;dong_porf_video_js_api_smoke_test_memory[2389]=(u8)97;dong_porf_video_js_api_smoke_test_memory[2390]=(u8)114;dong_porf_video_js_api_smoke_test_memory[2391]=(u8)116;dong_porf_video_js_api_smoke_test_memory[2392]=(u8)32;dong_porf_video_js_api_smoke_test_memory[2393]=(u8)101;dong_porf_video_js_api_smoke_test_memory[2394]=(u8)120;dong_porf_video_js_api_smoke_test_memory[2395]=(u8)112;dong_porf_video_js_api_smoke_test_memory[2396]=(u8)101;dong_porf_video_js_api_smoke_test_memory[2397]=(u8)99;dong_porf_video_js_api_smoke_test_memory[2398]=(u8)116;dong_porf_video_js_api_smoke_test_memory[2399]=(u8)115;dong_porf_video_js_api_smoke_test_memory[2400]=(u8)32;dong_porf_video_js_api_smoke_test_memory[2401]=(u8)39;dong_porf_video_js_api_smoke_test_memory[2402]=(u8)116;dong_porf_video_js_api_smoke_test_memory[2403]=(u8)104;dong_porf_video_js_api_smoke_test_memory[2404]=(u8)105;dong_porf_video_js_api_smoke_test_memory[2405]=(u8)115;dong_porf_video_js_api_smoke_test_memory[2406]=(u8)39;dong_porf_video_js_api_smoke_test_memory[2407]=(u8)32;dong_porf_video_js_api_smoke_test_memory[2408]=(u8)116;dong_porf_video_js_api_smoke_test_memory[2409]=(u8)111;dong_porf_video_js_api_smoke_test_memory[2410]=(u8)32;dong_porf_video_js_api_smoke_test_memory[2411]=(u8)98;dong_porf_video_js_api_smoke_test_memory[2412]=(u8)101;dong_porf_video_js_api_smoke_test_memory[2413]=(u8)32;dong_porf_video_js_api_smoke_test_memory[2414]=(u8)110;dong_porf_video_js_api_smoke_test_memory[2415]=(u8)111;dong_porf_video_js_api_smoke_test_memory[2416]=(u8)110;dong_porf_video_js_api_smoke_test_memory[2417]=(u8)45;dong_porf_video_js_api_smoke_test_memory[2418]=(u8)110;dong_porf_video_js_api_smoke_test_memory[2419]=(u8)117;dong_porf_video_js_api_smoke_test_memory[2420]=(u8)108;dong_porf_video_js_api_smoke_test_memory[2421]=(u8)108;dong_porf_video_js_api_smoke_test_memory[2422]=(u8)105;dong_porf_video_js_api_smoke_test_memory[2423]=(u8)115;dong_porf_video_js_api_smoke_test_memory[2424]=(u8)104;
+  dong_porf_video_js_api_smoke_test_memory[16501]=(u8)7;dong_porf_video_js_api_smoke_test_memory[16505]=(u8)118;dong_porf_video_js_api_smoke_test_memory[16506]=(u8)97;dong_porf_video_js_api_smoke_test_memory[16507]=(u8)108;dong_porf_video_js_api_smoke_test_memory[16508]=(u8)117;dong_porf_video_js_api_smoke_test_memory[16509]=(u8)101;dong_porf_video_js_api_smoke_test_memory[16510]=(u8)79;dong_porf_video_js_api_smoke_test_memory[16511]=(u8)102;dong_porf_video_js_api_smoke_test_memory[16555]=(u8)1;dong_porf_video_js_api_smoke_test_memory[16558]=(u8)14;dong_porf_video_js_api_smoke_test_memory[16562]=(u8)104;dong_porf_video_js_api_smoke_test_memory[16563]=(u8)97;dong_porf_video_js_api_smoke_test_memory[16564]=(u8)115;dong_porf_video_js_api_smoke_test_memory[16565]=(u8)79;dong_porf_video_js_api_smoke_test_memory[16566]=(u8)119;dong_porf_video_js_api_smoke_test_memory[16567]=(u8)110;dong_porf_video_js_api_smoke_test_memory[16568]=(u8)80;dong_porf_video_js_api_smoke_test_memory[16569]=(u8)114;dong_porf_video_js_api_smoke_test_memory[16570]=(u8)111;dong_porf_video_js_api_smoke_test_memory[16571]=(u8)112;dong_porf_video_js_api_smoke_test_memory[16572]=(u8)101;dong_porf_video_js_api_smoke_test_memory[16573]=(u8)114;dong_porf_video_js_api_smoke_test_memory[16574]=(u8)116;dong_porf_video_js_api_smoke_test_memory[16575]=(u8)121;dong_porf_video_js_api_smoke_test_memory[16612]=(u8)1;dong_porf_video_js_api_smoke_test_memory[16615]=(u8)20;dong_porf_video_js_api_smoke_test_memory[16619]=(u8)112;dong_porf_video_js_api_smoke_test_memory[16620]=(u8)114;dong_porf_video_js_api_smoke_test_memory[16621]=(u8)111;dong_porf_video_js_api_smoke_test_memory[16622]=(u8)112;dong_porf_video_js_api_smoke_test_memory[16623]=(u8)101;dong_porf_video_js_api_smoke_test_memory[16624]=(u8)114;dong_porf_video_js_api_smoke_test_memory[16625]=(u8)116;dong_porf_video_js_api_smoke_test_memory[16626]=(u8)121;dong_porf_video_js_api_smoke_test_memory[16627]=(u8)73;dong_porf_video_js_api_smoke_test_memory[16628]=(u8)115;dong_porf_video_js_api_smoke_test_memory[16629]=(u8)69;dong_porf_video_js_api_smoke_test_memory[16630]=(u8)110;dong_porf_video_js_api_smoke_test_memory[16631]=(u8)117;dong_porf_video_js_api_smoke_test_memory[16632]=(u8)109;dong_porf_video_js_api_smoke_test_memory[16633]=(u8)101;dong_porf_video_js_api_smoke_test_memory[16634]=(u8)114;dong_porf_video_js_api_smoke_test_memory[16635]=(u8)97;dong_porf_video_js_api_smoke_test_memory[16636]=(u8)98;dong_porf_video_js_api_smoke_test_memory[16637]=(u8)108;dong_porf_video_js_api_smoke_test_memory[16638]=(u8)101;dong_porf_video_js_api_smoke_test_memory[16669]=(u8)1;dong_porf_video_js_api_smoke_test_memory[16672]=(u8)13;dong_porf_video_js_api_smoke_test_memory[16676]=(u8)105;dong_porf_video_js_api_smoke_test_memory[16677]=(u8)115;dong_porf_video_js_api_smoke_test_memory[16678]=(u8)80;dong_porf_video_js_api_smoke_test_memory[16679]=(u8)114;dong_porf_video_js_api_smoke_test_memory[16680]=(u8)111;dong_porf_video_js_api_smoke_test_memory[16681]=(u8)116;dong_porf_video_js_api_smoke_test_memory[16682]=(u8)111;dong_porf_video_js_api_smoke_test_memory[16683]=(u8)116;dong_porf_video_js_api_smoke_test_memory[16684]=(u8)121;dong_porf_video_js_api_smoke_test_memory[16685]=(u8)112;dong_porf_video_js_api_smoke_test_memory[16686]=(u8)101;dong_porf_video_js_api_smoke_test_memory[16687]=(u8)79;dong_porf_video_js_api_smoke_test_memory[16688]=(u8)102;dong_porf_video_js_api_smoke_test_memory[16729]=(u8)8;dong_porf_video_js_api_smoke_test_memory[16733]=(u8)116;dong_porf_video_js_api_smoke_test_memory[16734]=(u8)111;dong_porf_video_js_api_smoke_test_memory[16735]=(u8)83;dong_porf_video_js_api_smoke_test_memory[16736]=(u8)116;dong_porf_video_js_api_smoke_test_memory[16737]=(u8)114;dong_porf_video_js_api_smoke_test_memory[16738]=(u8)105;dong_porf_video_js_api_smoke_test_memory[16739]=(u8)110;dong_porf_video_js_api_smoke_test_memory[16740]=(u8)103;dong_porf_video_js_api_smoke_test_memory[16786]=(u8)14;dong_porf_video_js_api_smoke_test_memory[16790]=(u8)116;dong_porf_video_js_api_smoke_test_memory[16791]=(u8)111;dong_porf_video_js_api_smoke_test_memory[16792]=(u8)76;dong_porf_video_js_api_smoke_test_memory[16793]=(u8)111;dong_porf_video_js_api_smoke_test_memory[16794]=(u8)99;dong_porf_video_js_api_smoke_test_memory[16795]=(u8)97;dong_porf_video_js_api_smoke_test_memory[16796]=(u8)108;dong_porf_video_js_api_smoke_test_memory[16797]=(u8)101;dong_porf_video_js_api_smoke_test_memory[16798]=(u8)83;dong_porf_video_js_api_smoke_test_memory[16799]=(u8)116;dong_porf_video_js_api_smoke_test_memory[16800]=(u8)114;dong_porf_video_js_api_smoke_test_memory[16801]=(u8)105;dong_porf_video_js_api_smoke_test_memory[16802]=(u8)110;dong_porf_video_js_api_smoke_test_memory[16803]=(u8)103;dong_porf_video_js_api_smoke_test_memory[16840]=(u8)1;dong_porf_video_js_api_smoke_test_memory[16842]=(u8)2;dong_porf_video_js_api_smoke_test_memory[16843]=(u8)6;dong_porf_video_js_api_smoke_test_memory[16847]=(u8)79;dong_porf_video_js_api_smoke_test_memory[16848]=(u8)98;dong_porf_video_js_api_smoke_test_memory[16849]=(u8)106;dong_porf_video_js_api_smoke_test_memory[16850]=(u8)101;dong_porf_video_js_api_smoke_test_memory[16851]=(u8)99;dong_porf_video_js_api_smoke_test_memory[16852]=(u8)116;
 }
 
-static struct ReturnValue dong_porf_t12_inline_utf8AppendCodePoint(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype, f64 out, i32 outjjtype, f64 cp, i32 cpjjtype);
-static struct ReturnValue dong_porf_t12_inline_toUtf8(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype, f64 s, i32 sjjtype);
-static struct ReturnValue dong_porf_t12_inline_getElementById(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype, f64 id, i32 idjjtype);
-static struct ReturnValue dong_porf_t12_inline_setTextContent(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype, f64 nodeId, i32 nodeIdjjtype, f64 text, i32 textjjtype);
-static struct ReturnValue dong_porf_t12_inline_addEventListener(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype, f64 nodeId, i32 nodeIdjjtype, f64 type, i32 typejjtype, f64 handlerName, i32 handlerNamejjtype);
-struct ReturnValue dong_porf_t12_inline_inc__onclick(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype);
-static f64 dong_porf_t12_inline_TypeError(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype, f64 message, i32 messagejjtype);
-static struct ReturnValue dong_porf_t12_inline__ecma262_ToString(f64 argument, i32 argumentjjtype);
-static struct ReturnValue dong_porf_t12_inline__Number_prototype_toString(f64 _this, i32 _thisjjtype, f64 radix, i32 radixjjtype);
-static f64 dong_porf_t12_inline__Math_trunc(f64 l0);
-static f64 dong_porf_t12_inline_RangeError(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype, f64 message, i32 messagejjtype);
-static i32 dong_porf_t12_inline__Porffor_malloc(i32 l0);
-static f64 dong_porf_t12_inline__Number_isFinite(f64 l0);
-static f64 dong_porf_t12_inline__Number_isNaN(f64 l0);
-static f64 dong_porf_t12_inline__Math_round(f64 l0);
-static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_String(f64 input, i32 inputjjtype);
-static struct ReturnValue dong_porf_t12_inline__Boolean_prototype_toString(f64 _this, i32 _thisjjtype);
-static struct ReturnValue dong_porf_t12_inline__Function_prototype_toString(f64 _this, i32 _thisjjtype);
-static f64 dong_porf_t12_inline__Porffor_bytestring_appendStr(f64 str, i32 strjjtype, f64 appendage, i32 appendagejjtype);
-static i32 dong_porf_t12_inline__Porffor_funcLut_name(i32 l0);
-static struct ReturnValue dong_porf_t12_inline__TypeError_prototype_toString(f64 _this, i32 _thisjjtype);
-static struct ReturnValue dong_porf_t12_inline__TypeError_prototype_namekkget(f64 _this, i32 _thisjjtype);
-static struct ReturnValue dong_porf_t12_inline__TypeError_prototype_messagekkget(f64 _this, i32 _thisjjtype);
-static struct ReturnValue dong_porf_t12_inline__Porffor_concatStrings(f64 a, i32 ajjtype, f64 b, i32 bjjtype);
-static struct ReturnValue dong_porf_t12_inline__Porffor_strcat(i32 a, i32 ajjtype, i32 b, i32 bjjtype);
-static struct ReturnValue dong_porf_t12_inline__RangeError_prototype_toString(f64 _this, i32 _thisjjtype);
-static struct ReturnValue dong_porf_t12_inline__RangeError_prototype_namekkget(f64 _this, i32 _thisjjtype);
-static struct ReturnValue dong_porf_t12_inline__RangeError_prototype_messagekkget(f64 _this, i32 _thisjjtype);
-static struct ReturnValue dong_porf_t12_inline__ByteString_prototype_toString(i32 _this, i32 _thisjjtype);
-static struct ReturnValue dong_porf_t12_inline__Object_prototype_toString(f64 _this, i32 _thisjjtype);
-static struct ReturnValue dong_porf_t12_inline__Porffor_object_get_withHash(i32 _obj, i32 _objjjtype, i32 key, i32 keyjjtype, i32 hash, i32 hashjjtype);
-static struct ReturnValue dong_porf_t12_inline__Porffor_object_underlying(f64 _obj, i32 _objjjtype);
-static i32 dong_porf_t12_inline__Porffor_funcLut_length(i32 l0);
-static void dong_porf_t12_inline__Porffor_object_fastAdd(i32 obj, i32 objjjtype, i32 key, i32 keyjjtype, f64 value, i32 valuejjtype, i32 flags, i32 flagsjjtype);
-static i32 dong_porf_t12_inline__Porffor_object_hash(i32 key, i32 keyjjtype);
-static void dong_porf_t12_inline__Porffor_object_writeKey(i32 ptr, i32 ptrjjtype, i32 key, i32 keyjjtype, i32 hash, i32 hashjjtype);
-static f64 dong_porf_t12_inline__ecma262_IsConstructor(f64 argument, i32 argumentjjtype);
-static i32 dong_porf_t12_inline__Porffor_funcLut_flags(i32 l0);
-static i32 dong_porf_t12_inline__Porffor_object_lookup(i32 obj, i32 objjjtype, i32 target, i32 targetjjtype, i32 targetHash, i32 targetHashjjtype);
-static i32 dong_porf_t12_inline_jjget___Object_prototype();
-static struct ReturnValue dong_porf_t12_inline__ecma262_ToPropertyKey(f64 argument, i32 argumentjjtype);
-static f64 dong_porf_t12_inline__Array_from(f64 arg, i32 argjjtype, f64 mapFn, i32 mapFnjjtype, f64 thisArg, i32 thisArgjjtype);
-static i32 dong_porf_t12_inline__Porffor_object_isObject(i32 arg, i32 argjjtype);
-static struct ReturnValue dong_porf_t12_inline__Porffor_object_get(i32 _obj, i32 _objjjtype, i32 key, i32 keyjjtype);
-static struct ReturnValue dong_porf_t12_inline__Porffor_object_getHiddenPrototype(i32 trueType, i32 trueTypejjtype);
-static i32 dong_porf_t12_inline__Porffor_strcmp(i32 a, i32 ajjtype, i32 b, i32 bjjtype);
-static struct ReturnValue dong_porf_t12_inline__Porffor_object_getPrototype(i32 obj, i32 objjjtype);
-static struct ReturnValue dong_porf_t12_inline__Porffor_object_accessorGet(i32 entryPtr, i32 entryPtrjjtype);
-static f64 dong_porf_t12_inline__ecma262_ToIntegerOrInfinity(f64 argument, i32 argumentjjtype);
-static f64 dong_porf_t12_inline__ecma262_ToNumber(f64 argument, i32 argumentjjtype);
-static f64 dong_porf_t12_inline__ecma262_StringToNumber(f64 str, i32 strjjtype);
-static struct ReturnValue dong_porf_t12_inline__ByteString_prototype_trim(i32 _this, i32 _thisjjtype);
-static struct ReturnValue dong_porf_t12_inline__ByteString_prototype_trimEnd(i32 _this, i32 _thisjjtype);
-static struct ReturnValue dong_porf_t12_inline__ByteString_prototype_trimStart(i32 _this, i32 _thisjjtype);
-static struct ReturnValue dong_porf_t12_inline__ByteString_prototype_charCodeAt(f64 _this, i32 _thisjjtype, f64 index, i32 indexjjtype);
-static f64 dong_porf_t12_inline__Porffor_stn_int(f64 str, i32 strjjtype, f64 radix, i32 radixjjtype, f64 i, i32 ijjtype);
-static f64 dong_porf_t12_inline__Porffor_stn_float(f64 str, i32 strjjtype, f64 i, i32 ijjtype);
-static f64 dong_porf_t12_inline__Porffor_parseExp(f64 str, i32 strjjtype, f64 i, i32 ijjtype, f64 len, i32 lenjjtype, f64 strict, i32 strictjjtype);
-static f64 dong_porf_t12_inline__Math_pow(f64 base, i32 basejjtype, f64 exponent, i32 exponentjjtype);
-static f64 dong_porf_t12_inline__Number_isInteger(f64 l0);
-static f64 dong_porf_t12_inline__Math_abs(f64 l0);
-static f64 dong_porf_t12_inline__Math_exp(f64 x, i32 xjjtype);
-static f64 dong_porf_t12_inline__Math_floor(f64 l0);
-static f64 dong_porf_t12_inline__Math_log(f64 y, i32 yjjtype);
-static f64 dong_porf_t12_inline__Math_log2(f64 y, i32 yjjtype);
-static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_Number(f64 input, i32 inputjjtype);
-static struct ReturnValue dong_porf_t12_inline__Number_prototype_valueOf(f64 _this, i32 _thisjjtype);
-static struct ReturnValue dong_porf_t12_inline__Boolean_prototype_valueOf(f64 _this, i32 _thisjjtype);
-static struct ReturnValue dong_porf_t12_inline__Array_prototype_valueOf(f64 _this, i32 _thisjjtype);
-static struct ReturnValue dong_porf_t12_inline__ByteString_prototype_valueOf(i32 _this, i32 _thisjjtype);
-static struct ReturnValue dong_porf_t12_inline__Object_prototype_valueOf(f64 _this, i32 _thisjjtype);
-static struct ReturnValue dong_porf_t12_inline__Porffor_object_readValue(i32 entryPtr, i32 entryPtrjjtype);
-static i32 dong_porf_t12_inline__Porffor_object_isObjectOrNull(i32 arg, i32 argjjtype);
-static struct ReturnValue dong_porf_t12_inline__Array_prototype_toString(f64 _this, i32 _thisjjtype);
-static f64 dong_porf_t12_inline__Porffor_bytestring_appendChar(f64 str, i32 strjjtype, f64 _char, i32 charjjtype);
-static void dong_porf_t12_inline__Porffor_object_setPrototype(i32 obj, i32 objjjtype, i32 proto, i32 protojjtype);
-static struct ReturnValue dong_porf_t12_inline_String(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype, f64 args, i32 argsjjtype);
-static struct ReturnValue dong_porf_t12_inline__Symbol_prototype_toString(f64 _this, i32 _thisjjtype);
-static struct ReturnValue dong_porf_t12_inline__Symbol_prototype_descriptionkkget(f64 _this, i32 _thisjjtype);
-static i32 dong_porf_t12_inline__Porffor_bytestringToString(i32 src);
-static struct ReturnValue dong_porf_t12_inline__String_prototype_valueOf(i32 _this, i32 _thisjjtype);
-static struct ReturnValue dong_porf_t12_inline__String_prototype_charCodeAt(f64 _this, i32 _thisjjtype, f64 index, i32 indexjjtype);
-static struct ReturnValue dong_porf_t12_inline__String_fromCharCode(f64 codes, i32 codesjjtype);
-struct ReturnValue dong_porf_t12_inline__porf_auto_0__onclick(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype);
-static struct ReturnValue dong_porf_t12_inline__String_prototype_toString(i32 _this, i32 _thisjjtype);
-static struct ReturnValue dong_porf_t12_inline__String_prototype_trim(i32 _this, i32 _thisjjtype);
-static struct ReturnValue dong_porf_t12_inline__String_prototype_trimEnd(i32 _this, i32 _thisjjtype);
-static struct ReturnValue dong_porf_t12_inline__String_prototype_trimStart(i32 _this, i32 _thisjjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test_utf8AppendCodePoint(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype, f64 out, i32 outjjtype, f64 cp, i32 cpjjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test_toUtf8(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype, f64 s, i32 sjjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test_pullHostString(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test_getElementById(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype, f64 id, i32 idjjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test_setTextContent(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype, f64 nodeId, i32 nodeIdjjtype, f64 text, i32 textjjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test_getTextContent(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype, f64 nodeId, i32 nodeIdjjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test_dongLog(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype, f64 msg, i32 msgjjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test_getAttribute(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype, f64 nodeId, i32 nodeIdjjtype, f64 name, i32 namejjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test_setAttribute(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype, f64 nodeId, i32 nodeIdjjtype, f64 name, i32 namejjtype, f64 value, i32 valuejjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test_boolText(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype, f64 v, i32 vjjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test_isPaused(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test_line(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype, f64 text, i32 textjjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test_porfInit(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype);
+static f64 dong_porf_video_js_api_smoke_test_TypeError(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype, f64 message, i32 messagejjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test__ecma262_ToString(f64 argument, i32 argumentjjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test__Number_prototype_toString(f64 _this, i32 _thisjjtype, f64 radix, i32 radixjjtype);
+static f64 dong_porf_video_js_api_smoke_test__Math_trunc(f64 l0);
+static f64 dong_porf_video_js_api_smoke_test_RangeError(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype, f64 message, i32 messagejjtype);
+static i32 dong_porf_video_js_api_smoke_test__Porffor_malloc(i32 l0);
+static f64 dong_porf_video_js_api_smoke_test__Number_isFinite(f64 l0);
+static f64 dong_porf_video_js_api_smoke_test__Number_isNaN(f64 l0);
+static f64 dong_porf_video_js_api_smoke_test__Math_round(f64 l0);
+static struct ReturnValue dong_porf_video_js_api_smoke_test__ecma262_ToPrimitive_String(f64 input, i32 inputjjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test__Boolean_prototype_toString(f64 _this, i32 _thisjjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test__Function_prototype_toString(f64 _this, i32 _thisjjtype);
+static f64 dong_porf_video_js_api_smoke_test__Porffor_bytestring_appendStr(f64 str, i32 strjjtype, f64 appendage, i32 appendagejjtype);
+static i32 dong_porf_video_js_api_smoke_test__Porffor_funcLut_name(i32 l0);
+static struct ReturnValue dong_porf_video_js_api_smoke_test__TypeError_prototype_toString(f64 _this, i32 _thisjjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test__TypeError_prototype_namekkget(f64 _this, i32 _thisjjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test__TypeError_prototype_messagekkget(f64 _this, i32 _thisjjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test__Porffor_concatStrings(f64 a, i32 ajjtype, f64 b, i32 bjjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test__Porffor_strcat(i32 a, i32 ajjtype, i32 b, i32 bjjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test__RangeError_prototype_toString(f64 _this, i32 _thisjjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test__RangeError_prototype_namekkget(f64 _this, i32 _thisjjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test__RangeError_prototype_messagekkget(f64 _this, i32 _thisjjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test__ByteString_prototype_toString(i32 _this, i32 _thisjjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test__Object_prototype_toString(f64 _this, i32 _thisjjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test__Porffor_object_get_withHash(i32 _obj, i32 _objjjtype, i32 key, i32 keyjjtype, i32 hash, i32 hashjjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test__Porffor_object_underlying(f64 _obj, i32 _objjjtype);
+static i32 dong_porf_video_js_api_smoke_test__Porffor_funcLut_length(i32 l0);
+static void dong_porf_video_js_api_smoke_test__Porffor_object_fastAdd(i32 obj, i32 objjjtype, i32 key, i32 keyjjtype, f64 value, i32 valuejjtype, i32 flags, i32 flagsjjtype);
+static i32 dong_porf_video_js_api_smoke_test__Porffor_object_hash(i32 key, i32 keyjjtype);
+static void dong_porf_video_js_api_smoke_test__Porffor_object_writeKey(i32 ptr, i32 ptrjjtype, i32 key, i32 keyjjtype, i32 hash, i32 hashjjtype);
+static f64 dong_porf_video_js_api_smoke_test__ecma262_IsConstructor(f64 argument, i32 argumentjjtype);
+static i32 dong_porf_video_js_api_smoke_test__Porffor_funcLut_flags(i32 l0);
+static i32 dong_porf_video_js_api_smoke_test__Porffor_object_lookup(i32 obj, i32 objjjtype, i32 target, i32 targetjjtype, i32 targetHash, i32 targetHashjjtype);
+static i32 dong_porf_video_js_api_smoke_test_jjget___Object_prototype();
+static struct ReturnValue dong_porf_video_js_api_smoke_test__ecma262_ToPropertyKey(f64 argument, i32 argumentjjtype);
+static f64 dong_porf_video_js_api_smoke_test__Array_from(f64 arg, i32 argjjtype, f64 mapFn, i32 mapFnjjtype, f64 thisArg, i32 thisArgjjtype);
+static i32 dong_porf_video_js_api_smoke_test__Porffor_object_isObject(i32 arg, i32 argjjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test__Porffor_object_get(i32 _obj, i32 _objjjtype, i32 key, i32 keyjjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test__Porffor_object_getHiddenPrototype(i32 trueType, i32 trueTypejjtype);
+static i32 dong_porf_video_js_api_smoke_test__Porffor_strcmp(i32 a, i32 ajjtype, i32 b, i32 bjjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test__Porffor_object_getPrototype(i32 obj, i32 objjjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test__Porffor_object_accessorGet(i32 entryPtr, i32 entryPtrjjtype);
+static f64 dong_porf_video_js_api_smoke_test__ecma262_ToIntegerOrInfinity(f64 argument, i32 argumentjjtype);
+static f64 dong_porf_video_js_api_smoke_test__ecma262_ToNumber(f64 argument, i32 argumentjjtype);
+static f64 dong_porf_video_js_api_smoke_test__ecma262_StringToNumber(f64 str, i32 strjjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test__ByteString_prototype_trim(i32 _this, i32 _thisjjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test__ByteString_prototype_trimEnd(i32 _this, i32 _thisjjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test__ByteString_prototype_trimStart(i32 _this, i32 _thisjjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test__ByteString_prototype_charCodeAt(f64 _this, i32 _thisjjtype, f64 index, i32 indexjjtype);
+static f64 dong_porf_video_js_api_smoke_test__Porffor_stn_int(f64 str, i32 strjjtype, f64 radix, i32 radixjjtype, f64 i, i32 ijjtype);
+static f64 dong_porf_video_js_api_smoke_test__Porffor_stn_float(f64 str, i32 strjjtype, f64 i, i32 ijjtype);
+static f64 dong_porf_video_js_api_smoke_test__Porffor_parseExp(f64 str, i32 strjjtype, f64 i, i32 ijjtype, f64 len, i32 lenjjtype, f64 strict, i32 strictjjtype);
+static f64 dong_porf_video_js_api_smoke_test__Math_pow(f64 base, i32 basejjtype, f64 exponent, i32 exponentjjtype);
+static f64 dong_porf_video_js_api_smoke_test__Number_isInteger(f64 l0);
+static f64 dong_porf_video_js_api_smoke_test__Math_abs(f64 l0);
+static f64 dong_porf_video_js_api_smoke_test__Math_exp(f64 x, i32 xjjtype);
+static f64 dong_porf_video_js_api_smoke_test__Math_floor(f64 l0);
+static f64 dong_porf_video_js_api_smoke_test__Math_log(f64 y, i32 yjjtype);
+static f64 dong_porf_video_js_api_smoke_test__Math_log2(f64 y, i32 yjjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test__ecma262_ToPrimitive_Number(f64 input, i32 inputjjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test__Number_prototype_valueOf(f64 _this, i32 _thisjjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test__Boolean_prototype_valueOf(f64 _this, i32 _thisjjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test__Array_prototype_valueOf(f64 _this, i32 _thisjjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test__ByteString_prototype_valueOf(i32 _this, i32 _thisjjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test__Object_prototype_valueOf(f64 _this, i32 _thisjjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test__Porffor_object_readValue(i32 entryPtr, i32 entryPtrjjtype);
+static i32 dong_porf_video_js_api_smoke_test__Porffor_object_isObjectOrNull(i32 arg, i32 argjjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test__Array_prototype_toString(f64 _this, i32 _thisjjtype);
+static f64 dong_porf_video_js_api_smoke_test__Porffor_bytestring_appendChar(f64 str, i32 strjjtype, f64 _char, i32 charjjtype);
+static f64 dong_porf_video_js_api_smoke_test__Porffor_compareStrings(f64 a, i32 ajjtype, f64 b, i32 bjjtype);
+static void dong_porf_video_js_api_smoke_test__Porffor_object_setPrototype(i32 obj, i32 objjjtype, i32 proto, i32 protojjtype);
+static i32 dong_porf_video_js_api_smoke_test__Porffor_bytestringToString(i32 src);
+static struct ReturnValue dong_porf_video_js_api_smoke_test__String_prototype_valueOf(i32 _this, i32 _thisjjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test__String_prototype_charCodeAt(f64 _this, i32 _thisjjtype, f64 index, i32 indexjjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test__String_fromCharCode(f64 codes, i32 codesjjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test__String_prototype_toString(i32 _this, i32 _thisjjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test__String_prototype_trim(i32 _this, i32 _thisjjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test__String_prototype_trimEnd(i32 _this, i32 _thisjjtype);
+static struct ReturnValue dong_porf_video_js_api_smoke_test__String_prototype_trimStart(i32 _this, i32 _thisjjtype);
 
-static f64 dong_porf_t12_inline_METRIC_OFFSET_WIDTH = 0;
-static i32 dong_porf_t12_inline_METRIC_OFFSET_WIDTHjjtype = 0;
-static f64 dong_porf_t12_inline_METRIC_OFFSET_HEIGHT = 0;
-static i32 dong_porf_t12_inline_METRIC_OFFSET_HEIGHTjjtype = 0;
-static f64 dong_porf_t12_inline_METRIC_OFFSET_TOP = 0;
-static i32 dong_porf_t12_inline_METRIC_OFFSET_TOPjjtype = 0;
-static f64 dong_porf_t12_inline_METRIC_OFFSET_LEFT = 0;
-static i32 dong_porf_t12_inline_METRIC_OFFSET_LEFTjjtype = 0;
-static f64 dong_porf_t12_inline_METRIC_CLIENT_WIDTH = 0;
-static i32 dong_porf_t12_inline_METRIC_CLIENT_WIDTHjjtype = 0;
-static f64 dong_porf_t12_inline_METRIC_CLIENT_HEIGHT = 0;
-static i32 dong_porf_t12_inline_METRIC_CLIENT_HEIGHTjjtype = 0;
-static f64 dong_porf_t12_inline_METRIC_SCROLL_WIDTH = 0;
-static i32 dong_porf_t12_inline_METRIC_SCROLL_WIDTHjjtype = 0;
-static f64 dong_porf_t12_inline_METRIC_SCROLL_HEIGHT = 0;
-static i32 dong_porf_t12_inline_METRIC_SCROLL_HEIGHTjjtype = 0;
-static f64 dong_porf_t12_inline_count = 0;
-static i32 dong_porf_t12_inline_countjjtype = 0;
-static f64 dong_porf_t12_inline_statusId = 0;
-static i32 dong_porf_t12_inline_statusIdjjtype = 0;
-static f64 dong_porf_t12_inline__porf_auto_0Id = 0;
-static i32 dong_porf_t12_inline__porf_auto_0Idjjtype = 0;
-static f64 dong_porf_t12_inline_incId = 0;
-static i32 dong_porf_t12_inline_incIdjjtype = 0;
-static i32 dong_porf_t12_inline_jjporfjjcurrentPtr = 0;
-static i32 dong_porf_t12_inline_jjporfjjcurrentPtrjjglbl_inited = 0;
-static i32 dong_porf_t12_inline_jjporfjjendPtr = 0;
-static i32 dong_porf_t12_inline_jjporfjjendPtrjjglbl_inited = 0;
-static i32 dong_porf_t12_inline_jjporfjjunderlyingStore = 0;
-static i32 dong_porf_t12_inline_jjporfjjunderlyingStorejjglbl_inited = 0;
-static i32 dong_porf_t12_inline_jjporfjjgetptr___Object_prototype = 0;
-static i32 dong_porf_t12_inline_jjporfjjgetptr___Object_prototypejjglbl_inited = 0;
+static f64 dong_porf_video_js_api_smoke_test_METRIC_OFFSET_WIDTH = 0;
+static i32 dong_porf_video_js_api_smoke_test_METRIC_OFFSET_WIDTHjjtype = 0;
+static f64 dong_porf_video_js_api_smoke_test_METRIC_OFFSET_HEIGHT = 0;
+static i32 dong_porf_video_js_api_smoke_test_METRIC_OFFSET_HEIGHTjjtype = 0;
+static f64 dong_porf_video_js_api_smoke_test_METRIC_OFFSET_TOP = 0;
+static i32 dong_porf_video_js_api_smoke_test_METRIC_OFFSET_TOPjjtype = 0;
+static f64 dong_porf_video_js_api_smoke_test_METRIC_OFFSET_LEFT = 0;
+static i32 dong_porf_video_js_api_smoke_test_METRIC_OFFSET_LEFTjjtype = 0;
+static f64 dong_porf_video_js_api_smoke_test_METRIC_CLIENT_WIDTH = 0;
+static i32 dong_porf_video_js_api_smoke_test_METRIC_CLIENT_WIDTHjjtype = 0;
+static f64 dong_porf_video_js_api_smoke_test_METRIC_CLIENT_HEIGHT = 0;
+static i32 dong_porf_video_js_api_smoke_test_METRIC_CLIENT_HEIGHTjjtype = 0;
+static f64 dong_porf_video_js_api_smoke_test_METRIC_SCROLL_WIDTH = 0;
+static i32 dong_porf_video_js_api_smoke_test_METRIC_SCROLL_WIDTHjjtype = 0;
+static f64 dong_porf_video_js_api_smoke_test_METRIC_SCROLL_HEIGHT = 0;
+static i32 dong_porf_video_js_api_smoke_test_METRIC_SCROLL_HEIGHTjjtype = 0;
+static f64 dong_porf_video_js_api_smoke_test_bodyId = 0;
+static i32 dong_porf_video_js_api_smoke_test_bodyIdjjtype = 0;
+static f64 dong_porf_video_js_api_smoke_test_badgeId = 0;
+static i32 dong_porf_video_js_api_smoke_test_badgeIdjjtype = 0;
+static f64 dong_porf_video_js_api_smoke_test_outId = 0;
+static i32 dong_porf_video_js_api_smoke_test_outIdjjtype = 0;
+static f64 dong_porf_video_js_api_smoke_test_videoId = 0;
+static i32 dong_porf_video_js_api_smoke_test_videoIdjjtype = 0;
+static i32 dong_porf_video_js_api_smoke_test_jjporfjjcurrentPtr = 0;
+static i32 dong_porf_video_js_api_smoke_test_jjporfjjcurrentPtrjjglbl_inited = 0;
+static i32 dong_porf_video_js_api_smoke_test_jjporfjjendPtr = 0;
+static i32 dong_porf_video_js_api_smoke_test_jjporfjjendPtrjjglbl_inited = 0;
+static i32 dong_porf_video_js_api_smoke_test_jjporfjjunderlyingStore = 0;
+static i32 dong_porf_video_js_api_smoke_test_jjporfjjunderlyingStorejjglbl_inited = 0;
+static i32 dong_porf_video_js_api_smoke_test_jjporfjjgetptr___Object_prototype = 0;
+static i32 dong_porf_video_js_api_smoke_test_jjporfjjgetptr___Object_prototypejjglbl_inited = 0;
 
-static f64 dong_porf_t12_inline__Math_trunc(f64 l0) {
+static f64 dong_porf_video_js_api_smoke_test__Math_trunc(f64 l0) {
   f64 _get0;
   _get0 = l0;
   return trunc(_get0);
 }
 
-static i32 dong_porf_t12_inline__Porffor_malloc(i32 l0) {
+static i32 dong_porf_video_js_api_smoke_test__Porffor_malloc(i32 l0) {
   i32 _get5;
   i32 _get4;
   i32 _get3;
@@ -273,28 +300,28 @@ static i32 dong_porf_t12_inline__Porffor_malloc(i32 l0) {
   _get0 = l0;
   // if i32
   i32 _r15;
-    if ((dong_porf_t12_inline_jjporfjjcurrentPtr + _get0) >= dong_porf_t12_inline_jjporfjjendPtr) {
-      const u32 _oldPages1 = dong_porf_t12_inline_memory_pages;
-      dong_porf_t12_inline_memory_pages += 16;
-      dong_porf_t12_inline_memory = realloc(dong_porf_t12_inline_memory, dong_porf_t12_inline_memory_pages * 65536);
-      memset(dong_porf_t12_inline_memory + _oldPages1 * 65536, 0, (dong_porf_t12_inline_memory_pages - _oldPages1) * 65536);
+    if ((dong_porf_video_js_api_smoke_test_jjporfjjcurrentPtr + _get0) >= dong_porf_video_js_api_smoke_test_jjporfjjendPtr) {
+      const u32 _oldPages1 = dong_porf_video_js_api_smoke_test_memory_pages;
+      dong_porf_video_js_api_smoke_test_memory_pages += 16;
+      dong_porf_video_js_api_smoke_test_memory = realloc(dong_porf_video_js_api_smoke_test_memory, dong_porf_video_js_api_smoke_test_memory_pages * 65536);
+      memset(dong_porf_video_js_api_smoke_test_memory + _oldPages1 * 65536, 0, (dong_porf_video_js_api_smoke_test_memory_pages - _oldPages1) * 65536);
       _get2 = l0;
-      dong_porf_t12_inline_jjporfjjcurrentPtr = (_oldPages1 * 65536) + _get2;
+      dong_porf_video_js_api_smoke_test_jjporfjjcurrentPtr = (_oldPages1 * 65536) + _get2;
       _get3 = l0;
-      dong_porf_t12_inline_jjporfjjendPtr = (dong_porf_t12_inline_jjporfjjcurrentPtr + 1048576) - _get3;
+      dong_porf_video_js_api_smoke_test_jjporfjjendPtr = (dong_porf_video_js_api_smoke_test_jjporfjjcurrentPtr + 1048576) - _get3;
       _get4 = l0;
-      _r15 = dong_porf_t12_inline_jjporfjjcurrentPtr - _get4;
+      _r15 = dong_porf_video_js_api_smoke_test_jjporfjjcurrentPtr - _get4;
     } else {
       _get5 = l0;
-      dong_porf_t12_inline_jjporfjjcurrentPtr = dong_porf_t12_inline_jjporfjjcurrentPtr + _get5;
-      _r15 = dong_porf_t12_inline_jjporfjjcurrentPtr - _get5;
+      dong_porf_video_js_api_smoke_test_jjporfjjcurrentPtr = dong_porf_video_js_api_smoke_test_jjporfjjcurrentPtr + _get5;
+      _r15 = dong_porf_video_js_api_smoke_test_jjporfjjcurrentPtr - _get5;
     }
   // end
   j15:;
   return _r15;
 }
 
-static f64 dong_porf_t12_inline_RangeError(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype, f64 message, i32 messagejjtype) {
+static f64 dong_porf_video_js_api_smoke_test_RangeError(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype, f64 message, i32 messagejjtype) {
   f64 _get9;
   i32 _get8;
   f64 _get7;
@@ -317,7 +344,7 @@ static f64 dong_porf_t12_inline_RangeError(f64 jjnewtarget, i32 jjnewtargetjjtyp
     } else {
       _get2 = message;
       _get3 = messagejjtype;
-      const struct ReturnValue _0 = dong_porf_t12_inline__ecma262_ToString(_get2, _get3);
+      const struct ReturnValue _0 = dong_porf_video_js_api_smoke_test__ecma262_ToString(_get2, _get3);
       jjlast_type = _0.type;
       _get4 = jjlast_type;
       messagejjtype = _get4;
@@ -325,7 +352,7 @@ static f64 dong_porf_t12_inline_RangeError(f64 jjnewtarget, i32 jjnewtargetjjtyp
     }
   // end
   j14:;
-  obj = (f64)(dong_porf_t12_inline__Porffor_malloc(8));
+  obj = (f64)(dong_porf_video_js_api_smoke_test__Porffor_malloc(8));
   _get5 = obj;
   _get6 = message;
   i32_store(0, 0, (i32)(_get5), (i32)(_get6));
@@ -336,7 +363,7 @@ static f64 dong_porf_t12_inline_RangeError(f64 jjnewtarget, i32 jjnewtargetjjtyp
   return _get9;
 }
 
-static f64 dong_porf_t12_inline__Number_isFinite(f64 l0) {
+static f64 dong_porf_video_js_api_smoke_test__Number_isFinite(f64 l0) {
   f64 _get3;
   f64 _get2;
   f64 _get1;
@@ -351,7 +378,7 @@ static f64 dong_porf_t12_inline__Number_isFinite(f64 l0) {
   return (f64)(_get2 == _get3);
 }
 
-static f64 dong_porf_t12_inline__Number_isNaN(f64 l0) {
+static f64 dong_porf_video_js_api_smoke_test__Number_isNaN(f64 l0) {
   f64 _get1;
   f64 _get0;
   _get0 = l0;
@@ -359,13 +386,13 @@ static f64 dong_porf_t12_inline__Number_isNaN(f64 l0) {
   return (f64)(_get0 != _get1);
 }
 
-static f64 dong_porf_t12_inline__Math_round(f64 l0) {
+static f64 dong_porf_video_js_api_smoke_test__Math_round(f64 l0) {
   f64 _get0;
   _get0 = l0;
   return round(_get0);
 }
 
-static struct ReturnValue dong_porf_t12_inline__Number_prototype_toString(f64 _this, i32 _thisjjtype, f64 radix, i32 radixjjtype) {
+static struct ReturnValue dong_porf_video_js_api_smoke_test__Number_prototype_toString(f64 _this, i32 _thisjjtype, f64 radix, i32 radixjjtype) {
   f64 _get239;
   f64 _get238;
   f64 _get237;
@@ -642,7 +669,7 @@ static struct ReturnValue dong_porf_t12_inline__Number_prototype_toString(f64 _t
   // end
   j11:;
   _get3 = radix;
-  radix = dong_porf_t12_inline__Math_trunc(_get3);
+  radix = dong_porf_video_js_api_smoke_test__Math_trunc(_get3);
   radixjjtype = 1;
   _get4 = radix;
   logictmpi = _get4 < 2;
@@ -667,10 +694,10 @@ static struct ReturnValue dong_porf_t12_inline__Number_prototype_toString(f64 _t
   j13:;
   _get8 = _this;
   // if 
-    if (dong_porf_t12_inline__Number_isFinite(_get8) == 0) {
+    if (dong_porf_video_js_api_smoke_test__Number_isFinite(_get8) == 0) {
       _get9 = _this;
       // if 
-        if (((u32)(dong_porf_t12_inline__Number_isNaN(_get9))) != 0) {
+        if (((u32)(dong_porf_video_js_api_smoke_test__Number_isNaN(_get9))) != 0) {
           return (struct ReturnValue){ 226, 195 };
         }
       // end
@@ -693,7 +720,7 @@ static struct ReturnValue dong_porf_t12_inline__Number_prototype_toString(f64 _t
     }
   // end
   j19:;
-  out = (f64)(dong_porf_t12_inline__Porffor_malloc(512));
+  out = (f64)(dong_porf_video_js_api_smoke_test__Porffor_malloc(512));
   _get12 = out;
   outPtr = _get12;
   _get13 = _this;
@@ -709,7 +736,7 @@ static struct ReturnValue dong_porf_t12_inline__Number_prototype_toString(f64 _t
   // end
   j20:;
   _get17 = _this;
-  i = dong_porf_t12_inline__Math_trunc(_get17);
+  i = dong_porf_video_js_api_smoke_test__Math_trunc(_get17);
   digits = 0;
   l = 0;
   _get18 = radix;
@@ -736,7 +763,7 @@ static struct ReturnValue dong_porf_t12_inline__Number_prototype_toString(f64 _t
                 digit = _get22 - (_get24 * trunc((_get25 / _get26)));
                 _get27 = i;
                 _get28 = radix;
-                i = dong_porf_t12_inline__Math_trunc(_get27 / _get28);
+                i = dong_porf_video_js_api_smoke_test__Math_trunc(_get27 / _get28);
                 _get29 = e;
                 e = _get29 + 1;
                 _get30 = trailing;
@@ -843,7 +870,7 @@ static struct ReturnValue dong_porf_t12_inline__Number_prototype_toString(f64 _t
                 i32_store8(0, 4, (i32)((_get61 + _get62)), (i32)((_get64 - (_get66 * trunc((_get67 / _get68))))));
                 _get69 = e;
                 _get70 = radix;
-                e = dong_porf_t12_inline__Math_trunc(_get69 / _get70);
+                e = dong_porf_video_js_api_smoke_test__Math_trunc(_get69 / _get70);
                 _get71 = l;
                 l = _get71 + 1;
                 goto j31;
@@ -911,7 +938,7 @@ static struct ReturnValue dong_porf_t12_inline__Number_prototype_toString(f64 _t
                 _get93 = radix;
                 decimal = _get92 * _get93;
                 _get94 = decimal;
-                intPart = dong_porf_t12_inline__Math_trunc(_get94);
+                intPart = dong_porf_video_js_api_smoke_test__Math_trunc(_get94);
                 _get95 = intPart;
                 // if 
                   if (_get95 > 0) {
@@ -950,7 +977,7 @@ static struct ReturnValue dong_porf_t12_inline__Number_prototype_toString(f64 _t
                 digit = _get101 - (_get103 * trunc((_get104 / _get105)));
                 _get106 = decimal;
                 _get107 = radix;
-                decimal = dong_porf_t12_inline__Math_trunc(_get106 / _get107);
+                decimal = dong_porf_video_js_api_smoke_test__Math_trunc(_get106 / _get107);
                 _get108 = digits;
                 _get109 = l;
                 _get110 = digit;
@@ -1041,7 +1068,7 @@ static struct ReturnValue dong_porf_t12_inline__Number_prototype_toString(f64 _t
                 i32_store8(0, 4, (i32)((_get137 + _get138)), (i32)((_get140 - (_get142 * trunc((_get143 / _get144))))));
                 _get145 = e;
                 _get146 = radix;
-                e = dong_porf_t12_inline__Math_trunc(_get145 / _get146);
+                e = dong_porf_video_js_api_smoke_test__Math_trunc(_get145 / _get146);
                 _get147 = l;
                 l = _get147 + 1;
                 goto j47;
@@ -1123,7 +1150,7 @@ static struct ReturnValue dong_porf_t12_inline__Number_prototype_toString(f64 _t
             i32_store8(0, 4, (i32)((_get169 + _get170)), (i32)((_get172 - (_get174 * trunc((_get175 / _get176))))));
             _get177 = i;
             _get178 = radix;
-            i = dong_porf_t12_inline__Math_trunc(_get177 / _get178);
+            i = dong_porf_video_js_api_smoke_test__Math_trunc(_get177 / _get178);
             _get179 = l;
             l = _get179 + 1;
             goto j53;
@@ -1173,7 +1200,7 @@ static struct ReturnValue dong_porf_t12_inline__Number_prototype_toString(f64 _t
   // end
   _get194 = _this;
   _get195 = _this;
-  decimal = _get194 - dong_porf_t12_inline__Math_trunc(_get195);
+  decimal = _get194 - dong_porf_video_js_api_smoke_test__Math_trunc(_get195);
   _get196 = decimal;
   // if 
     if (_get196 > 0) {
@@ -1203,7 +1230,7 @@ static struct ReturnValue dong_porf_t12_inline__Number_prototype_toString(f64 _t
         j60:;
       // end
       _get206 = decimal;
-      decimal = dong_porf_t12_inline__Math_round(_get206);
+      decimal = dong_porf_video_js_api_smoke_test__Math_round(_get206);
       l = 0;
       trailing = 1;
       // loop 
@@ -1222,7 +1249,7 @@ static struct ReturnValue dong_porf_t12_inline__Number_prototype_toString(f64 _t
             digit = _get209 - (_get211 * trunc((_get212 / _get213)));
             _get214 = decimal;
             _get215 = radix;
-            decimal = dong_porf_t12_inline__Math_trunc(_get214 / _get215);
+            decimal = dong_porf_video_js_api_smoke_test__Math_trunc(_get214 / _get215);
             _get216 = trailing;
             // if 
               if (((u32)(_get216)) != 0) {
@@ -1296,7 +1323,7 @@ static struct ReturnValue dong_porf_t12_inline__Number_prototype_toString(f64 _t
   return (struct ReturnValue){ _get239, 195 };
 }
 
-static struct ReturnValue dong_porf_t12_inline__Boolean_prototype_toString(f64 _this, i32 _thisjjtype) {
+static struct ReturnValue dong_porf_video_js_api_smoke_test__Boolean_prototype_toString(f64 _this, i32 _thisjjtype) {
   f64 _get0;
   _get0 = _this;
   // if 
@@ -1308,7 +1335,7 @@ static struct ReturnValue dong_porf_t12_inline__Boolean_prototype_toString(f64 _
   return (struct ReturnValue){ 98, 195 };
 }
 
-static f64 dong_porf_t12_inline__Porffor_bytestring_appendStr(f64 str, i32 strjjtype, f64 appendage, i32 appendagejjtype) {
+static f64 dong_porf_video_js_api_smoke_test__Porffor_bytestring_appendStr(f64 str, i32 strjjtype, f64 appendage, i32 appendagejjtype) {
   f64 _get15;
   f64 _get14;
   f64 _get13;
@@ -1368,13 +1395,13 @@ static f64 dong_porf_t12_inline__Porffor_bytestring_appendStr(f64 str, i32 strjj
   return 1;
 }
 
-static i32 dong_porf_t12_inline__Porffor_funcLut_name(i32 l0) {
+static i32 dong_porf_video_js_api_smoke_test__Porffor_funcLut_name(i32 l0) {
   i32 _get0;
   _get0 = l0;
   return (((_get0 * 57) + 3) + 16384);
 }
 
-static struct ReturnValue dong_porf_t12_inline__Function_prototype_toString(f64 _this, i32 _thisjjtype) {
+static struct ReturnValue dong_porf_video_js_api_smoke_test__Function_prototype_toString(f64 _this, i32 _thisjjtype) {
   f64 _get5;
   f64 _get4;
   f64 _get3;
@@ -1389,25 +1416,25 @@ static struct ReturnValue dong_porf_t12_inline__Function_prototype_toString(f64 
     }
   // end
   j75:;
-  out = (f64)(dong_porf_t12_inline__Porffor_malloc(256));
+  out = (f64)(dong_porf_video_js_api_smoke_test__Porffor_malloc(256));
   _get1 = out;
-  (void) dong_porf_t12_inline__Porffor_bytestring_appendStr(_get1, 195, 336, 195);
+  (void) dong_porf_video_js_api_smoke_test__Porffor_bytestring_appendStr(_get1, 195, 336, 195);
   _get2 = out;
   _get3 = _this;
-  (void) dong_porf_t12_inline__Porffor_bytestring_appendStr(_get2, 195, (f64)(dong_porf_t12_inline__Porffor_funcLut_name((i32)(_get3))), 195);
+  (void) dong_porf_video_js_api_smoke_test__Porffor_bytestring_appendStr(_get2, 195, (f64)(dong_porf_video_js_api_smoke_test__Porffor_funcLut_name((i32)(_get3))), 195);
   _get4 = out;
-  (void) dong_porf_t12_inline__Porffor_bytestring_appendStr(_get4, 195, 351, 195);
+  (void) dong_porf_video_js_api_smoke_test__Porffor_bytestring_appendStr(_get4, 195, 351, 195);
   _get5 = out;
   return (struct ReturnValue){ _get5, 195 };
 }
 
-static i32 dong_porf_t12_inline__Porffor_funcLut_length(i32 l0) {
+static i32 dong_porf_video_js_api_smoke_test__Porffor_funcLut_length(i32 l0) {
   i32 _get0;
   _get0 = l0;
   return i32_load16_u(0, 16384, _get0 * 57);
 }
 
-static i32 dong_porf_t12_inline__Porffor_object_hash(i32 key, i32 keyjjtype) {
+static i32 dong_porf_video_js_api_smoke_test__Porffor_object_hash(i32 key, i32 keyjjtype) {
   i32 _get21;
   i32 _get20;
   i32 _get19;
@@ -1490,7 +1517,7 @@ static i32 dong_porf_t12_inline__Porffor_object_hash(i32 key, i32 keyjjtype) {
   return _get20 ^ ((u32)(_get21) >> 16);
 }
 
-static void dong_porf_t12_inline__Porffor_object_writeKey(i32 ptr, i32 ptrjjtype, i32 key, i32 keyjjtype, i32 hash, i32 hashjjtype) {
+static void dong_porf_video_js_api_smoke_test__Porffor_object_writeKey(i32 ptr, i32 ptrjjtype, i32 key, i32 keyjjtype, i32 hash, i32 hashjjtype) {
   i32 _get6;
   i32 _get5;
   i32 _get4;
@@ -1519,7 +1546,7 @@ static void dong_porf_t12_inline__Porffor_object_writeKey(i32 ptr, i32 ptrjjtype
   return;
 }
 
-static void dong_porf_t12_inline__Porffor_object_fastAdd(i32 obj, i32 objjjtype, i32 key, i32 keyjjtype, f64 value, i32 valuejjtype, i32 flags, i32 flagsjjtype) {
+static void dong_porf_video_js_api_smoke_test__Porffor_object_fastAdd(i32 obj, i32 objjjtype, i32 key, i32 keyjjtype, f64 value, i32 valuejjtype, i32 flags, i32 flagsjjtype) {
   i32 _get14;
   i32 _get13;
   i32 _get12;
@@ -1551,7 +1578,7 @@ static void dong_porf_t12_inline__Porffor_object_fastAdd(i32 obj, i32 objjjtype,
   _get7 = keyjjtype;
   _get8 = key;
   _get9 = keyjjtype;
-  dong_porf_t12_inline__Porffor_object_writeKey(_get5, 1, _get6, _get7, dong_porf_t12_inline__Porffor_object_hash(_get8, _get9), 1);
+  dong_porf_video_js_api_smoke_test__Porffor_object_writeKey(_get5, 1, _get6, _get7, dong_porf_video_js_api_smoke_test__Porffor_object_hash(_get8, _get9), 1);
   _get10 = entryPtr;
   _get11 = value;
   f64_store(0, 8, _get10, _get11);
@@ -1562,13 +1589,13 @@ static void dong_porf_t12_inline__Porffor_object_fastAdd(i32 obj, i32 objjjtype,
   return;
 }
 
-static i32 dong_porf_t12_inline__Porffor_funcLut_flags(i32 l0) {
+static i32 dong_porf_video_js_api_smoke_test__Porffor_funcLut_flags(i32 l0) {
   i32 _get0;
   _get0 = l0;
   return i32_load8_u(0, 16384, (_get0 * 57) + 2);
 }
 
-static f64 dong_porf_t12_inline__ecma262_IsConstructor(f64 argument, i32 argumentjjtype) {
+static f64 dong_porf_video_js_api_smoke_test__ecma262_IsConstructor(f64 argument, i32 argumentjjtype) {
   f64 _get1;
   i32 _get0;
   _get0 = argumentjjtype;
@@ -1579,10 +1606,10 @@ static f64 dong_porf_t12_inline__ecma262_IsConstructor(f64 argument, i32 argumen
   // end
   j94:;
   _get1 = argument;
-  return (f64)((f64)(dong_porf_t12_inline__Porffor_funcLut_flags((i32)(_get1)) & 2) == 2);
+  return (f64)((f64)(dong_porf_video_js_api_smoke_test__Porffor_funcLut_flags((i32)(_get1)) & 2) == 2);
 }
 
-static struct ReturnValue dong_porf_t12_inline__Porffor_object_underlying(f64 _obj, i32 _objjjtype) {
+static struct ReturnValue dong_porf_video_js_api_smoke_test__Porffor_object_underlying(f64 _obj, i32 _objjjtype) {
   i32 _get84;
   f64 _get83;
   i32 _get82;
@@ -1698,19 +1725,19 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_object_underlying(f64 _o
   // if 
     if (_get2 > 5) {
       // if 
-        if ((dong_porf_t12_inline_jjporfjjunderlyingStorejjglbl_inited) == 0) {
-          dong_porf_t12_inline_jjporfjjunderlyingStore = 0;
-          dong_porf_t12_inline_jjporfjjunderlyingStorejjglbl_inited = 1;
+        if ((dong_porf_video_js_api_smoke_test_jjporfjjunderlyingStorejjglbl_inited) == 0) {
+          dong_porf_video_js_api_smoke_test_jjporfjjunderlyingStore = 0;
+          dong_porf_video_js_api_smoke_test_jjporfjjunderlyingStorejjglbl_inited = 1;
         }
       // end
       j84:;
       // if 
-        if ((dong_porf_t12_inline_jjporfjjunderlyingStore) == 0) {
-          dong_porf_t12_inline_jjporfjjunderlyingStore = dong_porf_t12_inline__Porffor_malloc(16384);
+        if ((dong_porf_video_js_api_smoke_test_jjporfjjunderlyingStore) == 0) {
+          dong_porf_video_js_api_smoke_test_jjporfjjunderlyingStore = dong_porf_video_js_api_smoke_test__Porffor_malloc(16384);
         }
       // end
       j85:;
-      underlyingLength = i32_load(0, 0, dong_porf_t12_inline_jjporfjjunderlyingStore);
+      underlyingLength = i32_load(0, 0, dong_porf_video_js_api_smoke_test_jjporfjjunderlyingStore);
       _get3 = underlyingLength;
       end = _get3 * 12;
       i = 0;
@@ -1723,9 +1750,9 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_object_underlying(f64 _o
             _get6 = i;
             _get7 = _obj;
             // if 
-              if (f64_load(0, 4, dong_porf_t12_inline_jjporfjjunderlyingStore + _get6) == _get7) {
+              if (f64_load(0, 4, dong_porf_video_js_api_smoke_test_jjporfjjunderlyingStore + _get6) == _get7) {
                 _get8 = i;
-                return (struct ReturnValue){ i32_load(0, 12, dong_porf_t12_inline_jjporfjjunderlyingStore + _get8), 7 };
+                return (struct ReturnValue){ i32_load(0, 12, dong_porf_video_js_api_smoke_test_jjporfjjunderlyingStore + _get8), 7 };
               }
             // end
             j88:;
@@ -1738,28 +1765,28 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_object_underlying(f64 _o
       // end
       _get10 = _obj;
       obj = (u32)(_get10);
-      underlying = dong_porf_t12_inline__Porffor_malloc(16384);
+      underlying = dong_porf_video_js_api_smoke_test__Porffor_malloc(16384);
       _get11 = _objjjtype;
       // if 
         if (_get11 == 6) {
           _get12 = underlying;
           _get13 = obj;
-          dong_porf_t12_inline__Porffor_object_fastAdd(_get12, 7, 430, 195, (f64)(dong_porf_t12_inline__Porffor_funcLut_length(_get13)), 1, 2, 1);
+          dong_porf_video_js_api_smoke_test__Porffor_object_fastAdd(_get12, 7, 430, 195, (f64)(dong_porf_video_js_api_smoke_test__Porffor_funcLut_length(_get13)), 1, 2, 1);
           _get14 = underlying;
           _get15 = obj;
-          dong_porf_t12_inline__Porffor_object_fastAdd(_get14, 7, 442, 195, (f64)(dong_porf_t12_inline__Porffor_funcLut_name(_get15)), 195, 2, 1);
+          dong_porf_video_js_api_smoke_test__Porffor_object_fastAdd(_get14, 7, 442, 195, (f64)(dong_porf_video_js_api_smoke_test__Porffor_funcLut_name(_get15)), 195, 2, 1);
           _get16 = _obj;
           _get17 = _objjjtype;
           // if 
-            if (((i32)(dong_porf_t12_inline__ecma262_IsConstructor(_get16, _get17))) != 0) {
-              proto = dong_porf_t12_inline__Porffor_malloc(16384);
+            if (((i32)(dong_porf_video_js_api_smoke_test__ecma262_IsConstructor(_get16, _get17))) != 0) {
+              proto = dong_porf_video_js_api_smoke_test__Porffor_malloc(16384);
               _get18 = underlying;
               _get19 = proto;
-              dong_porf_t12_inline__Porffor_object_fastAdd(_get18, 7, 452, 195, (f64)(_get19), 7, 8, 1);
+              dong_porf_video_js_api_smoke_test__Porffor_object_fastAdd(_get18, 7, 452, 195, (f64)(_get19), 7, 8, 1);
               _get20 = proto;
               _get21 = _obj;
               _get22 = _objjjtype;
-              dong_porf_t12_inline__Porffor_object_fastAdd(_get20, 7, 467, 195, _get21, _get22, 10, 1);
+              dong_porf_video_js_api_smoke_test__Porffor_object_fastAdd(_get20, 7, 467, 195, _get21, _get22, 10, 1);
             }
           // end
           j95:;
@@ -1773,7 +1800,7 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_object_underlying(f64 _o
           len = i32_load(0, 0, _get24);
           _get25 = underlying;
           _get26 = len;
-          dong_porf_t12_inline__Porffor_object_fastAdd(_get25, 7, 430, 195, (f64)(_get26), 1, 8, 1);
+          dong_porf_video_js_api_smoke_test__Porffor_object_fastAdd(_get25, 7, 430, 195, (f64)(_get26), 1, 8, 1);
           i = 0;
           // loop 
           j97:;
@@ -1790,12 +1817,12 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_object_underlying(f64 _o
                 xjjtype = i32_load8_u(0, 12, _get32);
                 _get33 = underlying;
                 _get34 = i;
-                const struct ReturnValue _0 = dong_porf_t12_inline__Number_prototype_toString((f64)(_get34), 1, 0, 0);
+                const struct ReturnValue _0 = dong_porf_video_js_api_smoke_test__Number_prototype_toString((f64)(_get34), 1, 0, 0);
                 jjlast_type = _0.type;
                 _get35 = jjlast_type;
                 _get36 = x;
                 _get37 = xjjtype;
-                dong_porf_t12_inline__Porffor_object_fastAdd(_get33, 7, (i32)(_0.value), _get35, _get36, _get37, 14, 1);
+                dong_porf_video_js_api_smoke_test__Porffor_object_fastAdd(_get33, 7, (i32)(_0.value), _get35, _get36, _get37, 14, 1);
                 _get38 = i;
                 i = _get38 + 1;
                 goto j97;
@@ -1814,7 +1841,7 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_object_underlying(f64 _o
           len = i32_load(1, 0, _get41);
           _get42 = underlying;
           _get43 = len;
-          dong_porf_t12_inline__Porffor_object_fastAdd(_get42, 7, 430, 195, (f64)(_get43), 1, 0, 1);
+          dong_porf_video_js_api_smoke_test__Porffor_object_fastAdd(_get42, 7, 430, 195, (f64)(_get43), 1, 0, 1);
           i = 0;
           // loop 
           j100:;
@@ -1824,14 +1851,14 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_object_underlying(f64 _o
               if (_get44 < _get45) {
                 _get46 = underlying;
                 _get47 = i;
-                const struct ReturnValue _1 = dong_porf_t12_inline__Number_prototype_toString((f64)(_get47), 1, 0, 0);
+                const struct ReturnValue _1 = dong_porf_video_js_api_smoke_test__Number_prototype_toString((f64)(_get47), 1, 0, 0);
                 jjlast_type = _1.type;
                 _get48 = jjlast_type;
                 _get49 = i;
                 jjmember_prop_0 = _get49;
                 _get50 = obj;
                 jjmember_obj_0 = _get50;
-                jjmember_allocd = dong_porf_t12_inline__Porffor_malloc(8);
+                jjmember_allocd = dong_porf_video_js_api_smoke_test__Porffor_malloc(8);
                 _get51 = jjmember_allocd;
                 i32_store(0, 0, _get51, 1);
                 _get52 = jjmember_allocd;
@@ -1840,7 +1867,7 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_object_underlying(f64 _o
                 i32_store16(0, 4, _get52, i32_load16_u(0, 4, (_get53 * 2) + _get54));
                 _get55 = jjmember_allocd;
                 jjlast_type = 67;
-                dong_porf_t12_inline__Porffor_object_fastAdd(_get46, 7, (i32)(_1.value), _get48, (f64)(_get55), 67, 4, 1);
+                dong_porf_video_js_api_smoke_test__Porffor_object_fastAdd(_get46, 7, (i32)(_1.value), _get48, (f64)(_get55), 67, 4, 1);
                 _get56 = i;
                 i = _get56 + 1;
                 goto j100;
@@ -1866,7 +1893,7 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_object_underlying(f64 _o
           len = i32_load(1, 0, _get60);
           _get61 = underlying;
           _get62 = len;
-          dong_porf_t12_inline__Porffor_object_fastAdd(_get61, 7, 430, 195, (f64)(_get62), 1, 0, 1);
+          dong_porf_video_js_api_smoke_test__Porffor_object_fastAdd(_get61, 7, 430, 195, (f64)(_get62), 1, 0, 1);
           i = 0;
           // loop 
           j104:;
@@ -1876,14 +1903,14 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_object_underlying(f64 _o
               if (_get63 < _get64) {
                 _get65 = underlying;
                 _get66 = i;
-                const struct ReturnValue _2 = dong_porf_t12_inline__Number_prototype_toString((f64)(_get66), 1, 0, 0);
+                const struct ReturnValue _2 = dong_porf_video_js_api_smoke_test__Number_prototype_toString((f64)(_get66), 1, 0, 0);
                 jjlast_type = _2.type;
                 _get67 = jjlast_type;
                 _get68 = i;
                 jjmember_prop_1 = _get68;
                 _get69 = obj;
                 jjmember_obj_1 = _get69;
-                jjmember_allocd = dong_porf_t12_inline__Porffor_malloc(8);
+                jjmember_allocd = dong_porf_video_js_api_smoke_test__Porffor_malloc(8);
                 _get70 = jjmember_allocd;
                 i32_store(0, 0, _get70, 1);
                 _get71 = jjmember_allocd;
@@ -1892,7 +1919,7 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_object_underlying(f64 _o
                 i32_store8(0, 4, _get71, i32_load8_u(0, 4, _get72 + _get73));
                 _get74 = jjmember_allocd;
                 jjlast_type = 195;
-                dong_porf_t12_inline__Porffor_object_fastAdd(_get65, 7, (i32)(_2.value), _get67, (f64)(_get74), 195, 4, 1);
+                dong_porf_video_js_api_smoke_test__Porffor_object_fastAdd(_get65, 7, (i32)(_2.value), _get67, (f64)(_get74), 195, 4, 1);
                 _get75 = i;
                 i = _get75 + 1;
                 goto j104;
@@ -1906,13 +1933,13 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_object_underlying(f64 _o
       // end
       j103:;
       _get77 = underlyingLength;
-      i32_store(0, 0, dong_porf_t12_inline_jjporfjjunderlyingStore, _get77 + 1);
+      i32_store(0, 0, dong_porf_video_js_api_smoke_test_jjporfjjunderlyingStore, _get77 + 1);
       _get78 = underlyingLength;
       _get79 = _obj;
-      f64_store(0, 4, dong_porf_t12_inline_jjporfjjunderlyingStore + (_get78 * 12), _get79);
+      f64_store(0, 4, dong_porf_video_js_api_smoke_test_jjporfjjunderlyingStore + (_get78 * 12), _get79);
       _get80 = underlyingLength;
       _get81 = underlying;
-      i32_store(0, 12, dong_porf_t12_inline_jjporfjjunderlyingStore + (_get80 * 12), _get81);
+      i32_store(0, 12, dong_porf_video_js_api_smoke_test_jjporfjjunderlyingStore + (_get80 * 12), _get81);
       _get82 = underlying;
       return (struct ReturnValue){ _get82, 7 };
     }
@@ -1923,7 +1950,7 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_object_underlying(f64 _o
   return (struct ReturnValue){ (u32)(_get83), _get84 };
 }
 
-static i32 dong_porf_t12_inline__Porffor_object_lookup(i32 obj, i32 objjjtype, i32 target, i32 targetjjtype, i32 targetHash, i32 targetHashjjtype) {
+static i32 dong_porf_video_js_api_smoke_test__Porffor_object_lookup(i32 obj, i32 objjjtype, i32 target, i32 targetjjtype, i32 targetHash, i32 targetHashjjtype) {
   i32 _get9;
   i32 _get8;
   i32 _get7;
@@ -1974,7 +2001,7 @@ static i32 dong_porf_t12_inline__Porffor_object_lookup(i32 obj, i32 objjjtype, i
   return -1;
 }
 
-static i32 dong_porf_t12_inline__Porffor_object_isObjectOrNull(i32 arg, i32 argjjtype) {
+static i32 dong_porf_video_js_api_smoke_test__Porffor_object_isObjectOrNull(i32 arg, i32 argjjtype) {
   i32 _get3;
   i32 _get2;
   i32 _get1;
@@ -1989,7 +2016,7 @@ static i32 dong_porf_t12_inline__Porffor_object_isObjectOrNull(i32 arg, i32 argj
   return ((_get1 > 5) & (_get2 != 67)) & (_get3 != 195);
 }
 
-static void dong_porf_t12_inline__Porffor_object_setPrototype(i32 obj, i32 objjjtype, i32 proto, i32 protojjtype) {
+static void dong_porf_video_js_api_smoke_test__Porffor_object_setPrototype(i32 obj, i32 objjjtype, i32 proto, i32 protojjtype) {
   i32 _get10;
   i32 _get9;
   i32 _get8;
@@ -2008,7 +2035,7 @@ static void dong_porf_t12_inline__Porffor_object_setPrototype(i32 obj, i32 objjj
     if (_get0 != 7) {
       _get1 = obj;
       _get2 = objjjtype;
-      const struct ReturnValue _0 = dong_porf_t12_inline__Porffor_object_underlying((f64)(_get1), _get2);
+      const struct ReturnValue _0 = dong_porf_video_js_api_smoke_test__Porffor_object_underlying((f64)(_get1), _get2);
       jjlast_type = _0.type;
       _get3 = jjlast_type;
       objjjtype = _get3;
@@ -2026,7 +2053,7 @@ static void dong_porf_t12_inline__Porffor_object_setPrototype(i32 obj, i32 objjj
   _get5 = proto;
   _get6 = protojjtype;
   // if 
-    if ((dong_porf_t12_inline__Porffor_object_isObjectOrNull(_get5, _get6)) != 0) {
+    if ((dong_porf_video_js_api_smoke_test__Porffor_object_isObjectOrNull(_get5, _get6)) != 0) {
       _get7 = obj;
       _get8 = proto;
       i32_store(0, 4, _get7, _get8);
@@ -2039,7 +2066,7 @@ static void dong_porf_t12_inline__Porffor_object_setPrototype(i32 obj, i32 objjj
   return;
 }
 
-static i32 dong_porf_t12_inline_jjget___Object_prototype() {
+static i32 dong_porf_video_js_api_smoke_test_jjget___Object_prototype() {
   i32 _get9;
   i32 _get8;
   i32 _get7;
@@ -2053,42 +2080,42 @@ static i32 dong_porf_t12_inline_jjget___Object_prototype() {
   i32 l0 = 0;
 
   // if 
-    if ((dong_porf_t12_inline_jjporfjjgetptr___Object_prototype) != 0) {
-      return dong_porf_t12_inline_jjporfjjgetptr___Object_prototype;
+    if ((dong_porf_video_js_api_smoke_test_jjporfjjgetptr___Object_prototype) != 0) {
+      return dong_porf_video_js_api_smoke_test_jjporfjjgetptr___Object_prototype;
     }
   // end
   j114:;
   l0 = 49152;
   _get0 = l0;
-  dong_porf_t12_inline_jjporfjjgetptr___Object_prototype = _get0;
+  dong_porf_video_js_api_smoke_test_jjporfjjgetptr___Object_prototype = _get0;
   _get1 = l0;
-  const struct ReturnValue _0 = dong_porf_t12_inline__Porffor_object_underlying((f64)(_get1), 7);
+  const struct ReturnValue _0 = dong_porf_video_js_api_smoke_test__Porffor_object_underlying((f64)(_get1), 7);
   (void) _0.type;
   l0 = _0.value;
   _get2 = l0;
-  dong_porf_t12_inline__Porffor_object_fastAdd(_get2, 7, 517, 195, 3, 6, 10, 1);
+  dong_porf_video_js_api_smoke_test__Porffor_object_fastAdd(_get2, 7, 517, 195, 3, 6, 10, 1);
   _get3 = l0;
-  dong_porf_t12_inline__Porffor_object_fastAdd(_get3, 7, 1139, 195, 4, 6, 10, 1);
+  dong_porf_video_js_api_smoke_test__Porffor_object_fastAdd(_get3, 7, 1139, 195, 4, 6, 10, 1);
   _get4 = l0;
-  dong_porf_t12_inline__Porffor_object_fastAdd(_get4, 7, 1165, 195, 5, 6, 10, 1);
+  dong_porf_video_js_api_smoke_test__Porffor_object_fastAdd(_get4, 7, 1165, 195, 5, 6, 10, 1);
   _get5 = l0;
-  dong_porf_t12_inline__Porffor_object_fastAdd(_get5, 7, 416, 195, 6, 6, 10, 1);
+  dong_porf_video_js_api_smoke_test__Porffor_object_fastAdd(_get5, 7, 416, 195, 6, 6, 10, 1);
   _get6 = l0;
-  dong_porf_t12_inline__Porffor_object_fastAdd(_get6, 7, 1222, 195, 7, 6, 10, 1);
+  dong_porf_video_js_api_smoke_test__Porffor_object_fastAdd(_get6, 7, 1222, 195, 7, 6, 10, 1);
   _get7 = l0;
-  dong_porf_t12_inline__Porffor_object_fastAdd(_get7, 7, 995, 195, 2, 6, 10, 1);
+  dong_porf_video_js_api_smoke_test__Porffor_object_fastAdd(_get7, 7, 995, 195, 2, 6, 10, 1);
   _get8 = l0;
-  dong_porf_t12_inline__Porffor_object_setPrototype(_get8, 7, 0, 7);
+  dong_porf_video_js_api_smoke_test__Porffor_object_setPrototype(_get8, 7, 0, 7);
   _get9 = l0;
-  dong_porf_t12_inline__Porffor_object_fastAdd(_get9, 7, 467, 195, 8, 6, 10, 1);
-  return dong_porf_t12_inline_jjporfjjgetptr___Object_prototype;
+  dong_porf_video_js_api_smoke_test__Porffor_object_fastAdd(_get9, 7, 467, 195, 8, 6, 10, 1);
+  return dong_porf_video_js_api_smoke_test_jjporfjjgetptr___Object_prototype;
 }
 
-static struct ReturnValue dong_porf_t12_inline__Porffor_object_getHiddenPrototype(i32 trueType, i32 trueTypejjtype) {
-  return (struct ReturnValue){ dong_porf_t12_inline_jjget___Object_prototype(), 7 };
+static struct ReturnValue dong_porf_video_js_api_smoke_test__Porffor_object_getHiddenPrototype(i32 trueType, i32 trueTypejjtype) {
+  return (struct ReturnValue){ dong_porf_video_js_api_smoke_test_jjget___Object_prototype(), 7 };
 }
 
-static struct ReturnValue dong_porf_t12_inline__Porffor_object_getPrototype(i32 obj, i32 objjjtype) {
+static struct ReturnValue dong_porf_video_js_api_smoke_test__Porffor_object_getPrototype(i32 obj, i32 objjjtype) {
   i32 _get6;
   i32 _get5;
   i32 _get4;
@@ -2103,7 +2130,7 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_object_getPrototype(i32 
     if (_get0 != 7) {
       _get1 = obj;
       _get2 = objjjtype;
-      const struct ReturnValue _0 = dong_porf_t12_inline__Porffor_object_underlying((f64)(_get1), _get2);
+      const struct ReturnValue _0 = dong_porf_video_js_api_smoke_test__Porffor_object_underlying((f64)(_get1), _get2);
       jjlast_type = _0.type;
       _get3 = jjlast_type;
       objjjtype = _get3;
@@ -2123,7 +2150,7 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_object_getPrototype(i32 
   return (struct ReturnValue){ i32_load(0, 4, _get5), i32_load8_u(0, 3, _get6) };
 }
 
-static struct ReturnValue dong_porf_t12_inline__Porffor_object_accessorGet(i32 entryPtr, i32 entryPtrjjtype) {
+static struct ReturnValue dong_porf_video_js_api_smoke_test__Porffor_object_accessorGet(i32 entryPtr, i32 entryPtrjjtype) {
   i32 _get2;
   i32 _get1;
   i32 _get0;
@@ -2142,7 +2169,7 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_object_accessorGet(i32 e
   return (struct ReturnValue){ _get2, 6 };
 }
 
-static struct ReturnValue dong_porf_t12_inline__Porffor_object_get_withHash(i32 _obj, i32 _objjjtype, i32 key, i32 keyjjtype, i32 hash, i32 hashjjtype) {
+static struct ReturnValue dong_porf_video_js_api_smoke_test__Porffor_object_get_withHash(i32 _obj, i32 _objjjtype, i32 key, i32 keyjjtype, i32 hash, i32 hashjjtype) {
   i32 _get67;
   i32 _get66;
   i32 _get65;
@@ -2238,7 +2265,7 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_object_get_withHash(i32 
     if (_get3 != 7) {
       _get4 = obj;
       _get5 = objjjtype;
-      const struct ReturnValue _0 = dong_porf_t12_inline__Porffor_object_underlying((f64)(_get4), _get5);
+      const struct ReturnValue _0 = dong_porf_video_js_api_smoke_test__Porffor_object_underlying((f64)(_get4), _get5);
       jjlast_type = _0.type;
       _get6 = jjlast_type;
       objjjtype = _get6;
@@ -2257,7 +2284,7 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_object_get_withHash(i32 
   _get10 = key;
   _get11 = keyjjtype;
   _get12 = hash;
-  entryPtr = dong_porf_t12_inline__Porffor_object_lookup(_get8, _get9, _get10, _get11, _get12, 1);
+  entryPtr = dong_porf_video_js_api_smoke_test__Porffor_object_lookup(_get8, _get9, _get10, _get11, _get12, 1);
   _get13 = entryPtr;
   // if 
     if (_get13 == -1) {
@@ -2271,14 +2298,14 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_object_get_withHash(i32 
           _get17 = objjjtype;
           // if 
             if ((_get17) == 0) {
-              obj = dong_porf_t12_inline_jjget___Object_prototype();
+              obj = dong_porf_video_js_api_smoke_test_jjget___Object_prototype();
               objjjtype = 7;
             }
           // end
           j113:;
         } else {
           _get18 = trueType;
-          const struct ReturnValue _1 = dong_porf_t12_inline__Porffor_object_getHiddenPrototype(_get18, 1);
+          const struct ReturnValue _1 = dong_porf_video_js_api_smoke_test__Porffor_object_getHiddenPrototype(_get18, 1);
           jjlast_type = _1.type;
           _get19 = jjlast_type;
           objjjtype = _get19;
@@ -2291,7 +2318,7 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_object_get_withHash(i32 
         if (_get20 != 7) {
           _get21 = obj;
           _get22 = objjjtype;
-          const struct ReturnValue _2 = dong_porf_t12_inline__Porffor_object_underlying((f64)(_get21), _get22);
+          const struct ReturnValue _2 = dong_porf_video_js_api_smoke_test__Porffor_object_underlying((f64)(_get21), _get22);
           jjlast_type = _2.type;
           _get23 = jjlast_type;
           objjjtype = _get23;
@@ -2312,7 +2339,7 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_object_get_withHash(i32 
             _get28 = key;
             _get29 = keyjjtype;
             _get30 = hash;
-            entryPtr = dong_porf_t12_inline__Porffor_object_lookup(_get26, _get27, _get28, _get29, _get30, 1);
+            entryPtr = dong_porf_video_js_api_smoke_test__Porffor_object_lookup(_get26, _get27, _get28, _get29, _get30, 1);
             _get31 = entryPtr;
             // if 
               if (_get31 != -1) {
@@ -2330,7 +2357,7 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_object_get_withHash(i32 
                 _get35 = objjjtype;
                 // if 
                   if ((_get35) == 0) {
-                    obj = dong_porf_t12_inline_jjget___Object_prototype();
+                    obj = dong_porf_video_js_api_smoke_test_jjget___Object_prototype();
                     objjjtype = 7;
                   }
                 // end
@@ -2338,7 +2365,7 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_object_get_withHash(i32 
               } else {
                 _get36 = obj;
                 _get37 = objjjtype;
-                const struct ReturnValue _3 = dong_porf_t12_inline__Porffor_object_getPrototype(_get36, _get37);
+                const struct ReturnValue _3 = dong_porf_video_js_api_smoke_test__Porffor_object_getPrototype(_get36, _get37);
                 jjlast_type = _3.type;
                 _get38 = jjlast_type;
                 objjjtype = _get38;
@@ -2351,7 +2378,7 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_object_get_withHash(i32 
               if (_get39 != 7) {
                 _get40 = obj;
                 _get41 = objjjtype;
-                const struct ReturnValue _4 = dong_porf_t12_inline__Porffor_object_underlying((f64)(_get40), _get41);
+                const struct ReturnValue _4 = dong_porf_video_js_api_smoke_test__Porffor_object_underlying((f64)(_get40), _get41);
                 jjlast_type = _4.type;
                 _get42 = jjlast_type;
                 objjjtype = _get42;
@@ -2418,7 +2445,7 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_object_get_withHash(i32 
   // if 
     if ((_get54 & 1) != 0) {
       _get55 = entryPtr;
-      const struct ReturnValue _5 = dong_porf_t12_inline__Porffor_object_accessorGet(_get55, 1);
+      const struct ReturnValue _5 = dong_porf_video_js_api_smoke_test__Porffor_object_accessorGet(_get55, 1);
       jjlast_type = _5.type;
       get = _5.value;
       _get56 = get;
@@ -2453,7 +2480,7 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_object_get_withHash(i32 
   return (struct ReturnValue){ f64_load(0, 8, _get66), (u32)(_get67) >> 8 };
 }
 
-static struct ReturnValue dong_porf_t12_inline__Porffor_object_readValue(i32 entryPtr, i32 entryPtrjjtype) {
+static struct ReturnValue dong_porf_video_js_api_smoke_test__Porffor_object_readValue(i32 entryPtr, i32 entryPtrjjtype) {
   i32 _get1;
   i32 _get0;
   _get0 = entryPtr;
@@ -2461,7 +2488,7 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_object_readValue(i32 ent
   return (struct ReturnValue){ f64_load(0, 8, _get0), i32_load8_u(0, 17, _get1) };
 }
 
-static struct ReturnValue dong_porf_t12_inline__Object_prototype_toString(f64 _this, i32 _thisjjtype) {
+static struct ReturnValue dong_porf_video_js_api_smoke_test__Object_prototype_toString(f64 _this, i32 _thisjjtype) {
   i32 _get45;
   i32 _get44;
   i32 _get43;
@@ -2534,7 +2561,7 @@ static struct ReturnValue dong_porf_t12_inline__Object_prototype_toString(f64 _t
           jjmember_obj_254 = _get3;
           _get4 = jjmember_obj_254;
           _get5 = jjmember_prop_254;
-          const struct ReturnValue _0 = dong_porf_t12_inline__Porffor_object_get_withHash((i32)(_get4), 7, (u32)(_get5), 195, -2133638001, 1);
+          const struct ReturnValue _0 = dong_porf_video_js_api_smoke_test__Porffor_object_get_withHash((i32)(_get4), 7, (u32)(_get5), 195, -2133638001, 1);
           jjlast_type = _0.type;
           _get6 = jjlast_type;
           ovrjjtype = _get6;
@@ -2584,12 +2611,12 @@ static struct ReturnValue dong_porf_t12_inline__Object_prototype_toString(f64 _t
           // end
           j136:;
           _get19 = obj;
-          entryPtr = (f64)(dong_porf_t12_inline__Porffor_object_lookup((i32)(_get19), 7, 416, 195, dong_porf_t12_inline__Porffor_object_hash(416, 195), 1));
+          entryPtr = (f64)(dong_porf_video_js_api_smoke_test__Porffor_object_lookup((i32)(_get19), 7, 416, 195, dong_porf_video_js_api_smoke_test__Porffor_object_hash(416, 195), 1));
           _get20 = entryPtr;
           // if 
             if (_get20 != -1) {
               _get21 = entryPtr;
-              const struct ReturnValue _1 = dong_porf_t12_inline__Porffor_object_readValue((i32)(_get21), 1);
+              const struct ReturnValue _1 = dong_porf_video_js_api_smoke_test__Porffor_object_readValue((i32)(_get21), 1);
               jjlast_type = _1.type;
               _get22 = jjlast_type;
               ovrjjtype = _get22;
@@ -2715,7 +2742,7 @@ static struct ReturnValue dong_porf_t12_inline__Object_prototype_toString(f64 _t
   return (struct ReturnValue){ 1561, 195 };
 }
 
-static i32 dong_porf_t12_inline__Porffor_bytestringToString(i32 src) {
+static i32 dong_porf_video_js_api_smoke_test__Porffor_bytestringToString(i32 src) {
   i32 _get11;
   i32 _get10;
   i32 _get9;
@@ -2735,7 +2762,7 @@ static i32 dong_porf_t12_inline__Porffor_bytestringToString(i32 src) {
   _get0 = src;
   len = i32_load(0, 0, _get0);
   _get1 = len;
-  dst = dong_porf_t12_inline__Porffor_malloc((_get1 * 2) + 6);
+  dst = dong_porf_video_js_api_smoke_test__Porffor_malloc((_get1 * 2) + 6);
   _get2 = dst;
   _get3 = len;
   i32_store(0, 0, _get2, _get3);
@@ -2758,7 +2785,7 @@ static i32 dong_porf_t12_inline__Porffor_bytestringToString(i32 src) {
   return _get11;
 }
 
-static struct ReturnValue dong_porf_t12_inline__String_prototype_toString(i32 _this, i32 _thisjjtype) {
+static struct ReturnValue dong_porf_video_js_api_smoke_test__String_prototype_toString(i32 _this, i32 _thisjjtype) {
   i32 _get8;
   i32 _get7;
   i32 _get6;
@@ -2781,14 +2808,14 @@ static struct ReturnValue dong_porf_t12_inline__String_prototype_toString(i32 _t
       j154:;
       _get4 = _this;
       _get5 = _thisjjtype;
-      const struct ReturnValue _0 = dong_porf_t12_inline__ecma262_ToString((f64)(_get4), _get5);
+      const struct ReturnValue _0 = dong_porf_video_js_api_smoke_test__ecma262_ToString((f64)(_get4), _get5);
       _thisjjtype = _0.type;
       _this = (i32)(_0.value);
       _get6 = _thisjjtype;
       // if 
         if (_get6 == 195) {
           _get7 = _this;
-          _this = dong_porf_t12_inline__Porffor_bytestringToString(_get7);
+          _this = dong_porf_video_js_api_smoke_test__Porffor_bytestringToString(_get7);
         }
       // end
       j155:;
@@ -2799,11 +2826,11 @@ static struct ReturnValue dong_porf_t12_inline__String_prototype_toString(i32 _t
   return (struct ReturnValue){ _get8, 67 };
 }
 
-static struct ReturnValue dong_porf_t12_inline__TypeError_prototype_namekkget(f64 _this, i32 _thisjjtype) {
+static struct ReturnValue dong_porf_video_js_api_smoke_test__TypeError_prototype_namekkget(f64 _this, i32 _thisjjtype) {
   return (struct ReturnValue){ 377, 195 };
 }
 
-static struct ReturnValue dong_porf_t12_inline__TypeError_prototype_messagekkget(f64 _this, i32 _thisjjtype) {
+static struct ReturnValue dong_porf_video_js_api_smoke_test__TypeError_prototype_messagekkget(f64 _this, i32 _thisjjtype) {
   f64 _get1;
   f64 _get0;
   _get0 = _this;
@@ -2811,7 +2838,7 @@ static struct ReturnValue dong_porf_t12_inline__TypeError_prototype_messagekkget
   return (struct ReturnValue){ (f64)(i32_load(0, 0, (u32)(_get0))), i32_load8_u(0, 4, (u32)(_get1)) };
 }
 
-static struct ReturnValue dong_porf_t12_inline__Porffor_strcat(i32 a, i32 ajjtype, i32 b, i32 bjjtype) {
+static struct ReturnValue dong_porf_video_js_api_smoke_test__Porffor_strcat(i32 a, i32 ajjtype, i32 b, i32 bjjtype) {
   i32 _get65;
   i32 _get64;
   i32 _get63;
@@ -2896,7 +2923,7 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_strcat(i32 a, i32 ajjtyp
         if (_get3 == 195) {
           _get4 = al;
           _get5 = bl;
-          out = dong_porf_t12_inline__Porffor_malloc((6 + _get4) + _get5);
+          out = dong_porf_video_js_api_smoke_test__Porffor_malloc((6 + _get4) + _get5);
           _get6 = out;
           _get7 = al;
           _get8 = bl;
@@ -2904,18 +2931,18 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_strcat(i32 a, i32 ajjtyp
           _get9 = out;
           _get10 = a;
           _get11 = al;
-          memcpy(dong_porf_t12_inline_memory + (_get9 + 4), dong_porf_t12_inline_memory + (_get10 + 4), _get11);
+          memcpy(dong_porf_video_js_api_smoke_test_memory + (_get9 + 4), dong_porf_video_js_api_smoke_test_memory + (_get10 + 4), _get11);
           _get12 = out;
           _get13 = al;
           _get14 = b;
           _get15 = bl;
-          memcpy(dong_porf_t12_inline_memory + ((_get12 + 4) + _get13), dong_porf_t12_inline_memory + (_get14 + 4), _get15);
+          memcpy(dong_porf_video_js_api_smoke_test_memory + ((_get12 + 4) + _get13), dong_porf_video_js_api_smoke_test_memory + (_get14 + 4), _get15);
           _get16 = out;
           return (struct ReturnValue){ _get16, 195 };
         } else {
           _get17 = al;
           _get18 = bl;
-          out = dong_porf_t12_inline__Porffor_malloc(6 + ((_get17 + _get18) * 2));
+          out = dong_porf_video_js_api_smoke_test__Porffor_malloc(6 + ((_get17 + _get18) * 2));
           _get19 = out;
           _get20 = al;
           _get21 = bl;
@@ -2943,7 +2970,7 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_strcat(i32 a, i32 ajjtyp
           _get30 = al;
           _get31 = b;
           _get32 = bl;
-          memcpy(dong_porf_t12_inline_memory + ((_get29 + 4) + (_get30 * 2)), dong_porf_t12_inline_memory + (_get31 + 4), (_get32 * 2));
+          memcpy(dong_porf_video_js_api_smoke_test_memory + ((_get29 + 4) + (_get30 * 2)), dong_porf_video_js_api_smoke_test_memory + (_get31 + 4), (_get32 * 2));
           _get33 = out;
           return (struct ReturnValue){ _get33, 67 };
         }
@@ -2955,7 +2982,7 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_strcat(i32 a, i32 ajjtyp
         if (_get34 == 195) {
           _get35 = al;
           _get36 = bl;
-          out = dong_porf_t12_inline__Porffor_malloc(6 + ((_get35 + _get36) * 2));
+          out = dong_porf_video_js_api_smoke_test__Porffor_malloc(6 + ((_get35 + _get36) * 2));
           _get37 = out;
           _get38 = al;
           _get39 = bl;
@@ -2963,7 +2990,7 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_strcat(i32 a, i32 ajjtyp
           _get40 = out;
           _get41 = a;
           _get42 = al;
-          memcpy(dong_porf_t12_inline_memory + (_get40 + 4), dong_porf_t12_inline_memory + (_get41 + 4), (_get42 * 2));
+          memcpy(dong_porf_video_js_api_smoke_test_memory + (_get40 + 4), dong_porf_video_js_api_smoke_test_memory + (_get41 + 4), (_get42 * 2));
           _get43 = out;
           _get44 = al;
           ptr = _get43 + (_get44 * 2);
@@ -2991,7 +3018,7 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_strcat(i32 a, i32 ajjtyp
         } else {
           _get53 = al;
           _get54 = bl;
-          out = dong_porf_t12_inline__Porffor_malloc(6 + ((_get53 + _get54) * 2));
+          out = dong_porf_video_js_api_smoke_test__Porffor_malloc(6 + ((_get53 + _get54) * 2));
           _get55 = out;
           _get56 = al;
           _get57 = bl;
@@ -2999,12 +3026,12 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_strcat(i32 a, i32 ajjtyp
           _get58 = out;
           _get59 = a;
           _get60 = al;
-          memcpy(dong_porf_t12_inline_memory + (_get58 + 4), dong_porf_t12_inline_memory + (_get59 + 4), (_get60 * 2));
+          memcpy(dong_porf_video_js_api_smoke_test_memory + (_get58 + 4), dong_porf_video_js_api_smoke_test_memory + (_get59 + 4), (_get60 * 2));
           _get61 = out;
           _get62 = al;
           _get63 = b;
           _get64 = bl;
-          memcpy(dong_porf_t12_inline_memory + ((_get61 + 4) + (_get62 * 2)), dong_porf_t12_inline_memory + (_get63 + 4), (_get64 * 2));
+          memcpy(dong_porf_video_js_api_smoke_test_memory + ((_get61 + 4) + (_get62 * 2)), dong_porf_video_js_api_smoke_test_memory + (_get63 + 4), (_get64 * 2));
           _get65 = out;
           return (struct ReturnValue){ _get65, 67 };
         }
@@ -3016,7 +3043,7 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_strcat(i32 a, i32 ajjtyp
   return (struct ReturnValue){ 0, 0 };
 }
 
-static struct ReturnValue dong_porf_t12_inline__Porffor_concatStrings(f64 a, i32 ajjtype, f64 b, i32 bjjtype) {
+static struct ReturnValue dong_porf_video_js_api_smoke_test__Porffor_concatStrings(f64 a, i32 ajjtype, f64 b, i32 bjjtype) {
   i32 _get12;
   i32 _get11;
   f64 _get10;
@@ -3037,7 +3064,7 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_concatStrings(f64 a, i32
     if ((f64)(_get0 | 128) != 195) {
       _get1 = a;
       _get2 = ajjtype;
-      const struct ReturnValue _0 = dong_porf_t12_inline__ecma262_ToString(_get1, _get2);
+      const struct ReturnValue _0 = dong_porf_video_js_api_smoke_test__ecma262_ToString(_get1, _get2);
       jjlast_type = _0.type;
       _get3 = jjlast_type;
       ajjtype = _get3;
@@ -3050,7 +3077,7 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_concatStrings(f64 a, i32
     if ((f64)(_get4 | 128) != 195) {
       _get5 = b;
       _get6 = bjjtype;
-      const struct ReturnValue _1 = dong_porf_t12_inline__ecma262_ToString(_get5, _get6);
+      const struct ReturnValue _1 = dong_porf_video_js_api_smoke_test__ecma262_ToString(_get5, _get6);
       jjlast_type = _1.type;
       _get7 = jjlast_type;
       bjjtype = _get7;
@@ -3062,13 +3089,13 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_concatStrings(f64 a, i32
   _get9 = ajjtype;
   _get10 = b;
   _get11 = bjjtype;
-  const struct ReturnValue _2 = dong_porf_t12_inline__Porffor_strcat((i32)(_get8), _get9, (i32)(_get10), _get11);
+  const struct ReturnValue _2 = dong_porf_video_js_api_smoke_test__Porffor_strcat((i32)(_get8), _get9, (i32)(_get10), _get11);
   jjlast_type = _2.type;
   _get12 = jjlast_type;
   return (struct ReturnValue){ (f64)(_2.value), _get12 };
 }
 
-static struct ReturnValue dong_porf_t12_inline__TypeError_prototype_toString(f64 _this, i32 _thisjjtype) {
+static struct ReturnValue dong_porf_video_js_api_smoke_test__TypeError_prototype_toString(f64 _this, i32 _thisjjtype) {
   i32 _get12;
   i32 _get11;
   f64 _get10;
@@ -3093,13 +3120,13 @@ static struct ReturnValue dong_porf_t12_inline__TypeError_prototype_toString(f64
   f64 jjmember_prop_145 = 0;
 
   _get0 = _this;
-  const struct ReturnValue _0 = dong_porf_t12_inline__TypeError_prototype_namekkget(_get0, 38);
+  const struct ReturnValue _0 = dong_porf_video_js_api_smoke_test__TypeError_prototype_namekkget(_get0, 38);
   jjlast_type = _0.type;
   _get1 = jjlast_type;
   namejjtype = _get1;
   name = _0.value;
   _get2 = _this;
-  const struct ReturnValue _1 = dong_porf_t12_inline__TypeError_prototype_messagekkget(_get2, 38);
+  const struct ReturnValue _1 = dong_porf_video_js_api_smoke_test__TypeError_prototype_messagekkget(_get2, 38);
   jjlast_type = _1.type;
   _get3 = jjlast_type;
   messagejjtype = _get3;
@@ -3115,22 +3142,22 @@ static struct ReturnValue dong_porf_t12_inline__TypeError_prototype_toString(f64
   j158:;
   _get7 = name;
   _get8 = namejjtype;
-  const struct ReturnValue _2 = dong_porf_t12_inline__Porffor_concatStrings(_get7, _get8, 392, 195);
+  const struct ReturnValue _2 = dong_porf_video_js_api_smoke_test__Porffor_concatStrings(_get7, _get8, 392, 195);
   jjlast_type = _2.type;
   _get9 = jjlast_type;
   _get10 = message;
   _get11 = messagejjtype;
-  const struct ReturnValue _3 = dong_porf_t12_inline__Porffor_concatStrings(_2.value, _get9, _get10, _get11);
+  const struct ReturnValue _3 = dong_porf_video_js_api_smoke_test__Porffor_concatStrings(_2.value, _get9, _get10, _get11);
   jjlast_type = _3.type;
   _get12 = jjlast_type;
   return (struct ReturnValue){ _3.value, _get12 };
 }
 
-static struct ReturnValue dong_porf_t12_inline__RangeError_prototype_namekkget(f64 _this, i32 _thisjjtype) {
+static struct ReturnValue dong_porf_video_js_api_smoke_test__RangeError_prototype_namekkget(f64 _this, i32 _thisjjtype) {
   return (struct ReturnValue){ 400, 195 };
 }
 
-static struct ReturnValue dong_porf_t12_inline__RangeError_prototype_messagekkget(f64 _this, i32 _thisjjtype) {
+static struct ReturnValue dong_porf_video_js_api_smoke_test__RangeError_prototype_messagekkget(f64 _this, i32 _thisjjtype) {
   f64 _get1;
   f64 _get0;
   _get0 = _this;
@@ -3138,7 +3165,7 @@ static struct ReturnValue dong_porf_t12_inline__RangeError_prototype_messagekkge
   return (struct ReturnValue){ (f64)(i32_load(0, 0, (u32)(_get0))), i32_load8_u(0, 4, (u32)(_get1)) };
 }
 
-static struct ReturnValue dong_porf_t12_inline__RangeError_prototype_toString(f64 _this, i32 _thisjjtype) {
+static struct ReturnValue dong_porf_video_js_api_smoke_test__RangeError_prototype_toString(f64 _this, i32 _thisjjtype) {
   i32 _get12;
   i32 _get11;
   f64 _get10;
@@ -3163,13 +3190,13 @@ static struct ReturnValue dong_porf_t12_inline__RangeError_prototype_toString(f6
   f64 jjmember_prop_151 = 0;
 
   _get0 = _this;
-  const struct ReturnValue _0 = dong_porf_t12_inline__RangeError_prototype_namekkget(_get0, 41);
+  const struct ReturnValue _0 = dong_porf_video_js_api_smoke_test__RangeError_prototype_namekkget(_get0, 41);
   jjlast_type = _0.type;
   _get1 = jjlast_type;
   namejjtype = _get1;
   name = _0.value;
   _get2 = _this;
-  const struct ReturnValue _1 = dong_porf_t12_inline__RangeError_prototype_messagekkget(_get2, 41);
+  const struct ReturnValue _1 = dong_porf_video_js_api_smoke_test__RangeError_prototype_messagekkget(_get2, 41);
   jjlast_type = _1.type;
   _get3 = jjlast_type;
   messagejjtype = _get3;
@@ -3185,18 +3212,18 @@ static struct ReturnValue dong_porf_t12_inline__RangeError_prototype_toString(f6
   j169:;
   _get7 = name;
   _get8 = namejjtype;
-  const struct ReturnValue _2 = dong_porf_t12_inline__Porffor_concatStrings(_get7, _get8, 392, 195);
+  const struct ReturnValue _2 = dong_porf_video_js_api_smoke_test__Porffor_concatStrings(_get7, _get8, 392, 195);
   jjlast_type = _2.type;
   _get9 = jjlast_type;
   _get10 = message;
   _get11 = messagejjtype;
-  const struct ReturnValue _3 = dong_porf_t12_inline__Porffor_concatStrings(_2.value, _get9, _get10, _get11);
+  const struct ReturnValue _3 = dong_porf_video_js_api_smoke_test__Porffor_concatStrings(_2.value, _get9, _get10, _get11);
   jjlast_type = _3.type;
   _get12 = jjlast_type;
   return (struct ReturnValue){ _3.value, _get12 };
 }
 
-static i32 dong_porf_t12_inline__Porffor_object_isObject(i32 arg, i32 argjjtype) {
+static i32 dong_porf_video_js_api_smoke_test__Porffor_object_isObject(i32 arg, i32 argjjtype) {
   i32 _get4;
   i32 _get3;
   i32 _get2;
@@ -3213,7 +3240,7 @@ static i32 dong_porf_t12_inline__Porffor_object_isObject(i32 arg, i32 argjjtype)
   return (((_get1 != 0) & (_get2 > 5)) & (_get3 != 67)) & (_get4 != 195);
 }
 
-static struct ReturnValue dong_porf_t12_inline__ecma262_ToPropertyKey(f64 argument, i32 argumentjjtype) {
+static struct ReturnValue dong_porf_video_js_api_smoke_test__ecma262_ToPropertyKey(f64 argument, i32 argumentjjtype) {
   i32 _get14;
   i32 _get13;
   f64 _get12;
@@ -3258,7 +3285,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPropertyKey(f64 argume
     if ((_r198) != 0) {
       _get6 = argument;
       _get7 = argumentjjtype;
-      const struct ReturnValue _0 = dong_porf_t12_inline__ecma262_ToPrimitive_String(_get6, _get7);
+      const struct ReturnValue _0 = dong_porf_video_js_api_smoke_test__ecma262_ToPrimitive_String(_get6, _get7);
       jjlast_type = _0.type;
       _get8 = jjlast_type;
       keyjjtype = _get8;
@@ -3277,13 +3304,13 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPropertyKey(f64 argume
   j200:;
   _get12 = key;
   _get13 = keyjjtype;
-  const struct ReturnValue _1 = dong_porf_t12_inline__ecma262_ToString(_get12, _get13);
+  const struct ReturnValue _1 = dong_porf_video_js_api_smoke_test__ecma262_ToString(_get12, _get13);
   jjlast_type = _1.type;
   _get14 = jjlast_type;
   return (struct ReturnValue){ _1.value, _get14 };
 }
 
-static i32 dong_porf_t12_inline__Porffor_strcmp(i32 a, i32 ajjtype, i32 b, i32 bjjtype) {
+static i32 dong_porf_video_js_api_smoke_test__Porffor_strcmp(i32 a, i32 ajjtype, i32 b, i32 bjjtype) {
   i32 _get85;
   i32 _get84;
   i32 _get83;
@@ -3671,7 +3698,7 @@ static i32 dong_porf_t12_inline__Porffor_strcmp(i32 a, i32 ajjtype, i32 b, i32 b
   return 0;
 }
 
-static struct ReturnValue dong_porf_t12_inline__Porffor_object_get(i32 _obj, i32 _objjjtype, i32 key, i32 keyjjtype) {
+static struct ReturnValue dong_porf_video_js_api_smoke_test__Porffor_object_get(i32 _obj, i32 _objjjtype, i32 key, i32 keyjjtype) {
   i32 _get74;
   i32 _get73;
   i32 _get72;
@@ -3775,7 +3802,7 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_object_get(i32 _obj, i32
     if (_get3 != 7) {
       _get4 = obj;
       _get5 = objjjtype;
-      const struct ReturnValue _0 = dong_porf_t12_inline__Porffor_object_underlying((f64)(_get4), _get5);
+      const struct ReturnValue _0 = dong_porf_video_js_api_smoke_test__Porffor_object_underlying((f64)(_get4), _get5);
       jjlast_type = _0.type;
       _get6 = jjlast_type;
       objjjtype = _get6;
@@ -3791,13 +3818,13 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_object_get(i32 _obj, i32
   j202:;
   _get8 = key;
   _get9 = keyjjtype;
-  hash = dong_porf_t12_inline__Porffor_object_hash(_get8, _get9);
+  hash = dong_porf_video_js_api_smoke_test__Porffor_object_hash(_get8, _get9);
   _get10 = obj;
   _get11 = objjjtype;
   _get12 = key;
   _get13 = keyjjtype;
   _get14 = hash;
-  entryPtr = dong_porf_t12_inline__Porffor_object_lookup(_get10, _get11, _get12, _get13, _get14, 1);
+  entryPtr = dong_porf_video_js_api_smoke_test__Porffor_object_lookup(_get10, _get11, _get12, _get13, _get14, 1);
   _get15 = entryPtr;
   // if 
     if (_get15 == -1) {
@@ -3811,14 +3838,14 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_object_get(i32 _obj, i32
           _get19 = objjjtype;
           // if 
             if ((_get19) == 0) {
-              obj = dong_porf_t12_inline_jjget___Object_prototype();
+              obj = dong_porf_video_js_api_smoke_test_jjget___Object_prototype();
               objjjtype = 7;
             }
           // end
           j205:;
         } else {
           _get20 = trueType;
-          const struct ReturnValue _1 = dong_porf_t12_inline__Porffor_object_getHiddenPrototype(_get20, 1);
+          const struct ReturnValue _1 = dong_porf_video_js_api_smoke_test__Porffor_object_getHiddenPrototype(_get20, 1);
           jjlast_type = _1.type;
           _get21 = jjlast_type;
           objjjtype = _get21;
@@ -3832,7 +3859,7 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_object_get(i32 _obj, i32
           _get23 = key;
           _get24 = keyjjtype;
           // if 
-            if ((dong_porf_t12_inline__Porffor_strcmp(_get23, _get24, 729, 195)) != 0) {
+            if ((dong_porf_video_js_api_smoke_test__Porffor_strcmp(_get23, _get24, 729, 195)) != 0) {
               _get25 = obj;
               _get26 = objjjtype;
               return (struct ReturnValue){ (f64)(_get25), _get26 };
@@ -3847,7 +3874,7 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_object_get(i32 _obj, i32
         if (_get27 != 7) {
           _get28 = obj;
           _get29 = objjjtype;
-          const struct ReturnValue _2 = dong_porf_t12_inline__Porffor_object_underlying((f64)(_get28), _get29);
+          const struct ReturnValue _2 = dong_porf_video_js_api_smoke_test__Porffor_object_underlying((f64)(_get28), _get29);
           jjlast_type = _2.type;
           _get30 = jjlast_type;
           objjjtype = _get30;
@@ -3868,7 +3895,7 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_object_get(i32 _obj, i32
             _get35 = key;
             _get36 = keyjjtype;
             _get37 = hash;
-            entryPtr = dong_porf_t12_inline__Porffor_object_lookup(_get33, _get34, _get35, _get36, _get37, 1);
+            entryPtr = dong_porf_video_js_api_smoke_test__Porffor_object_lookup(_get33, _get34, _get35, _get36, _get37, 1);
             _get38 = entryPtr;
             // if 
               if (_get38 != -1) {
@@ -3886,7 +3913,7 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_object_get(i32 _obj, i32
                 _get42 = objjjtype;
                 // if 
                   if ((_get42) == 0) {
-                    obj = dong_porf_t12_inline_jjget___Object_prototype();
+                    obj = dong_porf_video_js_api_smoke_test_jjget___Object_prototype();
                     objjjtype = 7;
                   }
                 // end
@@ -3894,7 +3921,7 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_object_get(i32 _obj, i32
               } else {
                 _get43 = obj;
                 _get44 = objjjtype;
-                const struct ReturnValue _3 = dong_porf_t12_inline__Porffor_object_getPrototype(_get43, _get44);
+                const struct ReturnValue _3 = dong_porf_video_js_api_smoke_test__Porffor_object_getPrototype(_get43, _get44);
                 jjlast_type = _3.type;
                 _get45 = jjlast_type;
                 objjjtype = _get45;
@@ -3907,7 +3934,7 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_object_get(i32 _obj, i32
               if (_get46 != 7) {
                 _get47 = obj;
                 _get48 = objjjtype;
-                const struct ReturnValue _4 = dong_porf_t12_inline__Porffor_object_underlying((f64)(_get47), _get48);
+                const struct ReturnValue _4 = dong_porf_video_js_api_smoke_test__Porffor_object_underlying((f64)(_get47), _get48);
                 jjlast_type = _4.type;
                 _get49 = jjlast_type;
                 objjjtype = _get49;
@@ -3974,7 +4001,7 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_object_get(i32 _obj, i32
   // if 
     if ((_get61 & 1) != 0) {
       _get62 = entryPtr;
-      const struct ReturnValue _5 = dong_porf_t12_inline__Porffor_object_accessorGet(_get62, 1);
+      const struct ReturnValue _5 = dong_porf_video_js_api_smoke_test__Porffor_object_accessorGet(_get62, 1);
       jjlast_type = _5.type;
       get = _5.value;
       _get63 = get;
@@ -4009,7 +4036,7 @@ static struct ReturnValue dong_porf_t12_inline__Porffor_object_get(i32 _obj, i32
   return (struct ReturnValue){ f64_load(0, 8, _get73), (u32)(_get74) >> 8 };
 }
 
-static struct ReturnValue dong_porf_t12_inline__String_prototype_trimEnd(i32 _this, i32 _thisjjtype) {
+static struct ReturnValue dong_porf_video_js_api_smoke_test__String_prototype_trimEnd(i32 _this, i32 _thisjjtype) {
   i32 _get54;
   i32 _get53;
   i32 _get52;
@@ -4087,14 +4114,14 @@ static struct ReturnValue dong_porf_t12_inline__String_prototype_trimEnd(i32 _th
       j265:;
       _get4 = _this;
       _get5 = _thisjjtype;
-      const struct ReturnValue _0 = dong_porf_t12_inline__ecma262_ToString((f64)(_get4), _get5);
+      const struct ReturnValue _0 = dong_porf_video_js_api_smoke_test__ecma262_ToString((f64)(_get4), _get5);
       _thisjjtype = _0.type;
       _this = (i32)(_0.value);
       _get6 = _thisjjtype;
       // if 
         if (_get6 == 195) {
           _get7 = _this;
-          _this = dong_porf_t12_inline__Porffor_bytestringToString(_get7);
+          _this = dong_porf_video_js_api_smoke_test__Porffor_bytestringToString(_get7);
         }
       // end
       j266:;
@@ -4104,7 +4131,7 @@ static struct ReturnValue dong_porf_t12_inline__String_prototype_trimEnd(i32 _th
   _get8 = _this;
   len = i32_load(1, 0, _get8);
   _get9 = len;
-  out = dong_porf_t12_inline__Porffor_malloc(6 + (_get9 * 2));
+  out = dong_porf_video_js_api_smoke_test__Porffor_malloc(6 + (_get9 * 2));
   _get10 = out;
   outPtr = _get10;
   _get11 = _this;
@@ -4187,7 +4214,7 @@ static struct ReturnValue dong_porf_t12_inline__String_prototype_trimEnd(i32 _th
   return (struct ReturnValue){ _get54, 67 };
 }
 
-static struct ReturnValue dong_porf_t12_inline__String_prototype_trimStart(i32 _this, i32 _thisjjtype) {
+static struct ReturnValue dong_porf_video_js_api_smoke_test__String_prototype_trimStart(i32 _this, i32 _thisjjtype) {
   i32 _get51;
   i32 _get50;
   i32 _get49;
@@ -4262,14 +4289,14 @@ static struct ReturnValue dong_porf_t12_inline__String_prototype_trimStart(i32 _
       j272:;
       _get4 = _this;
       _get5 = _thisjjtype;
-      const struct ReturnValue _0 = dong_porf_t12_inline__ecma262_ToString((f64)(_get4), _get5);
+      const struct ReturnValue _0 = dong_porf_video_js_api_smoke_test__ecma262_ToString((f64)(_get4), _get5);
       _thisjjtype = _0.type;
       _this = (i32)(_0.value);
       _get6 = _thisjjtype;
       // if 
         if (_get6 == 195) {
           _get7 = _this;
-          _this = dong_porf_t12_inline__Porffor_bytestringToString(_get7);
+          _this = dong_porf_video_js_api_smoke_test__Porffor_bytestringToString(_get7);
         }
       // end
       j273:;
@@ -4279,7 +4306,7 @@ static struct ReturnValue dong_porf_t12_inline__String_prototype_trimStart(i32 _
   _get8 = _this;
   len = i32_load(1, 0, _get8);
   _get9 = len;
-  out = dong_porf_t12_inline__Porffor_malloc(6 + (_get9 * 2));
+  out = dong_porf_video_js_api_smoke_test__Porffor_malloc(6 + (_get9 * 2));
   _get10 = out;
   outPtr = _get10;
   _get11 = _this;
@@ -4357,7 +4384,7 @@ static struct ReturnValue dong_porf_t12_inline__String_prototype_trimStart(i32 _
   return (struct ReturnValue){ _get51, 67 };
 }
 
-static struct ReturnValue dong_porf_t12_inline__String_prototype_trim(i32 _this, i32 _thisjjtype) {
+static struct ReturnValue dong_porf_video_js_api_smoke_test__String_prototype_trim(i32 _this, i32 _thisjjtype) {
   i32 _get10;
   i32 _get9;
   i32 _get8;
@@ -4384,14 +4411,14 @@ static struct ReturnValue dong_porf_t12_inline__String_prototype_trim(i32 _this,
       j262:;
       _get4 = _this;
       _get5 = _thisjjtype;
-      const struct ReturnValue _0 = dong_porf_t12_inline__ecma262_ToString((f64)(_get4), _get5);
+      const struct ReturnValue _0 = dong_porf_video_js_api_smoke_test__ecma262_ToString((f64)(_get4), _get5);
       _thisjjtype = _0.type;
       _this = (i32)(_0.value);
       _get6 = _thisjjtype;
       // if 
         if (_get6 == 195) {
           _get7 = _this;
-          _this = dong_porf_t12_inline__Porffor_bytestringToString(_get7);
+          _this = dong_porf_video_js_api_smoke_test__Porffor_bytestringToString(_get7);
         }
       // end
       j263:;
@@ -4399,16 +4426,16 @@ static struct ReturnValue dong_porf_t12_inline__String_prototype_trim(i32 _this,
   // end
   j261:;
   _get8 = _this;
-  const struct ReturnValue _1 = dong_porf_t12_inline__String_prototype_trimEnd(_get8, 67);
+  const struct ReturnValue _1 = dong_porf_video_js_api_smoke_test__String_prototype_trimEnd(_get8, 67);
   jjlast_type = _1.type;
   _get9 = jjlast_type;
-  const struct ReturnValue _2 = dong_porf_t12_inline__String_prototype_trimStart(_1.value, _get9);
+  const struct ReturnValue _2 = dong_porf_video_js_api_smoke_test__String_prototype_trimStart(_1.value, _get9);
   jjlast_type = _2.type;
   _get10 = jjlast_type;
   return (struct ReturnValue){ _2.value, _get10 };
 }
 
-static struct ReturnValue dong_porf_t12_inline__ByteString_prototype_trimEnd(i32 _this, i32 _thisjjtype) {
+static struct ReturnValue dong_porf_video_js_api_smoke_test__ByteString_prototype_trimEnd(i32 _this, i32 _thisjjtype) {
   i32 _get46;
   i32 _get45;
   i32 _get44;
@@ -4468,7 +4495,7 @@ static struct ReturnValue dong_porf_t12_inline__ByteString_prototype_trimEnd(i32
   _get0 = _this;
   len = i32_load(1, 0, _get0);
   _get1 = len;
-  out = dong_porf_t12_inline__Porffor_malloc(6 + _get1);
+  out = dong_porf_video_js_api_smoke_test__Porffor_malloc(6 + _get1);
   _get2 = out;
   outPtr = _get2;
   _get3 = _this;
@@ -4551,7 +4578,7 @@ static struct ReturnValue dong_porf_t12_inline__ByteString_prototype_trimEnd(i32
   return (struct ReturnValue){ _get46, 195 };
 }
 
-static struct ReturnValue dong_porf_t12_inline__ByteString_prototype_trimStart(i32 _this, i32 _thisjjtype) {
+static struct ReturnValue dong_porf_video_js_api_smoke_test__ByteString_prototype_trimStart(i32 _this, i32 _thisjjtype) {
   i32 _get43;
   i32 _get42;
   i32 _get41;
@@ -4608,7 +4635,7 @@ static struct ReturnValue dong_porf_t12_inline__ByteString_prototype_trimStart(i
   _get0 = _this;
   len = i32_load(1, 0, _get0);
   _get1 = len;
-  out = dong_porf_t12_inline__Porffor_malloc(6 + _get1);
+  out = dong_porf_video_js_api_smoke_test__Porffor_malloc(6 + _get1);
   _get2 = out;
   outPtr = _get2;
   _get3 = _this;
@@ -4686,23 +4713,23 @@ static struct ReturnValue dong_porf_t12_inline__ByteString_prototype_trimStart(i
   return (struct ReturnValue){ _get43, 195 };
 }
 
-static struct ReturnValue dong_porf_t12_inline__ByteString_prototype_trim(i32 _this, i32 _thisjjtype) {
+static struct ReturnValue dong_porf_video_js_api_smoke_test__ByteString_prototype_trim(i32 _this, i32 _thisjjtype) {
   i32 _get2;
   i32 _get1;
   i32 _get0;
   i32 jjlast_type = 0;
 
   _get0 = _this;
-  const struct ReturnValue _0 = dong_porf_t12_inline__ByteString_prototype_trimEnd(_get0, 195);
+  const struct ReturnValue _0 = dong_porf_video_js_api_smoke_test__ByteString_prototype_trimEnd(_get0, 195);
   jjlast_type = _0.type;
   _get1 = jjlast_type;
-  const struct ReturnValue _1 = dong_porf_t12_inline__ByteString_prototype_trimStart(_0.value, _get1);
+  const struct ReturnValue _1 = dong_porf_video_js_api_smoke_test__ByteString_prototype_trimStart(_0.value, _get1);
   jjlast_type = _1.type;
   _get2 = jjlast_type;
   return (struct ReturnValue){ _1.value, _get2 };
 }
 
-static struct ReturnValue dong_porf_t12_inline__String_prototype_charCodeAt(f64 _this, i32 _thisjjtype, f64 index, i32 indexjjtype) {
+static struct ReturnValue dong_porf_video_js_api_smoke_test__String_prototype_charCodeAt(f64 _this, i32 _thisjjtype, f64 index, i32 indexjjtype) {
   f64 _get14;
   f64 _get13;
   f64 _get12;
@@ -4733,14 +4760,14 @@ static struct ReturnValue dong_porf_t12_inline__String_prototype_charCodeAt(f64 
       j292:;
       _get4 = _this;
       _get5 = _thisjjtype;
-      const struct ReturnValue _0 = dong_porf_t12_inline__ecma262_ToString(_get4, _get5);
+      const struct ReturnValue _0 = dong_porf_video_js_api_smoke_test__ecma262_ToString(_get4, _get5);
       _thisjjtype = _0.type;
       _this = _0.value;
       _get6 = _thisjjtype;
       // if 
         if (_get6 == 195) {
           _get7 = _this;
-          _this = (f64)(dong_porf_t12_inline__Porffor_bytestringToString((u32)(_get7)));
+          _this = (f64)(dong_porf_video_js_api_smoke_test__Porffor_bytestringToString((u32)(_get7)));
         }
       // end
       j293:;
@@ -4750,7 +4777,7 @@ static struct ReturnValue dong_porf_t12_inline__String_prototype_charCodeAt(f64 
   _get8 = _this;
   len = (f64)(i32_load(1, 0, (u32)(_get8)));
   _get9 = index;
-  index = dong_porf_t12_inline__Math_trunc(_get9);
+  index = dong_porf_video_js_api_smoke_test__Math_trunc(_get9);
   _get10 = index;
   _get11 = index;
   _get12 = len;
@@ -4765,7 +4792,7 @@ static struct ReturnValue dong_porf_t12_inline__String_prototype_charCodeAt(f64 
   return (struct ReturnValue){ (f64)(i32_load16_u(0, 4, (i32)((_get13 + (_get14 * 2))))), 1 };
 }
 
-static struct ReturnValue dong_porf_t12_inline__ByteString_prototype_charCodeAt(f64 _this, i32 _thisjjtype, f64 index, i32 indexjjtype) {
+static struct ReturnValue dong_porf_video_js_api_smoke_test__ByteString_prototype_charCodeAt(f64 _this, i32 _thisjjtype, f64 index, i32 indexjjtype) {
   f64 _get6;
   f64 _get5;
   f64 _get4;
@@ -4778,7 +4805,7 @@ static struct ReturnValue dong_porf_t12_inline__ByteString_prototype_charCodeAt(
   _get0 = _this;
   len = (f64)(i32_load(1, 0, (u32)(_get0)));
   _get1 = index;
-  index = dong_porf_t12_inline__Math_trunc(_get1);
+  index = dong_porf_video_js_api_smoke_test__Math_trunc(_get1);
   _get2 = index;
   _get3 = index;
   _get4 = len;
@@ -4793,7 +4820,7 @@ static struct ReturnValue dong_porf_t12_inline__ByteString_prototype_charCodeAt(
   return (struct ReturnValue){ (f64)(i32_load8_u(0, 4, (i32)((_get5 + _get6)))), 1 };
 }
 
-static f64 dong_porf_t12_inline__Porffor_stn_int(f64 str, i32 strjjtype, f64 radix, i32 radixjjtype, f64 i, i32 ijjtype) {
+static f64 dong_porf_video_js_api_smoke_test__Porffor_stn_int(f64 str, i32 strjjtype, f64 radix, i32 radixjjtype, f64 i, i32 ijjtype) {
   f64 _get50;
   f64 _get49;
   f64 _get48;
@@ -4897,7 +4924,7 @@ static f64 dong_porf_t12_inline__Porffor_stn_int(f64 str, i32 strjjtype, f64 rad
               _get13 = i;
               _get14 = i;
               i = _get14 + 1;
-              const struct ReturnValue _0 = dong_porf_t12_inline__String_prototype_charCodeAt(_get11, _get12, _get13, 1);
+              const struct ReturnValue _0 = dong_porf_video_js_api_smoke_test__String_prototype_charCodeAt(_get11, _get12, _get13, 1);
               jjlast_type = _0.type;
               _r309 = _0.value;
               goto j309;
@@ -4912,7 +4939,7 @@ static f64 dong_porf_t12_inline__Porffor_stn_int(f64 str, i32 strjjtype, f64 rad
               _get18 = i;
               _get19 = i;
               i = _get19 + 1;
-              const struct ReturnValue _1 = dong_porf_t12_inline__String_prototype_charCodeAt(_get16, _get17, _get18, 1);
+              const struct ReturnValue _1 = dong_porf_video_js_api_smoke_test__String_prototype_charCodeAt(_get16, _get17, _get18, 1);
               jjlast_type = _1.type;
               _r309 = _1.value;
               goto j309;
@@ -4927,7 +4954,7 @@ static f64 dong_porf_t12_inline__Porffor_stn_int(f64 str, i32 strjjtype, f64 rad
               _get23 = i;
               _get24 = i;
               i = _get24 + 1;
-              const struct ReturnValue _2 = dong_porf_t12_inline__ByteString_prototype_charCodeAt(_get21, _get22, _get23, 1);
+              const struct ReturnValue _2 = dong_porf_video_js_api_smoke_test__ByteString_prototype_charCodeAt(_get21, _get22, _get23, 1);
               jjlast_type = _2.type;
               _r309 = _2.value;
               goto j309;
@@ -5037,7 +5064,7 @@ static f64 dong_porf_t12_inline__Porffor_stn_int(f64 str, i32 strjjtype, f64 rad
   return _get50;
 }
 
-static f64 dong_porf_t12_inline__Porffor_parseExp(f64 str, i32 strjjtype, f64 i, i32 ijjtype, f64 len, i32 lenjjtype, f64 strict, i32 strictjjtype) {
+static f64 dong_porf_video_js_api_smoke_test__Porffor_parseExp(f64 str, i32 strjjtype, f64 i, i32 ijjtype, f64 len, i32 lenjjtype, f64 strict, i32 strictjjtype) {
   f64 _get59;
   f64 _get58;
   f64 _get57;
@@ -5132,7 +5159,7 @@ static f64 dong_porf_t12_inline__Porffor_parseExp(f64 str, i32 strjjtype, f64 i,
             _get6 = jjproto_target;
             _get7 = jjproto_targetjjtype;
             _get8 = i;
-            const struct ReturnValue _0 = dong_porf_t12_inline__String_prototype_charCodeAt(_get6, _get7, _get8, 1);
+            const struct ReturnValue _0 = dong_porf_video_js_api_smoke_test__String_prototype_charCodeAt(_get6, _get7, _get8, 1);
             jjlast_type = _0.type;
             _r393 = _0.value;
             goto j393;
@@ -5145,7 +5172,7 @@ static f64 dong_porf_t12_inline__Porffor_parseExp(f64 str, i32 strjjtype, f64 i,
             _get10 = jjproto_target;
             _get11 = jjproto_targetjjtype;
             _get12 = i;
-            const struct ReturnValue _1 = dong_porf_t12_inline__String_prototype_charCodeAt(_get10, _get11, _get12, 1);
+            const struct ReturnValue _1 = dong_porf_video_js_api_smoke_test__String_prototype_charCodeAt(_get10, _get11, _get12, 1);
             jjlast_type = _1.type;
             _r393 = _1.value;
             goto j393;
@@ -5158,7 +5185,7 @@ static f64 dong_porf_t12_inline__Porffor_parseExp(f64 str, i32 strjjtype, f64 i,
             _get14 = jjproto_target;
             _get15 = jjproto_targetjjtype;
             _get16 = i;
-            const struct ReturnValue _2 = dong_porf_t12_inline__ByteString_prototype_charCodeAt(_get14, _get15, _get16, 1);
+            const struct ReturnValue _2 = dong_porf_video_js_api_smoke_test__ByteString_prototype_charCodeAt(_get14, _get15, _get16, 1);
             jjlast_type = _2.type;
             _r393 = _2.value;
             goto j393;
@@ -5252,7 +5279,7 @@ static f64 dong_porf_t12_inline__Porffor_parseExp(f64 str, i32 strjjtype, f64 i,
               _get37 = jjproto_target;
               _get38 = jjproto_targetjjtype;
               _get39 = i;
-              const struct ReturnValue _3 = dong_porf_t12_inline__String_prototype_charCodeAt(_get37, _get38, _get39, 1);
+              const struct ReturnValue _3 = dong_porf_video_js_api_smoke_test__String_prototype_charCodeAt(_get37, _get38, _get39, 1);
               jjlast_type = _3.type;
               _r405 = _3.value;
               goto j405;
@@ -5265,7 +5292,7 @@ static f64 dong_porf_t12_inline__Porffor_parseExp(f64 str, i32 strjjtype, f64 i,
               _get41 = jjproto_target;
               _get42 = jjproto_targetjjtype;
               _get43 = i;
-              const struct ReturnValue _4 = dong_porf_t12_inline__String_prototype_charCodeAt(_get41, _get42, _get43, 1);
+              const struct ReturnValue _4 = dong_porf_video_js_api_smoke_test__String_prototype_charCodeAt(_get41, _get42, _get43, 1);
               jjlast_type = _4.type;
               _r405 = _4.value;
               goto j405;
@@ -5278,7 +5305,7 @@ static f64 dong_porf_t12_inline__Porffor_parseExp(f64 str, i32 strjjtype, f64 i,
               _get45 = jjproto_target;
               _get46 = jjproto_targetjjtype;
               _get47 = i;
-              const struct ReturnValue _5 = dong_porf_t12_inline__ByteString_prototype_charCodeAt(_get45, _get46, _get47, 1);
+              const struct ReturnValue _5 = dong_porf_video_js_api_smoke_test__ByteString_prototype_charCodeAt(_get45, _get46, _get47, 1);
               jjlast_type = _5.type;
               _r405 = _5.value;
               goto j405;
@@ -5349,7 +5376,7 @@ static f64 dong_porf_t12_inline__Porffor_parseExp(f64 str, i32 strjjtype, f64 i,
   return _get59;
 }
 
-static f64 dong_porf_t12_inline__Number_isInteger(f64 l0) {
+static f64 dong_porf_video_js_api_smoke_test__Number_isInteger(f64 l0) {
   f64 _get1;
   f64 _get0;
   _get0 = l0;
@@ -5357,20 +5384,20 @@ static f64 dong_porf_t12_inline__Number_isInteger(f64 l0) {
   return (f64)(_get0 == trunc(_get1));
 }
 
-static f64 dong_porf_t12_inline__Math_abs(f64 l0) {
+static f64 dong_porf_video_js_api_smoke_test__Math_abs(f64 l0) {
   f64 _get0;
   _get0 = l0;
   const f64 _tmp0 = _get0;
   return (_tmp0 < 0 ? -_tmp0 : _tmp0);
 }
 
-static f64 dong_porf_t12_inline__Math_floor(f64 l0) {
+static f64 dong_porf_video_js_api_smoke_test__Math_floor(f64 l0) {
   f64 _get0;
   _get0 = l0;
   return floor(_get0);
 }
 
-static f64 dong_porf_t12_inline__Math_exp(f64 x, i32 xjjtype) {
+static f64 dong_porf_video_js_api_smoke_test__Math_exp(f64 x, i32 xjjtype) {
   f64 _get20;
   f64 _get19;
   f64 _get18;
@@ -5400,7 +5427,7 @@ static f64 dong_porf_t12_inline__Math_exp(f64 x, i32 xjjtype) {
 
   _get0 = x;
   // if 
-    if (dong_porf_t12_inline__Number_isFinite(_get0) == 0) {
+    if (dong_porf_video_js_api_smoke_test__Number_isFinite(_get0) == 0) {
       _get1 = x;
       // if 
         if (_get1 == (-INFINITY)) {
@@ -5417,12 +5444,12 @@ static f64 dong_porf_t12_inline__Math_exp(f64 x, i32 xjjtype) {
   // if 
     if (_get3 < 0) {
       _get4 = x;
-      return 1 / dong_porf_t12_inline__Math_exp(-_get4, 1);
+      return 1 / dong_porf_video_js_api_smoke_test__Math_exp(-_get4, 1);
     }
   // end
   j444:;
   _get5 = x;
-  k = dong_porf_t12_inline__Math_floor(_get5 / 0.6931471805599453);
+  k = dong_porf_video_js_api_smoke_test__Math_floor(_get5 / 0.6931471805599453);
   _get6 = x;
   _get7 = k;
   r = _get6 - (_get7 * 0.6931471805599453);
@@ -5435,7 +5462,7 @@ static f64 dong_porf_t12_inline__Math_exp(f64 x, i32 xjjtype) {
   j445:;
     _get10 = term;
     // if 
-      if (dong_porf_t12_inline__Math_abs(_get10) > 1e-15) {
+      if (dong_porf_video_js_api_smoke_test__Math_abs(_get10) > 1e-15) {
         _get11 = term;
         _get12 = r;
         _get13 = i;
@@ -5468,7 +5495,7 @@ static f64 dong_porf_t12_inline__Math_exp(f64 x, i32 xjjtype) {
   return _get20;
 }
 
-static f64 dong_porf_t12_inline__Math_log2(f64 y, i32 yjjtype) {
+static f64 dong_porf_video_js_api_smoke_test__Math_log2(f64 y, i32 yjjtype) {
   f64 _get19;
   f64 _get18;
   f64 _get17;
@@ -5503,7 +5530,7 @@ static f64 dong_porf_t12_inline__Math_log2(f64 y, i32 yjjtype) {
   j457:;
   _get1 = y;
   // if 
-    if (dong_porf_t12_inline__Number_isFinite(_get1) == 0) {
+    if (dong_porf_video_js_api_smoke_test__Number_isFinite(_get1) == 0) {
       _get2 = y;
       return _get2;
     }
@@ -5546,7 +5573,7 @@ static f64 dong_porf_t12_inline__Math_log2(f64 y, i32 yjjtype) {
   j463:;
     // block 
       _get11 = x;
-      e_x = dong_porf_t12_inline__Math_exp(_get11 * 0.6931471805599453, 1);
+      e_x = dong_porf_video_js_api_smoke_test__Math_exp(_get11 * 0.6931471805599453, 1);
       _get12 = e_x;
       _get13 = y;
       _get14 = e_x;
@@ -5555,7 +5582,7 @@ static f64 dong_porf_t12_inline__Math_log2(f64 y, i32 yjjtype) {
       _get16 = delta;
       x = _get15 - _get16;
       _get17 = delta;
-      if (dong_porf_t12_inline__Math_abs(_get17) > 1e-15) {
+      if (dong_porf_video_js_api_smoke_test__Math_abs(_get17) > 1e-15) {
         goto j463;
       }
     // end
@@ -5566,7 +5593,7 @@ static f64 dong_porf_t12_inline__Math_log2(f64 y, i32 yjjtype) {
   return _get18 + _get19;
 }
 
-static f64 dong_porf_t12_inline__Math_log(f64 y, i32 yjjtype) {
+static f64 dong_porf_video_js_api_smoke_test__Math_log(f64 y, i32 yjjtype) {
   f64 _get31;
   f64 _get30;
   f64 _get29;
@@ -5630,7 +5657,7 @@ static f64 dong_porf_t12_inline__Math_log(f64 y, i32 yjjtype) {
   j453:;
   _get2 = y;
   // if 
-    if (dong_porf_t12_inline__Number_isFinite(_get2) == 0) {
+    if (dong_porf_video_js_api_smoke_test__Number_isFinite(_get2) == 0) {
       _get3 = y;
       return _get3;
     }
@@ -5640,12 +5667,12 @@ static f64 dong_porf_t12_inline__Math_log(f64 y, i32 yjjtype) {
   // if 
     if (_get4 > 1e+308) {
       _get5 = y;
-      n = dong_porf_t12_inline__Math_floor(dong_porf_t12_inline__Math_log2(_get5, 1));
+      n = dong_porf_video_js_api_smoke_test__Math_floor(dong_porf_video_js_api_smoke_test__Math_log2(_get5, 1));
       njjtype = 1;
       _get6 = n;
       _get7 = y;
       _get8 = n;
-      return (0.6931471805599453 * _get6) + dong_porf_t12_inline__Math_log((_get7 / (f64)(1 << 30)) / (f64)(1 << (i32)((_get8 - 30))), 1);
+      return (0.6931471805599453 * _get6) + dong_porf_video_js_api_smoke_test__Math_log((_get7 / (f64)(1 << 30)) / (f64)(1 << (i32)((_get8 - 30))), 1);
     }
   // end
   j456:;
@@ -5701,7 +5728,7 @@ static f64 dong_porf_t12_inline__Math_log(f64 y, i32 yjjtype) {
   j469:;
     _get22 = term;
     // if 
-      if (dong_porf_t12_inline__Math_abs(_get22) > 1e-15) {
+      if (dong_porf_video_js_api_smoke_test__Math_abs(_get22) > 1e-15) {
         _get23 = term;
         _get24 = x2;
         _get25 = i;
@@ -5724,7 +5751,7 @@ static f64 dong_porf_t12_inline__Math_log(f64 y, i32 yjjtype) {
   return (2 * _get30) + (_get31 * 0.6931471805599453);
 }
 
-static f64 dong_porf_t12_inline__Math_pow(f64 base, i32 basejjtype, f64 exponent, i32 exponentjjtype) {
+static f64 dong_porf_video_js_api_smoke_test__Math_pow(f64 base, i32 basejjtype, f64 exponent, i32 exponentjjtype) {
   f64 _get59;
   f64 _get58;
   f64 _get57;
@@ -5798,7 +5825,7 @@ static f64 dong_porf_t12_inline__Math_pow(f64 base, i32 basejjtype, f64 exponent
 
   _get0 = exponent;
   // if 
-    if (((u32)(dong_porf_t12_inline__Number_isNaN(_get0))) != 0) {
+    if (((u32)(dong_porf_video_js_api_smoke_test__Number_isNaN(_get0))) != 0) {
       return NAN;
     }
   // end
@@ -5817,7 +5844,7 @@ static f64 dong_porf_t12_inline__Math_pow(f64 base, i32 basejjtype, f64 exponent
       _get4 = exponent;
       _get5 = exponent;
       // if 
-        if ((((u32)(dong_porf_t12_inline__Number_isInteger(_get3)) & (_get4 > 0)) & (_get5 < 31)) != 0) {
+        if ((((u32)(dong_porf_video_js_api_smoke_test__Number_isInteger(_get3)) & (_get4 > 0)) & (_get5 < 31)) != 0) {
           _get6 = exponent;
           return (f64)(2 << (i32)((_get6 - 1)));
         }
@@ -5828,10 +5855,10 @@ static f64 dong_porf_t12_inline__Math_pow(f64 base, i32 basejjtype, f64 exponent
   j418:;
   _get7 = base;
   // if 
-    if (dong_porf_t12_inline__Number_isFinite(_get7) == 0) {
+    if (dong_porf_video_js_api_smoke_test__Number_isFinite(_get7) == 0) {
       _get8 = base;
       // if 
-        if (((u32)(dong_porf_t12_inline__Number_isNaN(_get8))) != 0) {
+        if (((u32)(dong_porf_video_js_api_smoke_test__Number_isNaN(_get8))) != 0) {
           _get9 = base;
           return _get9;
         }
@@ -5853,7 +5880,7 @@ static f64 dong_porf_t12_inline__Math_pow(f64 base, i32 basejjtype, f64 exponent
       // end
       j422:;
       _get13 = exponent;
-      jjmath_a = dong_porf_t12_inline__Math_abs(_get13);
+      jjmath_a = dong_porf_video_js_api_smoke_test__Math_abs(_get13);
       _get14 = jjmath_a;
       jjmath_b = 2;
       _get15 = jjmath_b;
@@ -5904,7 +5931,7 @@ static f64 dong_porf_t12_inline__Math_pow(f64 base, i32 basejjtype, f64 exponent
       // end
       j428:;
       _get24 = exponent;
-      jjmath_a = dong_porf_t12_inline__Math_abs(_get24);
+      jjmath_a = dong_porf_video_js_api_smoke_test__Math_abs(_get24);
       _get25 = jjmath_a;
       jjmath_b = 2;
       _get26 = jjmath_b;
@@ -5941,7 +5968,7 @@ static f64 dong_porf_t12_inline__Math_pow(f64 base, i32 basejjtype, f64 exponent
   // if 
     if (_get32 == INFINITY) {
       _get33 = base;
-      abs = dong_porf_t12_inline__Math_abs(_get33);
+      abs = dong_porf_video_js_api_smoke_test__Math_abs(_get33);
       absjjtype = 1;
       _get34 = abs;
       // if 
@@ -5965,7 +5992,7 @@ static f64 dong_porf_t12_inline__Math_pow(f64 base, i32 basejjtype, f64 exponent
   // if 
     if (_get36 == (-INFINITY)) {
       _get37 = base;
-      abs = dong_porf_t12_inline__Math_abs(_get37);
+      abs = dong_porf_video_js_api_smoke_test__Math_abs(_get37);
       absjjtype = 1;
       _get38 = abs;
       // if 
@@ -5990,7 +6017,7 @@ static f64 dong_porf_t12_inline__Math_pow(f64 base, i32 basejjtype, f64 exponent
     if (_get40 < 0) {
       _get41 = exponent;
       // if 
-        if (dong_porf_t12_inline__Number_isInteger(_get41) == 0) {
+        if (dong_porf_video_js_api_smoke_test__Number_isInteger(_get41) == 0) {
           return NAN;
         }
       // end
@@ -6002,14 +6029,14 @@ static f64 dong_porf_t12_inline__Math_pow(f64 base, i32 basejjtype, f64 exponent
   // if 
     if (_get42 == 2.718281828459045) {
       _get43 = exponent;
-      return dong_porf_t12_inline__Math_exp(_get43, 1);
+      return dong_porf_video_js_api_smoke_test__Math_exp(_get43, 1);
     }
   // end
   j441:;
   _get44 = base;
   currentBase = _get44;
   _get45 = exponent;
-  currentExponent = dong_porf_t12_inline__Math_abs(_get45);
+  currentExponent = dong_porf_video_js_api_smoke_test__Math_abs(_get45);
   result = 1;
   // loop 
   j449:;
@@ -6032,12 +6059,12 @@ static f64 dong_porf_t12_inline__Math_pow(f64 base, i32 basejjtype, f64 exponent
             _get52 = currentBase;
             currentBase = _get51 * _get52;
             _get53 = currentExponent;
-            currentExponent = dong_porf_t12_inline__Math_trunc(_get53 / 2);
+            currentExponent = dong_porf_video_js_api_smoke_test__Math_trunc(_get53 / 2);
           } else {
             _get54 = result;
             _get55 = currentExponent;
             _get56 = currentBase;
-            result = _get54 * dong_porf_t12_inline__Math_exp(_get55 * dong_porf_t12_inline__Math_log(dong_porf_t12_inline__Math_abs(_get56), 1), 1);
+            result = _get54 * dong_porf_video_js_api_smoke_test__Math_exp(_get55 * dong_porf_video_js_api_smoke_test__Math_log(dong_porf_video_js_api_smoke_test__Math_abs(_get56), 1), 1);
             goto j450;
           }
         // end
@@ -6062,7 +6089,7 @@ static f64 dong_porf_t12_inline__Math_pow(f64 base, i32 basejjtype, f64 exponent
   return _r471;
 }
 
-static f64 dong_porf_t12_inline__Porffor_stn_float(f64 str, i32 strjjtype, f64 i, i32 ijjtype) {
+static f64 dong_porf_video_js_api_smoke_test__Porffor_stn_float(f64 str, i32 strjjtype, f64 i, i32 ijjtype) {
   f64 _get50;
   f64 _get49;
   f64 _get48;
@@ -6159,7 +6186,7 @@ static f64 dong_porf_t12_inline__Porffor_stn_float(f64 str, i32 strjjtype, f64 i
               _get11 = i;
               _get12 = i;
               i = _get12 + 1;
-              const struct ReturnValue _0 = dong_porf_t12_inline__String_prototype_charCodeAt(_get9, _get10, _get11, 1);
+              const struct ReturnValue _0 = dong_porf_video_js_api_smoke_test__String_prototype_charCodeAt(_get9, _get10, _get11, 1);
               jjlast_type = _0.type;
               _r381 = _0.value;
               goto j381;
@@ -6174,7 +6201,7 @@ static f64 dong_porf_t12_inline__Porffor_stn_float(f64 str, i32 strjjtype, f64 i
               _get16 = i;
               _get17 = i;
               i = _get17 + 1;
-              const struct ReturnValue _1 = dong_porf_t12_inline__String_prototype_charCodeAt(_get14, _get15, _get16, 1);
+              const struct ReturnValue _1 = dong_porf_video_js_api_smoke_test__String_prototype_charCodeAt(_get14, _get15, _get16, 1);
               jjlast_type = _1.type;
               _r381 = _1.value;
               goto j381;
@@ -6189,7 +6216,7 @@ static f64 dong_porf_t12_inline__Porffor_stn_float(f64 str, i32 strjjtype, f64 i
               _get21 = i;
               _get22 = i;
               i = _get22 + 1;
-              const struct ReturnValue _2 = dong_porf_t12_inline__ByteString_prototype_charCodeAt(_get19, _get20, _get21, 1);
+              const struct ReturnValue _2 = dong_porf_video_js_api_smoke_test__ByteString_prototype_charCodeAt(_get19, _get20, _get21, 1);
               jjlast_type = _2.type;
               _r381 = _2.value;
               goto j381;
@@ -6269,10 +6296,10 @@ static f64 dong_porf_t12_inline__Porffor_stn_float(f64 str, i32 strjjtype, f64 i
                     _get41 = strjjtype;
                     _get42 = i;
                     _get43 = len;
-                    exp = dong_porf_t12_inline__Porffor_parseExp(_get40, _get41, _get42, 1, _get43, 1, 1, 2);
+                    exp = dong_porf_video_js_api_smoke_test__Porffor_parseExp(_get40, _get41, _get42, 1, _get43, 1, 1, 2);
                     _get44 = exp;
                     // if 
-                      if (((u32)(dong_porf_t12_inline__Number_isNaN(_get44))) != 0) {
+                      if (((u32)(dong_porf_video_js_api_smoke_test__Number_isNaN(_get44))) != 0) {
                         return NAN;
                       }
                     // end
@@ -6282,13 +6309,13 @@ static f64 dong_porf_t12_inline__Porffor_stn_float(f64 str, i32 strjjtype, f64 i
                       if (_get45 < 0) {
                         _get46 = n;
                         _get47 = exp;
-                        return _get46 / dong_porf_t12_inline__Math_pow(10, 1, -_get47, 1);
+                        return _get46 / dong_porf_video_js_api_smoke_test__Math_pow(10, 1, -_get47, 1);
                       }
                     // end
                     j415:;
                     _get48 = n;
                     _get49 = exp;
-                    return _get48 * dong_porf_t12_inline__Math_pow(10, 1, _get49, 1);
+                    return _get48 * dong_porf_video_js_api_smoke_test__Math_pow(10, 1, _get49, 1);
                   } else {
                     return NAN;
                   }
@@ -6309,7 +6336,7 @@ static f64 dong_porf_t12_inline__Porffor_stn_float(f64 str, i32 strjjtype, f64 i
   return _get50;
 }
 
-static f64 dong_porf_t12_inline__ecma262_StringToNumber(f64 str, i32 strjjtype) {
+static f64 dong_porf_video_js_api_smoke_test__ecma262_StringToNumber(f64 str, i32 strjjtype) {
   f64 _get233;
   f64 _get232;
   f64 _get231;
@@ -6569,7 +6596,7 @@ static f64 dong_porf_t12_inline__ecma262_StringToNumber(f64 str, i32 strjjtype) 
       if (_get3 == 33) {
         _get4 = jjproto_target;
         _get5 = jjproto_targetjjtype;
-        const struct ReturnValue _0 = dong_porf_t12_inline__String_prototype_trim((i32)(_get4), _get5);
+        const struct ReturnValue _0 = dong_porf_video_js_api_smoke_test__String_prototype_trim((i32)(_get4), _get5);
         jjlast_type = _0.type;
         _r259 = (f64)(_0.value);
         goto j259;
@@ -6581,7 +6608,7 @@ static f64 dong_porf_t12_inline__ecma262_StringToNumber(f64 str, i32 strjjtype) 
       if (_get6 == 67) {
         _get7 = jjproto_target;
         _get8 = jjproto_targetjjtype;
-        const struct ReturnValue _1 = dong_porf_t12_inline__String_prototype_trim((i32)(_get7), _get8);
+        const struct ReturnValue _1 = dong_porf_video_js_api_smoke_test__String_prototype_trim((i32)(_get7), _get8);
         jjlast_type = _1.type;
         _r259 = (f64)(_1.value);
         goto j259;
@@ -6593,7 +6620,7 @@ static f64 dong_porf_t12_inline__ecma262_StringToNumber(f64 str, i32 strjjtype) 
       if (_get9 == 195) {
         _get10 = jjproto_target;
         _get11 = jjproto_targetjjtype;
-        const struct ReturnValue _2 = dong_porf_t12_inline__ByteString_prototype_trim((i32)(_get10), _get11);
+        const struct ReturnValue _2 = dong_porf_video_js_api_smoke_test__ByteString_prototype_trim((i32)(_get10), _get11);
         jjlast_type = _2.type;
         _r259 = (f64)(_2.value);
         goto j259;
@@ -6626,7 +6653,7 @@ static f64 dong_porf_t12_inline__ecma262_StringToNumber(f64 str, i32 strjjtype) 
       if (_get17 == 33) {
         _get18 = jjproto_target;
         _get19 = jjproto_targetjjtype;
-        const struct ReturnValue _3 = dong_porf_t12_inline__String_prototype_charCodeAt(_get18, _get19, 0, 1);
+        const struct ReturnValue _3 = dong_porf_video_js_api_smoke_test__String_prototype_charCodeAt(_get18, _get19, 0, 1);
         jjlast_type = _3.type;
         _r289 = _3.value;
         goto j289;
@@ -6638,7 +6665,7 @@ static f64 dong_porf_t12_inline__ecma262_StringToNumber(f64 str, i32 strjjtype) 
       if (_get20 == 67) {
         _get21 = jjproto_target;
         _get22 = jjproto_targetjjtype;
-        const struct ReturnValue _4 = dong_porf_t12_inline__String_prototype_charCodeAt(_get21, _get22, 0, 1);
+        const struct ReturnValue _4 = dong_porf_video_js_api_smoke_test__String_prototype_charCodeAt(_get21, _get22, 0, 1);
         jjlast_type = _4.type;
         _r289 = _4.value;
         goto j289;
@@ -6650,7 +6677,7 @@ static f64 dong_porf_t12_inline__ecma262_StringToNumber(f64 str, i32 strjjtype) 
       if (_get23 == 195) {
         _get24 = jjproto_target;
         _get25 = jjproto_targetjjtype;
-        const struct ReturnValue _5 = dong_porf_t12_inline__ByteString_prototype_charCodeAt(_get24, _get25, 0, 1);
+        const struct ReturnValue _5 = dong_porf_video_js_api_smoke_test__ByteString_prototype_charCodeAt(_get24, _get25, 0, 1);
         jjlast_type = _5.type;
         _r289 = _5.value;
         goto j289;
@@ -6674,7 +6701,7 @@ static f64 dong_porf_t12_inline__ecma262_StringToNumber(f64 str, i32 strjjtype) 
       if (_get29 == 33) {
         _get30 = jjproto_target;
         _get31 = jjproto_targetjjtype;
-        const struct ReturnValue _6 = dong_porf_t12_inline__String_prototype_charCodeAt(_get30, _get31, 1, 1);
+        const struct ReturnValue _6 = dong_porf_video_js_api_smoke_test__String_prototype_charCodeAt(_get30, _get31, 1, 1);
         jjlast_type = _6.type;
         _r298 = _6.value;
         goto j298;
@@ -6686,7 +6713,7 @@ static f64 dong_porf_t12_inline__ecma262_StringToNumber(f64 str, i32 strjjtype) 
       if (_get32 == 67) {
         _get33 = jjproto_target;
         _get34 = jjproto_targetjjtype;
-        const struct ReturnValue _7 = dong_porf_t12_inline__String_prototype_charCodeAt(_get33, _get34, 1, 1);
+        const struct ReturnValue _7 = dong_porf_video_js_api_smoke_test__String_prototype_charCodeAt(_get33, _get34, 1, 1);
         jjlast_type = _7.type;
         _r298 = _7.value;
         goto j298;
@@ -6698,7 +6725,7 @@ static f64 dong_porf_t12_inline__ecma262_StringToNumber(f64 str, i32 strjjtype) 
       if (_get35 == 195) {
         _get36 = jjproto_target;
         _get37 = jjproto_targetjjtype;
-        const struct ReturnValue _8 = dong_porf_t12_inline__ByteString_prototype_charCodeAt(_get36, _get37, 1, 1);
+        const struct ReturnValue _8 = dong_porf_video_js_api_smoke_test__ByteString_prototype_charCodeAt(_get36, _get37, 1, 1);
         jjlast_type = _8.type;
         _r298 = _8.value;
         goto j298;
@@ -6732,7 +6759,7 @@ static f64 dong_porf_t12_inline__ecma262_StringToNumber(f64 str, i32 strjjtype) 
         if ((_r303) != 0) {
           _get43 = str;
           _get44 = strjjtype;
-          return dong_porf_t12_inline__Porffor_stn_int(_get43, _get44, 16, 1, 2, 1);
+          return dong_porf_video_js_api_smoke_test__Porffor_stn_int(_get43, _get44, 16, 1, 2, 1);
         }
       // end
       j304:;
@@ -6756,7 +6783,7 @@ static f64 dong_porf_t12_inline__ecma262_StringToNumber(f64 str, i32 strjjtype) 
         if ((_r320) != 0) {
           _get49 = str;
           _get50 = strjjtype;
-          return dong_porf_t12_inline__Porffor_stn_int(_get49, _get50, 8, 1, 2, 1);
+          return dong_porf_video_js_api_smoke_test__Porffor_stn_int(_get49, _get50, 8, 1, 2, 1);
         }
       // end
       j321:;
@@ -6780,7 +6807,7 @@ static f64 dong_porf_t12_inline__ecma262_StringToNumber(f64 str, i32 strjjtype) 
         if ((_r322) != 0) {
           _get55 = str;
           _get56 = strjjtype;
-          return dong_porf_t12_inline__Porffor_stn_int(_get55, _get56, 2, 1, 2, 1);
+          return dong_porf_video_js_api_smoke_test__Porffor_stn_int(_get55, _get56, 2, 1, 2, 1);
         }
       // end
       j323:;
@@ -6825,7 +6852,7 @@ static f64 dong_porf_t12_inline__ecma262_StringToNumber(f64 str, i32 strjjtype) 
             _get66 = jjproto_target;
             _get67 = jjproto_targetjjtype;
             _get68 = i;
-            const struct ReturnValue _9 = dong_porf_t12_inline__String_prototype_charCodeAt(_get66, _get67, _get68, 1);
+            const struct ReturnValue _9 = dong_porf_video_js_api_smoke_test__String_prototype_charCodeAt(_get66, _get67, _get68, 1);
             jjlast_type = _9.type;
             _r327 = _9.value;
             goto j327;
@@ -6838,7 +6865,7 @@ static f64 dong_porf_t12_inline__ecma262_StringToNumber(f64 str, i32 strjjtype) 
             _get70 = jjproto_target;
             _get71 = jjproto_targetjjtype;
             _get72 = i;
-            const struct ReturnValue _10 = dong_porf_t12_inline__String_prototype_charCodeAt(_get70, _get71, _get72, 1);
+            const struct ReturnValue _10 = dong_porf_video_js_api_smoke_test__String_prototype_charCodeAt(_get70, _get71, _get72, 1);
             jjlast_type = _10.type;
             _r327 = _10.value;
             goto j327;
@@ -6851,7 +6878,7 @@ static f64 dong_porf_t12_inline__ecma262_StringToNumber(f64 str, i32 strjjtype) 
             _get74 = jjproto_target;
             _get75 = jjproto_targetjjtype;
             _get76 = i;
-            const struct ReturnValue _11 = dong_porf_t12_inline__ByteString_prototype_charCodeAt(_get74, _get75, _get76, 1);
+            const struct ReturnValue _11 = dong_porf_video_js_api_smoke_test__ByteString_prototype_charCodeAt(_get74, _get75, _get76, 1);
             jjlast_type = _11.type;
             _r327 = _11.value;
             goto j327;
@@ -6886,7 +6913,7 @@ static f64 dong_porf_t12_inline__ecma262_StringToNumber(f64 str, i32 strjjtype) 
             _get82 = jjproto_target;
             _get83 = jjproto_targetjjtype;
             _get84 = i;
-            const struct ReturnValue _12 = dong_porf_t12_inline__String_prototype_charCodeAt(_get82, _get83, _get84 + 1, 1);
+            const struct ReturnValue _12 = dong_porf_video_js_api_smoke_test__String_prototype_charCodeAt(_get82, _get83, _get84 + 1, 1);
             jjlast_type = _12.type;
             _r332 = _12.value;
             goto j332;
@@ -6899,7 +6926,7 @@ static f64 dong_porf_t12_inline__ecma262_StringToNumber(f64 str, i32 strjjtype) 
             _get86 = jjproto_target;
             _get87 = jjproto_targetjjtype;
             _get88 = i;
-            const struct ReturnValue _13 = dong_porf_t12_inline__String_prototype_charCodeAt(_get86, _get87, _get88 + 1, 1);
+            const struct ReturnValue _13 = dong_porf_video_js_api_smoke_test__String_prototype_charCodeAt(_get86, _get87, _get88 + 1, 1);
             jjlast_type = _13.type;
             _r332 = _13.value;
             goto j332;
@@ -6912,7 +6939,7 @@ static f64 dong_porf_t12_inline__ecma262_StringToNumber(f64 str, i32 strjjtype) 
             _get90 = jjproto_target;
             _get91 = jjproto_targetjjtype;
             _get92 = i;
-            const struct ReturnValue _14 = dong_porf_t12_inline__ByteString_prototype_charCodeAt(_get90, _get91, _get92 + 1, 1);
+            const struct ReturnValue _14 = dong_porf_video_js_api_smoke_test__ByteString_prototype_charCodeAt(_get90, _get91, _get92 + 1, 1);
             jjlast_type = _14.type;
             _r332 = _14.value;
             goto j332;
@@ -6941,7 +6968,7 @@ static f64 dong_porf_t12_inline__ecma262_StringToNumber(f64 str, i32 strjjtype) 
                 _get98 = jjproto_target;
                 _get99 = jjproto_targetjjtype;
                 _get100 = i;
-                const struct ReturnValue _15 = dong_porf_t12_inline__String_prototype_charCodeAt(_get98, _get99, _get100 + 2, 1);
+                const struct ReturnValue _15 = dong_porf_video_js_api_smoke_test__String_prototype_charCodeAt(_get98, _get99, _get100 + 2, 1);
                 jjlast_type = _15.type;
                 _r337 = _15.value;
                 goto j337;
@@ -6954,7 +6981,7 @@ static f64 dong_porf_t12_inline__ecma262_StringToNumber(f64 str, i32 strjjtype) 
                 _get102 = jjproto_target;
                 _get103 = jjproto_targetjjtype;
                 _get104 = i;
-                const struct ReturnValue _16 = dong_porf_t12_inline__String_prototype_charCodeAt(_get102, _get103, _get104 + 2, 1);
+                const struct ReturnValue _16 = dong_porf_video_js_api_smoke_test__String_prototype_charCodeAt(_get102, _get103, _get104 + 2, 1);
                 jjlast_type = _16.type;
                 _r337 = _16.value;
                 goto j337;
@@ -6967,7 +6994,7 @@ static f64 dong_porf_t12_inline__ecma262_StringToNumber(f64 str, i32 strjjtype) 
                 _get106 = jjproto_target;
                 _get107 = jjproto_targetjjtype;
                 _get108 = i;
-                const struct ReturnValue _17 = dong_porf_t12_inline__ByteString_prototype_charCodeAt(_get106, _get107, _get108 + 2, 1);
+                const struct ReturnValue _17 = dong_porf_video_js_api_smoke_test__ByteString_prototype_charCodeAt(_get106, _get107, _get108 + 2, 1);
                 jjlast_type = _17.type;
                 _r337 = _17.value;
                 goto j337;
@@ -7024,7 +7051,7 @@ static f64 dong_porf_t12_inline__ecma262_StringToNumber(f64 str, i32 strjjtype) 
                 _get120 = jjproto_target;
                 _get121 = jjproto_targetjjtype;
                 _get122 = i;
-                const struct ReturnValue _18 = dong_porf_t12_inline__String_prototype_charCodeAt(_get120, _get121, _get122 + 3, 1);
+                const struct ReturnValue _18 = dong_porf_video_js_api_smoke_test__String_prototype_charCodeAt(_get120, _get121, _get122 + 3, 1);
                 jjlast_type = _18.type;
                 _r344 = _18.value;
                 goto j344;
@@ -7037,7 +7064,7 @@ static f64 dong_porf_t12_inline__ecma262_StringToNumber(f64 str, i32 strjjtype) 
                 _get124 = jjproto_target;
                 _get125 = jjproto_targetjjtype;
                 _get126 = i;
-                const struct ReturnValue _19 = dong_porf_t12_inline__String_prototype_charCodeAt(_get124, _get125, _get126 + 3, 1);
+                const struct ReturnValue _19 = dong_porf_video_js_api_smoke_test__String_prototype_charCodeAt(_get124, _get125, _get126 + 3, 1);
                 jjlast_type = _19.type;
                 _r344 = _19.value;
                 goto j344;
@@ -7050,7 +7077,7 @@ static f64 dong_porf_t12_inline__ecma262_StringToNumber(f64 str, i32 strjjtype) 
                 _get128 = jjproto_target;
                 _get129 = jjproto_targetjjtype;
                 _get130 = i;
-                const struct ReturnValue _20 = dong_porf_t12_inline__ByteString_prototype_charCodeAt(_get128, _get129, _get130 + 3, 1);
+                const struct ReturnValue _20 = dong_porf_video_js_api_smoke_test__ByteString_prototype_charCodeAt(_get128, _get129, _get130 + 3, 1);
                 jjlast_type = _20.type;
                 _r344 = _20.value;
                 goto j344;
@@ -7108,7 +7135,7 @@ static f64 dong_porf_t12_inline__ecma262_StringToNumber(f64 str, i32 strjjtype) 
                 _get143 = jjproto_target;
                 _get144 = jjproto_targetjjtype;
                 _get145 = i;
-                const struct ReturnValue _21 = dong_porf_t12_inline__String_prototype_charCodeAt(_get143, _get144, _get145 + 4, 1);
+                const struct ReturnValue _21 = dong_porf_video_js_api_smoke_test__String_prototype_charCodeAt(_get143, _get144, _get145 + 4, 1);
                 jjlast_type = _21.type;
                 _r351 = _21.value;
                 goto j351;
@@ -7121,7 +7148,7 @@ static f64 dong_porf_t12_inline__ecma262_StringToNumber(f64 str, i32 strjjtype) 
                 _get147 = jjproto_target;
                 _get148 = jjproto_targetjjtype;
                 _get149 = i;
-                const struct ReturnValue _22 = dong_porf_t12_inline__String_prototype_charCodeAt(_get147, _get148, _get149 + 4, 1);
+                const struct ReturnValue _22 = dong_porf_video_js_api_smoke_test__String_prototype_charCodeAt(_get147, _get148, _get149 + 4, 1);
                 jjlast_type = _22.type;
                 _r351 = _22.value;
                 goto j351;
@@ -7134,7 +7161,7 @@ static f64 dong_porf_t12_inline__ecma262_StringToNumber(f64 str, i32 strjjtype) 
                 _get151 = jjproto_target;
                 _get152 = jjproto_targetjjtype;
                 _get153 = i;
-                const struct ReturnValue _23 = dong_porf_t12_inline__ByteString_prototype_charCodeAt(_get151, _get152, _get153 + 4, 1);
+                const struct ReturnValue _23 = dong_porf_video_js_api_smoke_test__ByteString_prototype_charCodeAt(_get151, _get152, _get153 + 4, 1);
                 jjlast_type = _23.type;
                 _r351 = _23.value;
                 goto j351;
@@ -7192,7 +7219,7 @@ static f64 dong_porf_t12_inline__ecma262_StringToNumber(f64 str, i32 strjjtype) 
                 _get166 = jjproto_target;
                 _get167 = jjproto_targetjjtype;
                 _get168 = i;
-                const struct ReturnValue _24 = dong_porf_t12_inline__String_prototype_charCodeAt(_get166, _get167, _get168 + 5, 1);
+                const struct ReturnValue _24 = dong_porf_video_js_api_smoke_test__String_prototype_charCodeAt(_get166, _get167, _get168 + 5, 1);
                 jjlast_type = _24.type;
                 _r358 = _24.value;
                 goto j358;
@@ -7205,7 +7232,7 @@ static f64 dong_porf_t12_inline__ecma262_StringToNumber(f64 str, i32 strjjtype) 
                 _get170 = jjproto_target;
                 _get171 = jjproto_targetjjtype;
                 _get172 = i;
-                const struct ReturnValue _25 = dong_porf_t12_inline__String_prototype_charCodeAt(_get170, _get171, _get172 + 5, 1);
+                const struct ReturnValue _25 = dong_porf_video_js_api_smoke_test__String_prototype_charCodeAt(_get170, _get171, _get172 + 5, 1);
                 jjlast_type = _25.type;
                 _r358 = _25.value;
                 goto j358;
@@ -7218,7 +7245,7 @@ static f64 dong_porf_t12_inline__ecma262_StringToNumber(f64 str, i32 strjjtype) 
                 _get174 = jjproto_target;
                 _get175 = jjproto_targetjjtype;
                 _get176 = i;
-                const struct ReturnValue _26 = dong_porf_t12_inline__ByteString_prototype_charCodeAt(_get174, _get175, _get176 + 5, 1);
+                const struct ReturnValue _26 = dong_porf_video_js_api_smoke_test__ByteString_prototype_charCodeAt(_get174, _get175, _get176 + 5, 1);
                 jjlast_type = _26.type;
                 _r358 = _26.value;
                 goto j358;
@@ -7276,7 +7303,7 @@ static f64 dong_porf_t12_inline__ecma262_StringToNumber(f64 str, i32 strjjtype) 
                 _get189 = jjproto_target;
                 _get190 = jjproto_targetjjtype;
                 _get191 = i;
-                const struct ReturnValue _27 = dong_porf_t12_inline__String_prototype_charCodeAt(_get189, _get190, _get191 + 6, 1);
+                const struct ReturnValue _27 = dong_porf_video_js_api_smoke_test__String_prototype_charCodeAt(_get189, _get190, _get191 + 6, 1);
                 jjlast_type = _27.type;
                 _r365 = _27.value;
                 goto j365;
@@ -7289,7 +7316,7 @@ static f64 dong_porf_t12_inline__ecma262_StringToNumber(f64 str, i32 strjjtype) 
                 _get193 = jjproto_target;
                 _get194 = jjproto_targetjjtype;
                 _get195 = i;
-                const struct ReturnValue _28 = dong_porf_t12_inline__String_prototype_charCodeAt(_get193, _get194, _get195 + 6, 1);
+                const struct ReturnValue _28 = dong_porf_video_js_api_smoke_test__String_prototype_charCodeAt(_get193, _get194, _get195 + 6, 1);
                 jjlast_type = _28.type;
                 _r365 = _28.value;
                 goto j365;
@@ -7302,7 +7329,7 @@ static f64 dong_porf_t12_inline__ecma262_StringToNumber(f64 str, i32 strjjtype) 
                 _get197 = jjproto_target;
                 _get198 = jjproto_targetjjtype;
                 _get199 = i;
-                const struct ReturnValue _29 = dong_porf_t12_inline__ByteString_prototype_charCodeAt(_get197, _get198, _get199 + 6, 1);
+                const struct ReturnValue _29 = dong_porf_video_js_api_smoke_test__ByteString_prototype_charCodeAt(_get197, _get198, _get199 + 6, 1);
                 jjlast_type = _29.type;
                 _r365 = _29.value;
                 goto j365;
@@ -7360,7 +7387,7 @@ static f64 dong_porf_t12_inline__ecma262_StringToNumber(f64 str, i32 strjjtype) 
                 _get212 = jjproto_target;
                 _get213 = jjproto_targetjjtype;
                 _get214 = i;
-                const struct ReturnValue _30 = dong_porf_t12_inline__String_prototype_charCodeAt(_get212, _get213, _get214 + 7, 1);
+                const struct ReturnValue _30 = dong_porf_video_js_api_smoke_test__String_prototype_charCodeAt(_get212, _get213, _get214 + 7, 1);
                 jjlast_type = _30.type;
                 _r372 = _30.value;
                 goto j372;
@@ -7373,7 +7400,7 @@ static f64 dong_porf_t12_inline__ecma262_StringToNumber(f64 str, i32 strjjtype) 
                 _get216 = jjproto_target;
                 _get217 = jjproto_targetjjtype;
                 _get218 = i;
-                const struct ReturnValue _31 = dong_porf_t12_inline__String_prototype_charCodeAt(_get216, _get217, _get218 + 7, 1);
+                const struct ReturnValue _31 = dong_porf_video_js_api_smoke_test__String_prototype_charCodeAt(_get216, _get217, _get218 + 7, 1);
                 jjlast_type = _31.type;
                 _r372 = _31.value;
                 goto j372;
@@ -7386,7 +7413,7 @@ static f64 dong_porf_t12_inline__ecma262_StringToNumber(f64 str, i32 strjjtype) 
                 _get220 = jjproto_target;
                 _get221 = jjproto_targetjjtype;
                 _get222 = i;
-                const struct ReturnValue _32 = dong_porf_t12_inline__ByteString_prototype_charCodeAt(_get220, _get221, _get222 + 7, 1);
+                const struct ReturnValue _32 = dong_porf_video_js_api_smoke_test__ByteString_prototype_charCodeAt(_get220, _get221, _get222 + 7, 1);
                 jjlast_type = _32.type;
                 _r372 = _32.value;
                 goto j372;
@@ -7434,7 +7461,7 @@ static f64 dong_porf_t12_inline__ecma262_StringToNumber(f64 str, i32 strjjtype) 
   _get228 = str;
   _get229 = strjjtype;
   _get230 = i;
-  n = dong_porf_t12_inline__Porffor_stn_float(_get228, _get229, _get230, 1);
+  n = dong_porf_video_js_api_smoke_test__Porffor_stn_float(_get228, _get229, _get230, 1);
   _get231 = negative;
   // if 
     if (((u32)(_get231)) != 0) {
@@ -7447,7 +7474,7 @@ static f64 dong_porf_t12_inline__ecma262_StringToNumber(f64 str, i32 strjjtype) 
   return _get233;
 }
 
-static struct ReturnValue dong_porf_t12_inline__Number_prototype_valueOf(f64 _this, i32 _thisjjtype) {
+static struct ReturnValue dong_porf_video_js_api_smoke_test__Number_prototype_valueOf(f64 _this, i32 _thisjjtype) {
   f64 _get2;
   i32 _get1;
   i32 _get0;
@@ -7462,13 +7489,13 @@ static struct ReturnValue dong_porf_t12_inline__Number_prototype_valueOf(f64 _th
   return (struct ReturnValue){ _get2, 1 };
 }
 
-static struct ReturnValue dong_porf_t12_inline__Boolean_prototype_valueOf(f64 _this, i32 _thisjjtype) {
+static struct ReturnValue dong_porf_video_js_api_smoke_test__Boolean_prototype_valueOf(f64 _this, i32 _thisjjtype) {
   f64 _get0;
   _get0 = _this;
   return (struct ReturnValue){ _get0, 2 };
 }
 
-static struct ReturnValue dong_porf_t12_inline__Object_prototype_valueOf(f64 _this, i32 _thisjjtype) {
+static struct ReturnValue dong_porf_video_js_api_smoke_test__Object_prototype_valueOf(f64 _this, i32 _thisjjtype) {
   i32 _get33;
   f64 _get32;
   i32 _get31;
@@ -7529,7 +7556,7 @@ static struct ReturnValue dong_porf_t12_inline__Object_prototype_valueOf(f64 _th
           jjmember_obj_257 = _get3;
           _get4 = jjmember_obj_257;
           _get5 = jjmember_prop_257;
-          const struct ReturnValue _0 = dong_porf_t12_inline__Porffor_object_get_withHash((i32)(_get4), 7, (u32)(_get5), 195, -238740424, 1);
+          const struct ReturnValue _0 = dong_porf_video_js_api_smoke_test__Porffor_object_get_withHash((i32)(_get4), 7, (u32)(_get5), 195, -238740424, 1);
           jjlast_type = _0.type;
           _get6 = jjlast_type;
           ovrjjtype = _get6;
@@ -7579,12 +7606,12 @@ static struct ReturnValue dong_porf_t12_inline__Object_prototype_valueOf(f64 _th
           // end
           j482:;
           _get19 = obj;
-          entryPtr = (f64)(dong_porf_t12_inline__Porffor_object_lookup((i32)(_get19), 7, 995, 195, dong_porf_t12_inline__Porffor_object_hash(995, 195), 1));
+          entryPtr = (f64)(dong_porf_video_js_api_smoke_test__Porffor_object_lookup((i32)(_get19), 7, 995, 195, dong_porf_video_js_api_smoke_test__Porffor_object_hash(995, 195), 1));
           _get20 = entryPtr;
           // if 
             if (_get20 != -1) {
               _get21 = entryPtr;
-              const struct ReturnValue _1 = dong_porf_t12_inline__Porffor_object_readValue((i32)(_get21), 1);
+              const struct ReturnValue _1 = dong_porf_video_js_api_smoke_test__Porffor_object_readValue((i32)(_get21), 1);
               jjlast_type = _1.type;
               _get22 = jjlast_type;
               ovrjjtype = _get22;
@@ -7635,7 +7662,7 @@ static struct ReturnValue dong_porf_t12_inline__Object_prototype_valueOf(f64 _th
   return (struct ReturnValue){ _get32, _get33 };
 }
 
-static struct ReturnValue dong_porf_t12_inline__String_prototype_valueOf(i32 _this, i32 _thisjjtype) {
+static struct ReturnValue dong_porf_video_js_api_smoke_test__String_prototype_valueOf(i32 _this, i32 _thisjjtype) {
   i32 _get8;
   i32 _get7;
   i32 _get6;
@@ -7658,14 +7685,14 @@ static struct ReturnValue dong_porf_t12_inline__String_prototype_valueOf(i32 _th
       j491:;
       _get4 = _this;
       _get5 = _thisjjtype;
-      const struct ReturnValue _0 = dong_porf_t12_inline__ecma262_ToString((f64)(_get4), _get5);
+      const struct ReturnValue _0 = dong_porf_video_js_api_smoke_test__ecma262_ToString((f64)(_get4), _get5);
       _thisjjtype = _0.type;
       _this = (i32)(_0.value);
       _get6 = _thisjjtype;
       // if 
         if (_get6 == 195) {
           _get7 = _this;
-          _this = dong_porf_t12_inline__Porffor_bytestringToString(_get7);
+          _this = dong_porf_video_js_api_smoke_test__Porffor_bytestringToString(_get7);
         }
       // end
       j492:;
@@ -7676,7 +7703,7 @@ static struct ReturnValue dong_porf_t12_inline__String_prototype_valueOf(i32 _th
   return (struct ReturnValue){ _get8, 67 };
 }
 
-static struct ReturnValue dong_porf_t12_inline__Array_prototype_valueOf(f64 _this, i32 _thisjjtype) {
+static struct ReturnValue dong_porf_video_js_api_smoke_test__Array_prototype_valueOf(f64 _this, i32 _thisjjtype) {
   f64 _get3;
   i32 _get2;
   f64 _get1;
@@ -7686,7 +7713,7 @@ static struct ReturnValue dong_porf_t12_inline__Array_prototype_valueOf(f64 _thi
     if (_get0 != 72) {
       _get1 = _this;
       _get2 = _thisjjtype;
-      _this = dong_porf_t12_inline__Array_from(_get1, _get2, 0, 0, 0, 0);
+      _this = dong_porf_video_js_api_smoke_test__Array_from(_get1, _get2, 0, 0, 0, 0);
       _thisjjtype = 72;
     }
   // end
@@ -7695,19 +7722,19 @@ static struct ReturnValue dong_porf_t12_inline__Array_prototype_valueOf(f64 _thi
   return (struct ReturnValue){ _get3, 72 };
 }
 
-static struct ReturnValue dong_porf_t12_inline__ByteString_prototype_valueOf(i32 _this, i32 _thisjjtype) {
+static struct ReturnValue dong_porf_video_js_api_smoke_test__ByteString_prototype_valueOf(i32 _this, i32 _thisjjtype) {
   i32 _get0;
   _get0 = _this;
   return (struct ReturnValue){ _get0, 195 };
 }
 
-static struct ReturnValue dong_porf_t12_inline__ByteString_prototype_toString(i32 _this, i32 _thisjjtype) {
+static struct ReturnValue dong_porf_video_js_api_smoke_test__ByteString_prototype_toString(i32 _this, i32 _thisjjtype) {
   i32 _get0;
   _get0 = _this;
   return (struct ReturnValue){ _get0, 195 };
 }
 
-static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_Number(f64 input, i32 inputjjtype) {
+static struct ReturnValue dong_porf_video_js_api_smoke_test__ecma262_ToPrimitive_Number(f64 input, i32 inputjjtype) {
   i32 _get98;
   f64 _get97;
   i32 _get96;
@@ -7838,7 +7865,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_Number(f64 i
       if (_get4 == 1) {
         _get5 = jjproto_target;
         _get6 = jjproto_targetjjtype;
-        const struct ReturnValue _0 = dong_porf_t12_inline__Number_prototype_valueOf(_get5, _get6);
+        const struct ReturnValue _0 = dong_porf_video_js_api_smoke_test__Number_prototype_valueOf(_get5, _get6);
         jjlast_type = _0.type;
         _r473 = _0.value;
         goto j473;
@@ -7850,7 +7877,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_Number(f64 i
       if (_get7 == 2) {
         _get8 = jjproto_target;
         _get9 = jjproto_targetjjtype;
-        const struct ReturnValue _1 = dong_porf_t12_inline__Boolean_prototype_valueOf(_get8, _get9);
+        const struct ReturnValue _1 = dong_porf_video_js_api_smoke_test__Boolean_prototype_valueOf(_get8, _get9);
         jjlast_type = _1.type;
         _r473 = _1.value;
         goto j473;
@@ -7862,7 +7889,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_Number(f64 i
       if (_get10 == 7) {
         _get11 = jjproto_target;
         _get12 = jjproto_targetjjtype;
-        const struct ReturnValue _2 = dong_porf_t12_inline__Object_prototype_valueOf(_get11, _get12);
+        const struct ReturnValue _2 = dong_porf_video_js_api_smoke_test__Object_prototype_valueOf(_get11, _get12);
         jjlast_type = _2.type;
         _r473 = _2.value;
         goto j473;
@@ -7874,7 +7901,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_Number(f64 i
       if (_get13 == 31) {
         _get14 = jjproto_target;
         _get15 = jjproto_targetjjtype;
-        const struct ReturnValue _3 = dong_porf_t12_inline__Boolean_prototype_valueOf(_get14, _get15);
+        const struct ReturnValue _3 = dong_porf_video_js_api_smoke_test__Boolean_prototype_valueOf(_get14, _get15);
         jjlast_type = _3.type;
         _r473 = _3.value;
         goto j473;
@@ -7886,7 +7913,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_Number(f64 i
       if (_get16 == 32) {
         _get17 = jjproto_target;
         _get18 = jjproto_targetjjtype;
-        const struct ReturnValue _4 = dong_porf_t12_inline__Number_prototype_valueOf(_get17, _get18);
+        const struct ReturnValue _4 = dong_porf_video_js_api_smoke_test__Number_prototype_valueOf(_get17, _get18);
         jjlast_type = _4.type;
         _r473 = _4.value;
         goto j473;
@@ -7898,7 +7925,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_Number(f64 i
       if (_get19 == 33) {
         _get20 = jjproto_target;
         _get21 = jjproto_targetjjtype;
-        const struct ReturnValue _5 = dong_porf_t12_inline__String_prototype_valueOf((i32)(_get20), _get21);
+        const struct ReturnValue _5 = dong_porf_video_js_api_smoke_test__String_prototype_valueOf((i32)(_get20), _get21);
         jjlast_type = _5.type;
         _r473 = (f64)(_5.value);
         goto j473;
@@ -7910,7 +7937,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_Number(f64 i
       if (_get22 == 67) {
         _get23 = jjproto_target;
         _get24 = jjproto_targetjjtype;
-        const struct ReturnValue _6 = dong_porf_t12_inline__String_prototype_valueOf((i32)(_get23), _get24);
+        const struct ReturnValue _6 = dong_porf_video_js_api_smoke_test__String_prototype_valueOf((i32)(_get23), _get24);
         jjlast_type = _6.type;
         _r473 = (f64)(_6.value);
         goto j473;
@@ -7922,7 +7949,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_Number(f64 i
       if (_get25 == 72) {
         _get26 = jjproto_target;
         _get27 = jjproto_targetjjtype;
-        const struct ReturnValue _7 = dong_porf_t12_inline__Array_prototype_valueOf(_get26, _get27);
+        const struct ReturnValue _7 = dong_porf_video_js_api_smoke_test__Array_prototype_valueOf(_get26, _get27);
         jjlast_type = _7.type;
         _r473 = _7.value;
         goto j473;
@@ -7934,7 +7961,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_Number(f64 i
       if (_get28 == 195) {
         _get29 = jjproto_target;
         _get30 = jjproto_targetjjtype;
-        const struct ReturnValue _8 = dong_porf_t12_inline__ByteString_prototype_valueOf((i32)(_get29), _get30);
+        const struct ReturnValue _8 = dong_porf_video_js_api_smoke_test__ByteString_prototype_valueOf((i32)(_get29), _get30);
         jjlast_type = _8.type;
         _r473 = (f64)(_8.value);
         goto j473;
@@ -7943,7 +7970,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_Number(f64 i
     j496:;
     _get31 = jjproto_target;
     _get32 = jjproto_targetjjtype;
-    const struct ReturnValue _9 = dong_porf_t12_inline__Object_prototype_valueOf(_get31, _get32);
+    const struct ReturnValue _9 = dong_porf_video_js_api_smoke_test__Object_prototype_valueOf(_get31, _get32);
     jjlast_type = _9.type;
     _r473 = _9.value;
   // end
@@ -7985,7 +8012,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_Number(f64 i
       _get40 = value;
       _get41 = valuejjtype;
       jjlast_type = 2;
-      _r500 = (f64)(dong_porf_t12_inline__Porffor_object_isObjectOrNull((i32)(_get40), _get41)) == 0;
+      _r500 = (f64)(dong_porf_video_js_api_smoke_test__Porffor_object_isObjectOrNull((i32)(_get40), _get41)) == 0;
     } else {
       _get42 = logictmpi;
       jjlast_type = 2;
@@ -8023,7 +8050,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_Number(f64 i
       if (_get49 == 1) {
         _get50 = jjproto_target;
         _get51 = jjproto_targetjjtype;
-        const struct ReturnValue _10 = dong_porf_t12_inline__Number_prototype_toString(_get50, _get51, 0, 0);
+        const struct ReturnValue _10 = dong_porf_video_js_api_smoke_test__Number_prototype_toString(_get50, _get51, 0, 0);
         jjlast_type = _10.type;
         _r502 = _10.value;
         goto j502;
@@ -8035,7 +8062,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_Number(f64 i
       if (_get52 == 2) {
         _get53 = jjproto_target;
         _get54 = jjproto_targetjjtype;
-        const struct ReturnValue _11 = dong_porf_t12_inline__Boolean_prototype_toString(_get53, _get54);
+        const struct ReturnValue _11 = dong_porf_video_js_api_smoke_test__Boolean_prototype_toString(_get53, _get54);
         jjlast_type = _11.type;
         _r502 = _11.value;
         goto j502;
@@ -8047,7 +8074,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_Number(f64 i
       if (_get55 == 6) {
         _get56 = jjproto_target;
         _get57 = jjproto_targetjjtype;
-        const struct ReturnValue _12 = dong_porf_t12_inline__Function_prototype_toString(_get56, _get57);
+        const struct ReturnValue _12 = dong_porf_video_js_api_smoke_test__Function_prototype_toString(_get56, _get57);
         jjlast_type = _12.type;
         _r502 = _12.value;
         goto j502;
@@ -8059,7 +8086,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_Number(f64 i
       if (_get58 == 7) {
         _get59 = jjproto_target;
         _get60 = jjproto_targetjjtype;
-        const struct ReturnValue _13 = dong_porf_t12_inline__Object_prototype_toString(_get59, _get60);
+        const struct ReturnValue _13 = dong_porf_video_js_api_smoke_test__Object_prototype_toString(_get59, _get60);
         jjlast_type = _13.type;
         _r502 = _13.value;
         goto j502;
@@ -8071,7 +8098,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_Number(f64 i
       if (_get61 == 31) {
         _get62 = jjproto_target;
         _get63 = jjproto_targetjjtype;
-        const struct ReturnValue _14 = dong_porf_t12_inline__Boolean_prototype_toString(_get62, _get63);
+        const struct ReturnValue _14 = dong_porf_video_js_api_smoke_test__Boolean_prototype_toString(_get62, _get63);
         jjlast_type = _14.type;
         _r502 = _14.value;
         goto j502;
@@ -8083,7 +8110,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_Number(f64 i
       if (_get64 == 32) {
         _get65 = jjproto_target;
         _get66 = jjproto_targetjjtype;
-        const struct ReturnValue _15 = dong_porf_t12_inline__Number_prototype_toString(_get65, _get66, 0, 0);
+        const struct ReturnValue _15 = dong_porf_video_js_api_smoke_test__Number_prototype_toString(_get65, _get66, 0, 0);
         jjlast_type = _15.type;
         _r502 = _15.value;
         goto j502;
@@ -8095,7 +8122,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_Number(f64 i
       if (_get67 == 33) {
         _get68 = jjproto_target;
         _get69 = jjproto_targetjjtype;
-        const struct ReturnValue _16 = dong_porf_t12_inline__String_prototype_toString((i32)(_get68), _get69);
+        const struct ReturnValue _16 = dong_porf_video_js_api_smoke_test__String_prototype_toString((i32)(_get68), _get69);
         jjlast_type = _16.type;
         _r502 = (f64)(_16.value);
         goto j502;
@@ -8107,7 +8134,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_Number(f64 i
       if (_get70 == 38) {
         _get71 = jjproto_target;
         _get72 = jjproto_targetjjtype;
-        const struct ReturnValue _17 = dong_porf_t12_inline__TypeError_prototype_toString(_get71, _get72);
+        const struct ReturnValue _17 = dong_porf_video_js_api_smoke_test__TypeError_prototype_toString(_get71, _get72);
         jjlast_type = _17.type;
         _r502 = _17.value;
         goto j502;
@@ -8119,7 +8146,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_Number(f64 i
       if (_get73 == 41) {
         _get74 = jjproto_target;
         _get75 = jjproto_targetjjtype;
-        const struct ReturnValue _18 = dong_porf_t12_inline__RangeError_prototype_toString(_get74, _get75);
+        const struct ReturnValue _18 = dong_porf_video_js_api_smoke_test__RangeError_prototype_toString(_get74, _get75);
         jjlast_type = _18.type;
         _r502 = _18.value;
         goto j502;
@@ -8131,7 +8158,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_Number(f64 i
       if (_get76 == 67) {
         _get77 = jjproto_target;
         _get78 = jjproto_targetjjtype;
-        const struct ReturnValue _19 = dong_porf_t12_inline__String_prototype_toString((i32)(_get77), _get78);
+        const struct ReturnValue _19 = dong_porf_video_js_api_smoke_test__String_prototype_toString((i32)(_get77), _get78);
         jjlast_type = _19.type;
         _r502 = (f64)(_19.value);
         goto j502;
@@ -8143,7 +8170,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_Number(f64 i
       if (_get79 == 72) {
         _get80 = jjproto_target;
         _get81 = jjproto_targetjjtype;
-        const struct ReturnValue _20 = dong_porf_t12_inline__Array_prototype_toString(_get80, _get81);
+        const struct ReturnValue _20 = dong_porf_video_js_api_smoke_test__Array_prototype_toString(_get80, _get81);
         jjlast_type = _20.type;
         _r502 = _20.value;
         goto j502;
@@ -8155,7 +8182,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_Number(f64 i
       if (_get82 == 195) {
         _get83 = jjproto_target;
         _get84 = jjproto_targetjjtype;
-        const struct ReturnValue _21 = dong_porf_t12_inline__ByteString_prototype_toString((i32)(_get83), _get84);
+        const struct ReturnValue _21 = dong_porf_video_js_api_smoke_test__ByteString_prototype_toString((i32)(_get83), _get84);
         jjlast_type = _21.type;
         _r502 = (f64)(_21.value);
         goto j502;
@@ -8164,7 +8191,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_Number(f64 i
     j515:;
     _get85 = jjproto_target;
     _get86 = jjproto_targetjjtype;
-    const struct ReturnValue _22 = dong_porf_t12_inline__Object_prototype_toString(_get85, _get86);
+    const struct ReturnValue _22 = dong_porf_video_js_api_smoke_test__Object_prototype_toString(_get85, _get86);
     jjlast_type = _22.type;
     _r502 = _22.value;
   // end
@@ -8206,7 +8233,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_Number(f64 i
       _get94 = value;
       _get95 = valuejjtype;
       jjlast_type = 2;
-      _r519 = (f64)(dong_porf_t12_inline__Porffor_object_isObjectOrNull((i32)(_get94), _get95)) == 0;
+      _r519 = (f64)(dong_porf_video_js_api_smoke_test__Porffor_object_isObjectOrNull((i32)(_get94), _get95)) == 0;
     } else {
       _get96 = logictmpi;
       jjlast_type = 2;
@@ -8225,7 +8252,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_Number(f64 i
   return (struct ReturnValue){ 0, 0 };
 }
 
-static f64 dong_porf_t12_inline__ecma262_ToNumber(f64 argument, i32 argumentjjtype) {
+static f64 dong_porf_video_js_api_smoke_test__ecma262_ToNumber(f64 argument, i32 argumentjjtype) {
   i32 _get18;
   f64 _get17;
   i32 _get16;
@@ -8294,23 +8321,23 @@ static f64 dong_porf_t12_inline__ecma262_ToNumber(f64 argument, i32 argumentjjty
     if ((f64)(_get11 | 128) == 195) {
       _get12 = argument;
       _get13 = argumentjjtype;
-      return dong_porf_t12_inline__ecma262_StringToNumber(_get12, _get13);
+      return dong_porf_video_js_api_smoke_test__ecma262_StringToNumber(_get12, _get13);
     }
   // end
   j258:;
   _get14 = argument;
   _get15 = argumentjjtype;
-  const struct ReturnValue _0 = dong_porf_t12_inline__ecma262_ToPrimitive_Number(_get14, _get15);
+  const struct ReturnValue _0 = dong_porf_video_js_api_smoke_test__ecma262_ToPrimitive_Number(_get14, _get15);
   jjlast_type = _0.type;
   _get16 = jjlast_type;
   primValuejjtype = _get16;
   primValue = _0.value;
   _get17 = primValue;
   _get18 = primValuejjtype;
-  return dong_porf_t12_inline__ecma262_ToNumber(_get17, _get18);
+  return dong_porf_video_js_api_smoke_test__ecma262_ToNumber(_get17, _get18);
 }
 
-static f64 dong_porf_t12_inline__ecma262_ToIntegerOrInfinity(f64 argument, i32 argumentjjtype) {
+static f64 dong_porf_video_js_api_smoke_test__ecma262_ToIntegerOrInfinity(f64 argument, i32 argumentjjtype) {
   f64 _get7;
   f64 _get6;
   f64 _get5;
@@ -8323,24 +8350,24 @@ static f64 dong_porf_t12_inline__ecma262_ToIntegerOrInfinity(f64 argument, i32 a
 
   _get0 = argument;
   _get1 = argumentjjtype;
-  number = dong_porf_t12_inline__ecma262_ToNumber(_get0, _get1);
+  number = dong_porf_video_js_api_smoke_test__ecma262_ToNumber(_get0, _get1);
   _get2 = number;
   // if 
-    if (((u32)(dong_porf_t12_inline__Number_isNaN(_get2))) != 0) {
+    if (((u32)(dong_porf_video_js_api_smoke_test__Number_isNaN(_get2))) != 0) {
       return 0;
     }
   // end
   j521:;
   _get3 = number;
   // if 
-    if (dong_porf_t12_inline__Number_isFinite(_get3) == 0) {
+    if (dong_porf_video_js_api_smoke_test__Number_isFinite(_get3) == 0) {
       _get4 = number;
       return _get4;
     }
   // end
   j522:;
   _get5 = number;
-  number = dong_porf_t12_inline__Math_trunc(_get5);
+  number = dong_porf_video_js_api_smoke_test__Math_trunc(_get5);
   _get6 = number;
   // if 
     if (_get6 == 0) {
@@ -8352,7 +8379,7 @@ static f64 dong_porf_t12_inline__ecma262_ToIntegerOrInfinity(f64 argument, i32 a
   return _get7;
 }
 
-static f64 dong_porf_t12_inline__Array_from(f64 arg, i32 argjjtype, f64 mapFn, i32 mapFnjjtype, f64 thisArg, i32 thisArgjjtype) {
+static f64 dong_porf_video_js_api_smoke_test__Array_from(f64 arg, i32 argjjtype, f64 mapFn, i32 mapFnjjtype, f64 thisArg, i32 thisArgjjtype) {
   f64 _get174;
   f64 _get173;
   f64 _get172;
@@ -8603,7 +8630,7 @@ static f64 dong_porf_t12_inline__Array_from(f64 arg, i32 argjjtype, f64 mapFn, i
     }
   // end
   j177:;
-  out = (f64)(dong_porf_t12_inline__Porffor_malloc(16384));
+  out = (f64)(dong_porf_video_js_api_smoke_test__Porffor_malloc(16384));
   _get6 = argjjtype;
   _get7 = argjjtype;
   _get8 = argjjtype;
@@ -8675,7 +8702,7 @@ static f64 dong_porf_t12_inline__Array_from(f64 arg, i32 argjjtype, f64 mapFn, i
                     if ((_get33) == 0) {
                       goto j183;
                     }
-                    jjforof_allocd = dong_porf_t12_inline__Porffor_malloc(8);
+                    jjforof_allocd = dong_porf_video_js_api_smoke_test__Porffor_malloc(8);
                     _get34 = jjforof_allocd;
                     i32_store(0, 0, _get34, 1);
                     _get35 = jjforof_allocd;
@@ -8699,7 +8726,7 @@ static f64 dong_porf_t12_inline__Array_from(f64 arg, i32 argjjtype, f64 mapFn, i
                     if ((_get41) == 0) {
                       goto j183;
                     }
-                    jjforof_allocd = dong_porf_t12_inline__Porffor_malloc(8);
+                    jjforof_allocd = dong_porf_video_js_api_smoke_test__Porffor_malloc(8);
                     _get42 = jjforof_allocd;
                     i32_store(0, 0, _get42, 1);
                     _get43 = jjforof_allocd;
@@ -8817,7 +8844,7 @@ static f64 dong_porf_t12_inline__Array_from(f64 arg, i32 argjjtype, f64 mapFn, i
                     if ((_get87) == 0) {
                       goto j191;
                     }
-                    jjforof_allocd = dong_porf_t12_inline__Porffor_malloc(8);
+                    jjforof_allocd = dong_porf_video_js_api_smoke_test__Porffor_malloc(8);
                     _get88 = jjforof_allocd;
                     i32_store(0, 0, _get88, 1);
                     _get89 = jjforof_allocd;
@@ -8841,7 +8868,7 @@ static f64 dong_porf_t12_inline__Array_from(f64 arg, i32 argjjtype, f64 mapFn, i
                     if ((_get95) == 0) {
                       goto j191;
                     }
-                    jjforof_allocd = dong_porf_t12_inline__Porffor_malloc(8);
+                    jjforof_allocd = dong_porf_video_js_api_smoke_test__Porffor_malloc(8);
                     _get96 = jjforof_allocd;
                     i32_store(0, 0, _get96, 1);
                     _get97 = jjforof_allocd;
@@ -8898,7 +8925,7 @@ static f64 dong_porf_t12_inline__Array_from(f64 arg, i32 argjjtype, f64 mapFn, i
   _get115 = arg;
   _get116 = argjjtype;
   // if 
-    if ((dong_porf_t12_inline__Porffor_object_isObject((i32)(_get115), _get116)) != 0) {
+    if ((dong_porf_video_js_api_smoke_test__Porffor_object_isObject((i32)(_get115), _get116)) != 0) {
       _get117 = argjjtype;
       // if f64
       f64 _r197;
@@ -8910,7 +8937,7 @@ static f64 dong_porf_t12_inline__Array_from(f64 arg, i32 argjjtype, f64 mapFn, i
         } else {
           _get120 = arg;
           _get121 = argjjtype;
-          const struct ReturnValue _0 = dong_porf_t12_inline__Porffor_object_underlying(_get120, _get121);
+          const struct ReturnValue _0 = dong_porf_video_js_api_smoke_test__Porffor_object_underlying(_get120, _get121);
           jjlast_type = _0.type;
           _get122 = jjlast_type;
           jjlast_type = _get122;
@@ -8924,13 +8951,13 @@ static f64 dong_porf_t12_inline__Array_from(f64 arg, i32 argjjtype, f64 mapFn, i
       jjmember_obj_17 = _get123;
       _get124 = jjmember_obj_17;
       _get125 = jjmember_prop_17;
-      const struct ReturnValue _1 = dong_porf_t12_inline__ecma262_ToPropertyKey(_get125, 195);
+      const struct ReturnValue _1 = dong_porf_video_js_api_smoke_test__ecma262_ToPropertyKey(_get125, 195);
       jjswap = _1.type;
       _get126 = jjswap;
-      const struct ReturnValue _2 = dong_porf_t12_inline__Porffor_object_get((i32)(_get124), 7, (i32)(_1.value), _get126);
+      const struct ReturnValue _2 = dong_porf_video_js_api_smoke_test__Porffor_object_get((i32)(_get124), 7, (i32)(_1.value), _get126);
       jjlast_type = _2.type;
       _get127 = jjlast_type;
-      len = dong_porf_t12_inline__ecma262_ToIntegerOrInfinity(_2.value, _get127);
+      len = dong_porf_video_js_api_smoke_test__ecma262_ToIntegerOrInfinity(_2.value, _get127);
       _get128 = len;
       // if 
         if (_get128 > 4294967295) {
@@ -8988,10 +9015,10 @@ static f64 dong_porf_t12_inline__Array_from(f64 arg, i32 argjjtype, f64 mapFn, i
                     jjmember_obj_19 = _get146;
                     _get147 = jjmember_obj_19;
                     _get148 = jjmember_prop_19;
-                    const struct ReturnValue _3 = dong_porf_t12_inline__ecma262_ToPropertyKey(_get148, 1);
+                    const struct ReturnValue _3 = dong_porf_video_js_api_smoke_test__ecma262_ToPropertyKey(_get148, 1);
                     jjswap = _3.type;
                     _get149 = jjswap;
-                    const struct ReturnValue _4 = dong_porf_t12_inline__Porffor_object_get((i32)(_get147), 7, (i32)(_3.value), _get149);
+                    const struct ReturnValue _4 = dong_porf_video_js_api_smoke_test__Porffor_object_get((i32)(_get147), 7, (i32)(_3.value), _get149);
                     jjlast_type = _4.type;
                     _get150 = jjlast_type;
                     _get151 = i;
@@ -9036,10 +9063,10 @@ static f64 dong_porf_t12_inline__Array_from(f64 arg, i32 argjjtype, f64 mapFn, i
                 jjmember_obj_22 = _get164;
                 _get165 = jjmember_obj_22;
                 _get166 = jjmember_prop_22;
-                const struct ReturnValue _5 = dong_porf_t12_inline__ecma262_ToPropertyKey(_get166, 1);
+                const struct ReturnValue _5 = dong_porf_video_js_api_smoke_test__ecma262_ToPropertyKey(_get166, 1);
                 jjswap = _5.type;
                 _get167 = jjswap;
-                const struct ReturnValue _6 = dong_porf_t12_inline__Porffor_object_get((i32)(_get165), 7, (i32)(_5.value), _get167);
+                const struct ReturnValue _6 = dong_porf_video_js_api_smoke_test__Porffor_object_get((i32)(_get165), 7, (i32)(_5.value), _get167);
                 jjlast_type = _6.type;
                 f64_store(0, 4, _get162, _6.value);
                 _get168 = jjmember_setter_ptr_tmp;
@@ -9068,7 +9095,7 @@ static f64 dong_porf_t12_inline__Array_from(f64 arg, i32 argjjtype, f64 mapFn, i
   return _get174;
 }
 
-static f64 dong_porf_t12_inline__Porffor_bytestring_appendChar(f64 str, i32 strjjtype, f64 _char, i32 charjjtype) {
+static f64 dong_porf_video_js_api_smoke_test__Porffor_bytestring_appendChar(f64 str, i32 strjjtype, f64 _char, i32 charjjtype) {
   f64 _get5;
   f64 _get4;
   f64 _get3;
@@ -9089,7 +9116,7 @@ static f64 dong_porf_t12_inline__Porffor_bytestring_appendChar(f64 str, i32 strj
   return 1;
 }
 
-static struct ReturnValue dong_porf_t12_inline__Array_prototype_toString(f64 _this, i32 _thisjjtype) {
+static struct ReturnValue dong_porf_video_js_api_smoke_test__Array_prototype_toString(f64 _this, i32 _thisjjtype) {
   f64 _get25;
   i32 _get24;
   i32 _get23;
@@ -9132,12 +9159,12 @@ static struct ReturnValue dong_porf_t12_inline__Array_prototype_toString(f64 _th
     if (_get0 != 72) {
       _get1 = _this;
       _get2 = _thisjjtype;
-      _this = dong_porf_t12_inline__Array_from(_get1, _get2, 0, 0, 0, 0);
+      _this = dong_porf_video_js_api_smoke_test__Array_from(_get1, _get2, 0, 0, 0, 0);
       _thisjjtype = 72;
     }
   // end
   j172:;
-  out = (f64)(dong_porf_t12_inline__Porffor_malloc(16384));
+  out = (f64)(dong_porf_video_js_api_smoke_test__Porffor_malloc(16384));
   _get3 = _this;
   len = (f64)(i32_load(1, 0, (u32)(_get3)));
   i = 0;
@@ -9151,7 +9178,7 @@ static struct ReturnValue dong_porf_t12_inline__Array_prototype_toString(f64 _th
         // if 
           if (_get6 > 0) {
             _get7 = out;
-            (void) dong_porf_t12_inline__Porffor_bytestring_appendChar(_get7, 195, 44, 1);
+            (void) dong_porf_video_js_api_smoke_test__Porffor_bytestring_appendChar(_get7, 195, 44, 1);
           }
         // end
         j535:;
@@ -9192,10 +9219,10 @@ static struct ReturnValue dong_porf_t12_inline__Array_prototype_toString(f64 _th
             _get21 = out;
             _get22 = element;
             _get23 = elementjjtype;
-            const struct ReturnValue _0 = dong_porf_t12_inline__ecma262_ToString(_get22, _get23);
+            const struct ReturnValue _0 = dong_porf_video_js_api_smoke_test__ecma262_ToString(_get22, _get23);
             jjlast_type = _0.type;
             _get24 = jjlast_type;
-            (void) dong_porf_t12_inline__Porffor_bytestring_appendStr(_get21, 195, _0.value, _get24);
+            (void) dong_porf_video_js_api_smoke_test__Porffor_bytestring_appendStr(_get21, 195, _0.value, _get24);
           }
         // end
         j537:;
@@ -9208,7 +9235,7 @@ static struct ReturnValue dong_porf_t12_inline__Array_prototype_toString(f64 _th
   return (struct ReturnValue){ _get25, 195 };
 }
 
-static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_String(f64 input, i32 inputjjtype) {
+static struct ReturnValue dong_porf_video_js_api_smoke_test__ecma262_ToPrimitive_String(f64 input, i32 inputjjtype) {
   i32 _get98;
   f64 _get97;
   i32 _get96;
@@ -9339,7 +9366,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_String(f64 i
       if (_get4 == 1) {
         _get5 = jjproto_target;
         _get6 = jjproto_targetjjtype;
-        const struct ReturnValue _0 = dong_porf_t12_inline__Number_prototype_toString(_get5, _get6, 0, 0);
+        const struct ReturnValue _0 = dong_porf_video_js_api_smoke_test__Number_prototype_toString(_get5, _get6, 0, 0);
         jjlast_type = _0.type;
         _r69 = _0.value;
         goto j69;
@@ -9351,7 +9378,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_String(f64 i
       if (_get7 == 2) {
         _get8 = jjproto_target;
         _get9 = jjproto_targetjjtype;
-        const struct ReturnValue _1 = dong_porf_t12_inline__Boolean_prototype_toString(_get8, _get9);
+        const struct ReturnValue _1 = dong_porf_video_js_api_smoke_test__Boolean_prototype_toString(_get8, _get9);
         jjlast_type = _1.type;
         _r69 = _1.value;
         goto j69;
@@ -9363,7 +9390,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_String(f64 i
       if (_get10 == 6) {
         _get11 = jjproto_target;
         _get12 = jjproto_targetjjtype;
-        const struct ReturnValue _2 = dong_porf_t12_inline__Function_prototype_toString(_get11, _get12);
+        const struct ReturnValue _2 = dong_porf_video_js_api_smoke_test__Function_prototype_toString(_get11, _get12);
         jjlast_type = _2.type;
         _r69 = _2.value;
         goto j69;
@@ -9375,7 +9402,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_String(f64 i
       if (_get13 == 7) {
         _get14 = jjproto_target;
         _get15 = jjproto_targetjjtype;
-        const struct ReturnValue _3 = dong_porf_t12_inline__Object_prototype_toString(_get14, _get15);
+        const struct ReturnValue _3 = dong_porf_video_js_api_smoke_test__Object_prototype_toString(_get14, _get15);
         jjlast_type = _3.type;
         _r69 = _3.value;
         goto j69;
@@ -9387,7 +9414,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_String(f64 i
       if (_get16 == 31) {
         _get17 = jjproto_target;
         _get18 = jjproto_targetjjtype;
-        const struct ReturnValue _4 = dong_porf_t12_inline__Boolean_prototype_toString(_get17, _get18);
+        const struct ReturnValue _4 = dong_porf_video_js_api_smoke_test__Boolean_prototype_toString(_get17, _get18);
         jjlast_type = _4.type;
         _r69 = _4.value;
         goto j69;
@@ -9399,7 +9426,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_String(f64 i
       if (_get19 == 32) {
         _get20 = jjproto_target;
         _get21 = jjproto_targetjjtype;
-        const struct ReturnValue _5 = dong_porf_t12_inline__Number_prototype_toString(_get20, _get21, 0, 0);
+        const struct ReturnValue _5 = dong_porf_video_js_api_smoke_test__Number_prototype_toString(_get20, _get21, 0, 0);
         jjlast_type = _5.type;
         _r69 = _5.value;
         goto j69;
@@ -9411,7 +9438,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_String(f64 i
       if (_get22 == 33) {
         _get23 = jjproto_target;
         _get24 = jjproto_targetjjtype;
-        const struct ReturnValue _6 = dong_porf_t12_inline__String_prototype_toString((i32)(_get23), _get24);
+        const struct ReturnValue _6 = dong_porf_video_js_api_smoke_test__String_prototype_toString((i32)(_get23), _get24);
         jjlast_type = _6.type;
         _r69 = (f64)(_6.value);
         goto j69;
@@ -9423,7 +9450,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_String(f64 i
       if (_get25 == 38) {
         _get26 = jjproto_target;
         _get27 = jjproto_targetjjtype;
-        const struct ReturnValue _7 = dong_porf_t12_inline__TypeError_prototype_toString(_get26, _get27);
+        const struct ReturnValue _7 = dong_porf_video_js_api_smoke_test__TypeError_prototype_toString(_get26, _get27);
         jjlast_type = _7.type;
         _r69 = _7.value;
         goto j69;
@@ -9435,7 +9462,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_String(f64 i
       if (_get28 == 41) {
         _get29 = jjproto_target;
         _get30 = jjproto_targetjjtype;
-        const struct ReturnValue _8 = dong_porf_t12_inline__RangeError_prototype_toString(_get29, _get30);
+        const struct ReturnValue _8 = dong_porf_video_js_api_smoke_test__RangeError_prototype_toString(_get29, _get30);
         jjlast_type = _8.type;
         _r69 = _8.value;
         goto j69;
@@ -9447,7 +9474,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_String(f64 i
       if (_get31 == 67) {
         _get32 = jjproto_target;
         _get33 = jjproto_targetjjtype;
-        const struct ReturnValue _9 = dong_porf_t12_inline__String_prototype_toString((i32)(_get32), _get33);
+        const struct ReturnValue _9 = dong_porf_video_js_api_smoke_test__String_prototype_toString((i32)(_get32), _get33);
         jjlast_type = _9.type;
         _r69 = (f64)(_9.value);
         goto j69;
@@ -9459,7 +9486,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_String(f64 i
       if (_get34 == 72) {
         _get35 = jjproto_target;
         _get36 = jjproto_targetjjtype;
-        const struct ReturnValue _10 = dong_porf_t12_inline__Array_prototype_toString(_get35, _get36);
+        const struct ReturnValue _10 = dong_porf_video_js_api_smoke_test__Array_prototype_toString(_get35, _get36);
         jjlast_type = _10.type;
         _r69 = _10.value;
         goto j69;
@@ -9471,7 +9498,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_String(f64 i
       if (_get37 == 195) {
         _get38 = jjproto_target;
         _get39 = jjproto_targetjjtype;
-        const struct ReturnValue _11 = dong_porf_t12_inline__ByteString_prototype_toString((i32)(_get38), _get39);
+        const struct ReturnValue _11 = dong_porf_video_js_api_smoke_test__ByteString_prototype_toString((i32)(_get38), _get39);
         jjlast_type = _11.type;
         _r69 = (f64)(_11.value);
         goto j69;
@@ -9480,7 +9507,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_String(f64 i
     j538:;
     _get40 = jjproto_target;
     _get41 = jjproto_targetjjtype;
-    const struct ReturnValue _12 = dong_porf_t12_inline__Object_prototype_toString(_get40, _get41);
+    const struct ReturnValue _12 = dong_porf_video_js_api_smoke_test__Object_prototype_toString(_get40, _get41);
     jjlast_type = _12.type;
     _r69 = _12.value;
   // end
@@ -9522,7 +9549,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_String(f64 i
       _get49 = value;
       _get50 = valuejjtype;
       jjlast_type = 2;
-      _r542 = (f64)(dong_porf_t12_inline__Porffor_object_isObjectOrNull((i32)(_get49), _get50)) == 0;
+      _r542 = (f64)(dong_porf_video_js_api_smoke_test__Porffor_object_isObjectOrNull((i32)(_get49), _get50)) == 0;
     } else {
       _get51 = logictmpi;
       jjlast_type = 2;
@@ -9560,7 +9587,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_String(f64 i
       if (_get58 == 1) {
         _get59 = jjproto_target;
         _get60 = jjproto_targetjjtype;
-        const struct ReturnValue _13 = dong_porf_t12_inline__Number_prototype_valueOf(_get59, _get60);
+        const struct ReturnValue _13 = dong_porf_video_js_api_smoke_test__Number_prototype_valueOf(_get59, _get60);
         jjlast_type = _13.type;
         _r544 = _13.value;
         goto j544;
@@ -9572,7 +9599,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_String(f64 i
       if (_get61 == 2) {
         _get62 = jjproto_target;
         _get63 = jjproto_targetjjtype;
-        const struct ReturnValue _14 = dong_porf_t12_inline__Boolean_prototype_valueOf(_get62, _get63);
+        const struct ReturnValue _14 = dong_porf_video_js_api_smoke_test__Boolean_prototype_valueOf(_get62, _get63);
         jjlast_type = _14.type;
         _r544 = _14.value;
         goto j544;
@@ -9584,7 +9611,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_String(f64 i
       if (_get64 == 7) {
         _get65 = jjproto_target;
         _get66 = jjproto_targetjjtype;
-        const struct ReturnValue _15 = dong_porf_t12_inline__Object_prototype_valueOf(_get65, _get66);
+        const struct ReturnValue _15 = dong_porf_video_js_api_smoke_test__Object_prototype_valueOf(_get65, _get66);
         jjlast_type = _15.type;
         _r544 = _15.value;
         goto j544;
@@ -9596,7 +9623,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_String(f64 i
       if (_get67 == 31) {
         _get68 = jjproto_target;
         _get69 = jjproto_targetjjtype;
-        const struct ReturnValue _16 = dong_porf_t12_inline__Boolean_prototype_valueOf(_get68, _get69);
+        const struct ReturnValue _16 = dong_porf_video_js_api_smoke_test__Boolean_prototype_valueOf(_get68, _get69);
         jjlast_type = _16.type;
         _r544 = _16.value;
         goto j544;
@@ -9608,7 +9635,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_String(f64 i
       if (_get70 == 32) {
         _get71 = jjproto_target;
         _get72 = jjproto_targetjjtype;
-        const struct ReturnValue _17 = dong_porf_t12_inline__Number_prototype_valueOf(_get71, _get72);
+        const struct ReturnValue _17 = dong_porf_video_js_api_smoke_test__Number_prototype_valueOf(_get71, _get72);
         jjlast_type = _17.type;
         _r544 = _17.value;
         goto j544;
@@ -9620,7 +9647,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_String(f64 i
       if (_get73 == 33) {
         _get74 = jjproto_target;
         _get75 = jjproto_targetjjtype;
-        const struct ReturnValue _18 = dong_porf_t12_inline__String_prototype_valueOf((i32)(_get74), _get75);
+        const struct ReturnValue _18 = dong_porf_video_js_api_smoke_test__String_prototype_valueOf((i32)(_get74), _get75);
         jjlast_type = _18.type;
         _r544 = (f64)(_18.value);
         goto j544;
@@ -9632,7 +9659,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_String(f64 i
       if (_get76 == 67) {
         _get77 = jjproto_target;
         _get78 = jjproto_targetjjtype;
-        const struct ReturnValue _19 = dong_porf_t12_inline__String_prototype_valueOf((i32)(_get77), _get78);
+        const struct ReturnValue _19 = dong_porf_video_js_api_smoke_test__String_prototype_valueOf((i32)(_get77), _get78);
         jjlast_type = _19.type;
         _r544 = (f64)(_19.value);
         goto j544;
@@ -9644,7 +9671,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_String(f64 i
       if (_get79 == 72) {
         _get80 = jjproto_target;
         _get81 = jjproto_targetjjtype;
-        const struct ReturnValue _20 = dong_porf_t12_inline__Array_prototype_valueOf(_get80, _get81);
+        const struct ReturnValue _20 = dong_porf_video_js_api_smoke_test__Array_prototype_valueOf(_get80, _get81);
         jjlast_type = _20.type;
         _r544 = _20.value;
         goto j544;
@@ -9656,7 +9683,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_String(f64 i
       if (_get82 == 195) {
         _get83 = jjproto_target;
         _get84 = jjproto_targetjjtype;
-        const struct ReturnValue _21 = dong_porf_t12_inline__ByteString_prototype_valueOf((i32)(_get83), _get84);
+        const struct ReturnValue _21 = dong_porf_video_js_api_smoke_test__ByteString_prototype_valueOf((i32)(_get83), _get84);
         jjlast_type = _21.type;
         _r544 = (f64)(_21.value);
         goto j544;
@@ -9665,7 +9692,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_String(f64 i
     j554:;
     _get85 = jjproto_target;
     _get86 = jjproto_targetjjtype;
-    const struct ReturnValue _22 = dong_porf_t12_inline__Object_prototype_valueOf(_get85, _get86);
+    const struct ReturnValue _22 = dong_porf_video_js_api_smoke_test__Object_prototype_valueOf(_get85, _get86);
     jjlast_type = _22.type;
     _r544 = _22.value;
   // end
@@ -9707,7 +9734,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_String(f64 i
       _get94 = value;
       _get95 = valuejjtype;
       jjlast_type = 2;
-      _r558 = (f64)(dong_porf_t12_inline__Porffor_object_isObjectOrNull((i32)(_get94), _get95)) == 0;
+      _r558 = (f64)(dong_porf_video_js_api_smoke_test__Porffor_object_isObjectOrNull((i32)(_get94), _get95)) == 0;
     } else {
       _get96 = logictmpi;
       jjlast_type = 2;
@@ -9726,7 +9753,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToPrimitive_String(f64 i
   return (struct ReturnValue){ 0, 0 };
 }
 
-static struct ReturnValue dong_porf_t12_inline__ecma262_ToString(f64 argument, i32 argumentjjtype) {
+static struct ReturnValue dong_porf_video_js_api_smoke_test__ecma262_ToString(f64 argument, i32 argumentjjtype) {
   i32 _get20;
   i32 _get19;
   f64 _get18;
@@ -9801,7 +9828,7 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToString(f64 argument, i
     if ((f64)(_get9) == 1) {
       _get10 = argument;
       _get11 = argumentjjtype;
-      const struct ReturnValue _0 = dong_porf_t12_inline__Number_prototype_toString(_get10, _get11, 10, 1);
+      const struct ReturnValue _0 = dong_porf_video_js_api_smoke_test__Number_prototype_toString(_get10, _get11, 10, 1);
       jjlast_type = _0.type;
       _get12 = jjlast_type;
       return (struct ReturnValue){ _0.value, _get12 };
@@ -9818,20 +9845,20 @@ static struct ReturnValue dong_porf_t12_inline__ecma262_ToString(f64 argument, i
   j68:;
   _get15 = argument;
   _get16 = argumentjjtype;
-  const struct ReturnValue _1 = dong_porf_t12_inline__ecma262_ToPrimitive_String(_get15, _get16);
+  const struct ReturnValue _1 = dong_porf_video_js_api_smoke_test__ecma262_ToPrimitive_String(_get15, _get16);
   jjlast_type = _1.type;
   _get17 = jjlast_type;
   primValuejjtype = _get17;
   primValue = _1.value;
   _get18 = primValue;
   _get19 = primValuejjtype;
-  const struct ReturnValue _2 = dong_porf_t12_inline__ecma262_ToString(_get18, _get19);
+  const struct ReturnValue _2 = dong_porf_video_js_api_smoke_test__ecma262_ToString(_get18, _get19);
   jjlast_type = _2.type;
   _get20 = jjlast_type;
   return (struct ReturnValue){ _2.value, _get20 };
 }
 
-static f64 dong_porf_t12_inline_TypeError(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype, f64 message, i32 messagejjtype) {
+static f64 dong_porf_video_js_api_smoke_test_TypeError(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype, f64 message, i32 messagejjtype) {
   f64 _get9;
   i32 _get8;
   f64 _get7;
@@ -9854,7 +9881,7 @@ static f64 dong_porf_t12_inline_TypeError(f64 jjnewtarget, i32 jjnewtargetjjtype
     } else {
       _get2 = message;
       _get3 = messagejjtype;
-      const struct ReturnValue _0 = dong_porf_t12_inline__ecma262_ToString(_get2, _get3);
+      const struct ReturnValue _0 = dong_porf_video_js_api_smoke_test__ecma262_ToString(_get2, _get3);
       jjlast_type = _0.type;
       _get4 = jjlast_type;
       messagejjtype = _get4;
@@ -9862,7 +9889,7 @@ static f64 dong_porf_t12_inline_TypeError(f64 jjnewtarget, i32 jjnewtargetjjtype
     }
   // end
   j2:;
-  obj = (f64)(dong_porf_t12_inline__Porffor_malloc(8));
+  obj = (f64)(dong_porf_video_js_api_smoke_test__Porffor_malloc(8));
   _get5 = obj;
   _get6 = message;
   i32_store(0, 0, (i32)(_get5), (i32)(_get6));
@@ -9873,7 +9900,7 @@ static f64 dong_porf_t12_inline_TypeError(f64 jjnewtarget, i32 jjnewtargetjjtype
   return _get9;
 }
 
-static struct ReturnValue dong_porf_t12_inline__String_fromCharCode(f64 codes, i32 codesjjtype) {
+static struct ReturnValue dong_porf_video_js_api_smoke_test__String_fromCharCode(f64 codes, i32 codesjjtype) {
   f64 _get27;
   f64 _get26;
   f64 _get25;
@@ -9913,7 +9940,7 @@ static struct ReturnValue dong_porf_t12_inline__String_fromCharCode(f64 codes, i
   i32 jjloadArray_offset = 0;
   f64 out2 = 0;
 
-  out = (f64)(dong_porf_t12_inline__Porffor_malloc(16384));
+  out = (f64)(dong_porf_video_js_api_smoke_test__Porffor_malloc(16384));
   _get0 = codes;
   len = (f64)(i32_load(1, 0, (u32)(_get0)));
   _get1 = out;
@@ -9938,7 +9965,7 @@ static struct ReturnValue dong_porf_t12_inline__String_fromCharCode(f64 codes, i
         _get10 = jjloadArray_offset;
         jjlast_type = i32_load8_u(0, 12, _get10);
         _get11 = jjlast_type;
-        v = dong_porf_t12_inline__ecma262_ToIntegerOrInfinity(f64_load(0, 4, _get9), _get11);
+        v = dong_porf_video_js_api_smoke_test__ecma262_ToIntegerOrInfinity(f64_load(0, 4, _get9), _get11);
         _get12 = v;
         // if 
           if (_get12 > 255) {
@@ -9990,7 +10017,7 @@ static struct ReturnValue dong_porf_t12_inline__String_fromCharCode(f64 codes, i
   return (struct ReturnValue){ _get27, 67 };
 }
 
-static struct ReturnValue dong_porf_t12_inline_utf8AppendCodePoint(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype, f64 out, i32 outjjtype, f64 cp, i32 cpjjtype) {
+static struct ReturnValue dong_porf_video_js_api_smoke_test_utf8AppendCodePoint(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype, f64 out, i32 outjjtype, f64 cp, i32 cpjjtype) {
   i32 _get207;
   f64 _get206;
   i32 _get205;
@@ -10220,7 +10247,7 @@ static struct ReturnValue dong_porf_t12_inline_utf8AppendCodePoint(f64 jjnewtarg
         _get4 = cpjjtype;
         i32_store8(0, 12, 65536, _get4);
         i32_store(1, 0, 65536, 1);
-        const struct ReturnValue _0 = dong_porf_t12_inline__String_fromCharCode(65536, 72);
+        const struct ReturnValue _0 = dong_porf_video_js_api_smoke_test__String_fromCharCode(65536, 72);
         jjlast_type = _0.type;
         __tmpop_right = _0.value;
         _get5 = __tmpop_right;
@@ -10232,7 +10259,7 @@ static struct ReturnValue dong_porf_t12_inline_utf8AppendCodePoint(f64 jjnewtarg
             _get9 = outjjtype;
             _get10 = __tmpop_right;
             _get11 = jjlast_type;
-            const struct ReturnValue _1 = dong_porf_t12_inline__Porffor_concatStrings(_get8, _get9, _get10, _get11);
+            const struct ReturnValue _1 = dong_porf_video_js_api_smoke_test__Porffor_concatStrings(_get8, _get9, _get10, _get11);
             jjlast_type = _1.type;
             _r585 = _1.value;
             goto j585;
@@ -10252,7 +10279,7 @@ static struct ReturnValue dong_porf_t12_inline_utf8AppendCodePoint(f64 jjnewtarg
           _get14 = jjreturn;
           _get15 = jjreturnjjtype;
           // if 
-            if ((dong_porf_t12_inline__Porffor_object_isObject((i32)(_get14), _get15)) == 0) {
+            if ((dong_porf_video_js_api_smoke_test__Porffor_object_isObject((i32)(_get14), _get15)) == 0) {
               _get16 = jjthis;
               _get17 = jjthisjjtype;
               return (struct ReturnValue){ _get16, _get17 };
@@ -10387,7 +10414,7 @@ static struct ReturnValue dong_porf_t12_inline_utf8AppendCodePoint(f64 jjnewtarg
         f64_store(0, 13, 81920, (f64)(_r601 | _r604));
         i32_store8(0, 21, 81920, 1);
         i32_store(1, 0, 81920, 2);
-        const struct ReturnValue _2 = dong_porf_t12_inline__String_fromCharCode(81920, 72);
+        const struct ReturnValue _2 = dong_porf_video_js_api_smoke_test__String_fromCharCode(81920, 72);
         jjlast_type = _2.type;
         __tmpop_right = _2.value;
         _get49 = __tmpop_right;
@@ -10399,7 +10426,7 @@ static struct ReturnValue dong_porf_t12_inline_utf8AppendCodePoint(f64 jjnewtarg
             _get53 = outjjtype;
             _get54 = __tmpop_right;
             _get55 = jjlast_type;
-            const struct ReturnValue _3 = dong_porf_t12_inline__Porffor_concatStrings(_get52, _get53, _get54, _get55);
+            const struct ReturnValue _3 = dong_porf_video_js_api_smoke_test__Porffor_concatStrings(_get52, _get53, _get54, _get55);
             jjlast_type = _3.type;
             _r596 = _3.value;
             goto j596;
@@ -10419,7 +10446,7 @@ static struct ReturnValue dong_porf_t12_inline_utf8AppendCodePoint(f64 jjnewtarg
           _get58 = jjreturn;
           _get59 = jjreturnjjtype;
           // if 
-            if ((dong_porf_t12_inline__Porffor_object_isObject((i32)(_get58), _get59)) == 0) {
+            if ((dong_porf_video_js_api_smoke_test__Porffor_object_isObject((i32)(_get58), _get59)) == 0) {
               _get60 = jjthis;
               _get61 = jjthisjjtype;
               return (struct ReturnValue){ _get60, _get61 };
@@ -10635,7 +10662,7 @@ static struct ReturnValue dong_porf_t12_inline_utf8AppendCodePoint(f64 jjnewtarg
         f64_store(0, 22, 98304, (f64)(_r620 | _r623));
         i32_store8(0, 30, 98304, 1);
         i32_store(1, 0, 98304, 3);
-        const struct ReturnValue _4 = dong_porf_t12_inline__String_fromCharCode(98304, 72);
+        const struct ReturnValue _4 = dong_porf_video_js_api_smoke_test__String_fromCharCode(98304, 72);
         jjlast_type = _4.type;
         __tmpop_right = _4.value;
         _get112 = __tmpop_right;
@@ -10647,7 +10674,7 @@ static struct ReturnValue dong_porf_t12_inline_utf8AppendCodePoint(f64 jjnewtarg
             _get116 = outjjtype;
             _get117 = __tmpop_right;
             _get118 = jjlast_type;
-            const struct ReturnValue _5 = dong_porf_t12_inline__Porffor_concatStrings(_get115, _get116, _get117, _get118);
+            const struct ReturnValue _5 = dong_porf_video_js_api_smoke_test__Porffor_concatStrings(_get115, _get116, _get117, _get118);
             jjlast_type = _5.type;
             _r609 = _5.value;
             goto j609;
@@ -10667,7 +10694,7 @@ static struct ReturnValue dong_porf_t12_inline_utf8AppendCodePoint(f64 jjnewtarg
           _get121 = jjreturn;
           _get122 = jjreturnjjtype;
           // if 
-            if ((dong_porf_t12_inline__Porffor_object_isObject((i32)(_get121), _get122)) == 0) {
+            if ((dong_porf_video_js_api_smoke_test__Porffor_object_isObject((i32)(_get121), _get122)) == 0) {
               _get123 = jjthis;
               _get124 = jjthisjjtype;
               return (struct ReturnValue){ _get123, _get124 };
@@ -10961,7 +10988,7 @@ static struct ReturnValue dong_porf_t12_inline_utf8AppendCodePoint(f64 jjnewtarg
     f64_store(0, 31, 114688, (f64)(_r644 | _r647));
     i32_store8(0, 39, 114688, 1);
     i32_store(1, 0, 114688, 4);
-    const struct ReturnValue _6 = dong_porf_t12_inline__String_fromCharCode(114688, 72);
+    const struct ReturnValue _6 = dong_porf_video_js_api_smoke_test__String_fromCharCode(114688, 72);
     jjlast_type = _6.type;
     __tmpop_right = _6.value;
     _get193 = __tmpop_right;
@@ -10973,7 +11000,7 @@ static struct ReturnValue dong_porf_t12_inline_utf8AppendCodePoint(f64 jjnewtarg
         _get197 = outjjtype;
         _get198 = __tmpop_right;
         _get199 = jjlast_type;
-        const struct ReturnValue _7 = dong_porf_t12_inline__Porffor_concatStrings(_get196, _get197, _get198, _get199);
+        const struct ReturnValue _7 = dong_porf_video_js_api_smoke_test__Porffor_concatStrings(_get196, _get197, _get198, _get199);
         jjlast_type = _7.type;
         _r627 = _7.value;
         goto j627;
@@ -10993,7 +11020,7 @@ static struct ReturnValue dong_porf_t12_inline_utf8AppendCodePoint(f64 jjnewtarg
       _get202 = jjreturn;
       _get203 = jjreturnjjtype;
       // if 
-        if ((dong_porf_t12_inline__Porffor_object_isObject((i32)(_get202), _get203)) == 0) {
+        if ((dong_porf_video_js_api_smoke_test__Porffor_object_isObject((i32)(_get202), _get203)) == 0) {
           _get204 = jjthis;
           _get205 = jjthisjjtype;
           return (struct ReturnValue){ _get204, _get205 };
@@ -11008,7 +11035,7 @@ static struct ReturnValue dong_porf_t12_inline_utf8AppendCodePoint(f64 jjnewtarg
   return (struct ReturnValue){ _get206, _get207 };
 }
 
-static struct ReturnValue dong_porf_t12_inline_toUtf8(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype, f64 s, i32 sjjtype) {
+static struct ReturnValue dong_porf_video_js_api_smoke_test_toUtf8(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype, f64 s, i32 sjjtype) {
   i32 _get116;
   f64 _get115;
   i32 _get114;
@@ -11134,27 +11161,27 @@ static struct ReturnValue dong_porf_t12_inline_toUtf8(f64 jjnewtarget, i32 jjnew
   i32 lenjjtype = 0;
   i32 jjlength_tmp = 0;
   i32 jjlast_type = 0;
-  f64 jjmember_obj_559 = 0;
-  f64 jjmember_prop_559 = 0;
+  f64 jjmember_obj_532 = 0;
+  f64 jjmember_prop_532 = 0;
   f64 cp = 0;
   i32 cpjjtype = 0;
   f64 jjproto_target = 0;
   i32 jjproto_targetjjtype = 0;
-  f64 jjindirect_560_callee = 0;
-  f64 jjindirect_560_caller = 0;
-  i32 jjindirect_560_callerjjtype = 0;
-  f64 jjmember_obj_561 = 0;
-  f64 jjmember_prop_561 = 0;
+  f64 jjindirect_533_callee = 0;
+  f64 jjindirect_533_caller = 0;
+  i32 jjindirect_533_callerjjtype = 0;
+  f64 jjmember_obj_534 = 0;
+  f64 jjmember_prop_534 = 0;
   i32 jjtypeswitch_tmp1 = 0;
   i32 logictmpi = 0;
   i32 jjlogicinner_tmp_int = 0;
   f64 next = 0;
   i32 nextjjtype = 0;
-  f64 jjindirect_562_callee = 0;
-  f64 jjindirect_562_caller = 0;
-  i32 jjindirect_562_callerjjtype = 0;
-  f64 jjmember_obj_563 = 0;
-  f64 jjmember_prop_563 = 0;
+  f64 jjindirect_535_callee = 0;
+  f64 jjindirect_535_caller = 0;
+  i32 jjindirect_535_callerjjtype = 0;
+  f64 jjmember_obj_536 = 0;
+  f64 jjmember_prop_536 = 0;
   f64 jjbitwise_left = 0;
   f64 jjbitwise_right = 0;
   f64 jjreturn = 0;
@@ -11174,19 +11201,19 @@ static struct ReturnValue dong_porf_t12_inline_toUtf8(f64 jjnewtarget, i32 jjnew
       jjlast_type = 1;
       _r0 = (f64)(i32_load(1, 0, _get2));
     } else {
-      jjmember_prop_559 = 430;
+      jjmember_prop_532 = 430;
       _get3 = s;
-      jjmember_obj_559 = _get3;
+      jjmember_obj_532 = _get3;
       _get4 = sjjtype;
       // if f64
       f64 _r1;
         if (_get4 == 0) {
           _r1 = 0;
         } else {
-          _get5 = jjmember_obj_559;
+          _get5 = jjmember_obj_532;
           _get6 = sjjtype;
-          _get7 = jjmember_prop_559;
-          const struct ReturnValue _0 = dong_porf_t12_inline__Porffor_object_get_withHash((i32)(_get5), _get6, (u32)(_get7), 195, -2086110260, 1);
+          _get7 = jjmember_prop_532;
+          const struct ReturnValue _0 = dong_porf_video_js_api_smoke_test__Porffor_object_get_withHash((i32)(_get5), _get6, (u32)(_get7), 195, -2086110260, 1);
           jjlast_type = _0.type;
           _r1 = _0.value;
         }
@@ -11220,7 +11247,7 @@ static struct ReturnValue dong_porf_t12_inline_toUtf8(f64 jjnewtarget, i32 jjnew
               _get16 = jjproto_targetjjtype;
               _get17 = i;
               _get18 = ijjtype;
-              const struct ReturnValue _1 = dong_porf_t12_inline__String_prototype_charCodeAt(_get15, _get16, _get17, _get18);
+              const struct ReturnValue _1 = dong_porf_video_js_api_smoke_test__String_prototype_charCodeAt(_get15, _get16, _get17, _get18);
               jjlast_type = _1.type;
               _r562 = _1.value;
               goto j562;
@@ -11234,7 +11261,7 @@ static struct ReturnValue dong_porf_t12_inline_toUtf8(f64 jjnewtarget, i32 jjnew
               _get21 = jjproto_targetjjtype;
               _get22 = i;
               _get23 = ijjtype;
-              const struct ReturnValue _2 = dong_porf_t12_inline__String_prototype_charCodeAt(_get20, _get21, _get22, _get23);
+              const struct ReturnValue _2 = dong_porf_video_js_api_smoke_test__String_prototype_charCodeAt(_get20, _get21, _get22, _get23);
               jjlast_type = _2.type;
               _r562 = _2.value;
               goto j562;
@@ -11248,45 +11275,45 @@ static struct ReturnValue dong_porf_t12_inline_toUtf8(f64 jjnewtarget, i32 jjnew
               _get26 = jjproto_targetjjtype;
               _get27 = i;
               _get28 = ijjtype;
-              const struct ReturnValue _3 = dong_porf_t12_inline__ByteString_prototype_charCodeAt(_get25, _get26, _get27, _get28);
+              const struct ReturnValue _3 = dong_porf_video_js_api_smoke_test__ByteString_prototype_charCodeAt(_get25, _get26, _get27, _get28);
               jjlast_type = _3.type;
               _r562 = _3.value;
               goto j562;
             }
           // end
           j565:;
-          jjmember_prop_561 = 1684;
+          jjmember_prop_534 = 1684;
           _get29 = s;
-          jjindirect_560_caller = _get29;
-          _get30 = jjindirect_560_caller;
+          jjindirect_533_caller = _get29;
+          _get30 = jjindirect_533_caller;
           _get31 = sjjtype;
-          jjindirect_560_callerjjtype = _get31;
-          jjmember_obj_561 = _get30;
-          _get32 = jjindirect_560_callerjjtype;
+          jjindirect_533_callerjjtype = _get31;
+          jjmember_obj_534 = _get30;
+          _get32 = jjindirect_533_callerjjtype;
           // if f64
           f64 _r566;
             if (_get32 == 0) {
               _r566 = 0;
             } else {
-              _get33 = jjmember_obj_561;
-              _get34 = jjindirect_560_callerjjtype;
-              _get35 = jjmember_prop_561;
-              const struct ReturnValue _4 = dong_porf_t12_inline__Porffor_object_get_withHash((i32)(_get33), _get34, (u32)(_get35), 195, -1592872053, 1);
+              _get33 = jjmember_obj_534;
+              _get34 = jjindirect_533_callerjjtype;
+              _get35 = jjmember_prop_534;
+              const struct ReturnValue _4 = dong_porf_video_js_api_smoke_test__Porffor_object_get_withHash((i32)(_get33), _get34, (u32)(_get35), 195, -1592872053, 1);
               jjlast_type = _4.type;
               _r566 = _4.value;
             }
           // end
           j566:;
-          jjindirect_560_callee = _r566;
+          jjindirect_533_callee = _r566;
           _get36 = jjlast_type;
           // if f64
           f64 _r567;
             if (_get36 == 6) {
-              _get37 = jjindirect_560_caller;
-              _get38 = jjindirect_560_callerjjtype;
+              _get37 = jjindirect_533_caller;
+              _get38 = jjindirect_533_callerjjtype;
               _get39 = i;
               _get40 = ijjtype;
-              _get41 = jjindirect_560_callee;
+              _get41 = jjindirect_533_callee;
               jjlast_type = 0;
               _r567 = 0;
             } else {
@@ -11377,7 +11404,7 @@ static struct ReturnValue dong_porf_t12_inline_toUtf8(f64 jjnewtarget, i32 jjnew
                   _get63 = jjproto_target;
                   _get64 = jjproto_targetjjtype;
                   _get65 = i;
-                  const struct ReturnValue _5 = dong_porf_t12_inline__String_prototype_charCodeAt(_get63, _get64, _get65 + 1, 1);
+                  const struct ReturnValue _5 = dong_porf_video_js_api_smoke_test__String_prototype_charCodeAt(_get63, _get64, _get65 + 1, 1);
                   jjlast_type = _5.type;
                   _r574 = _5.value;
                   goto j574;
@@ -11390,7 +11417,7 @@ static struct ReturnValue dong_porf_t12_inline_toUtf8(f64 jjnewtarget, i32 jjnew
                   _get67 = jjproto_target;
                   _get68 = jjproto_targetjjtype;
                   _get69 = i;
-                  const struct ReturnValue _6 = dong_porf_t12_inline__String_prototype_charCodeAt(_get67, _get68, _get69 + 1, 1);
+                  const struct ReturnValue _6 = dong_porf_video_js_api_smoke_test__String_prototype_charCodeAt(_get67, _get68, _get69 + 1, 1);
                   jjlast_type = _6.type;
                   _r574 = _6.value;
                   goto j574;
@@ -11403,44 +11430,44 @@ static struct ReturnValue dong_porf_t12_inline_toUtf8(f64 jjnewtarget, i32 jjnew
                   _get71 = jjproto_target;
                   _get72 = jjproto_targetjjtype;
                   _get73 = i;
-                  const struct ReturnValue _7 = dong_porf_t12_inline__ByteString_prototype_charCodeAt(_get71, _get72, _get73 + 1, 1);
+                  const struct ReturnValue _7 = dong_porf_video_js_api_smoke_test__ByteString_prototype_charCodeAt(_get71, _get72, _get73 + 1, 1);
                   jjlast_type = _7.type;
                   _r574 = _7.value;
                   goto j574;
                 }
               // end
               j577:;
-              jjmember_prop_563 = 1684;
+              jjmember_prop_536 = 1684;
               _get74 = s;
-              jjindirect_562_caller = _get74;
-              _get75 = jjindirect_562_caller;
+              jjindirect_535_caller = _get74;
+              _get75 = jjindirect_535_caller;
               _get76 = sjjtype;
-              jjindirect_562_callerjjtype = _get76;
-              jjmember_obj_563 = _get75;
-              _get77 = jjindirect_562_callerjjtype;
+              jjindirect_535_callerjjtype = _get76;
+              jjmember_obj_536 = _get75;
+              _get77 = jjindirect_535_callerjjtype;
               // if f64
               f64 _r578;
                 if (_get77 == 0) {
                   _r578 = 0;
                 } else {
-                  _get78 = jjmember_obj_563;
-                  _get79 = jjindirect_562_callerjjtype;
-                  _get80 = jjmember_prop_563;
-                  const struct ReturnValue _8 = dong_porf_t12_inline__Porffor_object_get_withHash((i32)(_get78), _get79, (u32)(_get80), 195, -1592872053, 1);
+                  _get78 = jjmember_obj_536;
+                  _get79 = jjindirect_535_callerjjtype;
+                  _get80 = jjmember_prop_536;
+                  const struct ReturnValue _8 = dong_porf_video_js_api_smoke_test__Porffor_object_get_withHash((i32)(_get78), _get79, (u32)(_get80), 195, -1592872053, 1);
                   jjlast_type = _8.type;
                   _r578 = _8.value;
                 }
               // end
               j578:;
-              jjindirect_562_callee = _r578;
+              jjindirect_535_callee = _r578;
               _get81 = jjlast_type;
               // if f64
               f64 _r579;
                 if (_get81 == 6) {
-                  _get82 = jjindirect_562_caller;
-                  _get83 = jjindirect_562_callerjjtype;
+                  _get82 = jjindirect_535_caller;
+                  _get83 = jjindirect_535_callerjjtype;
                   _get84 = i;
-                  _get85 = jjindirect_562_callee;
+                  _get85 = jjindirect_535_callee;
                   jjlast_type = 0;
                   _r579 = 0;
                 } else {
@@ -11519,7 +11546,7 @@ static struct ReturnValue dong_porf_t12_inline_toUtf8(f64 jjnewtarget, i32 jjnew
         _get103 = outjjtype;
         _get104 = cp;
         _get105 = cpjjtype;
-        const struct ReturnValue _9 = dong_porf_t12_inline_utf8AppendCodePoint(0, 0, 0, 0, _get102, _get103, _get104, _get105);
+        const struct ReturnValue _9 = dong_porf_video_js_api_smoke_test_utf8AppendCodePoint(0, 0, 0, 0, _get102, _get103, _get104, _get105);
         jjlast_type = _9.type;
         _get106 = jjlast_type;
         outjjtype = _get106;
@@ -11543,7 +11570,7 @@ static struct ReturnValue dong_porf_t12_inline_toUtf8(f64 jjnewtarget, i32 jjnew
       _get111 = jjreturn;
       _get112 = jjreturnjjtype;
       // if 
-        if ((dong_porf_t12_inline__Porffor_object_isObject((i32)(_get111), _get112)) == 0) {
+        if ((dong_porf_video_js_api_smoke_test__Porffor_object_isObject((i32)(_get111), _get112)) == 0) {
           _get113 = jjthis;
           _get114 = jjthisjjtype;
           return (struct ReturnValue){ _get113, _get114 };
@@ -11558,7 +11585,7 @@ static struct ReturnValue dong_porf_t12_inline_toUtf8(f64 jjnewtarget, i32 jjnew
   return (struct ReturnValue){ _get115, _get116 };
 }
 
-static struct ReturnValue dong_porf_t12_inline_getElementById(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype, f64 id, i32 idjjtype) {
+static struct ReturnValue dong_porf_video_js_api_smoke_test_getElementById(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype, f64 id, i32 idjjtype) {
   i32 _get9;
   f64 _get8;
   i32 _get7;
@@ -11575,7 +11602,7 @@ static struct ReturnValue dong_porf_t12_inline_getElementById(f64 jjnewtarget, i
 
   _get0 = id;
   _get1 = idjjtype;
-  const struct ReturnValue _0 = dong_porf_t12_inline_toUtf8(0, 0, 0, 0, _get0, _get1);
+  const struct ReturnValue _0 = dong_porf_video_js_api_smoke_test_toUtf8(0, 0, 0, 0, _get0, _get1);
   jjlast_type = _0.type;
   jjreturn = __porf_import_dong_dom_getElementById(_0.value);
   _get2 = jjlast_type;
@@ -11586,7 +11613,7 @@ static struct ReturnValue dong_porf_t12_inline_getElementById(f64 jjnewtarget, i
       _get4 = jjreturn;
       _get5 = jjreturnjjtype;
       // if 
-        if ((dong_porf_t12_inline__Porffor_object_isObject((i32)(_get4), _get5)) == 0) {
+        if ((dong_porf_video_js_api_smoke_test__Porffor_object_isObject((i32)(_get4), _get5)) == 0) {
           _get6 = jjthis;
           _get7 = jjthisjjtype;
           return (struct ReturnValue){ _get6, _get7 };
@@ -11601,412 +11628,7 @@ static struct ReturnValue dong_porf_t12_inline_getElementById(f64 jjnewtarget, i
   return (struct ReturnValue){ _get8, _get9 };
 }
 
-static struct ReturnValue dong_porf_t12_inline_addEventListener(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype, f64 nodeId, i32 nodeIdjjtype, f64 type, i32 typejjtype, f64 handlerName, i32 handlerNamejjtype) {
-  i32 _get7;
-  f64 _get6;
-  f64 _get5;
-  i32 _get4;
-  f64 _get3;
-  i32 _get2;
-  f64 _get1;
-  f64 _get0;
-  i32 jjlast_type = 0;
-
-  _get0 = nodeId;
-  __porf_import_dong_stage_0(_get0);
-  _get1 = type;
-  _get2 = typejjtype;
-  const struct ReturnValue _0 = dong_porf_t12_inline_toUtf8(0, 0, 0, 0, _get1, _get2);
-  (void) _0.type;
-  __porf_import_dong_stage_1(_0.value);
-  _get3 = handlerName;
-  _get4 = handlerNamejjtype;
-  const struct ReturnValue _1 = dong_porf_t12_inline_toUtf8(0, 0, 0, 0, _get3, _get4);
-  (void) _1.type;
-  __porf_import_dong_stage_2(_1.value);
-  __porf_import_dong_commit_addEventListener();
-  _get5 = jjnewtarget;
-  // if 
-    if (((u32)(_get5)) != 0) {
-      _get6 = jjthis;
-      _get7 = jjthisjjtype;
-      return (struct ReturnValue){ _get6, _get7 };
-    }
-  // end
-  j655:;
-  return (struct ReturnValue){ 0, 0 };
-}
-
-int dong_porf_t12_inline_main() {
-  i32 _get3;
-  i32 _get2;
-  i32 _get1;
-  i32 _get0;
-  dong_porf_t12_inline__porf_init();
-
-  i32 jjlast_type = 0;
-
-  dong_porf_t12_inline_METRIC_OFFSET_WIDTH = 0;
-  dong_porf_t12_inline_METRIC_OFFSET_WIDTHjjtype = 1;
-  dong_porf_t12_inline_METRIC_OFFSET_HEIGHT = 1;
-  dong_porf_t12_inline_METRIC_OFFSET_HEIGHTjjtype = 1;
-  dong_porf_t12_inline_METRIC_OFFSET_TOP = 2;
-  dong_porf_t12_inline_METRIC_OFFSET_TOPjjtype = 1;
-  dong_porf_t12_inline_METRIC_OFFSET_LEFT = 3;
-  dong_porf_t12_inline_METRIC_OFFSET_LEFTjjtype = 1;
-  dong_porf_t12_inline_METRIC_CLIENT_WIDTH = 4;
-  dong_porf_t12_inline_METRIC_CLIENT_WIDTHjjtype = 1;
-  dong_porf_t12_inline_METRIC_CLIENT_HEIGHT = 5;
-  dong_porf_t12_inline_METRIC_CLIENT_HEIGHTjjtype = 1;
-  dong_porf_t12_inline_METRIC_SCROLL_WIDTH = 6;
-  dong_porf_t12_inline_METRIC_SCROLL_WIDTHjjtype = 1;
-  dong_porf_t12_inline_METRIC_SCROLL_HEIGHT = 7;
-  dong_porf_t12_inline_METRIC_SCROLL_HEIGHTjjtype = 1;
-  dong_porf_t12_inline_count = 0;
-  dong_porf_t12_inline_countjjtype = 1;
-  dong_porf_t12_inline_statusId = 0;
-  dong_porf_t12_inline_statusIdjjtype = 1;
-  dong_porf_t12_inline__porf_auto_0Id = 0;
-  dong_porf_t12_inline__porf_auto_0Idjjtype = 1;
-  dong_porf_t12_inline_incId = 0;
-  dong_porf_t12_inline_incIdjjtype = 1;
-  const struct ReturnValue _0 = dong_porf_t12_inline_getElementById(0, 0, 0, 0, 1799, 195);
-  jjlast_type = _0.type;
-  _get0 = jjlast_type;
-  dong_porf_t12_inline__porf_auto_0Idjjtype = _get0;
-  dong_porf_t12_inline__porf_auto_0Id = _0.value;
-  const struct ReturnValue _1 = dong_porf_t12_inline_getElementById(0, 0, 0, 0, 1818, 195);
-  jjlast_type = _1.type;
-  _get1 = jjlast_type;
-  dong_porf_t12_inline_incIdjjtype = _get1;
-  dong_porf_t12_inline_incId = _1.value;
-  const struct ReturnValue _2 = dong_porf_t12_inline_getElementById(0, 0, 0, 0, 1827, 195);
-  jjlast_type = _2.type;
-  _get2 = jjlast_type;
-  dong_porf_t12_inline_statusIdjjtype = _get2;
-  dong_porf_t12_inline_statusId = _2.value;
-  const struct ReturnValue _3 = dong_porf_t12_inline_addEventListener(0, 0, 0, 0, dong_porf_t12_inline_incId, dong_porf_t12_inline_incIdjjtype, 1839, 195, 1850, 195);
-  jjlast_type = _3.type;
-  (void) _3.value;
-  const struct ReturnValue _4 = dong_porf_t12_inline_addEventListener(0, 0, 0, 0, dong_porf_t12_inline__porf_auto_0Id, dong_porf_t12_inline__porf_auto_0Idjjtype, 1839, 195, 1868, 195);
-  jjlast_type = _4.type;
-  _get3 = jjlast_type;
-
-  return 0;
-}
-
-static struct ReturnValue dong_porf_t12_inline__Symbol_prototype_descriptionkkget(f64 _this, i32 _thisjjtype) {
-  f64 _get2;
-  f64 _get1;
-  i32 _get0;
-  _get0 = _thisjjtype;
-  // if 
-    if (_get0 != 5) {
-    }
-  // end
-  j664:;
-  _get1 = _this;
-  _get2 = _this;
-  return (struct ReturnValue){ f64_load(0, 0, (u32)(_get1)), i32_load8_u(0, 8, (u32)(_get2)) };
-}
-
-static struct ReturnValue dong_porf_t12_inline__Symbol_prototype_toString(f64 _this, i32 _thisjjtype) {
-  f64 _get27;
-  f64 _get26;
-  f64 _get25;
-  f64 _get24;
-  f64 _get23;
-  f64 _get22;
-  f64 _get21;
-  f64 _get20;
-  f64 _get19;
-  f64 _get18;
-  f64 _get17;
-  f64 _get16;
-  f64 _get15;
-  f64 _get14;
-  f64 _get13;
-  f64 _get12;
-  i32 _get11;
-  f64 _get10;
-  i32 _get9;
-  f64 _get8;
-  f64 _get7;
-  f64 _get6;
-  f64 _get5;
-  f64 _get4;
-  f64 _get3;
-  f64 _get2;
-  f64 _get1;
-  i32 _get0;
-  f64 out = 0;
-  f64 description = 0;
-  i32 descriptionjjtype = 0;
-  f64 jjmember_obj_433 = 0;
-  f64 jjmember_prop_433 = 0;
-  i32 jjlast_type = 0;
-  f64 descLen = 0;
-  f64 outPtr = 0;
-  f64 descPtr = 0;
-  f64 descPtrEnd = 0;
-
-  _get0 = _thisjjtype;
-  // if 
-    if (_get0 != 5) {
-    }
-  // end
-  j663:;
-  out = (f64)(dong_porf_t12_inline__Porffor_malloc(16384));
-  _get1 = out;
-  i32_store8(0, 4, (i32)(_get1), 83);
-  _get2 = out;
-  i32_store8(0, 5, (i32)(_get2), 121);
-  _get3 = out;
-  i32_store8(0, 6, (i32)(_get3), 109);
-  _get4 = out;
-  i32_store8(0, 7, (i32)(_get4), 98);
-  _get5 = out;
-  i32_store8(0, 8, (i32)(_get5), 111);
-  _get6 = out;
-  i32_store8(0, 9, (i32)(_get6), 108);
-  _get7 = out;
-  i32_store8(0, 10, (i32)(_get7), 40);
-  _get8 = _this;
-  const struct ReturnValue _0 = dong_porf_t12_inline__Symbol_prototype_descriptionkkget(_get8, 5);
-  jjlast_type = _0.type;
-  _get9 = jjlast_type;
-  descriptionjjtype = _get9;
-  description = _0.value;
-  descLen = 0;
-  _get10 = description;
-  _get11 = descriptionjjtype;
-  // if 
-    if (((_get10 != 0) | ((_get11 | 128) != (0 | 128))) != 0) {
-      _get12 = description;
-      descLen = (f64)(i32_load(1, 0, (u32)(_get12)));
-      _get13 = out;
-      outPtr = _get13 + 7;
-      _get14 = description;
-      descPtr = _get14;
-      _get15 = descPtr;
-      _get16 = descLen;
-      descPtrEnd = _get15 + _get16;
-      // loop 
-      j666:;
-        _get17 = descPtr;
-        _get18 = descPtrEnd;
-        // if 
-          if (_get17 < _get18) {
-            _get19 = outPtr;
-            _get20 = outPtr;
-            outPtr = _get20 + 1;
-            _get21 = descPtr;
-            _get22 = descPtr;
-            descPtr = _get22 + 1;
-            i32_store8(0, 4, (i32)(_get19), i32_load8_u(0, 4, (i32)(_get21)));
-            goto j666;
-          }
-        // end
-        j667:;
-      // end
-    }
-  // end
-  j665:;
-  _get23 = out;
-  _get24 = descLen;
-  i32_store8(0, 11, (i32)((_get23 + _get24)), 41);
-  _get25 = out;
-  _get26 = descLen;
-  i32_store(1, 0, (u32)(_get25), (u32)((8 + _get26)));
-  _get27 = out;
-  return (struct ReturnValue){ _get27, 195 };
-}
-
-static struct ReturnValue dong_porf_t12_inline_String(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype, f64 args, i32 argsjjtype) {
-  f64 _get37;
-  f64 _get36;
-  i32 _get35;
-  i32 _get34;
-  f64 _get33;
-  f64 _get32;
-  f64 _get31;
-  i32 _get30;
-  i32 _get29;
-  i32 _get28;
-  f64 _get27;
-  i32 _get26;
-  i32 _get25;
-  f64 _get24;
-  i32 _get23;
-  i32 _get22;
-  f64 _get21;
-  f64 _get20;
-  f64 _get19;
-  i32 _get18;
-  i32 _get17;
-  i32 _get16;
-  f64 _get15;
-  i32 _get14;
-  f64 _get13;
-  f64 _get12;
-  f64 _get11;
-  i32 _get10;
-  i32 _get9;
-  i32 _get8;
-  f64 _get7;
-  i32 _get6;
-  i32 _get5;
-  i32 _get4;
-  f64 _get3;
-  f64 _get2;
-  f64 _get1;
-  f64 _get0;
-  f64 s = 0;
-  i32 sjjtype = 0;
-  f64 value = 0;
-  i32 valuejjtype = 0;
-  f64 jjmember_obj_425 = 0;
-  f64 jjmember_prop_425 = 0;
-  i32 jjlast_type = 0;
-  i32 jjloadArray_offset = 0;
-  f64 jjlogicinner_tmp = 0;
-  i32 jjtypeswitch_tmp1 = 0;
-  f64 logictmp = 0;
-
-  s = 0;
-  sjjtype = 195;
-  _get0 = args;
-  // if 
-    if ((f64)(i32_load(1, 0, (u32)(_get0))) > 0) {
-      jjmember_prop_425 = 0;
-      _get1 = args;
-      jjmember_obj_425 = _get1;
-      _get2 = jjmember_prop_425;
-      _get3 = jjmember_obj_425;
-      jjloadArray_offset = ((u32)(_get2) * 9) + (u32)(_get3);
-      _get4 = jjloadArray_offset;
-      _get5 = jjloadArray_offset;
-      jjlast_type = i32_load8_u(0, 12, _get5);
-      _get6 = jjlast_type;
-      valuejjtype = _get6;
-      value = f64_load(0, 4, _get4);
-      _get7 = jjnewtarget;
-      jjlogicinner_tmp = _get7;
-      _get8 = jjnewtargetjjtype;
-      jjtypeswitch_tmp1 = _get8;
-      // block f64
-      f64 _r657;
-        _get9 = jjtypeswitch_tmp1;
-        _get10 = jjtypeswitch_tmp1;
-        // if 
-          if (((_get9 == 67) | (_get10 == 195)) != 0) {
-            _get11 = jjlogicinner_tmp;
-            _r657 = (f64)((i32_load(1, 0, (u32)(_get11))) == 0);
-            goto j657;
-          }
-        // end
-        j658:;
-        _get12 = jjlogicinner_tmp;
-        _r657 = (f64)(_get12 == 0);
-      // end
-      j657:;
-      logictmp = _r657;
-      _get13 = logictmp;
-      // if f64
-      f64 _r659;
-        if (((u32)(_get13)) != 0) {
-          _get14 = valuejjtype;
-          jjlast_type = 2;
-          _r659 = (f64)((f64)(_get14) == 5);
-        } else {
-          _get15 = logictmp;
-          jjlast_type = 2;
-          _r659 = _get15;
-        }
-      // end
-      j659:;
-      jjlogicinner_tmp = _r659;
-      _get16 = jjlast_type;
-      jjtypeswitch_tmp1 = _get16;
-      // block i32
-      i32 _r660;
-        _get17 = jjtypeswitch_tmp1;
-        _get18 = jjtypeswitch_tmp1;
-        // if 
-          if (((_get17 == 67) | (_get18 == 195)) != 0) {
-            _get19 = jjlogicinner_tmp;
-            _r660 = i32_load(1, 0, (u32)(_get19));
-            goto j660;
-          }
-        // end
-        j661:;
-        _get20 = jjlogicinner_tmp;
-        _r660 = (u32)(_get20);
-      // end
-      j660:;
-      // if 
-        if ((_r660) != 0) {
-          _get21 = value;
-          _get22 = valuejjtype;
-          const struct ReturnValue _0 = dong_porf_t12_inline__Symbol_prototype_toString(_get21, _get22);
-          jjlast_type = _0.type;
-          _get23 = jjlast_type;
-          return (struct ReturnValue){ _0.value, _get23 };
-        }
-      // end
-      j662:;
-      _get24 = value;
-      _get25 = valuejjtype;
-      const struct ReturnValue _1 = dong_porf_t12_inline__ecma262_ToString(_get24, _get25);
-      jjlast_type = _1.type;
-      _get26 = jjlast_type;
-      sjjtype = _get26;
-      s = _1.value;
-    }
-  // end
-  j656:;
-  _get27 = jjnewtarget;
-  jjlogicinner_tmp = _get27;
-  _get28 = jjnewtargetjjtype;
-  jjtypeswitch_tmp1 = _get28;
-  // block f64
-  f64 _r668;
-    _get29 = jjtypeswitch_tmp1;
-    _get30 = jjtypeswitch_tmp1;
-    // if 
-      if (((_get29 == 67) | (_get30 == 195)) != 0) {
-        _get31 = jjlogicinner_tmp;
-        _r668 = (f64)((i32_load(1, 0, (u32)(_get31))) == 0);
-        goto j668;
-      }
-    // end
-    j669:;
-    _get32 = jjlogicinner_tmp;
-    _r668 = (f64)(_get32 == 0);
-  // end
-  j668:;
-  // if 
-    if (((u32)(_r668)) != 0) {
-      _get33 = s;
-      _get34 = sjjtype;
-      return (struct ReturnValue){ _get33, _get34 };
-    }
-  // end
-  j670:;
-  _get35 = sjjtype;
-  // if 
-    if ((f64)(_get35) == 195) {
-      _get36 = s;
-      s = (f64)(dong_porf_t12_inline__Porffor_bytestringToString((i32)(_get36)));
-      sjjtype = 67;
-    }
-  // end
-  j671:;
-  _get37 = s;
-  return (struct ReturnValue){ _get37, 33 };
-}
-
-static struct ReturnValue dong_porf_t12_inline_setTextContent(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype, f64 nodeId, i32 nodeIdjjtype, f64 text, i32 textjjtype) {
+static struct ReturnValue dong_porf_video_js_api_smoke_test_setTextContent(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype, f64 nodeId, i32 nodeIdjjtype, f64 text, i32 textjjtype) {
   i32 _get5;
   f64 _get4;
   f64 _get3;
@@ -12019,7 +11641,7 @@ static struct ReturnValue dong_porf_t12_inline_setTextContent(f64 jjnewtarget, i
   __porf_import_dong_stage_0(_get0);
   _get1 = text;
   _get2 = textjjtype;
-  const struct ReturnValue _0 = dong_porf_t12_inline_toUtf8(0, 0, 0, 0, _get1, _get2);
+  const struct ReturnValue _0 = dong_porf_video_js_api_smoke_test_toUtf8(0, 0, 0, 0, _get1, _get2);
   (void) _0.type;
   __porf_import_dong_stage_1(_0.value);
   __porf_import_dong_commit_set_textContent();
@@ -12031,185 +11653,1075 @@ static struct ReturnValue dong_porf_t12_inline_setTextContent(f64 jjnewtarget, i
       return (struct ReturnValue){ _get4, _get5 };
     }
   // end
+  j655:;
+  return (struct ReturnValue){ 0, 0 };
+}
+
+static struct ReturnValue dong_porf_video_js_api_smoke_test_setAttribute(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype, f64 nodeId, i32 nodeIdjjtype, f64 name, i32 namejjtype, f64 value, i32 valuejjtype) {
+  i32 _get7;
+  f64 _get6;
+  f64 _get5;
+  i32 _get4;
+  f64 _get3;
+  i32 _get2;
+  f64 _get1;
+  f64 _get0;
+  i32 jjlast_type = 0;
+
+  _get0 = nodeId;
+  _get1 = name;
+  _get2 = namejjtype;
+  const struct ReturnValue _0 = dong_porf_video_js_api_smoke_test_toUtf8(0, 0, 0, 0, _get1, _get2);
+  (void) _0.type;
+  _get3 = value;
+  _get4 = valuejjtype;
+  const struct ReturnValue _1 = dong_porf_video_js_api_smoke_test_toUtf8(0, 0, 0, 0, _get3, _get4);
+  (void) _1.type;
+  __porf_import_dong_set_attribute(_get0, _0.value, _1.value);
+  _get5 = jjnewtarget;
+  // if 
+    if (((u32)(_get5)) != 0) {
+      _get6 = jjthis;
+      _get7 = jjthisjjtype;
+      return (struct ReturnValue){ _get6, _get7 };
+    }
+  // end
+  j656:;
+  return (struct ReturnValue){ 0, 0 };
+}
+
+static struct ReturnValue dong_porf_video_js_api_smoke_test_pullHostString(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype) {
+  i32 _get6;
+  f64 _get5;
+  i32 _get4;
+  f64 _get3;
+  i32 _get2;
+  f64 _get1;
+  f64 _get0;
+  f64 jjreturn = 0;
+  i32 jjreturnjjtype = 0;
+
+  jjreturn = __porf_import_dong_str_pull();
+  jjreturnjjtype = 195;
+  _get0 = jjnewtarget;
+  // if 
+    if (((u32)(_get0)) != 0) {
+      _get1 = jjreturn;
+      _get2 = jjreturnjjtype;
+      // if 
+        if ((dong_porf_video_js_api_smoke_test__Porffor_object_isObject((i32)(_get1), _get2)) == 0) {
+          _get3 = jjthis;
+          _get4 = jjthisjjtype;
+          return (struct ReturnValue){ _get3, _get4 };
+        }
+      // end
+      j658:;
+    }
+  // end
+  j657:;
+  _get5 = jjreturn;
+  _get6 = jjreturnjjtype;
+  return (struct ReturnValue){ _get5, _get6 };
+}
+
+static struct ReturnValue dong_porf_video_js_api_smoke_test_getAttribute(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype, f64 nodeId, i32 nodeIdjjtype, f64 name, i32 namejjtype) {
+  i32 _get10;
+  f64 _get9;
+  i32 _get8;
+  f64 _get7;
+  i32 _get6;
+  f64 _get5;
+  f64 _get4;
+  i32 _get3;
+  i32 _get2;
+  f64 _get1;
+  f64 _get0;
+  i32 jjlast_type = 0;
+  f64 jjreturn = 0;
+  i32 jjreturnjjtype = 0;
+
+  _get0 = nodeId;
+  _get1 = name;
+  _get2 = namejjtype;
+  const struct ReturnValue _0 = dong_porf_video_js_api_smoke_test_toUtf8(0, 0, 0, 0, _get1, _get2);
+  jjlast_type = _0.type;
+  __porf_import_dong_get_attribute(_get0, _0.value);
+  const struct ReturnValue _1 = dong_porf_video_js_api_smoke_test_pullHostString(0, 0, 0, 0);
+  jjlast_type = _1.type;
+  jjreturn = _1.value;
+  _get3 = jjlast_type;
+  jjreturnjjtype = _get3;
+  _get4 = jjnewtarget;
+  // if 
+    if (((u32)(_get4)) != 0) {
+      _get5 = jjreturn;
+      _get6 = jjreturnjjtype;
+      // if 
+        if ((dong_porf_video_js_api_smoke_test__Porffor_object_isObject((i32)(_get5), _get6)) == 0) {
+          _get7 = jjthis;
+          _get8 = jjthisjjtype;
+          return (struct ReturnValue){ _get7, _get8 };
+        }
+      // end
+      j660:;
+    }
+  // end
+  j659:;
+  _get9 = jjreturn;
+  _get10 = jjreturnjjtype;
+  return (struct ReturnValue){ _get9, _get10 };
+}
+
+static f64 dong_porf_video_js_api_smoke_test__Porffor_compareStrings(f64 a, i32 ajjtype, f64 b, i32 bjjtype) {
+  i32 _get25;
+  f64 _get24;
+  i32 _get23;
+  f64 _get22;
+  i32 _get21;
+  i32 _get20;
+  f64 _get19;
+  i32 _get18;
+  i32 _get17;
+  f64 _get16;
+  i32 _get15;
+  i32 _get14;
+  i32 _get13;
+  f64 _get12;
+  i32 _get11;
+  i32 _get10;
+  i32 _get9;
+  f64 _get8;
+  i32 _get7;
+  i32 _get6;
+  f64 _get5;
+  i32 _get4;
+  i32 _get3;
+  i32 _get2;
+  f64 _get1;
+  i32 _get0;
+  f64 jjlogicinner_tmp = 0;
+  i32 jjtypeswitch_tmp1 = 0;
+  i32 jjlast_type = 0;
+
+  _get0 = ajjtype;
+  // if 
+    if ((f64)(_get0 | 128) != 195) {
+      _get1 = a;
+      jjlogicinner_tmp = _get1;
+      _get2 = ajjtype;
+      jjtypeswitch_tmp1 = _get2;
+      // block i32
+      i32 _r662;
+        _get3 = jjtypeswitch_tmp1;
+        // if 
+          if (_get3 == 0) {
+            _r662 = 1;
+            goto j662;
+          }
+        // end
+        j663:;
+        _get4 = jjtypeswitch_tmp1;
+        // if 
+          if (_get4 == 7) {
+            _get5 = jjlogicinner_tmp;
+            _r662 = _get5 == 0;
+            goto j662;
+          }
+        // end
+        j664:;
+        _r662 = 0;
+      // end
+      j662:;
+      _get6 = ajjtype;
+      _get7 = ajjtype;
+      // if 
+        if (((_r662 | ((f64)(_get6) == 5)) | ((f64)(_get7) == 2)) != 0) {
+          return 0;
+        }
+      // end
+      j665:;
+      _get8 = a;
+      _get9 = ajjtype;
+      const struct ReturnValue _0 = dong_porf_video_js_api_smoke_test__ecma262_ToString(_get8, _get9);
+      jjlast_type = _0.type;
+      _get10 = jjlast_type;
+      ajjtype = _get10;
+      a = _0.value;
+    }
+  // end
+  j661:;
+  _get11 = bjjtype;
+  // if 
+    if ((f64)(_get11 | 128) != 195) {
+      _get12 = b;
+      jjlogicinner_tmp = _get12;
+      _get13 = bjjtype;
+      jjtypeswitch_tmp1 = _get13;
+      // block i32
+      i32 _r667;
+        _get14 = jjtypeswitch_tmp1;
+        // if 
+          if (_get14 == 0) {
+            _r667 = 1;
+            goto j667;
+          }
+        // end
+        j668:;
+        _get15 = jjtypeswitch_tmp1;
+        // if 
+          if (_get15 == 7) {
+            _get16 = jjlogicinner_tmp;
+            _r667 = _get16 == 0;
+            goto j667;
+          }
+        // end
+        j669:;
+        _r667 = 0;
+      // end
+      j667:;
+      _get17 = bjjtype;
+      _get18 = bjjtype;
+      // if 
+        if (((_r667 | ((f64)(_get17) == 5)) | ((f64)(_get18) == 2)) != 0) {
+          return 0;
+        }
+      // end
+      j670:;
+      _get19 = b;
+      _get20 = bjjtype;
+      const struct ReturnValue _1 = dong_porf_video_js_api_smoke_test__ecma262_ToString(_get19, _get20);
+      jjlast_type = _1.type;
+      _get21 = jjlast_type;
+      bjjtype = _get21;
+      b = _1.value;
+    }
+  // end
+  j666:;
+  _get22 = a;
+  _get23 = ajjtype;
+  _get24 = b;
+  _get25 = bjjtype;
+  return (f64)(dong_porf_video_js_api_smoke_test__Porffor_strcmp((i32)(_get22), _get23, (i32)(_get24), _get25));
+}
+
+static struct ReturnValue dong_porf_video_js_api_smoke_test_isPaused(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype) {
+  i32 _get20;
+  f64 _get19;
+  i32 _get18;
+  f64 _get17;
+  i32 _get16;
+  f64 _get15;
+  f64 _get14;
+  f64 _get13;
+  i32 _get12;
+  i32 _get11;
+  f64 _get10;
+  i32 _get9;
+  i32 _get8;
+  i32 _get7;
+  i32 _get6;
+  i32 _get5;
+  f64 _get4;
+  i32 _get3;
+  i32 _get2;
+  f64 _get1;
+  i32 _get0;
+  f64 playing = 0;
+  i32 playingjjtype = 0;
+  i32 jjlast_type = 0;
+  i32 logictmpi = 0;
+  f64 jjlogicinner_tmp = 0;
+  i32 jjtypeswitch_tmp1 = 0;
+  f64 jjreturn = 0;
+  i32 jjreturnjjtype = 0;
+
+  const struct ReturnValue _0 = dong_porf_video_js_api_smoke_test_getAttribute(0, 0, 0, 0, dong_porf_video_js_api_smoke_test_videoId, dong_porf_video_js_api_smoke_test_videoIdjjtype, 1836, 195);
+  jjlast_type = _0.type;
+  _get0 = jjlast_type;
+  playingjjtype = _get0;
+  playing = _0.value;
+  _get1 = playing;
+  _get2 = playingjjtype;
+  logictmpi = (u32)(dong_porf_video_js_api_smoke_test__Porffor_compareStrings(_get1, _get2, 1918, 195));
+  _get3 = logictmpi;
+  // if i32
+  i32 _r671;
+    if ((_get3) == 0) {
+      _get4 = playing;
+      _get5 = playingjjtype;
+      jjlast_type = 2;
+      _r671 = (u32)(dong_porf_video_js_api_smoke_test__Porffor_compareStrings(_get4, _get5, 88, 195));
+    } else {
+      _get6 = logictmpi;
+      jjlast_type = 2;
+      _r671 = _get6;
+    }
+  // end
+  j671:;
+  jjlogicinner_tmp = (f64)(_r671);
+  _get7 = jjlast_type;
+  jjtypeswitch_tmp1 = _get7;
+  // block f64
+  f64 _r672;
+    _get8 = jjtypeswitch_tmp1;
+    _get9 = jjtypeswitch_tmp1;
+    // if 
+      if (((_get8 == 67) | (_get9 == 195)) != 0) {
+        _get10 = jjlogicinner_tmp;
+        _r672 = (f64)((i32_load(1, 0, (u32)(_get10))) == 0);
+        goto j672;
+      }
+    // end
+    j673:;
+    _get11 = jjtypeswitch_tmp1;
+    _get12 = jjtypeswitch_tmp1;
+    // if 
+      if (((_get11 == 31) | (_get12 == 32)) != 0) {
+        _r672 = 0;
+        goto j672;
+      }
+    // end
+    j674:;
+    _get13 = jjlogicinner_tmp;
+    const f64 _tmp0 = _get13;
+    _r672 = (f64)(!((_tmp0 < 0 ? -_tmp0 : _tmp0) > 0));
+  // end
   j672:;
-  return (struct ReturnValue){ 0, 0 };
+  jjreturn = _r672;
+  jjreturnjjtype = 2;
+  _get14 = jjnewtarget;
+  // if 
+    if (((u32)(_get14)) != 0) {
+      _get15 = jjreturn;
+      _get16 = jjreturnjjtype;
+      // if 
+        if ((dong_porf_video_js_api_smoke_test__Porffor_object_isObject((i32)(_get15), _get16)) == 0) {
+          _get17 = jjthis;
+          _get18 = jjthisjjtype;
+          return (struct ReturnValue){ _get17, _get18 };
+        }
+      // end
+      j676:;
+    }
+  // end
+  j675:;
+  _get19 = jjreturn;
+  _get20 = jjreturnjjtype;
+  return (struct ReturnValue){ _get19, _get20 };
 }
 
-struct ReturnValue dong_porf_t12_inline_inc__onclick(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype) {
+static struct ReturnValue dong_porf_video_js_api_smoke_test_boolText(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype, f64 v, i32 vjjtype) {
+  i32 _get15;
+  f64 _get14;
+  i32 _get13;
+  f64 _get12;
+  i32 _get11;
+  f64 _get10;
+  f64 _get9;
+  i32 _get8;
+  f64 _get7;
+  i32 _get6;
+  i32 _get5;
+  f64 _get4;
   i32 _get3;
+  i32 _get2;
+  i32 _get1;
+  f64 _get0;
+  f64 jjlogicinner_tmp = 0;
+  i32 jjtypeswitch_tmp1 = 0;
+  i32 jjlast_type = 0;
+  f64 jjreturn = 0;
+  i32 jjreturnjjtype = 0;
+
+  _get0 = v;
+  jjlogicinner_tmp = _get0;
+  _get1 = vjjtype;
+  jjtypeswitch_tmp1 = _get1;
+  // block i32
+  i32 _r690;
+    _get2 = jjtypeswitch_tmp1;
+    _get3 = jjtypeswitch_tmp1;
+    // if 
+      if (((_get2 == 67) | (_get3 == 195)) != 0) {
+        _get4 = jjlogicinner_tmp;
+        _r690 = i32_load(1, 0, (u32)(_get4));
+        goto j690;
+      }
+    // end
+    j691:;
+    _get5 = jjtypeswitch_tmp1;
+    _get6 = jjtypeswitch_tmp1;
+    // if 
+      if (((_get5 == 31) | (_get6 == 32)) != 0) {
+        _r690 = 1;
+        goto j690;
+      }
+    // end
+    j692:;
+    _get7 = jjlogicinner_tmp;
+    const f64 _tmp0 = _get7;
+    _r690 = (_tmp0 < 0 ? -_tmp0 : _tmp0) > 0;
+  // end
+  j690:;
+  // if f64
+  f64 _r693;
+    if ((_r690) != 0) {
+      jjlast_type = 195;
+      _r693 = 88;
+    } else {
+      jjlast_type = 195;
+      _r693 = 98;
+    }
+  // end
+  j693:;
+  jjreturn = _r693;
+  _get8 = jjlast_type;
+  jjreturnjjtype = _get8;
+  _get9 = jjnewtarget;
+  // if 
+    if (((u32)(_get9)) != 0) {
+      _get10 = jjreturn;
+      _get11 = jjreturnjjtype;
+      // if 
+        if ((dong_porf_video_js_api_smoke_test__Porffor_object_isObject((i32)(_get10), _get11)) == 0) {
+          _get12 = jjthis;
+          _get13 = jjthisjjtype;
+          return (struct ReturnValue){ _get12, _get13 };
+        }
+      // end
+      j695:;
+    }
+  // end
+  j694:;
+  _get14 = jjreturn;
+  _get15 = jjreturnjjtype;
+  return (struct ReturnValue){ _get14, _get15 };
+}
+
+static struct ReturnValue dong_porf_video_js_api_smoke_test_getTextContent(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype, f64 nodeId, i32 nodeIdjjtype) {
+  i32 _get8;
+  f64 _get7;
+  i32 _get6;
+  f64 _get5;
+  i32 _get4;
+  f64 _get3;
+  f64 _get2;
+  i32 _get1;
+  f64 _get0;
+  i32 jjlast_type = 0;
+  f64 jjreturn = 0;
+  i32 jjreturnjjtype = 0;
+
+  _get0 = nodeId;
+  __porf_import_dong_dom_get_textContent(_get0);
+  const struct ReturnValue _0 = dong_porf_video_js_api_smoke_test_pullHostString(0, 0, 0, 0);
+  jjlast_type = _0.type;
+  jjreturn = _0.value;
+  _get1 = jjlast_type;
+  jjreturnjjtype = _get1;
+  _get2 = jjnewtarget;
+  // if 
+    if (((u32)(_get2)) != 0) {
+      _get3 = jjreturn;
+      _get4 = jjreturnjjtype;
+      // if 
+        if ((dong_porf_video_js_api_smoke_test__Porffor_object_isObject((i32)(_get3), _get4)) == 0) {
+          _get5 = jjthis;
+          _get6 = jjthisjjtype;
+          return (struct ReturnValue){ _get5, _get6 };
+        }
+      // end
+      j697:;
+    }
+  // end
+  j696:;
+  _get7 = jjreturn;
+  _get8 = jjreturnjjtype;
+  return (struct ReturnValue){ _get7, _get8 };
+}
+
+static struct ReturnValue dong_porf_video_js_api_smoke_test_line(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype, f64 text, i32 textjjtype) {
+  i32 _get15;
+  f64 _get14;
+  f64 _get13;
+  i32 _get12;
+  i32 _get11;
+  i32 _get10;
+  f64 _get9;
+  i32 _get8;
+  f64 _get7;
+  i32 _get6;
+  i32 _get5;
+  f64 _get4;
+  f64 _get3;
   f64 _get2;
   f64 _get1;
   i32 _get0;
+  f64 old = 0;
+  i32 oldjjtype = 0;
   i32 jjlast_type = 0;
+  f64 __tmpop_left = 0;
+  f64 __tmpop_right = 0;
 
-  dong_porf_t12_inline_count = dong_porf_t12_inline_count + 1;
-  dong_porf_t12_inline_countjjtype = 1;
-  (void) dong_porf_t12_inline_count;
-  f64_store(0, 4, 131072, dong_porf_t12_inline_count);
-  i32_store8(0, 12, 131072, dong_porf_t12_inline_countjjtype);
-  i32_store(1, 0, 131072, 1);
-  const struct ReturnValue _0 = dong_porf_t12_inline_String(0, 0, 0, 0, 131072, 72);
+  const struct ReturnValue _0 = dong_porf_video_js_api_smoke_test_getTextContent(0, 0, 0, 0, dong_porf_video_js_api_smoke_test_outId, dong_porf_video_js_api_smoke_test_outIdjjtype);
   jjlast_type = _0.type;
   _get0 = jjlast_type;
-  const struct ReturnValue _1 = dong_porf_t12_inline_setTextContent(0, 0, 0, 0, dong_porf_t12_inline_statusId, 1, _0.value, _get0);
-  jjlast_type = _1.type;
-  (void) _1.value;
-  _get1 = jjnewtarget;
+  oldjjtype = _get0;
+  old = _0.value;
+  // block f64
+  f64 _r698;
+    _get1 = old;
+    __tmpop_left = _get1;
+    _get2 = __tmpop_left;
+    _get3 = text;
+    __tmpop_right = _get3;
+    _get4 = __tmpop_right;
+    _get5 = oldjjtype;
+    _get6 = textjjtype;
+    // if 
+      if ((((_get5 | 128) == 195) | ((_get6 | 128) == 195)) != 0) {
+        _get7 = __tmpop_left;
+        _get8 = oldjjtype;
+        _get9 = __tmpop_right;
+        _get10 = textjjtype;
+        const struct ReturnValue _1 = dong_porf_video_js_api_smoke_test__Porffor_concatStrings(_get7, _get8, _get9, _get10);
+        jjlast_type = _1.type;
+        _r698 = _1.value;
+        goto j698;
+      }
+    // end
+    j699:;
+    jjlast_type = 1;
+    _r698 = _get2 + _get4;
+  // end
+  j698:;
+  _get11 = jjlast_type;
+  const struct ReturnValue _2 = dong_porf_video_js_api_smoke_test__Porffor_concatStrings(_r698, _get11, 1957, 195);
+  jjlast_type = _2.type;
+  _get12 = jjlast_type;
+  const struct ReturnValue _3 = dong_porf_video_js_api_smoke_test_setTextContent(0, 0, 0, 0, dong_porf_video_js_api_smoke_test_outId, dong_porf_video_js_api_smoke_test_outIdjjtype, _2.value, _get12);
+  jjlast_type = _3.type;
+  (void) _3.value;
+  _get13 = jjnewtarget;
   // if 
-    if (((u32)(_get1)) != 0) {
-      _get2 = jjthis;
-      _get3 = jjthisjjtype;
-      return (struct ReturnValue){ _get2, _get3 };
+    if (((u32)(_get13)) != 0) {
+      _get14 = jjthis;
+      _get15 = jjthisjjtype;
+      return (struct ReturnValue){ _get14, _get15 };
     }
   // end
-  j673:;
+  j700:;
   return (struct ReturnValue){ 0, 0 };
 }
 
-struct ReturnValue dong_porf_t12_inline__porf_auto_0__onclick(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype) {
-  i32 _get3;
+static struct ReturnValue dong_porf_video_js_api_smoke_test_dongLog(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype, f64 msg, i32 msgjjtype) {
+  i32 _get4;
+  f64 _get3;
   f64 _get2;
-  f64 _get1;
+  i32 _get1;
+  f64 _get0;
+  i32 jjlast_type = 0;
+
+  _get0 = msg;
+  _get1 = msgjjtype;
+  const struct ReturnValue _0 = dong_porf_video_js_api_smoke_test_toUtf8(0, 0, 0, 0, _get0, _get1);
+  (void) _0.type;
+  __porf_import_dong_print(_0.value);
+  _get2 = jjnewtarget;
+  // if 
+    if (((u32)(_get2)) != 0) {
+      _get3 = jjthis;
+      _get4 = jjthisjjtype;
+      return (struct ReturnValue){ _get3, _get4 };
+    }
+  // end
+  j702:;
+  return (struct ReturnValue){ 0, 0 };
+}
+
+static struct ReturnValue dong_porf_video_js_api_smoke_test_porfInit(f64 jjnewtarget, i32 jjnewtargetjjtype, f64 jjthis, i32 jjthisjjtype) {
+  i32 _get55;
+  f64 _get54;
+  f64 _get53;
+  f64 _get52;
+  i32 _get51;
+  i32 _get50;
+  f64 _get49;
+  i32 _get48;
+  i32 _get47;
+  i32 _get46;
+  f64 _get45;
+  i32 _get44;
+  i32 _get43;
+  i32 _get42;
+  f64 _get41;
+  i32 _get40;
+  i32 _get39;
+  i32 _get38;
+  f64 _get37;
+  f64 _get36;
+  f64 _get35;
+  i32 _get34;
+  f64 _get33;
+  f64 _get32;
+  i32 _get31;
+  i32 _get30;
+  f64 _get29;
+  i32 _get28;
+  i32 _get27;
+  i32 _get26;
+  f64 _get25;
+  i32 _get24;
+  f64 _get23;
+  f64 _get22;
+  i32 _get21;
+  i32 _get20;
+  f64 _get19;
+  i32 _get18;
+  i32 _get17;
+  i32 _get16;
+  f64 _get15;
+  i32 _get14;
+  f64 _get13;
+  f64 _get12;
+  i32 _get11;
+  i32 _get10;
+  f64 _get9;
+  i32 _get8;
+  i32 _get7;
+  i32 _get6;
+  f64 _get5;
+  i32 _get4;
+  i32 _get3;
+  i32 _get2;
+  i32 _get1;
   i32 _get0;
   i32 jjlast_type = 0;
+  f64 ok = 0;
+  i32 okjjtype = 0;
+  f64 p0 = 0;
+  i32 p0jjtype = 0;
+  f64 jjlogicinner_tmp = 0;
+  i32 jjtypeswitch_tmp1 = 0;
+  f64 p1 = 0;
+  i32 p1jjtype = 0;
+  f64 p2 = 0;
+  i32 p2jjtype = 0;
+  f64 s1 = 0;
+  i32 s1jjtype = 0;
 
-  dong_porf_t12_inline_count = dong_porf_t12_inline_count + 1;
-  dong_porf_t12_inline_countjjtype = 1;
-  (void) dong_porf_t12_inline_count;
-  f64_store(0, 4, 147456, dong_porf_t12_inline_count);
-  i32_store8(0, 12, 147456, dong_porf_t12_inline_countjjtype);
-  i32_store(1, 0, 147456, 1);
-  const struct ReturnValue _0 = dong_porf_t12_inline_String(0, 0, 0, 0, 147456, 72);
+  const struct ReturnValue _0 = dong_porf_video_js_api_smoke_test_getElementById(0, 0, 0, 0, 1799, 195);
   jjlast_type = _0.type;
   _get0 = jjlast_type;
-  const struct ReturnValue _1 = dong_porf_t12_inline_setTextContent(0, 0, 0, 0, dong_porf_t12_inline_statusId, 1, _0.value, _get0);
+  dong_porf_video_js_api_smoke_test_bodyIdjjtype = _get0;
+  dong_porf_video_js_api_smoke_test_bodyId = _0.value;
+  const struct ReturnValue _1 = dong_porf_video_js_api_smoke_test_getElementById(0, 0, 0, 0, 1809, 195);
   jjlast_type = _1.type;
-  (void) _1.value;
-  _get1 = jjnewtarget;
+  _get1 = jjlast_type;
+  dong_porf_video_js_api_smoke_test_badgeIdjjtype = _get1;
+  dong_porf_video_js_api_smoke_test_badgeId = _1.value;
+  const struct ReturnValue _2 = dong_porf_video_js_api_smoke_test_getElementById(0, 0, 0, 0, 1820, 195);
+  jjlast_type = _2.type;
+  _get2 = jjlast_type;
+  dong_porf_video_js_api_smoke_test_outIdjjtype = _get2;
+  dong_porf_video_js_api_smoke_test_outId = _2.value;
+  const struct ReturnValue _3 = dong_porf_video_js_api_smoke_test_getElementById(0, 0, 0, 0, 1829, 195);
+  jjlast_type = _3.type;
+  _get3 = jjlast_type;
+  dong_porf_video_js_api_smoke_test_videoIdjjtype = _get3;
+  dong_porf_video_js_api_smoke_test_videoId = _3.value;
+  const struct ReturnValue _4 = dong_porf_video_js_api_smoke_test_setTextContent(0, 0, 0, 0, dong_porf_video_js_api_smoke_test_outId, dong_porf_video_js_api_smoke_test_outIdjjtype, 0, 195);
+  jjlast_type = _4.type;
+  (void) _4.value;
+  const struct ReturnValue _5 = dong_porf_video_js_api_smoke_test_setAttribute(0, 0, 0, 0, dong_porf_video_js_api_smoke_test_videoId, dong_porf_video_js_api_smoke_test_videoIdjjtype, 1836, 195, 264, 195);
+  jjlast_type = _5.type;
+  (void) _5.value;
+  const struct ReturnValue _6 = dong_porf_video_js_api_smoke_test_setAttribute(0, 0, 0, 0, dong_porf_video_js_api_smoke_test_videoId, dong_porf_video_js_api_smoke_test_videoIdjjtype, 1862, 195, 264, 195);
+  jjlast_type = _6.type;
+  (void) _6.value;
+  const struct ReturnValue _7 = dong_porf_video_js_api_smoke_test_setAttribute(0, 0, 0, 0, dong_porf_video_js_api_smoke_test_videoId, dong_porf_video_js_api_smoke_test_videoIdjjtype, 1888, 195, 264, 195);
+  jjlast_type = _7.type;
+  (void) _7.value;
+  ok = 1;
+  okjjtype = 2;
+  const struct ReturnValue _8 = dong_porf_video_js_api_smoke_test_isPaused(0, 0, 0, 0);
+  jjlast_type = _8.type;
+  _get4 = jjlast_type;
+  p0jjtype = _get4;
+  p0 = _8.value;
+  _get5 = p0;
+  jjlogicinner_tmp = _get5;
+  _get6 = p0jjtype;
+  jjtypeswitch_tmp1 = _get6;
+  // block f64
+  f64 _r677;
+    _get7 = jjtypeswitch_tmp1;
+    _get8 = jjtypeswitch_tmp1;
+    // if 
+      if (((_get7 == 67) | (_get8 == 195)) != 0) {
+        _get9 = jjlogicinner_tmp;
+        _r677 = (f64)((i32_load(1, 0, (u32)(_get9))) == 0);
+        goto j677;
+      }
+    // end
+    j678:;
+    _get10 = jjtypeswitch_tmp1;
+    _get11 = jjtypeswitch_tmp1;
+    // if 
+      if (((_get10 == 31) | (_get11 == 32)) != 0) {
+        _r677 = 0;
+        goto j677;
+      }
+    // end
+    j679:;
+    _get12 = jjlogicinner_tmp;
+    const f64 _tmp0 = _get12;
+    _r677 = (f64)(!((_tmp0 < 0 ? -_tmp0 : _tmp0) > 0));
+  // end
+  j677:;
+  const f64 _tmp1 = _r677;
   // if 
-    if (((u32)(_get1)) != 0) {
-      _get2 = jjthis;
-      _get3 = jjthisjjtype;
-      return (struct ReturnValue){ _get2, _get3 };
+    if ((_tmp1 < 0 ? -_tmp1 : _tmp1) > 0) {
+      ok = 0;
+      _get13 = ok;
+      okjjtype = 2;
+      (void) _get13;
     }
   // end
-  j674:;
+  j680:;
+  const struct ReturnValue _9 = dong_porf_video_js_api_smoke_test_setAttribute(0, 0, 0, 0, dong_porf_video_js_api_smoke_test_videoId, dong_porf_video_js_api_smoke_test_videoIdjjtype, 1836, 195, 1918, 195);
+  jjlast_type = _9.type;
+  (void) _9.value;
+  const struct ReturnValue _10 = dong_porf_video_js_api_smoke_test_isPaused(0, 0, 0, 0);
+  jjlast_type = _10.type;
+  _get14 = jjlast_type;
+  p1jjtype = _get14;
+  p1 = _10.value;
+  _get15 = p1;
+  jjlogicinner_tmp = _get15;
+  _get16 = p1jjtype;
+  jjtypeswitch_tmp1 = _get16;
+  // block i32
+  i32 _r681;
+    _get17 = jjtypeswitch_tmp1;
+    _get18 = jjtypeswitch_tmp1;
+    // if 
+      if (((_get17 == 67) | (_get18 == 195)) != 0) {
+        _get19 = jjlogicinner_tmp;
+        _r681 = i32_load(1, 0, (u32)(_get19));
+        goto j681;
+      }
+    // end
+    j682:;
+    _get20 = jjtypeswitch_tmp1;
+    _get21 = jjtypeswitch_tmp1;
+    // if 
+      if (((_get20 == 31) | (_get21 == 32)) != 0) {
+        _r681 = 1;
+        goto j681;
+      }
+    // end
+    j683:;
+    _get22 = jjlogicinner_tmp;
+    const f64 _tmp2 = _get22;
+    _r681 = (_tmp2 < 0 ? -_tmp2 : _tmp2) > 0;
+  // end
+  j681:;
+  // if 
+    if ((_r681) != 0) {
+      ok = 0;
+      _get23 = ok;
+      okjjtype = 2;
+      (void) _get23;
+    }
+  // end
+  j684:;
+  const struct ReturnValue _11 = dong_porf_video_js_api_smoke_test_setAttribute(0, 0, 0, 0, dong_porf_video_js_api_smoke_test_videoId, dong_porf_video_js_api_smoke_test_videoIdjjtype, 1836, 195, 264, 195);
+  jjlast_type = _11.type;
+  (void) _11.value;
+  const struct ReturnValue _12 = dong_porf_video_js_api_smoke_test_isPaused(0, 0, 0, 0);
+  jjlast_type = _12.type;
+  _get24 = jjlast_type;
+  p2jjtype = _get24;
+  p2 = _12.value;
+  _get25 = p2;
+  jjlogicinner_tmp = _get25;
+  _get26 = p2jjtype;
+  jjtypeswitch_tmp1 = _get26;
+  // block f64
+  f64 _r685;
+    _get27 = jjtypeswitch_tmp1;
+    _get28 = jjtypeswitch_tmp1;
+    // if 
+      if (((_get27 == 67) | (_get28 == 195)) != 0) {
+        _get29 = jjlogicinner_tmp;
+        _r685 = (f64)((i32_load(1, 0, (u32)(_get29))) == 0);
+        goto j685;
+      }
+    // end
+    j686:;
+    _get30 = jjtypeswitch_tmp1;
+    _get31 = jjtypeswitch_tmp1;
+    // if 
+      if (((_get30 == 31) | (_get31 == 32)) != 0) {
+        _r685 = 0;
+        goto j685;
+      }
+    // end
+    j687:;
+    _get32 = jjlogicinner_tmp;
+    const f64 _tmp3 = _get32;
+    _r685 = (f64)(!((_tmp3 < 0 ? -_tmp3 : _tmp3) > 0));
+  // end
+  j685:;
+  const f64 _tmp4 = _r685;
+  // if 
+    if ((_tmp4 < 0 ? -_tmp4 : _tmp4) > 0) {
+      ok = 0;
+      _get33 = ok;
+      okjjtype = 2;
+      (void) _get33;
+    }
+  // end
+  j688:;
+  const struct ReturnValue _13 = dong_porf_video_js_api_smoke_test_setAttribute(0, 0, 0, 0, dong_porf_video_js_api_smoke_test_videoId, dong_porf_video_js_api_smoke_test_videoIdjjtype, 1925, 195, 1948, 195);
+  jjlast_type = _13.type;
+  (void) _13.value;
+  const struct ReturnValue _14 = dong_porf_video_js_api_smoke_test_setAttribute(0, 0, 0, 0, dong_porf_video_js_api_smoke_test_videoId, dong_porf_video_js_api_smoke_test_videoIdjjtype, 1888, 195, 1948, 195);
+  jjlast_type = _14.type;
+  (void) _14.value;
+  const struct ReturnValue _15 = dong_porf_video_js_api_smoke_test_setAttribute(0, 0, 0, 0, dong_porf_video_js_api_smoke_test_videoId, dong_porf_video_js_api_smoke_test_videoIdjjtype, 1862, 195, 1918, 195);
+  jjlast_type = _15.type;
+  (void) _15.value;
+  const struct ReturnValue _16 = dong_porf_video_js_api_smoke_test_getAttribute(0, 0, 0, 0, dong_porf_video_js_api_smoke_test_videoId, dong_porf_video_js_api_smoke_test_videoIdjjtype, 1862, 195);
+  jjlast_type = _16.type;
+  _get34 = jjlast_type;
+  s1 = dong_porf_video_js_api_smoke_test__Porffor_compareStrings(_16.value, _get34, 1918, 195);
+  s1jjtype = 2;
+  _get35 = s1;
+  const f64 _tmp5 = _get35;
+  // if 
+    if ((f64)(!((_tmp5 < 0 ? -_tmp5 : _tmp5) > 0)) != 0) {
+      ok = 0;
+      _get36 = ok;
+      okjjtype = 2;
+      (void) _get36;
+    }
+  // end
+  j689:;
+  _get37 = p0;
+  _get38 = p0jjtype;
+  const struct ReturnValue _17 = dong_porf_video_js_api_smoke_test_boolText(0, 0, 0, 0, _get37, _get38);
+  jjlast_type = _17.type;
+  _get39 = jjlast_type;
+  const struct ReturnValue _18 = dong_porf_video_js_api_smoke_test__Porffor_concatStrings(1964, 195, _17.value, _get39);
+  jjlast_type = _18.type;
+  _get40 = jjlast_type;
+  const struct ReturnValue _19 = dong_porf_video_js_api_smoke_test_line(0, 0, 0, 0, _18.value, _get40);
+  jjlast_type = _19.type;
+  (void) _19.value;
+  _get41 = p1;
+  _get42 = p1jjtype;
+  const struct ReturnValue _20 = dong_porf_video_js_api_smoke_test_boolText(0, 0, 0, 0, _get41, _get42);
+  jjlast_type = _20.type;
+  _get43 = jjlast_type;
+  const struct ReturnValue _21 = dong_porf_video_js_api_smoke_test__Porffor_concatStrings(1986, 195, _20.value, _get43);
+  jjlast_type = _21.type;
+  _get44 = jjlast_type;
+  const struct ReturnValue _22 = dong_porf_video_js_api_smoke_test_line(0, 0, 0, 0, _21.value, _get44);
+  jjlast_type = _22.type;
+  (void) _22.value;
+  _get45 = p2;
+  _get46 = p2jjtype;
+  const struct ReturnValue _23 = dong_porf_video_js_api_smoke_test_boolText(0, 0, 0, 0, _get45, _get46);
+  jjlast_type = _23.type;
+  _get47 = jjlast_type;
+  const struct ReturnValue _24 = dong_porf_video_js_api_smoke_test__Porffor_concatStrings(2011, 195, _23.value, _get47);
+  jjlast_type = _24.type;
+  _get48 = jjlast_type;
+  const struct ReturnValue _25 = dong_porf_video_js_api_smoke_test_line(0, 0, 0, 0, _24.value, _get48);
+  jjlast_type = _25.type;
+  (void) _25.value;
+  _get49 = s1;
+  const struct ReturnValue _26 = dong_porf_video_js_api_smoke_test_boolText(0, 0, 0, 0, _get49, 2);
+  jjlast_type = _26.type;
+  _get50 = jjlast_type;
+  const struct ReturnValue _27 = dong_porf_video_js_api_smoke_test__Porffor_concatStrings(2037, 195, _26.value, _get50);
+  jjlast_type = _27.type;
+  _get51 = jjlast_type;
+  const struct ReturnValue _28 = dong_porf_video_js_api_smoke_test_line(0, 0, 0, 0, _27.value, _get51);
+  jjlast_type = _28.type;
+  (void) _28.value;
+  _get52 = ok;
+  const f64 _tmp6 = _get52;
+  // if 
+    if ((_tmp6 < 0 ? -_tmp6 : _tmp6) > 0) {
+      const struct ReturnValue _29 = dong_porf_video_js_api_smoke_test_setAttribute(0, 0, 0, 0, dong_porf_video_js_api_smoke_test_bodyId, dong_porf_video_js_api_smoke_test_bodyIdjjtype, 2074, 195, 2085, 195);
+      jjlast_type = _29.type;
+      (void) _29.value;
+      const struct ReturnValue _30 = dong_porf_video_js_api_smoke_test_setTextContent(0, 0, 0, 0, dong_porf_video_js_api_smoke_test_badgeId, dong_porf_video_js_api_smoke_test_badgeIdjjtype, 2093, 195);
+      jjlast_type = _30.type;
+      (void) _30.value;
+    } else {
+      const struct ReturnValue _31 = dong_porf_video_js_api_smoke_test_setTextContent(0, 0, 0, 0, dong_porf_video_js_api_smoke_test_badgeId, dong_porf_video_js_api_smoke_test_badgeIdjjtype, 2115, 195);
+      jjlast_type = _31.type;
+      (void) _31.value;
+    }
+  // end
+  j701:;
+  const struct ReturnValue _32 = dong_porf_video_js_api_smoke_test_dongLog(0, 0, 0, 0, 2139, 195);
+  jjlast_type = _32.type;
+  (void) _32.value;
+  _get53 = jjnewtarget;
+  // if 
+    if (((u32)(_get53)) != 0) {
+      _get54 = jjthis;
+      _get55 = jjthisjjtype;
+      return (struct ReturnValue){ _get54, _get55 };
+    }
+  // end
+  j703:;
   return (struct ReturnValue){ 0, 0 };
 }
 
-int dong_porf_t12_inline_export_inc__onclick(void) {
-  dong_porf_t12_inline__porf_init();
-  (void)dong_porf_t12_inline_inc__onclick(0, 0, 0, 0);
-  return 0;
-}
+int dong_porf_video_js_api_smoke_test_main() {
+  i32 _get0;
+  dong_porf_video_js_api_smoke_test__porf_init();
 
-int dong_porf_t12_inline_export___porf_auto_0__onclick(void) {
-  dong_porf_t12_inline__porf_init();
-  (void)dong_porf_t12_inline__porf_auto_0__onclick(0, 0, 0, 0);
+  i32 jjlast_type = 0;
+
+  dong_porf_video_js_api_smoke_test_METRIC_OFFSET_WIDTH = 0;
+  dong_porf_video_js_api_smoke_test_METRIC_OFFSET_WIDTHjjtype = 1;
+  dong_porf_video_js_api_smoke_test_METRIC_OFFSET_HEIGHT = 1;
+  dong_porf_video_js_api_smoke_test_METRIC_OFFSET_HEIGHTjjtype = 1;
+  dong_porf_video_js_api_smoke_test_METRIC_OFFSET_TOP = 2;
+  dong_porf_video_js_api_smoke_test_METRIC_OFFSET_TOPjjtype = 1;
+  dong_porf_video_js_api_smoke_test_METRIC_OFFSET_LEFT = 3;
+  dong_porf_video_js_api_smoke_test_METRIC_OFFSET_LEFTjjtype = 1;
+  dong_porf_video_js_api_smoke_test_METRIC_CLIENT_WIDTH = 4;
+  dong_porf_video_js_api_smoke_test_METRIC_CLIENT_WIDTHjjtype = 1;
+  dong_porf_video_js_api_smoke_test_METRIC_CLIENT_HEIGHT = 5;
+  dong_porf_video_js_api_smoke_test_METRIC_CLIENT_HEIGHTjjtype = 1;
+  dong_porf_video_js_api_smoke_test_METRIC_SCROLL_WIDTH = 6;
+  dong_porf_video_js_api_smoke_test_METRIC_SCROLL_WIDTHjjtype = 1;
+  dong_porf_video_js_api_smoke_test_METRIC_SCROLL_HEIGHT = 7;
+  dong_porf_video_js_api_smoke_test_METRIC_SCROLL_HEIGHTjjtype = 1;
+  dong_porf_video_js_api_smoke_test_bodyId = 0;
+  dong_porf_video_js_api_smoke_test_bodyIdjjtype = 1;
+  dong_porf_video_js_api_smoke_test_badgeId = 0;
+  dong_porf_video_js_api_smoke_test_badgeIdjjtype = 1;
+  dong_porf_video_js_api_smoke_test_outId = 0;
+  dong_porf_video_js_api_smoke_test_outIdjjtype = 1;
+  dong_porf_video_js_api_smoke_test_videoId = 0;
+  dong_porf_video_js_api_smoke_test_videoIdjjtype = 1;
+  const struct ReturnValue _0 = dong_porf_video_js_api_smoke_test_porfInit(0, 0, 0, 0);
+  jjlast_type = _0.type;
+  _get0 = jjlast_type;
+
   return 0;
 }
 
 typedef struct {
-  f64 dong_porf_t12_inline_METRIC_OFFSET_WIDTH;
-  i32 dong_porf_t12_inline_METRIC_OFFSET_WIDTHjjtype;
-  f64 dong_porf_t12_inline_METRIC_OFFSET_HEIGHT;
-  i32 dong_porf_t12_inline_METRIC_OFFSET_HEIGHTjjtype;
-  f64 dong_porf_t12_inline_METRIC_OFFSET_TOP;
-  i32 dong_porf_t12_inline_METRIC_OFFSET_TOPjjtype;
-  f64 dong_porf_t12_inline_METRIC_OFFSET_LEFT;
-  i32 dong_porf_t12_inline_METRIC_OFFSET_LEFTjjtype;
-  f64 dong_porf_t12_inline_METRIC_CLIENT_WIDTH;
-  i32 dong_porf_t12_inline_METRIC_CLIENT_WIDTHjjtype;
-  f64 dong_porf_t12_inline_METRIC_CLIENT_HEIGHT;
-  i32 dong_porf_t12_inline_METRIC_CLIENT_HEIGHTjjtype;
-  f64 dong_porf_t12_inline_METRIC_SCROLL_WIDTH;
-  i32 dong_porf_t12_inline_METRIC_SCROLL_WIDTHjjtype;
-  f64 dong_porf_t12_inline_METRIC_SCROLL_HEIGHT;
-  i32 dong_porf_t12_inline_METRIC_SCROLL_HEIGHTjjtype;
-  f64 dong_porf_t12_inline_count;
-  i32 dong_porf_t12_inline_countjjtype;
-  f64 dong_porf_t12_inline_statusId;
-  i32 dong_porf_t12_inline_statusIdjjtype;
-  f64 dong_porf_t12_inline__porf_auto_0Id;
-  i32 dong_porf_t12_inline__porf_auto_0Idjjtype;
-  f64 dong_porf_t12_inline_incId;
-  i32 dong_porf_t12_inline_incIdjjtype;
-  i32 dong_porf_t12_inline_jjporfjjcurrentPtr;
-  i32 dong_porf_t12_inline_jjporfjjcurrentPtrjjglbl_inited;
-  i32 dong_porf_t12_inline_jjporfjjendPtr;
-  i32 dong_porf_t12_inline_jjporfjjendPtrjjglbl_inited;
-  i32 dong_porf_t12_inline_jjporfjjunderlyingStore;
-  i32 dong_porf_t12_inline_jjporfjjunderlyingStorejjglbl_inited;
-  i32 dong_porf_t12_inline_jjporfjjgetptr___Object_prototype;
-  i32 dong_porf_t12_inline_jjporfjjgetptr___Object_prototypejjglbl_inited;
-} dong_porf_t12_inline_state_t;
+  f64 dong_porf_video_js_api_smoke_test_METRIC_OFFSET_WIDTH;
+  i32 dong_porf_video_js_api_smoke_test_METRIC_OFFSET_WIDTHjjtype;
+  f64 dong_porf_video_js_api_smoke_test_METRIC_OFFSET_HEIGHT;
+  i32 dong_porf_video_js_api_smoke_test_METRIC_OFFSET_HEIGHTjjtype;
+  f64 dong_porf_video_js_api_smoke_test_METRIC_OFFSET_TOP;
+  i32 dong_porf_video_js_api_smoke_test_METRIC_OFFSET_TOPjjtype;
+  f64 dong_porf_video_js_api_smoke_test_METRIC_OFFSET_LEFT;
+  i32 dong_porf_video_js_api_smoke_test_METRIC_OFFSET_LEFTjjtype;
+  f64 dong_porf_video_js_api_smoke_test_METRIC_CLIENT_WIDTH;
+  i32 dong_porf_video_js_api_smoke_test_METRIC_CLIENT_WIDTHjjtype;
+  f64 dong_porf_video_js_api_smoke_test_METRIC_CLIENT_HEIGHT;
+  i32 dong_porf_video_js_api_smoke_test_METRIC_CLIENT_HEIGHTjjtype;
+  f64 dong_porf_video_js_api_smoke_test_METRIC_SCROLL_WIDTH;
+  i32 dong_porf_video_js_api_smoke_test_METRIC_SCROLL_WIDTHjjtype;
+  f64 dong_porf_video_js_api_smoke_test_METRIC_SCROLL_HEIGHT;
+  i32 dong_porf_video_js_api_smoke_test_METRIC_SCROLL_HEIGHTjjtype;
+  f64 dong_porf_video_js_api_smoke_test_bodyId;
+  i32 dong_porf_video_js_api_smoke_test_bodyIdjjtype;
+  f64 dong_porf_video_js_api_smoke_test_badgeId;
+  i32 dong_porf_video_js_api_smoke_test_badgeIdjjtype;
+  f64 dong_porf_video_js_api_smoke_test_outId;
+  i32 dong_porf_video_js_api_smoke_test_outIdjjtype;
+  f64 dong_porf_video_js_api_smoke_test_videoId;
+  i32 dong_porf_video_js_api_smoke_test_videoIdjjtype;
+  i32 dong_porf_video_js_api_smoke_test_jjporfjjcurrentPtr;
+  i32 dong_porf_video_js_api_smoke_test_jjporfjjcurrentPtrjjglbl_inited;
+  i32 dong_porf_video_js_api_smoke_test_jjporfjjendPtr;
+  i32 dong_porf_video_js_api_smoke_test_jjporfjjendPtrjjglbl_inited;
+  i32 dong_porf_video_js_api_smoke_test_jjporfjjunderlyingStore;
+  i32 dong_porf_video_js_api_smoke_test_jjporfjjunderlyingStorejjglbl_inited;
+  i32 dong_porf_video_js_api_smoke_test_jjporfjjgetptr___Object_prototype;
+  i32 dong_porf_video_js_api_smoke_test_jjporfjjgetptr___Object_prototypejjglbl_inited;
+} dong_porf_video_js_api_smoke_test_state_t;
 
-void dong_porf_t12_inline_state_capture(dong_porf_t12_inline_state_t* out) {
-  out->dong_porf_t12_inline_METRIC_OFFSET_WIDTH = dong_porf_t12_inline_METRIC_OFFSET_WIDTH;
-  out->dong_porf_t12_inline_METRIC_OFFSET_WIDTHjjtype = dong_porf_t12_inline_METRIC_OFFSET_WIDTHjjtype;
-  out->dong_porf_t12_inline_METRIC_OFFSET_HEIGHT = dong_porf_t12_inline_METRIC_OFFSET_HEIGHT;
-  out->dong_porf_t12_inline_METRIC_OFFSET_HEIGHTjjtype = dong_porf_t12_inline_METRIC_OFFSET_HEIGHTjjtype;
-  out->dong_porf_t12_inline_METRIC_OFFSET_TOP = dong_porf_t12_inline_METRIC_OFFSET_TOP;
-  out->dong_porf_t12_inline_METRIC_OFFSET_TOPjjtype = dong_porf_t12_inline_METRIC_OFFSET_TOPjjtype;
-  out->dong_porf_t12_inline_METRIC_OFFSET_LEFT = dong_porf_t12_inline_METRIC_OFFSET_LEFT;
-  out->dong_porf_t12_inline_METRIC_OFFSET_LEFTjjtype = dong_porf_t12_inline_METRIC_OFFSET_LEFTjjtype;
-  out->dong_porf_t12_inline_METRIC_CLIENT_WIDTH = dong_porf_t12_inline_METRIC_CLIENT_WIDTH;
-  out->dong_porf_t12_inline_METRIC_CLIENT_WIDTHjjtype = dong_porf_t12_inline_METRIC_CLIENT_WIDTHjjtype;
-  out->dong_porf_t12_inline_METRIC_CLIENT_HEIGHT = dong_porf_t12_inline_METRIC_CLIENT_HEIGHT;
-  out->dong_porf_t12_inline_METRIC_CLIENT_HEIGHTjjtype = dong_porf_t12_inline_METRIC_CLIENT_HEIGHTjjtype;
-  out->dong_porf_t12_inline_METRIC_SCROLL_WIDTH = dong_porf_t12_inline_METRIC_SCROLL_WIDTH;
-  out->dong_porf_t12_inline_METRIC_SCROLL_WIDTHjjtype = dong_porf_t12_inline_METRIC_SCROLL_WIDTHjjtype;
-  out->dong_porf_t12_inline_METRIC_SCROLL_HEIGHT = dong_porf_t12_inline_METRIC_SCROLL_HEIGHT;
-  out->dong_porf_t12_inline_METRIC_SCROLL_HEIGHTjjtype = dong_porf_t12_inline_METRIC_SCROLL_HEIGHTjjtype;
-  out->dong_porf_t12_inline_count = dong_porf_t12_inline_count;
-  out->dong_porf_t12_inline_countjjtype = dong_porf_t12_inline_countjjtype;
-  out->dong_porf_t12_inline_statusId = dong_porf_t12_inline_statusId;
-  out->dong_porf_t12_inline_statusIdjjtype = dong_porf_t12_inline_statusIdjjtype;
-  out->dong_porf_t12_inline__porf_auto_0Id = dong_porf_t12_inline__porf_auto_0Id;
-  out->dong_porf_t12_inline__porf_auto_0Idjjtype = dong_porf_t12_inline__porf_auto_0Idjjtype;
-  out->dong_porf_t12_inline_incId = dong_porf_t12_inline_incId;
-  out->dong_porf_t12_inline_incIdjjtype = dong_porf_t12_inline_incIdjjtype;
-  out->dong_porf_t12_inline_jjporfjjcurrentPtr = dong_porf_t12_inline_jjporfjjcurrentPtr;
-  out->dong_porf_t12_inline_jjporfjjcurrentPtrjjglbl_inited = dong_porf_t12_inline_jjporfjjcurrentPtrjjglbl_inited;
-  out->dong_porf_t12_inline_jjporfjjendPtr = dong_porf_t12_inline_jjporfjjendPtr;
-  out->dong_porf_t12_inline_jjporfjjendPtrjjglbl_inited = dong_porf_t12_inline_jjporfjjendPtrjjglbl_inited;
-  out->dong_porf_t12_inline_jjporfjjunderlyingStore = dong_porf_t12_inline_jjporfjjunderlyingStore;
-  out->dong_porf_t12_inline_jjporfjjunderlyingStorejjglbl_inited = dong_porf_t12_inline_jjporfjjunderlyingStorejjglbl_inited;
-  out->dong_porf_t12_inline_jjporfjjgetptr___Object_prototype = dong_porf_t12_inline_jjporfjjgetptr___Object_prototype;
-  out->dong_porf_t12_inline_jjporfjjgetptr___Object_prototypejjglbl_inited = dong_porf_t12_inline_jjporfjjgetptr___Object_prototypejjglbl_inited;
+void dong_porf_video_js_api_smoke_test_state_capture(dong_porf_video_js_api_smoke_test_state_t* out) {
+  out->dong_porf_video_js_api_smoke_test_METRIC_OFFSET_WIDTH = dong_porf_video_js_api_smoke_test_METRIC_OFFSET_WIDTH;
+  out->dong_porf_video_js_api_smoke_test_METRIC_OFFSET_WIDTHjjtype = dong_porf_video_js_api_smoke_test_METRIC_OFFSET_WIDTHjjtype;
+  out->dong_porf_video_js_api_smoke_test_METRIC_OFFSET_HEIGHT = dong_porf_video_js_api_smoke_test_METRIC_OFFSET_HEIGHT;
+  out->dong_porf_video_js_api_smoke_test_METRIC_OFFSET_HEIGHTjjtype = dong_porf_video_js_api_smoke_test_METRIC_OFFSET_HEIGHTjjtype;
+  out->dong_porf_video_js_api_smoke_test_METRIC_OFFSET_TOP = dong_porf_video_js_api_smoke_test_METRIC_OFFSET_TOP;
+  out->dong_porf_video_js_api_smoke_test_METRIC_OFFSET_TOPjjtype = dong_porf_video_js_api_smoke_test_METRIC_OFFSET_TOPjjtype;
+  out->dong_porf_video_js_api_smoke_test_METRIC_OFFSET_LEFT = dong_porf_video_js_api_smoke_test_METRIC_OFFSET_LEFT;
+  out->dong_porf_video_js_api_smoke_test_METRIC_OFFSET_LEFTjjtype = dong_porf_video_js_api_smoke_test_METRIC_OFFSET_LEFTjjtype;
+  out->dong_porf_video_js_api_smoke_test_METRIC_CLIENT_WIDTH = dong_porf_video_js_api_smoke_test_METRIC_CLIENT_WIDTH;
+  out->dong_porf_video_js_api_smoke_test_METRIC_CLIENT_WIDTHjjtype = dong_porf_video_js_api_smoke_test_METRIC_CLIENT_WIDTHjjtype;
+  out->dong_porf_video_js_api_smoke_test_METRIC_CLIENT_HEIGHT = dong_porf_video_js_api_smoke_test_METRIC_CLIENT_HEIGHT;
+  out->dong_porf_video_js_api_smoke_test_METRIC_CLIENT_HEIGHTjjtype = dong_porf_video_js_api_smoke_test_METRIC_CLIENT_HEIGHTjjtype;
+  out->dong_porf_video_js_api_smoke_test_METRIC_SCROLL_WIDTH = dong_porf_video_js_api_smoke_test_METRIC_SCROLL_WIDTH;
+  out->dong_porf_video_js_api_smoke_test_METRIC_SCROLL_WIDTHjjtype = dong_porf_video_js_api_smoke_test_METRIC_SCROLL_WIDTHjjtype;
+  out->dong_porf_video_js_api_smoke_test_METRIC_SCROLL_HEIGHT = dong_porf_video_js_api_smoke_test_METRIC_SCROLL_HEIGHT;
+  out->dong_porf_video_js_api_smoke_test_METRIC_SCROLL_HEIGHTjjtype = dong_porf_video_js_api_smoke_test_METRIC_SCROLL_HEIGHTjjtype;
+  out->dong_porf_video_js_api_smoke_test_bodyId = dong_porf_video_js_api_smoke_test_bodyId;
+  out->dong_porf_video_js_api_smoke_test_bodyIdjjtype = dong_porf_video_js_api_smoke_test_bodyIdjjtype;
+  out->dong_porf_video_js_api_smoke_test_badgeId = dong_porf_video_js_api_smoke_test_badgeId;
+  out->dong_porf_video_js_api_smoke_test_badgeIdjjtype = dong_porf_video_js_api_smoke_test_badgeIdjjtype;
+  out->dong_porf_video_js_api_smoke_test_outId = dong_porf_video_js_api_smoke_test_outId;
+  out->dong_porf_video_js_api_smoke_test_outIdjjtype = dong_porf_video_js_api_smoke_test_outIdjjtype;
+  out->dong_porf_video_js_api_smoke_test_videoId = dong_porf_video_js_api_smoke_test_videoId;
+  out->dong_porf_video_js_api_smoke_test_videoIdjjtype = dong_porf_video_js_api_smoke_test_videoIdjjtype;
+  out->dong_porf_video_js_api_smoke_test_jjporfjjcurrentPtr = dong_porf_video_js_api_smoke_test_jjporfjjcurrentPtr;
+  out->dong_porf_video_js_api_smoke_test_jjporfjjcurrentPtrjjglbl_inited = dong_porf_video_js_api_smoke_test_jjporfjjcurrentPtrjjglbl_inited;
+  out->dong_porf_video_js_api_smoke_test_jjporfjjendPtr = dong_porf_video_js_api_smoke_test_jjporfjjendPtr;
+  out->dong_porf_video_js_api_smoke_test_jjporfjjendPtrjjglbl_inited = dong_porf_video_js_api_smoke_test_jjporfjjendPtrjjglbl_inited;
+  out->dong_porf_video_js_api_smoke_test_jjporfjjunderlyingStore = dong_porf_video_js_api_smoke_test_jjporfjjunderlyingStore;
+  out->dong_porf_video_js_api_smoke_test_jjporfjjunderlyingStorejjglbl_inited = dong_porf_video_js_api_smoke_test_jjporfjjunderlyingStorejjglbl_inited;
+  out->dong_porf_video_js_api_smoke_test_jjporfjjgetptr___Object_prototype = dong_porf_video_js_api_smoke_test_jjporfjjgetptr___Object_prototype;
+  out->dong_porf_video_js_api_smoke_test_jjporfjjgetptr___Object_prototypejjglbl_inited = dong_porf_video_js_api_smoke_test_jjporfjjgetptr___Object_prototypejjglbl_inited;
 }
 
-void dong_porf_t12_inline_state_apply(const dong_porf_t12_inline_state_t* in) {
-  dong_porf_t12_inline_METRIC_OFFSET_WIDTH = in->dong_porf_t12_inline_METRIC_OFFSET_WIDTH;
-  dong_porf_t12_inline_METRIC_OFFSET_WIDTHjjtype = in->dong_porf_t12_inline_METRIC_OFFSET_WIDTHjjtype;
-  dong_porf_t12_inline_METRIC_OFFSET_HEIGHT = in->dong_porf_t12_inline_METRIC_OFFSET_HEIGHT;
-  dong_porf_t12_inline_METRIC_OFFSET_HEIGHTjjtype = in->dong_porf_t12_inline_METRIC_OFFSET_HEIGHTjjtype;
-  dong_porf_t12_inline_METRIC_OFFSET_TOP = in->dong_porf_t12_inline_METRIC_OFFSET_TOP;
-  dong_porf_t12_inline_METRIC_OFFSET_TOPjjtype = in->dong_porf_t12_inline_METRIC_OFFSET_TOPjjtype;
-  dong_porf_t12_inline_METRIC_OFFSET_LEFT = in->dong_porf_t12_inline_METRIC_OFFSET_LEFT;
-  dong_porf_t12_inline_METRIC_OFFSET_LEFTjjtype = in->dong_porf_t12_inline_METRIC_OFFSET_LEFTjjtype;
-  dong_porf_t12_inline_METRIC_CLIENT_WIDTH = in->dong_porf_t12_inline_METRIC_CLIENT_WIDTH;
-  dong_porf_t12_inline_METRIC_CLIENT_WIDTHjjtype = in->dong_porf_t12_inline_METRIC_CLIENT_WIDTHjjtype;
-  dong_porf_t12_inline_METRIC_CLIENT_HEIGHT = in->dong_porf_t12_inline_METRIC_CLIENT_HEIGHT;
-  dong_porf_t12_inline_METRIC_CLIENT_HEIGHTjjtype = in->dong_porf_t12_inline_METRIC_CLIENT_HEIGHTjjtype;
-  dong_porf_t12_inline_METRIC_SCROLL_WIDTH = in->dong_porf_t12_inline_METRIC_SCROLL_WIDTH;
-  dong_porf_t12_inline_METRIC_SCROLL_WIDTHjjtype = in->dong_porf_t12_inline_METRIC_SCROLL_WIDTHjjtype;
-  dong_porf_t12_inline_METRIC_SCROLL_HEIGHT = in->dong_porf_t12_inline_METRIC_SCROLL_HEIGHT;
-  dong_porf_t12_inline_METRIC_SCROLL_HEIGHTjjtype = in->dong_porf_t12_inline_METRIC_SCROLL_HEIGHTjjtype;
-  dong_porf_t12_inline_count = in->dong_porf_t12_inline_count;
-  dong_porf_t12_inline_countjjtype = in->dong_porf_t12_inline_countjjtype;
-  dong_porf_t12_inline_statusId = in->dong_porf_t12_inline_statusId;
-  dong_porf_t12_inline_statusIdjjtype = in->dong_porf_t12_inline_statusIdjjtype;
-  dong_porf_t12_inline__porf_auto_0Id = in->dong_porf_t12_inline__porf_auto_0Id;
-  dong_porf_t12_inline__porf_auto_0Idjjtype = in->dong_porf_t12_inline__porf_auto_0Idjjtype;
-  dong_porf_t12_inline_incId = in->dong_porf_t12_inline_incId;
-  dong_porf_t12_inline_incIdjjtype = in->dong_porf_t12_inline_incIdjjtype;
-  dong_porf_t12_inline_jjporfjjcurrentPtr = in->dong_porf_t12_inline_jjporfjjcurrentPtr;
-  dong_porf_t12_inline_jjporfjjcurrentPtrjjglbl_inited = in->dong_porf_t12_inline_jjporfjjcurrentPtrjjglbl_inited;
-  dong_porf_t12_inline_jjporfjjendPtr = in->dong_porf_t12_inline_jjporfjjendPtr;
-  dong_porf_t12_inline_jjporfjjendPtrjjglbl_inited = in->dong_porf_t12_inline_jjporfjjendPtrjjglbl_inited;
-  dong_porf_t12_inline_jjporfjjunderlyingStore = in->dong_porf_t12_inline_jjporfjjunderlyingStore;
-  dong_porf_t12_inline_jjporfjjunderlyingStorejjglbl_inited = in->dong_porf_t12_inline_jjporfjjunderlyingStorejjglbl_inited;
-  dong_porf_t12_inline_jjporfjjgetptr___Object_prototype = in->dong_porf_t12_inline_jjporfjjgetptr___Object_prototype;
-  dong_porf_t12_inline_jjporfjjgetptr___Object_prototypejjglbl_inited = in->dong_porf_t12_inline_jjporfjjgetptr___Object_prototypejjglbl_inited;
+void dong_porf_video_js_api_smoke_test_state_apply(const dong_porf_video_js_api_smoke_test_state_t* in) {
+  dong_porf_video_js_api_smoke_test_METRIC_OFFSET_WIDTH = in->dong_porf_video_js_api_smoke_test_METRIC_OFFSET_WIDTH;
+  dong_porf_video_js_api_smoke_test_METRIC_OFFSET_WIDTHjjtype = in->dong_porf_video_js_api_smoke_test_METRIC_OFFSET_WIDTHjjtype;
+  dong_porf_video_js_api_smoke_test_METRIC_OFFSET_HEIGHT = in->dong_porf_video_js_api_smoke_test_METRIC_OFFSET_HEIGHT;
+  dong_porf_video_js_api_smoke_test_METRIC_OFFSET_HEIGHTjjtype = in->dong_porf_video_js_api_smoke_test_METRIC_OFFSET_HEIGHTjjtype;
+  dong_porf_video_js_api_smoke_test_METRIC_OFFSET_TOP = in->dong_porf_video_js_api_smoke_test_METRIC_OFFSET_TOP;
+  dong_porf_video_js_api_smoke_test_METRIC_OFFSET_TOPjjtype = in->dong_porf_video_js_api_smoke_test_METRIC_OFFSET_TOPjjtype;
+  dong_porf_video_js_api_smoke_test_METRIC_OFFSET_LEFT = in->dong_porf_video_js_api_smoke_test_METRIC_OFFSET_LEFT;
+  dong_porf_video_js_api_smoke_test_METRIC_OFFSET_LEFTjjtype = in->dong_porf_video_js_api_smoke_test_METRIC_OFFSET_LEFTjjtype;
+  dong_porf_video_js_api_smoke_test_METRIC_CLIENT_WIDTH = in->dong_porf_video_js_api_smoke_test_METRIC_CLIENT_WIDTH;
+  dong_porf_video_js_api_smoke_test_METRIC_CLIENT_WIDTHjjtype = in->dong_porf_video_js_api_smoke_test_METRIC_CLIENT_WIDTHjjtype;
+  dong_porf_video_js_api_smoke_test_METRIC_CLIENT_HEIGHT = in->dong_porf_video_js_api_smoke_test_METRIC_CLIENT_HEIGHT;
+  dong_porf_video_js_api_smoke_test_METRIC_CLIENT_HEIGHTjjtype = in->dong_porf_video_js_api_smoke_test_METRIC_CLIENT_HEIGHTjjtype;
+  dong_porf_video_js_api_smoke_test_METRIC_SCROLL_WIDTH = in->dong_porf_video_js_api_smoke_test_METRIC_SCROLL_WIDTH;
+  dong_porf_video_js_api_smoke_test_METRIC_SCROLL_WIDTHjjtype = in->dong_porf_video_js_api_smoke_test_METRIC_SCROLL_WIDTHjjtype;
+  dong_porf_video_js_api_smoke_test_METRIC_SCROLL_HEIGHT = in->dong_porf_video_js_api_smoke_test_METRIC_SCROLL_HEIGHT;
+  dong_porf_video_js_api_smoke_test_METRIC_SCROLL_HEIGHTjjtype = in->dong_porf_video_js_api_smoke_test_METRIC_SCROLL_HEIGHTjjtype;
+  dong_porf_video_js_api_smoke_test_bodyId = in->dong_porf_video_js_api_smoke_test_bodyId;
+  dong_porf_video_js_api_smoke_test_bodyIdjjtype = in->dong_porf_video_js_api_smoke_test_bodyIdjjtype;
+  dong_porf_video_js_api_smoke_test_badgeId = in->dong_porf_video_js_api_smoke_test_badgeId;
+  dong_porf_video_js_api_smoke_test_badgeIdjjtype = in->dong_porf_video_js_api_smoke_test_badgeIdjjtype;
+  dong_porf_video_js_api_smoke_test_outId = in->dong_porf_video_js_api_smoke_test_outId;
+  dong_porf_video_js_api_smoke_test_outIdjjtype = in->dong_porf_video_js_api_smoke_test_outIdjjtype;
+  dong_porf_video_js_api_smoke_test_videoId = in->dong_porf_video_js_api_smoke_test_videoId;
+  dong_porf_video_js_api_smoke_test_videoIdjjtype = in->dong_porf_video_js_api_smoke_test_videoIdjjtype;
+  dong_porf_video_js_api_smoke_test_jjporfjjcurrentPtr = in->dong_porf_video_js_api_smoke_test_jjporfjjcurrentPtr;
+  dong_porf_video_js_api_smoke_test_jjporfjjcurrentPtrjjglbl_inited = in->dong_porf_video_js_api_smoke_test_jjporfjjcurrentPtrjjglbl_inited;
+  dong_porf_video_js_api_smoke_test_jjporfjjendPtr = in->dong_porf_video_js_api_smoke_test_jjporfjjendPtr;
+  dong_porf_video_js_api_smoke_test_jjporfjjendPtrjjglbl_inited = in->dong_porf_video_js_api_smoke_test_jjporfjjendPtrjjglbl_inited;
+  dong_porf_video_js_api_smoke_test_jjporfjjunderlyingStore = in->dong_porf_video_js_api_smoke_test_jjporfjjunderlyingStore;
+  dong_porf_video_js_api_smoke_test_jjporfjjunderlyingStorejjglbl_inited = in->dong_porf_video_js_api_smoke_test_jjporfjjunderlyingStorejjglbl_inited;
+  dong_porf_video_js_api_smoke_test_jjporfjjgetptr___Object_prototype = in->dong_porf_video_js_api_smoke_test_jjporfjjgetptr___Object_prototype;
+  dong_porf_video_js_api_smoke_test_jjporfjjgetptr___Object_prototypejjglbl_inited = in->dong_porf_video_js_api_smoke_test_jjporfjjgetptr___Object_prototypejjglbl_inited;
 }

@@ -43,7 +43,7 @@
     }
   </style>
 </head>
-<body>
+<body data-porffor-module="video_play_test">
   <div class="row">
     <div class="card">
       <div class="title">autoplay + loop (expect frames change across renders)</div>
@@ -61,19 +61,5 @@
     </div>
   </div>
 
-  <script>
-    (function () {
-      function bindToggle(id) {
-        const v = document.getElementById(id);
-        if (!v) return;
-        v.addEventListener('click', () => {
-          if (v.paused) v.play();
-          else v.pause();
-        });
-      }
-      bindToggle('v_auto');
-      bindToggle('v_pause');
-    })();
-  </script>
 </body>
 </html>
