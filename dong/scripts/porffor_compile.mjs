@@ -317,6 +317,110 @@ function fixMallocReturnPointers(cSource) {
   );
 }
 
+function prefixed2cSymbol(symbol, cPrefix) {
+  if (symbol === '_memory') return `${cPrefix}memory`;
+  if (symbol === '_memoryPages') return `${cPrefix}memory_pages`;
+  if (symbol.startsWith('_')) return `${cPrefix}${symbol.slice(1)}`;
+  return `${cPrefix}${symbol}`;
+}
+
+function collect2cSymbols(cSource) {
+  const symbols = new Set();
+  const add = (name) => {
+    if (!name || name.startsWith('__porf_import_')) return;
+    symbols.add(name);
+  };
+
+  let m;
+  const memoryRe = /^char\*\s+([A-Za-z_]\w*)\s*;\s*u32\s+([A-Za-z_]\w*)\s*=/gm;
+  while ((m = memoryRe.exec(cSource)) !== null) {
+    add(m[1]);
+    add(m[2]);
+  }
+
+  const globalRe = /^static\s+(?:f64|i32|u32|u8|u16|i64|u64|f32)\s+([A-Za-z_]\w*)\s*=/gm;
+  while ((m = globalRe.exec(cSource)) !== null) {
+    add(m[1]);
+  }
+
+  const fnRe =
+    /^(?:static\s+)?(?:struct\s+ReturnValue|void|int|i32|u32|u8|u16|i64|u64|f32|f64|char\*)\s+([A-Za-z_]\w*)\s*\(/gm;
+  while ((m = fnRe.exec(cSource)) !== null) {
+    add(m[1]);
+  }
+
+  return symbols;
+}
+
+function replaceCIdentifiers(cSource, replacements) {
+  let out = '';
+  let i = 0;
+  while (i < cSource.length) {
+    const ch = cSource[i];
+    const next = cSource[i + 1];
+
+    if (ch === '"' || ch === "'") {
+      const quote = ch;
+      const start = i++;
+      while (i < cSource.length) {
+        if (cSource[i] === '\\') {
+          i += 2;
+          continue;
+        }
+        if (cSource[i] === quote) {
+          i++;
+          break;
+        }
+        i++;
+      }
+      out += cSource.slice(start, i);
+      continue;
+    }
+
+    if (ch === '/' && next === '/') {
+      const start = i;
+      i += 2;
+      while (i < cSource.length && cSource[i] !== '\n') i++;
+      out += cSource.slice(start, i);
+      continue;
+    }
+
+    if (ch === '/' && next === '*') {
+      const start = i;
+      i += 2;
+      while (i < cSource.length && !(cSource[i] === '*' && cSource[i + 1] === '/')) i++;
+      if (i < cSource.length) i += 2;
+      out += cSource.slice(start, i);
+      continue;
+    }
+
+    if (/[A-Za-z_]/.test(ch)) {
+      const start = i++;
+      while (i < cSource.length && /[A-Za-z0-9_]/.test(cSource[i])) i++;
+      const ident = cSource.slice(start, i);
+      out += replacements.get(ident) ?? ident;
+      continue;
+    }
+
+    out += ch;
+    i++;
+  }
+  return out;
+}
+
+function normalizePorffor2cPrefix(cSource, cPrefix) {
+  if (cSource.includes(`int ${cPrefix}main(`)) return cSource;
+  if (!/\bint\s+main\s*\(/.test(cSource)) return cSource;
+
+  const replacements = new Map();
+  for (const symbol of collect2cSymbols(cSource)) {
+    if (!symbol.startsWith(cPrefix)) {
+      replacements.set(symbol, prefixed2cSymbol(symbol, cPrefix));
+    }
+  }
+  return replaceCIdentifiers(cSource, replacements);
+}
+
 function parseExportShims(cSource, modPrefix) {
   const shims = new Map();
   const esc = modPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -355,26 +459,31 @@ function emitModuleC(item) {
 function compileSource(entry, source, logicalName, useModule) {
   lintPorfforSource(source, entry.path ?? logicalName);
   const cPrefix = `dong_porf_${logicalName}_`;
+  const forcePrefixRewrite = process.env.DONG_PORFFOR_FORCE_PREFIX_REWRITE === '1';
   process.argv = process.argv.filter(
     (a) => !a.startsWith('--2c-prefix=') && !a.startsWith('--2cPrefix=') && a !== '--module',
   );
-  process.argv.push(`--2c-prefix=${cPrefix}`);
-  process.argv.push(`--2cPrefix=${cPrefix}`);
+  if (!forcePrefixRewrite) {
+    process.argv.push(`--2c-prefix=${cPrefix}`);
+    process.argv.push(`--2cPrefix=${cPrefix}`);
+  }
   if (useModule) {
     process.argv.push('--module');
   }
   globalThis.argvChanged?.();
   if (globalThis.Prefs) {
-    globalThis.Prefs['2cPrefix'] = cPrefix;
+    globalThis.Prefs['2cPrefix'] = forcePrefixRewrite ? '' : cPrefix;
+    globalThis.Prefs['2cSharedInit'] = true;
     globalThis.Prefs.module = useModule;
   }
 
   globalThis.file = entry.path ?? logicalName;
   const result = compile(source);
-  const c = result?.c;
+  let c = result?.c;
   if (!c) {
     throw new Error(`Porffor compile produced no C for ${logicalName}`);
   }
+  c = normalizePorffor2cPrefix(c, cPrefix);
   if (!c.includes(`int ${cPrefix}main(`)) {
     throw new Error(
       `Porffor 2c prefix failed for ${logicalName}; expected symbol ${cPrefix}main in generated C`,
