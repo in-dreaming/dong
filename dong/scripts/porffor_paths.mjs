@@ -23,8 +23,8 @@ function gitOutput(args, cwd) {
 }
 
 function assertPorfforSubmodulePinned() {
-  const lsTree = gitOutput(['ls-tree', 'HEAD', 'third_party/porffor'], dongRoot);
-  const expected = lsTree.match(/\bcommit\s+([0-9a-f]{40})\b/)?.[1] ?? '';
+  const lsFiles = gitOutput(['ls-files', '-s', 'third_party/porffor'], dongRoot);
+  const expected = lsFiles.match(/^160000\s+([0-9a-f]{40})\s+/)?.[1] ?? '';
   if (!expected) {
     return;
   }
