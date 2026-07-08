@@ -443,6 +443,51 @@ function parseExportShims(cSource, modPrefix) {
   return shims;
 }
 
+function appendMissingExportShims(cSource, modPrefix, exports) {
+  if (!exports?.length) return cSource;
+
+  let out = cSource;
+  const shims = parseExportShims(out, modPrefix);
+  const escPrefix = modPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  for (const exportName of exports) {
+    if (shims.has(exportName)) continue;
+
+    const escExport = exportName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const fnRe = new RegExp(
+      `(?:^|\\n)(?:static\\s+)?struct\\s+ReturnValue\\s+(${escPrefix}${escExport})\\(([^)]*)\\)`,
+      'm',
+    );
+    const m = fnRe.exec(out);
+    if (!m) continue;
+
+    const fnSymbol = m[1];
+    const params = m[2].split(',').map((p) => p.trim()).filter(Boolean);
+    const userPairs = Math.max(0, Math.floor((params.length - 4) / 2));
+    const shimSymbol =
+      userPairs <= 1
+        ? `${modPrefix}export_${exportName}`
+        : `${modPrefix}export_${exportName}_p${userPairs}`;
+    const cParams = [];
+    const cArgs = ['0', '0', '0', '0'];
+    for (let i = 0; i < userPairs; i++) {
+      cParams.push(`f64 p${i}`);
+      cArgs.push(`p${i}`, '1');
+    }
+
+    out += `
+int ${shimSymbol}(${cParams.length ? cParams.join(', ') : 'void'}) {
+  ${modPrefix}_porf_init();
+  (void)${fnSymbol}(${cArgs.join(', ')});
+  return 0;
+}
+`;
+    shims.set(exportName, { symbol: shimSymbol, params: userPairs });
+  }
+
+  return out;
+}
+
 function emitModuleC(item) {
   const modPrefix = `dong_porf_${item.name}_`;
   const globals = parseModuleStateGlobals(item.c, modPrefix);
@@ -511,6 +556,7 @@ function compileScript(entry) {
   const useModule = exports.length > 0;
   const item = compileSource(entry, `${prelude}\n${user}`, entry.name, useModule);
   item.exports = exports;
+  item.c = appendMissingExportShims(item.c, `dong_porf_${entry.name}_`, exports);
   item.exportShims = useModule
     ? parseExportShims(item.c, `dong_porf_${entry.name}_`)
     : new Map();
