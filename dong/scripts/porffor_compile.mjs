@@ -211,6 +211,17 @@ function detectExports(source) {
   return names;
 }
 
+function detectExportParamCounts(source) {
+  const counts = new Map();
+  const re = /export\s+function\s+(\w+)\s*\(([^)]*)\)/g;
+  let m;
+  while ((m = re.exec(source)) !== null) {
+    const params = m[2].split(',').map((p) => p.trim()).filter(Boolean);
+    counts.set(m[1], params.length);
+  }
+  return counts;
+}
+
 function estimateStructSize(globals) {
   const sizeOf = { f64: 8, i32: 4, u32: 4, u8: 1, u16: 2, i64: 8, u64: 8 };
   let offset = 0;
@@ -443,7 +454,7 @@ function parseExportShims(cSource, modPrefix) {
   return shims;
 }
 
-function appendMissingExportShims(cSource, modPrefix, exports) {
+function appendMissingExportShims(cSource, modPrefix, exports, exportParamCounts = new Map()) {
   if (!exports?.length) return cSource;
 
   let out = cSource;
@@ -459,11 +470,11 @@ function appendMissingExportShims(cSource, modPrefix, exports) {
       'm',
     );
     const m = fnRe.exec(out);
-    if (!m) continue;
-
-    const fnSymbol = m[1];
-    const params = m[2].split(',').map((p) => p.trim()).filter(Boolean);
-    const userPairs = Math.max(0, Math.floor((params.length - 4) / 2));
+    const fnSymbol = m?.[1] ?? null;
+    const params = (m?.[2] ?? '').split(',').map((p) => p.trim()).filter(Boolean);
+    const userPairs = fnSymbol
+      ? Math.max(0, Math.floor((params.length - 4) / 2))
+      : exportParamCounts.get(exportName) ?? 0;
     const shimSymbol =
       userPairs <= 1
         ? `${modPrefix}export_${exportName}`
@@ -478,7 +489,7 @@ function appendMissingExportShims(cSource, modPrefix, exports) {
     out += `
 int ${shimSymbol}(${cParams.length ? cParams.join(', ') : 'void'}) {
   ${modPrefix}_porf_init();
-  (void)${fnSymbol}(${cArgs.join(', ')});
+  ${fnSymbol ? `(void)${fnSymbol}(${cArgs.join(', ')});` : '(void)0;'}
   return 0;
 }
 `;
@@ -552,11 +563,17 @@ function compileScript(entry) {
   const user = fs.readFileSync(scriptPath, 'utf8');
   const manifestExports = entry.exports ?? [];
   const detectedExports = detectExports(user);
+  const exportParamCounts = detectExportParamCounts(user);
   const exports = manifestExports.length > 0 ? manifestExports : detectedExports;
   const useModule = exports.length > 0;
   const item = compileSource(entry, `${prelude}\n${user}`, entry.name, useModule);
   item.exports = exports;
-  item.c = appendMissingExportShims(item.c, `dong_porf_${entry.name}_`, exports);
+  item.c = appendMissingExportShims(
+    item.c,
+    `dong_porf_${entry.name}_`,
+    exports,
+    exportParamCounts,
+  );
   item.exportShims = useModule
     ? parseExportShims(item.c, `dong_porf_${entry.name}_`)
     : new Map();
