@@ -509,12 +509,55 @@ function emitModuleC(item) {
   body = body.replace(/\bNaN\b/g, 'NAN').replace(/\bInfinity\b/g, 'INFINITY');
   body = appendModuleStateSnapshot(body, modPrefix, globals);
   const out = `// Porffor module: ${item.name}\n#include "dong_porf_runtime.h"\n${body}`;
-  fs.writeFileSync(path.join(outDir, `${item.name}.c`), out);
+  writeTextFileIfChanged(path.join(outDir, `${item.name}.c`), out);
+}
+
+function sleepMs(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function writeTextFileIfChanged(filePath, content) {
+  try {
+    if (fs.existsSync(filePath) && fs.readFileSync(filePath, 'utf8') === content) {
+      return;
+    }
+  } catch {
+    // If reading fails because another process/tool has the file momentarily,
+    // fall through to the retrying write path.
+  }
+
+  let lastError;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    try {
+      fs.writeFileSync(filePath, content);
+      return;
+    } catch (err) {
+      lastError = err;
+      sleepMs(50 + attempt * 25);
+    }
+  }
+  throw lastError;
+}
+
+function sanitizeOutputStem(name) {
+  return String(name).replace(/[^A-Za-z0-9_.-]/g, '_');
+}
+
+function setPorfforScratchOutput(logicalName) {
+  const outFile = path.join(outDir, `_tmp_${process.pid}_${sanitizeOutputStem(logicalName)}.c`);
+  process.argv = process.argv.filter((a) => !a.startsWith('-o='));
+  process.argv.push(`-o=${outFile}`);
+  globalThis.argvChanged?.();
+  if (globalThis.Prefs) {
+    globalThis.Prefs.o = outFile;
+  }
+  return outFile;
 }
 
 function compileSource(entry, source, logicalName, useModule) {
   lintPorfforSource(source, entry.path ?? logicalName);
   const cPrefix = `dong_porf_${logicalName}_`;
+  const scratchOut = setPorfforScratchOutput(logicalName);
   const forcePrefixRewrite = process.env.DONG_PORFFOR_FORCE_PREFIX_REWRITE === '1';
   process.argv = process.argv.filter(
     (a) => !a.startsWith('--2c-prefix=') && !a.startsWith('--2cPrefix=') && a !== '--module',
@@ -534,7 +577,17 @@ function compileSource(entry, source, logicalName, useModule) {
   }
 
   globalThis.file = entry.path ?? logicalName;
-  const result = compile(source);
+  let result;
+  try {
+    result = compile(source);
+  } finally {
+    try {
+      fs.unlinkSync(scratchOut);
+    } catch {
+      // Best-effort cleanup only; the C text is returned by Porffor and emitted
+      // by this script under its final generated/porffor/<module>.c path.
+    }
+  }
   let c = result?.c;
   if (!c) {
     throw new Error(`Porffor compile produced no C for ${logicalName}`);
@@ -589,10 +642,6 @@ function compileHandler(parentName, handlerName, handlerPath) {
 }
 
 fs.mkdirSync(outDir, { recursive: true });
-if (!process.argv.some((a) => a.startsWith('-o='))) {
-  process.argv.push(`-o=${path.join(outDir, '_unused.c')}`);
-  globalThis.argvChanged?.();
-}
 
 const compiled = [];
 const handlers = [];
@@ -642,7 +691,7 @@ for (const h of handlers) {
     generatedSources.push(h.module_name);
   }
 }
-fs.writeFileSync(
+writeTextFileIfChanged(
   path.join(outDir, 'sources.cmake'),
   `set(DONG_PORFFOR_MODULE_SOURCES\n${generatedSources.map((s) => `  "\${DONG_PORFFOR_OUT_DIR}/${s}.c"`).join('\n')}\n)\n`,
 );
@@ -778,8 +827,8 @@ const dong_porf_handler_t* dong_porf_find_handler(const char* parent_module, con
 }
 `;
 
-fs.writeFileSync(path.join(outDir, 'registry.h'), registryH);
-fs.writeFileSync(path.join(outDir, 'registry.c'), registryC);
+writeTextFileIfChanged(path.join(outDir, 'registry.h'), registryH);
+writeTextFileIfChanged(path.join(outDir, 'registry.c'), registryC);
 
 console.log(
   `[porffor_compile] ${modules.length} module(s) + ${handlers.length} handler(s) -> ${outDir}`,

@@ -555,7 +555,10 @@ pub fn build(b: *std.Build) void {
         "Bypass",
         "-Command",
         b.fmt(
-            "& {{ $node = '{s}'; $npm = Join-Path (Split-Path $node -Parent) 'npm.cmd'; " ++
+            "& {{ $node = '{s}'; " ++
+                "if ($node -eq 'node') {{ $cmd = Get-Command node -ErrorAction SilentlyContinue; if ($cmd) {{ $node = $cmd.Source }} }}; " ++
+                "$nodeDir = Split-Path $node -Parent; " ++
+                "$npm = if ($nodeDir) {{ Join-Path $nodeDir 'npm.cmd' }} else {{ 'npm.cmd' }}; " ++
                 "if (-not (Test-Path third_party/porffor/node_modules/acorn)) {{ " ++
                 "Push-Location third_party/porffor; & $npm install; Pop-Location }} }}",
             .{resolveNodeExecutable(io, config)},

@@ -402,7 +402,11 @@ void JSBindings::dispatchPorfforEvent(uint64_t node_id, const std::string& type,
 
     PorfforHost* host = engine_->host();
     if (host) {
-        host->pushEventSlot(dom_event, node_id, norm);
+        uint64_t target_node_id = node_id;
+        if (dom_event && dom_event->target) {
+            target_node_id = getNodeIdFor(dom_event->target);
+        }
+        host->pushEventSlot(dom_event, target_node_id, norm);
     }
 
     for (const auto& l : named_listeners_) {
